@@ -1949,6 +1949,78 @@ describe('TypeScript toolchain migration gates behavior', () => {
         }
     });
 
+    it('keeps phase 15 runtime core interop seams explicit and narrowed', () => {
+        const commonJsBoundaryPaths = [
+            'src/core/config.ts',
+            'src/core/index.ts'
+        ];
+        const forbiddenInteropPatterns = [
+            {
+                path: 'src/main.ts',
+                forbidden: [
+                    "const nodeRequire = createRequire(import.meta.url);",
+                    "nodeRequire('./core')",
+                    "nodeRequire('./core/constants')",
+                    "from './services/CommandCooldownService.js'",
+                    "from './services/GracefulExitService.js'",
+                    "from './services/PlatformLifecycleService.js'",
+                    "from './services/VFXCommandService.js'"
+                ]
+            },
+            {
+                path: 'src/runtime/AppRuntime.ts',
+                forbidden: [
+                    "from '../services/ChatNotificationRouter.js'",
+                    "from '../services/PlatformEventRouter.js'",
+                    "from '../services/VFXCommandService.js'"
+                ]
+            },
+            {
+                path: 'src/core/logging.ts',
+                forbidden: [
+                    "nodeRequire('../utils/text-processing')",
+                    "nodeRequire('../utils/file-logger')"
+                ]
+            },
+            {
+                path: 'src/utils/logger-utils.ts',
+                forbidden: [
+                    "nodeRequire('../core/logging')"
+                ]
+            },
+            {
+                path: 'src/utils/secret-manager.ts',
+                forbidden: [
+                    "nodeRequire('./env-file-parser')",
+                    "nodeRequire('./logger-resolver')"
+                ]
+            },
+            {
+                path: 'src/utils/validation.ts',
+                forbidden: [
+                    "nodeRequire('../core/config')"
+                ]
+            }
+        ];
+
+        for (const modulePath of commonJsBoundaryPaths) {
+            const content = readFileSync(join(repoRoot, modulePath), 'utf8');
+
+            expect(content).not.toMatch(/^\s*(?:const|let|var)\s+.+?=\s*require\s*\(/m);
+            expect(content).not.toMatch(/\brequire\s*\(/);
+            expect(content).not.toContain('module.exports');
+            expect(content).not.toMatch(/module\[['"]exports['"]\]/);
+            expect(content).not.toMatch(/^\s*exports\./m);
+        }
+
+        for (const assertion of forbiddenInteropPatterns) {
+            const content = readFileSync(join(repoRoot, assertion.path), 'utf8');
+            for (const forbiddenPattern of assertion.forbidden) {
+                expect(content).not.toContain(forbiddenPattern);
+            }
+        }
+    });
+
     it('keeps youtube extractor helper modules free of commonjs exports syntax', () => {
         const helperPaths = [
             'src/platforms/youtube/youtube-author-extractor.ts',

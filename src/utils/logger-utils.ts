@@ -1,6 +1,4 @@
-import { createRequire } from 'node:module';
-
-const nodeRequire = createRequire(import.meta.url);
+import * as loggingModule from '../core/logging';
 
 type LoggerModule = {
     logger: unknown;
@@ -8,7 +6,7 @@ type LoggerModule = {
 };
 
 function getLoggingModule(): LoggerModule {
-    return nodeRequire('../core/logging') as LoggerModule;
+    return loggingModule as LoggerModule;
 }
 
 function isDebugModeEnabled() {

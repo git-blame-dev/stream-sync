@@ -1,13 +1,12 @@
-import { createRequire } from 'node:module';
-
 import { DEFAULT_LOGGING_CONFIG } from './config-builders';
 import { safeObjectStringify } from '../utils/logger-utils';
+import fileLoggerModule from '../utils/file-logger.js';
+import textProcessingModule from '../utils/text-processing.js';
 
-const nodeRequire = createRequire(import.meta.url);
-const { formatTimestampCompact } = nodeRequire('../utils/text-processing') as {
+const { formatTimestampCompact } = textProcessingModule as {
     formatTimestampCompact: (date: Date) => string;
 };
-const { FileLogger } = nodeRequire('../utils/file-logger') as {
+const { FileLogger } = fileLoggerModule as {
     FileLogger: new (options: { logDir: string; filename: string }) => {
         log: (line: string) => void;
     };

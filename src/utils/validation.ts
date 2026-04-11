@@ -1,17 +1,16 @@
-import { createRequire } from 'node:module';
+import { config } from '../core/config';
 
-const nodeRequire = createRequire(import.meta.url);
-const { config } = nodeRequire('../core/config') as {
-    config: {
-        general: {
-            fallbackUsername: string;
-            anonymousUsername: string;
-        };
-    };
+type ValidationGeneralConfig = {
+    fallbackUsername: string;
+    anonymousUsername: string;
 };
 
-const getFallbackUsername = (): string => config.general.fallbackUsername;
-const getAnonymousUsername = (): string => config.general.anonymousUsername;
+function getGeneralConfig(): ValidationGeneralConfig {
+    return config.general as ValidationGeneralConfig;
+}
+
+const getFallbackUsername = (): string => getGeneralConfig().fallbackUsername;
+const getAnonymousUsername = (): string => getGeneralConfig().anonymousUsername;
 
 const REGEX_PATTERNS = {
     HTML_TAGS: /<[^>]*>/g,

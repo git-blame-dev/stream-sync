@@ -15,6 +15,7 @@ function resetConfigModule() {
 function loadFreshConfig() {
     resetConfigModule();
     const { config } = load('../../src/core/config');
+    void config.general;
     return { config };
 }
 

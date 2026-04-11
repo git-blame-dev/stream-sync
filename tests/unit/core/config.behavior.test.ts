@@ -2,12 +2,13 @@ import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { createMockFn, restoreAllMocks } from '../../helpers/bun-mock-utils';
 import { captureStderr, captureStdout } from '../../helpers/output-capture';
 import fs from 'fs';
-
-const configModule = require('../../../src/core/config.ts');
+import * as configModule from '../../../src/core/config.ts';
 
 function loadFreshConfig() {
     configModule._resetConfigForTesting();
-    return { config: configModule.config, configModule };
+    const loadedConfig = configModule.config;
+    void loadedConfig.general;
+    return { config: loadedConfig, configModule };
 }
 
 function loadFreshConfigModule() {
