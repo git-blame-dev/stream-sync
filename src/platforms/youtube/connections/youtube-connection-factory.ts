@@ -1,4 +1,8 @@
 import { createRequire } from 'node:module';
+import {
+    installYouTubeLiveChatUnknownRendererCapture,
+    type InstallYouTubeLiveChatUnknownRendererCaptureOptions
+} from './youtube-live-chat-unknown-renderer-capture';
 import { YOUTUBE } from '../../../core/endpoints';
 
 const nodeRequire = createRequire(__filename);
@@ -44,6 +48,7 @@ interface YouTubeConnectionFactoryOptions {
     };
     withTimeout?: <T>(promise: Promise<T>, timeoutMs: number, operationName: string) => Promise<T>;
     innertubeCreationTimeoutMs?: number;
+    installLiveChatUnknownRendererCapture?: (options: LiveChatUnknownRendererCaptureOptions) => Promise<void>;
 }
 
 interface YouTubeConnection {
@@ -54,10 +59,31 @@ interface YouTubeConnection {
 
 interface YouTubeInfo {
     getLiveChat: () => Promise<unknown>;
+    actions?: {
+        execute?: (endpoint: string, args?: Record<string, unknown>) => Promise<unknown>;
+    };
+    livechat?: {
+        continuation?: string | null;
+    };
 }
 
 interface YouTubeClient {
     getInfo: (videoId: string, options: { client: string }) => Promise<YouTubeInfo>;
+}
+
+type ParserModuleLike = {
+    Parser?: {
+        parseResponse?: (data: unknown) => unknown;
+    };
+};
+
+type LiveChatUnknownRendererCaptureOptions = Omit<
+    InstallYouTubeLiveChatUnknownRendererCaptureOptions,
+    'parser' | 'logUnknownRenderer'
+>;
+
+function isParserLike(value: ParserModuleLike['Parser']): value is { parseResponse: (data: unknown) => unknown } {
+    return !!value && typeof value.parseResponse === 'function';
 }
 
 function createYouTubeConnectionFactory(options: YouTubeConnectionFactoryOptions = {}) {
@@ -65,7 +91,8 @@ function createYouTubeConnectionFactory(options: YouTubeConnectionFactoryOptions
         platform,
         innertubeInstanceManager,
         withTimeout,
-        innertubeCreationTimeoutMs
+        innertubeCreationTimeoutMs,
+        installLiveChatUnknownRendererCapture
     } = options;
 
     if (!platform) {
@@ -84,6 +111,24 @@ function createYouTubeConnectionFactory(options: YouTubeConnectionFactoryOptions
     if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
         throw new Error('YouTube connection factory requires positive innertubeCreationTimeoutMs');
     }
+
+    const captureInstaller = typeof installLiveChatUnknownRendererCapture === 'function'
+        ? installLiveChatUnknownRendererCapture
+        : async (captureOptions: LiveChatUnknownRendererCaptureOptions) => {
+            const youtubeModule = await InnertubeFactory.getLazyYouTubeModule() as ParserModuleLike;
+            const parser = youtubeModule.Parser;
+            if (!isParserLike(parser)) {
+                return;
+            }
+
+            installYouTubeLiveChatUnknownRendererCapture({
+                ...captureOptions,
+                parser,
+                logUnknownRenderer: async (entry) => {
+                    await platform.logRawPlatformData('unknown-renderer', entry);
+                }
+            });
+        };
 
     const applyConfiguredChatMode = (connection: YouTubeConnection, videoId: string, startData: unknown) => {
         const chatMode = platform.config.chatMode;
@@ -171,6 +216,16 @@ function createYouTubeConnectionFactory(options: YouTubeConnectionFactoryOptions
         const validationResult = platform._validateVideoForConnection(videoId, info);
         if (!validationResult.shouldConnect) {
             throw new Error(`Stream validation failed: ${validationResult.reason}`);
+        }
+
+        if (info.actions && typeof info.actions.execute === 'function') {
+            await captureInstaller({
+                actions: info.actions as { execute: (endpoint: string, args?: Record<string, unknown>) => Promise<unknown> },
+                videoId,
+                initialContinuation: typeof info.livechat?.continuation === 'string'
+                    ? info.livechat.continuation
+                    : null
+            });
         }
 
         return await withTimeout(

@@ -9,6 +9,9 @@ type InnertubeClassLike = {
 
 type YouTubeModuleLike = {
     Innertube: InnertubeClassLike;
+    Parser?: {
+        setParserErrorHandler: (handler: (context?: Record<string, unknown>) => void) => void;
+    };
     [key: string]: unknown;
 };
 
@@ -29,11 +32,7 @@ class InnertubeFactory {
         this._importPromise = null;
     }
 
-    static async _getInnertubeClass() {
-        if (this._innertubeClassCache) {
-            return this._innertubeClassCache;
-        }
-
+    static async _getYouTubeModule() {
         const importer = this._importer || (() => import('youtubei.js') as Promise<YouTubeModuleLike>);
         if (!this._importPromise) {
             this._importPromise = importer();
@@ -46,8 +45,21 @@ class InnertubeFactory {
             logger,
             youtubeModule: youtubei
         });
+        return youtubei;
+    }
+
+    static async _getInnertubeClass() {
+        if (this._innertubeClassCache) {
+            return this._innertubeClassCache;
+        }
+
+        const youtubei = await this._getYouTubeModule();
         this._innertubeClassCache = youtubei.Innertube;
         return this._innertubeClassCache;
+    }
+
+    static async getLazyYouTubeModule() {
+        return this._getYouTubeModule();
     }
 
     static async createInstance() {
@@ -109,7 +121,7 @@ class InnertubeFactory {
     static getStats() {
         return {
             factoryVersion: '1.0.0',
-            supportedMethods: ['createInstance', 'createWithConfig', 'createForTesting', 'createWithTimeout', 'getLazyInnertubeClass', 'createLazyReference'],
+            supportedMethods: ['createInstance', 'createWithConfig', 'createForTesting', 'createWithTimeout', 'getLazyInnertubeClass', 'getLazyYouTubeModule', 'createLazyReference'],
             youtubeJsVersion: 'v16+',
             esm: true,
             cached: !!this._innertubeClassCache
