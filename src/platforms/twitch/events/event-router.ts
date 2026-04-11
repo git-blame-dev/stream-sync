@@ -1,11 +1,11 @@
-const { extractTwitchMessageData } = require('../../../utils/message-normalization');
-const { validateLoggerInterface } = require('../../../utils/dependency-validator');
-const { createPlatformErrorHandler } = require('../../../utils/platform-error-handler');
-const {
+import { extractTwitchMessageData } from '../../../utils/message-normalization';
+import { validateLoggerInterface } from '../../../utils/dependency-validator';
+import { createPlatformErrorHandler } from '../../../utils/platform-error-handler';
+import {
     applyNotificationMetadataFallback,
     normalizeMonths,
     normalizeUserIdentity
-} = require('./event-normalizer');
+} from './event-normalizer';
 
 function createTwitchEventSubEventRouter(options = {}) {
     const {
@@ -335,6 +335,4 @@ function createTwitchEventSubEventRouter(options = {}) {
     };
 }
 
-module.exports = {
-    createTwitchEventSubEventRouter
-};
+export { createTwitchEventSubEventRouter };

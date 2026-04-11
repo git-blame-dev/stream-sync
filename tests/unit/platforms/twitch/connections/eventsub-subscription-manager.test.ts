@@ -237,4 +237,84 @@ describe('Twitch EventSub subscription manager', () => {
         expect(deleteCalls).toHaveLength(1);
         expect(deleteCalls[0]).toContain('disconnected-sub');
     });
+
+    test('deletes only current session subscriptions and updates local state', async () => {
+        const deleteCalls = [];
+        const errorLogs = [];
+        const subscriptions = new Map([
+            ['test-ours-ok', { id: 'test-ours-ok' }],
+            ['test-ours-fail', { id: 'test-ours-fail' }],
+            ['test-other', { id: 'test-other' }]
+        ]);
+
+        const get = async () => ({
+            data: {
+                data: [
+                    { id: 'test-ours-ok', type: 'channel.chat.message', transport: { method: 'websocket', session_id: 'test-session-1' } },
+                    { id: 'test-ours-fail', type: 'channel.follow', transport: { method: 'websocket', session_id: 'test-session-1' } },
+                    { id: 'test-other', type: 'channel.subscribe', transport: { method: 'websocket', session_id: 'test-session-2' } },
+                    { id: 'test-ignored', type: 'channel.raid', transport: { method: 'webhook' } }
+                ]
+            }
+        });
+        const deleteCall = async (url) => {
+            deleteCalls.push(url);
+            if (url.includes('test-ours-fail')) {
+                throw new Error('delete failed');
+            }
+            return {};
+        };
+
+        const manager = createManager({
+            subscriptions,
+            axios: { get, delete: deleteCall },
+            logError: (message) => errorLogs.push(message)
+        });
+
+        await manager.deleteAllSubscriptions({ sessionId: 'test-session-1' });
+
+        expect(deleteCalls).toHaveLength(2);
+        expect(deleteCalls[0]).toContain('test-ours-ok');
+        expect(deleteCalls[1]).toContain('test-ours-fail');
+        expect(subscriptions.has('test-ours-ok')).toBe(false);
+        expect(subscriptions.has('test-ours-fail')).toBe(true);
+        expect(subscriptions.has('test-other')).toBe(true);
+        expect(errorLogs.length).toBe(1);
+    });
+
+    test('skips deleteAllSubscriptions when authentication is missing', async () => {
+        let getCalls = 0;
+        const manager = createManager({
+            axios: {
+                get: async () => {
+                    getCalls += 1;
+                    return { data: { data: [] } };
+                },
+                delete: async () => ({})
+            }
+        });
+        secrets.twitch.accessToken = '';
+
+        await manager.deleteAllSubscriptions({ sessionId: 'test-session-1' });
+
+        expect(getCalls).toBe(0);
+    });
+
+    test('reports top-level cleanup failure when listing subscriptions fails', async () => {
+        const errorLogs = [];
+        const manager = createManager({
+            axios: {
+                get: async () => {
+                    throw new Error('list failed');
+                },
+                delete: async () => ({})
+            },
+            logError: (message) => errorLogs.push(message)
+        });
+
+        await manager.deleteAllSubscriptions({ sessionId: 'test-session-1' });
+
+        expect(errorLogs.length).toBe(1);
+        expect(errorLogs[0]).toContain('Failed to cleanup EventSub subscriptions');
+    });
 });

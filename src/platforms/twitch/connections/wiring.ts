@@ -1,4 +1,4 @@
-const { createPlatformErrorHandler } = require('../../../utils/platform-error-handler');
+import { createPlatformErrorHandler } from '../../../utils/platform-error-handler';
 
 function createTwitchEventSubWiring(options = {}) {
     const {
@@ -63,6 +63,4 @@ function createTwitchEventSubWiring(options = {}) {
     };
 }
 
-module.exports = {
-    createTwitchEventSubWiring
-};
+export { createTwitchEventSubWiring };

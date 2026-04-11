@@ -1,9 +1,8 @@
-
-const { getUnifiedLogger } = require('../../core/logging');
-const { secrets } = require('../../core/secrets');
-const { createEnhancedHttpClient } = require('../enhanced-http-client');
-const { createRetrySystem } = require('../retry-system');
-const { createPlatformErrorHandler } = require('../platform-error-handler');
+import { getUnifiedLogger } from '../../core/logging';
+import { secrets } from '../../core/secrets';
+import { createEnhancedHttpClient } from '../enhanced-http-client';
+import { createRetrySystem } from '../retry-system';
+import { createPlatformErrorHandler } from '../platform-error-handler';
 
 class TwitchApiClient {
     constructor(twitchAuth, config = {}, logger = null, dependencies = {}) {
@@ -189,4 +188,4 @@ class TwitchApiClient {
     }
 }
 
-module.exports = { TwitchApiClient };
+export { TwitchApiClient };

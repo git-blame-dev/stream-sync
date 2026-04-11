@@ -1,5 +1,3 @@
-
-
 class CheermoteProcessor {
     static processEventSubFragments(fragments) {
         if (!fragments || !Array.isArray(fragments) || fragments.length === 0) {
@@ -126,6 +124,4 @@ class CheermoteProcessor {
     }
 }
 
-module.exports = {
-    CheermoteProcessor
-};
+export { CheermoteProcessor };

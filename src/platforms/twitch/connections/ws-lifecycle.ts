@@ -1,4 +1,4 @@
-const crypto = require('crypto');
+import crypto from 'node:crypto';
 
 function createTwitchEventSubWsLifecycle(options = {}) {
     const {
@@ -408,6 +408,4 @@ function createTwitchEventSubWsLifecycle(options = {}) {
     };
 }
 
-module.exports = {
-    createTwitchEventSubWsLifecycle
-};
+export { createTwitchEventSubWsLifecycle };
