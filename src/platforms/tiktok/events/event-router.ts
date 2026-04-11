@@ -1,9 +1,15 @@
-const { validateNormalizedMessage } = require('../../../utils/message-normalization');
-const { normalizeTikTokChatEvent } = require('./event-normalizer');
-const { PlatformEvents } = require('../../../interfaces/PlatformEvents');
-const { UNKNOWN_CHAT_MESSAGE, UNKNOWN_CHAT_USERNAME } = require('../../../constants/degraded-chat');
-const { getValidMessageParts } = require('../../../utils/message-parts');
-const { collectMissingFields, getMissingFields, mergeMissingFieldsMetadata } = require('../../../utils/missing-fields');
+import { validateNormalizedMessage } from '../../../utils/message-normalization';
+import { normalizeTikTokChatEvent } from './event-normalizer';
+import { UNKNOWN_CHAT_MESSAGE, UNKNOWN_CHAT_USERNAME } from '../../../constants/degraded-chat';
+import { getValidMessageParts } from '../../../utils/message-parts';
+import { collectMissingFields, getMissingFields, mergeMissingFieldsMetadata } from '../../../utils/missing-fields';
+
+const PlatformEvents = {
+    CHAT_MESSAGE: 'platform:chat-message',
+    VIEWER_COUNT: 'platform:viewer-count',
+    ENVELOPE: 'platform:envelope',
+    PAYPIGGY: 'platform:paypiggy'
+} as const;
 
 const DEFAULT_CHAT_DEDUP_TTL_MS = 90 * 60 * 1000;
 const DEFAULT_CHAT_MAX_CACHE_SIZE = 10_000;
@@ -22,7 +28,7 @@ function isRecoverableTikTokChatNormalizationError(error) {
         || message === 'Missing TikTok timestamp';
 }
 
-function buildDegradedTikTokChatEvent(platform, data = {}) {
+function buildDegradedTikTokChatEvent(platform: any, data: any = {}) {
     const userData = data?.user && typeof data.user === 'object' ? data.user : {};
     const userId = typeof userData.uniqueId === 'string' ? userData.uniqueId.trim() : '';
     const username = typeof userData.nickname === 'string' ? userData.nickname.trim() : '';
@@ -68,7 +74,7 @@ function buildDegradedTikTokChatEvent(platform, data = {}) {
     };
 }
 
-function getChatReplayConfig(platform) {
+function getChatReplayConfig(platform: any) {
     const provided = platform?.chatReplayProtectionConfig;
     const ttlMs = Number.isFinite(provided?.ttlMs) && provided.ttlMs > 0
         ? provided.ttlMs
@@ -87,7 +93,7 @@ function getChatReplayConfig(platform) {
     };
 }
 
-function getChatReplayState(platform) {
+function getChatReplayState(platform: any) {
     if (!platform._chatReplayIngressState || typeof platform._chatReplayIngressState !== 'object') {
         platform._chatReplayIngressState = {
             recentMessageIds: new Map()
@@ -101,7 +107,7 @@ function getChatReplayState(platform) {
     return platform._chatReplayIngressState;
 }
 
-function getPlatformMessageId(platform, data) {
+function getPlatformMessageId(platform: any, data: any) {
     if (typeof platform?._getPlatformMessageId !== 'function') {
         return null;
     }
@@ -109,7 +115,7 @@ function getPlatformMessageId(platform, data) {
     return platform._getPlatformMessageId(data);
 }
 
-function checkDuplicateChatMessage(platform, data) {
+function checkDuplicateChatMessage(platform: any, data: any) {
     const messageId = getPlatformMessageId(platform, data);
     if (!messageId) {
         return { isDuplicate: false, messageId: null };
@@ -146,7 +152,7 @@ function checkDuplicateChatMessage(platform, data) {
     return { isDuplicate: false, messageId };
 }
 
-function isStaleChatReplay(platform, data, eventTimestampMs) {
+function isStaleChatReplay(platform: any, data: any, eventTimestampMs: number | null) {
     if (eventTimestampMs === null) {
         return false;
     }
@@ -155,7 +161,7 @@ function isStaleChatReplay(platform, data, eventTimestampMs) {
     return (Date.now() - eventTimestampMs) > maxAgeMs;
 }
 
-function cleanupTikTokEventListeners(platform) {
+function cleanupTikTokEventListeners(platform: any) {
     if (!platform?.connection) {
         return;
     }
@@ -220,7 +226,7 @@ function cleanupTikTokEventListeners(platform) {
     platform.listenersConfigured = false;
 }
 
-function setupTikTokEventListeners(platform) {
+function setupTikTokEventListeners(platform: any) {
     if (platform.listenersConfigured) {
         return;
     }
@@ -507,7 +513,4 @@ function setupTikTokEventListeners(platform) {
     platform.listenersConfigured = true;
 }
 
-module.exports = {
-    cleanupTikTokEventListeners,
-    setupTikTokEventListeners
-};
+export { cleanupTikTokEventListeners, setupTikTokEventListeners };

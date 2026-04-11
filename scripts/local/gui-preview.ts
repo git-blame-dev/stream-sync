@@ -43,7 +43,7 @@ const NotificationManager = load('../../src/notifications/NotificationManager');
 const { DisplayQueue } = load('../../src/obs/display-queue');
 const { createTikTokGiftAnimationResolver } = load('../../src/services/tiktok-gift-animation/resolver');
 const { createYouTubeEventRouter } = load('../../src/platforms/youtube/events/event-router');
-const { setupTikTokEventListeners } = load('../../src/platforms/tiktok/events/event-router');
+const { setupTikTokEventListeners } = load('../../src/platforms/tiktok/events/event-router.js');
 const { DEFAULT_AVATAR_URL } = load('../../src/constants/avatar');
 
 type UnknownRecord = Record<string, any>;

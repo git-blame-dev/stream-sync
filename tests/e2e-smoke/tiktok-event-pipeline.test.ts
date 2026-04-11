@@ -17,7 +17,7 @@ const {
     advanceTimersByTime,
     clearAllTimers
 } = load('../helpers/bun-timers');
-const { setupTikTokEventListeners, cleanupTikTokEventListeners } = load('../../src/platforms/tiktok/events/event-router.ts');
+const { setupTikTokEventListeners, cleanupTikTokEventListeners } = load('../../src/platforms/tiktok/events/event-router.js');
 const { expectNoTechnicalArtifacts } = load('../helpers/assertion-helpers');
 const coreConstants = load('../../src/core/constants');
 

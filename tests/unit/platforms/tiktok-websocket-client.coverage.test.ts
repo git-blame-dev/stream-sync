@@ -32,7 +32,7 @@ describe('TikTokWebSocketClient coverage', () => {
 
     beforeEach(() => {
         useFakeTimers();
-        ({ TikTokWebSocketClient } = require('../../../src/platforms/tiktok-websocket-client'));
+        ({ TikTokWebSocketClient } = require('../../../src/platforms/tiktok-websocket-client.js'));
         mockWs = null;
     });
 

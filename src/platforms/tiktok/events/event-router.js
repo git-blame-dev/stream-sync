@@ -1,1 +1,6 @@
-module.exports = require('./event-router.ts');
+const { cleanupTikTokEventListeners, setupTikTokEventListeners } = require('./event-router.ts');
+
+module.exports = {
+    cleanupTikTokEventListeners,
+    setupTikTokEventListeners
+};

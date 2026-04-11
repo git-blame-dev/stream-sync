@@ -1,1 +1,5 @@
-module.exports = require('./event-factory.ts');
+const { createTikTokEventFactory } = require('./event-factory.ts');
+
+module.exports = {
+    createTikTokEventFactory
+};

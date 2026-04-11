@@ -15,11 +15,11 @@ const { createMonetizationErrorPayload } = require('../utils/monetization-error-
 const { createRetrySystem } = require('../utils/retry-system');
 const { extractTikTokUserData, extractTikTokAvatarUrl, formatCoinAmount } = require('../utils/tiktok-data-extraction');
 const { validateNotificationManagerInterface } = require('../utils/dependency-validator');
-const { normalizeTikTokChatEvent, normalizeTikTokGiftEvent } = require('./tiktok/events/event-normalizer');
-const { createTikTokConnectionOrchestrator } = require('./tiktok/connections/tiktok-connection-orchestrator');
-const { cleanupTikTokEventListeners, setupTikTokEventListeners } = require('./tiktok/events/event-router');
-const { createTikTokGiftAggregator } = require('./tiktok/monetization/gift-aggregator');
-const { createTikTokEventFactory } = require('./tiktok/events/event-factory');
+const { normalizeTikTokChatEvent, normalizeTikTokGiftEvent } = require('./tiktok/events/event-normalizer.js');
+const { createTikTokConnectionOrchestrator } = require('./tiktok/connections/tiktok-connection-orchestrator.js');
+const { cleanupTikTokEventListeners, setupTikTokEventListeners } = require('./tiktok/events/event-router.js');
+const { createTikTokGiftAggregator } = require('./tiktok/monetization/gift-aggregator.js');
+const { createTikTokEventFactory } = require('./tiktok/events/event-factory.js');
 const { DEFAULT_AVATAR_URL } = require('../constants/avatar');
 
 class TikTokPlatform extends EventEmitter {

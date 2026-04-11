@@ -1,11 +1,24 @@
-const { PlatformEvents } = require('../../../interfaces/PlatformEvents');
-const { normalizeTikTokMessage } = require('../../../utils/message-normalization');
-const { extractTikTokUserData } = require('../../../utils/tiktok-data-extraction');
-const { getSystemTimestampISO } = require('../../../utils/timestamp');
-const { DEFAULT_AVATAR_URL } = require('../../../constants/avatar');
-const { UNKNOWN_CHAT_MESSAGE, UNKNOWN_CHAT_USERNAME } = require('../../../constants/degraded-chat');
-const { getValidMessageParts, normalizeBadgeImages } = require('../../../utils/message-parts');
-const { getMissingFields, mergeMissingFieldsMetadata } = require('../../../utils/missing-fields');
+import crypto from 'node:crypto';
+import { normalizeTikTokMessage } from '../../../utils/message-normalization';
+import { extractTikTokUserData } from '../../../utils/tiktok-data-extraction';
+import { getSystemTimestampISO } from '../../../utils/timestamp';
+import { DEFAULT_AVATAR_URL } from '../../../constants/avatar';
+import { UNKNOWN_CHAT_MESSAGE, UNKNOWN_CHAT_USERNAME } from '../../../constants/degraded-chat';
+import { getValidMessageParts, normalizeBadgeImages } from '../../../utils/message-parts';
+import { getMissingFields, mergeMissingFieldsMetadata } from '../../../utils/missing-fields';
+
+const PlatformEvents = {
+    CHAT_MESSAGE: 'platform:chat-message',
+    GIFT: 'platform:gift',
+    FOLLOW: 'platform:follow',
+    SHARE: 'platform:share',
+    ENVELOPE: 'platform:envelope',
+    PAYPIGGY: 'platform:paypiggy',
+    CHAT_CONNECTED: 'platform:chat-connected',
+    CHAT_DISCONNECTED: 'platform:chat-disconnected',
+    ERROR: 'platform:error',
+    _generateCorrelationId: () => crypto.randomUUID()
+} as const;
 
 function createTikTokEventFactory(options = {}) {
     const platformName = options.platformName || 'tiktok';
@@ -423,6 +436,4 @@ function createTikTokEventFactory(options = {}) {
     };
 }
 
-module.exports = {
-    createTikTokEventFactory
-};
+export { createTikTokEventFactory };

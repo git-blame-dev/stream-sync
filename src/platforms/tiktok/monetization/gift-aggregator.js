@@ -1,1 +1,5 @@
-module.exports = require('./gift-aggregator.ts');
+const { createTikTokGiftAggregator } = require('./gift-aggregator.ts');
+
+module.exports = {
+    createTikTokGiftAggregator
+};

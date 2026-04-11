@@ -29,7 +29,7 @@ describe('TikTokWebSocketClient (behavior)', () => {
 
     beforeEach(() => {
         useFakeTimers();
-        ({ TikTokWebSocketClient } = require('../../../src/platforms/tiktok-websocket-client'));
+        ({ TikTokWebSocketClient } = require('../../../src/platforms/tiktok-websocket-client.js'));
         mockWs = null;
         const CapturingWebSocket = class extends MockWebSocket {
             constructor(...args) {
