@@ -1,6 +1,16 @@
-const { PlatformEvents } = require('../../../interfaces/PlatformEvents');
-const { isIsoTimestamp } = require('../../../utils/timestamp');
-const { DEFAULT_AVATAR_URL } = require('../../../constants/avatar');
+import crypto from 'node:crypto';
+import { isIsoTimestamp } from '../../../utils/timestamp';
+import { DEFAULT_AVATAR_URL } from '../../../constants/avatar';
+
+const PlatformEvents = {
+    FOLLOW: 'platform:follow',
+    PAYPIGGY: 'platform:paypiggy',
+    GIFTPAYPIGGY: 'platform:giftpaypiggy',
+    RAID: 'platform:raid',
+    GIFT: 'platform:gift',
+    STREAM_STATUS: 'platform:stream-status',
+    _generateCorrelationId: () => crypto.randomUUID()
+} as const;
 
 function normalizeIdentity(data) {
     if (!data || typeof data !== 'object') {
@@ -290,6 +300,4 @@ function createTwitchEventFactory(options = {}) {
     };
 }
 
-module.exports = {
-    createTwitchEventFactory
-};
+export { createTwitchEventFactory };

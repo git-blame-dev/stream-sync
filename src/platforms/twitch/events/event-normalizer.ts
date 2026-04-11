@@ -121,7 +121,7 @@ const applyNotificationMetadataFallback = (event, metadata, subscriptionType) =>
     return applyIdFallback(timestampNormalizedEvent, metadata, subscriptionType);
 };
 
-module.exports = {
+export {
     applyNotificationMetadataFallback,
     applyTimestampFallback,
     normalizeMonths,

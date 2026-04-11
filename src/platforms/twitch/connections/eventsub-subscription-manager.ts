@@ -1,7 +1,8 @@
-const { safeDelay, validateTimeout } = require('../../../utils/timeout-validator');
-const { extractHttpErrorDetails } = require('../../../utils/http-error-utils');
-const { validateLoggerInterface } = require('../../../utils/dependency-validator');
-const { secrets } = require('../../../core/secrets');
+import * as axiosModule from 'axios';
+import { safeDelay, validateTimeout } from '../../../utils/timeout-validator';
+import { extractHttpErrorDetails } from '../../../utils/http-error-utils';
+import { validateLoggerInterface } from '../../../utils/dependency-validator';
+import { secrets } from '../../../core/secrets';
 
 const STARTUP_CLEANUP_DELETE_CONCURRENCY = 3;
 const STARTUP_STALE_WEBSOCKET_STATUS = 'websocket_disconnected';
@@ -19,7 +20,7 @@ function createTwitchEventSubSubscriptionManager(options = {}) {
         now = () => Date.now()
     } = options;
 
-    const axios = injectedAxios || require('axios');
+    const axios = injectedAxios || axiosModule.default || axiosModule;
 
     const safeLogger = (() => {
         if (!logger) {
@@ -68,14 +69,13 @@ function createTwitchEventSubSubscriptionManager(options = {}) {
         };
     };
 
-     const getAuthHeaders = async () => ({
-         'Authorization': `Bearer ${secrets.twitch.accessToken}`,
-         'Client-Id': safeGetClientId(),
-         'Content-Type': 'application/json'
-     });
+    const getAuthHeaders = async () => ({
+        'Authorization': `Bearer ${secrets.twitch.accessToken}`,
+        'Client-Id': safeGetClientId(),
+        'Content-Type': 'application/json'
+    });
 
-     const getTimestamp = () => now();
-
+    const getTimestamp = () => now();
 
     const ensureAuthReady = async () => {
         const clientId = safeGetClientId();
@@ -451,6 +451,4 @@ function createTwitchEventSubSubscriptionManager(options = {}) {
     };
 }
 
-module.exports = {
-    createTwitchEventSubSubscriptionManager
-};
+export { createTwitchEventSubSubscriptionManager };

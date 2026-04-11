@@ -1885,6 +1885,30 @@ describe('TypeScript toolchain migration gates behavior', () => {
         expect(content).not.toMatch(/^\s*exports\./m);
     });
 
+    it('keeps twitch eventsub, event, and api helper modules free of commonjs module syntax', () => {
+        const modulePaths = [
+            'src/platforms/twitch/connections/eventsub-subscription-manager.ts',
+            'src/platforms/twitch/connections/eventsub-subscriptions.ts',
+            'src/platforms/twitch/connections/wiring.ts',
+            'src/platforms/twitch/connections/ws-lifecycle.ts',
+            'src/platforms/twitch/events/event-factory.ts',
+            'src/platforms/twitch/events/event-normalizer.ts',
+            'src/platforms/twitch/events/event-router.ts',
+            'src/utils/api-clients/twitch-api-client.ts',
+            'src/utils/cheermote-processor.ts'
+        ];
+
+        for (const modulePath of modulePaths) {
+            const content = readFileSync(join(repoRoot, modulePath), 'utf8');
+
+            expect(content).not.toMatch(/^\s*(?:const|let|var)\s+.+?=\s*require\s*\(/m);
+            expect(content).not.toMatch(/\brequire\s*\(/);
+            expect(content).not.toContain('module.exports');
+            expect(content).not.toMatch(/module\[['"]exports['"]\]/);
+            expect(content).not.toMatch(/^\s*exports\./m);
+        }
+    });
+
     it('keeps youtube extractor helper modules free of commonjs exports syntax', () => {
         const helperPaths = [
             'src/platforms/youtube/youtube-author-extractor.ts',

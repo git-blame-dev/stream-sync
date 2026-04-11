@@ -52,6 +52,4 @@ function createTwitchEventSubSubscriptions() {
     }));
 }
 
-module.exports = {
-    createTwitchEventSubSubscriptions
-};
+export { createTwitchEventSubSubscriptions };
