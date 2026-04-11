@@ -1,26 +1,43 @@
+import { EventEmitter } from 'node:events';
+import crypto from 'node:crypto';
+import { getLazyLogger, getLazyUnifiedLogger } from '../utils/logger-utils';
+import { PlatformInitializationManager } from '../utils/platform-initialization-manager';
+import { IntervalManager } from '../utils/interval-manager';
+import { InitializationStatistics } from '../utils/initialization-statistics';
+import { ConnectionStateManager } from '../utils/connection-state-manager';
+import { PlatformConnectionFactory } from '../utils/platform-connection-factory';
+import { safeSetTimeout } from '../utils/timeout-validator';
+import { resolveTikTokTimestampMs, resolveTikTokTimestampISO } from '../utils/platform-timestamp';
+import { getSystemTimestampISO } from '../utils/timestamp';
+import { createPlatformErrorHandler } from '../utils/platform-error-handler';
+import { createMonetizationErrorPayload } from '../utils/monetization-error-utils';
+import { createRetrySystem } from '../utils/retry-system';
+import { extractTikTokUserData, extractTikTokAvatarUrl, formatCoinAmount } from '../utils/tiktok-data-extraction';
+import { validateNotificationManagerInterface } from '../utils/dependency-validator';
+import { normalizeTikTokChatEvent, normalizeTikTokGiftEvent } from './tiktok/events/event-normalizer';
+import { createTikTokConnectionOrchestrator } from './tiktok/connections/tiktok-connection-orchestrator';
+import { cleanupTikTokEventListeners, setupTikTokEventListeners } from './tiktok/events/event-router';
+import { createTikTokGiftAggregator } from './tiktok/monetization/gift-aggregator';
+import { createTikTokEventFactory } from './tiktok/events/event-factory';
+import { DEFAULT_AVATAR_URL } from '../constants/avatar';
+import { ChatFileLoggingService } from '../services/ChatFileLoggingService';
 
-const { EventEmitter } = require('events');
-const { getLazyLogger, getLazyUnifiedLogger } = require('../utils/logger-utils');
-const { PlatformInitializationManager } = require('../utils/platform-initialization-manager');
-const { IntervalManager } = require('../utils/interval-manager');
-const { InitializationStatistics } = require('../utils/initialization-statistics');
-const { ConnectionStateManager } = require('../utils/connection-state-manager');
-const { PlatformConnectionFactory } = require('../utils/platform-connection-factory');
-const { PlatformEvents } = require('../interfaces/PlatformEvents');
-const { safeSetTimeout } = require('../utils/timeout-validator');
-const { resolveTikTokTimestampMs, resolveTikTokTimestampISO } = require('../utils/platform-timestamp');
-const { getSystemTimestampISO } = require('../utils/timestamp');
-const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
-const { createMonetizationErrorPayload } = require('../utils/monetization-error-utils');
-const { createRetrySystem } = require('../utils/retry-system');
-const { extractTikTokUserData, extractTikTokAvatarUrl, formatCoinAmount } = require('../utils/tiktok-data-extraction');
-const { validateNotificationManagerInterface } = require('../utils/dependency-validator');
-const { normalizeTikTokChatEvent, normalizeTikTokGiftEvent } = require('./tiktok/events/event-normalizer.js');
-const { createTikTokConnectionOrchestrator } = require('./tiktok/connections/tiktok-connection-orchestrator.js');
-const { cleanupTikTokEventListeners, setupTikTokEventListeners } = require('./tiktok/events/event-router.js');
-const { createTikTokGiftAggregator } = require('./tiktok/monetization/gift-aggregator.js');
-const { createTikTokEventFactory } = require('./tiktok/events/event-factory.js');
-const { DEFAULT_AVATAR_URL } = require('../constants/avatar');
+const PlatformEvents = {
+    CHAT_MESSAGE: 'platform:chat-message',
+    GIFT: 'platform:gift',
+    FOLLOW: 'platform:follow',
+    SHARE: 'platform:share',
+    PAYPIGGY: 'platform:paypiggy',
+    GIFTPAYPIGGY: 'platform:giftpaypiggy',
+    ENVELOPE: 'platform:envelope',
+    RAID: 'platform:raid',
+    STREAM_STATUS: 'platform:stream-status',
+    VIEWER_COUNT: 'platform:viewer-count',
+    CHAT_CONNECTED: 'platform:chat-connected',
+    CHAT_DISCONNECTED: 'platform:chat-disconnected',
+    ERROR: 'platform:error',
+    _generateCorrelationId: () => crypto.randomUUID()
+} as const;
 
 class TikTokPlatform extends EventEmitter {
     constructor(config = {}, dependencies = {}) {
@@ -88,8 +105,8 @@ class TikTokPlatform extends EventEmitter {
         this.connectionStateManager.initialize(this.config, { ...dependencies, logger: this.logger });
         
         // Initialize chat file logging service via dependency injection
-        const ChatFileLoggingService = dependencies.ChatFileLoggingService || require('../services/ChatFileLoggingService.js');
-        this.chatFileLoggingService = new ChatFileLoggingService({
+        const ChatFileLoggingServiceClass = dependencies.ChatFileLoggingService || ChatFileLoggingService;
+        this.chatFileLoggingService = new ChatFileLoggingServiceClass({
             logger: this.logger,
             config: this.config
         });
@@ -1566,7 +1583,4 @@ class TikTokPlatform extends EventEmitter {
     }
 }
 
-// Export the class
-module.exports = {
-    TikTokPlatform
-};
+export { TikTokPlatform };
