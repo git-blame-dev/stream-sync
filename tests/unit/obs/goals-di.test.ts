@@ -65,4 +65,38 @@ describe('OBSGoalsManager DI requirements', () => {
         expect(mockGoalTracker.getGoalState).toHaveBeenCalledWith('tiktok');
         expect(status).toEqual({ current: 100, target: 500, formatted: '100/500' });
     });
+
+    it('uses injected updateTextSource for goal display updates', async () => {
+        const mockObsManager = {
+            isConnected: createMockFn().mockReturnValue(true),
+            ensureConnected: createMockFn(),
+            call: createMockFn(),
+            addEventListener: createMockFn(),
+            removeEventListener: createMockFn()
+        };
+        const updateTextSource = createMockFn().mockResolvedValue();
+
+        const goalsManager = createOBSGoalsManager(mockObsManager, {
+            logger: noOpLogger,
+            config: {
+                goals: {
+                    enabled: true,
+                    tiktokGoalEnabled: true,
+                    tiktokGoalSource: 'test-tiktok-goal-source'
+                }
+            },
+            updateTextSource,
+            goalTracker: {
+                initializeGoalTracker: createMockFn().mockResolvedValue(),
+                addDonationToGoal: createMockFn().mockResolvedValue({ success: true, formatted: '25/100' }),
+                addPaypiggyToGoal: createMockFn().mockResolvedValue({ success: true, formatted: '25/100' }),
+                getGoalState: createMockFn().mockReturnValue({ formatted: '25/100' }),
+                getAllGoalStates: createMockFn().mockReturnValue({ tiktok: { formatted: '25/100' } })
+            }
+        });
+
+        await goalsManager.updateGoalDisplay('tiktok', '25/100');
+
+        expect(updateTextSource).toHaveBeenCalledWith('test-tiktok-goal-source', '25/100');
+    });
 });

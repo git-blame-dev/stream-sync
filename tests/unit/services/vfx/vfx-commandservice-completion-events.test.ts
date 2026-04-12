@@ -3,7 +3,7 @@ const { describe, test, expect, beforeEach } = require('bun:test');
 const { createMockFn } = require('../../../helpers/bun-mock-utils');
 
 const { PlatformEvents } = require('../../../../src/interfaces/PlatformEvents');
-const { VFXCommandService } = require('../../../../src/services/VFXCommandService.js');
+const { VFXCommandService, createVFXCommandService } = require('../../../../src/services/VFXCommandService.js');
 
 describe('VFXCommandService completion events', () => {
     let eventBus;
@@ -65,5 +65,21 @@ describe('VFXCommandService completion events', () => {
         expect(payload.platform).toBe('twitch');
         expect(payload.userId).toBe('test-user-123');
         expect(payload.context).toEqual(expect.objectContaining({ notificationType: 'greeting' }));
+    });
+
+    test('factory passes injected effects manager through to service construction', () => {
+        const config = {
+            commands: { greetings: '!hello' },
+            farewell: {},
+            vfx: { filePath: '/tmp' },
+            cooldowns: { cmdCooldown: 60, globalCmdCooldownMs: 60000 }
+        };
+        const customEffectsManager = { playMediaInOBS: createMockFn().mockResolvedValue(undefined) };
+
+        const service = createVFXCommandService(config, null, {
+            effectsManager: customEffectsManager
+        });
+
+        expect(service._effectsManager).toBe(customEffectsManager);
     });
 });

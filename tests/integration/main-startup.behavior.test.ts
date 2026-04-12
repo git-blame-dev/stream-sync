@@ -60,7 +60,16 @@ const buildMainConfig = (overrides = {}) => createConfigFixture({
 
 const buildOverrides = (options = {}) => {
     const displayQueue = createMockDisplayQueue();
-    const obsManager = { isConnected: () => false, isReady: () => false };
+    const obsManager = {
+        isConnected: () => false,
+        isReady: () => false,
+        ensureConnected: async () => undefined,
+        call: async () => ({}),
+        connect: async () => true,
+        disconnect: async () => undefined,
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined
+    };
     let capturedDisplayQueueConfig = null;
 
     const ensureSecrets = async () => {
@@ -231,5 +240,95 @@ describe('main startup behavior', () => {
             cliArgs: { chat: 'invalid-chat-count' },
             config: buildMainConfig()
         })).rejects.toThrow('main override cliArgs.chat must be null or a positive integer');
+    });
+
+    it('uses one OBS subsystem instance for display queue, event services, and VFX wiring', async () => {
+        process.env.CHAT_BOT_STARTUP_ONLY = 'true';
+        const { overrides } = buildOverrides({ cliArgs: { chat: 1 } });
+        const displayQueueManagers = [];
+        const eventServiceManagers = [];
+        const sceneServiceManagers = [];
+        const createVfxCallArgs = [];
+        const createProductionDependenciesArgs = [];
+        let managerSeq = 0;
+
+        const makeObsManager = () => {
+            managerSeq += 1;
+            return {
+                id: `obs-manager-${managerSeq}`,
+                isConnected: () => false,
+                isReady: () => false,
+                connect: async () => true,
+                disconnect: async () => undefined,
+                ensureConnected: async () => undefined,
+                call: async () => ({}),
+                addEventListener: () => undefined,
+                removeEventListener: () => undefined
+            };
+        };
+
+        const result = await main({
+            ...overrides,
+            getOBSConnectionManager: () => makeObsManager(),
+            initializeDisplayQueue: (obsManager) => {
+                displayQueueManagers.push(obsManager);
+                return createMockDisplayQueue();
+            },
+            createOBSEventService: ({ obsConnection }) => {
+                eventServiceManagers.push(obsConnection);
+                return {
+                    connect: async () => true,
+                    disconnect: async () => undefined,
+                    destroy: () => undefined
+                };
+            },
+            createSceneManagementService: ({ obsConnection }) => {
+                sceneServiceManagers.push(obsConnection);
+                return {
+                    destroy: () => undefined
+                };
+            },
+            createVFXCommandService: (...args) => {
+                createVfxCallArgs.push(args);
+                return {
+                    executeCommand: async () => ({ success: true }),
+                    executeCommandForKey: async () => ({ success: true }),
+                    getVFXConfig: async () => null
+                };
+            },
+            createProductionDependencies: (...args) => {
+                createProductionDependenciesArgs.push(args);
+                const loggerDouble = {
+                    debug: () => undefined,
+                    info: () => undefined,
+                    warn: () => undefined,
+                    error: () => undefined,
+                    console: () => undefined
+                };
+                return {
+                    obs: {},
+                    logger: loggerDouble,
+                    logging: loggerDouble,
+                    platforms: {},
+                    displayQueue: null,
+                    notificationManager: null,
+                    dependencyFactory: {},
+                    lazyInnertube: {},
+                    eventBus: null,
+                    vfxCommandService: null,
+                    userTrackingService: null
+                };
+            },
+            config: buildMainConfig()
+        });
+
+        expect(result.success).toBe(true);
+        expect(displayQueueManagers.length).toBe(1);
+        expect(eventServiceManagers.length).toBe(1);
+        expect(sceneServiceManagers.length).toBe(1);
+        expect(displayQueueManagers[0]).toBe(eventServiceManagers[0]);
+        expect(displayQueueManagers[0]).toBe(sceneServiceManagers[0]);
+        expect(createVfxCallArgs[0][2]?.effectsManager).toBeDefined();
+        expect(createProductionDependenciesArgs[0][1]?.effectsManager).toBe(createVfxCallArgs[0][2]?.effectsManager);
     });
 });

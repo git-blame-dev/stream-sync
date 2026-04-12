@@ -558,11 +558,11 @@ class VFXCommandService {
 
 }
 
-function createVFXCommandService(config, eventBus = null) {
+function createVFXCommandService(config, eventBus = null, options = {}) {
     if (arguments.length < 2) {
         throw new Error('createVFXCommandService requires config and eventBus (use null when none)');
     }
-    return new VFXCommandService(config, eventBus);
+    return new VFXCommandService(config, eventBus, options);
 }
 
 // Export the class and factory
