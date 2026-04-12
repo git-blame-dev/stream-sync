@@ -186,7 +186,7 @@ describe('DisplayQueue control', () => {
             expect(processed).toBe(true);
         });
 
-        it('emits display row event when queue item is added', () => {
+        it('does not emit chat display row when queue item is only enqueued', () => {
             const emittedRows = [];
             const eventBus = {
                 emit: (eventName, payload) => {
@@ -208,6 +208,34 @@ describe('DisplayQueue control', () => {
                 data: { username: 'test-user', userId: 'test-user-id', message: 'hello' }
             });
 
+            expect(emittedRows.length).toBe(0);
+        });
+
+        it('emits chat display row when chat item is displayed', async () => {
+            const emittedRows = [];
+            const eventBus = {
+                emit: (eventName, payload) => {
+                    emittedRows.push({ eventName, payload });
+                }
+            };
+
+            const queue = new DisplayQueue(
+                createMockOBSManager('connected'),
+                createConfig({ autoProcess: false }),
+                constants,
+                eventBus,
+                createMockDependencies()
+            );
+
+            queue.renderer.displayChatItem = createMockFn().mockResolvedValue(true);
+
+            const displayResult = await queue.displayChatItem({
+                type: 'chat',
+                platform: 'twitch',
+                data: { username: 'test-user', userId: 'test-user-id', message: 'hello' }
+            });
+
+            expect(displayResult).toBe(true);
             expect(emittedRows.length).toBe(1);
             expect(emittedRows[0].eventName).toBe('display:row');
             expect(emittedRows[0].payload.type).toBe('chat');

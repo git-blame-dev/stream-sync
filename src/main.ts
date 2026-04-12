@@ -215,6 +215,13 @@ function logMainError(message: string, error: unknown, payload: Record<string, u
     handler.logOperationalError(message, logContext, payload);
 }
 
+function getErrorMessage(error: unknown): string {
+    if (error instanceof Error) {
+        return error.message;
+    }
+    return String(error);
+}
+
 const textProcessing = createTextProcessingManager({ logger });
 const coreConstants = {
     PRIORITY_LEVELS,
@@ -684,7 +691,7 @@ async function main(overrides: MainOverrides = {}) {
             try {
                 await app.rollbackStartup();
             } catch (rollbackError) {
-                const rollbackMessage = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
+                const rollbackMessage = getErrorMessage(rollbackError);
                 logMainError(
                     `Startup rollback failed: ${rollbackMessage}`,
                     rollbackError,
@@ -693,16 +700,31 @@ async function main(overrides: MainOverrides = {}) {
                 );
             }
         }
-        const message = error instanceof Error ? error.message : String(error);
+        const message = getErrorMessage(error);
         logMainError(`Critical error occurred: ${message}`, error, null, { eventType: 'startup', logContext: 'main' });
         throw error;
+    }
+}
+
+async function runMainEntrypoint(mainFn: () => Promise<unknown> = main) {
+    try {
+        await mainFn();
+        return { success: true };
+    } catch (error) {
+        const message = getErrorMessage(error);
+        logMainError(`Fatal startup failure: ${message}`, error, null, { eventType: 'startup', logContext: 'main-entrypoint' });
+        process.exitCode = 1;
+        return {
+            success: false,
+            error: message
+        };
     }
 }
 
 process.noDeprecation = true;
 
 if (import.meta.main) {
-    main();
+    void runMainEntrypoint();
 }
 
-export { main, AppRuntime };
+export { main, AppRuntime, runMainEntrypoint };
