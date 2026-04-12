@@ -1,4 +1,3 @@
-import { safeDelay } from '../utils/timeout-validator';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 
 type EventBusLike = {
@@ -25,18 +24,9 @@ type ObsEventLogger = {
     warn: (message: string, context?: unknown, payload?: unknown) => void;
 };
 
-type ReconnectConfig = {
-    maxAttempts: number;
-    baseDelay: number;
-    maxDelay: number;
-    enabled: boolean;
-};
-
 type ObsEventState = {
     connected: boolean;
     ready: boolean;
-    reconnecting: boolean;
-    reconnectAttempts: number;
     lastError: Error | null;
 };
 
@@ -56,21 +46,20 @@ class OBSEventService {
     logger: ObsEventLogger;
     errorHandler: ReturnType<typeof createPlatformErrorHandler> | null;
     state: ObsEventState;
-    reconnectConfig: ReconnectConfig;
     unsubscribeFns: Array<() => void>;
     connectionEventHandlers: Array<{
         event: string;
         handler: (data?: { reason?: unknown; code?: unknown }) => void;
     }>;
+    connectPromise: Promise<void> | null;
 
     constructor(dependencies: {
         eventBus: EventBusLike;
         obsConnection: ObsConnectionLike;
         obsSources: ObsSourcesLike;
         logger: ObsEventLogger;
-        reconnectConfig?: ReconnectConfig;
     }) {
-        const { eventBus, obsConnection, obsSources, logger, reconnectConfig } = dependencies;
+        const { eventBus, obsConnection, obsSources, logger } = dependencies;
 
         this.eventBus = eventBus;
         this.obsConnection = obsConnection;
@@ -82,22 +71,13 @@ class OBSEventService {
         this.state = {
             connected: false,
             ready: false,
-            reconnecting: false,
-            reconnectAttempts: 0,
             lastError: null
-        };
-
-        // Reconnection configuration (with defaults)
-        this.reconnectConfig = reconnectConfig || {
-            maxAttempts: 5,
-            baseDelay: 1000,
-            maxDelay: 30000,
-            enabled: true
         };
 
         // Event unsubscribe functions for cleanup
         this.unsubscribeFns = [];
         this.connectionEventHandlers = [];
+        this.connectPromise = null;
 
         // Initialize event listeners
         this._setupEventListeners();
@@ -133,12 +113,6 @@ class OBSEventService {
             })
         );
 
-        // Connection loss handler
-        this.unsubscribeFns.push(
-            this.eventBus.subscribe('obs:connection-lost', async () => {
-                await this._handleConnectionLoss();
-            })
-        );
     }
 
     _setupConnectionMonitoring() {
@@ -147,6 +121,8 @@ class OBSEventService {
         }
 
         const handleConnectionClosed = (data: { reason?: unknown; code?: unknown } = {}) => {
+            this.state.connected = false;
+            this.state.ready = false;
             this.logger.warn('OBS connection closed; emitting obs:connection-lost event', data);
             this.eventBus.emit('obs:connection-lost', {
                 reason: data.reason,
@@ -250,52 +226,32 @@ class OBSEventService {
         }
     }
 
-    async _handleConnectionLoss() {
-        if (this.state.reconnecting || !this.reconnectConfig.enabled) {
-            return;
-        }
-
-        this.state.reconnecting = true;
-        this.state.reconnectAttempts = 0;
-
-        while (this.state.reconnectAttempts < this.reconnectConfig.maxAttempts) {
-            this.state.reconnectAttempts++;
-
-            try {
-                await this.connect();
-
-                this.state.reconnecting = false;
-                this.state.reconnectAttempts = 0;
-                return;
-            } catch (_error) {
-                const delay = Math.min(
-                    this.reconnectConfig.baseDelay * Math.pow(2, this.state.reconnectAttempts - 1),
-                    this.reconnectConfig.maxDelay
-                );
-
-                await safeDelay(delay, this.reconnectConfig.baseDelay, 'OBS reconnect backoff');
-            }
-        }
-
-        this.state.reconnecting = false;
-    }
-
     async connect() {
-        try {
-            await this.obsConnection.connect();
-
-            this.state.connected = true;
-            this.state.ready = true;
-            this.state.lastError = null;
-        } catch (error) {
-            this.state.connected = false;
-            this.state.ready = false;
-            this.state.lastError = error instanceof Error ? error : new Error(String(error));
-
-            this._handleObsEventError('Failed to connect to OBS', error, { operation: 'connect' });
-
-            throw error;
+        if (this.connectPromise) {
+            return this.connectPromise;
         }
+
+        this.connectPromise = (async () => {
+            try {
+                await this.obsConnection.connect();
+
+                this.state.connected = true;
+                this.state.ready = true;
+                this.state.lastError = null;
+            } catch (error) {
+                this.state.connected = false;
+                this.state.ready = false;
+                this.state.lastError = error instanceof Error ? error : new Error(String(error));
+
+                this._handleObsEventError('Failed to connect to OBS', error, { operation: 'connect' });
+
+                throw error;
+            } finally {
+                this.connectPromise = null;
+            }
+        })();
+
+        return this.connectPromise;
     }
 
     async disconnect() {
@@ -314,8 +270,6 @@ class OBSEventService {
         return {
             connected: this.state.connected,
             ready: this.state.ready,
-            reconnecting: this.state.reconnecting,
-            reconnectAttempts: this.state.reconnectAttempts,
             lastError: this.state.lastError
         };
     }
@@ -336,7 +290,6 @@ class OBSEventService {
             healthy: connected && responsive,
             connected,
             responsive,
-            reconnecting: this.state.reconnecting,
             lastError: this.state.lastError?.message
         };
     }
@@ -359,6 +312,7 @@ class OBSEventService {
     destroy() {
         this.unsubscribeFns.forEach(unsubscribe => unsubscribe());
         this.unsubscribeFns = [];
+        this.connectPromise = null;
         const removeEventListener = this.obsConnection?.removeEventListener;
         if (typeof removeEventListener === 'function') {
             this.connectionEventHandlers.forEach(({ event, handler }) => {
@@ -374,7 +328,6 @@ function createOBSEventService(dependencies: {
     obsConnection: ObsConnectionLike;
     obsSources: ObsSourcesLike;
     logger: ObsEventLogger;
-    reconnectConfig?: ReconnectConfig;
 }) {
     return new OBSEventService(dependencies);
 }

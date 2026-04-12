@@ -40,13 +40,7 @@ describe('OBSEventService', () => {
             eventBus,
             obsConnection: mockOBSConnection,
             obsSources: mockObsSources,
-            logger: noOpLogger,
-            reconnectConfig: {
-                maxAttempts: 3,
-                baseDelay: 10,
-                maxDelay: 100,
-                enabled: true
-            }
+            logger: noOpLogger
         });
     });
 
@@ -97,6 +91,52 @@ describe('OBSEventService', () => {
             const [eventName, handler] = mockOBSConnection.removeEventListener.mock.calls[0];
             expect(eventName).toBe('ConnectionClosed');
             expect(typeof handler).toBe('function');
+        });
+
+        test('marks service disconnected when OBS emits ConnectionClosed', async () => {
+            const reconnectDisabledConnection = {
+                ...mockOBSConnection,
+                addEventListener: createMockFn(),
+                removeEventListener: createMockFn()
+            };
+            const { createOBSEventService } = require('../../../src/obs/obs-event-service.ts');
+            const service = createOBSEventService({
+                eventBus,
+                obsConnection: reconnectDisabledConnection,
+                obsSources: mockObsSources,
+                logger: noOpLogger
+            });
+
+            try {
+                await service.connect();
+                expect(service.getConnectionState().connected).toBe(true);
+
+                const [, connectionClosedHandler] = reconnectDisabledConnection.addEventListener.mock.calls[0];
+                connectionClosedHandler({ code: 1006, reason: 'socket closed' });
+                await waitForDelay(10);
+
+                const state = service.getConnectionState();
+                expect(state.connected).toBe(false);
+                expect(state.ready).toBe(false);
+            } finally {
+                service.destroy();
+            }
+        });
+
+        test('dedupes concurrent connect requests into one OBS connect attempt', async () => {
+            let releaseConnect;
+            const pendingConnect = new Promise((resolve) => {
+                releaseConnect = resolve;
+            });
+            mockOBSConnection.connect.mockImplementation(() => pendingConnect);
+
+            const first = obsEventService.connect();
+            const second = obsEventService.connect();
+
+            expect(mockOBSConnection.connect).toHaveBeenCalledTimes(1);
+
+            releaseConnect(true);
+            await Promise.all([first, second]);
         });
     });
 
@@ -273,33 +313,38 @@ describe('OBSEventService', () => {
     });
 
     describe('Error Recovery', () => {
-        test('attempts automatic reconnection after connection loss', async () => {
+        test('does not auto-reconnect when connection loss is observed', async () => {
             await obsEventService.connect();
+            const connectCallCountBeforeLoss = mockOBSConnection.connect.mock.calls.length;
             eventBus.emit('obs:connection-lost');
 
             await waitForDelay(100);
 
-            expect(mockOBSConnection.connect.mock.calls.length).toBeGreaterThan(1);
+            expect(mockOBSConnection.connect.mock.calls.length).toBe(connectCallCountBeforeLoss);
         });
 
-        test('reconnects successfully after connection loss', async () => {
+        test('keeps connected state unchanged when connection loss event bus signal is observed', async () => {
             await obsEventService.connect();
             eventBus.emit('obs:connection-lost');
             await waitForDelay(100);
 
             const state = obsEventService.getConnectionState();
             expect(state.connected).toBe(true);
+            expect(state.ready).toBe(true);
         });
 
-        test('stops reconnect attempts after max retries', async () => {
+        test('disconnect keeps service disconnected after connection loss signal', async () => {
             await obsEventService.connect();
-            mockOBSConnection.connect.mockRejectedValue(new Error('Connection refused'));
+
+            mockOBSConnection.connect.mockImplementation(() => new Promise(() => {}));
             eventBus.emit('obs:connection-lost');
-            await waitForDelay(200);
+            await waitForDelay(20);
+
+            await obsEventService.disconnect();
 
             const state = obsEventService.getConnectionState();
-            expect(state.reconnecting).toBe(false);
-            expect(state.reconnectAttempts).toBe(3);
+            expect(state.connected).toBe(false);
+            expect(state.ready).toBe(false);
         });
     });
 

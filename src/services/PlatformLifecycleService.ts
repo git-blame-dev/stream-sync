@@ -31,6 +31,7 @@ class PlatformLifecycleService {
     backgroundPlatformInits: Array<{ platform: string; promise: Promise<unknown> }>;
     platformHealth: Record<string, any>;
     platformErrors: Array<{ platform: string; message: string; timestamp: string }>;
+    shutdownRequested: boolean;
 
     constructor(options: any = {}) {
         this.config = options.config;
@@ -47,11 +48,13 @@ class PlatformLifecycleService {
         this.backgroundPlatformInits = [];
         this.platformHealth = {};
         this.platformErrors = [];
+        this.shutdownRequested = false;
 
         this.logger.debug('PlatformLifecycleService initialized', 'PlatformLifecycleService');
     }
 
     async initializeAllPlatforms(platformModules, eventHandlers = null) {
+        this.shutdownRequested = false;
         this.logger.info('Initializing platform connections...', 'PlatformLifecycleService');
 
         const initTasks = Object.entries(platformModules || {}).map(([platformName, PlatformClass]) =>
@@ -448,6 +451,9 @@ class PlatformLifecycleService {
     }
 
     markPlatformReady(platformName) {
+        if (this.shutdownRequested) {
+            return;
+        }
         if (this.platformHealth[platformName]?.state === 'ready') {
             return;
         }
@@ -481,6 +487,7 @@ class PlatformLifecycleService {
 
     async disconnectAll() {
         this.logger.info('Cleaning up all platforms...', 'PlatformLifecycleService');
+        this.shutdownRequested = true;
 
         // Wait for any background initializations to complete
         await this.waitForBackgroundInits(10000);
@@ -512,6 +519,7 @@ class PlatformLifecycleService {
         this.backgroundPlatformInits = [];
         this.platformHealth = {};
         this.platformErrors = [];
+        this.shutdownRequested = false;
 
         this.logger.debug('PlatformLifecycleService disposed', 'PlatformLifecycleService');
     }

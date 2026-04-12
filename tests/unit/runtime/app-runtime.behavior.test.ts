@@ -632,6 +632,102 @@ describe('AppRuntime behavior', () => {
         }
     });
 
+    it('calls disconnect and destroy on OBS-facing services during shutdown', async () => {
+        const obsEventService = {
+            disconnect: createMockFn().mockResolvedValue(),
+            destroy: createMockFn()
+        };
+        const sceneManagementService = {
+            destroy: createMockFn()
+        };
+        const runtime = createRuntime({ obsEventService, sceneManagementService });
+        runtime.viewerCountSystem = { stopPolling: createMockFn(), cleanup: createMockFn().mockResolvedValue() };
+        runtime.viewerCountStatusCleanup = createMockFn();
+        const originalExit = process.exit;
+        process.exit = createMockFn();
+
+        try {
+            await runtime.shutdown();
+            expect(obsEventService.disconnect.mock.calls.length).toBe(1);
+            expect(obsEventService.destroy.mock.calls.length).toBe(1);
+            expect(sceneManagementService.destroy.mock.calls.length).toBe(1);
+        } finally {
+            process.exit = originalExit;
+        }
+    });
+
+    it('unsubscribes VFX command listener during shutdown', async () => {
+        const unsubscribeByEvent = new Map();
+        const eventBus = {
+            subscribe: createMockFn((eventName) => {
+                const unsubscribe = createMockFn();
+                unsubscribeByEvent.set(eventName, unsubscribe);
+                return unsubscribe;
+            })
+        };
+        const runtime = createRuntime({ eventBus });
+        runtime.viewerCountSystem = { stopPolling: createMockFn(), cleanup: createMockFn().mockResolvedValue() };
+        runtime.viewerCountStatusCleanup = createMockFn();
+        const originalExit = process.exit;
+        process.exit = createMockFn();
+
+        try {
+            await runtime.shutdown();
+
+            const vfxUnsubscribe = unsubscribeByEvent.get(PlatformEvents.VFX_COMMAND_RECEIVED);
+            expect(typeof vfxUnsubscribe).toBe('function');
+            expect(vfxUnsubscribe.mock.calls.length).toBe(1);
+        } finally {
+            process.exit = originalExit;
+        }
+    });
+
+    it('cleans up viewer count observers on shutdown when cleanup is available', async () => {
+        const runtime = createRuntime();
+        runtime.viewerCountSystem = {
+            stopPolling: createMockFn(),
+            cleanup: createMockFn().mockResolvedValue()
+        };
+        runtime.viewerCountStatusCleanup = createMockFn();
+        const originalExit = process.exit;
+        process.exit = createMockFn();
+
+        try {
+            await runtime.shutdown();
+            expect(runtime.viewerCountSystem.cleanup.mock.calls.length).toBe(1);
+        } finally {
+            process.exit = originalExit;
+        }
+    });
+
+    it('continues shutdown cleanup after platform disconnect failures', async () => {
+        const obsEventService = {
+            disconnect: createMockFn().mockResolvedValue(),
+            destroy: createMockFn()
+        };
+        const runtime = createRuntime({
+            obsEventService,
+            platformLifecycleService: {
+                getAllPlatforms: createMockFn().mockReturnValue({}),
+                getStatus: createMockFn().mockReturnValue({ platformHealth: {} }),
+                recordPlatformConnection: createMockFn(),
+                initializeAllPlatforms: createMockFn().mockResolvedValue(),
+                disconnectAll: createMockFn().mockRejectedValue(new Error('disconnect failed'))
+            }
+        });
+        runtime.viewerCountSystem = { stopPolling: createMockFn(), cleanup: createMockFn().mockResolvedValue() };
+        runtime.viewerCountStatusCleanup = createMockFn();
+        const originalExit = process.exit;
+        process.exit = createMockFn();
+
+        try {
+            await runtime.shutdown();
+            expect(obsEventService.disconnect.mock.calls.length).toBe(1);
+        } finally {
+            process.exit = originalExit;
+        }
+    });
+
     it('emits system shutdown and forces exit on timeout', () => {
         const runtime = createRuntime();
         const exitCalls = [];
@@ -668,12 +764,134 @@ describe('AppRuntime behavior', () => {
             initialize: async () => { viewerCountCalls.init += 1; },
             startPolling: async () => { viewerCountCalls.start += 1; }
         };
-        runtime.vfxCommandService = null;
 
         await runtime.start();
 
         expect(viewerCountCalls).toEqual({ add: 1, init: 1, start: 1 });
         expect(goalsCalls).toEqual(['init']);
+    });
+
+    it('rolls back initialized services when startup fails after platform initialization', async () => {
+        const disconnectAll = createMockFn().mockResolvedValue();
+        const runtime = createRuntime({
+            platformLifecycleService: {
+                getAllPlatforms: createMockFn().mockReturnValue({}),
+                getStatus: createMockFn().mockReturnValue({ platformHealth: {} }),
+                recordPlatformConnection: createMockFn(),
+                initializeAllPlatforms: createMockFn().mockResolvedValue(),
+                disconnectAll
+            }
+        });
+        runtime.dependencies.obs = {
+            goalsManager: { initializeGoalDisplay: async () => {} },
+            connectionManager: { isConnected: () => false }
+        };
+        runtime.viewerCountSystem = {
+            addObserver: createMockFn(),
+            initialize: createMockFn().mockRejectedValue(new Error('viewer count init failed')),
+            startPolling: createMockFn().mockResolvedValue()
+        };
+
+        await expect(runtime.start()).rejects.toThrow('viewer count init failed');
+        expect(disconnectAll.mock.calls.length).toBe(1);
+    });
+
+    it('rolls back gui transport when startup fails', async () => {
+        const eventBus = {
+            subscribe: createMockFn(() => createMockFn())
+        };
+        const guiTransportService = {
+            start: createMockFn().mockResolvedValue(),
+            stop: createMockFn().mockResolvedValue(),
+            isActive: createMockFn().mockReturnValue(true)
+        };
+        const runtime = createRuntime(
+            { eventBus, guiTransportService },
+            { gui: { enableDock: true, enableOverlay: false } }
+        );
+        runtime.dependencies.obs = {
+            goalsManager: { initializeGoalDisplay: async () => {} },
+            connectionManager: { isConnected: () => false }
+        };
+        runtime.viewerCountSystem = {
+            addObserver: createMockFn(),
+            initialize: createMockFn().mockRejectedValue(new Error('viewer count init failed')),
+            startPolling: createMockFn().mockResolvedValue(),
+            stopPolling: createMockFn(),
+            cleanup: createMockFn().mockResolvedValue()
+        };
+
+        await expect(runtime.start()).rejects.toThrow('viewer count init failed');
+        expect(guiTransportService.stop.mock.calls.length).toBe(1);
+    });
+
+    it('rejects repeated start calls once runtime has already started', async () => {
+        const runtime = createRuntime();
+        runtime.dependencies.obs = {
+            goalsManager: { initializeGoalDisplay: async () => {} },
+            connectionManager: { isConnected: () => false }
+        };
+        runtime.viewerCountSystem = {
+            addObserver: createMockFn(),
+            initialize: createMockFn().mockResolvedValue(),
+            startPolling: createMockFn().mockResolvedValue()
+        };
+
+        await runtime.start();
+        await expect(runtime.start()).rejects.toThrow(/already started|start in progress/i);
+    });
+
+    it('fails startup when VFX command service is unavailable at startup time', async () => {
+        const runtime = createRuntime();
+        runtime.dependencies.obs = {
+            goalsManager: { initializeGoalDisplay: async () => {} },
+            connectionManager: { isConnected: () => false }
+        };
+        runtime.viewerCountSystem = {
+            addObserver: createMockFn(),
+            initialize: createMockFn().mockResolvedValue(),
+            startPolling: createMockFn().mockResolvedValue()
+        };
+        runtime.vfxCommandService = null;
+
+        await expect(runtime.start()).rejects.toThrow('VFXCommandService unavailable for runtime startup');
+    });
+
+    it('emits degraded readiness when platform initialization reports failures', async () => {
+        const runtime = createRuntime({
+            platformLifecycleService: {
+                getAllPlatforms: createMockFn().mockReturnValue({}),
+                getStatus: createMockFn().mockReturnValue({
+                    platformHealth: {
+                        twitch: { state: 'failed', lastError: 'auth failed' }
+                    },
+                    failedPlatforms: [{ name: 'twitch', lastError: 'auth failed' }]
+                }),
+                recordPlatformConnection: createMockFn(),
+                initializeAllPlatforms: createMockFn().mockResolvedValue(),
+                disconnectAll: createMockFn().mockResolvedValue()
+            }
+        });
+        runtime.dependencies.obs = {
+            goalsManager: { initializeGoalDisplay: async () => {} },
+            connectionManager: { isConnected: () => false }
+        };
+        runtime.viewerCountSystem = {
+            addObserver: createMockFn(),
+            initialize: createMockFn().mockResolvedValue(),
+            startPolling: createMockFn().mockResolvedValue()
+        };
+        let readyPayload = null;
+        const emitSystemReady = runtime.emitSystemReady.bind(runtime);
+        runtime.emitSystemReady = createMockFn((options) => {
+            const payload = emitSystemReady(options);
+            readyPayload = payload;
+            return payload;
+        });
+
+        await runtime.start();
+        expect(readyPayload?.degraded).toBe(true);
+        expect(readyPayload?.degradationReasons).toEqual(expect.arrayContaining(['platform-initialization-failed']));
     });
 
     it('starts gui transport when gui is active', async () => {

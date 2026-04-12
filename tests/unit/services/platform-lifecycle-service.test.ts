@@ -577,6 +577,28 @@ describe('PlatformLifecycleService', () => {
             expect(disconnectSpy).not.toHaveBeenCalled();
             expect(service.isPlatformAvailable('twitch')).toBe(false);
         });
+
+        it('prevents background init from transitioning health to ready after shutdown begins', async () => {
+            configFixture.tiktok = { enabled: true, username: 'test-streamer' };
+
+            const deferred = createDeferred();
+            const cleanupSpy = createMockFn().mockResolvedValue();
+            const tiktokClass = createMockFn().mockImplementation(() => ({
+                initialize: createMockFn().mockImplementation(() => deferred.promise),
+                cleanup: cleanupSpy,
+                on: createMockFn()
+            }));
+
+            await service.initializeAllPlatforms({ tiktok: tiktokClass });
+
+            const shutdownPromise = service.disconnectAll();
+            deferred.resolve(true);
+            await shutdownPromise;
+
+            const status = service.getStatus();
+            expect(status.platformHealth.tiktok?.state).not.toBe('ready');
+            expect(cleanupSpy).toHaveBeenCalled();
+        });
     });
 
     describe('Default Handler Contract Matrix', () => {
