@@ -441,16 +441,21 @@ function getDefaultGoalsManager(dependencies: GoalsDependencies = {}) {
         const obsManager = dependencies.obsManager || getOBSConnectionManager() || {
             isConnected: () => false
         };
-
         const sourcesManager = dependencies.sourcesManager || getDefaultSourcesManager();
+        const updateTextSource = dependencies.updateTextSource || sourcesManager.updateTextSource;
+        const goalTracker = dependencies.goalTracker || createGoalTracker({ logger, config });
         defaultInstance = buildGoalsManager(obsManager, {
             logger,
             config,
-            updateTextSource: sourcesManager.updateTextSource,
-            goalTracker: createGoalTracker({ logger, config })
+            updateTextSource,
+            goalTracker
         });
     }
     return defaultInstance;
+}
+
+function resetDefaultGoalsManager() {
+    defaultInstance = null;
 }
 
 function createOBSGoalsManager(obsManager: ObsManagerLike, dependencies: GoalsDependencies = {}) {
@@ -460,5 +465,6 @@ function createOBSGoalsManager(obsManager: ObsManagerLike, dependencies: GoalsDe
 export {
     OBSGoalsManager,
     createOBSGoalsManager,
-    getDefaultGoalsManager
+    getDefaultGoalsManager,
+    resetDefaultGoalsManager
 };

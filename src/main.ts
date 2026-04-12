@@ -7,7 +7,7 @@ import { getUnifiedLogger, initializeLoggingConfig, setDebugMode } from './core/
 import { InnertubeFactory } from './factories/innertube-factory';
 import NotificationManagerModule from './notifications/NotificationManager.js';
 import { getOBSConnectionManager } from './obs/connection';
-import { initializeDisplayQueue } from './obs/display-queue';
+import { createDisplayQueue, initializeDisplayQueue } from './obs/display-queue';
 import { getDefaultEffectsManager } from './obs/effects';
 import { getDefaultSourcesManager } from './obs/sources';
 import { StreamElementsPlatform, TikTokPlatform, TwitchPlatform, YouTubePlatform } from './platforms';
@@ -234,6 +234,7 @@ const MAIN_FUNCTION_OVERRIDE_KEYS = [
     'ensureSecrets',
     'TwitchAuth',
     'createEventBus',
+    'createDisplayQueue',
     'initializeDisplayQueue',
     'getOBSConnectionManager',
     'createVFXCommandService',
@@ -359,6 +360,7 @@ async function main(overrides: MainOverrides = {}) {
     const ensureSecretsFn = runtimeOverrides.ensureSecrets || ensureSecrets;
     const TwitchAuthCtor = runtimeOverrides.TwitchAuth || TwitchAuth;
     const createEventBusFn = runtimeOverrides.createEventBus || createEventBus;
+    const createDisplayQueueFn = runtimeOverrides.createDisplayQueue || createDisplayQueue;
     const initializeDisplayQueueFn = runtimeOverrides.initializeDisplayQueue || initializeDisplayQueue;
     const getOBSConnectionManagerFn = runtimeOverrides.getOBSConnectionManager || getOBSConnectionManager;
     const createVFXCommandServiceFn = runtimeOverrides.createVFXCommandService || createVFXCommandService;
@@ -513,16 +515,25 @@ async function main(overrides: MainOverrides = {}) {
         } as Parameters<typeof createOBSSubsystem>[0]);
 
         logger.debug('About to initialize display queue...', 'Main');
-        const displayQueue = initializeDisplayQueueFn(
-            obsSubsystem.connectionManager,
-            displayQueueConfig,
-            displayQueueConstants,
-            eventBus,
-            {
-                sourcesManager: obsSubsystem.sourcesManager,
-                goalsManager: obsSubsystem.goalsManager
-            }
-        );
+        const displayQueueDependencies = {
+            sourcesManager: obsSubsystem.sourcesManager,
+            goalsManager: obsSubsystem.goalsManager
+        };
+        const displayQueue = runtimeOverrides.initializeDisplayQueue
+            ? initializeDisplayQueueFn(
+                obsSubsystem.connectionManager,
+                displayQueueConfig,
+                displayQueueConstants,
+                eventBus,
+                displayQueueDependencies
+            )
+            : createDisplayQueueFn(
+                obsSubsystem.connectionManager,
+                displayQueueConfig,
+                displayQueueConstants,
+                eventBus,
+                displayQueueDependencies
+            );
         logger.debug('Display queue initialized', 'Main');
         
         logger.debug('Creating VFXCommandService...', 'Main');

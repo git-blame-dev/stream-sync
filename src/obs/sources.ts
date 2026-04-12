@@ -17,6 +17,7 @@ type SourcesObsManager = {
     removeEventListener?: (...args: unknown[]) => void;
     isConnected?: () => boolean;
     isReady?: () => Promise<boolean>;
+    setSourcesCacheInvalidator?: (invalidator: (() => void) | null) => void;
 };
 
 type SourcesDependencies = {
@@ -44,6 +45,10 @@ function sanitizeForOBS(text) {
     }
     
     return text.replace(/[^\x20-\x7E]/g, '');
+}
+
+function isNonEmptySourceName(sourceName: unknown): sourceName is string {
+    return typeof sourceName === 'string' && sourceName.trim().length > 0;
 }
 
 function createOBSSourcesManager(obsManager: SourcesObsManager, dependencies: SourcesDependencies = {}) {
@@ -106,6 +111,11 @@ function createOBSSourcesManager(obsManager: SourcesObsManager, dependencies: So
     function clearSceneItemCache() {
         sceneItemCache.clear();
         logger.debug('[OBS Cache] Scene item cache cleared', 'obs-sources');
+    }
+
+    const activeConnectionManager = getOBSConnectionManager();
+    if (activeConnectionManager && typeof activeConnectionManager.setSourcesCacheInvalidator === 'function') {
+        activeConnectionManager.setSourcesCacheInvalidator(clearSceneItemCache);
     }
 
     function validateGroupName(groupName, operationType = "group operation") {
@@ -321,6 +331,9 @@ function createOBSSourcesManager(obsManager: SourcesObsManager, dependencies: So
     async function setPlatformLogoVisibility(activePlatform, platformLogos) {
     for (const platform in platformLogos) {
         const logoSource = platformLogos[platform];
+        if (!isNonEmptySourceName(logoSource)) {
+            continue;
+        }
         const isVisible = platform.toLowerCase() === activePlatform.toLowerCase();
         
         try {
@@ -338,6 +351,9 @@ function createOBSSourcesManager(obsManager: SourcesObsManager, dependencies: So
     async function setNotificationPlatformLogoVisibility(activePlatform, platformLogos) {
     for (const platform in platformLogos) {
         const logoSource = platformLogos[platform];
+        if (!isNonEmptySourceName(logoSource)) {
+            continue;
+        }
         const isVisible = platform.toLowerCase() === activePlatform.toLowerCase();
         
         try {
@@ -354,14 +370,22 @@ function createOBSSourcesManager(obsManager: SourcesObsManager, dependencies: So
 
     async function hideAllPlatformLogos(platformLogos) {
     for (const platform in platformLogos) {
-        await setGroupSourceVisibility(platformLogos[platform], chatGroupName, false);
+        const logoSource = platformLogos[platform];
+        if (!isNonEmptySourceName(logoSource)) {
+            continue;
+        }
+        await setGroupSourceVisibility(logoSource, chatGroupName, false);
     }
     }
 
     async function hideAllNotificationPlatformLogos(platformLogos) {
 
         for (const platform in platformLogos) {
-            await setGroupSourceVisibility(platformLogos[platform], notificationGroupName, false);
+            const logoSource = platformLogos[platform];
+            if (!isNonEmptySourceName(logoSource)) {
+                continue;
+            }
+            await setGroupSourceVisibility(logoSource, notificationGroupName, false);
         }
     }
 
@@ -560,16 +584,33 @@ class OBSSourcesManager {
 }
 
 let defaultInstance = null;
+let defaultConnectionManagerForCacheInvalidation: SourcesObsManager | null = null;
 
-function getDefaultSourcesManager() {
+type DefaultSourcesManagerDependencies = {
+    logger?: SourcesLogger;
+    config?: {
+        obs: {
+            chatMsgGroup: string;
+            notificationMsgGroup: string;
+        };
+        timing: {
+            fadeDuration: number;
+        };
+    };
+    ensureOBSConnected?: () => Promise<void>;
+    obsCall?: (requestType: string, payload?: Record<string, unknown>) => Promise<unknown>;
+    getOBSConnectionManager?: () => SourcesObsManager;
+};
+
+function getDefaultSourcesManager(dependencies: DefaultSourcesManagerDependencies = {}) {
     if (!defaultInstance) {
-        const { logger } = nodeRequire('../core/logging') as {
+        const { logger: defaultLogger } = nodeRequire('../core/logging') as {
             logger: {
                 warn: (...args: unknown[]) => void;
                 debug: (...args: unknown[]) => void;
             };
         };
-        const { config } = nodeRequire('../core/config') as {
+        const { config: defaultConfig } = nodeRequire('../core/config') as {
             config: {
                 obs: {
                     chatMsgGroup: string;
@@ -580,7 +621,7 @@ function getDefaultSourcesManager() {
                 };
             };
         };
-        const { ensureOBSConnected, obsCall, getOBSConnectionManager } = nodeRequire('./connection') as {
+        const connectionModule = nodeRequire('./connection') as {
             ensureOBSConnected: () => Promise<void>;
             obsCall: (requestType: string, payload?: Record<string, unknown>) => Promise<unknown>;
             getOBSConnectionManager: () => {
@@ -591,6 +632,12 @@ function getDefaultSourcesManager() {
                 isConnected: () => boolean;
             };
         };
+
+        const logger = dependencies.logger || defaultLogger;
+        const config = dependencies.config || defaultConfig;
+        const ensureOBSConnected = dependencies.ensureOBSConnected || connectionModule.ensureOBSConnected;
+        const obsCall = dependencies.obsCall || connectionModule.obsCall;
+        const getOBSConnectionManager = dependencies.getOBSConnectionManager || connectionModule.getOBSConnectionManager;
 
         const chatGroupName = config.obs.chatMsgGroup;
         const notificationGroupName = config.obs.notificationMsgGroup;
@@ -630,13 +677,27 @@ function getDefaultSourcesManager() {
             obsCall
         });
         defaultInstance.isDegraded = isDegraded;
+        defaultConnectionManagerForCacheInvalidation = obsManager;
     }
     return defaultInstance;
+}
+
+function resetDefaultSourcesManager() {
+    if (
+        defaultConnectionManagerForCacheInvalidation
+        && typeof defaultConnectionManagerForCacheInvalidation.setSourcesCacheInvalidator === 'function'
+    ) {
+        defaultConnectionManagerForCacheInvalidation.setSourcesCacheInvalidator(null);
+    }
+
+    defaultInstance = null;
+    defaultConnectionManagerForCacheInvalidation = null;
 }
 
 export {
     OBSSourcesManager,
     createOBSSourcesManager,
     getDefaultSourcesManager,
+    resetDefaultSourcesManager,
     sanitizeForOBS
 };

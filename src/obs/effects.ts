@@ -45,7 +45,9 @@ const { createRetrySystem } = nodeRequire('../utils/retry-system') as {
 const { getOBSConnectionManager } = nodeRequire('./connection') as {
     getOBSConnectionManager: () => ObsManagerLike;
 };
-const defaultSourcesManager = nodeRequire('./sources') as SourcesManagerLike;
+const { getDefaultSourcesManager } = nodeRequire('./sources') as {
+    getDefaultSourcesManager: () => SourcesManagerLike;
+};
 
 function hasObsEventListeners(obsManager: ObsManagerLike): obsManager is ObsManagerWithEvents {
     return typeof obsManager.addEventListener === 'function' && typeof obsManager.removeEventListener === 'function';
@@ -213,15 +215,20 @@ function getDefaultEffectsManager() {
             getOBSConnectionManager(),  // Get singleton directly
             {
                 logger,
-                sourcesManager: defaultSourcesManager
+                sourcesManager: getDefaultSourcesManager()
             }
         );
     }
     return defaultInstance;
 }
 
+function resetDefaultEffectsManager() {
+    defaultInstance = null;
+}
+
 // Export class and factory functions
 export {
     OBSEffectsManager,
-    getDefaultEffectsManager
+    getDefaultEffectsManager,
+    resetDefaultEffectsManager
 };

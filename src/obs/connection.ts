@@ -43,6 +43,10 @@ type ConnectionDependencies = {
     handcam?: Parameters<typeof initializeHandcamGlow>[1];
 };
 
+type ManagerOwnedDependencyKeys = 'obs' | 'OBSWebSocket' | 'constants';
+
+const MANAGER_OWNED_DEPENDENCY_KEYS: ManagerOwnedDependencyKeys[] = ['obs', 'OBSWebSocket', 'constants'];
+
 const nodeRequire = createRequire(import.meta.url);
 const { default: OBSWebSocket } = nodeRequire('obs-websocket-js') as {
     default: new () => ObsSocketLike;
@@ -79,6 +83,7 @@ class OBSConnectionManager {
     isIntentionalDisconnect: boolean;
     isDisposed: boolean;
     eventHandlers: Map<string, (data?: { reason?: unknown; code?: unknown }) => void>;
+    sourcesCacheInvalidator: (() => void) | null;
 
     constructor(dependencies: ConnectionDependencies = {}) {
         this.logger = logger;
@@ -118,6 +123,7 @@ class OBSConnectionManager {
         this.isIntentionalDisconnect = false;
         this.isDisposed = false;
         this.eventHandlers = new Map();
+        this.sourcesCacheInvalidator = null;
 
         // Set up event handlers
         this.setupEventHandlers();
@@ -185,42 +191,36 @@ class OBSConnectionManager {
         // Scene item cache invalidation events
         const sceneItemCreatedHandler = () => {
             this.clearSceneItemCache();
-            this.notifySourcesCacheClearing();
         };
         this.eventHandlers.set('SceneItemCreated', sceneItemCreatedHandler);
         this.obs.on('SceneItemCreated', sceneItemCreatedHandler);
         
         const sceneItemRemovedHandler = () => {
             this.clearSceneItemCache();
-            this.notifySourcesCacheClearing();
         };
         this.eventHandlers.set('SceneItemRemoved', sceneItemRemovedHandler);
         this.obs.on('SceneItemRemoved', sceneItemRemovedHandler);
         
         const sceneCreatedHandler = () => {
             this.clearSceneItemCache();
-            this.notifySourcesCacheClearing();
         };
         this.eventHandlers.set('SceneCreated', sceneCreatedHandler);
         this.obs.on('SceneCreated', sceneCreatedHandler);
         
         const sceneRemovedHandler = () => {
             this.clearSceneItemCache();
-            this.notifySourcesCacheClearing();
         };
         this.eventHandlers.set('SceneRemoved', sceneRemovedHandler);
         this.obs.on('SceneRemoved', sceneRemovedHandler);
         
         const inputCreatedHandler = () => {
             this.clearSceneItemCache();
-            this.notifySourcesCacheClearing();
         };
         this.eventHandlers.set('InputCreated', inputCreatedHandler);
         this.obs.on('InputCreated', inputCreatedHandler);
         
         const inputRemovedHandler = () => {
             this.clearSceneItemCache();
-            this.notifySourcesCacheClearing();
         };
         this.eventHandlers.set('InputRemoved', inputRemovedHandler);
         this.obs.on('InputRemoved', inputRemovedHandler);
@@ -487,20 +487,13 @@ class OBSConnectionManager {
     clearSceneItemCache() {
         this.sceneItemIdCache.clear();
         this.logger.debug('[OBS Connection] Scene item cache cleared', 'obs-connection');
-    }
-    
-    notifySourcesCacheClearing() {
-        try {
-            const sources = nodeRequire('./sources') as {
-                clearSceneItemCache?: () => void;
-            };
-            if (sources && typeof sources.clearSceneItemCache === 'function') {
-                sources.clearSceneItemCache();
-            }
-        } catch {
-            // Ignore errors - sources manager might not be initialized yet
-            this.logger.debug('[OBS Cache] Could not notify sources cache clearing - sources manager not available', 'obs-connection');
+        if (typeof this.sourcesCacheInvalidator === 'function') {
+            this.sourcesCacheInvalidator();
         }
+    }
+
+    setSourcesCacheInvalidator(invalidator: (() => void) | null) {
+        this.sourcesCacheInvalidator = typeof invalidator === 'function' ? invalidator : null;
     }
 
     scheduleReconnect(reason = 'unknown') {
@@ -552,6 +545,7 @@ class OBSConnectionManager {
         this.isConnecting = false;
         this._isConnected = false;
         this.lifecycleState = 'disposed';
+        this.sourcesCacheInvalidator = null;
 
         for (const [eventName, handler] of this.eventHandlers.entries()) {
             this.obs.off(eventName, handler);
@@ -587,10 +581,22 @@ class OBSConnectionManager {
 // Global instance management
 let globalOBSManager: OBSConnectionManager | null = null;
 
+function assertNoIncompatibleSingletonOverrides(dependencies: ConnectionDependencies) {
+    if (!dependencies || Object.keys(dependencies).length === 0) {
+        return;
+    }
+
+    const invalidOverrideKeys = MANAGER_OWNED_DEPENDENCY_KEYS.filter((key) => dependencies[key] !== undefined);
+    if (invalidOverrideKeys.length > 0) {
+        throw new Error(`getOBSConnectionManager incompatible non-config dependency overrides: ${invalidOverrideKeys.join(', ')}`);
+    }
+}
+
 function getOBSConnectionManager(dependencies: ConnectionDependencies = {}): OBSConnectionManager {
     if (!globalOBSManager) {
         globalOBSManager = createOBSConnectionManager(dependencies);
     } else if (dependencies && Object.keys(dependencies).length > 0) {
+        assertNoIncompatibleSingletonOverrides(dependencies);
         // Update existing manager configuration if new dependencies provided
         if (dependencies.config) {
             globalOBSManager.updateConfig(dependencies.config);

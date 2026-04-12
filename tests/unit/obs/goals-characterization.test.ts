@@ -86,6 +86,36 @@ describe('OBS Goals Module Characterization Tests', () => {
     });
 
     describe('Goal System Initialization', () => {
+        test('getDefaultGoalsManager uses injected goalTracker dependency', async () => {
+            const injectedGoalTracker = {
+                initializeGoalTracker: createMockFn().mockResolvedValue(),
+                addDonationToGoal: createMockFn().mockResolvedValue({ success: true, formatted: '40/100' }),
+                addPaypiggyToGoal: createMockFn().mockResolvedValue({ success: true, formatted: '40/100' }),
+                getGoalState: createMockFn().mockReturnValue({ formatted: '40/100' }),
+                getAllGoalStates: createMockFn().mockReturnValue({ tiktok: { formatted: '40/100' } })
+            };
+
+            const freshGoals = await import(`../../../src/obs/goals.ts?test-default-goal-tracker=${testClock.now()}`);
+            const defaultGoalsManager = freshGoals.getDefaultGoalsManager({
+                config: {
+                    goals: {
+                        enabled: true,
+                        tiktokGoalEnabled: true,
+                        tiktokGoalSource: 'test-default-goal-source'
+                    }
+                },
+                obsManager: {
+                    isConnected: () => false
+                },
+                goalTracker: injectedGoalTracker,
+                updateTextSource: createMockFn().mockResolvedValue()
+            });
+
+            defaultGoalsManager.getCurrentGoalStatus('tiktok');
+
+            expect(injectedGoalTracker.getGoalState).toHaveBeenCalledWith('tiktok');
+        }, TEST_TIMEOUTS.FAST);
+
         test('initializeGoalDisplay should initialize goal tracker and update displays when OBS connected', async () => {
             const { updateTextSource } = mockSourcesManager;
 
