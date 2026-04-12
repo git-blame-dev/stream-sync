@@ -203,6 +203,25 @@ describe('AppRuntime behavior', () => {
         }));
     });
 
+    it('returns failed result when notification manager throws a non-Error value', async () => {
+        const runtime = createRuntime({
+            notificationManager: {
+                handleNotification: createMockFn().mockRejectedValue('test-notification-manager-non-error')
+            }
+        });
+
+        const result = await runtime.handleUnifiedNotification('farewell', 'twitch', 'test-user', {
+            userId: 'test-user-id',
+            command: '!bye',
+            timestamp: '2024-01-01T00:00:00.000Z'
+        });
+
+        expect(result).toEqual(expect.objectContaining({
+            success: false,
+            error: 'test-notification-manager-non-error'
+        }));
+    });
+
     it('returns failed result when notification manager returns invalid result shape', async () => {
         const runtime = createRuntime({
             notificationManager: {

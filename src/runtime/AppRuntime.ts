@@ -99,8 +99,9 @@ class AppRuntime {
             }
             throw new Error('Notification manager returned invalid result shape');
         } catch (error) {
+            const errorMessage = getErrorMessage(error);
             this._handleAppRuntimeError(
-                `Error handling ${type} notification for ${username}: ${error.message}`,
+                `Error handling ${type} notification for ${username}: ${errorMessage}`,
                 error,
                 { notificationType: type, username, platform },
                 { eventType: 'notification', logContext: platform }
@@ -108,7 +109,7 @@ class AppRuntime {
 
             return {
                 success: false,
-                error: error.message,
+                error: errorMessage,
                 notificationType: type,
                 platform,
                 username: typeof username === 'string' ? username : null
@@ -370,7 +371,7 @@ class AppRuntime {
             }
         } catch (error) {
             this._handleAppRuntimeError(
-                `Error processing chat message from ${platform}: ${error.message}`,
+                `Error processing chat message from ${platform}: ${getErrorMessage(error)}`,
                 error,
                 { platform, normalizedData },
                 { eventType: 'chat-message', logContext: 'system' }
@@ -392,7 +393,7 @@ class AppRuntime {
             const notificationPromise = this.viewerCountSystem.notifyObservers(platform, count, previousCount);
             if (notificationPromise && notificationPromise.catch) {
                 notificationPromise.catch((error) => {
-                    this.logger.warn(`Observer notification failed for ${platform}: ${error.message}`, 'system');
+                    this.logger.warn(`Observer notification failed for ${platform}: ${getErrorMessage(error)}`, 'system');
                 });
             }
         }
@@ -727,7 +728,7 @@ class AppRuntime {
 
         } catch (error) {
             this._handleAppRuntimeError(
-                `EARLY: ViewerCount system failed to start: ${error.message}`,
+                `EARLY: ViewerCount system failed to start: ${getErrorMessage(error)}`,
                 error,
                 null,
                 {
@@ -890,7 +891,7 @@ class AppRuntime {
                 giftVFXConfig = await this.vfxCommandService.getVFXConfig('gifts', null);
             } catch (vfxError) {
                 this._handleAppRuntimeError(
-                    `Error resolving gift VFX config: ${vfxError.message}`,
+                    `Error resolving gift VFX config: ${getErrorMessage(vfxError)}`,
                     vfxError,
                     null,
                     { eventType: 'notification', logContext: 'system' }
@@ -1048,7 +1049,7 @@ class AppRuntime {
 
         } catch (error) {
             this._handleAppRuntimeError(
-                `Error handling envelope notification: ${error.message}`,
+                `Error handling envelope notification: ${getErrorMessage(error)}`,
                 error,
                 { platform, envelopeData: data },
                 { eventType: 'notification', logContext: platform }
@@ -1061,7 +1062,7 @@ class AppRuntime {
             await this.handleGiftPaypiggyEvent(platform, username, options);
         } catch (error) {
             this._handleAppRuntimeError(
-                `Error handling giftpaypiggy notification for ${username}: ${error.message}`,
+                `Error handling giftpaypiggy notification for ${username}: ${getErrorMessage(error)}`,
                 error,
                 { platform, username, options },
                 { eventType: 'notification', logContext: platform }
@@ -1074,7 +1075,7 @@ class AppRuntime {
             await this.handleResubEvent(platform, username, options);
         } catch (error) {
             this._handleAppRuntimeError(
-                `Error handling resub notification for ${username}: ${error.message}`,
+                `Error handling resub notification for ${username}: ${getErrorMessage(error)}`,
                 error,
                 { platform, username, options },
                 { eventType: 'notification', logContext: platform }

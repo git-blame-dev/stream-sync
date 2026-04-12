@@ -176,9 +176,6 @@ class DisplayQueue {
         if (removedChatCount > 0) {
             logger.debug(`[Display Queue] Removing ${removedChatCount} stale chat messages to show latest`, 'display-queue');
         }
-        if (!isNotificationType(item.type)) {
-            this.emitDisplayRow(item);
-        }
         logger.debug(`[Display Queue] Added ${item.type} (priority ${item.priority}) at position ${insertIndex}. Queue length: ${this.queue.length}`, 'display-queue');
         
         if (!this.isProcessing && !this.isRetryScheduled && this.config.autoProcess) {
@@ -310,7 +307,12 @@ class DisplayQueue {
     }
     
     async displayChatItem(item) {
-        return this.renderer.displayChatItem(item);
+        const displayed = await this.renderer.displayChatItem(item);
+        if (displayed === false) {
+            return false;
+        }
+        this.emitDisplayRow(item);
+        return true;
     }
 
     async displayNotificationItem(item) {
