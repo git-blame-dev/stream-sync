@@ -350,9 +350,10 @@ class PlatformEventRouter {
             throw new Error('Notification payload requires ISO timestamp');
         }
 
-        const normalizedUserId = sanitized.userId === undefined || sanitized.userId === null
-            ? undefined
-            : String(sanitized.userId);
+        const normalizedUserIdValue = sanitized.userId === undefined || sanitized.userId === null
+            ? ''
+            : String(sanitized.userId).trim();
+        const normalizedUserId = normalizedUserIdValue || undefined;
         const normalizedUsername = typeof sanitized.username === 'string' ? sanitized.username.trim() : '';
         const isAnonymousPayload = sanitized.isAnonymous === true;
         const allowsAnonymous = isAnonymousPayload &&
