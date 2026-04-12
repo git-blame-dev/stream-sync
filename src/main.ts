@@ -655,6 +655,19 @@ async function main(overrides: MainOverrides = {}) {
         };
 
     } catch (error) {
+        if (app && typeof app.rollbackStartup === 'function') {
+            try {
+                await app.rollbackStartup();
+            } catch (rollbackError) {
+                const rollbackMessage = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
+                logMainError(
+                    `Startup rollback failed: ${rollbackMessage}`,
+                    rollbackError,
+                    null,
+                    { eventType: 'startup-rollback', logContext: 'main' }
+                );
+            }
+        }
         const message = error instanceof Error ? error.message : String(error);
         logMainError(`Critical error occurred: ${message}`, error, null, { eventType: 'startup', logContext: 'main' });
         throw error;

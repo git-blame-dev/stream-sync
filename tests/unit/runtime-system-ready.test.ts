@@ -52,6 +52,26 @@ describe('AppRuntime system readiness payload', () => {
             correlationId: 'test-noop'
         }));
     });
+
+    it('marks readiness as degraded when platform lifecycle status reports failures', () => {
+        const runtime = createAppRuntimeDouble();
+        runtime.platformLifecycleService = {
+            getStatus: createMockFn().mockReturnValue({
+                failedPlatforms: [{ name: 'twitch', lastError: 'auth failed' }],
+                platformHealth: {
+                    twitch: { state: 'failed', lastError: 'auth failed' }
+                }
+            })
+        };
+
+        const payload = runtime.emitSystemReady({ correlationId: 'test-degraded-ready' });
+
+        expect(payload).toEqual(expect.objectContaining({
+            correlationId: 'test-degraded-ready',
+            degraded: true,
+            degradationReasons: expect.arrayContaining(['platform-initialization-failed'])
+        }));
+    });
 });
 
 describe('AppRuntime shutdown lifecycle', () => {
