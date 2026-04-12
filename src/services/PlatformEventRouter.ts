@@ -15,12 +15,6 @@ const PlatformEvents = {
     SHARE: 'platform:share',
     RAID: 'platform:raid',
     STREAM_STATUS: 'platform:stream-status',
-    CHAT_CONNECTED: 'platform:chat-connected',
-    CHAT_DISCONNECTED: 'platform:chat-disconnected',
-    CONNECTION_STATUS: 'platform:connection-status',
-    PLATFORM_CONNECTION: 'platform:connection',
-    ERROR: 'platform:error',
-    HEALTH_CHECK: 'platform:health-check',
     STREAM_DETECTED: 'platform:stream-detected',
     ENVELOPE: 'platform:envelope'
 } as const;
@@ -177,12 +171,6 @@ class PlatformEventRouter {
                 return;
             }
             case PlatformEvents.STREAM_STATUS:
-            case PlatformEvents.CHAT_CONNECTED:
-            case PlatformEvents.CHAT_DISCONNECTED:
-            case PlatformEvents.CONNECTION_STATUS:
-            case PlatformEvents.PLATFORM_CONNECTION:
-            case PlatformEvents.ERROR:
-            case PlatformEvents.HEALTH_CHECK:
                 return;
             case PlatformEvents.STREAM_DETECTED:
                 if (this.runtime?.handleStreamDetected) {
