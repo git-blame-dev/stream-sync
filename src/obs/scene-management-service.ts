@@ -1,4 +1,3 @@
-import { safeDelay } from '../utils/timeout-validator';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 
 type SceneEventBus = {
@@ -12,10 +11,6 @@ type SceneObsConnection = {
 type SceneLogger = {
     warn?: (message: string, context?: string, payload?: unknown) => void;
 };
-
-function getRequiredSceneName(value: unknown): string | null {
-    return typeof value === 'string' && value.length > 0 ? value : null;
-}
 
 class SceneManagementService {
     eventBus: SceneEventBus;
@@ -71,78 +66,7 @@ class SceneManagementService {
         // Event unsubscribe functions for cleanup
         this.unsubscribeFns = [];
 
-        // Initialize event listeners
-        this._setupEventListeners();
-    }
-
-    _setupEventListeners() {
-        this.unsubscribeFns.push(
-            this.eventBus.subscribe('scene:switch', async (data) => {
-                await this._handleSceneSwitch(data);
-            })
-        );
-    }
-
-    async _handleSceneSwitch(data: Record<string, unknown>) {
-        const { sceneName, transition, retry = true } = data;
-        const resolvedSceneName = getRequiredSceneName(sceneName);
-
-        if (!resolvedSceneName) {
-            this._handleSceneManagerError('Scene switch requires a non-empty sceneName', null, {
-                sceneName,
-                transition,
-                retry
-            });
-            return;
-        }
-
-        let attempt = 0;
-
-        while (attempt <= (retry ? this.config.maxRetries : 0)) {
-            try {
-                if (attempt > 0) {
-                    await safeDelay(this.config.retryDelay, this.config.retryDelay || 1000, 'Scene switch retry delay');
-                }
-
-                await this.obsConnection.call('SetCurrentProgramScene', {
-                    sceneName: resolvedSceneName
-                });
-
-                // Update state
-                this.state.previousScene = this.state.currentScene;
-                this.state.currentScene = resolvedSceneName;
-                this.state.switchCount++;
-
-                // Add to history
-                this._addToHistory({
-                    sceneName: resolvedSceneName,
-                    timestamp: Date.now(),
-                    transition
-                });
-
-                return;
-            } catch (error) {
-                attempt++;
-
-                if (attempt > (retry ? this.config.maxRetries : 0)) {
-                    // All retries exhausted
-                    this._handleSceneManagerError(`Failed to switch to scene ${sceneName}`, error, {
-                        sceneName,
-                        attempts: attempt
-                    });
-
-                }
-            }
-        }
-    }
-
-    _addToHistory(entry: { sceneName: string; timestamp: number; transition: unknown }) {
-        this.state.history.push(entry);
-
-        // Limit history size to prevent memory leaks
-        if (this.state.history.length > this.config.maxHistorySize) {
-            this.state.history.shift();
-        }
+        // Scene management no longer subscribes to scene:switch because there is no runtime producer.
     }
 
     async validateScene(sceneName: string) {

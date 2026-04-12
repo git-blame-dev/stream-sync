@@ -147,7 +147,6 @@ class AppRuntime {
             logger: this.logger
         });
         this.obsEventService = this.dependencies.obsEventService;
-        this.sceneManagementService = this.dependencies.sceneManagementService;
 
         this.viewerCountSystem = new ViewerCountSystem({
             platformProvider: () => this.getPlatforms(),
@@ -175,7 +174,6 @@ class AppRuntime {
             'vfxCommandService',
             'userTrackingService',
             'obsEventService',
-            'sceneManagementService',
             'commandCooldownService',
             'platformLifecycleService'
         ];
@@ -475,19 +473,6 @@ class AppRuntime {
             this.platformEventRouter.dispose();
         }
 
-        if (this.sceneManagementService && typeof this.sceneManagementService.destroy === 'function') {
-            try {
-                this.sceneManagementService.destroy();
-            } catch (error) {
-                this._handleAppRuntimeError(
-                    `Error destroying scene management service: ${getErrorMessage(error)}`,
-                    error,
-                    null,
-                    { eventType: 'shutdown', logContext: 'system' }
-                );
-            }
-        }
-
         try {
             if (this.viewerCountSystem) {
                 this.viewerCountSystem.stopPolling();
@@ -697,12 +682,6 @@ class AppRuntime {
             }
             if (this.obsEventService && typeof this.obsEventService.destroy === 'function') {
                 this.obsEventService.destroy();
-            }
-        });
-
-        await this._runStartupRollbackStep('destroy scene management service', async () => {
-            if (this.sceneManagementService && typeof this.sceneManagementService.destroy === 'function') {
-                this.sceneManagementService.destroy();
             }
         });
 
