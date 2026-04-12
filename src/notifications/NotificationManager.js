@@ -1,5 +1,6 @@
 
 const EventEmitter = require('events');
+const { randomUUID } = require('node:crypto');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
 const { createSyntheticGiftFromAggregated } = require('./aggregated-donation-transformer');
 const { NotificationInputValidator } = require('./notification-input-validator');
@@ -472,9 +473,30 @@ class NotificationManager extends EventEmitter {
             this.logger.debug(`[NotificationManager] Processing VFX for ${vfxNotification.type}`, 'notification-manager');
 
             if (this.vfxCommandService && vfxNotification.vfxCommand) {
+                const username = typeof vfxNotification.username === 'string' ? vfxNotification.username.trim() : '';
+                const platform = typeof vfxNotification.platform === 'string' ? vfxNotification.platform.trim().toLowerCase() : '';
+                const userId = (vfxNotification.userId !== undefined && vfxNotification.userId !== null)
+                    ? String(vfxNotification.userId).trim()
+                    : '';
+
+                if (!username || !platform || !userId) {
+                    this.logger.warn('[NotificationManager] Skipping VFX execution due to incomplete context', {
+                        hasUsername: !!username,
+                        hasPlatform: !!platform,
+                        hasUserId: !!userId,
+                        type: vfxNotification.type
+                    });
+                    return;
+                }
+
                 const context = {
-                    username: vfxNotification.username,
-                    platform: vfxNotification.platform,
+                    username,
+                    platform,
+                    userId,
+                    skipCooldown: true,
+                    correlationId: typeof vfxNotification.correlationId === 'string' && vfxNotification.correlationId.trim()
+                        ? vfxNotification.correlationId.trim()
+                        : randomUUID(),
                     type: vfxNotification.type
                 };
 

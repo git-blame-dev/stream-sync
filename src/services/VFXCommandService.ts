@@ -130,8 +130,6 @@ class VFXCommandService {
             const executionResult = await this._executeVFXCommand(vfxConfig, { username: commandUser, platform });
             
             if (executionResult.success) {
-                this.stats.successfulCommands++;
-
                 if (this.eventBus) {
                     try {
                         if (!correlationId) {
@@ -171,6 +169,7 @@ class VFXCommandService {
                 if (!skipCooldown) {
                     this._updateCooldowns(userId, vfxConfig.commandKey);
                 }
+                this.stats.successfulCommands++;
             } else {
                 this.stats.failedCommands++;
             }

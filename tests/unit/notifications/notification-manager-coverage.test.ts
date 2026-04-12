@@ -94,11 +94,19 @@ describe('NotificationManager coverage', () => {
                 type: 'platform:gift',
                 platform: 'tiktok',
                 username: 'testUser',
+                userId: 'test-user-id',
                 vfxCommand: 'confetti'
             });
 
             expect(executedCommands.length).toBe(1);
             expect(executedCommands[0].cmd).toBe('confetti');
+            expect(executedCommands[0].ctx).toEqual(expect.objectContaining({
+                username: 'testUser',
+                platform: 'tiktok',
+                userId: 'test-user-id',
+                skipCooldown: true,
+                correlationId: expect.any(String)
+            }));
         });
 
         it('skips when no VFX command specified', async () => {
@@ -128,8 +136,30 @@ describe('NotificationManager coverage', () => {
 
             await expect(manager.processVFXForNotification({
                 type: 'platform:gift',
+                platform: 'tiktok',
+                username: 'testUser',
+                userId: 'test-user-id',
                 vfxCommand: 'broken'
             })).resolves.toBeUndefined();
+        });
+
+        it('skips VFX execution when required execution context is incomplete', async () => {
+            const executeCommand = createMockFn();
+            const deps = createDeps({
+                vfxCommandService: {
+                    executeCommand
+                }
+            });
+            const manager = new NotificationManager(deps);
+
+            await manager.processVFXForNotification({
+                type: 'platform:gift',
+                platform: 'tiktok',
+                username: 'testUser',
+                vfxCommand: 'confetti'
+            });
+
+            expect(executeCommand).not.toHaveBeenCalled();
         });
     });
 

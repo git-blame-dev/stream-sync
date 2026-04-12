@@ -121,6 +121,8 @@ describe('VFXCommandService completion events', () => {
         });
 
         expect(result.success).toBe(false);
+        expect(service.stats.successfulCommands).toBe(0);
+        expect(service.stats.failedCommands).toBe(1);
         expect(service.userLastCommand.size).toBe(0);
         expect(service.globalCommandCooldowns.size).toBe(0);
     });

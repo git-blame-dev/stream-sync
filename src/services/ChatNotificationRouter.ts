@@ -86,7 +86,7 @@ class ChatNotificationRouter {
             const firstMessageTrackingId = greetingProfile
                 ? `greeting-profile:${greetingProfile.profileId}`
                 : safeNormalizedData.userId;
-            const isFirstMessage = this.isFirstMessage(safeNormalizedData, platform, firstMessageTrackingId);
+            const firstMessageState = this.getFirstMessageState(safeNormalizedData, platform, firstMessageTrackingId);
             const greetingsEnabled = this.isGreetingEnabled(platform);
 
             if (chatEnabled) {
@@ -104,18 +104,19 @@ class ChatNotificationRouter {
             const commandConfig = await this.detectCommand(sanitizedMessage.message);
             if (commandConfig) {
                 await this.processCommand(platform, safeNormalizedData, commandConfig, {
-                    isFirstMessage,
+                    firstMessageState,
                     greetingsEnabled,
                     greetingProfile
                 });
                 return;
             }
 
-            if (isFirstMessage && greetingsEnabled) {
+            if (firstMessageState.isFirstMessage && greetingsEnabled) {
                 await this.queueGreeting(platform, safeNormalizedData.username, {
                     userId,
                     greetingProfile
                 });
+                firstMessageState.consume();
             }
         } catch (error) {
             const errorDetails = getErrorMessage(error);
@@ -344,7 +345,11 @@ class ChatNotificationRouter {
             return;
         }
 
-        const { isFirstMessage, greetingsEnabled, greetingProfile } = safeOptions;
+        const { firstMessageState, greetingsEnabled, greetingProfile } = safeOptions;
+        const isFirstMessage = firstMessageState?.isFirstMessage === true;
+        const consumeFirstMessage = typeof firstMessageState?.consume === 'function'
+            ? firstMessageState.consume
+            : () => {};
         const { perUserCooldown, heavyCooldown, globalCooldown } = this.getCooldownSettings();
 
         const userAllowed = this.runtime.commandCooldownService.checkUserCooldown(
@@ -370,11 +375,43 @@ class ChatNotificationRouter {
                 userId: normalizedData.userId,
                 greetingProfile
             });
+            consumeFirstMessage();
         }
 
         await this.queueCommand(platform, normalizedData, commandConfig);
+        if (isFirstMessage && !greetingsEnabled) {
+            consumeFirstMessage();
+        }
         this.runtime.commandCooldownService.updateUserCooldown(normalizedData.userId);
         this.updateGlobalCooldown(commandConfig.command);
+    }
+
+    getFirstMessageState(normalizedData, platform, trackingUserId = normalizedData.userId) {
+        const context = {
+            username: normalizedData.username,
+            platform
+        };
+
+        const userTrackingService = this.runtime.userTrackingService;
+        if (userTrackingService &&
+            typeof userTrackingService.hasSeenUser === 'function' &&
+            typeof userTrackingService.markMessageSeen === 'function') {
+            const isFirstMessage = !userTrackingService.hasSeenUser(trackingUserId, context);
+            return {
+                isFirstMessage,
+                consume: () => {
+                    if (isFirstMessage) {
+                        userTrackingService.markMessageSeen(trackingUserId, context);
+                    }
+                }
+            };
+        }
+
+        const isFirstMessage = this.isFirstMessage(normalizedData, platform, trackingUserId);
+        return {
+            isFirstMessage,
+            consume: () => {}
+        };
     }
 
     async processFarewell(platform, normalizedData, farewellTrigger) {
