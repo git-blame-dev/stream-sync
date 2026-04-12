@@ -206,6 +206,28 @@ describe('PlatformEventRouter validation', () => {
         expect(calledPayload.eventType).toBe('stream-detected');
     });
 
+    it('rejects dead contract event types with no runtime producers', async () => {
+        const { router } = buildRouter();
+        const deadEventTypes = [
+            'platform:chat-connected',
+            'platform:chat-disconnected',
+            'platform:connection-status',
+            'platform:connection',
+            'platform:error',
+            'platform:health-check'
+        ];
+
+        for (const type of deadEventTypes) {
+            await expect(router.routeEvent({
+                platform: 'twitch',
+                type,
+                data: {
+                    timestamp: new Date().toISOString()
+                }
+            })).rejects.toThrow(`Unsupported platform event type: ${type}`);
+        }
+    });
+
     it('routes envelope events to runtime envelope handler', async () => {
         const { router, runtime } = buildRouter();
         const timestamp = new Date().toISOString();
