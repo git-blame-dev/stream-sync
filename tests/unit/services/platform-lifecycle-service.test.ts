@@ -270,6 +270,38 @@ describe('PlatformLifecycleService', () => {
             expect(service.isPlatformAvailable('twitch')).toBe(false);
             expect(service.getPlatform('twitch')).toBeNull();
         });
+
+        it('records platform failure safely when non-Error values are thrown during initialization', async () => {
+            configFixture.twitch = {
+                enabled: true,
+                channel: 'test-channel',
+                clientId: 'test-client-id'
+            };
+
+            service.createPlatformInstance = createMockFn().mockRejectedValue(null);
+
+            await service.initializeAllPlatforms({
+                twitch: createMockFn()
+            });
+
+            const status = service.getStatus();
+            expect(status.failedPlatforms).toEqual(expect.arrayContaining([
+                expect.objectContaining({
+                    name: 'twitch',
+                    lastError: 'null'
+                })
+            ]));
+        });
+
+        it('rethrows original non-Error values from initializePlatformConnection without secondary crashes', async () => {
+            const platformInstance = {
+                initialize: createMockFn().mockRejectedValue(null)
+            };
+
+            await expect(service.initializePlatformConnection('twitch', platformInstance, {}, {
+                enabled: true
+            })).rejects.toBeNull();
+        });
     });
 
     describe('Platform Instance Creation', () => {
@@ -567,6 +599,20 @@ describe('PlatformLifecycleService', () => {
             twitchInitDeferred.resolve(true);
             tiktokInitDeferred.resolve(true);
             await initPromise;
+        });
+
+        it('marks background init failure safely when callback throws non-Error values', async () => {
+            await expect(service.initializePlatformAsync('tiktok', async () => {
+                throw null;
+            })).resolves.toBeUndefined();
+
+            const status = service.getStatus();
+            expect(status.failedPlatforms).toEqual(expect.arrayContaining([
+                expect.objectContaining({
+                    name: 'tiktok',
+                    lastError: 'null'
+                })
+            ]));
         });
     });
 

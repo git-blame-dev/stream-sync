@@ -125,7 +125,7 @@ class PlatformLifecycleService {
 
             this.logger.info(`Platform ${platformName} initialized`, 'PlatformLifecycleService');
         } catch (error) {
-            this._handleLifecycleError(`Failed to initialize platform ${platformName}: ${error.message}`, error, 'initialize');
+            this._handleLifecycleError(`Failed to initialize platform ${platformName}: ${getErrorMessage(error)}`, error, 'initialize');
             this.markPlatformFailure(platformName, error);
         }
     }
@@ -327,7 +327,7 @@ class PlatformLifecycleService {
 
             await connectCallback();
         } catch (error) {
-            this._handleLifecycleError(`Failed to initialize connection for ${platformName}: ${error.message}`, error, 'initialize');
+            this._handleLifecycleError(`Failed to initialize connection for ${platformName}: ${getErrorMessage(error)}`, error, 'initialize');
             throw error;
         }
     }
@@ -355,7 +355,7 @@ class PlatformLifecycleService {
 
             this.logger.info(`[${platformName}] Background initialization completed successfully`, 'PlatformLifecycleService');
         } catch (error) {
-            this._handleLifecycleError(`[${platformName}] Background initialization failed: ${error.message}`, error, 'background-init');
+            this._handleLifecycleError(`[${platformName}] Background initialization failed: ${getErrorMessage(error)}`, error, 'background-init');
             this.markPlatformFailure(platformName, error);
             // Don't rethrow - let other systems continue
         }
