@@ -533,6 +533,12 @@ class AppRuntime {
     emitSystemShutdown({ reason, restartRequested = false } = {}) {
         const shutdownReason = typeof reason === 'string' && reason.trim() ? reason : 'unknown';
         const shutdownMode = restartRequested ? 'restart' : 'exit';
+        if (this.eventBus && typeof this.eventBus.emit === 'function') {
+            this.eventBus.emit(PlatformEvents.SYSTEM_SHUTDOWN, {
+                reason: shutdownReason,
+                mode: shutdownMode
+            });
+        }
         this.logger.info(`Shutdown complete (${shutdownReason}); ${shutdownMode} requested.`, 'system');
         this.logger.debug('[Shutdown] Calling process.exit(0)', 'system');
         safeSetTimeout(() => {
@@ -764,6 +770,10 @@ class AppRuntime {
 
         if (this.commandCooldownService?.getStatus) {
             readyPayload.cooldowns = this.commandCooldownService.getStatus();
+        }
+
+        if (this.eventBus && typeof this.eventBus.emit === 'function') {
+            this.eventBus.emit(PlatformEvents.SYSTEM_READY, readyPayload);
         }
 
         this.logger.debug('system:ready payload built', 'AppRuntime', readyPayload);

@@ -8,6 +8,13 @@ import { normalizeGreetingIdentityKey } from '../utils/greeting-identity-key-nor
 
 const LOG_TRUNCATION_LENGTH = 200;
 
+function getErrorMessage(error: unknown) {
+    if (error instanceof Error) {
+        return error.message;
+    }
+    return String(error);
+}
+
 class ChatNotificationRouter {
     runtime;
     logger;
@@ -111,7 +118,7 @@ class ChatNotificationRouter {
                 });
             }
         } catch (error) {
-            const errorDetails = error instanceof Error ? error.message : String(error);
+            const errorDetails = getErrorMessage(error);
             this._handleRouterError(`Error routing chat message: ${errorDetails}`, error, 'chat-routing');
         }
     }
@@ -404,7 +411,7 @@ class ChatNotificationRouter {
             this._logSkipped(platform, normalizedData.username, 'farewell notification not enqueued');
             return false;
         } catch (error) {
-            this._handleRouterError(`Error handling farewell notification: ${error.message}`, error, 'farewell-routing');
+            this._handleRouterError(`Error handling farewell notification: ${getErrorMessage(error)}`, error, 'farewell-routing');
             return false;
         }
     }
@@ -551,7 +558,7 @@ class ChatNotificationRouter {
                 return this.shapeVfxConfig(vfxResult, 'Greeting VFX config');
             }
         } catch (error) {
-            this._handleRouterError(`Error getting greeting VFX config: ${error.message}`, error, 'greeting-vfx');
+            this._handleRouterError(`Error getting greeting VFX config: ${getErrorMessage(error)}`, error, 'greeting-vfx');
         }
 
         return null;
@@ -576,7 +583,7 @@ class ChatNotificationRouter {
             }
             return this.shapeVfxConfig(vfxResult, 'Greeting secondary VFX config');
         } catch (error) {
-            this._handleRouterError(`Error getting greeting secondary VFX config: ${error.message}`, error, 'greeting-secondary-vfx');
+            this._handleRouterError(`Error getting greeting secondary VFX config: ${getErrorMessage(error)}`, error, 'greeting-secondary-vfx');
             return null;
         }
     }

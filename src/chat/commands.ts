@@ -31,6 +31,13 @@ type CommandParserConfig = {
     };
 };
 
+function getErrorMessage(error: unknown): string {
+    if (error instanceof Error) {
+        return error.message;
+    }
+    return String(error);
+}
+
 
 class CommandParser {
     commands: Record<string, unknown>;
@@ -334,7 +341,7 @@ async function runCommand(commandData, vfxFilePath, effectsManager = getDefaultE
         await effectsManager.playMediaInOBS(commandConfig, waitForCompletion);
     } catch (error) {
         // Re-throw the error for test expectations
-        logger.debug(`[runCommand] Failed to execute VFX for ${vfxData.filename || vfxData.mediaSource}. Error: ${error.message}`, 'command-parser');
+        logger.debug(`[runCommand] Failed to execute VFX for ${vfxData.filename || vfxData.mediaSource}. Error: ${getErrorMessage(error)}`, 'command-parser');
         throw error;
     }
 }

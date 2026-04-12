@@ -97,6 +97,40 @@ describe('GUI transport routes and SSE integration', () => {
         await expect(service.start()).rejects.toThrow('GUI transport requires non-empty host');
     });
 
+    it('remains restartable after stop sees server close errors', async () => {
+        const eventBus = new TestEventBus();
+        const config = buildConfig({
+            enableDock: true,
+            enableOverlay: false,
+            port: 0
+        });
+
+        let createServerCalls = 0;
+        const fakeCreateServer = () => {
+            createServerCalls += 1;
+            return {
+                once: () => undefined,
+                listen: (_port: number, _host: string, callback: () => void) => callback(),
+                address: () => ({ address: '127.0.0.1', family: 'IPv4', port: 45678 }),
+                close: (callback: (error: Error) => void) => callback(new Error('forced-close-failure'))
+            };
+        };
+
+        const service = createGuiTransportService({
+            config,
+            eventBus,
+            logger: null,
+            createServer: fakeCreateServer
+        });
+
+        await service.start();
+        await expect(service.stop()).resolves.toBeUndefined();
+        await service.start();
+        await expect(service.stop()).resolves.toBeUndefined();
+        expect(createServerCalls).toBe(2);
+        expect(service.isActive()).toBe(false);
+    });
+
     it('delivers mapped rows over SSE and supports reconnect delivery', async () => {
         const port = 0;
         const eventBus = new TestEventBus();

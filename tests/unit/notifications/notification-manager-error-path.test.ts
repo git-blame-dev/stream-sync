@@ -65,4 +65,35 @@ describe('NotificationManager monetization error path', () => {
         expect(queued.data?.ttsMessage).toMatch(/error/i);
         expect(queued.data?.logMessage).toMatch(/error/i);
     });
+
+    it('returns safe queue error details when non-Error values are thrown', async () => {
+        const displayQueue = {
+            addItem: () => {
+                throw 'queue-string-failure';
+            },
+            getQueueLength: () => 0
+        };
+        const manager = new NotificationManager({
+            displayQueue,
+            eventBus: { emit: createMockFn(), subscribe: createMockFn() },
+            config: createConfigFixture(),
+            vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) },
+            logger: noOpLogger,
+            constants,
+            textProcessing: { formatChatMessage: createMockFn() },
+            obsGoals: { processDonationGoal: createMockFn() }
+        });
+
+        const result = await manager.handleNotification('platform:follow', 'twitch', {
+            username: 'test-user',
+            userId: 'test-user-id',
+            timestamp: '2024-01-01T00:00:00.000Z'
+        });
+
+        expect(result).toEqual(expect.objectContaining({
+            success: false,
+            error: 'Display queue error',
+            details: 'queue-string-failure'
+        }));
+    });
 });

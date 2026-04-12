@@ -28,6 +28,13 @@ function handleVFXCommandError(message, error, eventType) {
     }
 }
 
+function getErrorMessage(error) {
+    if (error instanceof Error) {
+        return error.message;
+    }
+    return String(error);
+}
+
 class VFXCommandService {
     constructor(config, eventBus, options = {}) {
         if (!config || typeof config !== 'object') {
@@ -149,7 +156,7 @@ class VFXCommandService {
                         this.eventBus.emit(PlatformEvents.VFX_COMMAND_EXECUTED, eventPayload);
                         this.eventBus.emit(PlatformEvents.VFX_EFFECT_COMPLETED, eventPayload);
                     } catch (eventError) {
-                        handleVFXCommandError(`[VFXCommandService] EventBus error: ${eventError.message}`, eventError, 'event-bus');
+                        handleVFXCommandError(`[VFXCommandService] EventBus error: ${getErrorMessage(eventError)}`, eventError, 'event-bus');
                         throw eventError; // Re-throw to be caught by outer catch
                     }
                 }
@@ -180,11 +187,11 @@ class VFXCommandService {
 
         } catch (error) {
             this.stats.failedCommands++;
-            handleVFXCommandError(`[VFXCommandService] Command execution error: ${error.message}`, error, 'command-execution');
+            handleVFXCommandError(`[VFXCommandService] Command execution error: ${getErrorMessage(error)}`, error, 'command-execution');
             const safeContext = context && typeof context === 'object' ? context : {};
             return {
                 success: false,
-                error: error.message,
+                error: getErrorMessage(error),
                 command,
                 username: (typeof safeContext.username === 'string' && safeContext.username.trim()) ? safeContext.username.trim() : null,
                 platform: (typeof safeContext.platform === 'string') ? safeContext.platform : null
@@ -222,7 +229,7 @@ class VFXCommandService {
             return null;
 
         } catch (error) {
-            handleVFXCommandError(`[VFXCommandService] Error selecting VFX command: ${error.message}`, error, 'select-command');
+            handleVFXCommandError(`[VFXCommandService] Error selecting VFX command: ${getErrorMessage(error)}`, error, 'select-command');
             throw error;
         }
     }
@@ -259,7 +266,7 @@ class VFXCommandService {
             return await this.selectVFXCommand(selectedCommand, contextMessage);
 
         } catch (error) {
-            handleVFXCommandError(`[VFXCommandService] Error getting VFX config for ${commandKey}: ${error.message}`, error, 'get-config');
+            handleVFXCommandError(`[VFXCommandService] Error getting VFX config for ${commandKey}: ${getErrorMessage(error)}`, error, 'get-config');
             throw error;
         }
     }
@@ -329,10 +336,10 @@ class VFXCommandService {
                 skipCooldown: context.skipCooldown
             });
         } catch (error) {
-            handleVFXCommandError(`[VFXCommandService] Error executing command for key ${commandKey}: ${error.message}`, error, 'notification');
+            handleVFXCommandError(`[VFXCommandService] Error executing command for key ${commandKey}: ${getErrorMessage(error)}`, error, 'notification');
             return {
                 success: false,
-                reason: error.message
+                reason: getErrorMessage(error)
             };
         }
     }
@@ -377,7 +384,7 @@ class VFXCommandService {
             };
 
         } catch (error) {
-            handleVFXCommandError(`[VFXCommandService] Error checking cooldown: ${error.message}`, error, 'cooldown');
+            handleVFXCommandError(`[VFXCommandService] Error checking cooldown: ${getErrorMessage(error)}`, error, 'cooldown');
             throw error;
         }
     }
@@ -408,7 +415,7 @@ class VFXCommandService {
             logger.info('[VFXCommandService] Configuration reloaded', 'vfx-service');
             return true;
         } catch (error) {
-            handleVFXCommandError(`[VFXCommandService] Error reloading config: ${error.message}`, error, 'config-reload');
+            handleVFXCommandError(`[VFXCommandService] Error reloading config: ${getErrorMessage(error)}`, error, 'config-reload');
             return false;
         }
     }
@@ -428,7 +435,7 @@ class VFXCommandService {
             logger.debug('[VFXCommandService] CommandParser initialized', 'vfx-service');
 
         } catch (error) {
-            handleVFXCommandError(`[VFXCommandService] Error initializing CommandParser: ${error.message}`, error, 'parser-init');
+            handleVFXCommandError(`[VFXCommandService] Error initializing CommandParser: ${getErrorMessage(error)}`, error, 'parser-init');
             this.commandParser = null;
         }
     }
@@ -472,10 +479,10 @@ class VFXCommandService {
             };
 
         } catch (error) {
-            handleVFXCommandError(`[VFXCommandService] VFX execution failed: ${error.message}`, error, 'execution');
+            handleVFXCommandError(`[VFXCommandService] VFX execution failed: ${getErrorMessage(error)}`, error, 'execution');
             return {
                 success: false,
-                error: error.message,
+                error: getErrorMessage(error),
                 vfxConfig
             };
         }

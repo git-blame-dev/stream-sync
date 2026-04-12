@@ -22,6 +22,9 @@ function createGuiTransportService(options: any = {}) {
     const logger = options.logger;
     const eventBus = options.eventBus;
     const mapper = options.mapper || createEventToGuiContractMapper({ config });
+    const createServer = typeof options.createServer === 'function'
+        ? options.createServer
+        : http.createServer;
     const errorHandler = createGuiTransportErrorHandler(logger);
     const logDebug = (message: string, data?: any) => {
         if (logger && typeof logger.debug === 'function') {
@@ -590,7 +593,7 @@ function createGuiTransportService(options: any = {}) {
 
         try {
             await new Promise<void>((resolve, reject) => {
-                server = http.createServer(requestHandler);
+                server = createServer(requestHandler);
                 server.once('error', reject);
                 server.listen(port, host, () => {
                     active = true;
@@ -640,18 +643,20 @@ function createGuiTransportService(options: any = {}) {
             return;
         }
 
-        await new Promise<void>((resolve, reject) => {
-            server.close((error: any) => {
+        const closingServer = server;
+        server = null;
+        active = false;
+
+        await new Promise<void>((resolve) => {
+            closingServer.close((error: any) => {
                 if (error) {
-                    reject(error);
-                    return;
+                    errorHandler.logOperationalError('Failed closing GUI transport server', 'gui-transport', {
+                        error: error instanceof Error ? error.message : String(error)
+                    });
                 }
                 resolve();
             });
         });
-
-        server = null;
-        active = false;
     };
 
     const getAddress = () => {
