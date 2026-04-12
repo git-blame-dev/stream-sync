@@ -19,13 +19,18 @@ describe('YouTube live chat unknown renderer capture', () => {
                 liveChatContinuation: {
                     actions: [
                         {
+                            trackingParams: 'test-tracking-params',
                             addChatItemAction: {
+                                clientId: 'test-client-id',
                                 item: {
                                     giftMessageView: {
                                         id: 'test-gift-id',
                                         text: {
                                             runs: [{ text }]
                                         }
+                                    },
+                                    itemMetadata: {
+                                        source: 'test-item-metadata'
                                     }
                                 }
                             }
@@ -120,6 +125,95 @@ describe('YouTube live chat unknown renderer capture', () => {
         expect(execute.mock.calls[0][1]).toMatchObject({
             continuation: 'test-continuation-1',
             parse: false
+        });
+    });
+
+    test('captures the immediate item container for GiftMessageView so sibling item metadata can be inspected', async () => {
+        const rawResponse = createGiftRawResponse('sent Girl power for 300 Jewels');
+        const parsedResponse = createParsedResponse();
+        const handler = parserApi.setParserErrorHandler.mock.calls[0][0];
+        parserApi.parseResponse.mockImplementation(() => {
+            handler({
+                error_type: 'class_not_found',
+                classname: 'GiftMessageView'
+            });
+            return parsedResponse;
+        });
+
+        const actions = {
+            execute: createMockFn().mockResolvedValue(rawResponse)
+        };
+        const logUnknownRenderer = createMockFn().mockResolvedValue(undefined);
+
+        installYouTubeLiveChatUnknownRendererCapture({
+            actions,
+            parser: parserApi,
+            videoId: 'test-video-id',
+            initialContinuation: 'test-continuation-1',
+            logUnknownRenderer
+        });
+
+        await actions.execute('live_chat/get_live_chat', {
+            continuation: 'test-continuation-1',
+            parse: true
+        });
+
+        expect(logUnknownRenderer).toHaveBeenCalledTimes(1);
+        expect(logUnknownRenderer.mock.calls[0][0]).toMatchObject({
+            matchedRenderers: [
+                expect.objectContaining({
+                    containerPath: '$.continuationContents.liveChatContinuation.actions[0].addChatItemAction.item',
+                    container: {
+                        giftMessageView: expect.objectContaining({
+                            id: 'test-gift-id'
+                        }),
+                        itemMetadata: {
+                            source: 'test-item-metadata'
+                        }
+                    }
+                })
+            ]
+        });
+    });
+
+    test('captures the enclosing raw action wrapper for GiftMessageView so sibling action metadata can be inspected', async () => {
+        const rawResponse = createGiftRawResponse('sent Girl power for 300 Jewels');
+        const parsedResponse = createParsedResponse();
+        const handler = parserApi.setParserErrorHandler.mock.calls[0][0];
+        parserApi.parseResponse.mockImplementation(() => {
+            handler({
+                error_type: 'class_not_found',
+                classname: 'GiftMessageView'
+            });
+            return parsedResponse;
+        });
+
+        const actions = {
+            execute: createMockFn().mockResolvedValue(rawResponse)
+        };
+        const logUnknownRenderer = createMockFn().mockResolvedValue(undefined);
+
+        installYouTubeLiveChatUnknownRendererCapture({
+            actions,
+            parser: parserApi,
+            videoId: 'test-video-id',
+            initialContinuation: 'test-continuation-1',
+            logUnknownRenderer
+        });
+
+        await actions.execute('live_chat/get_live_chat', {
+            continuation: 'test-continuation-1',
+            parse: true
+        });
+
+        expect(logUnknownRenderer).toHaveBeenCalledTimes(1);
+        const capturedMatch = logUnknownRenderer.mock.calls[0][0].matchedRenderers[0];
+        expect(capturedMatch.actionPath).toBe('$.continuationContents.liveChatContinuation.actions[0]');
+        expect(capturedMatch.action).toMatchObject({
+            trackingParams: 'test-tracking-params',
+            addChatItemAction: {
+                clientId: 'test-client-id'
+            }
         });
     });
 

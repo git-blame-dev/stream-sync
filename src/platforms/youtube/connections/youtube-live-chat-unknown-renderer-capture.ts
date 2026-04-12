@@ -22,6 +22,10 @@ type UnknownRendererLogEntry = {
         rawKey: string;
         path: string;
         renderer: unknown;
+        containerPath?: string;
+        container?: unknown;
+        actionPath?: string;
+        action?: unknown;
     }>;
     responseMetadata: {
         actionCount: number;
@@ -46,6 +50,11 @@ type WrappedState = {
 
 type RawExecuteResponse = {
     data: unknown;
+};
+
+type TraversalAncestor = {
+    path: string;
+    value: unknown;
 };
 
 const wrappedActions = new WeakMap<ActionsLike, WrappedState>();
@@ -129,12 +138,29 @@ function getNextContinuationToken(parsedResponse: unknown): string | null {
     return getString(continuation, 'token');
 }
 
+function shouldCaptureExpandedContext(className: string): boolean {
+    return className === 'GiftMessageView';
+}
+
+function findActionAncestor(ancestors: TraversalAncestor[]): TraversalAncestor | null {
+    for (let index = ancestors.length - 1; index >= 0; index -= 1) {
+        const ancestor = ancestors[index];
+        if (/\.actions\[\d+\]$/.test(ancestor.path)) {
+            return ancestor;
+        }
+    }
+
+    return null;
+}
+
 function collectMatchedRenderers(rawData: unknown, classNames: Set<string>) {
     const matches: UnknownRendererLogEntry['matchedRenderers'] = [];
 
-    const visit = (value: unknown, path: string) => {
+    const visit = (value: unknown, path: string, ancestors: TraversalAncestor[]) => {
+        const nextAncestors = [...ancestors, { path, value }];
+
         if (Array.isArray(value)) {
-            value.forEach((entry, index) => visit(entry, `${path}[${index}]`));
+            value.forEach((entry, index) => visit(entry, `${path}[${index}]`, nextAncestors));
             return;
         }
 
@@ -145,19 +171,33 @@ function collectMatchedRenderers(rawData: unknown, classNames: Set<string>) {
         for (const [rawKey, child] of Object.entries(value)) {
             const childPath = `${path}.${rawKey}`;
             if (classNames.has(normalizeRendererKey(rawKey)) && child !== undefined) {
-                matches.push({
-                    className: normalizeRendererKey(rawKey),
+                const className = normalizeRendererKey(rawKey);
+                const match: UnknownRendererLogEntry['matchedRenderers'][number] = {
+                    className,
                     rawKey,
                     path: childPath,
                     renderer: child
-                });
+                };
+
+                if (shouldCaptureExpandedContext(className)) {
+                    match.containerPath = path;
+                    match.container = value;
+
+                    const actionAncestor = findActionAncestor(nextAncestors);
+                    if (actionAncestor) {
+                        match.actionPath = actionAncestor.path;
+                        match.action = actionAncestor.value;
+                    }
+                }
+
+                matches.push(match);
             }
 
-            visit(child, childPath);
+            visit(child, childPath, nextAncestors);
         }
     };
 
-    visit(rawData, '$');
+    visit(rawData, '$', []);
     return matches;
 }
 
