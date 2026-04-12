@@ -184,6 +184,38 @@ describe('AppRuntime behavior', () => {
         }));
     });
 
+    it('preserves suppression result shape from notification manager', async () => {
+        const runtime = createRuntime({
+            notificationManager: {
+                handleNotification: createMockFn().mockResolvedValue({
+                    success: false,
+                    suppressed: true,
+                    reason: 'spam_detection',
+                    notificationType: 'platform:gift',
+                    platform: 'tiktok'
+                })
+            }
+        });
+
+        const result = await runtime.handleUnifiedNotification('platform:gift', 'tiktok', 'test-user', {
+            userId: 'test-user-id',
+            timestamp: '2024-01-01T00:00:00.000Z',
+            giftType: 'Rose',
+            giftCount: 1,
+            amount: 1,
+            currency: 'coins',
+            id: 'test-gift-1'
+        });
+
+        expect(result).toEqual(expect.objectContaining({
+            success: false,
+            suppressed: true,
+            reason: 'spam_detection',
+            notificationType: 'platform:gift',
+            platform: 'tiktok'
+        }));
+    });
+
     it('returns failed result when notification manager throws', async () => {
         const runtime = createRuntime({
             notificationManager: {

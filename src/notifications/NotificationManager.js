@@ -221,7 +221,13 @@ class NotificationManager extends EventEmitter {
 
                 if (!spamResult.shouldShow) {
                     this.platformLogger.debug(`Spam gift suppressed from ${normalizedData.username}.`, platform);
-                    return { suppressed: true, reason: 'spam_detection' };
+                    return {
+                        success: false,
+                        suppressed: true,
+                        reason: 'spam_detection',
+                        notificationType,
+                        platform
+                    };
                 }
             } catch (error) {
                 this.platformLogger.warn(`Error in spam detection: ${getErrorMessage(error)}`, platform);

@@ -9,7 +9,18 @@ const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
 
 type NotificationManagerLike = {
     handleNotification: (type: string, platform: string, data: Record<string, unknown>) => Promise<unknown>;
-    handleNotificationInternal: (type: string, platform: string, data: Record<string, unknown>, isTextOnly: boolean) => Promise<{ suppressed?: boolean; reason?: string }>;
+    handleNotificationInternal: (
+        type: string,
+        platform: string,
+        data: Record<string, unknown>,
+        isTextOnly: boolean
+    ) => Promise<{
+        success?: boolean;
+        suppressed?: boolean;
+        reason?: string;
+        notificationType?: string;
+        platform?: string;
+    }>;
     donationSpamDetector?: unknown;
 };
 
@@ -276,8 +287,11 @@ describe('NotificationManager Spam Protection Behavior - Modernized', () => {
 
             const result = await notificationManager.handleNotificationInternal('platform:gift', 'tiktok', giftData, false);
 
+            expect(result.success).toBe(false);
             expect(result.suppressed).toBe(true);
             expect(result.reason).toBe('spam_detection');
+            expect(result.notificationType).toBe('platform:gift');
+            expect(result.platform).toBe('tiktok');
             expect(mockDisplayQueue.addItem).not.toHaveBeenCalled();
         });
 
