@@ -623,8 +623,15 @@ class AppRuntime {
                 throw new Error('VFXCommandService unavailable for runtime startup');
             }
 
+            const obsManager = this._getObsConnectionManager();
+            const sourcesManager = this._getObsSourcesManager();
+
             this.logger.info('Clearing previous displays...', 'AppRuntime');
-            await clearStartupDisplays(this.config);
+            await clearStartupDisplays(this.config, {
+                logger: this.logger,
+                obsManager,
+                ...(sourcesManager ? { sourcesManager } : {})
+            });
             this.logger.info('Displays cleared', 'AppRuntime');
 
             this.logger.info('Initializing goal display...', 'AppRuntime');
@@ -632,7 +639,6 @@ class AppRuntime {
             await goalsManager.initializeGoalDisplay();
             this.logger.info('Goal display initialized', 'AppRuntime');
 
-            const obsManager = this._getObsConnectionManager();
             const obsObserver = new OBSViewerCountObserver(obsManager, this.logger, { config: this.config });
             this.viewerCountSystem.addObserver(obsObserver);
             this.logger.info('Initializing viewer count system...', 'AppRuntime');
@@ -1130,6 +1136,13 @@ class AppRuntime {
             return this.dependencies.obs.goalsManager;
         }
         return getDefaultGoalsManager();
+    }
+
+    _getObsSourcesManager() {
+        if (this.dependencies?.obs?.sourcesManager) {
+            return this.dependencies.obs.sourcesManager;
+        }
+        return null;
     }
 
     async _startGuiTransport() {

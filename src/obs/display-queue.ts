@@ -584,18 +584,31 @@ class DisplayQueue {
 
 let displayQueueInstance = null;
 
-function createDisplayQueue(obsManager, config = {}, constants = {}, eventBus = null) {
-    return new DisplayQueue(obsManager, config, constants, eventBus);
+function createDisplayQueue(obsManager, config = {}, constants = {}, eventBus = null, dependencies = {}) {
+    return new DisplayQueue(obsManager, config, constants, eventBus, dependencies);
 }
 
-function initializeDisplayQueue(obsManager, config = {}, constants = {}, eventBus = null) {
+function initializeDisplayQueue(obsManager, config = {}, constants = {}, eventBus = null, dependencies = {}) {
     if (!obsManager) {
         throw new Error('DisplayQueue requires OBSConnectionManager instance');
     }
 
     if (!displayQueueInstance) {
-        displayQueueInstance = createDisplayQueue(obsManager, config, constants, eventBus);
+        displayQueueInstance = createDisplayQueue(obsManager, config, constants, eventBus, dependencies);
         logger.debug('Display Queue system initialized.');
+    } else if (dependencies && typeof dependencies === 'object') {
+        displayQueueInstance.obsManager = obsManager;
+        displayQueueInstance.renderer.obsManager = obsManager;
+        displayQueueInstance.effects.obsManager = obsManager;
+        if (dependencies.sourcesManager) {
+            displayQueueInstance.sourcesManager = dependencies.sourcesManager;
+            displayQueueInstance.renderer.sourcesManager = dependencies.sourcesManager;
+            displayQueueInstance.effects.sourcesManager = dependencies.sourcesManager;
+        }
+        if (dependencies.goalsManager) {
+            displayQueueInstance.goalsManager = dependencies.goalsManager;
+            displayQueueInstance.effects.goalsManager = dependencies.goalsManager;
+        }
     }
     return displayQueueInstance;
 }

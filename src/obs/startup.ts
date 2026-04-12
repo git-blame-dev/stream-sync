@@ -34,6 +34,8 @@ type StartupConfig = {
 
 type StartupDeps = {
     logger?: LoggerLike;
+    obsManager?: ObsManagerLike | null;
+    sourcesManager?: SourcesManagerLike;
     getOBSConnectionManager?: () => ObsManagerLike | null;
     getDefaultSourcesManager?: () => SourcesManagerLike;
 };
@@ -49,6 +51,8 @@ const { getDefaultSourcesManager: defaultGetDefaultSourcesManager } = nodeRequir
 async function clearStartupDisplays(config: StartupConfig | null | undefined, deps: StartupDeps = {}) {
     const {
         logger = defaultLogger,
+        obsManager: providedObsManager,
+        sourcesManager: providedSourcesManager,
         getOBSConnectionManager = defaultGetOBSConnectionManager,
         getDefaultSourcesManager = defaultGetDefaultSourcesManager
     } = deps;
@@ -59,8 +63,9 @@ async function clearStartupDisplays(config: StartupConfig | null | undefined, de
             return;
         }
 
-        const { hideAllDisplays } = getDefaultSourcesManager();
-        const obsManager = getOBSConnectionManager();
+        const sourcesManager = providedSourcesManager || getDefaultSourcesManager();
+        const { hideAllDisplays } = sourcesManager;
+        const obsManager = providedObsManager || getOBSConnectionManager();
         if (!obsManager || !obsManager.isConnected()) {
             logger.debug('OBS not connected, skipping display clearing', 'OBSStartup');
             return;

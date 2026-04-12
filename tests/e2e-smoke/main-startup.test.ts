@@ -77,7 +77,16 @@ describe('main startup smoke', () => {
             cliArgs: { chat: 1 },
             ensureSecrets: async () => {},
             initializeDisplayQueue: () => createMockDisplayQueue(),
-            getOBSConnectionManager: () => ({ isConnected: () => false, isReady: () => false }),
+            getOBSConnectionManager: () => ({
+                isConnected: () => false,
+                isReady: () => false,
+                ensureConnected: async () => undefined,
+                call: async () => ({}),
+                connect: async () => true,
+                disconnect: async () => undefined,
+                addEventListener: () => undefined,
+                removeEventListener: () => undefined
+            }),
             createOBSEventService: () => ({ disconnect: async () => {} }),
             createSceneManagementService: () => ({}),
             createDonationSpamDetection: createDonationSpamDetectionNoCleanup

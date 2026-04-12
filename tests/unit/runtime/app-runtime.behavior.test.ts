@@ -771,6 +771,52 @@ describe('AppRuntime behavior', () => {
         expect(goalsCalls).toEqual(['init']);
     });
 
+    it('uses injected OBS subsystem dependencies for startup display clearing and observer wiring', async () => {
+        const hideAllDisplays = createMockFn().mockResolvedValue();
+        const connectionManager = {
+            isConnected: createMockFn().mockReturnValue(true),
+            isReady: createMockFn().mockReturnValue(true),
+            ensureConnected: createMockFn().mockResolvedValue(),
+            call: createMockFn().mockResolvedValue({}),
+            addEventListener: createMockFn(),
+            removeEventListener: createMockFn()
+        };
+        const goalsManager = {
+            initializeGoalDisplay: createMockFn().mockResolvedValue()
+        };
+        const runtime = createRuntime({}, {
+            obs: {
+                enabled: false,
+                chatMsgScene: 'test-chat-scene',
+                notificationScene: 'test-notification-scene',
+                chatPlatformLogos: { twitch: 'test-chat-logo' },
+                notificationPlatformLogos: { twitch: 'test-notification-logo' },
+                ttsTxt: 'test-tts-source',
+                notificationTxt: 'test-notification-source'
+            }
+        });
+        runtime.dependencies.obs = {
+            connectionManager,
+            sourcesManager: {
+                hideAllDisplays,
+                updateTextSource: createMockFn().mockResolvedValue()
+            },
+            goalsManager
+        };
+        runtime.viewerCountSystem = {
+            addObserver: createMockFn(),
+            initialize: createMockFn().mockResolvedValue(),
+            startPolling: createMockFn().mockResolvedValue()
+        };
+
+        await runtime.start();
+
+        expect(hideAllDisplays.mock.calls.length).toBe(1);
+        expect(goalsManager.initializeGoalDisplay.mock.calls.length).toBe(1);
+        const [obsViewerObserver] = runtime.viewerCountSystem.addObserver.mock.calls[0];
+        expect(obsViewerObserver.obsManager).toBe(connectionManager);
+    });
+
     it('rolls back initialized services when startup fails after platform initialization', async () => {
         const disconnectAll = createMockFn().mockResolvedValue();
         const runtime = createRuntime({

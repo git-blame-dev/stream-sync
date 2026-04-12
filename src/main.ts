@@ -9,7 +9,6 @@ import NotificationManagerModule from './notifications/NotificationManager.js';
 import { getOBSConnectionManager } from './obs/connection';
 import { initializeDisplayQueue } from './obs/display-queue';
 import { getDefaultEffectsManager } from './obs/effects';
-import { getDefaultGoalsManager } from './obs/goals';
 import { getDefaultSourcesManager } from './obs/sources';
 import { StreamElementsPlatform, TikTokPlatform, TwitchPlatform, YouTubePlatform } from './platforms';
 import { AppRuntime } from './runtime/AppRuntime';
@@ -31,6 +30,7 @@ import { createPlatformErrorHandler } from './utils/platform-error-handler';
 import { ensureSecrets } from './utils/secret-manager';
 import { createTextProcessingManager } from './utils/text-processing';
 import { safeSetInterval } from './utils/timeout-validator';
+import { createOBSSubsystem } from './obs/subsystem';
 
 const NotificationManager = NotificationManagerModule as new (...args: unknown[]) => {
     handleAggregatedDonation: (data: unknown) => void;
@@ -276,7 +276,15 @@ function validateRuntimeCliArgs(cliArgsCandidate: Partial<MainCliArgs> & Record<
     }
 }
 
-function createProductionDependencies(overrides: MainOverrides = {}) {
+function createProductionDependencies(
+    overrides: MainOverrides = {},
+    obsSubsystem: {
+        connectionManager: unknown;
+        sourcesManager: unknown;
+        effectsManager: unknown;
+        goalsManager: unknown;
+    } | null = null
+) {
     validateLoggerInterface(logger);
 
     const resolvedOverrides = overrides || {};
@@ -286,9 +294,10 @@ function createProductionDependencies(overrides: MainOverrides = {}) {
     
     return {
         obs: {
-            connectionManager: getOBSConnectionManager({ config: config.obs }),
-            sourcesManager: getDefaultSourcesManager(),
-            effectsManager: getDefaultEffectsManager()
+            connectionManager: obsSubsystem?.connectionManager || getOBSConnectionManager({ config: config.obs }),
+            sourcesManager: obsSubsystem?.sourcesManager || getDefaultSourcesManager(),
+            effectsManager: obsSubsystem?.effectsManager || getDefaultEffectsManager(),
+            ...(obsSubsystem?.goalsManager ? { goalsManager: obsSubsystem.goalsManager } : {})
         },
         sourcesFactory: { getDefaultSourcesManager },
         effectsFactory: { getDefaultEffectsManager },
@@ -494,13 +503,32 @@ async function main(overrides: MainOverrides = {}) {
         });
         logger.debug('EventBus created', 'Main');
 
+        const obsSubsystem = createOBSSubsystem({
+            config,
+            logger,
+            eventBus,
+            getOBSConnectionManager: getOBSConnectionManagerFn,
+            createOBSEventService: createOBSEventServiceFn,
+            createSceneManagementService: createSceneManagementServiceFn
+        } as Parameters<typeof createOBSSubsystem>[0]);
+
         logger.debug('About to initialize display queue...', 'Main');
-        const obsManager = getOBSConnectionManagerFn({ config: config.obs });
-        const displayQueue = initializeDisplayQueueFn(obsManager, displayQueueConfig, displayQueueConstants, eventBus);
+        const displayQueue = initializeDisplayQueueFn(
+            obsSubsystem.connectionManager,
+            displayQueueConfig,
+            displayQueueConstants,
+            eventBus,
+            {
+                sourcesManager: obsSubsystem.sourcesManager,
+                goalsManager: obsSubsystem.goalsManager
+            }
+        );
         logger.debug('Display queue initialized', 'Main');
         
         logger.debug('Creating VFXCommandService...', 'Main');
-        const vfxCommandService = createVFXCommandServiceFn(config, eventBus);
+        const vfxCommandService = createVFXCommandServiceFn(config, eventBus, {
+            effectsManager: obsSubsystem.effectsManager
+        });
         logger.debug('VFXCommandService created', 'Main');
         
         logger.debug('Creating UserTrackingService...', 'Main');
@@ -508,25 +536,13 @@ async function main(overrides: MainOverrides = {}) {
         logger.debug('UserTrackingService created', 'Main');
 
         logger.debug('Creating OBS event-driven services...', 'Main');
-        const obsConnectionManager = getOBSConnectionManagerFn({ config: config.obs });
-        const obsSources = getDefaultSourcesManager();
-
-        const obsEventService = createOBSEventServiceFn({
-            eventBus,
-            obsConnection: obsConnectionManager,
-            obsSources,
-            logger
-        });
+        const obsEventService = obsSubsystem.obsEventService;
         logger.debug('OBSEventService created', 'Main');
 
-        const sceneManagementService = createSceneManagementServiceFn({
-            eventBus,
-            obsConnection: obsConnectionManager,
-            logger
-        });
+        const sceneManagementService = obsSubsystem.sceneManagementService;
         logger.debug('SceneManagementService created', 'Main');
 
-        const obsGoals = getDefaultGoalsManager();
+        const obsGoals = obsSubsystem.goalsManager;
 
         logger.debug('About to create notification manager...', 'Main');
         logger.info('Creating notification manager...', 'Main');
@@ -559,7 +575,13 @@ async function main(overrides: MainOverrides = {}) {
             }
         }
         
-        const dependencies = createProductionDependenciesFn(runtimeOverrides);
+        const dependencies = createProductionDependenciesFn(runtimeOverrides, obsSubsystem);
+        dependencies.obs = {
+            connectionManager: obsSubsystem.connectionManager,
+            sourcesManager: obsSubsystem.sourcesManager,
+            effectsManager: obsSubsystem.effectsManager,
+            goalsManager: obsSubsystem.goalsManager
+        };
         dependencies.displayQueue = displayQueue;
         dependencies.notificationManager = notificationManager;
         dependencies.twitchAuth = twitchAuth;
