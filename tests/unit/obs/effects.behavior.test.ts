@@ -1,6 +1,7 @@
 const { describe, expect, beforeEach, it } = require('bun:test');
 const { createMockFn } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
+const { waitForDelay } = require('../../helpers/time-utils');
 const { OBSEffectsManager, getDefaultEffectsManager, resetDefaultEffectsManager } = require('../../../src/obs/effects.ts');
 const effectsCompatModule = require('../../../src/obs/effects.js');
 
@@ -63,6 +64,16 @@ describe('obs effects behavior', () => {
         }, { logger: noOpLogger });
 
         await expect(manager.waitForMediaCompletion('testSrc')).rejects.toThrow('event listener support');
+    });
+
+    it('returns after timeout when media completion event never arrives', async () => {
+        const manager = new OBSEffectsManager(mockObsManager, { logger: noOpLogger });
+
+        const pending = manager.waitForMediaCompletion('testSrc', 5);
+        await waitForDelay(10);
+
+        await expect(pending).resolves.toBeUndefined();
+        expect(mockObsManager.removeEventListener).toHaveBeenCalledTimes(1);
     });
 
     it('triggers media input action through OBS manager', async () => {

@@ -85,7 +85,12 @@ describe('DisplayQueue monetization VFX context', () => {
             data: { username: 'test-gift-user', userId: 'test-user-id-123', displayMessage: 'sent a gift' }
         };
 
-        eventBus.on(PlatformEvents.VFX_COMMAND_RECEIVED, (payload) => capturedVfx.push(payload));
+        eventBus.on(PlatformEvents.VFX_COMMAND_RECEIVED, (payload) => {
+            capturedVfx.push(payload);
+            safeSetTimeout(() => {
+                eventBus.emit(PlatformEvents.VFX_EFFECT_COMPLETED, { correlationId: payload.correlationId });
+            }, 1, 'test gift VFX completion emit');
+        });
 
         await queue.effects.handleGiftEffects(item, []);
 

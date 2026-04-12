@@ -27,10 +27,6 @@ class DisplayQueueState {
             throw new Error('Invalid display item: missing platform');
         }
 
-        if (this.maxQueueSize && this.queue.length >= this.maxQueueSize) {
-            throw new Error(`Queue at capacity (${this.maxQueueSize})`);
-        }
-
         if (item.priority === undefined && this.getPriority) {
             item.priority = this.getPriority(item.type);
         }
@@ -39,6 +35,10 @@ class DisplayQueueState {
         if (item.type === 'chat') {
             this.lastChatItem = { ...item };
             removedChatCount = this._removeQueuedChatItems();
+        }
+
+        if (this.maxQueueSize && this.queue.length >= this.maxQueueSize) {
+            throw new Error(`Queue at capacity (${this.maxQueueSize})`);
         }
 
         const insertIndex = this._findInsertIndex(item.priority);

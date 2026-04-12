@@ -1,7 +1,9 @@
 const { describe, expect, it } = require('bun:test');
+const { EventEmitter } = require('events');
 
 const { DisplayQueueEffects } = require('../../../src/obs/display-queue-effects.ts');
 const { waitForDelay } = require('../../helpers/time-utils');
+const { PlatformEvents } = require('../../../src/interfaces/PlatformEvents');
 
 describe('DisplayQueueEffects', () => {
     it('runs TTS stages for non-gift notifications', async () => {
@@ -409,5 +411,170 @@ describe('DisplayQueueEffects', () => {
 
         await handlePromise;
         expect(item.holdDurationMs).toBe(4200);
+    });
+
+    it('waits for exact tuple completion when correlation id is absent', async () => {
+        const eventBus = new EventEmitter();
+        eventBus.subscribe = (eventName, handler) => {
+            eventBus.on(eventName, handler);
+            return () => eventBus.off(eventName, handler);
+        };
+
+        const effects = new DisplayQueueEffects({
+            config: { ttsEnabled: false, obs: { ttsTxt: 'tts' }, handcam: { enabled: false } },
+            sourcesManager: { clearTextSource: async () => {}, updateTextSource: async () => {} },
+            obsManager: { call: async () => ({}) },
+            goalsManager: { processDonationGoal: async () => {} },
+            eventBus,
+            delay: async () => {},
+            handleDisplayQueueError: () => {},
+            extractUsername: () => 'test-user'
+        });
+
+        const pending = effects.waitForVfxCompletion({
+            commandKey: 'test-key',
+            command: '!test',
+            filename: 'test-file',
+            mediaSource: 'test-source'
+        }, { timeoutMs: 50 });
+
+        eventBus.emit(PlatformEvents.VFX_EFFECT_COMPLETED, {
+            commandKey: 'test-key',
+            command: '!test',
+            filename: 'different-file',
+            mediaSource: 'test-source'
+        });
+
+        await waitForDelay(1);
+        eventBus.emit(PlatformEvents.VFX_EFFECT_COMPLETED, {
+            commandKey: 'test-key',
+            command: '!test',
+            filename: 'test-file',
+            mediaSource: 'test-source'
+        });
+
+        const result = await pending;
+        expect(result.reason).toBe('completed');
+        expect(result.payload.filename).toBe('test-file');
+    });
+
+    it('does not treat command executed as completion signal', async () => {
+        const eventBus = new EventEmitter();
+        eventBus.subscribe = (eventName, handler) => {
+            eventBus.on(eventName, handler);
+            return () => eventBus.off(eventName, handler);
+        };
+
+        const effects = new DisplayQueueEffects({
+            config: { ttsEnabled: false, obs: { ttsTxt: 'tts' }, handcam: { enabled: false } },
+            sourcesManager: { clearTextSource: async () => {}, updateTextSource: async () => {} },
+            obsManager: { call: async () => ({}) },
+            goalsManager: { processDonationGoal: async () => {} },
+            eventBus,
+            delay: async () => {},
+            handleDisplayQueueError: () => {},
+            extractUsername: () => 'test-user'
+        });
+
+        const pending = effects.waitForVfxCompletion({ correlationId: 'test-correlation-id' }, { timeoutMs: 50 });
+        eventBus.emit(PlatformEvents.VFX_COMMAND_EXECUTED, { correlationId: 'test-correlation-id' });
+
+        await waitForDelay(1);
+        eventBus.emit(PlatformEvents.VFX_EFFECT_COMPLETED, { correlationId: 'test-correlation-id' });
+
+        const result = await pending;
+        expect(result.reason).toBe('completed');
+    });
+
+    it('cleans up gift completion listeners when VFX emit fails', async () => {
+        const eventBus = new EventEmitter();
+        eventBus.subscribe = (eventName, handler) => {
+            eventBus.on(eventName, handler);
+            return () => eventBus.off(eventName, handler);
+        };
+
+        const effects = new DisplayQueueEffects({
+            config: {
+                ttsEnabled: false,
+                obs: { ttsTxt: 'tts' },
+                handcam: { enabled: false },
+                gifts: { giftVideoSource: 'gift-video', giftAudioSource: 'gift-audio' }
+            },
+            sourcesManager: { clearTextSource: async () => {}, updateTextSource: async () => {} },
+            obsManager: { call: async () => ({}) },
+            goalsManager: { processDonationGoal: async () => {} },
+            eventBus,
+            delay: async () => {},
+            handleDisplayQueueError: () => {},
+            extractUsername: (data) => data?.username ?? null
+        });
+
+        await effects.handleGiftEffects({
+            type: 'platform:gift',
+            platform: 'tiktok',
+            vfxConfig: {
+                commandKey: 'gifts',
+                command: '!gift',
+                filename: 'gift.mp4',
+                mediaSource: 'vfx',
+                vfxFilePath: '/tmp/vfx'
+            },
+            data: { username: 'test-user' }
+        }, []);
+
+        expect(eventBus.listenerCount(PlatformEvents.VFX_EFFECT_COMPLETED)).toBe(0);
+    });
+
+    it('holds gift effect completion until matching VFX completion event', async () => {
+        const eventBus = new EventEmitter();
+        eventBus.subscribe = (eventName, handler) => {
+            eventBus.on(eventName, handler);
+            return () => eventBus.off(eventName, handler);
+        };
+
+        let capturedCorrelationId = null;
+        eventBus.on(PlatformEvents.VFX_COMMAND_RECEIVED, (payload) => {
+            capturedCorrelationId = payload.correlationId;
+        });
+
+        const effects = new DisplayQueueEffects({
+            config: {
+                ttsEnabled: false,
+                obs: { ttsTxt: 'tts' },
+                handcam: { enabled: false },
+                gifts: { giftVideoSource: 'gift-video', giftAudioSource: 'gift-audio' }
+            },
+            sourcesManager: { clearTextSource: async () => {}, updateTextSource: async () => {} },
+            obsManager: { call: async () => ({}) },
+            goalsManager: { processDonationGoal: async () => {} },
+            eventBus,
+            delay: async () => {},
+            handleDisplayQueueError: () => {},
+            extractUsername: (data) => data?.username ?? null
+        });
+
+        let settled = false;
+        const pending = effects.handleGiftEffects({
+            type: 'platform:gift',
+            platform: 'tiktok',
+            vfxConfig: {
+                commandKey: 'gifts',
+                command: '!gift',
+                filename: 'gift.mp4',
+                mediaSource: 'vfx',
+                vfxFilePath: '/tmp/vfx'
+            },
+            data: { username: 'test-user', userId: 'test-user-id' }
+        }, []).then(() => {
+            settled = true;
+        });
+
+        await waitForDelay(1);
+        expect(settled).toBe(false);
+        expect(typeof capturedCorrelationId).toBe('string');
+
+        eventBus.emit(PlatformEvents.VFX_EFFECT_COMPLETED, { correlationId: capturedCorrelationId });
+        await pending;
+        expect(settled).toBe(true);
     });
 });

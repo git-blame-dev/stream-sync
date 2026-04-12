@@ -97,6 +97,18 @@ describe('ChatNotificationRouter', () => {
         expect(queuedItem?.platform).toBe('twitch');
     });
 
+    it('preserves timestamp on queued chat rows', async () => {
+        const { router, runtime } = createRouter();
+
+        await router.handleChatMessage('twitch', {
+            ...baseMessage,
+            timestamp: '2026-01-02T03:04:05.000Z'
+        });
+
+        const [queuedItem] = runtime.displayQueue.addItem.mock.calls[0];
+        expect(queuedItem?.data?.timestamp).toBe('2026-01-02T03:04:05.000Z');
+    });
+
     it('preserves canonical avatarUrl on queued chat rows', async () => {
         const { router, runtime } = createRouter();
 
@@ -224,6 +236,29 @@ describe('ChatNotificationRouter', () => {
         const commandItem = queuedItems.find(item => item.type === 'command');
         expect(commandItem).toBeDefined();
         expect(commandItem.vfxConfig.command).toBe('!testboom');
+    });
+
+    it('does not consume cooldowns when command enqueue fails', async () => {
+        const addItem = createMockFn((item) => {
+            if (item.type === 'command') {
+                throw new Error('queue failed');
+            }
+        });
+        const { router, runtime } = createRouter({
+            runtime: {
+                displayQueue: { addItem },
+                vfxCommandService: {
+                    selectVFXCommand: createMockFn().mockResolvedValue({ command: '!testboom' }),
+                    matchFarewell: createMockFn().mockReturnValue(null),
+                    getVFXConfig: createMockFn().mockResolvedValue(null)
+                }
+            }
+        });
+
+        await router.handleChatMessage('twitch', { ...baseMessage });
+
+        expect(runtime.commandCooldownService.updateUserCooldown).not.toHaveBeenCalled();
+        expect(runtime.commandCooldownService.updateGlobalCooldown).not.toHaveBeenCalled();
     });
 
     it('does not skip chat when timestamp is invalid even if connection time exists', async () => {

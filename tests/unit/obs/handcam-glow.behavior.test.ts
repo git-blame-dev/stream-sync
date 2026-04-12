@@ -133,6 +133,56 @@ describe('handcam-glow', () => {
         await new Promise(resolve => setImmediate(resolve));
     });
 
+    it('supersedes an in-flight glow run when triggered again rapidly', async () => {
+        let firstHoldRelease;
+        let delayCallCount = 0;
+        const settingsCalls = [];
+
+        mockDelay = createMockFn(() => {
+            delayCallCount += 1;
+            if (delayCallCount === 1) {
+                return new Promise((resolve) => {
+                    firstHoldRelease = resolve;
+                });
+            }
+            return Promise.resolve();
+        });
+        setTestingDependencies({
+            logger: mockLogger,
+            ensureConnected: mockEnsureConnected,
+            delay: mockDelay
+        });
+
+        const obs = {
+            call: createMockFn(async (action, payload) => {
+                if (action === 'GetSourceFilter') {
+                    return { filterSettings: { brightness: 10 } };
+                }
+                if (action === 'SetSourceFilterSettings') {
+                    settingsCalls.push(payload.filterSettings);
+                }
+                return {};
+            })
+        };
+
+        const config = createHandcamConfigFixture({ totalSteps: 0, holdDuration: 1, rampUpDuration: 0, rampDownDuration: 0 });
+        triggerHandcamGlow(obs, config);
+        await new Promise(resolve => setImmediate(resolve));
+        await new Promise(resolve => setImmediate(resolve));
+
+        triggerHandcamGlow(obs, config);
+        await new Promise(resolve => setImmediate(resolve));
+        await new Promise(resolve => setImmediate(resolve));
+        await new Promise(resolve => setImmediate(resolve));
+
+        const callCountBeforeRelease = settingsCalls.length;
+        firstHoldRelease();
+        await new Promise(resolve => setImmediate(resolve));
+        await new Promise(resolve => setImmediate(resolve));
+
+        expect(settingsCalls.length).toBe(callCountBeforeRelease);
+    });
+
     it('ignores trigger when disabled', () => {
         const obs = { call: createMockFn() };
         triggerHandcamGlow(obs, createHandcamConfigFixture({ enabled: false }));

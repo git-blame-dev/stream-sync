@@ -82,4 +82,44 @@ describe('VFXCommandService completion events', () => {
 
         expect(service._effectsManager).toBe(customEffectsManager);
     });
+
+    test('does not update cooldown state when completion event emission fails', async () => {
+        const config = {
+            commands: { greetings: '!hello' },
+            farewell: {},
+            vfx: { filePath: '/tmp' },
+            cooldowns: { cmdCooldown: 60, globalCmdCooldownMs: 60000 }
+        };
+        const failingEventBus = {
+            emit: (name) => {
+                if (name === PlatformEvents.VFX_EFFECT_COMPLETED) {
+                    throw new Error('emit failed');
+                }
+            }
+        };
+        const service = new VFXCommandService(config, failingEventBus, {
+            effectsManager: mockEffectsManager
+        });
+
+        service.selectVFXCommand = createMockFn().mockResolvedValue({
+            commandKey: 'greetings',
+            filename: 'hello',
+            mediaSource: 'VFX Top',
+            vfxFilePath: '/tmp',
+            command: '!hello',
+            duration: 5000
+        });
+
+        const result = await service.executeCommand('!hello', {
+            username: 'testViewer',
+            platform: 'twitch',
+            userId: 'test-user-123',
+            skipCooldown: false,
+            correlationId: 'test-corr-2'
+        });
+
+        expect(result.success).toBe(false);
+        expect(service.userLastCommand.size).toBe(0);
+        expect(service.globalCommandCooldowns.size).toBe(0);
+    });
 });

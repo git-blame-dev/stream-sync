@@ -48,4 +48,15 @@ describe('DisplayQueueState', () => {
             state.addItem({ type: 'high', platform: 'test', data: { username: 'test-user' } });
         }).toThrow('Queue at capacity (1)');
     });
+
+    it('accepts latest chat item at capacity by replacing stale queued chat', () => {
+        const state = new DisplayQueueState({ maxQueueSize: 1, getPriority });
+
+        state.addItem({ type: 'chat', platform: 'test', data: { username: 'test-user-1', message: 'first' } });
+        state.addItem({ type: 'chat', platform: 'test', data: { username: 'test-user-2', message: 'second' } });
+
+        expect(state.queue).toHaveLength(1);
+        expect(state.queue[0].data.message).toBe('second');
+        expect(state.lastChatItem.data.message).toBe('second');
+    });
 });

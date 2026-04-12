@@ -297,6 +297,7 @@ class ChatNotificationRouter {
             username: normalizedData.username,
             userId: normalizedData.userId,
             avatarUrl: normalizedData.avatarUrl,
+            timestamp: normalizedData.timestamp,
             message: sanitizedMessage,
             isPaypiggy: normalizedData.isPaypiggy === true
         };
@@ -306,6 +307,7 @@ class ChatNotificationRouter {
             builtChatData && typeof builtChatData === 'object'
                 ? { ...builtChatData }
                 : { ...baseChatData };
+        chatData.timestamp = normalizedData.timestamp;
         const messagePayload: {
             text: string;
             parts?: Array<Record<string, unknown>>;
@@ -355,9 +357,6 @@ class ChatNotificationRouter {
             return;
         }
 
-        this.runtime.commandCooldownService.updateUserCooldown(normalizedData.userId);
-        this.updateGlobalCooldown(commandConfig.command);
-
         if (isFirstMessage && greetingsEnabled) {
             await this.queueGreeting(platform, normalizedData.username, {
                 priority: 6,
@@ -367,6 +366,8 @@ class ChatNotificationRouter {
         }
 
         await this.queueCommand(platform, normalizedData, commandConfig);
+        this.runtime.commandCooldownService.updateUserCooldown(normalizedData.userId);
+        this.updateGlobalCooldown(commandConfig.command);
     }
 
     async processFarewell(platform, normalizedData, farewellTrigger) {

@@ -144,7 +144,7 @@ class OBSEffectsManager {
     }
 }
 
-    async waitForMediaCompletion(mediaSourceName: string) {
+    async waitForMediaCompletion(mediaSourceName: string, timeoutMs = 10000) {
         if (!this.obsManager) {
             this.logger.warn('[VFX] No OBS manager available, skipping wait', 'effects');
             return;
@@ -157,8 +157,14 @@ class OBSEffectsManager {
         const { addEventListener, removeEventListener } = this.obsManager;
 
         return new Promise<void>((resolve) => {
+            let settled = false;
             const mediaEndHandler = (data: { inputName?: string }) => {
+                if (settled) {
+                    return;
+                }
+
                 if (data.inputName === mediaSourceName) {
+                    settled = true;
                     removeEventListener.call(this.obsManager, 'MediaInputPlaybackEnded', mediaEndHandler);
                     this.logger.debug(`[VFX] Media playback ended: ${mediaSourceName}`, 'effects');
                     resolve();
@@ -167,6 +173,17 @@ class OBSEffectsManager {
 
             addEventListener.call(this.obsManager, 'MediaInputPlaybackEnded', mediaEndHandler);
             this.logger.debug(`[VFX] Waiting for media end event: ${mediaSourceName}`, 'effects');
+
+            safeDelay(timeoutMs, timeoutMs, 'obs-effects-media-completion-timeout').then(() => {
+                if (settled) {
+                    return;
+                }
+
+                settled = true;
+                removeEventListener.call(this.obsManager, 'MediaInputPlaybackEnded', mediaEndHandler);
+                this.logger.warn(`[VFX] Media completion wait timed out: ${mediaSourceName}`, 'effects', { timeoutMs });
+                resolve();
+            });
         });
     }
 
