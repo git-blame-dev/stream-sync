@@ -228,4 +228,100 @@ describe('VFXCommandService cooldown handling', () => {
             useRealTimers();
         }
     });
+
+    test('prunes stale user cooldown bookkeeping after configured user cooldown elapses', async () => {
+        useFakeTimers();
+        setSystemTime(new Date(0));
+        try {
+            const service = new VFXCommandService(createConfig('!spark', {
+                cmdCooldown: 1,
+                globalCmdCooldownMs: 0
+            }), null, {
+                effectsManager: mockEffectsManager
+            });
+            service.commandParser = createMockCommandParser();
+
+            const first = await service.executeCommand('!spark', {
+                username: 'testUser1',
+                userId: 'test-user-u1',
+                platform: 'twitch',
+                skipCooldown: false
+            });
+            expect(first.success).toBe(true);
+            expect(service.userLastCommand.size).toBe(1);
+
+            advanceTimersByTime(1500);
+
+            const cooldownCheck = service.checkCommandCooldown('test-user-u1', '!spark');
+            expect(cooldownCheck.allowed).toBe(true);
+            expect(service.userLastCommand.size).toBe(0);
+            expect(service.userCommandTimestamps.size).toBe(0);
+        } finally {
+            useRealTimers();
+        }
+    });
+
+    test('prunes stale global cooldown bookkeeping using configured duration', async () => {
+        useFakeTimers();
+        setSystemTime(new Date(0));
+        try {
+            const service = new VFXCommandService(createConfig('!spark', {
+                cmdCooldown: 0,
+                globalCmdCooldownMs: 1000
+            }), null, {
+                effectsManager: mockEffectsManager
+            });
+            service.commandParser = createMockCommandParser();
+
+            const first = await service.executeCommand('!spark', {
+                username: 'testUser1',
+                userId: 'test-user-u1',
+                platform: 'twitch',
+                skipCooldown: false
+            });
+            expect(first.success).toBe(true);
+            expect(service.globalCommandCooldowns.size).toBe(1);
+
+            advanceTimersByTime(1100);
+
+            const cooldownCheck = service.checkCommandCooldown('test-user-u2', '!spark');
+            expect(cooldownCheck.allowed).toBe(true);
+            expect(service.globalCommandCooldowns.size).toBe(0);
+        } finally {
+            useRealTimers();
+        }
+    });
+
+    test('reports truthful status metrics without queue bookkeeping placeholders', async () => {
+        const service = new VFXCommandService(createConfig('!spark', {
+            cmdCooldown: 0,
+            globalCmdCooldownMs: 0
+        }), null, {
+            effectsManager: mockEffectsManager
+        });
+        service.commandParser = createMockCommandParser();
+
+        const earlyReturnResult = await service.executeCommand('!spark', {
+            username: '   ',
+            userId: 'test-user-u1',
+            platform: 'twitch',
+            skipCooldown: true
+        });
+        expect(earlyReturnResult.success).toBe(false);
+
+        const timedResult = await service.executeCommand('!spark', {
+            username: 'testUser2',
+            userId: 'test-user-u2',
+            platform: 'twitch',
+            skipCooldown: true
+        });
+        expect(timedResult.success).toBe(true);
+
+        const status = service.getStatus();
+        expect(status).not.toHaveProperty('queueLength');
+        expect(status).not.toHaveProperty('isProcessing');
+        expect(status.stats.totalCommands).toBe(2);
+        expect(status.stats.timedCommands).toBe(1);
+        expect(status.stats.avgExecutionTime).toBeGreaterThan(0);
+    });
 });
