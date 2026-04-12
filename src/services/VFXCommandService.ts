@@ -53,13 +53,10 @@ class VFXCommandService {
         this.globalCommandCooldowns = new Map();
         this.userCommandTimestamps = new Map();
         
-        // Command execution queue
-        this.commandQueue = [];
-        this.isProcessing = false;
-        
         // Performance monitoring
         this.stats = {
             totalCommands: 0,
+            timedCommands: 0,
             successfulCommands: 0,
             failedCommands: 0,
             cooldownBlocked: 0,
@@ -76,6 +73,7 @@ class VFXCommandService {
     async executeCommand(command, context) {
         const startTime = Date.now();
         this.stats.totalCommands++;
+        let timedExecutionRecorded = false;
         
         try {
             if (!context || typeof context !== 'object') {
@@ -128,6 +126,7 @@ class VFXCommandService {
             }
 
             // Execute the command
+            timedExecutionRecorded = true;
             const executionResult = await this._executeVFXCommand(vfxConfig, { username: commandUser, platform });
             
             if (executionResult.success) {
@@ -178,11 +177,14 @@ class VFXCommandService {
             
             // Update average execution time with weighted calculation
             const executionTime = Math.max(1, Date.now() - startTime); // Ensure minimum 1ms for tracking
-            if (this.stats.totalCommands === 1) {
-                this.stats.avgExecutionTime = executionTime;
-            } else {
-                // Running average: (oldAvg * (n-1) + newValue) / n
-                this.stats.avgExecutionTime = ((this.stats.avgExecutionTime * (this.stats.totalCommands - 1)) + executionTime) / this.stats.totalCommands;
+            if (timedExecutionRecorded) {
+                this.stats.timedCommands += 1;
+                if (this.stats.timedCommands === 1) {
+                    this.stats.avgExecutionTime = executionTime;
+                } else {
+                    // Running average: (oldAvg * (n-1) + newValue) / n
+                    this.stats.avgExecutionTime = ((this.stats.avgExecutionTime * (this.stats.timedCommands - 1)) + executionTime) / this.stats.timedCommands;
+                }
             }
             
             // Return enhanced result with command context for better user experience
@@ -361,6 +363,7 @@ class VFXCommandService {
                 throw new Error('Cooldown config values must be numeric');
             }
             const userCooldownMs = userCooldownSec * 1000;
+            this._pruneCooldownBookkeeping(now);
             
             // Check user cooldown
             const hasUserCommand = this.userLastCommand.has(userId);
@@ -398,10 +401,9 @@ class VFXCommandService {
     }
 
     getStatus() {
+        this._pruneCooldownBookkeeping(Date.now());
         return {
             isActive: !!this.commandParser,
-            queueLength: this.commandQueue.length,
-            isProcessing: this.isProcessing,
             activeCooldowns: {
                 users: this.userLastCommand.size,
                 globalCommands: this.globalCommandCooldowns.size
@@ -498,29 +500,71 @@ class VFXCommandService {
 
     _updateCooldowns(userId, command) {
         const now = Date.now();
+        const userCooldownSec = this.config.cooldowns.cmdCooldown;
+        const globalCooldownMs = this.config.cooldowns.globalCmdCooldownMs;
+        if (!Number.isFinite(userCooldownSec) || !Number.isFinite(globalCooldownMs)) {
+            throw new Error('Cooldown config values must be numeric');
+        }
+        const userCooldownMs = userCooldownSec * 1000;
         
         // Update user cooldown
-        this.userLastCommand.set(userId, now);
+        if (userCooldownMs > 0) {
+            this.userLastCommand.set(userId, now);
+        }
         
         // Update user command timestamps for tracking
-        if (!this.userCommandTimestamps.has(userId)) {
-            this.userCommandTimestamps.set(userId, []);
+        if (userCooldownMs > 0) {
+            if (!this.userCommandTimestamps.has(userId)) {
+                this.userCommandTimestamps.set(userId, []);
+            }
+            this.userCommandTimestamps.get(userId).push(now);
         }
-        this.userCommandTimestamps.get(userId).push(now);
-        
-        // Keep only recent timestamps (last hour)
-        const oneHourAgo = now - (60 * 60 * 1000);
-        const timestamps = this.userCommandTimestamps.get(userId);
-        this.userCommandTimestamps.set(userId, timestamps.filter(t => t > oneHourAgo));
         
         // Update global command cooldown
-        this.globalCommandCooldowns.set(command, now);
-        
-        // Clean up old global cooldowns (older than 10 minutes)
-        const tenMinutesAgo = now - (10 * 60 * 1000);
-        for (const [cmd, timestamp] of this.globalCommandCooldowns) {
-            if (timestamp < tenMinutesAgo) {
-                this.globalCommandCooldowns.delete(cmd);
+        if (globalCooldownMs > 0) {
+            this.globalCommandCooldowns.set(command, now);
+        }
+
+        this._pruneCooldownBookkeeping(now);
+    }
+
+    _pruneCooldownBookkeeping(now) {
+        const userCooldownSec = this.config.cooldowns.cmdCooldown;
+        const globalCooldownMs = this.config.cooldowns.globalCmdCooldownMs;
+        if (!Number.isFinite(userCooldownSec) || !Number.isFinite(globalCooldownMs)) {
+            throw new Error('Cooldown config values must be numeric');
+        }
+
+        const userCooldownMs = userCooldownSec * 1000;
+        for (const [userId, timestamp] of this.userLastCommand) {
+            const isStale = !Number.isFinite(timestamp) ||
+                userCooldownMs <= 0 ||
+                (now - timestamp) >= userCooldownMs;
+            if (isStale) {
+                this.userLastCommand.delete(userId);
+            }
+        }
+
+        for (const [userId, timestamps] of this.userCommandTimestamps) {
+            const staleCutoff = now - userCooldownMs;
+            const normalizedTimestamps = Array.isArray(timestamps)
+                ? timestamps.filter((timestamp) => Number.isFinite(timestamp) && timestamp > staleCutoff)
+                : [];
+
+            if (normalizedTimestamps.length === 0 || userCooldownMs <= 0) {
+                this.userCommandTimestamps.delete(userId);
+                continue;
+            }
+
+            this.userCommandTimestamps.set(userId, normalizedTimestamps);
+        }
+
+        for (const [commandKey, timestamp] of this.globalCommandCooldowns) {
+            const isStale = !Number.isFinite(timestamp) ||
+                globalCooldownMs <= 0 ||
+                (now - timestamp) >= globalCooldownMs;
+            if (isStale) {
+                this.globalCommandCooldowns.delete(commandKey);
             }
         }
     }
