@@ -774,11 +774,13 @@ describe('AppRuntime behavior', () => {
         }
     });
 
-    it('emits system shutdown and forces exit on timeout', () => {
+    it('emits system shutdown, sets exit code, and only forces exit on timeout fallback', () => {
         const runtime = createRuntime();
         const exitCalls = [];
         const logged = [];
         const originalExit = process.exit;
+        const originalExitCode = process.exitCode;
+        process.exitCode = undefined;
         process.exit = (code) => exitCalls.push(code);
         runtime.errorHandler = {
             handleEventProcessingError: createMockFn(),
@@ -788,12 +790,16 @@ describe('AppRuntime behavior', () => {
 
         try {
             runtime.emitSystemShutdown({ reason: 'test' });
+            expect(process.exitCode).toBe(0);
+            expect(exitCalls.length).toBe(0);
+
             runOnlyPendingTimers();
 
-            expect(exitCalls.length).toBe(2);
+            expect(exitCalls.length).toBe(1);
             expect(logged.length).toBe(1);
         } finally {
             process.exit = originalExit;
+            process.exitCode = originalExitCode;
         }
     });
 

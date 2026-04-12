@@ -541,12 +541,15 @@ class AppRuntime {
             });
         }
         this.logger.info(`Shutdown complete (${shutdownReason}); ${shutdownMode} requested.`, 'system');
-        this.logger.debug('[Shutdown] Calling process.exit(0)', 'system');
-        safeSetTimeout(() => {
+        this.logger.debug('[Shutdown] Marking process exit code and scheduling forced-exit fallback', 'system');
+        process.exitCode = 0;
+        const forcedExitTimer = safeSetTimeout(() => {
             this._handleAppRuntimeError('[Shutdown] Forced exit due to lingering handles', null, null, { eventType: 'shutdown', logContext: 'system' });
             process.exit(0);
         }, 2000);
-        process.exit(0);
+        if (forcedExitTimer && typeof forcedExitTimer.unref === 'function') {
+            forcedExitTimer.unref();
+        }
     }
 
     async start() {
