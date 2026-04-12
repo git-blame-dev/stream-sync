@@ -131,6 +131,105 @@ describe('GUI transport routes and SSE integration', () => {
         expect(service.isActive()).toBe(false);
     });
 
+    it('shares one in-flight startup across concurrent start calls', async () => {
+        const config = buildConfig({
+            enableDock: true,
+            enableOverlay: false,
+            port: 0
+        });
+
+        let subscribeCalls = 0;
+        let unsubscribeCalls = 0;
+        const eventBus = {
+            subscribe: () => {
+                subscribeCalls += 1;
+                return () => {
+                    unsubscribeCalls += 1;
+                };
+            }
+        };
+
+        let createServerCalls = 0;
+        const fakeCreateServer = () => {
+            createServerCalls += 1;
+            return {
+                once: () => undefined,
+                on: () => undefined,
+                removeListener: () => undefined,
+                listen: (_port: number, _host: string, callback: () => void) => {
+                    safeSetTimeout(callback, 15);
+                },
+                address: () => ({ address: '127.0.0.1', family: 'IPv4', port: 45679 }),
+                close: (callback: (error?: Error) => void) => callback()
+            };
+        };
+
+        const service = createGuiTransportService({
+            config,
+            eventBus,
+            logger: null,
+            createServer: fakeCreateServer
+        });
+
+        await Promise.all([service.start(), service.start()]);
+        expect(createServerCalls).toBe(1);
+        expect(subscribeCalls).toBe(2);
+        expect(service.isActive()).toBe(true);
+
+        await service.stop();
+        expect(unsubscribeCalls).toBe(2);
+    });
+
+    it('marks transport inactive when server emits runtime error after start', async () => {
+        const config = buildConfig({
+            enableDock: true,
+            enableOverlay: false,
+            port: 0
+        });
+
+        const eventBus = new TestEventBus();
+        let runtimeErrorListener: ((error: Error) => void) | null = null;
+        const fakeCreateServer = () => {
+            return {
+                once: () => undefined,
+                on: (eventName: string, listener: (error: Error) => void) => {
+                    if (eventName === 'error') {
+                        runtimeErrorListener = listener;
+                    }
+                },
+                removeListener: (eventName: string, listener: (error: Error) => void) => {
+                    if (eventName === 'error' && runtimeErrorListener === listener) {
+                        runtimeErrorListener = null;
+                    }
+                },
+                listen: (_port: number, _host: string, callback: () => void) => callback(),
+                address: () => ({ address: '127.0.0.1', family: 'IPv4', port: 45680 }),
+                close: (callback: (error?: Error) => void) => callback()
+            };
+        };
+
+        const service = createGuiTransportService({
+            config,
+            eventBus,
+            logger: null,
+            createServer: fakeCreateServer
+        });
+
+        await service.start();
+        expect(service.isActive()).toBe(true);
+        if (!runtimeErrorListener) {
+            throw new Error('Expected runtime server error listener to be registered');
+        }
+
+        runtimeErrorListener(new Error('runtime transport error'));
+        expect(service.isActive()).toBe(false);
+        expect(service.getAddress()).toBe(null);
+
+        await service.start();
+        expect(service.isActive()).toBe(true);
+        await service.stop();
+    });
+
     it('delivers mapped rows over SSE and supports reconnect delivery', async () => {
         const port = 0;
         const eventBus = new TestEventBus();
