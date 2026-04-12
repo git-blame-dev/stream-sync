@@ -105,7 +105,6 @@ const buildOverrides = (options = {}) => {
             },
             getOBSConnectionManager: () => obsManager,
             createOBSEventService: () => ({ disconnect: async () => {} }),
-            createSceneManagementService: () => ({}),
             createDonationSpamDetection: createDonationSpamDetectionNoCleanup
         },
         getCapturedDisplayQueueConfig: () => capturedDisplayQueueConfig
@@ -247,7 +246,6 @@ describe('main startup behavior', () => {
         const { overrides } = buildOverrides({ cliArgs: { chat: 1 } });
         const displayQueueManagers = [];
         const eventServiceManagers = [];
-        const sceneServiceManagers = [];
         const createVfxCallArgs = [];
         const createProductionDependenciesArgs = [];
         let managerSeq = 0;
@@ -279,12 +277,6 @@ describe('main startup behavior', () => {
                 return {
                     connect: async () => true,
                     disconnect: async () => undefined,
-                    destroy: () => undefined
-                };
-            },
-            createSceneManagementService: ({ obsConnection }) => {
-                sceneServiceManagers.push(obsConnection);
-                return {
                     destroy: () => undefined
                 };
             },
@@ -325,9 +317,7 @@ describe('main startup behavior', () => {
         expect(result.success).toBe(true);
         expect(displayQueueManagers.length).toBe(1);
         expect(eventServiceManagers.length).toBe(1);
-        expect(sceneServiceManagers.length).toBe(1);
         expect(displayQueueManagers[0]).toBe(eventServiceManagers[0]);
-        expect(displayQueueManagers[0]).toBe(sceneServiceManagers[0]);
         expect(createVfxCallArgs[0][2]?.effectsManager).toBeDefined();
         expect(createProductionDependenciesArgs[0][1]?.effectsManager).toBe(createVfxCallArgs[0][2]?.effectsManager);
     });

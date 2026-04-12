@@ -2,7 +2,6 @@ const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { createEventBus } = require('../../../src/core/EventBus');
-const testClock = require('../../helpers/test-clock');
 
 describe('SceneManagementService', () => {
     let sceneService;
@@ -13,9 +12,7 @@ describe('SceneManagementService', () => {
         eventBus = createEventBus({ debugEnabled: false });
 
         mockOBSConnection = {
-            call: createMockFn().mockResolvedValue({}),
-            isConnected: createMockFn().mockReturnValue(true),
-            isReady: createMockFn().mockResolvedValue(true)
+            call: createMockFn().mockResolvedValue({})
         };
 
         const { createSceneManagementService } = require('../../../src/obs/scene-management-service.ts');
@@ -32,254 +29,53 @@ describe('SceneManagementService', () => {
         eventBus.reset();
     });
 
-    describe('Scene Switching', () => {
-        test('switches to specified scene when scene:switch event is emitted', async () => {
-            eventBus.emit('scene:switch', { sceneName: 'GameplayScene' });
-
-            await waitForDelay(10);
-
-            expect(mockOBSConnection.call).toHaveBeenCalled();
-            const [method, payload] = mockOBSConnection.call.mock.calls[0];
-            expect(method).toBe('SetCurrentProgramScene');
-            expect(payload).toEqual({ sceneName: 'GameplayScene' });
+    test('starts with empty scene state', () => {
+        expect(sceneService.getCurrentScene()).toBe('');
+        expect(sceneService.getSceneState()).toEqual({
+            currentScene: '',
+            previousScene: '',
+            switchCount: 0
         });
-
-        test('does not update state when scene switch fails', async () => {
-            mockOBSConnection.call.mockRejectedValue(new Error('Scene not found'));
-
-            eventBus.emit('scene:switch', { sceneName: 'InvalidScene' });
-
-            await waitForDelay(400);
-
-            const state = sceneService.getSceneState();
-            expect(state.currentScene).not.toBe('InvalidScene');
-            expect(state.switchCount).toBe(0);
-        });
-
-        test('tracks current scene after successful switch', async () => {
-            eventBus.emit('scene:switch', { sceneName: 'ChatScene' });
-
-            await waitForDelay(10);
-
-            const currentScene = sceneService.getCurrentScene();
-            expect(currentScene).toBe('ChatScene');
-        });
-
-        test('ignores invalid scene switch payloads', async () => {
-            eventBus.emit('scene:switch', { sceneName: null });
-
-            await waitForDelay(10);
-
-            expect(mockOBSConnection.call).not.toHaveBeenCalled();
-            expect(sceneService.getCurrentScene()).toBe('');
-        });
+        expect(sceneService.getSceneHistory()).toEqual([]);
     });
 
-    describe('Scene State Monitoring', () => {
-        test('provides scene state information', () => {
-            const state = sceneService.getSceneState();
-
-            expect(state).toEqual(
-                expect.objectContaining({
-                    currentScene: expect.any(String),
-                    previousScene: expect.any(String),
-                    switchCount: expect.any(Number)
-                })
-            );
-        });
-
-        test('tracks scene switch history', async () => {
-            eventBus.emit('scene:switch', { sceneName: 'Scene1' });
-            await waitForDelay(10);
-
-            eventBus.emit('scene:switch', { sceneName: 'Scene2' });
-            await waitForDelay(10);
-
-            const history = sceneService.getSceneHistory();
-
-            expect(history).toHaveLength(2);
-            expect(history[0].sceneName).toBe('Scene1');
-            expect(history[1].sceneName).toBe('Scene2');
-        });
-
-        test('limits scene history to prevent memory leaks', async () => {
-            for (let i = 0; i < 150; i++) {
-                eventBus.emit('scene:switch', { sceneName: `Scene${i}` });
-            }
-
-            await waitForDelay(50);
-
-            const history = sceneService.getSceneHistory();
-
-            expect(history.length).toBeLessThanOrEqual(100);
-        });
+    test('does not subscribe scene-switch listeners when no producer exists', () => {
+        const listeners = eventBus.getListenerSummary();
+        expect(listeners['scene:switch']).toBeUndefined();
     });
 
-    describe('Scene Validation', () => {
-        test('validates scene exists before switching', async () => {
-            mockOBSConnection.call.mockImplementation((method) => {
-                if (method === 'GetSceneList') {
-                    return Promise.resolve({
-                        scenes: [
-                            { sceneName: 'GameplayScene' },
-                            { sceneName: 'ChatScene' }
-                        ]
-                    });
-                }
-                return Promise.resolve({});
-            });
-
-            const result = await sceneService.validateScene('GameplayScene');
-
-            expect(result).toBe(true);
+    test('validates scenes from OBS scene list', async () => {
+        mockOBSConnection.call.mockResolvedValue({
+            scenes: [
+                { sceneName: 'GameplayScene' },
+                { sceneName: 'ChatScene' }
+            ]
         });
 
-        test('returns false for non-existent scenes', async () => {
-            mockOBSConnection.call.mockImplementation((method) => {
-                if (method === 'GetSceneList') {
-                    return Promise.resolve({
-                        scenes: [
-                            { sceneName: 'GameplayScene' }
-                        ]
-                    });
-                }
-                return Promise.resolve({});
-            });
-
-            const result = await sceneService.validateScene('InvalidScene');
-
-            expect(result).toBe(false);
-        });
-
-        test('validates scenes consistently across multiple calls', async () => {
-            mockOBSConnection.call.mockImplementation((method) => {
-                if (method === 'GetSceneList') {
-                    return Promise.resolve({
-                        scenes: [{ sceneName: 'GameplayScene' }]
-                    });
-                }
-                return Promise.resolve({});
-            });
-
-            const result1 = await sceneService.validateScene('GameplayScene');
-            const result2 = await sceneService.validateScene('GameplayScene');
-            const result3 = await sceneService.validateScene('InvalidScene');
-
-            expect(result1).toBe(true);
-            expect(result2).toBe(true);
-            expect(result3).toBe(false);
-        });
+        await expect(sceneService.validateScene('GameplayScene')).resolves.toBe(true);
+        await expect(sceneService.validateScene('MissingScene')).resolves.toBe(false);
     });
 
-    describe('Scene Transitions', () => {
-        test('applies transition when switching scenes', async () => {
-            eventBus.emit('scene:switch', {
-                sceneName: 'GameplayScene',
-                transition: {
-                    type: 'fade',
-                    duration: 300
-                }
-            });
-
-            await waitForDelay(10);
-
-            const history = sceneService.getSceneHistory();
-            expect(history[0]).toEqual(expect.objectContaining({
-                sceneName: 'GameplayScene',
-                transition: expect.objectContaining({
-                    type: 'fade',
-                    duration: 300
-                })
-            }));
+    test('uses cached scene list during cache window', async () => {
+        mockOBSConnection.call.mockResolvedValue({
+            scenes: [{ sceneName: 'GameplayScene' }]
         });
+
+        await sceneService.validateScene('GameplayScene');
+        await sceneService.validateScene('GameplayScene');
+
+        expect(mockOBSConnection.call.mock.calls.length).toBe(1);
     });
 
-    describe('Error Recovery', () => {
-        test('retries scene switch on transient errors', async () => {
-            let callCount = 0;
-            mockOBSConnection.call.mockImplementation(() => {
-                callCount++;
-                if (callCount === 1) {
-                    return Promise.reject(new Error('Temporary failure'));
-                }
-                return Promise.resolve({});
-            });
-
-            const startTime = testClock.now();
-
-            eventBus.emit('scene:switch', { sceneName: 'GameplayScene', retry: true });
-
-            await waitForDelay(200);
-            testClock.advance(200);
-
-            const duration = testClock.now() - startTime;
-
-            const state = sceneService.getSceneState();
-            expect(state.currentScene).toBe('GameplayScene');
-            expect(duration).toBeGreaterThan(100);
-        });
-
-        test('fails immediately when retry is disabled', async () => {
-            mockOBSConnection.call.mockRejectedValue(new Error('Failure'));
-
-            const startTime = testClock.now();
-
-            eventBus.emit('scene:switch', { sceneName: 'GameplayScene', retry: false });
-
-            await waitForDelay(100);
-            testClock.advance(100);
-
-            const duration = testClock.now() - startTime;
-
-            const state = sceneService.getSceneState();
-            expect(state.currentScene).not.toBe('GameplayScene');
-            expect(duration).toBeLessThan(150);
-        });
+    test('returns false when scene validation call fails', async () => {
+        mockOBSConnection.call.mockRejectedValue(new Error('obs-failure'));
+        await expect(sceneService.validateScene('GameplayScene')).resolves.toBe(false);
     });
 
-    describe('Performance Requirements', () => {
-        test('completes scene switch within 50ms latency', async () => {
-            const startTime = testClock.now();
-
-            eventBus.emit('scene:switch', { sceneName: 'GameplayScene' });
-
-            await waitForDelay(10);
-            testClock.advance(10);
-
-            const duration = testClock.now() - startTime;
-            expect(duration).toBeLessThan(50);
-        });
-
-        test('maintains memory footprint during rapid scene switches', async () => {
-            const initialMemory = process.memoryUsage().heapUsed;
-
-            for (let i = 0; i < 100; i++) {
-                eventBus.emit('scene:switch', { sceneName: `Scene${i % 5}` });
-            }
-
-            await waitForDelay(100);
-
-            const finalMemory = process.memoryUsage().heapUsed;
-            const memoryIncrease = (finalMemory - initialMemory) / 1024 / 1024;
-
-            expect(memoryIncrease).toBeLessThan(10);
-        });
-    });
-
-    describe('Integration with EventBus', () => {
-        test('subscribes to scene:switch event on initialization', () => {
-            const listeners = eventBus.getListenerSummary();
-
-            expect(listeners['scene:switch']).toBeGreaterThan(0);
-        });
-
-        test('cleans up event listeners on service destruction', () => {
-            sceneService.destroy();
-
-            const listeners = eventBus.getListenerSummary();
-            const sceneListeners = Object.keys(listeners).filter(name => name.startsWith('scene:'));
-
-            expect(sceneListeners.length).toBe(0);
-        });
+    test('destroy is safe and idempotent without listeners', () => {
+        sceneService.destroy();
+        sceneService.destroy();
+        const listeners = eventBus.getListenerSummary();
+        expect(listeners['scene:switch']).toBeUndefined();
     });
 });

@@ -24,7 +24,6 @@ import dependencyFactoryModule from './utils/dependency-factory.js';
 import { validateLoggerInterface } from './utils/dependency-validator';
 import { createSpamDetectionConfig, createDonationSpamDetection } from './utils/spam-detection';
 import { createOBSEventService } from './obs/obs-event-service';
-import { createSceneManagementService } from './obs/scene-management-service';
 import { clearExpiredGlobalCooldowns } from './utils/global-command-cooldown';
 import { createPlatformErrorHandler } from './utils/platform-error-handler';
 import { ensureSecrets } from './utils/secret-manager';
@@ -240,7 +239,6 @@ const MAIN_FUNCTION_OVERRIDE_KEYS = [
     'createVFXCommandService',
     'createUserTrackingService',
     'createOBSEventService',
-    'createSceneManagementService',
     'NotificationManager',
     'createSpamDetectionConfig',
     'createDonationSpamDetection',
@@ -366,7 +364,6 @@ async function main(overrides: MainOverrides = {}) {
     const createVFXCommandServiceFn = runtimeOverrides.createVFXCommandService || createVFXCommandService;
     const createUserTrackingServiceFn = runtimeOverrides.createUserTrackingService || createUserTrackingService;
     const createOBSEventServiceFn = runtimeOverrides.createOBSEventService || createOBSEventService;
-    const createSceneManagementServiceFn = runtimeOverrides.createSceneManagementService || createSceneManagementService;
     const NotificationManagerCtor = runtimeOverrides.NotificationManager || NotificationManager;
     const createSpamDetectionConfigFn = runtimeOverrides.createSpamDetectionConfig || createSpamDetectionConfig;
     const createDonationSpamDetectionFn = runtimeOverrides.createDonationSpamDetection || createDonationSpamDetection;
@@ -510,8 +507,7 @@ async function main(overrides: MainOverrides = {}) {
             logger,
             eventBus,
             getOBSConnectionManager: getOBSConnectionManagerFn,
-            createOBSEventService: createOBSEventServiceFn,
-            createSceneManagementService: createSceneManagementServiceFn
+            createOBSEventService: createOBSEventServiceFn
         } as Parameters<typeof createOBSSubsystem>[0]);
 
         logger.debug('About to initialize display queue...', 'Main');
@@ -549,9 +545,6 @@ async function main(overrides: MainOverrides = {}) {
         logger.debug('Creating OBS event-driven services...', 'Main');
         const obsEventService = obsSubsystem.obsEventService;
         logger.debug('OBSEventService created', 'Main');
-
-        const sceneManagementService = obsSubsystem.sceneManagementService;
-        logger.debug('SceneManagementService created', 'Main');
 
         const obsGoals = obsSubsystem.goalsManager;
 
@@ -601,7 +594,6 @@ async function main(overrides: MainOverrides = {}) {
         dependencies.vfxCommandService = vfxCommandService;
         dependencies.userTrackingService = userTrackingService;
         dependencies.obsEventService = obsEventService;
-        dependencies.sceneManagementService = sceneManagementService;
 
         const sharedPlatformDependencies: Record<string, unknown> = {
             logger,

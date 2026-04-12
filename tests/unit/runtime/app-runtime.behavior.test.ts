@@ -23,7 +23,6 @@ const createDeps = (overrides = {}) => ({
     },
     userTrackingService: overrides.userTrackingService || { isFirstMessage: createMockFn() },
     obsEventService: overrides.obsEventService || { disconnect: createMockFn().mockResolvedValue() },
-    sceneManagementService: overrides.sceneManagementService || {},
     guiTransportService: overrides.guiTransportService,
     commandCooldownService: overrides.commandCooldownService || {
         checkUserCooldown: createMockFn().mockReturnValue({ allowed: true }),
@@ -632,15 +631,12 @@ describe('AppRuntime behavior', () => {
         }
     });
 
-    it('calls disconnect and destroy on OBS-facing services during shutdown', async () => {
+    it('calls disconnect and destroy on OBS event service during shutdown', async () => {
         const obsEventService = {
             disconnect: createMockFn().mockResolvedValue(),
             destroy: createMockFn()
         };
-        const sceneManagementService = {
-            destroy: createMockFn()
-        };
-        const runtime = createRuntime({ obsEventService, sceneManagementService });
+        const runtime = createRuntime({ obsEventService });
         runtime.viewerCountSystem = { stopPolling: createMockFn(), cleanup: createMockFn().mockResolvedValue() };
         runtime.viewerCountStatusCleanup = createMockFn();
         const originalExit = process.exit;
@@ -650,7 +646,6 @@ describe('AppRuntime behavior', () => {
             await runtime.shutdown();
             expect(obsEventService.disconnect.mock.calls.length).toBe(1);
             expect(obsEventService.destroy.mock.calls.length).toBe(1);
-            expect(sceneManagementService.destroy.mock.calls.length).toBe(1);
         } finally {
             process.exit = originalExit;
         }

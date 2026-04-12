@@ -39,11 +39,6 @@ type ObsSubsystemDeps = {
         obsSources: unknown;
         logger: LoggerLike;
     }) => unknown;
-    createSceneManagementService: (deps: {
-        eventBus: unknown;
-        obsConnection: ObsManagerLike;
-        logger: LoggerLike;
-    }) => unknown;
 };
 
 function createOBSSubsystem(deps: ObsSubsystemDeps) {
@@ -115,19 +110,12 @@ function createOBSSubsystem(deps: ObsSubsystemDeps) {
         obsSources: sourcesManager,
         logger: deps.logger
     });
-    const sceneManagementService = deps.createSceneManagementService({
-        eventBus: deps.eventBus,
-        obsConnection: connectionManager,
-        logger: deps.logger
-    });
-
     return {
         connectionManager,
         sourcesManager,
         effectsManager,
         goalsManager,
-        obsEventService,
-        sceneManagementService
+        obsEventService
     };
 }
 
