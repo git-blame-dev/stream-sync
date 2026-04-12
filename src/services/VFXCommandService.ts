@@ -298,7 +298,7 @@ class VFXCommandService {
             if (!commandKey) {
                 return {
                     success: false,
-                    reason: 'Missing command key'
+                    error: 'Missing command key'
                 };
             }
             if (!context || typeof context !== 'object') {
@@ -320,7 +320,7 @@ class VFXCommandService {
             if (!command) {
                 return {
                     success: false,
-                    reason: `No VFX configured for ${commandKey}`
+                    error: `No VFX configured for ${commandKey}`
                 };
             }
 
@@ -331,7 +331,7 @@ class VFXCommandService {
             if (!vfxConfig) {
                 return {
                     success: false,
-                    reason: `No VFX configured for ${commandKey}`
+                    error: `No VFX configured for ${commandKey}`
                 };
             }
 
@@ -347,7 +347,7 @@ class VFXCommandService {
             handleVFXCommandError(`[VFXCommandService] Error executing command for key ${commandKey}: ${getErrorMessage(error)}`, error, 'notification');
             return {
                 success: false,
-                reason: getErrorMessage(error)
+                error: getErrorMessage(error)
             };
         }
     }

@@ -56,13 +56,7 @@ const PlatformEvents = {
     AUTH_CREDENTIALS_UPDATED: 'auth:credentials-updated',
     AUTH_HEALTH_CHECK: 'auth:health-check',
     
-    // OBS Events (6 types)
-    OBS_CONNECTED: 'obs:connected',
-    OBS_DISCONNECTED: 'obs:disconnected',
-    OBS_SCENE_CHANGED: 'obs:scene-changed',
-    OBS_SOURCE_UPDATED: 'obs:source-updated',
-    OBS_EFFECT_TRIGGERED: 'obs:effect-triggered',
-    OBS_HEALTH_CHECK: 'obs:health-check'
+    // OBS runtime events are emitted through service-specific channels, not PlatformEvents.
 };
 
 const VALID_PLATFORMS = ['twitch', 'youtube', 'tiktok'];
@@ -74,8 +68,8 @@ function resolveAvatarUrl(avatarUrl) {
 
 const EVENT_SCHEMAS = {
     'platform:chat-message': {
-        required: ['type', 'platform', 'username', 'userId', 'message', 'avatarUrl', 'timestamp'],
-        optional: ['isMod', 'isPaypiggy', 'isBroadcaster', 'metadata'],
+        required: ['type', 'platform', 'username', 'message', 'avatarUrl'],
+        optional: ['userId', 'timestamp', 'isMod', 'isPaypiggy', 'isBroadcaster', 'metadata'],
         properties: {
             type: { type: 'string', enum: ['platform:chat-message'] },
             platform: { type: 'string', enum: VALID_PLATFORMS },
@@ -120,8 +114,8 @@ const EVENT_SCHEMAS = {
         }
     },
     'platform:follow': {
-        required: ['type', 'platform', 'username', 'userId', 'avatarUrl', 'timestamp'],
-        optional: ['metadata', 'source', 'sourceType'],
+        required: ['type', 'platform', 'username', 'userId', 'timestamp'],
+        optional: ['avatarUrl', 'metadata', 'source', 'sourceType'],
         properties: {
             type: { type: 'string', enum: ['platform:follow'] },
             platform: { type: 'string', enum: VALID_PLATFORMS },
@@ -135,8 +129,8 @@ const EVENT_SCHEMAS = {
         }
     },
     'platform:share': {
-        required: ['type', 'platform', 'username', 'userId', 'avatarUrl', 'timestamp'],
-        optional: ['metadata'],
+        required: ['type', 'platform', 'username', 'userId', 'timestamp'],
+        optional: ['avatarUrl', 'metadata'],
         properties: {
             type: { type: 'string', enum: ['platform:share'] },
             platform: { type: 'string', enum: VALID_PLATFORMS },
@@ -148,7 +142,7 @@ const EVENT_SCHEMAS = {
         }
     },
     'platform:paypiggy': {
-        required: ['type', 'platform', 'username', 'userId', 'avatarUrl', 'timestamp'],
+        required: ['type', 'platform', 'username', 'userId', 'timestamp'],
         properties: {
             type: { type: 'string', enum: ['platform:paypiggy'] },
             platform: { type: 'string', enum: VALID_PLATFORMS },
@@ -162,7 +156,7 @@ const EVENT_SCHEMAS = {
         }
     },
     'platform:giftpaypiggy': {
-        required: ['type', 'platform', 'username', 'userId', 'avatarUrl', 'giftCount', 'timestamp'],
+        required: ['type', 'platform', 'giftCount', 'timestamp'],
         properties: {
             type: { type: 'string', enum: ['platform:giftpaypiggy'] },
             platform: { type: 'string', enum: VALID_PLATFORMS },
@@ -177,8 +171,8 @@ const EVENT_SCHEMAS = {
         }
     },
     'platform:gift': {
-        required: ['type', 'platform', 'username', 'userId', 'avatarUrl', 'id', 'giftType', 'giftCount', 'amount', 'currency', 'timestamp'],
-        optional: ['repeatCount', 'message', 'cheermoteInfo', 'giftImageUrl', 'isError', 'isAnonymous', 'isAggregated', 'aggregatedCount', 'enhancedGiftData', 'sourceType'],
+        required: ['type', 'platform', 'id', 'giftType', 'giftCount', 'amount', 'currency', 'timestamp'],
+        optional: ['avatarUrl', 'repeatCount', 'message', 'cheermoteInfo', 'giftImageUrl', 'isError', 'isAnonymous', 'isAggregated', 'aggregatedCount', 'enhancedGiftData', 'sourceType'],
         properties: {
             type: { type: 'string', enum: ['platform:gift'] },
             platform: { type: 'string', enum: VALID_PLATFORMS },
@@ -204,8 +198,8 @@ const EVENT_SCHEMAS = {
         }
     },
     'platform:envelope': {
-        required: ['type', 'platform', 'username', 'userId', 'avatarUrl', 'id', 'giftType', 'giftCount', 'amount', 'currency', 'timestamp'],
-        optional: ['repeatCount', 'message', 'isError', 'sourceType'],
+        required: ['type', 'platform', 'username', 'userId', 'id', 'giftType', 'giftCount', 'amount', 'currency', 'timestamp'],
+        optional: ['avatarUrl', 'repeatCount', 'message', 'isError', 'sourceType'],
         properties: {
             type: { type: 'string', enum: ['platform:envelope'] },
             platform: { type: 'string', enum: VALID_PLATFORMS },
@@ -225,8 +219,8 @@ const EVENT_SCHEMAS = {
         }
     },
     'platform:raid': {
-        required: ['type', 'platform', 'username', 'userId', 'avatarUrl', 'viewerCount', 'timestamp'],
-        optional: ['metadata'],
+        required: ['type', 'platform', 'username', 'userId', 'viewerCount', 'timestamp'],
+        optional: ['avatarUrl', 'metadata'],
         properties: {
             type: { type: 'string', enum: ['platform:raid'] },
             platform: { type: 'string', enum: VALID_PLATFORMS },
@@ -1047,7 +1041,61 @@ class EnhancedPlatformEvents {
         }
 
         const validator = new PlatformEventValidator();
-        return validator.validate(event).valid;
+        if (!validator.validate(event).valid) {
+            return false;
+        }
+
+        const metadata = event.metadata;
+        const missingFields = Array.isArray(metadata?.missingFields)
+            ? metadata.missingFields
+            : [];
+
+        const hasUserId = typeof event.userId === 'string' && event.userId.trim().length > 0;
+        const hasTimestamp = typeof event.timestamp === 'string' && event.timestamp.trim().length > 0;
+
+        if (!hasUserId && !missingFields.includes('userId')) {
+            return false;
+        }
+
+        if (!hasTimestamp && !missingFields.includes('timestamp')) {
+            return false;
+        }
+
+        return true;
+    }
+
+    static validateRuntimeMonetizationEvent(event) {
+        if (!event || typeof event !== 'object') {
+            return false;
+        }
+
+        const validator = new PlatformEventValidator();
+        if (!validator.validate(event).valid) {
+            return false;
+        }
+
+        const isErrorPayload = event.isError === true;
+        const isAnonymousGift = event.isAnonymous === true &&
+            (event.type === PlatformEvents.GIFT || event.type === PlatformEvents.GIFTPAYPIGGY);
+        const hasValidUsername = typeof event.username === 'string' && event.username.trim().length > 0;
+        const hasValidUserId = typeof event.userId === 'string' && event.userId.trim().length > 0;
+
+        if (isErrorPayload) {
+            return true;
+        }
+
+        if (isAnonymousGift) {
+            if ((event.username !== undefined && event.username !== null && !hasValidUsername) ||
+                (event.userId !== undefined && event.userId !== null && !hasValidUserId)) {
+                return false;
+            }
+            if ((hasValidUsername && !hasValidUserId) || (!hasValidUsername && hasValidUserId)) {
+                return false;
+            }
+            return true;
+        }
+
+        return hasValidUsername && hasValidUserId;
     }
 
     static validateNotificationEvent(event) {
@@ -1154,14 +1202,13 @@ class EnhancedPlatformEvents {
         switch (event.type) {
             case 'platform:chat-message':
                 return this.validateChatMessageEvent(event);
-            case 'platform:notification':
-                return this.validateNotificationEvent(event);
             case 'platform:connection':
                 return this.validateConnectionEvent(event);
             case 'platform:error':
                 return this.validateErrorEvent(event);
             case 'platform:gift':
             case 'platform:giftpaypiggy':
+                return this.validateRuntimeMonetizationEvent(event);
             case 'platform:paypiggy':
             case 'platform:raid':
             case 'platform:viewer-count':

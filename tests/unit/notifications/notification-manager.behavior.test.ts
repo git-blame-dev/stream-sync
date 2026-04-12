@@ -65,4 +65,25 @@ describe('NotificationManager behavior', () => {
         expect(manager.displayQueue).toBe(deps.displayQueue);
         expect(manager.config).toBe(deps.config);
     });
+
+    it('returns canonical result envelope from handleGiftNotification wrapper', async () => {
+        const manager = new NotificationManager(createDeps());
+        const expectedResult = {
+            success: false,
+            error: 'Notifications disabled',
+            notificationType: 'platform:gift',
+            platform: 'twitch'
+        };
+        manager.handleNotification = createMockFn().mockResolvedValue(expectedResult);
+
+        const result = await manager.handleGiftNotification('twitch', {
+            id: 'test-gift-id',
+            giftType: 'bits',
+            giftCount: 1,
+            amount: 1,
+            currency: 'bits'
+        });
+
+        expect(result).toEqual(expectedResult);
+    });
 });

@@ -35,9 +35,8 @@ describe('Platform Event Interface Design', () => {
                 const result = validator.validate(event);
                 expect(result.valid).toBe(false);
                 expect(result.errors).toContain('Missing required field: username');
-                expect(result.errors).toContain('Missing required field: userId');
                 expect(result.errors).toContain('Missing required field: message');
-                expect(result.errors).toContain('Missing required field: timestamp');
+                expect(result.errors).toContain('Missing required field: avatarUrl');
             });
 
             it('should reject platform:chat-message event with invalid message text', () => {
@@ -690,10 +689,8 @@ describe('Platform Event Interface Design', () => {
             expect(schema.required).toContain('type');
             expect(schema.required).toContain('platform');
             expect(schema.required).toContain('username');
-            expect(schema.required).toContain('userId');
             expect(schema.required).toContain('avatarUrl');
             expect(schema.required).toContain('message');
-            expect(schema.required).toContain('timestamp');
         });
         
         it('should validate platform field is restricted to valid platforms', () => {

@@ -852,7 +852,13 @@ class AppRuntime {
         if (!username || (typeof username === 'string' && username.trim().length === 0)) {
             if (!isError && !allowAnonymous) {
                 this.logger.warn('Missing username for gift notification', platform, { options });
-                return;
+                return {
+                    success: false,
+                    error: 'Missing username for gift notification',
+                    notificationType: 'platform:gift',
+                    platform,
+                    username: null
+                };
             }
         }
 
@@ -904,10 +910,9 @@ class AppRuntime {
             throw new Error('VFXCommandService unavailable for gift notification');
         }
 
-        const notificationType = options.type;
-        if (!notificationType) {
-            throw new Error('Gift notification requires type');
-        }
+        const notificationType = typeof options.type === 'string' && options.type.trim()
+            ? options.type
+            : 'platform:gift';
         if (!isError && !options.id) {
             throw new Error('Gift notification requires id');
         }
@@ -1035,7 +1040,7 @@ class AppRuntime {
                 amount = undefined;
             }
 
-            await this.handleUnifiedNotification('platform:envelope', platform, data.username, {
+            return await this.handleUnifiedNotification('platform:envelope', platform, data.username, {
                 giftType,
                 giftCount,
                 amount,
@@ -1057,12 +1062,19 @@ class AppRuntime {
                 { platform, envelopeData: data },
                 { eventType: 'notification', logContext: platform }
             );
+            return {
+                success: false,
+                error: getErrorMessage(error),
+                notificationType: 'platform:envelope',
+                platform,
+                username: typeof data?.username === 'string' ? data.username : null
+            };
         }
     }
 
     async handleGiftPaypiggyNotification(platform, username, options) {
         try {
-            await this.handleGiftPaypiggyEvent(platform, username, options);
+            return await this.handleGiftPaypiggyEvent(platform, username, options);
         } catch (error) {
             this._handleAppRuntimeError(
                 `Error handling giftpaypiggy notification for ${username}: ${getErrorMessage(error)}`,
@@ -1070,12 +1082,19 @@ class AppRuntime {
                 { platform, username, options },
                 { eventType: 'notification', logContext: platform }
             );
+            return {
+                success: false,
+                error: getErrorMessage(error),
+                notificationType: 'platform:giftpaypiggy',
+                platform,
+                username: typeof username === 'string' ? username : null
+            };
         }
     }
 
     async handleResubNotification(platform, username, options) {
         try {
-            await this.handleResubEvent(platform, username, options);
+            return await this.handleResubEvent(platform, username, options);
         } catch (error) {
             this._handleAppRuntimeError(
                 `Error handling resub notification for ${username}: ${getErrorMessage(error)}`,
@@ -1083,6 +1102,13 @@ class AppRuntime {
                 { platform, username, options },
                 { eventType: 'notification', logContext: platform }
             );
+            return {
+                success: false,
+                error: getErrorMessage(error),
+                notificationType: 'platform:paypiggy',
+                platform,
+                username: typeof username === 'string' ? username : null
+            };
         }
     }
 

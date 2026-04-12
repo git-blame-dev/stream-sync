@@ -75,7 +75,7 @@ describe('VFXCommandService random variant selection', () => {
         });
 
         expect(result.success).toBe(false);
-        expect(result.reason).toBe('No VFX configured for gifts');
+        expect(result.error).toBe('No VFX configured for gifts');
         expect(capturedCommands.length).toBe(0);
     });
 

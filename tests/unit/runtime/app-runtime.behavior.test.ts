@@ -307,6 +307,28 @@ describe('AppRuntime behavior', () => {
         expect(Object.prototype.hasOwnProperty.call(calls[0][2], 'repeatCount')).toBe(false);
     });
 
+    it('defaults gift notification type to platform:gift when omitted', async () => {
+        const calls = [];
+        const notificationManager = createRecordingNotificationManager(calls);
+        const runtime = createRuntime({
+            notificationManager,
+            vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue({ key: 'gifts' }) }
+        });
+
+        await runtime.handleGiftNotification('twitch', 'test-user', {
+            userId: 'test-user-id',
+            timestamp: '2024-01-01T00:00:00.000Z',
+            giftType: 'Rose',
+            giftCount: 1,
+            amount: 5,
+            currency: 'USD',
+            id: 'test-gift-default-type'
+        });
+
+        expect(calls.length).toBe(1);
+        expect(calls[0][0]).toBe('platform:gift');
+    });
+
     it('normalizes gift notification error payloads', async () => {
         const calls = [];
         const notificationManager = createRecordingNotificationManager(calls);
@@ -407,9 +429,14 @@ describe('AppRuntime behavior', () => {
             logOperationalError: createMockFn()
         };
 
-        await runtime.handleResubNotification('twitch', 'test-user', { tier: '1000', months: 3 });
+        const result = await runtime.handleResubNotification('twitch', 'test-user', { tier: '1000', months: 3 });
 
         expect(handled.length).toBe(1);
+        expect(result).toEqual(expect.objectContaining({
+            success: false,
+            notificationType: 'platform:paypiggy',
+            platform: 'twitch'
+        }));
     });
 
     it('validates raid inputs', async () => {
@@ -1171,9 +1198,36 @@ describe('AppRuntime behavior', () => {
             logOperationalError: createMockFn()
         };
 
-        await runtime.handleGiftPaypiggyNotification('twitch', 'test-user', { userId: 'test-user-id' });
+        const result = await runtime.handleGiftPaypiggyNotification('twitch', 'test-user', { userId: 'test-user-id' });
 
         expect(handled.length).toBe(1);
+        expect(result).toEqual(expect.objectContaining({
+            success: false,
+            notificationType: 'platform:giftpaypiggy',
+            platform: 'twitch'
+        }));
+    });
+
+    it('returns failed result shape when gift notification username is missing', async () => {
+        const runtime = createRuntime();
+
+        const result = await runtime.handleGiftNotification('twitch', '', {
+            type: 'platform:gift',
+            userId: 'test-user-id',
+            timestamp: '2024-01-01T00:00:00.000Z',
+            giftType: 'Rose',
+            giftCount: 1,
+            amount: 5,
+            currency: 'USD',
+            id: 'test-gift-missing-user'
+        });
+
+        expect(result).toEqual(expect.objectContaining({
+            success: false,
+            error: 'Missing username for gift notification',
+            notificationType: 'platform:gift',
+            platform: 'twitch'
+        }));
     });
 
     it('routes chat errors through runtime handler when router is missing', async () => {
