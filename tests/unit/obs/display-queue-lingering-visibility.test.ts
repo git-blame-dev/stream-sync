@@ -38,7 +38,8 @@ describe('DisplayQueue lingering chat visibility', () => {
         platform: 'twitch',
         data: {
             username: 'test-viewer',
-            message: 'Hello there'
+            timestamp: '2026-01-01T00:00:00.000Z',
+            message: { text: 'Hello there' }
         }
     });
 
@@ -56,6 +57,7 @@ describe('DisplayQueue lingering chat visibility', () => {
                 type: 'chat',
                 username: 'test-viewer',
                 content: 'test-viewer: Hello there',
+                timestamp: '2026-01-01T00:00:00.000Z',
                 isLingering: true
             })
         );
@@ -120,6 +122,7 @@ describe('DisplayQueue lingering chat visibility', () => {
         };
 
         expect(displayQueue.isItemDisplayedToUser('platform:gift')).toBe(true);
+        expect(displayQueue.isItemDisplayedToUser('platform:follow')).toBe(false);
         const content = displayQueue.getCurrentDisplayContent();
         expect(content).toEqual(expect.objectContaining({
             type: 'platform:gift',
@@ -151,6 +154,27 @@ describe('DisplayQueue lingering chat visibility', () => {
             type: 'custom',
             content: 'custom message',
             username: 'test-user'
+        }));
+    });
+
+    it('formats object chat payload text without object artifacts', () => {
+        const displayQueue = new DisplayQueue(createMockOBSManager('connected'), config, constants, null, constants);
+        displayQueue.currentDisplay = {
+            type: 'chat',
+            platform: 'youtube',
+            data: {
+                username: 'test-user',
+                timestamp: '2026-01-01T01:02:03.000Z',
+                message: { text: 'message from object payload' }
+            }
+        };
+
+        const content = displayQueue.getCurrentDisplayContent();
+        expect(content).toEqual(expect.objectContaining({
+            type: 'chat',
+            platform: 'youtube',
+            content: 'test-user: message from object payload',
+            timestamp: '2026-01-01T01:02:03.000Z'
         }));
     });
 

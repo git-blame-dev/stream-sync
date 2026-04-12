@@ -31,7 +31,12 @@ describe('DisplayQueue gift flow (smoke E2E)', () => {
         };
 
         const vfxEvents: unknown[] = [];
-        emitter.on(PlatformEvents.VFX_COMMAND_RECEIVED, (payload) => vfxEvents.push(payload));
+        emitter.on(PlatformEvents.VFX_COMMAND_RECEIVED, (payload) => {
+            vfxEvents.push(payload);
+            queueMicrotask(() => {
+                emitter.emit(PlatformEvents.VFX_EFFECT_COMPLETED, { correlationId: payload.correlationId });
+            });
+        });
 
         const actions: QueueAction[] = [];
         const sourcesManager = {

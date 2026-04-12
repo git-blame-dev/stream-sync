@@ -34,6 +34,26 @@ function isChatType(type) {
     return type === CHAT_TYPE;
 }
 
+function resolveChatMessageText(message) {
+    if (typeof message === 'string') {
+        return message;
+    }
+
+    if (message && typeof message === 'object') {
+        if (typeof message.text === 'string') {
+            return message.text;
+        }
+
+        if (Array.isArray(message.parts)) {
+            return message.parts
+                .map((part) => (part && typeof part === 'object' && typeof part.text === 'string' ? part.text : ''))
+                .join('');
+        }
+    }
+
+    return '';
+}
+
 let displayQueueErrorHandler = logger ? createPlatformErrorHandler(logger, 'display-queue') : null;
 
 function handleDisplayQueueError(message, error = null, payload = null) {
@@ -196,17 +216,23 @@ class DisplayQueue {
 
         this.isRetryScheduled = true;
 
-        if (!await this.obsManager.isReady()) {
-            logger.debug('[DisplayQueue] OBS not ready, pausing queue processing', 'display-queue');
-            
-            if (this.queue.length > 0) {
-                safeSetTimeout(() => {
+        try {
+            if (!await this.obsManager.isReady()) {
+                logger.debug('[DisplayQueue] OBS not ready, pausing queue processing', 'display-queue');
+
+                if (this.queue.length > 0) {
+                    safeSetTimeout(() => {
+                        this.isRetryScheduled = false;
+                        this.processQueue();
+                    }, 1000);
+                } else {
                     this.isRetryScheduled = false;
-                    this.processQueue();
-                }, 1000);
-            } else {
-                this.isRetryScheduled = false;
+                }
+                return;
             }
+        } catch (error) {
+            this.isRetryScheduled = false;
+            handleDisplayQueueError('[Display Queue] Failed readiness check during processing', error);
             return;
         }
         
@@ -261,7 +287,7 @@ class DisplayQueue {
             if (this.lastChatItem) {
                 logger.debug('[Display Queue] Queue empty, showing lingering chat.', 'display-queue');
                 await this.displayLingeringChat();
-                this.currentDisplay = { type: 'chat', data: this.lastChatItem.data };
+                this.currentDisplay = { type: 'chat', platform: this.lastChatItem.platform, data: this.lastChatItem.data };
             }
         } finally {
             this.isProcessing = false;
@@ -366,6 +392,10 @@ class DisplayQueue {
             ? holdDurationMs
             : 0;
 
+        if (!this.config?.ttsEnabled) {
+            return normalizedHoldDurationMs;
+        }
+
         if (!item?.data) {
             return normalizedHoldDurationMs;
         }
@@ -444,7 +474,7 @@ class DisplayQueue {
             }
 
             if (isNotificationType(type)) {
-                const isNotificationDisplayed = isNotificationType(this.currentDisplay.type);
+                const isNotificationDisplayed = this.currentDisplay.type === type;
                 logger.debug(`[DisplayQueue] Notification display check: ${isNotificationDisplayed} (current: ${this.currentDisplay.type})`, 'display-queue');
                 return isNotificationDisplayed;
             }
@@ -490,13 +520,15 @@ class DisplayQueue {
         if (!this.lastChatItem) return null;
 
         const username = this.extractUsername(this.lastChatItem.data);
-        const content = `${username}: ${this.lastChatItem.data.message}`;
+        const messageText = resolveChatMessageText(this.lastChatItem.data.message);
+        const content = `${username}: ${messageText}`;
 
         return {
             type: 'chat',
             content: content,
             username: username,
             platform: this.lastChatItem.platform || 'unknown',
+            timestamp: this.lastChatItem.data.timestamp || null,
             isTechnicalArtifactFree: this._isContentClean(content),
             isLingering: true
         };
@@ -504,13 +536,15 @@ class DisplayQueue {
 
     _formatChatContent(displayItem) {
         const username = this.extractUsername(displayItem.data);
-        const content = `${username}: ${displayItem.data.message}`;
+        const messageText = resolveChatMessageText(displayItem.data.message);
+        const content = `${username}: ${messageText}`;
 
         return {
             type: 'chat',
             content: content,
             username: username,
             platform: displayItem.platform || 'unknown',
+            timestamp: displayItem.data.timestamp || null,
             isTechnicalArtifactFree: this._isContentClean(content),
             isLingering: false
         };

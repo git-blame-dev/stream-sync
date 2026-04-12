@@ -125,12 +125,7 @@ class VFXCommandService {
             
             if (executionResult.success) {
                 this.stats.successfulCommands++;
-                
-                // Update cooldowns after successful execution (only when cooldowns are enforced)
-                if (!skipCooldown) {
-                    this._updateCooldowns(userId, vfxConfig.commandKey);
-                }
-                
+
                 if (this.eventBus) {
                     try {
                         if (!correlationId) {
@@ -157,6 +152,10 @@ class VFXCommandService {
                         handleVFXCommandError(`[VFXCommandService] EventBus error: ${eventError.message}`, eventError, 'event-bus');
                         throw eventError; // Re-throw to be caught by outer catch
                     }
+                }
+
+                if (!skipCooldown) {
+                    this._updateCooldowns(userId, vfxConfig.commandKey);
                 }
             } else {
                 this.stats.failedCommands++;

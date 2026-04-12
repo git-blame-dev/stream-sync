@@ -329,10 +329,6 @@ class DisplayQueueEffects {
                 });
             }
         }
-        if (vfxMatch) {
-            void this.waitForVfxCompletion(vfxMatch);
-        }
-
         allPromises.push(this.playGiftVideoAndAudio());
 
         const handcamConfig = this.config.handcam;
@@ -359,7 +355,7 @@ class DisplayQueueEffects {
 
         const eventBus = this.eventBus;
         if (vfxMatch && eventBus && vfxConfig) {
-            const vfxPromise = this.delay(2000).then(() => {
+            const vfxPromise = this.delay(2000).then(async () => {
                 let payload: Record<string, unknown> | undefined;
                 try {
                     const { command, commandKey, filename, mediaSource, vfxFilePath } = vfxConfig;
@@ -386,7 +382,10 @@ class DisplayQueueEffects {
                         vfxConfig
                     };
 
+                    vfxMatch.correlationId = correlationId;
+                    const completionPromise = this.waitForVfxCompletion(vfxMatch);
                     eventBus.emit(PlatformEvents.VFX_COMMAND_RECEIVED, payload);
+                    await completionPromise;
                 } catch (error) {
                     this.handleDisplayQueueError('[Gift] Error emitting VFX command', error, payload);
                 }
@@ -420,9 +419,9 @@ class DisplayQueueEffects {
                 if (emitResult.emitted && emitResult.match?.correlationId) {
                     match.correlationId = emitResult.match.correlationId;
                 }
-                completionResult = emitResult.error
+                completionResult = emitResult.error || !emitResult.emitted || !emitResult.completionPromise
                     ? null
-                    : await this.waitForVfxCompletion(match);
+                    : await emitResult.completionPromise;
             }
         }
 
@@ -445,8 +444,8 @@ class DisplayQueueEffects {
                 if (emitResult.emitted && emitResult.match?.correlationId) {
                     secondaryMatch.correlationId = emitResult.match.correlationId;
                 }
-                if (!emitResult.error) {
-                    completionResult = await this.waitForVfxCompletion(secondaryMatch);
+                if (!emitResult.error && emitResult.emitted && emitResult.completionPromise) {
+                    completionResult = await emitResult.completionPromise;
                 }
             }
         }
@@ -525,7 +524,7 @@ class DisplayQueueEffects {
         }
 
         const timeoutMs = typeof options.timeoutMs === 'number' ? options.timeoutMs : 10000;
-        const eventNames = [PlatformEvents.VFX_EFFECT_COMPLETED, PlatformEvents.VFX_COMMAND_EXECUTED];
+        const eventNames = [PlatformEvents.VFX_EFFECT_COMPLETED];
         const eventBus = this.eventBus;
         const subscribe = (eventName: string, handler: (payload: Record<string, unknown>) => void) => {
             if (eventBus && typeof eventBus.subscribe === 'function') {
@@ -558,8 +557,24 @@ class DisplayQueueEffects {
 
             const matches = (payload: Record<string, unknown> = {}) => {
                 const payloadCorrelationId = typeof payload.correlationId === 'string' ? payload.correlationId : null;
-                if (match.correlationId && payloadCorrelationId && match.correlationId === payloadCorrelationId) {
-                    return true;
+                if (typeof match.correlationId === 'string' && match.correlationId.trim().length > 0) {
+                    if (!payloadCorrelationId) {
+                        return false;
+                    }
+                    return match.correlationId === payloadCorrelationId;
+                }
+
+                const hasExactTuple = typeof match.commandKey === 'string'
+                    && typeof match.command === 'string'
+                    && typeof match.filename === 'string'
+                    && typeof match.mediaSource === 'string'
+                    && match.commandKey.trim().length > 0
+                    && match.command.trim().length > 0
+                    && match.filename.trim().length > 0
+                    && match.mediaSource.trim().length > 0;
+
+                if (!hasExactTuple) {
+                    return false;
                 }
 
                 const payloadKey = typeof payload.commandKey === 'string' ? payload.commandKey : null;
@@ -567,12 +582,10 @@ class DisplayQueueEffects {
                 const payloadFile = typeof payload.filename === 'string' ? payload.filename : null;
                 const payloadSource = typeof payload.mediaSource === 'string' ? payload.mediaSource : null;
 
-                const byKey = match.commandKey && payloadKey && match.commandKey === payloadKey;
-                const byCommand = match.command && payloadCommand && match.command === payloadCommand;
-                const byFile = match.filename && payloadFile && match.filename === payloadFile;
-                const bySource = match.mediaSource && payloadSource && match.mediaSource === payloadSource;
-
-                return byKey || byCommand || byFile || bySource;
+                return match.commandKey === payloadKey
+                    && match.command === payloadCommand
+                    && match.filename === payloadFile
+                    && match.mediaSource === payloadSource;
             };
 
             const handler = (payload: Record<string, unknown>) => {
@@ -605,7 +618,7 @@ class DisplayQueueEffects {
     async emitVfxFromConfig(item: QueueItem, username: string | null) {
         const vfxConfig = item && item.vfxConfig ? item.vfxConfig : null;
         if (!this.eventBus || !vfxConfig) {
-            return { emitted: false, match: null };
+            return { emitted: false, match: null, completionPromise: null };
         }
 
         let payload: Record<string, unknown> | undefined;
@@ -636,11 +649,12 @@ class DisplayQueueEffects {
                 vfxConfig
             };
 
+            const completionPromise = this.waitForVfxCompletion(match);
             this.eventBus.emit(PlatformEvents.VFX_COMMAND_RECEIVED, payload);
-            return { emitted: true, match };
+            return { emitted: true, match, completionPromise };
         } catch (error) {
             this.handleDisplayQueueError('[DisplayQueue] Error emitting VFX command', error, payload);
-            return { emitted: false, match: null, error };
+            return { emitted: false, match: null, completionPromise: null, error };
         }
     }
 

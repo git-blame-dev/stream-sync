@@ -49,6 +49,12 @@ type ObsLike = {
     call: (requestType: string, payload: Record<string, unknown>) => Promise<unknown>;
 };
 
+class HandcamGlowSupersededError extends Error {
+    constructor() {
+        super('Handcam glow run superseded by newer request');
+    }
+}
+
 function getErrorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
 }
@@ -94,8 +100,16 @@ function handleHandcamGlowError(message: string, error: unknown, payload: Record
     }
 }
 
-// Global timeout reference for handcam glow animation cleanup
-let handcamGlowTimeout: ReturnType<typeof setTimeout> | null = null;
+let handcamGlowRunId = 0;
+
+function assertActiveRun(runId: number | null = null) {
+    if (runId === null) {
+        return;
+    }
+    if (runId !== handcamGlowRunId) {
+        throw new HandcamGlowSupersededError();
+    }
+}
 
 function easeOutCubic(t: number) {
     return 1 - Math.pow(1 - t, 3);
@@ -129,10 +143,12 @@ function createHandcamGlowConfig(handcamConfig: HandcamConfigInput): HandcamGlow
     };
 }
 
-async function setHandcamGlowSize(obs: ObsLike, config: HandcamGlowConfig, baseSettings: FilterSettings, size: number) {
+async function setHandcamGlowSize(obs: ObsLike, config: HandcamGlowConfig, baseSettings: FilterSettings, size: number, runId: number | null = null) {
     const { logger, ensureConnected } = moduleDeps;
     try {
+        assertActiveRun(runId);
         await ensureConnected();
+        assertActiveRun(runId);
 
         const newSettings = {
             ...baseSettings,
@@ -159,18 +175,21 @@ async function executeAnimationPhase(
     phaseName: string,
     phaseNumber: number,
     calculateSize: (step: number) => number,
-    stepDelay: number
+    stepDelay: number,
+    runId: number
 ) {
     const { logger, delay } = moduleDeps;
     try {
         logger.debug(`[Handcam] Phase ${phaseNumber}: ${phaseName} - ${config.totalSteps} steps, ${stepDelay.toFixed(1)}ms per step`, 'handcam-glow');
 
         for (let step = 0; step <= config.totalSteps; step++) {
+            assertActiveRun(runId);
             const size = calculateSize(step);
-            await setHandcamGlowSize(obs, config, baseSettings, size);
+            await setHandcamGlowSize(obs, config, baseSettings, size, runId);
 
             if (step < config.totalSteps) {
                 await delay(stepDelay, Math.max(stepDelay || 0, 10), 'Handcam glow step delay');
+                assertActiveRun(runId);
             }
         }
 
@@ -182,7 +201,7 @@ async function executeAnimationPhase(
     }
 }
 
-async function animateGlowSize(obs: ObsLike, config: HandcamGlowConfig, baseSettings: FilterSettings) {
+async function animateGlowSize(obs: ObsLike, config: HandcamGlowConfig, baseSettings: FilterSettings, runId: number) {
     const { logger, delay } = moduleDeps;
     try {
         logger.debug(`[Handcam] Starting enhanced glow animation with easing: ${config.easingEnabled ? 'enabled' : 'disabled'}`, 'handcam-glow');
@@ -198,11 +217,13 @@ async function animateGlowSize(obs: ObsLike, config: HandcamGlowConfig, baseSett
                 const easedProgress = config.easingEnabled ? easeInCubic(progress) : progress;
                 return Math.round(easedProgress * config.maxSize);
             },
-            config.rampUpStepDelay
+            config.rampUpStepDelay,
+            runId
         );
 
         logger.debug(`[Handcam] Phase 2: Hold at maximum glow for ${config.holdDuration}s`, 'handcam-glow');
         await delay(config.holdDuration * 1000, 1000, 'Handcam glow hold duration');
+        assertActiveRun(runId);
 
         await executeAnimationPhase(
             obs,
@@ -215,7 +236,8 @@ async function animateGlowSize(obs: ObsLike, config: HandcamGlowConfig, baseSett
                 const easedProgress = config.easingEnabled ? easeOutCubic(progress) : progress;
                 return Math.round((1 - easedProgress) * config.maxSize);
             },
-            config.rampDownStepDelay
+            config.rampDownStepDelay,
+            runId
         );
 
         logger.debug(`[Handcam] Enhanced glow animation completed successfully`, 'handcam-glow');
@@ -229,6 +251,7 @@ async function animateGlowSize(obs: ObsLike, config: HandcamGlowConfig, baseSett
 async function activateHandcamGlow(obs: ObsLike, handcamConfig: HandcamConfigInput) {
     const { logger, ensureConnected } = moduleDeps;
     const config = createHandcamGlowConfig(handcamConfig);
+    const runId = ++handcamGlowRunId;
 
     if (!config.enabled) {
         logger.debug('[Handcam] Glow filter disabled in config', 'handcam-glow');
@@ -238,13 +261,8 @@ async function activateHandcamGlow(obs: ObsLike, handcamConfig: HandcamConfigInp
     try {
         logger.debug(`[Handcam] Starting glow animation: 0→${config.maxSize}→0 over ${config.totalDuration}s (${config.rampUpDuration}s up + ${config.holdDuration}s hold + ${config.rampDownDuration}s down)`, 'handcam-glow');
 
-        if (handcamGlowTimeout) {
-            clearTimeout(handcamGlowTimeout);
-            handcamGlowTimeout = null;
-            logger.debug('[Handcam] Cleared existing glow animation timeout', 'handcam-glow');
-        }
-
         await ensureConnected();
+        assertActiveRun(runId);
 
         const filterInfo = await obs.call('GetSourceFilter', {
             sourceName: config.sourceName,
@@ -254,12 +272,16 @@ async function activateHandcamGlow(obs: ObsLike, handcamConfig: HandcamConfigInp
         const baseSettings = filterInfo.filterSettings ?? {};
         logger.debug(`[Handcam] Retrieved filter settings for ${config.sourceName}:${config.filterName}`, 'handcam-glow');
 
-        await setHandcamGlowSize(obs, config, baseSettings, 0);
-        await animateGlowSize(obs, config, baseSettings);
+        await setHandcamGlowSize(obs, config, baseSettings, 0, runId);
+        await animateGlowSize(obs, config, baseSettings, runId);
 
         logger.debug('[Handcam] Glow animation completed', 'handcam-glow');
 
     } catch (error) {
+        if (error instanceof HandcamGlowSupersededError) {
+            logger.debug('[Handcam] Glow animation superseded by a newer request', 'handcam-glow');
+            return;
+        }
         handleHandcamGlowError('[Handcam] Error in glow animation', error, { config });
 
         try {

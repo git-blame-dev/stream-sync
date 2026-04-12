@@ -92,7 +92,7 @@ describe('DisplayQueue TTS-driven durations', () => {
         expect(queue.getDuration({ type: 'platform:gift', data: null })).toBe(0);
     });
 
-    it('preserves baseline tts-derived window when tts is disabled', () => {
+    it('uses hold duration only when tts is disabled', () => {
         const queue = new DisplayQueue(
             {},
             { ttsEnabled: false },
@@ -106,10 +106,10 @@ describe('DisplayQueue TTS-driven durations', () => {
         );
 
         const duration = queue.getDuration({ type: 'platform:gift', data: { ttsMessage: 'hello' } });
-        expect(duration).toBe(2000);
+        expect(duration).toBe(0);
     });
 
-    it('uses max of baseline window and hold duration when tts is disabled', () => {
+    it('keeps explicit hold duration when tts is disabled', () => {
         const queue = new DisplayQueue(
             {},
             { ttsEnabled: false },

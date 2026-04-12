@@ -263,6 +263,21 @@ describe('DisplayQueue control', () => {
             expect(queue.isRetryScheduled).toBe(false);
             expect(queue.isProcessing).toBe(false);
         });
+
+        it('clears retry flag when OBS readiness check throws', async () => {
+            const queue = new DisplayQueue({ isReady: async () => { throw new Error('readiness failed'); } }, createConfig(), constants, null, createMockDependencies());
+            queue.addItem({
+                type: 'platform:gift',
+                platform: 'twitch',
+                data: { username: 'test-user', giftType: 'Rose', giftCount: 1, amount: 10, currency: 'coins' }
+            });
+
+            await queue.processQueue();
+
+            expect(queue.isRetryScheduled).toBe(false);
+            expect(queue.isProcessing).toBe(false);
+            expect(queue.getQueueLength()).toBe(1);
+        });
     });
 
     describe('display routing', () => {
