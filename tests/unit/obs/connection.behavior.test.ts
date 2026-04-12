@@ -150,6 +150,19 @@ describe('OBSConnectionManager behavior', () => {
         expect(second.getConfig().address).toBe('ws://second:4455');
     });
 
+    it('rejects incompatible non-config overrides after singleton creation', () => {
+        const firstObs = createMockOBS();
+        getOBSConnectionManager({
+            obs: firstObs,
+            config: { address: 'ws://first:4455', password: 'first-pass', enabled: true, connectionTimeoutMs: 50 },
+            constants: { ERROR_MESSAGES: { OBS_CONNECTION_TIMEOUT: 'Timed out' } }
+        });
+
+        const secondObs = createMockOBS();
+
+        expect(() => getOBSConnectionManager({ obs: secondObs })).toThrow(/incompatible non-config dependency overrides/i);
+    });
+
     it('routes obsCall and ensureOBSConnected through the singleton manager', async () => {
         const mockOBS = createMockOBS();
         mockOBS.call.mockResolvedValue({ ok: true });

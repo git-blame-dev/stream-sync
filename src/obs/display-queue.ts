@@ -588,6 +588,10 @@ function createDisplayQueue(obsManager, config = {}, constants = {}, eventBus = 
     return new DisplayQueue(obsManager, config, constants, eventBus, dependencies);
 }
 
+function resetDisplayQueue() {
+    displayQueueInstance = null;
+}
+
 function initializeDisplayQueue(obsManager, config = {}, constants = {}, eventBus = null, dependencies = {}) {
     if (!obsManager) {
         throw new Error('DisplayQueue requires OBSConnectionManager instance');
@@ -614,7 +618,9 @@ function initializeDisplayQueue(obsManager, config = {}, constants = {}, eventBu
 }
 
 export {
+    createDisplayQueue,
     initializeDisplayQueue,
+    resetDisplayQueue,
     DisplayQueue,
     isNotificationType,
     isChatType

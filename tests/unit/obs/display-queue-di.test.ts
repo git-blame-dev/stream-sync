@@ -2,7 +2,7 @@ const { describe, expect, beforeEach, it, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { createMockOBSManager } = require('../../helpers/mock-factories');
 const { initializeTestLogging } = require('../../helpers/test-setup');
-const { DisplayQueue, initializeDisplayQueue } = require('../../../src/obs/display-queue.ts');
+const { DisplayQueue, initializeDisplayQueue, resetDisplayQueue } = require('../../../src/obs/display-queue.ts');
 const { PRIORITY_LEVELS } = require('../../../src/core/constants');
 
 initializeTestLogging();
@@ -10,6 +10,7 @@ initializeTestLogging();
 describe('DisplayQueue DI requirements', () => {
     afterEach(() => {
         restoreAllMocks();
+        resetDisplayQueue();
     });
 
     beforeEach(() => {
@@ -124,5 +125,36 @@ describe('DisplayQueue DI requirements', () => {
         );
 
         expect(queue.obsManager).toBe(secondManager);
+    });
+
+    it('supports resetting display queue singleton between initializations', () => {
+        const manager = createMockOBSManager('connected');
+        const first = initializeDisplayQueue(
+            manager,
+            {
+                autoProcess: false,
+                chat: { sourceName: 'chat', sceneName: 'scene', groupName: 'group', platformLogos: {} },
+                notification: { sourceName: 'notification', sceneName: 'scene', groupName: 'group', platformLogos: {} }
+            },
+            { PRIORITY_LEVELS, CHAT_MESSAGE_DURATION: 4500 },
+            null,
+            {}
+        );
+
+        resetDisplayQueue();
+
+        const second = initializeDisplayQueue(
+            manager,
+            {
+                autoProcess: false,
+                chat: { sourceName: 'chat', sceneName: 'scene', groupName: 'group', platformLogos: {} },
+                notification: { sourceName: 'notification', sceneName: 'scene', groupName: 'group', platformLogos: {} }
+            },
+            { PRIORITY_LEVELS, CHAT_MESSAGE_DURATION: 4500 },
+            null,
+            {}
+        );
+
+        expect(second).not.toBe(first);
     });
 });

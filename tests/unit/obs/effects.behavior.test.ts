@@ -1,7 +1,7 @@
 const { describe, expect, beforeEach, it } = require('bun:test');
 const { createMockFn } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
-const { OBSEffectsManager, getDefaultEffectsManager } = require('../../../src/obs/effects.ts');
+const { OBSEffectsManager, getDefaultEffectsManager, resetDefaultEffectsManager } = require('../../../src/obs/effects.ts');
 const effectsCompatModule = require('../../../src/obs/effects.js');
 
 describe('obs effects behavior', () => {
@@ -16,6 +16,7 @@ describe('obs effects behavior', () => {
 
     beforeEach(() => {
         mockObsManager = createObsManager();
+        resetDefaultEffectsManager();
     });
 
     it('plays media and triggers OBS calls with fire-and-forget mode', async () => {
@@ -89,6 +90,22 @@ describe('obs effects behavior', () => {
 
         expect(first).toBeDefined();
         expect(first).toBe(second);
+    });
+
+    it('wires default effects manager to real default sources manager instance', () => {
+        const manager = getDefaultEffectsManager();
+
+        expect(manager.sourcesManager).toBeDefined();
+        expect(typeof manager.sourcesManager.updateTextSource).toBe('function');
+    });
+
+    it('supports resetting default effects manager singleton', () => {
+        const first = getDefaultEffectsManager();
+
+        resetDefaultEffectsManager();
+
+        const second = getDefaultEffectsManager();
+        expect(second).not.toBe(first);
     });
 
     it('preserves named exports through the commonjs compatibility wrapper', () => {

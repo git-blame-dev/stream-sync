@@ -331,4 +331,23 @@ describe('main startup behavior', () => {
         expect(createVfxCallArgs[0][2]?.effectsManager).toBeDefined();
         expect(createProductionDependenciesArgs[0][1]?.effectsManager).toBe(createVfxCallArgs[0][2]?.effectsManager);
     });
+
+    it('uses non-singleton createDisplayQueue runtime path when provided', async () => {
+        process.env.CHAT_BOT_STARTUP_ONLY = 'true';
+        const { overrides } = buildOverrides({ cliArgs: { chat: 1 } });
+        const createdQueues = [];
+
+        const result = await main({
+            ...overrides,
+            initializeDisplayQueue: undefined,
+            createDisplayQueue: (obsManager, displayQueueConfig, displayQueueConstants, eventBus, dependencies) => {
+                createdQueues.push({ obsManager, displayQueueConfig, displayQueueConstants, eventBus, dependencies });
+                return createMockDisplayQueue();
+            },
+            config: buildMainConfig()
+        });
+
+        expect(result.success).toBe(true);
+        expect(createdQueues.length).toBe(1);
+    });
 });
