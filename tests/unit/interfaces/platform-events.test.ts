@@ -581,6 +581,53 @@ describe('Platform Events Interface', () => {
             expect(PlatformEvents.validateEvent(youtubeGift)).toBe(true);
         });
 
+        it('accepts platform:follow payloads carrying stream-elements source metadata', () => {
+            const followEvent = {
+                type: 'platform:follow',
+                platform: 'youtube',
+                username: 'test-se-follower',
+                userId: 'test-se-user-id',
+                avatarUrl: 'https://example.invalid/test-se-avatar.png',
+                timestamp: new Date(testClock.now()).toISOString(),
+                source: 'streamelements',
+                sourceType: 'streamelements:follow'
+            };
+
+            expect(PlatformEvents.validateEvent(followEvent)).toBe(true);
+        });
+
+        it('validates emitted vfx command lifecycle payload contracts', () => {
+            const commandExecutedEvent = {
+                type: PlatformEvents.VFX_COMMAND_EXECUTED,
+                command: '!hello',
+                commandKey: 'greetings',
+                filename: 'hello',
+                mediaSource: 'VFX Top',
+                username: 'test-viewer',
+                userId: 'test-user-id',
+                platform: 'twitch',
+                correlationId: 'test-correlation-id',
+                vfxConfig: {
+                    commandKey: 'greetings'
+                },
+                result: {
+                    success: true
+                },
+                duration: 123,
+                context: {
+                    skipCooldown: true
+                }
+            };
+
+            const effectCompletedEvent = {
+                type: PlatformEvents.VFX_EFFECT_COMPLETED,
+                correlationId: 'test-correlation-id'
+            };
+
+            expect(PlatformEvents.validateEvent(commandExecutedEvent)).toBe(true);
+            expect(PlatformEvents.validateEvent(effectCompletedEvent)).toBe(true);
+        });
+
         it('should handle Unicode and emoji content properly', () => {
             const unicodeMessages = [
                 '你好世界 🌍',

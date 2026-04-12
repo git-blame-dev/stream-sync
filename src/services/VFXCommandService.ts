@@ -152,9 +152,17 @@ class VFXCommandService {
                             duration: Date.now() - startTime,
                             context: { ...context, correlationId }
                         };
+                        const commandExecutedPayload = {
+                            ...eventPayload,
+                            type: PlatformEvents.VFX_COMMAND_EXECUTED
+                        };
+                        const effectCompletedPayload = {
+                            ...eventPayload,
+                            type: PlatformEvents.VFX_EFFECT_COMPLETED
+                        };
 
-                        this.eventBus.emit(PlatformEvents.VFX_COMMAND_EXECUTED, eventPayload);
-                        this.eventBus.emit(PlatformEvents.VFX_EFFECT_COMPLETED, eventPayload);
+                        this.eventBus.emit(PlatformEvents.VFX_COMMAND_EXECUTED, commandExecutedPayload);
+                        this.eventBus.emit(PlatformEvents.VFX_EFFECT_COMPLETED, effectCompletedPayload);
                     } catch (eventError) {
                         handleVFXCommandError(`[VFXCommandService] EventBus error: ${getErrorMessage(eventError)}`, eventError, 'event-bus');
                         throw eventError; // Re-throw to be caught by outer catch

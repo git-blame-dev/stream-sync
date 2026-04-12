@@ -121,7 +121,7 @@ const EVENT_SCHEMAS = {
     },
     'platform:follow': {
         required: ['type', 'platform', 'username', 'userId', 'avatarUrl', 'timestamp'],
-        optional: ['metadata'],
+        optional: ['metadata', 'source', 'sourceType'],
         properties: {
             type: { type: 'string', enum: ['platform:follow'] },
             platform: { type: 'string', enum: VALID_PLATFORMS },
@@ -129,7 +129,9 @@ const EVENT_SCHEMAS = {
             userId: { type: 'string' },
             avatarUrl: { type: 'string' },
             timestamp: { type: 'string' },
-            metadata: { type: 'object' }
+            metadata: { type: 'object' },
+            source: { type: 'string' },
+            sourceType: { type: 'string' }
         }
     },
     'platform:share': {
@@ -364,22 +366,38 @@ const EVENT_SCHEMAS = {
         }
     },
     'vfx:command-executed': {
-        required: ['type', 'command', 'result', 'duration', 'effects'],
+        required: ['type', 'command', 'commandKey', 'username', 'platform', 'userId', 'correlationId', 'result', 'duration', 'context'],
         properties: {
             type: { type: 'string', enum: ['vfx:command-executed'] },
             command: { type: 'string' },
+            commandKey: { type: 'string' },
+            filename: { type: 'string' },
+            mediaSource: { type: 'string' },
+            username: { type: 'string' },
+            userId: { type: 'string' },
+            platform: { type: 'string', enum: VALID_PLATFORMS },
+            correlationId: { type: 'string' },
+            vfxConfig: { type: 'object' },
             result: { type: 'object' },
             duration: { type: 'number' },
-            effects: { type: 'array' }
+            context: { type: 'object' }
         }
     },
     'vfx:effect-completed': {
-        required: ['type', 'effectId', 'success', 'duration'],
+        required: ['type', 'correlationId'],
         properties: {
             type: { type: 'string', enum: ['vfx:effect-completed'] },
+            correlationId: { type: 'string' },
             effectId: { type: 'string' },
             success: { type: 'boolean' },
-            duration: { type: 'number' }
+            duration: { type: 'number' },
+            command: { type: 'string' },
+            commandKey: { type: 'string' },
+            username: { type: 'string' },
+            userId: { type: 'string' },
+            platform: { type: 'string', enum: VALID_PLATFORMS },
+            result: { type: 'object' },
+            context: { type: 'object' }
         }
     }
 };
@@ -1150,6 +1168,8 @@ class EnhancedPlatformEvents {
             case 'platform:envelope':
             case 'platform:follow':
             case 'platform:share':
+            case PlatformEvents.VFX_COMMAND_EXECUTED:
+            case PlatformEvents.VFX_EFFECT_COMPLETED:
                 return validator.validate(event).valid;
             case PlatformEvents.STREAM_DETECTED:
                 return this.validateStreamDetectedEvent(event);
