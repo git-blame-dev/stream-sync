@@ -328,6 +328,39 @@ describe('PlatformEventRouter validation', () => {
         expect(payload.userId).toBe('12345');
     });
 
+    it('rejects notification payloads with whitespace-only userId', async () => {
+        const { router, runtime } = buildRouter();
+
+        await expect(router.routeEvent({
+            platform: 'twitch',
+            type: 'platform:follow',
+            data: {
+                username: 'Follower',
+                userId: '   ',
+                timestamp: new Date().toISOString()
+            }
+        })).rejects.toThrow('Notification payload requires userId');
+
+        expect(runtime.handleFollowNotification).not.toHaveBeenCalled();
+    });
+
+    it('trims notification userId before routing to runtime handlers', async () => {
+        const { router, runtime } = buildRouter();
+
+        await router.routeEvent({
+            platform: 'twitch',
+            type: 'platform:follow',
+            data: {
+                username: 'Follower',
+                userId: ' 12345 ',
+                timestamp: new Date().toISOString()
+            }
+        });
+
+        const [, , payload] = runtime.handleFollowNotification.mock.calls[0];
+        expect(payload.userId).toBe('12345');
+    });
+
     it('rejects viewer-count events with non-finite counts', async () => {
         const { router, runtime } = buildRouter();
 

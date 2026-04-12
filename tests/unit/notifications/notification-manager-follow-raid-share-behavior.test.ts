@@ -37,6 +37,7 @@ type NotificationResult = {
     disabled?: boolean;
     notificationType?: string;
     platform?: string;
+    priority?: number;
     error?: string;
 };
 
@@ -110,6 +111,7 @@ describe('NotificationManager follow/raid/share behavior', () => {
 
         const queued = queuedItems[0];
         expect(queued.priority).toBe(constants.PRIORITY_LEVELS.SHARE);
+        expect(result.priority).toBe(constants.PRIORITY_LEVELS.SHARE);
         expect(queued.vfxConfig).toEqual(expect.objectContaining({
             commandKey: 'shares',
             filename: 'shares.mp4'

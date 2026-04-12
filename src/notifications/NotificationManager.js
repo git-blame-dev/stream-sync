@@ -304,12 +304,13 @@ class NotificationManager extends EventEmitter {
         
         const priorityType = canonicalType;
         const displayType = notificationType;
+        const appliedPriority = this.getPriorityForType(priorityType, config);
         
         const item = {
             type: displayType,
             data: notificationData,
             platform: platform,
-            priority: this.getPriorityForType(priorityType, config),
+            priority: appliedPriority,
             vfxConfig: vfxConfig
         };
         
@@ -340,7 +341,7 @@ class NotificationManager extends EventEmitter {
             notificationType,
             platform,
             notificationData,
-            priority: config.priority,
+            priority: appliedPriority,
             vfxConfig
         };
     }
