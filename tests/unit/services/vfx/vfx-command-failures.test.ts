@@ -109,7 +109,7 @@ describe('VFXCommandService failure paths', () => {
         });
 
         expect(result.success).toBe(false);
-        expect(result.reason).toBe('Missing command key');
+        expect(result.error).toBe('Missing command key');
     });
 
     it('returns friendly error when config has no command for key', async () => {
@@ -123,7 +123,7 @@ describe('VFXCommandService failure paths', () => {
         });
 
         expect(result.success).toBe(false);
-        expect(result.reason).toBe('No VFX configured for missing');
+        expect(result.error).toBe('No VFX configured for missing');
     });
 
     it('throws when config is missing', () => {

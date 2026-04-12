@@ -414,7 +414,7 @@ class NotificationManager extends EventEmitter {
     }
 
     async handleGiftNotification(platform, data) {
-        await this.handleNotification('platform:gift', platform, data);
+        return await this.handleNotification('platform:gift', platform, data);
     }
 
     _isDebugEnabled() {
