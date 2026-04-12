@@ -261,6 +261,75 @@ describe('ChatNotificationRouter', () => {
         expect(runtime.commandCooldownService.updateGlobalCooldown).not.toHaveBeenCalled();
     });
 
+    it('consumes first-message state only after greeting row enqueue succeeds', async () => {
+        const hasSeenUser = createMockFn().mockReturnValue(false);
+        const markMessageSeen = createMockFn();
+        const { router, runtime } = createRouter({
+            runtime: {
+                userTrackingService: {
+                    hasSeenUser,
+                    markMessageSeen,
+                    isFirstMessage: createMockFn().mockReturnValue(true)
+                },
+                isFirstMessage: createMockFn().mockImplementation(() => {
+                    throw new Error('legacy first-message fallback should not be used');
+                })
+            }
+        });
+
+        await router.handleChatMessage('twitch', { ...baseMessage, message: 'hello there' });
+
+        const queuedItems = runtime.displayQueue.addItem.mock.calls.map((call) => call[0]);
+        const greetingItem = queuedItems.find((item) => item.type === 'greeting');
+        expect(greetingItem).toBeDefined();
+        expect(markMessageSeen).toHaveBeenCalledTimes(1);
+        expect(markMessageSeen).toHaveBeenCalledWith('test-user-1', expect.objectContaining({
+            platform: 'twitch',
+            username: 'test-user-gamma'
+        }));
+    });
+
+    it('does not consume first-message state when command enqueue fails', async () => {
+        const hasSeenUser = createMockFn().mockReturnValue(false);
+        const markMessageSeen = createMockFn();
+        const addItem = createMockFn((item) => {
+            if (item.type === 'command') {
+                throw new Error('command enqueue failed');
+            }
+        });
+        const { router } = createRouter({
+            runtime: {
+                displayQueue: { addItem },
+                vfxCommandService: {
+                    selectVFXCommand: createMockFn().mockResolvedValue({ command: '!testboom' }),
+                    matchFarewell: createMockFn().mockReturnValue(null),
+                    getVFXConfig: createMockFn().mockResolvedValue(null)
+                },
+                config: {
+                    general: { greetingsEnabled: false, messagesEnabled: true },
+                    cooldowns: {
+                        cmdCooldownMs: 60000,
+                        heavyCommandCooldownMs: 300000,
+                        globalCmdCooldownMs: 45000
+                    },
+                    twitch: { greetingsEnabled: false, messagesEnabled: true, farewellsEnabled: true }
+                },
+                userTrackingService: {
+                    hasSeenUser,
+                    markMessageSeen,
+                    isFirstMessage: createMockFn().mockReturnValue(true)
+                },
+                isFirstMessage: createMockFn().mockImplementation(() => {
+                    throw new Error('legacy first-message fallback should not be used');
+                })
+            }
+        });
+
+        await router.handleChatMessage('twitch', { ...baseMessage, message: '!testboom now' });
+
+        expect(markMessageSeen).not.toHaveBeenCalled();
+    });
+
     it('does not skip chat when timestamp is invalid even if connection time exists', async () => {
         const connectionTime = testClock.now();
         const { router, runtime } = createRouter({

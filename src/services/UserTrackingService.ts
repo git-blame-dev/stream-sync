@@ -30,30 +30,51 @@ class UserTrackingService {
         });
     }
 
-    isFirstMessage(userId: string | null | undefined, context: TrackingContext = {}) {
+    hasSeenUser(userId: string | null | undefined, context: TrackingContext = {}) {
         if (!userId) {
-            logger.warn('[UserTrackingService] No userId provided for first message check', 'user-tracking');
+            logger.warn('[UserTrackingService] No userId provided for seen-user check', 'user-tracking');
+            return true;
+        }
+
+        try {
+            return this.seenUsers.has(userId);
+        } catch (error) {
+            handleServiceError('[UserTrackingService] Error checking seen-user state', error, {
+                userId,
+                context
+            });
+            return true;
+        }
+    }
+
+    markMessageSeen(userId: string | null | undefined, context: TrackingContext = {}) {
+        if (!userId) {
+            logger.warn('[UserTrackingService] No userId provided for message tracking', 'user-tracking');
             return false;
         }
 
         try {
-            if (this.seenUsers.has(userId)) {
-                return false;
-            }
-
             this.seenUsers.add(userId);
-            logger.debug('[UserTrackingService] First message detected', 'user-tracking', {
+            logger.debug('[UserTrackingService] Message marked as seen', 'user-tracking', {
                 userId,
                 platform: context.platform
             });
             return true;
         } catch (error) {
-            handleServiceError('[UserTrackingService] Error checking first message', error, {
+            handleServiceError('[UserTrackingService] Error marking message as seen', error, {
                 userId,
                 context
             });
             return false;
         }
+    }
+
+    isFirstMessage(userId: string | null | undefined, context: TrackingContext = {}) {
+        if (this.hasSeenUser(userId, context)) {
+            return false;
+        }
+
+        return this.markMessageSeen(userId, context);
     }
 }
 
