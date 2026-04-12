@@ -1046,4 +1046,30 @@ describe('ChatNotificationRouter', () => {
             ]
         });
     });
+
+    it('builds safe farewell error details when non-Error values are thrown', async () => {
+        const { router } = createRouter({
+            runtime: {
+                handleFarewellNotification: async () => {
+                    throw 'plain-farewell-failure';
+                },
+                vfxCommandService: {
+                    selectVFXCommand: createMockFn().mockResolvedValue(null),
+                    matchFarewell: createMockFn().mockReturnValue('!bye'),
+                    getVFXConfig: createMockFn().mockResolvedValue(null)
+                }
+            }
+        });
+
+        const capturedErrors = [];
+        router._handleRouterError = createMockFn((message) => capturedErrors.push(message));
+
+        await router.handleChatMessage('twitch', {
+            ...baseMessage,
+            message: '!bye everyone'
+        });
+
+        expect(capturedErrors.length).toBeGreaterThan(0);
+        expect(capturedErrors[0]).toContain('plain-farewell-failure');
+    });
 });

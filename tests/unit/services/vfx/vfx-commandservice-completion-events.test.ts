@@ -122,4 +122,29 @@ describe('VFXCommandService completion events', () => {
         expect(service.userLastCommand.size).toBe(0);
         expect(service.globalCommandCooldowns.size).toBe(0);
     });
+
+    test('returns safe error text when non-Error values are thrown during execution', async () => {
+        const config = {
+            commands: { greetings: '!hello' },
+            farewell: {},
+            vfx: { filePath: '/tmp' },
+            cooldowns: { cmdCooldown: 60, globalCmdCooldownMs: 60000 }
+        };
+        const service = new VFXCommandService(config, eventBus, {
+            effectsManager: mockEffectsManager
+        });
+
+        service.selectVFXCommand = createMockFn().mockRejectedValue('plain-string-failure');
+
+        const result = await service.executeCommand('!hello', {
+            username: 'testViewer',
+            platform: 'twitch',
+            userId: 'test-user-123',
+            skipCooldown: true,
+            correlationId: 'test-corr-3'
+        });
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBe('plain-string-failure');
+    });
 });

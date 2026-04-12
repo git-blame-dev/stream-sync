@@ -6,6 +6,13 @@ const { NotificationInputValidator } = require('./notification-input-validator')
 const { NotificationPayloadBuilder } = require('./notification-payload-builder');
 const { NotificationGate } = require('./notification-gate');
 
+function getErrorMessage(error) {
+    if (error instanceof Error) {
+        return error.message;
+    }
+    return String(error);
+}
+
 class NotificationManager extends EventEmitter {
     constructor(dependencies = {}) {
         super(); // Initialize EventEmitter
@@ -109,7 +116,7 @@ class NotificationManager extends EventEmitter {
             await this.handleNotificationInternal('platform:gift', aggregatedData.platform, syntheticGiftData, true);
 
         } catch (error) {
-            this._handleNotificationError(`Error handling aggregated donation: ${error.message}`, error, { aggregatedData }, { eventType: 'aggregated-donation' });
+            this._handleNotificationError(`Error handling aggregated donation: ${getErrorMessage(error)}`, error, { aggregatedData }, { eventType: 'aggregated-donation' });
         }
     }
 
@@ -217,7 +224,7 @@ class NotificationManager extends EventEmitter {
                     return { suppressed: true, reason: 'spam_detection' };
                 }
             } catch (error) {
-                this.platformLogger.warn(`Error in spam detection: ${error.message}`, platform);
+                this.platformLogger.warn(`Error in spam detection: ${getErrorMessage(error)}`, platform);
             }
         }
 
@@ -240,7 +247,7 @@ class NotificationManager extends EventEmitter {
                 const logMessage = this.generateLogMessage(notificationType, normalizedData);
                 this.platformLogger.info(logMessage, platform);
             } catch (logError) {
-                this.logger.warn(`[NotificationManager] Debug log failed: ${logError.message}`, 'notification-manager');
+                this.logger.warn(`[NotificationManager] Debug log failed: ${getErrorMessage(logError)}`, 'notification-manager');
             }
         }
 
@@ -249,7 +256,7 @@ class NotificationManager extends EventEmitter {
             vfxConfig = await this._getVFXConfigFromService(config.commandKey, normalizedData.message ?? null);
         } catch (vfxError) {
             this._handleNotificationError(
-                `[NotificationManager] VFX config failed: ${vfxError.message}`,
+                `[NotificationManager] VFX config failed: ${getErrorMessage(vfxError)}`,
                 vfxError,
                 { commandKey: config.commandKey },
                 { eventType: 'vfx-config' }
@@ -281,7 +288,7 @@ class NotificationManager extends EventEmitter {
             
         } catch (error) {
             this._handleNotificationError(
-                `Error creating notification data for ${notificationType} from ${platform}: ${error.message}`,
+                `Error creating notification data for ${notificationType} from ${platform}: ${getErrorMessage(error)}`,
                 error,
                 { notificationType, platform, data: normalizedData },
                 { eventType: 'notification-data-build' }
@@ -314,12 +321,12 @@ class NotificationManager extends EventEmitter {
             this.displayQueue.addItem(item);
         } catch (error) {
             this._handleNotificationError(
-                `Error in notification processing for ${notificationType} from ${platform}: ${error.message}`,
+                `Error in notification processing for ${notificationType} from ${platform}: ${getErrorMessage(error)}`,
                 error,
                 { notificationType, platform, item, data: normalizedData },
                 { eventType: 'display-queue' }
             );
-            return { success: false, error: 'Display queue error', details: error.message };
+            return { success: false, error: 'Display queue error', details: getErrorMessage(error) };
         }
 
         return {
@@ -417,7 +424,7 @@ class NotificationManager extends EventEmitter {
             return this.userTrackingService.isFirstMessage(userId, context);
         } catch (error) {
             this._handleNotificationError(
-                `[NotificationManager] Error checking first message: ${error.message}`,
+                `[NotificationManager] Error checking first message: ${getErrorMessage(error)}`,
                 error,
                 { userId, context },
                 { eventType: 'first-message-check' }
@@ -444,7 +451,7 @@ class NotificationManager extends EventEmitter {
             throw new Error(`VFXCommandService not available for config lookup: ${commandKey}`);
         } catch (error) {
             this._handleNotificationError(
-                `[NotificationManager] Error getting VFX config: ${error.message}`,
+                `[NotificationManager] Error getting VFX config: ${getErrorMessage(error)}`,
                 error,
                 { commandKey, message },
                 { eventType: 'vfx-config' }
@@ -477,7 +484,7 @@ class NotificationManager extends EventEmitter {
 
         } catch (error) {
             this._handleNotificationError(
-                `[NotificationManager] Error processing VFX: ${error.message}`,
+                `[NotificationManager] Error processing VFX: ${getErrorMessage(error)}`,
                 error,
                 { vfxNotification },
                 { eventType: 'vfx-processing' }
@@ -511,12 +518,12 @@ class NotificationManager extends EventEmitter {
                 }
                 await this.handleNotification(notification.type, platform, notification.data);
             } catch (handleError) {
-                this.logger.warn(`[NotificationManager] handleNotification failed: ${handleError.message} - continuing with minimal processing`);
+                this.logger.warn(`[NotificationManager] handleNotification failed: ${getErrorMessage(handleError)} - continuing with minimal processing`);
             }
 
         } catch (error) {
             this._handleNotificationError(
-                `[NotificationManager] Error processing notification: ${error.message}`,
+                `[NotificationManager] Error processing notification: ${getErrorMessage(error)}`,
                 error,
                 { notification },
                 { eventType: 'notification-processing' }

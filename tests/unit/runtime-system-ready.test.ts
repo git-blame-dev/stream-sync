@@ -55,6 +55,10 @@ describe('AppRuntime system readiness payload', () => {
 
     it('marks readiness as degraded when platform lifecycle status reports failures', () => {
         const runtime = createAppRuntimeDouble();
+        const emitCalls: unknown[][] = [];
+        runtime.eventBus = {
+            emit: (...args: unknown[]) => emitCalls.push(args)
+        };
         runtime.platformLifecycleService = {
             getStatus: createMockFn().mockReturnValue({
                 failedPlatforms: [{ name: 'twitch', lastError: 'auth failed' }],
@@ -71,6 +75,9 @@ describe('AppRuntime system readiness payload', () => {
             degraded: true,
             degradationReasons: expect.arrayContaining(['platform-initialization-failed'])
         }));
+        expect(emitCalls).toEqual([
+            ['system:ready', payload]
+        ]);
     });
 });
 
@@ -84,7 +91,7 @@ describe('AppRuntime shutdown lifecycle', () => {
         return bot;
     };
 
-    it('does not emit telemetry events when restart is requested', () => {
+    it('emits shutdown lifecycle event with restart mode when restart is requested', () => {
         const runtime = createAppRuntimeDouble();
         const emitCalls: unknown[][] = [];
         runtime.eventBus.emit = (...args) => emitCalls.push(args);
@@ -94,7 +101,29 @@ describe('AppRuntime shutdown lifecycle', () => {
         try {
             runtime.emitSystemShutdown({ reason: 'test', restartRequested: true });
 
-            expect(emitCalls.length).toBe(0);
+            expect(emitCalls).toEqual([
+                ['system:shutdown', { reason: 'test', mode: 'restart' }]
+            ]);
+            runOnlyPendingTimers();
+        } finally {
+            process.exit = originalExit;
+            useRealTimers();
+        }
+    });
+
+    it('emits shutdown lifecycle event before exiting on normal shutdown', () => {
+        const runtime = createAppRuntimeDouble();
+        const emitCalls: unknown[][] = [];
+        runtime.eventBus.emit = (...args: unknown[]) => emitCalls.push(args);
+        useFakeTimers();
+        const originalExit = process.exit;
+        process.exit = (() => undefined as never) as typeof process.exit;
+        try {
+            runtime.emitSystemShutdown({ reason: 'manual' });
+
+            expect(emitCalls).toEqual([
+                ['system:shutdown', { reason: 'manual', mode: 'exit' }]
+            ]);
             runOnlyPendingTimers();
         } finally {
             process.exit = originalExit;
