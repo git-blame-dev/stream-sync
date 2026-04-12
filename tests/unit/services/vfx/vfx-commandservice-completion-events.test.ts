@@ -58,6 +58,8 @@ describe('VFXCommandService completion events', () => {
         expect(completedEvent).toBeDefined();
 
         const payload = completedEvent.payload;
+        expect(executedEvent.payload.type).toBe(PlatformEvents.VFX_COMMAND_EXECUTED);
+        expect(payload.type).toBe(PlatformEvents.VFX_EFFECT_COMPLETED);
         expect(payload.commandKey).toBe('greetings');
         expect(payload.filename).toBe('hello');
         expect(payload.mediaSource).toBe('VFX Top');
