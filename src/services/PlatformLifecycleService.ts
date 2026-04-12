@@ -18,6 +18,15 @@ const PlatformEvents = {
     STREAM_DETECTED: 'platform:stream-detected'
 } as const;
 
+const PLATFORM_CONFIG_KEYS = ['twitch', 'youtube', 'tiktok', 'streamelements'] as const;
+
+function getErrorMessage(error: unknown): string {
+    if (error instanceof Error) {
+        return error.message;
+    }
+    return String(error);
+}
+
 class PlatformLifecycleService {
     config: any;
     eventBus: any;
@@ -284,10 +293,13 @@ class PlatformLifecycleService {
             if (shouldRunInBackground) {
                 this.logger.info(`Initializing ${platformName} in background (non-blocking)`, 'PlatformLifecycleService');
 
-                const backgroundInit = this.initializePlatformAsync(
+                let backgroundInit: Promise<void>;
+                backgroundInit = this.initializePlatformAsync(
                     platformName,
                     connectCallback
-                );
+                ).finally(() => {
+                    this.backgroundPlatformInits = this.backgroundPlatformInits.filter((entry) => entry.promise !== backgroundInit);
+                });
 
                 this.backgroundPlatformInits.push({
                     platform: platformName,
@@ -391,10 +403,14 @@ class PlatformLifecycleService {
         const initializing = platformNames.filter((name) => this.platformHealth[name].state === 'initializing');
         const failed = platformNames.filter((name) => this.platformHealth[name].state === 'failed');
         const disabled = platformNames.filter((name) => this.platformHealth[name].state === 'disabled');
+        const totalConfigured = PLATFORM_CONFIG_KEYS
+            .filter((platformName) => this.config?.[platformName] && typeof this.config[platformName] === 'object')
+            .length;
 
         return {
             timestamp: getSystemTimestampISO(),
-            totalConfigured: Object.keys(this.config).length,
+            totalConfigured,
+            registeredPlatforms: Object.keys(this.platforms),
             initializedPlatforms: ready,
             initializingPlatforms: initializing,
             failedPlatforms: failed.map((name) => ({
@@ -478,6 +494,9 @@ class PlatformLifecycleService {
             timestamp
         });
 
+        delete this.platforms[platformName];
+        delete this.platformConnectionTimes[platformName];
+
         this.updatePlatformHealth(platformName, {
             state: 'failed',
             lastError: error?.message || String(error),
@@ -494,20 +513,36 @@ class PlatformLifecycleService {
 
         // Disconnect from all platforms
         for (const platformName in this.platforms) {
+            let cleanupError: unknown = null;
             try {
                 const platform = this.platforms[platformName];
                 if (platform && typeof platform.cleanup === 'function') {
                     await platform.cleanup();
                     this.logger.info(`Cleaned up ${platformName}`, 'PlatformLifecycleService');
                 } else {
-                    const error = new Error(`Platform ${platformName} is missing cleanup()`);
-                    this._handleLifecycleError(`Unable to cleanup ${platformName}: cleanup() missing`, error, 'cleanup');
+                    cleanupError = new Error(`Platform ${platformName} is missing cleanup()`);
+                    this._handleLifecycleError(`Unable to cleanup ${platformName}: cleanup() missing`, cleanupError, 'cleanup');
                 }
-
+            } catch (error) {
+                cleanupError = error;
+                this._handleLifecycleError(`Error disconnecting from ${platformName}: ${getErrorMessage(error)}`, error, 'disconnect');
+            } finally {
                 delete this.platforms[platformName];
                 delete this.platformConnectionTimes[platformName];
-            } catch (error) {
-                this._handleLifecycleError(`Error disconnecting from ${platformName}: ${error.message}`, error, 'disconnect');
+
+                if (cleanupError) {
+                    this.updatePlatformHealth(platformName, {
+                        state: 'failed',
+                        lastError: getErrorMessage(cleanupError),
+                        lastUpdated: getSystemTimestampISO()
+                    });
+                } else {
+                    this.updatePlatformHealth(platformName, {
+                        state: 'disconnected',
+                        lastError: null,
+                        lastUpdated: getSystemTimestampISO()
+                    });
+                }
             }
         }
     }
