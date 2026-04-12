@@ -87,6 +87,36 @@ describe('PlatformLifecycleService', () => {
                     })
                 ])
             );
+            expect(service.getPlatform('youtube')).toBeNull();
+            expect(status.registeredPlatforms).not.toContain('youtube');
+        });
+
+        it('reports registered platforms consistently with accessors', () => {
+            service.platforms = {
+                twitch: { initialize: createMockFn(), cleanup: createMockFn() },
+                youtube: { initialize: createMockFn(), cleanup: createMockFn() }
+            };
+            service.updatePlatformHealth('twitch', { state: 'ready' });
+            service.updatePlatformHealth('youtube', { state: 'failed', lastError: 'test-failure' });
+
+            const accessorPlatforms = Object.keys(service.getAllPlatforms()).sort();
+            const status = service.getStatus();
+
+            expect(status.registeredPlatforms.sort()).toEqual(accessorPlatforms);
+        });
+
+        it('counts only platform config entries in totalConfigured status', () => {
+            service.config = {
+                twitch: { enabled: true },
+                youtube: { enabled: false },
+                general: { debugEnabled: false },
+                obs: { enabled: true },
+                vfx: { filePath: '/tmp' }
+            };
+
+            const status = service.getStatus();
+
+            expect(status.totalConfigured).toBe(2);
         });
     });
 
@@ -408,6 +438,7 @@ describe('PlatformLifecycleService', () => {
             const waitPromise = service.waitForBackgroundInits(100);
             deferred.resolve();
             await waitPromise;
+            expect(service.backgroundPlatformInits).toHaveLength(0);
         });
 
         it('starts enabled non-background platforms in parallel', async () => {
@@ -556,6 +587,25 @@ describe('PlatformLifecycleService', () => {
 
             expect(cleanupSpy).toHaveBeenCalled();
             expect(service.isPlatformAvailable('twitch')).toBe(false);
+            expect(service.getStatus().platformHealth.twitch.state).toBe('disconnected');
+        });
+
+        it('removes platform instances even when cleanup fails', async () => {
+            configFixture.twitch = { enabled: true, channel: 'test-channel', clientId: 'test-client-id' };
+
+            const cleanupSpy = createMockFn().mockRejectedValue(new Error('cleanup failed'));
+            const mockPlatformClass = createMockFn().mockImplementation(() => ({
+                initialize: createMockFn().mockResolvedValue(true),
+                cleanup: cleanupSpy,
+                on: createMockFn()
+            }));
+
+            await service.initializeAllPlatforms({ twitch: mockPlatformClass });
+            await service.disconnectAll();
+
+            expect(cleanupSpy).toHaveBeenCalled();
+            expect(service.isPlatformAvailable('twitch')).toBe(false);
+            expect(service.getStatus().registeredPlatforms).not.toContain('twitch');
         });
 
         it('prefers cleanup even when a disconnect method exists', async () => {
