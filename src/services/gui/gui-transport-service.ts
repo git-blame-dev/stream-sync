@@ -49,6 +49,8 @@ function createGuiTransportService(options: any = {}) {
 
     let server: any = null;
     let active = false;
+    let startPromise: Promise<void> | null = null;
+    let serverRuntimeErrorHandler: ((error: any) => void) | null = null;
     let unsubscribeDisplayRows: (() => void) | null = null;
     let unsubscribeDisplayEffects: (() => void) | null = null;
     const clients = new Set<any>();
@@ -570,55 +572,88 @@ function createGuiTransportService(options: any = {}) {
     };
 
     const start = async () => {
-        if (active && server) {
-            return;
+        if (startPromise) {
+            return await startPromise;
         }
 
-        if (!isGuiActive(config)) {
-            active = false;
-            return;
-        }
-
-        const host = typeof guiConfig.host === 'string' ? guiConfig.host.trim() : '';
-        if (!host) {
-            throw new Error('GUI transport requires non-empty host');
-        }
-        const port = Number(guiConfig.port);
-        if (!Number.isInteger(port) || port < 0 || port > 65535) {
-            throw new Error('GUI transport requires integer port between 0 and 65535');
-        }
-
-        subscribeToDisplayRows();
-        subscribeToDisplayEffects();
-
-        try {
-            await new Promise<void>((resolve, reject) => {
-                server = createServer(requestHandler);
-                server.once('error', reject);
-                server.listen(port, host, () => {
-                    active = true;
-                    const address = server && typeof server.address === 'function' ? server.address() : null;
-                    const boundPort = address && typeof address === 'object' ? address.port : port;
-                    logInfo(`GUI transport started on ${host}:${boundPort}`);
-                    resolve();
-                });
-            });
-        } catch (error: any) {
-            unsubscribeFromDisplayRows();
-            unsubscribeFromDisplayEffects();
-            if (server) {
-                try {
-                    server.close();
-                } catch (closeError: any) {
-                    errorHandler.logOperationalError('Failed closing GUI server after start error', 'gui-transport', {
-                        error: closeError.message
-                    });
-                }
-                server = null;
+        startPromise = (async () => {
+            if (active && server) {
+                return;
             }
-            active = false;
-            throw error;
-        }
+
+            if (!active && server) {
+                await stop();
+            }
+
+            if (!isGuiActive(config)) {
+                active = false;
+                return;
+            }
+
+            const host = typeof guiConfig.host === 'string' ? guiConfig.host.trim() : '';
+            if (!host) {
+                throw new Error('GUI transport requires non-empty host');
+            }
+            const port = Number(guiConfig.port);
+            if (!Number.isInteger(port) || port < 0 || port > 65535) {
+                throw new Error('GUI transport requires integer port between 0 and 65535');
+            }
+
+            subscribeToDisplayRows();
+            subscribeToDisplayEffects();
+
+            serverRuntimeErrorHandler = (error: any) => {
+                active = false;
+                errorHandler.handleEventProcessingError(
+                    error,
+                    'server-runtime',
+                    null,
+                    'GUI transport server runtime error'
+                );
+            };
+
+            try {
+                await new Promise<void>((resolve, reject) => {
+                    server = createServer(requestHandler);
+                    server.once('error', reject);
+                    server.listen(port, host, () => {
+                        if (server && typeof server.removeListener === 'function') {
+                            server.removeListener('error', reject);
+                        }
+                        if (server && typeof server.on === 'function' && serverRuntimeErrorHandler) {
+                            server.on('error', serverRuntimeErrorHandler);
+                        }
+                        active = true;
+                        const address = server && typeof server.address === 'function' ? server.address() : null;
+                        const boundPort = address && typeof address === 'object' ? address.port : port;
+                        logInfo(`GUI transport started on ${host}:${boundPort}`);
+                        resolve();
+                    });
+                });
+            } catch (error: any) {
+                unsubscribeFromDisplayRows();
+                unsubscribeFromDisplayEffects();
+                if (server) {
+                    if (serverRuntimeErrorHandler && typeof server.removeListener === 'function') {
+                        server.removeListener('error', serverRuntimeErrorHandler);
+                    }
+                    try {
+                        server.close();
+                    } catch (closeError: any) {
+                        errorHandler.logOperationalError('Failed closing GUI server after start error', 'gui-transport', {
+                            error: closeError instanceof Error ? closeError.message : String(closeError)
+                        });
+                    }
+                    server = null;
+                }
+                active = false;
+                throw error;
+            }
+        })().finally(() => {
+            startPromise = null;
+        });
+
+        return await startPromise;
     };
 
     const stop = async () => {
@@ -646,6 +681,10 @@ function createGuiTransportService(options: any = {}) {
         const closingServer = server;
         server = null;
         active = false;
+        if (serverRuntimeErrorHandler && typeof closingServer.removeListener === 'function') {
+            closingServer.removeListener('error', serverRuntimeErrorHandler);
+        }
+        serverRuntimeErrorHandler = null;
 
         await new Promise<void>((resolve) => {
             closingServer.close((error: any) => {
