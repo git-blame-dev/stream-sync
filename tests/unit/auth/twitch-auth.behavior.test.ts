@@ -66,7 +66,7 @@ describe('TwitchAuth behavior', () => {
 
     it('throws when expectedUsername is missing', async () => {
         const httpClient = { get: createMockFn(), post: createMockFn() };
-        const oauthFlow = { runOAuthFlow: createMockFn() };
+        const oauthFlow = createMockFn();
         const auth = createAuth({ expectedUsername: null, httpClient, oauthFlow });
 
         await expect(auth.initialize()).rejects.toThrow('expectedUsername');
@@ -74,7 +74,7 @@ describe('TwitchAuth behavior', () => {
 
     it('throws when clientId is missing', async () => {
         const httpClient = { get: createMockFn(), post: createMockFn() };
-        const oauthFlow = { runOAuthFlow: createMockFn() };
+        const oauthFlow = createMockFn();
         const auth = createAuth({ clientId: null, httpClient, oauthFlow });
 
         await expect(auth.initialize()).rejects.toThrow('clientId');
@@ -83,10 +83,17 @@ describe('TwitchAuth behavior', () => {
     it('throws when clientSecret is missing', async () => {
         secrets.twitch.clientSecret = null;
         const httpClient = { get: createMockFn(), post: createMockFn() };
-        const oauthFlow = { runOAuthFlow: createMockFn() };
+        const oauthFlow = createMockFn();
         const auth = createAuth({ httpClient, oauthFlow });
 
         await expect(auth.initialize()).rejects.toThrow('clientSecret');
+    });
+
+    it('throws when oauthFlow override is not a function', () => {
+        const httpClient = { get: createMockFn(), post: createMockFn() };
+
+        expect(() => createAuth({ httpClient, oauthFlow: { runOAuthFlow: createMockFn() } }))
+            .toThrow('oauthFlow must be a function when provided');
     });
 
     it('loads token store tokens and validates successfully', async () => {
@@ -101,7 +108,7 @@ describe('TwitchAuth behavior', () => {
             get: createMockFn().mockResolvedValue(buildValidationResponse()),
             post: createMockFn()
         };
-        const oauthFlow = { runOAuthFlow: createMockFn() };
+        const oauthFlow = createMockFn();
         const auth = createAuth({ httpClient, oauthFlow });
 
         const userId = await auth.initialize();
@@ -111,7 +118,7 @@ describe('TwitchAuth behavior', () => {
         expect(auth.getUserId()).toBe('test-user-id');
         expect(secrets.twitch.accessToken).toBe('test-access-token');
         expect(secrets.twitch.refreshToken).toBe('test-refresh-token');
-        expect(oauthFlow.runOAuthFlow.mock.calls.length).toBe(0);
+        expect(oauthFlow.mock.calls.length).toBe(0);
     });
 
     it('runs OAuth flow when tokens are missing', async () => {
@@ -119,13 +126,11 @@ describe('TwitchAuth behavior', () => {
             get: createMockFn().mockResolvedValue(buildValidationResponse()),
             post: createMockFn()
         };
-        const oauthFlow = {
-            runOAuthFlow: createMockFn().mockResolvedValue({
-                accessToken: 'test-oauth-access-token',
-                refreshToken: 'test-oauth-refresh-token',
-                expiresIn: 3600
-            })
-        };
+        const oauthFlow = createMockFn().mockResolvedValue({
+            accessToken: 'test-oauth-access-token',
+            refreshToken: 'test-oauth-refresh-token',
+            expiresIn: 3600
+        });
         const auth = createAuth({ httpClient, oauthFlow });
 
         const userId = await auth.initialize();
@@ -134,7 +139,7 @@ describe('TwitchAuth behavior', () => {
         expect(auth.isReady()).toBe(true);
         expect(secrets.twitch.accessToken).toBe('test-oauth-access-token');
         expect(secrets.twitch.refreshToken).toBe('test-oauth-refresh-token');
-        expect(oauthFlow.runOAuthFlow.mock.calls.length).toBe(1);
+        expect(oauthFlow.mock.calls.length).toBe(1);
     });
 
     it('throws when OAuth flow returns snake_case tokens', async () => {
@@ -142,13 +147,11 @@ describe('TwitchAuth behavior', () => {
             get: createMockFn().mockResolvedValue(buildValidationResponse()),
             post: createMockFn()
         };
-        const oauthFlow = {
-            runOAuthFlow: createMockFn().mockResolvedValue({
-                access_token: 'test-oauth-access-token',
-                refresh_token: 'test-oauth-refresh-token',
-                expires_in: 3600
-            })
-        };
+        const oauthFlow = createMockFn().mockResolvedValue({
+            access_token: 'test-oauth-access-token',
+            refresh_token: 'test-oauth-refresh-token',
+            expires_in: 3600
+        });
         const auth = createAuth({ httpClient, oauthFlow });
 
         await expect(auth.initialize()).rejects.toThrow('OAuth flow must return camelCase token fields');
@@ -163,7 +166,7 @@ describe('TwitchAuth behavior', () => {
         });
 
         const httpClient = { get: createMockFn(), post: createMockFn() };
-        const oauthFlow = { runOAuthFlow: createMockFn() };
+        const oauthFlow = createMockFn();
         const auth = createAuth({ httpClient, oauthFlow });
 
         await expect(auth.initialize()).rejects.toThrow('Token store must provide string accessToken');
@@ -174,13 +177,11 @@ describe('TwitchAuth behavior', () => {
             get: createMockFn().mockResolvedValue(buildValidationResponse()),
             post: createMockFn()
         };
-        const oauthFlow = {
-            runOAuthFlow: createMockFn().mockResolvedValue({
-                accessToken: 12345,
-                refreshToken: 'test-oauth-refresh-token',
-                expiresIn: 3600
-            })
-        };
+        const oauthFlow = createMockFn().mockResolvedValue({
+            accessToken: 12345,
+            refreshToken: 'test-oauth-refresh-token',
+            expiresIn: 3600
+        });
         const auth = createAuth({ httpClient, oauthFlow });
 
         await expect(auth.initialize()).rejects.toThrow('OAuth flow must provide string accessToken');
@@ -200,19 +201,17 @@ describe('TwitchAuth behavior', () => {
                 .mockResolvedValueOnce(buildValidationResponse()),
             post: createMockFn()
         };
-        const oauthFlow = {
-            runOAuthFlow: createMockFn().mockResolvedValue({
-                accessToken: 'test-oauth-access-token',
-                refreshToken: 'test-oauth-refresh-token',
-                expiresIn: 3600
-            })
-        };
+        const oauthFlow = createMockFn().mockResolvedValue({
+            accessToken: 'test-oauth-access-token',
+            refreshToken: 'test-oauth-refresh-token',
+            expiresIn: 3600
+        });
         const auth = createAuth({ httpClient, oauthFlow });
 
         const userId = await auth.initialize();
 
         expect(userId).toBe('test-user-id');
-        expect(oauthFlow.runOAuthFlow.mock.calls.length).toBe(1);
+        expect(oauthFlow.mock.calls.length).toBe(1);
         expect(auth.isReady()).toBe(true);
     });
 
@@ -228,7 +227,7 @@ describe('TwitchAuth behavior', () => {
             get: createMockFn(),
             post: createMockFn().mockReturnValue(postPromise)
         };
-        const oauthFlow = { runOAuthFlow: createMockFn() };
+        const oauthFlow = createMockFn();
         const auth = createAuth({ httpClient, oauthFlow });
 
         const first = auth.refreshTokens();
@@ -261,7 +260,7 @@ describe('TwitchAuth behavior', () => {
                 }
             })
         };
-        const oauthFlow = { runOAuthFlow: createMockFn() };
+        const oauthFlow = createMockFn();
         const auth = createAuth({ httpClient, oauthFlow });
 
         const result = await auth.refreshTokens();
@@ -284,19 +283,17 @@ describe('TwitchAuth behavior', () => {
                 response: { status: 400, data: { error: 'invalid_grant' } }
             })
         };
-        const oauthFlow = {
-            runOAuthFlow: createMockFn().mockResolvedValue({
-                accessToken: 'test-oauth-access-token',
-                refreshToken: 'test-oauth-refresh-token',
-                expiresIn: 3600
-            })
-        };
+        const oauthFlow = createMockFn().mockResolvedValue({
+            accessToken: 'test-oauth-access-token',
+            refreshToken: 'test-oauth-refresh-token',
+            expiresIn: 3600
+        });
         const auth = createAuth({ httpClient, oauthFlow });
 
         const result = await auth.refreshTokens();
 
         expect(result).toBe(true);
-        expect(oauthFlow.runOAuthFlow.mock.calls.length).toBe(1);
+        expect(oauthFlow.mock.calls.length).toBe(1);
         expect(secrets.twitch.accessToken).toBe('test-oauth-access-token');
         expect(secrets.twitch.refreshToken).toBe('test-oauth-refresh-token');
     });

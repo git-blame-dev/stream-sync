@@ -2,7 +2,7 @@ import * as axiosModule from 'axios';
 import { EventEmitter } from 'node:events';
 import * as wsModule from 'ws';
 import { secrets } from '../core/secrets';
-import { ChatFileLoggingService } from '../services/ChatFileLoggingService.js';
+import { ChatFileLoggingService } from '../services/ChatFileLoggingService';
 import { validateLoggerInterface } from '../utils/dependency-validator';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 import { getSystemTimestampISO } from '../utils/timestamp';

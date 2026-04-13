@@ -106,7 +106,7 @@ class TwitchAuth {
     #logger;
     #expectedUsername;
     #httpClient;
-    #oauthFlow;
+    #oauthFlowRunner;
 
     constructor({ tokenStorePath, clientId, logger, expectedUsername = null, httpClient, oauthFlow }) {
         this.#tokenStorePath = tokenStorePath;
@@ -114,7 +114,10 @@ class TwitchAuth {
         this.#logger = resolveLogger(logger, 'TwitchAuth');
         this.#expectedUsername = expectedUsername;
         this.#httpClient = httpClient || axiosModule.default || axiosModule;
-        this.#oauthFlow = oauthFlow || { runOAuthFlow };
+        if (oauthFlow !== undefined && typeof oauthFlow !== 'function') {
+            throw new Error('oauthFlow must be a function when provided');
+        }
+        this.#oauthFlowRunner = oauthFlow || runOAuthFlow;
     }
 
     async initialize() {
@@ -230,7 +233,7 @@ class TwitchAuth {
     }
 
     async #runOAuthFlow() {
-        return await this.#oauthFlow.runOAuthFlow({
+        return await this.#oauthFlowRunner({
             clientId: this.#clientId,
             tokenStorePath: this.#tokenStorePath,
             logger: this.#logger
