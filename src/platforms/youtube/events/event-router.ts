@@ -1,10 +1,7 @@
-import { createRequire } from 'node:module';
 import { getSystemTimestampISO } from '../../../utils/timestamp';
-
-const nodeRequire = createRequire(__filename);
-const { createPlatformErrorHandler } = nodeRequire('../../../utils/platform-error-handler');
-const { PlatformEvents } = nodeRequire('../../../interfaces/PlatformEvents');
-const { validateLoggerInterface } = nodeRequire('../../../utils/dependency-validator');
+import { PlatformEvents } from '../../../interfaces/PlatformEvents';
+import { createPlatformErrorHandler } from '../../../utils/platform-error-handler';
+import { validateLoggerInterface } from '../../../utils/dependency-validator';
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -42,6 +39,14 @@ const LOW_PRIORITY_EVENT_TYPES = new Set([
     'LiveChatBannerPoll'
 ]);
 
+function asEventData(value: unknown): UnknownRecord | null {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        return null;
+    }
+
+    return value as UnknownRecord;
+}
+
 function createYouTubeEventRouter(options: CreateYouTubeEventRouterOptions = {}) {
     const { platform } = options;
     if (!platform) {
@@ -57,7 +62,7 @@ function createYouTubeEventRouter(options: CreateYouTubeEventRouterOptions = {})
     const emitMissingHandlerError = (eventType: string, handlerName: string, chatItem: unknown): void => {
         const message = `Missing YouTube handler for ${eventType}`;
         const error = new Error(message);
-        errorHandler.handleEventProcessingError(error, eventType, chatItem, message, 'youtube-event-router');
+        errorHandler.handleEventProcessingError(error, eventType, asEventData(chatItem), message, 'youtube-event-router');
 
         if (!platform.eventFactory || typeof platform._emitPlatformEvent !== 'function') {
             return;
@@ -82,7 +87,7 @@ function createYouTubeEventRouter(options: CreateYouTubeEventRouterOptions = {})
             errorHandler.handleEventProcessingError(
                 emitError,
                 eventType,
-                chatItem,
+                asEventData(chatItem),
                 `Error emitting platform error event: ${emitErrorMessage}`,
                 'youtube-event-router'
             );
