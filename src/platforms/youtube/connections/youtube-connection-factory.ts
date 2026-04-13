@@ -1,14 +1,11 @@
-import { createRequire } from 'node:module';
 import {
     installYouTubeLiveChatUnknownRendererCapture,
     type InstallYouTubeLiveChatUnknownRendererCaptureOptions
 } from './youtube-live-chat-unknown-renderer-capture';
 import { YOUTUBE } from '../../../core/endpoints';
-
-const nodeRequire = createRequire(__filename);
-const { getFallbackUsername } = nodeRequire('../../../utils/validation');
-const { normalizeYouTubeUsername } = nodeRequire('../youtube-username-normalizer');
-const { InnertubeFactory } = nodeRequire('../../../factories/innertube-factory');
+import { InnertubeFactory } from '../../../factories/innertube-factory';
+import { getFallbackUsername } from '../../../utils/validation';
+import { normalizeYouTubeUsername } from '../youtube-username-normalizer';
 
 type UnknownRecord = Record<string, unknown>;
 

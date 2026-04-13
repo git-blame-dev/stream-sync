@@ -1,4 +1,5 @@
-import { createRequire } from 'node:module';
+import { createPlatformErrorHandler } from '../../utils/platform-error-handler';
+import { resolveLogger } from '../../utils/logger-resolver';
 
 type CurrencySymbolMapping = {
     pattern: RegExp;
@@ -25,30 +26,8 @@ type CurrencyParseFailure = {
 
 type CurrencyParseAttempt = CurrencyParseSuccess | { success: false };
 
-interface LoggerLike {
-    warn: (message: string, scope: string, metadata: Record<string, unknown>) => void;
-}
-
-interface ErrorHandlerLike {
-    handleEventProcessingError: (
-        error: Error,
-        eventType: string,
-        eventData: unknown,
-        message: string,
-        platform: string
-    ) => void;
-    logOperationalError: (message: string, platform: string, metadata: Record<string, unknown>) => void;
-}
-
-const nodeRequire = createRequire(__filename);
-
-const { createPlatformErrorHandler } = nodeRequire('../../utils/platform-error-handler') as {
-    createPlatformErrorHandler: (logger: LoggerLike, platform: string) => ErrorHandlerLike;
-};
-
-const { resolveLogger } = nodeRequire('../../utils/logger-resolver') as {
-    resolveLogger: (logger: unknown, componentName: string) => LoggerLike;
-};
+type LoggerLike = ReturnType<typeof resolveLogger>;
+type ErrorHandlerLike = ReturnType<typeof createPlatformErrorHandler>;
 
 export interface YouTubeiCurrencyParserDependencies {
     logger?: unknown;

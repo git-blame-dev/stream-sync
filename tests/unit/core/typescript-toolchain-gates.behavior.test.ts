@@ -2421,4 +2421,64 @@ describe('TypeScript toolchain migration gates behavior', () => {
             expect(content).not.toContain('nodeRequire(');
         }
     });
+
+    it('keeps phase 15 youtube interop seams explicit and import-based', () => {
+        const assertions: Array<{ path: string; forbidden: string[] }> = [
+            {
+                path: 'src/platforms/youtube/events/event-router.ts',
+                forbidden: [
+                    "import { createRequire } from 'node:module';",
+                    'const nodeRequire = createRequire(__filename);',
+                    "nodeRequire('../../../utils/platform-error-handler')",
+                    "nodeRequire('../../../interfaces/PlatformEvents')",
+                    "nodeRequire('../../../utils/dependency-validator')"
+                ]
+            },
+            {
+                path: 'src/platforms/youtube/events/event-factory.ts',
+                forbidden: [
+                    "import { createRequire } from 'node:module';",
+                    'const nodeRequire = createRequire(__filename);',
+                    "nodeRequire('../../../interfaces/PlatformEvents')",
+                    "nodeRequire('../../../constants/avatar')",
+                    "nodeRequire('../../../constants/degraded-chat')",
+                    "nodeRequire('../../../utils/missing-fields')"
+                ]
+            },
+            {
+                path: 'src/platforms/youtube/connections/youtube-connection-factory.ts',
+                forbidden: [
+                    "import { createRequire } from 'node:module';",
+                    'const nodeRequire = createRequire(__filename);',
+                    "nodeRequire('../../../utils/validation')",
+                    "nodeRequire('../youtube-username-normalizer')",
+                    "nodeRequire('../../../factories/innertube-factory')"
+                ]
+            },
+            {
+                path: 'src/platforms/youtube/streams/youtube-multistream-manager.ts',
+                forbidden: [
+                    "import { createRequire } from 'node:module';",
+                    'const nodeRequire = createRequire(__filename);',
+                    "nodeRequire('../../../interfaces/PlatformEvents')"
+                ]
+            },
+            {
+                path: 'src/platforms/youtube/youtubei-currency-parser.ts',
+                forbidden: [
+                    "import { createRequire } from 'node:module';",
+                    'const nodeRequire = createRequire(__filename);',
+                    "nodeRequire('../../utils/platform-error-handler')",
+                    "nodeRequire('../../utils/logger-resolver')"
+                ]
+            }
+        ];
+
+        for (const assertion of assertions) {
+            const content = readFileSync(join(repoRoot, assertion.path), 'utf8');
+            for (const forbiddenPattern of assertion.forbidden) {
+                expect(content).not.toContain(forbiddenPattern);
+            }
+        }
+    });
 });

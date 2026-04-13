@@ -1,12 +1,9 @@
-import { createRequire } from 'node:module';
 import { isIsoTimestamp } from '../../../utils/timestamp';
 import { getValidMessageParts, normalizeBadgeImages } from '../../../utils/message-parts';
-
-const nodeRequire = createRequire(__filename);
-const { PlatformEvents } = nodeRequire('../../../interfaces/PlatformEvents');
-const { DEFAULT_AVATAR_URL } = nodeRequire('../../../constants/avatar');
-const { UNKNOWN_CHAT_MESSAGE, UNKNOWN_CHAT_USERNAME } = nodeRequire('../../../constants/degraded-chat');
-const { getMissingFields, mergeMissingFieldsMetadata } = nodeRequire('../../../utils/missing-fields');
+import { PlatformEvents } from '../../../interfaces/PlatformEvents';
+import { DEFAULT_AVATAR_URL } from '../../../constants/avatar';
+import { UNKNOWN_CHAT_MESSAGE, UNKNOWN_CHAT_USERNAME } from '../../../constants/degraded-chat';
+import { getMissingFields, mergeMissingFieldsMetadata } from '../../../utils/missing-fields';
 
 type UnknownRecord = Record<string, unknown>;
 
