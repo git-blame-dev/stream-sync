@@ -24,7 +24,34 @@ type OAuthTokenResponse = {
 
 let cachedCerts: { key: string; cert: string } | null = null;
 
-const createOAuthFlowErrorHandler = (logger) => createPlatformErrorHandler(logger, 'oauth-flow');
+type OAuthFlowOptions = {
+    clientId: string;
+    tokenStorePath: string;
+    logger?: unknown;
+    port?: number;
+    autoFindPort?: boolean;
+    skipBrowserOpen?: boolean;
+    scopes?: readonly string[];
+};
+
+type CallbackServerBootstrapResult = {
+    server: https.Server;
+    waitForCode: Promise<string>;
+    port: number;
+    redirectUri: string;
+};
+
+type RunOAuthFlowDependencies = {
+    startCallbackServer?: (options: {
+        port?: number;
+        autoFindPort?: boolean;
+        logger: OAuthLogger;
+    }) => Promise<CallbackServerBootstrapResult>;
+    exchangeCodeForTokens?: typeof exchangeCodeForTokens;
+    openBrowser?: typeof openBrowser;
+};
+
+const createOAuthFlowErrorHandler = (logger: OAuthLogger) => createPlatformErrorHandler(logger, 'oauth-flow');
 
 const getErrorCode = (error: unknown): string | number | null => {
     if (!error || typeof error !== 'object' || !('code' in error)) {
@@ -49,7 +76,7 @@ const logConsole = (logger: OAuthLogger, message: string, context = 'oauth-flow'
     logger.info(message, context);
 };
 
-const safeCloseServer = (server) => {
+const safeCloseServer = (server: { close?: () => void } | null | undefined) => {
     if (!server || typeof server.close !== 'function') {
         return;
     }
@@ -77,7 +104,7 @@ function generateSelfSignedCert() {
     return cachedCerts;
 }
 
-function buildAuthUrl(clientId, redirectUri, scopes = TWITCH_OAUTH_SCOPES) {
+function buildAuthUrl(clientId: string, redirectUri: string, scopes: readonly string[] = TWITCH_OAUTH_SCOPES) {
     const params = new URLSearchParams({
         client_id: clientId,
         redirect_uri: redirectUri,
@@ -139,12 +166,12 @@ function renderCallbackHtml(status: string, details: { error?: string; descripti
     `;
 }
 
-async function startCallbackServer({ port = OAUTH_SERVER_CONFIG.DEFAULT_PORT, autoFindPort = false, logger }) {
-    const resolvedLogger: OAuthLogger = resolveLogger(logger, 'oauth-flow');
+async function startCallbackServer({ port = OAUTH_SERVER_CONFIG.DEFAULT_PORT, autoFindPort = false, logger }: { port?: number; autoFindPort?: boolean; logger?: unknown }): Promise<CallbackServerBootstrapResult> {
+    const resolvedLogger: OAuthLogger = resolveLogger(logger, 'oauth-flow') as OAuthLogger;
     const handler = createOAuthFlowErrorHandler(resolvedLogger);
 
-    let resolveCode: (value: string) => void;
-    let rejectCode: (reason: unknown) => void;
+    let resolveCode: (value: string) => void = () => {};
+    let rejectCode: (reason: unknown) => void = () => {};
     const waitForCode = new Promise<string>((resolve, reject) => {
         resolveCode = resolve;
         rejectCode = reject;
@@ -265,7 +292,7 @@ async function startCallbackServer({ port = OAUTH_SERVER_CONFIG.DEFAULT_PORT, au
 }
 
 async function exchangeCodeForTokens(
-    code,
+    code: string,
     {
         clientId,
         clientSecret,
@@ -280,7 +307,7 @@ async function exchangeCodeForTokens(
         httpsRequest?: typeof https.request;
     }
 ): Promise<OAuthTokenResponse> {
-    const resolvedLogger = logger as OAuthLogger;
+    const resolvedLogger: OAuthLogger = resolveLogger(logger, 'oauth-flow') as OAuthLogger;
     const handler = createOAuthFlowErrorHandler(resolvedLogger);
     const postData = querystring.stringify({
         client_id: clientId,
@@ -292,7 +319,7 @@ async function exchangeCodeForTokens(
 
     const requestImpl = httpsRequest || https.request;
 
-    return await new Promise((resolve, reject) => {
+    return await new Promise<OAuthTokenResponse>((resolve, reject) => {
         const urlParts = new URL(TWITCH.OAUTH.TOKEN);
         const options = {
             hostname: urlParts.hostname,
@@ -341,8 +368,8 @@ async function exchangeCodeForTokens(
     });
 }
 
-function displayOAuthInstructions(authUrl, logger, { scopes = TWITCH_OAUTH_SCOPES, tokenStorePath = null } = {}) {
-    const resolvedLogger: OAuthLogger = resolveLogger(logger, 'oauth-flow');
+function displayOAuthInstructions(authUrl: string, logger: unknown, { scopes = TWITCH_OAUTH_SCOPES, tokenStorePath = null }: { scopes?: readonly string[]; tokenStorePath?: string | null } = {}) {
+    const resolvedLogger: OAuthLogger = resolveLogger(logger, 'oauth-flow') as OAuthLogger;
 
     logConsole(resolvedLogger, '\n' + '='.repeat(80));
     logConsole(resolvedLogger, 'TWITCH AUTHENTICATION REQUIRED');
@@ -380,8 +407,8 @@ function displayOAuthInstructions(authUrl, logger, { scopes = TWITCH_OAUTH_SCOPE
     logConsole(resolvedLogger, '='.repeat(80));
 }
 
-function openBrowser(authUrl, logger, { skipBrowserOpen = false } = {}) {
-    const resolvedLogger: OAuthLogger = resolveLogger(logger, 'oauth-flow');
+function openBrowser(authUrl: string, logger: unknown, { skipBrowserOpen = false }: { skipBrowserOpen?: boolean } = {}) {
+    const resolvedLogger: OAuthLogger = resolveLogger(logger, 'oauth-flow') as OAuthLogger;
     if (skipBrowserOpen) {
         resolvedLogger.info('Skipping automatic browser opening', 'oauth-flow');
         resolvedLogger.info('Please copy the authorization URL manually if you still need to authenticate.', 'oauth-flow');
@@ -419,14 +446,14 @@ function openBrowser(authUrl, logger, { skipBrowserOpen = false } = {}) {
 }
 
 async function runOAuthFlow(
-    { clientId, tokenStorePath, logger, port = OAUTH_SERVER_CONFIG.DEFAULT_PORT, autoFindPort = false, skipBrowserOpen = false, scopes = TWITCH_OAUTH_SCOPES },
+    { clientId, tokenStorePath, logger, port = OAUTH_SERVER_CONFIG.DEFAULT_PORT, autoFindPort = false, skipBrowserOpen = false, scopes = TWITCH_OAUTH_SCOPES }: OAuthFlowOptions,
     {
         startCallbackServer: startCallbackServerImpl = startCallbackServer,
         exchangeCodeForTokens: exchangeCodeForTokensImpl = exchangeCodeForTokens,
         openBrowser: openBrowserImpl = openBrowser
-    } = {}
+    }: RunOAuthFlowDependencies = {}
 ) {
-    const resolvedLogger: OAuthLogger = resolveLogger(logger, 'oauth-flow');
+    const resolvedLogger: OAuthLogger = resolveLogger(logger, 'oauth-flow') as OAuthLogger;
     const handler = createOAuthFlowErrorHandler(resolvedLogger);
 
     if (!clientId) {
@@ -439,7 +466,7 @@ async function runOAuthFlow(
         throw new Error('clientSecret is required for OAuth flow');
     }
 
-    let serverRef;
+    let serverRef: https.Server | null = null;
     try {
         const { server, waitForCode, redirectUri } = await startCallbackServerImpl({
             port,
