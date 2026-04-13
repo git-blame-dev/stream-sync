@@ -1,4 +1,5 @@
 import * as axiosModule from 'axios';
+import type { AxiosRequestConfig } from 'axios';
 import { TWITCH } from '../core/endpoints';
 import { secrets } from '../core/secrets';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
@@ -7,9 +8,91 @@ import { loadTokens, saveTokens } from '../utils/token-store';
 import { runOAuthFlow } from './oauth-flow';
 import { TWITCH_OAUTH_SCOPES } from './twitch-oauth-scopes';
 
-const createTwitchAuthErrorHandler = (logger) => createPlatformErrorHandler(logger, 'twitch-auth');
+type AuthRecord = Record<string, unknown>;
 
-const logAuthError = (handler, message, error, payload: Record<string, unknown> | null = null) => {
+type OAuthTokenPayload = {
+    accessToken: string;
+    refreshToken?: string | null;
+    expiresIn?: number | null;
+    expiresAt?: number | null;
+};
+
+type RefreshTokenPayload = {
+    accessToken: string;
+    refreshToken?: string;
+    expiresIn: number | null;
+};
+
+type TokenValidationSuccess = {
+    userId: string;
+    login: string;
+    scopes: string[];
+    expiresIn: number | null;
+};
+
+type TokenValidationFailure = {
+    error: unknown;
+    status: number | null;
+};
+
+type TokenValidationResult = TokenValidationSuccess | TokenValidationFailure;
+
+type HttpClient = {
+    get: (url: string, config?: AxiosRequestConfig) => Promise<{ data?: unknown }>;
+    post: (url: string, data?: unknown, config?: AxiosRequestConfig) => Promise<{ data?: unknown }>;
+};
+
+type OAuthFlowRunner = (options: {
+    clientId: string;
+    tokenStorePath: string;
+    logger: ReturnType<typeof resolveLogger>;
+}) => Promise<OAuthTokenPayload | null>;
+
+type TwitchAuthOptions = {
+    tokenStorePath: string;
+    clientId: string;
+    logger?: unknown;
+    expectedUsername?: string | null;
+    httpClient?: HttpClient;
+    oauthFlow?: OAuthFlowRunner;
+};
+
+type HttpErrorShape = {
+    response?: {
+        status?: unknown;
+        data?: {
+            error?: unknown;
+            error_description?: unknown;
+            message?: unknown;
+        };
+    };
+    message?: unknown;
+};
+
+const createTwitchAuthErrorHandler = (logger: ReturnType<typeof resolveLogger>) => createPlatformErrorHandler(logger, 'twitch-auth');
+
+function asRecord(value: unknown): AuthRecord {
+    return value && typeof value === 'object' ? (value as AuthRecord) : {};
+}
+
+function asFiniteNumber(value: unknown): number | null {
+    return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function asHttpError(error: unknown): HttpErrorShape {
+    return error && typeof error === 'object' ? (error as HttpErrorShape) : {};
+}
+
+function isValidationFailure(result: TokenValidationResult): result is TokenValidationFailure {
+    return 'error' in result;
+}
+
+const logAuthError = (
+    handler: ReturnType<typeof createPlatformErrorHandler>,
+    message: string,
+    error: unknown,
+    payload: Record<string, unknown> | null = null
+) => {
     if (error instanceof Error) {
         handler.handleEventProcessingError(error, 'twitch-auth', payload, message, 'twitch-auth');
         return;
@@ -17,75 +100,86 @@ const logAuthError = (handler, message, error, payload: Record<string, unknown> 
     handler.logOperationalError(message, 'twitch-auth', payload || error);
 };
 
-const ensureCamelTokenPayload = (payload, sourceLabel) => {
+const ensureCamelTokenPayload = (payload: unknown, sourceLabel: string): OAuthTokenPayload | null => {
     if (!payload) {
         return null;
     }
 
-    if (Object.prototype.hasOwnProperty.call(payload, 'access_token')
-        || Object.prototype.hasOwnProperty.call(payload, 'refresh_token')
-        || Object.prototype.hasOwnProperty.call(payload, 'expires_in')) {
+    const payloadRecord = asRecord(payload);
+
+    if (Object.prototype.hasOwnProperty.call(payloadRecord, 'access_token')
+        || Object.prototype.hasOwnProperty.call(payloadRecord, 'refresh_token')
+        || Object.prototype.hasOwnProperty.call(payloadRecord, 'expires_in')) {
         throw new Error(`${sourceLabel} must return camelCase token fields`);
     }
 
-    if (!Object.prototype.hasOwnProperty.call(payload, 'accessToken')) {
+    if (!Object.prototype.hasOwnProperty.call(payloadRecord, 'accessToken')) {
         throw new Error(`${sourceLabel} must include accessToken`);
     }
 
-    if (typeof payload.accessToken !== 'string' || payload.accessToken.trim() === '') {
+    if (typeof payloadRecord.accessToken !== 'string' || payloadRecord.accessToken.trim() === '') {
         throw new Error(`${sourceLabel} must provide string accessToken`);
     }
 
-    if (Object.prototype.hasOwnProperty.call(payload, 'refreshToken')
-        && payload.refreshToken !== null
-        && payload.refreshToken !== undefined
-        && typeof payload.refreshToken !== 'string') {
+    if (Object.prototype.hasOwnProperty.call(payloadRecord, 'refreshToken')
+        && payloadRecord.refreshToken !== null
+        && payloadRecord.refreshToken !== undefined
+        && typeof payloadRecord.refreshToken !== 'string') {
         throw new Error(`${sourceLabel} must provide string refreshToken when present`);
     }
 
-    if (Object.prototype.hasOwnProperty.call(payload, 'expiresIn')
-        && payload.expiresIn !== null
-        && payload.expiresIn !== undefined
-        && !Number.isFinite(payload.expiresIn)) {
+    if (Object.prototype.hasOwnProperty.call(payloadRecord, 'expiresIn')
+        && payloadRecord.expiresIn !== null
+        && payloadRecord.expiresIn !== undefined
+        && (typeof payloadRecord.expiresIn !== 'number' || !Number.isFinite(payloadRecord.expiresIn))) {
         throw new Error(`${sourceLabel} must provide numeric expiresIn when present`);
     }
 
-    if (Object.prototype.hasOwnProperty.call(payload, 'expiresAt')
-        && payload.expiresAt !== null
-        && payload.expiresAt !== undefined
-        && !Number.isFinite(payload.expiresAt)) {
+    if (Object.prototype.hasOwnProperty.call(payloadRecord, 'expiresAt')
+        && payloadRecord.expiresAt !== null
+        && payloadRecord.expiresAt !== undefined
+        && (typeof payloadRecord.expiresAt !== 'number' || !Number.isFinite(payloadRecord.expiresAt))) {
         throw new Error(`${sourceLabel} must provide numeric expiresAt when present`);
     }
 
     return {
-        accessToken: payload.accessToken,
-        refreshToken: payload.refreshToken,
-        expiresIn: payload.expiresIn,
-        expiresAt: payload.expiresAt
+        accessToken: payloadRecord.accessToken,
+        refreshToken: typeof payloadRecord.refreshToken === 'string' ? payloadRecord.refreshToken : null,
+        expiresIn: asFiniteNumber(payloadRecord.expiresIn),
+        expiresAt: asFiniteNumber(payloadRecord.expiresAt)
     };
 };
 
-const parseRefreshResponse = (data) => {
-    if (!data || !data.access_token) {
+const parseRefreshResponse = (data: unknown): RefreshTokenPayload => {
+    const dataRecord = asRecord(data);
+
+    if (typeof dataRecord.access_token !== 'string' || !dataRecord.access_token.trim()) {
         throw new Error('Token refresh response missing access token');
     }
 
-    const hasRefreshToken = Object.prototype.hasOwnProperty.call(data, 'refresh_token');
+    const hasRefreshToken = Object.prototype.hasOwnProperty.call(dataRecord, 'refresh_token');
+    const refreshToken = hasRefreshToken && typeof dataRecord.refresh_token === 'string'
+        ? dataRecord.refresh_token
+        : undefined;
 
     return {
-        accessToken: data.access_token,
-        refreshToken: hasRefreshToken ? data.refresh_token : undefined,
-        expiresIn: Number.isFinite(data.expires_in) ? data.expires_in : null
+        accessToken: dataRecord.access_token,
+        refreshToken,
+        expiresIn: asFiniteNumber(dataRecord.expires_in)
     };
 };
 
-const computeExpiresAt = (normalized) => {
-    if (Number.isFinite(normalized.expiresAt)) {
-        return normalized.expiresAt;
+const computeExpiresAt = (normalized: { expiresAt?: number | null; expiresIn?: number | null }): number | null => {
+    const expiresAt = asFiniteNumber(normalized.expiresAt);
+    if (expiresAt !== null) {
+        return expiresAt;
     }
-    if (Number.isFinite(normalized.expiresIn)) {
-        return Date.now() + (normalized.expiresIn * 1000);
+
+    const expiresIn = asFiniteNumber(normalized.expiresIn);
+    if (expiresIn !== null) {
+        return Date.now() + (expiresIn * 1000);
     }
+
     return null;
 };
 
@@ -99,19 +193,19 @@ const isAuthDisabled = () => {
 
 class TwitchAuth {
     #initialized = false;
-    #userId = null;
+    #userId: string | null = null;
     #refreshPromise: Promise<boolean> | null = null;
-    #tokenStorePath;
-    #clientId;
-    #logger;
-    #expectedUsername;
-    #httpClient;
-    #oauthFlowRunner;
+    #tokenStorePath: string;
+    #clientId: string;
+    #logger: ReturnType<typeof resolveLogger>;
+    #expectedUsername: string | null;
+    #httpClient: HttpClient;
+    #oauthFlowRunner: OAuthFlowRunner;
 
-    constructor({ tokenStorePath, clientId, logger, expectedUsername = null, httpClient, oauthFlow }) {
+    constructor({ tokenStorePath, clientId, logger, expectedUsername = null, httpClient, oauthFlow }: TwitchAuthOptions) {
         this.#tokenStorePath = tokenStorePath;
         this.#clientId = clientId;
-        this.#logger = resolveLogger(logger, 'TwitchAuth');
+        this.#logger = resolveLogger(logger, 'TwitchAuth') as ReturnType<typeof resolveLogger>;
         this.#expectedUsername = expectedUsername;
         this.#httpClient = httpClient || axiosModule.default || axiosModule;
         if (oauthFlow !== undefined && typeof oauthFlow !== 'function') {
@@ -121,7 +215,7 @@ class TwitchAuth {
     }
 
     async initialize() {
-        this.#requireConfig();
+        const expectedUsername = this.#requireConfig();
 
         const tokenData = await loadTokens({
             tokenStorePath: this.#tokenStorePath,
@@ -144,19 +238,19 @@ class TwitchAuth {
         }
 
         let validation = await this.#validateToken();
-        if (validation.error) {
+        if (isValidationFailure(validation)) {
             const refreshed = await this.refreshTokens();
             if (refreshed) {
                 validation = await this.#validateToken();
             }
         }
 
-        if (validation.error) {
+        if (isValidationFailure(validation)) {
             await this.#runOAuthAndPersistTokens('Twitch authentication failed after refresh');
             validation = await this.#validateToken();
         }
 
-        if (validation.error) {
+        if (isValidationFailure(validation)) {
             throw new Error('Twitch authentication failed');
         }
 
@@ -165,12 +259,12 @@ class TwitchAuth {
             validation = await this.#validateToken();
         }
 
-        if (validation.error || this.#missingScopes(validation.scopes).length > 0) {
+        if (isValidationFailure(validation) || this.#missingScopes(validation.scopes).length > 0) {
             throw new Error('Twitch authentication failed due to missing scopes');
         }
 
         const login = validation.login || '';
-        if (login.toLowerCase() !== this.#expectedUsername.toLowerCase()) {
+        if (login.toLowerCase() !== expectedUsername.toLowerCase()) {
             throw new Error(`Twitch token login mismatch for ${this.#expectedUsername}`);
         }
 
@@ -199,7 +293,7 @@ class TwitchAuth {
         return this.#initialized;
     }
 
-    #requireConfig() {
+    #requireConfig(): string {
         if (!this.#expectedUsername) {
             throw new Error('expectedUsername is required for Twitch authentication');
         }
@@ -209,16 +303,18 @@ class TwitchAuth {
         if (!secrets.twitch.clientSecret) {
             throw new Error('clientSecret is required for Twitch authentication');
         }
+
+        return this.#expectedUsername;
     }
 
-    #applyTokens({ accessToken, refreshToken }) {
+    #applyTokens({ accessToken, refreshToken }: { accessToken: string | null; refreshToken?: string | null }) {
         secrets.twitch.accessToken = accessToken || null;
         if (refreshToken !== undefined) {
             secrets.twitch.refreshToken = refreshToken || null;
         }
     }
 
-    async #persistTokens(normalized) {
+    async #persistTokens(normalized: OAuthTokenPayload) {
         await saveTokens(
             {
                 tokenStorePath: this.#tokenStorePath,
@@ -232,7 +328,7 @@ class TwitchAuth {
         );
     }
 
-    async #runOAuthFlow() {
+    async #runOAuthFlow(): Promise<OAuthTokenPayload | null> {
         return await this.#oauthFlowRunner({
             clientId: this.#clientId,
             tokenStorePath: this.#tokenStorePath,
@@ -240,7 +336,7 @@ class TwitchAuth {
         });
     }
 
-    async #runOAuthAndPersistTokens(failureMessage) {
+    async #runOAuthAndPersistTokens(failureMessage: string): Promise<OAuthTokenPayload> {
         const oauthTokens = await this.#runOAuthFlow();
         const oauthNormalized = ensureCamelTokenPayload(oauthTokens, 'OAuth flow');
         if (!oauthNormalized || !oauthNormalized.accessToken) {
@@ -295,7 +391,8 @@ class TwitchAuth {
             });
             return true;
         } catch (error) {
-            if (this.#isTerminalRefreshError(error)) {
+            const httpError = asHttpError(error);
+            if (this.#isTerminalRefreshError(httpError)) {
                 try {
                     await this.#runOAuthAndPersistTokens('OAuth flow did not return valid Twitch tokens');
                     return true;
@@ -305,18 +402,18 @@ class TwitchAuth {
                 }
             }
             logAuthError(handler, 'Token refresh failed', error, {
-                status: error?.response?.status,
-                error: error?.response?.data?.error
+                status: typeof httpError.response?.status === 'number' ? httpError.response.status : null,
+                error: typeof httpError.response?.data?.error === 'string' ? httpError.response.data.error : null
             });
             return false;
         }
     }
 
-    #isTerminalRefreshError(error) {
-        const errorCode = error?.response?.data?.error;
-        const message = error?.response?.data?.error_description
-            || error?.response?.data?.message
-            || error?.message
+    #isTerminalRefreshError(error: HttpErrorShape) {
+        const errorCode = typeof error.response?.data?.error === 'string' ? error.response.data.error : '';
+        const message = (typeof error.response?.data?.error_description === 'string' ? error.response.data.error_description : '')
+            || (typeof error.response?.data?.message === 'string' ? error.response.data.message : '')
+            || (typeof error.message === 'string' ? error.message : '')
             || '';
         const normalized = message.toLowerCase();
 
@@ -331,7 +428,7 @@ class TwitchAuth {
         return false;
     }
 
-    async #validateToken() {
+    async #validateToken(): Promise<TokenValidationResult> {
         const handler = createTwitchAuthErrorHandler(this.#logger);
         if (!secrets.twitch.accessToken) {
             return { error: new Error('Access token is missing'), status: null };
@@ -347,27 +444,33 @@ class TwitchAuth {
                 }
             );
 
-            const data = response && response.data ? response.data : null;
-            if (!data || !data.user_id || !data.login) {
+            const data = asRecord(response && response.data ? response.data : null);
+            if (!data.user_id || !data.login) {
                 return { error: new Error('Token validation response missing user data'), status: null };
             }
 
             return {
-                userId: data.user_id.toString(),
-                login: data.login,
-                scopes: Array.isArray(data.scopes) ? data.scopes : [],
-                expiresIn: Number.isFinite(data.expires_in) ? data.expires_in : null
+                userId: String(data.user_id),
+                login: String(data.login),
+                scopes: Array.isArray(data.scopes)
+                    ? data.scopes.filter((scope): scope is string => typeof scope === 'string')
+                    : [],
+                expiresIn: asFiniteNumber(data.expires_in)
             };
         } catch (error) {
+            const httpError = asHttpError(error);
             logAuthError(handler, 'Token validation failed', error, {
-                status: error?.response?.status,
-                message: error?.message
+                status: typeof httpError.response?.status === 'number' ? httpError.response.status : null,
+                message: typeof httpError.message === 'string' ? httpError.message : null
             });
-            return { error, status: error?.response?.status || null };
+            return {
+                error,
+                status: typeof httpError.response?.status === 'number' ? httpError.response.status : null
+            };
         }
     }
 
-    #missingScopes(scopes) {
+    #missingScopes(scopes: string[] | null | undefined): string[] {
         const actual = new Set(scopes || []);
         return TWITCH_OAUTH_SCOPES.filter(scope => !actual.has(scope));
     }

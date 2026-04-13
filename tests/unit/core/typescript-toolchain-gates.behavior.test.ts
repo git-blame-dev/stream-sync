@@ -1914,6 +1914,49 @@ describe('TypeScript toolchain migration gates behavior', () => {
         }
     });
 
+    it('keeps twitch auth and oauth-flow strictness contracts explicit and narrowed', () => {
+        const modulePaths = [
+            'src/auth/TwitchAuth.ts',
+            'src/auth/oauth-flow.ts'
+        ];
+        const forbiddenLegacySignatures: Array<{ path: string; signatures: string[] }> = [
+            {
+                path: 'src/auth/TwitchAuth.ts',
+                signatures: [
+                    'const createTwitchAuthErrorHandler = (logger) =>',
+                    'const logAuthError = (handler, message, error',
+                    'const ensureCamelTokenPayload = (payload, sourceLabel) =>',
+                    'const parseRefreshResponse = (data) =>',
+                    'const computeExpiresAt = (normalized) =>'
+                ]
+            },
+            {
+                path: 'src/auth/oauth-flow.ts',
+                signatures: [
+                    'const createOAuthFlowErrorHandler = (logger) =>',
+                    'const safeCloseServer = (server) =>',
+                    'function buildAuthUrl(clientId, redirectUri',
+                    'function displayOAuthInstructions(authUrl, logger',
+                    'function openBrowser(authUrl, logger'
+                ]
+            }
+        ];
+
+        for (const modulePath of modulePaths) {
+            const content = readFileSync(join(repoRoot, modulePath), 'utf8');
+
+            expect(content).not.toContain(': any');
+            expect(content).not.toContain('UnknownRecord');
+        }
+
+        for (const assertion of forbiddenLegacySignatures) {
+            const content = readFileSync(join(repoRoot, assertion.path), 'utf8');
+            for (const signature of assertion.signatures) {
+                expect(content).not.toContain(signature);
+            }
+        }
+    });
+
     it('keeps tiktok platform shell module free of commonjs module syntax', () => {
         const content = readFileSync(join(repoRoot, 'src/platforms/tiktok.ts'), 'utf8');
 
