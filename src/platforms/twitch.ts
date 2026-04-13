@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import crypto from 'node:crypto';
 import { DEFAULT_AVATAR_URL } from '../constants/avatar';
-import { ChatFileLoggingService } from '../services/ChatFileLoggingService.js';
+import { ChatFileLoggingService } from '../services/ChatFileLoggingService';
 import { ConnectionStateFactory } from '../utils/platform-connection-state';
 import { createTwitchEventFactory } from './twitch/events/event-factory';
 import { createTwitchEventSubWiring } from './twitch/connections/wiring';
