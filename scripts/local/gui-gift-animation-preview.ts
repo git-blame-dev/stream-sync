@@ -29,8 +29,8 @@ interface GiftAnimationPreviewOptions {
         start: () => Promise<void>;
         stop?: () => Promise<void>;
     };
-    safeSetTimeoutImpl?: (callback: () => void, duration: number) => unknown;
-    clearTimeoutImpl?: (handle: unknown) => void;
+    safeSetTimeoutImpl?: (callback: () => void, duration: number) => ReturnType<typeof setTimeout>;
+    clearTimeoutImpl?: (handle: ReturnType<typeof setTimeout>) => void;
     stdout?: { write: (text: string) => void };
     delay?: (ms: number) => Promise<void>;
     eventBus?: unknown;
@@ -43,6 +43,14 @@ type PreviewScenarioEvent = {
     rawEvent: {
         eventType?: string;
     } | null;
+};
+
+const asRecord = (value: unknown): Record<string, unknown> | null => {
+    if (!value || typeof value !== 'object') {
+        return null;
+    }
+
+    return value as Record<string, unknown>;
 };
 
 function resolveLogger(logger: GiftAnimationPreviewOptions['logger']) {
@@ -72,18 +80,18 @@ function buildGiftAnimationPreviewEvent(): { adapter: string; rawEvent: unknown 
 }
 
 function buildGiftPreviewNotificationData(giftEvent: { rawEvent: unknown }): Record<string, unknown> {
-    const rawEvent: any = (giftEvent && giftEvent.rawEvent && typeof giftEvent.rawEvent === 'object')
-        ? giftEvent.rawEvent
-        : {};
-    const rawData: any = rawEvent.data || null;
-    const sourceUser: any = rawData && typeof rawData === 'object' ? (rawData.user || {}) : {};
-    const giftName = rawData && typeof rawData === 'object'
-        ? (rawData.giftName || (rawData.giftDetails && rawData.giftDetails.giftName) || 'Corgi')
+    const rawEvent = asRecord(giftEvent?.rawEvent) || {};
+    const rawData = asRecord(rawEvent.data);
+    const sourceUser = asRecord(rawData?.user) || {};
+    const giftDetails = asRecord(rawData?.giftDetails);
+    const gift = asRecord(rawData?.gift);
+    const giftName = rawData
+        ? (rawData.giftName || giftDetails?.giftName || 'Corgi')
         : 'Corgi';
-    const repeatCount = rawData && typeof rawData === 'object' ? Number(rawData.repeatCount) || 1 : 1;
-    const unitAmount = rawData && typeof rawData === 'object' ? Number(rawData.diamondCount) || 0 : 0;
-    const giftImageUrl = rawData && rawData.gift && typeof rawData.gift === 'object' && typeof rawData.gift.giftPictureUrl === 'string'
-        ? rawData.gift.giftPictureUrl
+    const repeatCount = rawData ? Number(rawData.repeatCount) || 1 : 1;
+    const unitAmount = rawData ? Number(rawData.diamondCount) || 0 : 0;
+    const giftImageUrl = typeof gift?.giftPictureUrl === 'string'
+        ? gift.giftPictureUrl
         : '';
 
     return {
@@ -105,8 +113,8 @@ function buildGiftPreviewNotificationData(giftEvent: { rawEvent: unknown }): Rec
             isStreakCompleted: true,
             originalData: {
                 asset: rawData ? rawData.asset : undefined,
-                giftDetails: rawData ? rawData.giftDetails : undefined,
-                gift: rawData ? rawData.gift : undefined
+                giftDetails: giftDetails || undefined,
+                gift: gift || undefined
             }
         }
     };
@@ -139,7 +147,7 @@ async function runGuiGiftAnimationPreview(options: GiftAnimationPreviewOptions =
     const createPreviewPipelineImpl = options.createPreviewPipelineImpl || createPreviewPipeline;
     const createGuiTransportServiceImpl = options.createGuiTransportServiceImpl || createGuiTransportService;
     const safeSetTimeoutImpl = options.safeSetTimeoutImpl || safeSetTimeout;
-    const clearTimeoutImpl = options.clearTimeoutImpl || ((handle) => clearTimeout(handle as NodeJS.Timeout));
+    const clearTimeoutImpl = options.clearTimeoutImpl || clearTimeout;
     const stdout = options.stdout || process.stdout;
     const delay = options.delay || ((ms) => {
         const parsed = Number(ms);
@@ -148,7 +156,7 @@ async function runGuiGiftAnimationPreview(options: GiftAnimationPreviewOptions =
 
     let pipeline: ReturnType<NonNullable<GiftAnimationPreviewOptions['createPreviewPipelineImpl']>> | null = null;
     let service: ReturnType<NonNullable<GiftAnimationPreviewOptions['createGuiTransportServiceImpl']>> | null = null;
-    const scheduledEmitTimers: unknown[] = [];
+    const scheduledEmitTimers: Array<ReturnType<typeof setTimeout>> = [];
 
     try {
         const giftAnimationResolver = options.giftAnimationResolver || createTikTokGiftAnimationResolver({ logger });

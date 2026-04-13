@@ -1487,6 +1487,48 @@ describe('TypeScript toolchain migration gates behavior', () => {
         expect(content).not.toMatch(/^\s*exports\./m);
     });
 
+    it('keeps gui preview script strictness contracts explicit and narrowed', () => {
+        const modulePaths = [
+            'scripts/local/gui-preview.ts',
+            'scripts/local/gui-gift-animation-preview.ts'
+        ];
+        const forbiddenLegacySignatures: Array<{ path: string; signatures: string[] }> = [
+            {
+                path: 'scripts/local/gui-preview.ts',
+                signatures: [
+                    'type UnknownRecord = Record<string, any>;',
+                    'TwitchEventRouterModule as unknown as',
+                    'UserTrackingServiceModule as unknown as',
+                    'VFXCommandServiceModule as unknown as',
+                    'CommandCooldownServiceModule as unknown as'
+                ]
+            },
+            {
+                path: 'scripts/local/gui-gift-animation-preview.ts',
+                signatures: [
+                    'const rawEvent: any =',
+                    'const rawData: any =',
+                    'const sourceUser: any ='
+                ]
+            }
+        ];
+
+        for (const modulePath of modulePaths) {
+            const content = readFileSync(join(repoRoot, modulePath), 'utf8');
+
+            expect(content).not.toContain(': any');
+            expect(content).not.toContain('as unknown as');
+            expect(content).not.toContain('Record<string, any>');
+        }
+
+        for (const assertion of forbiddenLegacySignatures) {
+            const content = readFileSync(join(repoRoot, assertion.path), 'utf8');
+            for (const signature of assertion.signatures) {
+                expect(content).not.toContain(signature);
+            }
+        }
+    });
+
     it('keeps bun prerun setup bootstrap free of raw top-level require declarations', () => {
         const content = readFileSync(join(repoRoot, 'tests/setup/bun.prerun.ts'), 'utf8');
 
