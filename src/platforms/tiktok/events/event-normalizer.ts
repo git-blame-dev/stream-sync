@@ -2,21 +2,51 @@ import { normalizeTikTokMessage } from '../../../utils/message-normalization';
 import { extractTikTokUserData, extractTikTokGiftData, extractTikTokAvatarUrl } from '../../../utils/tiktok-data-extraction';
 import { resolveTikTokTimestampISO } from '../../../utils/platform-timestamp';
 
-type UnknownRecord = Record<string, unknown>;
+type TikTokChatEventPayload = Record<string, unknown>;
+
+type TikTokGiftEventPayload = Record<string, unknown> & {
+    msgId?: string | number | null;
+    common?: {
+        msgId?: string | number | null;
+    };
+    repeatCount?: unknown;
+    sourceType?: unknown;
+};
+
+type NormalizedTikTokGiftEvent = {
+    platform: string;
+    userId: string;
+    username: string;
+    avatarUrl: string;
+    giftType: string;
+    giftImageUrl?: string;
+    giftCount: number;
+    repeatCount: number;
+    amount: number;
+    currency: string;
+    unitAmount: number;
+    comboType: number;
+    repeatEnd: boolean;
+    groupId: string | null;
+    id: string;
+    timestamp: string;
+    rawData: TikTokGiftEventPayload;
+    sourceType?: string;
+};
 
 type TikTokEventNormalizerOptions = {
     platformName?: string;
     timestampService?: unknown;
-    getTimestamp?: (data: UnknownRecord) => string | null;
-    getPlatformMessageId?: (data: UnknownRecord) => string | null;
+    getTimestamp?: (data: TikTokGiftEventPayload) => string | null;
+    getPlatformMessageId?: (data: TikTokGiftEventPayload) => string | null;
 };
 
-function normalizeTikTokChatEvent(data: UnknownRecord, options: TikTokEventNormalizerOptions = {}) {
+function normalizeTikTokChatEvent(data: TikTokChatEventPayload, options: TikTokEventNormalizerOptions = {}) {
     const platformName = options.platformName || 'tiktok';
     return normalizeTikTokMessage(data, platformName);
 }
 
-function normalizeTikTokGiftEvent(data: UnknownRecord, options: TikTokEventNormalizerOptions = {}) {
+function normalizeTikTokGiftEvent(data: TikTokGiftEventPayload, options: TikTokEventNormalizerOptions = {}): NormalizedTikTokGiftEvent {
     if (!data || typeof data !== 'object') {
         throw new Error('TikTok gift payload must be an object');
     }
@@ -56,26 +86,7 @@ function normalizeTikTokGiftEvent(data: UnknownRecord, options: TikTokEventNorma
         ? Number(data.repeatCount)
         : giftData.giftCount;
 
-    const normalized: {
-        platform: string;
-        userId: string;
-        username: string;
-        avatarUrl: string;
-        giftType: string;
-        giftImageUrl?: string;
-        giftCount: number;
-        repeatCount: number;
-        amount: number;
-        currency: string;
-        unitAmount: number;
-        comboType: number;
-        repeatEnd: boolean;
-        groupId: string | null;
-        id: string;
-        timestamp: string;
-        rawData: UnknownRecord;
-        sourceType?: string;
-    } = {
+    const normalized: NormalizedTikTokGiftEvent = {
         platform: platformName,
         userId,
         username,

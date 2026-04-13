@@ -20,35 +20,62 @@ const PlatformEvents = {
     _generateCorrelationId: () => crypto.randomUUID()
 } as const;
 
-function createTikTokEventFactory(options = {}) {
+type EventFactoryMetadata = Record<string, unknown>;
+
+type NormalizedIdentity = {
+    userId: string;
+    username: string;
+};
+
+type EventFactoryOptions = {
+    platformName?: string;
+    timestampService?: unknown;
+    getTimestamp?: (data: Record<string, unknown>) => string | null | undefined;
+    normalizeUserData?: (data: NormalizedIdentity) => NormalizedIdentity;
+    getPlatformMessageId?: (data: Record<string, unknown>) => string | number | null | undefined;
+    generateCorrelationId?: () => string;
+    buildEventMetadata?: (additionalMetadata?: EventFactoryMetadata) => EventFactoryMetadata;
+    normalizeChatEvent?: (data: Record<string, unknown>) => Record<string, unknown>;
+};
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        return null;
+    }
+
+    return value as Record<string, unknown>;
+}
+
+function createTikTokEventFactory(options: EventFactoryOptions = {}) {
     const platformName = options.platformName || 'tiktok';
-    const getTimestamp = options.getTimestamp || ((data) => data.timestamp);
-    const normalizeUserData = options.normalizeUserData || ((data) => data);
-    const getPlatformMessageId = options.getPlatformMessageId || ((data) => data?.id ?? data?.msgId);
+    const getTimestamp = options.getTimestamp || ((data: Record<string, unknown>) => data.timestamp as string | undefined);
+    const normalizeUserData = options.normalizeUserData || ((data: NormalizedIdentity) => data);
+    const getPlatformMessageId = options.getPlatformMessageId || ((data: Record<string, unknown>) => data.id ?? data.msgId);
     const generateCorrelationId = options.generateCorrelationId || (() => PlatformEvents._generateCorrelationId());
-    const buildEventMetadata = options.buildEventMetadata || ((additionalMetadata = {}) => ({
+    const buildEventMetadata = options.buildEventMetadata || ((additionalMetadata: EventFactoryMetadata = {}) => ({
         platform: platformName,
         correlationId: generateCorrelationId(),
         ...additionalMetadata
     }));
 
-    const normalizeContext = (context) => {
+    const normalizeContext = (context: unknown): EventFactoryMetadata => {
         if (!context || typeof context !== 'object' || Array.isArray(context)) {
             return {};
         }
 
-        return context;
+        return context as EventFactoryMetadata;
     };
 
-    const normalizeRecoverable = (recoverable) => (typeof recoverable === 'boolean' ? recoverable : true);
-    const normalizeChatEvent = options.normalizeChatEvent || ((data) => normalizeTikTokMessage(data, platformName, options.timestampService));
+    const normalizeRecoverable = (recoverable: unknown) => (typeof recoverable === 'boolean' ? recoverable : true);
+    const normalizeChatEvent = options.normalizeChatEvent
+        || ((data: Record<string, unknown>) => normalizeTikTokMessage(data, platformName, options.timestampService) as Record<string, unknown>);
 
-    const normalizeIdentityFromPayload = (data) => normalizeUserData(extractTikTokUserData(data));
-    const normalizeIdentityFromCanonical = (data) => normalizeUserData({
-        userId: data.userId,
-        username: data.username
+    const normalizeIdentityFromPayload = (data: Record<string, unknown>) => normalizeUserData(extractTikTokUserData(data));
+    const normalizeIdentityFromCanonical = (data: Record<string, unknown>) => normalizeUserData({
+        userId: typeof data.userId === 'string' ? data.userId : String(data.userId ?? ''),
+        username: typeof data.username === 'string' ? data.username : String(data.username ?? '')
     });
-    const resolveAvatarUrl = (data = {}, fallbackData = {}) => {
+    const resolveAvatarUrl = (data: Record<string, unknown> = {}, fallbackData: Record<string, unknown> = {}) => {
         const avatarFromData = typeof data.avatarUrl === 'string' ? data.avatarUrl.trim() : '';
         if (avatarFromData) {
             return avatarFromData;
@@ -59,7 +86,8 @@ function createTikTokEventFactory(options = {}) {
             return avatarFromFallback;
         }
 
-        const profilePicture = fallbackData?.metadata?.profilePicture;
+        const metadata = asRecord(fallbackData.metadata);
+        const profilePicture = metadata?.profilePicture;
         if (typeof profilePicture === 'string' && profilePicture.trim()) {
             return profilePicture.trim();
         }
@@ -67,9 +95,10 @@ function createTikTokEventFactory(options = {}) {
         return DEFAULT_AVATAR_URL;
     };
 
-    const resolveMessageParts = (normalized = {}) => {
-        const sourceParts = Array.isArray(normalized?.message?.parts)
-            ? normalized.message.parts
+    const resolveMessageParts = (normalized: Record<string, unknown> = {}) => {
+        const normalizedMessage = asRecord(normalized.message);
+        const sourceParts = Array.isArray(normalizedMessage?.parts)
+            ? normalizedMessage.parts
             : [];
 
         return getValidMessageParts({ message: { parts: sourceParts } })
@@ -96,13 +125,15 @@ function createTikTokEventFactory(options = {}) {
             });
     };
 
-    const resolveMessageText = (normalized = {}) => {
-        if (typeof normalized?.message === 'string') {
-            return normalized.message.trim();
+    const resolveMessageText = (normalized: Record<string, unknown> = {}) => {
+        const normalizedMessage = normalized.message;
+        if (typeof normalizedMessage === 'string') {
+            return normalizedMessage.trim();
         }
 
-        if (normalized?.message && typeof normalized.message === 'object' && typeof normalized.message.text === 'string') {
-            return normalized.message.text.trim();
+        const normalizedMessageRecord = asRecord(normalizedMessage);
+        if (typeof normalizedMessageRecord?.text === 'string') {
+            return normalizedMessageRecord.text.trim();
         }
 
         return '';

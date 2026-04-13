@@ -2,7 +2,56 @@ import { safeSetTimeout as defaultSafeSetTimeout } from '../../../utils/timeout-
 import { safeObjectStringify as defaultSafeObjectStringify } from '../../../utils/logger-utils';
 import { formatCoinAmount as defaultFormatCoinAmount } from '../../../utils/tiktok-data-extraction';
 
-type UnknownRecord = Record<string, unknown>;
+type TikTokGiftPayload = Record<string, unknown> & {
+    platform?: unknown;
+    userId?: unknown;
+    username?: unknown;
+    giftType?: unknown;
+    giftCount?: unknown;
+    repeatCount?: unknown;
+    unitAmount?: unknown;
+    amount?: unknown;
+    currency?: unknown;
+    id?: unknown;
+    timestamp?: unknown;
+    comboType?: unknown;
+    repeatEnd?: unknown;
+    groupId?: unknown;
+    avatarUrl?: unknown;
+    giftImageUrl?: unknown;
+    sourceType?: unknown;
+    rawData?: unknown;
+};
+
+type TikTokAggregatedGiftPayload = {
+    platform: unknown;
+    userId: string;
+    username: string;
+    avatarUrl: string;
+    giftImageUrl: string;
+    giftType: string;
+    giftCount: number;
+    repeatCount: number;
+    unitAmount: number;
+    amount: number;
+    currency: string;
+    id: string;
+    timestamp: string;
+    isAggregated: true;
+    aggregatedCount: number;
+    enhancedGiftData: {
+        username: string;
+        userId: string;
+        giftType: string;
+        giftCount: number;
+        amount: number;
+        currency: string;
+        isAggregated: boolean;
+        isStreakCompleted: boolean;
+        originalData: unknown;
+    };
+    sourceType?: string;
+};
 
 type TikTokGiftAggregationState = {
     platform: unknown;
@@ -15,7 +64,7 @@ type TikTokGiftAggregationState = {
     totalCount: number;
     timer: ReturnType<typeof setTimeout> | number | null;
     unitAmount: number;
-    lastGift: UnknownRecord;
+    lastGift: TikTokGiftPayload;
     lastId: string;
     lastTimestamp: string;
     sourceType?: string;
@@ -34,7 +83,7 @@ type TikTokGiftAggregatorPlatform = {
     errorHandler: {
         handleEventProcessingError: (error: unknown, context: string, payload: unknown, message: string) => void;
     };
-    _handleGift: (payload: UnknownRecord) => Promise<unknown>;
+    _handleGift: (payload: TikTokAggregatedGiftPayload | TikTokGiftPayload) => Promise<unknown>;
 };
 
 type TikTokGiftAggregatorOptions = {
@@ -85,7 +134,7 @@ function createTikTokGiftAggregator(options: TikTokGiftAggregatorOptions = {}) {
         platform.giftAggregation = {};
     };
 
-    const handleStandardGift = async (gift: UnknownRecord) => {
+    const handleStandardGift = async (gift: TikTokGiftPayload) => {
         if (!gift || typeof gift !== 'object') {
             throw new Error('TikTok gift aggregation requires gift payload');
         }
@@ -246,25 +295,7 @@ function createTikTokGiftAggregator(options: TikTokGiftAggregatorOptions = {}) {
                     return;
                 }
 
-                const giftPayload: {
-                    platform: unknown;
-                    userId: string;
-                    username: string;
-                    avatarUrl: string;
-                    giftImageUrl: string;
-                    giftType: string;
-                    giftCount: number;
-                    repeatCount: number;
-                    unitAmount: number;
-                    amount: number;
-                    currency: string;
-                    id: string;
-                    timestamp: string;
-                    isAggregated: boolean;
-                    aggregatedCount: number;
-                    enhancedGiftData: Record<string, unknown>;
-                    sourceType?: string;
-                } = {
+                const giftPayload: TikTokAggregatedGiftPayload = {
                     platform: aggregationData.platform,
                     userId: aggregationData.userId,
                     username: finalUsername,

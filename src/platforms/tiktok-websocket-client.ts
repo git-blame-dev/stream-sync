@@ -6,7 +6,7 @@ import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 const nodeRequire = createRequire(__filename);
 const defaultWebSocketCtor = nodeRequire('ws');
 
-type UnknownRecord = Record<string, unknown>;
+type JsonObject = Record<string, unknown>;
 
 type RoomInfo = {
     roomId: string | null;
@@ -14,19 +14,34 @@ type RoomInfo = {
     status?: unknown;
 };
 
+type WebSocketClientSocket = {
+    on: (eventName: string, handler: (...args: unknown[]) => void) => void;
+    ping: () => void;
+    close: (code?: number, reason?: string) => void;
+    readyState: number;
+};
+
+type WebSocketClientConstructor = {
+    new (url: string, options?: unknown): WebSocketClientSocket;
+    OPEN?: number;
+};
+
 type TikTokWebSocketClientOptions = {
     apiKey?: string | null;
     logger?: unknown;
-    WebSocketCtor?: new (url: string, options?: unknown) => {
-        on: (eventName: string, handler: (...args: unknown[]) => void) => void;
-        ping: () => void;
-        close: (code?: number, reason?: string) => void;
-        readyState: number;
-    };
+    WebSocketCtor?: WebSocketClientConstructor;
 };
 
 function getErrorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
+}
+
+function asJsonObject(value: unknown): JsonObject | null {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        return null;
+    }
+
+    return value as JsonObject;
 }
 
 class TikTokWebSocketClient extends EventEmitter {
@@ -34,18 +49,8 @@ class TikTokWebSocketClient extends EventEmitter {
     apiKey: string | null;
     logger: unknown;
     errorHandler: ReturnType<typeof createPlatformErrorHandler>;
-    WebSocketCtor: new (url: string, options?: unknown) => {
-        on: (eventName: string, handler: (...args: unknown[]) => void) => void;
-        ping: () => void;
-        close: (code?: number, reason?: string) => void;
-        readyState: number;
-    };
-    ws: {
-        on: (eventName: string, handler: (...args: unknown[]) => void) => void;
-        ping: () => void;
-        close: (code?: number, reason?: string) => void;
-        readyState: number;
-    } | null;
+    WebSocketCtor: WebSocketClientConstructor;
+    ws: WebSocketClientSocket | null;
     isConnecting: boolean;
     isConnected: boolean;
     roomId: string | null;
@@ -130,8 +135,10 @@ class TikTokWebSocketClient extends EventEmitter {
                     this.stats.messageCount++;
                     this.stats.lastMessageTime = Date.now();
                     try {
-                        const payload = JSON.parse(String(data));
-                        if (payload.messages && Array.isArray(payload.messages)) {
+                        const parsedPayload: unknown = JSON.parse(String(data));
+                        const payload = asJsonObject(parsedPayload);
+
+                        if (Array.isArray(payload?.messages)) {
                             payload.messages.forEach((msg: unknown) => {
                                 this.handleEvent(msg, (roomInfo) => {
                                     if (!connectResolved && roomInfo) {
@@ -142,7 +149,7 @@ class TikTokWebSocketClient extends EventEmitter {
                                 });
                             });
                         } else {
-                            this.handleEvent(payload, (roomInfo) => {
+                            this.handleEvent(payload || parsedPayload, (roomInfo) => {
                                 if (!connectResolved && roomInfo) {
                                     connectResolved = true;
                                     this.roomId = roomInfo.roomId;
@@ -217,17 +224,14 @@ class TikTokWebSocketClient extends EventEmitter {
     }
 
     handleEvent(message: unknown, connectCallback?: (roomInfo: RoomInfo) => void): void {
-        const safeMessage = (message && typeof message === 'object') ? (message as UnknownRecord) : {};
+        const safeMessage = asJsonObject(message) || {};
         const eventType = safeMessage.type;
         const eventData = safeMessage.data || safeMessage;
 
         if (eventType === 'connected' || eventType === 'roomInfo') {
-            const typedEventData = (eventData && typeof eventData === 'object') ? (eventData as UnknownRecord) : {};
-            const roomInfoData = (typedEventData.roomInfo && typeof typedEventData.roomInfo === 'object')
-                ? (typedEventData.roomInfo as UnknownRecord)
-                : null;
-            const roomId = roomInfoData?.id ||
-                typedEventData.roomId ||
+            const typedEventData = asJsonObject(eventData) || {};
+            const roomInfoData = asJsonObject(typedEventData.roomInfo);
+            const roomId = roomInfoData?.id || typedEventData.roomId ||
                 'unknown';
 
             const roomInfo: RoomInfo = {
@@ -268,10 +272,8 @@ class TikTokWebSocketClient extends EventEmitter {
             case 'social':
             case 'WebcastSocialMessage':
                 this.emit('social', eventData);
-                const socialEventData = (eventData && typeof eventData === 'object') ? (eventData as UnknownRecord) : {};
-                const displayText = (socialEventData.displayText && typeof socialEventData.displayText === 'object')
-                    ? (socialEventData.displayText as UnknownRecord)
-                    : {};
+                const socialEventData = asJsonObject(eventData) || {};
+                const displayText = asJsonObject(socialEventData.displayText) || {};
                 if (socialEventData.actionType === 'follow'
                     || socialEventData.displayType === 'follow'
                     || String(displayText.defaultPattern || '').toLowerCase().includes('follow')) {
@@ -308,9 +310,11 @@ class TikTokWebSocketClient extends EventEmitter {
             case 'WebcastLiveIntroMessage':
                 this.emit('liveIntro', eventData);
                 break;
-            case 'error':
-                this.emit('error', new Error(String((eventData as UnknownRecord)?.message || 'Unknown error')));
+            case 'error': {
+                const errorData = asJsonObject(eventData);
+                this.emit('error', new Error(String(errorData?.message || 'Unknown error')));
                 break;
+            }
             default:
                 this.emit(String(eventType), eventData);
                 this.emit('rawData', { type: String(eventType), data: eventData });
@@ -358,7 +362,7 @@ class TikTokWebSocketClient extends EventEmitter {
             clearInterval(this.pingInterval);
         }
         this.pingInterval = safeSetInterval(() => {
-            const openState = (this.WebSocketCtor as unknown as { OPEN?: number }).OPEN ?? 1;
+            const openState = this.WebSocketCtor.OPEN ?? 1;
             if (this.ws && this.ws.readyState === openState) {
                 this.ws.ping();
             }

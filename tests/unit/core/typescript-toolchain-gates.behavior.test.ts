@@ -1875,6 +1875,25 @@ describe('TypeScript toolchain migration gates behavior', () => {
         }
     });
 
+    it('keeps tiktok strictness contracts explicit and narrowed', () => {
+        const modulePaths = [
+            'src/platforms/tiktok.ts',
+            'src/platforms/tiktok-websocket-client.ts',
+            'src/platforms/tiktok/connections/tiktok-connection-orchestrator.ts',
+            'src/platforms/tiktok/events/event-factory.ts',
+            'src/platforms/tiktok/events/event-normalizer.ts',
+            'src/platforms/tiktok/events/event-router.ts',
+            'src/platforms/tiktok/monetization/gift-aggregator.ts'
+        ];
+
+        for (const modulePath of modulePaths) {
+            const content = readFileSync(join(repoRoot, modulePath), 'utf8');
+
+            expect(content).not.toContain(': any');
+            expect(content).not.toContain('UnknownRecord');
+        }
+    });
+
     it('keeps tiktok platform shell module free of commonjs module syntax', () => {
         const content = readFileSync(join(repoRoot, 'src/platforms/tiktok.ts'), 'utf8');
 
