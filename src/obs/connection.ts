@@ -1,4 +1,4 @@
-import { createRequire } from 'node:module';
+import OBSWebSocket from 'obs-websocket-js';
 import { logger } from '../core/logging';
 import { ERROR_MESSAGES as DEFAULT_ERROR_MESSAGES } from '../core/constants';
 import { secrets } from '../core/secrets';
@@ -47,10 +47,7 @@ type ManagerOwnedDependencyKeys = 'obs' | 'OBSWebSocket' | 'constants';
 
 const MANAGER_OWNED_DEPENDENCY_KEYS: ManagerOwnedDependencyKeys[] = ['obs', 'OBSWebSocket', 'constants'];
 
-const nodeRequire = createRequire(import.meta.url);
-const { default: OBSWebSocket } = nodeRequire('obs-websocket-js') as {
-    default: new () => ObsSocketLike;
-};
+const OBSWebSocketCtor = OBSWebSocket as new () => ObsSocketLike;
 
 // Dependency injection support
 class OBSConnectionManager {
@@ -89,7 +86,7 @@ class OBSConnectionManager {
         this.logger = logger;
         this.log = logger;
         this.constants = dependencies.constants || { ERROR_MESSAGES: DEFAULT_ERROR_MESSAGES };
-        this.OBSWebSocket = dependencies.OBSWebSocket || OBSWebSocket;
+        this.OBSWebSocket = dependencies.OBSWebSocket || OBSWebSocketCtor;
 
         const { ERROR_MESSAGES } = this.constants;
         this.ERROR_MESSAGES = ERROR_MESSAGES;

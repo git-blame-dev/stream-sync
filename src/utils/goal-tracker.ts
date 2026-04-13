@@ -1,12 +1,7 @@
 import fs from 'node:fs';
-import { createRequire } from 'node:module';
+import { config as defaultConfig } from '../core/config';
 import { logger as defaultLogger } from '../core/logging';
 import { createPlatformErrorHandler } from './platform-error-handler';
-
-const nodeRequire = createRequire(import.meta.url);
-const { config: defaultConfig } = nodeRequire('../core/config') as {
-    config: GoalTrackerConfig;
-};
 
 type GoalPlatform = 'tiktok' | 'youtube' | 'twitch';
 
@@ -66,7 +61,7 @@ class GoalTracker {
 
     constructor(dependencies: GoalTrackerDependencies = {}) {
         this.logger = dependencies.logger || defaultLogger;
-        this.config = dependencies.config || defaultConfig;
+        this.config = (dependencies.config || defaultConfig) as GoalTrackerConfig;
         this.fileSystem = dependencies.fileSystem || fs;
         this.errorHandler = createPlatformErrorHandler(this.logger, 'goal-tracker');
         this.goalState = createDefaultGoalState();

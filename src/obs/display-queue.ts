@@ -1,7 +1,7 @@
-import { createRequire } from 'node:module';
 import { logger } from '../core/logging';
 import { PRIORITY_LEVELS, NOTIFICATION_CONFIGS } from '../core/constants';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
+import MessageTTSHandler from '../utils/message-tts-handler.js';
 import { safeSetTimeout, safeDelay } from '../utils/timeout-validator';
 import { validateDisplayConfig } from './display-config-validator';
 import { DisplayQueueState } from './display-queue-state';
@@ -10,15 +10,95 @@ import { DisplayRenderer } from './display-renderer';
 import { getDefaultGoalsManager } from './goals';
 import { getDefaultSourcesManager } from './sources';
 
-const nodeRequire = createRequire(import.meta.url);
-const MessageTTSHandler = nodeRequire('../utils/message-tts-handler') as {
-    createTTSStages: (data: Record<string, unknown>) => Array<{ text: string; delay: number }>;
+type QueueMessagePart = {
+    text?: unknown;
 };
 
-let notificationTypeSet = null;
+type QueueMessage = {
+    text?: unknown;
+    parts?: QueueMessagePart[];
+};
+
+type QueueItemData = Record<string, unknown> & {
+    username?: string;
+    userId?: string;
+    message?: unknown;
+    timestamp?: unknown;
+    displayMessage?: unknown;
+    amount?: unknown;
+    currency?: unknown;
+    giftType?: unknown;
+    giftCount?: unknown;
+    repeatCount?: unknown;
+    tier?: unknown;
+    months?: unknown;
+    isError?: boolean;
+};
+
+type QueueItem = {
+    type: string;
+    platform: string;
+    data: QueueItemData;
+    priority?: number;
+    holdDurationMs?: number;
+    [key: string]: unknown;
+};
+
+type DisplayQueueConfig = {
+    autoProcess?: boolean;
+    maxQueueSize?: number;
+    ttsEnabled?: boolean;
+    timing?: {
+        transitionDelay?: number;
+        notificationClearDelay?: number;
+    };
+    chat?: {
+        sourceName?: string;
+        sceneName?: string;
+        groupName?: string;
+        platformLogos?: Record<string, unknown>;
+    };
+    notification?: {
+        sourceName?: string;
+        sceneName?: string;
+        groupName?: string;
+        platformLogos?: Record<string, unknown>;
+    };
+    [platform: string]: unknown;
+};
+
+type DisplayQueueConstants = {
+    PRIORITY_LEVELS?: Record<string, number>;
+    [key: string]: unknown;
+};
+
+type DisplayQueueEventBus = {
+    emit?: (eventName: string, payload: Record<string, unknown>) => void;
+} | null;
+
+type DisplayQueueDependencies = {
+    sourcesManager?: ReturnType<typeof getDefaultSourcesManager>;
+    goalsManager?: ReturnType<typeof getDefaultGoalsManager>;
+    delay?: (ms: number) => Promise<void>;
+    giftAnimationResolver?: {
+        resolveFromNotificationData: (data: unknown) => Promise<{
+            durationMs: number;
+            mediaFilePath: string;
+            mediaContentType: string;
+            animationConfig: Record<string, unknown>;
+        } | null>;
+    };
+};
+
+type DisplayQueueObsManager = {
+    isReady: () => Promise<boolean>;
+    call: (requestType: string, payload: Record<string, unknown>) => Promise<unknown>;
+};
+
+let notificationTypeSet: Set<string> | null = null;
 const CHAT_TYPE = 'chat';
 
-function isNotificationType(type) {
+function isNotificationType(type: string) {
     if (typeof type !== 'string') {
         return false;
     }
@@ -30,22 +110,23 @@ function isNotificationType(type) {
     return notificationTypeSet.has(type);
 }
 
-function isChatType(type) {
+function isChatType(type: string) {
     return type === CHAT_TYPE;
 }
 
-function resolveChatMessageText(message) {
+function resolveChatMessageText(message: unknown) {
     if (typeof message === 'string') {
         return message;
     }
 
     if (message && typeof message === 'object') {
-        if (typeof message.text === 'string') {
-            return message.text;
+        const messageObject = message as QueueMessage;
+        if (typeof messageObject.text === 'string') {
+            return messageObject.text;
         }
 
-        if (Array.isArray(message.parts)) {
-            return message.parts
+        if (Array.isArray(messageObject.parts)) {
+            return messageObject.parts
                 .map((part) => (part && typeof part === 'object' && typeof part.text === 'string' ? part.text : ''))
                 .join('');
         }
@@ -56,7 +137,7 @@ function resolveChatMessageText(message) {
 
 let displayQueueErrorHandler = logger ? createPlatformErrorHandler(logger, 'display-queue') : null;
 
-function handleDisplayQueueError(message, error = null, payload = null) {
+function handleDisplayQueueError(message: string, error: unknown = null, payload: Record<string, unknown> | null = null) {
     if (!displayQueueErrorHandler && logger) {
         displayQueueErrorHandler = createPlatformErrorHandler(logger, 'display-queue');
     }
@@ -71,13 +152,34 @@ function handleDisplayQueueError(message, error = null, payload = null) {
     }
 }
 
-function defaultDelay(ms) {
+function defaultDelay(ms: number) {
     const numMs = Number(ms);
     return safeDelay(numMs, Number.isFinite(numMs) ? numMs : 5000, 'DisplayQueue delay');
 }
 
 class DisplayQueue {
-    constructor(obsManager, config = {}, constants = {}, eventBus = null, dependencies = {}) {
+    queue: QueueItem[];
+    isProcessing: boolean;
+    isRetryScheduled: boolean;
+    currentDisplay: QueueItem | null;
+    obsManager: DisplayQueueObsManager;
+    constants: DisplayQueueConstants;
+    sourcesManager: ReturnType<typeof getDefaultSourcesManager>;
+    goalsManager: ReturnType<typeof getDefaultGoalsManager>;
+    eventBus: DisplayQueueEventBus;
+    delay: (ms: number) => Promise<void>;
+    config: DisplayQueueConfig;
+    state: DisplayQueueState;
+    renderer: DisplayRenderer;
+    effects: DisplayQueueEffects;
+
+    constructor(
+        obsManager: DisplayQueueObsManager,
+        config: DisplayQueueConfig = {},
+        constants: DisplayQueueConstants = {},
+        eventBus: DisplayQueueEventBus = null,
+        dependencies: DisplayQueueDependencies = {}
+    ) {
         if (!obsManager) {
             throw new Error('DisplayQueue requires OBSConnectionManager instance');
         }
@@ -99,15 +201,15 @@ class DisplayQueue {
                 maxQueueSize: this.config.maxQueueSize,
                 getPriority: (type) => this.getTypePriority(type)
             });
-            this.queue = this.state.queue;
+            this.queue = this.state.queue as QueueItem[];
 
             this.renderer = new DisplayRenderer({
                 obsManager: this.obsManager,
-                sourcesManager: this.sourcesManager,
-                config: this.config,
+                sourcesManager: this.sourcesManager as ConstructorParameters<typeof DisplayRenderer>[0]['sourcesManager'],
+                config: this.config as ConstructorParameters<typeof DisplayRenderer>[0]['config'],
                 delay: this.delay,
                 handleDisplayQueueError,
-                extractUsername: (data) => this.extractUsername(data),
+                extractUsername: (data) => this.extractUsername(data) || '',
                 validateDisplayConfig,
                 isNotificationType,
                 isChatType
@@ -115,10 +217,10 @@ class DisplayQueue {
 
             this.effects = new DisplayQueueEffects({
                 obsManager: this.obsManager,
-                sourcesManager: this.sourcesManager,
-                goalsManager: this.goalsManager,
-                eventBus: this.eventBus,
-                config: this.config,
+                sourcesManager: this.sourcesManager as ConstructorParameters<typeof DisplayQueueEffects>[0]['sourcesManager'],
+                goalsManager: this.goalsManager as ConstructorParameters<typeof DisplayQueueEffects>[0]['goalsManager'],
+                eventBus: this.eventBus as ConstructorParameters<typeof DisplayQueueEffects>[0]['eventBus'],
+                config: this.config as ConstructorParameters<typeof DisplayQueueEffects>[0]['config'],
                 delay: this.delay,
                 handleDisplayQueueError,
                 extractUsername: (data) => this.extractUsername(data),
@@ -130,11 +232,11 @@ class DisplayQueue {
         }
     }
 
-    get lastChatItem() {
-        return this.state ? this.state.lastChatItem : null;
+    get lastChatItem(): QueueItem | null {
+        return this.state ? this.state.lastChatItem as QueueItem | null : null;
     }
 
-    set lastChatItem(value) {
+    set lastChatItem(value: QueueItem | null) {
         if (this.state) {
             this.state.lastChatItem = value;
         }
@@ -144,34 +246,35 @@ class DisplayQueue {
         return this.effects.isTTSEnabled();
     }
 
-    async setTTSText(text) {
+    async setTTSText(text: string) {
         await this.effects.setTTSText(text);
     }
 
-    getTypePriority(type) {
+    getTypePriority(type: string) {
         if (!this.constants || !this.constants.PRIORITY_LEVELS) {
             logger.warn('[Display Queue] PRIORITY_LEVELS not available, using default priority');
             return PRIORITY_LEVELS.CHAT;
         }
 
+        const priorityLevels = this.constants.PRIORITY_LEVELS;
         const typeToPriorityMap = {
-            'platform:paypiggy': this.constants.PRIORITY_LEVELS.PAYPIGGY,
-            'platform:gift': this.constants.PRIORITY_LEVELS.GIFT,
-            'platform:follow': this.constants.PRIORITY_LEVELS.FOLLOW,
-            'greeting': this.constants.PRIORITY_LEVELS.GREETING,
-            'farewell': this.constants.PRIORITY_LEVELS.FAREWELL,
-            'platform:raid': this.constants.PRIORITY_LEVELS.RAID,
-            'platform:share': this.constants.PRIORITY_LEVELS.SHARE,
-            'platform:envelope': this.constants.PRIORITY_LEVELS.ENVELOPE,
-            'platform:giftpaypiggy': this.constants.PRIORITY_LEVELS.GIFTPAYPIGGY,
-            'chat': this.constants.PRIORITY_LEVELS.CHAT,
-            'command': this.constants.PRIORITY_LEVELS.COMMAND
+            'platform:paypiggy': priorityLevels.PAYPIGGY,
+            'platform:gift': priorityLevels.GIFT,
+            'platform:follow': priorityLevels.FOLLOW,
+            'greeting': priorityLevels.GREETING,
+            'farewell': priorityLevels.FAREWELL,
+            'platform:raid': priorityLevels.RAID,
+            'platform:share': priorityLevels.SHARE,
+            'platform:envelope': priorityLevels.ENVELOPE,
+            'platform:giftpaypiggy': priorityLevels.GIFTPAYPIGGY,
+            'chat': priorityLevels.CHAT,
+            'command': priorityLevels.COMMAND
         };
-        
-        return typeToPriorityMap[type] || this.constants.PRIORITY_LEVELS.CHAT;
+
+        return typeToPriorityMap[type as keyof typeof typeToPriorityMap] || priorityLevels.CHAT;
     }
     
-    addItem(item) {
+    addItem(item: QueueItem) {
         const { insertIndex, removedChatCount } = this.state.addItem(item);
         if (removedChatCount > 0) {
             logger.debug(`[Display Queue] Removing ${removedChatCount} stale chat messages to show latest`, 'display-queue');
@@ -183,7 +286,7 @@ class DisplayQueue {
         }
     }
 
-    emitDisplayRow(item) {
+    emitDisplayRow(item: QueueItem) {
         if (!this.eventBus || typeof this.eventBus.emit !== 'function') {
             return;
         }
@@ -196,7 +299,7 @@ class DisplayQueue {
         });
     }
     
-    async processChatMessage(chatItem) {
+    async processChatMessage(chatItem: QueueItem) {
         if (!chatItem || chatItem.type !== 'chat') {
             throw new Error('Invalid chat item: must be type "chat"');
         }
@@ -210,6 +313,8 @@ class DisplayQueue {
     
     async processQueue() {
         if (this.isProcessing || this.isRetryScheduled || !this.obsManager) return;
+
+        const transitionDelay = this.config.timing?.transitionDelay ?? 0;
 
         this.isRetryScheduled = true;
 
@@ -239,7 +344,10 @@ class DisplayQueue {
         
         try {
             while (this.queue.length > 0) {
-                const item = this.state.shift();
+                const item = this.state.shift() as QueueItem | undefined;
+                if (!item) {
+                    continue;
+                }
                 this.currentDisplay = item;
                 logger.debug(`[Display Queue] Processing ${item.type} item. Remaining: ${this.queue.length}`, 'display-queue');
                 
@@ -257,7 +365,7 @@ class DisplayQueue {
 
                         await this.delay(this.getDuration(item));
                         await this.hideCurrentDisplay(item);
-                        await this.delay(this.config.timing.transitionDelay);
+                        await this.delay(transitionDelay);
                         this.currentDisplay = null;
                         continue;
                     }
@@ -270,7 +378,7 @@ class DisplayQueue {
                         }
                     }
 
-                    await this.delay(this.config.timing.transitionDelay);
+                    await this.delay(transitionDelay);
                     this.currentDisplay = null;
 
                 } catch (err) {
@@ -297,7 +405,7 @@ class DisplayQueue {
         }
     }
     
-    async displayItem(item) {
+    async displayItem(item: QueueItem) {
         switch (item.type) {
             case 'chat':
                 return await this.displayChatItem(item);
@@ -306,7 +414,7 @@ class DisplayQueue {
         }
     }
     
-    async displayChatItem(item) {
+    async displayChatItem(item: QueueItem) {
         const displayed = await this.renderer.displayChatItem(item);
         if (displayed === false) {
             return false;
@@ -315,7 +423,7 @@ class DisplayQueue {
         return true;
     }
 
-    async displayNotificationItem(item) {
+    async displayNotificationItem(item: QueueItem) {
         const displayed = await this.renderer.displayNotificationItem(item);
         if (displayed === false) {
             return false;
@@ -326,11 +434,11 @@ class DisplayQueue {
         return true;
     }
 
-    async handleNotificationEffects(item) {
+    async handleNotificationEffects(item: QueueItem) {
         return this.effects.handleNotificationEffects(item);
     }
 
-    buildVfxMatch(config) {
+    buildVfxMatch(config: Record<string, unknown>) {
         return this.effects.buildVfxMatch(config);
     }
 
@@ -338,15 +446,15 @@ class DisplayQueue {
         return this.effects.waitForVfxCompletion(match, options);
     }
     
-    async emitVfxFromConfig(item, username) {
+    async emitVfxFromConfig(item: QueueItem, username: string | null) {
         return this.effects.emitVfxFromConfig(item, username);
     }
 
-    async handleGiftEffects(item, ttsStages) {
+    async handleGiftEffects(item: QueueItem, ttsStages: Array<{ text: string; delay: number; type?: string }>) {
         return this.effects.handleGiftEffects(item, ttsStages);
     }
     
-    async handleSequentialEffects(item, ttsStages) {
+    async handleSequentialEffects(item: QueueItem, ttsStages: Array<{ text: string; delay: number; type?: string }>) {
         return this.effects.handleSequentialEffects(item, ttsStages);
     }
 
@@ -358,7 +466,7 @@ class DisplayQueue {
         return this.renderer.displayLingeringChat(this.lastChatItem);
     }
     
-    async hideCurrentDisplay(item) {
+    async hideCurrentDisplay(item: QueueItem | null) {
         return this.renderer.hideCurrentDisplay(item);
     }
     
@@ -388,7 +496,7 @@ class DisplayQueue {
         logger.info('[Display Queue] Processing stopped and queue cleared.');
     }
 
-    getDuration(item) {
+    getDuration(item: QueueItem) {
         const holdDurationMs = Number(item?.holdDurationMs);
         const normalizedHoldDurationMs = Number.isFinite(holdDurationMs) && holdDurationMs > 0
             ? holdDurationMs
@@ -412,7 +520,7 @@ class DisplayQueue {
             return normalizedHoldDurationMs;
         }
 
-        const estimateSpeechMs = (text) => {
+        const estimateSpeechMs = (text: unknown) => {
             if (!text || typeof text !== 'string') return 0;
             const words = text.trim().split(/\s+/).filter(Boolean).length;
             return 400 + (words * 170);
@@ -435,7 +543,7 @@ class DisplayQueue {
         return Math.max(ttsWindowMs, normalizedHoldDurationMs);
     }
 
-    extractUsername(data) {
+    extractUsername(data: unknown): string | null {
         if (!data || typeof data !== 'object') {
             logger.warn('[DisplayQueue] extractUsername: Invalid data object; missing username field.', 'display-queue', {
                 callerMethod: 'extractUsername',
@@ -444,14 +552,15 @@ class DisplayQueue {
             return null;
         }
 
-        const username = data.username;
-        if (data.isError === true && (typeof username !== 'string' || !username.trim())) {
+        const dataRecord = data as QueueItemData;
+        const username = dataRecord.username;
+        if (dataRecord.isError === true && (typeof username !== 'string' || !username.trim())) {
             return null;
         }
         if (typeof username !== 'string' || !username.trim()) {
             logger.warn('[DisplayQueue] extractUsername: Missing username field in notification data.', 'display-queue', {
                 callerMethod: 'extractUsername',
-                dataKeys: Object.keys(data)
+                dataKeys: Object.keys(dataRecord)
             });
             return null;
         }
@@ -459,7 +568,7 @@ class DisplayQueue {
         return username.trim();
     }
 
-    isItemDisplayedToUser(type) {
+    isItemDisplayedToUser(type: string) {
         try {
             if (isChatType(type)) {
                 const isChatCurrentlyDisplayed = this.currentDisplay && isChatType(this.currentDisplay.type);
@@ -536,7 +645,7 @@ class DisplayQueue {
         };
     }
 
-    _formatChatContent(displayItem) {
+    _formatChatContent(displayItem: QueueItem) {
         const username = this.extractUsername(displayItem.data);
         const messageText = resolveChatMessageText(displayItem.data.message);
         const content = `${username}: ${messageText}`;
@@ -552,7 +661,7 @@ class DisplayQueue {
         };
     }
 
-    _formatNotificationContent(displayItem) {
+    _formatNotificationContent(displayItem: QueueItem) {
         const username = this.extractUsername(displayItem.data);
         const content = displayItem.data.displayMessage || `${username} ${displayItem.type}`;
 
@@ -566,7 +675,7 @@ class DisplayQueue {
         };
     }
 
-    _formatGenericContent(displayItem) {
+    _formatGenericContent(displayItem: QueueItem) {
         const username = this.extractUsername(displayItem.data);
         const content = displayItem.data.displayMessage || 
                        displayItem.data.message || 
@@ -581,7 +690,7 @@ class DisplayQueue {
         };
     }
 
-    _isContentClean(content) {
+    _isContentClean(content: unknown) {
         if (!content || typeof content !== 'string') return false;
 
         const technicalArtifacts = [
@@ -602,8 +711,8 @@ class DisplayQueue {
         return !technicalArtifacts.some(artifact => lowerContent.includes(artifact.toLowerCase()));
     }
 
-    _extractNotificationDetails(data) {
-        const details = {};
+    _extractNotificationDetails(data: QueueItemData) {
+        const details: Record<string, unknown> = {};
 
         if (data.amount !== undefined) details.amount = data.amount;
         if (data.currency) details.currency = data.currency;
@@ -618,9 +727,15 @@ class DisplayQueue {
 
 }
 
-let displayQueueInstance = null;
+let displayQueueInstance: DisplayQueue | null = null;
 
-function createDisplayQueue(obsManager, config = {}, constants = {}, eventBus = null, dependencies = {}) {
+function createDisplayQueue(
+    obsManager: DisplayQueueObsManager,
+    config: DisplayQueueConfig = {},
+    constants: DisplayQueueConstants = {},
+    eventBus: DisplayQueueEventBus = null,
+    dependencies: DisplayQueueDependencies = {}
+) {
     return new DisplayQueue(obsManager, config, constants, eventBus, dependencies);
 }
 
@@ -628,7 +743,13 @@ function resetDisplayQueue() {
     displayQueueInstance = null;
 }
 
-function initializeDisplayQueue(obsManager, config = {}, constants = {}, eventBus = null, dependencies = {}) {
+function initializeDisplayQueue(
+    obsManager: DisplayQueueObsManager,
+    config: DisplayQueueConfig = {},
+    constants: DisplayQueueConstants = {},
+    eventBus: DisplayQueueEventBus = null,
+    dependencies: DisplayQueueDependencies = {}
+) {
     if (!obsManager) {
         throw new Error('DisplayQueue requires OBSConnectionManager instance');
     }
@@ -636,7 +757,7 @@ function initializeDisplayQueue(obsManager, config = {}, constants = {}, eventBu
     if (!displayQueueInstance) {
         displayQueueInstance = createDisplayQueue(obsManager, config, constants, eventBus, dependencies);
         logger.debug('Display Queue system initialized.');
-    } else if (dependencies && typeof dependencies === 'object') {
+    } else if (dependencies && typeof dependencies === 'object' && displayQueueInstance) {
         displayQueueInstance.obsManager = obsManager;
         displayQueueInstance.renderer.obsManager = obsManager;
         displayQueueInstance.effects.obsManager = obsManager;
