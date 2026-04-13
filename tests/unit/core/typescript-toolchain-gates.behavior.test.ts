@@ -1957,6 +1957,79 @@ describe('TypeScript toolchain migration gates behavior', () => {
         }
     });
 
+    it('keeps platform-event and twitch eventsub strictness contracts explicit and narrowed', () => {
+        const modulePaths = [
+            'src/interfaces/PlatformEvents.ts',
+            'src/platforms/twitch-eventsub.ts',
+            'src/platforms/twitch.ts',
+            'src/platforms/twitch/events/event-normalizer.ts',
+            'src/platforms/twitch/events/event-router.ts'
+        ];
+        const forbiddenLegacySignatures: Array<{ path: string; signatures: string[] }> = [
+            {
+                path: 'src/interfaces/PlatformEvents.ts',
+                signatures: [
+                    'function resolveAvatarUrl(avatarUrl)',
+                    'validate(event) {',
+                    '_validateFieldType(value, schema, fieldName)',
+                    'createChatMessage(params) {',
+                    'normalizeMessage(platform, data) {',
+                    'static createChatMessageEvent(platform, identity, message, metadata = {})',
+                    'platform(platform) {'
+                ]
+            },
+            {
+                path: 'src/platforms/twitch-eventsub.ts',
+                signatures: [
+                    'constructor(config, dependencies = {})',
+                    '_isDuplicateMessageId(metadata) {',
+                    'handleWebSocketMessage(message) {',
+                    'sendMessage(message) {',
+                    "_logEventSubError(message, error = null, eventType = 'twitch-eventsub', payload = null)"
+                ]
+            },
+            {
+                path: 'src/platforms/twitch.ts',
+                signatures: [
+                    'constructor(config, dependencies = {})',
+                    'async initialize(handlers) {',
+                    '_resolvePlatformEventType(eventType) {',
+                    "_logPlatformError(message, error = null, eventType = 'twitch-platform', payload = null)"
+                ]
+            },
+            {
+                path: 'src/platforms/twitch/events/event-normalizer.ts',
+                signatures: [
+                    'const normalizeMonths = (value) =>',
+                    'const normalizeUserIdentity = (username, userId) =>',
+                    'const applyNotificationMetadataFallback = (event, metadata, subscriptionType) =>'
+                ]
+            },
+            {
+                path: 'src/platforms/twitch/events/event-router.ts',
+                signatures: [
+                    'function createTwitchEventSubEventRouter(options = {})',
+                    'const logRawIfEnabled = (eventType, event, failureStage, failureMessagePrefix) =>',
+                    'const handleNotificationEvent = (subscriptionType, event, metadata) =>'
+                ]
+            }
+        ];
+
+        for (const modulePath of modulePaths) {
+            const content = readFileSync(join(repoRoot, modulePath), 'utf8');
+
+            expect(content).not.toContain(': any');
+            expect(content).not.toContain('UnknownRecord');
+        }
+
+        for (const assertion of forbiddenLegacySignatures) {
+            const content = readFileSync(join(repoRoot, assertion.path), 'utf8');
+            for (const signature of assertion.signatures) {
+                expect(content).not.toContain(signature);
+            }
+        }
+    });
+
     it('keeps tiktok platform shell module free of commonjs module syntax', () => {
         const content = readFileSync(join(repoRoot, 'src/platforms/tiktok.ts'), 'utf8');
 

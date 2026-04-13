@@ -1,13 +1,13 @@
-const normalizeMonths = (value) => {
+const normalizeMonths = (value: unknown): number | undefined => {
     const numericValue = Number(value);
     return Number.isFinite(numericValue) && numericValue > 0 ? numericValue : undefined;
 };
 
-const normalizeUserIdentity = (username, userId) => ({ username, userId });
+const normalizeUserIdentity = (username: string, userId: string): { username: string; userId: string } => ({ username, userId });
 
 const RFC3339_UTC_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z$/;
 
-const normalizeTimestampValue = (value) => {
+const normalizeTimestampValue = (value: unknown): string | null => {
     if (value === undefined || value === null) {
         return null;
     }
@@ -33,7 +33,7 @@ const normalizeTimestampValue = (value) => {
     return new Date(parsedTimestamp).toISOString();
 };
 
-const normalizeCanonicalIdValue = (value) => {
+const normalizeCanonicalIdValue = (value: unknown): string | null => {
     if (typeof value !== 'string') {
         return null;
     }
@@ -42,11 +42,14 @@ const normalizeCanonicalIdValue = (value) => {
     return trimmedValue ? trimmedValue : null;
 };
 
-const metadataMessageTimestamp = (_event, metadata) => normalizeTimestampValue(metadata?.message_timestamp);
+const metadataMessageTimestamp = (
+    _event: Record<string, unknown> | null | undefined,
+    metadata: Record<string, unknown> | null | undefined
+) => normalizeTimestampValue(metadata?.message_timestamp);
 
 const TIMESTAMP_RESOLVERS = {
-    'stream.online': (event) => normalizeTimestampValue(event?.started_at),
-    'channel.follow': (event) => normalizeTimestampValue(event?.followed_at),
+    'stream.online': (event: Record<string, unknown> | null | undefined) => normalizeTimestampValue(event?.started_at),
+    'channel.follow': (event: Record<string, unknown> | null | undefined) => normalizeTimestampValue(event?.followed_at),
     'channel.chat.message': metadataMessageTimestamp,
     'channel.subscribe': metadataMessageTimestamp,
     'channel.subscription.message': metadataMessageTimestamp,
@@ -58,7 +61,11 @@ const TIMESTAMP_RESOLVERS = {
 
 const STRICT_TIMESTAMP_SUBSCRIPTIONS = new Set(Object.keys(TIMESTAMP_RESOLVERS));
 
-const resolveNotificationTimestamp = (event, metadata, subscriptionType) => {
+const resolveNotificationTimestamp = (
+    event: Record<string, unknown> | null | undefined,
+    metadata: Record<string, unknown> | null | undefined,
+    subscriptionType: string
+): string | null => {
     if (!event || typeof event !== 'object') {
         return null;
     }
@@ -67,7 +74,11 @@ const resolveNotificationTimestamp = (event, metadata, subscriptionType) => {
     return resolver ? resolver(event, metadata) : null;
 };
 
-const applyTimestampFallback = (event, metadata, subscriptionType) => {
+const applyTimestampFallback = (
+    event: Record<string, unknown> | null | undefined,
+    metadata: Record<string, unknown> | null | undefined,
+    subscriptionType: string
+) => {
     const resolvedTimestamp = resolveNotificationTimestamp(event, metadata, subscriptionType);
     if (!event || typeof event !== 'object') {
         return event;
@@ -93,7 +104,11 @@ const applyTimestampFallback = (event, metadata, subscriptionType) => {
     return { ...event, timestamp: resolvedTimestamp };
 };
 
-const applyIdFallback = (event, metadata, subscriptionType) => {
+const applyIdFallback = (
+    event: Record<string, unknown> | null | undefined,
+    metadata: Record<string, unknown> | null | undefined,
+    subscriptionType: string
+) => {
     if (!event || typeof event !== 'object') {
         return event;
     }
@@ -116,7 +131,11 @@ const applyIdFallback = (event, metadata, subscriptionType) => {
     };
 };
 
-const applyNotificationMetadataFallback = (event, metadata, subscriptionType) => {
+const applyNotificationMetadataFallback = (
+    event: Record<string, unknown> | null | undefined,
+    metadata: Record<string, unknown> | null | undefined,
+    subscriptionType: string
+) => {
     const timestampNormalizedEvent = applyTimestampFallback(event, metadata, subscriptionType);
     return applyIdFallback(timestampNormalizedEvent, metadata, subscriptionType);
 };
