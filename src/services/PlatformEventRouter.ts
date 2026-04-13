@@ -30,8 +30,74 @@ const ALIAS_PAID_TYPES = [
     'paid_supporter'
 ];
 
-function resolveCanonicalMessageParts(data: any = {}) {
-    return getValidMessageParts(data)
+type RouterRecord = Record<string, unknown>;
+
+type RouterLogger = {
+    debug: (message: string, scope: string, data?: unknown) => void;
+    warn: (message: string, scope: string, data?: unknown) => void;
+};
+
+type RouterEventBus = {
+    subscribe: (eventName: string, handler: (event: unknown) => Promise<void>) => (() => void) | void;
+};
+
+type RuntimeNotificationHandler = (platform: string, username: unknown, payload: RouterRecord) => Promise<unknown> | unknown;
+
+type RouterRuntime = {
+    handleChatMessage?: (platform: string, payload: RouterRecord) => Promise<unknown> | unknown;
+    updateViewerCount?: (platform: string, count: number) => void;
+    handleGiftNotification?: RuntimeNotificationHandler;
+    handlePaypiggyNotification?: RuntimeNotificationHandler;
+    handleGiftPaypiggyNotification?: RuntimeNotificationHandler;
+    handleFollowNotification?: RuntimeNotificationHandler;
+    handleShareNotification?: RuntimeNotificationHandler;
+    handleRaidNotification?: RuntimeNotificationHandler;
+    handleStreamDetected?: (platform: string, payload: RouterRecord) => Promise<unknown> | unknown;
+    handleEnvelopeNotification?: (platform: string, payload: RouterRecord) => Promise<unknown> | unknown;
+    [key: string]: unknown;
+};
+
+type RouterNotificationManager = {
+    handleNotification?: (type: string, platform: string, payload: RouterRecord) => Promise<unknown> | unknown;
+};
+
+type RouterOptions = {
+    eventBus: RouterEventBus;
+    runtime: RouterRuntime;
+    notificationManager: RouterNotificationManager;
+    config: Record<string, RouterRecord>;
+    logger: RouterLogger;
+};
+
+type NotificationType = keyof typeof NOTIFICATION_CONFIGS;
+
+type NormalizedChatPayload = {
+    platform: string;
+    userId?: string;
+    username: string;
+    message: {
+        text: string;
+        parts?: ReturnType<typeof resolveCanonicalMessageParts>;
+    };
+    timestamp?: string;
+    isMod: unknown;
+    isPaypiggy: boolean;
+    isBroadcaster: unknown;
+    avatarUrl?: string;
+    metadata?: RouterRecord;
+    badgeImages?: ReturnType<typeof normalizeBadgeImages>;
+};
+
+function asRouterRecord(value: unknown): RouterRecord {
+    return value && typeof value === 'object' ? (value as RouterRecord) : {};
+}
+
+function isNotificationType(value: string): value is NotificationType {
+    return Object.prototype.hasOwnProperty.call(NOTIFICATION_CONFIGS, value);
+}
+
+function resolveCanonicalMessageParts(data: unknown = {}) {
+    return getValidMessageParts(asRouterRecord(data))
         .map((part) => {
             if (part.type === 'emote') {
                 const placeInComment = Number((part as { placeInComment?: unknown }).placeInComment);
@@ -54,15 +120,15 @@ function resolveCanonicalMessageParts(data: any = {}) {
 }
 
 class PlatformEventRouter {
-    eventBus: any;
-    runtime: any;
-    notificationManager: any;
-    config: any;
-    logger: any;
+    eventBus: RouterEventBus;
+    runtime: RouterRuntime;
+    notificationManager: RouterNotificationManager;
+    config: Record<string, RouterRecord>;
+    logger: RouterLogger;
     errorHandler: ReturnType<typeof createPlatformErrorHandler>;
     subscription: (() => void) | null;
 
-    constructor(options: any) {
+    constructor(options: RouterOptions) {
         if (!options) {
             throw new Error('PlatformEventRouter requires options');
         }
@@ -85,30 +151,38 @@ class PlatformEventRouter {
             throw new Error('PlatformEventRouter requires eventBus.subscribe');
         }
 
-        this.subscription = this.eventBus.subscribe('platform:event', async (event: any) => {
+        const unsubscribe = this.eventBus.subscribe('platform:event', async (event: unknown) => {
             try {
                 await this.routeEvent(event);
             } catch (error) {
                 const errorDetails = error instanceof Error ? error.message : String(error);
-                this._handleRouterError(`Error routing platform event: ${errorDetails}`, error, event?.type || 'unknown');
+                const eventRecord = asRouterRecord(event);
+                const eventType = typeof eventRecord.type === 'string' ? eventRecord.type : 'unknown';
+                this._handleRouterError(`Error routing platform event: ${errorDetails}`, error, eventType);
             }
         });
+        this.subscription = typeof unsubscribe === 'function' ? unsubscribe : null;
     }
 
-    async routeEvent(event: any) {
+    async routeEvent(event: unknown) {
+        const eventRecord = asRouterRecord(event);
         if (!event || typeof event !== 'object') {
             throw new Error('PlatformEventRouter requires event object');
         }
-        const { platform, data, type } = event;
-        if (!platform || !type || !data) {
+
+        const platform = typeof eventRecord.platform === 'string' ? eventRecord.platform : '';
+        const type = typeof eventRecord.type === 'string' ? eventRecord.type : '';
+        const data = eventRecord.data;
+        if (!platform || !type || !data || typeof data !== 'object') {
             throw new Error('PlatformEventRouter requires platform, type, and data');
         }
+        const payload = asRouterRecord(data);
 
         if (ALIAS_PAID_TYPES.includes(type)) {
             throw new Error(`Unsupported paid alias event type: ${type}`);
         }
 
-        if (type !== PlatformEvents.CHAT_MESSAGE && NOTIFICATION_CONFIGS[type]?.settingKey) {
+        if (type !== PlatformEvents.CHAT_MESSAGE && isNotificationType(type) && NOTIFICATION_CONFIGS[type]?.settingKey) {
             if (this._isNotificationEnabled(type, platform) === false) {
                 this.logger.debug(`[${platform}] ${type} notifications disabled at router`, 'PlatformEventRouter');
                 return;
@@ -118,7 +192,7 @@ class PlatformEventRouter {
         switch (type) {
             case PlatformEvents.CHAT_MESSAGE:
                 if (this.runtime?.handleChatMessage) {
-                    const normalizedChat = this._normalizeChatEvent(data, platform);
+                    const normalizedChat = this._normalizeChatEvent(payload, platform);
                     if (!normalizedChat) {
                         return;
                     }
@@ -127,13 +201,15 @@ class PlatformEventRouter {
                 return;
             case PlatformEvents.VIEWER_COUNT:
                 if (this.runtime?.updateViewerCount) {
-                    if (!data?.timestamp || !isIsoTimestamp(String(data.timestamp))) {
+                    if (!payload.timestamp || !isIsoTimestamp(String(payload.timestamp))) {
                         throw new Error('Viewer-count event requires ISO timestamp');
                     }
-                    if (data.count === undefined) {
+                    if (payload.count === undefined) {
                         throw new Error('Viewer-count event requires count');
                     }
-                    const count = typeof data.count === 'string' ? Number(data.count) : data.count;
+                    const count = typeof payload.count === 'string'
+                        ? Number(payload.count)
+                        : (typeof payload.count === 'number' ? payload.count : Number.NaN);
                     if (!Number.isFinite(count)) {
                         throw new Error('Viewer-count event requires numeric count');
                     }
@@ -141,58 +217,58 @@ class PlatformEventRouter {
                 }
                 return;
             case PlatformEvents.GIFT: {
-                await this._routeRuntimeNotification('handleGiftNotification', type, platform, data, (sanitized) => ({
+                await this._routeRuntimeNotification('handleGiftNotification', type, platform, payload, (sanitized) => ({
                     ...sanitized,
                     type
                 }));
                 return;
             }
             case PlatformEvents.PAYPIGGY: {
-                await this._routeRuntimeNotification('handlePaypiggyNotification', type, platform, data, (sanitized) => ({
+                await this._routeRuntimeNotification('handlePaypiggyNotification', type, platform, payload, (sanitized) => ({
                     ...sanitized,
                     type
                 }));
                 return;
             }
             case PlatformEvents.GIFTPAYPIGGY: {
-                await this._routeRuntimeNotification('handleGiftPaypiggyNotification', type, platform, data);
+                await this._routeRuntimeNotification('handleGiftPaypiggyNotification', type, platform, payload);
                 return;
             }
             case PlatformEvents.FOLLOW: {
-                await this._routeRuntimeNotification('handleFollowNotification', type, platform, data);
+                await this._routeRuntimeNotification('handleFollowNotification', type, platform, payload);
                 return;
             }
             case PlatformEvents.SHARE: {
-                await this._routeRuntimeNotification('handleShareNotification', type, platform, data);
+                await this._routeRuntimeNotification('handleShareNotification', type, platform, payload);
                 return;
             }
             case PlatformEvents.RAID: {
-                await this._routeRuntimeNotification('handleRaidNotification', type, platform, data);
+                await this._routeRuntimeNotification('handleRaidNotification', type, platform, payload);
                 return;
             }
             case PlatformEvents.STREAM_STATUS:
                 return;
             case PlatformEvents.STREAM_DETECTED:
                 if (this.runtime?.handleStreamDetected) {
-                    await this.runtime.handleStreamDetected(platform, data);
+                    await this.runtime.handleStreamDetected(platform, payload);
                 }
                 return;
             case PlatformEvents.ENVELOPE:
                 if (this.runtime?.handleEnvelopeNotification) {
-                    const sanitized = this._sanitizeNotificationPayload(data, type, platform);
+                    const sanitized = this._sanitizeNotificationPayload(payload, type, platform);
                     await this.runtime.handleEnvelopeNotification(platform, sanitized);
                 }
                 return;
             default:
-                if (NOTIFICATION_CONFIGS[type]) {
-                    await this.forwardToNotificationManager(type, platform, data);
+                if (isNotificationType(type)) {
+                    await this.forwardToNotificationManager(type, platform, payload);
                     return;
                 }
                 throw new Error(`Unsupported platform event type: ${type}`);
         }
     }
 
-    _isNotificationEnabled(type: string, platform: string) {
+    _isNotificationEnabled(type: NotificationType, platform: string) {
         const settingKey = NOTIFICATION_CONFIGS[type]?.settingKey;
         if (!settingKey) {
             throw new Error(`Unknown notification type: ${type}`);
@@ -205,7 +281,7 @@ class PlatformEventRouter {
         return !!value;
     }
 
-    async forwardToNotificationManager(type: string, platform: string, data: any) {
+    async forwardToNotificationManager(type: string, platform: string, data: RouterRecord) {
         if (this.notificationManager?.handleNotification) {
             const sanitized = this._sanitizeNotificationPayload(data, type, platform);
             if (!sanitized) {
@@ -237,46 +313,51 @@ class PlatformEventRouter {
         }
     }
 
-    _normalizeChatEvent(data: any = {}, platform = 'unknown') {
-        const metadata = data.metadata;
-        const avatarUrl = typeof data.avatarUrl === 'string' ? data.avatarUrl.trim() : '';
-        const messageParts = resolveCanonicalMessageParts(data);
-        const badgeImages = normalizeBadgeImages(data.badgeImages);
+    _normalizeChatEvent(data: unknown = {}, platform = 'unknown') {
+        const payload = asRouterRecord(data);
+        const metadataValue = payload.metadata;
+        const metadata = (metadataValue && typeof metadataValue === 'object')
+            ? asRouterRecord(metadataValue)
+            : metadataValue;
+        const avatarUrl = typeof payload.avatarUrl === 'string' ? payload.avatarUrl.trim() : '';
+        const messageParts = resolveCanonicalMessageParts(payload);
+        const badgeImages = normalizeBadgeImages(payload.badgeImages);
         const missingFields = getMissingFields(metadata);
         const isMissingField = (fieldName: string) => missingFields.includes(fieldName);
-        if (metadata !== undefined && (typeof metadata !== 'object' || metadata === null)) {
+        if (metadataValue !== undefined && (typeof metadataValue !== 'object' || metadataValue === null)) {
             throw new Error('Chat event metadata must be an object');
         }
-        if ((!data.message || typeof data.message !== 'object') && !isMissingField('message')) {
+        const messagePayload = asRouterRecord(payload.message);
+        if ((!payload.message || typeof payload.message !== 'object') && !isMissingField('message')) {
             throw new Error('Chat event requires message payload');
         }
-        if ((typeof data?.message?.text !== 'string') && !isMissingField('message')) {
+        if ((typeof messagePayload.text !== 'string') && !isMissingField('message')) {
             throw new Error('Chat event requires message text');
         }
-        const normalizedText = typeof data?.message?.text === 'string'
-            ? String(data.message.text).trim()
+        const normalizedText = typeof messagePayload.text === 'string'
+            ? String(messagePayload.text).trim()
             : '';
         if (!normalizedText && messageParts.length === 0 && !isMissingField('message')) {
             throw new Error('Chat event requires non-empty message text');
         }
-        const normalizedUsername = typeof data.username === 'string' ? data.username.trim() : '';
+        const normalizedUsername = typeof payload.username === 'string' ? payload.username.trim() : '';
         if (!normalizedUsername && !isMissingField('username')) {
             throw new Error('Chat event requires username');
         }
-        const normalizedUserId = (typeof data.userId === 'string' && data.userId.trim())
-            ? data.userId.trim()
-            : (data.userId !== undefined && data.userId !== null ? String(data.userId).trim() : '');
+        const normalizedUserId = (typeof payload.userId === 'string' && payload.userId.trim())
+            ? payload.userId.trim()
+            : (payload.userId !== undefined && payload.userId !== null ? String(payload.userId).trim() : '');
         if (!normalizedUserId && !isMissingField('userId')) {
             throw new Error('Chat event requires userId');
         }
-        const normalizedTimestamp = (typeof data.timestamp === 'string' && data.timestamp.trim() && isIsoTimestamp(String(data.timestamp)))
-            ? String(data.timestamp)
+        const normalizedTimestamp = (typeof payload.timestamp === 'string' && payload.timestamp.trim() && isIsoTimestamp(String(payload.timestamp)))
+            ? String(payload.timestamp)
             : '';
         if (!normalizedTimestamp && !isMissingField('timestamp')) {
             throw new Error('Chat event requires ISO timestamp');
         }
 
-        const normalized: any = {
+        const normalized: NormalizedChatPayload = {
             platform,
             ...(normalizedUserId ? { userId: normalizedUserId } : {}),
             username: normalizedUsername || UNKNOWN_CHAT_USERNAME,
@@ -284,9 +365,9 @@ class PlatformEventRouter {
                 text: normalizedText || (isMissingField('message') ? UNKNOWN_CHAT_MESSAGE : '')
             },
             ...(normalizedTimestamp ? { timestamp: normalizedTimestamp } : {}),
-            isMod: data.isMod,
-            isPaypiggy: data.isPaypiggy === true,
-            isBroadcaster: data.isBroadcaster
+            isMod: payload.isMod,
+            isPaypiggy: payload.isPaypiggy === true,
+            isBroadcaster: payload.isBroadcaster
         };
         if (messageParts.length > 0) {
             normalized.message.parts = messageParts;
@@ -296,7 +377,7 @@ class PlatformEventRouter {
         }
         if (metadata !== undefined || missingFields.length > 0) {
             normalized.metadata = {
-                ...(metadata || {})
+                ...(asRouterRecord(metadata) || {})
             };
             delete normalized.metadata.messageParts;
             if (missingFields.length > 0) {
@@ -310,7 +391,7 @@ class PlatformEventRouter {
         return normalized;
     }
 
-    async _routeRuntimeNotification(handlerName: string, type: string, platform: string, data: any, payloadBuilder: ((sanitized: any) => any) | null = null) {
+    async _routeRuntimeNotification(handlerName: string, type: string, platform: string, data: RouterRecord, payloadBuilder: ((sanitized: RouterRecord) => RouterRecord) | null = null) {
         const handler = this.runtime?.[handlerName];
         if (!handler) {
             return;
@@ -321,15 +402,15 @@ class PlatformEventRouter {
             return;
         }
         const payload = payloadBuilder ? payloadBuilder(sanitized) : sanitized;
-        await handler.call(this.runtime, platform, sanitized.username, payload);
+        await (handler as RuntimeNotificationHandler).call(this.runtime, platform, sanitized.username, payload);
     }
 
-    _sanitizeNotificationPayload(data: any = {}, sourceType: string | null = null, sourcePlatform: string | null = null) {
+    _sanitizeNotificationPayload(data: unknown = {}, sourceType: string | null = null, sourcePlatform: string | null = null) {
         if (!data || typeof data !== 'object') {
             throw new Error('Notification payload must be an object');
         }
 
-        const sanitized = { ...data };
+        const sanitized: RouterRecord = { ...asRouterRecord(data) };
         const originalType = sourceType;
         const originalPlatform = sourcePlatform;
 
@@ -395,7 +476,7 @@ class PlatformEventRouter {
             platform: originalPlatform,
             sourceType: originalType,
             type: originalType
-        };
+        } as RouterRecord;
         if (normalizedUsername) {
             result.username = normalizedUsername;
         }

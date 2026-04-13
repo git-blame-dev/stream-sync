@@ -2,7 +2,7 @@ import type { GuiBadgeImage, GuiMessagePart, GuiRowDto, GuiRowKind } from '../..
 import { DEFAULT_AVATAR_URL } from '../../constants/avatar';
 import { getValidMessageParts, normalizeBadgeImages } from '../../utils/message-parts';
 
-type UnknownRecord = Record<string, unknown>;
+type MapperRecord = Record<string, unknown>;
 
 type GuiToggleKey =
     | 'showMessages'
@@ -64,8 +64,8 @@ const EVENT_RULES: Record<string, EventRule> = {
     'platform:envelope': { kind: 'notification', toggleKey: 'showEnvelopes' }
 };
 
-function toRecord(value: unknown): UnknownRecord {
-    return value && typeof value === 'object' ? (value as UnknownRecord) : {};
+function toRecord(value: unknown): MapperRecord {
+    return value && typeof value === 'object' ? (value as MapperRecord) : {};
 }
 
 function normalizeString(value: unknown): string {
@@ -88,14 +88,14 @@ function applyMessageLimit(text: string, limit: number): string {
     return text.slice(0, limit);
 }
 
-function resolveText(type: string, data: UnknownRecord): string {
+function resolveText(type: string, data: MapperRecord): string {
     if (type === 'chat' || type === 'platform:chat-message') {
         const message = data.message;
         if (typeof message === 'string') {
             return normalizeString(message);
         }
         if (message && typeof message === 'object') {
-            return normalizeString((message as UnknownRecord).text);
+            return normalizeString((message as MapperRecord).text);
         }
         return '';
     }
@@ -103,7 +103,7 @@ function resolveText(type: string, data: UnknownRecord): string {
     return normalizeString(data.displayMessage || data.message);
 }
 
-function resolveMessageParts(type: string, platform: string, data: UnknownRecord): GuiMessagePart[] {
+function resolveMessageParts(type: string, platform: string, data: MapperRecord): GuiMessagePart[] {
     const message = toRecord(data.message);
     const canonicalMessageParts = Array.isArray(message.parts)
         ? message.parts
@@ -184,7 +184,7 @@ function createEventToGuiContractMapper(options: MapperOptions = {}) {
 
     const getRule = (type: string): EventRule | null => EVENT_RULES[type] || null;
 
-    const resolveAvatarUrl = async ({ platform, data }: { platform: string; data: UnknownRecord }): Promise<string> => {
+    const resolveAvatarUrl = async ({ platform, data }: { platform: string; data: MapperRecord }): Promise<string> => {
         const payloadAvatar = normalizeString(data.avatarUrl);
         const userId = normalizeString(data.userId);
         const key = avatarCacheKey(platform, userId);

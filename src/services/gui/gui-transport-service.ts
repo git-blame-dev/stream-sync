@@ -1,4 +1,4 @@
-import http from 'node:http';
+import http, { type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -7,31 +7,70 @@ import { createPlatformErrorHandler } from '../../utils/platform-error-handler';
 import { createEventToGuiContractMapper } from './event-to-gui-contract-mapper';
 import { GIFT_ANIMATION_CACHE_DIR } from '../tiktok-gift-animation/resolver';
 
-function isGuiActive(config: any = {}) {
-    const gui = config.gui || {};
+type TransportRecord = Record<string, unknown>;
+
+type GuiTransportLogger = {
+    debug?: (message: string, scope: string, data?: unknown) => void;
+    info?: (message: string, scope: string, data?: unknown) => void;
+};
+
+type GuiTransportEventBus = {
+    subscribe: (eventName: string, handler: (payload: unknown) => void | Promise<void>) => (() => void) | void;
+};
+
+type DisplayRowMapperInput = Parameters<ReturnType<typeof createEventToGuiContractMapper>['mapDisplayRow']>[0];
+
+type GuiTransportMapper = {
+    mapDisplayRow: (row: DisplayRowMapperInput) => Promise<unknown | null>;
+};
+
+type GuiTransportOptions = {
+    config?: TransportRecord;
+    logger?: GuiTransportLogger;
+    eventBus?: GuiTransportEventBus;
+    mapper?: GuiTransportMapper;
+    createServer?: typeof http.createServer;
+    assetsRoot?: string;
+    runtimeAssetRoots?: unknown[];
+};
+
+type RuntimeAssetRecord = {
+    filePath: string;
+    contentType: string;
+    expiresAt: number;
+};
+
+function toTransportRecord(value: unknown): TransportRecord {
+    return value && typeof value === 'object' ? (value as TransportRecord) : {};
+}
+
+function isGuiActive(config: unknown = {}) {
+    const gui = toTransportRecord(toTransportRecord(config).gui);
     return gui.enableDock === true || gui.enableOverlay === true;
 }
 
-function createGuiTransportErrorHandler(logger: any) {
+function createGuiTransportErrorHandler(logger: GuiTransportLogger | undefined) {
     return createPlatformErrorHandler(logger, 'gui-transport');
 }
 
-function createGuiTransportService(options: any = {}) {
-    const config = options.config || {};
-    const guiConfig = config.gui || {};
+function createGuiTransportService(options: GuiTransportOptions = {}) {
+    const config = toTransportRecord(options.config);
+    const guiConfig = toTransportRecord(config.gui);
     const logger = options.logger;
     const eventBus = options.eventBus;
-    const mapper = options.mapper || createEventToGuiContractMapper({ config });
+    const mapper = options.mapper || createEventToGuiContractMapper({
+        config: config as { gui?: Record<string, unknown> }
+    });
     const createServer = typeof options.createServer === 'function'
         ? options.createServer
         : http.createServer;
     const errorHandler = createGuiTransportErrorHandler(logger);
-    const logDebug = (message: string, data?: any) => {
+    const logDebug = (message: string, data?: unknown) => {
         if (logger && typeof logger.debug === 'function') {
             logger.debug(message, 'gui-transport', data || null);
         }
     };
-    const logInfo = (message: string, data?: any) => {
+    const logInfo = (message: string, data?: unknown) => {
         if (logger && typeof logger.info === 'function') {
             logger.info(message, 'gui-transport', data || null);
         }
@@ -43,18 +82,18 @@ function createGuiTransportService(options: any = {}) {
         ? options.runtimeAssetRoots
         : [GIFT_ANIMATION_CACHE_DIR];
     const normalizedRuntimeAssetRoots = runtimeAssetRoots
-        .map((root: any) => (typeof root === 'string' ? root.trim() : ''))
+        .map((root) => (typeof root === 'string' ? root.trim() : ''))
         .filter((root: string) => root.length > 0)
         .map((root: string) => path.resolve(root));
 
-    let server: any = null;
+    let server: Server | null = null;
     let active = false;
     let startPromise: Promise<void> | null = null;
-    let serverRuntimeErrorHandler: ((error: any) => void) | null = null;
+    let serverRuntimeErrorHandler: ((error: Error) => void) | null = null;
     let unsubscribeDisplayRows: (() => void) | null = null;
     let unsubscribeDisplayEffects: (() => void) | null = null;
-    const clients = new Set<any>();
-    const runtimeAssetRegistry = new Map();
+    const clients = new Set<ServerResponse<IncomingMessage>>();
+    const runtimeAssetRegistry = new Map<string, RuntimeAssetRecord>();
     let dispatchChain = Promise.resolve();
     let dispatchEpoch = 0;
 
@@ -77,18 +116,20 @@ function createGuiTransportService(options: any = {}) {
         return 'application/octet-stream';
     };
 
-    const normalizeRuntimeAssetRecord = (record: any) => {
+    const normalizeRuntimeAssetRecord = (record: unknown): RuntimeAssetRecord | null => {
         if (!record || typeof record !== 'object') {
             return null;
         }
 
-        const filePath = typeof record.filePath === 'string' ? record.filePath.trim() : '';
+        const recordShape = toTransportRecord(record);
+
+        const filePath = typeof recordShape.filePath === 'string' ? recordShape.filePath.trim() : '';
         if (!filePath) {
             return null;
         }
 
-        const contentType = typeof record.contentType === 'string' && record.contentType.trim()
-            ? record.contentType
+        const contentType = typeof recordShape.contentType === 'string' && recordShape.contentType.trim()
+            ? recordShape.contentType
             : 'video/mp4';
 
         const expiresAt = Date.now() + RUNTIME_ASSET_TTL_MS;
@@ -122,7 +163,7 @@ function createGuiTransportService(options: any = {}) {
         }
     };
 
-    const registerRuntimeAsset = (record: any) => {
+    const registerRuntimeAsset = (record: unknown) => {
         const normalizedRecord = normalizeRuntimeAssetRecord(record);
         if (!normalizedRecord) {
             throw new Error('Runtime asset registration requires filePath');
@@ -168,7 +209,7 @@ function createGuiTransportService(options: any = {}) {
         return record;
     };
 
-    const enqueueDispatch = (operation: () => any) => {
+    const enqueueDispatch = (operation: () => void | Promise<void>) => {
         const enqueueEpoch = dispatchEpoch;
         dispatchChain = dispatchChain
             .then(() => {
@@ -235,7 +276,7 @@ function createGuiTransportService(options: any = {}) {
         return `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><link rel="stylesheet" href="/gui/assets/styles.css?v=${assetVersion}"></head><body style="${bodyStyle}"><div id="app" data-kind="${runtimeKind}"></div><script>window.__STREAM_SYNC_GUI_KIND__=${JSON.stringify(runtimeKind)};window.__STREAM_SYNC_GUI_EVENTS__='/gui/events';window.__STREAM_SYNC_GUI_CONFIG__=${JSON.stringify(runtimeGuiConfig)};</script><script type="module" src="/gui/assets/${scriptKind}.js?v=${assetVersion}"></script></body></html>`;
     };
 
-    const sendSse = (payload: any) => {
+    const sendSse = (payload: unknown) => {
         const packet = `data: ${JSON.stringify(payload)}\n\n`;
         for (const client of clients) {
             try {
@@ -244,15 +285,16 @@ function createGuiTransportService(options: any = {}) {
                 clients.delete(client);
                 try {
                     client.destroy();
-                } catch (destroyError: any) {
+                } catch (destroyError) {
                     errorHandler.logOperationalError('Failed destroying stale GUI SSE client', 'sse-write', {
-                        error: destroyError.message
+                        error: destroyError instanceof Error ? destroyError.message : String(destroyError)
                     });
                 }
+                const payloadRecord = toTransportRecord(payload);
                 errorHandler.handleEventProcessingError(
                     error,
                     'sse-write',
-                    { payloadType: payload?.type },
+                    { payloadType: payloadRecord.type },
                     'Failed writing GUI SSE event'
                 );
             }
@@ -264,24 +306,26 @@ function createGuiTransportService(options: any = {}) {
             return;
         }
 
-        unsubscribeDisplayRows = eventBus.subscribe('display:row', async (row: any) => {
+        const unsubscribe = eventBus.subscribe('display:row', async (row: unknown) => {
             enqueueDispatch(async () => {
                 try {
-                    const mapped = await mapper.mapDisplayRow(row);
+                    const mapped = await mapper.mapDisplayRow(row as DisplayRowMapperInput);
                     if (!mapped) {
                         return;
                     }
                     sendSse(mapped);
-                } catch (error: any) {
+                } catch (error) {
+                    const rowRecord = toTransportRecord(row);
                     errorHandler.handleEventProcessingError(
                         error,
                         'display-row-map',
-                        { rowType: row?.type },
+                        { rowType: rowRecord.type },
                         'Failed mapping display row for GUI transport'
                     );
                 }
             });
         });
+        unsubscribeDisplayRows = typeof unsubscribe === 'function' ? unsubscribe : null;
     };
 
     const subscribeToDisplayEffects = () => {
@@ -289,28 +333,29 @@ function createGuiTransportService(options: any = {}) {
             return;
         }
 
-        unsubscribeDisplayEffects = eventBus.subscribe('display:gift-animation', (payload: any) => {
+        const unsubscribe = eventBus.subscribe('display:gift-animation', (payload: unknown) => {
             enqueueDispatch(() => {
+                const payloadRecord = toTransportRecord(payload);
                 const giftsVisible = guiConfig.showGifts !== false;
                 if (!giftsVisible) {
                     logDebug('Skipping gift animation effect packet because gifts are hidden', {
-                        playbackId: payload?.playbackId || null
+                        playbackId: payloadRecord.playbackId || null
                     });
                     return;
                 }
 
                 const runtimeAssetId = registerRuntimeAsset({
-                    filePath: payload?.mediaFilePath,
-                    contentType: payload?.mediaContentType || 'video/mp4'
+                    filePath: payloadRecord.mediaFilePath,
+                    contentType: payloadRecord.mediaContentType || 'video/mp4'
                 });
 
                 const effectPayload = {
                     __guiEvent: 'effect',
                     effectType: 'tiktok-gift-animation',
-                    playbackId: payload?.playbackId,
-                    durationMs: payload?.durationMs,
+                    playbackId: payloadRecord.playbackId,
+                    durationMs: payloadRecord.durationMs,
                     assetUrl: `/gui/runtime/${runtimeAssetId}.mp4`,
-                    config: payload?.animationConfig
+                    config: payloadRecord.animationConfig
                 };
 
                 logDebug('Dispatching gift animation effect packet', {
@@ -324,6 +369,7 @@ function createGuiTransportService(options: any = {}) {
                 sendSse(effectPayload);
             });
         });
+        unsubscribeDisplayEffects = typeof unsubscribe === 'function' ? unsubscribe : null;
     };
 
     const unsubscribeFromDisplayRows = () => {
@@ -340,8 +386,8 @@ function createGuiTransportService(options: any = {}) {
         unsubscribeDisplayEffects = null;
     };
 
-    const requestHandler = (req: any, res: any) => {
-        const rawUrl = req.url || '/';
+    const requestHandler = (req: IncomingMessage, res: ServerResponse<IncomingMessage>) => {
+        const rawUrl = typeof req.url === 'string' ? req.url : '/';
         let url = rawUrl;
         try {
             url = new URL(rawUrl, 'http://localhost').pathname;
@@ -602,7 +648,7 @@ function createGuiTransportService(options: any = {}) {
             subscribeToDisplayRows();
             subscribeToDisplayEffects();
 
-            serverRuntimeErrorHandler = (error: any) => {
+            serverRuntimeErrorHandler = (error: Error) => {
                 active = false;
                 errorHandler.handleEventProcessingError(
                     error,
@@ -630,7 +676,7 @@ function createGuiTransportService(options: any = {}) {
                         resolve();
                     });
                 });
-            } catch (error: any) {
+            } catch (error) {
                 unsubscribeFromDisplayRows();
                 unsubscribeFromDisplayEffects();
                 if (server) {
@@ -639,7 +685,7 @@ function createGuiTransportService(options: any = {}) {
                     }
                     try {
                         server.close();
-                    } catch (closeError: any) {
+                    } catch (closeError) {
                         errorHandler.logOperationalError('Failed closing GUI server after start error', 'gui-transport', {
                             error: closeError instanceof Error ? closeError.message : String(closeError)
                         });
@@ -665,9 +711,9 @@ function createGuiTransportService(options: any = {}) {
         for (const client of clients) {
             try {
                 client.end();
-            } catch (error: any) {
+            } catch (error) {
                 errorHandler.logOperationalError('Failed closing GUI SSE client', 'gui-transport', {
-                    error: error.message
+                    error: error instanceof Error ? error.message : String(error)
                 });
             }
         }
@@ -687,7 +733,7 @@ function createGuiTransportService(options: any = {}) {
         serverRuntimeErrorHandler = null;
 
         await new Promise<void>((resolve) => {
-            closingServer.close((error: any) => {
+            closingServer.close((error) => {
                 if (error) {
                     errorHandler.logOperationalError('Failed closing GUI transport server', 'gui-transport', {
                         error: error instanceof Error ? error.message : String(error)

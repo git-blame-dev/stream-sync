@@ -1894,6 +1894,26 @@ describe('TypeScript toolchain migration gates behavior', () => {
         }
     });
 
+    it('keeps messaging, lifecycle, and gui strictness contracts explicit and narrowed', () => {
+        const modulePaths = [
+            'src/chat/commands.ts',
+            'src/services/ChatNotificationRouter.ts',
+            'src/services/PlatformEventRouter.ts',
+            'src/services/PlatformLifecycleService.ts',
+            'src/services/VFXCommandService.ts',
+            'src/services/gui/event-to-gui-contract-mapper.ts',
+            'src/services/gui/gui-transport-service.ts',
+            'src/utils/message-normalization.ts'
+        ];
+
+        for (const modulePath of modulePaths) {
+            const content = readFileSync(join(repoRoot, modulePath), 'utf8');
+
+            expect(content).not.toContain(': any');
+            expect(content).not.toContain('UnknownRecord');
+        }
+    });
+
     it('keeps tiktok platform shell module free of commonjs module syntax', () => {
         const content = readFileSync(join(repoRoot, 'src/platforms/tiktok.ts'), 'utf8');
 
