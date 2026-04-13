@@ -27,22 +27,83 @@ function getErrorMessage(error: unknown): string {
     return String(error);
 }
 
+type LifecycleRecord = Record<string, unknown>;
+
+type PlatformLifecycleLogger = {
+    debug: (message: string, scope: string, data?: unknown) => void;
+    info: (message: string, scope: string, data?: unknown) => void;
+    warn: (message: string, scope: string, data?: unknown) => void;
+};
+
+type PlatformEventBus = {
+    emit: (eventName: string, payload: unknown) => void;
+};
+
+type PlatformEventHandlers = {
+    onChat: (data: unknown) => void;
+    onViewerCount: (data: unknown) => void;
+    onGift: (data: unknown) => void;
+    onPaypiggy: (data: unknown) => void;
+    onGiftPaypiggy: (data: unknown) => void;
+    onFollow: (data: unknown) => void;
+    onShare: (data: unknown) => void;
+    onRaid: (data: unknown) => void;
+    onEnvelope: (data: unknown) => void;
+    onStreamStatus: (data: unknown) => void;
+    onStreamDetected: (data: unknown) => void;
+};
+
+type PlatformEventHandlerMap = Record<string, PlatformEventHandlers> & {
+    default?: PlatformEventHandlers;
+};
+
+type PlatformConfig = LifecycleRecord & {
+    enabled?: unknown;
+    username?: unknown;
+};
+
+type PlatformLifecycleOptions = {
+    config?: Record<string, PlatformConfig>;
+    eventBus?: PlatformEventBus | null;
+    dependencyFactory?: Record<string, unknown>;
+    logger?: PlatformLifecycleLogger;
+    sharedDependencies?: LifecycleRecord;
+    handlerFactory?: ((platformName: string) => PlatformEventHandlers | null | undefined) | null;
+};
+
+type PlatformInstance = {
+    initialize: (handlers: PlatformEventHandlers) => Promise<unknown> | unknown;
+    cleanup?: () => Promise<void> | void;
+    [key: string]: unknown;
+};
+
+type PlatformConstructor = new (config: PlatformConfig, dependencies?: unknown) => PlatformInstance;
+
+type PlatformHealthEntry = {
+    state: string;
+    attempts: number;
+    failures: number;
+    lastUpdated: string | null;
+    lastError: string | null;
+    lastConnection: string | null;
+};
+
 class PlatformLifecycleService {
-    config: any;
-    eventBus: any;
-    dependencyFactory: any;
-    logger: any;
-    errorHandler: any;
-    sharedDependencies: any;
-    handlerFactory: any;
-    platforms: Record<string, any>;
+    config: Record<string, PlatformConfig> | undefined;
+    eventBus: PlatformEventBus | null;
+    dependencyFactory: Record<string, unknown> | undefined;
+    logger: PlatformLifecycleLogger;
+    errorHandler: ReturnType<typeof createPlatformErrorHandler>;
+    sharedDependencies: LifecycleRecord;
+    handlerFactory: ((platformName: string) => PlatformEventHandlers | null | undefined) | null;
+    platforms: Record<string, PlatformInstance>;
     platformConnectionTimes: Record<string, number>;
     backgroundPlatformInits: Array<{ platform: string; promise: Promise<unknown> }>;
-    platformHealth: Record<string, any>;
+    platformHealth: Record<string, PlatformHealthEntry>;
     platformErrors: Array<{ platform: string; message: string; timestamp: string }>;
     shutdownRequested: boolean;
 
-    constructor(options: any = {}) {
+    constructor(options: PlatformLifecycleOptions = {}) {
         this.config = options.config;
         this.eventBus = options.eventBus || null;
         this.dependencyFactory = options.dependencyFactory;
@@ -62,7 +123,7 @@ class PlatformLifecycleService {
         this.logger.debug('PlatformLifecycleService initialized', 'PlatformLifecycleService');
     }
 
-    async initializeAllPlatforms(platformModules, eventHandlers = null) {
+    async initializeAllPlatforms(platformModules: Record<string, PlatformConstructor>, eventHandlers: PlatformEventHandlerMap | null = null) {
         this.shutdownRequested = false;
         this.logger.info('Initializing platform connections...', 'PlatformLifecycleService');
 
@@ -76,7 +137,7 @@ class PlatformLifecycleService {
         return this.platforms;
     }
 
-    async initializePlatform(platformName, PlatformClass, eventHandlers = null) {
+    async initializePlatform(platformName: string, PlatformClass: PlatformConstructor, eventHandlers: PlatformEventHandlerMap | null = null) {
         this.logger.debug(`Processing platform: ${platformName}`, 'PlatformLifecycleService');
         const platformConfig = this.config?.[platformName];
 
@@ -101,7 +162,7 @@ class PlatformLifecycleService {
                 return;
             }
 
-            const configCopy = { ...platformConfig };
+            const configCopy: PlatformConfig = { ...platformConfig };
 
             const platformInstance = await this.createPlatformInstance(
                 platformName,
@@ -130,7 +191,7 @@ class PlatformLifecycleService {
         }
     }
 
-    resolveEventHandlers(platformName, providedHandlers) {
+    resolveEventHandlers(platformName: string, providedHandlers: PlatformEventHandlerMap | null) {
         if (providedHandlers) {
             if (providedHandlers[platformName]) {
                 return providedHandlers[platformName];
@@ -150,8 +211,8 @@ class PlatformLifecycleService {
         return this.createDefaultEventHandlers(platformName);
     }
 
-    createDefaultEventHandlers(platformName) {
-        const handlers = {
+    createDefaultEventHandlers(platformName: string): PlatformEventHandlers {
+        const handlers: PlatformEventHandlers = {
             onChat: (data) => this.emitPlatformEvent(platformName, PlatformEvents.CHAT_MESSAGE, data),
             onViewerCount: (data) => {
                 if (typeof data === 'number') {
@@ -176,7 +237,7 @@ class PlatformLifecycleService {
         return handlers;
     }
 
-    emitPlatformEvent(platformName, type, data) {
+    emitPlatformEvent(platformName: string, type: string, data: unknown) {
         if (!this.eventBus || typeof this.eventBus.emit !== 'function') {
             this.logger.debug(`EventBus unavailable for platform event ${type}`, 'PlatformLifecycleService');
             return;
@@ -184,7 +245,7 @@ class PlatformLifecycleService {
 
         const eventPlatform = this._resolveEventPlatform(platformName, data);
         const sanitizedData = this._sanitizePlatformEventData(eventPlatform, type, data);
-        const requiresTimestamp = new Set([
+        const requiresTimestamp: Set<string> = new Set([
             PlatformEvents.CHAT_MESSAGE,
             PlatformEvents.FOLLOW,
             PlatformEvents.SHARE,
@@ -198,7 +259,10 @@ class PlatformLifecycleService {
         ]);
 
         if (requiresTimestamp.has(type)) {
-            if (!sanitizedData || typeof sanitizedData !== 'object' || !sanitizedData.timestamp) {
+            const sanitizedRecord = sanitizedData && typeof sanitizedData === 'object'
+                ? (sanitizedData as LifecycleRecord)
+                : null;
+            if (!sanitizedRecord || !sanitizedRecord.timestamp) {
                 this.logger.warn(`Platform event missing timestamp: ${type}`, 'PlatformLifecycleService', {
                     platform: eventPlatform
                 });
@@ -213,7 +277,7 @@ class PlatformLifecycleService {
         });
     }
 
-    _resolveEventPlatform(defaultPlatform, data) {
+    _resolveEventPlatform(defaultPlatform: string, data: unknown) {
         if (defaultPlatform !== 'streamelements') {
             return defaultPlatform;
         }
@@ -222,16 +286,18 @@ class PlatformLifecycleService {
             return defaultPlatform;
         }
 
-        const payloadPlatform = typeof data.platform === 'string' ? data.platform.trim() : '';
+        const payload = data as LifecycleRecord;
+        const payloadPlatform = typeof payload.platform === 'string' ? payload.platform.trim() : '';
         return payloadPlatform || defaultPlatform;
     }
 
-    _sanitizePlatformEventData(platformName, type, data) {
+    _sanitizePlatformEventData(platformName: string, type: string, data: unknown) {
         if (!data || typeof data !== 'object') {
             return data;
         }
 
-        const { type: originalType, platform: originalPlatform, ...rest } = data;
+        const payload = data as LifecycleRecord;
+        const { type: originalType, platform: originalPlatform, ...rest } = payload;
 
         if (originalType && originalType !== type) {
             rest.sourceType = originalType;
@@ -243,7 +309,7 @@ class PlatformLifecycleService {
         return rest;
     }
 
-    async createPlatformInstance(platformName, PlatformClass, config) {
+    async createPlatformInstance(platformName: string, PlatformClass: PlatformConstructor, config: PlatformConfig) {
         // Validate inputs
         if (!PlatformClass || typeof PlatformClass !== 'function') {
             throw new Error(`Invalid PlatformClass for ${platformName}`);
@@ -259,12 +325,13 @@ class PlatformLifecycleService {
             // Check if factory has method for this platform
             const factoryMethodName = `create${platformName.charAt(0).toUpperCase() + platformName.slice(1)}Dependencies`;
 
-            if (typeof this.dependencyFactory[factoryMethodName] !== 'function') {
+            const factoryCandidate = this.dependencyFactory[factoryMethodName];
+            if (typeof factoryCandidate !== 'function') {
                 this.logger.debug(`No factory method ${factoryMethodName}, creating ${platformName} without DI`, 'PlatformLifecycleService');
                 instance = new PlatformClass(config);
             } else {
                 // Create dependencies using factory with shared dependencies
-                const dependencies = this.dependencyFactory[factoryMethodName](config, this.sharedDependencies);
+                const dependencies = factoryCandidate(config, this.sharedDependencies);
 
                 this.logger.debug(`${platformName} platform instance created via factory`, 'PlatformLifecycleService');
                 instance = new PlatformClass(config, dependencies);
@@ -275,7 +342,7 @@ class PlatformLifecycleService {
         return instance;
     }
 
-    async initializePlatformConnection(platformName, platformInstance, handlers, platformConfig) {
+    async initializePlatformConnection(platformName: string, platformInstance: PlatformInstance, handlers: PlatformEventHandlers, platformConfig: PlatformConfig) {
         const connectCallback = async () => {
             this.logger.info(`Connecting to ${platformName}...`, 'PlatformLifecycleService');
 
@@ -332,7 +399,7 @@ class PlatformLifecycleService {
         }
     }
 
-    shouldRunPlatformInBackground(platformName, platformConfig) {
+    shouldRunPlatformInBackground(platformName: string, platformConfig: PlatformConfig) {
         // TikTok blocks waiting for stream to go live
         if (platformName === 'tiktok') {
             return true;
@@ -342,7 +409,7 @@ class PlatformLifecycleService {
         return false;
     }
 
-    async initializePlatformAsync(platformName, connectCallback) {
+    async initializePlatformAsync(platformName: string, connectCallback: () => Promise<PlatformInstance>) {
         try {
             this.logger.info(`[${platformName}] Background initialization started`, 'PlatformLifecycleService');
 
@@ -361,20 +428,20 @@ class PlatformLifecycleService {
         }
     }
 
-    recordPlatformConnection(platformName) {
+    recordPlatformConnection(platformName: string) {
         this.platformConnectionTimes[platformName] = Date.now();
         this.logger.debug(`Platform ${platformName} connection time recorded`, 'PlatformLifecycleService');
     }
 
-    getPlatformConnectionTime(platformName) {
+    getPlatformConnectionTime(platformName: string) {
         return this.platformConnectionTimes[platformName] || null;
     }
 
-    isPlatformAvailable(platformName) {
+    isPlatformAvailable(platformName: string) {
         return !!this.platforms[platformName];
     }
 
-    getPlatform(platformName) {
+    getPlatform(platformName: string) {
         return this.platforms[platformName] || null;
     }
 
@@ -427,7 +494,7 @@ class PlatformLifecycleService {
         };
     }
 
-    ensurePlatformHealthEntry(platformName: string): any {
+    ensurePlatformHealthEntry(platformName: string): PlatformHealthEntry {
         if (!this.platformHealth[platformName]) {
             this.platformHealth[platformName] = {
                 state: 'unknown',
@@ -441,8 +508,8 @@ class PlatformLifecycleService {
         return this.platformHealth[platformName];
     }
 
-    updatePlatformHealth(platformName: string, patch: any = {}): any {
-        const current: any = this.ensurePlatformHealthEntry(platformName);
+    updatePlatformHealth(platformName: string, patch: Partial<PlatformHealthEntry> = {}): PlatformHealthEntry {
+        const current = this.ensurePlatformHealthEntry(platformName);
         const next = {
             ...current,
             ...patch
@@ -466,7 +533,7 @@ class PlatformLifecycleService {
         return next;
     }
 
-    markPlatformReady(platformName) {
+    markPlatformReady(platformName: string) {
         if (this.shutdownRequested) {
             return;
         }
@@ -486,11 +553,12 @@ class PlatformLifecycleService {
 
     }
 
-    markPlatformFailure(platformName, error) {
+    markPlatformFailure(platformName: string, error: unknown) {
         const timestamp = getSystemTimestampISO();
+        const errorMessage = getErrorMessage(error);
         this.platformErrors.push({
             platform: platformName,
-            message: error?.message || String(error),
+            message: errorMessage,
             timestamp
         });
 
@@ -499,7 +567,7 @@ class PlatformLifecycleService {
 
         this.updatePlatformHealth(platformName, {
             state: 'failed',
-            lastError: error?.message || String(error),
+            lastError: errorMessage,
             lastUpdated: timestamp
         });
     }
@@ -559,7 +627,7 @@ class PlatformLifecycleService {
         this.logger.debug('PlatformLifecycleService disposed', 'PlatformLifecycleService');
     }
 
-    _handleLifecycleError(message, error, eventType = 'lifecycle') {
+    _handleLifecycleError(message: string, error: unknown, eventType = 'lifecycle') {
         if (this.errorHandler && error instanceof Error) {
             this.errorHandler.handleEventProcessingError(error, eventType, null, message);
         } else {
