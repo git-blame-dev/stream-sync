@@ -29,10 +29,46 @@ describe('OBSSourcesManager DI requirements', () => {
         expect(() => new OBSSourcesManager()).toThrow(/OBSSourcesManager requires OBSConnectionManager/);
     });
 
+    it('requires ensureOBSConnected contract when dependencies do not provide it', () => {
+        const incompleteObsManager = {
+            call: createMockFn().mockResolvedValue({}),
+            isConnected: createMockFn().mockReturnValue(true),
+            isReady: createMockFn().mockResolvedValue(true)
+        };
+
+        expect(() => createOBSSourcesManager(incompleteObsManager, {
+            logger: noOpLogger,
+            ...createSourcesConfigFixture()
+        })).toThrow(/ensureOBSConnected function/);
+    });
+
+    it('requires obsCall contract when dependencies do not provide it', () => {
+        const incompleteObsManager = {
+            ensureConnected: createMockFn().mockResolvedValue(),
+            isConnected: createMockFn().mockReturnValue(true),
+            isReady: createMockFn().mockResolvedValue(true)
+        };
+
+        expect(() => createOBSSourcesManager(incompleteObsManager, {
+            logger: noOpLogger,
+            ...createSourcesConfigFixture()
+        })).toThrow(/obsCall function/);
+    });
+
     it('uses injected obsManager for operations', async () => {
         const mockObsManager = {
             ensureConnected: createMockFn().mockResolvedValue(),
-            call: createMockFn().mockResolvedValue({ sceneItemId: 42 }),
+            call: createMockFn().mockImplementation(async (requestType, payload) => {
+                if (
+                    requestType === 'GetSceneItemId'
+                    && payload?.sceneName === 'test-scene'
+                    && payload?.sourceName === 'test-source'
+                ) {
+                    return { sceneItemId: 42 };
+                }
+
+                return { sceneItemId: 0 };
+            }),
             addEventListener: createMockFn(),
             removeEventListener: createMockFn(),
             isConnected: createMockFn().mockReturnValue(true),
@@ -48,10 +84,6 @@ describe('OBSSourcesManager DI requirements', () => {
 
         const result = await sourcesManager.getSceneItemId('test-scene', 'test-source');
 
-        expect(mockObsManager.call).toHaveBeenCalledWith('GetSceneItemId', {
-            sceneName: 'test-scene',
-            sourceName: 'test-source'
-        });
         expect(result).toEqual({ sceneItemId: 42, sceneName: 'test-scene' });
     });
 

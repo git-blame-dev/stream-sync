@@ -103,7 +103,45 @@ declare module '*global-command-cooldown' {
 }
 
 declare module '*tiktok-gift-animation/resolver' {
+    function createTikTokGiftAnimationResolver(options?: { logger?: unknown }): {
+        resolveFromNotificationData: (data: unknown) => Promise<{
+            durationMs: number;
+            mediaFilePath: string;
+            mediaContentType: string;
+            animationConfig: Record<string, unknown>;
+        } | null>;
+    };
+
     function getGiftAnimationDependencyStatus(): Record<string, unknown>;
 
+    export { createTikTokGiftAnimationResolver };
     export { getGiftAnimationDependencyStatus };
+}
+
+declare module '*tiktok-gift-animation/resolver.js' {
+    function createTikTokGiftAnimationResolver(options?: { logger?: unknown }): {
+        resolveFromNotificationData: (data: unknown) => Promise<{
+            durationMs: number;
+            mediaFilePath: string;
+            mediaContentType: string;
+            animationConfig: Record<string, unknown>;
+        } | null>;
+    };
+
+    function getGiftAnimationDependencyStatus(): Record<string, unknown>;
+
+    export { createTikTokGiftAnimationResolver };
+    export { getGiftAnimationDependencyStatus };
+}
+
+declare module '*message-tts-handler.js' {
+    class MessageTTSHandler {
+        static createTTSStages(notification: Record<string, unknown>): Array<{
+            text: string;
+            delay: number;
+            type?: string;
+        }>;
+    }
+
+    export default MessageTTSHandler;
 }

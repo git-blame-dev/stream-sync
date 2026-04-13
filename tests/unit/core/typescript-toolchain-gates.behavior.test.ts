@@ -2021,6 +2021,58 @@ describe('TypeScript toolchain migration gates behavior', () => {
         }
     });
 
+    it('keeps obs stateful manager strictness seams explicit and narrowed', () => {
+        const assertions = [
+            {
+                path: 'src/obs/display-queue.ts',
+                forbidden: [
+                    "from 'node:module'",
+                    'createRequire(',
+                    'nodeRequire('
+                ]
+            },
+            {
+                path: 'src/obs/sources.ts',
+                forbidden: [
+                    "from 'node:module'",
+                    'createRequire(',
+                    'nodeRequire('
+                ]
+            },
+            {
+                path: 'src/obs/connection.ts',
+                forbidden: [
+                    "from 'node:module'",
+                    'createRequire(',
+                    'nodeRequire('
+                ]
+            },
+            {
+                path: 'src/obs/display-queue-effects.ts',
+                forbidden: [
+                    "from 'node:module'",
+                    'createRequire(',
+                    'nodeRequire('
+                ]
+            },
+            {
+                path: 'src/utils/goal-tracker.ts',
+                forbidden: [
+                    "from 'node:module'",
+                    'createRequire(',
+                    'nodeRequire('
+                ]
+            }
+        ];
+
+        for (const assertion of assertions) {
+            const content = readFileSync(join(repoRoot, assertion.path), 'utf8');
+            for (const forbiddenPattern of assertion.forbidden) {
+                expect(content).not.toContain(forbiddenPattern);
+            }
+        }
+    });
+
     it('keeps youtube extractor helper modules free of commonjs exports syntax', () => {
         const helperPaths = [
             'src/platforms/youtube/youtube-author-extractor.ts',

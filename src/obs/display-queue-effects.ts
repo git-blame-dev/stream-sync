@@ -1,30 +1,14 @@
 import crypto from 'node:crypto';
-import { createRequire } from 'node:module';
 import { logger } from '../core/logging';
+import { createTikTokGiftAnimationResolver } from '../services/tiktok-gift-animation/resolver.js';
+import MessageTTSHandler from '../utils/message-tts-handler.js';
 import { safeDelay } from '../utils/timeout-validator';
 import { triggerHandcamGlow } from './handcam-glow';
 
-const nodeRequire = createRequire(import.meta.url);
-const { createTikTokGiftAnimationResolver } = nodeRequire('../services/tiktok-gift-animation/resolver') as {
-    createTikTokGiftAnimationResolver: (deps: { logger: typeof logger }) => {
-        resolveFromNotificationData: (data: unknown) => Promise<{
-            durationMs: number;
-            mediaFilePath: string;
-            mediaContentType: string;
-            animationConfig: Record<string, unknown>;
-        } | null>;
-    };
-};
-const MessageTTSHandler = nodeRequire('../utils/message-tts-handler') as {
-    createTTSStages: (data: Record<string, unknown>) => Array<{ text: string; delay: number; type?: string }>;
-};
-const { PlatformEvents } = nodeRequire('../interfaces/PlatformEvents') as {
-    PlatformEvents: {
-        VFX_EFFECT_COMPLETED: string;
-        VFX_COMMAND_EXECUTED: string;
-        VFX_COMMAND_RECEIVED: string;
-    };
-};
+const VFX_EVENTS = {
+    EFFECT_COMPLETED: 'vfx:effect-completed',
+    COMMAND_RECEIVED: 'vfx:command-received'
+} as const;
 
 type QueueItemData = Record<string, unknown> & {
     username?: string;
@@ -384,7 +368,7 @@ class DisplayQueueEffects {
 
                     vfxMatch.correlationId = correlationId;
                     const completionPromise = this.waitForVfxCompletion(vfxMatch);
-                    eventBus.emit(PlatformEvents.VFX_COMMAND_RECEIVED, payload);
+                    eventBus.emit(VFX_EVENTS.COMMAND_RECEIVED, payload);
                     await completionPromise;
                 } catch (error) {
                     this.handleDisplayQueueError('[Gift] Error emitting VFX command', error, payload);
@@ -524,7 +508,7 @@ class DisplayQueueEffects {
         }
 
         const timeoutMs = typeof options.timeoutMs === 'number' ? options.timeoutMs : 10000;
-        const eventNames = [PlatformEvents.VFX_EFFECT_COMPLETED];
+        const eventNames = [VFX_EVENTS.EFFECT_COMPLETED];
         const eventBus = this.eventBus;
         const subscribe = (eventName: string, handler: (payload: Record<string, unknown>) => void) => {
             if (eventBus && typeof eventBus.subscribe === 'function') {
@@ -650,7 +634,7 @@ class DisplayQueueEffects {
             };
 
             const completionPromise = this.waitForVfxCompletion(match);
-            this.eventBus.emit(PlatformEvents.VFX_COMMAND_RECEIVED, payload);
+            this.eventBus.emit(VFX_EVENTS.COMMAND_RECEIVED, payload);
             return { emitted: true, match, completionPromise };
         } catch (error) {
             this.handleDisplayQueueError('[DisplayQueue] Error emitting VFX command', error, payload);
