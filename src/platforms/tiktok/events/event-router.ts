@@ -15,11 +15,139 @@ const DEFAULT_CHAT_DEDUP_TTL_MS = 90 * 60 * 1000;
 const DEFAULT_CHAT_MAX_CACHE_SIZE = 10_000;
 const DEFAULT_CHAT_MAX_AGE_MS = 20 * 60 * 1000;
 
-function hasCanonicalMessageParts(normalizedData) {
+type TikTokDisplayText = {
+    defaultPattern?: unknown;
+    displayType?: unknown;
+};
+
+type TikTokUserPayload = Record<string, unknown> & {
+    uniqueId?: unknown;
+    nickname?: unknown;
+    userId?: unknown;
+    profilePictureUrl?: unknown;
+    profilePicture?: { url?: unknown };
+    followRole?: unknown;
+    userBadges?: unknown;
+};
+
+type TikTokCommonPayload = Record<string, unknown> & {
+    msgId?: unknown;
+    createTime?: unknown;
+    displayText?: TikTokDisplayText;
+};
+
+type TikTokRawEvent = Record<string, unknown> & {
+    comment?: unknown;
+    user?: TikTokUserPayload;
+    common?: TikTokCommonPayload;
+    displayText?: TikTokDisplayText;
+    displayType?: unknown;
+    actionType?: unknown;
+    type?: unknown;
+    label?: unknown;
+    userIdentity?: {
+        isSubscriberOfAnchor?: unknown;
+    };
+    isModerator?: unknown;
+    isOwner?: unknown;
+    viewerCount?: unknown;
+};
+
+type TikTokWebcastEventMap = {
+    CHAT: string;
+    GIFT: string;
+    FOLLOW: string;
+    SOCIAL: string;
+    ROOM_USER: string;
+    ENVELOPE?: string;
+    SUBSCRIBE?: string;
+    SUPER_FAN?: string;
+    ERROR: string;
+    DISCONNECT: string;
+    STREAM_END?: string;
+};
+
+type TikTokControlEventMap = {
+    CONNECTED?: string;
+    DISCONNECTED?: string;
+    ERROR?: string;
+};
+
+type TikTokPlatformRouterContract = {
+    listenersConfigured: boolean;
+    connection: {
+        on: (eventName: string, handler: (payload: unknown) => void | Promise<void>) => void;
+        removeAllListeners?: (eventName?: string) => void;
+    } | null;
+    WebcastEvent: TikTokWebcastEventMap;
+    ControlEvent?: TikTokControlEventMap;
+    platformName?: string;
+    timestampService?: unknown;
+    selfMessageDetectionService?: {
+        shouldFilterMessage: (
+            platform: string,
+            messageData: { username?: string; userId?: string; isBroadcaster?: boolean },
+            config: unknown
+        ) => boolean;
+    } | null;
+    config: Record<string, unknown>;
+    logger: {
+        warn: (message: string, source?: string, details?: unknown) => void;
+        debug: (message: string, source?: string, details?: unknown) => void;
+        info: (message: string, source?: string, details?: unknown) => void;
+    };
+    errorHandler: {
+        handleConnectionError: (error: unknown, context?: string, message?: string) => void;
+        handleEventProcessingError: (error: unknown, context: string, payload?: unknown, message?: string) => void;
+        handleCleanupError: (error: unknown, context?: string, message?: string) => void;
+    };
+    constructor?: {
+        resolveEventTimestampMs?: (data: TikTokRawEvent) => number | null;
+    };
+    _logIncomingEvent: (eventType: string, data: unknown) => Promise<void> | void;
+    _emitPlatformEvent: (type: string, payload: Record<string, unknown>) => void;
+    _handleStandardEvent: (eventType: string, data: TikTokRawEvent, options?: Record<string, unknown>) => Promise<unknown>;
+    _handleStreamEnd: () => Promise<void>;
+    handleConnectionIssue: (issue: unknown, isError?: boolean) => Promise<unknown>;
+    handleConnectionError: (error: unknown) => void;
+    handleRetry: (error: unknown) => unknown;
+    handleTikTokGift: (data: TikTokRawEvent) => Promise<void>;
+    handleTikTokFollow: (data: TikTokRawEvent) => Promise<void>;
+    handleTikTokSocial: (data: TikTokRawEvent) => Promise<void>;
+    connectionActive: boolean;
+    cachedViewerCount: number;
+    connectionTime: number;
+    _getTimestamp: (data: TikTokRawEvent) => string | null;
+    _getPlatformMessageId: (data: TikTokRawEvent) => string | null;
+    _handleChatMessage: (rawData: TikTokRawEvent, normalizedData: Record<string, unknown>) => Promise<void>;
+    chatReplayProtectionConfig?: {
+        ttlMs?: number;
+        maxCacheSize?: number;
+        maxAgeMs?: number;
+    };
+    _chatReplayIngressState?: {
+        recentMessageIds?: Map<string, number>;
+    };
+};
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        return null;
+    }
+
+    return value as Record<string, unknown>;
+}
+
+function asTikTokRawEvent(value: unknown): TikTokRawEvent {
+    const record = asRecord(value);
+    return (record || {}) as TikTokRawEvent;
+}
+
+function hasCanonicalMessageParts(normalizedData: Record<string, unknown>) {
     return getValidMessageParts({ message: normalizedData?.message }).length > 0;
 }
 
-function isRecoverableTikTokChatNormalizationError(error) {
+function isRecoverableTikTokChatNormalizationError(error: unknown) {
     const message = error instanceof Error ? error.message : '';
     return message === 'Missing TikTok message data'
         || message === 'Missing TikTok userId (uniqueId)'
@@ -28,7 +156,7 @@ function isRecoverableTikTokChatNormalizationError(error) {
         || message === 'Missing TikTok timestamp';
 }
 
-function buildDegradedTikTokChatEvent(platform: any, data: any = {}) {
+function buildDegradedTikTokChatEvent(platform: TikTokPlatformRouterContract, data: TikTokRawEvent = {}) {
     const userData = data?.user && typeof data.user === 'object' ? data.user : {};
     const userId = typeof userData.uniqueId === 'string' ? userData.uniqueId.trim() : '';
     const username = typeof userData.nickname === 'string' ? userData.nickname.trim() : '';
@@ -74,7 +202,7 @@ function buildDegradedTikTokChatEvent(platform: any, data: any = {}) {
     };
 }
 
-function getChatReplayConfig(platform: any) {
+function getChatReplayConfig(platform: TikTokPlatformRouterContract) {
     const provided = platform?.chatReplayProtectionConfig;
     const ttlMs = Number.isFinite(provided?.ttlMs) && provided.ttlMs > 0
         ? provided.ttlMs
@@ -93,7 +221,7 @@ function getChatReplayConfig(platform: any) {
     };
 }
 
-function getChatReplayState(platform: any) {
+function getChatReplayState(platform: TikTokPlatformRouterContract) {
     if (!platform._chatReplayIngressState || typeof platform._chatReplayIngressState !== 'object') {
         platform._chatReplayIngressState = {
             recentMessageIds: new Map()
@@ -107,7 +235,7 @@ function getChatReplayState(platform: any) {
     return platform._chatReplayIngressState;
 }
 
-function getPlatformMessageId(platform: any, data: any) {
+function getPlatformMessageId(platform: TikTokPlatformRouterContract, data: TikTokRawEvent) {
     if (typeof platform?._getPlatformMessageId !== 'function') {
         return null;
     }
@@ -115,7 +243,7 @@ function getPlatformMessageId(platform: any, data: any) {
     return platform._getPlatformMessageId(data);
 }
 
-function checkDuplicateChatMessage(platform: any, data: any) {
+function checkDuplicateChatMessage(platform: TikTokPlatformRouterContract, data: TikTokRawEvent) {
     const messageId = getPlatformMessageId(platform, data);
     if (!messageId) {
         return { isDuplicate: false, messageId: null };
@@ -152,7 +280,7 @@ function checkDuplicateChatMessage(platform: any, data: any) {
     return { isDuplicate: false, messageId };
 }
 
-function isStaleChatReplay(platform: any, data: any, eventTimestampMs: number | null) {
+function isStaleChatReplay(platform: TikTokPlatformRouterContract, eventTimestampMs: number | null) {
     if (eventTimestampMs === null) {
         return false;
     }
@@ -161,7 +289,7 @@ function isStaleChatReplay(platform: any, data: any, eventTimestampMs: number | 
     return (Date.now() - eventTimestampMs) > maxAgeMs;
 }
 
-function cleanupTikTokEventListeners(platform: any) {
+function cleanupTikTokEventListeners(platform: TikTokPlatformRouterContract) {
     if (!platform?.connection) {
         return;
     }
@@ -226,7 +354,7 @@ function cleanupTikTokEventListeners(platform: any) {
     platform.listenersConfigured = false;
 }
 
-function setupTikTokEventListeners(platform: any) {
+function setupTikTokEventListeners(platform: TikTokPlatformRouterContract) {
     if (platform.listenersConfigured) {
         return;
     }
@@ -249,12 +377,17 @@ function setupTikTokEventListeners(platform: any) {
 
     cleanupTikTokEventListeners(platform);
 
-    platform.connection.on(platform.WebcastEvent.CHAT, async (data) => {
-        await platform._logIncomingEvent('chat', data);
+    platform.connection.on(platform.WebcastEvent.CHAT, async (payload: unknown) => {
+        await platform._logIncomingEvent('chat', payload);
+        const payloadRecord = asRecord(payload);
+        const data = asTikTokRawEvent(payload);
 
         try {
-            if (!data || typeof data !== 'object') {
-                platform.logger.warn('Received invalid chat data:', 'tiktok', { dataType: typeof data, data });
+            if (!payloadRecord) {
+                platform.logger.warn('Received invalid chat data:', 'tiktok', {
+                    dataType: typeof payload,
+                    data: payload
+                });
                 return;
             }
 
@@ -287,7 +420,7 @@ function setupTikTokEventListeners(platform: any) {
                 return;
             }
 
-            const isStaleReplay = isStaleChatReplay(platform, data, eventTimestampMs);
+            const isStaleReplay = isStaleChatReplay(platform, eventTimestampMs);
             if (isStaleReplay) {
                 platform.logger.debug('Skipping stale TikTok chat replay at ingress', 'tiktok', {
                     messageId: duplicateCheck.messageId,
@@ -296,17 +429,17 @@ function setupTikTokEventListeners(platform: any) {
                 return;
             }
 
-            let normalizedData;
+            let normalizedData: Record<string, unknown>;
             try {
                 normalizedData = normalizeTikTokChatEvent(data, {
                     platformName: platform.platformName,
                     timestampService: platform.timestampService
-                });
+                }) as Record<string, unknown>;
             } catch (error) {
                 if (!isRecoverableTikTokChatNormalizationError(error)) {
                     throw error;
                 }
-                normalizedData = buildDegradedTikTokChatEvent(platform, data);
+                normalizedData = buildDegradedTikTokChatEvent(platform, data) as Record<string, unknown>;
             }
             const validation = validateNormalizedMessage(normalizedData);
 
@@ -318,10 +451,12 @@ function setupTikTokEventListeners(platform: any) {
             }
 
             if (platform.selfMessageDetectionService) {
+                const normalizedUsername = typeof normalizedData.username === 'string' ? normalizedData.username : undefined;
+                const normalizedUserId = typeof normalizedData.userId === 'string' ? normalizedData.userId : undefined;
                 const messageData = {
-                    username: normalizedData.username,
-                    userId: normalizedData.userId,
-                    isBroadcaster: normalizedData.isBroadcaster
+                    username: normalizedUsername,
+                    userId: normalizedUserId,
+                    isBroadcaster: normalizedData.isBroadcaster === true
                 };
 
                 if (platform.selfMessageDetectionService.shouldFilterMessage('tiktok', messageData, platform.config)) {
@@ -330,16 +465,18 @@ function setupTikTokEventListeners(platform: any) {
                 }
             }
 
-            const messageText = typeof normalizedData?.message === 'string'
-                ? normalizedData.message
-                : (typeof normalizedData?.message?.text === 'string' ? normalizedData.message.text : '');
-            const missingFields = getMissingFields(normalizedData?.metadata);
+            const normalizedMessage = normalizedData.message;
+            const normalizedMessageRecord = asRecord(normalizedMessage);
+            const messageText = typeof normalizedMessage === 'string'
+                ? normalizedMessage
+                : (typeof normalizedMessageRecord?.text === 'string' ? normalizedMessageRecord.text : '');
+            const missingFields = getMissingFields(asRecord(normalizedData.metadata) || {});
             const isMessageMarkedMissing = missingFields.includes('message');
             if ((!messageText || messageText.trim() === '') && !hasCanonicalMessageParts(normalizedData) && !isMessageMarkedMissing) {
                 platform.logger.debug('Skipping empty message after normalization', 'tiktok', {
                     originalComment: data.comment,
                     normalizedMessage: messageText,
-                    messageParts: normalizedData?.message?.parts || []
+                    messageParts: Array.isArray(normalizedMessageRecord?.parts) ? normalizedMessageRecord.parts : []
                 });
                 return;
             }
@@ -350,12 +487,13 @@ function setupTikTokEventListeners(platform: any) {
                 error,
                 'chat-message',
                 data,
-                `Error processing chat message: ${error?.message || error}`
+                `Error processing chat message: ${error instanceof Error ? error.message : error}`
             );
         }
     });
 
-    platform.connection.on(platform.WebcastEvent.GIFT, async (data) => {
+    platform.connection.on(platform.WebcastEvent.GIFT, async (payload: unknown) => {
+        const data = asTikTokRawEvent(payload);
         await platform._logIncomingEvent('gift', data);
 
         try {
@@ -365,7 +503,8 @@ function setupTikTokEventListeners(platform: any) {
         }
     });
 
-    platform.connection.on(platform.WebcastEvent.FOLLOW, async (data) => {
+    platform.connection.on(platform.WebcastEvent.FOLLOW, async (payload: unknown) => {
+        const data = asTikTokRawEvent(payload);
         await platform._logIncomingEvent('follow', data);
 
         try {
@@ -375,13 +514,14 @@ function setupTikTokEventListeners(platform: any) {
                 error,
                 'follow',
                 data,
-                `Error processing follow: ${error?.message || error}`
+                `Error processing follow: ${error instanceof Error ? error.message : error}`
             );
         }
     });
 
     if (typeof platform.WebcastEvent.ENVELOPE !== 'undefined') {
-        platform.connection.on(platform.WebcastEvent.ENVELOPE, async (data) => {
+        platform.connection.on(platform.WebcastEvent.ENVELOPE, async (payload: unknown) => {
+            const data = asTikTokRawEvent(payload);
             try {
                 await platform._logIncomingEvent('envelope', data);
                 await platform._handleStandardEvent('envelope', data, {
@@ -395,7 +535,8 @@ function setupTikTokEventListeners(platform: any) {
     }
 
     if (typeof platform.WebcastEvent.SUBSCRIBE !== 'undefined') {
-        platform.connection.on(platform.WebcastEvent.SUBSCRIBE, async (data) => {
+        platform.connection.on(platform.WebcastEvent.SUBSCRIBE, async (payload: unknown) => {
+            const data = asTikTokRawEvent(payload);
             await platform._logIncomingEvent('subscribe', data);
 
             try {
@@ -410,7 +551,8 @@ function setupTikTokEventListeners(platform: any) {
     }
 
     if (typeof platform.WebcastEvent.SUPER_FAN !== 'undefined') {
-        platform.connection.on(platform.WebcastEvent.SUPER_FAN, async (data) => {
+        platform.connection.on(platform.WebcastEvent.SUPER_FAN, async (payload: unknown) => {
+            const data = asTikTokRawEvent(payload);
             await platform._logIncomingEvent('superfan', data);
 
             try {
@@ -425,7 +567,8 @@ function setupTikTokEventListeners(platform: any) {
     }
 
     if (typeof platform.WebcastEvent.SOCIAL !== 'undefined') {
-        platform.connection.on(platform.WebcastEvent.SOCIAL, async (data) => {
+        platform.connection.on(platform.WebcastEvent.SOCIAL, async (payload: unknown) => {
+            const data = asTikTokRawEvent(payload);
             await platform._logIncomingEvent('social', data);
 
             try {
@@ -436,9 +579,11 @@ function setupTikTokEventListeners(platform: any) {
         });
     }
 
-    platform.connection.on(platform.WebcastEvent.ROOM_USER, (data) => {
+    platform.connection.on(platform.WebcastEvent.ROOM_USER, (payload: unknown) => {
+        const data = asTikTokRawEvent(payload);
         platform._logIncomingEvent('roomUser', data);
-        platform.cachedViewerCount = data.viewerCount;
+        const viewerCount = data.viewerCount as number;
+        platform.cachedViewerCount = viewerCount;
 
         const timestamp = typeof platform._getTimestamp === 'function'
             ? platform._getTimestamp(data)
@@ -450,7 +595,7 @@ function setupTikTokEventListeners(platform: any) {
 
         platform._emitPlatformEvent(PlatformEvents.VIEWER_COUNT, {
             platform: 'tiktok',
-            count: data.viewerCount,
+            count: viewerCount,
             timestamp
         });
     });
@@ -458,7 +603,7 @@ function setupTikTokEventListeners(platform: any) {
     const disconnectedEvent = platform.ControlEvent?.DISCONNECTED || 'disconnected';
     const errorEvent = platform.ControlEvent?.ERROR || 'error';
 
-    platform.connection.on(disconnectedEvent, async (reason) => {
+    platform.connection.on(disconnectedEvent, async (reason: unknown) => {
         await platform._logIncomingEvent('disconnected', reason);
         try {
             await platform.handleConnectionIssue(reason, false);
@@ -472,17 +617,18 @@ function setupTikTokEventListeners(platform: any) {
         }
     });
 
-    platform.connection.on(errorEvent, (err) => {
+    platform.connection.on(errorEvent, (err: unknown) => {
         platform._logIncomingEvent('control-error', err);
         platform.handleConnectionError(err);
     });
 
-    platform.connection.on(platform.WebcastEvent.ERROR, (err) => {
+    platform.connection.on(platform.WebcastEvent.ERROR, (err: unknown) => {
+        const errorRecord = asRecord(err);
         platform._logIncomingEvent('error', err);
         platform.errorHandler.handleConnectionError(
             err,
             'webcast connection',
-            `Webcast Connection Error: ${err.message}`
+            `Webcast Connection Error: ${errorRecord?.message}`
         );
 
         if (platform.connectionActive) {
@@ -499,14 +645,16 @@ function setupTikTokEventListeners(platform: any) {
     });
 
     if (typeof platform.WebcastEvent.STREAM_END !== 'undefined') {
-        platform.connection.on(platform.WebcastEvent.STREAM_END, async (data) => {
+        platform.connection.on(platform.WebcastEvent.STREAM_END, async (payload: unknown) => {
+            const data = asTikTokRawEvent(payload);
             await platform._logIncomingEvent('streamEnd', data);
             await platform._handleStreamEnd();
         });
     }
 
-    platform.connection.on('rawData', async (payload) => {
-        const eventType = payload?.type || 'unknown';
+    platform.connection.on('rawData', async (payload: unknown) => {
+        const payloadRecord = asRecord(payload);
+        const eventType = typeof payloadRecord?.type === 'string' ? payloadRecord.type : 'unknown';
         await platform._logIncomingEvent(eventType, payload);
     });
 

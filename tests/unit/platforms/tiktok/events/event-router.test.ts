@@ -375,6 +375,35 @@ describe('TikTok event router', () => {
         expect(handledChatMessages[0].normalizedData.metadata.missingFields).toContain('message');
     });
 
+    test('ignores non-object chat payloads at ingress', async () => {
+        const { platform, listeners, handledChatMessages } = createPlatformHarness();
+
+        setupTikTokEventListeners(platform);
+
+        await listeners[platform.WebcastEvent.CHAT]('invalid-chat-payload');
+
+        expect(handledChatMessages).toHaveLength(0);
+    });
+
+    test('reports chat handler failures through event processing error handler', async () => {
+        const { platform, listeners } = createPlatformHarness({
+            _handleChatMessage: async () => {
+                throw new Error('chat handler failed');
+            }
+        });
+
+        setupTikTokEventListeners(platform);
+
+        await listeners[platform.WebcastEvent.CHAT]({
+            comment: 'trigger failure',
+            user: { userId: 'test-user-chat-error', uniqueId: 'chat-error-user', nickname: 'ChatErrorUser' },
+            common: { createTime: '1700000000', msgId: 'test-chat-msg-error-1' }
+        });
+
+        expect(platform.errorHandler.handleEventProcessingError.mock.calls).toHaveLength(1);
+        expect(platform.errorHandler.handleEventProcessingError.mock.calls[0][1]).toBe('chat-message');
+    });
+
     test('processes emote-only chat payloads when comment is whitespace and emotes are present', async () => {
         const { platform, listeners, handledChatMessages } = createPlatformHarness();
 
