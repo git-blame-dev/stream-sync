@@ -5,28 +5,72 @@ import * as CommandCooldownServiceModule from '../../src/services/CommandCooldow
 import * as UserTrackingServiceModule from '../../src/services/UserTrackingService.js';
 import * as VFXCommandServiceModule from '../../src/services/VFXCommandService.js';
 
-const { createTwitchEventSubEventRouter } = TwitchEventRouterModule as unknown as {
-    createTwitchEventSubEventRouter: (options: UnknownRecord) => {
-        handleNotificationEvent: (subscriptionType: string, event: UnknownRecord, metadata: UnknownRecord) => void;
-    };
+type UnknownRecord = Record<string, unknown>;
+
+type PreviewLogFn = (...args: unknown[]) => void;
+
+interface PreviewLogger {
+    debug: PreviewLogFn;
+    console: PreviewLogFn;
+    info: PreviewLogFn;
+    warn: PreviewLogFn;
+    error: PreviewLogFn;
+}
+
+type PreviewEventBus = {
+    emit: (eventName: string, payload?: unknown) => void;
+    subscribe: (eventName: string, handler: (payload: unknown) => void) => () => void;
 };
-const { createUserTrackingService } = UserTrackingServiceModule as unknown as {
-    createUserTrackingService: () => {
-        isFirstMessage: (userId: unknown, context: unknown) => unknown;
-    };
+
+type TwitchEventRouterFactory = (options: UnknownRecord) => {
+    handleNotificationEvent: (subscriptionType: string, event: UnknownRecord, metadata: UnknownRecord) => void;
 };
-const { createVFXCommandService } = VFXCommandServiceModule as unknown as {
-    createVFXCommandService: (config: UnknownRecord, eventBus: PreviewPipeline['eventBus']) => unknown;
+
+type CreateUserTrackingService = () => {
+    isFirstMessage: (userId: unknown, context: unknown) => unknown;
 };
-const { CommandCooldownService: CommandCooldownServiceClass } = CommandCooldownServiceModule as unknown as {
-    CommandCooldownService: new (options: {
-        config: UnknownRecord;
-        eventBus: PreviewPipeline['eventBus'];
-        logger: PreviewLogger;
-    }) => {
-        dispose?: () => void;
-    };
+
+type CreateVFXCommandService = (...args: unknown[]) => unknown;
+
+type CommandCooldownServiceCtor = new (options?: {
+    config: UnknownRecord;
+    eventBus: PreviewEventBus;
+    logger: PreviewLogger;
+}) => {
+    dispose?: () => void;
 };
+
+const createTwitchEventSubEventRouterCandidate = (TwitchEventRouterModule as {
+    createTwitchEventSubEventRouter?: TwitchEventRouterFactory;
+}).createTwitchEventSubEventRouter;
+if (typeof createTwitchEventSubEventRouterCandidate !== 'function') {
+    throw new Error('gui-preview requires createTwitchEventSubEventRouter');
+}
+const createTwitchEventSubEventRouter: TwitchEventRouterFactory = createTwitchEventSubEventRouterCandidate;
+
+const createUserTrackingServiceCandidate = (UserTrackingServiceModule as {
+    createUserTrackingService?: CreateUserTrackingService;
+}).createUserTrackingService;
+if (typeof createUserTrackingServiceCandidate !== 'function') {
+    throw new Error('gui-preview requires createUserTrackingService');
+}
+const createUserTrackingService: CreateUserTrackingService = createUserTrackingServiceCandidate;
+
+const createVFXCommandServiceCandidate = (VFXCommandServiceModule as {
+    createVFXCommandService?: CreateVFXCommandService;
+}).createVFXCommandService;
+if (typeof createVFXCommandServiceCandidate !== 'function') {
+    throw new Error('gui-preview requires createVFXCommandService');
+}
+const createVFXCommandService: CreateVFXCommandService = createVFXCommandServiceCandidate;
+
+const CommandCooldownServiceClassCandidate = (CommandCooldownServiceModule as {
+    CommandCooldownService?: CommandCooldownServiceCtor;
+}).CommandCooldownService;
+if (typeof CommandCooldownServiceClassCandidate !== 'function') {
+    throw new Error('gui-preview requires CommandCooldownService');
+}
+const CommandCooldownServiceClass: CommandCooldownServiceCtor = CommandCooldownServiceClassCandidate;
 
 const load = createRequire(__filename);
 const configModule = load('../../src/core/config');
@@ -46,19 +90,7 @@ const { createYouTubeEventRouter } = load('../../src/platforms/youtube/events/ev
 const { setupTikTokEventListeners } = load('../../src/platforms/tiktok/events/event-router.js');
 const { DEFAULT_AVATAR_URL } = load('../../src/constants/avatar');
 
-type UnknownRecord = Record<string, any>;
-
 type PreviewAdapter = 'twitch' | 'youtube' | 'tiktok';
-
-type PreviewLogFn = (...args: unknown[]) => void;
-
-interface PreviewLogger {
-    debug: PreviewLogFn;
-    console: PreviewLogFn;
-    info: PreviewLogFn;
-    warn: PreviewLogFn;
-    error: PreviewLogFn;
-}
 
 interface PreviewScenarioStep {
     type: string;
@@ -82,10 +114,7 @@ interface PreviewIngestAdapters {
 }
 
 interface PreviewPipeline {
-    eventBus: {
-        emit: (eventName: string, payload?: unknown) => void;
-        subscribe: (eventName: string, handler: (payload: unknown) => void) => () => void;
-    };
+    eventBus: PreviewEventBus;
     emitIngestEvent: (event: UnknownRecord) => void;
     dispose: () => Promise<void>;
 }
@@ -108,7 +137,7 @@ interface CreatePreviewIngestAdaptersOptions {
 interface CreatePreviewPipelineOptions {
     config?: UnknownRecord;
     logger?: PreviewLogger | UnknownRecord;
-    eventBus?: PreviewPipeline['eventBus'];
+    eventBus?: PreviewEventBus;
     obsManager?: {
         isReady: () => Promise<boolean>;
         call: (method: string, params?: UnknownRecord) => Promise<UnknownRecord>;
@@ -208,7 +237,7 @@ interface RunGuiPreviewOptions {
     createPreviewIngestAdaptersImpl?: (options: CreatePreviewIngestAdaptersOptions) => PreviewIngestAdapters;
     createGuiTransportServiceImpl?: (options: {
         config: UnknownRecord;
-        eventBus: PreviewPipeline['eventBus'];
+        eventBus: PreviewEventBus;
         logger: PreviewLogger;
     }) => PreviewService;
     safeSetIntervalImpl?: (handler: () => void, delayMs: number) => ReturnType<typeof setInterval> | number;
@@ -220,7 +249,7 @@ interface RunGuiPreviewOptions {
     giftAnimationResolver?: {
         resolveFromNotificationData: (payload: unknown) => Promise<unknown>;
     };
-    eventBus?: PreviewPipeline['eventBus'];
+    eventBus?: PreviewEventBus;
 }
 
 const PREVIEW_DURATION_MS = 32000;
