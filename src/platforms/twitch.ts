@@ -39,7 +39,7 @@ const PlatformEvents = {
 } as const;
 
 class TwitchPlatform extends EventEmitter {
-    constructor(config, dependencies = {}) {
+    constructor(config: Record<string, unknown>, dependencies: Record<string, unknown> = {}) {
         super(); // Call EventEmitter constructor first to ensure proper prototype chain
 
         // Inject dependencies with fallbacks to actual implementations
@@ -153,7 +153,7 @@ class TwitchPlatform extends EventEmitter {
         this.eventSubWiring = null;
     }
 
-    async initialize(handlers) {
+    async initialize(handlers: Record<string, ((payload: unknown) => void) | undefined> = {}) {
         if (!this.config.enabled) {
             this.logger.info('Platform is disabled in config', 'twitch');
             return;
@@ -907,7 +907,7 @@ class TwitchPlatform extends EventEmitter {
         });
     }
 
-    _resolvePlatformEventType(eventType) {
+    _resolvePlatformEventType(eventType: string) {
         const mapping = {
             chat: PlatformEvents.CHAT_MESSAGE,
             follow: PlatformEvents.FOLLOW,
@@ -1221,7 +1221,12 @@ class TwitchPlatform extends EventEmitter {
         this._emitPlatformEvent(PlatformEvents.PLATFORM_CONNECTION, payload);
     }
 
-    _logPlatformError(message, error = null, eventType = 'twitch-platform', payload = null) {
+    _logPlatformError(
+        message: string,
+        error: unknown = null,
+        eventType = 'twitch-platform',
+        payload: Record<string, unknown> | null = null
+    ) {
         if (this.errorHandler && error instanceof Error) {
             this.errorHandler.handleEventProcessingError(error, eventType, payload, message);
         } else if (this.errorHandler) {

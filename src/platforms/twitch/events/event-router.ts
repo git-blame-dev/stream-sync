@@ -7,7 +7,15 @@ import {
     normalizeUserIdentity
 } from './event-normalizer';
 
-function createTwitchEventSubEventRouter(options = {}) {
+type EventRouterOptions = {
+    config?: Record<string, unknown>;
+    logger?: unknown;
+    emit?: (eventName: string, payload: unknown) => void;
+    logRawPlatformData?: (eventType: string, event: unknown) => Promise<void> | void;
+    logError?: (message: string, error?: unknown, failureStage?: string) => void;
+};
+
+function createTwitchEventSubEventRouter(options: EventRouterOptions = {}) {
     const {
         config = {},
         logger,
@@ -28,12 +36,18 @@ function createTwitchEventSubEventRouter(options = {}) {
     const safeLogRaw = typeof logRawPlatformData === 'function' ? logRawPlatformData : async () => {};
     const errorHandler = createPlatformErrorHandler(safeLogger, 'twitch-eventsub-router');
 
-    const logRawIfEnabled = (eventType, event, failureStage, failureMessagePrefix) => {
+    const logRawIfEnabled = (
+        eventType: string,
+        event: unknown,
+        failureStage: string,
+        failureMessagePrefix: string
+    ) => {
         if (!config.dataLoggingEnabled) {
             return;
         }
         Promise.resolve(safeLogRaw(eventType, event)).catch((err) => {
-            safeLogError(`${failureMessagePrefix}: ${err.message}`, err, failureStage);
+            const message = err instanceof Error ? err.message : String(err);
+            safeLogError(`${failureMessagePrefix}: ${message}`, err, failureStage);
         });
     };
 
@@ -284,7 +298,11 @@ function createTwitchEventSubEventRouter(options = {}) {
         });
     };
 
-    const handleNotificationEvent = (subscriptionType, event, metadata) => {
+    const handleNotificationEvent = (
+        subscriptionType: string,
+        event: Record<string, unknown> | null | undefined,
+        metadata: Record<string, unknown> | null | undefined
+    ) => {
         safeLogger.debug(`EventSub notification received: ${subscriptionType}`, 'twitch', event);
         const normalizedEvent = applyNotificationMetadataFallback(event, metadata, subscriptionType);
 

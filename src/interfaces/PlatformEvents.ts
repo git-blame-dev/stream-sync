@@ -61,7 +61,7 @@ const PlatformEvents = {
 
 const VALID_PLATFORMS = ['twitch', 'youtube', 'tiktok'];
 
-function resolveAvatarUrl(avatarUrl) {
+function resolveAvatarUrl(avatarUrl: unknown): string {
     const normalizedAvatarUrl = typeof avatarUrl === 'string' ? avatarUrl.trim() : '';
     return normalizedAvatarUrl || DEFAULT_AVATAR_URL;
 }
@@ -401,7 +401,7 @@ class PlatformEventValidator {
         this.schemas = EVENT_SCHEMAS;
     }
     
-    validate(event) {
+    validate(event: Record<string, unknown> | null | undefined) {
         if (!event) {
             return {
                 valid: false,
@@ -480,7 +480,21 @@ class PlatformEventValidator {
         return this.schemas[eventType] || null;
     }
     
-    _validateFieldType(value, schema, fieldName) {
+    _validateFieldType(
+        value: unknown,
+        schema: {
+            type?: string | string[];
+            enum?: unknown[];
+            required?: string[];
+            properties?: Record<string, {
+                type?: string | string[];
+                enum?: unknown[];
+                required?: string[];
+                properties?: Record<string, unknown>;
+            }>;
+        },
+        fieldName: string
+    ) {
         // Handle enum validation
         if (schema.enum && !schema.enum.includes(value)) {
             return false;
@@ -556,7 +570,7 @@ class PlatformEventBuilder {
         this.validator = new PlatformEventValidator();
     }
     
-    createChatMessage(params) {
+    createChatMessage(params: Record<string, unknown>) {
         this._validateRequiredParams(params, ['platform', 'username', 'userId', 'message', 'timestamp']);
         if (typeof params.message !== 'string') {
             throw new Error('Chat message text must be a string');
@@ -639,7 +653,7 @@ class PlatformEventBuilder {
         return result;
     }
     
-    normalizeMessage(platform, data) {
+    normalizeMessage(platform: string, data: Record<string, unknown>) {
         if (!data || typeof data !== 'object') {
             throw new Error('Message payload must be an object');
         }
@@ -833,7 +847,12 @@ class EnhancedPlatformEvents {
         return platform;
     }
 
-    static createChatMessageEvent(platform, identity, message, metadata = {}) {
+    static createChatMessageEvent(
+        platform: string,
+        identity: Record<string, unknown>,
+        message: string,
+        metadata: Record<string, unknown> = {}
+    ) {
         const normalizedIdentity = this.normalizeIdentity(platform, identity);
         const timestamp = getSystemTimestampISO();
         return {
@@ -1262,7 +1281,7 @@ class EventBuilder {
         };
     }
 
-    platform(platform) {
+    platform(platform: string) {
         this._event.platform = platform;
         return this;
     }

@@ -13,7 +13,7 @@ import { createTwitchEventSubWsLifecycle } from './twitch/connections/ws-lifecyc
 import { createTwitchEventSubEventRouter } from './twitch/events/event-router';
 
 class TwitchEventSub extends EventEmitter {
-    constructor(config, dependencies = {}) {
+    constructor(config: Record<string, unknown>, dependencies: Record<string, unknown> = {}) {
         super();
 
         this.config = config;
@@ -138,7 +138,7 @@ class TwitchEventSub extends EventEmitter {
         }
     }
 
-    _isDuplicateMessageId(metadata) {
+    _isDuplicateMessageId(metadata: Record<string, unknown> | null | undefined) {
         const messageId = metadata?.message_id;
         if (!messageId) {
             return false;
@@ -326,7 +326,7 @@ class TwitchEventSub extends EventEmitter {
         return this.wsLifecycle.connectWebSocket(this);
     }
 
-    async handleWebSocketMessage(message) {
+    async handleWebSocketMessage(message: { metadata?: Record<string, unknown>; payload?: Record<string, unknown> }) {
         const { metadata, payload } = message;
 
         this.logger.info(`EventSub message received: ${metadata.message_type}`, 'twitch');
@@ -518,7 +518,7 @@ class TwitchEventSub extends EventEmitter {
         this.eventRouter.handlePaypiggyMessageEvent(event);
     }
 
-    async sendMessage(message) {
+    async sendMessage(message: string) {
         const trimmedMessage = typeof message === 'string' ? message.trim() : '';
         if (!trimmedMessage) {
             throw new Error('EventSub chat send requires a non-empty message');
@@ -712,7 +712,12 @@ class TwitchEventSub extends EventEmitter {
         return this.chatFileLoggingService.logRawPlatformData('twitch', eventType, data, this.config);
     }
 
-    _logEventSubError(message, error = null, eventType = 'twitch-eventsub', payload = null) {
+    _logEventSubError(
+        message: string,
+        error: unknown = null,
+        eventType = 'twitch-eventsub',
+        payload: Record<string, unknown> | null = null
+    ) {
         if (this.errorHandler && error instanceof Error) {
             this.errorHandler.handleEventProcessingError(error, eventType, payload, message);
         } else if (this.errorHandler) {
