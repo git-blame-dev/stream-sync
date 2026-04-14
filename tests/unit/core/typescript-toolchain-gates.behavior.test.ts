@@ -2329,6 +2329,14 @@ describe('TypeScript toolchain migration gates behavior', () => {
         expect(content).not.toMatch(/\brequire\s*\(/);
     });
 
+    it('keeps youtube currency parser logger resolver typing declaration present', () => {
+        const declarationPath = join(repoRoot, 'src/utils/logger-resolver.d.ts');
+        expect(existsSync(declarationPath)).toBe(true);
+
+        const declarationContent = readFileSync(declarationPath, 'utf8');
+        expect(declarationContent).toContain('export function resolveLogger(');
+    });
+
     it('keeps youtube multistream manager module free of commonjs exports syntax', () => {
         const content = readFileSync(join(repoRoot, 'src/platforms/youtube/streams/youtube-multistream-manager.ts'), 'utf8');
 
