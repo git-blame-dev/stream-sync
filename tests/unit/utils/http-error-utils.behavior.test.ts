@@ -1,5 +1,5 @@
 const { describe, test, expect } = require('bun:test');
-const { extractHttpErrorDetails } = require('../../../src/utils/http-error-utils');
+const { extractHttpErrorDetails } = require('../../../src/utils/http-error-utils.ts');
 export {};
 
 describe('http-error-utils behavior', () => {
