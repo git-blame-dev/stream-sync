@@ -1,22 +1,55 @@
-const { createPlatformErrorHandler } = require('./platform-error-handler');
+import { createPlatformErrorHandler } from './platform-error-handler';
 
 const YOUTUBE_TEXT_TAG = '[YOUTUBEJS][Text]:';
 const MISMATCH_WARNING_PATTERN = /^Unable to find matching run for (style|command|attachment) run\. Skipping\.\.\.$/;
 const ADAPTER_MARKER = Symbol.for('stream-sync.youtube-text-log-adapter');
 
-function hasValidLoggerInterface(logger) {
+type AdapterLogger = {
+    warn: (message: string, source?: string, data?: unknown) => void;
+    error: (message: string, source?: string, data?: unknown) => void;
+};
+
+type MismatchWarningType = 'style' | 'command' | 'attachment';
+
+type YouTubeTextInputData = {
+    content?: unknown;
+    styleRuns?: unknown;
+    commandRuns?: unknown;
+    attachmentRuns?: unknown;
+};
+
+type YouTubeTextWarningPayload = {
+    input_data?: YouTubeTextInputData;
+    parsed_runs?: unknown;
+};
+
+type WarningMetadata = {
+    warningType: MismatchWarningType;
+    contentLength: number;
+    styleRunCount: number;
+    commandRunCount: number;
+    attachmentRunCount: number;
+    parsedRunCount: number;
+};
+
+type AdapterInstallResult = {
+    installed: boolean;
+    reason: 'logger-unavailable' | 'console-warn-unavailable' | 'already-installed' | 'install-failed' | 'installed';
+};
+
+function hasValidLoggerInterface(logger: unknown): logger is AdapterLogger {
     return !!logger
-        && typeof logger.warn === 'function'
-        && typeof logger.error === 'function';
+        && typeof (logger as { warn?: unknown }).warn === 'function'
+        && typeof (logger as { error?: unknown }).error === 'function';
 }
 
-function toOneLine(value) {
+function toOneLine(value: unknown): string {
     return String(value ?? '')
         .replace(/\s+/g, ' ')
         .trim();
 }
 
-function getMismatchWarningType(args) {
+function getMismatchWarningType(args: unknown[]): MismatchWarningType | null {
     if (args.length < 2) {
         return null;
     }
@@ -28,11 +61,14 @@ function getMismatchWarningType(args) {
 
     const normalizedMessage = toOneLine(message);
     const match = normalizedMessage.match(MISMATCH_WARNING_PATTERN);
-    return match ? match[1] : null;
+    return match ? (match[1] as MismatchWarningType) : null;
 }
 
-function buildWarningMetadata(warningType, payload) {
-    const inputData = payload && payload.input_data;
+function buildWarningMetadata(warningType: MismatchWarningType, payload: unknown): WarningMetadata {
+    const normalizedPayload = payload && typeof payload === 'object'
+        ? (payload as YouTubeTextWarningPayload)
+        : null;
+    const inputData = normalizedPayload?.input_data;
     const content = inputData && typeof inputData.content === 'string'
         ? inputData.content
         : '';
@@ -43,17 +79,22 @@ function buildWarningMetadata(warningType, payload) {
         styleRunCount: Array.isArray(inputData && inputData.styleRuns) ? inputData.styleRuns.length : 0,
         commandRunCount: Array.isArray(inputData && inputData.commandRuns) ? inputData.commandRuns.length : 0,
         attachmentRunCount: Array.isArray(inputData && inputData.attachmentRuns) ? inputData.attachmentRuns.length : 0,
-        parsedRunCount: Array.isArray(payload && payload.parsed_runs) ? payload.parsed_runs.length : 0
+        parsedRunCount: Array.isArray(normalizedPayload?.parsed_runs) ? normalizedPayload.parsed_runs.length : 0
     };
 }
 
-function buildWarningMessage(metadata) {
+function buildWarningMessage(metadata: WarningMetadata): string {
     return toOneLine(
         `YouTube text run mismatch warning (${metadata.warningType}) | contentLength=${metadata.contentLength} | parsedRuns=${metadata.parsedRunCount}`
     );
 }
 
-function handleAdapterError(errorHandler, message, error, payload) {
+function handleAdapterError(
+    errorHandler: ReturnType<typeof createPlatformErrorHandler>,
+    message: string,
+    error: unknown,
+    payload: Record<string, unknown> | null
+): void {
     if (error instanceof Error) {
         errorHandler.handleEventProcessingError(
             error,
@@ -68,7 +109,7 @@ function handleAdapterError(errorHandler, message, error, payload) {
     errorHandler.logOperationalError(message, 'youtube-text-log-adapter', payload);
 }
 
-function installYouTubeTextLogAdapter(options = {}) {
+function installYouTubeTextLogAdapter(options: { logger?: unknown } = {}): AdapterInstallResult {
     const logger = options.logger;
     if (!hasValidLoggerInterface(logger)) {
         return {
@@ -87,7 +128,7 @@ function installYouTubeTextLogAdapter(options = {}) {
         };
     }
 
-    if (runtimeConsole.warn[ADAPTER_MARKER]) {
+    if (Reflect.get(runtimeConsole.warn, ADAPTER_MARKER) === true) {
         return {
             installed: false,
             reason: 'already-installed'
@@ -95,7 +136,7 @@ function installYouTubeTextLogAdapter(options = {}) {
     }
 
     const passthroughWarn = runtimeConsole.warn;
-    const wrappedWarn = (...args) => {
+    const wrappedWarn = (...args: unknown[]) => {
         try {
             const warningType = getMismatchWarningType(args);
             if (!warningType) {
@@ -144,6 +185,4 @@ function installYouTubeTextLogAdapter(options = {}) {
     };
 }
 
-module.exports = {
-    installYouTubeTextLogAdapter
-};
+export { installYouTubeTextLogAdapter };
