@@ -117,6 +117,29 @@ describe('TwitchPlatform Modular Refactor', () => {
                 expect(state.isConnected).toBe(false);
                 expect(state.isApiReady()).toBe(false);
             });
+
+            it('should treat missing EventSub dependency as disconnected', () => {
+                const config = { channel: 'test_channel', username: 'test_user' };
+
+                const state = ConnectionStateFactory.createTwitchState(config, null);
+
+                expect(state.isConnected).toBe(false);
+                expect(state.platform).toBe('twitch');
+            });
+
+            it('should create YouTube and TikTok states with consistent platform metadata', () => {
+                const config = { username: 'test_user' };
+
+                const youtubeState = ConnectionStateFactory.createYouTubeState(config, { stream1: {} });
+                const tikTokState = ConnectionStateFactory.createTikTokState(config, { connected: true });
+
+                expect(youtubeState.isConnected).toBe(true);
+                expect(youtubeState.platform).toBe('youtube');
+                expect(youtubeState.channel).toBe('test_user');
+                expect(tikTokState.isConnected).toBe(true);
+                expect(tikTokState.platform).toBe('tiktok');
+                expect(tikTokState.channel).toBe('test_user');
+            });
         });
     });
 

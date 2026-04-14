@@ -1,7 +1,20 @@
-const { getSystemTimestampISO } = require('./timestamp');
+import { getSystemTimestampISO } from './timestamp';
+
+type ConnectionStateInput = {
+    isConnected?: unknown;
+    platform?: string;
+    channel?: string;
+    username?: string;
+};
 
 class ConnectionState {
-    constructor({ isConnected, platform, channel, username }) {
+    isConnected: boolean;
+    platform: string | undefined;
+    channel: string | undefined;
+    username: string | undefined;
+    timestamp: string;
+
+    constructor({ isConnected, platform, channel, username }: ConnectionStateInput) {
         this.isConnected = !!isConnected;
         this.platform = platform;
         this.channel = channel;
@@ -9,7 +22,7 @@ class ConnectionState {
         this.timestamp = getSystemTimestampISO();
     }
 
-    isApiReady() {
+    isApiReady(): boolean {
         return !!(this.isConnected && this.channel && this.username);
     }
 
@@ -25,8 +38,21 @@ class ConnectionState {
     }
 }
 
+type PlatformIdentityConfig = {
+    channel?: string;
+    username?: string;
+};
+
+type EventSubLike = {
+    isActive: () => boolean;
+};
+
+type TikTokClientLike = {
+    connected?: unknown;
+};
+
 class ConnectionStateFactory {
-    static createTwitchState(config, eventSub) {
+    static createTwitchState(config: PlatformIdentityConfig, eventSub: EventSubLike | null): ConnectionState {
         return new ConnectionState({
             isConnected: eventSub ? eventSub.isActive() : false,
             platform: 'twitch',
@@ -35,16 +61,19 @@ class ConnectionStateFactory {
         });
     }
 
-    static createYouTubeState(config, connections) {
+    static createYouTubeState(
+        config: PlatformIdentityConfig,
+        connections: Record<string, unknown> | null | undefined
+    ): ConnectionState {
         return new ConnectionState({
-            isConnected: connections && Object.keys(connections).length > 0,
+            isConnected: !!connections && Object.keys(connections).length > 0,
             platform: 'youtube',
             channel: config.username,
             username: config.username
         });
     }
 
-    static createTikTokState(config, client) {
+    static createTikTokState(config: PlatformIdentityConfig, client: TikTokClientLike | null): ConnectionState {
         return new ConnectionState({
             isConnected: client ? client.connected : false,
             platform: 'tiktok',
@@ -54,4 +83,4 @@ class ConnectionStateFactory {
     }
 }
 
-module.exports = { ConnectionState, ConnectionStateFactory };
+export { ConnectionState, ConnectionStateFactory };

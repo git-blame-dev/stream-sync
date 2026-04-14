@@ -1,7 +1,7 @@
 const DEFAULT_REQUIRED_METHODS = ['initialize', 'on', 'cleanup'];
-const DEFAULT_OPTIONAL_SHUTDOWN_METHODS = [];
+const DEFAULT_OPTIONAL_SHUTDOWN_METHODS: string[] = [];
 
-function normalizePlatformName(platformName) {
+function normalizePlatformName(platformName: unknown): string {
     if (typeof platformName !== 'string') {
         return 'unknown';
     }
@@ -10,7 +10,11 @@ function normalizePlatformName(platformName) {
     return trimmed ? trimmed : 'unknown';
 }
 
-function getMissingMethods(instance, requiredMethods, optionalShutdownMethods) {
+function getMissingMethods(
+    instance: unknown,
+    requiredMethods: string[],
+    optionalShutdownMethods: string[]
+): string[] {
     const expected = [...requiredMethods];
 
     if (!instance || typeof instance !== 'object') {
@@ -18,8 +22,9 @@ function getMissingMethods(instance, requiredMethods, optionalShutdownMethods) {
         return expected.sort();
     }
 
-    const missing = expected.filter((methodName) => typeof instance[methodName] !== 'function');
-    const hasShutdownMethod = optionalShutdownMethods.some((methodName) => typeof instance[methodName] === 'function');
+    const record = instance as Record<string, unknown>;
+    const missing = expected.filter((methodName) => typeof record[methodName] !== 'function');
+    const hasShutdownMethod = optionalShutdownMethods.some((methodName) => typeof record[methodName] === 'function');
     if (!hasShutdownMethod) {
         missing.push(...optionalShutdownMethods);
     }
@@ -27,12 +32,20 @@ function getMissingMethods(instance, requiredMethods, optionalShutdownMethods) {
     return missing.sort();
 }
 
+type PlatformValidationResult = {
+    valid: boolean;
+    platformName: string;
+    requiredMethods: string[];
+    missingMethods: string[];
+    issues: string[];
+};
+
 function validatePlatformInterface(
-    platformName,
-    instance,
-    requiredMethods = DEFAULT_REQUIRED_METHODS,
-    optionalShutdownMethods = DEFAULT_OPTIONAL_SHUTDOWN_METHODS
-) {
+    platformName: unknown,
+    instance: unknown,
+    requiredMethods: string[] = DEFAULT_REQUIRED_METHODS,
+    optionalShutdownMethods: string[] = DEFAULT_OPTIONAL_SHUTDOWN_METHODS
+): PlatformValidationResult {
     const normalizedName = normalizePlatformName(platformName);
     const methods = Array.isArray(requiredMethods) && requiredMethods.length > 0
         ? requiredMethods
@@ -41,7 +54,7 @@ function validatePlatformInterface(
         ? optionalShutdownMethods
         : DEFAULT_OPTIONAL_SHUTDOWN_METHODS;
 
-    const issues = [];
+    const issues: string[] = [];
     const isObject = !!instance && typeof instance === 'object';
     const missingMethods = getMissingMethods(instance, methods, shutdownMethods);
 
@@ -69,14 +82,17 @@ function validatePlatformInterface(
     };
 }
 
-function assertPlatformInterface(platformName, instance, requiredMethods = DEFAULT_REQUIRED_METHODS) {
+function assertPlatformInterface<T>(
+    platformName: unknown,
+    instance: T,
+    requiredMethods: string[] = DEFAULT_REQUIRED_METHODS
+): T {
     const result = validatePlatformInterface(platformName, instance, requiredMethods);
     if (!result.valid) {
         throw new Error(result.issues.join(' '));
     }
+
     return instance;
 }
 
-module.exports = {
-    assertPlatformInterface
-};
+export { assertPlatformInterface };
