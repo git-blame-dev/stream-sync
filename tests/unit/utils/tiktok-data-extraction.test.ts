@@ -1,6 +1,6 @@
 const { describe, test, expect } = require('bun:test');
 export {};
-const { extractTikTokGiftData } = require('../../../src/utils/tiktok-data-extraction');
+const { extractTikTokGiftData } = require('../../../src/utils/tiktok-data-extraction.ts');
 
 describe('extractTikTokGiftData', () => {
     const createValidGiftPayload = (overrides = {}) => ({

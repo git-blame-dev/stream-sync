@@ -1,6 +1,6 @@
 const { describe, it, expect } = require('bun:test');
 export {};
-const { extractTikTokGiftData } = require('../../../src/utils/tiktok-data-extraction');
+const { extractTikTokGiftData } = require('../../../src/utils/tiktok-data-extraction.ts');
 
 describe('extractTikTokGiftData - WebcastGiftMessage shape', () => {
     it('parses nested webcast gift with diamondCount and repeatCount', () => {

@@ -5,7 +5,7 @@ const {
     extractTikTokAvatarUrl,
     extractTikTokGiftData,
     formatCoinAmount
-} = require('../../../src/utils/tiktok-data-extraction');
+} = require('../../../src/utils/tiktok-data-extraction.ts');
 
 describe('extractTikTokUserData', () => {
     it('throws when payload is missing', () => {
