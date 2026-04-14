@@ -4,7 +4,7 @@ const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const testClock = require('../../helpers/test-clock');
 
-const { InitializationStatistics } = require('../../../src/utils/initialization-statistics');
+const { InitializationStatistics } = require('../../../src/utils/initialization-statistics.ts');
 
 describe('InitializationStatistics behavior', () => {
     afterEach(() => {

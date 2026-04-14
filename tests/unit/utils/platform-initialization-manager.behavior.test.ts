@@ -2,7 +2,7 @@ const { describe, expect, beforeEach, it } = require('bun:test');
 export {};
 const { createMockFn } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
-const { PlatformInitializationManager } = require('../../../src/utils/platform-initialization-manager');
+const { PlatformInitializationManager } = require('../../../src/utils/platform-initialization-manager.ts');
 
 describe('PlatformInitializationManager behavior edges', () => {
     let sharedHandler: {

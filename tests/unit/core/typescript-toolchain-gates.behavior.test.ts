@@ -169,11 +169,11 @@ describe('TypeScript toolchain migration gates behavior', () => {
     it('keeps source javascript migration inventory explicit and measurable', () => {
         const sourceInventory = collectExecutableJavaScriptInventory(join(repoRoot, 'src'));
 
-        expect(sourceInventory.total).toBe(118);
+        expect(sourceInventory.total).toBe(114);
         expect(sourceInventory.withTypeScriptSiblingCount).toBe(87);
         expect(sourceInventory.wrapperProxyCount).toBe(75);
         expect(sourceInventory.withTypeScriptSiblingNonWrapperCount).toBe(12);
-        expect(sourceInventory.withoutTypeScriptSiblingCount).toBe(31);
+        expect(sourceInventory.withoutTypeScriptSiblingCount).toBe(27);
     });
 
     it('removes first safe ts-proxy wrapper batch from source lane', () => {
@@ -226,6 +226,20 @@ describe('TypeScript toolchain migration gates behavior', () => {
         ];
 
         for (const modulePath of migratedModules) {
+            expect(existsSync(join(repoRoot, `${modulePath}.ts`))).toBe(true);
+            expect(existsSync(join(repoRoot, `${modulePath}.js`))).toBe(false);
+        }
+    });
+
+    it('migrates tiktok initialization utility cohort to typescript source files', () => {
+        const migratedUtilities = [
+            'src/utils/platform-initialization-manager',
+            'src/utils/interval-manager',
+            'src/utils/initialization-statistics',
+            'src/utils/connection-state-manager'
+        ];
+
+        for (const modulePath of migratedUtilities) {
             expect(existsSync(join(repoRoot, `${modulePath}.ts`))).toBe(true);
             expect(existsSync(join(repoRoot, `${modulePath}.js`))).toBe(false);
         }
