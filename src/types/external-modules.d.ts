@@ -12,15 +12,6 @@ type YouTubeParserApiLike = {
     setParserErrorHandler?: (handler: (context?: Record<string, unknown>) => void) => void;
 };
 
-declare module '*youtube-text-log-adapter' {
-    function installYouTubeTextLogAdapter(options?: { logger?: YouTubeLogAdapterLogger }): {
-        installed: boolean;
-        reason: string;
-    };
-
-    export { installYouTubeTextLogAdapter };
-}
-
 declare module '*youtube-parser-log-adapter' {
     function installYouTubeParserLogAdapter(options?: {
         logger?: YouTubeLogAdapterLogger;

@@ -4,7 +4,7 @@ const { createMockFn, clearAllMocks } = require('../../helpers/bun-mock-utils');
 
 const {
     installYouTubeTextLogAdapter
-} = require('../../../src/utils/youtube-text-log-adapter');
+} = require('../../../src/utils/youtube-text-log-adapter.ts');
 
 function createPayload() {
     return {

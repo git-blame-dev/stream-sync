@@ -169,11 +169,11 @@ describe('TypeScript toolchain migration gates behavior', () => {
     it('keeps source javascript migration inventory explicit and measurable', () => {
         const sourceInventory = collectExecutableJavaScriptInventory(join(repoRoot, 'src'));
 
-        expect(sourceInventory.total).toBe(120);
+        expect(sourceInventory.total).toBe(118);
         expect(sourceInventory.withTypeScriptSiblingCount).toBe(87);
         expect(sourceInventory.wrapperProxyCount).toBe(75);
         expect(sourceInventory.withTypeScriptSiblingNonWrapperCount).toBe(12);
-        expect(sourceInventory.withoutTypeScriptSiblingCount).toBe(33);
+        expect(sourceInventory.withoutTypeScriptSiblingCount).toBe(31);
     });
 
     it('removes first safe ts-proxy wrapper batch from source lane', () => {
@@ -214,6 +214,18 @@ describe('TypeScript toolchain migration gates behavior', () => {
         ];
 
         for (const modulePath of migratedUtilities) {
+            expect(existsSync(join(repoRoot, `${modulePath}.ts`))).toBe(true);
+            expect(existsSync(join(repoRoot, `${modulePath}.js`))).toBe(false);
+        }
+    });
+
+    it('migrates avatar constant and youtube text log adapter to typescript source files', () => {
+        const migratedModules = [
+            'src/constants/avatar',
+            'src/utils/youtube-text-log-adapter'
+        ];
+
+        for (const modulePath of migratedModules) {
             expect(existsSync(join(repoRoot, `${modulePath}.ts`))).toBe(true);
             expect(existsSync(join(repoRoot, `${modulePath}.js`))).toBe(false);
         }
