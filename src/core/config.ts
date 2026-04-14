@@ -3,7 +3,7 @@ import ini from 'ini';
 
 import { buildConfig } from './config-builders';
 import type { BuiltConfig, NormalizedConfig } from './types/config-types';
-import envFileParserModule from '../utils/env-file-parser.js';
+import { parseEnvContent } from '../utils/env-file-parser';
 import configValidatorModule from '../utils/config-validator.js';
 import { handleUserFacingError } from '../utils/user-friendly-errors';
 
@@ -21,9 +21,6 @@ type ConfigValidatorApi = {
 
 const { ConfigValidator } = configValidatorModule as unknown as {
     ConfigValidator: ConfigValidatorApi;
-};
-const { parseEnvContent } = envFileParserModule as {
-    parseEnvContent: (content: string) => Record<string, string>;
 };
 
 let loadedConfig: RawConfig | null = null;

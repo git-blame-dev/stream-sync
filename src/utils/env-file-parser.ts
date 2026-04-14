@@ -1,11 +1,18 @@
-function parseEnvContent(content, options = {}) {
+export type ParseEnvContentOptions = {
+    ignoreEmptyKeys?: boolean;
+};
+
+export function parseEnvContent(
+    content: unknown,
+    options: ParseEnvContentOptions = {}
+): Record<string, string> {
     const { ignoreEmptyKeys = true } = options;
 
     if (content === undefined || content === null) {
         return {};
     }
 
-    return String(content).split(/\r?\n/).reduce((acc, line) => {
+    return String(content).split(/\r?\n/).reduce<Record<string, string>>((acc, line) => {
         const trimmed = line.trim();
         if (!trimmed || trimmed.startsWith('#')) {
             return acc;
@@ -26,7 +33,3 @@ function parseEnvContent(content, options = {}) {
         return acc;
     }, {});
 }
-
-module.exports = {
-    parseEnvContent
-};
