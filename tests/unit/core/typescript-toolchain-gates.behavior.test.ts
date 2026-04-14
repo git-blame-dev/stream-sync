@@ -47,6 +47,73 @@ function collectExecutableTypeScriptFiles(directoryPath: string, output: string[
     return output;
 }
 
+type ExecutableJavaScriptInventory = {
+    total: number;
+    withTypeScriptSiblingCount: number;
+    wrapperProxyCount: number;
+    withTypeScriptSiblingNonWrapperCount: number;
+    withoutTypeScriptSiblingCount: number;
+};
+
+const WRAPPER_PROXY_PATTERN = /^module\.exports\s*=\s*require\((['"])\.\/[^'"]+\.ts\1\);?$/;
+
+function collectExecutableJavaScriptInventory(directoryPath: string): ExecutableJavaScriptInventory {
+    const inventory: ExecutableJavaScriptInventory = {
+        total: 0,
+        withTypeScriptSiblingCount: 0,
+        wrapperProxyCount: 0,
+        withTypeScriptSiblingNonWrapperCount: 0,
+        withoutTypeScriptSiblingCount: 0
+    };
+
+    if (!existsSync(directoryPath)) {
+        return inventory;
+    }
+
+    const walk = (currentPath: string): void => {
+        const entries = readdirSync(currentPath, { withFileTypes: true });
+
+        for (const entry of entries) {
+            if (EXCLUDED_SCAN_DIRECTORIES.has(entry.name)) {
+                continue;
+            }
+
+            const fullPath = join(currentPath, entry.name);
+            if (entry.isDirectory()) {
+                walk(fullPath);
+                continue;
+            }
+
+            if (!entry.isFile() || !entry.name.endsWith('.js')) {
+                continue;
+            }
+
+            inventory.total += 1;
+
+            const siblingTypeScriptPath = `${fullPath.slice(0, -3)}.ts`;
+            const hasTypeScriptSibling = existsSync(siblingTypeScriptPath);
+            if (!hasTypeScriptSibling) {
+                inventory.withoutTypeScriptSiblingCount += 1;
+                continue;
+            }
+
+            inventory.withTypeScriptSiblingCount += 1;
+
+            const content = readFileSync(fullPath, 'utf8').trim();
+            const isWrapperProxy = WRAPPER_PROXY_PATTERN.test(content);
+            if (isWrapperProxy) {
+                inventory.wrapperProxyCount += 1;
+                continue;
+            }
+
+            inventory.withTypeScriptSiblingNonWrapperCount += 1;
+        }
+    };
+
+    walk(directoryPath);
+    return inventory;
+}
+
 function findCommonJsModuleSyntax(content: string) {
     const lines = content.split(/\r?\n/);
     const syntaxPatterns = [
@@ -88,6 +155,46 @@ describe('TypeScript toolchain migration gates behavior', () => {
         expect(existsSync(join(repoRoot, 'tsconfig.scripts.json'))).toBe(true);
         expect(existsSync(join(repoRoot, 'tsconfig.tools.json'))).toBe(true);
         expect(existsSync(join(repoRoot, 'tsconfig.all.json'))).toBe(true);
+    });
+
+    it('keeps executable tests, scripts, and tools lanes free of javascript files', () => {
+        const laneRoots = ['tests', 'scripts', 'tools'];
+
+        for (const laneRoot of laneRoots) {
+            const laneInventory = collectExecutableJavaScriptInventory(join(repoRoot, laneRoot));
+            expect(laneInventory.total).toBe(0);
+        }
+    });
+
+    it('keeps source javascript migration inventory explicit and measurable', () => {
+        const sourceInventory = collectExecutableJavaScriptInventory(join(repoRoot, 'src'));
+
+        expect(sourceInventory.total).toBe(134);
+        expect(sourceInventory.withTypeScriptSiblingCount).toBe(97);
+        expect(sourceInventory.wrapperProxyCount).toBe(85);
+        expect(sourceInventory.withTypeScriptSiblingNonWrapperCount).toBe(12);
+        expect(sourceInventory.withoutTypeScriptSiblingCount).toBe(37);
+    });
+
+    it('keeps transitional tsconfig allowJs lane contracts explicit before final hardening', () => {
+        const laneConfigPaths = [
+            'tsconfig.src.json',
+            'tsconfig.tests.json',
+            'tsconfig.scripts.json',
+            'tsconfig.tools.json'
+        ];
+
+        for (const laneConfigPath of laneConfigPaths) {
+            const laneConfig = JSON.parse(readFileSync(join(repoRoot, laneConfigPath), 'utf8')) as {
+                compilerOptions?: {
+                    allowJs?: boolean;
+                };
+                include?: string[];
+            };
+
+            expect(laneConfig.compilerOptions?.allowJs).toBe(true);
+            expect(laneConfig.include?.some(pattern => pattern.includes('**/*.js'))).toBe(true);
+        }
     });
 
     it('keeps Bun test preload contracts explicit', () => {
