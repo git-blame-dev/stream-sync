@@ -257,7 +257,7 @@ describe('TypeScript toolchain migration gates behavior', () => {
         }
     });
 
-    it('keeps transitional tsconfig allowJs lane contracts explicit before final hardening', () => {
+    it('requires final ts-only lane contracts for source, tests, scripts, and tools', () => {
         const laneConfigPaths = [
             'tsconfig.src.json',
             'tsconfig.tests.json',
@@ -269,13 +269,49 @@ describe('TypeScript toolchain migration gates behavior', () => {
             const laneConfig = JSON.parse(readFileSync(join(repoRoot, laneConfigPath), 'utf8')) as {
                 compilerOptions?: {
                     allowJs?: boolean;
+                    module?: string;
                 };
                 include?: string[];
             };
 
-            expect(laneConfig.compilerOptions?.allowJs).toBe(true);
-            expect(laneConfig.include?.some(pattern => pattern.includes('**/*.js'))).toBe(true);
+            expect(laneConfig.compilerOptions?.allowJs).toBe(false);
+            expect(laneConfig.include?.some(pattern => pattern.includes('**/*.js'))).toBe(false);
+            expect(laneConfig.include?.some(pattern => pattern.includes('**/*.ts'))).toBe(true);
+
+            if (laneConfigPath === 'tsconfig.tests.json') {
+                expect(laneConfig.compilerOptions?.module).not.toBe('CommonJS');
+            }
         }
+    });
+
+    it('requires lint and knip lanes aligned to final ts-only executable surface', () => {
+        const lintScript = packageJson.scripts.lint;
+        expect(lintScript).toContain('bun x eslint "src/**/*.ts" "tests/**/*.ts" "scripts/**/*.ts" "tools/**/*.ts"');
+        expect(lintScript).not.toContain('{js,ts}');
+
+        const knipConfig = JSON.parse(readFileSync(join(repoRoot, 'knip.json'), 'utf8')) as {
+            project?: string[];
+            entry?: string[];
+        };
+
+        expect(knipConfig.project).toEqual(expect.arrayContaining([
+            'src/**/*.ts',
+            'tests/**/*.ts',
+            'scripts/**/*.ts',
+            'tools/**/*.ts',
+            'gui/**/*.{ts,tsx}'
+        ]));
+
+        expect(knipConfig.project?.some((pattern) => pattern.includes('.js'))).toBe(false);
+
+        const executableEntryPatterns = (knipConfig.entry ?? []).filter((pattern) => pattern !== 'eslint.config.js');
+        expect(executableEntryPatterns.some((pattern) => pattern.includes('.js'))).toBe(false);
+
+        const eslintConfigContent = readFileSync(join(repoRoot, 'eslint.config.js'), 'utf8');
+        expect(eslintConfigContent).not.toContain("files: ['src/**/*.js']");
+        expect(eslintConfigContent).not.toContain("files: ['tests/**/*.js']");
+        expect(eslintConfigContent).not.toContain("files: ['scripts/**/*.js']");
+        expect(eslintConfigContent).not.toContain("files: ['tools/**/*.js']");
     });
 
     it('keeps Bun test preload contracts explicit', () => {

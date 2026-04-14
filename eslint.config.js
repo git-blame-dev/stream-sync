@@ -54,22 +54,6 @@ const testGlobals = {
   createTestApp: false
 };
 
-const srcJsRules = {
-  'chatbot/no-logger-error': 'error',
-  'no-empty': ['error', { allowEmptyCatch: false }],
-  'no-undef': 'error',
-  'no-console': 'error',
-  'no-unused-private-class-members': 'error',
-  'no-unused-vars': ['error', { vars: 'all', args: 'none', varsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' }],
-  'no-restricted-syntax': [
-    'error',
-    {
-      selector: 'CallExpression[callee.property.name="toISOString"][callee.object.type="NewExpression"][callee.object.callee.name="Date"][callee.object.arguments.length=0]',
-      message: 'Use getSystemTimestampISO() from src/utils/timestamp.ts instead of new Date().toISOString().'
-    }
-  ]
-};
-
 const srcTsRules = {
   'chatbot/no-logger-error': 'error',
   'no-empty': ['error', { allowEmptyCatch: false }],
@@ -87,43 +71,12 @@ const srcTsRules = {
   ]
 };
 
-const scriptJsRules = {
-  'no-empty': ['error', { allowEmptyCatch: false }],
-  'no-undef': 'error',
-  'no-unused-private-class-members': 'error',
-  'no-unused-vars': ['error', { vars: 'all', args: 'none', varsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' }]
-};
-
 const scriptTsRules = {
   'no-empty': ['error', { allowEmptyCatch: false }],
   'no-unused-private-class-members': 'error',
   'no-undef': 'off',
   'no-unused-vars': 'off',
   '@typescript-eslint/no-unused-vars': ['error', { vars: 'all', args: 'none', varsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' }]
-};
-
-const testJsRules = {
-  'no-empty': ['error', { allowEmptyCatch: false }],
-  'no-undef': 'error',
-  'no-unused-vars': ['error', { vars: 'all', args: 'none', varsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' }],
-  'no-restricted-properties': [
-    'error',
-    {
-      object: 'Date',
-      property: 'now',
-      message: 'Use testClock.now() for deterministic test timing.'
-    },
-    {
-      object: 'performance',
-      property: 'now',
-      message: 'Use testClock.now() for deterministic test timing.'
-    },
-    {
-      object: 'Math',
-      property: 'random',
-      message: 'Use deterministic test data instead of Math.random().'
-    }
-  ]
 };
 
 const testTsRules = {
@@ -162,18 +115,6 @@ const guiTsRules = {
 
 module.exports = [
   {
-    files: ['src/**/*.js'],
-    languageOptions: nodeLanguageOptions,
-    plugins: {
-      chatbot: {
-        rules: {
-          'no-logger-error': noLoggerErrorRule
-        }
-      }
-    },
-    rules: srcJsRules
-  },
-  {
     files: ['src/**/*.ts'],
     ignores: ['src/utils/platform-error-handler.ts'],
     languageOptions: nodeTsLanguageOptions,
@@ -188,13 +129,6 @@ module.exports = [
     rules: srcTsRules
   },
   {
-    files: ['src/core/logging.js'],
-    languageOptions: nodeLanguageOptions,
-    rules: {
-      'no-console': 'off'
-    }
-  },
-  {
     files: ['src/bootstrap.ts', 'src/core/logging.ts'],
     languageOptions: nodeTsLanguageOptions,
     plugins: {
@@ -203,16 +137,6 @@ module.exports = [
     rules: {
       'no-console': 'off'
     }
-  },
-  {
-    files: ['scripts/**/*.js'],
-    languageOptions: nodeLanguageOptions,
-    rules: scriptJsRules
-  },
-  {
-    files: ['tools/**/*.js'],
-    languageOptions: nodeLanguageOptions,
-    rules: scriptJsRules
   },
   {
     files: ['scripts/**/*.ts'],
@@ -229,14 +153,6 @@ module.exports = [
       '@typescript-eslint': tsPlugin
     },
     rules: scriptTsRules
-  },
-  {
-    files: ['tests/**/*.js'],
-    languageOptions: {
-      ...nodeLanguageOptions,
-      globals: testGlobals
-    },
-    rules: testJsRules
   },
   {
     files: ['tests/**/*.ts'],
