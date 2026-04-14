@@ -314,6 +314,54 @@ describe('TypeScript toolchain migration gates behavior', () => {
         expect(eslintConfigContent).not.toContain("files: ['tools/**/*.js']");
     });
 
+    it('requires explicit strictness policy flags and lane alignment', () => {
+        const baseConfig = JSON.parse(readFileSync(join(repoRoot, 'tsconfig.base.json'), 'utf8')) as {
+            compilerOptions?: {
+                strict?: boolean;
+                useUnknownInCatchVariables?: boolean;
+                noImplicitOverride?: boolean;
+                noFallthroughCasesInSwitch?: boolean;
+                exactOptionalPropertyTypes?: boolean;
+                noUncheckedIndexedAccess?: boolean;
+            };
+        };
+
+        expect(baseConfig.compilerOptions?.strict).toBe(true);
+        expect(baseConfig.compilerOptions?.useUnknownInCatchVariables).toBe(true);
+        expect(baseConfig.compilerOptions?.noImplicitOverride).toBe(true);
+        expect(baseConfig.compilerOptions?.noFallthroughCasesInSwitch).toBe(true);
+        expect(baseConfig.compilerOptions?.exactOptionalPropertyTypes).toBe(false);
+        expect(baseConfig.compilerOptions?.noUncheckedIndexedAccess).toBe(false);
+
+        const laneConfigPaths = [
+            'tsconfig.src.json',
+            'tsconfig.tests.json',
+            'tsconfig.scripts.json',
+            'tsconfig.tools.json'
+        ];
+
+        for (const laneConfigPath of laneConfigPaths) {
+            const laneConfig = JSON.parse(readFileSync(join(repoRoot, laneConfigPath), 'utf8')) as {
+                compilerOptions?: {
+                    strict?: boolean;
+                    useUnknownInCatchVariables?: boolean;
+                    noImplicitOverride?: boolean;
+                    noFallthroughCasesInSwitch?: boolean;
+                    exactOptionalPropertyTypes?: boolean;
+                    noUncheckedIndexedAccess?: boolean;
+                };
+            };
+
+            const laneOptions = laneConfig.compilerOptions;
+            expect(laneOptions?.strict).toBeUndefined();
+            expect(laneOptions?.useUnknownInCatchVariables).toBeUndefined();
+            expect(laneOptions?.noImplicitOverride).toBeUndefined();
+            expect(laneOptions?.noFallthroughCasesInSwitch).toBeUndefined();
+            expect(laneOptions?.exactOptionalPropertyTypes).toBeUndefined();
+            expect(laneOptions?.noUncheckedIndexedAccess).toBeUndefined();
+        }
+    });
+
     it('keeps Bun test preload contracts explicit', () => {
         const bunfig = readFileSync(join(repoRoot, 'bunfig.toml'), 'utf8');
 
