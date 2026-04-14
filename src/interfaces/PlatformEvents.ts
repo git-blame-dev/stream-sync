@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { DEFAULT_AVATAR_URL } from '../constants/avatar';
+import { allowsYouTubeJewelsMissingUserId } from '../utils/missing-fields';
 import { getSystemTimestampISO } from '../utils/timestamp';
 
 const PlatformEvents = {
@@ -172,7 +173,7 @@ const EVENT_SCHEMAS = {
     },
     'platform:gift': {
         required: ['type', 'platform', 'id', 'giftType', 'giftCount', 'amount', 'currency', 'timestamp'],
-        optional: ['avatarUrl', 'repeatCount', 'message', 'cheermoteInfo', 'giftImageUrl', 'isError', 'isAnonymous', 'isAggregated', 'aggregatedCount', 'enhancedGiftData', 'sourceType'],
+        optional: ['avatarUrl', 'repeatCount', 'message', 'cheermoteInfo', 'giftImageUrl', 'isError', 'isAnonymous', 'isAggregated', 'aggregatedCount', 'enhancedGiftData', 'sourceType', 'metadata'],
         properties: {
             type: { type: 'string', enum: ['platform:gift'] },
             platform: { type: 'string', enum: VALID_PLATFORMS },
@@ -194,7 +195,8 @@ const EVENT_SCHEMAS = {
             isAggregated: { type: 'boolean' },
             aggregatedCount: { type: 'number' },
             enhancedGiftData: { type: 'object' },
-            sourceType: { type: 'string' }
+            sourceType: { type: 'string' },
+            metadata: { type: 'object' }
         }
     },
     'platform:envelope': {
@@ -1098,6 +1100,15 @@ class EnhancedPlatformEvents {
             (event.type === PlatformEvents.GIFT || event.type === PlatformEvents.GIFTPAYPIGGY);
         const hasValidUsername = typeof event.username === 'string' && event.username.trim().length > 0;
         const hasValidUserId = typeof event.userId === 'string' && event.userId.trim().length > 0;
+        const metadata = event.metadata && typeof event.metadata === 'object'
+            ? event.metadata
+            : null;
+        const allowsMissingUserId = allowsYouTubeJewelsMissingUserId({
+            type: event.type,
+            platform: event.platform,
+            currency: event.currency,
+            metadata
+        });
 
         if (isErrorPayload) {
             return true;
@@ -1114,7 +1125,7 @@ class EnhancedPlatformEvents {
             return true;
         }
 
-        return hasValidUsername && hasValidUserId;
+        return hasValidUsername && (hasValidUserId || allowsMissingUserId);
     }
 
     static validateNotificationEvent(event) {

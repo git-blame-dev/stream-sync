@@ -3,7 +3,7 @@ import { NOTIFICATION_CONFIGS } from '../core/constants';
 import { isIsoTimestamp } from '../utils/timestamp';
 import { getValidMessageParts, normalizeBadgeImages } from '../utils/message-parts';
 import { UNKNOWN_CHAT_MESSAGE, UNKNOWN_CHAT_USERNAME } from '../constants/degraded-chat';
-import { getMissingFields } from '../utils/missing-fields';
+import { allowsYouTubeJewelsMissingUserId, getMissingFields } from '../utils/missing-fields';
 
 const PlatformEvents = {
     CHAT_MESSAGE: 'platform:chat-message',
@@ -436,6 +436,15 @@ class PlatformEventRouter {
             : String(sanitized.userId).trim();
         const normalizedUserId = normalizedUserIdValue || undefined;
         const normalizedUsername = typeof sanitized.username === 'string' ? sanitized.username.trim() : '';
+        const metadata = sanitized.metadata && typeof sanitized.metadata === 'object'
+            ? asRouterRecord(sanitized.metadata)
+            : null;
+        const allowsMissingUserId = allowsYouTubeJewelsMissingUserId({
+            type: originalType,
+            platform: originalPlatform,
+            currency: sanitized.currency,
+            metadata
+        });
         const isAnonymousPayload = sanitized.isAnonymous === true;
         const allowsAnonymous = isAnonymousPayload &&
             (originalType === PlatformEvents.GIFT || originalType === PlatformEvents.GIFTPAYPIGGY);
@@ -445,7 +454,7 @@ class PlatformEventRouter {
                 if (!normalizedUsername) {
                     throw new Error('Notification payload requires username');
                 }
-                if (!normalizedUserId) {
+                if (!normalizedUserId && !allowsMissingUserId) {
                     throw new Error('Notification payload requires userId');
                 }
             } else if ((normalizedUsername && !normalizedUserId) || (!normalizedUsername && normalizedUserId)) {

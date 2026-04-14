@@ -143,6 +143,52 @@ describe('PlatformEventRouter validation', () => {
         expect(payload.userId).toBeUndefined();
     });
 
+    it('allows YouTube jewels gifts without userId only when missing-field metadata marks userId', async () => {
+        const { router, runtime } = buildRouter();
+
+        await router.routeEvent({
+            platform: 'youtube',
+            type: 'platform:gift',
+            data: {
+                id: 'gift-yt-jewels-1',
+                giftType: 'Girl power',
+                giftCount: 1,
+                amount: 300,
+                currency: 'jewels',
+                username: 'test-jewels-user',
+                timestamp: new Date().toISOString(),
+                metadata: {
+                    missingFields: ['userId']
+                }
+            }
+        });
+
+        expect(runtime.handleGiftNotification).toHaveBeenCalledTimes(1);
+        const [, , payload] = runtime.handleGiftNotification.mock.calls[0];
+        expect(payload.userId).toBeUndefined();
+        expect(payload.metadata).toEqual({ missingFields: ['userId'] });
+    });
+
+    it('rejects YouTube jewels gifts without userId when missing-field metadata is absent', async () => {
+        const { router, runtime } = buildRouter();
+
+        await expect(router.routeEvent({
+            platform: 'youtube',
+            type: 'platform:gift',
+            data: {
+                id: 'gift-yt-jewels-2',
+                giftType: 'Girl power',
+                giftCount: 1,
+                amount: 300,
+                currency: 'jewels',
+                username: 'test-jewels-user',
+                timestamp: new Date().toISOString()
+            }
+        })).rejects.toThrow('Notification payload requires userId');
+
+        expect(runtime.handleGiftNotification).not.toHaveBeenCalled();
+    });
+
     it('allows anonymous giftpaypiggy payloads without identity fields', async () => {
         const { router, runtime } = buildRouter();
 

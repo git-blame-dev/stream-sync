@@ -9,6 +9,7 @@ import { ChatNotificationRouter } from '../services/ChatNotificationRouter';
 import { PlatformEventRouter } from '../services/PlatformEventRouter';
 import { createGuiTransportService, isGuiActive } from '../services/gui/gui-transport-service';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
+import { allowsYouTubeJewelsMissingUserId } from '../utils/missing-fields';
 import { getSystemTimestampISO } from '../utils/timestamp';
 import { safeSetTimeout } from '../utils/timeout-validator';
 import { ViewerCountSystem } from '../utils/viewer-count';
@@ -56,13 +57,19 @@ class AppRuntime {
             const isError = options.isError === true;
             const allowAnonymous = options.isAnonymous === true &&
                 (type === 'platform:gift' || type === 'platform:giftpaypiggy');
+            const allowYouTubeJewelsMissingUserId = allowsYouTubeJewelsMissingUserId({
+                type,
+                platform,
+                currency: options.currency,
+                metadata: options.metadata
+            });
             if (!username || typeof username !== 'string' || !username.trim()) {
                 if (!isError && !allowAnonymous) {
                     throw new Error(`Missing username for ${type} notification`);
                 }
             }
             if (!isError) {
-                if (!options.userId && !allowAnonymous) {
+                if (!options.userId && !allowAnonymous && !allowYouTubeJewelsMissingUserId) {
                     throw new Error(`Missing userId for ${type} notification`);
                 }
                 if (!options.timestamp) {
@@ -837,11 +844,17 @@ class AppRuntime {
         }
         const isError = options.isError === true;
         const allowAnonymous = options.isAnonymous === true;
+        const allowYouTubeJewelsMissingUserId = allowsYouTubeJewelsMissingUserId({
+            type: 'platform:gift',
+            platform,
+            currency: options.currency,
+            metadata: options.metadata
+        });
         if (!isError) {
             if (!options.timestamp) {
                 throw new Error('handleGiftNotification requires timestamp');
             }
-            if (!options.userId && !allowAnonymous) {
+            if (!options.userId && !allowAnonymous && !allowYouTubeJewelsMissingUserId) {
                 throw new Error('handleGiftNotification requires userId');
             }
         }

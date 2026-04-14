@@ -41,6 +41,16 @@ interface ParsedMembership {
     id?: string;
 }
 
+interface ParsedGiftMessageView {
+    id: string;
+    timestamp: string;
+    giftType: string;
+    giftCount: 1;
+    amount: number;
+    currency: 'jewels';
+    message: string;
+}
+
 interface MembershipLevelInput {
     headerPrimaryText: string;
     headerSubtext: string;
@@ -182,6 +192,35 @@ function createYouTubeMonetizationParser(options: YouTubeMonetizationParserOptio
         }
 
         return '';
+    };
+
+    const resolveGiftMessageText = (field: unknown): string => {
+        if (typeof field === 'string') {
+            return field.trim();
+        }
+
+        const fieldRecord = toRecord(field);
+        const content = fieldRecord.content;
+        if (typeof content === 'string' && content.trim()) {
+            return content.trim();
+        }
+
+        return extractStructuredText(field);
+    };
+
+    const parseJewelsGiftText = (message: string): { giftType: string; amount: number } => {
+        const match = message.match(/^sent\s+(.+?)\s+for\s+(\d+(?:\.\d+)?)\s+jewels$/i);
+        if (!match) {
+            throw new Error('YouTube GiftMessageView requires text in "sent <gift> for <amount> Jewels" format');
+        }
+
+        const giftType = match[1].trim();
+        const amount = Number(match[2]);
+        if (!giftType || !Number.isFinite(amount) || amount <= 0) {
+            throw new Error('YouTube GiftMessageView requires text in "sent <gift> for <amount> Jewels" format');
+        }
+
+        return { giftType, amount };
     };
 
     const parseMembershipMonthsFromHeaderText = (text: unknown): number | undefined => {
@@ -394,11 +433,31 @@ function createYouTubeMonetizationParser(options: YouTubeMonetizationParserOptio
         return payload;
     };
 
+    const parseGiftMessageView = (chatItem: UnknownRecord): ParsedGiftMessageView => {
+        const item = toRecord(chatItem.item);
+        const message = resolveGiftMessageText(item.text);
+        if (!message) {
+            throw new Error('YouTube GiftMessageView requires text in "sent <gift> for <amount> Jewels" format');
+        }
+
+        const { giftType, amount } = parseJewelsGiftText(message);
+        return {
+            id: resolveId(chatItem, 'YouTube GiftMessageView'),
+            timestamp: resolveTimestamp(chatItem, 'YouTube GiftMessageView'),
+            giftType,
+            giftCount: 1,
+            amount,
+            currency: 'jewels',
+            message
+        };
+    };
+
     return {
         parseSuperChat,
         parseSuperSticker,
         parseMembership,
         parseGiftPurchase,
+        parseGiftMessageView,
         resolveTimestamp,
         resolveOptionalId
     };

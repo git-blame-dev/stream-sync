@@ -30,6 +30,7 @@ describe('YouTube event router', () => {
         const superStickerCalls: unknown[] = [];
         const membershipCalls: unknown[] = [];
         const giftMembershipCalls: unknown[] = [];
+        const giftMessageViewCalls: unknown[] = [];
         const chatTextCalls: unknown[] = [];
         const lowPriorityCalls: Array<{ item: unknown; type: string }> = [];
 
@@ -39,6 +40,7 @@ describe('YouTube event router', () => {
             handleSuperSticker: (item: unknown) => superStickerCalls.push(item),
             handleMembership: (item: unknown) => membershipCalls.push(item),
             handleGiftMembershipPurchase: (item: unknown) => giftMembershipCalls.push(item),
+            handleGiftMessageView: (item: unknown) => giftMessageViewCalls.push(item),
             handleChatTextMessage: (item: unknown) => chatTextCalls.push(item),
             handleLowPriorityEvent: (item: unknown, type: string) => lowPriorityCalls.push({ item, type }),
             _emitPlatformEvent: () => {},
@@ -54,6 +56,7 @@ describe('YouTube event router', () => {
         await router.routeEvent(chatItem('LiveChatPaidSticker'), 'LiveChatPaidSticker');
         await router.routeEvent(chatItem('LiveChatMembershipItem'), 'LiveChatMembershipItem');
         await router.routeEvent(chatItem('LiveChatSponsorshipsGiftPurchaseAnnouncement'), 'LiveChatSponsorshipsGiftPurchaseAnnouncement');
+        await router.routeEvent(chatItem('GiftMessageView'), 'GiftMessageView');
         await router.routeEvent(chatItem('LiveChatTextMessage'), 'LiveChatTextMessage');
         await router.routeEvent(chatItem('LiveChatViewerEngagementMessage'), 'LiveChatViewerEngagementMessage');
 
@@ -61,6 +64,7 @@ describe('YouTube event router', () => {
         expect(superStickerCalls).toHaveLength(1);
         expect(membershipCalls).toHaveLength(1);
         expect(giftMembershipCalls).toHaveLength(1);
+        expect(giftMessageViewCalls).toHaveLength(1);
         expect(chatTextCalls).toHaveLength(1);
         expect(lowPriorityCalls).toHaveLength(1);
         expect(lowPriorityCalls[0].type).toBe('LiveChatViewerEngagementMessage');

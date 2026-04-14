@@ -515,6 +515,44 @@ describe('Platform Events Interface', () => {
             expect(PlatformEvents.validateEvent(event)).toBe(true);
         });
 
+        it('accepts YouTube jewels gift payloads without userId only when missing-field metadata marks userId', () => {
+            const event = {
+                type: 'platform:gift',
+                platform: 'youtube',
+                id: 'yt-jewels-gift-1',
+                giftType: 'Girl power',
+                giftCount: 1,
+                amount: 300,
+                currency: 'jewels',
+                username: 'test-jewels-user',
+                timestamp: new Date(testClock.now()).toISOString(),
+                metadata: {
+                    missingFields: ['userId']
+                }
+            };
+
+            expect(PlatformEvents.validateEvent(event)).toBe(true);
+        });
+
+        it('rejects non-YouTube gift payloads without userId even when missing-field metadata marks userId', () => {
+            const event = {
+                type: 'platform:gift',
+                platform: 'tiktok',
+                id: 'tt-jewels-gift-1',
+                giftType: 'Girl power',
+                giftCount: 1,
+                amount: 300,
+                currency: 'jewels',
+                username: 'test-jewels-user',
+                timestamp: new Date(testClock.now()).toISOString(),
+                metadata: {
+                    missingFields: ['userId']
+                }
+            };
+
+            expect(PlatformEvents.validateEvent(event)).toBe(false);
+        });
+
         it('rejects platform:notification envelope in validateEvent runtime contract', () => {
             const envelope = PlatformEvents.createNotificationEvent('twitch', 'platform:gift', {
                 id: 'gift-runtime-envelope-1',

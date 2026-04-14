@@ -27,6 +27,7 @@ interface CreateYouTubeEventRouterOptions {
 const EVENT_HANDLER_MAP = new Map([
     ['LiveChatPaidMessage', 'handleSuperChat'],
     ['LiveChatPaidSticker', 'handleSuperSticker'],
+    ['GiftMessageView', 'handleGiftMessageView'],
     ['LiveChatMembershipItem', 'handleMembership'],
     ['LiveChatSponsorshipsGiftPurchaseAnnouncement', 'handleGiftMembershipPurchase'],
     ['LiveChatTextMessage', 'handleChatTextMessage']
