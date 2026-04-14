@@ -101,6 +101,75 @@ describe('YouTube monetized event pipeline', () => {
         expect(membershipEvents[0].timestamp).toBe(new Date(1704067200000).toISOString());
     });
 
+    test('emits a YouTube jewels gift event for GiftMessageView without fabricating userId', async () => {
+        const youtubePlatform = createPlatform();
+        const giftEvents = [];
+        youtubePlatform.handlers = {
+            ...youtubePlatform.handlers,
+            onGift: (event) => giftEvents.push(event)
+        };
+
+        await youtubePlatform.handleChatMessage({
+            item: {
+                type: 'GiftMessageView',
+                id: 'ChwKGkNNRHAzZmpKNVpNREZkM0N3Z1FkQUpZWmNn',
+                timestamp_usec: '1704067200000000',
+                text: {
+                    content: 'sent Girl power for 300 Jewels'
+                },
+                authorName: {
+                    content: '@test-jewels-gifter '
+                }
+            }
+        });
+        await new Promise((resolve) => setImmediate(resolve));
+
+        expect(giftEvents).toHaveLength(1);
+        expect(giftEvents[0]).toMatchObject({
+            platform: 'youtube',
+            type: 'platform:gift',
+            username: 'test-jewels-gifter',
+            giftType: 'Girl power',
+            giftCount: 1,
+            amount: 300,
+            currency: 'jewels',
+            id: 'ChwKGkNNRHAzZmpKNVpNREZkM0N3Z1FkQUpZWmNn',
+            metadata: {
+                missingFields: ['userId']
+            }
+        });
+        expect(giftEvents[0].timestamp).toBe(new Date(1704067200000).toISOString());
+        expect(giftEvents[0].userId).toBeUndefined();
+    });
+
+    test('resolves GiftMessageView usernames from snake_case author_name payloads', async () => {
+        const youtubePlatform = createPlatform();
+        const giftEvents = [];
+        youtubePlatform.handlers = {
+            ...youtubePlatform.handlers,
+            onGift: (event) => giftEvents.push(event)
+        };
+
+        await youtubePlatform.handleChatMessage({
+            item: {
+                type: 'GiftMessageView',
+                id: 'ChwKGkNQMnAwNmFnNkpNREZTVHp3Z1FkdFFZeTB3',
+                timestamp_usec: '1704067200000000',
+                text: {
+                    content: 'sent Six seven for 67 Jewels'
+                },
+                author_name: {
+                    content: '@test-snake-gifter '
+                }
+            }
+        });
+        await new Promise((resolve) => setImmediate(resolve));
+
+        expect(giftEvents).toHaveLength(1);
+        expect(giftEvents[0].username).toBe('test-snake-gifter');
+        expect(giftEvents[0].currency).toBe('jewels');
+    });
+
     test('emits renewal paypiggy events for real snake_case YouTube membership milestone payloads', async () => {
         const youtubePlatform = createPlatform();
         const membershipEvents = [];

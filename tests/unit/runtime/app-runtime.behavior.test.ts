@@ -307,6 +307,39 @@ describe('AppRuntime behavior', () => {
         expect(Object.prototype.hasOwnProperty.call(calls[0][2], 'repeatCount')).toBe(false);
     });
 
+    it('forwards YouTube jewels gift notifications without userId when metadata marks missing userId', async () => {
+        const calls = [];
+        const notificationManager = createRecordingNotificationManager(calls);
+        const runtime = createRuntime({
+            notificationManager,
+            vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue({ key: 'gifts' }) }
+        });
+
+        await runtime.handleGiftNotification('youtube', 'test-jewels-user', {
+            type: 'platform:gift',
+            timestamp: '2024-01-01T00:00:00.000Z',
+            giftType: 'Girl power',
+            giftCount: 1,
+            amount: 300,
+            currency: 'jewels',
+            id: 'yt-jewels-gift-runtime-1',
+            metadata: {
+                missingFields: ['userId']
+            }
+        });
+
+        expect(calls.length).toBe(1);
+        expect(calls[0][0]).toBe('platform:gift');
+        expect(calls[0][2]).toMatchObject({
+            username: 'test-jewels-user',
+            giftType: 'Girl power',
+            amount: 300,
+            currency: 'jewels',
+            metadata: { missingFields: ['userId'] }
+        });
+        expect(calls[0][2].userId).toBeUndefined();
+    });
+
     it('defaults gift notification type to platform:gift when omitted', async () => {
         const calls = [];
         const notificationManager = createRecordingNotificationManager(calls);

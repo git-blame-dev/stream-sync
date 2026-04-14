@@ -3,7 +3,11 @@ import { getValidMessageParts, normalizeBadgeImages } from '../../../utils/messa
 import { PlatformEvents } from '../../../interfaces/PlatformEvents';
 import { DEFAULT_AVATAR_URL } from '../../../constants/avatar';
 import { UNKNOWN_CHAT_MESSAGE, UNKNOWN_CHAT_USERNAME } from '../../../constants/degraded-chat';
-import { getMissingFields, mergeMissingFieldsMetadata } from '../../../utils/missing-fields';
+import {
+    allowsYouTubeJewelsMissingUserId,
+    getMissingFields,
+    mergeMissingFieldsMetadata
+} from '../../../utils/missing-fields';
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -209,7 +213,16 @@ function createYouTubeEventFactory(options: YouTubeEventFactoryOptions = {}) {
 
         createGiftEvent: (data: UnknownRecord = {}) => {
             const isError = data.isError === true;
-            const identity = normalizeIdentity(data, { allowMissing: isError });
+            const metadata = data.metadata && typeof data.metadata === 'object'
+                ? data.metadata as UnknownRecord
+                : undefined;
+            const allowsMissingUserId = !isError && allowsYouTubeJewelsMissingUserId({
+                type: PlatformEvents.GIFT,
+                platform: platformName,
+                currency: data.currency,
+                metadata
+            });
+            const identity = normalizeIdentity(data, { allowMissing: isError || allowsMissingUserId });
             const avatarUrl = resolveAvatarUrl(data);
             const giftType = normalizeText(data.giftType);
             const giftCount = isError
@@ -238,6 +251,12 @@ function createYouTubeEventFactory(options: YouTubeEventFactoryOptions = {}) {
                 if (!data.id) {
                     throw new Error('YouTube gift payload requires id');
                 }
+                if (!identity.username) {
+                    throw new Error('YouTube event payload requires userId and username');
+                }
+                if (!identity.userId && !allowsMissingUserId) {
+                    throw new Error('YouTube event payload requires userId and username');
+                }
             }
 
             const result: UnknownRecord = {
@@ -259,6 +278,9 @@ function createYouTubeEventFactory(options: YouTubeEventFactoryOptions = {}) {
             }
             if (giftImageUrl) {
                 result.giftImageUrl = giftImageUrl;
+            }
+            if (metadata) {
+                result.metadata = metadata;
             }
             if (isError) {
                 result.isError = true;

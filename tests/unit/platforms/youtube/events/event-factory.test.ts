@@ -463,6 +463,54 @@ describe('YouTube event factory behavior', () => {
         expect(event.avatarUrl).toBe('https://example.invalid/youtube-gift-avatar.jpg');
     });
 
+    it('allows YouTube jewels gift events with missing userId when metadata marks missing userId', () => {
+        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
+
+        const eventFactory = createYouTubeEventFactory();
+
+        const event = eventFactory.createGiftEvent({
+            username: 'test-jewels-user',
+            id: 'gift-jewels-123',
+            giftType: 'Girl power',
+            giftCount: 1,
+            amount: 300,
+            currency: 'jewels',
+            timestamp: '2024-01-01T00:00:00.000Z',
+            metadata: {
+                missingFields: ['userId']
+            }
+        });
+
+        expect(event).toMatchObject({
+            type: PlatformEvents.GIFT,
+            platform: 'youtube',
+            username: 'test-jewels-user',
+            giftType: 'Girl power',
+            amount: 300,
+            currency: 'jewels',
+            metadata: {
+                missingFields: ['userId']
+            }
+        });
+        expect(event.userId).toBeUndefined();
+    });
+
+    it('rejects YouTube jewels gift events with missing userId when metadata is absent', () => {
+        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
+
+        const eventFactory = createYouTubeEventFactory();
+
+        expect(() => eventFactory.createGiftEvent({
+            username: 'test-jewels-user',
+            id: 'gift-jewels-123',
+            giftType: 'Girl power',
+            giftCount: 1,
+            amount: 300,
+            currency: 'jewels',
+            timestamp: '2024-01-01T00:00:00.000Z'
+        })).toThrow('YouTube event payload requires userId and username');
+    });
+
     it('builds giftpaypiggy events with optional id', () => {
         const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
 

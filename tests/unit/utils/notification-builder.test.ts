@@ -321,4 +321,30 @@ describe('NotificationBuilder', () => {
         expect(notification.parts).toBeUndefined();
         expect(notification.displayMessage).toContain('Super Sticker');
     });
+
+    test('preserves jewels virtual-currency wording and allows missing userId for scoped YouTube gift payloads', () => {
+        const notification = NotificationBuilder.build({
+            platform: 'youtube',
+            type: 'platform:gift',
+            username: 'test-jewels-user',
+            giftType: 'Girl power',
+            giftCount: 1,
+            amount: 300,
+            currency: 'jewels',
+            id: 'yt-jewels-notification-1',
+            metadata: {
+                missingFields: ['userId']
+            }
+        });
+
+        expect(notification).toBeTruthy();
+        expect(notification.userId).toBeUndefined();
+        expect(notification.currency).toBe('jewels');
+        expect(notification.displayMessage.toLowerCase()).toContain('jewels');
+        expect(notification.ttsMessage.toLowerCase()).toContain('jewels');
+        expect(notification.logMessage.toLowerCase()).toContain('jewels');
+        expect(notification.displayMessage).not.toContain('XXX');
+        expect(notification.ttsMessage).not.toContain('XXX');
+        expect(notification.logMessage).not.toContain('XXX');
+    });
 });

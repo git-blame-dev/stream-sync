@@ -216,4 +216,56 @@ describe('YouTube gift platform flow (smoke)', () => {
             platformLifecycleService.dispose();
         }
     });
+
+    test('routes YouTube jewels gifts without userId through lifecycle, router, and runtime', async () => {
+        const {
+            displayQueue,
+            platformLifecycleService,
+            runtimeBundle
+        } = createRuntimeDeps();
+
+        class MockYouTubePlatform {
+            async initialize(handlers) {
+                handlers.onGift({
+                    username: 'test-jewels-user',
+                    giftType: 'Girl power',
+                    giftCount: 1,
+                    amount: 300,
+                    currency: 'jewels',
+                    id: 'yt-jewels-1',
+                    timestamp: '2024-01-01T00:00:00.000Z',
+                    metadata: {
+                        missingFields: ['userId']
+                    }
+                });
+            }
+
+            on() {}
+
+            cleanup() {
+                return Promise.resolve();
+            }
+        }
+
+        try {
+            await platformLifecycleService.initializeAllPlatforms({ youtube: MockYouTubePlatform });
+            await new Promise(setImmediate);
+
+            expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
+            const queued = displayQueue.addItem.mock.calls[0][0];
+            expect(queued.type).toBe('platform:gift');
+            expect(queued.platform).toBe('youtube');
+            expect(queued.data.giftType).toBe('Girl power');
+            expect(queued.data.currency).toBe('jewels');
+            expect(queued.data.userId).toBeUndefined();
+            expect(queued.data.displayMessage.toLowerCase()).toContain('jewels');
+            assertUserFacingOutput(queued.data, {
+                username: 'test-jewels-user',
+                keyword: 'jewels'
+            });
+        } finally {
+            runtimeBundle.runtime.platformEventRouter?.dispose();
+            platformLifecycleService.dispose();
+        }
+    });
 });

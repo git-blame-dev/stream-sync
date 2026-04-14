@@ -564,6 +564,32 @@ class YouTubePlatform extends EventEmitter {
         }
     }
 
+    async handleGiftMessageView(chatItem) {
+        const author = this._resolveGiftMessageViewAuthor(chatItem);
+        try {
+            const parsed = this.monetizationParser.parseGiftMessageView(chatItem);
+            const missingFields = collectMissingFields({
+                userId: !!author.userId
+            });
+            const payload = this.eventFactory.createGiftEvent({
+                ...parsed,
+                ...author,
+                ...(missingFields.length > 0
+                    ? { metadata: mergeMissingFieldsMetadata({}, missingFields) }
+                    : {})
+            });
+            this._emitPlatformEvent(PlatformEvents.GIFT, payload);
+        } catch (error) {
+            this._handleProcessingError(`Error processing GiftMessageView: ${error.message}`, error, 'gift-message-view', chatItem);
+            this._emitGiftError(chatItem, {
+                giftType: 'YouTube Gift',
+                giftCount: 1,
+                author,
+                label: 'YouTube GiftMessageView'
+            });
+        }
+    }
+
     handleChatTextMessage(chatItem) {
         if (!chatItem || typeof chatItem !== 'object' || !chatItem.item || typeof chatItem.item !== 'object') {
             this.logger.warn('Skipping chat message: missing chat item payload', 'youtube');
@@ -743,6 +769,40 @@ class YouTubePlatform extends EventEmitter {
         return {
             username: author.name,
             userId: author.id
+        };
+    }
+
+    _resolveGiftMessageViewAuthor(chatItem) {
+        const item = chatItem?.item && typeof chatItem.item === 'object'
+            ? chatItem.item
+            : {};
+        const resolveName = (candidate) => {
+            if (typeof candidate === 'string') {
+                return normalizeYouTubeUsername(candidate);
+            }
+            if (!candidate || typeof candidate !== 'object') {
+                return null;
+            }
+            if (typeof candidate.content === 'string') {
+                return normalizeYouTubeUsername(candidate.content);
+            }
+            if (typeof candidate.text === 'string') {
+                return normalizeYouTubeUsername(candidate.text);
+            }
+            if (typeof candidate.simpleText === 'string') {
+                return normalizeYouTubeUsername(candidate.simpleText);
+            }
+            return null;
+        };
+
+        const username = resolveName(item.authorName)
+            || resolveName(item.author_name)
+            || resolveName(item.author?.name);
+
+        const rawUserId = typeof item.author?.id === 'string' ? item.author.id.trim() : '';
+        return {
+            ...(username ? { username } : {}),
+            ...(rawUserId ? { userId: rawUserId } : {})
         };
     }
 

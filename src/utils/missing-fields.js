@@ -62,7 +62,20 @@ function getMissingFields(metadata = {}) {
     return normalizeMissingFields(metadata?.missingFields);
 }
 
+function allowsYouTubeJewelsMissingUserId({ type, platform, currency, metadata } = {}) {
+    const normalizedType = typeof type === 'string' ? type.trim() : '';
+    const normalizedPlatform = typeof platform === 'string' ? platform.trim().toLowerCase() : '';
+    const normalizedCurrency = typeof currency === 'string' ? currency.trim().toLowerCase() : '';
+
+    if (normalizedType !== 'platform:gift' || normalizedPlatform !== 'youtube' || normalizedCurrency !== 'jewels') {
+        return false;
+    }
+
+    return getMissingFields(metadata).includes('userId');
+}
+
 module.exports = {
+    allowsYouTubeJewelsMissingUserId,
     collectMissingFields,
     getMissingFields,
     mergeMissingFieldsMetadata,

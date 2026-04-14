@@ -4,6 +4,44 @@ const { getSyntheticFixture } = require('../../../../helpers/platform-test-data'
 const { createYouTubeMonetizationParser } = require('../../../../../src/platforms/youtube/monetization/monetization-parser.ts');
 
 describe('YouTube monetization parser', () => {
+    const createGiftMessageViewItem = (overrides = {}) => ({
+        item: {
+            type: 'GiftMessageView',
+            id: 'ChwKGkNNRHAzZmpKNVpNREZkM0N3Z1FkQUpZWmNn',
+            timestamp_usec: '1704067200000000',
+            text: {
+                content: 'sent Girl power for 300 Jewels'
+            },
+            authorName: {
+                content: '@test-youtube-gifter '
+            },
+            ...overrides
+        }
+    });
+
+    test('parses GiftMessageView jewels gifts into the canonical monetization shape', () => {
+        const parser = createYouTubeMonetizationParser({ logger: noOpLogger });
+        const result = parser.parseGiftMessageView(createGiftMessageViewItem());
+
+        expect(result).toEqual({
+            id: 'ChwKGkNNRHAzZmpKNVpNREZkM0N3Z1FkQUpZWmNn',
+            timestamp: new Date(1704067200000).toISOString(),
+            giftType: 'Girl power',
+            giftCount: 1,
+            amount: 300,
+            currency: 'jewels',
+            message: 'sent Girl power for 300 Jewels'
+        });
+    });
+
+    test('throws for GiftMessageView payloads that do not match jewels gift grammar', () => {
+        const parser = createYouTubeMonetizationParser({ logger: noOpLogger });
+
+        expect(() => parser.parseGiftMessageView(createGiftMessageViewItem({
+            text: { content: 'sent a gift' }
+        }))).toThrow('YouTube GiftMessageView requires text in "sent <gift> for <amount> Jewels" format');
+    });
+
     test('parses numeric purchase_amount with explicit currency', () => {
         const parser = createYouTubeMonetizationParser({ logger: noOpLogger });
         const fixture = getSyntheticFixture('youtube', 'superchat');

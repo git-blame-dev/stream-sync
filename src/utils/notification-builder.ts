@@ -4,6 +4,7 @@ import { normalizeCurrency } from './currency-utils';
 import { getAnonymousUsername } from './validation';
 
 const HARDCODED_TYPES = ['platform:gift', 'platform:giftpaypiggy', 'platform:paypiggy', 'platform:follow', 'platform:share', 'platform:raid', 'platform:envelope'];
+const VIRTUAL_GIFT_CURRENCIES = new Set(['coins', 'bits', 'jewels']);
 
 const NOTIFICATION_TEMPLATES = {
     'platform:gift': {
@@ -100,7 +101,7 @@ class NotificationBuilder {
             ? (() => {
                 const trimmedCurrency = String(currency).trim();
                 const normalizedLower = trimmedCurrency.toLowerCase();
-                if (normalizedLower === 'coins' || normalizedLower === 'bits') {
+                if (VIRTUAL_GIFT_CURRENCIES.has(normalizedLower)) {
                     return { ...input, currency: normalizedLower };
                 }
                 return { ...input, currency: normalizeCurrency(trimmedCurrency, { warnUnknown: true }) };
@@ -435,14 +436,20 @@ class NotificationBuilder {
             const resolvedGiftCount = Number(giftCount);
             const amountValue = Number(amount);
             const currencyValue = String(currency).trim();
+            const currencyLower = currencyValue.toLowerCase();
             const messageText = message && message.trim() ? `: ${message}` : '';
 
-            if (currencyValue.toLowerCase() === 'bits') {
+            if (currencyLower === 'bits') {
                 const formattedAmount = this.formatBitsAmount(amountValue);
                 return `${userName} sent ${formattedAmount} ${giftType}${messageText}`;
             }
 
-            if (currencyValue && currencyValue.toLowerCase() !== 'coins') {
+            if (currencyLower === 'jewels') {
+                const jewelLabel = amountValue === 1 ? 'jewel' : 'jewels';
+                return `${userName} sent ${amountValue} ${jewelLabel} ${giftType}${messageText}`;
+            }
+
+            if (currencyValue && currencyLower !== 'coins') {
                 const formattedAmount = this.formatCurrency(amountValue, currencyValue);
                 return `${userName} sent a ${formattedAmount} ${giftType}${messageText}`;
             }
@@ -526,14 +533,20 @@ class NotificationBuilder {
             const resolvedGiftCount = Number(giftCount);
             const amountValue = Number(amount);
             const currencyValue = String(currency).trim();
+            const currencyLower = currencyValue.toLowerCase();
             const messageText = message && message.trim() ? `. ${message}` : '';
 
-            if (currencyValue.toLowerCase() === 'bits') {
+            if (currencyLower === 'bits') {
                 const formattedAmount = this.formatBitsAmountForTts(amountValue);
                 return `${userName} sent ${formattedAmount} ${giftType}${messageText}`;
             }
 
-            if (currencyValue && currencyValue.toLowerCase() !== 'coins') {
+            if (currencyLower === 'jewels') {
+                const jewelLabel = amountValue === 1 ? 'jewel' : 'jewels';
+                return `${userName} sent ${amountValue} ${jewelLabel} ${giftType}${messageText}`;
+            }
+
+            if (currencyValue && currencyLower !== 'coins') {
                 const formattedAmount = this.formatCurrencyForTts(amountValue, currencyValue);
                 const safeMessageText = currencyValue === 'ARS' ? '' : messageText;
                 return `${userName} sent a ${formattedAmount} ${giftType}${safeMessageText}`;
@@ -622,8 +635,9 @@ class NotificationBuilder {
             const resolvedGiftCount = Number(giftCount);
             const amountValue = Number(amount);
             const currencyValue = String(currency).trim();
+            const currencyLower = currencyValue.toLowerCase();
 
-            if (currencyValue.toLowerCase() === 'bits') {
+            if (currencyLower === 'bits') {
                 return this.formatBitsLogMessage({
                     username: userName,
                     giftType,
@@ -631,7 +645,12 @@ class NotificationBuilder {
                 });
             }
 
-            if (currencyValue && currencyValue.toLowerCase() !== 'coins') {
+            if (currencyLower === 'jewels') {
+                const jewelLabel = amountValue === 1 ? 'jewel' : 'jewels';
+                return `Gift from ${userName}: ${giftType} (${amountValue} ${jewelLabel})`;
+            }
+
+            if (currencyValue && currencyLower !== 'coins') {
                 const formattedAmount = this.formatCurrency(amountValue, currencyValue);
                 return `Gift from ${userName}: ${giftType} (${formattedAmount})`;
             }
