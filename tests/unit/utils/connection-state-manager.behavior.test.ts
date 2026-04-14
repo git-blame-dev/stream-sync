@@ -1,6 +1,6 @@
 const { describe, it, expect } = require('bun:test');
 export {};
-const { ConnectionStateManager } = require('../../../src/utils/connection-state-manager');
+const { ConnectionStateManager } = require('../../../src/utils/connection-state-manager.ts');
 const { noOpLogger } = require('../../helpers/mock-factories');
 
 const createManager = (disconnectFn = () => {}) => {
