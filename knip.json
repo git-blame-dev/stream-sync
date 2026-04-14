@@ -24,9 +24,17 @@
     "src/auth/oauth-flow.js",
     "src/auth/twitch-oauth-scopes.js",
     "src/auth/twitch-oauth-scopes.ts",
-    "src/utils/token-store.js"
+    "src/utils/token-store.js",
+    "src/utils/cheermote-processor.js",
+    "tests/helpers/farewell-routing-harness.ts"
   ],
   "ignoreIssues": {
+    "src/obs/connection.ts": [
+      "exports"
+    ],
+    "src/services/innertube-instance-manager.ts": [
+      "exports"
+    ],
     "tests/helpers/**/*.js": [
       "exports"
     ],
