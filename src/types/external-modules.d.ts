@@ -33,12 +33,6 @@ declare module '*youtube-parser-log-adapter' {
     export { installYouTubeParserLogAdapter };
 }
 
-declare module '*env-file-parser.js' {
-    function parseEnvContent(content: string, options?: { ignoreEmptyKeys?: boolean }): Record<string, string>;
-
-    export { parseEnvContent };
-}
-
 declare module '*logger-resolver.js' {
     function resolveLogger(loggerCandidate: unknown, fallbackContext: string): {
         debug?: (message: string, context?: string, payload?: unknown) => void;
@@ -48,15 +42,6 @@ declare module '*logger-resolver.js' {
     };
 
     export { resolveLogger };
-}
-
-declare module '*file-logger.js' {
-    class FileLogger {
-        constructor(options: { logDir: string; filename: string });
-        log(line: string): void;
-    }
-
-    export { FileLogger };
 }
 
 declare module '*text-processing.js' {

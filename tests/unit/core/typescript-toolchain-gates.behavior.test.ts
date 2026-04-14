@@ -169,11 +169,11 @@ describe('TypeScript toolchain migration gates behavior', () => {
     it('keeps source javascript migration inventory explicit and measurable', () => {
         const sourceInventory = collectExecutableJavaScriptInventory(join(repoRoot, 'src'));
 
-        expect(sourceInventory.total).toBe(124);
+        expect(sourceInventory.total).toBe(122);
         expect(sourceInventory.withTypeScriptSiblingCount).toBe(87);
         expect(sourceInventory.wrapperProxyCount).toBe(75);
         expect(sourceInventory.withTypeScriptSiblingNonWrapperCount).toBe(12);
-        expect(sourceInventory.withoutTypeScriptSiblingCount).toBe(37);
+        expect(sourceInventory.withoutTypeScriptSiblingCount).toBe(35);
     });
 
     it('removes first safe ts-proxy wrapper batch from source lane', () => {
@@ -192,6 +192,18 @@ describe('TypeScript toolchain migration gates behavior', () => {
 
         for (const wrapperPath of removedWrapperPaths) {
             expect(existsSync(join(repoRoot, wrapperPath))).toBe(false);
+        }
+    });
+
+    it('migrates first js-only utility batch to typescript source files', () => {
+        const migratedUtilities = [
+            'src/utils/env-file-parser',
+            'src/utils/file-logger'
+        ];
+
+        for (const modulePath of migratedUtilities) {
+            expect(existsSync(join(repoRoot, `${modulePath}.ts`))).toBe(true);
+            expect(existsSync(join(repoRoot, `${modulePath}.js`))).toBe(false);
         }
     });
 
