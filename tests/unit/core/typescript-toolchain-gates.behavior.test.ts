@@ -169,11 +169,30 @@ describe('TypeScript toolchain migration gates behavior', () => {
     it('keeps source javascript migration inventory explicit and measurable', () => {
         const sourceInventory = collectExecutableJavaScriptInventory(join(repoRoot, 'src'));
 
-        expect(sourceInventory.total).toBe(134);
-        expect(sourceInventory.withTypeScriptSiblingCount).toBe(97);
-        expect(sourceInventory.wrapperProxyCount).toBe(85);
+        expect(sourceInventory.total).toBe(124);
+        expect(sourceInventory.withTypeScriptSiblingCount).toBe(87);
+        expect(sourceInventory.wrapperProxyCount).toBe(75);
         expect(sourceInventory.withTypeScriptSiblingNonWrapperCount).toBe(12);
         expect(sourceInventory.withoutTypeScriptSiblingCount).toBe(37);
+    });
+
+    it('removes first safe ts-proxy wrapper batch from source lane', () => {
+        const removedWrapperPaths = [
+            'src/core/EventBus.js',
+            'src/core/config-builders.js',
+            'src/obs/display-config-validator.js',
+            'src/obs/display-queue-state.js',
+            'src/obs/display-renderer.js',
+            'src/obs/obs-event-service.js',
+            'src/obs/safe-operations.js',
+            'src/utils/currency-utils.js',
+            'src/utils/monetization-error-utils.js',
+            'src/utils/user-friendly-errors.js'
+        ];
+
+        for (const wrapperPath of removedWrapperPaths) {
+            expect(existsSync(join(repoRoot, wrapperPath))).toBe(false);
+        }
     });
 
     it('keeps transitional tsconfig allowJs lane contracts explicit before final hardening', () => {
