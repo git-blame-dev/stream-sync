@@ -1,10 +1,10 @@
 {
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
-    "module": "CommonJS",
+    "module": "ESNext",
     "moduleDetection": "force",
     "moduleResolution": "Node",
-    "allowJs": true,
+    "allowJs": false,
     "checkJs": false,
     "noEmit": true,
     "types": ["node", "bun"],
@@ -13,6 +13,6 @@
     "composite": true
   },
   "references": [{ "path": "./tsconfig.src.json" }],
-  "include": ["tests/**/*.js", "tests/**/*.ts", "tests/types/**/*.d.ts"],
+  "include": ["tests/**/*.ts", "tests/types/**/*.d.ts"],
   "exclude": ["node_modules", "gui/dist"]
 }

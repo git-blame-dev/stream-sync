@@ -4,7 +4,7 @@
     "module": "CommonJS",
     "moduleDetection": "force",
     "moduleResolution": "Node",
-    "allowJs": true,
+    "allowJs": false,
     "checkJs": false,
     "noEmit": true,
     "types": ["node", "bun"],
@@ -12,6 +12,6 @@
     "jsx": "react-jsx",
     "composite": true
   },
-  "include": ["src/**/*.js", "src/**/*.ts", "src/types/**/*.d.ts"],
+  "include": ["src/**/*.ts", "src/types/**/*.d.ts"],
   "exclude": ["node_modules", "gui/dist", "gui/**/*"]
 }

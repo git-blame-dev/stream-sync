@@ -2,15 +2,14 @@
   "$schema": "https://unpkg.com/knip@5/schema.json",
   "entry": [
     "eslint.config.js",
-    "tests/**/*.test.{js,ts}",
-    "tests/setup/**/*.{js,ts}",
-    "scripts/local/gui-preview.{js,ts}"
+    "tests/**/*.test.ts",
+    "tests/setup/**/*.ts"
   ],
   "project": [
-    "src/**/*.{js,ts}",
-    "tests/**/*.{js,ts}",
-    "scripts/**/*.{js,ts}",
-    "tools/**/*.{js,ts}",
+    "src/**/*.ts",
+    "tests/**/*.ts",
+    "scripts/**/*.ts",
+    "tools/**/*.ts",
     "gui/**/*.{ts,tsx}"
   ],
   "eslint": false,

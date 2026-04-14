@@ -4,7 +4,7 @@
     "module": "CommonJS",
     "moduleDetection": "force",
     "moduleResolution": "Node",
-    "allowJs": true,
+    "allowJs": false,
     "checkJs": false,
     "noEmit": true,
     "types": ["node", "bun"],
@@ -13,6 +13,6 @@
     "composite": true
   },
   "references": [{ "path": "./tsconfig.src.json" }],
-  "include": ["scripts/**/*.js", "scripts/**/*.ts"],
+  "include": ["scripts/**/*.ts"],
   "exclude": ["node_modules", "gui/dist"]
 }
