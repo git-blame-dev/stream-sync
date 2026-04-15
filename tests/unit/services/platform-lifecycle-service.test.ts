@@ -3,6 +3,7 @@ const { createMockFn, clearAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { PlatformLifecycleService } = require('../../../src/services/PlatformLifecycleService.js');
 const { PlatformEvents } = require('../../../src/interfaces/PlatformEvents');
+const { DependencyFactory } = require('../../../src/utils/dependency-factory.js');
 const testClock = require('../../helpers/test-clock');
 const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../../src/core/secrets');
 
@@ -334,7 +335,9 @@ describe('PlatformLifecycleService', () => {
                 sharedDependencies: { test: 'value' }
             });
 
-            const mockPlatformClass = createMockFn().mockImplementation(() => ({
+            const mockPlatformClass = createMockFn().mockImplementation((platformConfig, dependencies) => ({
+                platformConfig,
+                dependencies,
                 initialize: createMockFn().mockResolvedValue(true),
                 cleanup: createMockFn().mockResolvedValue(),
                 on: createMockFn()
@@ -343,9 +346,46 @@ describe('PlatformLifecycleService', () => {
 
             const instance = await service.createPlatformInstance('twitch', mockPlatformClass, config);
 
-            expect(mockFactory.createTwitchDependencies).toHaveBeenCalledWith(config, { test: 'value' });
+            expect(instance.dependencies).toBe(mockDependencies);
             expect(instance).toBeDefined();
             expect(typeof instance).toBe('object');
+        });
+
+        it('creates platform dependencies from a DependencyFactory instance without losing method context', async () => {
+            configFixture.twitch = {
+                enabled: true,
+                channel: 'test-channel',
+                clientId: 'test-client-id'
+            };
+
+            const dependencyFactory = new DependencyFactory();
+            const testTwitchAuth = { isReady: () => true };
+
+            service.dispose();
+            service = new PlatformLifecycleService({
+                config: configFixture,
+                eventBus: mockEventBus,
+                logger: noOpLogger,
+                dependencyFactory,
+                sharedDependencies: {
+                    config: configFixture,
+                    twitchAuth: testTwitchAuth
+                }
+            });
+
+            const TestPlatform = createMockFn().mockImplementation((platformConfig, dependencies) => ({
+                platformConfig,
+                dependencies,
+                initialize: createMockFn().mockResolvedValue(true),
+                cleanup: createMockFn().mockResolvedValue(),
+                on: createMockFn()
+            }));
+
+            const instance = await service.createPlatformInstance('twitch', TestPlatform, configFixture.twitch);
+
+            expect(instance.dependencies.twitchAuth).toBe(testTwitchAuth);
+            expect(instance.dependencies.selfMessageDetectionService).toBeDefined();
+            expect(typeof instance.dependencies.logger?.info).toBe('function');
         });
 
         it('should fallback gracefully if factory method missing', async () => {
