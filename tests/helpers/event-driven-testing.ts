@@ -1,7 +1,8 @@
 
-const EventEmitter = require('events');
-const { waitForDelay, scheduleTimeout, resolveDelay } = require('./time-utils');
-const testClock = require('./test-clock');
+import { EventEmitter } from 'node:events';
+
+import testClock from './test-clock';
+import { resolveDelay, scheduleTimeout, waitForDelay } from './time-utils';
 
 const waitForEvent = (emitter, eventName, timeout = 5000) => {
     return new Promise((resolve, reject) => {
@@ -344,7 +345,7 @@ class NetworkEventSimulator extends EventEmitter {
     }
 }
 
-module.exports = {
+export {
     // Event-driven utilities
     waitForEvent,
     waitFor,

@@ -1,8 +1,11 @@
 
-// Import platform-specific builders
-const { createYouTubeSuperChatEvent, createYouTubeChatEvent } = require('./youtube-test-data');
-const { createTikTokGiftEvent, createTikTokChatEvent } = require('./tiktok-test-data');
-const { createTwitchChatEvent, createTwitchSubscriptionEvent, createTwitchRaidEvent } = require('./twitch-test-data');
+import { createTikTokChatEvent, createTikTokGiftEvent } from './tiktok-test-data';
+import {
+    createTwitchChatEvent,
+    createTwitchRaidEvent,
+    createTwitchSubscriptionEvent
+} from './twitch-test-data';
+import { createYouTubeChatEvent, createYouTubeSuperChatEvent } from './youtube-test-data';
 
 const BASE_TIMESTAMP_MS = 1700000000000;
 const BASE_USER_ID = 7000000000000000;
@@ -1593,7 +1596,7 @@ const loadPlatformFixture = (platform, eventType) => {
 // EXPORTS
 // ================================================================================================
 
-module.exports = {
+export {
     // Core data collections
     INTERNATIONAL_USERNAMES,
     PHASE_5B_INTERNATIONAL_TEST_DATA,

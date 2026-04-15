@@ -3,8 +3,8 @@
 // NOTIFICATION ASSERTION HELPERS
 // ================================================================================================
 
-const testClock = require('./test-clock');
-const { isMockFunction } = require('./bun-mock-utils');
+import { isMockFunction } from './bun-mock-utils';
+import testClock from './test-clock';
 
 const expectValidNotification = (notification, expectedType, expectedPlatform) => {
     // Required fields for all notifications
@@ -1916,7 +1916,7 @@ const expectUnifiedRequestPatterns = (requestPatterns) => {
     }
 };
 
-module.exports = {
+export {
     // Notification assertions
     expectValidNotification,
     expectNotificationContent,

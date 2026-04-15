@@ -1,11 +1,12 @@
-const { createConfigFixture } = require('./config-fixture');
-const { noOpLogger } = require('./mock-factories');
-const NotificationManager = require('../../src/notifications/NotificationManager');
-const { PlatformEventRouter } = require('../../src/services/PlatformEventRouter.js');
-const { ChatNotificationRouter } = require('../../src/services/ChatNotificationRouter.js');
-const { VFXCommandService } = require('../../src/services/VFXCommandService.js');
-const { AppRuntime } = require('../../src/runtime/AppRuntime');
-const { PRIORITY_LEVELS, NOTIFICATION_CONFIGS } = require('../../src/core/constants');
+import { NOTIFICATION_CONFIGS, PRIORITY_LEVELS } from '../../src/core/constants';
+import NotificationManager from '../../src/notifications/NotificationManager.js';
+import { AppRuntime } from '../../src/runtime/AppRuntime';
+import { ChatNotificationRouter } from '../../src/services/ChatNotificationRouter';
+import { PlatformEventRouter } from '../../src/services/PlatformEventRouter';
+import { VFXCommandService } from '../../src/services/VFXCommandService';
+
+import { createConfigFixture } from './config-fixture';
+import { noOpLogger } from './mock-factories';
 
 function createFarewellRoutingHarness(configOverrides = {}) {
     const config = createConfigFixture({
@@ -107,6 +108,6 @@ function createFarewellRoutingHarness(configOverrides = {}) {
     };
 }
 
-module.exports = {
+export {
     createFarewellRoutingHarness
 };

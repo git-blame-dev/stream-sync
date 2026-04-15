@@ -3,8 +3,8 @@
 // LOG LEVEL DEFINITIONS
 // ================================================================================================
 
-const testClock = require('./test-clock');
-const { nextTestId } = require('./test-id');
+import testClock from './test-clock';
+import { nextTestId } from './test-id';
 
 const LOG_LEVELS = {
     ERROR: 0,
@@ -366,7 +366,7 @@ const assertEntryCount = (logger, count, levelName = null) => {
 // EXPORTS
 // ================================================================================================
 
-module.exports = {
+export {
     TestLogger,
     LogEntry,
     LOG_LEVELS,
@@ -379,4 +379,4 @@ module.exports = {
     assertNoWarnings,
     assertMessageLogged,
     assertEntryCount
-}; 
+};
