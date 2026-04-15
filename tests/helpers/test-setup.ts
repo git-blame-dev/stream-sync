@@ -1,6 +1,6 @@
 
-const testClock = require('./test-clock');
-const { createMockFn, isMockFunction, clearAllMocks } = require('./bun-mock-utils');
+import testClock from './test-clock';
+import { createMockFn, isMockFunction, clearAllMocks } from './bun-mock-utils';
 const BASE_TIMESTAMP_MS = Date.parse('2024-01-01T00:00:00.000Z');
 let sequence = 0;
 const nextSequence = () => {
@@ -517,7 +517,7 @@ const validateActiveMocks = () => {
     return true;
 };
 
-module.exports = {
+export {
     // Setup functions
     initializeTestLogging,
     

@@ -1,8 +1,8 @@
 
-const { validateMockContract } = require('./mock-validation');
-const testClock = require('./test-clock');
-const { nextTestId } = require('./test-id');
-const { isMockFunction } = require('./bun-mock-utils');
+import { validateMockContract } from './mock-validation';
+import testClock from './test-clock';
+import { nextTestId } from './test-id';
+import { isMockFunction } from './bun-mock-utils';
 
 // ================================================================================================
 // MOCK LIFECYCLE MANAGER
@@ -418,7 +418,7 @@ const globalMockCache = new MockReuseCache();
 // EXPORTS
 // ================================================================================================
 
-module.exports = {
+export {
     // Core lifecycle management
     MockLifecycleManager,
     globalLifecycleManager,

@@ -3,8 +3,8 @@
 // API CONTRACT DEFINITIONS
 // ================================================================================================
 
-const testClock = require('./test-clock');
-const { isMockFunction } = require('./bun-mock-utils');
+import testClock from './test-clock';
+import { isMockFunction } from './bun-mock-utils';
 
 const API_CONTRACTS = {
     NotificationDispatcher: {
@@ -378,7 +378,7 @@ class MockContractMonitor {
 // EXPORTS
 // ================================================================================================
 
-module.exports = {
+export {
     // Core validation functions
     validateMockContract,
     validateNotificationData,
