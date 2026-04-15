@@ -1,12 +1,11 @@
 
-// Import necessary mock factories for re-export
-const {
-    createMockPlatform,
+import {
     createMockNotificationManager,
+    createMockPlatform,
     setupAutomatedCleanup
-} = require('./mock-factories');
-const testClock = require('./test-clock');
-const { waitForDelay } = require('./time-utils');
+} from './mock-factories';
+import testClock from './test-clock';
+import { waitForDelay } from './time-utils';
 
 // ================================================================================================
 // USER WORKFLOW VALIDATION
@@ -729,7 +728,7 @@ const expectValidUserFeedback = (feedback) => {
 // EXPORTS
 // ================================================================================================
 
-module.exports = {
+export {
     // User Workflow Validation
     validateUserGiftFlow,
     validateNotificationFlow,

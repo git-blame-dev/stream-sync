@@ -1,8 +1,9 @@
-const { initializeTestLogging } = require('./test-setup');
-initializeTestLogging();
+import { NotificationBuilder } from '../../src/utils/notification-builder';
+import { interpolateTemplate } from '../../src/utils/notification-template-interpolator';
 
-const { interpolateTemplate } = require('../../src/utils/notification-template-interpolator');
-const { NotificationBuilder } = require('../../src/utils/notification-builder.js');
+import { initializeTestLogging } from './test-setup';
+
+initializeTestLogging();
 
 function createNotificationData(type, platform, userData, eventData = {}, vfxConfig = null) {
     if (!type || typeof type !== 'string' || !type.trim()) {
@@ -205,7 +206,7 @@ const testUsernameSanitization = (rawUsername, expectedDisplay, expectedTTS) => 
     return notification;
 };
 
-module.exports = {
+export {
     testNotificationGeneration,
     testGiftNotification,
     testCommandNotification,

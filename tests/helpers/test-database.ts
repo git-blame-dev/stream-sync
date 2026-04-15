@@ -1,7 +1,7 @@
 
-const { scheduleTimeout, resolveDelay } = require('./time-utils');
-const testClock = require('./test-clock');
-const { nextTestId } = require('./test-id');
+import testClock from './test-clock';
+import { nextTestId } from './test-id';
+import { resolveDelay, scheduleTimeout } from './time-utils';
 
 // ================================================================================================
 // TEST DATA STORAGE
@@ -363,11 +363,11 @@ const createMockTimer = (startTime = testClock.now()) => {
 // EXPORTS
 // ================================================================================================
 
-module.exports = {
+export {
     TestDataStore,
     TestStateManager,
     TestEnvironment,
     createTestDataFactory,
     waitForCondition,
     createMockTimer
-}; 
+};

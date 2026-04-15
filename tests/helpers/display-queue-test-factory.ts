@@ -1,8 +1,9 @@
-const { createMockFn } = require('./bun-mock-utils');
-const { noOpLogger } = require('./mock-factories');
-const { createSourcesConfigFixture } = require('./config-fixture');
-const { createOBSSourcesManager } = require('../../src/obs/sources');
-const { createGoalTracker } = require('../../src/utils/goal-tracker');
+import { createOBSSourcesManager } from '../../src/obs/sources';
+import { createGoalTracker } from '../../src/utils/goal-tracker';
+
+import { createMockFn } from './bun-mock-utils';
+import { createSourcesConfigFixture } from './config-fixture';
+import { noOpLogger } from './mock-factories';
 
 function createMockOBSForTesting() {
     return {
@@ -68,7 +69,7 @@ function createDisplayQueueDependencies() {
     };
 }
 
-module.exports = {
+export {
     createMockOBSForTesting,
     createTestConfig,
     createRealSourcesManager,

@@ -1,12 +1,13 @@
-const EventEmitter = require('events');
-const { createMockFn } = require('./bun-mock-utils');
-const {
+import { EventEmitter } from 'node:events';
+
+import { createMockFn } from './bun-mock-utils';
+import { createConfigFixture } from './config-fixture';
+import {
     createMockDisplayQueue,
     createMockNotificationManager,
     noOpLogger
-} = require('./mock-factories');
-const testClock = require('./test-clock');
-const { createConfigFixture } = require('./config-fixture');
+} from './mock-factories';
+import testClock from './test-clock';
 
 const createEventBusStub = () => {
     const emitter = new EventEmitter();
@@ -104,28 +105,30 @@ function createAppRuntimeTestDependencies(options = {}) {
         ...overrides
     };
 
-  return {
-    dependencies,
-    eventBus,
-    notificationManager,
-    configFixture: config
-  };
+    return {
+        dependencies,
+        eventBus,
+        notificationManager,
+        configFixture: config
+    };
 }
 
-module.exports = {
+const createTestAppRuntime = (configOverrides = {}, options = {}) => {
+    const { AppRuntime } = require('../../src/runtime/AppRuntime');
+    const harness = createAppRuntimeTestDependencies({
+        configOverrides,
+        ...options
+    });
+
+    const runtime = new AppRuntime(harness.configFixture, harness.dependencies);
+
+    return {
+        runtime,
+        dependencies: harness.dependencies
+    };
+};
+
+export {
     createAppRuntimeTestDependencies,
-    createTestAppRuntime: (configOverrides = {}, options = {}) => {
-        const { AppRuntime } = require('../../src/runtime/AppRuntime');
-        const harness = createAppRuntimeTestDependencies({
-            configOverrides,
-            ...options
-        });
-
-        const runtime = new AppRuntime(harness.configFixture, harness.dependencies);
-
-        return {
-            runtime,
-            dependencies: harness.dependencies
-        };
-    }
+    createTestAppRuntime
 };

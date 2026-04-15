@@ -1,11 +1,13 @@
 
-const crypto = require('crypto');
-const { EventEmitter } = require('events');
-const { logger } = require('../../src/core/logging');
-const { safeDelay } = require('../../src/utils/timeout-validator');
-const { resolveDelay } = require('./time-utils');
-const { createPlatformErrorHandler } = require('../../src/utils/platform-error-handler');
-const testClock = require('./test-clock');
+import crypto from 'node:crypto';
+import { EventEmitter } from 'node:events';
+
+import { logger } from '../../src/core/logging';
+import { createPlatformErrorHandler } from '../../src/utils/platform-error-handler';
+import { safeDelay } from '../../src/utils/timeout-validator';
+
+import testClock from './test-clock';
+import { resolveDelay } from './time-utils';
 
 class WebSocketMessageSimulator extends EventEmitter {
     constructor(options = {}) {
@@ -658,7 +660,7 @@ class UserJourneyValidator {
     }
 }
 
-module.exports = {
+export {
     WebSocketMessageSimulator,
     CrossPlatformIntegrationTester,
     UserJourneyValidator

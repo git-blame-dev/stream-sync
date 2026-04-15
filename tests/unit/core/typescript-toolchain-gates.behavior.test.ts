@@ -1855,9 +1855,9 @@ describe('TypeScript toolchain migration gates behavior', () => {
         for (const helperPath of helperPaths) {
             const content = readFileSync(join(repoRoot, helperPath), 'utf8');
 
-            expect(content).not.toMatch(/^[ \t]*(?:const|let|var)\s+.+?=\s*require\s*\(/m);
+            expect(content).not.toMatch(/^(?:const|let|var)\s+.+?=\s*require\s*\(/m);
             expect(content).not.toContain('module.exports');
-            expect(content).not.toMatch(/^[ \t]*exports\./m);
+            expect(content).not.toMatch(/^exports\./m);
         }
     });
 
@@ -1872,7 +1872,31 @@ describe('TypeScript toolchain migration gates behavior', () => {
         for (const helperPath of helperPaths) {
             const content = readFileSync(join(repoRoot, helperPath), 'utf8');
 
-            expect(content).not.toMatch(/^const\s+.+?=\s*require\s*\(/m);
+            expect(content).not.toMatch(/^(?:const|let|var)\s+.+?=\s*require\s*\(/m);
+            expect(content).not.toContain('module.exports');
+            expect(content).not.toMatch(/^exports\./m);
+        }
+    });
+
+    it('keeps consumer harness helper modules free of top-level commonjs imports and exports', () => {
+        const helperPaths = [
+            'tests/helpers/platform-test-data.ts',
+            'tests/helpers/runtime-test-harness.ts',
+            'tests/helpers/display-queue-test-factory.ts',
+            'tests/helpers/farewell-routing-harness.ts',
+            'tests/helpers/notification-test-utils.ts',
+            'tests/helpers/assertion-helpers.ts',
+            'tests/helpers/behavior-validation.ts',
+            'tests/helpers/event-driven-testing.ts',
+            'tests/helpers/e2e-testing-infrastructure.ts',
+            'tests/helpers/test-logger.ts',
+            'tests/helpers/test-database.ts'
+        ];
+
+        for (const helperPath of helperPaths) {
+            const content = readFileSync(join(repoRoot, helperPath), 'utf8');
+
+            expect(content).not.toMatch(/^(?:const|let|var)\s+.+?=\s*require\s*\(/m);
             expect(content).not.toContain('module.exports');
             expect(content).not.toMatch(/^exports\./m);
         }
@@ -1917,6 +1941,7 @@ describe('TypeScript toolchain migration gates behavior', () => {
 
     it('keeps helper behavior test modules free of top-level commonjs and transitional exports', () => {
         const testPaths = [
+            'tests/helpers/assertion-helpers.behavior.test.ts',
             'tests/helpers/test-clock.test.ts',
             'tests/helpers/test-database.test.ts',
             'tests/helpers/bun-mock-utils.behavior.test.ts',

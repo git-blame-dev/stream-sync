@@ -1,8 +1,7 @@
-const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-const testClock = require('./test-clock');
-const { createMockFn } = require('./bun-mock-utils');
-const {
+import { createMockFn } from './bun-mock-utils';
+import {
     expectValidNotification,
     expectNotificationContent,
     expectNotificationTiming,
@@ -37,7 +36,8 @@ const {
     expectUnifiedRequestPatterns,
     expectConsistentConfigBehavior,
     expectUnifiedErrorHandling
-} = require('./assertion-helpers');
+} from './assertion-helpers';
+import testClock from './test-clock';
 
 const createGiftNotification = (overrides = {}) => {
     const now = testClock.now();
@@ -103,6 +103,35 @@ describe('assertion-helpers behavior', () => {
             .toThrow('Gift count must be a non-negative number');
         expect(() => expectValidNotification({ ...valid, amount: -1 }, 'platform:gift', 'tiktok'))
             .toThrow('Gift amount must be a non-negative number');
+        const { id: _unusedId, ...missingIdNotification } = valid;
+        expect(() => expectValidNotification(missingIdNotification, 'platform:gift', 'tiktok'))
+            .toThrow('Missing required notification field: id');
+        expect(() => expectValidNotification({ ...valid, id: null }, 'platform:gift', 'tiktok'))
+            .toThrow("Notification field 'id' cannot be null or undefined");
+        const { giftType: _unusedGiftType, ...missingGiftType } = valid;
+        expect(() => expectValidNotification(missingGiftType, 'platform:gift', 'tiktok'))
+            .toThrow('Gift notifications must have giftType field');
+        const { giftType: _unusedYoutubeGiftType, ...missingYouTubeGiftType } = {
+            ...valid,
+            platform: 'youtube'
+        };
+        expect(() => expectValidNotification(missingYouTubeGiftType, 'platform:gift', 'youtube'))
+            .toThrow('Gift notifications must have giftType field');
+
+        const invalidTwitchTier = {
+            id: 'test-id',
+            type: 'platform:paypiggy',
+            platform: 'twitch',
+            username: 'test-user',
+            displayMessage: 'test-user subscribed',
+            ttsMessage: 'test user subscribed',
+            logMessage: 'subscribed',
+            processedAt: testClock.now(),
+            timestamp: new Date(testClock.now()).toISOString(),
+            tier: '5000'
+        };
+        expect(() => expectValidNotification(invalidTwitchTier, 'platform:paypiggy', 'twitch'))
+            .toThrow('Twitch paypiggy tier must be 1000, 2000, or 3000');
 
         const twitchRaid = {
             id: 'test-id',
@@ -189,10 +218,10 @@ describe('assertion-helpers behavior', () => {
         expect(() => expectOBSIntegration(obsCommands, { textUpdates: 1, effectTriggers: 1, sceneChanges: 1, filterChanges: 1 })).not.toThrow();
         expect(() => expectOBSIntegration([{ type: 'unknown' }], {})).toThrow('Unknown OBS command type');
 
-        expect(() => expectPlatformEventStructure({ item: { type: 'x', authorDetails: {} } }, 'youtube')).not.toThrow();
+        expect(() => expectPlatformEventStructure({ item: { type: 'x', authorDetails: {} } }, 'youtube', undefined)).not.toThrow();
         expect(() => expectPlatformEventStructure({ gift: {}, user: { userId: 'id', uniqueId: 'uid' }, giftCount: 1 }, 'tiktok', 'gift')).not.toThrow();
         expect(() => expectPlatformEventStructure(twitchEvent, 'twitch', 'follow')).not.toThrow();
-        expect(() => expectPlatformEventStructure({}, 'unknown')).toThrow('Unknown platform');
+        expect(() => expectPlatformEventStructure({}, 'unknown', undefined)).toThrow('Unknown platform');
     });
 
     it('validates mock interaction helper contracts', () => {
@@ -203,7 +232,7 @@ describe('assertion-helpers behavior', () => {
         expect(() => expectOnlyMethodCalled(factoryMock, 'primary', ['wrong'])).toThrow('wrong arguments');
 
         factoryMock.secondary('two');
-        expect(() => expectOnlyMethodCalled(factoryMock, 'primary')).toThrow('Unexpected method calls');
+        expect(() => expectOnlyMethodCalled(factoryMock, 'primary', undefined)).toThrow('Unexpected method calls');
 
         const sequenced = createFactoryMock();
         sequenced.primary('a');
@@ -402,11 +431,11 @@ describe('assertion-helpers behavior', () => {
         expect(() => expectNotificationTiming(oldNotification, { maxAge: 100 })).toThrow('too old');
         expect(() => expectNotificationSequence([createGiftNotification()], 'priority_desc')).not.toThrow();
 
-        expect(() => expectPlatformEventStructure({}, 'youtube')).toThrow('item property');
+        expect(() => expectPlatformEventStructure({}, 'youtube', undefined)).toThrow('item property');
         expect(() => expectPlatformEventStructure({ gift: {} }, 'tiktok', 'gift')).toThrow('nested userId');
 
         expect(() => expectInternationalContentPreservation('你好', 'plain-text')).toThrow('Unicode chars');
-        expect(() => expectInternationalContentSupport('missing test data')).toThrow('Test data must be provided');
+        expect(() => expectInternationalContentSupport('missing test data', null)).toThrow('Test data must be provided');
 
         expect(() => expectUserFriendlyErrorMessage('Please review details code 500', { allowErrorCodes: true })).not.toThrow();
         expect(() => expectCrossPlatformContentConsistency({ youtube: 'one platform only' })).toThrow('Need at least 2 platforms');
