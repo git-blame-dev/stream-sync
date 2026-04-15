@@ -330,8 +330,7 @@ class PlatformLifecycleService {
                 this.logger.debug(`No factory method ${factoryMethodName}, creating ${platformName} without DI`, 'PlatformLifecycleService');
                 instance = new PlatformClass(config);
             } else {
-                // Create dependencies using factory with shared dependencies
-                const dependencies = factoryCandidate(config, this.sharedDependencies);
+                const dependencies = factoryCandidate.call(this.dependencyFactory, config, this.sharedDependencies);
 
                 this.logger.debug(`${platformName} platform instance created via factory`, 'PlatformLifecycleService');
                 instance = new PlatformClass(config, dependencies);
