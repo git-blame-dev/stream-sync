@@ -1,7 +1,7 @@
 
-const { setupAutomatedCleanup } = require('./mock-lifecycle');
-const { waitForDelay } = require('./time-utils');
-const { createMockFn, isMockFunction } = require('./bun-mock-utils');
+import { setupAutomatedCleanup } from './mock-lifecycle';
+import { waitForDelay } from './time-utils';
+import { createMockFn, isMockFunction } from './bun-mock-utils';
 
 const BASE_TIMESTAMP_MS = Date.parse('2024-01-01T00:00:00.000Z');
 let sequence = 0;
@@ -2877,63 +2877,6 @@ const createMockHttpClient = (options = {}) => {
     };
 };
 
-module.exports = {
-    // Notification System Factories
-    createMockNotificationDispatcher,
-    createMockNotificationBuilder,
-    createMockNotificationManager,
-    
-    // Platform Service Factories
-    createMockYouTubeServices,
-    createMockTikTokServices,
-    createMockTwitchServices,
-    createMockPlatform,
-    createMockPlatformConnection,
-    createMockTikTokPlatformDependencies,
-    
-    // Behavior-focused platform factories
-    createMockYouTubePlatform,
-    createMockTwitchPlatform,
-    createMockTikTokPlatform,
-    
-    // Infrastructure Factories
-    createMockOBSManager,
-    createMockSourcesManager,
-    createMockRetrySystem,
-    createMockFileSystem,
-    noOpLogger,
-    createTestApp,
-    createMockSpamDetector,
-    createMockDisplayQueue,
-    createMockOBSConnection,
-    createMockAuthManager,
-    
-    // Authentication system factories
-    createMockAuthService,
-    createMockTokenRefresh,
-    createMockAuthInitializer,
-    createMockOAuthHandler,
-    createMockHttpClient,
-    
-    // Mock Lifecycle Management
-    resetMock,
-    clearMockCalls,
-    validateMockAPI,
-    setupAutomatedCleanup,
-    
-    // Behavior-focused scenario builders
-    createUserGiftScenario,
-    getUserExperienceState,
-    getDisplayedNotifications,
-    getSystemState,
-    createPerformanceTracker,
-    createBulkGiftEvents,
-    simulateNetworkFailure,
-    waitForRecoveryAttempt,
-    createTikTokGiftBuilder,
-    createInvalidEventBuilder
-};
-
 // ================================================================================================
 // E2E WEBSOCKET MESSAGE GENERATORS - For comprehensive E2E testing
 // ================================================================================================
@@ -3280,9 +3223,66 @@ const createWebSocketMessageSimulator = (options = {}) => {
     };
 };
 
-// Add E2E functions to module.exports
-module.exports.createMockWebSocketMessage = createMockWebSocketMessage;
-module.exports.createTwitchWebSocketMessage = createTwitchWebSocketMessage;
-module.exports.createYouTubeWebSocketMessage = createYouTubeWebSocketMessage;
-module.exports.createTikTokWebSocketMessage = createTikTokWebSocketMessage;
-module.exports.createWebSocketMessageSimulator = createWebSocketMessageSimulator;
+export {
+    // Notification System Factories
+    createMockNotificationDispatcher,
+    createMockNotificationBuilder,
+    createMockNotificationManager,
+
+    // Platform Service Factories
+    createMockYouTubeServices,
+    createMockTikTokServices,
+    createMockTwitchServices,
+    createMockPlatform,
+    createMockPlatformConnection,
+    createMockTikTokPlatformDependencies,
+
+    // Behavior-focused platform factories
+    createMockYouTubePlatform,
+    createMockTwitchPlatform,
+    createMockTikTokPlatform,
+
+    // Infrastructure Factories
+    createMockOBSManager,
+    createMockSourcesManager,
+    createMockRetrySystem,
+    createMockFileSystem,
+    noOpLogger,
+    createTestApp,
+    createMockSpamDetector,
+    createMockDisplayQueue,
+    createMockOBSConnection,
+    createMockAuthManager,
+
+    // Authentication system factories
+    createMockAuthService,
+    createMockTokenRefresh,
+    createMockAuthInitializer,
+    createMockOAuthHandler,
+    createMockHttpClient,
+
+    // Mock Lifecycle Management
+    resetMock,
+    clearMockCalls,
+    validateMockAPI,
+    setupAutomatedCleanup,
+
+    // Behavior-focused scenario builders
+    createUserGiftScenario,
+    getUserExperienceState,
+    getDisplayedNotifications,
+    getSystemState,
+    createPerformanceTracker,
+    createBulkGiftEvents,
+    simulateNetworkFailure,
+    waitForRecoveryAttempt,
+    createTikTokGiftBuilder,
+    createInvalidEventBuilder,
+
+    // E2E websocket helpers
+    createMockWebSocketMessage,
+    createTwitchWebSocketMessage,
+    createYouTubeWebSocketMessage,
+    createTikTokWebSocketMessage,
+    createWebSocketMessageSimulator
+};

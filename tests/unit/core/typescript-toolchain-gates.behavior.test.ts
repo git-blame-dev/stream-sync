@@ -1861,6 +1861,23 @@ describe('TypeScript toolchain migration gates behavior', () => {
         }
     });
 
+    it('keeps mock setup foundation helpers free of top-level commonjs imports and exports', () => {
+        const helperPaths = [
+            'tests/helpers/mock-validation.ts',
+            'tests/helpers/mock-lifecycle.ts',
+            'tests/helpers/mock-factories.ts',
+            'tests/helpers/test-setup.ts'
+        ];
+
+        for (const helperPath of helperPaths) {
+            const content = readFileSync(join(repoRoot, helperPath), 'utf8');
+
+            expect(content).not.toMatch(/^const\s+.+?=\s*require\s*\(/m);
+            expect(content).not.toContain('module.exports');
+            expect(content).not.toMatch(/^exports\./m);
+        }
+    });
+
     it('keeps timeout and core utility modules free of commonjs export syntax', () => {
         const modulePaths = [
             'src/utils/timeout-validator.ts',
