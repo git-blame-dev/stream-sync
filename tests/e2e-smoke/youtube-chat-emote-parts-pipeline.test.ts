@@ -1,5 +1,7 @@
 import { describe, test, expect } from 'bun:test';
 import { createRequire } from 'node:module';
+import { createConfigFixture } from '../helpers/config-fixture';
+import { createYouTubeRunsMessageChatItem } from '../helpers/youtube-test-data';
 
 const load = createRequire(__filename);
 const EventEmitter = load('events');
@@ -7,10 +9,8 @@ const { PlatformEventRouter } = load('../../src/services/PlatformEventRouter.js'
 const { ChatNotificationRouter } = load('../../src/services/ChatNotificationRouter.js');
 const { PlatformEvents } = load('../../src/interfaces/PlatformEvents');
 const { YouTubePlatform } = load('../../src/platforms/youtube');
-const { createConfigFixture } = load('../helpers/config-fixture');
 const { createMockDisplayQueue, noOpLogger } = load('../helpers/mock-factories');
 const { createMockFn } = load('../helpers/bun-mock-utils');
-const { createYouTubeRunsMessageChatItem } = load('../helpers/youtube-test-data');
 
 const createEventBus = () => {
     const emitter = new EventEmitter();

@@ -262,7 +262,7 @@ const isObject = (item) => {
 // EXPORTS
 // ================================================================================================
 
-module.exports = {
+export {
     // Core event builders
     createTwitchChatEvent,
     createTwitchEventSubEvent,

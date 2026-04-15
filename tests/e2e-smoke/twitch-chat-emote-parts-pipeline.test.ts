@@ -1,5 +1,7 @@
 import { describe, test, expect } from 'bun:test';
 import { createRequire } from 'node:module';
+import { createConfigFixture } from '../helpers/config-fixture';
+import { createTwitchEventSubChatMessageEvent } from '../helpers/twitch-test-data';
 
 const load = createRequire(__filename);
 const EventEmitter = load('events');
@@ -7,9 +9,7 @@ const { PlatformEventRouter } = load('../../src/services/PlatformEventRouter.js'
 const { ChatNotificationRouter } = load('../../src/services/ChatNotificationRouter.js');
 const { PlatformEvents } = load('../../src/interfaces/PlatformEvents');
 const { TwitchPlatform } = load('../../src/platforms/twitch.ts');
-const { createConfigFixture } = load('../helpers/config-fixture');
 const { createMockDisplayQueue, noOpLogger } = load('../helpers/mock-factories');
-const { createTwitchEventSubChatMessageEvent } = load('../helpers/twitch-test-data');
 
 const createEventBus = () => {
     const emitter = new EventEmitter();

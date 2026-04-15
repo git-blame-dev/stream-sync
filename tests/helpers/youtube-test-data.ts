@@ -259,7 +259,7 @@ const isObject = (item) => {
 // EXPORTS
 // ================================================================================================
 
-module.exports = {
+export {
     // Core event builders
     createYouTubeChatEvent,
     createYouTubeSuperChatEvent,

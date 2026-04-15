@@ -322,7 +322,7 @@ const isObject = (item) => {
 // EXPORTS
 // ================================================================================================
 
-module.exports = {
+export {
     // Core event builders
     createTikTokGiftEvent,
     createTikTokFollowEvent,
