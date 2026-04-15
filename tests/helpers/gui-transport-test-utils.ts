@@ -1,12 +1,10 @@
-const EventEmitter = require('events');
+import EventEmitter from 'node:events';
 
 class TestEventBus extends EventEmitter {
-    subscribe(eventName: string, handler: (...args: any[]) => void) {
+    subscribe(eventName: string, handler: (...args: unknown[]) => void) {
         this.on(eventName, handler);
         return () => this.off(eventName, handler);
     }
 }
 
-module.exports = {
-    TestEventBus
-};
+export { TestEventBus };

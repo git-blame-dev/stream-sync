@@ -1,7 +1,5 @@
-'use strict';
-
-const { ConfigValidator } = require('../../src/utils/config-validator');
-const { buildConfig } = require('../../src/core/config-builders');
+import { ConfigValidator } from '../../src/utils/config-validator';
+import { buildConfig } from '../../src/core/config-builders';
 
 const RAW_TEST_CONFIG = {
     general: {
@@ -210,7 +208,7 @@ function createConfigFixture(overrides = {}) {
     };
 }
 
-module.exports = {
+export {
     createSourcesConfigFixture,
     createStreamElementsConfigFixture,
     createHandcamConfigFixture,

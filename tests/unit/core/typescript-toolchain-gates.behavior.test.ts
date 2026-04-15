@@ -1843,6 +1843,24 @@ describe('TypeScript toolchain migration gates behavior', () => {
         }
     });
 
+    it('keeps leaf helper modules free of top-level commonjs imports and exports', () => {
+        const helperPaths = [
+            'tests/helpers/config-fixture.ts',
+            'tests/helpers/youtube-test-data.ts',
+            'tests/helpers/twitch-test-data.ts',
+            'tests/helpers/tiktok-test-data.ts',
+            'tests/helpers/gui-transport-test-utils.ts'
+        ];
+
+        for (const helperPath of helperPaths) {
+            const content = readFileSync(join(repoRoot, helperPath), 'utf8');
+
+            expect(content).not.toMatch(/^[ \t]*(?:const|let|var)\s+.+?=\s*require\s*\(/m);
+            expect(content).not.toContain('module.exports');
+            expect(content).not.toMatch(/^[ \t]*exports\./m);
+        }
+    });
+
     it('keeps timeout and core utility modules free of commonjs export syntax', () => {
         const modulePaths = [
             'src/utils/timeout-validator.ts',
