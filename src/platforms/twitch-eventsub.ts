@@ -630,24 +630,11 @@ class TwitchEventSub extends EventEmitter {
         this.isInitialized = false;
         this._isConnected = false;
         this.subscriptionsReady = false;
+        this.retryAttempts = 0;
 
-        this.retryAttempts++;
-
-        if (this.retryAttempts <= this.maxRetryAttempts) {
-            this.logger.warn('EventSub initialization failed - retrying', 'twitch', {
-                attempt: this.retryAttempts,
-                maxAttempts: this.maxRetryAttempts,
-                retryDelay: this.retryDelay,
-                error: error.message
-            });
-
-            this.reconnectTimeout = safeSetTimeout(() => {
-                this.initialize();
-            }, validateTimeout(this.retryDelay, 5000));
-        } else {
-            this._logEventSubError('EventSub initialization failed after all retries', null, 'eventsub-init-retry', {
-                finalError: error.message
-            });
+        if (this.reconnectTimeout) {
+            clearTimeout(this.reconnectTimeout);
+            this.reconnectTimeout = null;
         }
     }
 

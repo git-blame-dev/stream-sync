@@ -13,6 +13,7 @@ import { normalizeBadgeImages } from '../utils/message-parts';
 import { createMonetizationErrorPayload } from '../utils/monetization-error-utils';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 import { resolveTwitchTimestampISO } from '../utils/platform-timestamp';
+import { createRetrySystem } from '../utils/retry-system';
 import { getSystemTimestampISO } from '../utils/timestamp';
 import { TwitchApiClient } from '../utils/api-clients/twitch-api-client';
 import { ViewerCountProviderFactory } from '../utils/viewer-count-providers';
@@ -50,10 +51,12 @@ class TwitchPlatform extends EventEmitter {
         this.logger = dependencies.logger || getUnifiedLogger();
         this.errorHandler = createPlatformErrorHandler(this.logger, 'twitch');
         this.dependencies = { ...dependencies };
+        this.retrySystem = dependencies.retrySystem || createRetrySystem({ logger: this.logger });
 
         // Initialize connection state
         this.isConnected = false;
         this.isPlannedDisconnection = false;
+        this.recoveryInFlight = false;
 
         // Store configuration and app reference
         this.config = config;
@@ -109,6 +112,16 @@ class TwitchPlatform extends EventEmitter {
         // Initialize connection state tracking
         this.isConnecting = false;
 
+        if (this.retrySystem && typeof this.retrySystem === 'object') {
+            this.retrySystem.isConnected = (platform) => {
+                if (platform !== this.platformName) {
+                    return false;
+                }
+
+                return !!(this.eventSub?.isActive?.() || this.isConnected);
+            };
+        }
+
         // EventSub will be initialized later when TwitchAuth is ready
 
         this.eventFactory = createTwitchEventFactory({
@@ -159,6 +172,7 @@ class TwitchPlatform extends EventEmitter {
             return;
         }
 
+        this.isPlannedDisconnection = false;
         this.handlers = handlers || {};
         this.isConnecting = true;
 
@@ -264,6 +278,7 @@ class TwitchPlatform extends EventEmitter {
             this.eventSub = null;
             this.isConnected = false;
             this.isConnecting = false;
+            this.recoveryInFlight = false;
             throw error;
         }
     }
@@ -1064,11 +1079,41 @@ class TwitchPlatform extends EventEmitter {
                 loaded: false
             };
             this.isConnected = false;
+            this.isConnecting = false;
             this.handlers = {};
             this.logger.info('Twitch platform cleanup completed', 'twitch');
         } catch (error) {
             this.errorHandler.handleCleanupError(error, 'twitch resources');
         }
+    }
+
+    _queuePlatformRecovery(error) {
+        if (this.recoveryInFlight || !this.retrySystem) {
+            return;
+        }
+
+        const handlers = { ...this.handlers };
+        this.recoveryInFlight = true;
+
+        this.retrySystem.handleConnectionError(
+            this.platformName,
+            error,
+            async () => {
+                this.isPlannedDisconnection = false;
+                await this.initialize(handlers);
+            },
+            async () => {
+                await this.cleanup();
+            },
+            (platform, isConnected, _connection, isConnecting) => {
+                if (platform !== this.platformName) {
+                    return;
+                }
+
+                this.isConnected = !!isConnected;
+                this.isConnecting = !!isConnecting;
+            }
+        );
     }
 
     getConnectionState() {
@@ -1218,6 +1263,18 @@ class TwitchPlatform extends EventEmitter {
 
         this.isConnected = !!isConnected;
         this.isConnecting = false;
+
+        if (isConnected) {
+            this.isPlannedDisconnection = false;
+            this.recoveryInFlight = false;
+            this.retrySystem?.handleConnectionSuccess?.(this.platformName, this.eventSub, 'Twitch EventSub');
+        } else if (!payload.willReconnect && !this.isPlannedDisconnection && this.config.enabled) {
+            const recoveryError = error instanceof Error
+                ? error
+                : new Error(error?.message || details.reason || 'EventSub disconnected');
+            this._queuePlatformRecovery(recoveryError);
+            payload.willReconnect = true;
+        }
 
         this._emitPlatformEvent(PlatformEvents.PLATFORM_CONNECTION, payload);
     }
