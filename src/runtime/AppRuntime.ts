@@ -386,10 +386,6 @@ class AppRuntime {
         }
     }
 
-    recordPlatformConnection(platform) {
-        this.platformLifecycleService.recordPlatformConnection(platform);
-    }
-
     updateViewerCount(platform, count) {
         this.logger.debug(`[${platform}] Viewer count updated: ${count}`, 'system');
 

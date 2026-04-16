@@ -1192,7 +1192,8 @@ class TwitchPlatform extends EventEmitter {
             [PlatformEvents.GIFT]: 'onGift',
             [PlatformEvents.GIFTPAYPIGGY]: 'onGiftPaypiggy',
             [PlatformEvents.RAID]: 'onRaid',
-            [PlatformEvents.STREAM_STATUS]: 'onStreamStatus'
+            [PlatformEvents.STREAM_STATUS]: 'onStreamStatus',
+            [PlatformEvents.PLATFORM_CONNECTION]: 'onConnection'
         };
 
         const handlerName = handlerMap[type];
