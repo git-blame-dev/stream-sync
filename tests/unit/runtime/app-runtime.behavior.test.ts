@@ -660,19 +660,16 @@ describe('AppRuntime behavior', () => {
         expect(handled.length).toBe(1);
     });
 
-    it('records platform connections via lifecycle service', () => {
-        const calls = [];
+    it('does not expose a platform-connection passthrough helper', () => {
         const runtime = createRuntime({
             platformLifecycleService: {
                 getAllPlatforms: createMockFn().mockReturnValue({}),
                 getStatus: createMockFn().mockReturnValue({ platformHealth: {} }),
-                recordPlatformConnection: (platform) => calls.push(platform),
                 disconnectAll: createMockFn().mockResolvedValue()
             }
         });
-        runtime.recordPlatformConnection('twitch');
 
-        expect(calls).toEqual(['twitch']);
+        expect(runtime.recordPlatformConnection).toBeUndefined();
     });
 
     it('handles early viewer count initialization failures', async () => {

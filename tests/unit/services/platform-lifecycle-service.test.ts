@@ -752,7 +752,7 @@ describe('PlatformLifecycleService', () => {
             onStreamDetected: { eventType: PlatformEvents.STREAM_DETECTED, requiresTimestamp: false, dataKey: 'eventType' }
         };
 
-        const CANONICAL_HANDLER_NAMES = Object.keys(CANONICAL_HANDLER_MATRIX);
+        const CANONICAL_HANDLER_NAMES = [...Object.keys(CANONICAL_HANDLER_MATRIX), 'onConnection'];
 
         const createPayloadForHandler = (handlerName, timestamp) => {
             const base = { username: 'test-user', userId: 'test-user-id', timestamp };
@@ -873,6 +873,68 @@ describe('PlatformLifecycleService', () => {
                 ([, p]) => p?.type === PlatformEvents.VIEWER_COUNT
             );
             expect(emitted).toBeUndefined();
+        });
+
+        it('onConnection updates lifecycle state without emitting through the event bus', () => {
+            const handlers = service.createDefaultEventHandlers('twitch');
+
+            testClock.set(1000);
+            mockEventBus.emit.mockClear();
+
+            handlers.onConnection({
+                platform: 'twitch',
+                status: 'connected',
+                timestamp: new Date(testClock.now()).toISOString(),
+                willReconnect: false
+            });
+
+            expect(service.getStatus().platformHealth.twitch.state).toBe('ready');
+            expect(service.getPlatformConnectionTime('twitch')).toBe(testClock.now());
+            expect(mockEventBus.emit).not.toHaveBeenCalled();
+        });
+
+        it('onConnection keeps platform instance registered while reconnect is expected', () => {
+            const handlers = service.createDefaultEventHandlers('twitch');
+            const livePlatform = { initialize: createMockFn(), cleanup: createMockFn(), on: createMockFn() };
+
+            service.platforms.twitch = livePlatform;
+            service.updatePlatformHealth('twitch', { state: 'ready' });
+            testClock.set(1000);
+            service.recordPlatformConnection('twitch');
+
+            mockEventBus.emit.mockClear();
+            handlers.onConnection({
+                platform: 'twitch',
+                status: 'disconnected',
+                timestamp: new Date(testClock.now() + 1000).toISOString(),
+                willReconnect: true,
+                error: { message: 'socket dropped' }
+            });
+
+            expect(service.getStatus().platformHealth.twitch.state).toBe('disconnected');
+            expect(service.getPlatform('twitch')).toBe(livePlatform);
+            expect(service.getPlatformConnectionTime('twitch')).toBe(1000);
+            expect(mockEventBus.emit).not.toHaveBeenCalled();
+        });
+
+        it('onConnection ignores late connection events after shutdown begins', () => {
+            const handlers = service.createDefaultEventHandlers('twitch');
+
+            service.shutdownRequested = true;
+            service.updatePlatformHealth('twitch', { state: 'disconnected' });
+            testClock.set(1000);
+            mockEventBus.emit.mockClear();
+
+            handlers.onConnection({
+                platform: 'twitch',
+                status: 'connected',
+                timestamp: new Date(testClock.now()).toISOString(),
+                willReconnect: false
+            });
+
+            expect(service.getStatus().platformHealth.twitch.state).toBe('disconnected');
+            expect(service.getPlatformConnectionTime('twitch')).toBeNull();
+            expect(mockEventBus.emit).not.toHaveBeenCalled();
         });
     });
 });

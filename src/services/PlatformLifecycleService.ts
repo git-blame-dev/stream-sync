@@ -51,6 +51,7 @@ type PlatformEventHandlers = {
     onEnvelope: (data: unknown) => void;
     onStreamStatus: (data: unknown) => void;
     onStreamDetected: (data: unknown) => void;
+    onConnection: (data: unknown) => void;
 };
 
 type PlatformEventHandlerMap = Record<string, PlatformEventHandlers> & {
@@ -231,10 +232,88 @@ class PlatformLifecycleService {
             onRaid: (data) => this.emitPlatformEvent(platformName, PlatformEvents.RAID, data),
             onEnvelope: (data) => this.emitPlatformEvent(platformName, PlatformEvents.ENVELOPE, data),
             onStreamStatus: (data) => this.emitPlatformEvent(platformName, PlatformEvents.STREAM_STATUS, data),
-            onStreamDetected: (data) => this.emitPlatformEvent(platformName, PlatformEvents.STREAM_DETECTED, data)
+            onStreamDetected: (data) => this.emitPlatformEvent(platformName, PlatformEvents.STREAM_DETECTED, data),
+            onConnection: (data) => this.handlePlatformConnectionEvent(platformName, data)
         };
 
         return handlers;
+    }
+
+    handlePlatformConnectionEvent(platformName: string, data: unknown) {
+        if (this.shutdownRequested) {
+            return;
+        }
+
+        if (!data || typeof data !== 'object') {
+            this.logger.warn('Platform connection event missing payload object', 'PlatformLifecycleService', {
+                platform: platformName
+            });
+            return;
+        }
+
+        const payload = data as LifecycleRecord;
+        const eventPlatform = this._resolveEventPlatform(platformName, data);
+        const status = typeof payload.status === 'string' ? payload.status.trim() : '';
+        const timestamp = this.resolveConnectionTimestamp(payload.timestamp);
+        const errorMessage = this.resolveConnectionErrorMessage(payload.error);
+
+        if (status === 'connected') {
+            this.recordPlatformConnection(eventPlatform, timestamp.epochMs);
+            this.updatePlatformHealth(eventPlatform, {
+                state: 'ready',
+                lastError: null,
+                lastConnection: timestamp.iso,
+                lastUpdated: timestamp.iso
+            });
+            return;
+        }
+
+        if (status === 'disconnected' || status === 'reconnecting') {
+            this.updatePlatformHealth(eventPlatform, {
+                state: 'disconnected',
+                lastError: errorMessage,
+                lastUpdated: timestamp.iso
+            });
+            return;
+        }
+
+        this.logger.warn('Unsupported platform connection status', 'PlatformLifecycleService', {
+            platform: eventPlatform,
+            status
+        });
+    }
+
+    resolveConnectionTimestamp(rawTimestamp: unknown) {
+        const isoTimestamp = typeof rawTimestamp === 'string' ? rawTimestamp : '';
+        const epochMs = isoTimestamp ? Date.parse(isoTimestamp) : Number.NaN;
+
+        if (!Number.isNaN(epochMs)) {
+            return { iso: isoTimestamp, epochMs };
+        }
+
+        const fallbackIso = getSystemTimestampISO();
+        return {
+            iso: fallbackIso,
+            epochMs: Date.parse(fallbackIso)
+        };
+    }
+
+    resolveConnectionErrorMessage(rawError: unknown) {
+        if (!rawError) {
+            return null;
+        }
+
+        if (rawError instanceof Error) {
+            return rawError.message;
+        }
+
+        if (typeof rawError === 'object' && rawError !== null) {
+            const errorRecord = rawError as LifecycleRecord;
+            const errorMessage = typeof errorRecord.message === 'string' ? errorRecord.message.trim() : '';
+            return errorMessage || getErrorMessage(rawError);
+        }
+
+        return getErrorMessage(rawError);
     }
 
     emitPlatformEvent(platformName: string, type: string, data: unknown) {
@@ -427,8 +506,8 @@ class PlatformLifecycleService {
         }
     }
 
-    recordPlatformConnection(platformName: string) {
-        this.platformConnectionTimes[platformName] = Date.now();
+    recordPlatformConnection(platformName: string, timestampMs = Date.now()) {
+        this.platformConnectionTimes[platformName] = timestampMs;
         this.logger.debug(`Platform ${platformName} connection time recorded`, 'PlatformLifecycleService');
     }
 

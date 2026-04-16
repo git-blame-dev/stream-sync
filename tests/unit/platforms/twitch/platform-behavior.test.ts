@@ -286,6 +286,21 @@ describe('TwitchPlatform behavior standards', () => {
         });
     });
 
+    it('forwards connection lifecycle events to injected onConnection handlers', () => {
+        const onConnection = createMockFn();
+        platform = createPlatform({}, { twitchAuth: createReadyTwitchAuth() });
+        platform.handlers = { onConnection };
+
+        platform._handleEventSubConnectionChange(false, { reason: 'socket dropped', willReconnect: true });
+
+        expect(onConnection).toHaveBeenCalledTimes(1);
+        expect(onConnection.mock.calls[0][0]).toMatchObject({
+            platform: 'twitch',
+            status: 'disconnected',
+            willReconnect: true
+        });
+    });
+
     it('maps resubscription data to months and isRenewal in subscription events', () => {
         platform = createPlatform({}, { twitchAuth: createReadyTwitchAuth() });
         const resubData = {
