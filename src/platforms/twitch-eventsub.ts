@@ -379,7 +379,6 @@ class TwitchEventSub extends EventEmitter {
             broadcasterId: this.broadcasterId,
             sessionId: this.sessionId,
             subscriptionDelay: this.subscriptionDelay,
-            isConnected: this._isConnected,
             validationAlreadyDone
         });
 

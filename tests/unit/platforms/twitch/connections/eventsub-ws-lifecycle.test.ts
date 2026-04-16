@@ -215,6 +215,32 @@ describe('Twitch EventSub WS lifecycle', () => {
         expect(state.emitCalls.some(({ event, payload }) => event === 'eventSubSubscriptionFailed' && payload.sessionId === 'test-session-456')).toBe(true);
     });
 
+    test('connectWebSocket surfaces one startup failure path when subscription setup aborts on dead session loss', async () => {
+        const lifecycle = buildLifecycle();
+
+        const state = createState({
+            _setupEventSubscriptions: createMockFn(async () => ({
+                failures: [{
+                    subscription: 'Chat',
+                    error: { message: 'websocket session has already disconnected' }
+                }]
+            }))
+        });
+        const connectPromise = lifecycle.connectWebSocket(state);
+
+        state.ws.readyState = 1;
+        state.ws.emit('open');
+        state.ws.emit('message', Buffer.from(JSON.stringify({
+            metadata: { message_type: 'session_welcome' },
+            payload: { session: { id: 'dead-session-startup' } }
+        })));
+
+        await expect(connectPromise).rejects.toThrow('Subscription setup completed with failures');
+        expect(state.scheduleReconnectCalls).toHaveLength(1);
+        expect(state.emitCalls.filter(({ event }) => event === 'eventSubSubscriptionFailed')).toHaveLength(1);
+        expect(state.emitCalls.some(({ event }) => event === 'eventSubDisconnected')).toBe(false);
+    });
+
     test('scheduleReconnect disables initialization when max attempts exceeded', () => {
         const lifecycle = buildLifecycle();
 
