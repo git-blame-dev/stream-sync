@@ -140,6 +140,97 @@ describe('Twitch EventSub subscription manager', () => {
         expect(result.failures).toHaveLength(0);
     });
 
+    test('stops subscription setup immediately when connection validation fails before the next request', async () => {
+        const postCalls = [];
+        const post = async (_url, payload) => {
+            postCalls.push(payload.type);
+            return { data: { data: [{ id: `sub-${payload.type}`, status: 'enabled' }] } };
+        };
+        let validationCalls = 0;
+        const manager = createManager({
+            axios: { post },
+            validateConnectionForSubscriptions: () => {
+                validationCalls += 1;
+                return validationCalls <= 2;
+            },
+            now: (() => {
+                const values = [0, 1000, 1000, 1000];
+                return () => values.shift() ?? 1000;
+            })()
+        });
+
+        const result = await manager.setupEventSubscriptions({
+            requiredSubscriptions: [
+                {
+                    name: 'Chat',
+                    type: 'channel.chat.message',
+                    version: '1',
+                    getCondition: () => ({ broadcaster_user_id: 'test-broadcaster-1', user_id: 'test-user-1' })
+                },
+                {
+                    name: 'Follows',
+                    type: 'channel.follow',
+                    version: '2',
+                    getCondition: () => ({ broadcaster_user_id: 'test-broadcaster-1', moderator_user_id: 'test-user-1' })
+                }
+            ],
+            userId: 'test-user-1',
+            broadcasterId: 'test-broadcaster-1',
+            sessionId: 'test-session-1',
+            subscriptionDelay: 0,
+            isConnected: true
+        });
+
+        expect(postCalls).toEqual(['channel.chat.message']);
+        expect(result.successful).toBe(1);
+    });
+
+    test('treats dead websocket session responses as terminal for the current setup pass', async () => {
+        const postCalls = [];
+        const post = async (_url, payload) => {
+            postCalls.push(payload.type);
+            if (payload.type === 'channel.chat.message') {
+                const error = new Error('dead session');
+                error.response = {
+                    data: {
+                        error: 'Bad Request',
+                        message: 'websocket session has already disconnected'
+                    },
+                    status: 400
+                };
+                throw error;
+            }
+            return { data: { data: [{ id: `sub-${payload.type}`, status: 'enabled' }] } };
+        };
+        const manager = createManager({ axios: { post } });
+
+        const result = await manager.setupEventSubscriptions({
+            requiredSubscriptions: [
+                {
+                    name: 'Chat',
+                    type: 'channel.chat.message',
+                    version: '1',
+                    getCondition: () => ({ broadcaster_user_id: 'test-broadcaster-1', user_id: 'test-user-1' })
+                },
+                {
+                    name: 'Follows',
+                    type: 'channel.follow',
+                    version: '2',
+                    getCondition: () => ({ broadcaster_user_id: 'test-broadcaster-1', moderator_user_id: 'test-user-1' })
+                }
+            ],
+            userId: 'test-user-1',
+            broadcasterId: 'test-broadcaster-1',
+            sessionId: 'test-session-1',
+            subscriptionDelay: 0,
+            isConnected: true
+        });
+
+        expect(postCalls).toEqual(['channel.chat.message']);
+        expect(result.failures).toHaveLength(1);
+        expect(result.failures[0].error.message).toContain('websocket session has already disconnected');
+    });
+
     test('uses config clientId and secrets token for cleanup', async () => {
         const getCalls = [];
         const deleteCalls = [];

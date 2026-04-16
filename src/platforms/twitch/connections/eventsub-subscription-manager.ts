@@ -109,6 +109,11 @@ function createTwitchEventSubSubscriptionManager(options = {}) {
 
     const shouldRetrySubscription = (errorDetails) => !!errorDetails?.isRetryable && !errorDetails?.isCritical;
 
+    const isTerminalSessionLoss = (errorDetails) => {
+        const message = typeof errorDetails?.message === 'string' ? errorDetails.message.trim().toLowerCase() : '';
+        return message.includes('websocket session has already disconnected');
+    };
+
     const retrySubscription = async ({ subscription, payload, retriesRemaining }) => {
         if (retriesRemaining <= 0) {
             return { success: false, error: 'retry-exhausted' };
@@ -148,7 +153,6 @@ function createTwitchEventSubSubscriptionManager(options = {}) {
         broadcasterId,
         sessionId,
         subscriptionDelay,
-        isConnected,
         validationAlreadyDone = false
     }) => {
         if (!validationAlreadyDone && !safeValidateConnection()) {
@@ -171,16 +175,12 @@ function createTwitchEventSubSubscriptionManager(options = {}) {
 
         let successCount = 0;
         const failedSubscriptions = [];
-        let lastValidationTime = now();
-
         for (const subscription of requiredSubscriptions) {
             try {
-                const currentTime = now();
-                if (currentTime - lastValidationTime > 5000 && !safeValidateConnection()) {
+                if (!safeValidateConnection()) {
                     safeLogger.warn('Stopping subscription setup - connection lost during process', 'twitch');
                     break;
                 }
-                lastValidationTime = currentTime;
 
                 safeLogger.debug(`Creating subscription: ${subscription.name}`, 'twitch');
 
@@ -265,12 +265,16 @@ function createTwitchEventSubSubscriptionManager(options = {}) {
                 safeLogError(`Failed to create ${subscription.name} subscription`, null, 'subscription-create', {
                     error: errorDetails,
                     type: subscription.type,
-                    sessionId: sessionId ? 'present' : 'missing',
-                    isConnected: !!isConnected
+                    sessionId: sessionId ? 'present' : 'missing'
                 });
 
                 if (errorDetails.isCritical) {
                     safeLogError('Critical error encountered, stopping subscription setup', null, 'subscription-critical');
+                    break;
+                }
+
+                if (isTerminalSessionLoss(errorDetails)) {
+                    safeLogError('Terminal session loss encountered, stopping subscription setup', null, 'subscription-terminal-session-loss');
                     break;
                 }
             }
