@@ -265,13 +265,17 @@ function createTwitchEventSubWsLifecycle(options = {}) {
 
                     state.subscriptions?.clear?.();
 
+                    const willReconnect = code !== 1000 && !!state.isInitialized;
+
                     emit('eventSubDisconnected', {
                         code,
                         reason: reason?.toString(),
-                        abnormal: code !== 1000
+                        abnormal: code !== 1000,
+                        willReconnect,
+                        terminal: false
                     });
 
-                    if (code !== 1000 && state.isInitialized) {
+                    if (willReconnect) {
                         if (code === 1006) {
                             state.logger?.warn?.('Abnormal closure detected, will retry with increased delay', 'twitch');
                         }
@@ -313,6 +317,13 @@ function createTwitchEventSubWsLifecycle(options = {}) {
                 'reconnect-max'
             );
             state.isInitialized = false;
+            state.emit?.('eventSubDisconnected', {
+                code: null,
+                reason: 'max reconnect attempts exceeded',
+                abnormal: true,
+                willReconnect: false,
+                terminal: true
+            });
             return;
         }
 
@@ -396,6 +407,13 @@ function createTwitchEventSubWsLifecycle(options = {}) {
                     'reconnect-abandoned'
                 );
                 state.isInitialized = false;
+                state.emit?.('eventSubDisconnected', {
+                    code: null,
+                    reason: 'reconnect attempts exhausted',
+                    abnormal: true,
+                    willReconnect: false,
+                    terminal: true
+                });
             }
         }
     };

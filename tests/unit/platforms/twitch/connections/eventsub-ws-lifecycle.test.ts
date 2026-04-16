@@ -222,6 +222,9 @@ describe('Twitch EventSub WS lifecycle', () => {
         lifecycle.scheduleReconnect(state);
 
         expect(state.isInitialized).toBe(false);
+        expect(state.emitCalls.some(({ event, payload }) =>
+            event === 'eventSubDisconnected' && payload.willReconnect === false && payload.terminal === true
+        )).toBe(true);
     });
 
     test('scheduleReconnect triggers reconnection after delay', async () => {
@@ -458,10 +461,34 @@ describe('Twitch EventSub WS lifecycle', () => {
         state.ws.emit('close', 1000, 'normal closure');
 
         expect(state.emitCalls.some(({ event, payload }) =>
-            event === 'eventSubDisconnected' && payload.code === 1000 && payload.abnormal === false
+            event === 'eventSubDisconnected' && payload.code === 1000 && payload.abnormal === false && payload.willReconnect === false && payload.terminal === false
         )).toBe(true);
         expect(state._isConnected).toBe(false);
         expect(state.sessionId).toBe(null);
+    });
+
+    test('connectWebSocket marks abnormal disconnects as reconnecting while session recovery is in progress', async () => {
+        const lifecycle = buildLifecycle();
+
+        const state = createState({
+            _setupEventSubscriptions: createMockFn(async () => ({ failures: [] })),
+            isInitialized: true
+        });
+        const connectPromise = lifecycle.connectWebSocket(state);
+
+        state.ws.readyState = 1;
+        state.ws.emit('open');
+        state.ws.emit('message', Buffer.from(JSON.stringify({
+            metadata: { message_type: 'session_welcome' },
+            payload: { session: { id: 'abnormal-close-session' } }
+        })));
+
+        await connectPromise;
+        state.ws.emit('close', 4003, 'connection unused');
+
+        expect(state.emitCalls.some(({ event, payload }) =>
+            event === 'eventSubDisconnected' && payload.code === 4003 && payload.willReconnect === true && payload.terminal === false
+        )).toBe(true);
     });
 
     test('connectWebSocket triggers reconnection on abnormal close when initialized', async () => {
@@ -656,6 +683,9 @@ describe('Twitch EventSub WS lifecycle', () => {
         const abandonedLog = state.logEventSubErrorCalls.find(c => c.msg === 'EventSub reconnection abandoned after maximum attempts');
         expect(abandonedLog).toBeTruthy();
         expect(abandonedLog.type).toBe('reconnect-abandoned');
+        expect(state.emitCalls.some(({ event, payload }) =>
+            event === 'eventSubDisconnected' && payload.willReconnect === false && payload.terminal === true
+        )).toBe(true);
     });
 
     test('reconnect resets retry attempts on success', async () => {
