@@ -2,7 +2,7 @@ const { describe, it, expect, afterEach } = require('bun:test');
 const { createMockFn } = require('../../../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../../../helpers/mock-factories');
 const testClock = require('../../../../helpers/test-clock');
-const { safeSetTimeout, safeDelay } = require('../../../../../src/utils/timeout-validator');
+const { safeSetTimeout } = require('../../../../../src/utils/timeout-validator');
 const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../../../../src/core/secrets');
 
 const { TwitchEventSub } = require('../../../../../src/platforms/twitch-eventsub.ts');
@@ -139,34 +139,30 @@ describe('TwitchEventSub lifecycle', () => {
             await expect(eventSub.initialize()).rejects.toThrow('ws connect failed');
             expect(eventSub.isInitialized).toBe(false);
             expect(eventSub._isConnected).toBe(false);
+            expect(eventSub.reconnectTimeout).toBeNull();
         });
 
-        it('increments retry attempts and schedules retry on initialization failure', async () => {
+        it('does not schedule hidden retry timers on initialization failure', async () => {
             eventSub = createEventSub();
             eventSub.maxRetryAttempts = 3;
             eventSub.retryDelay = 100;
-            let initializeCalled = false;
-            eventSub.initialize = () => { initializeCalled = true; };
 
             eventSub._handleInitializationError(new Error('test error'));
 
-            expect(eventSub.retryAttempts).toBe(1);
             expect(eventSub.isInitialized).toBe(false);
             expect(eventSub._isConnected).toBe(false);
-            expect(eventSub.reconnectTimeout).not.toBeNull();
-
-            await safeDelay(150);
-            expect(initializeCalled).toBe(true);
+            expect(eventSub.retryAttempts).toBe(0);
+            expect(eventSub.reconnectTimeout).toBeNull();
         });
 
-        it('stops retrying after max attempts exceeded', () => {
+        it('leaves retry timer unset even after repeated initialization errors', () => {
             eventSub = createEventSub();
             eventSub.maxRetryAttempts = 2;
             eventSub.retryAttempts = 2;
 
             eventSub._handleInitializationError(new Error('final error'));
 
-            expect(eventSub.retryAttempts).toBe(3);
+            expect(eventSub.retryAttempts).toBe(0);
             expect(eventSub.reconnectTimeout).toBeNull();
         });
     });

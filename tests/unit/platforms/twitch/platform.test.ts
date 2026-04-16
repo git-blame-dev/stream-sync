@@ -18,6 +18,7 @@ describe('Twitch Platform', () => {
     let mockTwitchAuth;
     let mockApiClient;
     let mockViewerCountProvider;
+    let mockRetrySystem;
     let mockApp;
     let platform;
     let config;
@@ -47,6 +48,13 @@ describe('Twitch Platform', () => {
             getViewerCount: createMockFn().mockResolvedValue(1500),
             startPolling: () => viewerCountProviderCalls.startPolling.push(true),
             stopPolling: () => viewerCountProviderCalls.stopPolling.push(true)
+        };
+        mockRetrySystem = {
+            isConnected: null,
+            handleConnectionError: createMockFn(),
+            handleConnectionSuccess: createMockFn(),
+            resetRetryCount: createMockFn(),
+            retryTimers: {}
         };
         mockApp = {
             handleChatMessage: createMockFn(),
@@ -79,6 +87,7 @@ describe('Twitch Platform', () => {
             TwitchEventSub: createMockFn().mockImplementation(() => mockTwitchEventSub),
             TwitchApiClient: createMockFn().mockImplementation(() => mockApiClient),
             twitchAuth: mockTwitchAuth,
+            retrySystem: mockRetrySystem,
             notificationBridge: mockApp,
             logger: noOpLogger,
             timestampService: {
@@ -135,6 +144,14 @@ describe('Twitch Platform', () => {
     });
 
     describe('when initializing', () => {
+        it('wires retry-system connectivity checks to Twitch active connection state', () => {
+            expect(mockRetrySystem.isConnected('youtube')).toBe(false);
+            expect(mockRetrySystem.isConnected('twitch')).toBe(false);
+
+            platform.eventSub = { isActive: () => true };
+            expect(mockRetrySystem.isConnected('twitch')).toBe(true);
+        });
+
         it('should accept valid configuration for user stream connection', () => {
             const validConfig = {
                 enabled: true,
@@ -169,6 +186,13 @@ describe('Twitch Platform', () => {
                 new TwitchPlatform(config, {});
             }).toThrow('TwitchPlatform requires twitchAuth via dependency injection');
         });
+
+        it('returns early when the platform is disabled', async () => {
+            platform.config.enabled = false;
+
+            await expect(platform.initialize(platformHandlers)).resolves.toBeUndefined();
+            expect(eventSubCalls.initialize).toHaveLength(0);
+        });
     });
 
     describe('when initializing EventSub for real-time events', () => {
@@ -190,6 +214,37 @@ describe('Twitch Platform', () => {
             mockTwitchAuth.isReady.mockReturnValue(false);
 
             await expect(platform.initializeEventSub()).rejects.toThrow('Twitch authentication is not ready');
+        });
+
+        it('fails initialization when EventSub is missing an event emitter interface', async () => {
+            platform.TwitchEventSub = createMockFn().mockImplementation(() => ({
+                initialize: createMockFn().mockResolvedValue(),
+                isConnected: createMockFn().mockReturnValue(true),
+                isActive: createMockFn().mockReturnValue(true)
+            }));
+
+            await expect(platform.initialize(platformHandlers)).rejects.toThrow('missing event emitter interface');
+        });
+
+        it('fails initialization when EventSub is missing connectivity methods', async () => {
+            platform.TwitchEventSub = createMockFn().mockImplementation(() => ({
+                initialize: createMockFn().mockResolvedValue(),
+                on: createMockFn(),
+                isActive: createMockFn().mockReturnValue(true)
+            }));
+
+            await expect(platform.initialize(platformHandlers)).rejects.toThrow('missing isConnected()');
+        });
+
+        it('fails initialization when EventSub does not report an active connection', async () => {
+            platform.TwitchEventSub = createMockFn().mockImplementation(() => ({
+                initialize: createMockFn().mockResolvedValue(),
+                on: createMockFn(),
+                isConnected: createMockFn().mockReturnValue(false),
+                isActive: createMockFn().mockReturnValue(true)
+            }));
+
+            await expect(platform.initialize(platformHandlers)).rejects.toThrow('connection is not active');
         });
     });
 
@@ -504,6 +559,83 @@ describe('Twitch Platform', () => {
             expect(connectionEvent[1].type).toBe('platform:connection');
             expect(platformHandlers._calls.onStreamStatus).toHaveLength(0);
         });
+
+        it('queues runtime recovery through the retry system for terminal disconnects', async () => {
+            await platform.initialize(platformHandlers);
+
+            platform._handleEventSubConnectionChange(false, { reason: 'socket dropped', willReconnect: false });
+
+            expect(mockRetrySystem.handleConnectionError).toHaveBeenCalledTimes(1);
+            expect(mockRetrySystem.handleConnectionError.mock.calls[0][0]).toBe('twitch');
+            expect(mockRetrySystem.handleConnectionError.mock.calls[0][1]).toBeInstanceOf(Error);
+            expect(typeof mockRetrySystem.handleConnectionError.mock.calls[0][2]).toBe('function');
+        });
+
+        it('does not queue runtime recovery while EventSub is already reconnecting', async () => {
+            await platform.initialize(platformHandlers);
+
+            platform._handleEventSubConnectionChange(false, { reason: 'socket dropped', willReconnect: true });
+
+            expect(mockRetrySystem.handleConnectionError).not.toHaveBeenCalled();
+        });
+
+        it('clears retry state when EventSub reconnects successfully', async () => {
+            await platform.initialize(platformHandlers);
+
+            platform._handleEventSubConnectionChange(true, { reason: 'session resumed' });
+
+            expect(mockRetrySystem.handleConnectionSuccess).toHaveBeenCalledTimes(1);
+            expect(mockRetrySystem.handleConnectionSuccess.mock.calls[0][0]).toBe('twitch');
+        });
+
+        it('marks terminal disconnect payloads as reconnecting when platform recovery takes over', async () => {
+            await platform.initialize(platformHandlers);
+
+            const emitSpy = spyOn(platform, 'emit');
+            platform._handleEventSubConnectionChange(false, { reason: 'socket dropped', willReconnect: false });
+
+            const connectionEvent = emitSpy.mock.calls.find(call => call[0] === 'platform:event');
+            expect(connectionEvent[1].data.willReconnect).toBe(true);
+        });
+
+        it('collapses repeated terminal disconnects while recovery is already in flight', async () => {
+            await platform.initialize(platformHandlers);
+            const recoveryPromise = new Promise(() => {});
+            mockRetrySystem.handleConnectionError.mockImplementation(() => recoveryPromise);
+
+            platform._handleEventSubConnectionChange(false, { reason: 'socket dropped', willReconnect: false });
+            platform._handleEventSubConnectionChange(false, { reason: 'socket dropped again', willReconnect: false });
+
+            expect(mockRetrySystem.handleConnectionError).toHaveBeenCalledTimes(1);
+        });
+
+        it('passes cleanup and reconnect callbacks into the retry system', async () => {
+            await platform.initialize(platformHandlers);
+            let reconnectFn;
+            let cleanupFn;
+            let setConnectionStateFn;
+            mockRetrySystem.handleConnectionError.mockImplementation((platformName, error, reconnect, cleanup, setConnectionState) => {
+                reconnectFn = reconnect;
+                cleanupFn = cleanup;
+                setConnectionStateFn = setConnectionState;
+            });
+
+            platform._handleEventSubConnectionChange(false, { reason: 'socket dropped', willReconnect: false });
+
+            expect(typeof reconnectFn).toBe('function');
+            expect(typeof cleanupFn).toBe('function');
+            expect(typeof setConnectionStateFn).toBe('function');
+
+            setConnectionStateFn('twitch', false, null, true);
+            expect(platform.isConnecting).toBe(true);
+
+            await cleanupFn();
+            expect(platform.eventSub).toBeNull();
+
+            mockTwitchEventSub.initialize.mockResolvedValue();
+            await reconnectFn();
+            expect(platform.isPlannedDisconnection).toBe(false);
+        });
     });
 
     describe('when bot sends messages to chat', () => {
@@ -556,6 +688,16 @@ describe('Twitch Platform', () => {
             platform.eventSub = null;
             state = platform.getConnectionState();
             expect(state.status).toBe('disconnected');
+        });
+
+        it('reports connection status snapshots for the current connection flag', async () => {
+            platform.isConnected = true;
+
+            const status = await platform.getConnectionStatus();
+
+            expect(status.platform).toBe('twitch');
+            expect(status.status).toBe('connected');
+            expect(typeof status.timestamp).toBe('string');
         });
     });
 
@@ -659,6 +801,151 @@ describe('Twitch Platform', () => {
             const isConfigured = invalidPlatform.isConfigured();
             expect(isConfigured).toBe(false);
         });
+
+        it('reports eventsub not active when connected without active subscriptions', () => {
+            platform.eventSub = {
+                isConnected: () => true,
+                isActive: () => false
+            };
+
+            const status = platform.validateConfig();
+
+            expect(status.isReady).toBe(false);
+            expect(status.issues).toContain('EventSub not active');
+        });
+    });
+
+    describe('when handling utility behaviors', () => {
+        it('logs operational payloads for non-Error platform issues', () => {
+            const logOperationalError = createMockFn();
+            platform.errorHandler = {
+                handleEventProcessingError: createMockFn(),
+                logOperationalError
+            };
+
+            platform._logPlatformError('test message', { info: 'payload' }, 'test-type');
+
+            expect(logOperationalError).toHaveBeenCalledTimes(1);
+            expect(logOperationalError.mock.calls[0][0]).toBe('test message');
+        });
+
+        it('returns zero viewer count when provider is unavailable', async () => {
+            platform.viewerCountProvider = null;
+
+            await expect(platform.getViewerCount()).resolves.toBe(0);
+        });
+
+        it('skips viewer count polling when provider lacks startPolling', () => {
+            platform.viewerCountProvider = { getViewerCount: createMockFn() };
+
+            expect(() => platform.initializeViewerCountProvider()).not.toThrow();
+        });
+
+        it('loads badge catalogs once and reuses cached broadcaster catalogs', async () => {
+            const getGlobalChatBadges = createMockFn().mockResolvedValue([{ set_id: 'moderator', versions: [] }]);
+            const getChannelChatBadges = createMockFn().mockResolvedValue([{ set_id: 'subscriber', versions: [] }]);
+            platform.apiClient = { getGlobalChatBadges, getChannelChatBadges };
+
+            await platform._ensureBadgeCatalogs(' broadcaster-id ');
+            await platform._ensureBadgeCatalogs('broadcaster-id');
+
+            expect(getGlobalChatBadges).toHaveBeenCalledTimes(1);
+            expect(getChannelChatBadges).toHaveBeenCalledTimes(1);
+            expect(platform.badgeCatalogCache.loaded).toBe(true);
+            expect(platform.badgeCatalogCache.broadcasterId).toBe('broadcaster-id');
+        });
+
+        it('loads cheermote catalogs once and reuses cached broadcaster catalogs', async () => {
+            const getCheermotes = createMockFn().mockResolvedValue([{ prefix: 'Cheer', tiers: [] }]);
+            platform.apiClient = { getCheermotes };
+            platform.broadcasterId = ' broadcaster-id ';
+
+            await platform._ensureCheermoteCatalog();
+            await platform._ensureCheermoteCatalog();
+
+            expect(getCheermotes).toHaveBeenCalledTimes(1);
+            expect(getCheermotes.mock.calls[0][0]).toBe('broadcaster-id');
+            expect(platform.cheermoteCatalogCache.loaded).toBe(true);
+        });
+
+        it('resolves cheermote images from the cached catalog', () => {
+            platform.cheermoteCatalogCache.catalog = [{
+                prefix: 'Cheer',
+                tiers: [{ id: 100, images: { dark: { animated: { 3: 'https://example.test/cheer.gif' } } } }]
+            }];
+
+            expect(platform._resolveCheermoteImageFromCatalog({ prefix: 'cheer', tier: '100' })).toBe('https://example.test/cheer.gif');
+            expect(platform._resolveCheermoteImageFromCatalog({ prefix: 'cheer', tier: '999' })).toBe('');
+        });
+
+        it('reloads cheermote catalogs on a cache miss before resolving gift imagery', async () => {
+            const getCheermotes = createMockFn()
+                .mockResolvedValueOnce([])
+                .mockResolvedValueOnce([{ prefix: 'Cheer', tiers: [{ id: 100, images: { dark: { animated: { 3: 'https://example.test/cheer.gif' } } } }] }]);
+            platform.apiClient = { getCheermotes };
+            platform.broadcasterId = 'broadcaster-id';
+
+            const imageUrl = await platform._resolveGiftCheermoteImageUrl({
+                currency: 'bits',
+                cheermoteInfo: { prefix: 'cheer', tier: '100' }
+            });
+
+            expect(getCheermotes).toHaveBeenCalledTimes(2);
+            expect(imageUrl).toBe('https://example.test/cheer.gif');
+        });
+
+        it('resolves avatar URLs from payload, cache, and API fallbacks', async () => {
+            const getUserById = createMockFn().mockResolvedValue({ profile_image_url: 'https://example.test/avatar.png' });
+            platform.apiClient = { getUserById };
+
+            const payloadAvatar = await platform._resolveAvatarUrl({ userId: 'user-1', avatarUrl: ' https://example.test/payload.png ' });
+            const cachedAvatar = await platform._resolveAvatarUrl({ userId: 'user-1' });
+            const apiAvatar = await platform._resolveAvatarUrl({ userId: 'user-2' });
+
+            expect(payloadAvatar).toBe('https://example.test/payload.png');
+            expect(cachedAvatar).toBe('https://example.test/payload.png');
+            expect(apiAvatar).toBe('https://example.test/avatar.png');
+            expect(getUserById).toHaveBeenCalledTimes(1);
+        });
+
+        it('tracks avatar lookup misses and falls back when API resolution fails', async () => {
+            platform.apiClient = { getUserById: createMockFn().mockRejectedValue(new Error('boom')) };
+            platform.errorHandler = {
+                handleEventProcessingError: createMockFn(),
+                logOperationalError: createMockFn()
+            };
+
+            const firstAvatar = await platform._resolveAvatarUrl({ userId: 'user-3' });
+            const secondAvatar = await platform._resolveAvatarUrl({ userId: 'user-3' });
+
+            expect(firstAvatar).toBe(platform.fallbackAvatarUrl);
+            expect(secondAvatar).toBe(platform.fallbackAvatarUrl);
+            expect(platform.avatarLookupMissCache.has('twitch:user-3')).toBe(true);
+            expect(platform.errorHandler.handleEventProcessingError).toHaveBeenCalledTimes(1);
+        });
+
+        it('derives monetization missing fields for Twitch gift subscription payloads', () => {
+            const missingFields = platform._getMonetizationMissingFields('giftpaypiggy', { giftCount: 0, tier: '' }, '2024-01-01T00:00:00Z');
+
+            expect(missingFields).toContain('giftCount');
+            expect(missingFields).toContain('tier');
+        });
+
+        it('enriches gift events before forwarding them through the standard event handler', async () => {
+            const enrichedGiftData = { giftType: 'bits', amount: 100, giftImageUrl: 'https://example.test/gift.gif' };
+            const enrichGiftPayload = createMockFn().mockResolvedValue(enrichedGiftData);
+            const handleStandardEvent = createMockFn().mockResolvedValue(undefined);
+            platform._enrichGiftPayload = enrichGiftPayload;
+            platform._handleStandardEvent = handleStandardEvent;
+
+            await platform.handleGiftEvent({ giftType: 'bits', amount: 100 });
+
+            expect(enrichGiftPayload).toHaveBeenCalledTimes(1);
+            expect(handleStandardEvent).toHaveBeenCalledWith('gift', enrichedGiftData, {
+                validateUser: true,
+                emitEventType: expect.any(String)
+            });
+        });
     });
 
     describe('when cleaning up', () => {
@@ -687,6 +974,14 @@ describe('Twitch Platform', () => {
             await platform.cleanup();
 
             expect(platform.isPlannedDisconnection).toBe(true);
+        });
+
+        it('resets planned disconnection before a new initialize call', async () => {
+            platform.isPlannedDisconnection = true;
+
+            await platform.initialize(platformHandlers);
+
+            expect(platform.isPlannedDisconnection).toBe(false);
         });
     });
 
@@ -720,6 +1015,7 @@ describe('Twitch Platform', () => {
             await expect(platform.initializeEventSub()).rejects.toThrow('EventSub init failed');
 
             expect(platform.eventSub).toBeNull();
+            expect(mockRetrySystem.handleConnectionError).not.toHaveBeenCalled();
         });
 
         it('should handle message processing errors', async () => {
