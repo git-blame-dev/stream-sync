@@ -423,7 +423,7 @@ describe('Twitch EventSub WS lifecycle', () => {
         await expect(connectPromise).rejects.toThrow('Connection refused');
     });
 
-    test('connectWebSocket handles ping by sending pong', () => {
+    test('connectWebSocket does not manually send pong frames on ping', () => {
         const lifecycle = buildLifecycle();
 
         const state = createState();
@@ -432,8 +432,7 @@ describe('Twitch EventSub WS lifecycle', () => {
         const pingData = Buffer.from('ping-data');
         state.ws.emit('ping', pingData);
 
-        expect(state.ws.pongCalls).toHaveLength(1);
-        expect(state.ws.pongCalls[0]).toEqual(pingData);
+        expect(state.ws.pongCalls).toHaveLength(0);
     });
 
     test('connectWebSocket handles pong event', () => {

@@ -189,10 +189,9 @@ function createTwitchEventSubWsLifecycle(options = {}) {
                 });
 
                 state.ws.on('ping', (data) => {
-                    state.logger?.debug?.('EventSub ping received, sending pong', 'twitch');
-                    if (typeof state.ws.pong === 'function') {
-                        state.ws.pong(data);
-                    }
+                    state.logger?.debug?.('EventSub ping received', 'twitch', {
+                        payloadLength: typeof data?.length === 'number' ? data.length : 0
+                    });
                 });
 
                 state.ws.on('pong', () => {
