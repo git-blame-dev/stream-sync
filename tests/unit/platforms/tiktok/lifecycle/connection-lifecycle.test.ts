@@ -207,6 +207,14 @@ describe('TikTokPlatform connection lifecycle', () => {
 
             expect(result).toEqual({ action: 'retry-queued' });
         });
+
+        it('treats not-live disconnects as non-recoverable', () => {
+            const platform = createPlatform();
+
+            const result = platform.handleRetry(new Error('Connection closed: User is not live'));
+
+            expect(result).toEqual({ action: 'skipped', reason: 'non-recoverable' });
+        });
     });
 
     describe('queueRetry', () => {
@@ -306,7 +314,24 @@ describe('TikTokPlatform connection lifecycle', () => {
             const result = await platform.handleConnectionIssue({ message: 'Stream is not live', code: 4404 });
 
             expect(result.issueType).toBe('stream-not-live');
-            expect(result.retryResult).toEqual({ queued: true });
+            expect(result.retryResult).toEqual({ queued: false, reason: 'no-retry-needed' });
+        });
+
+        it('emits stream-status disconnects with willReconnect=false for not-live issues', async () => {
+            const retrySystem = {
+                resetRetryCount: createMockFn(),
+                handleConnectionError: createMockFn(),
+                isConnected: createMockFn()
+            };
+            const platform = createPlatform({}, { retrySystem });
+            const emittedEvents = [];
+            platform.on('platform:event', (e) => emittedEvents.push(e));
+
+            await platform.handleConnectionIssue({ message: 'Stream is not live', code: 4404 });
+
+            const disconnectEvent = emittedEvents.find(e => e.type === PlatformEvents.CHAT_DISCONNECTED);
+            expect(disconnectEvent).toBeDefined();
+            expect(disconnectEvent.data.willReconnect).toBe(false);
         });
 
         it('keeps tracked share actors on transient disconnection', async () => {
