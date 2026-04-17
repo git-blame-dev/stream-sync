@@ -717,13 +717,33 @@ describe('Twitch EventSub WS lifecycle', () => {
         const state = createState({
             isInitialized: true,
             ws: existingWs,
+            sessionId: 'old-session-id',
+            _deleteAllSubscriptions: createMockFn(async () => {}),
             _connectWebSocket: createMockFn(async () => {})
         });
 
         await lifecycle.reconnect(state);
 
+        expect(state._deleteAllSubscriptions).toHaveBeenCalledTimes(1);
         expect(existingWs.closeCalls).toHaveLength(1);
         expect(existingWs.closeCalls[0]).toEqual({ code: 1000, reason: 'Reconnecting' });
+    });
+
+    test('reconnect continues when deleting prior session subscriptions fails', async () => {
+        const lifecycle = buildLifecycle();
+
+        const state = createState({
+            isInitialized: true,
+            sessionId: 'old-session-id',
+            _deleteAllSubscriptions: createMockFn(async () => { throw new Error('cleanup failed'); }),
+            _connectWebSocket: createMockFn(async () => {})
+        });
+
+        await lifecycle.reconnect(state);
+
+        const cleanupError = state.logEventSubErrorCalls.find(c => c.type === 'reconnect-cleanup');
+        expect(cleanupError).toBeTruthy();
+        expect(state._connectWebSocket).toHaveBeenCalledTimes(1);
     });
 
     test('reconnect retries on failure when attempts remain', async () => {
