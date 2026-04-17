@@ -91,6 +91,19 @@ describe('TikTokPlatform connection lifecycle', () => {
 
             await expect(platform.initialize({})).rejects.toThrow('connection failed');
         });
+
+        it('does not queue retry for offline initialization failures', async () => {
+            const retrySystem = {
+                resetRetryCount: createMockFn(),
+                handleConnectionError: createMockFn(),
+                isConnected: createMockFn()
+            };
+            const platform = createPlatform({}, { retrySystem });
+            platform._connect = createMockFn().mockRejectedValue(new Error('Connection closed: User is not live'));
+
+            await expect(platform.initialize({})).rejects.toThrow('Connection closed: User is not live');
+            expect(retrySystem.handleConnectionError).not.toHaveBeenCalled();
+        });
     });
 
     describe('handleConnectionSuccess', () => {
@@ -246,6 +259,26 @@ describe('TikTokPlatform connection lifecycle', () => {
 
             expect(result).toEqual({ queued: false, reason: 'locked' });
             expect(platform.retryLock).toBe(true);
+        });
+
+        it('routes reconnect callback failures through handleRetry', async () => {
+            const retrySystem = {
+                resetRetryCount: createMockFn(),
+                handleConnectionError: createMockFn(),
+                isConnected: createMockFn()
+            };
+            const platform = createPlatform({}, { retrySystem });
+            platform.retryLock = false;
+            platform._connect = createMockFn().mockRejectedValue(new Error('Connection closed: User is not live'));
+            platform.handleRetry = createMockFn().mockReturnValue({ action: 'skipped', reason: 'non-recoverable' });
+
+            platform.queueRetry(new Error('connection timeout'));
+            const reconnectFn = retrySystem.handleConnectionError.mock.calls[0][2];
+
+            await reconnectFn();
+
+            expect(platform.handleRetry).toHaveBeenCalledTimes(1);
+            expect(platform.handleRetry.mock.calls[0][0].message).toBe('Connection closed: User is not live');
         });
     });
 
