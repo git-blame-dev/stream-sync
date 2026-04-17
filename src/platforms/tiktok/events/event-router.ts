@@ -641,7 +641,6 @@ function setupTikTokEventListeners(platform: TikTokPlatformRouterContract) {
         platform.logger.info('Disconnected from webcast', 'tiktok');
         platform.connectionActive = false;
         platform.listenersConfigured = false;
-        await platform.handleConnectionIssue({ message: 'WebSocket disconnected' }, false);
     });
 
     if (typeof platform.WebcastEvent.STREAM_END !== 'undefined') {

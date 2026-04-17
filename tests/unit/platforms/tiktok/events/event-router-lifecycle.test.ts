@@ -167,7 +167,7 @@ describe('TikTok event router connection lifecycle', () => {
     });
 
     describe('DISCONNECT triggers proper handling', () => {
-        test('DISCONNECT should trigger handleConnectionIssue', async () => {
+        test('DISCONNECT should not trigger handleConnectionIssue', async () => {
             // Start with listenersConfigured: false so setup runs
             const { platform, listeners, disconnectionEvents } = createPlatformHarness({
                 connectionActive: true
@@ -178,10 +178,8 @@ describe('TikTok event router connection lifecycle', () => {
             // Trigger DISCONNECT
             await listeners[platform.WebcastEvent.DISCONNECT]();
 
-            // Should call handleConnectionIssue (not just log)
-            // The mock handleConnectionIssue pushes to disconnectionEvents
-            expect(disconnectionEvents.length).toBeGreaterThan(0);
-            expect(disconnectionEvents[0].handler).toBe('connectionIssue');
+            expect(disconnectionEvents).toEqual([]);
+            expect(platform.connectionActive).toBe(false);
         });
     });
 

@@ -460,7 +460,7 @@ describe('TikTokPlatform connection lifecycle', () => {
             platform.intervalManager.createInterval = createMockFn();
 
             await platform.handleConnectionIssue({ message: 'Stream is not live', code: 4404 });
-            await platform._handleStreamEnd({ code: 4404 });
+            await platform._handleStreamEnd({ reason: 'User is not live' });
 
             expect(platform.intervalManager.createInterval).not.toHaveBeenCalled();
         });

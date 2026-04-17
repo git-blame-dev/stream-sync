@@ -505,7 +505,7 @@ class TikTokPlatform extends EventEmitter {
     _isStreamNotLive(detailsOrMessage) {
         const message = typeof detailsOrMessage === 'string'
             ? detailsOrMessage
-            : detailsOrMessage?.message;
+            : detailsOrMessage?.message || detailsOrMessage?.reason;
         const code = typeof detailsOrMessage === 'object'
             ? detailsOrMessage?.code
             : undefined;
