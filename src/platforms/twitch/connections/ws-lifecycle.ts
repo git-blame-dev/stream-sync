@@ -378,6 +378,20 @@ function createTwitchEventSubWsLifecycle(options = {}) {
                 state.ws = null;
             }
 
+            const previousSessionId = state.sessionId;
+            if (previousSessionId && typeof state._deleteAllSubscriptions === 'function') {
+                try {
+                    await state._deleteAllSubscriptions({ sessionId: previousSessionId });
+                } catch (error) {
+                    state._logEventSubError?.(
+                        'Failed to clean up previous session subscriptions before reconnect',
+                        error,
+                        'reconnect-cleanup',
+                        { sessionId: previousSessionId }
+                    );
+                }
+            }
+
             state.sessionId = null;
             state._isConnected = false;
             state.subscriptions?.clear?.();
