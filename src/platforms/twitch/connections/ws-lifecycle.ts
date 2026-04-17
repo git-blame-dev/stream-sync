@@ -124,6 +124,9 @@ function createTwitchEventSubWsLifecycle(options = {}) {
                                     }
 
                                     const result = await state._setupEventSubscriptions?.(true);
+                                    if (connectionResolved || !state._isConnected || !state.sessionId) {
+                                        return;
+                                    }
                                     const failures = result?.failures || [];
                                     if (failures.length > 0) {
                                         state.subscriptionsReady = false;
@@ -146,6 +149,9 @@ function createTwitchEventSubWsLifecycle(options = {}) {
                                     connectionResolved = true;
                                     resolve();
                                 } catch (error) {
+                                    if (connectionResolved) {
+                                        return;
+                                    }
                                     state.subscriptionsReady = false;
                                     logError('Error during subscription setup', error, 'subscription-setup');
                                     emit('eventSubSubscriptionFailed', {

@@ -466,6 +466,72 @@ describe('Twitch EventSub WS lifecycle', () => {
         await expect(connectPromise).rejects.toThrow('Connection closed before EventSub startup completed');
     });
 
+    test('connectWebSocket stops deferred subscription failure handling after startup already failed', async () => {
+        const lifecycle = buildLifecycle();
+
+        let resolveSubscriptions;
+        const setupPromise = new Promise((resolve) => {
+            resolveSubscriptions = resolve;
+        });
+
+        const state = createState({
+            _setupEventSubscriptions: createMockFn(async () => setupPromise),
+            isInitialized: false
+        });
+        const connectPromise = lifecycle.connectWebSocket(state);
+
+        state.ws.readyState = 1;
+        state.ws.emit('open');
+        state.ws.emit('message', Buffer.from(JSON.stringify({
+            metadata: { message_type: 'session_welcome' },
+            payload: { session: { id: 'startup-close-session' } }
+        })));
+
+        state.ws.emit('close', 1006, 'abnormal');
+
+        await expect(connectPromise).rejects.toThrow('Connection closed abnormally during initial handshake');
+
+        resolveSubscriptions({ failures: [{ subscription: 'Chat' }] });
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(state.emitCalls.filter(({ event }) => event === 'eventSubSubscriptionFailed')).toHaveLength(0);
+        expect(state.scheduleReconnectCalls).toHaveLength(0);
+    });
+
+    test('connectWebSocket stops deferred subscription success handling after startup already failed', async () => {
+        const lifecycle = buildLifecycle();
+
+        let resolveSubscriptions;
+        const setupPromise = new Promise((resolve) => {
+            resolveSubscriptions = resolve;
+        });
+
+        const state = createState({
+            _setupEventSubscriptions: createMockFn(async () => setupPromise),
+            isInitialized: false
+        });
+        const connectPromise = lifecycle.connectWebSocket(state);
+
+        state.ws.readyState = 1;
+        state.ws.emit('open');
+        state.ws.emit('message', Buffer.from(JSON.stringify({
+            metadata: { message_type: 'session_welcome' },
+            payload: { session: { id: 'startup-close-success-session' } }
+        })));
+
+        state.ws.emit('close', 1006, 'abnormal');
+
+        await expect(connectPromise).rejects.toThrow('Connection closed abnormally during initial handshake');
+
+        resolveSubscriptions({ failures: [] });
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(state.subscriptionsReady).toBe(false);
+        expect(state.emitCalls.filter(({ event }) => event === 'eventSubSubscriptionFailed')).toHaveLength(0);
+    });
+
     test('connectWebSocket emits eventSubDisconnected on close with various codes', async () => {
         const lifecycle = buildLifecycle();
 
