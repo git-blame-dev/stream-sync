@@ -541,7 +541,8 @@ class TikTokPlatform extends EventEmitter {
             'invalid username',
             'user not found',
             'private account',
-            'banned account'
+            'banned account',
+            'not live'
         ];
         
         for (const pattern of nonRecoverablePatterns) {
@@ -630,7 +631,7 @@ class TikTokPlatform extends EventEmitter {
             }
 
             // Compute willReconnect BEFORE cleanup (which sets isPlannedDisconnection)
-            const willReconnect = !this.isPlannedDisconnection && this.config.enabled;
+            const willReconnect = !isStreamNotLive && !this.isPlannedDisconnection && this.config.enabled;
 
             this.connectionActive = false;
             await this.cleanup();
