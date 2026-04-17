@@ -648,7 +648,7 @@ function setupTikTokEventListeners(platform: TikTokPlatformRouterContract) {
         platform.connection.on(platform.WebcastEvent.STREAM_END, async (payload: unknown) => {
             const data = asTikTokRawEvent(payload);
             await platform._logIncomingEvent('streamEnd', data);
-            await platform._handleStreamEnd();
+            await platform._handleStreamEnd(data);
         });
     }
 

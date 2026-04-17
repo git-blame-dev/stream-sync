@@ -1457,7 +1457,7 @@ class TikTokPlatform extends EventEmitter {
         }
     }
 
-    async _handleStreamEnd() {
+    async _handleStreamEnd(payload = null) {
         // Prevent double-handling when both DISCONNECTED and STREAM_END fire (e.g., 4404)
         if (this._disconnectionInProgress) {
             this.logger.debug('Skipping stream-end handling: disconnection already in progress', 'tiktok');
@@ -1466,6 +1466,11 @@ class TikTokPlatform extends EventEmitter {
         this._disconnectionInProgress = true;
 
         try {
+            if (this._isStreamNotLive(payload)) {
+                this.logger.debug('Skipping stream-end reconnect scheduling after offline disconnect cycle', 'tiktok');
+                return;
+            }
+
             this.logger.info('TikTok stream ended; scheduling reconnect checks', 'tiktok');
             this._resetShareActorTracking('stream-end');
             this.isPlannedDisconnection = false;

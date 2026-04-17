@@ -420,5 +420,27 @@ describe('TikTokPlatform connection lifecycle', () => {
 
             expect(shares).toHaveLength(2);
         });
+
+        it('does not start stream-end reconnect polling after an offline disconnect cycle', async () => {
+            const platform = createPlatform();
+            platform.intervalManager.hasInterval = createMockFn().mockReturnValue(false);
+            platform.intervalManager.createInterval = createMockFn();
+
+            await platform.handleConnectionIssue({ message: 'Stream is not live', code: 4404 });
+            await platform._handleStreamEnd({ code: 4404 });
+
+            expect(platform.intervalManager.createInterval).not.toHaveBeenCalled();
+        });
+
+        it('starts stream-end reconnect polling for normal stream-end handling', async () => {
+            const platform = createPlatform();
+            platform.intervalManager.hasInterval = createMockFn().mockReturnValue(false);
+            platform.intervalManager.createInterval = createMockFn();
+
+            await platform._handleStreamEnd({});
+
+            expect(platform.intervalManager.createInterval).toHaveBeenCalledTimes(1);
+            expect(platform.intervalManager.createInterval.mock.calls[0][0]).toBe('tiktok-stream-reconnect');
+        });
     });
 });
