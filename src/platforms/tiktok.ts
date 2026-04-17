@@ -277,7 +277,7 @@ class TikTokPlatform extends EventEmitter {
             
             // Handle connection error with retry logic
             if (this.retrySystem) {
-                this.queueRetry(error);
+                this.handleRetry(error);
             } else {
                 this.errorHandler.handleConnectionError(
                     error,
@@ -589,7 +589,7 @@ class TikTokPlatform extends EventEmitter {
             try {
                 await this._connect(this.handlers);
             } catch (err) {
-                this.queueRetry(err);
+                this.handleRetry(err);
             }
         };
 
