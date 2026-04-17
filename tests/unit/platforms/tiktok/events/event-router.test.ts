@@ -342,8 +342,8 @@ describe('TikTok event router', () => {
         await listeners[platform.WebcastEvent.DISCONNECT]();
         await listeners[platform.WebcastEvent.STREAM_END]({});
 
-        // handleConnectionIssue called from both DISCONNECTED and DISCONNECT handlers
-        expect(platform.handleConnectionIssue.mock.calls).toHaveLength(2);
+        // semantic disconnect handling only comes from DISCONNECTED
+        expect(platform.handleConnectionIssue.mock.calls).toHaveLength(1);
         expect(platform.handleConnectionError.mock.calls).toHaveLength(1);
         expect(platform.handleRetry.mock.calls).toHaveLength(1);
         expect(platform.connectionActive).toBe(false);
