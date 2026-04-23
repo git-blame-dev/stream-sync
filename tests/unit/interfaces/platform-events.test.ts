@@ -534,6 +534,25 @@ describe('Platform Events Interface', () => {
             expect(PlatformEvents.validateEvent(event)).toBe(true);
         });
 
+        it('rejects YouTube jewels gift payloads without userId when metadata does not mark userId', () => {
+            const event = {
+                type: 'platform:gift',
+                platform: 'youtube',
+                id: 'yt-jewels-gift-missing-metadata-1',
+                giftType: 'Girl power',
+                giftCount: 1,
+                amount: 300,
+                currency: 'jewels',
+                username: 'test-jewels-user',
+                timestamp: new Date(testClock.now()).toISOString(),
+                metadata: {
+                    missingFields: ['timestamp']
+                }
+            };
+
+            expect(PlatformEvents.validateEvent(event)).toBe(false);
+        });
+
         it('rejects non-YouTube gift payloads without userId even when missing-field metadata marks userId', () => {
             const event = {
                 type: 'platform:gift',

@@ -196,6 +196,95 @@ describe('YouTubePlatform behavior', () => {
         expect(giftEvents[0].avatarUrl).toBe(FALLBACK_AVATAR_URL);
     });
 
+    it('emits degraded gift payloads when GiftMessageView text is malformed', async () => {
+        const platform = createPlatform();
+        const giftEvents = [];
+        platform.handlers.onGift = (payload) => giftEvents.push(payload);
+
+        await platform.handleGiftMessageView({
+            item: {
+                type: 'GiftMessageView',
+                id: 'LCC.test-gift-message-view-error',
+                timestamp_usec: '1704067200000000',
+                text: { content: 'sent a gift' },
+                authorName: { content: '@test-jewels-user ' }
+            }
+        });
+
+        expect(giftEvents).toHaveLength(1);
+        expect(giftEvents[0]).toMatchObject({
+            type: 'platform:gift',
+            platform: 'youtube',
+            username: 'test-jewels-user',
+            giftType: 'YouTube Gift',
+            giftCount: 1,
+            id: 'LCC.test-gift-message-view-error',
+            isError: true
+        });
+        expect(giftEvents[0].userId).toBeUndefined();
+        expect(giftEvents[0].timestamp).toBe(new Date(1704067200000).toISOString());
+    });
+
+    it('emits degraded paypiggy payloads when membership parsing fails', async () => {
+        const platform = createPlatform();
+        const paypiggyEvents = [];
+        platform.handlers.onPaypiggy = (payload) => paypiggyEvents.push(payload);
+
+        await platform.handleMembership({
+            item: {
+                type: 'LiveChatMembershipItem',
+                id: 'LCC.test-membership-error',
+                author: {
+                    id: 'UC_TEST_CHANNEL_02000',
+                    name: 'test-member-user'
+                },
+                headerPrimaryText: { text: 'Gold Member' },
+                headerSubtext: { text: 'Welcome to the membership' }
+            }
+        });
+
+        expect(paypiggyEvents).toHaveLength(1);
+        expect(paypiggyEvents[0]).toMatchObject({
+            type: 'platform:paypiggy',
+            platform: 'youtube',
+            username: 'test-member-user',
+            userId: 'UC_TEST_CHANNEL_02000',
+            id: 'LCC.test-membership-error',
+            isError: true
+        });
+        expect(paypiggyEvents[0].timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+    });
+
+    it('emits degraded giftpaypiggy payloads when gift purchase parsing fails', async () => {
+        const platform = createPlatform();
+        const giftPaypiggyEvents = [];
+        platform.handlers.onGiftPaypiggy = (payload) => giftPaypiggyEvents.push(payload);
+
+        await platform.handleGiftMembershipPurchase({
+            item: {
+                type: 'LiveChatSponsorshipsGiftPurchaseAnnouncement',
+                id: 'LCC.test-gift-purchase-error',
+                timestamp_usec: '1704067200000000',
+                giftMembershipsCount: 0,
+                author: {
+                    id: 'UC_TEST_CHANNEL_02001',
+                    name: 'test-gift-buyer'
+                }
+            }
+        });
+
+        expect(giftPaypiggyEvents).toHaveLength(1);
+        expect(giftPaypiggyEvents[0]).toMatchObject({
+            type: 'platform:giftpaypiggy',
+            platform: 'youtube',
+            username: 'test-gift-buyer',
+            userId: 'UC_TEST_CHANNEL_02001',
+            id: 'LCC.test-gift-purchase-error',
+            isError: true
+        });
+        expect(giftPaypiggyEvents[0].timestamp).toBe(new Date(1704067200000).toISOString());
+    });
+
     it('emits fallback avatarUrl for chat messages when thumbnail is missing', () => {
         const platform = createPlatform();
         const chatEvents = [];
