@@ -4,6 +4,7 @@ const os = require('os');
 const path = require('path');
 
 const { createGuiTransportService } = require('../../src/services/gui/gui-transport-service');
+const { DEFAULT_AVATAR_URL } = require('../../src/constants/avatar');
 const { safeSetTimeout } = require('../../src/utils/timeout-validator');
 const { TestEventBus } = require('../helpers/gui-transport-test-utils');
 const { createConfigFixture } = require('../helpers/config-fixture');
@@ -362,6 +363,95 @@ describe('GUI transport routes and SSE integration', () => {
             const chatRow = await reader.readEvent();
             expect(chatRow.type).toBe('chat');
             expect(chatRow.avatarUrl).toBe('https://example.invalid/notification-avatar.png');
+        } finally {
+            abort.abort();
+            await service.stop();
+        }
+    });
+
+    it('always includes avatarUrl and preserves real avatar over fallback payload rows', async () => {
+        const eventBus = new TestEventBus();
+        const service = createGuiTransportService({
+            config: buildConfig({
+                enableDock: true,
+                enableOverlay: false,
+                port: 0,
+                messageCharacterLimit: 0
+            }),
+            eventBus,
+            logger: null
+        });
+
+        await service.start();
+        const baseUrl = getBaseUrl(service);
+        const abort = new AbortController();
+
+        try {
+            const response = await fetch(`${baseUrl}/gui/events`, {
+                signal: abort.signal
+            });
+            expect(response.status).toBe(200);
+            const reader = createSseReader(response);
+
+            eventBus.emit('display:row', {
+                type: 'platform:follow',
+                platform: 'twitch',
+                data: {
+                    username: 'test-user',
+                    userId: 'test-user-id',
+                    displayMessage: 'followed',
+                    timestamp: '2024-01-01T00:00:00.000Z'
+                }
+            });
+
+            const fallbackRow = await reader.readEvent();
+            expect(typeof fallbackRow.avatarUrl).toBe('string');
+            expect(fallbackRow.avatarUrl).toBe(DEFAULT_AVATAR_URL);
+
+            eventBus.emit('display:row', {
+                type: 'platform:share',
+                platform: 'twitch',
+                data: {
+                    username: 'test-user',
+                    userId: 'test-user-id',
+                    avatarUrl: 'https://example.invalid/real-avatar.png',
+                    displayMessage: 'shared',
+                    timestamp: '2024-01-01T00:00:01.000Z'
+                }
+            });
+
+            const realAvatarRow = await reader.readEvent();
+            expect(realAvatarRow.avatarUrl).toBe('https://example.invalid/real-avatar.png');
+
+            eventBus.emit('display:row', {
+                type: 'platform:follow',
+                platform: 'twitch',
+                data: {
+                    username: 'test-user',
+                    userId: 'test-user-id',
+                    avatarUrl: DEFAULT_AVATAR_URL,
+                    displayMessage: 'followed again',
+                    timestamp: '2024-01-01T00:00:02.000Z'
+                }
+            });
+
+            const fallbackPayloadRow = await reader.readEvent();
+            expect(fallbackPayloadRow.avatarUrl).toBe('https://example.invalid/real-avatar.png');
+
+            eventBus.emit('display:row', {
+                type: 'chat',
+                platform: 'twitch',
+                data: {
+                    username: 'test-user',
+                    userId: 'test-user-id',
+                    message: 'hello',
+                    timestamp: '2024-01-01T00:00:03.000Z'
+                }
+            });
+
+            const cachedChatRow = await reader.readEvent();
+            expect(typeof cachedChatRow.avatarUrl).toBe('string');
+            expect(cachedChatRow.avatarUrl).toBe('https://example.invalid/real-avatar.png');
         } finally {
             abort.abort();
             await service.stop();
