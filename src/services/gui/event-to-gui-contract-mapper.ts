@@ -190,6 +190,13 @@ function createEventToGuiContractMapper(options: MapperOptions = {}) {
         const key = avatarCacheKey(platform, userId);
 
         if (payloadAvatar) {
+            if (payloadAvatar === fallbackAvatarUrl) {
+                if (key && cache.has(key)) {
+                    return cache.get(key) as string;
+                }
+                return fallbackAvatarUrl;
+            }
+
             setCachedAvatar(key, payloadAvatar);
             return payloadAvatar;
         }

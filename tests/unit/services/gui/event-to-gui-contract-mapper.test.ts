@@ -464,6 +464,83 @@ describe('Event-to-GUI contract mapper behavior', () => {
         expect(fallbackAvatar.avatarUrl).toBe(FALLBACK_AVATAR_URL);
     });
 
+    it('does not overwrite cached real avatar with fallback payload for the same platform user', async () => {
+        const mapper = createMapper();
+
+        await mapper.mapDisplayRow({
+            type: 'platform:follow',
+            platform: 'twitch',
+            data: {
+                username: 'test-user',
+                userId: 'test-user-id',
+                avatarUrl: 'https://example.invalid/real-avatar.png',
+                displayMessage: 'followed'
+            }
+        });
+
+        const fallbackPayloadRow = await mapper.mapDisplayRow({
+            type: 'platform:share',
+            platform: 'twitch',
+            data: {
+                username: 'test-user',
+                userId: 'test-user-id',
+                avatarUrl: FALLBACK_AVATAR_URL,
+                displayMessage: 'shared'
+            }
+        });
+
+        const cachedAfterFallbackPayload = await mapper.mapDisplayRow({
+            type: 'chat',
+            platform: 'twitch',
+            data: {
+                username: 'test-user',
+                userId: 'test-user-id',
+                message: 'hello'
+            }
+        });
+
+        expect(fallbackPayloadRow.avatarUrl).toBe('https://example.invalid/real-avatar.png');
+        expect(cachedAfterFallbackPayload.avatarUrl).toBe('https://example.invalid/real-avatar.png');
+    });
+
+    it('does not cache fallback payload avatars as canonical cache entries', async () => {
+        const mapper = createMapper({}, { avatarCacheMaxSize: 1 });
+
+        await mapper.mapDisplayRow({
+            type: 'chat',
+            platform: 'twitch',
+            data: {
+                username: 'retained-user',
+                userId: 'retained-user-id',
+                avatarUrl: 'https://example.invalid/retained-avatar.png',
+                message: 'hello'
+            }
+        });
+
+        await mapper.mapDisplayRow({
+            type: 'platform:follow',
+            platform: 'twitch',
+            data: {
+                username: 'fallback-only-user',
+                userId: 'fallback-only-user-id',
+                avatarUrl: FALLBACK_AVATAR_URL,
+                displayMessage: 'followed'
+            }
+        });
+
+        const retained = await mapper.mapDisplayRow({
+            type: 'platform:follow',
+            platform: 'twitch',
+            data: {
+                username: 'retained-user',
+                userId: 'retained-user-id',
+                displayMessage: 'followed'
+            }
+        });
+
+        expect(retained.avatarUrl).toBe('https://example.invalid/retained-avatar.png');
+    });
+
     it('evicts oldest cached avatar entries when cache exceeds configured size', async () => {
         const mapper = createMapper({}, { avatarCacheMaxSize: 2 });
 
