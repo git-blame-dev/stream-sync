@@ -407,6 +407,24 @@ describe('PlatformEventRouter validation', () => {
         expect(payload.userId).toBe('12345');
     });
 
+    it('preserves notification avatarUrl through runtime routing sanitization', async () => {
+        const { router, runtime } = buildRouter();
+
+        await router.routeEvent({
+            platform: 'twitch',
+            type: 'platform:follow',
+            data: {
+                username: 'Follower',
+                userId: 'follower-1',
+                avatarUrl: 'https://example.invalid/follow-avatar.png',
+                timestamp: new Date().toISOString()
+            }
+        });
+
+        const [, , payload] = runtime.handleFollowNotification.mock.calls[0];
+        expect(payload.avatarUrl).toBe('https://example.invalid/follow-avatar.png');
+    });
+
     it('rejects viewer-count events with non-finite counts', async () => {
         const { router, runtime } = buildRouter();
 

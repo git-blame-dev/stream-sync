@@ -694,6 +694,97 @@ describe('TwitchPlatform event behaviors', () => {
         ]);
     });
 
+    it('resolves avatarUrl before Twitch notification factory methods build event payloads', async () => {
+        const platform = new TwitchPlatform(baseConfig, {
+            twitchAuth: createTwitchAuth({ userId: TEST_USER_ID }),
+            logger: noOpLogger
+        });
+
+        const lookupCalls = [];
+        platform.apiClient = {
+            getUserById: createMockFn().mockImplementation(async (userId) => {
+                lookupCalls.push(userId);
+                return {
+                    id: userId,
+                    profile_image_url: `https://example.invalid/twitch/resolved-${userId}.png`
+                };
+            })
+        };
+
+        const factoryInputByEventType = {};
+        const wrapFactoryMethod = (factoryMethodName, eventType) => {
+            const originalMethod = platform.eventFactory[factoryMethodName].bind(platform.eventFactory);
+            platform.eventFactory[factoryMethodName] = createMockFn((payload) => {
+                factoryInputByEventType[eventType] = payload;
+                return originalMethod(payload);
+            });
+        };
+
+        wrapFactoryMethod('createFollowEvent', 'follow');
+        wrapFactoryMethod('createPaypiggyEvent', 'paypiggy');
+        wrapFactoryMethod('createGiftPaypiggyEvent', 'giftpaypiggy');
+        wrapFactoryMethod('createRaidEvent', 'raid');
+        wrapFactoryMethod('createGiftEvent', 'gift');
+
+        const scenarios = [
+            {
+                eventType: 'follow',
+                methodName: 'handleFollowEvent',
+                payload: {
+                    username: 'test-follow-avatar-user',
+                    userId: 'test-follow-avatar-user-id',
+                    timestamp: '2024-01-01T00:00:00.000Z'
+                }
+            },
+            {
+                eventType: 'paypiggy',
+                methodName: 'handlePaypiggyEvent',
+                payload: createTwitchNotificationPayload('paypiggy', {
+                    userId: 'test-paypiggy-avatar-user-id',
+                    timestamp: '2024-01-01T00:00:01.000Z'
+                })
+            },
+            {
+                eventType: 'giftpaypiggy',
+                methodName: 'handlePaypiggyGiftEvent',
+                payload: createTwitchNotificationPayload('giftpaypiggy', {
+                    userId: 'test-giftpaypiggy-avatar-user-id',
+                    timestamp: '2024-01-01T00:00:02.000Z'
+                })
+            },
+            {
+                eventType: 'raid',
+                methodName: 'handleRaidEvent',
+                payload: createTwitchNotificationPayload('raid', {
+                    userId: 'test-raid-avatar-user-id',
+                    timestamp: '2024-01-01T00:00:03.000Z'
+                })
+            },
+            {
+                eventType: 'gift',
+                methodName: 'handleGiftEvent',
+                payload: createTwitchNotificationPayload('gift', {
+                    userId: 'test-gift-avatar-user-id',
+                    timestamp: '2024-01-01T00:00:04.000Z'
+                })
+            }
+        ];
+
+        for (const scenario of scenarios) {
+            await platform[scenario.methodName](scenario.payload);
+            expect(factoryInputByEventType[scenario.eventType]?.avatarUrl)
+                .toBe(`https://example.invalid/twitch/resolved-${scenario.payload.userId}.png`);
+        }
+
+        expect(lookupCalls).toEqual([
+            'test-follow-avatar-user-id',
+            'test-paypiggy-avatar-user-id',
+            'test-giftpaypiggy-avatar-user-id',
+            'test-raid-avatar-user-id',
+            'test-gift-avatar-user-id'
+        ]);
+    });
+
     it('caches fallback avatar for repeated events when Helix lookup returns no avatar', async () => {
         const platform = new TwitchPlatform(baseConfig, {
             twitchAuth: createTwitchAuth({ userId: TEST_USER_ID }),
