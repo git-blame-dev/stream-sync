@@ -172,6 +172,33 @@ describe('YouTubePlatform behavior', () => {
         expect(giftEvents[0].avatarUrl).toBe(FALLBACK_AVATAR_URL);
     });
 
+    it('emits monetization sticker events with canonical avatarUrl from author thumbnail', async () => {
+        const platform = createPlatform();
+        const giftEvents = [];
+        platform.handlers.onGift = (payload) => giftEvents.push(payload);
+
+        await platform.handleSuperSticker({
+            item: {
+                type: 'LiveChatPaidSticker',
+                id: 'LCC.avatar-test-supersticker',
+                timestamp_usec: '1700000000000000',
+                purchase_amount: 3,
+                purchase_currency: 'USD',
+                author: {
+                    id: 'UC_TEST_CHANNEL_STICKER_AVATAR',
+                    name: 'AvatarStickerViewer',
+                    thumbnails: [{ url: 'https://example.invalid/youtube-monetization-sticker-avatar.jpg' }]
+                },
+                sticker: {
+                    label: { runs: [{ text: 'Great sticker' }] }
+                }
+            }
+        });
+
+        expect(giftEvents).toHaveLength(1);
+        expect(giftEvents[0].avatarUrl).toBe('https://example.invalid/youtube-monetization-sticker-avatar.jpg');
+    });
+
     it('emits fallback avatarUrl on degraded super chat error payloads', async () => {
         const platform = createPlatform();
         const giftEvents = [];

@@ -166,6 +166,54 @@ describe('TikTok event factory behavior', () => {
         expect(event.avatarUrl).toBe(DEFAULT_AVATAR_URL);
     });
 
+    it('extracts avatarUrl for follow events from nested TikTok user profile pictures', () => {
+        const { createTikTokEventFactory } = require('../../../../../src/platforms/tiktok/events/event-factory.ts');
+
+        const eventFactory = createTikTokEventFactory({
+            platformName: 'tiktok'
+        });
+
+        const event = eventFactory.createFollow({
+            userId: 'test-user-id',
+            username: 'test-username',
+            user: {
+                profilePicture: {
+                    url: ['https://example.invalid/tiktok-follow-nested-avatar.webp']
+                }
+            },
+            timestamp: '2026-01-30T12:00:00.000Z'
+        });
+
+        expect(event.avatarUrl).toBe('https://example.invalid/tiktok-follow-nested-avatar.webp');
+    });
+
+    it('extracts avatarUrl for gift events from nested TikTok user profile pictures', () => {
+        const { createTikTokEventFactory } = require('../../../../../src/platforms/tiktok/events/event-factory.ts');
+
+        const eventFactory = createTikTokEventFactory({
+            platformName: 'tiktok',
+            getPlatformMessageId: () => 'test-msg-id-nested-avatar'
+        });
+
+        const event = eventFactory.createGift({
+            userId: 'test-user-id',
+            username: 'test-username',
+            user: {
+                profilePicture: {
+                    url: ['https://example.invalid/tiktok-gift-nested-avatar.webp']
+                }
+            },
+            giftType: 'Rose',
+            giftCount: 1,
+            amount: 1,
+            unitAmount: 1,
+            currency: 'coins',
+            timestamp: '2026-01-30T12:00:00.000Z'
+        });
+
+        expect(event.avatarUrl).toBe('https://example.invalid/tiktok-gift-nested-avatar.webp');
+    });
+
     it('defaults boolean fields to false when not provided', () => {
         const { createTikTokEventFactory } = require('../../../../../src/platforms/tiktok/events/event-factory.ts');
 
@@ -378,7 +426,7 @@ describe('TikTok event factory behavior', () => {
         });
     });
 
-    it('creates subscription paypiggy event with canonical payload fields', () => {
+    it('creates subscription paypiggy event with extracted nested avatar', () => {
         const { createTikTokEventFactory } = require('../../../../../src/platforms/tiktok/events/event-factory.ts');
 
         const eventFactory = createTikTokEventFactory({
@@ -405,7 +453,7 @@ describe('TikTok event factory behavior', () => {
             platform: 'tiktok',
             username: 'TestSubscriber',
             userId: 'test_subscriber',
-            avatarUrl: DEFAULT_AVATAR_URL,
+            avatarUrl: 'https://example.invalid/sub-avatar.webp',
             tier: 'tier-1',
             months: 3,
             message: 'happy to support'
