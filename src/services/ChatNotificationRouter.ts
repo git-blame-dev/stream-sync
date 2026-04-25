@@ -114,6 +114,7 @@ class ChatNotificationRouter {
             if (firstMessageState.isFirstMessage && greetingsEnabled) {
                 await this.queueGreeting(platform, safeNormalizedData.username, {
                     userId,
+                    avatarUrl: safeNormalizedData.avatarUrl,
                     greetingProfile
                 });
                 firstMessageState.consume();
@@ -373,6 +374,7 @@ class ChatNotificationRouter {
             await this.queueGreeting(platform, normalizedData.username, {
                 priority: 6,
                 userId: normalizedData.userId,
+                avatarUrl: normalizedData.avatarUrl,
                 greetingProfile
             });
             consumeFirstMessage();
@@ -437,6 +439,7 @@ class ChatNotificationRouter {
                 command: farewellTrigger,
                 trigger: farewellTrigger,
                 userId: normalizedData.userId,
+                avatarUrl: normalizedData.avatarUrl,
                 timestamp: normalizedData.timestamp
             });
 
@@ -493,6 +496,7 @@ class ChatNotificationRouter {
             platform,
             username: normalizedData.username,
             userId: normalizedData.userId,
+            avatarUrl: normalizedData.avatarUrl,
             command: commandConfig.command.startsWith('!') ? commandConfig.command : `!${commandConfig.command}`,
             commandName: commandConfig.command.replace(/^!/, '')
         });
@@ -562,7 +566,8 @@ class ChatNotificationRouter {
             type: 'greeting',
             platform,
             username: username,
-            userId: safeOptions.userId
+            userId: safeOptions.userId,
+            avatarUrl: safeOptions.avatarUrl
         });
 
         const queueItem: Record<string, unknown> = {

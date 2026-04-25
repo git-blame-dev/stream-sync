@@ -308,6 +308,66 @@ describe('GUI transport routes and SSE integration', () => {
         }
     });
 
+    it('keeps real avatar resolution when notification rows arrive before chat rows', async () => {
+        const eventBus = new TestEventBus();
+        const service = createGuiTransportService({
+            config: buildConfig({
+                enableDock: true,
+                enableOverlay: false,
+                port: 0,
+                messageCharacterLimit: 0
+            }),
+            eventBus,
+            logger: null
+        });
+
+        await service.start();
+        const baseUrl = getBaseUrl(service);
+        const abort = new AbortController();
+
+        try {
+            const response = await fetch(`${baseUrl}/gui/events`, {
+                signal: abort.signal
+            });
+            expect(response.status).toBe(200);
+            const reader = createSseReader(response);
+
+            eventBus.emit('display:row', {
+                type: 'platform:follow',
+                platform: 'twitch',
+                data: {
+                    username: 'avatar-seed-user',
+                    userId: 'avatar-seed-user-id',
+                    displayMessage: 'avatar-seed-user followed',
+                    avatarUrl: 'https://example.invalid/notification-avatar.png',
+                    timestamp: '2024-01-01T00:00:00.000Z'
+                }
+            });
+
+            const notificationRow = await reader.readEvent();
+            expect(notificationRow.type).toBe('platform:follow');
+            expect(notificationRow.avatarUrl).toBe('https://example.invalid/notification-avatar.png');
+
+            eventBus.emit('display:row', {
+                type: 'chat',
+                platform: 'twitch',
+                data: {
+                    username: 'avatar-seed-user',
+                    userId: 'avatar-seed-user-id',
+                    message: 'hello from cache',
+                    timestamp: '2024-01-01T00:00:01.000Z'
+                }
+            });
+
+            const chatRow = await reader.readEvent();
+            expect(chatRow.type).toBe('chat');
+            expect(chatRow.avatarUrl).toBe('https://example.invalid/notification-avatar.png');
+        } finally {
+            abort.abort();
+            await service.stop();
+        }
+    });
+
     it('delivers gift animation effect envelopes after display rows and serves runtime media', async () => {
         const port = 0;
         const eventBus = new TestEventBus();

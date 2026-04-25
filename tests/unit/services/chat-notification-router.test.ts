@@ -175,6 +175,25 @@ describe('ChatNotificationRouter', () => {
         expect(greetingItem?.data?.userId).toBe(baseMessage.userId);
     });
 
+    it('propagates avatarUrl on queued greeting items for first-time messages', async () => {
+        const { router, runtime } = createRouter({
+            runtime: {
+                isFirstMessage: createMockFn().mockReturnValue(true)
+            }
+        });
+
+        await router.handleChatMessage('twitch', {
+            ...baseMessage,
+            avatarUrl: 'https://example.invalid/greeting-avatar.png'
+        });
+
+        const queuedItems = runtime.displayQueue.addItem.mock.calls.map((call) => call[0]);
+        const greetingItem = queuedItems.find((item) => item.type === 'greeting');
+
+        expect(greetingItem).toBeDefined();
+        expect(greetingItem?.data?.avatarUrl).toBe('https://example.invalid/greeting-avatar.png');
+    });
+
     it('does not queue greeting when platform greetingsEnabled is false', async () => {
         const { router, runtime } = createRouter({
             runtime: {
@@ -236,6 +255,30 @@ describe('ChatNotificationRouter', () => {
         const commandItem = queuedItems.find(item => item.type === 'command');
         expect(commandItem).toBeDefined();
         expect(commandItem.vfxConfig.command).toBe('!testboom');
+    });
+
+    it('propagates avatarUrl on queued command notifications', async () => {
+        const { router, runtime } = createRouter({
+            runtime: {
+                vfxCommandService: {
+                    selectVFXCommand: createMockFn().mockResolvedValue({ command: '!testboom' }),
+                    matchFarewell: createMockFn().mockReturnValue(null),
+                    getVFXConfig: createMockFn().mockResolvedValue(null)
+                }
+            }
+        });
+
+        await router.handleChatMessage('twitch', {
+            ...baseMessage,
+            message: '!testboom now',
+            avatarUrl: 'https://example.invalid/command-avatar.png'
+        });
+
+        const queuedItems = runtime.displayQueue.addItem.mock.calls.map((call) => call[0]);
+        const commandItem = queuedItems.find((item) => item.type === 'command');
+
+        expect(commandItem).toBeDefined();
+        expect(commandItem?.data?.avatarUrl).toBe('https://example.invalid/command-avatar.png');
     });
 
     it('does not consume cooldowns when command enqueue fails', async () => {
@@ -686,6 +729,43 @@ describe('ChatNotificationRouter', () => {
         const queuedTypes = runtime.displayQueue.addItem.mock.calls.map((call) => call[0].type);
         expect(queuedTypes).toContain('chat');
         expect(queuedTypes).toContain('farewell');
+    });
+
+    it('propagates avatarUrl to farewell notification payload options', async () => {
+        const addItem = createMockFn();
+        const { router, runtime } = createRouter({
+            runtime: {
+                displayQueue: { addItem },
+                handleFarewellNotification: createMockFn(async (platform, username, options) => {
+                    addItem({
+                        type: 'farewell',
+                        platform,
+                        data: {
+                            username,
+                            avatarUrl: options.avatarUrl,
+                            command: options.command
+                        }
+                    });
+                    return { success: true };
+                }),
+                vfxCommandService: {
+                    selectVFXCommand: createMockFn().mockResolvedValue(null),
+                    matchFarewell: createMockFn().mockReturnValue('!bye')
+                }
+            }
+        });
+
+        await router.handleChatMessage('twitch', {
+            ...baseMessage,
+            message: '!bye everyone',
+            avatarUrl: 'https://example.invalid/farewell-avatar.png'
+        });
+
+        const queuedItems = runtime.displayQueue.addItem.mock.calls.map((call) => call[0]);
+        const farewellItem = queuedItems.find((item) => item.type === 'farewell');
+
+        expect(farewellItem).toBeDefined();
+        expect(farewellItem?.data?.avatarUrl).toBe('https://example.invalid/farewell-avatar.png');
     });
 
     it('does not route commands when only runtime command parser is available', async () => {
