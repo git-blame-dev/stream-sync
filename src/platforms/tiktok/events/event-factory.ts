@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { normalizeTikTokMessage } from '../../../utils/message-normalization';
-import { extractTikTokUserData } from '../../../utils/tiktok-data-extraction';
+import { extractTikTokUserData, extractTikTokAvatarUrl } from '../../../utils/tiktok-data-extraction';
 import { getSystemTimestampISO } from '../../../utils/timestamp';
 import { DEFAULT_AVATAR_URL } from '../../../constants/avatar';
 import { UNKNOWN_CHAT_MESSAGE, UNKNOWN_CHAT_USERNAME } from '../../../constants/degraded-chat';
@@ -81,9 +81,19 @@ function createTikTokEventFactory(options: EventFactoryOptions = {}) {
             return avatarFromData;
         }
 
+        const extractedAvatarFromData = extractTikTokAvatarUrl(data);
+        if (extractedAvatarFromData) {
+            return extractedAvatarFromData;
+        }
+
         const avatarFromFallback = typeof fallbackData.avatarUrl === 'string' ? fallbackData.avatarUrl.trim() : '';
         if (avatarFromFallback) {
             return avatarFromFallback;
+        }
+
+        const extractedAvatarFromFallback = extractTikTokAvatarUrl(fallbackData);
+        if (extractedAvatarFromFallback) {
+            return extractedAvatarFromFallback;
         }
 
         const metadata = asRecord(fallbackData.metadata);

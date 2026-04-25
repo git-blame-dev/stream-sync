@@ -467,6 +467,40 @@ describe('YouTubePlatform modern architecture', () => {
         expect(giftErrors[0].username).toBeUndefined();
     });
 
+    it('emits unresolved GiftMessageView error payload when author data is missing', async () => {
+        const { platform } = createPlatform();
+        const giftErrors = [];
+        platform.handlers = {
+            ...platform.handlers,
+            onGift: (payload) => giftErrors.push(payload)
+        };
+
+        const chatItem = {
+            item: {
+                type: 'GiftMessageView',
+                id: 'LCC.test-giftmessageview-missing-author',
+                timestamp_usec: '1700000000000000',
+                text: {
+                    content: 'sent Girl power for 300 Jewels'
+                }
+            }
+        };
+
+        await platform.handleChatMessage(chatItem);
+
+        expect(giftErrors).toHaveLength(1);
+        expect(giftErrors[0]).toMatchObject({
+            type: 'platform:gift',
+            platform: 'youtube',
+            giftType: 'YouTube Gift',
+            giftCount: 1,
+            id: 'LCC.test-giftmessageview-missing-author',
+            isError: true
+        });
+        expect(giftErrors[0].username).toBeUndefined();
+        expect(giftErrors[0].userId).toBeUndefined();
+    });
+
     it('emits gift error payloads when monetization timestamps are missing', async () => {
         const { platform } = createPlatform();
         const giftErrors = [];
