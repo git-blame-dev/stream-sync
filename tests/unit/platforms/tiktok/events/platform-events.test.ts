@@ -4,6 +4,10 @@ const { createMockFn, restoreAllMocks } = require('../../../../helpers/bun-mock-
 const { TikTokPlatform } = require('../../../../../src/platforms/tiktok.ts');
 const { PlatformEvents } = require('../../../../../src/interfaces/PlatformEvents');
 const { createMockTikTokPlatformDependencies } = require('../../../../helpers/mock-factories');
+const {
+    createTikTokSocialNotificationFixture,
+    createTikTokGiftNotificationFixture
+} = require('../../../../helpers/avatar-source-matrix-fixtures');
 const { DEFAULT_AVATAR_URL } = require('../../../../../src/constants/avatar');
 
 describe('TikTokPlatform event emissions', () => {
@@ -118,6 +122,16 @@ describe('TikTokPlatform event emissions', () => {
         expect(follows).toHaveLength(0);
     });
 
+    it('emits social (share) events with avatarUrl extracted from nested user profile pictures', async () => {
+        const { eventHandlers, shares, webcastEvent } = createPlatformUnderTest();
+        const socialPayload = createTikTokSocialNotificationFixture('share');
+
+        await eventHandlers[webcastEvent.SOCIAL](socialPayload);
+
+        expect(shares).toHaveLength(1);
+        expect(shares[0].avatarUrl).toBe('https://example.invalid/tiktok/test-social-avatar.webp');
+    });
+
     it('emits follow from social payloads that only include follow wording', async () => {
         const { eventHandlers, shares, follows, webcastEvent } = createPlatformUnderTest();
         const socialPayload = {
@@ -134,6 +148,16 @@ describe('TikTokPlatform event emissions', () => {
         expect(shares).toHaveLength(0);
         expect(follows[0].username).toBe('FollowUser');
         expect(follows[0].avatarUrl).toBe(fallbackAvatarUrl);
+    });
+
+    it('emits follow events with avatarUrl extracted from nested user profile pictures', async () => {
+        const { eventHandlers, follows, webcastEvent } = createPlatformUnderTest();
+        const followPayload = createTikTokSocialNotificationFixture('follow');
+
+        await eventHandlers[webcastEvent.SOCIAL](followPayload);
+
+        expect(follows).toHaveLength(1);
+        expect(follows[0].avatarUrl).toBe('https://example.invalid/tiktok/test-social-avatar.webp');
     });
 
     it('treats share-shaped FOLLOW payloads as share events', async () => {
@@ -400,5 +424,14 @@ describe('TikTokPlatform event emissions', () => {
         expect(gifts).toHaveLength(1);
         expect(gifts[0].type).toBe('platform:gift');
         expect(gifts[0].avatarUrl).toBe(fallbackAvatarUrl);
+    });
+
+    it('emits gift notifications with avatarUrl extracted from nested user profile pictures', async () => {
+        const { platform, gifts } = createPlatformUnderTest();
+
+        await platform.handleTikTokGift(createTikTokGiftNotificationFixture());
+
+        expect(gifts).toHaveLength(1);
+        expect(gifts[0].avatarUrl).toBe('https://example.invalid/tiktok/test-gift-avatar.webp');
     });
 });

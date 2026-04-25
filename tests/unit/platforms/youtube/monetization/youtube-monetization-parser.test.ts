@@ -1,6 +1,12 @@
 const { describe, test, expect } = require('bun:test');
 const { noOpLogger } = require('../../../../helpers/mock-factories');
 const { getSyntheticFixture } = require('../../../../helpers/platform-test-data');
+const {
+    createYouTubeAuthorThumbnailFixture,
+    createYouTubeGiftPurchaseHeaderOnlyFixture,
+    createYouTubeGiftMessageViewFixture
+} = require('../../../../helpers/avatar-source-matrix-fixtures');
+const { normalizeYouTubeEvent } = require('../../../../../src/platforms/youtube/events/event-normalizer.ts');
 const { createYouTubeMonetizationParser } = require('../../../../../src/platforms/youtube/monetization/monetization-parser.ts');
 
 describe('YouTube monetization parser', () => {
@@ -32,6 +38,37 @@ describe('YouTube monetization parser', () => {
             currency: 'jewels',
             message: 'sent Girl power for 300 Jewels'
         });
+    });
+
+    test('parses avatarUrl for Super Chat from author thumbnails', () => {
+        const parser = createYouTubeMonetizationParser({ logger: noOpLogger });
+        const result = parser.parseSuperChat(createYouTubeAuthorThumbnailFixture('LiveChatPaidMessage'));
+
+        expect(result.avatarUrl).toBe('https://example.invalid/youtube/test-author-avatar.jpg');
+    });
+
+    test('parses avatarUrl for membership from author thumbnails', () => {
+        const parser = createYouTubeMonetizationParser({ logger: noOpLogger });
+        const result = parser.parseMembership(createYouTubeAuthorThumbnailFixture('LiveChatMembershipItem'));
+
+        expect(result.avatarUrl).toBe('https://example.invalid/youtube/test-author-avatar.jpg');
+    });
+
+    test('keeps GiftMessageView unresolved for avatar when source has no author thumbnail', () => {
+        const parser = createYouTubeMonetizationParser({ logger: noOpLogger });
+        const result = parser.parseGiftMessageView(createYouTubeGiftMessageViewFixture());
+
+        expect(result).not.toHaveProperty('avatarUrl');
+    });
+
+    test('parses gift purchase avatar after gift-purchase header hydration', () => {
+        const parser = createYouTubeMonetizationParser({ logger: noOpLogger });
+        const normalized = normalizeYouTubeEvent(createYouTubeGiftPurchaseHeaderOnlyFixture());
+
+        expect(normalized.normalizedChatItem).not.toBeNull();
+        const result = parser.parseGiftPurchase(normalized.normalizedChatItem);
+
+        expect(result.avatarUrl).toBe('https://example.invalid/youtube/test-giftpurchase-avatar.jpg');
     });
 
     test('throws for GiftMessageView payloads that do not match jewels gift grammar', () => {
