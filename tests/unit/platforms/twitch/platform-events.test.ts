@@ -5,6 +5,7 @@ const { noOpLogger } = require('../../../helpers/mock-factories');
 const { TwitchPlatform } = require('../../../../src/platforms/twitch.ts');
 const { TwitchEventSub } = require('../../../../src/platforms/twitch-eventsub.ts');
 const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../../../src/core/secrets');
+const { createTwitchNotificationPayload } = require('../../../helpers/avatar-source-matrix-fixtures');
 const { DEFAULT_AVATAR_URL } = require('../../../../src/constants/avatar');
 
 const createTwitchAuth = (overrides = {}) => ({
@@ -589,6 +590,108 @@ describe('TwitchPlatform event behaviors', () => {
         expect(received[0].avatarUrl).toBe('https://example.invalid/twitch-user-avatar.jpg');
         expect(received[1].avatarUrl).toBe('https://example.invalid/twitch-user-avatar.jpg');
         expect(lookupCalls).toEqual(['lookup-user-id']);
+    });
+
+    it('resolves and caches avatar URLs for Twitch notification families without source avatars', async () => {
+        const platform = new TwitchPlatform(baseConfig, {
+            twitchAuth: createTwitchAuth({ userId: TEST_USER_ID }),
+            logger: noOpLogger
+        });
+
+        const lookupCalls = [];
+        platform.apiClient = {
+            getUserById: createMockFn().mockImplementation(async (userId) => {
+                lookupCalls.push(userId);
+                return {
+                    id: userId,
+                    profile_image_url: `https://example.invalid/twitch/${userId}.png`
+                };
+            })
+        };
+
+        const received = {
+            paypiggy: [],
+            giftpaypiggy: [],
+            raid: [],
+            gift: []
+        };
+        platform.handlers = {
+            onPaypiggy: (payload) => received.paypiggy.push(payload),
+            onGiftPaypiggy: (payload) => received.giftpaypiggy.push(payload),
+            onRaid: (payload) => received.raid.push(payload),
+            onGift: (payload) => received.gift.push(payload)
+        };
+
+        const scenarios = [
+            {
+                key: 'paypiggy',
+                methodName: 'handlePaypiggyEvent',
+                avatarUserId: 'test-paypiggy-avatar-user-id',
+                payload: createTwitchNotificationPayload('paypiggy', {
+                    userId: 'test-paypiggy-avatar-user-id',
+                    timestamp: '2024-01-01T00:00:00.000Z'
+                }),
+                repeatedPayload: createTwitchNotificationPayload('paypiggy', {
+                    userId: 'test-paypiggy-avatar-user-id',
+                    timestamp: '2024-01-01T00:00:01.000Z'
+                })
+            },
+            {
+                key: 'giftpaypiggy',
+                methodName: 'handlePaypiggyGiftEvent',
+                avatarUserId: 'test-giftpaypiggy-avatar-user-id',
+                payload: createTwitchNotificationPayload('giftpaypiggy', {
+                    userId: 'test-giftpaypiggy-avatar-user-id',
+                    timestamp: '2024-01-01T00:00:02.000Z'
+                }),
+                repeatedPayload: createTwitchNotificationPayload('giftpaypiggy', {
+                    userId: 'test-giftpaypiggy-avatar-user-id',
+                    timestamp: '2024-01-01T00:00:03.000Z'
+                })
+            },
+            {
+                key: 'raid',
+                methodName: 'handleRaidEvent',
+                avatarUserId: 'test-raid-avatar-user-id',
+                payload: createTwitchNotificationPayload('raid', {
+                    userId: 'test-raid-avatar-user-id',
+                    timestamp: '2024-01-01T00:00:04.000Z'
+                }),
+                repeatedPayload: createTwitchNotificationPayload('raid', {
+                    userId: 'test-raid-avatar-user-id',
+                    timestamp: '2024-01-01T00:00:05.000Z'
+                })
+            },
+            {
+                key: 'gift',
+                methodName: 'handleGiftEvent',
+                avatarUserId: 'test-gift-avatar-user-id',
+                payload: createTwitchNotificationPayload('gift', {
+                    userId: 'test-gift-avatar-user-id',
+                    timestamp: '2024-01-01T00:00:06.000Z'
+                }),
+                repeatedPayload: createTwitchNotificationPayload('gift', {
+                    userId: 'test-gift-avatar-user-id',
+                    timestamp: '2024-01-01T00:00:07.000Z'
+                })
+            }
+        ];
+
+        for (const scenario of scenarios) {
+            await platform[scenario.methodName](scenario.payload);
+            await platform[scenario.methodName](scenario.repeatedPayload);
+
+            expect(received[scenario.key]).toHaveLength(2);
+            expect(received[scenario.key][0].avatarUrl).toBe(`https://example.invalid/twitch/${scenario.avatarUserId}.png`);
+            expect(received[scenario.key][1].avatarUrl).toBe(`https://example.invalid/twitch/${scenario.avatarUserId}.png`);
+        }
+
+        expect(lookupCalls).toEqual([
+            'test-paypiggy-avatar-user-id',
+            'test-giftpaypiggy-avatar-user-id',
+            'test-raid-avatar-user-id',
+            'test-gift-avatar-user-id'
+        ]);
     });
 
     it('caches fallback avatar for repeated events when Helix lookup returns no avatar', async () => {
