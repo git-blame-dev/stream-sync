@@ -1,16 +1,11 @@
 import { extractMessageText } from '../youtube-message-extractor';
 import { YouTubeiCurrencyParser } from '../youtubei-currency-parser';
-import type { YouTubeiCurrencyParseResult } from '../youtubei-currency-parser';
-
-type UnknownRecord = Record<string, unknown>;
+import type { UnknownRecord } from '../../../utils/record-contracts';
 
 interface YouTubeMonetizationParserOptions {
     logger?: unknown;
 }
 
-interface StructuredRun {
-    text?: string;
-}
 
 interface ParsedSuperSticker {
     id: string;
@@ -56,11 +51,11 @@ interface MembershipLevelInput {
     headerSubtext: string;
 }
 
-const toRecord = (value: unknown): UnknownRecord => (
-    value && typeof value === 'object' && !Array.isArray(value)
-        ? value as UnknownRecord
-        : {}
+const isRecord = (value: unknown): value is UnknownRecord => (
+    value !== null && typeof value === 'object' && !Array.isArray(value)
 );
+
+const toRecord = (value: unknown): UnknownRecord => (isRecord(value) ? value : {});
 
 function createYouTubeMonetizationParser(options: YouTubeMonetizationParserOptions = {}) {
     const currencyParser = new YouTubeiCurrencyParser({ logger: options.logger });
@@ -156,7 +151,7 @@ function createYouTubeMonetizationParser(options: YouTubeMonetizationParserOptio
         }
 
         if (typeof purchaseAmount === 'string') {
-            const result = currencyParser.parse(purchaseAmount) as YouTubeiCurrencyParseResult;
+            const result = currencyParser.parse(purchaseAmount);
             if (!result.success || !Number.isFinite(result.amount) || result.amount <= 0) {
                 throw new Error(`${label} requires valid purchase_amount`);
             }
@@ -176,11 +171,21 @@ function createYouTubeMonetizationParser(options: YouTubeMonetizationParserOptio
         }
 
         if (Array.isArray(fieldRecord.runs)) {
-            return (fieldRecord.runs as StructuredRun[]).map((run: StructuredRun) => run?.text || '').join('').trim();
+            return fieldRecord.runs
+                .map((run: unknown) => {
+                    const runText = toRecord(run).text;
+                    return runText ? String(runText) : '';
+                })
+                .join('')
+                .trim();
         }
 
-        const raw = fieldRecord.simpleText || fieldRecord.text || '';
-        return typeof raw === 'string' ? raw.trim() : '';
+        if (typeof fieldRecord.simpleText === 'string') {
+            return fieldRecord.simpleText.trim();
+        }
+
+        const rawText = fieldRecord.text;
+        return typeof rawText === 'string' ? rawText.trim() : '';
     };
 
     const extractFirstStructuredText = (...fields: unknown[]): string => {
@@ -266,9 +271,7 @@ function createYouTubeMonetizationParser(options: YouTubeMonetizationParserOptio
         const item = toRecord(chatItem.item);
         const author = toRecord(item.author);
         const thumbnails = Array.isArray(author.thumbnails) ? author.thumbnails : [];
-        const firstThumbnail = thumbnails[0] && typeof thumbnails[0] === 'object'
-            ? thumbnails[0] as UnknownRecord
-            : {};
+        const firstThumbnail = thumbnails.length > 0 ? toRecord(thumbnails[0]) : {};
         const avatarUrl = firstThumbnail.url;
         if (typeof avatarUrl !== 'string') {
             return '';

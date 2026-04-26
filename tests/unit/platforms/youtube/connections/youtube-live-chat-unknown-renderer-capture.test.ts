@@ -1,5 +1,6 @@
 const { describe, test, expect, beforeEach } = require('bun:test');
 export {};
+import type { InstallYouTubeLiveChatUnknownRendererCaptureOptions } from '../../../../../src/platforms/youtube/connections/youtube-live-chat-unknown-renderer-capture';
 const { createMockFn, clearAllMocks } = require('../../../../helpers/bun-mock-utils');
 
 const {
@@ -8,6 +9,13 @@ const {
 const {
     installYouTubeLiveChatUnknownRendererCapture
 } = require('../../../../../src/platforms/youtube/connections/youtube-live-chat-unknown-renderer-capture.ts');
+
+type CaptureActionArgs = Exclude<Parameters<InstallYouTubeLiveChatUnknownRendererCaptureOptions['actions']['execute']>[1], undefined>;
+const captureActionArgsForTypeCheck = {} as CaptureActionArgs;
+const parseFlagForTypeCheck: boolean | undefined = captureActionArgsForTypeCheck.parse;
+const continuationForTypeCheck: string | undefined = captureActionArgsForTypeCheck.continuation;
+void parseFlagForTypeCheck;
+void continuationForTypeCheck;
 
 describe('YouTube live chat unknown renderer capture', () => {
     let logger;

@@ -1,4 +1,23 @@
-type UnknownRecord = Record<string, unknown>;
+type MessagePartsPayload = {
+    message?: {
+        parts?: unknown;
+    } | null;
+};
+
+type MessagePartCandidate = {
+    type?: unknown;
+    emoteId?: unknown;
+    imageUrl?: unknown;
+    text?: unknown;
+    platform?: unknown;
+    [key: string]: unknown;
+};
+
+type BadgeImageCandidate = {
+    imageUrl?: unknown;
+    source?: unknown;
+    label?: unknown;
+};
 
 type MessagePart =
     | { type: 'emote'; emoteId: string; imageUrl: string; platform?: string }
@@ -14,10 +33,10 @@ interface NormalizedBadgeImage {
     label: string;
 }
 
-function getMessagePartsFromPayload(data: UnknownRecord = {}): unknown[] {
-    const message = data.message;
-    if (message && typeof message === 'object' && Array.isArray((message as UnknownRecord).parts)) {
-        return (message as UnknownRecord).parts as unknown[];
+function getMessagePartsFromPayload(data: MessagePartsPayload = {}): MessagePartCandidate[] {
+    const parts = data.message?.parts;
+    if (Array.isArray(parts)) {
+        return parts as MessagePartCandidate[];
     }
 
     return [];
@@ -30,7 +49,7 @@ function isValidMessagePart(part: unknown, options: MessagePartValidationOptions
         return false;
     }
 
-    const partRecord = part as UnknownRecord;
+    const partRecord = part as MessagePartCandidate;
 
     if (partRecord.type === 'emote') {
         return typeof partRecord.emoteId === 'string' && partRecord.emoteId.trim().length > 0
@@ -50,7 +69,7 @@ function isValidMessagePart(part: unknown, options: MessagePartValidationOptions
     return false;
 }
 
-function getValidMessageParts(data: UnknownRecord = {}, options: MessagePartValidationOptions = {}): MessagePart[] {
+function getValidMessageParts(data: MessagePartsPayload = {}, options: MessagePartValidationOptions = {}): MessagePart[] {
     return getMessagePartsFromPayload(data)
         .filter((part): part is MessagePart => isValidMessagePart(part, options));
 }
@@ -68,7 +87,7 @@ function normalizeBadgeImages(value: unknown): NormalizedBadgeImage[] {
             continue;
         }
 
-        const badgeRecord = badge as UnknownRecord;
+        const badgeRecord = badge as BadgeImageCandidate;
         const imageUrl = typeof badgeRecord.imageUrl === 'string' ? badgeRecord.imageUrl.trim() : '';
         if (!imageUrl || seen.has(imageUrl)) {
             continue;

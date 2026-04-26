@@ -540,8 +540,8 @@ describe('TypeScript toolchain migration gates behavior', () => {
         expect(baseConfig.compilerOptions?.useUnknownInCatchVariables).toBe(true);
         expect(baseConfig.compilerOptions?.noImplicitOverride).toBe(true);
         expect(baseConfig.compilerOptions?.noFallthroughCasesInSwitch).toBe(true);
-        expect(baseConfig.compilerOptions?.exactOptionalPropertyTypes).toBe(false);
-        expect(baseConfig.compilerOptions?.noUncheckedIndexedAccess).toBe(false);
+        expect(baseConfig.compilerOptions?.exactOptionalPropertyTypes).toBe(true);
+        expect(baseConfig.compilerOptions?.noUncheckedIndexedAccess).toBe(true);
 
         const laneConfigPaths = [
             'tsconfig.src.json',

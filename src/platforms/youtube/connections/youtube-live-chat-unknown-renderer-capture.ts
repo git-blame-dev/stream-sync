@@ -1,12 +1,15 @@
 import { collectParserWarningsDuring, type ParserWarningPayload } from '../../../utils/youtube-parser-log-adapter';
+import type { UnknownRecord } from '../../../utils/record-contracts';
 
-type UnknownRecord = Record<string, unknown>;
-
-type ExecuteArgs = UnknownRecord | undefined;
+type ExecuteArgs = UnknownRecord & {
+    continuation?: string;
+    parse?: boolean;
+};
+type OptionalExecuteArgs = ExecuteArgs | undefined;
 type ExecuteResult = Promise<unknown>;
 
 type ActionsLike = {
-    execute: (endpoint: string, args?: ExecuteArgs) => ExecuteResult;
+    execute: (endpoint: string, args?: OptionalExecuteArgs) => ExecuteResult;
 };
 
 type ParserLike = {
@@ -42,7 +45,7 @@ type InstallYouTubeLiveChatUnknownRendererCaptureOptions = {
 };
 
 type WrappedState = {
-    originalExecute: (endpoint: string, args?: ExecuteArgs) => ExecuteResult;
+    originalExecute: (endpoint: string, args?: OptionalExecuteArgs) => ExecuteResult;
     continuationOwners: Map<string, string>;
     parser: ParserLike;
     logUnknownRenderer: (entry: UnknownRendererLogEntry) => Promise<void>;
@@ -229,7 +232,7 @@ async function captureUnknownRenderers(
     });
 }
 
-function resolveVideoId(state: WrappedState, args: ExecuteArgs): string | null {
+function resolveVideoId(state: WrappedState, args: OptionalExecuteArgs): string | null {
     if (!args || !isRecord(args)) {
         return null;
     }
@@ -260,7 +263,7 @@ function registerContinuationOwner(state: WrappedState, continuation: string | n
     state.continuationOwners.set(continuation, videoId);
 }
 
-function shouldCapture(endpoint: string, args: ExecuteArgs): args is UnknownRecord {
+function shouldCapture(endpoint: string, args: OptionalExecuteArgs): args is ExecuteArgs {
     return isLiveChatEndpoint(endpoint) && isRecord(args) && args.parse === true;
 }
 
@@ -285,7 +288,7 @@ function installYouTubeLiveChatUnknownRendererCapture(
 
     registerContinuationOwner(state, initialContinuation, options.videoId);
 
-    options.actions.execute = async (endpoint: string, args?: ExecuteArgs) => {
+    options.actions.execute = async (endpoint: string, args?: OptionalExecuteArgs) => {
         if (!shouldCapture(endpoint, args)) {
             return state.originalExecute(endpoint, args);
         }

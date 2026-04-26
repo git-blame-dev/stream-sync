@@ -2,8 +2,8 @@ import { createRequire } from 'node:module';
 import { logger as defaultLogger } from '../core/logging';
 
 type LoggerLike = {
-    debug: (...args: unknown[]) => void;
-    warn: (...args: unknown[]) => void;
+    debug: (message: string, scope?: string, payload?: unknown) => void;
+    warn: (message: string, scope?: string, payload?: unknown) => void;
 };
 
 type ObsManagerLike = {

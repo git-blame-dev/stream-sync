@@ -1,10 +1,9 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { createRequire } from 'node:module';
 
 import { restoreAllMocks } from '../../../../helpers/bun-mock-utils';
+import { noOpLogger } from '../../../../helpers/mock-factories';
 import { createYouTubeEventRouter } from '../../../../../src/platforms/youtube/events/event-router';
-
-const nodeRequire = createRequire(import.meta.url);
+import { PlatformEvents } from '../../../../../src/interfaces/PlatformEvents';
 
 type LoggerLike = {
     debug: (...args: unknown[]) => void;
@@ -13,12 +12,7 @@ type LoggerLike = {
     error: (...args: unknown[]) => void;
 };
 
-const { noOpLogger } = nodeRequire('../../../../helpers/mock-factories') as {
-    noOpLogger: LoggerLike;
-};
-const { PlatformEvents } = nodeRequire('../../../../../src/interfaces/PlatformEvents') as {
-    PlatformEvents: { ERROR: string };
-};
+const logger: LoggerLike = noOpLogger;
 
 describe('YouTube event router', () => {
     afterEach(() => {
@@ -139,7 +133,34 @@ describe('YouTube event router', () => {
     });
 
     test('throws when logger dependency is missing', () => {
-        expect(() => createYouTubeEventRouter({ platform: {} as unknown as { logger: unknown } })).toThrow('YouTube event router requires logger dependency');
+        expect(() => createYouTubeEventRouter({ platform: { logger: undefined } })).toThrow('YouTube event router requires logger dependency');
+    });
+
+    test('routes mapped handlers and low-priority handlers with platform context', async () => {
+        let mappedHandlerContext: unknown = null;
+        let lowPriorityHandlerContext: unknown = null;
+
+        const platform = {
+            logger,
+            handleSuperChat(this: unknown, _item: unknown) {
+                mappedHandlerContext = this;
+            },
+            handleLowPriorityEvent(this: unknown, _item: unknown, _type: string) {
+                lowPriorityHandlerContext = this;
+            },
+            _emitPlatformEvent: () => {},
+            eventFactory: {
+                createErrorEvent: () => ({ type: PlatformEvents.ERROR, platform: 'youtube' })
+            }
+        };
+
+        const router = createYouTubeEventRouter({ platform });
+
+        await expect(router.routeEvent({ item: { type: 'LiveChatPaidMessage' } }, 'LiveChatPaidMessage')).resolves.toBe(true);
+        await expect(router.routeEvent({ item: { type: 'LiveChatViewerEngagementMessage' } }, 'LiveChatViewerEngagementMessage')).resolves.toBe(true);
+
+        expect(mappedHandlerContext).toBe(platform);
+        expect(lowPriorityHandlerContext).toBe(platform);
     });
 
     test('returns false for invalid event type input', async () => {

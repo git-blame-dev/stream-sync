@@ -8,9 +8,9 @@ import {
 } from './youtube-channel-resolver';
 
 type LoggerLike = {
-    error: (...args: unknown[]) => void;
-    debug?: (...args: unknown[]) => void;
-    warn?: (...args: unknown[]) => void;
+    error: (message: string, scope?: string, payload?: unknown) => void;
+    debug?: (message: string, scope?: string, payload?: unknown) => void;
+    warn?: (message: string, scope?: string, payload?: unknown) => void;
 };
 
 type ChannelVideo = {

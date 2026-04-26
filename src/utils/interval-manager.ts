@@ -2,12 +2,12 @@ import { safeSetInterval as defaultSafeSetInterval } from './timeout-validator';
 import { getSystemTimestampISO } from './timestamp';
 
 type LoggerLike = {
-    debug: (...args: unknown[]) => void;
-    info: (...args: unknown[]) => void;
-    warn: (...args: unknown[]) => void;
+    debug: (message: string, scope?: string, payload?: unknown) => void;
+    info: (message: string, scope?: string, payload?: unknown) => void;
+    warn: (message: string, scope?: string, payload?: unknown) => void;
 };
 
-type IntervalCallback = (...args: unknown[]) => void;
+type IntervalCallback = () => void;
 type IntervalType = 'generic' | 'monitoring' | 'polling' | 'keepalive' | string;
 
 type IntervalInfo = {

@@ -5,15 +5,15 @@ import {
 } from './dependency-validator';
 
 type LoggerLike = {
-    debug: (...args: unknown[]) => void;
+    debug: (message: string, scope?: string, payload?: unknown) => void;
 };
 
 type ConnectionLike = {
-    connect: (...args: unknown[]) => unknown;
-    on?: (...args: unknown[]) => unknown;
-    emit?: (...args: unknown[]) => unknown;
-    removeAllListeners?: (...args: unknown[]) => unknown;
-    disconnect?: () => unknown;
+    connect: () => unknown;
+    on?: (eventName: string, handler: (...args: unknown[]) => void) => unknown;
+    emit?: (eventName: string, payload?: unknown) => unknown;
+    removeAllListeners?: () => unknown;
+    disconnect?: () => Promise<void> | void;
 };
 
 type ConnectionFactoryLike = {
@@ -29,6 +29,21 @@ type DependenciesLike = {
 
 function getErrorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
+}
+
+function hasCatchMethod(value: unknown): value is { catch: (handler: () => void) => void } {
+    return !!value
+        && typeof value === 'object'
+        && typeof (value as { catch?: unknown }).catch === 'function';
+}
+
+function getErrorMessageFromUnknown(error: unknown): string | null {
+    if (!error || typeof error !== 'object') {
+        return null;
+    }
+
+    const message = (error as { message?: unknown }).message;
+    return typeof message === 'string' ? message : null;
 }
 
 class ConnectionStateManager {
@@ -176,8 +191,8 @@ class ConnectionStateManager {
                 }
                 if (typeof this.connection.disconnect === 'function') {
                     const result = this.connection.disconnect();
-                    if (result && typeof (result as { catch?: unknown }).catch === 'function') {
-                        (result as { catch: (handler: () => void) => void }).catch(() => {});
+                    if (hasCatchMethod(result)) {
+                        result.catch(() => {});
                     }
                 }
             } catch (error) {
@@ -209,9 +224,7 @@ class ConnectionStateManager {
             hasConnection: this.connection !== null,
             isValid: this.connection ? this.isConnectionValid(this.connection) : false,
             connectionTime: this.connectionTime,
-            lastError: typeof (this.lastError as { message?: unknown } | null)?.message === 'string'
-                ? ((this.lastError as { message: string }).message)
-                : null,
+            lastError: getErrorMessageFromUnknown(this.lastError),
             isConnected: this.isConnected(),
             isConnecting: this.isConnecting()
         };

@@ -5,7 +5,7 @@ import { withTimeout } from '../utils/timeout-wrapper';
 const DEFAULT_TIMEOUT_MS = 2000;
 
 type ResolverLogger = {
-    error: (...args: unknown[]) => void;
+    error: (message: string, scope?: string, payload?: unknown) => void;
 };
 
 type ResolverClient = {

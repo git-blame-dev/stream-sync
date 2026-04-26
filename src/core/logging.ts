@@ -3,7 +3,7 @@ import { safeObjectStringify } from '../utils/logger-utils';
 import { FileLogger } from '../utils/file-logger';
 import { formatTimestampCompact } from '../utils/text-processing';
 
-const LOG_LEVELS = ['debug', 'info', 'console', 'warn', 'error', 'emergency'];
+const LOG_LEVELS: readonly LogLevel[] = ['debug', 'info', 'console', 'warn', 'error', 'emergency'];
 
 type LogLevel = 'debug' | 'info' | 'console' | 'warn' | 'error' | 'emergency';
 type LogData = unknown;
@@ -21,7 +21,7 @@ function initializeLoggingConfig(appConfig: { logging?: LoggingConfig }) {
 
 function getLoggingConfig(): LoggingConfig {
     if (!globalLoggingConfig) {
-        return DEFAULT_LOGGING_CONFIG as unknown as LoggingConfig;
+        return DEFAULT_LOGGING_CONFIG as LoggingConfig;
     }
     return globalLoggingConfig;
 }
@@ -140,7 +140,7 @@ class UnifiedLogger {
 class ConsoleOutputter {
     write(logEntry: LogEntry) {
         const { timestamp, level, message, source, data } = logEntry;
-        let output;
+        let output: string;
         if (level === 'console') {
             output = `[${timestamp}] ${message}`;
         } else if (level === 'emergency') {
@@ -161,7 +161,7 @@ class ConsoleOutputter {
 
 class FileOutputter {
     config: OutputConfig;
-    fileLogger: InstanceType<typeof FileLogger> | null;
+    fileLogger: FileLogger | null;
 
     constructor(config: OutputConfig = {}) {
         this.config = config;
@@ -203,19 +203,19 @@ function getUnifiedLogger() {
     return globalLogger;
 }
 
-const logger = new Proxy<Record<string, unknown>>(
-    {},
+const logger = new Proxy<UnifiedLogger>(
+    {} as UnifiedLogger,
     {
         get(_target, prop) {
-            const resolvedLogger = getUnifiedLogger() as unknown as Record<string, unknown>;
-            const value = resolvedLogger[prop as keyof typeof resolvedLogger];
+            const resolvedLogger = getUnifiedLogger();
+            const value = Reflect.get(resolvedLogger, prop);
             if (typeof value === 'function') {
                 return value.bind(resolvedLogger);
             }
             return value;
         }
     }
-) as unknown as UnifiedLogger;
+) as UnifiedLogger;
 
 export {
     logger,

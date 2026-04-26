@@ -1,7 +1,17 @@
+type LogMethod = (message: string, context?: string, payload?: unknown) => void;
+
 type LoggerLike = {
-    [method: string]: (...args: unknown[]) => unknown;
-    error: (...args: unknown[]) => unknown;
+    debug?: LogMethod;
+    info?: LogMethod;
+    warn?: LogMethod;
+    error: LogMethod;
 };
+
+function hasErrorLogger(logger: unknown): logger is LoggerLike {
+    return !!logger
+        && typeof logger === 'object'
+        && typeof (logger as { error?: unknown }).error === 'function';
+}
 
 function resolveErrorMessage(error: unknown): string {
     if (error instanceof Error) {
@@ -16,8 +26,8 @@ class PlatformErrorHandler {
     platformName: string;
 
     constructor(logger: unknown, platformName: string) {
-        if (!logger || typeof logger !== 'object' || typeof (logger as { error?: unknown }).error !== 'function') {
-            const noop = () => {};
+        if (!hasErrorLogger(logger)) {
+            const noop: LogMethod = () => {};
             this.logger = {
                 debug: noop,
                 info: noop,
@@ -25,7 +35,7 @@ class PlatformErrorHandler {
                 error: noop
             };
         } else {
-            this.logger = logger as LoggerLike;
+            this.logger = logger;
         }
         this.platformName = platformName;
     }

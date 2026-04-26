@@ -2,13 +2,13 @@ const MILLISECOND_THRESHOLD = 1_000_000_000_000;
 const MICROSECOND_THRESHOLD = 1_000_000_000_000_000;
 const YOUTUBE_MICROSECOND_THRESHOLD = 10_000_000_000_000;
 
-type UnknownRecord = Record<string, unknown>;
+type TimestampRecord = Record<string, unknown>;
 
-function asRecord(value: unknown): UnknownRecord | null {
+function asRecord(value: unknown): TimestampRecord | null {
     if (!value || typeof value !== 'object') {
         return null;
     }
-    return value as UnknownRecord;
+    return value as TimestampRecord;
 }
 
 function parseTimestampCandidate(value: unknown): number | null {

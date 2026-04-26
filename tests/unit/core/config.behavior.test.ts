@@ -16,10 +16,10 @@ function loadFreshConfigModule() {
     return configModule;
 }
 
-let originalReadFileSync;
-let originalExistsSync;
-let originalConfigPath;
-let originalTwitchClientId;
+let originalReadFileSync: typeof fs.readFileSync;
+let originalExistsSync: typeof fs.existsSync;
+let originalConfigPath: string | undefined;
+let originalTwitchClientId: string | undefined;
 
 const testConfigPath = '/test/config.ini';
 
@@ -78,9 +78,9 @@ ${streamelementsSection}
 `;
 
 describe('Config loading behavior', () => {
-    let currentConfig;
+    let currentConfig: typeof configModule.config;
 
-    const setupConfigMocks = (content, configPath = testConfigPath) => {
+    const setupConfigMocks = (content: string, configPath = testConfigPath) => {
         fs.existsSync = createMockFn((filePath) => filePath === configPath);
         fs.readFileSync = createMockFn((filePath) => {
             if (filePath === configPath) return content;
@@ -88,7 +88,7 @@ describe('Config loading behavior', () => {
         });
     };
 
-    const reloadConfig = (content, configPath = testConfigPath) => {
+    const reloadConfig = (content: string, configPath = testConfigPath) => {
         setupConfigMocks(content, configPath);
         process.env.CHAT_BOT_CONFIG_PATH = configPath;
         const fresh = loadFreshConfig();

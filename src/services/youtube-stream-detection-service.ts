@@ -4,9 +4,9 @@ import { withTimeout } from '../utils/timeout-wrapper';
 import { YouTubeLiveStreamService } from './youtube-live-stream-service';
 
 type LoggerLike = {
-    debug?: (...args: unknown[]) => void;
-    warn?: (...args: unknown[]) => void;
-    error: (...args: unknown[]) => void;
+    debug?: (message: string, scope?: string, payload?: unknown) => void;
+    warn?: (message: string, scope?: string, payload?: unknown) => void;
+    error: (message: string, scope?: string, payload?: unknown) => void;
 };
 
 type DetectionServiceOptions = {
@@ -31,6 +31,7 @@ type DetectionResult = {
 };
 
 type LiveStreamServiceResult = Awaited<ReturnType<typeof YouTubeLiveStreamService.getLiveStreamsWithParserTolerance>>;
+type DetectionClient = Parameters<typeof YouTubeLiveStreamService.getLiveStreamsWithParserTolerance>[0];
 
 type DetectionServiceResponse = {
     success: boolean;
@@ -82,8 +83,8 @@ function asError(error: unknown): ErrorWithStatus {
 }
 
 class YouTubeStreamDetectionService {
-    client: unknown;
-    _innertubeClient: unknown;
+    client: DetectionClient | null;
+    _innertubeClient: DetectionClient;
     logger: LoggerLike;
     errorHandler: ReturnType<typeof createPlatformErrorHandler>;
     timeout: number;
@@ -92,7 +93,7 @@ class YouTubeStreamDetectionService {
     _circuitBreaker: CircuitBreakerState;
     username?: string;
 
-    constructor(innertubeClient: unknown, options: DetectionServiceOptions) {
+    constructor(innertubeClient: DetectionClient, options: DetectionServiceOptions) {
         this.client = innertubeClient;
         this._innertubeClient = innertubeClient;
 
@@ -252,10 +253,15 @@ class YouTubeStreamDetectionService {
         }
     }
 
-    async _performDetection(channelHandle: string): Promise<DetectionResult> {
-        const result: LiveStreamServiceResult = await YouTubeLiveStreamService.getLiveStreamsWithParserTolerance(
-            this.client as Parameters<typeof YouTubeLiveStreamService.getLiveStreamsWithParserTolerance>[0],
-            channelHandle,
+async _performDetection(channelHandle: string): Promise<DetectionResult> {
+if (!this.client) {
+throw new Error('YouTube stream detection client is not configured');
+}
+
+const detectionClient: DetectionClient = this.client;
+const result: LiveStreamServiceResult = await YouTubeLiveStreamService.getLiveStreamsWithParserTolerance(
+detectionClient,
+channelHandle,
             {
                 timeout: this.timeout,
                 logger: this.logger
@@ -305,13 +311,9 @@ class YouTubeStreamDetectionService {
         return cleanHandle;
     }
 
-    _validateVideoIds(streams: unknown) {
-        if (!Array.isArray(streams)) {
-            return [];
-        }
-
+    _validateVideoIds(streams: DetectionStream[]) {
         return streams
-            .map((stream) => (stream as DetectionStream).videoId)
+            .map((stream) => stream.videoId)
             .filter((videoId): videoId is string => this._isValidVideoId(videoId));
     }
 

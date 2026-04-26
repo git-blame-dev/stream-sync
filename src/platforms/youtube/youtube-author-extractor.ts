@@ -8,12 +8,16 @@ interface AuthorRecord {
 }
 
 interface ExtractedAuthor {
-    id: unknown;
+    id: string;
     name: string;
     thumbnailUrl: string;
     badges: unknown[];
     isModerator: boolean;
     isVerified: boolean;
+}
+
+function isNonEmptyString(value: unknown): value is string {
+    return typeof value === 'string' && value.trim().length > 0;
 }
 
 function extractAuthor(chatItem: unknown): ExtractedAuthor | null {
@@ -33,9 +37,10 @@ function extractAuthor(chatItem: unknown): ExtractedAuthor | null {
 
     const id = author.id;
     const rawName = author.name;
-    if (!id || typeof rawName !== 'string' || !rawName.trim()) {
+    if (!isNonEmptyString(id) || !isNonEmptyString(rawName)) {
         return null;
     }
+
     const name = stripAtPrefix(rawName);
     const thumbnailUrl = extractThumbnailUrl(author.thumbnails);
     const badges = Array.isArray(author.badges) ? author.badges : [];

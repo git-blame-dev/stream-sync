@@ -12,6 +12,7 @@ const {
     createDonationSpamDetection
 } = require('../../../src/utils/spam-detection');
 const testClock = require('../../helpers/test-clock');
+const { safeSetTimeout } = require('../../../src/utils/timeout-validator');
 
 type DonationSpamDetection = ReturnType<typeof createDonationSpamDetection>;
 type SpamDetectionConfigInstance = InstanceType<typeof SpamDetectionConfig>;
@@ -340,6 +341,73 @@ describe('Spam Detection', () => {
             expect(result.aggregatedMessage).toBeNull();
 
             disabledDetection.destroy();
+        });
+    });
+
+    describe('when processing aggregated donations', () => {
+        let detection: DonationSpamDetection;
+        let aggregatedDonation: { totalCoins: number; totalGifts: number } | null = null;
+
+        beforeEach(() => {
+            aggregatedDonation = null;
+            detection = createDonationSpamDetection(config, {
+                logger: mockLogger,
+                autoCleanup: false,
+                onAggregatedDonation: (payload: { totalCoins: number; totalGifts: number }) => {
+                    aggregatedDonation = payload;
+                }
+            });
+        });
+
+        afterEach(() => {
+            if (detection) {
+                detection.destroy();
+            }
+        });
+
+        it('should combine notifications into one aggregated message', () => {
+            const aggregationTimer = safeSetTimeout(() => {}, 1000);
+            const tracker = {
+                notifications: [
+                    { timestamp: 1700000000000, coinValue: 5, giftType: 'Rose', giftCount: 1, platform: 'tiktok' },
+                    { timestamp: 1700000001000, coinValue: 4, giftType: 'Heart', giftCount: 2, platform: 'tiktok' }
+                ],
+                aggregatedCount: 2,
+                lastReset: 1700000000000,
+                aggregationTimer,
+                username: 'User1',
+                platform: 'tiktok'
+            };
+
+            const result = detection.processAggregatedDonation('user1', tracker);
+
+            expect(result.shouldShow).toBe(true);
+            expect(result.totalCoinValue).toBe(13);
+            expect(result.totalGiftCount).toBe(3);
+            expect(result.aggregatedMessage).toContain('User1 sent 3 gifts worth 13 coins');
+            expect(tracker.notifications).toEqual([]);
+            expect(tracker.aggregationTimer).toBeNull();
+            expect(aggregatedDonation).toBeDefined();
+            expect(aggregatedDonation?.totalCoins).toBe(13);
+            expect(aggregatedDonation?.totalGifts).toBe(3);
+        });
+
+        it('should return empty aggregation result when notifications are missing', () => {
+            const tracker = {
+                notifications: [],
+                aggregatedCount: 0,
+                lastReset: 1700000000000,
+                aggregationTimer: null,
+                username: 'User1',
+                platform: 'tiktok'
+            };
+
+            const result = detection.processAggregatedDonation('user1', tracker);
+
+            expect(result.shouldShow).toBe(false);
+            expect(result.aggregatedMessage).toBeNull();
+            expect(result.totalCoinValue).toBe(0);
+            expect(result.totalGiftCount).toBe(0);
         });
     });
 

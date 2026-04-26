@@ -39,6 +39,23 @@ type TikTokPlatformLike = {
     getViewerCount?: () => Promise<unknown>;
 };
 
+type ProviderErrorType = 'network' | 'authentication' | 'rate_limit' | 'resource_not_found' | 'unknown';
+
+function getErrorMessage(error: unknown): string {
+    if (error instanceof Error && error.message.length > 0) {
+        return error.message;
+    }
+
+    if (typeof error === 'object' && error !== null) {
+        const objectError = error as { message?: unknown };
+        if (typeof objectError.message === 'string' && objectError.message.length > 0) {
+            return objectError.message;
+        }
+    }
+
+    return 'Unknown error';
+}
+
 class ViewerCountProvider {
     platform: string;
     logger: ProviderLogger;
@@ -47,7 +64,7 @@ class ViewerCountProvider {
 
     constructor(platform: string, logger: ProviderLogger | null = null) {
         this.platform = platform;
-        this.logger = logger || (getUnifiedLogger() as unknown as ProviderLogger);
+        this.logger = logger ?? (getUnifiedLogger() as ProviderLogger);
         this.errorHandler = createPlatformErrorHandler(this.logger, `${platform}-viewer-count`);
         this.errorStats = {
             totalErrors: 0,
@@ -67,9 +84,7 @@ class ViewerCountProvider {
 
     _handleProviderError(error: unknown, operation = 'getViewerCount'): number {
         this.errorStats.totalErrors++;
-        const message = (typeof error === 'object' && error !== null && typeof (error as { message?: unknown }).message === 'string' && (error as { message: string }).message.length > 0)
-            ? (error as { message: string }).message
-            : 'Unknown error';
+        const message = getErrorMessage(error);
         this.errorStats.lastError = message;
         this.errorStats.consecutiveErrors++;
 
@@ -85,11 +100,9 @@ class ViewerCountProvider {
         return 0;
     }
 
-    _categorizeError(error: unknown) {
-        const message = typeof error === 'object' && error !== null && typeof (error as { message?: unknown }).message === 'string'
-            ? (error as { message: string }).message.toLowerCase()
-            : '';
-        
+    _categorizeError(error: unknown): ProviderErrorType {
+        const message = getErrorMessage(error).toLowerCase();
+
         if (message.includes('network') || message.includes('timeout') || message.includes('connect')) {
             return 'network';
         }
@@ -102,15 +115,15 @@ class ViewerCountProvider {
         if (message.includes('not found') || message.includes('stream') || message.includes('video')) {
             return 'resource_not_found';
         }
-        
+
         return 'unknown';
     }
 
-    _resetErrorCount() {
+    _resetErrorCount(): void {
         this.errorStats.consecutiveErrors = 0;
     }
 
-    getErrorStats() {
+    getErrorStats(): Omit<ProviderErrorStats, 'errorTypes'> & { errorTypes: Record<string, number> } {
         return {
             ...this.errorStats,
             errorTypes: Object.fromEntries(this.errorStats.errorTypes)

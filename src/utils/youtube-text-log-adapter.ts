@@ -49,7 +49,7 @@ function toOneLine(value: unknown): string {
         .trim();
 }
 
-function getMismatchWarningType(args: unknown[]): MismatchWarningType | null {
+function getMismatchWarningType(args: readonly unknown[]): MismatchWarningType | null {
     if (args.length < 2) {
         return null;
     }

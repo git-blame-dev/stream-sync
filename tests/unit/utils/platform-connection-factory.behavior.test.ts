@@ -4,15 +4,28 @@ const { noOpLogger } = require('../../helpers/mock-factories');
 const { PlatformConnectionFactory } = require('../../../src/utils/platform-connection-factory');
 const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../../src/core/secrets');
 
+type LogEntry = {
+    level: string;
+    message: string;
+};
+
 describe('platform-connection-factory behavior', () => {
     afterEach(() => {
         _resetForTesting();
         initializeStaticSecrets();
     });
 
-    const createLogCollector = () => {
-        const entries = [];
-        const collect = (level) => (message) => entries.push({ level, message });
+    const createLogCollector = (): {
+        entries: LogEntry[];
+        debug: (message: string) => void;
+        info: (message: string) => void;
+        warn: (message: string) => void;
+        error: (message: string) => void;
+    } => {
+        const entries: LogEntry[] = [];
+        const collect = (level: string) => (message: string): void => {
+            entries.push({ level, message });
+        };
         return {
             entries,
             debug: collect('debug'),
@@ -26,7 +39,7 @@ describe('platform-connection-factory behavior', () => {
         const factory = new PlatformConnectionFactory(noOpLogger);
         const deps = {
             logger: noOpLogger,
-            TikTokWebSocketClient: function() { this.connect = () => {}; }
+            TikTokWebSocketClient: function(this: { connect: () => void }) { this.connect = () => {}; }
         };
 
         const conn = factory.createConnection('tiktok', { username: 'testuser' }, deps);
@@ -85,15 +98,15 @@ describe('platform-connection-factory behavior', () => {
         let warnCalls = 0;
 
         class PrototypeLogger {
-            debug() {}
+            debug(): void {}
 
-            info() {}
+            info(): void {}
 
-            warn() {
+            warn(): void {
                 warnCalls += 1;
             }
 
-            error() {}
+            error(): void {}
         }
 
         const logger = new PrototypeLogger();
@@ -142,7 +155,7 @@ describe('platform-connection-factory behavior', () => {
         const factory = new PlatformConnectionFactory(noOpLogger);
         const deps = {
             logger: {},
-            TikTokWebSocketClient: function() { this.connect = () => {}; }
+            TikTokWebSocketClient: function(this: { connect: () => void }) { this.connect = () => {}; }
         };
 
         expect(() => factory.createConnection('tiktok', { username: 'testuser' }, deps))
@@ -151,9 +164,9 @@ describe('platform-connection-factory behavior', () => {
 
     test('strips @ prefix from tiktok username before constructing connection', () => {
         const factory = new PlatformConnectionFactory(noOpLogger);
-        let capturedUsername = null;
+        let capturedUsername: string | null = null;
 
-        function TikTokWebSocketClient(username) {
+        function TikTokWebSocketClient(this: { connect: () => void; on: () => void; emit: () => void; removeAllListeners: () => void }, username: string): void {
             capturedUsername = username;
             this.connect = () => {};
             this.on = () => {};
@@ -179,7 +192,7 @@ describe('platform-connection-factory behavior', () => {
     test('fails when constructed TikTok connection lacks connect method', () => {
         const factory = new PlatformConnectionFactory(noOpLogger);
 
-        function TikTokWebSocketClient() {
+        function TikTokWebSocketClient(this: { on: () => void; emit: () => void; removeAllListeners: () => void }): void {
             this.on = () => {};
             this.emit = () => {};
             this.removeAllListeners = () => {};

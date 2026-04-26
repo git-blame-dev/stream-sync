@@ -1,8 +1,10 @@
 import { validateLoggerInterface } from './dependency-validator';
 
 type LoggerMethod = (message: unknown, source?: string, data?: unknown) => void;
+type LoggerRecord = Record<string, unknown>;
+const REQUIRED_LOGGER_METHODS = ['debug', 'info', 'warn', 'error', 'console'] as const;
 
-type NormalizedLogger = Record<string, unknown> & {
+type NormalizedLogger = LoggerRecord & {
     debug: LoggerMethod;
     info: LoggerMethod;
     warn: LoggerMethod;
@@ -10,11 +12,14 @@ type NormalizedLogger = Record<string, unknown> & {
     console: LoggerMethod;
 };
 
-function normalizeLoggerMethods(logger: Record<string, unknown>): NormalizedLogger {
-    const requiredMethods = ['debug', 'info', 'warn', 'error', 'console'] as const;
-    const normalized = Object.assign(Object.create(Object.getPrototypeOf(logger)), logger) as Record<string, unknown>;
+function isLoggerRecord(candidate: unknown): candidate is LoggerRecord {
+    return typeof candidate === 'object' && candidate !== null;
+}
 
-    for (const method of requiredMethods) {
+function normalizeLoggerMethods(logger: LoggerRecord): NormalizedLogger {
+    const normalized = Object.assign(Object.create(Object.getPrototypeOf(logger)), logger) as LoggerRecord;
+
+    for (const method of REQUIRED_LOGGER_METHODS) {
         if (typeof normalized[method] !== 'function') {
             normalized[method] = () => {};
         }
@@ -55,12 +60,12 @@ function gatherCandidates(candidate: unknown): unknown[] {
 
 function resolveLogger(candidate: unknown = null, moduleName = 'logger'): NormalizedLogger {
     const candidates = gatherCandidates(candidate);
-    const selectedCandidate = candidates.find(Boolean);
-    if (!selectedCandidate || typeof selectedCandidate !== 'object') {
+    const selectedCandidate = candidates.find(isLoggerRecord);
+    if (!selectedCandidate) {
         throw new Error(`${moduleName} requires a logger dependency`);
     }
 
-    const normalizedLogger = normalizeLoggerMethods(selectedCandidate as Record<string, unknown>);
+    const normalizedLogger = normalizeLoggerMethods(selectedCandidate);
     validateLoggerInterface(normalizedLogger);
     return normalizedLogger;
 }

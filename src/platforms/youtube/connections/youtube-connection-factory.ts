@@ -5,9 +5,8 @@ import {
 import { YOUTUBE } from '../../../core/endpoints';
 import { InnertubeFactory } from '../../../factories/innertube-factory';
 import { getFallbackUsername } from '../../../utils/validation';
+import type { UnknownRecord } from '../../../utils/record-contracts';
 import { normalizeYouTubeUsername } from '../youtube-username-normalizer';
-
-type UnknownRecord = Record<string, unknown>;
 
 interface LoggerLike {
     debug: (...args: unknown[]) => void;
@@ -45,7 +44,7 @@ interface YouTubeConnectionFactoryOptions {
     };
     withTimeout?: <T>(promise: Promise<T>, timeoutMs: number, operationName: string) => Promise<T>;
     innertubeCreationTimeoutMs?: number;
-    installLiveChatUnknownRendererCapture?: (options: LiveChatUnknownRendererCaptureOptions) => Promise<void>;
+    installLiveChatUnknownRendererCapture?: LiveChatUnknownRendererCaptureInstaller;
 }
 
 interface YouTubeConnection {
@@ -79,6 +78,8 @@ type LiveChatUnknownRendererCaptureOptions = Omit<
     'parser' | 'logUnknownRenderer'
 >;
 
+type LiveChatUnknownRendererCaptureInstaller = (options: LiveChatUnknownRendererCaptureOptions) => void | Promise<void>;
+
 function isParserLike(value: ParserModuleLike['Parser']): value is { parseResponse: (data: unknown) => unknown } {
     return !!value && typeof value.parseResponse === 'function';
 }
@@ -109,7 +110,7 @@ function createYouTubeConnectionFactory(options: YouTubeConnectionFactoryOptions
         throw new Error('YouTube connection factory requires positive innertubeCreationTimeoutMs');
     }
 
-    const captureInstaller = typeof installLiveChatUnknownRendererCapture === 'function'
+    const captureInstaller: LiveChatUnknownRendererCaptureInstaller = typeof installLiveChatUnknownRendererCapture === 'function'
         ? installLiveChatUnknownRendererCapture
         : async (captureOptions: LiveChatUnknownRendererCaptureOptions) => {
             const youtubeModule = await InnertubeFactory.getLazyYouTubeModule() as ParserModuleLike;
@@ -208,7 +209,7 @@ function createYouTubeConnectionFactory(options: YouTubeConnectionFactoryOptions
             yt.getInfo(videoId, { client: 'WEB' }),
             timeoutMs,
             'YouTube getInfo stream info call'
-        ) as YouTubeInfo;
+        );
 
         const validationResult = platform._validateVideoForConnection(videoId, info);
         if (!validationResult.shouldConnect) {

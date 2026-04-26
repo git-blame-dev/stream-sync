@@ -32,7 +32,7 @@ interface ConfigChangePayload {
 
 interface EventBusLike {
     emit?: (eventName: string, payload: unknown) => void;
-    subscribe?: (eventName: string, handler: (payload?: ConfigChangePayload) => void) => unknown;
+    subscribe?: (eventName: string, handler: (payload?: ConfigChangePayload) => void) => (() => void) | void;
 }
 
 type LoggerLike = typeof defaultLogger;
@@ -61,7 +61,7 @@ class CommandCooldownService {
     logger: LoggerLike;
     errorHandler: ErrorHandlerLike;
     cooldownsConfig: CooldownsSourceConfig;
-    configSubscriptions: unknown[];
+    configSubscriptions: Array<(() => void) | void>;
     lastConfigRefresh: string | null;
     userLastCommand: Map<string, number>;
     userHeavyLimit: Map<string, boolean>;

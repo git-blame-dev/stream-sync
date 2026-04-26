@@ -1,6 +1,7 @@
-const GIFT_PURCHASE_EVENT_TYPE = 'LiveChatSponsorshipsGiftPurchaseAnnouncement';
+import type { UnknownRecord } from '../../../utils/record-contracts';
 
-type UnknownRecord = Record<string, unknown>;
+const GIFT_PURCHASE_EVENT_TYPE = 'LiveChatSponsorshipsGiftPurchaseAnnouncement';
+type NormalizedEventStructure = 'wrapped' | 'direct' | null;
 
 interface NormalizeYouTubeEventResult {
     normalizedChatItem: UnknownRecord | null;
@@ -8,8 +9,25 @@ interface NormalizeYouTubeEventResult {
     debugMetadata: UnknownRecord;
 }
 
+const asRecord = (value: unknown): UnknownRecord | null => {
+    if (!value || typeof value !== 'object') {
+        return null;
+    }
+
+    return value as UnknownRecord;
+};
+
+const asEventType = (value: unknown): string | null => {
+    return typeof value === 'string' ? value : null;
+};
+
+const asTrimmedString = (value: unknown): string => {
+    return typeof value === 'string' ? value.trim() : '';
+};
+
 function normalizeYouTubeEvent(chatItem: unknown): NormalizeYouTubeEventResult {
-    if (!chatItem || typeof chatItem !== 'object') {
+    const rawChatItem = asRecord(chatItem);
+    if (!rawChatItem) {
         return {
             normalizedChatItem: null,
             debugMetadata: {
@@ -19,19 +37,18 @@ function normalizeYouTubeEvent(chatItem: unknown): NormalizeYouTubeEventResult {
         };
     }
 
-    const rawChatItem = chatItem as UnknownRecord;
     let normalizedChatItem: UnknownRecord | null = null;
     let eventType: string | null = null;
-    let structure: 'wrapped' | 'direct' | null = null;
+    let structure: NormalizedEventStructure = null;
 
-    if (rawChatItem.item && typeof rawChatItem.item === 'object') {
-        normalizedChatItem = rawChatItem as UnknownRecord;
-        const wrappedType = (rawChatItem.item as UnknownRecord).type;
-        eventType = typeof wrappedType === 'string' ? wrappedType : null;
+    const wrappedItem = asRecord(rawChatItem.item);
+    if (wrappedItem) {
+        normalizedChatItem = rawChatItem;
+        eventType = asEventType(wrappedItem.type);
         structure = 'wrapped';
     } else if (rawChatItem.type) {
         normalizedChatItem = { item: rawChatItem };
-        eventType = typeof rawChatItem.type === 'string' ? rawChatItem.type : null;
+        eventType = asEventType(rawChatItem.type);
         structure = 'direct';
     }
 
@@ -83,14 +100,12 @@ function normalizeYouTubeEvent(chatItem: unknown): NormalizeYouTubeEventResult {
 }
 
 function hydrateWrapperFields(normalizedChatItem: UnknownRecord, rawChatItem: UnknownRecord): UnknownRecord {
-    const rawItem = rawChatItem.item;
-    if (!rawItem || typeof rawItem !== 'object') {
+    const rawItem = asRecord(rawChatItem.item);
+    if (!rawItem) {
         return normalizedChatItem;
     }
 
-    const normalizedItem = normalizedChatItem.item && typeof normalizedChatItem.item === 'object'
-        ? normalizedChatItem.item as UnknownRecord
-        : null;
+    const normalizedItem = asRecord(normalizedChatItem.item);
 
     const wrapperId = rawChatItem.id;
     const wrapperTimestampUsec = rawChatItem.timestamp_usec;
@@ -119,36 +134,29 @@ function hydrateWrapperFields(normalizedChatItem: UnknownRecord, rawChatItem: Un
 }
 
 function hydrateGiftPurchaseAuthor(normalizedChatItem: UnknownRecord): UnknownRecord | null {
-    const item = normalizedChatItem.item as UnknownRecord | undefined;
-    if (!item || typeof item !== 'object') {
+    const item = asRecord(normalizedChatItem.item);
+    if (!item) {
         return null;
     }
 
-    const author = item.author;
-    const authorRecord = (author && typeof author === 'object') ? author as UnknownRecord : null;
-    const authorId = typeof authorRecord?.id === 'string' ? authorRecord.id.trim() : '';
-    const authorName = typeof authorRecord?.name === 'string' ? authorRecord.name.trim() : '';
+    const authorRecord = asRecord(item.author);
+    const authorId = asTrimmedString(authorRecord?.id);
+    const authorName = asTrimmedString(authorRecord?.name);
     if (authorId && authorName) {
         return normalizedChatItem;
     }
 
-    const header = item.header && typeof item.header === 'object' ? item.header as UnknownRecord : null;
-    const headerAuthorName = header?.author_name && typeof header.author_name === 'object'
-        ? header.author_name as UnknownRecord
-        : null;
-    const headerName = typeof headerAuthorName?.text === 'string'
-        ? headerAuthorName.text.trim()
-        : '';
-    const headerId = typeof item.author_external_channel_id === 'string'
-        ? item.author_external_channel_id.trim()
-        : '';
+    const header = asRecord(item.header);
+    const headerAuthorName = asRecord(header?.author_name);
+    const headerName = asTrimmedString(headerAuthorName?.text);
+    const headerId = asTrimmedString(item.author_external_channel_id);
 
     if (!headerName || !headerId) {
         return null;
     }
 
-    const headerPhoto = header && Array.isArray(header.author_photo) ? header.author_photo : [];
-    const headerBadges = header && Array.isArray(header.author_badges) ? header.author_badges : [];
+    const headerPhoto = Array.isArray(header?.author_photo) ? header.author_photo : [];
+    const headerBadges = Array.isArray(header?.author_badges) ? header.author_badges : [];
     const hydratedAuthor = {
         id: headerId,
         name: headerName,
