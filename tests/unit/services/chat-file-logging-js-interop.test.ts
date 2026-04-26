@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
-const chatFileLoggingModule = require('../../../src/services/ChatFileLoggingService.js');
+const chatFileLoggingModule = require('../../../src/services/ChatFileLoggingService.ts');
 
 describe('chat file logging JS interop', () => {
     it('exposes ChatFileLoggingService as a named export from the JS wrapper', () => {

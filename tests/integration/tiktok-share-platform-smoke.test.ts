@@ -1,6 +1,6 @@
 const { describe, test, afterEach, expect } = require('bun:test');
 const EventEmitter = require('events');
-const { PlatformLifecycleService } = require('../../src/services/PlatformLifecycleService.js');
+const { PlatformLifecycleService } = require('../../src/services/PlatformLifecycleService.ts');
 const NotificationManager = require('../../src/notifications/NotificationManager');
 const { TikTokPlatform } = require('../../src/platforms/tiktok');
 const { createTestAppRuntime } = require('../helpers/runtime-test-harness');

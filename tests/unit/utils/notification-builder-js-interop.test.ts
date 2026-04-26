@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'bun:test';
 
-const notificationBuilderModule = require('../../../src/utils/notification-builder.js');
-const { NotificationPayloadBuilder } = require('../../../src/notifications/notification-payload-builder.js');
-const MessageTTSHandler = require('../../../src/utils/message-tts-handler.js');
+const notificationBuilderModule = require('../../../src/utils/notification-builder.ts');
+const { NotificationPayloadBuilder } = require('../../../src/notifications/notification-payload-builder.ts');
+const MessageTTSHandlerModule = require('../../../src/utils/message-tts-handler.ts');
+const MessageTTSHandler = MessageTTSHandlerModule.default || MessageTTSHandlerModule.MessageTTSHandler;
 
 describe('notification-builder JS interop', () => {
     it('exposes NotificationBuilder as a named export from the JS wrapper', () => {

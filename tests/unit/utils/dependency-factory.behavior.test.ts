@@ -1,6 +1,6 @@
 const { describe, expect, beforeEach, it, afterEach } = require('bun:test');
 export {};
-const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { DependencyFactory } = require('../../../src/utils/dependency-factory');
 const { _resetForTesting, initializeStaticSecrets } = require('../../../src/core/secrets');
@@ -61,6 +61,57 @@ describe('DependencyFactory behavior', () => {
         it('requires twitchAuth to be injected', () => {
             expect(() => factory.createTwitchDependencies({ channel: 'me' }, { logger: noOpLogger, config: configFixture }))
                 .toThrow(/createTwitchDependencies requires twitchAuth/);
+        });
+    });
+
+    describe('Strictness migration behavior', () => {
+        it('builds youtubei dependencies with deferred stream detection service', () => {
+            const InnertubeClass = {
+                create: createMockFn().mockResolvedValue({
+                    search: createMockFn().mockResolvedValue({ results: [] }),
+                    getChannel: createMockFn().mockResolvedValue({ videos: [] })
+                })
+            };
+
+            const deps = factory.createYoutubeDependencies({
+                enableAPI: false,
+                username: 'test-channel',
+                streamDetectionMethod: 'youtubei'
+            }, {
+                logger: noOpLogger,
+                config: configFixture,
+                Innertube: InnertubeClass
+            });
+
+            expect(typeof deps.streamDetectionService.detectLiveStreams).toBe('function');
+            expect(deps.streamDetectionService.getUsageMetrics()).toEqual({
+                totalRequests: 0,
+                successfulRequests: 0,
+                failedRequests: 0,
+                averageResponseTime: 0,
+                errorRate: 0,
+                errorsByType: {}
+            });
+        });
+
+        it('throws when TikTok websocket client dependency is missing', () => {
+            expect(() => factory.createTiktokDependencies({ username: 'test-user' }, {
+                logger: noOpLogger,
+                config: configFixture,
+                TikTokWebSocketClient: {}
+            })).toThrow(/Missing TikTok dependencies: TikTokWebSocketClient/);
+        });
+
+        it('provides fallback TikTok event maps when connector enums are omitted', () => {
+            const deps = factory.createTiktokDependencies({ username: 'test-user' }, {
+                logger: noOpLogger,
+                config: configFixture,
+                TikTokWebSocketClient: function MockTikTokClient() {}
+            });
+
+            expect(deps.WebcastEvent.CHAT).toBe('chat');
+            expect(deps.ControlEvent.CONNECTED).toBe('connected');
+            expect(typeof deps.WebcastPushConnection).toBe('function');
         });
     });
 });

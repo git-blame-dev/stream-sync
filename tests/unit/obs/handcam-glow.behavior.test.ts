@@ -9,7 +9,7 @@ const {
     setTestingDependencies,
     resetTestingDependencies
 } = require('../../../src/obs/handcam-glow.ts');
-const handcamGlowCompatModule = require('../../../src/obs/handcam-glow.js');
+const handcamGlowCompatModule = require('../../../src/obs/handcam-glow.ts');
 
 describe('handcam-glow', () => {
     let mockLogger;

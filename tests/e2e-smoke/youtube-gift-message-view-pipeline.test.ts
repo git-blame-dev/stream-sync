@@ -4,7 +4,7 @@ import { createRequire } from 'node:module';
 const load = createRequire(__filename);
 const EventEmitter = load('events');
 const NotificationManager = load('../../src/notifications/NotificationManager');
-const { PlatformEventRouter } = load('../../src/services/PlatformEventRouter.js');
+const { PlatformEventRouter } = load('../../src/services/PlatformEventRouter.ts');
 const { YouTubePlatform } = load('../../src/platforms/youtube');
 const { PlatformEvents } = load('../../src/interfaces/PlatformEvents');
 const { createTextProcessingManager } = load('../../src/utils/text-processing');

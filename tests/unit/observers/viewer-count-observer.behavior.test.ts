@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { createRequire } from 'node:module';
 
-import '../../../src/observers/viewer-count-observer.js';
+import '../../../src/observers/viewer-count-observer.ts';
 
 const nodeRequire = createRequire(import.meta.url);
 

@@ -1,6 +1,6 @@
 const { describe, test, afterEach, expect } = require('bun:test');
 const EventEmitter = require('events');
-const { PlatformLifecycleService } = require('../../src/services/PlatformLifecycleService.js');
+const { PlatformLifecycleService } = require('../../src/services/PlatformLifecycleService.ts');
 const { TikTokPlatform } = require('../../src/platforms/tiktok');
 const { PlatformEvents } = require('../../src/interfaces/PlatformEvents');
 const { createTikTokConfigFixture } = require('../helpers/config-fixture');

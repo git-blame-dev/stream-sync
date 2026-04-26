@@ -5,8 +5,8 @@ const load = createRequire(__filename);
 const { createMockFn } = load('../helpers/bun-mock-utils');
 const { createConfigFixture } = load('../helpers/config-fixture');
 const { noOpLogger } = load('../helpers/mock-factories');
-const { DependencyFactory } = load('../../src/utils/dependency-factory.js');
-const { PlatformLifecycleService } = load('../../src/services/PlatformLifecycleService.js');
+const { DependencyFactory } = load('../../src/utils/dependency-factory');
+const { PlatformLifecycleService } = load('../../src/services/PlatformLifecycleService.ts');
 
 describe('Platform lifecycle startup smoke E2E', () => {
     it('initializes and disconnects an enabled platform without stream detection', async () => {

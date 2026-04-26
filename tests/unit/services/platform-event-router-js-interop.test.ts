@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
-const platformEventRouterModule = require('../../../src/services/PlatformEventRouter.js');
+const platformEventRouterModule = require('../../../src/services/PlatformEventRouter.ts');
 
 describe('platform event router JS interop', () => {
     it('exposes PlatformEventRouter as a named export from the JS wrapper', () => {

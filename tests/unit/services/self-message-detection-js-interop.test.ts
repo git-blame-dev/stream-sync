@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
-const selfMessageDetectionModule = require('../../../src/services/SelfMessageDetectionService.js');
+const selfMessageDetectionModule = require('../../../src/services/SelfMessageDetectionService.ts');
 
 describe('self message detection JS interop', () => {
     it('exposes SelfMessageDetectionService as a named export from the JS wrapper', () => {

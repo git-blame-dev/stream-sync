@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
-const commandCooldownModule = require('../../../src/services/CommandCooldownService.js');
+const commandCooldownModule = require('../../../src/services/CommandCooldownService.ts');
 const { createConfigFixture } = require('../../helpers/config-fixture');
 
 describe('command cooldown JS interop', () => {

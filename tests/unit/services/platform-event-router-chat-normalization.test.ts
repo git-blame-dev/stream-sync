@@ -2,7 +2,7 @@ const { describe, it, expect, afterEach } = require('bun:test');
 const { createMockFn, clearAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { createConfigFixture } = require('../../helpers/config-fixture');
-const { PlatformEventRouter } = require('../../../src/services/PlatformEventRouter.js');
+const { PlatformEventRouter } = require('../../../src/services/PlatformEventRouter.ts');
 
 describe('PlatformEventRouter chat normalization', () => {
     afterEach(() => {

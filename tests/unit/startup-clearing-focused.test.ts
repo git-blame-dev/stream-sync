@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'bun:test';
 import { createRequire } from 'node:module';
 
 import { createMockFn } from '../helpers/bun-mock-utils';
-import '../../src/obs/startup.js';
+import '../../src/obs/startup.ts';
 import '../../src/obs/startup.ts';
 
 const nodeRequire = createRequire(import.meta.url);

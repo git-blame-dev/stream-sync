@@ -1,11 +1,7 @@
 import { DEFAULT_LOGGING_CONFIG } from './config-builders';
 import { safeObjectStringify } from '../utils/logger-utils';
 import { FileLogger } from '../utils/file-logger';
-import textProcessingModule from '../utils/text-processing.js';
-
-const { formatTimestampCompact } = textProcessingModule as {
-    formatTimestampCompact: (date: Date) => string;
-};
+import { formatTimestampCompact } from '../utils/text-processing';
 
 const LOG_LEVELS = ['debug', 'info', 'console', 'warn', 'error', 'emergency'];
 

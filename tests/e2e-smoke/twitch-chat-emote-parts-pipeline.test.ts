@@ -5,8 +5,8 @@ import { createTwitchEventSubChatMessageEvent } from '../helpers/twitch-test-dat
 
 const load = createRequire(__filename);
 const EventEmitter = load('events');
-const { PlatformEventRouter } = load('../../src/services/PlatformEventRouter.js');
-const { ChatNotificationRouter } = load('../../src/services/ChatNotificationRouter.js');
+const { PlatformEventRouter } = load('../../src/services/PlatformEventRouter.ts');
+const { ChatNotificationRouter } = load('../../src/services/ChatNotificationRouter.ts');
 const { PlatformEvents } = load('../../src/interfaces/PlatformEvents');
 const { TwitchPlatform } = load('../../src/platforms/twitch.ts');
 const { createMockDisplayQueue, noOpLogger } = load('../helpers/mock-factories');

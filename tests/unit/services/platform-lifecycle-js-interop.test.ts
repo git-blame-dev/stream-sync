@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
-const platformLifecycleModule = require('../../../src/services/PlatformLifecycleService.js');
+const platformLifecycleModule = require('../../../src/services/PlatformLifecycleService.ts');
 
 describe('platform lifecycle JS interop', () => {
     it('exposes PlatformLifecycleService as a named export from the JS wrapper', () => {

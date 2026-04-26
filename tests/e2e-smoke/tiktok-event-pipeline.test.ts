@@ -4,7 +4,7 @@ import { createRequire } from 'node:module';
 const load = createRequire(__filename);
 const EventEmitter = load('events');
 const NotificationManager = load('../../src/notifications/NotificationManager');
-const { PlatformEventRouter } = load('../../src/services/PlatformEventRouter.js');
+const { PlatformEventRouter } = load('../../src/services/PlatformEventRouter.ts');
 const { TikTokPlatform } = load('../../src/platforms/tiktok.ts');
 const { createTextProcessingManager } = load('../../src/utils/text-processing');
 const { createConfigFixture } = load('../helpers/config-fixture');
@@ -17,7 +17,7 @@ const {
     advanceTimersByTime,
     clearAllTimers
 } = load('../helpers/bun-timers');
-const { setupTikTokEventListeners, cleanupTikTokEventListeners } = load('../../src/platforms/tiktok/events/event-router.js');
+const { setupTikTokEventListeners, cleanupTikTokEventListeners } = load('../../src/platforms/tiktok/events/event-router.ts');
 const { expectNoTechnicalArtifacts } = load('../helpers/assertion-helpers');
 const coreConstants = load('../../src/core/constants');
 

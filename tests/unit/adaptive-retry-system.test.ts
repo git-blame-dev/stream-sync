@@ -12,7 +12,7 @@ setupAutomatedCleanup({
     logPerformanceMetrics: true
 });
 
-const { RetrySystem, ADAPTIVE_RETRY_CONFIG } = load('../../src/utils/retry-system.js');
+const { RetrySystem, ADAPTIVE_RETRY_CONFIG } = load('../../src/utils/retry-system');
 
 describe('Unified Adaptive Retry System', () => {
     let retrySystem: InstanceType<typeof RetrySystem>;

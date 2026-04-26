@@ -4,7 +4,7 @@ import ini from 'ini';
 import { buildConfig } from './config-builders';
 import type { BuiltConfig, NormalizedConfig } from './types/config-types';
 import { parseEnvContent } from '../utils/env-file-parser';
-import configValidatorModule from '../utils/config-validator.js';
+import configValidatorModule from '../utils/config-validator';
 import { handleUserFacingError } from '../utils/user-friendly-errors';
 
 type RawConfig = NormalizedConfig;

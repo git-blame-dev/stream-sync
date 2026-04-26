@@ -4,7 +4,7 @@ import { createRequire } from 'node:module';
 const load = createRequire(__filename);
 const { ConfigValidator } = load('../../src/utils/config-validator');
 const { CommandParser } = load('../../src/chat/commands');
-const { VFXCommandService } = load('../../src/services/VFXCommandService.js');
+const { VFXCommandService } = load('../../src/services/VFXCommandService.ts');
 
 describe('VFX chat command resolution smoke E2E', () => {
     const createRawConfig = () => ({
