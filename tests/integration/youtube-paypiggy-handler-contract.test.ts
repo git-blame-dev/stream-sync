@@ -1,7 +1,7 @@
 const { describe, test, expect, afterEach } = require('bun:test');
 
 const EventEmitter = require('events');
-const { PlatformLifecycleService } = require('../../src/services/PlatformLifecycleService.js');
+const { PlatformLifecycleService } = require('../../src/services/PlatformLifecycleService.ts');
 const { YouTubePlatform } = require('../../src/platforms/youtube');
 const { PlatformEvents } = require('../../src/interfaces/PlatformEvents');
 

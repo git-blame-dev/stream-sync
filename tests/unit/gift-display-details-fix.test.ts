@@ -8,7 +8,7 @@ type NotificationPayload = Record<string, unknown> & {
     username?: string;
 };
 
-const { NotificationBuilder } = nodeRequire('../../src/utils/notification-builder.js') as {
+const { NotificationBuilder } = nodeRequire('../../src/utils/notification-builder.ts') as {
     NotificationBuilder: {
         build: (input: NotificationPayload) => (NotificationPayload & { logMessage?: string }) | null;
     };

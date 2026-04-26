@@ -1,7 +1,7 @@
 import { logger } from '../core/logging';
 import { PRIORITY_LEVELS, NOTIFICATION_CONFIGS } from '../core/constants';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
-import MessageTTSHandler from '../utils/message-tts-handler.js';
+import MessageTTSHandler from '../utils/message-tts-handler';
 import { safeSetTimeout, safeDelay } from '../utils/timeout-validator';
 import { validateDisplayConfig } from './display-config-validator';
 import { DisplayQueueState } from './display-queue-state';

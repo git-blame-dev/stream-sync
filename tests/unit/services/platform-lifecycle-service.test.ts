@@ -1,9 +1,9 @@
 const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, clearAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
-const { PlatformLifecycleService } = require('../../../src/services/PlatformLifecycleService.js');
+const { PlatformLifecycleService } = require('../../../src/services/PlatformLifecycleService.ts');
 const { PlatformEvents } = require('../../../src/interfaces/PlatformEvents');
-const { DependencyFactory } = require('../../../src/utils/dependency-factory.js');
+const { DependencyFactory } = require('../../../src/utils/dependency-factory');
 const testClock = require('../../helpers/test-clock');
 const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../../src/core/secrets');
 

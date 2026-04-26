@@ -1,9 +1,9 @@
 import EventEmitter from 'node:events';
 import { createRequire } from 'node:module';
-import * as TwitchEventRouterModule from '../../src/platforms/twitch/events/event-router.js';
-import * as CommandCooldownServiceModule from '../../src/services/CommandCooldownService.js';
-import * as UserTrackingServiceModule from '../../src/services/UserTrackingService.js';
-import * as VFXCommandServiceModule from '../../src/services/VFXCommandService.js';
+import * as TwitchEventRouterModule from '../../src/platforms/twitch/events/event-router.ts';
+import * as CommandCooldownServiceModule from '../../src/services/CommandCooldownService.ts';
+import * as UserTrackingServiceModule from '../../src/services/UserTrackingService.ts';
+import * as VFXCommandServiceModule from '../../src/services/VFXCommandService.ts';
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -81,13 +81,13 @@ const { PRIORITY_LEVELS, NOTIFICATION_CONFIGS } = load('../../src/core/constants
 const { createPlatformErrorHandler } = load('../../src/utils/platform-error-handler');
 const { safeSetInterval, safeSetTimeout, safeDelay } = load('../../src/utils/timeout-validator');
 const { createGuiTransportService } = load('../../src/services/gui/gui-transport-service');
-const { PlatformEventRouter } = load('../../src/services/PlatformEventRouter.js');
-const { ChatNotificationRouter } = load('../../src/services/ChatNotificationRouter.js');
+const { PlatformEventRouter } = load('../../src/services/PlatformEventRouter.ts');
+const { ChatNotificationRouter } = load('../../src/services/ChatNotificationRouter.ts');
 const NotificationManager = load('../../src/notifications/NotificationManager');
 const { DisplayQueue } = load('../../src/obs/display-queue');
 const { createTikTokGiftAnimationResolver } = load('../../src/services/tiktok-gift-animation/resolver');
 const { createYouTubeEventRouter } = load('../../src/platforms/youtube/events/event-router');
-const { setupTikTokEventListeners } = load('../../src/platforms/tiktok/events/event-router.js');
+const { setupTikTokEventListeners } = load('../../src/platforms/tiktok/events/event-router.ts');
 const { DEFAULT_AVATAR_URL } = load('../../src/constants/avatar');
 
 type PreviewAdapter = 'twitch' | 'youtube' | 'tiktok';

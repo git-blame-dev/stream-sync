@@ -21,11 +21,7 @@
     "src/core/types/config-types.ts",
     "src/types/external-modules.d.ts",
     "src/utils/logger-resolver.d.ts",
-    "src/auth/oauth-flow.js",
-    "src/auth/twitch-oauth-scopes.js",
     "src/auth/twitch-oauth-scopes.ts",
-    "src/utils/token-store.js",
-    "src/utils/cheermote-processor.js",
     "tests/helpers/farewell-routing-harness.ts"
   ],
   "ignoreIssues": {

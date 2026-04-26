@@ -4,7 +4,7 @@ const { useRealTimers } = require('../../helpers/bun-timers');
 
 const testClock = require('../../helpers/test-clock');
 const { OBSHealthChecker } = require('../../../src/obs/health-checker.ts');
-const OBSHealthCheckerCompat = require('../../../src/obs/health-checker.js');
+const OBSHealthCheckerCompat = require('../../../src/obs/health-checker.ts');
 
 describe('OBSHealthChecker', () => {
     let mockOBSManager;
@@ -29,8 +29,8 @@ describe('OBSHealthChecker', () => {
     });
 
     describe('Constructor', () => {
-        it('should preserve class export through the commonjs compatibility wrapper', () => {
-            expect(OBSHealthCheckerCompat).toBe(OBSHealthChecker);
+        it('should expose OBSHealthChecker on the module namespace export', () => {
+            expect(OBSHealthCheckerCompat.OBSHealthChecker).toBe(OBSHealthChecker);
         });
 
         it('should initialize with default configuration', () => {

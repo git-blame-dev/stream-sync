@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { logger } from '../core/logging';
-import { createTikTokGiftAnimationResolver } from '../services/tiktok-gift-animation/resolver.js';
-import MessageTTSHandler from '../utils/message-tts-handler.js';
+import { createTikTokGiftAnimationResolver } from '../services/tiktok-gift-animation/resolver';
+import MessageTTSHandler from '../utils/message-tts-handler';
 import { safeDelay } from '../utils/timeout-validator';
 import { triggerHandcamGlow } from './handcam-glow';
 

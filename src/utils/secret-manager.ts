@@ -4,16 +4,7 @@ import readline from 'node:readline';
 import { createPlatformErrorHandler } from './platform-error-handler';
 import { initializeStaticSecrets } from '../core/secrets';
 import { parseEnvContent } from './env-file-parser';
-import loggerResolverModule from './logger-resolver.js';
-
-const { resolveLogger } = loggerResolverModule as {
-    resolveLogger: (loggerCandidate: unknown, fallbackContext: string) => {
-        debug?: (message: string, context?: string, payload?: unknown) => void;
-        info?: (message: string, context?: string, payload?: unknown) => void;
-        warn?: (message: string, context?: string, payload?: unknown) => void;
-        error?: (message: string, context?: string, payload?: unknown) => void;
-    };
-};
+import { resolveLogger } from './logger-resolver';
 
 type LoggerLike = {
     debug?: (message: string, context?: string, payload?: unknown) => void;

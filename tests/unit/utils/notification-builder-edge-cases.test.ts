@@ -1,6 +1,6 @@
 const { describe, test, expect } = require('bun:test');
 export {};
-const { NotificationBuilder } = require('../../../src/utils/notification-builder.js');
+const { NotificationBuilder } = require('../../../src/utils/notification-builder.ts');
 
 describe('Notification Builder Edge Cases', () => {
     describe('Input Validation Edge Cases', () => {

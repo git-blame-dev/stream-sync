@@ -4,7 +4,7 @@ const { createMockFn } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { createConfigFixture } = require('../../helpers/config-fixture');
 const EventEmitter = require('events');
-const { PlatformEventRouter } = require('../../../src/services/PlatformEventRouter.js');
+const { PlatformEventRouter } = require('../../../src/services/PlatformEventRouter.ts');
 
 type RoutedNotification = {
     type: string;

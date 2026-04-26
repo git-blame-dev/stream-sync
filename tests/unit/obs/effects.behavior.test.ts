@@ -3,7 +3,7 @@ const { createMockFn } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { waitForDelay } = require('../../helpers/time-utils');
 const { OBSEffectsManager, getDefaultEffectsManager, resetDefaultEffectsManager } = require('../../../src/obs/effects.ts');
-const effectsCompatModule = require('../../../src/obs/effects.js');
+const effectsCompatModule = require('../../../src/obs/effects.ts');
 
 describe('obs effects behavior', () => {
     let mockObsManager;

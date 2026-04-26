@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
-const chatNotificationRouterModule = require('../../../src/services/ChatNotificationRouter.js');
+const chatNotificationRouterModule = require('../../../src/services/ChatNotificationRouter.ts');
 
 describe('chat notification router JS interop', () => {
     it('exposes ChatNotificationRouter as a named export from the JS wrapper', () => {

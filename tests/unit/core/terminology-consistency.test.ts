@@ -5,7 +5,7 @@ const { createConfigFixture } = require('../../helpers/config-fixture');
 
 const { createTestUser, TEST_TIMEOUTS } = require('../../helpers/test-setup');
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
-const { PlatformEventRouter } = require('../../../src/services/PlatformEventRouter.js');
+const { PlatformEventRouter } = require('../../../src/services/PlatformEventRouter.ts');
 const { generateLogMessage } = require('../../helpers/notification-test-utils');
 const { PlatformEvents } = require('../../../src/interfaces/PlatformEvents');
 const constants = require('../../../src/core/constants');

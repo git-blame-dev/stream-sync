@@ -155,7 +155,7 @@ describe('User-Facing Content Validation', () => {
             ];
 
             edgeCases.forEach(eventData => {
-                const { NotificationBuilder } = require('../../../src/utils/notification-builder.js');
+                const { NotificationBuilder } = require('../../../src/utils/notification-builder.ts');
                     expect(() => NotificationBuilder.build({
                         platform: 'twitch',
                         type: 'platform:gift',

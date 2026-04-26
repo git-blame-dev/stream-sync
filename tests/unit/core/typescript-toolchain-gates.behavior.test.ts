@@ -169,11 +169,23 @@ describe('TypeScript toolchain migration gates behavior', () => {
     it('keeps source javascript migration inventory explicit and measurable', () => {
         const sourceInventory = collectExecutableJavaScriptInventory(join(repoRoot, 'src'));
 
-        expect(sourceInventory.total).toBe(112);
-        expect(sourceInventory.withTypeScriptSiblingCount).toBe(87);
-        expect(sourceInventory.wrapperProxyCount).toBe(75);
-        expect(sourceInventory.withTypeScriptSiblingNonWrapperCount).toBe(12);
-        expect(sourceInventory.withoutTypeScriptSiblingCount).toBe(25);
+        expect(sourceInventory.total).toBe(0);
+        expect(sourceInventory.withTypeScriptSiblingCount).toBe(0);
+        expect(sourceInventory.wrapperProxyCount).toBe(0);
+        expect(sourceInventory.withTypeScriptSiblingNonWrapperCount).toBe(0);
+        expect(sourceInventory.withoutTypeScriptSiblingCount).toBe(0);
+    });
+
+    it('uses TypeScript bootstrap entrypoints without javascript proxy wrappers', () => {
+        expect(packageJson.main).toBe('src/bootstrap.ts');
+        expect(packageJson.scripts.start).toBe('tsx src/bootstrap.ts');
+        expect(packageJson.scripts['start:debug']).toBe('tsx src/bootstrap.ts --debug');
+        expect(packageJson.scripts['start:debug:build']).toBe('npm run build && tsx src/bootstrap.ts --debug');
+
+        expect(existsSync(join(repoRoot, 'src/bootstrap.ts'))).toBe(true);
+        expect(existsSync(join(repoRoot, 'src/main.ts'))).toBe(true);
+        expect(existsSync(join(repoRoot, 'src/bootstrap.js'))).toBe(false);
+        expect(existsSync(join(repoRoot, 'src/main.js'))).toBe(false);
     });
 
     it('removes first safe ts-proxy wrapper batch from source lane', () => {
@@ -193,6 +205,178 @@ describe('TypeScript toolchain migration gates behavior', () => {
         for (const wrapperPath of removedWrapperPaths) {
             expect(existsSync(join(repoRoot, wrapperPath))).toBe(false);
         }
+    });
+
+    it('removes second safe ts-proxy wrapper batch from source lane', () => {
+        const removedWrapperPaths = [
+            'src/auth/TwitchAuth.js',
+            'src/chat/commands.js',
+            'src/core/config-schema.js',
+            'src/core/constants.js',
+            'src/core/endpoints.js',
+            'src/core/http-config.js',
+            'src/core/logging.js',
+            'src/core/secrets.js',
+            'src/extractors/youtube-viewer-extractor.js',
+            'src/factories/innertube-factory.js',
+            'src/interfaces/PlatformEvents.js',
+            'src/runtime/AppRuntime.js'
+        ];
+
+        for (const wrapperPath of removedWrapperPaths) {
+            expect(existsSync(join(repoRoot, wrapperPath))).toBe(false);
+        }
+    });
+
+    it('removes third safe ts-proxy wrapper batch from source lane', () => {
+        const removedWrapperPaths = [
+            'src/platforms/index.js',
+            'src/platforms/twitch.js',
+            'src/platforms/twitch-eventsub.js',
+            'src/platforms/twitch/connections/eventsub-subscription-manager.js',
+            'src/platforms/twitch/connections/eventsub-subscriptions.js',
+            'src/platforms/twitch/connections/wiring.js',
+            'src/platforms/twitch/connections/ws-lifecycle.js',
+            'src/platforms/twitch/events/event-factory.js',
+            'src/platforms/youtube/connections/youtube-connection-factory.js',
+            'src/platforms/youtube/events/event-factory.js',
+            'src/platforms/youtube/events/event-normalizer.js',
+            'src/platforms/youtube/monetization/monetization-parser.js'
+        ];
+
+        for (const wrapperPath of removedWrapperPaths) {
+            expect(existsSync(join(repoRoot, wrapperPath))).toBe(false);
+        }
+    });
+
+    it('removes fourth safe ts-proxy wrapper batch from source lane', () => {
+        const removedWrapperPaths = [
+            'src/utils/cheermote-processor.js',
+            'src/utils/dependency-validator.js',
+            'src/utils/goal-tracker.js',
+            'src/utils/logger-utils.js',
+            'src/utils/message-normalization.js',
+            'src/utils/message-parts.js',
+            'src/utils/notification-template-interpolator.js',
+            'src/utils/platform-error-handler.js',
+            'src/utils/timeout-validator.js',
+            'src/utils/timeout-wrapper.js',
+            'src/utils/timestamp.js'
+        ];
+
+        for (const wrapperPath of removedWrapperPaths) {
+            expect(existsSync(join(repoRoot, wrapperPath))).toBe(false);
+        }
+    });
+
+    it('removes fifth safe ts-proxy wrapper batch from source lane', () => {
+        const removedWrapperPaths = [
+            'src/auth/oauth-flow.js',
+            'src/auth/twitch-oauth-scopes.js',
+            'src/core/config.js',
+            'src/obs/connection.js',
+            'src/obs/display-queue-effects.js',
+            'src/obs/display-queue.js',
+            'src/obs/goals.js',
+            'src/obs/sources.js',
+            'src/observers/obs-viewer-count-observer.js',
+            'src/platforms/youtube/events/event-router.js',
+            'src/platforms/youtube/streams/youtube-multistream-manager.js',
+            'src/platforms/youtube/youtube-author-extractor.js',
+            'src/platforms/youtube/youtube-message-extractor.js',
+            'src/platforms/youtube/youtube-username-normalizer.js',
+            'src/services/innertube-service.js',
+            'src/services/viewer-count-extraction-service.js',
+            'src/services/youtube-live-stream-service.js',
+            'src/services/youtube-stream-detection-service.js',
+            'src/utils/api-clients/twitch-api-client.js',
+            'src/utils/secret-manager.js',
+            'src/utils/token-store.js',
+            'src/utils/validation.js',
+            'src/utils/viewer-count-providers.js',
+            'src/utils/viewer-count.js',
+            'src/viewer-count/stream-status-handler.js'
+        ];
+
+        for (const wrapperPath of removedWrapperPaths) {
+            expect(existsSync(join(repoRoot, wrapperPath))).toBe(false);
+        }
+    });
+
+    it('removes final safe ts-proxy wrappers from source lane', () => {
+        const removedWrapperPaths = [
+            'src/obs/effects.js',
+            'src/obs/handcam-glow.js',
+            'src/obs/startup.js',
+            'src/observers/viewer-count-observer.js',
+            'src/platforms/twitch/events/event-router.js',
+            'src/services/ChatFileLoggingService.js',
+            'src/services/ChatNotificationRouter.js',
+            'src/services/CommandCooldownService.js',
+            'src/services/PlatformEventRouter.js',
+            'src/services/PlatformLifecycleService.js',
+            'src/services/SelfMessageDetectionService.js',
+            'src/services/UserTrackingService.js',
+            'src/utils/notification-builder.js'
+        ];
+
+        for (const wrapperPath of removedWrapperPaths) {
+            expect(existsSync(join(repoRoot, wrapperPath))).toBe(false);
+        }
+    });
+
+    it('migrates notification and timestamp utility cohort to typescript source files', () => {
+        const migratedModules = [
+            'src/constants/degraded-chat',
+            'src/utils/auth-constants',
+            'src/utils/platform-timestamp',
+            'src/notifications/notification-input-validator',
+            'src/notifications/notification-gate',
+            'src/notifications/notification-payload-builder'
+        ];
+
+        for (const modulePath of migratedModules) {
+            expect(existsSync(join(repoRoot, `${modulePath}.ts`))).toBe(true);
+            expect(existsSync(join(repoRoot, `${modulePath}.js`))).toBe(false);
+        }
+    });
+
+    it('migrates missing-fields and greeting utility cohort to typescript source files', () => {
+        const migratedModules = [
+            'src/utils/greeting-identity-key-normalizer',
+            'src/utils/missing-fields',
+            'src/notifications/aggregated-donation-transformer'
+        ];
+
+        for (const modulePath of migratedModules) {
+            expect(existsSync(join(repoRoot, `${modulePath}.ts`))).toBe(true);
+            expect(existsSync(join(repoRoot, `${modulePath}.js`))).toBe(false);
+        }
+    });
+
+    it('removes tiktok and service bridge wrappers after ts import rewrites', () => {
+        const removedWrapperPaths = [
+            'src/obs/health-checker.js',
+            'src/platforms/tiktok.js',
+            'src/platforms/tiktok-websocket-client.js',
+            'src/platforms/tiktok/connections/tiktok-connection-orchestrator.js',
+            'src/platforms/tiktok/events/event-factory.js',
+            'src/platforms/tiktok/events/event-normalizer.js',
+            'src/platforms/tiktok/events/event-router.js',
+            'src/platforms/tiktok/monetization/gift-aggregator.js',
+            'src/services/GracefulExitService.js',
+            'src/services/VFXCommandService.js',
+            'src/services/innertube-instance-manager.js'
+        ];
+
+        for (const wrapperPath of removedWrapperPaths) {
+            expect(existsSync(join(repoRoot, wrapperPath))).toBe(false);
+        }
+    });
+
+    it('removes youtube parser adapter javascript twin after typescript parity', () => {
+        expect(existsSync(join(repoRoot, 'src/utils/youtube-parser-log-adapter.ts'))).toBe(true);
+        expect(existsSync(join(repoRoot, 'src/utils/youtube-parser-log-adapter.js'))).toBe(false);
     });
 
     it('migrates first js-only utility batch to typescript source files', () => {
@@ -252,6 +436,32 @@ describe('TypeScript toolchain migration gates behavior', () => {
         ];
 
         for (const modulePath of migratedUtilities) {
+            expect(existsSync(join(repoRoot, `${modulePath}.ts`))).toBe(true);
+            expect(existsSync(join(repoRoot, `${modulePath}.js`))).toBe(false);
+        }
+    });
+
+    it('migrates final phase 16 runtime cohort to typescript source files', () => {
+        const migratedModules = [
+            'src/utils/dependency-factory',
+            'src/platforms/youtube',
+            'src/notifications/NotificationManager',
+            'src/utils/message-tts-handler',
+            'src/platforms/youtube/youtube-connection-manager',
+            'src/platforms/youtube/youtube-user-agent-manager',
+            'src/utils/config-validator',
+            'src/services/tiktok-gift-animation/resolver',
+            'src/utils/platform-connection-factory',
+            'src/utils/text-processing',
+            'src/utils/retry-system',
+            'src/utils/enhanced-http-client',
+            'src/utils/logger-resolver',
+            'src/platforms/streamelements',
+            'src/utils/global-command-cooldown',
+            'src/utils/spam-detection'
+        ];
+
+        for (const modulePath of migratedModules) {
             expect(existsSync(join(repoRoot, `${modulePath}.ts`))).toBe(true);
             expect(existsSync(join(repoRoot, `${modulePath}.js`))).toBe(false);
         }
@@ -1957,6 +2167,45 @@ describe('TypeScript toolchain migration gates behavior', () => {
         }
     });
 
+    it('keeps helper behavior consumer tests free of top-level commonjs and transitional exports', () => {
+        const helperBehaviorTestPaths = [
+            'tests/helpers/assertion-helpers.behavior.test.ts',
+            'tests/helpers/behavior-validation.behavior.test.ts',
+            'tests/helpers/display-queue-test-factory.behavior.test.ts',
+            'tests/helpers/e2e-testing-infrastructure.behavior.test.ts',
+            'tests/helpers/event-driven-testing.behavior.test.ts',
+            'tests/helpers/event-driven-testing.test.ts',
+            'tests/helpers/mock-factories.behavior.test.ts',
+            'tests/helpers/mock-lifecycle.behavior.test.ts',
+            'tests/helpers/mock-validation.behavior.test.ts',
+            'tests/helpers/notification-test-utils.behavior.test.ts',
+            'tests/helpers/platform-fixture-helpers.behavior.test.ts',
+            'tests/helpers/test-database.behavior.test.ts',
+            'tests/helpers/test-logger.behavior.test.ts',
+            'tests/helpers/test-setup.behavior.test.ts'
+        ];
+
+        for (const testPath of helperBehaviorTestPaths) {
+            const content = readFileSync(join(repoRoot, testPath), 'utf8');
+
+            expect(content).not.toContain("require('bun:test')");
+            expect(content).not.toMatch(/^\s*(?:const|let|var)\s+.+?=\s*require\s*\(/m);
+            expect(content).not.toContain('export {};');
+        }
+
+        const setupPaths = [
+            'tests/setup/bun.setup.ts',
+            'tests/setup/bun.prerun.ts'
+        ];
+
+        for (const setupPath of setupPaths) {
+            const content = readFileSync(join(repoRoot, setupPath), 'utf8');
+
+            expect(content).not.toContain("require('bun:test')");
+            expect(content).not.toContain('export {};');
+        }
+    });
+
     it('keeps selected platform/chat/gift unit test modules free of top-level commonjs and transitional exports', () => {
         const testPaths = [
             'tests/unit/platforms/youtube/events/event-router.test.ts',
@@ -2268,6 +2517,26 @@ describe('TypeScript toolchain migration gates behavior', () => {
         }
     });
 
+    it('keeps migrated stream-elements and gift-animation strictness contracts explicit and narrowed', () => {
+        const modulePaths = [
+            'src/services/tiktok-gift-animation/resolver.ts',
+            'src/platforms/streamelements.ts',
+            'src/utils/config-validator.ts',
+            'src/notifications/NotificationManager.ts',
+            'src/platforms/youtube.ts',
+            'src/utils/dependency-factory.ts'
+        ];
+
+        for (const modulePath of modulePaths) {
+            const content = readFileSync(join(repoRoot, modulePath), 'utf8');
+
+            expect(content).not.toContain('// @ts-nocheck');
+            expect(content).not.toContain(': any');
+            expect(content).not.toContain('UnknownRecord');
+            expect(content).not.toContain('as unknown as');
+        }
+    });
+
     it('keeps messaging, lifecycle, and gui strictness contracts explicit and narrowed', () => {
         const modulePaths = [
             'src/chat/commands.ts',
@@ -2490,18 +2759,18 @@ describe('TypeScript toolchain migration gates behavior', () => {
                     "const nodeRequire = createRequire(import.meta.url);",
                     "nodeRequire('./core')",
                     "nodeRequire('./core/constants')",
-                    "from './services/CommandCooldownService.js'",
-                    "from './services/GracefulExitService.js'",
-                    "from './services/PlatformLifecycleService.js'",
-                    "from './services/VFXCommandService.js'"
+                    "from './services/CommandCooldownService.ts'",
+                    "from './services/GracefulExitService.ts'",
+                    "from './services/PlatformLifecycleService.ts'",
+                    "from './services/VFXCommandService.ts'"
                 ]
             },
             {
                 path: 'src/runtime/AppRuntime.ts',
                 forbidden: [
-                    "from '../services/ChatNotificationRouter.js'",
-                    "from '../services/PlatformEventRouter.js'",
-                    "from '../services/VFXCommandService.js'"
+                    "from '../services/ChatNotificationRouter.ts'",
+                    "from '../services/PlatformEventRouter.ts'",
+                    "from '../services/VFXCommandService.ts'"
                 ]
             },
             {

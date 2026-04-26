@@ -1,5 +1,5 @@
 import { NOTIFICATION_CONFIGS, PRIORITY_LEVELS } from '../../src/core/constants';
-import NotificationManager from '../../src/notifications/NotificationManager.js';
+import NotificationManager from '../../src/notifications/NotificationManager';
 import { AppRuntime } from '../../src/runtime/AppRuntime';
 import { ChatNotificationRouter } from '../../src/services/ChatNotificationRouter';
 import { PlatformEventRouter } from '../../src/services/PlatformEventRouter';
