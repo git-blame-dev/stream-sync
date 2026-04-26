@@ -1,15 +1,15 @@
-const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-const testClock = require('./test-clock');
-const { resetTestIds } = require('./test-id');
-const {
+import {
     TestDataStore,
     TestStateManager,
     TestEnvironment,
     createTestDataFactory,
     waitForCondition,
     createMockTimer
-} = require('./test-database');
+} from './test-database';
+import testClock from './test-clock';
+import { resetTestIds } from './test-id';
 
 describe('test-database behavior', () => {
     beforeEach(() => {

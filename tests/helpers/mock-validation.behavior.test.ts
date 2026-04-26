@@ -1,8 +1,7 @@
-const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-const testClock = require('./test-clock');
-const { createMockFn } = require('./bun-mock-utils');
-const {
+import { createMockFn } from './bun-mock-utils';
+import {
     API_CONTRACTS,
     validateMockContract,
     validateNotificationData,
@@ -12,7 +11,8 @@ const {
     setupMockValidation,
     toMatchContract,
     MockContractMonitor
-} = require('./mock-validation');
+} from './mock-validation';
+import testClock from './test-clock';
 
 const createNotificationDispatcherMock = (overrides = {}) => ({
     _mockType: 'NotificationDispatcher',

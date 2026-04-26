@@ -1,8 +1,8 @@
-const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
-const EventEmitter = require('events');
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import EventEmitter from 'node:events';
 
-const testClock = require('./test-clock');
-const {
+import testClock from './test-clock';
+import {
     waitForEvent,
     waitFor,
     waitForMultipleEvents,
@@ -13,7 +13,7 @@ const {
     expectNoTechnicalArtifacts,
     TimeSimulator,
     NetworkEventSimulator
-} = require('./event-driven-testing');
+} from './event-driven-testing';
 
 describe('event-driven-testing behavior', () => {
     beforeEach(() => {

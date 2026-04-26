@@ -1,11 +1,11 @@
-const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-const testClock = require('./test-clock');
-const {
+import testClock from './test-clock';
+import {
     WebSocketMessageSimulator,
     CrossPlatformIntegrationTester,
     UserJourneyValidator
-} = require('./e2e-testing-infrastructure');
+} from './e2e-testing-infrastructure';
 
 const createNoOpLogger = () => ({
     debug: () => {},

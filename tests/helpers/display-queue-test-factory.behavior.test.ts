@@ -1,13 +1,13 @@
-const { describe, it, expect } = require('bun:test');
+import { describe, expect, it } from 'bun:test';
 
-const {
+import {
     createMockOBSForTesting,
     createTestConfig,
     createRealSourcesManager,
     createRealGoalTracker,
     createRealGoalsManager,
     createDisplayQueueDependencies
-} = require('./display-queue-test-factory');
+} from './display-queue-test-factory';
 
 describe('display-queue-test-factory behavior', () => {
     it('creates a mock OBS dependency with callable operations', async () => {

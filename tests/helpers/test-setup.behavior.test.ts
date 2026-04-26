@@ -1,8 +1,7 @@
-const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-const testClock = require('./test-clock');
-const { createMockFn } = require('./bun-mock-utils');
-const {
+import { createMockFn } from './bun-mock-utils';
+import {
     initializeTestLogging,
     setupAutomatedCleanup,
     validateMockUsage,
@@ -21,7 +20,8 @@ const {
     TEST_TIMEOUTS,
     TEST_USERNAMES,
     TEST_COMMANDS
-} = require('./test-setup');
+} from './test-setup';
+import testClock from './test-clock';
 
 describe('test-setup helper behavior', () => {
     beforeEach(() => {

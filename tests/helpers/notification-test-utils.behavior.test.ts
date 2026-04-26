@@ -1,6 +1,6 @@
-const { describe, it, expect } = require('bun:test');
+import { describe, expect, it } from 'bun:test';
 
-const {
+import {
     createNotificationData,
     generateLogMessage,
     generateNotificationString,
@@ -13,7 +13,7 @@ const {
     createNotificationTestSuite,
     testUsernameSanitization,
     interpolateTemplate
-} = require('./notification-test-utils');
+} from './notification-test-utils';
 
 createNotificationTestSuite('platform:follow', [
     {
