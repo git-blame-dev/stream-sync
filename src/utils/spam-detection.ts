@@ -55,6 +55,13 @@ type UserSpamTracker = {
     platform: string;
 };
 
+type PlatformConfig = {
+    enabled: boolean;
+    lowValueThreshold: number;
+    detectionWindow: number;
+    maxIndividualNotifications: number;
+};
+
 class SpamDetectionConfig {
     logger: SpamLogger;
     enabled: boolean;
@@ -88,18 +95,30 @@ class SpamDetectionConfig {
         this.logConfiguration();
     }
 
-    getPlatformConfig(platform = 'unknown') {
+    getPlatformConfig(platform = 'unknown'): PlatformConfig {
         const normalizedPlatform = platform.toLowerCase();
-        const platformEnabledKey = `${normalizedPlatform}Enabled` as const;
-        const platformThresholdKey = `${normalizedPlatform}LowValueThreshold` as const;
+        const platformSettings: Record<string, { enabled: boolean; lowValueThreshold: number }> = {
+            tiktok: {
+                enabled: this.tiktokEnabled,
+                lowValueThreshold: this.tiktokLowValueThreshold
+            },
+            twitch: {
+                enabled: this.twitchEnabled,
+                lowValueThreshold: this.twitchLowValueThreshold
+            },
+            youtube: {
+                enabled: this.youtubeEnabled,
+                lowValueThreshold: this.youtubeLowValueThreshold
+            }
+        };
 
-        const dynamicConfig = this as unknown as Record<string, unknown>;
-        const platformEnabled = (dynamicConfig[platformEnabledKey] as boolean | undefined) ?? this.enabled;
-        const platformThreshold = (dynamicConfig[platformThresholdKey] as number | undefined) ?? this.lowValueThreshold;
+        const selectedPlatformSettings = platformSettings[normalizedPlatform];
+        const enabled = selectedPlatformSettings ? selectedPlatformSettings.enabled : this.enabled;
+        const lowValueThreshold = selectedPlatformSettings ? selectedPlatformSettings.lowValueThreshold : this.lowValueThreshold;
 
         return {
-            enabled: platformEnabled,
-            lowValueThreshold: platformThreshold,
+            enabled,
+            lowValueThreshold,
             detectionWindow: this.detectionWindow,
             maxIndividualNotifications: this.maxIndividualNotifications
         };
@@ -132,7 +151,7 @@ class DonationSpamDetection {
 
         this.logger = dependencies.logger;
         this.errorHandler = createPlatformErrorHandler(this.logger, 'spam-detection');
-        this.onAggregatedDonation = dependencies.onAggregatedDonation || null;
+        this.onAggregatedDonation = dependencies.onAggregatedDonation ?? null;
         this.config = config;
         this.cleanupInterval = null;
         this.donationSpamTracker = {};

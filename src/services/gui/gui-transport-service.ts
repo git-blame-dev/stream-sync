@@ -21,7 +21,7 @@ type GuiTransportEventBus = {
 type DisplayRowMapperInput = Parameters<ReturnType<typeof createEventToGuiContractMapper>['mapDisplayRow']>[0];
 
 type GuiTransportMapper = {
-    mapDisplayRow: (row: DisplayRowMapperInput) => Promise<unknown | null>;
+    mapDisplayRow: (row: DisplayRowMapperInput) => Promise<TransportRecord | null>;
 };
 
 type GuiTransportOptions = {
@@ -31,7 +31,7 @@ type GuiTransportOptions = {
     mapper?: GuiTransportMapper;
     createServer?: typeof http.createServer;
     assetsRoot?: string;
-    runtimeAssetRoots?: unknown[];
+    runtimeAssetRoots?: readonly string[];
 };
 
 type RuntimeAssetRecord = {
@@ -58,9 +58,9 @@ function createGuiTransportService(options: GuiTransportOptions = {}) {
     const guiConfig = toTransportRecord(config.gui);
     const logger = options.logger;
     const eventBus = options.eventBus;
-    const mapper = options.mapper || createEventToGuiContractMapper({
+    const mapper = options.mapper ?? (createEventToGuiContractMapper({
         config: config as { gui?: Record<string, unknown> }
-    });
+    }) as GuiTransportMapper);
     const createServer = typeof options.createServer === 'function'
         ? options.createServer
         : http.createServer;
@@ -82,9 +82,9 @@ function createGuiTransportService(options: GuiTransportOptions = {}) {
         ? options.runtimeAssetRoots
         : [GIFT_ANIMATION_CACHE_DIR];
     const normalizedRuntimeAssetRoots = runtimeAssetRoots
-        .map((root) => (typeof root === 'string' ? root.trim() : ''))
-        .filter((root: string) => root.length > 0)
-        .map((root: string) => path.resolve(root));
+        .map((root) => root.trim())
+        .filter((root) => root.length > 0)
+        .map((root) => path.resolve(root));
 
     let server: Server | null = null;
     let active = false;

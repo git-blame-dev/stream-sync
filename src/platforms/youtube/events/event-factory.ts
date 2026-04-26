@@ -3,13 +3,12 @@ import { getValidMessageParts, normalizeBadgeImages } from '../../../utils/messa
 import { PlatformEvents } from '../../../interfaces/PlatformEvents';
 import { DEFAULT_AVATAR_URL } from '../../../constants/avatar';
 import { UNKNOWN_CHAT_MESSAGE, UNKNOWN_CHAT_USERNAME } from '../../../constants/degraded-chat';
+import { asRecord, type UnknownRecord } from '../../../utils/record-contracts';
 import {
-    allowsYouTubeJewelsMissingUserId,
-    getMissingFields,
-    mergeMissingFieldsMetadata
+allowsYouTubeJewelsMissingUserId,
+getMissingFields,
+mergeMissingFieldsMetadata
 } from '../../../utils/missing-fields';
-
-type UnknownRecord = Record<string, unknown>;
 
 type ValidMessagePart =
     | { type: 'text'; text: string }
@@ -65,8 +64,9 @@ function createYouTubeEventFactory(options: YouTubeEventFactoryOptions = {}) {
             return data.message;
         }
 
-        if (data.message && typeof data.message === 'object' && typeof (data.message as UnknownRecord).text === 'string') {
-            return (data.message as UnknownRecord).text as string;
+        const message = asRecord(data.message);
+        if (typeof message?.text === 'string') {
+            return message.text;
         }
 
         return '';
@@ -91,7 +91,7 @@ function createYouTubeEventFactory(options: YouTubeEventFactoryOptions = {}) {
             });
     };
 
-    const getTimestamp = (data: UnknownRecord, errorMessage: string) => ensureIsoTimestamp(data.timestamp, errorMessage);
+    const getTimestamp = (data: unknown, errorMessage: string) => ensureIsoTimestamp(asRecord(data)?.timestamp, errorMessage);
     const resolveAvatarUrl = (data: UnknownRecord) => {
         const avatarUrl = normalizeText(data.avatarUrl);
         if (avatarUrl) {
@@ -107,11 +107,7 @@ function createYouTubeEventFactory(options: YouTubeEventFactoryOptions = {}) {
     });
 
     const normalizeContext = (context: unknown): UnknownRecord => {
-        if (!context || typeof context !== 'object' || Array.isArray(context)) {
-            return {};
-        }
-
-        return context as UnknownRecord;
+        return asRecord(context) || {};
     };
 
     const normalizeRecoverable = (recoverable: unknown): boolean => (typeof recoverable === 'boolean' ? recoverable : true);
@@ -128,13 +124,14 @@ function createYouTubeEventFactory(options: YouTubeEventFactoryOptions = {}) {
             };
         },
 
-        createChatMessageEvent: (data: UnknownRecord = {}) => {
-            const dataMetadata = data?.metadata && typeof data.metadata === 'object'
-                ? data.metadata
+        createChatMessageEvent: (data: unknown = {}) => {
+            const payload = asRecord(data) || {};
+            const dataMetadata = asRecord(payload.metadata)
+                ? payload.metadata
                 : {};
             const missingFields = getMissingFields(dataMetadata);
             const isMissingField = (fieldName: string) => missingFields.includes(fieldName);
-            const rawTimestamp = normalizeText(data.timestamp);
+            const rawTimestamp = normalizeText(payload.timestamp);
             const timestamp = rawTimestamp && isIsoTimestamp(rawTimestamp)
                 ? rawTimestamp
                 : undefined;
@@ -142,7 +139,7 @@ function createYouTubeEventFactory(options: YouTubeEventFactoryOptions = {}) {
                 throw new Error('YouTube chat message event requires timestamp');
             }
 
-            const identity = normalizeIdentity(data, { allowMissing: true });
+            const identity = normalizeIdentity(payload, { allowMissing: true });
             if (!identity.username && !isMissingField('username')) {
                 throw new Error('YouTube event payload requires userId and username');
             }
@@ -150,13 +147,13 @@ function createYouTubeEventFactory(options: YouTubeEventFactoryOptions = {}) {
                 throw new Error('YouTube event payload requires userId and username');
             }
 
-            const avatarUrl = resolveAvatarUrl(data);
-            const messageText = normalizeText(resolveMessageText(data));
-            const messageParts = resolveMessageParts(data);
+            const avatarUrl = resolveAvatarUrl(payload);
+            const messageText = normalizeText(resolveMessageText(payload));
+            const messageParts = resolveMessageParts(payload);
             if (!messageText && messageParts.length === 0 && !isMissingField('message')) {
                 throw new Error('YouTube chat message event requires message text');
             }
-            const badgeImages = normalizeBadgeImages(data.badgeImages);
+            const badgeImages = normalizeBadgeImages(payload.badgeImages);
             const message: UnknownRecord = {
                 text: messageText || (isMissingField('message') ? UNKNOWN_CHAT_MESSAGE : '')
             };
@@ -165,10 +162,10 @@ function createYouTubeEventFactory(options: YouTubeEventFactoryOptions = {}) {
             }
 
             const metadata = mergeMissingFieldsMetadata(buildEventMetadata({
-                videoId: data.videoId,
-                isMod: data.isMod || false,
-                isOwner: data.isOwner || false,
-                isVerified: data.isVerified || false
+                videoId: payload.videoId,
+                isMod: payload.isMod || false,
+                isOwner: payload.isOwner || false,
+                isVerified: payload.isVerified || false
             }), missingFields, {
                 ...(missingFields.length > 0 && timestamp ? { sourceTimestamp: timestamp } : {})
             });
@@ -181,9 +178,9 @@ function createYouTubeEventFactory(options: YouTubeEventFactoryOptions = {}) {
                 avatarUrl,
                 message,
                 ...(timestamp ? { timestamp } : {}),
-                isMod: !!data.isMod,
-                isPaypiggy: data.isPaypiggy === true,
-                isBroadcaster: !!data.isBroadcaster,
+                isMod: !!payload.isMod,
+                isPaypiggy: payload.isPaypiggy === true,
+                isBroadcaster: !!payload.isBroadcaster,
                 metadata
             };
 
@@ -364,9 +361,10 @@ function createYouTubeEventFactory(options: YouTubeEventFactoryOptions = {}) {
             return result;
         },
 
-        createErrorEvent: (data: UnknownRecord = {}) => {
-            const timestamp = getTimestamp(data, 'YouTube error event requires timestamp');
-            const error = data.error && typeof data.error === 'object' ? data.error as UnknownRecord : {};
+        createErrorEvent: (data: unknown = {}) => {
+            const payload = asRecord(data) || {};
+            const timestamp = getTimestamp(payload, 'YouTube error event requires timestamp');
+            const error = asRecord(payload.error) || {};
             return {
                 type: PlatformEvents.ERROR,
                 platform: platformName,
@@ -374,11 +372,11 @@ function createYouTubeEventFactory(options: YouTubeEventFactoryOptions = {}) {
                     message: typeof error.message === 'string' ? error.message : undefined,
                     name: typeof error.name === 'string' ? error.name : undefined
                 },
-                context: normalizeContext(data.context),
-                recoverable: normalizeRecoverable(data.recoverable),
+                context: normalizeContext(payload.context),
+                recoverable: normalizeRecoverable(payload.recoverable),
                 timestamp,
                 metadata: buildEventMetadata({
-                    videoId: data.videoId
+                    videoId: payload.videoId
                 })
             };
         }

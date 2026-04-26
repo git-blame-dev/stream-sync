@@ -7,31 +7,57 @@ type ConnectionLogger = {
     warn: (message: string, source?: string) => void;
 };
 
+type ConnectionState = 'connecting' | 'connected' | 'ready' | 'disconnecting' | 'disconnected' | 'error';
+
+type ManagedConnection = {
+    stop?: () => Promise<void>;
+    disconnect?: () => Promise<void>;
+    [key: string]: unknown;
+};
+
+type ConnectionConfig = {
+    enableAPI?: boolean;
+    streamDetectionMethod?: string;
+    viewerCountMethod?: string;
+    [key: string]: unknown;
+};
+
 type ConnectionData = {
-    connection: unknown;
-    state: string;
+    connection: ManagedConnection | null;
+    state: ConnectionState;
     metadata: Record<string, unknown>;
     ready?: boolean;
 };
 
-type ConnectionFactory = (videoId: string) => Promise<unknown>;
+type ConnectionFactory = (videoId: string) => Promise<ManagedConnection>;
+
+type ConnectionStates = {
+    CONNECTING: ConnectionState;
+    CONNECTED: ConnectionState;
+    READY: ConnectionState;
+    DISCONNECTING: ConnectionState;
+    DISCONNECTED: ConnectionState;
+    ERROR: ConnectionState;
+};
+
+type ConnectionStateSummary = {
+    totalConnections: number;
+    readyConnections: number;
+    activeVideoIds: string[];
+    hasAnyReady: boolean;
+};
+
+type ConnectionStatus = ConnectionData & { videoId: string; ready: boolean };
 
 class YouTubeConnectionManager {
     logger: ConnectionLogger;
-    config: Record<string, unknown>;
+    config: ConnectionConfig;
     errorHandler: ReturnType<typeof createPlatformErrorHandler>;
     connections: Map<string, ConnectionData>;
-    CONNECTION_STATES: {
-        CONNECTING: string;
-        CONNECTED: string;
-        READY: string;
-        DISCONNECTING: string;
-        DISCONNECTED: string;
-        ERROR: string;
-    };
+    CONNECTION_STATES: ConnectionStates;
     operationLocks: Set<string>;
 
-    constructor(logger: ConnectionLogger, options: { config?: Record<string, unknown> } = {}) {
+    constructor(logger: ConnectionLogger, options: { config?: ConnectionConfig } = {}) {
         this.logger = logger;
         this.config = options.config || {};
         this.errorHandler = createPlatformErrorHandler(this.logger, 'youtube-connection');
@@ -117,7 +143,12 @@ class YouTubeConnectionManager {
                 return false;
             }
 
-            const connectionData = this.connections.get(videoId) as ConnectionData;
+            const connectionData = this.connections.get(videoId);
+            if (!connectionData) {
+                this.logger.warn(`No connection to disconnect for ${videoId}`, 'youtube');
+                return false;
+            }
+
             this.logger.info(`Disconnecting from ${videoId} (reason: ${reason})`, 'youtube');
 
             connectionData.state = this.CONNECTION_STATES.DISCONNECTING;
@@ -145,7 +176,7 @@ class YouTubeConnectionManager {
 
         const connectionData = this.connections.get(videoId);
         try {
-            await this.shutdownConnection(connectionData ? connectionData.connection : null, videoId);
+            await this.shutdownConnection(connectionData?.connection ?? null, videoId);
         } catch (error) {
             this.handleConnectionError(`Error removing connection for video ${videoId}`, error, { videoId });
         } finally {
@@ -188,7 +219,7 @@ class YouTubeConnectionManager {
         return this.connections.has(videoId);
     }
 
-    getConnection(videoId: string): unknown {
+    getConnection(videoId: string): ManagedConnection | null | undefined {
         const connectionData = this.connections.get(videoId);
         return connectionData ? connectionData.connection : undefined;
     }
@@ -211,7 +242,7 @@ class YouTubeConnectionManager {
         return Array.from(this.connections.keys());
     }
 
-    getAllConnections(): unknown[] {
+    getAllConnections(): Array<ManagedConnection | null> {
         return Array.from(this.connections.values()).map((connectionData) => connectionData.connection);
     }
 
@@ -227,7 +258,7 @@ class YouTubeConnectionManager {
         }
 
         for (const [videoId, connectionData] of this.connections) {
-            void this.shutdownConnection(connectionData ? connectionData.connection : null, videoId).catch((error) => {
+            void this.shutdownConnection(connectionData.connection, videoId).catch((error) => {
                 this.handleConnectionError(`Error removing connection for video ${videoId}`, error, { videoId });
             });
         }
@@ -236,7 +267,7 @@ class YouTubeConnectionManager {
         this.logger.info(`Cleaned up all ${count} connections`, 'youtube');
     }
 
-    getConnectionState() {
+    getConnectionState(): ConnectionStateSummary {
         return {
             totalConnections: this.getConnectionCount(),
             readyConnections: this.getReadyConnectionCount(),
@@ -245,11 +276,11 @@ class YouTubeConnectionManager {
         };
     }
 
-    getStats() {
+    getStats(): ConnectionStateSummary {
         return this.getConnectionState();
     }
 
-    getConnectionStatus(videoId: string): (ConnectionData & { videoId: string }) | null {
+    getConnectionStatus(videoId: string): ConnectionStatus | null {
         const connection = this.connections.get(videoId);
         if (!connection) {
             return null;
@@ -278,27 +309,22 @@ class YouTubeConnectionManager {
         return this.config.streamDetectionMethod === 'scraping';
     }
 
-    private async shutdownConnection(connection: unknown, videoId: string | null): Promise<void> {
-        if (!connection || typeof connection !== 'object') {
+    private async shutdownConnection(connection: ManagedConnection | null | undefined, videoId: string | null): Promise<void> {
+        if (!connection) {
             return;
         }
 
-        const maybeConnection = connection as {
-            stop?: () => Promise<void>;
-            disconnect?: () => Promise<void>;
-        };
-
         try {
-            if (typeof maybeConnection.stop === 'function') {
-                await maybeConnection.stop();
+            if (typeof connection.stop === 'function') {
+                await connection.stop();
             }
         } catch (error) {
             this.handleConnectionError(`Error stopping connection for ${videoId || 'unknown'}`, error, { videoId });
         }
 
-        if (typeof maybeConnection.disconnect === 'function') {
+        if (typeof connection.disconnect === 'function') {
             try {
-                await maybeConnection.disconnect();
+                await connection.disconnect();
             } catch (error) {
                 this.handleConnectionError(`Error disconnecting connection for ${videoId || 'unknown'}`, error, { videoId });
                 throw error;

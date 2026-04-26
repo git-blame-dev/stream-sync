@@ -1,14 +1,21 @@
-
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
-const { createMockFn, clearAllMocks } = require('../../helpers/bun-mock-utils');
-const testClock = require('../../helpers/test-clock');
-const { waitForDelay } = require('../../helpers/time-utils');
+import { createMockFn, clearAllMocks } from '../../helpers/bun-mock-utils';
+import testClock from '../../helpers/test-clock';
+import { waitForDelay } from '../../helpers/time-utils';
 
-const { EventBus, createEventBus } = require('../../../src/core/EventBus.ts');
-const { PlatformEvents } = require('../../../src/interfaces/PlatformEvents.ts');
+import { EventBus, createEventBus } from '../../../src/core/EventBus.ts';
+import { PlatformEvents } from '../../../src/interfaces/PlatformEvents.ts';
+
+type AssertTrue<T extends true> = T;
+type IsExact<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2)
+  ? ((<T>() => T extends B ? 1 : 2) extends (<T>() => T extends A ? 1 : 2) ? true : false)
+  : false;
+type _EventBusSetDebugEnabledType = AssertTrue<
+    IsExact<Parameters<EventBus['setDebugEnabled']>[0], boolean>
+>;
 
 describe('EventBus', () => {
-    let eventBus: any;
+    let eventBus: EventBus;
     
     beforeEach(() => {
         clearAllMocks();

@@ -1,7 +1,7 @@
 import { YOUTUBE } from '../../../core/endpoints';
 import { PlatformEvents } from '../../../interfaces/PlatformEvents';
-
-type UnknownRecord = Record<string, unknown>;
+import type { UnknownRecord } from '../../../utils/record-contracts';
+type PlatformEventType = Extract<(typeof PlatformEvents)[keyof typeof PlatformEvents], string>;
 
 interface LoggerLike {
     debug: (message: string, scope: string) => void;
@@ -49,7 +49,7 @@ interface YouTubeMultiStreamPlatform {
     _handleProcessingError: (message: string, error: unknown, category: string) => void;
     _handleConnectionErrorLogging: (message: string, error: unknown, category: string) => void;
     _handleError: (error: unknown, context: string) => void;
-    _emitPlatformEvent: (type: string, payload: UnknownRecord) => void;
+    _emitPlatformEvent: (type: PlatformEventType, payload: UnknownRecord) => void;
 }
 
 interface MultiStreamManagerOptions {
@@ -63,11 +63,20 @@ interface CheckMultiStreamOptions {
     throwOnError?: boolean;
 }
 
+interface YouTubeMultiStreamManager {
+    startMonitoring: () => Promise<void>;
+    checkMultiStream: (options?: CheckMultiStreamOptions) => Promise<void>;
+    requestImmediateRefresh: (context?: UnknownRecord) => Promise<void>;
+    isCheckInProgress: () => boolean;
+    checkStreamShortageAndWarn: (availableCount: number, maxStreams: number) => void;
+    logStatus: (includeDetails?: boolean, includeActiveStreamsList?: boolean) => void;
+}
+
 const toErrorMessage = (error: unknown): string => (
     error instanceof Error ? error.message : String(error)
 );
 
-function createYouTubeMultiStreamManager(options: MultiStreamManagerOptions = {}) {
+function createYouTubeMultiStreamManager(options: MultiStreamManagerOptions = {}): YouTubeMultiStreamManager {
     const {
         platform,
         safeSetInterval,

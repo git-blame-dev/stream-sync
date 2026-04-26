@@ -5,22 +5,20 @@ export {};
 describe('logger-resolver behavior', () => {
     it('preserves prototype methods like console on class-based loggers', () => {
         class TestLogger {
-            constructor() {
-                this.debugCalls = 0;
-                this.consoleCalls = 0;
-            }
+            debugCalls = 0;
+            consoleCalls = 0;
 
-            debug() {
+            debug(_message: unknown): void {
                 this.debugCalls += 1;
             }
 
-            info() {}
+            info(): void {}
 
-            warn() {}
+            warn(): void {}
 
-            error() {}
+            error(): void {}
 
-            console() {
+            console(_message: unknown, _source?: string): void {
                 this.consoleCalls += 1;
             }
         }

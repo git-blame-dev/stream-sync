@@ -17,30 +17,42 @@ type PlatformDependencies = {
     [key: string]: unknown;
 };
 
+type EmitterMethodName =
+    | 'on'
+    | 'once'
+    | 'off'
+    | 'emit'
+    | 'removeListener'
+    | 'removeAllListeners'
+    | 'prependListener'
+    | 'prependOnceListener'
+    | 'listenerCount'
+    | 'eventNames';
+
+type EmitterSurface = Record<EmitterMethodName, (...args: unknown[]) => unknown>;
+type MutableConnection = Record<string, unknown> & Partial<EmitterSurface>;
+
+function isCallable(value: unknown): value is (...args: unknown[]) => unknown {
+    return typeof value === 'function';
+}
+
 function ensureEmitterInterface(connection: unknown, logger: FactoryLogger, platform = 'tiktok'): unknown {
     if (!connection || typeof connection !== 'object') {
         return connection;
     }
 
-    const mutableConnection = connection as Record<string, unknown>;
+    const mutableConnection = connection as MutableConnection;
     const hasEmitterSurface =
-        typeof mutableConnection.on === 'function'
-        && typeof mutableConnection.emit === 'function'
-        && typeof mutableConnection.removeAllListeners === 'function';
+        isCallable(mutableConnection.on)
+        && isCallable(mutableConnection.emit)
+        && isCallable(mutableConnection.removeAllListeners);
 
     if (hasEmitterSurface) {
         return mutableConnection;
     }
 
     const emitter = new EventEmitter();
-    const bind = (method: string) => {
-        const emitterMethod = (emitter as unknown as Record<string, unknown>)[method];
-        if (typeof emitterMethod === 'function') {
-            mutableConnection[method] = (emitterMethod as Function).bind(emitter);
-        }
-    };
-
-    [
+    const emitterMethods: EmitterMethodName[] = [
         'on',
         'once',
         'off',
@@ -51,10 +63,17 @@ function ensureEmitterInterface(connection: unknown, logger: FactoryLogger, plat
         'prependOnceListener',
         'listenerCount',
         'eventNames'
-    ].forEach(bind);
+    ];
 
-    if (!mutableConnection.off && typeof mutableConnection.removeListener === 'function') {
-        mutableConnection.off = (mutableConnection.removeListener as Function).bind(mutableConnection);
+    for (const method of emitterMethods) {
+        const emitterMethod = emitter[method];
+        if (isCallable(emitterMethod)) {
+            mutableConnection[method] = emitterMethod.bind(emitter);
+        }
+    }
+
+    if (!mutableConnection.off && isCallable(mutableConnection.removeListener)) {
+        mutableConnection.off = mutableConnection.removeListener.bind(mutableConnection);
     }
 
     logger?.debug(`Hardened ${platform} connection with EventEmitter wrapper`, platform);
@@ -187,12 +206,12 @@ class PlatformConnectionFactory {
         }
     }
 
-    buildTikTokConnectionConfig(_config: Record<string, unknown>, dependencies: PlatformDependencies): Record<string, unknown> {
+    buildTikTokConnectionConfig(_config: Record<string, unknown>, dependencies: PlatformDependencies = {}): Record<string, unknown> {
         const apiKey = secrets.tiktok.apiKey || null;
 
         const baseConfig = {
             apiKey,
-            WebSocketCtor: dependencies?.WebSocketCtor
+            WebSocketCtor: dependencies.WebSocketCtor
         };
 
         if (apiKey) {

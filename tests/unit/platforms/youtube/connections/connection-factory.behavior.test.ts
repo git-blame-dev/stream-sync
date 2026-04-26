@@ -1,10 +1,37 @@
 const { describe, test, expect } = require('bun:test');
+export {};
 const { createMockFn } = require('../../../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../../../helpers/mock-factories');
 
 const { createYouTubeConnectionFactory } = require('../../../../../src/platforms/youtube/connections/youtube-connection-factory.ts');
 
-const createFactory = ({ validationResult, liveChatBehavior, platformOverrides, withTimeoutImplementation } = {}) => {
+type ValidationResult = {
+    shouldConnect: boolean;
+    reason?: string;
+};
+
+type LiveChatBehavior = {
+    value?: unknown;
+    error?: Error;
+};
+
+type WithTimeoutImplementation = (
+    promise: Promise<unknown>,
+    timeoutMs: number,
+    operationName: string
+) => Promise<unknown>;
+
+const createFactory = ({
+    validationResult,
+    liveChatBehavior,
+    platformOverrides,
+    withTimeoutImplementation
+}: {
+    validationResult?: ValidationResult;
+    liveChatBehavior?: LiveChatBehavior;
+    platformOverrides?: Record<string, unknown>;
+    withTimeoutImplementation?: WithTimeoutImplementation;
+} = {}) => {
     const platform = {
         logger: noOpLogger,
         _validateVideoForConnection: createMockFn().mockReturnValue(validationResult),

@@ -1,13 +1,16 @@
-const { describe, it, expect } = require('bun:test');
+import { describe, it, expect } from 'bun:test';
 
-const {
+import {
     getMessagePartsFromPayload,
     isValidMessagePart,
     getValidMessageParts,
     normalizeBadgeImages
-} = require('../../../src/utils/message-parts.ts');
+} from '../../../src/utils/message-parts.ts';
 
-export {};
+type Assert<T extends true> = T;
+type IsExactlyUnknownArray<T> = unknown[] extends T ? (T extends unknown[] ? true : false) : false;
+type _MessagePartsShouldNotBeUnknownArray = Assert<IsExactlyUnknownArray<ReturnType<typeof getMessagePartsFromPayload>> extends false ? true : false>;
+const _messagePartsTypeContract: Array<{ type?: unknown }> = getMessagePartsFromPayload({});
 
 describe('message parts utility', () => {
     it('reads canonical message.parts only', () => {

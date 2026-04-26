@@ -5,12 +5,13 @@ import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 
 const eventBusErrorHandler = createPlatformErrorHandler(logger, 'event-bus');
 
-type EventName = string;
+type EventName = string | symbol;
 type EventPayload = unknown;
 type EventHandler = (...args: unknown[]) => unknown;
-type SubscriptionOptions = { once?: boolean; context?: unknown };
+type SubscriptionOptions = { once?: boolean; context?: object | null };
 type EventStats = { emitted: number; success: number; error: number; totalDuration: number; avgDuration: number };
 type WrappedEventHandler = EventHandler & { _originalHandler?: EventHandler; _context?: unknown };
+type EventBusOptions = { debugEnabled?: boolean; maxListeners?: number };
 
 function logEventBusError(message: string, error: unknown, eventType = 'event-bus', payload: EventPayload = null) {
     if (error instanceof Error) {
@@ -25,7 +26,7 @@ class EventBus extends EventEmitter {
     maxListeners: number;
     eventStats: Map<EventName, EventStats>;
 
-    constructor(options: { debugEnabled?: boolean; maxListeners?: number } = {}) {
+    constructor(options: EventBusOptions = {}) {
         super();
 
         this.debugEnabled = options.debugEnabled || false;
@@ -177,7 +178,7 @@ class EventBus extends EventEmitter {
     }
 
     getListenerSummary() {
-        const summary: Record<string, number> = {};
+        const summary: Record<PropertyKey, number> = {};
         for (const eventName of this.eventNames()) {
             summary[eventName] = this.listenerCount(eventName);
         }
@@ -201,8 +202,8 @@ class EventBus extends EventEmitter {
         }
     }
 
-    setDebugEnabled(enabled: unknown) {
-        this.debugEnabled = !!enabled;
+    setDebugEnabled(enabled: boolean) {
+        this.debugEnabled = enabled;
         logger?.debug?.(`[EventBus] Debug logging ${enabled ? 'enabled' : 'disabled'}`, 'event-bus');
     }
 
@@ -230,7 +231,7 @@ class EventBus extends EventEmitter {
     }
 }
 
-function createEventBus(options: { debugEnabled?: boolean; maxListeners?: number } = {}): EventBus {
+function createEventBus(options: EventBusOptions = {}): EventBus {
     return new EventBus(options);
 }
 

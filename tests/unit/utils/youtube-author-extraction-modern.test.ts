@@ -131,6 +131,22 @@ describe('YouTube Author Extraction - Modern (Production Data)', () => {
             expect(author).toBeNull();
         });
 
+        it('returns null when author id is not a string', () => {
+            const malformed = {
+                item: {
+                    author: {
+                        id: 12345,
+                        name: 'NumericIdUser',
+                        thumbnails: [{ url: 'https://example.com/numeric-id-user.jpg' }]
+                    }
+                }
+            };
+
+            const author = YouTubeAuthorExtractor.extractAuthor(malformed);
+
+            expect(author).toBeNull();
+        });
+
         it('returns null when item.author is missing even if header data exists', () => {
             const headerOnly = {
                 ...giftPurchaseHeaderOnly,

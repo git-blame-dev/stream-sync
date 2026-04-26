@@ -1,39 +1,58 @@
-const { describe, test, expect } = require('bun:test');
+import { describe, expect, test } from 'bun:test';
 
-const { normalizeYouTubeEvent } = require('../../../../../src/platforms/youtube/events/event-normalizer.ts');
-const { getSyntheticFixture } = require('../../../../helpers/platform-test-data');
+import { getSyntheticFixture } from '../../../../helpers/platform-test-data';
+import { normalizeYouTubeEvent } from '../../../../../src/platforms/youtube/events/event-normalizer';
+
+type UnknownRecord = Record<string, unknown>;
+
+const assertRecord = (value: unknown, label: string): UnknownRecord => {
+    if (!value || typeof value !== 'object') {
+        throw new Error(`${label} must be an object`);
+    }
+
+    return value as UnknownRecord;
+};
 
 describe('normalizeYouTubeEvent', () => {
     test('hydrates gift purchase author from header fields', () => {
         const fixture = getSyntheticFixture('youtube', 'gift-purchase-header');
+        const fixtureRecord = assertRecord(fixture, 'fixture');
+        const fixtureItem = assertRecord(fixtureRecord.item, 'fixture.item');
         const headerOnly = {
-            ...fixture,
+            ...fixtureRecord,
             item: {
-                ...fixture.item,
+                ...fixtureItem,
                 author: undefined
             }
         };
 
         const result = normalizeYouTubeEvent(headerOnly);
+        const normalizedChatItem = assertRecord(result.normalizedChatItem, 'result.normalizedChatItem');
+        const normalizedItem = assertRecord(normalizedChatItem.item, 'result.normalizedChatItem.item');
+        const normalizedAuthor = assertRecord(normalizedItem.author, 'result.normalizedChatItem.item.author');
+        const header = assertRecord(fixtureItem.header, 'fixture.item.header');
+        const headerAuthorName = assertRecord(header.author_name, 'fixture.item.header.author_name');
 
         expect(result.eventType).toBe('LiveChatSponsorshipsGiftPurchaseAnnouncement');
-        expect(result.normalizedChatItem).not.toBeNull();
-        expect(result.normalizedChatItem.item.author).toMatchObject({
-            id: fixture.item.author_external_channel_id,
-            name: fixture.item.header.author_name.text
+        expect(normalizedAuthor).toMatchObject({
+            id: fixtureItem.author_external_channel_id,
+            name: headerAuthorName.text
         });
     });
 
     test('returns missing author metadata for gift purchase without header author', () => {
         const fixture = getSyntheticFixture('youtube', 'gift-purchase-header');
+        const fixtureRecord = assertRecord(fixture, 'fixture');
+        const fixtureItem = assertRecord(fixtureRecord.item, 'fixture.item');
+        const header = assertRecord(fixtureItem.header, 'fixture.item.header');
         const headerOnly = {
-            ...fixture,
+            ...fixtureRecord,
             item: {
-                ...fixture.item,
+                ...fixtureItem,
                 author: undefined,
                 author_external_channel_id: undefined,
                 header: {
-                    ...fixture.item.header,
+                    ...header,
                     author_name: undefined
                 }
             }
@@ -63,11 +82,12 @@ describe('normalizeYouTubeEvent', () => {
         };
 
         const result = normalizeYouTubeEvent(chatItem);
+        const normalizedChatItem = assertRecord(result.normalizedChatItem, 'result.normalizedChatItem');
+        const normalizedItem = assertRecord(normalizedChatItem.item, 'result.normalizedChatItem.item');
 
         expect(result.eventType).toBe('LiveChatTextMessage');
-        expect(result.normalizedChatItem).not.toBeNull();
-        expect(result.normalizedChatItem.item.id).toBe('LCC.wrapper-001');
-        expect(result.normalizedChatItem.item.timestamp_usec).toBe('1704067200000000');
+        expect(normalizedItem.id).toBe('LCC.wrapper-001');
+        expect(normalizedItem.timestamp_usec).toBe('1704067200000000');
     });
 
     test('preserves runs payload for wrapped and direct LiveChatTextMessage forms', () => {
@@ -114,8 +134,25 @@ describe('normalizeYouTubeEvent', () => {
 
         const wrappedResult = normalizeYouTubeEvent(wrapped);
         const directResult = normalizeYouTubeEvent(direct);
+        const wrappedNormalizedChatItem = assertRecord(wrappedResult.normalizedChatItem, 'wrappedResult.normalizedChatItem');
+        const wrappedItem = assertRecord(wrappedNormalizedChatItem.item, 'wrappedResult.normalizedChatItem.item');
+        const wrappedMessage = assertRecord(wrappedItem.message, 'wrappedResult.normalizedChatItem.item.message');
+        const directNormalizedChatItem = assertRecord(directResult.normalizedChatItem, 'directResult.normalizedChatItem');
+        const directItem = assertRecord(directNormalizedChatItem.item, 'directResult.normalizedChatItem.item');
+        const directMessage = assertRecord(directItem.message, 'directResult.normalizedChatItem.item.message');
 
-        expect(wrappedResult.normalizedChatItem.item.message.runs).toEqual(wrapped.item.message.runs);
-        expect(directResult.normalizedChatItem.item.message.runs).toEqual(direct.message.runs);
+        expect(wrappedMessage.runs).toEqual(wrapped.item.message.runs);
+        expect(directMessage.runs).toEqual(direct.message.runs);
+    });
+
+    test('keeps direct items with empty type as unrecognized structures', () => {
+        const result = normalizeYouTubeEvent({ type: '' });
+
+        expect(result.normalizedChatItem).toBeNull();
+        expect(result.debugMetadata).toMatchObject({
+            reason: 'unrecognized_structure',
+            hasType: false,
+            keys: ['type']
+        });
     });
 });

@@ -21,9 +21,9 @@ type ObsManagerWithEvents = ObsManagerLike & {
 };
 
 type SourcesManagerLike = {
-    setSourceFilterEnabled?: (...args: unknown[]) => unknown;
-    getSourceFilterSettings?: (...args: unknown[]) => unknown;
-    setSourceFilterSettings?: (...args: unknown[]) => unknown;
+    setSourceFilterEnabled?: (sourceName: string, filterName: string, enabled: boolean) => Promise<unknown> | unknown;
+    getSourceFilterSettings?: (sourceName: string, filterName: string) => Promise<unknown> | unknown;
+    setSourceFilterSettings?: (sourceName: string, filterName: string, settings: Record<string, unknown>) => Promise<unknown> | unknown;
 };
 
 type RetrySystemLike = {
@@ -62,9 +62,9 @@ class OBSEffectsManager {
     retrySystem: RetrySystemLike;
     ensureOBSConnected: () => Promise<void>;
     obsCall: (requestType: string, payload: Record<string, unknown>) => Promise<unknown>;
-    setSourceFilterEnabled?: (...args: unknown[]) => unknown;
-    getSourceFilterSettings?: (...args: unknown[]) => unknown;
-    setSourceFilterSettings?: (...args: unknown[]) => unknown;
+    setSourceFilterEnabled?: (sourceName: string, filterName: string, enabled: boolean) => Promise<unknown> | unknown;
+    getSourceFilterSettings?: (sourceName: string, filterName: string) => Promise<unknown> | unknown;
+    setSourceFilterSettings?: (sourceName: string, filterName: string, settings: Record<string, unknown>) => Promise<unknown> | unknown;
     delay: (ms: number, minMs: number, context: string) => Promise<void>;
     errorHandler: ReturnType<typeof createPlatformErrorHandler>;
 
@@ -82,7 +82,7 @@ class OBSEffectsManager {
         this.log = this.logger;
         this.sourcesManager = dependencies.sourcesManager;
         this.eventBus = dependencies.eventBus;
-        this.retrySystem = (dependencies.retrySystem || createRetrySystem({ logger: this.logger })) as RetrySystemLike;
+        this.retrySystem = dependencies.retrySystem ?? createRetrySystem({ logger: this.logger });
 
         // Convenience bindings for OBS manager methods
         this.ensureOBSConnected = this.obsManager.ensureConnected.bind(this.obsManager);

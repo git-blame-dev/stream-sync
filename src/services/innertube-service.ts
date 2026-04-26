@@ -1,8 +1,8 @@
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 
 type LoggerLike = {
-    error: (...args: unknown[]) => void;
-    debug?: (...args: unknown[]) => void;
+    error: (message: string, scope?: string, payload?: unknown) => void;
+    debug?: (message: string, scope?: string, payload?: unknown) => void;
 };
 
 type InnertubeInfoClient = {

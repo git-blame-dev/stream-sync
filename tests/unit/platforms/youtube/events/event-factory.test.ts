@@ -250,6 +250,16 @@ describe('YouTube event factory behavior', () => {
         })).toThrow('YouTube chat message event requires timestamp');
     });
 
+    it('rejects non-object chat-message payloads with contract error', () => {
+        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
+
+        const eventFactory = createYouTubeEventFactory({
+            generateCorrelationId: () => 'corr-non-object-chat'
+        });
+
+        expect(() => eventFactory.createChatMessageEvent(null)).toThrow('YouTube chat message event requires timestamp');
+    });
+
     it('rejects chat-message events missing canonical identity fields', () => {
         const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
 
@@ -404,6 +414,16 @@ describe('YouTube event factory behavior', () => {
         });
 
         expect(event.recoverable).toBe(true);
+    });
+
+    it('rejects non-object error payloads with contract error', () => {
+        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
+
+        const eventFactory = createYouTubeEventFactory({
+            generateCorrelationId: () => 'corr-error-non-object'
+        });
+
+        expect(() => eventFactory.createErrorEvent(null)).toThrow('YouTube error event requires timestamp');
     });
 
     it('builds gift events with monetization fields', () => {

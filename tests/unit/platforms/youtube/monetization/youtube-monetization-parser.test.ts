@@ -135,6 +135,27 @@ describe('YouTube monetization parser', () => {
         expect(result.timestamp).toBe(new Date(1704067200000).toISOString());
     });
 
+    test('uses membership subtext text when simpleText is non-string', () => {
+        const parser = createYouTubeMonetizationParser({ logger: noOpLogger });
+        const chatItem = {
+            item: {
+                type: 'LiveChatMembershipItem',
+                id: 'LCC.membership-non-string-simpletext',
+                timestamp_usec: '1704067200000000',
+                author: {
+                    id: 'UC_TEST_CHANNEL_000021',
+                    name: 'MembershipUser'
+                },
+                headerPrimaryText: { text: 'Member for 3 months' },
+                headerSubtext: { simpleText: 123, text: 'Welcome to Gold' }
+            }
+        };
+
+        const result = parser.parseMembership(chatItem);
+
+        expect(result.membershipLevel).toBe('Gold');
+    });
+
     test('throws when timestamp is blank', () => {
         const parser = createYouTubeMonetizationParser({ logger: noOpLogger });
         const chatItem = {

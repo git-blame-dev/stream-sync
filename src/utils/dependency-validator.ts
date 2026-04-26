@@ -1,14 +1,14 @@
 type LoggerLike = {
-    debug: (...args: unknown[]) => void;
-    info: (...args: unknown[]) => void;
-    error: (...args: unknown[]) => void;
-    warn: (...args: unknown[]) => void;
+    debug: (message: string, scope?: string, payload?: unknown) => void;
+    info: (message: string, scope?: string, payload?: unknown) => void;
+    error: (message: string, scope?: string, payload?: unknown) => void;
+    warn: (message: string, scope?: string, payload?: unknown) => void;
 };
 
 type NotificationManagerLike = {
-    emit: (...args: unknown[]) => unknown;
-    on: (...args: unknown[]) => unknown;
-    removeListener?: (...args: unknown[]) => unknown;
+    emit: (eventName: string, payload?: unknown) => unknown;
+    on: (eventName: string, handler: (...args: unknown[]) => void) => unknown;
+    removeListener?: (eventName: string, handler: (...args: unknown[]) => void) => unknown;
 };
 
 type ConnectionFactoryLike = {
@@ -22,7 +22,7 @@ type YouTubePlatformDependencies = {
     };
     notificationManager?: NotificationManagerLike;
     viewerCountProvider?: {
-        getViewerCount: (...args: unknown[]) => unknown;
+        getViewerCount: () => unknown;
     };
     [key: string]: unknown;
 };
@@ -193,7 +193,7 @@ function createStandardDependencies(platform: string, baseLogger: unknown): {
     logger: LoggerLike;
     notificationManager: NotificationManagerLike;
     displayQueue: {
-        add: () => void;
+        add: (item?: unknown) => void;
         process: () => void;
         isReady: () => boolean;
     };

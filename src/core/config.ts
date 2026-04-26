@@ -19,9 +19,11 @@ type ConfigValidatorApi = {
     };
 };
 
-const { ConfigValidator } = configValidatorModule as unknown as {
+type ConfigValidatorModule = {
     ConfigValidator: ConfigValidatorApi;
 };
+
+const { ConfigValidator } = configValidatorModule as ConfigValidatorModule;
 
 let loadedConfig: RawConfig | null = null;
 let cachedConfig: BuiltConfig | null = null;
@@ -44,7 +46,7 @@ function getErrorMessage(error: unknown): string {
     return String(error);
 }
 
-function preloadEnvFromConfig(rawConfig: RawConfig) {
+function preloadEnvFromConfig(rawConfig: RawConfig): void {
     const rawGeneral = rawConfig?.general || {};
     const envFileReadEnabled = ConfigValidator.parseBoolean(rawGeneral.envFileReadEnabled, true);
     if (!envFileReadEnabled) {
@@ -69,7 +71,7 @@ function preloadEnvFromConfig(rawConfig: RawConfig) {
     }
 }
 
-function loadConfig() {
+function loadConfig(): RawConfig {
     if (loadedConfig) {
         return loadedConfig;
     }
@@ -145,17 +147,17 @@ function loadConfig() {
     }
 }
 
-function _resetConfigForTesting() {
+function _resetConfigForTesting(): void {
     loadedConfig = null;
     cachedConfig = null;
     configPath = './config.ini';
 }
 
-function _getConfigPath() {
+function _getConfigPath(): string {
     return configPath;
 }
 
-function getConfig() {
+function getConfig(): BuiltConfig {
     if (!cachedConfig) {
         const normalizedConfig = loadConfig();
         cachedConfig = buildConfig(normalizedConfig);
@@ -165,19 +167,19 @@ function getConfig() {
 
 const config = new Proxy({} as BuiltConfig, {
     get(_target, property, receiver) {
-        return Reflect.get(getConfig() as object, property, receiver);
+        return Reflect.get(getConfig(), property, receiver);
     },
     set(_target, property, value) {
-        return Reflect.set(getConfig() as object, property, value);
+        return Reflect.set(getConfig(), property, value);
     },
     has(_target, property) {
-        return Reflect.has(getConfig() as object, property);
+        return Reflect.has(getConfig(), property);
     },
     ownKeys() {
-        return Reflect.ownKeys(getConfig() as object);
+        return Reflect.ownKeys(getConfig());
     },
     getOwnPropertyDescriptor(_target, property) {
-        const descriptor = Object.getOwnPropertyDescriptor(getConfig() as object, property);
+        const descriptor = Object.getOwnPropertyDescriptor(getConfig(), property);
         return descriptor ? { ...descriptor, configurable: true } : undefined;
     }
 }) as BuiltConfig;

@@ -2,10 +2,20 @@ import { getSystemTimestampISO } from '../../../utils/timestamp';
 import { PlatformEvents } from '../../../interfaces/PlatformEvents';
 import { createPlatformErrorHandler } from '../../../utils/platform-error-handler';
 import { validateLoggerInterface } from '../../../utils/dependency-validator';
+import type { UnknownRecord } from '../../../utils/record-contracts';
 
-type UnknownRecord = Record<string, unknown>;
+type MappedEventHandler = (chatItem: unknown) => unknown;
 
-interface RouteablePlatform {
+interface MappedEventHandlers {
+handleSuperChat?: MappedEventHandler;
+handleSuperSticker?: MappedEventHandler;
+handleGiftMessageView?: MappedEventHandler;
+handleMembership?: MappedEventHandler;
+handleGiftMembershipPurchase?: MappedEventHandler;
+handleChatTextMessage?: MappedEventHandler;
+}
+
+interface RouteablePlatform extends MappedEventHandlers {
     logger: unknown;
     eventFactory?: {
         createErrorEvent: (options: {
@@ -24,7 +34,7 @@ interface CreateYouTubeEventRouterOptions {
     platform?: RouteablePlatform;
 }
 
-const EVENT_HANDLER_MAP = new Map([
+const EVENT_HANDLER_MAP = new Map<string, keyof MappedEventHandlers>([
     ['LiveChatPaidMessage', 'handleSuperChat'],
     ['LiveChatPaidSticker', 'handleSuperSticker'],
     ['GiftMessageView', 'handleGiftMessageView'],
@@ -33,12 +43,32 @@ const EVENT_HANDLER_MAP = new Map([
     ['LiveChatTextMessage', 'handleChatTextMessage']
 ]);
 
-const LOW_PRIORITY_EVENT_TYPES = new Set([
+const LOW_PRIORITY_EVENT_TYPES = new Set<string>([
     'LiveChatViewerEngagementMessage',
     'LiveChatAutoModMessage',
     'LiveChatModeChangeMessage',
     'LiveChatBannerPoll'
 ]);
+
+function hasMessageProperty(value: unknown): value is { message: unknown } {
+    if (!value || typeof value !== 'object') {
+        return false;
+    }
+
+    return 'message' in value;
+}
+
+function toErrorMessage(error: unknown): string {
+    if (error instanceof Error) {
+        return error.message;
+    }
+
+    if (hasMessageProperty(error)) {
+        return String(error.message);
+    }
+
+    return String(error);
+}
 
 function asEventData(value: unknown): UnknownRecord | null {
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -82,9 +112,7 @@ function createYouTubeEventRouter(options: CreateYouTubeEventRouterOptions = {})
             });
             platform._emitPlatformEvent(PlatformEvents.ERROR, payload);
         } catch (emitError: unknown) {
-            const emitErrorMessage = emitError && typeof emitError === 'object' && 'message' in emitError
-                ? String((emitError as { message?: unknown }).message)
-                : String(emitError);
+            const emitErrorMessage = toErrorMessage(emitError);
             errorHandler.handleEventProcessingError(
                 emitError,
                 eventType,
@@ -101,12 +129,12 @@ function createYouTubeEventRouter(options: CreateYouTubeEventRouterOptions = {})
         }
 
         if (LOW_PRIORITY_EVENT_TYPES.has(eventType)) {
-            const handler = platform.handleLowPriorityEvent as ((item: unknown, type: string) => unknown) | undefined;
-            if (typeof handler !== 'function') {
+            const lowPriorityHandler = platform.handleLowPriorityEvent;
+            if (typeof lowPriorityHandler !== 'function') {
                 emitMissingHandlerError(eventType, 'handleLowPriorityEvent', chatItem);
                 return false;
             }
-            await Promise.resolve(handler.call(platform, chatItem, eventType));
+            await Promise.resolve(lowPriorityHandler.call(platform, chatItem, eventType));
             return true;
         }
 
@@ -115,13 +143,13 @@ function createYouTubeEventRouter(options: CreateYouTubeEventRouterOptions = {})
             return false;
         }
 
-        const handler = platform[handlerName] as ((item: unknown) => unknown) | undefined;
-        if (typeof handler !== 'function') {
+        const mappedHandler = platform[handlerName];
+        if (typeof mappedHandler !== 'function') {
             emitMissingHandlerError(eventType, handlerName, chatItem);
             return false;
         }
 
-        await Promise.resolve(handler.call(platform, chatItem));
+        await Promise.resolve(mappedHandler.call(platform, chatItem));
         return true;
     };
 
