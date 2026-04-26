@@ -1,7 +1,7 @@
-const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-const testClock = require('./test-clock');
-const {
+import testClock from './test-clock';
+import {
     validateUserGiftFlow,
     validateNotificationFlow,
     validateCrossPlatformBehavior,
@@ -21,7 +21,7 @@ const {
     expectValidNotification,
     expectNoTechnicalArtifacts,
     expectValidUserFeedback
-} = require('./behavior-validation');
+} from './behavior-validation';
 
 describe('behavior-validation helper behavior', () => {
     beforeEach(() => {

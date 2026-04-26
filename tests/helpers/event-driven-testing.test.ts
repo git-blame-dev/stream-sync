@@ -1,6 +1,7 @@
-const testClock = require('./test-clock');
-const { UserExperienceObserver } = require('./event-driven-testing');
-export {};
+import { beforeEach, describe, expect, test } from 'bun:test';
+
+import testClock from './test-clock';
+import { UserExperienceObserver } from './event-driven-testing';
 
 describe('event-driven-testing', () => {
     beforeEach(() => {

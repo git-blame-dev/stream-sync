@@ -1,8 +1,7 @@
-const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
-export {};
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-const testClock = require('./test-clock');
-const {
+import testClock from './test-clock';
+import {
     createMockNotificationDispatcher,
     createMockNotificationBuilder,
     createMockNotificationManager,
@@ -47,7 +46,7 @@ const {
     resetMock,
     clearMockCalls,
     validateMockAPI
-} = require('./mock-factories');
+} from './mock-factories';
 
 type UnknownRecord = Record<string, unknown>;
 

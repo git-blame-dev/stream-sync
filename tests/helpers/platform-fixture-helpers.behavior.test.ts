@@ -1,9 +1,9 @@
-const { describe, it, expect } = require('bun:test');
+import { describe, expect, it } from 'bun:test';
 
-const tiktokData = require('./tiktok-test-data');
-const twitchData = require('./twitch-test-data');
-const youtubeData = require('./youtube-test-data');
-const platformData = require('./platform-test-data');
+import * as platformData from './platform-test-data';
+import * as tiktokData from './tiktok-test-data';
+import * as twitchData from './twitch-test-data';
+import * as youtubeData from './youtube-test-data';
 
 describe('platform fixture helper behavior', () => {
     it('builds TikTok gift events with configured gift metadata and deep override merging', () => {

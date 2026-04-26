@@ -1,8 +1,6 @@
-const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-const testClock = require('./test-clock');
-const { resetTestIds } = require('./test-id');
-const {
+import {
     TestLogger,
     LogEntry,
     LOG_LEVELS,
@@ -15,7 +13,9 @@ const {
     assertNoWarnings,
     assertMessageLogged,
     assertEntryCount
-} = require('./test-logger');
+} from './test-logger';
+import testClock from './test-clock';
+import { resetTestIds } from './test-id';
 
 describe('test-logger behavior', () => {
     beforeEach(() => {
