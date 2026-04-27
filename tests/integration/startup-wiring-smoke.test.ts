@@ -1,10 +1,10 @@
-const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
-const path = require('path');
-const fs = require('fs');
-const os = require('os');
-const { initializeLoggingConfig } = require('../../src/core/logging');
-const { buildLoggingConfig } = require('../../src/core/config-builders');
-const { ConfigValidator } = require('../../src/utils/config-validator');
+import { describe, test, expect, beforeEach, afterEach } from "bun:test";
+import path from "path";
+import fs from "fs";
+import os from "os";
+import { initializeLoggingConfig } from "../../src/core/logging";
+import { buildLoggingConfig } from "../../src/core/config-builders";
+import { ConfigValidator } from "../../src/utils/config-validator";
 
 const buildSmokeConfigIni = () => `[general]
 debugEnabled=true
@@ -78,43 +78,43 @@ consoleLevel=debug
 enabled=false
 `;
 
-describe('Startup wiring smoke', () => {
-    let tempDir;
-    let tempConfigPath;
+describe("Startup wiring smoke", () => {
+  let tempDir;
+  let tempConfigPath;
 
-    beforeEach(() => {
-        tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'startup-smoke-'));
-        tempConfigPath = path.join(tempDir, 'config.smoke.ini');
-        fs.writeFileSync(tempConfigPath, buildSmokeConfigIni());
-    });
+  beforeEach(() => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "startup-smoke-"));
+    tempConfigPath = path.join(tempDir, "config.smoke.ini");
+    fs.writeFileSync(tempConfigPath, buildSmokeConfigIni());
+  });
 
-    afterEach(() => {
-        if (tempDir && fs.existsSync(tempDir)) {
-            fs.rmSync(tempDir, { recursive: true, force: true });
-        }
-    });
+  afterEach(() => {
+    if (tempDir && fs.existsSync(tempDir)) {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
 
-    test('core startup modules can be required and initialized', () => {
-        expect(typeof buildLoggingConfig).toBe('function');
-        expect(typeof initializeLoggingConfig).toBe('function');
+  test("core startup modules can be required and initialized", () => {
+    expect(typeof buildLoggingConfig).toBe("function");
+    expect(typeof initializeLoggingConfig).toBe("function");
 
-        const normalized = ConfigValidator.normalize({ general: {} });
-        const loggingConfig = buildLoggingConfig(normalized);
-        initializeLoggingConfig({ logging: loggingConfig });
-    });
+    const normalized = ConfigValidator.normalize({ general: {} });
+    const loggingConfig = buildLoggingConfig(normalized);
+    initializeLoggingConfig({ logging: loggingConfig });
+  });
 
-    test('smoke config file exists and is readable', () => {
-        expect(fs.existsSync(tempConfigPath)).toBe(true);
+  test("smoke config file exists and is readable", () => {
+    expect(fs.existsSync(tempConfigPath)).toBe(true);
 
-        const content = fs.readFileSync(tempConfigPath, 'utf-8');
-        expect(content).toContain('[general]');
-        expect(content).toContain('[obs]');
-        expect(content).toContain('[commands]');
-    });
+    const content = fs.readFileSync(tempConfigPath, "utf-8");
+    expect(content).toContain("[general]");
+    expect(content).toContain("[obs]");
+    expect(content).toContain("[commands]");
+  });
 
-    test('bootstrap file exists', () => {
-        const bootstrapPath = path.join(__dirname, '../../src/bootstrap.ts');
+  test("bootstrap file exists", () => {
+    const bootstrapPath = path.join(__dirname, "../../src/bootstrap.ts");
 
-        expect(fs.existsSync(bootstrapPath)).toBe(true);
-    });
+    expect(fs.existsSync(bootstrapPath)).toBe(true);
+  });
 });

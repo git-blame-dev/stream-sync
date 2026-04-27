@@ -1,409 +1,465 @@
-import { describe, expect, it } from 'bun:test';
-import { createRequire } from 'node:module';
+import { describe, expect, it } from "bun:test";
+import { getRawTestConfig } from "../helpers/config-fixture";
+import { ConfigValidator } from "../../src/utils/config-validator";
 
-const load = createRequire(__filename);
-const { ConfigValidator } = load('../../src/utils/config-validator');
+describe("ConfigValidator normalize + validate integration", () => {
+  it("full config normalization and validation flow", () => {
+    const rawConfig = {
+      general: { debugEnabled: "true" },
+      cooldowns: { cmdCooldown: "60" },
+      obs: { enabled: "false", address: "ws://localhost:4455" },
+      commands: {},
+      tiktok: { enabled: "false" },
+      twitch: { enabled: "false" },
+      youtube: { enabled: "false" },
+    };
 
-describe('ConfigValidator normalize + validate integration', () => {
-    it('full config normalization and validation flow', () => {
-        const rawConfig = {
-            general: { debugEnabled: 'true' },
-            cooldowns: { cmdCooldown: '60' },
-            obs: { enabled: 'false', address: 'ws://localhost:4455' },
-            commands: {},
-            tiktok: { enabled: 'false' },
-            twitch: { enabled: 'false' },
-            youtube: { enabled: 'false' }
-        };
+    const normalized = ConfigValidator.normalize(rawConfig);
 
-        const normalized = ConfigValidator.normalize(rawConfig);
+    expect(normalized.general.debugEnabled).toBe(true);
+    expect(normalized.cooldowns.cmdCooldown).toBe(60);
+    expect(normalized.obs.enabled).toBe(false);
 
-        expect(normalized.general.debugEnabled).toBe(true);
-        expect(normalized.cooldowns.cmdCooldown).toBe(60);
-        expect(normalized.obs.enabled).toBe(false);
+    const validation = ConfigValidator.validate(normalized);
 
-        const validation = ConfigValidator.validate(normalized);
+    expect(validation.isValid).toBe(true);
+    expect(validation.errors).toEqual([]);
+  });
 
-        expect(validation.isValid).toBe(true);
-        expect(validation.errors).toEqual([]);
-    });
+  it("missing general section fails validation", () => {
+    const manualConfig = { obs: {}, commands: {} };
+    const validation = ConfigValidator.validate(manualConfig);
 
-    it('missing general section fails validation', () => {
-        const manualConfig = { obs: {}, commands: {} };
-        const validation = ConfigValidator.validate(manualConfig);
+    expect(validation.isValid).toBe(false);
+    expect(validation.errors).toContain(
+      "Missing required configuration section: general",
+    );
+  });
 
-        expect(validation.isValid).toBe(false);
-        expect(validation.errors).toContain('Missing required configuration section: general');
-    });
+  it("enabled platform without username fails validation", () => {
+    const rawConfig = {
+      general: {},
+      obs: {},
+      commands: {},
+      tiktok: { enabled: "true", username: "" },
+    };
 
-    it('enabled platform without username fails validation', () => {
-        const rawConfig = {
-            general: {},
-            obs: {},
-            commands: {},
-            tiktok: { enabled: 'true', username: '' }
-        };
+    const normalized = ConfigValidator.normalize(rawConfig);
+    const validation = ConfigValidator.validate(normalized);
 
-        const normalized = ConfigValidator.normalize(rawConfig);
-        const validation = ConfigValidator.validate(normalized);
+    expect(validation.isValid).toBe(false);
+    expect(validation.errors).toContain(
+      "Missing required configuration: tiktok.username (required when tiktok is enabled)",
+    );
+  });
 
-        expect(validation.isValid).toBe(false);
-        expect(validation.errors).toContain('Missing required configuration: tiktok.username (required when tiktok is enabled)');
-    });
+  it("enabled platform with username passes validation", () => {
+    const rawConfig = {
+      general: {},
+      obs: {},
+      commands: {},
+      tiktok: { enabled: "true", username: "test-streamer" },
+    };
 
-    it('enabled platform with username passes validation', () => {
-        const rawConfig = {
-            general: {},
-            obs: {},
-            commands: {},
-            tiktok: { enabled: 'true', username: 'test-streamer' }
-        };
+    const normalized = ConfigValidator.normalize(rawConfig);
+    const validation = ConfigValidator.validate(normalized);
 
-        const normalized = ConfigValidator.normalize(rawConfig);
-        const validation = ConfigValidator.validate(normalized);
+    expect(validation.isValid).toBe(true);
+    expect(normalized.tiktok.enabled).toBe(true);
+    expect(normalized.tiktok.username).toBe("test-streamer");
+  });
 
-        expect(validation.isValid).toBe(true);
-        expect(normalized.tiktok.enabled).toBe(true);
-        expect(normalized.tiktok.username).toBe('test-streamer');
-    });
+  it("defaults applied for missing fields", () => {
+    const rawConfig = { general: {}, obs: {}, commands: {} };
+    const normalized = ConfigValidator.normalize(rawConfig);
 
-    it('defaults applied for missing fields', () => {
-        const rawConfig = { general: {}, obs: {}, commands: {} };
-        const normalized = ConfigValidator.normalize(rawConfig);
+    expect(normalized.general.debugEnabled).toBe(false);
+    expect(normalized.cooldowns.cmdCooldown).toBe(60);
+    expect(normalized.general.messagesEnabled).toBe(true);
+    expect(normalized.http.defaultTimeoutMs).toBe(10000);
+    expect(normalized.cooldowns.defaultCooldown).toBe(60);
+  });
 
-        expect(normalized.general.debugEnabled).toBe(false);
-        expect(normalized.cooldowns.cmdCooldown).toBe(60);
-        expect(normalized.general.messagesEnabled).toBe(true);
-        expect(normalized.http.defaultTimeoutMs).toBe(10000);
-        expect(normalized.cooldowns.defaultCooldown).toBe(60);
-    });
+  it("string to boolean conversion works correctly", () => {
+    const rawConfig = {
+      general: {
+        debugEnabled: "true",
+        messagesEnabled: "false",
+        commandsEnabled: "TRUE",
+        greetingsEnabled: "FALSE",
+      },
+      obs: {},
+      commands: {},
+    };
 
-    it('string to boolean conversion works correctly', () => {
-        const rawConfig = {
-            general: { 
-                debugEnabled: 'true', 
-                messagesEnabled: 'false',
-                commandsEnabled: 'TRUE',
-                greetingsEnabled: 'FALSE'
-            },
-            obs: {},
-            commands: {}
-        };
+    const normalized = ConfigValidator.normalize(rawConfig);
 
-        const normalized = ConfigValidator.normalize(rawConfig);
+    expect(normalized.general.debugEnabled).toBe(true);
+    expect(normalized.general.messagesEnabled).toBe(false);
+    expect(normalized.general.commandsEnabled).toBe(true);
+    expect(normalized.general.greetingsEnabled).toBe(false);
+  });
 
-        expect(normalized.general.debugEnabled).toBe(true);
-        expect(normalized.general.messagesEnabled).toBe(false);
-        expect(normalized.general.commandsEnabled).toBe(true);
-        expect(normalized.general.greetingsEnabled).toBe(false);
-    });
+  it("string to number conversion works correctly", () => {
+    const rawConfig = {
+      general: { maxMessageLength: "1000" },
+      cooldowns: { cmdCooldown: "120" },
+      obs: { connectionTimeoutMs: "5000" },
+      commands: {},
+      timing: { fadeDuration: "500", chatMessageDuration: "3000" },
+    };
 
-    it('string to number conversion works correctly', () => {
-        const rawConfig = {
-            general: { maxMessageLength: '1000' },
-            cooldowns: { cmdCooldown: '120' },
-            obs: { connectionTimeoutMs: '5000' },
-            commands: {},
-            timing: { fadeDuration: '500', chatMessageDuration: '3000' }
-        };
+    const normalized = ConfigValidator.normalize(rawConfig);
 
-        const normalized = ConfigValidator.normalize(rawConfig);
+    expect(normalized.cooldowns.cmdCooldown).toBe(120);
+    expect(normalized.general.maxMessageLength).toBe(1000);
+    expect(normalized.obs.connectionTimeoutMs).toBe(5000);
+    expect(normalized.timing.fadeDuration).toBe(500);
+    expect(normalized.timing.chatMessageDuration).toBe(3000);
+  });
 
-        expect(normalized.cooldowns.cmdCooldown).toBe(120);
-        expect(normalized.general.maxMessageLength).toBe(1000);
-        expect(normalized.obs.connectionTimeoutMs).toBe(5000);
-        expect(normalized.timing.fadeDuration).toBe(500);
-        expect(normalized.timing.chatMessageDuration).toBe(3000);
-    });
+  it("invalid string values fall back to defaults", () => {
+    const rawConfig = {
+      general: {
+        debugEnabled: "invalid",
+      },
+      cooldowns: {
+        cmdCooldown: "not-a-number",
+      },
+      obs: {},
+      commands: {},
+    };
 
-    it('invalid string values fall back to defaults', () => {
-        const rawConfig = {
-            general: { 
-                debugEnabled: 'invalid'
-            },
-            cooldowns: {
-                cmdCooldown: 'not-a-number'
-            },
-            obs: {},
-            commands: {}
-        };
+    const normalized = ConfigValidator.normalize(rawConfig);
 
-        const normalized = ConfigValidator.normalize(rawConfig);
+    expect(normalized.general.debugEnabled).toBe(false);
+    expect(normalized.cooldowns.cmdCooldown).toBe(60);
+  });
 
-        expect(normalized.general.debugEnabled).toBe(false);
-        expect(normalized.cooldowns.cmdCooldown).toBe(60);
-    });
+  it("validates all three platforms correctly", () => {
+    const originalTwitchClientId = process.env.TWITCH_CLIENT_ID;
+    try {
+      process.env.TWITCH_CLIENT_ID = "test-env-client-id";
+      const rawConfig = {
+        general: {},
+        obs: {},
+        commands: {},
+        tiktok: { enabled: "true", username: "" },
+        twitch: { enabled: "true", username: "" },
+        youtube: { enabled: "true", username: "" },
+      };
 
-    it('validates all three platforms correctly', () => {
-        const originalTwitchClientId = process.env.TWITCH_CLIENT_ID;
-        try {
-            process.env.TWITCH_CLIENT_ID = 'test-env-client-id';
-            const rawConfig = {
-                general: {},
-                obs: {},
-                commands: {},
-                tiktok: { enabled: 'true', username: '' },
-                twitch: { enabled: 'true', username: '' },
-                youtube: { enabled: 'true', username: '' }
-            };
+      const normalized = ConfigValidator.normalize(rawConfig);
+      const validation = ConfigValidator.validate(normalized);
 
-            const normalized = ConfigValidator.normalize(rawConfig);
-            const validation = ConfigValidator.validate(normalized);
+      expect(validation.isValid).toBe(false);
+      expect(validation.errors).toContain(
+        "Missing required configuration: tiktok.username (required when tiktok is enabled)",
+      );
+      expect(validation.errors).toContain(
+        "Missing required configuration: twitch.username (required when twitch is enabled)",
+      );
+      expect(validation.errors).toContain(
+        "Missing required configuration: youtube.username (required when youtube is enabled)",
+      );
+    } finally {
+      if (originalTwitchClientId === undefined) {
+        delete process.env.TWITCH_CLIENT_ID;
+      } else {
+        process.env.TWITCH_CLIENT_ID = originalTwitchClientId;
+      }
+    }
+  });
 
-            expect(validation.isValid).toBe(false);
-            expect(validation.errors).toContain('Missing required configuration: tiktok.username (required when tiktok is enabled)');
-            expect(validation.errors).toContain('Missing required configuration: twitch.username (required when twitch is enabled)');
-            expect(validation.errors).toContain('Missing required configuration: youtube.username (required when youtube is enabled)');
-        } finally {
-            if (originalTwitchClientId === undefined) {
-                delete process.env.TWITCH_CLIENT_ID;
-            } else {
-                process.env.TWITCH_CLIENT_ID = originalTwitchClientId;
-            }
-        }
-    });
+  it("StreamElements validation requires channel ID when enabled", () => {
+    const rawConfig = {
+      general: {},
+      obs: {},
+      commands: {},
+      streamelements: {
+        enabled: "true",
+        youtubeChannelId: "",
+        twitchChannelId: "",
+      },
+    };
 
-    it('StreamElements validation requires channel ID when enabled', () => {
-        const rawConfig = {
-            general: {},
-            obs: {},
-            commands: {},
-            streamelements: { enabled: 'true', youtubeChannelId: '', twitchChannelId: '' }
-        };
+    const normalized = ConfigValidator.normalize(rawConfig);
+    const validation = ConfigValidator.validate(normalized);
 
-        const normalized = ConfigValidator.normalize(rawConfig);
-        const validation = ConfigValidator.validate(normalized);
+    expect(validation.isValid).toBe(false);
+    expect(validation.errors).toContain(
+      "Missing required configuration: StreamElements channel ID (YouTube or Twitch)",
+    );
+  });
 
-        expect(validation.isValid).toBe(false);
-        expect(validation.errors).toContain('Missing required configuration: StreamElements channel ID (YouTube or Twitch)');
-    });
+  it("StreamElements passes with YouTube channel ID", () => {
+    const rawConfig = {
+      general: {},
+      obs: {},
+      commands: {},
+      streamelements: { enabled: "true", youtubeChannelId: "UC123456" },
+    };
 
-    it('StreamElements passes with YouTube channel ID', () => {
-        const rawConfig = {
-            general: {},
-            obs: {},
-            commands: {},
-            streamelements: { enabled: 'true', youtubeChannelId: 'UC123456' }
-        };
+    const normalized = ConfigValidator.normalize(rawConfig);
+    const validation = ConfigValidator.validate(normalized);
 
-        const normalized = ConfigValidator.normalize(rawConfig);
-        const validation = ConfigValidator.validate(normalized);
+    expect(validation.isValid).toBe(true);
+    expect(normalized.streamelements.enabled).toBe(true);
+    expect(normalized.streamelements.youtubeChannelId).toBe("UC123456");
+  });
 
-        expect(validation.isValid).toBe(true);
-        expect(normalized.streamelements.enabled).toBe(true);
-        expect(normalized.streamelements.youtubeChannelId).toBe('UC123456');
-    });
+  it("out-of-range values replaced with defaults during normalization", () => {
+    const rawConfig = {
+      general: {},
+      obs: {},
+      commands: {},
+      cooldowns: { defaultCooldown: "5", heavyCommandCooldown: "120" },
+      handcam: { maxSize: "200" },
+    };
 
-    it('out-of-range values replaced with defaults during normalization', () => {
-        const rawConfig = {
-            general: {},
-            obs: {},
-            commands: {},
-            cooldowns: { defaultCooldown: '5', heavyCommandCooldown: '120' },
-            handcam: { maxSize: '200' }
-        };
+    const normalized = ConfigValidator.normalize(rawConfig);
+    const validation = ConfigValidator.validate(normalized);
 
-        const normalized = ConfigValidator.normalize(rawConfig);
-        const validation = ConfigValidator.validate(normalized);
+    expect(validation.isValid).toBe(true);
+    expect(normalized.cooldowns.defaultCooldown).toBe(60);
+    expect(normalized.cooldowns.heavyCommandCooldown).toBe(120);
+    expect(normalized.handcam.maxSize).toBe(50);
+  });
 
-        expect(validation.isValid).toBe(true);
-        expect(normalized.cooldowns.defaultCooldown).toBe(60);
-        expect(normalized.cooldowns.heavyCommandCooldown).toBe(120);
-        expect(normalized.handcam.maxSize).toBe(50);
-    });
+  it("YouTube stream detection method validation", () => {
+    const rawConfigValid = {
+      general: {},
+      obs: {},
+      commands: {},
+      youtube: {
+        enabled: "true",
+        username: "test-channel",
+        streamDetectionMethod: "api",
+      },
+    };
 
-    it('YouTube stream detection method validation', () => {
-        const rawConfigValid = {
-            general: {},
-            obs: {},
-            commands: {},
-            youtube: { enabled: 'true', username: 'test-channel', streamDetectionMethod: 'api' }
-        };
+    const rawConfigInvalid = {
+      general: {},
+      obs: {},
+      commands: {},
+      youtube: {
+        enabled: "true",
+        username: "test-channel",
+        streamDetectionMethod: "invalid-method",
+      },
+    };
 
-        const rawConfigInvalid = {
-            general: {},
-            obs: {},
-            commands: {},
-            youtube: { enabled: 'true', username: 'test-channel', streamDetectionMethod: 'invalid-method' }
-        };
+    const normalizedValid = ConfigValidator.normalize(rawConfigValid);
+    const normalizedInvalid = ConfigValidator.normalize(rawConfigInvalid);
 
-        const normalizedValid = ConfigValidator.normalize(rawConfigValid);
-        const normalizedInvalid = ConfigValidator.normalize(rawConfigInvalid);
+    expect(normalizedValid.youtube.streamDetectionMethod).toBe("api");
+    expect(normalizedInvalid.youtube.streamDetectionMethod).toBe("youtubei");
+  });
 
-        expect(normalizedValid.youtube.streamDetectionMethod).toBe('api');
-        expect(normalizedInvalid.youtube.streamDetectionMethod).toBe('youtubei');
-    });
+  it("platform-overrideable fields default to null for inheritance", () => {
+    const rawConfig = {
+      general: { messagesEnabled: "true" },
+      obs: {},
+      commands: {},
+      tiktok: { enabled: "false" },
+    };
 
-    it('platform-overrideable fields default to null for inheritance', () => {
-        const rawConfig = {
-            general: { messagesEnabled: 'true' },
-            obs: {},
-            commands: {},
-            tiktok: { enabled: 'false' }
-        };
+    const normalized = ConfigValidator.normalize(rawConfig);
 
-        const normalized = ConfigValidator.normalize(rawConfig);
+    expect(normalized.general.messagesEnabled).toBe(true);
+    expect(normalized.tiktok.messagesEnabled).toBeNull();
+  });
 
-        expect(normalized.general.messagesEnabled).toBe(true);
-        expect(normalized.tiktok.messagesEnabled).toBeNull();
-    });
+  it("complete config round-trip maintains type integrity", () => {
+    const rawConfig = {
+      general: {
+        debugEnabled: "false",
+        messagesEnabled: "true",
+        fallbackUsername: "TestBot",
+      },
+      http: {
+        defaultTimeoutMs: "15000",
+      },
+      obs: {
+        enabled: "true",
+        address: "ws://192.168.1.100:4455",
+        connectionTimeoutMs: "8000",
+      },
+      commands: {},
+      tiktok: { enabled: "true", username: "test-tiktok" },
+      twitch: { enabled: "false" },
+      youtube: { enabled: "false" },
+      timing: {
+        fadeDuration: "500",
+        chatMessageDuration: "5000",
+      },
+      cooldowns: {
+        cmdCooldown: "30",
+        defaultCooldown: "60",
+        heavyCommandCooldown: "180",
+      },
+    };
 
-    it('complete config round-trip maintains type integrity', () => {
-        const rawConfig = {
-            general: {
-                debugEnabled: 'false',
-                messagesEnabled: 'true',
-                fallbackUsername: 'TestBot'
-            },
-            http: {
-                defaultTimeoutMs: '15000'
-            },
-            obs: {
-                enabled: 'true',
-                address: 'ws://192.168.1.100:4455',
-                connectionTimeoutMs: '8000'
-            },
-            commands: {},
-            tiktok: { enabled: 'true', username: 'test-tiktok' },
-            twitch: { enabled: 'false' },
-            youtube: { enabled: 'false' },
-            timing: {
-                fadeDuration: '500',
-                chatMessageDuration: '5000'
-            },
-            cooldowns: {
-                cmdCooldown: '30',
-                defaultCooldown: '60',
-                heavyCommandCooldown: '180'
-            }
-        };
+    const normalized = ConfigValidator.normalize(rawConfig);
+    const validation = ConfigValidator.validate(normalized);
 
-        const normalized = ConfigValidator.normalize(rawConfig);
-        const validation = ConfigValidator.validate(normalized);
+    expect(validation.isValid).toBe(true);
+    expect(validation.errors).toEqual([]);
 
-        expect(validation.isValid).toBe(true);
-        expect(validation.errors).toEqual([]);
+    expect(typeof normalized.general.debugEnabled).toBe("boolean");
+    expect(typeof normalized.cooldowns.cmdCooldown).toBe("number");
+    expect(typeof normalized.general.fallbackUsername).toBe("string");
+    expect(typeof normalized.http.defaultTimeoutMs).toBe("number");
+    expect(typeof normalized.obs.enabled).toBe("boolean");
+    expect(typeof normalized.obs.connectionTimeoutMs).toBe("number");
+    expect(typeof normalized.timing.fadeDuration).toBe("number");
+    expect(typeof normalized.cooldowns.defaultCooldown).toBe("number");
+  });
 
-        expect(typeof normalized.general.debugEnabled).toBe('boolean');
-        expect(typeof normalized.cooldowns.cmdCooldown).toBe('number');
-        expect(typeof normalized.general.fallbackUsername).toBe('string');
-        expect(typeof normalized.http.defaultTimeoutMs).toBe('number');
-        expect(typeof normalized.obs.enabled).toBe('boolean');
-        expect(typeof normalized.obs.connectionTimeoutMs).toBe('number');
-        expect(typeof normalized.timing.fadeDuration).toBe('number');
-        expect(typeof normalized.cooldowns.defaultCooldown).toBe('number');
-    });
+  it("commands section preserves user-defined command definitions through normalization", () => {
+    const rawConfig = {
+      general: {},
+      obs: {},
+      commands: {
+        enabled: "true",
+        "test-single": "!testsingle, vfx bottom green",
+        "test-multi": "!testalpha|!testbravo, vfx top, alpha|bravo",
+        "test-keywords":
+          "!testcmd|!testalt, vfx center green, keyword1|keyword2|keyword3",
+      },
+    };
 
-    it('commands section preserves user-defined command definitions through normalization', () => {
-        const rawConfig = {
-            general: {},
-            obs: {},
-            commands: {
-                enabled: 'true',
-                'test-single': '!testsingle, vfx bottom green',
-                'test-multi': '!testalpha|!testbravo, vfx top, alpha|bravo',
-                'test-keywords': '!testcmd|!testalt, vfx center green, keyword1|keyword2|keyword3'
-            }
-        };
+    const normalized = ConfigValidator.normalize(rawConfig);
 
-        const normalized = ConfigValidator.normalize(rawConfig);
+    expect(normalized.commands["test-single"]).toBe(
+      "!testsingle, vfx bottom green",
+    );
+    expect(normalized.commands["test-multi"]).toBe(
+      "!testalpha|!testbravo, vfx top, alpha|bravo",
+    );
+    expect(normalized.commands["test-keywords"]).toBe(
+      "!testcmd|!testalt, vfx center green, keyword1|keyword2|keyword3",
+    );
+    expect(Object.keys(normalized.commands).length).toBe(3);
+  });
 
-        expect(normalized.commands['test-single']).toBe('!testsingle, vfx bottom green');
-        expect(normalized.commands['test-multi']).toBe('!testalpha|!testbravo, vfx top, alpha|bravo');
-        expect(normalized.commands['test-keywords']).toBe('!testcmd|!testalt, vfx center green, keyword1|keyword2|keyword3');
-        expect(Object.keys(normalized.commands).length).toBe(3);
-    });
+  it("sharesEnabled is preserved through normalization with correct default", () => {
+    const rawConfigExplicit = {
+      general: { sharesEnabled: "true" },
+      obs: {},
+      commands: {},
+    };
+    const rawConfigDefault = {
+      general: {},
+      obs: {},
+      commands: {},
+    };
 
-    it('sharesEnabled is preserved through normalization with correct default', () => {
-        const rawConfigExplicit = {
-            general: { sharesEnabled: 'true' },
-            obs: {},
-            commands: {}
-        };
-        const rawConfigDefault = {
-            general: {},
-            obs: {},
-            commands: {}
-        };
+    const normalizedExplicit = ConfigValidator.normalize(rawConfigExplicit);
+    const normalizedDefault = ConfigValidator.normalize(rawConfigDefault);
 
-        const normalizedExplicit = ConfigValidator.normalize(rawConfigExplicit);
-        const normalizedDefault = ConfigValidator.normalize(rawConfigDefault);
+    expect(normalizedExplicit.general.sharesEnabled).toBe(true);
+    expect(normalizedDefault.general.sharesEnabled).toBe(true);
+  });
 
-        expect(normalizedExplicit.general.sharesEnabled).toBe(true);
-        expect(normalizedDefault.general.sharesEnabled).toBe(true);
-    });
+  it("shares section is normalized with command field", () => {
+    const rawConfigWithCommand = {
+      general: {},
+      shares: { command: "!share" },
+    };
+    const rawConfigEmpty = {
+      general: {},
+    };
 
-    it('shares section is normalized with command field', () => {
-        const rawConfigWithCommand = {
-            general: {},
-            shares: { command: '!share' }
-        };
-        const rawConfigEmpty = {
-            general: {}
-        };
+    const normalizedWithCommand =
+      ConfigValidator.normalize(rawConfigWithCommand);
+    const normalizedEmpty = ConfigValidator.normalize(rawConfigEmpty);
 
-        const normalizedWithCommand = ConfigValidator.normalize(rawConfigWithCommand);
-        const normalizedEmpty = ConfigValidator.normalize(rawConfigEmpty);
+    expect(normalizedWithCommand.shares.command).toBe("!share");
+    expect(normalizedEmpty.shares.command).toBe("");
+  });
 
-        expect(normalizedWithCommand.shares.command).toBe('!share');
-        expect(normalizedEmpty.shares.command).toBe('');
-    });
+  it("validateRequiredFields catches missing required fields from schema", () => {
+    const originalTwitchClientId = process.env.TWITCH_CLIENT_ID;
+    try {
+      delete process.env.TWITCH_CLIENT_ID;
+      const baseRaw = getRawTestConfig();
+      const rawConfig = {
+        ...baseRaw,
+        tiktok: { ...baseRaw.tiktok, enabled: "true", username: "" },
+        twitch: {
+          ...baseRaw.twitch,
+          enabled: "true",
+          username: "test-user",
+          clientId: "",
+          channel: "",
+        },
+        youtube: { ...baseRaw.youtube, enabled: "true", username: "" },
+      };
 
-    it('validateRequiredFields catches missing required fields from schema', () => {
-        const originalTwitchClientId = process.env.TWITCH_CLIENT_ID;
-        try {
-            delete process.env.TWITCH_CLIENT_ID;
-            const { getRawTestConfig } = load('../helpers/config-fixture');
-            const baseRaw = getRawTestConfig();
-            const rawConfig = {
-                ...baseRaw,
-                tiktok: { ...baseRaw.tiktok, enabled: 'true', username: '' },
-                twitch: { ...baseRaw.twitch, enabled: 'true', username: 'test-user', clientId: '', channel: '' },
-                youtube: { ...baseRaw.youtube, enabled: 'true', username: '' }
-            };
+      const normalized = ConfigValidator.normalize(rawConfig);
+      const errors: string[] = [];
+      ConfigValidator.validateRequiredFields(normalized, errors);
 
-            const normalized = ConfigValidator.normalize(rawConfig);
-            const errors: string[] = [];
-            ConfigValidator.validateRequiredFields(normalized, errors);
+      expect(errors.length).toBe(4);
+      expect(errors).toContain(
+        "Missing required configuration: tiktok.username (required when tiktok is enabled)",
+      );
+      expect(errors).toContain(
+        "Missing required environment variable: TWITCH_CLIENT_ID (required when twitch is enabled)",
+      );
+      expect(errors).toContain(
+        "Missing required configuration: twitch.channel (required when twitch is enabled)",
+      );
+      expect(errors).toContain(
+        "Missing required configuration: youtube.username (required when youtube is enabled)",
+      );
+    } finally {
+      if (originalTwitchClientId === undefined) {
+        delete process.env.TWITCH_CLIENT_ID;
+      } else {
+        process.env.TWITCH_CLIENT_ID = originalTwitchClientId;
+      }
+    }
+  });
 
-            expect(errors.length).toBe(4);
-            expect(errors).toContain('Missing required configuration: tiktok.username (required when tiktok is enabled)');
-            expect(errors).toContain('Missing required environment variable: TWITCH_CLIENT_ID (required when twitch is enabled)');
-            expect(errors).toContain('Missing required configuration: twitch.channel (required when twitch is enabled)');
-            expect(errors).toContain('Missing required configuration: youtube.username (required when youtube is enabled)');
-        } finally {
-            if (originalTwitchClientId === undefined) {
-                delete process.env.TWITCH_CLIENT_ID;
-            } else {
-                process.env.TWITCH_CLIENT_ID = originalTwitchClientId;
-            }
-        }
-    });
+  it("schema-driven validation passes when all required fields provided", () => {
+    const originalTwitchClientId = process.env.TWITCH_CLIENT_ID;
+    try {
+      process.env.TWITCH_CLIENT_ID = "test-env-client-id";
+      const baseRaw = getRawTestConfig();
+      const rawConfig = {
+        ...baseRaw,
+        tiktok: {
+          ...baseRaw.tiktok,
+          enabled: "true",
+          username: "test-tiktok-user",
+        },
+        twitch: {
+          ...baseRaw.twitch,
+          enabled: "true",
+          username: "test-twitch-user",
+          clientId: "test-client-id",
+          channel: "test-channel",
+        },
+        youtube: {
+          ...baseRaw.youtube,
+          enabled: "true",
+          username: "test-youtube-user",
+        },
+      };
 
-    it('schema-driven validation passes when all required fields provided', () => {
-        const originalTwitchClientId = process.env.TWITCH_CLIENT_ID;
-        try {
-            process.env.TWITCH_CLIENT_ID = 'test-env-client-id';
-            const { getRawTestConfig } = load('../helpers/config-fixture');
-            const baseRaw = getRawTestConfig();
-            const rawConfig = {
-                ...baseRaw,
-                tiktok: { ...baseRaw.tiktok, enabled: 'true', username: 'test-tiktok-user' },
-                twitch: { ...baseRaw.twitch, enabled: 'true', username: 'test-twitch-user', clientId: 'test-client-id', channel: 'test-channel' },
-                youtube: { ...baseRaw.youtube, enabled: 'true', username: 'test-youtube-user' }
-            };
+      const normalized = ConfigValidator.normalize(rawConfig);
+      const errors: string[] = [];
+      ConfigValidator.validateRequiredFields(normalized, errors);
 
-            const normalized = ConfigValidator.normalize(rawConfig);
-            const errors: string[] = [];
-            ConfigValidator.validateRequiredFields(normalized, errors);
-
-            expect(errors).toEqual([]);
-        } finally {
-            if (originalTwitchClientId === undefined) {
-                delete process.env.TWITCH_CLIENT_ID;
-            } else {
-                process.env.TWITCH_CLIENT_ID = originalTwitchClientId;
-            }
-        }
-    });
+      expect(errors).toEqual([]);
+    } finally {
+      if (originalTwitchClientId === undefined) {
+        delete process.env.TWITCH_CLIENT_ID;
+      } else {
+        process.env.TWITCH_CLIENT_ID = originalTwitchClientId;
+      }
+    }
+  });
 });

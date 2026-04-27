@@ -1,75 +1,78 @@
-const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
+import { describe, test, beforeEach, afterEach, expect } from "bun:test";
 
-const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { wireStreamStatusHandlers } = require('../../src/viewer-count/stream-status-handler.ts');
-const { ViewerCountSystem } = require('../../src/utils/viewer-count.ts');
-const { createConfigFixture } = require('../helpers/config-fixture');
-const { noOpLogger } = require('../helpers/mock-factories');
+import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
+import { wireStreamStatusHandlers } from "../../src/viewer-count/stream-status-handler.ts";
+import { ViewerCountSystem } from "../../src/utils/viewer-count.ts";
+import { createConfigFixture } from "../helpers/config-fixture";
+import { noOpLogger } from "../helpers/mock-factories";
 
 const createEventBus = () => {
-    const listeners = new Map();
-    return {
-        subscribe(event, handler) {
-            const existing = listeners.get(event) || [];
-            existing.push(handler);
-            listeners.set(event, existing);
-            return () => {
-                listeners.set(event, (listeners.get(event) || []).filter((fn) => fn !== handler));
-            };
-        },
-        async emit(event, payload) {
-            const handlers = listeners.get(event) || [];
-            await Promise.all(handlers.map((handler) => handler(payload)));
-        }
-    };
+  const listeners = new Map();
+  return {
+    subscribe(event, handler) {
+      const existing = listeners.get(event) || [];
+      existing.push(handler);
+      listeners.set(event, existing);
+      return () => {
+        listeners.set(
+          event,
+          (listeners.get(event) || []).filter((fn) => fn !== handler),
+        );
+      };
+    },
+    async emit(event, payload) {
+      const handlers = listeners.get(event) || [];
+      await Promise.all(handlers.map((handler) => handler(payload)));
+    },
+  };
 };
 
-describe('YouTube stream-status viewer count integration (smoke)', () => {
-    afterEach(async () => {
-        restoreAllMocks();
-        if (viewerCountSystem) {
-            viewerCountSystem.stopPolling();
-            await viewerCountSystem.cleanup();
-        }
+describe("YouTube stream-status viewer count integration (smoke)", () => {
+  afterEach(async () => {
+    restoreAllMocks();
+    if (viewerCountSystem) {
+      viewerCountSystem.stopPolling();
+      await viewerCountSystem.cleanup();
+    }
+  });
+
+  let viewerCountSystem;
+  let eventBus;
+  let platforms;
+
+  beforeEach(async () => {
+    platforms = {
+      youtube: {
+        getViewerCount: createMockFn().mockResolvedValue(42),
+      },
+    };
+
+    eventBus = createEventBus();
+    viewerCountSystem = new ViewerCountSystem({
+      platformProvider: () => platforms,
+      config: createConfigFixture(),
+      logger: noOpLogger,
     });
 
-    let viewerCountSystem;
-    let eventBus;
-    let platforms;
+    await viewerCountSystem.initialize();
+    viewerCountSystem.startPolling(); // YouTube starts as offline, so no polling yet
 
-    beforeEach(async () => {
-        platforms = {
-            youtube: {
-                getViewerCount: createMockFn().mockResolvedValue(42)
-            }
-        };
+    wireStreamStatusHandlers({
+      eventBus,
+      viewerCountSystem,
+    });
+  });
 
-        eventBus = createEventBus();
-        viewerCountSystem = new ViewerCountSystem({
-            platformProvider: () => platforms,
-            config: createConfigFixture(),
-            logger: noOpLogger
-        });
-
-        await viewerCountSystem.initialize();
-        viewerCountSystem.startPolling(); // YouTube starts as offline, so no polling yet
-
-        wireStreamStatusHandlers({
-            eventBus,
-            viewerCountSystem
-        });
+  test("starts polling YouTube when stream status is live and records viewer count", async () => {
+    await eventBus.emit("platform:event", {
+      platform: "youtube",
+      type: "platform:stream-status",
+      data: { isLive: true, timestamp: new Date().toISOString() },
     });
 
-    test('starts polling YouTube when stream status is live and records viewer count', async () => {
-        await eventBus.emit('platform:event', {
-            platform: 'youtube',
-            type: 'platform:stream-status',
-            data: { isLive: true, timestamp: new Date().toISOString() }
-        });
-
-        expect(platforms.youtube.getViewerCount).toHaveBeenCalled();
-        expect(viewerCountSystem.counts.youtube).toBe(42);
-        expect(viewerCountSystem.isStreamLive('youtube')).toBe(true);
-        expect(viewerCountSystem.pollingHandles.youtube).toBeDefined();
-    });
+    expect(platforms.youtube.getViewerCount).toHaveBeenCalled();
+    expect(viewerCountSystem.counts.youtube).toBe(42);
+    expect(viewerCountSystem.isStreamLive("youtube")).toBe(true);
+    expect(viewerCountSystem.pollingHandles.youtube).toBeDefined();
+  });
 });

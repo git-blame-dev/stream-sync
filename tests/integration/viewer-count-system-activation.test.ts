@@ -1,299 +1,350 @@
-const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { TEST_TIMEOUTS } = require('../helpers/test-setup');
-const { createConfigFixture } = require('../helpers/config-fixture');
-const {
-    noOpLogger,
-    createMockOBSConnection,
-    createMockTwitchPlatform,
-    createMockYouTubePlatform,
-    createMockTikTokPlatform,
-    createMockDisplayQueue
-} = require('../helpers/mock-factories');
-const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
-const { createAppRuntimeTestDependencies } = require('../helpers/runtime-test-harness');
-const testClock = require('../helpers/test-clock');
-const { safeDelay } = require('../../src/utils/timeout-validator');
+import { describe, test, beforeEach, afterEach, expect } from "bun:test";
+import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
+import { TEST_TIMEOUTS } from "../helpers/test-setup";
+import { createConfigFixture } from "../helpers/config-fixture";
+import {
+  noOpLogger,
+  createMockOBSConnection,
+  createMockTwitchPlatform,
+  createMockYouTubePlatform,
+  createMockTikTokPlatform,
+  createMockDisplayQueue,
+} from "../helpers/mock-factories";
+import { setupAutomatedCleanup } from "../helpers/mock-lifecycle";
+import { createAppRuntimeTestDependencies } from "../helpers/runtime-test-harness";
+import testClock from "../helpers/test-clock";
+import { safeDelay } from "../../src/utils/timeout-validator";
 
 const createMockPlatformLifecycleService = () => ({
-    platforms: {},
-    initializeAllPlatforms: createMockFn().mockResolvedValue({}),
-    getAllPlatforms: createMockFn(() => ({})),
-    getPlatforms: createMockFn(() => ({})),
-    getPlatform: createMockFn(() => null),
-    isPlatformAvailable: createMockFn(() => false),
-    getPlatformConnectionTime: createMockFn(() => testClock.now()),
-    recordPlatformConnection: createMockFn(),
-    disconnectAll: createMockFn().mockResolvedValue(),
-    waitForBackgroundInits: createMockFn().mockResolvedValue()
+  platforms: {},
+  initializeAllPlatforms: createMockFn().mockResolvedValue({}),
+  getAllPlatforms: createMockFn(() => ({})),
+  getPlatforms: createMockFn(() => ({})),
+  getPlatform: createMockFn(() => null),
+  isPlatformAvailable: createMockFn(() => false),
+  getPlatformConnectionTime: createMockFn(() => testClock.now()),
+  recordPlatformConnection: createMockFn(),
+  disconnectAll: createMockFn().mockResolvedValue(),
+  waitForBackgroundInits: createMockFn().mockResolvedValue(),
 });
 
 const createMockGoalsManager = () => ({
-    initializeGoalDisplay: createMockFn().mockResolvedValue(),
-    processDonationGoal: createMockFn()
+  initializeGoalDisplay: createMockFn().mockResolvedValue(),
+  processDonationGoal: createMockFn(),
 });
 
 setupAutomatedCleanup({
-    clearCallsBeforeEach: true,
-    logPerformanceMetrics: true
+  clearCallsBeforeEach: true,
+  logPerformanceMetrics: true,
 });
 
-describe('ViewerCount System Activation Integration', () => {
-    afterEach(() => {
-        restoreAllMocks();
-    });
+describe("ViewerCount System Activation Integration", () => {
+  afterEach(() => {
+    restoreAllMocks();
+  });
 
-    let AppRuntime;
-    let ViewerCountSystem;
-    let configOverrides;
-    let configFixture;
-    let mockOBSManager;
-    let mockYouTubePlatform;
-    let mockTwitchPlatform;
-    let mockTikTokPlatform;
-    let mockDisplayQueue;
-    let mockPlatformLifecycleService;
-    let mockGoalsManager;
-    let buildAppRuntimeDependencies;
+  let AppRuntime;
+  let ViewerCountSystem;
+  let configOverrides;
+  let configFixture;
+  let mockOBSManager;
+  let mockYouTubePlatform;
+  let mockTwitchPlatform;
+  let mockTikTokPlatform;
+  let mockDisplayQueue;
+  let mockPlatformLifecycleService;
+  let mockGoalsManager;
+  let buildAppRuntimeDependencies;
 
-    const registerMockPlatforms = () => {
-        const platforms = {
-            youtube: mockYouTubePlatform,
-            twitch: mockTwitchPlatform,
-            tiktok: mockTikTokPlatform
-        };
-
-        mockPlatformLifecycleService.platforms = platforms;
-        mockPlatformLifecycleService.getAllPlatforms.mockImplementation(() => ({ ...platforms }));
-        mockPlatformLifecycleService.getPlatforms.mockImplementation(() => ({ ...platforms }));
-        mockPlatformLifecycleService.getPlatform.mockImplementation((platform) => platforms[platform] || null);
-        mockPlatformLifecycleService.isPlatformAvailable.mockImplementation((platform) => !!platforms[platform]);
-
-        return platforms;
+  const registerMockPlatforms = () => {
+    const platforms = {
+      youtube: mockYouTubePlatform,
+      twitch: mockTwitchPlatform,
+      tiktok: mockTikTokPlatform,
     };
 
-    beforeEach(() => {
-        testClock.reset();
+    mockPlatformLifecycleService.platforms = platforms;
+    mockPlatformLifecycleService.getAllPlatforms.mockImplementation(() => ({
+      ...platforms,
+    }));
+    mockPlatformLifecycleService.getPlatforms.mockImplementation(() => ({
+      ...platforms,
+    }));
+    mockPlatformLifecycleService.getPlatform.mockImplementation(
+      (platform) => platforms[platform] || null,
+    );
+    mockPlatformLifecycleService.isPlatformAvailable.mockImplementation(
+      (platform) => !!platforms[platform],
+    );
 
-        configOverrides = {
-            general: {
-                debug: true,
-                viewerCountPollingInterval: 60
-            },
-            youtube: {
-                enabled: true,
-                viewerCountEnabled: true,
-                viewerCountSource: 'youtube-viewer-count'
-            },
-            twitch: {
-                enabled: true,
-                viewerCountEnabled: true,
-                viewerCountSource: 'twitch-viewer-count'
-            },
-            tiktok: {
-                enabled: true,
-                viewerCountEnabled: true,
-                viewerCountSource: 'tiktok-viewer-count'
-            },
-            obs: { enabled: true }
-        };
-        configFixture = createConfigFixture(configOverrides);
+    return platforms;
+  };
 
-        mockOBSManager = createMockOBSConnection();
-        mockOBSManager.isConnected.mockReturnValue(true);
+  beforeEach(() => {
+    testClock.reset();
 
-        mockGoalsManager = createMockGoalsManager();
+    configOverrides = {
+      general: {
+        debug: true,
+        viewerCountPollingInterval: 60,
+      },
+      youtube: {
+        enabled: true,
+        viewerCountEnabled: true,
+        viewerCountSource: "youtube-viewer-count",
+      },
+      twitch: {
+        enabled: true,
+        viewerCountEnabled: true,
+        viewerCountSource: "twitch-viewer-count",
+      },
+      tiktok: {
+        enabled: true,
+        viewerCountEnabled: true,
+        viewerCountSource: "tiktok-viewer-count",
+      },
+      obs: { enabled: true },
+    };
+    configFixture = createConfigFixture(configOverrides);
 
-        mockYouTubePlatform = createMockYouTubePlatform();
-        mockYouTubePlatform.getViewerCount = createMockFn().mockResolvedValue(150);
+    mockOBSManager = createMockOBSConnection();
+    mockOBSManager.isConnected.mockReturnValue(true);
 
-        mockTwitchPlatform = createMockTwitchPlatform();
-        mockTwitchPlatform.getViewerCount = createMockFn().mockResolvedValue(75);
+    mockGoalsManager = createMockGoalsManager();
 
-        mockTikTokPlatform = createMockTikTokPlatform();
-        mockTikTokPlatform.getViewerCount = createMockFn().mockResolvedValue(200);
+    mockYouTubePlatform = createMockYouTubePlatform();
+    mockYouTubePlatform.getViewerCount = createMockFn().mockResolvedValue(150);
 
-        mockDisplayQueue = createMockDisplayQueue();
+    mockTwitchPlatform = createMockTwitchPlatform();
+    mockTwitchPlatform.getViewerCount = createMockFn().mockResolvedValue(75);
 
-        mockPlatformLifecycleService = createMockPlatformLifecycleService();
-        registerMockPlatforms();
+    mockTikTokPlatform = createMockTikTokPlatform();
+    mockTikTokPlatform.getViewerCount = createMockFn().mockResolvedValue(200);
 
-        buildAppRuntimeDependencies = (overrides = {}) => {
-            const logger = noOpLogger;
-            return createAppRuntimeTestDependencies({
-                configOverrides,
-                displayQueue: mockDisplayQueue,
-                logger,
-                overrides: {
-                    obs: {
-                        connectionManager: mockOBSManager,
-                        goalsManager: mockGoalsManager
-                    },
-                    platformLifecycleService: mockPlatformLifecycleService,
-                    logging: logger,
-                    ...overrides
-                }
-            }).dependencies;
-        };
+    mockDisplayQueue = createMockDisplayQueue();
 
-        ViewerCountSystem = require('../../src/utils/viewer-count.ts').ViewerCountSystem;
-        AppRuntime = require('../../src/main').AppRuntime;
-    });
+    mockPlatformLifecycleService = createMockPlatformLifecycleService();
+    registerMockPlatforms();
 
-    describe('when system starts with YouTube enabled and live', () => {
-        test('should activate ViewerCount polling system', async () => {
-            const app = new AppRuntime(configFixture, buildAppRuntimeDependencies());
+    buildAppRuntimeDependencies = (overrides = {}) => {
+      const logger = noOpLogger;
+      return createAppRuntimeTestDependencies({
+        configOverrides,
+        displayQueue: mockDisplayQueue,
+        logger,
+        overrides: {
+          obs: {
+            connectionManager: mockOBSManager,
+            goalsManager: mockGoalsManager,
+          },
+          platformLifecycleService: mockPlatformLifecycleService,
+          logging: logger,
+          ...overrides,
+        },
+      }).dependencies;
+    };
 
-            app.viewerCountSystem = new ViewerCountSystem({
-                platformProvider: () => app.getPlatforms(),
-                logger: noOpLogger,
-                config: configFixture
-            });
+    ViewerCountSystem =
+      require("../../src/utils/viewer-count.ts").ViewerCountSystem;
+    AppRuntime = require("../../src/main").AppRuntime;
+  });
 
-            app.viewerCountSystem.updateStreamStatus('youtube', true);
+  describe("when system starts with YouTube enabled and live", () => {
+    test(
+      "should activate ViewerCount polling system",
+      async () => {
+        const app = new AppRuntime(
+          configFixture,
+          buildAppRuntimeDependencies(),
+        );
 
-            await app.viewerCountSystem.initialize();
-            await app.viewerCountSystem.startPolling();
+        app.viewerCountSystem = new ViewerCountSystem({
+          platformProvider: () => app.getPlatforms(),
+          logger: noOpLogger,
+          config: configFixture,
+        });
 
-            await safeDelay(100);
+        app.viewerCountSystem.updateStreamStatus("youtube", true);
 
-            expect(app.viewerCountSystem.isPolling).toBe(true);
-            expect(app.viewerCountSystem.isStreamLive('youtube')).toBe(true);
+        await app.viewerCountSystem.initialize();
+        await app.viewerCountSystem.startPolling();
 
-            expect(mockYouTubePlatform.getViewerCount).toHaveBeenCalled();
+        await safeDelay(100);
 
-            expect(app.viewerCountSystem.counts.youtube).toBe(150);
-        }, TEST_TIMEOUTS.FAST);
+        expect(app.viewerCountSystem.isPolling).toBe(true);
+        expect(app.viewerCountSystem.isStreamLive("youtube")).toBe(true);
 
-        test('should poll viewer counts for all live platforms', async () => {
-            const app = new AppRuntime(configFixture, buildAppRuntimeDependencies());
+        expect(mockYouTubePlatform.getViewerCount).toHaveBeenCalled();
 
-            app.viewerCountSystem = new ViewerCountSystem({
-                platformProvider: () => app.getPlatforms(),
-                logger: noOpLogger,
-                config: configFixture
-            });
+        expect(app.viewerCountSystem.counts.youtube).toBe(150);
+      },
+      TEST_TIMEOUTS.FAST,
+    );
 
-            app.viewerCountSystem.updateStreamStatus('youtube', true);
-            app.viewerCountSystem.updateStreamStatus('twitch', true);
-            app.viewerCountSystem.updateStreamStatus('tiktok', true);
+    test(
+      "should poll viewer counts for all live platforms",
+      async () => {
+        const app = new AppRuntime(
+          configFixture,
+          buildAppRuntimeDependencies(),
+        );
 
-            await app.viewerCountSystem.initialize();
-            await app.viewerCountSystem.startPolling();
+        app.viewerCountSystem = new ViewerCountSystem({
+          platformProvider: () => app.getPlatforms(),
+          logger: noOpLogger,
+          config: configFixture,
+        });
 
-            await safeDelay(100);
+        app.viewerCountSystem.updateStreamStatus("youtube", true);
+        app.viewerCountSystem.updateStreamStatus("twitch", true);
+        app.viewerCountSystem.updateStreamStatus("tiktok", true);
 
-            expect(app.viewerCountSystem.isPolling).toBe(true);
-            expect(mockYouTubePlatform.getViewerCount).toHaveBeenCalled();
-            expect(mockTwitchPlatform.getViewerCount).toHaveBeenCalled();
-            expect(mockTikTokPlatform.getViewerCount).toHaveBeenCalled();
+        await app.viewerCountSystem.initialize();
+        await app.viewerCountSystem.startPolling();
 
-            expect(app.viewerCountSystem.counts.youtube).toBe(150);
-            expect(app.viewerCountSystem.counts.twitch).toBe(75);
-            expect(app.viewerCountSystem.counts.tiktok).toBe(200);
-        }, TEST_TIMEOUTS.FAST);
+        await safeDelay(100);
 
-        test('should not poll platforms that are offline', async () => {
-            const app = new AppRuntime(configFixture, buildAppRuntimeDependencies());
+        expect(app.viewerCountSystem.isPolling).toBe(true);
+        expect(mockYouTubePlatform.getViewerCount).toHaveBeenCalled();
+        expect(mockTwitchPlatform.getViewerCount).toHaveBeenCalled();
+        expect(mockTikTokPlatform.getViewerCount).toHaveBeenCalled();
 
-            app.viewerCountSystem = new ViewerCountSystem({
-                platformProvider: () => app.getPlatforms(),
-                logger: noOpLogger,
-                config: configFixture
-            });
+        expect(app.viewerCountSystem.counts.youtube).toBe(150);
+        expect(app.viewerCountSystem.counts.twitch).toBe(75);
+        expect(app.viewerCountSystem.counts.tiktok).toBe(200);
+      },
+      TEST_TIMEOUTS.FAST,
+    );
 
-            app.viewerCountSystem.updateStreamStatus('youtube', true);
-            app.viewerCountSystem.updateStreamStatus('twitch', false);
-            app.viewerCountSystem.updateStreamStatus('tiktok', false);
+    test(
+      "should not poll platforms that are offline",
+      async () => {
+        const app = new AppRuntime(
+          configFixture,
+          buildAppRuntimeDependencies(),
+        );
 
-            await app.viewerCountSystem.initialize();
-            await app.viewerCountSystem.startPolling();
+        app.viewerCountSystem = new ViewerCountSystem({
+          platformProvider: () => app.getPlatforms(),
+          logger: noOpLogger,
+          config: configFixture,
+        });
 
-            await safeDelay(100);
+        app.viewerCountSystem.updateStreamStatus("youtube", true);
+        app.viewerCountSystem.updateStreamStatus("twitch", false);
+        app.viewerCountSystem.updateStreamStatus("tiktok", false);
 
-            expect(app.viewerCountSystem.isPolling).toBe(true);
-            expect(mockYouTubePlatform.getViewerCount).toHaveBeenCalled();
-            expect(mockTwitchPlatform.getViewerCount).not.toHaveBeenCalled();
-            expect(mockTikTokPlatform.getViewerCount).not.toHaveBeenCalled();
+        await app.viewerCountSystem.initialize();
+        await app.viewerCountSystem.startPolling();
 
-            expect(app.viewerCountSystem.counts.youtube).toBe(150);
-            expect(app.viewerCountSystem.counts.twitch).toBe(0);
-            expect(app.viewerCountSystem.counts.tiktok).toBe(0);
-        }, TEST_TIMEOUTS.FAST);
-    });
+        await safeDelay(100);
 
-    describe('when ViewerCount system activation is driven by app.start()', () => {
-        test('should demonstrate the integration flow that should work', async () => {
-            const app = new AppRuntime(configFixture, buildAppRuntimeDependencies());
+        expect(app.viewerCountSystem.isPolling).toBe(true);
+        expect(mockYouTubePlatform.getViewerCount).toHaveBeenCalled();
+        expect(mockTwitchPlatform.getViewerCount).not.toHaveBeenCalled();
+        expect(mockTikTokPlatform.getViewerCount).not.toHaveBeenCalled();
 
-            app.viewerCountSystem = new ViewerCountSystem({
-                platformProvider: () => app.getPlatforms(),
-                logger: noOpLogger,
-                config: configFixture
-            });
+        expect(app.viewerCountSystem.counts.youtube).toBe(150);
+        expect(app.viewerCountSystem.counts.twitch).toBe(0);
+        expect(app.viewerCountSystem.counts.tiktok).toBe(0);
+      },
+      TEST_TIMEOUTS.FAST,
+    );
+  });
 
-            app.initializePlatforms = createMockFn().mockResolvedValue();
+  describe("when ViewerCount system activation is driven by app.start()", () => {
+    test(
+      "should demonstrate the integration flow that should work",
+      async () => {
+        const app = new AppRuntime(
+          configFixture,
+          buildAppRuntimeDependencies(),
+        );
 
-            app.viewerCountSystem.updateStreamStatus('youtube', true);
+        app.viewerCountSystem = new ViewerCountSystem({
+          platformProvider: () => app.getPlatforms(),
+          logger: noOpLogger,
+          config: configFixture,
+        });
 
-            await app.viewerCountSystem.initialize();
+        app.initializePlatforms = createMockFn().mockResolvedValue();
 
-            await app.start();
+        app.viewerCountSystem.updateStreamStatus("youtube", true);
 
-            await safeDelay(100);
+        await app.viewerCountSystem.initialize();
 
-            expect(app.viewerCountSystem.isPolling).toBe(true);
-            expect(mockYouTubePlatform.getViewerCount).toHaveBeenCalled();
-        }, TEST_TIMEOUTS.SLOW);
-    });
+        await app.start();
 
-    describe('when stream status changes after startup', () => {
-        test('should start polling when stream goes live', async () => {
-            const app = new AppRuntime(configFixture, buildAppRuntimeDependencies());
+        await safeDelay(100);
 
-            app.viewerCountSystem = new ViewerCountSystem({
-                platformProvider: () => app.getPlatforms(),
-                logger: noOpLogger,
-                config: configFixture
-            });
+        expect(app.viewerCountSystem.isPolling).toBe(true);
+        expect(mockYouTubePlatform.getViewerCount).toHaveBeenCalled();
+      },
+      TEST_TIMEOUTS.SLOW,
+    );
+  });
 
-            app.viewerCountSystem.updateStreamStatus('youtube', false);
-            app.viewerCountSystem.updateStreamStatus('twitch', false);
-            app.viewerCountSystem.updateStreamStatus('tiktok', false);
+  describe("when stream status changes after startup", () => {
+    test(
+      "should start polling when stream goes live",
+      async () => {
+        const app = new AppRuntime(
+          configFixture,
+          buildAppRuntimeDependencies(),
+        );
 
-            await app.viewerCountSystem.initialize();
-            await app.viewerCountSystem.startPolling();
+        app.viewerCountSystem = new ViewerCountSystem({
+          platformProvider: () => app.getPlatforms(),
+          logger: noOpLogger,
+          config: configFixture,
+        });
 
-            app.viewerCountSystem.updateStreamStatus('youtube', true);
+        app.viewerCountSystem.updateStreamStatus("youtube", false);
+        app.viewerCountSystem.updateStreamStatus("twitch", false);
+        app.viewerCountSystem.updateStreamStatus("tiktok", false);
 
-            await safeDelay(100);
+        await app.viewerCountSystem.initialize();
+        await app.viewerCountSystem.startPolling();
 
-            expect(app.viewerCountSystem.isPolling).toBe(true);
-            expect(app.viewerCountSystem.isStreamLive('youtube')).toBe(true);
-            expect(mockYouTubePlatform.getViewerCount).toHaveBeenCalled();
-        }, TEST_TIMEOUTS.FAST);
+        app.viewerCountSystem.updateStreamStatus("youtube", true);
 
-        test('should stop polling when stream goes offline', async () => {
-            const app = new AppRuntime(configFixture, buildAppRuntimeDependencies());
+        await safeDelay(100);
 
-            app.viewerCountSystem = new ViewerCountSystem({
-                platformProvider: () => app.getPlatforms(),
-                logger: noOpLogger,
-                config: configFixture
-            });
+        expect(app.viewerCountSystem.isPolling).toBe(true);
+        expect(app.viewerCountSystem.isStreamLive("youtube")).toBe(true);
+        expect(mockYouTubePlatform.getViewerCount).toHaveBeenCalled();
+      },
+      TEST_TIMEOUTS.FAST,
+    );
 
-            app.viewerCountSystem.updateStreamStatus('youtube', true);
-            await app.viewerCountSystem.initialize();
-            await app.viewerCountSystem.startPolling();
+    test(
+      "should stop polling when stream goes offline",
+      async () => {
+        const app = new AppRuntime(
+          configFixture,
+          buildAppRuntimeDependencies(),
+        );
 
-            mockYouTubePlatform.getViewerCount.mockClear();
+        app.viewerCountSystem = new ViewerCountSystem({
+          platformProvider: () => app.getPlatforms(),
+          logger: noOpLogger,
+          config: configFixture,
+        });
 
-            app.viewerCountSystem.updateStreamStatus('youtube', false);
+        app.viewerCountSystem.updateStreamStatus("youtube", true);
+        await app.viewerCountSystem.initialize();
+        await app.viewerCountSystem.startPolling();
 
-            await safeDelay(100);
+        mockYouTubePlatform.getViewerCount.mockClear();
 
-            expect(app.viewerCountSystem.isStreamLive('youtube')).toBe(false);
-            expect(app.viewerCountSystem.counts.youtube).toBe(0);
-        }, TEST_TIMEOUTS.FAST);
-    });
+        app.viewerCountSystem.updateStreamStatus("youtube", false);
+
+        await safeDelay(100);
+
+        expect(app.viewerCountSystem.isStreamLive("youtube")).toBe(false);
+        expect(app.viewerCountSystem.counts.youtube).toBe(0);
+      },
+      TEST_TIMEOUTS.FAST,
+    );
+  });
 });

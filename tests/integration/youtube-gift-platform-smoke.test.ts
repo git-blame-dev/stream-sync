@@ -1,271 +1,273 @@
-const { describe, test, afterEach, expect } = require('bun:test');
+import { describe, test, afterEach, expect } from "bun:test";
 
-const EventEmitter = require('events');
-const { PlatformLifecycleService } = require('../../src/services/PlatformLifecycleService.ts');
-const NotificationManager = require('../../src/notifications/NotificationManager');
-const { createTestAppRuntime } = require('../helpers/runtime-test-harness');
-const { createMockDisplayQueue, noOpLogger } = require('../helpers/mock-factories');
-const { expectNoTechnicalArtifacts } = require('../helpers/assertion-helpers');
-const { createTextProcessingManager } = require('../../src/utils/text-processing');
-const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { createConfigFixture } = require('../helpers/config-fixture');
+import EventEmitter from "events";
+import { PlatformLifecycleService } from "../../src/services/PlatformLifecycleService.ts";
+import NotificationManager from "../../src/notifications/NotificationManager";
+import { createTestAppRuntime } from "../helpers/runtime-test-harness";
+import { createMockDisplayQueue, noOpLogger } from "../helpers/mock-factories";
+import { expectNoTechnicalArtifacts } from "../helpers/assertion-helpers";
+import { createTextProcessingManager } from "../../src/utils/text-processing";
+import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
+import { createConfigFixture } from "../helpers/config-fixture";
 
-describe('YouTube gift platform flow (smoke)', () => {
-    afterEach(() => {
-        restoreAllMocks();
+describe("YouTube gift platform flow (smoke)", () => {
+  afterEach(() => {
+    restoreAllMocks();
+  });
+
+  const createEventBus = () => {
+    const emitter = new EventEmitter();
+    return {
+      emit: emitter.emit.bind(emitter),
+      on: emitter.on.bind(emitter),
+      subscribe: (event, handler) => {
+        emitter.on(event, handler);
+        return () => emitter.off(event, handler);
+      },
+    };
+  };
+
+  const assertNonEmptyString = (value) => {
+    expect(typeof value).toBe("string");
+    expect(value.trim()).not.toBe("");
+  };
+
+  const assertUserFacingOutput = (data, { username, keyword }) => {
+    assertNonEmptyString(data.displayMessage);
+    assertNonEmptyString(data.ttsMessage);
+    assertNonEmptyString(data.logMessage);
+
+    expectNoTechnicalArtifacts(data.displayMessage);
+    expectNoTechnicalArtifacts(data.ttsMessage);
+    expectNoTechnicalArtifacts(data.logMessage);
+
+    if (username) {
+      expect(data.displayMessage).toContain(username);
+      expect(data.ttsMessage).toContain(username);
+      expect(data.logMessage).toContain(username);
+    }
+    if (keyword) {
+      const normalizedKeyword = keyword.toLowerCase();
+      expect(data.displayMessage.toLowerCase()).toContain(normalizedKeyword);
+      expect(data.ttsMessage.toLowerCase()).toContain(normalizedKeyword);
+      expect(data.logMessage.toLowerCase()).toContain(normalizedKeyword);
+    }
+  };
+
+  const configOverrides = {
+    general: {
+      debugEnabled: false,
+      giftsEnabled: true,
+      paypiggiesEnabled: true,
+    },
+    youtube: { enabled: true, username: "test-channel" },
+    obs: { enabled: false },
+  };
+
+  const createRuntimeDeps = () => {
+    const eventBus = createEventBus();
+    const logger = noOpLogger;
+    const displayQueue = createMockDisplayQueue();
+    const textProcessing = createTextProcessingManager({ logger });
+    const config = createConfigFixture(configOverrides);
+    const notificationManager = new NotificationManager({
+      displayQueue,
+      logger,
+      eventBus,
+      config,
+      constants: require("../../src/core/constants"),
+      textProcessing,
+      obsGoals: { processDonationGoal: createMockFn() },
+      vfxCommandService: {
+        getVFXConfig: createMockFn().mockResolvedValue(null),
+      },
+      userTrackingService: {
+        isFirstMessage: createMockFn().mockResolvedValue(false),
+      },
     });
 
-    const createEventBus = () => {
-        const emitter = new EventEmitter();
-        return {
-            emit: emitter.emit.bind(emitter),
-            on: emitter.on.bind(emitter),
-            subscribe: (event, handler) => {
-                emitter.on(event, handler);
-                return () => emitter.off(event, handler);
-            }
-        };
+    const platformLifecycleService = new PlatformLifecycleService({
+      config: { youtube: { enabled: true, username: "test-channel" } },
+      eventBus,
+      logger,
+    });
+
+    const runtimeBundle = createTestAppRuntime(configOverrides, {
+      eventBus,
+      notificationManager,
+      displayQueue,
+      logger,
+      platformLifecycleService,
+    });
+
+    return {
+      eventBus,
+      logger,
+      displayQueue,
+      config,
+      notificationManager,
+      platformLifecycleService,
+      runtimeBundle,
     };
+  };
 
-    const assertNonEmptyString = (value) => {
-        expect(typeof value).toBe('string');
-        expect(value.trim()).not.toBe('');
-    };
+  test("routes Super Chat gifts through lifecycle, router, and runtime", async () => {
+    const { displayQueue, platformLifecycleService, runtimeBundle } =
+      createRuntimeDeps();
 
-    const assertUserFacingOutput = (data, { username, keyword }) => {
-        assertNonEmptyString(data.displayMessage);
-        assertNonEmptyString(data.ttsMessage);
-        assertNonEmptyString(data.logMessage);
+    class MockYouTubePlatform {
+      async initialize(handlers) {
+        handlers.onGift({
+          username: "ChatHero",
+          userId: "yt-chat-1",
+          giftType: "Super Chat",
+          giftCount: 1,
+          amount: 5,
+          currency: "USD",
+          id: "yt-superchat-1",
+          timestamp: "2024-01-01T00:00:00.000Z",
+        });
+      }
 
-        expectNoTechnicalArtifacts(data.displayMessage);
-        expectNoTechnicalArtifacts(data.ttsMessage);
-        expectNoTechnicalArtifacts(data.logMessage);
+      on() {}
 
-        if (username) {
-            expect(data.displayMessage).toContain(username);
-            expect(data.ttsMessage).toContain(username);
-            expect(data.logMessage).toContain(username);
-        }
-        if (keyword) {
-            const normalizedKeyword = keyword.toLowerCase();
-            expect(data.displayMessage.toLowerCase()).toContain(normalizedKeyword);
-            expect(data.ttsMessage.toLowerCase()).toContain(normalizedKeyword);
-            expect(data.logMessage.toLowerCase()).toContain(normalizedKeyword);
-        }
-    };
+      cleanup() {
+        return Promise.resolve();
+      }
+    }
 
-    const configOverrides = {
-        general: {
-            debugEnabled: false,
-            giftsEnabled: true,
-            paypiggiesEnabled: true,
-            
+    try {
+      await platformLifecycleService.initializeAllPlatforms({
+        youtube: MockYouTubePlatform,
+      });
+      await new Promise(setImmediate);
+
+      expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
+      const queued = displayQueue.addItem.mock.calls[0][0];
+      expect(queued.type).toBe("platform:gift");
+      expect(queued.platform).toBe("youtube");
+      expect(queued.data.giftType).toBe("Super Chat");
+      expect(queued.data.currency).toBe("USD");
+      expect(queued.data.displayMessage).toContain("Super Chat");
+      assertUserFacingOutput(queued.data, {
+        username: "ChatHero",
+        keyword: "Super Chat",
+      });
+    } finally {
+      runtimeBundle.runtime.platformEventRouter?.dispose();
+      platformLifecycleService.dispose();
+    }
+  });
+
+  test("routes Super Sticker gifts through lifecycle, router, and runtime", async () => {
+    const { displayQueue, platformLifecycleService, runtimeBundle } =
+      createRuntimeDeps();
+
+    class MockYouTubePlatform {
+      async initialize(handlers) {
+        handlers.onGift({
+          username: "test-sticker-hero",
+          userId: "yt-sticker-1",
+          giftType: "Super Sticker",
+          giftCount: 1,
+          amount: 3,
+          currency: "USD",
+          message: "Nice sticker",
+          giftImageUrl:
+            "https://lh3.googleusercontent.com/test-supersticker=s176-rwa",
+          id: "yt-supersticker-1",
+          timestamp: "2024-01-01T00:00:00.000Z",
+        });
+      }
+
+      on() {}
+
+      cleanup() {
+        return Promise.resolve();
+      }
+    }
+
+    try {
+      await platformLifecycleService.initializeAllPlatforms({
+        youtube: MockYouTubePlatform,
+      });
+      await new Promise(setImmediate);
+
+      expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
+      const queued = displayQueue.addItem.mock.calls[0][0];
+      expect(queued.type).toBe("platform:gift");
+      expect(queued.platform).toBe("youtube");
+      expect(queued.data.giftType).toBe("Super Sticker");
+      expect(queued.data.message).toBe("Nice sticker");
+      expect(queued.data.displayMessage).toContain("Super Sticker");
+      expect(queued.data.parts).toEqual([
+        {
+          type: "emote",
+          platform: "youtube",
+          emoteId: "supersticker",
+          imageUrl:
+            "https://lh3.googleusercontent.com/test-supersticker=s176-rwa",
         },
-        youtube: { enabled: true, username: 'test-channel' },
-        obs: { enabled: false }
-    };
+        { type: "text", text: " Nice sticker" },
+      ]);
+      assertUserFacingOutput(queued.data, {
+        username: "test-sticker-hero",
+        keyword: "Super Sticker",
+      });
+    } finally {
+      runtimeBundle.runtime.platformEventRouter?.dispose();
+      platformLifecycleService.dispose();
+    }
+  });
 
-    const createRuntimeDeps = () => {
-        const eventBus = createEventBus();
-        const logger = noOpLogger;
-        const displayQueue = createMockDisplayQueue();
-        const textProcessing = createTextProcessingManager({ logger });
-        const config = createConfigFixture(configOverrides);
-        const notificationManager = new NotificationManager({
-            displayQueue,
-            logger,
-            eventBus,
-            config,
-            constants: require('../../src/core/constants'),
-            textProcessing,
-            obsGoals: { processDonationGoal: createMockFn() },
-            vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) },
-            userTrackingService: { isFirstMessage: createMockFn().mockResolvedValue(false) }
+  test("routes YouTube jewels gifts without userId through lifecycle, router, and runtime", async () => {
+    const { displayQueue, platformLifecycleService, runtimeBundle } =
+      createRuntimeDeps();
+
+    class MockYouTubePlatform {
+      async initialize(handlers) {
+        handlers.onGift({
+          username: "test-jewels-user",
+          giftType: "Girl power",
+          giftCount: 1,
+          amount: 300,
+          currency: "jewels",
+          id: "yt-jewels-1",
+          timestamp: "2024-01-01T00:00:00.000Z",
+          metadata: {
+            missingFields: ["userId"],
+          },
         });
+      }
 
-        const platformLifecycleService = new PlatformLifecycleService({
-            config: { youtube: { enabled: true, username: 'test-channel' } },
-            eventBus,
-            logger
-        });
+      on() {}
 
-        const runtimeBundle = createTestAppRuntime(configOverrides, {
-            eventBus,
-            notificationManager,
-            displayQueue,
-            logger,
-            platformLifecycleService
-        });
+      cleanup() {
+        return Promise.resolve();
+      }
+    }
 
-        return {
-            eventBus,
-            logger,
-            displayQueue,
-            config,
-            notificationManager,
-            platformLifecycleService,
-            runtimeBundle
-        };
-    };
+    try {
+      await platformLifecycleService.initializeAllPlatforms({
+        youtube: MockYouTubePlatform,
+      });
+      await new Promise(setImmediate);
 
-    test('routes Super Chat gifts through lifecycle, router, and runtime', async () => {
-        const {
-            displayQueue,
-            platformLifecycleService,
-            runtimeBundle
-        } = createRuntimeDeps();
-
-        class MockYouTubePlatform {
-            async initialize(handlers) {
-                handlers.onGift({
-                    username: 'ChatHero',
-                    userId: 'yt-chat-1',
-                    giftType: 'Super Chat',
-                    giftCount: 1,
-                    amount: 5,
-                    currency: 'USD',
-                    id: 'yt-superchat-1',
-                    timestamp: '2024-01-01T00:00:00.000Z'
-                });
-            }
-
-            on() {}
-
-            cleanup() {
-                return Promise.resolve();
-            }
-        }
-
-        try {
-            await platformLifecycleService.initializeAllPlatforms({ youtube: MockYouTubePlatform });
-            await new Promise(setImmediate);
-
-            expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
-            const queued = displayQueue.addItem.mock.calls[0][0];
-            expect(queued.type).toBe('platform:gift');
-            expect(queued.platform).toBe('youtube');
-            expect(queued.data.giftType).toBe('Super Chat');
-            expect(queued.data.currency).toBe('USD');
-            expect(queued.data.displayMessage).toContain('Super Chat');
-            assertUserFacingOutput(queued.data, {
-                username: 'ChatHero',
-                keyword: 'Super Chat'
-            });
-        } finally {
-            runtimeBundle.runtime.platformEventRouter?.dispose();
-            platformLifecycleService.dispose();
-        }
-    });
-
-    test('routes Super Sticker gifts through lifecycle, router, and runtime', async () => {
-        const {
-            displayQueue,
-            platformLifecycleService,
-            runtimeBundle
-        } = createRuntimeDeps();
-
-        class MockYouTubePlatform {
-            async initialize(handlers) {
-                handlers.onGift({
-                    username: 'test-sticker-hero',
-                    userId: 'yt-sticker-1',
-                    giftType: 'Super Sticker',
-                    giftCount: 1,
-                    amount: 3,
-                    currency: 'USD',
-                    message: 'Nice sticker',
-                    giftImageUrl: 'https://lh3.googleusercontent.com/test-supersticker=s176-rwa',
-                    id: 'yt-supersticker-1',
-                    timestamp: '2024-01-01T00:00:00.000Z'
-                });
-            }
-
-            on() {}
-
-            cleanup() {
-                return Promise.resolve();
-            }
-        }
-
-        try {
-            await platformLifecycleService.initializeAllPlatforms({ youtube: MockYouTubePlatform });
-            await new Promise(setImmediate);
-
-            expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
-            const queued = displayQueue.addItem.mock.calls[0][0];
-            expect(queued.type).toBe('platform:gift');
-            expect(queued.platform).toBe('youtube');
-            expect(queued.data.giftType).toBe('Super Sticker');
-            expect(queued.data.message).toBe('Nice sticker');
-            expect(queued.data.displayMessage).toContain('Super Sticker');
-            expect(queued.data.parts).toEqual([
-                {
-                    type: 'emote',
-                    platform: 'youtube',
-                    emoteId: 'supersticker',
-                    imageUrl: 'https://lh3.googleusercontent.com/test-supersticker=s176-rwa'
-                },
-                { type: 'text', text: ' Nice sticker' }
-            ]);
-            assertUserFacingOutput(queued.data, {
-                username: 'test-sticker-hero',
-                keyword: 'Super Sticker'
-            });
-        } finally {
-            runtimeBundle.runtime.platformEventRouter?.dispose();
-            platformLifecycleService.dispose();
-        }
-    });
-
-    test('routes YouTube jewels gifts without userId through lifecycle, router, and runtime', async () => {
-        const {
-            displayQueue,
-            platformLifecycleService,
-            runtimeBundle
-        } = createRuntimeDeps();
-
-        class MockYouTubePlatform {
-            async initialize(handlers) {
-                handlers.onGift({
-                    username: 'test-jewels-user',
-                    giftType: 'Girl power',
-                    giftCount: 1,
-                    amount: 300,
-                    currency: 'jewels',
-                    id: 'yt-jewels-1',
-                    timestamp: '2024-01-01T00:00:00.000Z',
-                    metadata: {
-                        missingFields: ['userId']
-                    }
-                });
-            }
-
-            on() {}
-
-            cleanup() {
-                return Promise.resolve();
-            }
-        }
-
-        try {
-            await platformLifecycleService.initializeAllPlatforms({ youtube: MockYouTubePlatform });
-            await new Promise(setImmediate);
-
-            expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
-            const queued = displayQueue.addItem.mock.calls[0][0];
-            expect(queued.type).toBe('platform:gift');
-            expect(queued.platform).toBe('youtube');
-            expect(queued.data.giftType).toBe('Girl power');
-            expect(queued.data.currency).toBe('jewels');
-            expect(queued.data.userId).toBeUndefined();
-            expect(queued.data.displayMessage.toLowerCase()).toContain('jewels');
-            assertUserFacingOutput(queued.data, {
-                username: 'test-jewels-user',
-                keyword: 'jewels'
-            });
-        } finally {
-            runtimeBundle.runtime.platformEventRouter?.dispose();
-            platformLifecycleService.dispose();
-        }
-    });
+      expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
+      const queued = displayQueue.addItem.mock.calls[0][0];
+      expect(queued.type).toBe("platform:gift");
+      expect(queued.platform).toBe("youtube");
+      expect(queued.data.giftType).toBe("Girl power");
+      expect(queued.data.currency).toBe("jewels");
+      expect(queued.data.userId).toBeUndefined();
+      expect(queued.data.displayMessage.toLowerCase()).toContain("jewels");
+      assertUserFacingOutput(queued.data, {
+        username: "test-jewels-user",
+        keyword: "jewels",
+      });
+    } finally {
+      runtimeBundle.runtime.platformEventRouter?.dispose();
+      platformLifecycleService.dispose();
+    }
+  });
 });
