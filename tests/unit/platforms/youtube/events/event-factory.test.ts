@@ -1,15 +1,12 @@
 import { PlatformEvents } from "../../../../../src/interfaces/PlatformEvents";
 import { DEFAULT_AVATAR_URL } from "../../../../../src/constants/avatar";
+import { createYouTubeEventFactory as createStaticYouTubeEventFactory } from "../../../../../src/platforms/youtube/events/event-factory";
 
 const FALLBACK_AVATAR_URL = DEFAULT_AVATAR_URL;
 
 describe("YouTube event factory behavior", () => {
   it("builds chat-connected events with deterministic timestamp", () => {
-    const {
-      createYouTubeEventFactory,
-    } = require("../../../../../src/platforms/youtube/events/event-factory.ts");
-
-    const eventFactory = createYouTubeEventFactory({
+    const eventFactory = createStaticYouTubeEventFactory({
       nowIso: () => "2024-01-01T00:00:00.000Z",
       generateCorrelationId: () => "corr-ignored",
     });

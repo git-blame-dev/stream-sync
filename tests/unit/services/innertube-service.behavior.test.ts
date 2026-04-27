@@ -1,16 +1,12 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../helpers/mock-factories";
+import { InnertubeService } from "../../../src/services/innertube-service";
 
 describe("InnertubeService behavior", () => {
-  let InnertubeService;
   let factory;
 
   beforeEach(() => {
-    ({
-      InnertubeService,
-    } = require("../../../src/services/innertube-service.ts"));
-
     factory = {
       createWithTimeout: createMockFn(async () => ({
         getInfo: createMockFn(async () => ({ video: "info" })),

@@ -2,6 +2,7 @@ import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../helpers/mock-factories";
 import { createEventBus } from "../../../src/core/EventBus";
+import { createSceneManagementService } from "../../../src/obs/scene-management-service";
 
 describe("SceneManagementService", () => {
   let sceneService;
@@ -15,9 +16,6 @@ describe("SceneManagementService", () => {
       call: createMockFn().mockResolvedValue({}),
     };
 
-    const {
-      createSceneManagementService,
-    } = require("../../../src/obs/scene-management-service.ts");
     sceneService = createSceneManagementService({
       eventBus,
       obsConnection: mockOBSConnection,
