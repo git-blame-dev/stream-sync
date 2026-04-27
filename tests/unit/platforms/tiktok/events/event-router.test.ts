@@ -1,514 +1,619 @@
-const { describe, test, expect, afterEach } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../../../../helpers/bun-mock-utils');
-const { noOpLogger } = require('../../../../helpers/mock-factories');
+import { describe, test, expect, afterEach } from "bun:test";
+import {
+  createMockFn,
+  restoreAllMocks,
+} from "../../../../helpers/bun-mock-utils";
+import { noOpLogger } from "../../../../helpers/mock-factories";
 const {
-    cleanupTikTokEventListeners,
-    setupTikTokEventListeners
-} = require('../../../../../src/platforms/tiktok/events/event-router.ts');
+  cleanupTikTokEventListeners,
+  setupTikTokEventListeners,
+} = require("../../../../../src/platforms/tiktok/events/event-router.ts");
 
-describe('TikTok event router', () => {
-    afterEach(() => {
-        restoreAllMocks();
-    });
+describe("TikTok event router", () => {
+  afterEach(() => {
+    restoreAllMocks();
+  });
 
-    const createPlatformHarness = (overrides = {}) => {
-        const listeners = {};
-        const emitted = [];
-        const handledChatMessages = [];
+  const createPlatformHarness = (overrides = {}) => {
+    const listeners = {};
+    const emitted = [];
+    const handledChatMessages = [];
 
-        const connection = {
-            on: createMockFn((eventName, handler) => {
-                listeners[eventName] = handler;
-            }),
-            removeAllListeners: createMockFn()
-        };
-
-        const platform = {
-            listenersConfigured: false,
-            connection,
-            WebcastEvent: {
-                CHAT: 'chat',
-                GIFT: 'gift',
-                FOLLOW: 'follow',
-                SOCIAL: 'social',
-                ROOM_USER: 'roomUser',
-                ENVELOPE: 'envelope',
-                SUBSCRIBE: 'subscribe',
-                SUPER_FAN: 'superfan',
-                ERROR: 'error',
-                DISCONNECT: 'disconnect',
-                STREAM_END: 'streamEnd'
-            },
-            ControlEvent: {
-                CONNECTED: 'connected',
-                DISCONNECTED: 'disconnected',
-                ERROR: 'control-error'
-            },
-            platformName: 'tiktok',
-            timestampService: null,
-            selfMessageDetectionService: null,
-            config: { dataLoggingEnabled: false },
-            logger: noOpLogger,
-            errorHandler: {
-                handleConnectionError: createMockFn(),
-                handleEventProcessingError: createMockFn(),
-                handleCleanupError: createMockFn()
-            },
-            constructor: {
-                resolveEventTimestampMs: createMockFn(() => null)
-            },
-            _logIncomingEvent: createMockFn().mockResolvedValue(),
-            _emitPlatformEvent: (type, payload) => emitted.push({ type, payload }),
-            _handleStandardEvent: createMockFn().mockResolvedValue(),
-            _handleStreamEnd: createMockFn(),
-            handleConnectionIssue: createMockFn(),
-            handleConnectionError: createMockFn(),
-            handleRetry: createMockFn(),
-            handleTikTokGift: createMockFn().mockResolvedValue(),
-            handleTikTokFollow: createMockFn().mockResolvedValue(),
-            handleTikTokSocial: createMockFn().mockResolvedValue(),
-            connectionActive: false,
-            cachedViewerCount: 0,
-            connectionTime: 0,
-            _getTimestamp: createMockFn(() => '2025-01-02T03:04:05.000Z'),
-            _getPlatformMessageId: createMockFn((data) => {
-                const msgId = data?.common?.msgId;
-                if (msgId === undefined || msgId === null) {
-                    return null;
-                }
-                const normalized = String(msgId).trim();
-                return normalized || null;
-            }),
-            _handleChatMessage: async (rawData, normalizedData) => handledChatMessages.push({ rawData, normalizedData }),
-            ...overrides
-        };
-
-        return { platform, connection, listeners, emitted, handledChatMessages };
+    const connection = {
+      on: createMockFn((eventName, handler) => {
+        listeners[eventName] = handler;
+      }),
+      removeAllListeners: createMockFn(),
     };
 
-    test('caches viewer count and emits viewer-count', async () => {
-        const { platform, listeners, emitted } = createPlatformHarness();
+    const platform = {
+      listenersConfigured: false,
+      connection,
+      WebcastEvent: {
+        CHAT: "chat",
+        GIFT: "gift",
+        FOLLOW: "follow",
+        SOCIAL: "social",
+        ROOM_USER: "roomUser",
+        ENVELOPE: "envelope",
+        SUBSCRIBE: "subscribe",
+        SUPER_FAN: "superfan",
+        ERROR: "error",
+        DISCONNECT: "disconnect",
+        STREAM_END: "streamEnd",
+      },
+      ControlEvent: {
+        CONNECTED: "connected",
+        DISCONNECTED: "disconnected",
+        ERROR: "control-error",
+      },
+      platformName: "tiktok",
+      timestampService: null,
+      selfMessageDetectionService: null,
+      config: { dataLoggingEnabled: false },
+      logger: noOpLogger,
+      errorHandler: {
+        handleConnectionError: createMockFn(),
+        handleEventProcessingError: createMockFn(),
+        handleCleanupError: createMockFn(),
+      },
+      constructor: {
+        resolveEventTimestampMs: createMockFn(() => null),
+      },
+      _logIncomingEvent: createMockFn().mockResolvedValue(),
+      _emitPlatformEvent: (type, payload) => emitted.push({ type, payload }),
+      _handleStandardEvent: createMockFn().mockResolvedValue(),
+      _handleStreamEnd: createMockFn(),
+      handleConnectionIssue: createMockFn(),
+      handleConnectionError: createMockFn(),
+      handleRetry: createMockFn(),
+      handleTikTokGift: createMockFn().mockResolvedValue(),
+      handleTikTokFollow: createMockFn().mockResolvedValue(),
+      handleTikTokSocial: createMockFn().mockResolvedValue(),
+      connectionActive: false,
+      cachedViewerCount: 0,
+      connectionTime: 0,
+      _getTimestamp: createMockFn(() => "2025-01-02T03:04:05.000Z"),
+      _getPlatformMessageId: createMockFn((data) => {
+        const msgId = data?.common?.msgId;
+        if (msgId === undefined || msgId === null) {
+          return null;
+        }
+        const normalized = String(msgId).trim();
+        return normalized || null;
+      }),
+      _handleChatMessage: async (rawData, normalizedData) =>
+        handledChatMessages.push({ rawData, normalizedData }),
+      ...overrides,
+    };
 
-        setupTikTokEventListeners(platform);
+    return { platform, connection, listeners, emitted, handledChatMessages };
+  };
 
-        await listeners[platform.WebcastEvent.ROOM_USER]({ viewerCount: 42 });
+  test("caches viewer count and emits viewer-count", async () => {
+    const { platform, listeners, emitted } = createPlatformHarness();
 
-        expect(platform.cachedViewerCount).toBe(42);
-        expect(emitted.some((entry) => entry.type === 'platform:viewer-count' && entry.payload.count === 42)).toBe(true);
+    setupTikTokEventListeners(platform);
+
+    await listeners[platform.WebcastEvent.ROOM_USER]({ viewerCount: 42 });
+
+    expect(platform.cachedViewerCount).toBe(42);
+    expect(
+      emitted.some(
+        (entry) =>
+          entry.type === "platform:viewer-count" && entry.payload.count === 42,
+      ),
+    ).toBe(true);
+  });
+
+  test("throws when connection is missing", () => {
+    const errorHandler = { handleConnectionError: createMockFn() };
+    const platform = {
+      listenersConfigured: false,
+      connection: null,
+      errorHandler,
+    };
+
+    expect(() => setupTikTokEventListeners(platform)).toThrow(
+      "TikTok connection missing connection object",
+    );
+    expect(errorHandler.handleConnectionError.mock.calls).toHaveLength(1);
+  });
+
+  test("throws when connection lacks event emitter methods", () => {
+    const errorHandler = { handleConnectionError: createMockFn() };
+    const platform = {
+      listenersConfigured: false,
+      connection: {},
+      errorHandler,
+    };
+
+    expect(() => setupTikTokEventListeners(platform)).toThrow(
+      "TikTok connection missing event emitter interface (on/removeAllListeners)",
+    );
+    expect(errorHandler.handleConnectionError.mock.calls).toHaveLength(1);
+  });
+
+  test("cleans up listeners when removeAllListeners is missing", () => {
+    const platform = {
+      connection: {},
+      listenersConfigured: true,
+    };
+
+    cleanupTikTokEventListeners(platform);
+
+    expect(platform.listenersConfigured).toBe(false);
+  });
+
+  test("removes listeners for all known event types", () => {
+    const removeAllListeners = createMockFn();
+    const platform = {
+      connection: { removeAllListeners },
+      listenersConfigured: true,
+      WebcastEvent: {
+        CHAT: "chat",
+        GIFT: "gift",
+        FOLLOW: "follow",
+        ROOM_USER: "roomUser",
+        ENVELOPE: "envelope",
+        SUBSCRIBE: "subscribe",
+        SUPER_FAN: "superfan",
+        SOCIAL: "social",
+        ERROR: "error",
+        DISCONNECT: "disconnect",
+        STREAM_END: "streamEnd",
+      },
+      ControlEvent: {
+        CONNECTED: "connected",
+        DISCONNECTED: "disconnected",
+        ERROR: "control-error",
+      },
+      errorHandler: { handleCleanupError: createMockFn() },
+    };
+
+    cleanupTikTokEventListeners(platform);
+
+    // 11 WebcastEvent types + 3 ControlEvent types + 1 rawData = 15
+    expect(removeAllListeners.mock.calls.length).toBe(15);
+    expect(platform.listenersConfigured).toBe(false);
+  });
+
+  test("processes valid chat messages end-to-end", async () => {
+    const timestampService = {
+      extractTimestamp: () => "2025-01-02T03:04:05.000Z",
+    };
+    const selfMessageDetectionService = {
+      shouldFilterMessage: createMockFn(() => false),
+    };
+    const { platform, listeners, handledChatMessages } = createPlatformHarness({
+      timestampService,
+      selfMessageDetectionService,
     });
 
-    test('throws when connection is missing', () => {
-        const errorHandler = { handleConnectionError: createMockFn() };
-        const platform = {
-            listenersConfigured: false,
-            connection: null,
-            errorHandler
-        };
+    setupTikTokEventListeners(platform);
 
-        expect(() => setupTikTokEventListeners(platform)).toThrow('TikTok connection missing connection object');
-        expect(errorHandler.handleConnectionError.mock.calls).toHaveLength(1);
+    await listeners[platform.WebcastEvent.CHAT]({
+      comment: "hello stream",
+      user: {
+        userId: "test-user-1",
+        uniqueId: "testuser",
+        nickname: "TestUser",
+      },
+      common: { createTime: "1700000000" },
+      isModerator: false,
+      isOwner: false,
     });
 
-    test('throws when connection lacks event emitter methods', () => {
-        const errorHandler = { handleConnectionError: createMockFn() };
-        const platform = {
-            listenersConfigured: false,
-            connection: {},
-            errorHandler
-        };
+    expect(handledChatMessages).toHaveLength(1);
+    expect(handledChatMessages[0].normalizedData.isPaypiggy).toBe(false);
+    expect(
+      selfMessageDetectionService.shouldFilterMessage.mock.calls,
+    ).toHaveLength(1);
+  });
 
-        expect(() => setupTikTokEventListeners(platform)).toThrow(
-            'TikTok connection missing event emitter interface (on/removeAllListeners)'
-        );
-        expect(errorHandler.handleConnectionError.mock.calls).toHaveLength(1);
+  test("derives paypiggy flag from userIdentity subscriber signal at chat ingress", async () => {
+    const { platform, listeners, handledChatMessages } =
+      createPlatformHarness();
+
+    setupTikTokEventListeners(platform);
+
+    await listeners[platform.WebcastEvent.CHAT]({
+      comment: "paypiggy user",
+      user: {
+        userId: "test-user-paypiggy",
+        uniqueId: "paypiggy-user",
+        nickname: "PaypiggyUser",
+      },
+      userIdentity: { isSubscriberOfAnchor: true },
+      common: { createTime: "1700000000" },
+      isOwner: false,
     });
 
-    test('cleans up listeners when removeAllListeners is missing', () => {
-        const platform = {
-            connection: {},
-            listenersConfigured: true
-        };
+    expect(handledChatMessages).toHaveLength(1);
+    expect(handledChatMessages[0].normalizedData.isPaypiggy).toBe(true);
+  });
 
-        cleanupTikTokEventListeners(platform);
-
-        expect(platform.listenersConfigured).toBe(false);
+  test("filters historical chat messages based on connection time", async () => {
+    const timestampService = {
+      extractTimestamp: () => "2025-01-02T03:04:05.000Z",
+    };
+    const { platform, listeners, handledChatMessages } = createPlatformHarness({
+      timestampService,
+      connectionTime: 2000,
+      constructor: {
+        resolveEventTimestampMs: createMockFn(() => 1000),
+      },
     });
 
-    test('removes listeners for all known event types', () => {
-        const removeAllListeners = createMockFn();
-        const platform = {
-            connection: { removeAllListeners },
-            listenersConfigured: true,
-            WebcastEvent: {
-                CHAT: 'chat',
-                GIFT: 'gift',
-                FOLLOW: 'follow',
-                ROOM_USER: 'roomUser',
-                ENVELOPE: 'envelope',
-                SUBSCRIBE: 'subscribe',
-                SUPER_FAN: 'superfan',
-                SOCIAL: 'social',
-                ERROR: 'error',
-                DISCONNECT: 'disconnect',
-                STREAM_END: 'streamEnd'
+    setupTikTokEventListeners(platform);
+
+    await listeners[platform.WebcastEvent.CHAT]({
+      comment: "late message",
+      user: {
+        userId: "test-user-2",
+        uniqueId: "testuser2",
+        nickname: "TestUser2",
+      },
+      common: { createTime: "1700000000" },
+      isModerator: false,
+      isOwner: false,
+    });
+
+    expect(handledChatMessages).toHaveLength(0);
+  });
+
+  test("skips duplicate chat messages at ingress", async () => {
+    const { platform, listeners, handledChatMessages } =
+      createPlatformHarness();
+
+    setupTikTokEventListeners(platform);
+
+    await listeners[platform.WebcastEvent.CHAT]({
+      comment: "duplicate replay first",
+      user: {
+        userId: "test-user-dup",
+        uniqueId: "dup-user",
+        nickname: "DupUser",
+      },
+      common: { createTime: "1700000000", msgId: "test-chat-msg-dup-1" },
+    });
+    await listeners[platform.WebcastEvent.CHAT]({
+      comment: "duplicate replay second",
+      user: {
+        userId: "test-user-dup",
+        uniqueId: "dup-user",
+        nickname: "DupUser",
+      },
+      common: { createTime: "1700000000", msgId: "test-chat-msg-dup-1" },
+    });
+
+    expect(handledChatMessages).toHaveLength(1);
+  });
+
+  test("skips stale chat replay messages at ingress", async () => {
+    const { platform, listeners, handledChatMessages } = createPlatformHarness({
+      chatReplayProtectionConfig: { maxAgeMs: 60 * 1000 },
+      constructor: {
+        resolveEventTimestampMs: createMockFn(() => 1),
+      },
+    });
+
+    setupTikTokEventListeners(platform);
+
+    await listeners[platform.WebcastEvent.CHAT]({
+      comment: "stale replay",
+      user: {
+        userId: "test-user-stale",
+        uniqueId: "stale-user",
+        nickname: "StaleUser",
+      },
+      common: { createTime: "1700000000", msgId: "test-chat-msg-stale-1" },
+    });
+
+    expect(handledChatMessages).toHaveLength(0);
+  });
+
+  test("routes mixed bursts by dropping only duplicate chat message ids", async () => {
+    const { platform, listeners, handledChatMessages } =
+      createPlatformHarness();
+
+    setupTikTokEventListeners(platform);
+
+    const makePayload = (msgId, comment) => ({
+      comment,
+      user: {
+        userId: "test-user-mix",
+        uniqueId: "mix-user",
+        nickname: "MixUser",
+      },
+      common: { createTime: "1700000000", msgId },
+    });
+
+    await listeners[platform.WebcastEvent.CHAT](
+      makePayload("test-chat-msg-a", "message-a"),
+    );
+    await listeners[platform.WebcastEvent.CHAT](
+      makePayload("test-chat-msg-b", "message-b"),
+    );
+    await listeners[platform.WebcastEvent.CHAT](
+      makePayload("test-chat-msg-a", "message-a-dup"),
+    );
+    await listeners[platform.WebcastEvent.CHAT](
+      makePayload("test-chat-msg-c", "message-c"),
+    );
+    await listeners[platform.WebcastEvent.CHAT](
+      makePayload("test-chat-msg-b", "message-b-dup"),
+    );
+
+    expect(handledChatMessages).toHaveLength(3);
+  });
+
+  test("filters self messages when detection service blocks", async () => {
+    const timestampService = {
+      extractTimestamp: () => "2025-01-02T03:04:05.000Z",
+    };
+    const selfMessageDetectionService = {
+      shouldFilterMessage: createMockFn(() => true),
+    };
+    const { platform, listeners, handledChatMessages } = createPlatformHarness({
+      timestampService,
+      selfMessageDetectionService,
+    });
+
+    setupTikTokEventListeners(platform);
+
+    await listeners[platform.WebcastEvent.CHAT]({
+      comment: "self message",
+      user: {
+        userId: "test-user-3",
+        uniqueId: "selfuser",
+        nickname: "SelfUser",
+      },
+      common: { createTime: "1700000000" },
+      isModerator: false,
+      isOwner: true,
+    });
+
+    expect(handledChatMessages).toHaveLength(0);
+    expect(
+      selfMessageDetectionService.shouldFilterMessage.mock.calls,
+    ).toHaveLength(1);
+  });
+
+  test("routes non-chat events to platform handlers", async () => {
+    const { platform, listeners } = createPlatformHarness();
+
+    setupTikTokEventListeners(platform);
+
+    await listeners[platform.WebcastEvent.GIFT]({ id: "gift-1" });
+    await listeners[platform.WebcastEvent.FOLLOW]({ id: "follow-1" });
+    await listeners[platform.WebcastEvent.ENVELOPE]({ id: "envelope-1" });
+    await listeners[platform.WebcastEvent.SUBSCRIBE]({ id: "sub-1" });
+    await listeners[platform.WebcastEvent.SUPER_FAN]({ id: "fan-1" });
+    await listeners[platform.WebcastEvent.SOCIAL]({ id: "social-1" });
+
+    expect(platform.handleTikTokGift.mock.calls).toHaveLength(1);
+    expect(platform.handleTikTokFollow.mock.calls).toHaveLength(1);
+    expect(platform.handleTikTokSocial.mock.calls).toHaveLength(1);
+    expect(platform._handleStandardEvent.mock.calls).toHaveLength(3);
+    expect(platform._handleStandardEvent.mock.calls[0][0]).toBe("envelope");
+    expect(platform._handleStandardEvent.mock.calls[1][0]).toBe("paypiggy");
+    expect(platform._handleStandardEvent.mock.calls[2][0]).toBe("paypiggy");
+  });
+
+  test("handles connection lifecycle events", async () => {
+    const { platform, listeners } = createPlatformHarness({
+      connectionActive: true,
+    });
+
+    setupTikTokEventListeners(platform);
+
+    listeners[platform.ControlEvent.DISCONNECTED]("bye");
+    listeners[platform.ControlEvent.ERROR](new Error("control-error"));
+    listeners[platform.WebcastEvent.ERROR](new Error("webcast-error"));
+    await listeners[platform.WebcastEvent.DISCONNECT]();
+    await listeners[platform.WebcastEvent.STREAM_END]({});
+
+    // semantic disconnect handling only comes from DISCONNECTED
+    expect(platform.handleConnectionIssue.mock.calls).toHaveLength(1);
+    expect(platform.handleConnectionError.mock.calls).toHaveLength(1);
+    expect(platform.handleRetry.mock.calls).toHaveLength(1);
+    expect(platform.connectionActive).toBe(false);
+    expect(platform._handleStreamEnd.mock.calls).toHaveLength(1);
+  });
+
+  test("warns when room user payload has no timestamp", async () => {
+    const { platform, listeners, emitted } = createPlatformHarness({
+      _getTimestamp: createMockFn(() => null),
+    });
+
+    setupTikTokEventListeners(platform);
+
+    await listeners[platform.WebcastEvent.ROOM_USER]({ viewerCount: 12 });
+
+    expect(emitted).toHaveLength(0);
+    expect(platform.cachedViewerCount).toBe(12);
+  });
+
+  test("processes degraded chat event when comment is invalid", async () => {
+    const { platform, listeners, handledChatMessages } =
+      createPlatformHarness();
+
+    setupTikTokEventListeners(platform);
+
+    await listeners[platform.WebcastEvent.CHAT]({ comment: 123 });
+
+    expect(handledChatMessages).toHaveLength(1);
+    expect(handledChatMessages[0].normalizedData.message).toEqual({
+      text: "Unknown Message",
+    });
+    expect(
+      handledChatMessages[0].normalizedData.metadata.missingFields,
+    ).toContain("message");
+  });
+
+  test("ignores non-object chat payloads at ingress", async () => {
+    const { platform, listeners, handledChatMessages } =
+      createPlatformHarness();
+
+    setupTikTokEventListeners(platform);
+
+    await listeners[platform.WebcastEvent.CHAT]("invalid-chat-payload");
+
+    expect(handledChatMessages).toHaveLength(0);
+  });
+
+  test("reports chat handler failures through event processing error handler", async () => {
+    const { platform, listeners } = createPlatformHarness({
+      _handleChatMessage: async () => {
+        throw new Error("chat handler failed");
+      },
+    });
+
+    setupTikTokEventListeners(platform);
+
+    await listeners[platform.WebcastEvent.CHAT]({
+      comment: "trigger failure",
+      user: {
+        userId: "test-user-chat-error",
+        uniqueId: "chat-error-user",
+        nickname: "ChatErrorUser",
+      },
+      common: { createTime: "1700000000", msgId: "test-chat-msg-error-1" },
+    });
+
+    expect(
+      platform.errorHandler.handleEventProcessingError.mock.calls,
+    ).toHaveLength(1);
+    expect(
+      platform.errorHandler.handleEventProcessingError.mock.calls[0][1],
+    ).toBe("chat-message");
+  });
+
+  test("processes emote-only chat payloads when comment is whitespace and emotes are present", async () => {
+    const { platform, listeners, handledChatMessages } =
+      createPlatformHarness();
+
+    setupTikTokEventListeners(platform);
+
+    await listeners[platform.WebcastEvent.CHAT]({
+      comment: " ",
+      emotes: [
+        {
+          placeInComment: 0,
+          emote: {
+            emoteId: "1234512345123451234",
+            image: {
+              imageUrl: "https://example.invalid/tiktok-emote.webp",
             },
-            ControlEvent: {
-                CONNECTED: 'connected',
-                DISCONNECTED: 'disconnected',
-                ERROR: 'control-error'
+          },
+        },
+      ],
+      user: {
+        userId: "test-user-emote-only",
+        uniqueId: "emote-only-user",
+        nickname: "EmoteOnlyUser",
+      },
+      common: { createTime: "1700000000" },
+    });
+
+    expect(handledChatMessages).toHaveLength(1);
+  });
+
+  test("processes emote-only chat payloads when comment is missing and emotes are present", async () => {
+    const { platform, listeners, handledChatMessages } =
+      createPlatformHarness();
+
+    setupTikTokEventListeners(platform);
+
+    await listeners[platform.WebcastEvent.CHAT]({
+      emotes: [
+        {
+          placeInComment: 0,
+          emote: {
+            emoteId: "1234512345123451234",
+            image: {
+              imageUrl: "https://example.invalid/tiktok-emote.webp",
             },
-            errorHandler: { handleCleanupError: createMockFn() }
-        };
-
-        cleanupTikTokEventListeners(platform);
-
-        // 11 WebcastEvent types + 3 ControlEvent types + 1 rawData = 15
-        expect(removeAllListeners.mock.calls.length).toBe(15);
-        expect(platform.listenersConfigured).toBe(false);
+          },
+        },
+      ],
+      user: {
+        userId: "test-user-emote-only",
+        uniqueId: "emote-only-user",
+        nickname: "EmoteOnlyUser",
+      },
+      common: { createTime: "1700000000" },
     });
 
-    test('processes valid chat messages end-to-end', async () => {
-        const timestampService = { extractTimestamp: () => '2025-01-02T03:04:05.000Z' };
-        const selfMessageDetectionService = { shouldFilterMessage: createMockFn(() => false) };
-        const { platform, listeners, handledChatMessages } = createPlatformHarness({
-            timestampService,
-            selfMessageDetectionService
-        });
+    expect(handledChatMessages).toHaveLength(1);
+  });
 
-        setupTikTokEventListeners(platform);
+  test("processes degraded chat payload when comment and emotes are both missing", async () => {
+    const { platform, listeners, handledChatMessages } =
+      createPlatformHarness();
 
-        await listeners[platform.WebcastEvent.CHAT]({
-            comment: 'hello stream',
-            user: { userId: 'test-user-1', uniqueId: 'testuser', nickname: 'TestUser' },
-            common: { createTime: '1700000000' },
-            isModerator: false,
-            isOwner: false
-        });
+    setupTikTokEventListeners(platform);
 
-        expect(handledChatMessages).toHaveLength(1);
-        expect(handledChatMessages[0].normalizedData.isPaypiggy).toBe(false);
-        expect(selfMessageDetectionService.shouldFilterMessage.mock.calls).toHaveLength(1);
+    await listeners[platform.WebcastEvent.CHAT]({
+      user: {
+        userId: "test-user-missing-message",
+        uniqueId: "missing-message-user",
+        nickname: "MissingMessageUser",
+      },
+      common: { createTime: "1700000000" },
     });
 
-    test('derives paypiggy flag from userIdentity subscriber signal at chat ingress', async () => {
-        const { platform, listeners, handledChatMessages } = createPlatformHarness();
-
-        setupTikTokEventListeners(platform);
-
-        await listeners[platform.WebcastEvent.CHAT]({
-            comment: 'paypiggy user',
-            user: { userId: 'test-user-paypiggy', uniqueId: 'paypiggy-user', nickname: 'PaypiggyUser' },
-            userIdentity: { isSubscriberOfAnchor: true },
-            common: { createTime: '1700000000' },
-            isOwner: false
-        });
-
-        expect(handledChatMessages).toHaveLength(1);
-        expect(handledChatMessages[0].normalizedData.isPaypiggy).toBe(true);
+    expect(handledChatMessages).toHaveLength(1);
+    expect(handledChatMessages[0].normalizedData.message).toEqual({
+      text: "Unknown Message",
     });
-
-    test('filters historical chat messages based on connection time', async () => {
-        const timestampService = { extractTimestamp: () => '2025-01-02T03:04:05.000Z' };
-        const { platform, listeners, handledChatMessages } = createPlatformHarness({
-            timestampService,
-            connectionTime: 2000,
-            constructor: {
-                resolveEventTimestampMs: createMockFn(() => 1000)
-            }
-        });
-
-        setupTikTokEventListeners(platform);
-
-        await listeners[platform.WebcastEvent.CHAT]({
-            comment: 'late message',
-            user: { userId: 'test-user-2', uniqueId: 'testuser2', nickname: 'TestUser2' },
-            common: { createTime: '1700000000' },
-            isModerator: false,
-            isOwner: false
-        });
-
-        expect(handledChatMessages).toHaveLength(0);
-    });
-
-    test('skips duplicate chat messages at ingress', async () => {
-        const { platform, listeners, handledChatMessages } = createPlatformHarness();
-
-        setupTikTokEventListeners(platform);
-
-        await listeners[platform.WebcastEvent.CHAT]({
-            comment: 'duplicate replay first',
-            user: { userId: 'test-user-dup', uniqueId: 'dup-user', nickname: 'DupUser' },
-            common: { createTime: '1700000000', msgId: 'test-chat-msg-dup-1' }
-        });
-        await listeners[platform.WebcastEvent.CHAT]({
-            comment: 'duplicate replay second',
-            user: { userId: 'test-user-dup', uniqueId: 'dup-user', nickname: 'DupUser' },
-            common: { createTime: '1700000000', msgId: 'test-chat-msg-dup-1' }
-        });
-
-        expect(handledChatMessages).toHaveLength(1);
-    });
-
-    test('skips stale chat replay messages at ingress', async () => {
-        const { platform, listeners, handledChatMessages } = createPlatformHarness({
-            chatReplayProtectionConfig: { maxAgeMs: 60 * 1000 },
-            constructor: {
-                resolveEventTimestampMs: createMockFn(() => 1)
-            }
-        });
-
-        setupTikTokEventListeners(platform);
-
-        await listeners[platform.WebcastEvent.CHAT]({
-            comment: 'stale replay',
-            user: { userId: 'test-user-stale', uniqueId: 'stale-user', nickname: 'StaleUser' },
-            common: { createTime: '1700000000', msgId: 'test-chat-msg-stale-1' }
-        });
-
-        expect(handledChatMessages).toHaveLength(0);
-    });
-
-    test('routes mixed bursts by dropping only duplicate chat message ids', async () => {
-        const { platform, listeners, handledChatMessages } = createPlatformHarness();
-
-        setupTikTokEventListeners(platform);
-
-        const makePayload = (msgId, comment) => ({
-            comment,
-            user: { userId: 'test-user-mix', uniqueId: 'mix-user', nickname: 'MixUser' },
-            common: { createTime: '1700000000', msgId }
-        });
-
-        await listeners[platform.WebcastEvent.CHAT](makePayload('test-chat-msg-a', 'message-a'));
-        await listeners[platform.WebcastEvent.CHAT](makePayload('test-chat-msg-b', 'message-b'));
-        await listeners[platform.WebcastEvent.CHAT](makePayload('test-chat-msg-a', 'message-a-dup'));
-        await listeners[platform.WebcastEvent.CHAT](makePayload('test-chat-msg-c', 'message-c'));
-        await listeners[platform.WebcastEvent.CHAT](makePayload('test-chat-msg-b', 'message-b-dup'));
-
-        expect(handledChatMessages).toHaveLength(3);
-    });
-
-    test('filters self messages when detection service blocks', async () => {
-        const timestampService = { extractTimestamp: () => '2025-01-02T03:04:05.000Z' };
-        const selfMessageDetectionService = { shouldFilterMessage: createMockFn(() => true) };
-        const { platform, listeners, handledChatMessages } = createPlatformHarness({
-            timestampService,
-            selfMessageDetectionService
-        });
-
-        setupTikTokEventListeners(platform);
-
-        await listeners[platform.WebcastEvent.CHAT]({
-            comment: 'self message',
-            user: { userId: 'test-user-3', uniqueId: 'selfuser', nickname: 'SelfUser' },
-            common: { createTime: '1700000000' },
-            isModerator: false,
-            isOwner: true
-        });
-
-        expect(handledChatMessages).toHaveLength(0);
-        expect(selfMessageDetectionService.shouldFilterMessage.mock.calls).toHaveLength(1);
-    });
-
-    test('routes non-chat events to platform handlers', async () => {
-        const { platform, listeners } = createPlatformHarness();
-
-        setupTikTokEventListeners(platform);
-
-        await listeners[platform.WebcastEvent.GIFT]({ id: 'gift-1' });
-        await listeners[platform.WebcastEvent.FOLLOW]({ id: 'follow-1' });
-        await listeners[platform.WebcastEvent.ENVELOPE]({ id: 'envelope-1' });
-        await listeners[platform.WebcastEvent.SUBSCRIBE]({ id: 'sub-1' });
-        await listeners[platform.WebcastEvent.SUPER_FAN]({ id: 'fan-1' });
-        await listeners[platform.WebcastEvent.SOCIAL]({ id: 'social-1' });
-
-        expect(platform.handleTikTokGift.mock.calls).toHaveLength(1);
-        expect(platform.handleTikTokFollow.mock.calls).toHaveLength(1);
-        expect(platform.handleTikTokSocial.mock.calls).toHaveLength(1);
-        expect(platform._handleStandardEvent.mock.calls).toHaveLength(3);
-        expect(platform._handleStandardEvent.mock.calls[0][0]).toBe('envelope');
-        expect(platform._handleStandardEvent.mock.calls[1][0]).toBe('paypiggy');
-        expect(platform._handleStandardEvent.mock.calls[2][0]).toBe('paypiggy');
-    });
-
-    test('handles connection lifecycle events', async () => {
-        const { platform, listeners } = createPlatformHarness({ connectionActive: true });
-
-        setupTikTokEventListeners(platform);
-
-        listeners[platform.ControlEvent.DISCONNECTED]('bye');
-        listeners[platform.ControlEvent.ERROR](new Error('control-error'));
-        listeners[platform.WebcastEvent.ERROR](new Error('webcast-error'));
-        await listeners[platform.WebcastEvent.DISCONNECT]();
-        await listeners[platform.WebcastEvent.STREAM_END]({});
-
-        // semantic disconnect handling only comes from DISCONNECTED
-        expect(platform.handleConnectionIssue.mock.calls).toHaveLength(1);
-        expect(platform.handleConnectionError.mock.calls).toHaveLength(1);
-        expect(platform.handleRetry.mock.calls).toHaveLength(1);
-        expect(platform.connectionActive).toBe(false);
-        expect(platform._handleStreamEnd.mock.calls).toHaveLength(1);
-    });
-
-    test('warns when room user payload has no timestamp', async () => {
-        const { platform, listeners, emitted } = createPlatformHarness({
-            _getTimestamp: createMockFn(() => null)
-        });
-
-        setupTikTokEventListeners(platform);
-
-        await listeners[platform.WebcastEvent.ROOM_USER]({ viewerCount: 12 });
-
-        expect(emitted).toHaveLength(0);
-        expect(platform.cachedViewerCount).toBe(12);
-    });
-
-    test('processes degraded chat event when comment is invalid', async () => {
-        const { platform, listeners, handledChatMessages } = createPlatformHarness();
-
-        setupTikTokEventListeners(platform);
-
-        await listeners[platform.WebcastEvent.CHAT]({ comment: 123 });
-
-        expect(handledChatMessages).toHaveLength(1);
-        expect(handledChatMessages[0].normalizedData.message).toEqual({ text: 'Unknown Message' });
-        expect(handledChatMessages[0].normalizedData.metadata.missingFields).toContain('message');
-    });
-
-    test('ignores non-object chat payloads at ingress', async () => {
-        const { platform, listeners, handledChatMessages } = createPlatformHarness();
-
-        setupTikTokEventListeners(platform);
-
-        await listeners[platform.WebcastEvent.CHAT]('invalid-chat-payload');
-
-        expect(handledChatMessages).toHaveLength(0);
-    });
-
-    test('reports chat handler failures through event processing error handler', async () => {
-        const { platform, listeners } = createPlatformHarness({
-            _handleChatMessage: async () => {
-                throw new Error('chat handler failed');
-            }
-        });
-
-        setupTikTokEventListeners(platform);
-
-        await listeners[platform.WebcastEvent.CHAT]({
-            comment: 'trigger failure',
-            user: { userId: 'test-user-chat-error', uniqueId: 'chat-error-user', nickname: 'ChatErrorUser' },
-            common: { createTime: '1700000000', msgId: 'test-chat-msg-error-1' }
-        });
-
-        expect(platform.errorHandler.handleEventProcessingError.mock.calls).toHaveLength(1);
-        expect(platform.errorHandler.handleEventProcessingError.mock.calls[0][1]).toBe('chat-message');
-    });
-
-    test('processes emote-only chat payloads when comment is whitespace and emotes are present', async () => {
-        const { platform, listeners, handledChatMessages } = createPlatformHarness();
-
-        setupTikTokEventListeners(platform);
-
-        await listeners[platform.WebcastEvent.CHAT]({
-            comment: ' ',
-            emotes: [
-                {
-                    placeInComment: 0,
-                    emote: {
-                        emoteId: '1234512345123451234',
-                        image: {
-                            imageUrl: 'https://example.invalid/tiktok-emote.webp'
-                        }
-                    }
-                }
-            ],
-            user: { userId: 'test-user-emote-only', uniqueId: 'emote-only-user', nickname: 'EmoteOnlyUser' },
-            common: { createTime: '1700000000' }
-        });
-
-        expect(handledChatMessages).toHaveLength(1);
-    });
-
-    test('processes emote-only chat payloads when comment is missing and emotes are present', async () => {
-        const { platform, listeners, handledChatMessages } = createPlatformHarness();
-
-        setupTikTokEventListeners(platform);
-
-        await listeners[platform.WebcastEvent.CHAT]({
-            emotes: [
-                {
-                    placeInComment: 0,
-                    emote: {
-                        emoteId: '1234512345123451234',
-                        image: {
-                            imageUrl: 'https://example.invalid/tiktok-emote.webp'
-                        }
-                    }
-                }
-            ],
-            user: { userId: 'test-user-emote-only', uniqueId: 'emote-only-user', nickname: 'EmoteOnlyUser' },
-            common: { createTime: '1700000000' }
-        });
-
-        expect(handledChatMessages).toHaveLength(1);
-    });
-
-    test('processes degraded chat payload when comment and emotes are both missing', async () => {
-        const { platform, listeners, handledChatMessages } = createPlatformHarness();
-
-        setupTikTokEventListeners(platform);
-
-        await listeners[platform.WebcastEvent.CHAT]({
-            user: { userId: 'test-user-missing-message', uniqueId: 'missing-message-user', nickname: 'MissingMessageUser' },
-            common: { createTime: '1700000000' }
-        });
-
-        expect(handledChatMessages).toHaveLength(1);
-        expect(handledChatMessages[0].normalizedData.message).toEqual({ text: 'Unknown Message' });
-        expect(handledChatMessages[0].normalizedData.metadata.missingFields).toContain('message');
-    });
-
-    test('registers listeners only for supported events', () => {
-        const { platform, listeners } = createPlatformHarness();
-
-        setupTikTokEventListeners(platform);
-
-        const registered = Object.keys(listeners).sort();
-        const expected = [
-            platform.WebcastEvent.CHAT,
-            platform.WebcastEvent.GIFT,
-            platform.WebcastEvent.FOLLOW,
-            platform.WebcastEvent.SOCIAL,
-            platform.WebcastEvent.ROOM_USER,
-            platform.WebcastEvent.ENVELOPE,
-            platform.WebcastEvent.SUBSCRIBE,
-            platform.WebcastEvent.SUPER_FAN,
-            platform.WebcastEvent.ERROR,
-            platform.WebcastEvent.DISCONNECT,
-            platform.WebcastEvent.STREAM_END,
-            platform.ControlEvent.DISCONNECTED,
-            platform.ControlEvent.ERROR,
-            'rawData'
-        ].sort();
-
-        expect(registered).toEqual(expected);
-    });
-
-    test('logs rawData payloads without trimming the envelope', async () => {
-        const { platform, listeners } = createPlatformHarness();
-
-        setupTikTokEventListeners(platform);
-
-        const payload = {
-            type: 'chat',
-            data: { comment: 'hello' },
-            envelope: { source: 'sdk' }
-        };
-
-        await listeners.rawData(payload);
-
-        expect(platform._logIncomingEvent.mock.calls).toHaveLength(1);
-        expect(platform._logIncomingEvent.mock.calls[0][0]).toBe('chat');
-        expect(platform._logIncomingEvent.mock.calls[0][1]).toBe(payload);
-    });
+    expect(
+      handledChatMessages[0].normalizedData.metadata.missingFields,
+    ).toContain("message");
+  });
+
+  test("registers listeners only for supported events", () => {
+    const { platform, listeners } = createPlatformHarness();
+
+    setupTikTokEventListeners(platform);
+
+    const registered = Object.keys(listeners).sort();
+    const expected = [
+      platform.WebcastEvent.CHAT,
+      platform.WebcastEvent.GIFT,
+      platform.WebcastEvent.FOLLOW,
+      platform.WebcastEvent.SOCIAL,
+      platform.WebcastEvent.ROOM_USER,
+      platform.WebcastEvent.ENVELOPE,
+      platform.WebcastEvent.SUBSCRIBE,
+      platform.WebcastEvent.SUPER_FAN,
+      platform.WebcastEvent.ERROR,
+      platform.WebcastEvent.DISCONNECT,
+      platform.WebcastEvent.STREAM_END,
+      platform.ControlEvent.DISCONNECTED,
+      platform.ControlEvent.ERROR,
+      "rawData",
+    ].sort();
+
+    expect(registered).toEqual(expected);
+  });
+
+  test("logs rawData payloads without trimming the envelope", async () => {
+    const { platform, listeners } = createPlatformHarness();
+
+    setupTikTokEventListeners(platform);
+
+    const payload = {
+      type: "chat",
+      data: { comment: "hello" },
+      envelope: { source: "sdk" },
+    };
+
+    await listeners.rawData(payload);
+
+    expect(platform._logIncomingEvent.mock.calls).toHaveLength(1);
+    expect(platform._logIncomingEvent.mock.calls[0][0]).toBe("chat");
+    expect(platform._logIncomingEvent.mock.calls[0][1]).toBe(payload);
+  });
 });

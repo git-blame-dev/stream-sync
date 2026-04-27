@@ -1,74 +1,88 @@
-const { describe, it, expect, afterEach } = require('bun:test');
-export {};
-const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+import { describe, it, expect, afterEach } from "bun:test";
+import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
 
-const { TikTokPlatform } = require('../../../src/platforms/tiktok');
-const { createMockTikTokPlatformDependencies, noOpLogger } = require('../../helpers/mock-factories');
+import { TikTokPlatform } from "../../../src/platforms/tiktok";
+import {
+  createMockTikTokPlatformDependencies,
+  noOpLogger,
+} from "../../helpers/mock-factories";
 
 type RetryCall = {
-    platformName: string;
-    err: Error;
-    reconnectFn: () => Promise<boolean> | boolean;
+  platformName: string;
+  err: Error;
+  reconnectFn: () => Promise<boolean> | boolean;
 };
 
-type RetryHandleArgs = [string, Error, () => Promise<boolean> | boolean, (() => void)?];
+type RetryHandleArgs = [
+  string,
+  Error,
+  () => Promise<boolean> | boolean,
+  (() => void)?,
+];
 
-describe('TikTokPlatform retry deduplication', () => {
-    const baseConfig = { enabled: true, username: 'retry_tester' };
+describe("TikTokPlatform retry deduplication", () => {
+  const baseConfig = { enabled: true, username: "retry_tester" };
 
-    afterEach(() => {
-        restoreAllMocks();
-    });
+  afterEach(() => {
+    restoreAllMocks();
+  });
 
-    it('only schedules one retry when queueRetry is invoked multiple times before a reconnect starts', () => {
-        const retryCalls: RetryHandleArgs[] = [];
-        const retrySystem = { handleConnectionError: (...args: RetryHandleArgs) => retryCalls.push(args) };
-        const dependencies = createMockTikTokPlatformDependencies();
-        dependencies.retrySystem = retrySystem;
-        dependencies.logger = noOpLogger;
-        dependencies.connectionFactory = dependencies.connectionFactory || {
-            createConnection: createMockFn()
-        };
+  it("only schedules one retry when queueRetry is invoked multiple times before a reconnect starts", () => {
+    const retryCalls: RetryHandleArgs[] = [];
+    const retrySystem = {
+      handleConnectionError: (...args: RetryHandleArgs) =>
+        retryCalls.push(args),
+    };
+    const dependencies = createMockTikTokPlatformDependencies();
+    dependencies.retrySystem = retrySystem;
+    dependencies.logger = noOpLogger;
+    dependencies.connectionFactory = dependencies.connectionFactory || {
+      createConnection: createMockFn(),
+    };
 
-        const platform = new TikTokPlatform(baseConfig, dependencies);
+    const platform = new TikTokPlatform(baseConfig, dependencies);
 
-        platform.queueRetry(new Error('first'));
-        platform.queueRetry(new Error('second'));
+    platform.queueRetry(new Error("first"));
+    platform.queueRetry(new Error("second"));
 
-        expect(retryCalls).toHaveLength(1);
-    });
+    expect(retryCalls).toHaveLength(1);
+  });
 
-    it('requeues a retry when the reconnect attempt fails, without double scheduling', async () => {
-        const retryCalls: RetryCall[] = [];
-        const retrySystem = {
-            handleConnectionError: (platformName: string, err: Error, reconnectFn: () => Promise<boolean> | boolean) => {
-                retryCalls.push({ platformName, err, reconnectFn });
-                reconnectFn();
-            }
-        };
-        const dependencies = createMockTikTokPlatformDependencies();
-        dependencies.retrySystem = retrySystem;
-        dependencies.logger = noOpLogger;
-        dependencies.connectionFactory = dependencies.connectionFactory || {
-            createConnection: createMockFn()
-        };
+  it("requeues a retry when the reconnect attempt fails, without double scheduling", async () => {
+    const retryCalls: RetryCall[] = [];
+    const retrySystem = {
+      handleConnectionError: (
+        platformName: string,
+        err: Error,
+        reconnectFn: () => Promise<boolean> | boolean,
+      ) => {
+        retryCalls.push({ platformName, err, reconnectFn });
+        reconnectFn();
+      },
+    };
+    const dependencies = createMockTikTokPlatformDependencies();
+    dependencies.retrySystem = retrySystem;
+    dependencies.logger = noOpLogger;
+    dependencies.connectionFactory = dependencies.connectionFactory || {
+      createConnection: createMockFn(),
+    };
 
-        const platform = new TikTokPlatform(baseConfig, dependencies);
+    const platform = new TikTokPlatform(baseConfig, dependencies);
 
-        const connectCalls: boolean[] = [];
-        platform._connect = async () => {
-            connectCalls.push(true);
-            if (connectCalls.length === 1) {
-                throw new Error('connect-failed');
-            }
-            return true;
-        };
+    const connectCalls: boolean[] = [];
+    platform._connect = async () => {
+      connectCalls.push(true);
+      if (connectCalls.length === 1) {
+        throw new Error("connect-failed");
+      }
+      return true;
+    };
 
-        platform.queueRetry(new Error('initial'));
-        await Promise.resolve();
-        await Promise.resolve();
+    platform.queueRetry(new Error("initial"));
+    await Promise.resolve();
+    await Promise.resolve();
 
-        expect(retryCalls).toHaveLength(2);
-        expect(connectCalls).toHaveLength(2);
-    });
+    expect(retryCalls).toHaveLength(2);
+    expect(connectCalls).toHaveLength(2);
+  });
 });

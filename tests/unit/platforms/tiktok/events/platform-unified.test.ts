@@ -1,199 +1,259 @@
-const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../../../../helpers/bun-mock-utils');
-const { noOpLogger } = require('../../../../helpers/mock-factories');
-const { createConfigFixture } = require('../../../../helpers/config-fixture');
+import { describe, it, expect, beforeEach, afterEach } from "bun:test";
+import {
+  createMockFn,
+  restoreAllMocks,
+} from "../../../../helpers/bun-mock-utils";
+import { noOpLogger } from "../../../../helpers/mock-factories";
+import { createConfigFixture } from "../../../../helpers/config-fixture";
 
-const { PlatformEventRouter } = require('../../../../../src/services/PlatformEventRouter.ts');
-const { PlatformEvents } = require('../../../../../src/interfaces/PlatformEvents');
-const { TikTokPlatform } = require('../../../../../src/platforms/tiktok.ts');
-const testClock = require('../../../../helpers/test-clock');
+import { PlatformEventRouter } from "../../../../../src/services/PlatformEventRouter.ts";
+import { PlatformEvents } from "../../../../../src/interfaces/PlatformEvents";
+import { TikTokPlatform } from "../../../../../src/platforms/tiktok.ts";
+import * as testClock from "../../../../helpers/test-clock";
 
-describe('TikTokPlatform unified event contract (expected behavior)', () => {
-    let platform;
-    let mockEventBus;
-    let runtime;
+describe("TikTokPlatform unified event contract (expected behavior)", () => {
+  let platform;
+  let mockEventBus;
+  let runtime;
 
-    afterEach(() => {
-        restoreAllMocks();
-    });
+  afterEach(() => {
+    restoreAllMocks();
+  });
 
-    beforeEach(() => {
-        mockEventBus = {
-            emitted: [],
-            handlers: {},
-            emit(eventName, payload) {
-                (this.handlers[eventName] || []).forEach((handler) => handler(payload));
-                this.emitted.push({ eventName, payload });
-            },
-            subscribe(eventName, handler) {
-                this.handlers[eventName] = this.handlers[eventName] || [];
-                this.handlers[eventName].push(handler);
-                return () => {
-                    this.handlers[eventName] = this.handlers[eventName].filter((h) => h !== handler);
-                };
-            }
+  beforeEach(() => {
+    mockEventBus = {
+      emitted: [],
+      handlers: {},
+      emit(eventName, payload) {
+        (this.handlers[eventName] || []).forEach((handler) => handler(payload));
+        this.emitted.push({ eventName, payload });
+      },
+      subscribe(eventName, handler) {
+        this.handlers[eventName] = this.handlers[eventName] || [];
+        this.handlers[eventName].push(handler);
+        return () => {
+          this.handlers[eventName] = this.handlers[eventName].filter(
+            (h) => h !== handler,
+          );
         };
+      },
+    };
 
-        const runtimeCalls = {
-            handleChatMessage: [],
-            handleFollowNotification: [],
-            handleGiftNotification: []
-        };
-        runtime = {
-            handleChatMessage: (...args) => runtimeCalls.handleChatMessage.push(args),
-            handleFollowNotification: (...args) => runtimeCalls.handleFollowNotification.push(args),
-            handleGiftNotification: (...args) => runtimeCalls.handleGiftNotification.push(args),
-            handlePaypiggyNotification: createMockFn(),
-            handleRaidNotification: createMockFn(),
-            _calls: runtimeCalls
-        };
+    const runtimeCalls = {
+      handleChatMessage: [],
+      handleFollowNotification: [],
+      handleGiftNotification: [],
+    };
+    runtime = {
+      handleChatMessage: (...args) => runtimeCalls.handleChatMessage.push(args),
+      handleFollowNotification: (...args) =>
+        runtimeCalls.handleFollowNotification.push(args),
+      handleGiftNotification: (...args) =>
+        runtimeCalls.handleGiftNotification.push(args),
+      handlePaypiggyNotification: createMockFn(),
+      handleRaidNotification: createMockFn(),
+      _calls: runtimeCalls,
+    };
 
-        new PlatformEventRouter({
-            eventBus: mockEventBus,
-            runtime,
-            notificationManager: { handleNotification: createMockFn() },
-            config: createConfigFixture({ general: { followsEnabled: true, giftsEnabled: true, messagesEnabled: true } }),
-            logger: noOpLogger
-        });
-
-        const mockDependencies = {
-            logger: noOpLogger,
-            connectionFactory: {
-                createConnection: createMockFn().mockReturnValue({
-                    connect: createMockFn().mockResolvedValue(),
-                    disconnect: createMockFn().mockResolvedValue(),
-                    on: createMockFn(),
-                    removeAllListeners: createMockFn()
-                })
-            },
-            TikTokWebSocketClient: class MockConnection {
-                constructor() {}
-                connect() { return Promise.resolve(); }
-                disconnect() { return Promise.resolve(); }
-                on() {}
-                removeAllListeners() {}
-            },
-            WebcastEvent: {
-                CHAT: 'chat',
-                GIFT: 'gift',
-                FOLLOW: 'follow',
-                SOCIAL: 'social',
-                ROOM_USER: 'roomUser',
-                ERROR: 'error',
-                DISCONNECT: 'disconnect'
-            },
-            ControlEvent: {},
-            timestampService: {
-                extractTimestamp: createMockFn(() => new Date(testClock.now()).toISOString())
-            }
-        };
-
-        platform = new TikTokPlatform({ enabled: false, username: 'user' }, {
-            ...mockDependencies,
-            eventBus: mockEventBus
-        });
-
-        const platformHandlers = {
-            onChat: (data) => mockEventBus.emit('platform:event', { platform: 'tiktok', type: PlatformEvents.CHAT_MESSAGE, data }),
-            onFollow: (data) => mockEventBus.emit('platform:event', { platform: 'tiktok', type: PlatformEvents.FOLLOW, data }),
-            onGift: (data) => mockEventBus.emit('platform:event', { platform: 'tiktok', type: PlatformEvents.GIFT, data }),
-            onShare: (data) => mockEventBus.emit('platform:event', { platform: 'tiktok', type: PlatformEvents.SHARE, data })
-        };
-
-        platform.handlers = { ...platform.handlers, ...platformHandlers };
+    new PlatformEventRouter({
+      eventBus: mockEventBus,
+      runtime,
+      notificationManager: { handleNotification: createMockFn() },
+      config: createConfigFixture({
+        general: {
+          followsEnabled: true,
+          giftsEnabled: true,
+          messagesEnabled: true,
+        },
+      }),
+      logger: noOpLogger,
     });
 
-    it('routes chat events through platform:event to PlatformEventRouter', async () => {
-        await platform._handleChatMessage({
-            user: {
-                userId: 'tt-user-1',
-                uniqueId: 'user1',
-                nickname: 'User1'
-            },
-            comment: 'hello world',
-            common: { createTime: testClock.now() }
-        });
+    const mockDependencies = {
+      logger: noOpLogger,
+      connectionFactory: {
+        createConnection: createMockFn().mockReturnValue({
+          connect: createMockFn().mockResolvedValue(),
+          disconnect: createMockFn().mockResolvedValue(),
+          on: createMockFn(),
+          removeAllListeners: createMockFn(),
+        }),
+      },
+      TikTokWebSocketClient: class MockConnection {
+        constructor() {}
+        connect() {
+          return Promise.resolve();
+        }
+        disconnect() {
+          return Promise.resolve();
+        }
+        on() {}
+        removeAllListeners() {}
+      },
+      WebcastEvent: {
+        CHAT: "chat",
+        GIFT: "gift",
+        FOLLOW: "follow",
+        SOCIAL: "social",
+        ROOM_USER: "roomUser",
+        ERROR: "error",
+        DISCONNECT: "disconnect",
+      },
+      ControlEvent: {},
+      timestampService: {
+        extractTimestamp: createMockFn(() =>
+          new Date(testClock.now()).toISOString(),
+        ),
+      },
+    };
 
-        expect(runtime._calls.handleChatMessage).toHaveLength(1);
-        expect(mockEventBus.emitted.find((e) => e.eventName === 'platform:event')).toBeDefined();
+    platform = new TikTokPlatform(
+      { enabled: false, username: "user" },
+      {
+        ...mockDependencies,
+        eventBus: mockEventBus,
+      },
+    );
+
+    const platformHandlers = {
+      onChat: (data) =>
+        mockEventBus.emit("platform:event", {
+          platform: "tiktok",
+          type: PlatformEvents.CHAT_MESSAGE,
+          data,
+        }),
+      onFollow: (data) =>
+        mockEventBus.emit("platform:event", {
+          platform: "tiktok",
+          type: PlatformEvents.FOLLOW,
+          data,
+        }),
+      onGift: (data) =>
+        mockEventBus.emit("platform:event", {
+          platform: "tiktok",
+          type: PlatformEvents.GIFT,
+          data,
+        }),
+      onShare: (data) =>
+        mockEventBus.emit("platform:event", {
+          platform: "tiktok",
+          type: PlatformEvents.SHARE,
+          data,
+        }),
+    };
+
+    platform.handlers = { ...platform.handlers, ...platformHandlers };
+  });
+
+  it("routes chat events through platform:event to PlatformEventRouter", async () => {
+    await platform._handleChatMessage({
+      user: {
+        userId: "tt-user-1",
+        uniqueId: "user1",
+        nickname: "User1",
+      },
+      comment: "hello world",
+      common: { createTime: testClock.now() },
     });
 
-    it('routes follow events through platform:event to PlatformEventRouter', async () => {
-        await platform._handleFollow({
-            user: { userId: 'tt-follow-1', uniqueId: 'follower', nickname: 'Follower' },
-            common: { createTime: testClock.now() }
-        });
+    expect(runtime._calls.handleChatMessage).toHaveLength(1);
+    expect(
+      mockEventBus.emitted.find((e) => e.eventName === "platform:event"),
+    ).toBeDefined();
+  });
 
-        expect(runtime._calls.handleFollowNotification).toHaveLength(1);
-        expect(mockEventBus.emitted.find((e) => e.eventName === 'platform:event')).toBeDefined();
+  it("routes follow events through platform:event to PlatformEventRouter", async () => {
+    await platform._handleFollow({
+      user: {
+        userId: "tt-follow-1",
+        uniqueId: "follower",
+        nickname: "Follower",
+      },
+      common: { createTime: testClock.now() },
     });
 
-    it('routes gift events through platform:event to PlatformEventRouter', async () => {
-        const timestamp = new Date(testClock.now()).toISOString();
-        await platform._handleGift({
-            platform: 'tiktok',
-            userId: 'tt-gift-1',
-            username: 'gifter',
-            giftType: 'Rose',
-            giftCount: 2,
-            repeatCount: 2,
-            amount: 20,
-            currency: 'coins',
-            unitAmount: 10,
-            timestamp,
-            id: 'gift-msg-1'
-        });
+    expect(runtime._calls.handleFollowNotification).toHaveLength(1);
+    expect(
+      mockEventBus.emitted.find((e) => e.eventName === "platform:event"),
+    ).toBeDefined();
+  });
 
-        expect(runtime._calls.handleGiftNotification).toHaveLength(1);
-        expect(mockEventBus.emitted.find((e) => e.eventName === 'platform:event')).toBeDefined();
+  it("routes gift events through platform:event to PlatformEventRouter", async () => {
+    const timestamp = new Date(testClock.now()).toISOString();
+    await platform._handleGift({
+      platform: "tiktok",
+      userId: "tt-gift-1",
+      username: "gifter",
+      giftType: "Rose",
+      giftCount: 2,
+      repeatCount: 2,
+      amount: 20,
+      currency: "coins",
+      unitAmount: 10,
+      timestamp,
+      id: "gift-msg-1",
     });
 
-    it('emits share events through platform:event when only default handlers are available', () => {
-        const emitted = [];
-        platform.handlers = platform._createDefaultHandlers();
-        mockEventBus.subscribe('platform:event', (payload) => emitted.push(payload));
+    expect(runtime._calls.handleGiftNotification).toHaveLength(1);
+    expect(
+      mockEventBus.emitted.find((e) => e.eventName === "platform:event"),
+    ).toBeDefined();
+  });
 
-        const sharePayload = { username: 'user123', actionType: 'share' };
-        platform.handlers.onShare(sharePayload);
+  it("emits share events through platform:event when only default handlers are available", () => {
+    const emitted = [];
+    platform.handlers = platform._createDefaultHandlers();
+    mockEventBus.subscribe("platform:event", (payload) =>
+      emitted.push(payload),
+    );
 
-        const shareEvent = emitted.find((entry) => entry.type === PlatformEvents.SHARE);
+    const sharePayload = { username: "user123", actionType: "share" };
+    platform.handlers.onShare(sharePayload);
 
-        expect(shareEvent).toBeDefined();
-        expect(shareEvent.data).toEqual(sharePayload);
+    const shareEvent = emitted.find(
+      (entry) => entry.type === PlatformEvents.SHARE,
+    );
+
+    expect(shareEvent).toBeDefined();
+    expect(shareEvent.data).toEqual(sharePayload);
+  });
+
+  it("emits platform:event for chat without relying on bridge shims", async () => {
+    const emitted = [];
+    mockEventBus.subscribe("platform:event", (payload) =>
+      emitted.push(payload),
+    );
+
+    await platform._handleChatMessage({
+      user: {
+        userId: "tt-user-2",
+        uniqueId: "user-no-bridge",
+        nickname: "NoBridgeUser",
+      },
+      comment: "hello from no bridge",
+      common: { createTime: testClock.now() },
     });
 
-    it('emits platform:event for chat without relying on bridge shims', async () => {
-        const emitted = [];
-        mockEventBus.subscribe('platform:event', (payload) => emitted.push(payload));
+    const chatEvent = emitted.find(
+      (entry) => entry.type === PlatformEvents.CHAT_MESSAGE,
+    );
+    expect(chatEvent).toBeDefined();
+    expect(chatEvent.data?.message?.text).toContain("hello from no bridge");
+  });
 
-        await platform._handleChatMessage({
-            user: {
-                userId: 'tt-user-2',
-                uniqueId: 'user-no-bridge',
-                nickname: 'NoBridgeUser'
-            },
-            comment: 'hello from no bridge',
-            common: { createTime: testClock.now() }
-        });
+  it("emits local platform:event for routed events", () => {
+    const emitted = [];
+    platform.on("platform:event", (payload) => emitted.push(payload));
 
-        const chatEvent = emitted.find((entry) => entry.type === PlatformEvents.CHAT_MESSAGE);
-        expect(chatEvent).toBeDefined();
-        expect(chatEvent.data?.message?.text).toContain('hello from no bridge');
-    });
+    const payload = { platform: "tiktok", message: { text: "hello" } };
+    platform._emitPlatformEvent(PlatformEvents.CHAT_MESSAGE, payload);
 
-    it('emits local platform:event for routed events', () => {
-        const emitted = [];
-        platform.on('platform:event', (payload) => emitted.push(payload));
-
-        const payload = { platform: 'tiktok', message: { text: 'hello' } };
-        platform._emitPlatformEvent(PlatformEvents.CHAT_MESSAGE, payload);
-
-        expect(emitted).toEqual([
-            {
-                platform: 'tiktok',
-                type: PlatformEvents.CHAT_MESSAGE,
-                data: payload
-            }
-        ]);
-    });
+    expect(emitted).toEqual([
+      {
+        platform: "tiktok",
+        type: PlatformEvents.CHAT_MESSAGE,
+        data: payload,
+      },
+    ]);
+  });
 });

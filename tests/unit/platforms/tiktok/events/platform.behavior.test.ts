@@ -1,385 +1,420 @@
-const { describe, it, expect, afterEach } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../../../../helpers/bun-mock-utils');
-const { noOpLogger } = require('../../../../helpers/mock-factories');
-const { useFakeTimers, useRealTimers, setSystemTime } = require('../../../../helpers/bun-timers');
+import { describe, it, expect, afterEach } from "bun:test";
+import {
+  createMockFn,
+  restoreAllMocks,
+} from "../../../../helpers/bun-mock-utils";
+import { noOpLogger } from "../../../../helpers/mock-factories";
+import {
+  useFakeTimers,
+  useRealTimers,
+  setSystemTime,
+} from "../../../../helpers/bun-timers";
 
-const { TikTokPlatform } = require('../../../../../src/platforms/tiktok.ts');
-const { PlatformEvents } = require('../../../../../src/interfaces/PlatformEvents');
+import { TikTokPlatform } from "../../../../../src/platforms/tiktok.ts";
+import { PlatformEvents } from "../../../../../src/interfaces/PlatformEvents";
 
 const createPlatform = (configOverrides = {}, dependencyOverrides = {}) => {
-    const logger = dependencyOverrides.logger || noOpLogger;
-    const notificationManager = dependencyOverrides.notificationManager || {
-        emit: createMockFn(),
-        on: createMockFn(),
-        removeListener: createMockFn(),
-        handleNotification: createMockFn().mockResolvedValue()
-    };
-    const connectionFactory = dependencyOverrides.connectionFactory || {
-        createConnection: createMockFn().mockReturnValue({
-            on: createMockFn(),
-            emit: createMockFn(),
-            removeAllListeners: createMockFn(),
-            connect: createMockFn(),
-            disconnect: createMockFn()
-        })
-    };
+  const logger = dependencyOverrides.logger || noOpLogger;
+  const notificationManager = dependencyOverrides.notificationManager || {
+    emit: createMockFn(),
+    on: createMockFn(),
+    removeListener: createMockFn(),
+    handleNotification: createMockFn().mockResolvedValue(),
+  };
+  const connectionFactory = dependencyOverrides.connectionFactory || {
+    createConnection: createMockFn().mockReturnValue({
+      on: createMockFn(),
+      emit: createMockFn(),
+      removeAllListeners: createMockFn(),
+      connect: createMockFn(),
+      disconnect: createMockFn(),
+    }),
+  };
 
-    const TikTokWebSocketClient = dependencyOverrides.TikTokWebSocketClient || createMockFn().mockImplementation(() => ({
-        on: createMockFn(),
+  const TikTokWebSocketClient =
+    dependencyOverrides.TikTokWebSocketClient ||
+    createMockFn().mockImplementation(() => ({
+      on: createMockFn(),
+      off: createMockFn(),
+      connect: createMockFn(),
+      disconnect: createMockFn(),
+      getState: createMockFn().mockReturnValue("DISCONNECTED"),
+      isConnecting: false,
+      isConnected: false,
+    }));
+
+  const WebcastEvent = dependencyOverrides.WebcastEvent || {
+    ERROR: "error",
+    DISCONNECT: "disconnect",
+  };
+  const ControlEvent = dependencyOverrides.ControlEvent || {};
+
+  const config = {
+    enabled: true,
+    username: "tester",
+    giftAggregationEnabled: true,
+    ...configOverrides,
+  };
+
+  return new TikTokPlatform(config, {
+    logger,
+    notificationManager,
+    TikTokWebSocketClient,
+    WebcastEvent,
+    ControlEvent,
+    connectionFactory,
+    ...dependencyOverrides,
+  });
+};
+
+describe("TikTokPlatform behavior alignment", () => {
+  afterEach(() => {
+    restoreAllMocks();
+  });
+
+  describe("gift handling", () => {
+    it("emits a user-facing error when gift count is zero and does not throw", async () => {
+      const platform = createPlatform();
+      const errors = [];
+      const routedGifts = [];
+      platform.on("platform:event", (payload) => {
+        if (payload.type === PlatformEvents.ERROR) {
+          errors.push(payload);
+        }
+      });
+      platform.handlers = {
+        ...platform.handlers,
+        onGift: (data) => routedGifts.push(data),
+      };
+
+      await expect(
+        platform.handleTikTokGift({
+          repeatCount: 0,
+          giftDetails: { giftName: "Rose", diamondCount: 1, giftType: 0 },
+          common: { msgId: "gift-zero" },
+          user: {
+            uniqueId: "alice",
+            nickname: "Alice",
+            userId: "alice-id",
+          },
+        }),
+      ).resolves.toBeUndefined();
+
+      expect(errors.length).toBe(1);
+      expect(errors[0]).toMatchObject({
+        type: PlatformEvents.ERROR,
+        platform: "tiktok",
+        data: expect.objectContaining({
+          type: PlatformEvents.ERROR,
+          platform: "tiktok",
+          recoverable: true,
+          context: expect.objectContaining({
+            reason: "gift-count-invalid",
+          }),
+        }),
+      });
+      expect(routedGifts).toHaveLength(1);
+      expect(routedGifts[0]).toMatchObject({
+        platform: "tiktok",
+        username: "alice",
+        userId: "alice-id",
+        isError: true,
+      });
+      expect(routedGifts[0]).not.toHaveProperty("giftCount");
+      expect(routedGifts[0]).not.toHaveProperty("amount");
+      expect(routedGifts[0]).not.toHaveProperty("currency");
+    });
+
+    it("emits a user-facing error when gift normalization fails", async () => {
+      const platform = createPlatform();
+      const routedGifts = [];
+      platform.handlers = {
+        ...platform.handlers,
+        onGift: (data) => routedGifts.push(data),
+      };
+
+      await expect(
+        platform.handleTikTokGift({
+          repeatCount: 1,
+          giftDetails: { giftName: "Rose", diamondCount: 1, giftType: 0 },
+          common: { msgId: "gift-missing-user" },
+          timestamp: "2024-01-01T00:00:00.000Z",
+        }),
+      ).resolves.toBeUndefined();
+
+      expect(routedGifts).toHaveLength(1);
+      expect(routedGifts[0]).toMatchObject({
+        platform: "tiktok",
+        isError: true,
+        type: PlatformEvents.GIFT,
+        eventType: PlatformEvents.GIFT,
+        avatarUrl: expect.any(String),
+      });
+      expect(routedGifts[0].timestamp).toEqual(expect.any(String));
+    });
+
+    it("emits a user-facing error when gift timestamps are missing", async () => {
+      const platform = createPlatform();
+      const routedGifts = [];
+      platform.handlers = {
+        ...platform.handlers,
+        onGift: (data) => routedGifts.push(data),
+      };
+
+      await expect(
+        platform.handleTikTokGift({
+          repeatCount: 1,
+          giftDetails: { giftName: "Rose", diamondCount: 1, giftType: 0 },
+          common: { msgId: "gift-missing-timestamp" },
+          user: {
+            uniqueId: "alice",
+            nickname: "Alice",
+            userId: "alice-id",
+          },
+        }),
+      ).resolves.toBeUndefined();
+
+      expect(routedGifts).toHaveLength(1);
+      expect(routedGifts[0]).toMatchObject({
+        platform: "tiktok",
+        isError: true,
+        type: PlatformEvents.GIFT,
+        eventType: PlatformEvents.GIFT,
+        avatarUrl: expect.any(String),
+      });
+      expect(routedGifts[0].timestamp).toMatch(
+        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
+      );
+    });
+
+    it("uses system time when gift timestamps are missing", async () => {
+      useFakeTimers();
+      setSystemTime(new Date("2025-01-20T10:00:00.000Z"));
+      try {
+        const platform = createPlatform();
+        const routedGifts = [];
+        platform.handlers = {
+          ...platform.handlers,
+          onGift: (data) => routedGifts.push(data),
+        };
+
+        await expect(
+          platform.handleTikTokGift({
+            repeatCount: 1,
+            giftDetails: { giftName: "Rose", diamondCount: 1, giftType: 0 },
+            common: { msgId: "test-gift-missing-timestamp" },
+            user: {
+              uniqueId: "test-alice",
+              nickname: "test-alice",
+              userId: "test-alice-id",
+            },
+          }),
+        ).resolves.toBeUndefined();
+
+        expect(routedGifts).toHaveLength(1);
+        expect(routedGifts[0].timestamp).toBe("2025-01-20T10:00:00.000Z");
+      } finally {
+        useRealTimers();
+      }
+    });
+  });
+
+  describe("connection lifecycle events", () => {
+    it("emits connected and disconnected events with correlation metadata", async () => {
+      const platform = createPlatform();
+      const connectedEvents = [];
+      const disconnectedEvents = [];
+
+      platform.on("platform:event", (payload) => {
+        if (payload.type === PlatformEvents.CHAT_CONNECTED) {
+          connectedEvents.push(payload);
+        }
+        if (payload.type === PlatformEvents.CHAT_DISCONNECTED) {
+          disconnectedEvents.push(payload);
+        }
+      });
+
+      await platform._handleConnection();
+      await platform._handleDisconnection("test-close");
+
+      expect(connectedEvents.length).toBe(1);
+      expect(connectedEvents[0]).toMatchObject({
+        type: PlatformEvents.CHAT_CONNECTED,
+        platform: "tiktok",
+        data: expect.objectContaining({
+          type: PlatformEvents.CHAT_CONNECTED,
+          platform: "tiktok",
+          metadata: expect.objectContaining({
+            correlationId: expect.any(String),
+          }),
+        }),
+      });
+
+      expect(disconnectedEvents.length).toBe(1);
+      expect(disconnectedEvents[0]).toMatchObject({
+        type: PlatformEvents.CHAT_DISCONNECTED,
+        platform: "tiktok",
+        data: expect.objectContaining({
+          type: PlatformEvents.CHAT_DISCONNECTED,
+          platform: "tiktok",
+          reason: "test-close",
+          metadata: expect.objectContaining({
+            correlationId: expect.any(String),
+          }),
+        }),
+      });
+    });
+  });
+
+  describe("gift aggregation and routing", () => {
+    it("emits aggregated gift payload with correct schema", async () => {
+      const platform = createPlatform();
+      const routedEvents = [];
+      const errors = [];
+
+      platform.handlers = {
+        ...platform.handlers,
+        onGift: (data) =>
+          routedEvents.push({
+            type: "platform:gift",
+            platform: "tiktok",
+            data,
+          }),
+      };
+
+      platform.on("platform:event", (payload) => {
+        if (payload.type === PlatformEvents.ERROR) {
+          errors.push(payload);
+        }
+      });
+
+      await platform._handleGift({
+        platform: "tiktok",
+        userId: "alice-id",
+        username: "alice",
+        giftType: "Rose",
+        giftCount: 3,
+        repeatCount: 3,
+        amount: 3,
+        currency: "coins",
+        unitAmount: 1,
+        id: "gift-agg-1",
+        timestamp: new Date().toISOString(),
+        aggregatedCount: 3,
+        isAggregated: true,
+        enhancedGiftData: {
+          giftType: "Rose",
+          giftCount: 3,
+          amount: 3,
+          currency: "coins",
+          isAggregated: true,
+        },
+      });
+
+      expect(errors).toEqual([]);
+      expect(routedEvents.length).toBe(1);
+
+      const routed = routedEvents[0];
+      expect(routed.type).toBe("platform:gift");
+      expect(routed.platform).toBe("tiktok");
+
+      const payload = routed.data;
+      expect(payload.type).toBe(PlatformEvents.GIFT);
+      expect(payload.userId).toBe("alice-id");
+      expect(payload.username).toBe("alice");
+      expect(payload.giftType).toBe("Rose");
+      expect(payload.amount).toBe(3);
+      expect(payload.currency).toBe("coins");
+      expect(payload.aggregatedCount).toBe(3);
+      expect(payload.isAggregated).toBe(true);
+      expect(payload.metadata).toBeUndefined();
+    });
+  });
+
+  describe("connection state and viewer count", () => {
+    it("caches viewer count and emits viewer-count event", async () => {
+      const events = [];
+      const platform = createPlatform(
+        {},
+        {
+          WebcastEvent: {
+            ROOM_USER: "room_user",
+            ERROR: "error",
+            DISCONNECT: "disconnect",
+            CHAT: "chat",
+            GIFT: "gift",
+            FOLLOW: "follow",
+            SOCIAL: "social",
+          },
+          connectionFactory: { createConnection: createMockFn() },
+        },
+      );
+
+      const listeners = {};
+      const connection = {
+        on: createMockFn((event, handler) => {
+          listeners[event] = handler;
+        }),
         off: createMockFn(),
         connect: createMockFn(),
         disconnect: createMockFn(),
-        getState: createMockFn().mockReturnValue('DISCONNECTED'),
+        removeAllListeners: createMockFn(),
         isConnecting: false,
-        isConnected: false
-    }));
+        isConnected: false,
+      };
 
-    const WebcastEvent = dependencyOverrides.WebcastEvent || { ERROR: 'error', DISCONNECT: 'disconnect' };
-    const ControlEvent = dependencyOverrides.ControlEvent || {};
+      platform.connection = connection;
 
-    const config = {
-        enabled: true,
-        username: 'tester',
-        giftAggregationEnabled: true,
-        ...configOverrides
-    };
+      platform.handlers = {
+        ...platform.handlers,
+        onViewerCount: (data) =>
+          events.push({ type: "viewer-count", platform: "tiktok", data }),
+      };
 
-    return new TikTokPlatform(config, {
-        logger,
-        notificationManager,
-        TikTokWebSocketClient,
-        WebcastEvent,
-        ControlEvent,
-        connectionFactory,
-        ...dependencyOverrides
+      platform.setupEventListeners();
+
+      const viewerTimestamp = Date.parse("2024-01-01T00:00:00Z");
+      await listeners["room_user"]?.({
+        viewerCount: 42,
+        common: { createTime: viewerTimestamp },
+      });
+
+      expect(platform.cachedViewerCount).toBe(42);
+      const viewerEvent = events.find((evt) => evt.type === "viewer-count");
+      expect(viewerEvent).toBeDefined();
+      expect(viewerEvent.data.count).toBe(42);
     });
-};
+  });
 
-describe('TikTokPlatform behavior alignment', () => {
-    afterEach(() => {
-        restoreAllMocks();
-    });
-
-    describe('gift handling', () => {
-        it('emits a user-facing error when gift count is zero and does not throw', async () => {
-            const platform = createPlatform();
-            const errors = [];
-            const routedGifts = [];
-            platform.on('platform:event', (payload) => {
-                if (payload.type === PlatformEvents.ERROR) {
-                    errors.push(payload);
-                }
-            });
-            platform.handlers = {
-                ...platform.handlers,
-                onGift: (data) => routedGifts.push(data)
-            };
-
-            await expect(
-                platform.handleTikTokGift({
-                    repeatCount: 0,
-                    giftDetails: { giftName: 'Rose', diamondCount: 1, giftType: 0 },
-                    common: { msgId: 'gift-zero' },
-                    user: {
-                        uniqueId: 'alice',
-                        nickname: 'Alice',
-                        userId: 'alice-id'
-                    }
-                })
-            ).resolves.toBeUndefined();
-
-            expect(errors.length).toBe(1);
-            expect(errors[0]).toMatchObject({
-                type: PlatformEvents.ERROR,
-                platform: 'tiktok',
-                data: expect.objectContaining({
-                    type: PlatformEvents.ERROR,
-                    platform: 'tiktok',
-                    recoverable: true,
-                    context: expect.objectContaining({
-                        reason: 'gift-count-invalid'
-                    })
-                })
-            });
-            expect(routedGifts).toHaveLength(1);
-            expect(routedGifts[0]).toMatchObject({
-                platform: 'tiktok',
-                username: 'alice',
-                userId: 'alice-id',
-                isError: true
-            });
-            expect(routedGifts[0]).not.toHaveProperty('giftCount');
-            expect(routedGifts[0]).not.toHaveProperty('amount');
-            expect(routedGifts[0]).not.toHaveProperty('currency');
-        });
-
-        it('emits a user-facing error when gift normalization fails', async () => {
-            const platform = createPlatform();
-            const routedGifts = [];
-            platform.handlers = {
-                ...platform.handlers,
-                onGift: (data) => routedGifts.push(data)
-            };
-
-            await expect(
-                platform.handleTikTokGift({
-                    repeatCount: 1,
-                    giftDetails: { giftName: 'Rose', diamondCount: 1, giftType: 0 },
-                    common: { msgId: 'gift-missing-user' },
-                    timestamp: '2024-01-01T00:00:00.000Z'
-                })
-            ).resolves.toBeUndefined();
-
-            expect(routedGifts).toHaveLength(1);
-            expect(routedGifts[0]).toMatchObject({
-                platform: 'tiktok',
-                isError: true,
-                type: PlatformEvents.GIFT,
-                eventType: PlatformEvents.GIFT,
-                avatarUrl: expect.any(String)
-            });
-            expect(routedGifts[0].timestamp).toEqual(expect.any(String));
-        });
-
-        it('emits a user-facing error when gift timestamps are missing', async () => {
-            const platform = createPlatform();
-            const routedGifts = [];
-            platform.handlers = {
-                ...platform.handlers,
-                onGift: (data) => routedGifts.push(data)
-            };
-
-            await expect(
-                platform.handleTikTokGift({
-                    repeatCount: 1,
-                    giftDetails: { giftName: 'Rose', diamondCount: 1, giftType: 0 },
-                    common: { msgId: 'gift-missing-timestamp' },
-                    user: {
-                        uniqueId: 'alice',
-                        nickname: 'Alice',
-                        userId: 'alice-id'
-                    }
-                })
-            ).resolves.toBeUndefined();
-
-            expect(routedGifts).toHaveLength(1);
-            expect(routedGifts[0]).toMatchObject({
-                platform: 'tiktok',
-                isError: true,
-                type: PlatformEvents.GIFT,
-                eventType: PlatformEvents.GIFT,
-                avatarUrl: expect.any(String)
-            });
-            expect(routedGifts[0].timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
-        });
-
-        it('uses system time when gift timestamps are missing', async () => {
-            useFakeTimers();
-            setSystemTime(new Date('2025-01-20T10:00:00.000Z'));
-            try {
-                const platform = createPlatform();
-                const routedGifts = [];
-                platform.handlers = {
-                    ...platform.handlers,
-                    onGift: (data) => routedGifts.push(data)
-                };
-
-                await expect(
-                    platform.handleTikTokGift({
-                        repeatCount: 1,
-                        giftDetails: { giftName: 'Rose', diamondCount: 1, giftType: 0 },
-                        common: { msgId: 'test-gift-missing-timestamp' },
-                        user: {
-                            uniqueId: 'test-alice',
-                            nickname: 'test-alice',
-                            userId: 'test-alice-id'
-                        }
-                    })
-                ).resolves.toBeUndefined();
-
-                expect(routedGifts).toHaveLength(1);
-                expect(routedGifts[0].timestamp).toBe('2025-01-20T10:00:00.000Z');
-            } finally {
-                useRealTimers();
-            }
-        });
+  describe("dependency validation", () => {
+    it("fails fast when TikTokWebSocketClient is missing", () => {
+      expect(
+        () =>
+          new TikTokPlatform(
+            { enabled: true, username: "tester" },
+            {
+              WebcastEvent: { ERROR: "error", DISCONNECT: "disconnect" },
+              ControlEvent: {},
+              connectionFactory: { createConnection: createMockFn() },
+              logger: noOpLogger,
+            },
+          ),
+      ).toThrow(/TikTokWebSocketClient/i);
     });
 
-    describe('connection lifecycle events', () => {
-        it('emits connected and disconnected events with correlation metadata', async () => {
-            const platform = createPlatform();
-            const connectedEvents = [];
-            const disconnectedEvents = [];
-
-            platform.on('platform:event', (payload) => {
-                if (payload.type === PlatformEvents.CHAT_CONNECTED) {
-                    connectedEvents.push(payload);
-                }
-                if (payload.type === PlatformEvents.CHAT_DISCONNECTED) {
-                    disconnectedEvents.push(payload);
-                }
-            });
-
-            await platform._handleConnection();
-            await platform._handleDisconnection('test-close');
-
-            expect(connectedEvents.length).toBe(1);
-            expect(connectedEvents[0]).toMatchObject({
-                type: PlatformEvents.CHAT_CONNECTED,
-                platform: 'tiktok',
-                data: expect.objectContaining({
-                    type: PlatformEvents.CHAT_CONNECTED,
-                    platform: 'tiktok',
-                    metadata: expect.objectContaining({
-                        correlationId: expect.any(String)
-                    })
-                })
-            });
-
-            expect(disconnectedEvents.length).toBe(1);
-            expect(disconnectedEvents[0]).toMatchObject({
-                type: PlatformEvents.CHAT_DISCONNECTED,
-                platform: 'tiktok',
-                data: expect.objectContaining({
-                    type: PlatformEvents.CHAT_DISCONNECTED,
-                    platform: 'tiktok',
-                    reason: 'test-close',
-                    metadata: expect.objectContaining({
-                        correlationId: expect.any(String)
-                    })
-                })
-            });
-        });
+    it("fails fast when WebcastEvent is missing", () => {
+      expect(
+        () =>
+          new TikTokPlatform(
+            { enabled: true, username: "tester" },
+            {
+              TikTokWebSocketClient: createMockFn(),
+              ControlEvent: {},
+              connectionFactory: { createConnection: createMockFn() },
+              logger: noOpLogger,
+            },
+          ),
+      ).toThrow(/WebcastEvent/i);
     });
-
-    describe('gift aggregation and routing', () => {
-        it('emits aggregated gift payload with correct schema', async () => {
-            const platform = createPlatform();
-            const routedEvents = [];
-            const errors = [];
-
-            platform.handlers = {
-                ...platform.handlers,
-                onGift: (data) => routedEvents.push({ type: 'platform:gift', platform: 'tiktok', data })
-            };
-
-            platform.on('platform:event', (payload) => {
-                if (payload.type === PlatformEvents.ERROR) {
-                    errors.push(payload);
-                }
-            });
-
-            await platform._handleGift({
-                platform: 'tiktok',
-                userId: 'alice-id',
-                username: 'alice',
-                giftType: 'Rose',
-                giftCount: 3,
-                repeatCount: 3,
-                amount: 3,
-                currency: 'coins',
-                unitAmount: 1,
-                id: 'gift-agg-1',
-                timestamp: new Date().toISOString(),
-                aggregatedCount: 3,
-                isAggregated: true,
-                enhancedGiftData: {
-                    giftType: 'Rose',
-                    giftCount: 3,
-                    amount: 3,
-                    currency: 'coins',
-                    isAggregated: true
-                }
-            });
-
-            expect(errors).toEqual([]);
-            expect(routedEvents.length).toBe(1);
-
-            const routed = routedEvents[0];
-            expect(routed.type).toBe('platform:gift');
-            expect(routed.platform).toBe('tiktok');
-
-            const payload = routed.data;
-            expect(payload.type).toBe(PlatformEvents.GIFT);
-            expect(payload.userId).toBe('alice-id');
-            expect(payload.username).toBe('alice');
-            expect(payload.giftType).toBe('Rose');
-            expect(payload.amount).toBe(3);
-            expect(payload.currency).toBe('coins');
-            expect(payload.aggregatedCount).toBe(3);
-            expect(payload.isAggregated).toBe(true);
-            expect(payload.metadata).toBeUndefined();
-        });
-
-    });
-
-    describe('connection state and viewer count', () => {
-        it('caches viewer count and emits viewer-count event', async () => {
-            const events = [];
-            const platform = createPlatform({}, {
-                WebcastEvent: {
-                    ROOM_USER: 'room_user',
-                    ERROR: 'error',
-                    DISCONNECT: 'disconnect',
-                    CHAT: 'chat',
-                    GIFT: 'gift',
-                    FOLLOW: 'follow',
-                    SOCIAL: 'social'
-                },
-                connectionFactory: { createConnection: createMockFn() }
-            });
-
-            const listeners = {};
-            const connection = {
-                on: createMockFn((event, handler) => { listeners[event] = handler; }),
-                off: createMockFn(),
-                connect: createMockFn(),
-                disconnect: createMockFn(),
-                removeAllListeners: createMockFn(),
-                isConnecting: false,
-                isConnected: false
-            };
-
-            platform.connection = connection;
-
-            platform.handlers = {
-                ...platform.handlers,
-                onViewerCount: (data) => events.push({ type: 'viewer-count', platform: 'tiktok', data })
-            };
-
-            platform.setupEventListeners();
-
-            const viewerTimestamp = Date.parse('2024-01-01T00:00:00Z');
-            await listeners['room_user']?.({
-                viewerCount: 42,
-                common: { createTime: viewerTimestamp }
-            });
-
-            expect(platform.cachedViewerCount).toBe(42);
-            const viewerEvent = events.find((evt) => evt.type === 'viewer-count');
-            expect(viewerEvent).toBeDefined();
-            expect(viewerEvent.data.count).toBe(42);
-        });
-
-    });
-
-    describe('dependency validation', () => {
-        it('fails fast when TikTokWebSocketClient is missing', () => {
-            expect(() => new TikTokPlatform({ enabled: true, username: 'tester' }, {
-                WebcastEvent: { ERROR: 'error', DISCONNECT: 'disconnect' },
-                ControlEvent: {},
-                connectionFactory: { createConnection: createMockFn() },
-                logger: noOpLogger
-            })).toThrow(/TikTokWebSocketClient/i);
-        });
-
-        it('fails fast when WebcastEvent is missing', () => {
-            expect(() => new TikTokPlatform({ enabled: true, username: 'tester' }, {
-                TikTokWebSocketClient: createMockFn(),
-                ControlEvent: {},
-                connectionFactory: { createConnection: createMockFn() },
-                logger: noOpLogger
-            })).toThrow(/WebcastEvent/i);
-        });
-    });
+  });
 });

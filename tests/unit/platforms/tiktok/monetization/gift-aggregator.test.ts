@@ -1,425 +1,477 @@
-const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
-const { noOpLogger } = require('../../../../helpers/mock-factories');
+import { describe, test, expect, beforeEach, afterEach } from "bun:test";
+import { noOpLogger } from "../../../../helpers/mock-factories";
 const {
-    useFakeTimers,
-    useRealTimers,
-    setSystemTime,
-    advanceTimersByTime,
-    getTimerCount
-} = require('../../../../helpers/bun-timers');
+  useFakeTimers,
+  useRealTimers,
+  setSystemTime,
+  advanceTimersByTime,
+  getTimerCount,
+} = require("../../../../helpers/bun-timers");
 const {
-    createTikTokGiftAggregator
-} = require('../../../../../src/platforms/tiktok/monetization/gift-aggregator.ts');
+  createTikTokGiftAggregator,
+} = require("../../../../../src/platforms/tiktok/monetization/gift-aggregator.ts");
 
-describe('TikTok gift aggregator', () => {
-    beforeEach(() => {
-        useFakeTimers();
-        setSystemTime(new Date('2025-01-15T12:00:00.000Z'));
+describe("TikTok gift aggregator", () => {
+  beforeEach(() => {
+    useFakeTimers();
+    setSystemTime(new Date("2025-01-15T12:00:00.000Z"));
+  });
+
+  afterEach(() => {
+    useRealTimers();
+  });
+
+  const buildGift = (overrides = {}) => ({
+    platform: "tiktok",
+    userId: "tt-user1",
+    username: "testUserOne",
+    avatarUrl: "https://example.invalid/tiktok-avatar.jpg",
+    giftType: "Rose",
+    giftCount: 2,
+    repeatCount: 2,
+    unitAmount: 1,
+    amount: 2,
+    currency: "coins",
+    id: "gift-msg-1",
+    timestamp: "2025-01-15T12:00:00.000Z",
+    ...overrides,
+  });
+
+  const createTestPlatform = (overrides = {}) => ({
+    giftAggregation: {},
+    giftAggregationDelay: 2000,
+    logger: noOpLogger,
+    errorHandler: { handleEventProcessingError: () => {} },
+    _handleGift: async () => undefined,
+    ...overrides,
+  });
+
+  describe("factory validation", () => {
+    test("throws when platform is missing", () => {
+      expect(() => createTikTokGiftAggregator({})).toThrow(
+        "platform is required to create TikTok gift aggregator",
+      );
     });
 
-    afterEach(() => {
-        useRealTimers();
+    test("throws when platform is null", () => {
+      expect(() => createTikTokGiftAggregator({ platform: null })).toThrow(
+        "platform is required to create TikTok gift aggregator",
+      );
+    });
+  });
+
+  describe("gift payload validation", () => {
+    test("throws when gift payload is null", async () => {
+      const giftAggregator = createTikTokGiftAggregator({
+        platform: createTestPlatform(),
+      });
+
+      await expect(giftAggregator.handleStandardGift(null)).rejects.toThrow(
+        "TikTok gift aggregation requires gift payload",
+      );
     });
 
-    const buildGift = (overrides = {}) => ({
-        platform: 'tiktok',
-        userId: 'tt-user1',
-        username: 'testUserOne',
-        avatarUrl: 'https://example.invalid/tiktok-avatar.jpg',
-        giftType: 'Rose',
-        giftCount: 2,
-        repeatCount: 2,
-        unitAmount: 1,
-        amount: 2,
-        currency: 'coins',
-        id: 'gift-msg-1',
-        timestamp: '2025-01-15T12:00:00.000Z',
-        ...overrides
+    test("throws when gift payload is not an object", async () => {
+      const giftAggregator = createTikTokGiftAggregator({
+        platform: createTestPlatform(),
+      });
+
+      await expect(
+        giftAggregator.handleStandardGift("invalid"),
+      ).rejects.toThrow("TikTok gift aggregation requires gift payload");
     });
 
-    const createTestPlatform = (overrides = {}) => ({
-        giftAggregation: {},
-        giftAggregationDelay: 2000,
-        logger: noOpLogger,
-        errorHandler: { handleEventProcessingError: () => {} },
+    test("throws when giftCount is zero", async () => {
+      const giftAggregator = createTikTokGiftAggregator({
+        platform: createTestPlatform(),
+      });
+
+      await expect(
+        giftAggregator.handleStandardGift(buildGift({ giftCount: 0 })),
+      ).rejects.toThrow("TikTok gift aggregation requires giftCount");
+    });
+
+    test("throws when giftCount is negative", async () => {
+      const giftAggregator = createTikTokGiftAggregator({
+        platform: createTestPlatform(),
+      });
+
+      await expect(
+        giftAggregator.handleStandardGift(buildGift({ giftCount: -1 })),
+      ).rejects.toThrow("TikTok gift aggregation requires giftCount");
+    });
+
+    test("throws when unitAmount is not finite", async () => {
+      const giftAggregator = createTikTokGiftAggregator({
+        platform: createTestPlatform(),
+      });
+
+      await expect(
+        giftAggregator.handleStandardGift(buildGift({ unitAmount: NaN })),
+      ).rejects.toThrow("TikTok gift aggregation requires unitAmount");
+    });
+  });
+
+  describe("gift aggregation behavior", () => {
+    test("aggregates gifts and delivers after delay", async () => {
+      const handledGifts = [];
+      const platform = createTestPlatform({
+        _handleGift: async (payload) => handledGifts.push(payload),
+      });
+
+      const giftAggregator = createTikTokGiftAggregator({ platform });
+
+      await giftAggregator.handleStandardGift(buildGift({ giftCount: 3 }));
+
+      expect(handledGifts).toHaveLength(0);
+
+      await advanceTimersByTime(platform.giftAggregationDelay);
+
+      expect(handledGifts).toHaveLength(1);
+      expect(handledGifts[0].giftCount).toBe(3);
+      expect(handledGifts[0].isAggregated).toBe(true);
+    });
+
+    test("updates aggregation using high-water delta for same message id", async () => {
+      const handledGifts = [];
+      const platform = createTestPlatform({
+        _handleGift: async (payload) => handledGifts.push(payload),
+      });
+
+      const giftAggregator = createTikTokGiftAggregator({ platform });
+
+      await giftAggregator.handleStandardGift(buildGift({ giftCount: 2 }));
+
+      setSystemTime(new Date("2025-01-15T12:00:01.500Z"));
+      await advanceTimersByTime(500);
+
+      await giftAggregator.handleStandardGift(buildGift({ giftCount: 5 }));
+
+      expect(handledGifts).toHaveLength(0);
+
+      await advanceTimersByTime(platform.giftAggregationDelay);
+
+      expect(handledGifts).toHaveLength(1);
+      expect(handledGifts[0].giftCount).toBe(5);
+    });
+
+    test("accumulates distinct non-combo message ids with same counts", async () => {
+      const handledGifts = [];
+      const platform = createTestPlatform({
+        _handleGift: async (payload) => handledGifts.push(payload),
+      });
+
+      const giftAggregator = createTikTokGiftAggregator({ platform });
+
+      await giftAggregator.handleStandardGift(
+        buildGift({ id: "gift-msg-1", giftCount: 1 }),
+      );
+
+      setSystemTime(new Date("2025-01-15T12:00:00.300Z"));
+      await advanceTimersByTime(300);
+
+      await giftAggregator.handleStandardGift(
+        buildGift({ id: "gift-msg-2", giftCount: 1 }),
+      );
+      await giftAggregator.handleStandardGift(
+        buildGift({ id: "gift-msg-3", giftCount: 1 }),
+      );
+      await giftAggregator.handleStandardGift(
+        buildGift({ id: "gift-msg-4", giftCount: 1 }),
+      );
+
+      await advanceTimersByTime(platform.giftAggregationDelay);
+
+      expect(handledGifts).toHaveLength(1);
+      expect(handledGifts[0].giftCount).toBe(4);
+      expect(handledGifts[0].aggregatedCount).toBe(4);
+    });
+
+    test("ignores retransmitted duplicate gift with same message id", async () => {
+      const handledGifts = [];
+      const platform = createTestPlatform({
+        _handleGift: async (payload) => handledGifts.push(payload),
+      });
+
+      const giftAggregator = createTikTokGiftAggregator({ platform });
+
+      await giftAggregator.handleStandardGift(buildGift({ giftCount: 2 }));
+
+      setSystemTime(new Date("2025-01-15T12:00:00.500Z"));
+      await advanceTimersByTime(500);
+
+      await giftAggregator.handleStandardGift(buildGift({ giftCount: 2 }));
+
+      await advanceTimersByTime(platform.giftAggregationDelay);
+
+      expect(handledGifts).toHaveLength(1);
+      expect(handledGifts[0].giftCount).toBe(2);
+    });
+
+    test("accumulates only delta for progressive updates on same message id", async () => {
+      const handledGifts = [];
+      const platform = createTestPlatform({
+        _handleGift: async (payload) => handledGifts.push(payload),
+      });
+
+      const giftAggregator = createTikTokGiftAggregator({ platform });
+
+      await giftAggregator.handleStandardGift(
+        buildGift({ id: "gift-msg-9", giftCount: 1 }),
+      );
+      await giftAggregator.handleStandardGift(
+        buildGift({ id: "gift-msg-9", giftCount: 2 }),
+      );
+      await giftAggregator.handleStandardGift(
+        buildGift({ id: "gift-msg-9", giftCount: 3 }),
+      );
+
+      await advanceTimersByTime(platform.giftAggregationDelay);
+
+      expect(handledGifts).toHaveLength(1);
+      expect(handledGifts[0].giftCount).toBe(3);
+    });
+
+    test("deduplicates combo completion packets with same group id", async () => {
+      const handledGifts = [];
+      const platform = createTestPlatform({
+        _handleGift: async (payload) => handledGifts.push(payload),
+      });
+
+      const giftAggregator = createTikTokGiftAggregator({ platform });
+
+      const comboGift = {
+        giftType: "GG",
+        comboType: 1,
+        repeatEnd: true,
+        groupId: "combo-group-1",
+        giftCount: 1,
+      };
+
+      await giftAggregator.handleStandardGift(
+        buildGift({ ...comboGift, id: "gift-msg-a" }),
+      );
+      await giftAggregator.handleStandardGift(
+        buildGift({ ...comboGift, id: "gift-msg-b" }),
+      );
+
+      await advanceTimersByTime(platform.giftAggregationDelay);
+
+      expect(handledGifts).toHaveLength(1);
+      expect(handledGifts[0].giftCount).toBe(1);
+    });
+
+    test("rejects combo completion payload when group id is missing", async () => {
+      const platform = createTestPlatform();
+      const giftAggregator = createTikTokGiftAggregator({ platform });
+
+      await expect(
+        giftAggregator.handleStandardGift(
+          buildGift({
+            giftType: "GG",
+            comboType: 1,
+            repeatEnd: true,
+            groupId: undefined,
+            giftCount: 1,
+            id: "gift-msg-fallback",
+          }),
+        ),
+      ).rejects.toThrow("TikTok combo completion requires groupId");
+    });
+
+    test("counts separate combo completion groups even when rapid and same count", async () => {
+      const handledGifts = [];
+      const platform = createTestPlatform({
+        _handleGift: async (payload) => handledGifts.push(payload),
+      });
+
+      const giftAggregator = createTikTokGiftAggregator({ platform });
+
+      await giftAggregator.handleStandardGift(
+        buildGift({
+          id: "gift-msg-c1",
+          giftType: "GG",
+          comboType: 1,
+          repeatEnd: true,
+          groupId: "combo-group-1",
+          giftCount: 1,
+        }),
+      );
+
+      setSystemTime(new Date("2025-01-15T12:00:00.600Z"));
+      await advanceTimersByTime(600);
+
+      await giftAggregator.handleStandardGift(
+        buildGift({
+          id: "gift-msg-c2",
+          giftType: "GG",
+          comboType: 1,
+          repeatEnd: true,
+          groupId: "combo-group-2",
+          giftCount: 1,
+        }),
+      );
+
+      await advanceTimersByTime(platform.giftAggregationDelay);
+
+      expect(handledGifts).toHaveLength(1);
+      expect(handledGifts[0].giftCount).toBe(2);
+    });
+
+    test("includes sourceType in delivered payload when present", async () => {
+      const handledGifts = [];
+      const platform = createTestPlatform({
+        _handleGift: async (payload) => handledGifts.push(payload),
+      });
+
+      const giftAggregator = createTikTokGiftAggregator({ platform });
+
+      await giftAggregator.handleStandardGift(
+        buildGift({ sourceType: "streak" }),
+      );
+      await advanceTimersByTime(platform.giftAggregationDelay);
+
+      expect(handledGifts).toHaveLength(1);
+      expect(handledGifts[0].sourceType).toBe("streak");
+    });
+
+    test("includes avatarUrl in delivered aggregated payload", async () => {
+      const handledGifts = [];
+      const platform = createTestPlatform({
+        _handleGift: async (payload) => handledGifts.push(payload),
+      });
+
+      const giftAggregator = createTikTokGiftAggregator({ platform });
+
+      await giftAggregator.handleStandardGift(
+        buildGift({
+          avatarUrl: "https://example.invalid/tiktok-aggregated-avatar.jpg",
+        }),
+      );
+      await advanceTimersByTime(platform.giftAggregationDelay);
+
+      expect(handledGifts).toHaveLength(1);
+      expect(handledGifts[0].avatarUrl).toBe(
+        "https://example.invalid/tiktok-aggregated-avatar.jpg",
+      );
+    });
+
+    test("includes giftImageUrl in delivered aggregated payload", async () => {
+      const handledGifts = [];
+      const platform = createTestPlatform({
+        _handleGift: async (payload) => handledGifts.push(payload),
+      });
+
+      const giftAggregator = createTikTokGiftAggregator({ platform });
+
+      await giftAggregator.handleStandardGift(
+        buildGift({
+          giftImageUrl: "https://example.invalid/tiktok-gifts/corgi.png",
+        }),
+      );
+      await advanceTimersByTime(platform.giftAggregationDelay);
+
+      expect(handledGifts).toHaveLength(1);
+      expect(handledGifts[0].giftImageUrl).toBe(
+        "https://example.invalid/tiktok-gifts/corgi.png",
+      );
+    });
+
+    test("preserves last non-empty avatarUrl when later packets are empty", async () => {
+      const handledGifts = [];
+      const platform = createTestPlatform({
+        _handleGift: async (payload) => handledGifts.push(payload),
+      });
+
+      const giftAggregator = createTikTokGiftAggregator({ platform });
+
+      await giftAggregator.handleStandardGift(
+        buildGift({
+          id: "gift-msg-avatar-1",
+          giftCount: 1,
+          avatarUrl:
+            "https://example.invalid/tiktok-aggregated-avatar-initial.jpg",
+        }),
+      );
+      await giftAggregator.handleStandardGift(
+        buildGift({
+          id: "gift-msg-avatar-2",
+          giftCount: 1,
+          avatarUrl: "",
+        }),
+      );
+
+      await advanceTimersByTime(platform.giftAggregationDelay);
+
+      expect(handledGifts).toHaveLength(1);
+      expect(handledGifts[0].giftCount).toBe(2);
+      expect(handledGifts[0].avatarUrl).toBe(
+        "https://example.invalid/tiktok-aggregated-avatar-initial.jpg",
+      );
+    });
+
+    test("cleans up aggregation state after delivery", async () => {
+      const platform = createTestPlatform({
         _handleGift: async () => undefined,
-        ...overrides
+      });
+
+      const giftAggregator = createTikTokGiftAggregator({ platform });
+
+      await giftAggregator.handleStandardGift(buildGift());
+
+      expect(platform.giftAggregation["tt-user1-Rose"]).toBeDefined();
+
+      await advanceTimersByTime(platform.giftAggregationDelay);
+
+      expect(platform.giftAggregation["tt-user1-Rose"]).toBeUndefined();
     });
 
-    describe('factory validation', () => {
-        test('throws when platform is missing', () => {
-            expect(() => createTikTokGiftAggregator({}))
-                .toThrow('platform is required to create TikTok gift aggregator');
-        });
+    test("cleans up aggregation state when delivery fails", async () => {
+      const platform = createTestPlatform({
+        _handleGift: async () => {
+          throw new Error("Handler failed");
+        },
+      });
 
-        test('throws when platform is null', () => {
-            expect(() => createTikTokGiftAggregator({ platform: null }))
-                .toThrow('platform is required to create TikTok gift aggregator');
-        });
+      const giftAggregator = createTikTokGiftAggregator({ platform });
+
+      await giftAggregator.handleStandardGift(buildGift());
+      await advanceTimersByTime(platform.giftAggregationDelay);
+
+      expect(platform.giftAggregation["tt-user1-Rose"]).toBeUndefined();
+    });
+  });
+
+  describe("cleanupGiftAggregation", () => {
+    test("cancels pending timers and prevents delivery", async () => {
+      const handledGifts = [];
+      const platform = createTestPlatform({
+        _handleGift: async (payload) => handledGifts.push(payload),
+      });
+
+      const giftAggregator = createTikTokGiftAggregator({ platform });
+
+      await giftAggregator.handleStandardGift(buildGift());
+
+      expect(getTimerCount()).toBe(1);
+
+      giftAggregator.cleanupGiftAggregation();
+
+      expect(getTimerCount()).toBe(0);
+      expect(platform.giftAggregation).toEqual({});
+
+      await advanceTimersByTime(platform.giftAggregationDelay * 2);
+
+      expect(handledGifts).toHaveLength(0);
     });
 
-    describe('gift payload validation', () => {
-        test('throws when gift payload is null', async () => {
-            const giftAggregator = createTikTokGiftAggregator({
-                platform: createTestPlatform()
-            });
+    test("handles empty aggregation state", () => {
+      const platform = createTestPlatform({ giftAggregation: {} });
+      const giftAggregator = createTikTokGiftAggregator({ platform });
 
-            await expect(giftAggregator.handleStandardGift(null))
-                .rejects.toThrow('TikTok gift aggregation requires gift payload');
-        });
+      giftAggregator.cleanupGiftAggregation();
 
-        test('throws when gift payload is not an object', async () => {
-            const giftAggregator = createTikTokGiftAggregator({
-                platform: createTestPlatform()
-            });
-
-            await expect(giftAggregator.handleStandardGift('invalid'))
-                .rejects.toThrow('TikTok gift aggregation requires gift payload');
-        });
-
-        test('throws when giftCount is zero', async () => {
-            const giftAggregator = createTikTokGiftAggregator({
-                platform: createTestPlatform()
-            });
-
-            await expect(giftAggregator.handleStandardGift(buildGift({ giftCount: 0 })))
-                .rejects.toThrow('TikTok gift aggregation requires giftCount');
-        });
-
-        test('throws when giftCount is negative', async () => {
-            const giftAggregator = createTikTokGiftAggregator({
-                platform: createTestPlatform()
-            });
-
-            await expect(giftAggregator.handleStandardGift(buildGift({ giftCount: -1 })))
-                .rejects.toThrow('TikTok gift aggregation requires giftCount');
-        });
-
-        test('throws when unitAmount is not finite', async () => {
-            const giftAggregator = createTikTokGiftAggregator({
-                platform: createTestPlatform()
-            });
-
-            await expect(giftAggregator.handleStandardGift(buildGift({ unitAmount: NaN })))
-                .rejects.toThrow('TikTok gift aggregation requires unitAmount');
-        });
+      expect(platform.giftAggregation).toEqual({});
     });
-
-    describe('gift aggregation behavior', () => {
-        test('aggregates gifts and delivers after delay', async () => {
-            const handledGifts = [];
-            const platform = createTestPlatform({
-                _handleGift: async (payload) => handledGifts.push(payload)
-            });
-
-            const giftAggregator = createTikTokGiftAggregator({ platform });
-
-            await giftAggregator.handleStandardGift(buildGift({ giftCount: 3 }));
-
-            expect(handledGifts).toHaveLength(0);
-
-            await advanceTimersByTime(platform.giftAggregationDelay);
-
-            expect(handledGifts).toHaveLength(1);
-            expect(handledGifts[0].giftCount).toBe(3);
-            expect(handledGifts[0].isAggregated).toBe(true);
-        });
-
-        test('updates aggregation using high-water delta for same message id', async () => {
-            const handledGifts = [];
-            const platform = createTestPlatform({
-                _handleGift: async (payload) => handledGifts.push(payload)
-            });
-
-            const giftAggregator = createTikTokGiftAggregator({ platform });
-
-            await giftAggregator.handleStandardGift(buildGift({ giftCount: 2 }));
-
-            setSystemTime(new Date('2025-01-15T12:00:01.500Z'));
-            await advanceTimersByTime(500);
-
-            await giftAggregator.handleStandardGift(buildGift({ giftCount: 5 }));
-
-            expect(handledGifts).toHaveLength(0);
-
-            await advanceTimersByTime(platform.giftAggregationDelay);
-
-            expect(handledGifts).toHaveLength(1);
-            expect(handledGifts[0].giftCount).toBe(5);
-        });
-
-        test('accumulates distinct non-combo message ids with same counts', async () => {
-            const handledGifts = [];
-            const platform = createTestPlatform({
-                _handleGift: async (payload) => handledGifts.push(payload)
-            });
-
-            const giftAggregator = createTikTokGiftAggregator({ platform });
-
-            await giftAggregator.handleStandardGift(buildGift({ id: 'gift-msg-1', giftCount: 1 }));
-
-            setSystemTime(new Date('2025-01-15T12:00:00.300Z'));
-            await advanceTimersByTime(300);
-
-            await giftAggregator.handleStandardGift(buildGift({ id: 'gift-msg-2', giftCount: 1 }));
-            await giftAggregator.handleStandardGift(buildGift({ id: 'gift-msg-3', giftCount: 1 }));
-            await giftAggregator.handleStandardGift(buildGift({ id: 'gift-msg-4', giftCount: 1 }));
-
-            await advanceTimersByTime(platform.giftAggregationDelay);
-
-            expect(handledGifts).toHaveLength(1);
-            expect(handledGifts[0].giftCount).toBe(4);
-            expect(handledGifts[0].aggregatedCount).toBe(4);
-        });
-
-        test('ignores retransmitted duplicate gift with same message id', async () => {
-            const handledGifts = [];
-            const platform = createTestPlatform({
-                _handleGift: async (payload) => handledGifts.push(payload)
-            });
-
-            const giftAggregator = createTikTokGiftAggregator({ platform });
-
-            await giftAggregator.handleStandardGift(buildGift({ giftCount: 2 }));
-
-            setSystemTime(new Date('2025-01-15T12:00:00.500Z'));
-            await advanceTimersByTime(500);
-
-            await giftAggregator.handleStandardGift(buildGift({ giftCount: 2 }));
-
-            await advanceTimersByTime(platform.giftAggregationDelay);
-
-            expect(handledGifts).toHaveLength(1);
-            expect(handledGifts[0].giftCount).toBe(2);
-        });
-
-        test('accumulates only delta for progressive updates on same message id', async () => {
-            const handledGifts = [];
-            const platform = createTestPlatform({
-                _handleGift: async (payload) => handledGifts.push(payload)
-            });
-
-            const giftAggregator = createTikTokGiftAggregator({ platform });
-
-            await giftAggregator.handleStandardGift(buildGift({ id: 'gift-msg-9', giftCount: 1 }));
-            await giftAggregator.handleStandardGift(buildGift({ id: 'gift-msg-9', giftCount: 2 }));
-            await giftAggregator.handleStandardGift(buildGift({ id: 'gift-msg-9', giftCount: 3 }));
-
-            await advanceTimersByTime(platform.giftAggregationDelay);
-
-            expect(handledGifts).toHaveLength(1);
-            expect(handledGifts[0].giftCount).toBe(3);
-        });
-
-        test('deduplicates combo completion packets with same group id', async () => {
-            const handledGifts = [];
-            const platform = createTestPlatform({
-                _handleGift: async (payload) => handledGifts.push(payload)
-            });
-
-            const giftAggregator = createTikTokGiftAggregator({ platform });
-
-            const comboGift = {
-                giftType: 'GG',
-                comboType: 1,
-                repeatEnd: true,
-                groupId: 'combo-group-1',
-                giftCount: 1
-            };
-
-            await giftAggregator.handleStandardGift(buildGift({ ...comboGift, id: 'gift-msg-a' }));
-            await giftAggregator.handleStandardGift(buildGift({ ...comboGift, id: 'gift-msg-b' }));
-
-            await advanceTimersByTime(platform.giftAggregationDelay);
-
-            expect(handledGifts).toHaveLength(1);
-            expect(handledGifts[0].giftCount).toBe(1);
-        });
-
-        test('rejects combo completion payload when group id is missing', async () => {
-            const platform = createTestPlatform();
-            const giftAggregator = createTikTokGiftAggregator({ platform });
-
-            await expect(giftAggregator.handleStandardGift(buildGift({
-                giftType: 'GG',
-                comboType: 1,
-                repeatEnd: true,
-                groupId: undefined,
-                giftCount: 1,
-                id: 'gift-msg-fallback'
-            }))).rejects.toThrow('TikTok combo completion requires groupId');
-        });
-
-        test('counts separate combo completion groups even when rapid and same count', async () => {
-            const handledGifts = [];
-            const platform = createTestPlatform({
-                _handleGift: async (payload) => handledGifts.push(payload)
-            });
-
-            const giftAggregator = createTikTokGiftAggregator({ platform });
-
-            await giftAggregator.handleStandardGift(buildGift({
-                id: 'gift-msg-c1',
-                giftType: 'GG',
-                comboType: 1,
-                repeatEnd: true,
-                groupId: 'combo-group-1',
-                giftCount: 1
-            }));
-
-            setSystemTime(new Date('2025-01-15T12:00:00.600Z'));
-            await advanceTimersByTime(600);
-
-            await giftAggregator.handleStandardGift(buildGift({
-                id: 'gift-msg-c2',
-                giftType: 'GG',
-                comboType: 1,
-                repeatEnd: true,
-                groupId: 'combo-group-2',
-                giftCount: 1
-            }));
-
-            await advanceTimersByTime(platform.giftAggregationDelay);
-
-            expect(handledGifts).toHaveLength(1);
-            expect(handledGifts[0].giftCount).toBe(2);
-        });
-
-        test('includes sourceType in delivered payload when present', async () => {
-            const handledGifts = [];
-            const platform = createTestPlatform({
-                _handleGift: async (payload) => handledGifts.push(payload)
-            });
-
-            const giftAggregator = createTikTokGiftAggregator({ platform });
-
-            await giftAggregator.handleStandardGift(buildGift({ sourceType: 'streak' }));
-            await advanceTimersByTime(platform.giftAggregationDelay);
-
-            expect(handledGifts).toHaveLength(1);
-            expect(handledGifts[0].sourceType).toBe('streak');
-        });
-
-        test('includes avatarUrl in delivered aggregated payload', async () => {
-            const handledGifts = [];
-            const platform = createTestPlatform({
-                _handleGift: async (payload) => handledGifts.push(payload)
-            });
-
-            const giftAggregator = createTikTokGiftAggregator({ platform });
-
-            await giftAggregator.handleStandardGift(buildGift({
-                avatarUrl: 'https://example.invalid/tiktok-aggregated-avatar.jpg'
-            }));
-            await advanceTimersByTime(platform.giftAggregationDelay);
-
-            expect(handledGifts).toHaveLength(1);
-            expect(handledGifts[0].avatarUrl).toBe('https://example.invalid/tiktok-aggregated-avatar.jpg');
-        });
-
-        test('includes giftImageUrl in delivered aggregated payload', async () => {
-            const handledGifts = [];
-            const platform = createTestPlatform({
-                _handleGift: async (payload) => handledGifts.push(payload)
-            });
-
-            const giftAggregator = createTikTokGiftAggregator({ platform });
-
-            await giftAggregator.handleStandardGift(buildGift({
-                giftImageUrl: 'https://example.invalid/tiktok-gifts/corgi.png'
-            }));
-            await advanceTimersByTime(platform.giftAggregationDelay);
-
-            expect(handledGifts).toHaveLength(1);
-            expect(handledGifts[0].giftImageUrl).toBe('https://example.invalid/tiktok-gifts/corgi.png');
-        });
-
-        test('preserves last non-empty avatarUrl when later packets are empty', async () => {
-            const handledGifts = [];
-            const platform = createTestPlatform({
-                _handleGift: async (payload) => handledGifts.push(payload)
-            });
-
-            const giftAggregator = createTikTokGiftAggregator({ platform });
-
-            await giftAggregator.handleStandardGift(buildGift({
-                id: 'gift-msg-avatar-1',
-                giftCount: 1,
-                avatarUrl: 'https://example.invalid/tiktok-aggregated-avatar-initial.jpg'
-            }));
-            await giftAggregator.handleStandardGift(buildGift({
-                id: 'gift-msg-avatar-2',
-                giftCount: 1,
-                avatarUrl: ''
-            }));
-
-            await advanceTimersByTime(platform.giftAggregationDelay);
-
-            expect(handledGifts).toHaveLength(1);
-            expect(handledGifts[0].giftCount).toBe(2);
-            expect(handledGifts[0].avatarUrl).toBe('https://example.invalid/tiktok-aggregated-avatar-initial.jpg');
-        });
-
-        test('cleans up aggregation state after delivery', async () => {
-            const platform = createTestPlatform({
-                _handleGift: async () => undefined
-            });
-
-            const giftAggregator = createTikTokGiftAggregator({ platform });
-
-            await giftAggregator.handleStandardGift(buildGift());
-
-            expect(platform.giftAggregation['tt-user1-Rose']).toBeDefined();
-
-            await advanceTimersByTime(platform.giftAggregationDelay);
-
-            expect(platform.giftAggregation['tt-user1-Rose']).toBeUndefined();
-        });
-
-        test('cleans up aggregation state when delivery fails', async () => {
-            const platform = createTestPlatform({
-                _handleGift: async () => { throw new Error('Handler failed'); }
-            });
-
-            const giftAggregator = createTikTokGiftAggregator({ platform });
-
-            await giftAggregator.handleStandardGift(buildGift());
-            await advanceTimersByTime(platform.giftAggregationDelay);
-
-            expect(platform.giftAggregation['tt-user1-Rose']).toBeUndefined();
-        });
-    });
-
-    describe('cleanupGiftAggregation', () => {
-        test('cancels pending timers and prevents delivery', async () => {
-            const handledGifts = [];
-            const platform = createTestPlatform({
-                _handleGift: async (payload) => handledGifts.push(payload)
-            });
-
-            const giftAggregator = createTikTokGiftAggregator({ platform });
-
-            await giftAggregator.handleStandardGift(buildGift());
-
-            expect(getTimerCount()).toBe(1);
-
-            giftAggregator.cleanupGiftAggregation();
-
-            expect(getTimerCount()).toBe(0);
-            expect(platform.giftAggregation).toEqual({});
-
-            await advanceTimersByTime(platform.giftAggregationDelay * 2);
-
-            expect(handledGifts).toHaveLength(0);
-        });
-
-        test('handles empty aggregation state', () => {
-            const platform = createTestPlatform({ giftAggregation: {} });
-            const giftAggregator = createTikTokGiftAggregator({ platform });
-
-            giftAggregator.cleanupGiftAggregation();
-
-            expect(platform.giftAggregation).toEqual({});
-        });
-    });
+  });
 });
