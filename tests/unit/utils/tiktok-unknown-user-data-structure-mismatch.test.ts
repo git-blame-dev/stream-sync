@@ -1,193 +1,249 @@
-const { describe, expect, beforeEach, it, afterEach } = require('bun:test');
-export {};
-const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { TEST_TIMEOUTS } = require('../../helpers/test-setup');
-const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
-const { expectNoTechnicalArtifacts } = require('../../helpers/assertion-helpers');
-const testClock = require('../../helpers/test-clock');
-const { normalizeTikTokMessage } = require('../../../src/utils/message-normalization');
-const { extractTikTokUserData } = require('../../../src/utils/tiktok-data-extraction');
-
+import { describe, expect, beforeEach, it, afterEach } from "bun:test";
+import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
+import { TEST_TIMEOUTS } from "../../helpers/test-setup";
+import { setupAutomatedCleanup } from "../../helpers/mock-lifecycle";
+import { expectNoTechnicalArtifacts } from "../../helpers/assertion-helpers";
+import testClock from "../../helpers/test-clock";
+import { normalizeTikTokMessage } from "../../../src/utils/message-normalization";
+import { extractTikTokUserData } from "../../../src/utils/tiktok-data-extraction";
 setupAutomatedCleanup({
   clearCallsBeforeEach: true,
-  logPerformanceMetrics: true
+  logPerformanceMetrics: true,
 });
 
 const buildTimestampService = () => ({
   extractTimestamp: createMockFn((platform, data) => {
-    if (platform !== 'tiktok') {
-      throw new Error('Unsupported platform');
+    if (platform !== "tiktok") {
+      throw new Error("Unsupported platform");
     }
     if (!data?.common?.createTime) {
-      throw new Error('Missing tiktok timestamp');
+      throw new Error("Missing tiktok timestamp");
     }
     return new Date(Number(data.common.createTime)).toISOString();
-  })
+  }),
 });
 
-describe('TikTok Unknown User Data Structure Mismatch', () => {
-    afterEach(() => {
-        restoreAllMocks();
-    });
+describe("TikTok Unknown User Data Structure Mismatch", () => {
+  afterEach(() => {
+    restoreAllMocks();
+  });
 
   let timestampService;
 
   beforeEach(() => {
     timestampService = buildTimestampService();
   });
-  describe('Message Normalization with Actual TikTok Data Structure', () => {
-    describe('when TikTok data has nested structure (current production format)', () => {
-      it('should extract username from nested user structure', () => {
-        const nestedTikTokData = {
-          "comment": "Test nested message",
-          "user": {
-            "uniqueId": "testUserNested",
-            "nickname": "TestNestedUser",
-            "userId": "test_user_id_nested",
-            "profilePictureUrl": "https://example.invalid/avatar-nested.jpg"
-          },
-          "common": { "createTime": testClock.now() }
-        };
+  describe("Message Normalization with Actual TikTok Data Structure", () => {
+    describe("when TikTok data has nested structure (current production format)", () => {
+      it(
+        "should extract username from nested user structure",
+        () => {
+          const nestedTikTokData = {
+            comment: "Test nested message",
+            user: {
+              uniqueId: "testUserNested",
+              nickname: "TestNestedUser",
+              userId: "test_user_id_nested",
+              profilePictureUrl: "https://example.invalid/avatar-nested.jpg",
+            },
+            common: { createTime: testClock.now() },
+          };
 
-        const result = normalizeTikTokMessage(nestedTikTokData, 'tiktok', timestampService);
+          const result = normalizeTikTokMessage(
+            nestedTikTokData,
+            "tiktok",
+            timestampService,
+          );
 
-        expect(result.username).toBe('TestNestedUser');
-        expect(result.userId).toBe('testUserNested');
-        expect(result.message).toEqual({ text: 'Test nested message' });
-        expect(result.platform).toBe('tiktok');
-        expectNoTechnicalArtifacts(result.username);
-      }, TEST_TIMEOUTS.FAST);
-    });
-
-    describe('when TikTok data is malformed or empty', () => {
-      it('should reject null data', () => {
-        expect(() => normalizeTikTokMessage(null, 'tiktok', timestampService))
-          .toThrow('message data');
-      }, TEST_TIMEOUTS.FAST);
-
-      it('should reject empty object', () => {
-        expect(() => normalizeTikTokMessage({}, 'tiktok', timestampService))
-          .toThrow('userId');
-      }, TEST_TIMEOUTS.FAST);
-    });
-  });
-
-  describe('User Data Extraction with Actual TikTok Gift Structure', () => {
-    describe('when gift data has nested structure (current production format)', () => {
-      it('should extract user data from nested gift structure', () => {
-        const nestedGiftData = {
-          "user": {
-            "uniqueId": "testGiftNestedUser",
-            "nickname": "TestNestedGiftSender",
-            "userId": "test_user_id_gift_nested"
-          },
-          "giftName": "TestGiftTikTok",
-          "giftCount": 1,
-          "diamondCount": 10
-        };
-
-        const result = extractTikTokUserData(nestedGiftData);
-
-        expect(result.userId).toBe('testGiftNestedUser');
-        expect(result.username).toBe('TestNestedGiftSender');
-      }, TEST_TIMEOUTS.FAST);
-    });
-
-    describe('when gift data is malformed', () => {
-      it('should reject null gift data', () => {
-        expect(() => extractTikTokUserData(null)).toThrow('TikTok user payload');
-      }, TEST_TIMEOUTS.FAST);
-
-      it('should reject empty gift data', () => {
-        expect(() => extractTikTokUserData({})).toThrow('TikTok user payload');
-      }, TEST_TIMEOUTS.FAST);
-    });
-  });
-
-  describe('Cross-Platform Consistency', () => {
-    it('should maintain consistent user data format across platforms', () => {
-      const tikTokData = {
-        "user": {
-          "userId": "test_user_id_cross",
-          "uniqueId": "testUserCrossPlatform",
-          "nickname": "TestCrossPlatform"
+          expect(result.username).toBe("TestNestedUser");
+          expect(result.userId).toBe("testUserNested");
+          expect(result.message).toEqual({ text: "Test nested message" });
+          expect(result.platform).toBe("tiktok");
+          expectNoTechnicalArtifacts(result.username);
         },
-        "comment": "Test consistency message",
-        "common": { "createTime": testClock.now() }
-      };
-
-      const result = normalizeTikTokMessage(tikTokData, 'tiktok', timestampService);
-
-      expect(result).toHaveProperty('platform', 'tiktok');
-      expect(result).toHaveProperty('userId');
-      expect(result).toHaveProperty('username');
-      expect(result).toHaveProperty('message');
-      expect(result).toHaveProperty('timestamp');
-      expect(result).toHaveProperty('isMod');
-      expect(result).toHaveProperty('isPaypiggy');
-      expect(result).toHaveProperty('isBroadcaster');
-      expect(result).toHaveProperty('metadata');
-      expect(result).toHaveProperty('rawData');
-      expectNoTechnicalArtifacts(result.username);
-      expect(result.userId).not.toBe('undefined');
-      expect(result.userId).not.toBe(null);
-    }, TEST_TIMEOUTS.FAST);
-  });
-
-  describe('Error Recovery and Data Validation', () => {
-    it('should reject nested user data missing uniqueId', () => {
-      const corruptedData = {
-        "comment": "Test message with missing uniqueId",
-        "user": {
-          "userId": "test_user_id_missing_uniqueId",
-          "nickname": "MissingUnique"
-        },
-        "common": { "createTime": testClock.now() }
-      };
-
-      const timestampService = buildTimestampService();
-
-      expect(() => normalizeTikTokMessage(corruptedData, 'tiktok', timestampService))
-        .toThrow('userId');
-      expect(() => extractTikTokUserData(corruptedData)).toThrow('user.uniqueId and user.nickname');
-    }, TEST_TIMEOUTS.FAST);
-  });
-
-  describe('Performance and Memory Impact', () => {
-    it('should maintain performance with nested user structures', () => {
-      const multipleEvents = Array.from({ length: 100 }, (_, i) => ({
-        "user": {
-          "uniqueId": `testRapidUser${i}`,
-          "nickname": `TestRapidUser${i}`,
-          "userId": `test_user_id_${i}`
-        },
-        "comment": `Test message ${i}`,
-        "common": { "createTime": testClock.now() + i }
-      }));
-
-      const startTime = testClock.now();
-
-      const timestampService = buildTimestampService();
-      const results = multipleEvents.map(event => {
-        const normalized = normalizeTikTokMessage(event, 'tiktok', timestampService);
-        const userData = extractTikTokUserData(event);
-        return { normalized, userData };
-      });
-
-      const simulatedProcessingMs = 120;
-      testClock.advance(simulatedProcessingMs);
-      const processingTime = testClock.now() - startTime;
-
-      expect(processingTime).toBeLessThan(1000);
-      expect(results).toHaveLength(100);
-      expect(results[0].normalized.username).toBe('TestRapidUser0');
-      expect(results[99].normalized.username).toBe('TestRapidUser99');
-
-      const unknownUserEvents = results.filter(r =>
-        r.normalized.username === 'Unknown User' ||
-        r.userData.username === 'Unknown User'
+        TEST_TIMEOUTS.FAST,
       );
-      expect(unknownUserEvents).toHaveLength(0);
-    }, TEST_TIMEOUTS.SLOW);
+    });
+
+    describe("when TikTok data is malformed or empty", () => {
+      it(
+        "should reject null data",
+        () => {
+          expect(() =>
+            normalizeTikTokMessage(null, "tiktok", timestampService),
+          ).toThrow("message data");
+        },
+        TEST_TIMEOUTS.FAST,
+      );
+
+      it(
+        "should reject empty object",
+        () => {
+          expect(() =>
+            normalizeTikTokMessage({}, "tiktok", timestampService),
+          ).toThrow("userId");
+        },
+        TEST_TIMEOUTS.FAST,
+      );
+    });
+  });
+
+  describe("User Data Extraction with Actual TikTok Gift Structure", () => {
+    describe("when gift data has nested structure (current production format)", () => {
+      it(
+        "should extract user data from nested gift structure",
+        () => {
+          const nestedGiftData = {
+            user: {
+              uniqueId: "testGiftNestedUser",
+              nickname: "TestNestedGiftSender",
+              userId: "test_user_id_gift_nested",
+            },
+            giftName: "TestGiftTikTok",
+            giftCount: 1,
+            diamondCount: 10,
+          };
+
+          const result = extractTikTokUserData(nestedGiftData);
+
+          expect(result.userId).toBe("testGiftNestedUser");
+          expect(result.username).toBe("TestNestedGiftSender");
+        },
+        TEST_TIMEOUTS.FAST,
+      );
+    });
+
+    describe("when gift data is malformed", () => {
+      it(
+        "should reject null gift data",
+        () => {
+          expect(() => extractTikTokUserData(null)).toThrow(
+            "TikTok user payload",
+          );
+        },
+        TEST_TIMEOUTS.FAST,
+      );
+
+      it(
+        "should reject empty gift data",
+        () => {
+          expect(() => extractTikTokUserData({})).toThrow(
+            "TikTok user payload",
+          );
+        },
+        TEST_TIMEOUTS.FAST,
+      );
+    });
+  });
+
+  describe("Cross-Platform Consistency", () => {
+    it(
+      "should maintain consistent user data format across platforms",
+      () => {
+        const tikTokData = {
+          user: {
+            userId: "test_user_id_cross",
+            uniqueId: "testUserCrossPlatform",
+            nickname: "TestCrossPlatform",
+          },
+          comment: "Test consistency message",
+          common: { createTime: testClock.now() },
+        };
+
+        const result = normalizeTikTokMessage(
+          tikTokData,
+          "tiktok",
+          timestampService,
+        );
+
+        expect(result).toHaveProperty("platform", "tiktok");
+        expect(result).toHaveProperty("userId");
+        expect(result).toHaveProperty("username");
+        expect(result).toHaveProperty("message");
+        expect(result).toHaveProperty("timestamp");
+        expect(result).toHaveProperty("isMod");
+        expect(result).toHaveProperty("isPaypiggy");
+        expect(result).toHaveProperty("isBroadcaster");
+        expect(result).toHaveProperty("metadata");
+        expect(result).toHaveProperty("rawData");
+        expectNoTechnicalArtifacts(result.username);
+        expect(result.userId).not.toBe("undefined");
+        expect(result.userId).not.toBe(null);
+      },
+      TEST_TIMEOUTS.FAST,
+    );
+  });
+
+  describe("Error Recovery and Data Validation", () => {
+    it(
+      "should reject nested user data missing uniqueId",
+      () => {
+        const corruptedData = {
+          comment: "Test message with missing uniqueId",
+          user: {
+            userId: "test_user_id_missing_uniqueId",
+            nickname: "MissingUnique",
+          },
+          common: { createTime: testClock.now() },
+        };
+
+        const timestampService = buildTimestampService();
+
+        expect(() =>
+          normalizeTikTokMessage(corruptedData, "tiktok", timestampService),
+        ).toThrow("userId");
+        expect(() => extractTikTokUserData(corruptedData)).toThrow(
+          "user.uniqueId and user.nickname",
+        );
+      },
+      TEST_TIMEOUTS.FAST,
+    );
+  });
+
+  describe("Performance and Memory Impact", () => {
+    it(
+      "should maintain performance with nested user structures",
+      () => {
+        const multipleEvents = Array.from({ length: 100 }, (_, i) => ({
+          user: {
+            uniqueId: `testRapidUser${i}`,
+            nickname: `TestRapidUser${i}`,
+            userId: `test_user_id_${i}`,
+          },
+          comment: `Test message ${i}`,
+          common: { createTime: testClock.now() + i },
+        }));
+
+        const startTime = testClock.now();
+
+        const timestampService = buildTimestampService();
+        const results = multipleEvents.map((event) => {
+          const normalized = normalizeTikTokMessage(
+            event,
+            "tiktok",
+            timestampService,
+          );
+          const userData = extractTikTokUserData(event);
+          return { normalized, userData };
+        });
+
+        const simulatedProcessingMs = 120;
+        testClock.advance(simulatedProcessingMs);
+        const processingTime = testClock.now() - startTime;
+
+        expect(processingTime).toBeLessThan(1000);
+        expect(results).toHaveLength(100);
+        expect(results[0].normalized.username).toBe("TestRapidUser0");
+        expect(results[99].normalized.username).toBe("TestRapidUser99");
+
+        const unknownUserEvents = results.filter(
+          (r) =>
+            r.normalized.username === "Unknown User" ||
+            r.userData.username === "Unknown User",
+        );
+        expect(unknownUserEvents).toHaveLength(0);
+      },
+      TEST_TIMEOUTS.SLOW,
+    );
   });
 });

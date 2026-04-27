@@ -1,473 +1,550 @@
-
-const { describe, expect, beforeEach, afterEach, it } = require('bun:test');
-export {};
-const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
-
-const { initializeTestLogging } = require('../../helpers/test-setup');
-const { noOpLogger } = require('../../helpers/mock-factories');
-const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
-const {
-    SpamDetectionConfig,
-    createSpamDetectionConfig,
-    createDonationSpamDetection
-} = require('../../../src/utils/spam-detection');
-const testClock = require('../../helpers/test-clock');
-const { safeSetTimeout } = require('../../../src/utils/timeout-validator');
-
+import { describe, expect, beforeEach, afterEach, it } from "bun:test";
+import { restoreAllMocks } from "../../helpers/bun-mock-utils";
+import { initializeTestLogging } from "../../helpers/test-setup";
+import { noOpLogger } from "../../helpers/mock-factories";
+import { setupAutomatedCleanup } from "../../helpers/mock-lifecycle";
+import {
+  SpamDetectionConfig,
+  createSpamDetectionConfig,
+  createDonationSpamDetection,
+} from "../../../src/utils/spam-detection";
+import testClock from "../../helpers/test-clock";
+import { safeSetTimeout } from "../../../src/utils/timeout-validator";
 type DonationSpamDetection = ReturnType<typeof createDonationSpamDetection>;
 type SpamDetectionConfigInstance = InstanceType<typeof SpamDetectionConfig>;
 
 initializeTestLogging();
 
 setupAutomatedCleanup({
-    clearCallsBeforeEach: true,
-    validateAfterCleanup: true,
-    logPerformanceMetrics: true
+  clearCallsBeforeEach: true,
+  validateAfterCleanup: true,
+  logPerformanceMetrics: true,
 });
 
-describe('Spam Detection', () => {
-    let mockLogger: typeof noOpLogger;
-    let config: SpamDetectionConfigInstance;
+describe("Spam Detection", () => {
+  let mockLogger: typeof noOpLogger;
+  let config: SpamDetectionConfigInstance;
+
+  beforeEach(() => {
+    mockLogger = noOpLogger;
+
+    const configObj = {
+      enabled: true,
+      lowValueThreshold: 10,
+      detectionWindow: 5,
+      maxIndividualNotifications: 2,
+    };
+
+    config = new SpamDetectionConfig(configObj, { logger: mockLogger });
+  });
+
+  afterEach(() => {
+    restoreAllMocks();
+  });
+
+  describe("when initializing spam detection configuration", () => {
+    it("should store normalized config values", () => {
+      const normalizedConfig = {
+        enabled: true,
+        lowValueThreshold: 10,
+        detectionWindow: 5,
+        maxIndividualNotifications: 2,
+      };
+      const spamConfig = createSpamDetectionConfig(normalizedConfig, {
+        logger: mockLogger,
+      });
+
+      expect(spamConfig.lowValueThreshold).toBe(10);
+      expect(spamConfig.enabled).toBe(true);
+      expect(spamConfig.detectionWindow).toBe(5);
+      expect(spamConfig.maxIndividualNotifications).toBe(2);
+    });
+
+    it("should create configuration with custom values", () => {
+      const customConfig = {
+        enabled: false,
+        lowValueThreshold: 20,
+        detectionWindow: 10,
+        maxIndividualNotifications: 5,
+      };
+      const spamConfig = createSpamDetectionConfig(customConfig, {
+        logger: mockLogger,
+      });
+
+      expect(spamConfig.lowValueThreshold).toBe(20);
+      expect(spamConfig.enabled).toBe(false);
+      expect(spamConfig.detectionWindow).toBe(10);
+      expect(spamConfig.maxIndividualNotifications).toBe(5);
+    });
+
+    it("should return consistent platform config for any platform", () => {
+      const tiktokConfig = config.getPlatformConfig("tiktok");
+      const twitchConfig = config.getPlatformConfig("twitch");
+      const youtubeConfig = config.getPlatformConfig("youtube");
+
+      expect(tiktokConfig.enabled).toBe(true);
+      expect(tiktokConfig.lowValueThreshold).toBe(10);
+      expect(twitchConfig.enabled).toBe(true);
+      expect(twitchConfig.lowValueThreshold).toBe(10);
+      expect(youtubeConfig.enabled).toBe(true);
+      expect(youtubeConfig.lowValueThreshold).toBe(10);
+    });
+  });
+
+  describe("when detecting low-value donations", () => {
+    it("should detect low-value donations correctly", () => {
+      const detection = createDonationSpamDetection(config, {
+        logger: mockLogger,
+        autoCleanup: false,
+      });
+
+      expect(detection.isLowValueDonation(5, "tiktok")).toBe(true);
+      expect(detection.isLowValueDonation(15, "tiktok")).toBe(false);
+      expect(detection.isLowValueDonation(8, "twitch")).toBe(true);
+      expect(detection.isLowValueDonation(12, "twitch")).toBe(false);
+
+      detection.destroy();
+    });
+
+    it("should handle different platforms with same threshold", () => {
+      const detection = createDonationSpamDetection(config, {
+        logger: mockLogger,
+        autoCleanup: false,
+      });
+
+      expect(detection.isLowValueDonation(5, "tiktok")).toBe(true);
+      expect(detection.isLowValueDonation(15, "tiktok")).toBe(false);
+
+      expect(detection.isLowValueDonation(8, "twitch")).toBe(true);
+      expect(detection.isLowValueDonation(12, "twitch")).toBe(false);
+
+      expect(detection.isLowValueDonation(5, "youtube")).toBe(true);
+      expect(detection.isLowValueDonation(15, "youtube")).toBe(false);
+
+      detection.destroy();
+    });
+
+    it("should handle unknown platforms with default threshold", () => {
+      const detection = createDonationSpamDetection(config, {
+        logger: mockLogger,
+        autoCleanup: false,
+      });
+
+      expect(detection.isLowValueDonation(8, "unknown")).toBe(true);
+      expect(detection.isLowValueDonation(12, "unknown")).toBe(false);
+
+      detection.destroy();
+    });
+
+    it("should handle zero and negative values", () => {
+      const detection = createDonationSpamDetection(config, {
+        logger: mockLogger,
+        autoCleanup: false,
+      });
+
+      expect(detection.isLowValueDonation(0, "tiktok")).toBe(true);
+      expect(detection.isLowValueDonation(-5, "tiktok")).toBe(true);
+
+      detection.destroy();
+    });
+  });
+
+  describe("when handling donation spam", () => {
+    let detection: DonationSpamDetection;
 
     beforeEach(() => {
-        mockLogger = noOpLogger;
-
-        const configObj = {
-            enabled: true,
-            lowValueThreshold: 10,
-            detectionWindow: 5,
-            maxIndividualNotifications: 2
-        };
-
-        config = new SpamDetectionConfig(configObj, { logger: mockLogger });
+      detection = createDonationSpamDetection(config, {
+        logger: mockLogger,
+        autoCleanup: false,
+      });
     });
 
     afterEach(() => {
-        restoreAllMocks();
+      if (detection) {
+        detection.destroy();
+      }
     });
 
-    describe('when initializing spam detection configuration', () => {
-        it('should store normalized config values', () => {
-            const normalizedConfig = {
-                enabled: true,
-                lowValueThreshold: 10,
-                detectionWindow: 5,
-                maxIndividualNotifications: 2
-            };
-            const spamConfig = createSpamDetectionConfig(normalizedConfig, { logger: mockLogger });
+    it("should allow first donation within threshold", () => {
+      const result = detection.handleDonationSpam(
+        "user1",
+        "User1",
+        5,
+        "Rose",
+        1,
+        "tiktok",
+      );
 
-            expect(spamConfig.lowValueThreshold).toBe(10);
-            expect(spamConfig.enabled).toBe(true);
-            expect(spamConfig.detectionWindow).toBe(5);
-            expect(spamConfig.maxIndividualNotifications).toBe(2);
-        });
-
-        it('should create configuration with custom values', () => {
-            const customConfig = {
-                enabled: false,
-                lowValueThreshold: 20,
-                detectionWindow: 10,
-                maxIndividualNotifications: 5
-            };
-            const spamConfig = createSpamDetectionConfig(customConfig, { logger: mockLogger });
-
-            expect(spamConfig.lowValueThreshold).toBe(20);
-            expect(spamConfig.enabled).toBe(false);
-            expect(spamConfig.detectionWindow).toBe(10);
-            expect(spamConfig.maxIndividualNotifications).toBe(5);
-        });
-
-        it('should return consistent platform config for any platform', () => {
-            const tiktokConfig = config.getPlatformConfig('tiktok');
-            const twitchConfig = config.getPlatformConfig('twitch');
-            const youtubeConfig = config.getPlatformConfig('youtube');
-
-            expect(tiktokConfig.enabled).toBe(true);
-            expect(tiktokConfig.lowValueThreshold).toBe(10);
-            expect(twitchConfig.enabled).toBe(true);
-            expect(twitchConfig.lowValueThreshold).toBe(10);
-            expect(youtubeConfig.enabled).toBe(true);
-            expect(youtubeConfig.lowValueThreshold).toBe(10);
-        });
+      expect(result.shouldShow).toBe(true);
+      expect(result.aggregatedMessage).toBeNull();
     });
 
-    describe('when detecting low-value donations', () => {
-        it('should detect low-value donations correctly', () => {
-            const detection = createDonationSpamDetection(config, {
-                logger: mockLogger,
-                autoCleanup: false
-            });
+    it("should aggregate multiple low-value donations from same user", () => {
+      detection.handleDonationSpam("user1", "User1", 5, "Rose", 1, "tiktok");
+      detection.handleDonationSpam("user1", "User1", 5, "Rose", 1, "tiktok");
 
-            expect(detection.isLowValueDonation(5, 'tiktok')).toBe(true);
-            expect(detection.isLowValueDonation(15, 'tiktok')).toBe(false);
-            expect(detection.isLowValueDonation(8, 'twitch')).toBe(true);
-            expect(detection.isLowValueDonation(12, 'twitch')).toBe(false);
+      const result = detection.handleDonationSpam(
+        "user1",
+        "User1",
+        3,
+        "Rose",
+        1,
+        "tiktok",
+      );
 
-            detection.destroy();
-        });
-
-        it('should handle different platforms with same threshold', () => {
-            const detection = createDonationSpamDetection(config, {
-                logger: mockLogger,
-                autoCleanup: false
-            });
-
-            expect(detection.isLowValueDonation(5, 'tiktok')).toBe(true);
-            expect(detection.isLowValueDonation(15, 'tiktok')).toBe(false);
-
-            expect(detection.isLowValueDonation(8, 'twitch')).toBe(true);
-            expect(detection.isLowValueDonation(12, 'twitch')).toBe(false);
-
-            expect(detection.isLowValueDonation(5, 'youtube')).toBe(true);
-            expect(detection.isLowValueDonation(15, 'youtube')).toBe(false);
-
-            detection.destroy();
-        });
-
-        it('should handle unknown platforms with default threshold', () => {
-            const detection = createDonationSpamDetection(config, {
-                logger: mockLogger,
-                autoCleanup: false
-            });
-
-            expect(detection.isLowValueDonation(8, 'unknown')).toBe(true);
-            expect(detection.isLowValueDonation(12, 'unknown')).toBe(false);
-
-            detection.destroy();
-        });
-
-        it('should handle zero and negative values', () => {
-            const detection = createDonationSpamDetection(config, {
-                logger: mockLogger,
-                autoCleanup: false
-            });
-
-            expect(detection.isLowValueDonation(0, 'tiktok')).toBe(true);
-            expect(detection.isLowValueDonation(-5, 'tiktok')).toBe(true);
-
-            detection.destroy();
-        });
+      expect(result.shouldShow).toBe(false);
+      expect(result.aggregatedMessage).toBeNull();
     });
 
-    describe('when handling donation spam', () => {
-        let detection: DonationSpamDetection;
+    it("should reset tracking after time window expires", () => {
+      detection.handleDonationSpam("user1", "User1", 5, "Rose", 1, "tiktok");
 
-        beforeEach(() => {
-            detection = createDonationSpamDetection(config, {
-                logger: mockLogger,
-                autoCleanup: false
-            });
-        });
+      testClock.advance(11000);
 
-        afterEach(() => {
-            if (detection) {
-                detection.destroy();
-            }
-        });
+      const result = detection.handleDonationSpam(
+        "user1",
+        "User1",
+        5,
+        "Rose",
+        1,
+        "tiktok",
+      );
 
-        it('should allow first donation within threshold', () => {
-            const result = detection.handleDonationSpam('user1', 'User1', 5, 'Rose', 1, 'tiktok');
-
-            expect(result.shouldShow).toBe(true);
-            expect(result.aggregatedMessage).toBeNull();
-        });
-
-        it('should aggregate multiple low-value donations from same user', () => {
-            detection.handleDonationSpam('user1', 'User1', 5, 'Rose', 1, 'tiktok');
-            detection.handleDonationSpam('user1', 'User1', 5, 'Rose', 1, 'tiktok');
-
-            const result = detection.handleDonationSpam('user1', 'User1', 3, 'Rose', 1, 'tiktok');
-
-            expect(result.shouldShow).toBe(false);
-            expect(result.aggregatedMessage).toBeNull();
-        });
-
-        it('should reset tracking after time window expires', () => {
-            detection.handleDonationSpam('user1', 'User1', 5, 'Rose', 1, 'tiktok');
-
-            testClock.advance(11000);
-
-            const result = detection.handleDonationSpam('user1', 'User1', 5, 'Rose', 1, 'tiktok');
-
-            expect(result.shouldShow).toBe(true);
-            expect(result.aggregatedMessage).toBeNull();
-        });
-
-        it('should keep recent entries', () => {
-            detection.handleDonationSpam('user1', 'User1', 5, 'Rose', 1, 'tiktok');
-            detection.handleDonationSpam('user2', 'User2', 8, 'bits', 1, 'twitch');
-
-            detection.cleanupSpamDetection();
-
-            const stats = detection.getStatistics();
-            expect(stats.trackedUsers).toBe(2);
-        });
-
-        it('should handle cleanup with no entries', () => {
-            detection.cleanupSpamDetection();
-
-            const stats = detection.getStatistics();
-            expect(stats.trackedUsers).toBe(0);
-        });
+      expect(result.shouldShow).toBe(true);
+      expect(result.aggregatedMessage).toBeNull();
     });
 
-    describe('when getting statistics', () => {
-        let detection: DonationSpamDetection;
+    it("should keep recent entries", () => {
+      detection.handleDonationSpam("user1", "User1", 5, "Rose", 1, "tiktok");
+      detection.handleDonationSpam("user2", "User2", 8, "bits", 1, "twitch");
 
-        beforeEach(() => {
-            detection = createDonationSpamDetection(config, {
-                logger: mockLogger,
-                autoCleanup: false
-            });
-        });
+      detection.cleanupSpamDetection();
 
-        afterEach(() => {
-            if (detection) {
-                detection.destroy();
-            }
-        });
-
-        it('should return accurate statistics', () => {
-            detection.handleDonationSpam('user1', 'User1', 5, 'Rose', 1, 'tiktok');
-            detection.handleDonationSpam('user2', 'User2', 8, 'bits', 1, 'twitch');
-            detection.handleDonationSpam('user1', 'User1', 3, 'Rose', 1, 'tiktok');
-
-            const stats = detection.getStatistics();
-
-            expect(stats.trackedUsers).toBe(2);
-            expect(stats.totalNotifications).toBeGreaterThan(0);
-            expect(stats.enabled).toBeDefined();
-            expect(stats.threshold).toBeDefined();
-        });
-
-        it('should return zero statistics for empty tracker', () => {
-            const stats = detection.getStatistics();
-
-            expect(stats.trackedUsers).toBe(0);
-            expect(stats.totalNotifications).toBe(0);
-        });
+      const stats = detection.getStatistics();
+      expect(stats.trackedUsers).toBe(2);
     });
 
-    describe('when resetting tracking', () => {
-        let detection: DonationSpamDetection;
+    it("should handle cleanup with no entries", () => {
+      detection.cleanupSpamDetection();
 
-        beforeEach(() => {
-            detection = createDonationSpamDetection(config, {
-                logger: mockLogger,
-                autoCleanup: false
-            });
-        });
+      const stats = detection.getStatistics();
+      expect(stats.trackedUsers).toBe(0);
+    });
+  });
 
-        afterEach(() => {
-            if (detection) {
-                detection.destroy();
-            }
-        });
+  describe("when getting statistics", () => {
+    let detection: DonationSpamDetection;
 
-        it('should reset all tracking data', () => {
-            detection.handleDonationSpam('user1', 'User1', 5, 'Rose', 1, 'tiktok');
-            detection.handleDonationSpam('user2', 'User2', 8, 'bits', 1, 'twitch');
-
-            detection.resetTracking();
-
-            const stats = detection.getStatistics();
-            expect(stats.trackedUsers).toBe(0);
-            expect(stats.totalNotifications).toBe(0);
-        });
-
-        it('should allow new donations after reset', () => {
-            detection.handleDonationSpam('user1', 'User1', 5, 'Rose', 1, 'tiktok');
-            detection.resetTracking();
-
-            const result = detection.handleDonationSpam('user1', 'User1', 5, 'Rose', 1, 'tiktok');
-
-            expect(result.shouldShow).toBe(true);
-            expect(result.aggregatedMessage).toBeNull();
-        });
+    beforeEach(() => {
+      detection = createDonationSpamDetection(config, {
+        logger: mockLogger,
+        autoCleanup: false,
+      });
     });
 
-    describe('when handling edge cases', () => {
-        let detection: DonationSpamDetection;
-
-        beforeEach(() => {
-            detection = createDonationSpamDetection(config, {
-                logger: mockLogger,
-                autoCleanup: false
-            });
-        });
-
-        afterEach(() => {
-            if (detection) {
-                detection.destroy();
-            }
-        });
-
-        it('should handle very large gift counts', () => {
-            const result = detection.handleDonationSpam('user1', 'User1', 1, 'Rose', 1000, 'tiktok');
-
-            expect(result.shouldShow).toBe(true);
-            expect(result.aggregatedMessage).toBeNull();
-        });
-
-        it('should handle very high coin values', () => {
-            const result = detection.handleDonationSpam('user1', 'User1', 999999, 'Diamond', 1, 'tiktok');
-
-            expect(result.shouldShow).toBe(true);
-            expect(result.aggregatedMessage).toBeNull();
-        });
-
-        it('should handle missing user data', () => {
-            const result = detection.handleDonationSpam(null, null, 5, 'Rose', 1, 'tiktok');
-
-            expect(result.shouldShow).toBe(true);
-            expect(result.aggregatedMessage).toBeNull();
-        });
-
-        it('should handle disabled spam detection', () => {
-            const disabledConfig = createSpamDetectionConfig({
-                enabled: false,
-                lowValueThreshold: 10,
-                detectionWindow: 5,
-                maxIndividualNotifications: 2
-            }, { logger: mockLogger });
-            const disabledDetection = createDonationSpamDetection(disabledConfig, {
-                logger: mockLogger,
-                autoCleanup: false
-            });
-
-            const result = disabledDetection.handleDonationSpam('user1', 'User1', 5, 'Rose', 1, 'tiktok');
-
-            expect(result.shouldShow).toBe(true);
-            expect(result.aggregatedMessage).toBeNull();
-
-            disabledDetection.destroy();
-        });
+    afterEach(() => {
+      if (detection) {
+        detection.destroy();
+      }
     });
 
-    describe('when processing aggregated donations', () => {
-        let detection: DonationSpamDetection;
-        let aggregatedDonation: { totalCoins: number; totalGifts: number } | null = null;
+    it("should return accurate statistics", () => {
+      detection.handleDonationSpam("user1", "User1", 5, "Rose", 1, "tiktok");
+      detection.handleDonationSpam("user2", "User2", 8, "bits", 1, "twitch");
+      detection.handleDonationSpam("user1", "User1", 3, "Rose", 1, "tiktok");
 
-        beforeEach(() => {
-            aggregatedDonation = null;
-            detection = createDonationSpamDetection(config, {
-                logger: mockLogger,
-                autoCleanup: false,
-                onAggregatedDonation: (payload: { totalCoins: number; totalGifts: number }) => {
-                    aggregatedDonation = payload;
-                }
-            });
-        });
+      const stats = detection.getStatistics();
 
-        afterEach(() => {
-            if (detection) {
-                detection.destroy();
-            }
-        });
-
-        it('should combine notifications into one aggregated message', () => {
-            const aggregationTimer = safeSetTimeout(() => {}, 1000);
-            const tracker = {
-                notifications: [
-                    { timestamp: 1700000000000, coinValue: 5, giftType: 'Rose', giftCount: 1, platform: 'tiktok' },
-                    { timestamp: 1700000001000, coinValue: 4, giftType: 'Heart', giftCount: 2, platform: 'tiktok' }
-                ],
-                aggregatedCount: 2,
-                lastReset: 1700000000000,
-                aggregationTimer,
-                username: 'User1',
-                platform: 'tiktok'
-            };
-
-            const result = detection.processAggregatedDonation('user1', tracker);
-
-            expect(result.shouldShow).toBe(true);
-            expect(result.totalCoinValue).toBe(13);
-            expect(result.totalGiftCount).toBe(3);
-            expect(result.aggregatedMessage).toContain('User1 sent 3 gifts worth 13 coins');
-            expect(tracker.notifications).toEqual([]);
-            expect(tracker.aggregationTimer).toBeNull();
-            expect(aggregatedDonation).toBeDefined();
-            expect(aggregatedDonation?.totalCoins).toBe(13);
-            expect(aggregatedDonation?.totalGifts).toBe(3);
-        });
-
-        it('should return empty aggregation result when notifications are missing', () => {
-            const tracker = {
-                notifications: [],
-                aggregatedCount: 0,
-                lastReset: 1700000000000,
-                aggregationTimer: null,
-                username: 'User1',
-                platform: 'tiktok'
-            };
-
-            const result = detection.processAggregatedDonation('user1', tracker);
-
-            expect(result.shouldShow).toBe(false);
-            expect(result.aggregatedMessage).toBeNull();
-            expect(result.totalCoinValue).toBe(0);
-            expect(result.totalGiftCount).toBe(0);
-        });
+      expect(stats.trackedUsers).toBe(2);
+      expect(stats.totalNotifications).toBeGreaterThan(0);
+      expect(stats.enabled).toBeDefined();
+      expect(stats.threshold).toBeDefined();
     });
 
-    describe('when managing cleanup scheduling', () => {
-        let detection: DonationSpamDetection;
+    it("should return zero statistics for empty tracker", () => {
+      const stats = detection.getStatistics();
 
-        beforeEach(() => {
-            detection = createDonationSpamDetection(config, {
-                logger: mockLogger,
-                autoCleanup: false
-            });
-        });
+      expect(stats.trackedUsers).toBe(0);
+      expect(stats.totalNotifications).toBe(0);
+    });
+  });
 
-        afterEach(() => {
-            if (detection) {
-                detection.destroy();
-            }
-        });
+  describe("when resetting tracking", () => {
+    let detection: DonationSpamDetection;
 
-        it('should cleanup periodically', () => {
-            detection.setupPeriodicCleanup();
-
-            detection.handleDonationSpam('user1', 'User1', 5, 'Rose', 1, 'tiktok');
-
-            expect(detection.cleanupInterval).toBeDefined();
-        });
+    beforeEach(() => {
+      detection = createDonationSpamDetection(config, {
+        logger: mockLogger,
+        autoCleanup: false,
+      });
     });
 
-    describe('when destroying spam detection', () => {
-        let detection: DonationSpamDetection;
-
-        beforeEach(() => {
-            detection = createDonationSpamDetection(config, {
-                logger: mockLogger,
-                autoCleanup: false
-            });
-        });
-
-        afterEach(() => {
-            if (detection) {
-                detection.destroy();
-            }
-        });
-
-        it('should cleanup resources on destroy', () => {
-            detection.setupPeriodicCleanup();
-            detection.handleDonationSpam('user1', 'User1', 5, 'Rose', 1, 'tiktok');
-
-            detection.destroy();
-
-            expect(detection.cleanupInterval).toBeNull();
-            const stats = detection.getStatistics();
-            expect(stats.trackedUsers).toBe(0);
-        });
-
-        it('should handle multiple destroy calls', () => {
-            detection.destroy();
-            detection.destroy();
-
-            expect(detection.cleanupInterval).toBeNull();
-        });
+    afterEach(() => {
+      if (detection) {
+        detection.destroy();
+      }
     });
+
+    it("should reset all tracking data", () => {
+      detection.handleDonationSpam("user1", "User1", 5, "Rose", 1, "tiktok");
+      detection.handleDonationSpam("user2", "User2", 8, "bits", 1, "twitch");
+
+      detection.resetTracking();
+
+      const stats = detection.getStatistics();
+      expect(stats.trackedUsers).toBe(0);
+      expect(stats.totalNotifications).toBe(0);
+    });
+
+    it("should allow new donations after reset", () => {
+      detection.handleDonationSpam("user1", "User1", 5, "Rose", 1, "tiktok");
+      detection.resetTracking();
+
+      const result = detection.handleDonationSpam(
+        "user1",
+        "User1",
+        5,
+        "Rose",
+        1,
+        "tiktok",
+      );
+
+      expect(result.shouldShow).toBe(true);
+      expect(result.aggregatedMessage).toBeNull();
+    });
+  });
+
+  describe("when handling edge cases", () => {
+    let detection: DonationSpamDetection;
+
+    beforeEach(() => {
+      detection = createDonationSpamDetection(config, {
+        logger: mockLogger,
+        autoCleanup: false,
+      });
+    });
+
+    afterEach(() => {
+      if (detection) {
+        detection.destroy();
+      }
+    });
+
+    it("should handle very large gift counts", () => {
+      const result = detection.handleDonationSpam(
+        "user1",
+        "User1",
+        1,
+        "Rose",
+        1000,
+        "tiktok",
+      );
+
+      expect(result.shouldShow).toBe(true);
+      expect(result.aggregatedMessage).toBeNull();
+    });
+
+    it("should handle very high coin values", () => {
+      const result = detection.handleDonationSpam(
+        "user1",
+        "User1",
+        999999,
+        "Diamond",
+        1,
+        "tiktok",
+      );
+
+      expect(result.shouldShow).toBe(true);
+      expect(result.aggregatedMessage).toBeNull();
+    });
+
+    it("should handle missing user data", () => {
+      const result = detection.handleDonationSpam(
+        null,
+        null,
+        5,
+        "Rose",
+        1,
+        "tiktok",
+      );
+
+      expect(result.shouldShow).toBe(true);
+      expect(result.aggregatedMessage).toBeNull();
+    });
+
+    it("should handle disabled spam detection", () => {
+      const disabledConfig = createSpamDetectionConfig(
+        {
+          enabled: false,
+          lowValueThreshold: 10,
+          detectionWindow: 5,
+          maxIndividualNotifications: 2,
+        },
+        { logger: mockLogger },
+      );
+      const disabledDetection = createDonationSpamDetection(disabledConfig, {
+        logger: mockLogger,
+        autoCleanup: false,
+      });
+
+      const result = disabledDetection.handleDonationSpam(
+        "user1",
+        "User1",
+        5,
+        "Rose",
+        1,
+        "tiktok",
+      );
+
+      expect(result.shouldShow).toBe(true);
+      expect(result.aggregatedMessage).toBeNull();
+
+      disabledDetection.destroy();
+    });
+  });
+
+  describe("when processing aggregated donations", () => {
+    let detection: DonationSpamDetection;
+    let aggregatedDonation: { totalCoins: number; totalGifts: number } | null =
+      null;
+
+    beforeEach(() => {
+      aggregatedDonation = null;
+      detection = createDonationSpamDetection(config, {
+        logger: mockLogger,
+        autoCleanup: false,
+        onAggregatedDonation: (payload: {
+          totalCoins: number;
+          totalGifts: number;
+        }) => {
+          aggregatedDonation = payload;
+        },
+      });
+    });
+
+    afterEach(() => {
+      if (detection) {
+        detection.destroy();
+      }
+    });
+
+    it("should combine notifications into one aggregated message", () => {
+      const aggregationTimer = safeSetTimeout(() => {}, 1000);
+      const tracker = {
+        notifications: [
+          {
+            timestamp: 1700000000000,
+            coinValue: 5,
+            giftType: "Rose",
+            giftCount: 1,
+            platform: "tiktok",
+          },
+          {
+            timestamp: 1700000001000,
+            coinValue: 4,
+            giftType: "Heart",
+            giftCount: 2,
+            platform: "tiktok",
+          },
+        ],
+        aggregatedCount: 2,
+        lastReset: 1700000000000,
+        aggregationTimer,
+        username: "User1",
+        platform: "tiktok",
+      };
+
+      const result = detection.processAggregatedDonation("user1", tracker);
+
+      expect(result.shouldShow).toBe(true);
+      expect(result.totalCoinValue).toBe(13);
+      expect(result.totalGiftCount).toBe(3);
+      expect(result.aggregatedMessage).toContain(
+        "User1 sent 3 gifts worth 13 coins",
+      );
+      expect(tracker.notifications).toEqual([]);
+      expect(tracker.aggregationTimer).toBeNull();
+      expect(aggregatedDonation).toBeDefined();
+      expect(aggregatedDonation?.totalCoins).toBe(13);
+      expect(aggregatedDonation?.totalGifts).toBe(3);
+    });
+
+    it("should return empty aggregation result when notifications are missing", () => {
+      const tracker = {
+        notifications: [],
+        aggregatedCount: 0,
+        lastReset: 1700000000000,
+        aggregationTimer: null,
+        username: "User1",
+        platform: "tiktok",
+      };
+
+      const result = detection.processAggregatedDonation("user1", tracker);
+
+      expect(result.shouldShow).toBe(false);
+      expect(result.aggregatedMessage).toBeNull();
+      expect(result.totalCoinValue).toBe(0);
+      expect(result.totalGiftCount).toBe(0);
+    });
+  });
+
+  describe("when managing cleanup scheduling", () => {
+    let detection: DonationSpamDetection;
+
+    beforeEach(() => {
+      detection = createDonationSpamDetection(config, {
+        logger: mockLogger,
+        autoCleanup: false,
+      });
+    });
+
+    afterEach(() => {
+      if (detection) {
+        detection.destroy();
+      }
+    });
+
+    it("should cleanup periodically", () => {
+      detection.setupPeriodicCleanup();
+
+      detection.handleDonationSpam("user1", "User1", 5, "Rose", 1, "tiktok");
+
+      expect(detection.cleanupInterval).toBeDefined();
+    });
+  });
+
+  describe("when destroying spam detection", () => {
+    let detection: DonationSpamDetection;
+
+    beforeEach(() => {
+      detection = createDonationSpamDetection(config, {
+        logger: mockLogger,
+        autoCleanup: false,
+      });
+    });
+
+    afterEach(() => {
+      if (detection) {
+        detection.destroy();
+      }
+    });
+
+    it("should cleanup resources on destroy", () => {
+      detection.setupPeriodicCleanup();
+      detection.handleDonationSpam("user1", "User1", 5, "Rose", 1, "tiktok");
+
+      detection.destroy();
+
+      expect(detection.cleanupInterval).toBeNull();
+      const stats = detection.getStatistics();
+      expect(stats.trackedUsers).toBe(0);
+    });
+
+    it("should handle multiple destroy calls", () => {
+      detection.destroy();
+      detection.destroy();
+
+      expect(detection.cleanupInterval).toBeNull();
+    });
+  });
 });

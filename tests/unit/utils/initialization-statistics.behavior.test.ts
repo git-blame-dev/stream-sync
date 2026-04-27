@@ -1,77 +1,76 @@
-const { describe, expect, it, afterEach } = require('bun:test');
-export {};
-const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { noOpLogger } = require('../../helpers/mock-factories');
-const testClock = require('../../helpers/test-clock');
+import { describe, expect, it, afterEach } from "bun:test";
+import { restoreAllMocks } from "../../helpers/bun-mock-utils";
+import { noOpLogger } from "../../helpers/mock-factories";
+import testClock from "../../helpers/test-clock";
+import { InitializationStatistics } from "../../../src/utils/initialization-statistics.ts";
+describe("InitializationStatistics behavior", () => {
+  afterEach(() => {
+    restoreAllMocks();
+  });
 
-const { InitializationStatistics } = require('../../../src/utils/initialization-statistics.ts');
+  it("tracks successful initialization timing and metrics", () => {
+    const stats = new InitializationStatistics("twitch", noOpLogger);
 
-describe('InitializationStatistics behavior', () => {
-    afterEach(() => {
-        restoreAllMocks();
-    });
+    testClock.set(1000);
+    const attemptId = stats.startInitializationAttempt({ reason: "boot" });
+    testClock.set(2000);
+    stats.recordSuccess(attemptId, { connectionTime: 50, serviceInitTime: 30 });
 
-    it('tracks successful initialization timing and metrics', () => {
-        const stats = new InitializationStatistics('twitch', noOpLogger);
+    const summary = stats.getStatistics();
 
-        testClock.set(1000);
-        const attemptId = stats.startInitializationAttempt({ reason: 'boot' });
-        testClock.set(2000);
-        stats.recordSuccess(attemptId, { connectionTime: 50, serviceInitTime: 30 });
+    expect(summary.successfulAttempts).toBe(1);
+    expect(summary.averageInitializationTime).toBe(1000);
+    expect(summary.performanceMetrics.connectionEstablishmentTime.average).toBe(
+      50,
+    );
+    expect(stats.consecutiveFailures).toBe(0);
+  });
 
-        const summary = stats.getStatistics();
+  it("records failures and tracks error statistics", () => {
+    const stats = new InitializationStatistics("youtube", noOpLogger);
 
-        expect(summary.successfulAttempts).toBe(1);
-        expect(summary.averageInitializationTime).toBe(1000);
-        expect(summary.performanceMetrics.connectionEstablishmentTime.average).toBe(50);
-        expect(stats.consecutiveFailures).toBe(0);
-    });
+    testClock.set(1000);
+    const attemptId = stats.startInitializationAttempt();
+    testClock.set(1050);
+    const error = new Error("connect failed");
 
-    it('records failures and tracks error statistics', () => {
-        const stats = new InitializationStatistics('youtube', noOpLogger);
+    stats.recordFailure(attemptId, error, { phase: "connect" });
 
-        testClock.set(1000);
-        const attemptId = stats.startInitializationAttempt();
-        testClock.set(1050);
-        const error = new Error('connect failed');
+    expect(stats.failedAttempts).toBe(1);
+    expect(stats.errorTypes.get("Error")).toBe(1);
+    expect(stats.consecutiveFailures).toBe(1);
+  });
 
-        stats.recordFailure(attemptId, error, { phase: 'connect' });
+  it("identifies unhealthy state after repeated failures", () => {
+    const stats = new InitializationStatistics("platform", noOpLogger);
 
-        expect(stats.failedAttempts).toBe(1);
-        expect(stats.errorTypes.get('Error')).toBe(1);
-        expect(stats.consecutiveFailures).toBe(1);
-    });
+    testClock.set(10);
+    for (let i = 0; i < 5; i++) {
+      const attemptId = stats.startInitializationAttempt();
+      testClock.advance(10);
+      stats.recordFailure(attemptId, new Error("boom"));
+    }
 
-    it('identifies unhealthy state after repeated failures', () => {
-        const stats = new InitializationStatistics('platform', noOpLogger);
+    const summary = stats.getStatistics();
+    const analysis = stats.getErrorAnalysis();
 
-        testClock.set(10);
-        for (let i = 0; i < 5; i++) {
-            const attemptId = stats.startInitializationAttempt();
-            testClock.advance(10);
-            stats.recordFailure(attemptId, new Error('boom'));
-        }
+    expect(summary.isHealthy).toBe(false);
+    expect(analysis.recommendedAction).toContain("CRITICAL");
+    expect(analysis.mostCommonError).toBe("Error");
+  });
 
-        const summary = stats.getStatistics();
-        const analysis = stats.getErrorAnalysis();
+  it("resets statistics to defaults", () => {
+    const stats = new InitializationStatistics("platform", noOpLogger);
 
-        expect(summary.isHealthy).toBe(false);
-        expect(analysis.recommendedAction).toContain('CRITICAL');
-        expect(analysis.mostCommonError).toBe('Error');
-    });
+    testClock.set(1000);
+    const attemptId = stats.startInitializationAttempt();
+    testClock.set(1020);
+    stats.recordSuccess(attemptId);
+    stats.reset();
 
-    it('resets statistics to defaults', () => {
-        const stats = new InitializationStatistics('platform', noOpLogger);
-
-        testClock.set(1000);
-        const attemptId = stats.startInitializationAttempt();
-        testClock.set(1020);
-        stats.recordSuccess(attemptId);
-        stats.reset();
-
-        const summary = stats.getStatistics();
-        expect(summary.totalAttempts).toBe(0);
-        expect(stats.errorTypes.size).toBe(0);
-        expect(stats.isCurrentlyInitializing).toBe(false);
-    });
+    const summary = stats.getStatistics();
+    expect(summary.totalAttempts).toBe(0);
+    expect(stats.errorTypes.size).toBe(0);
+    expect(stats.isCurrentlyInitializing).toBe(false);
+  });
 });

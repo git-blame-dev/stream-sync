@@ -1,264 +1,304 @@
-describe('monetization error payload no-fallback behavior', () => {
-    it('omits username when not provided', () => {
-        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils.ts');
+describe("monetization error payload no-fallback behavior", () => {
+  it("omits username when not provided", () => {
+    const {
+      createMonetizationErrorPayload,
+    } = require("../../../src/utils/monetization-error-utils.ts");
 
-        const payload = createMonetizationErrorPayload({
-            notificationType: 'platform:gift',
-            platform: 'twitch',
-            timestamp: '2024-01-01T00:00:00.000Z',
-            giftType: 'bits',
-            giftCount: 1,
-            amount: 5,
-            currency: 'bits'
-        });
-
-        expect(payload).not.toHaveProperty('username');
-        expect(payload).not.toHaveProperty('userId');
-        expect(payload.isError).toBe(true);
+    const payload = createMonetizationErrorPayload({
+      notificationType: "platform:gift",
+      platform: "twitch",
+      timestamp: "2024-01-01T00:00:00.000Z",
+      giftType: "bits",
+      giftCount: 1,
+      amount: 5,
+      currency: "bits",
     });
 
-    it('includes username when provided', () => {
-        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils.ts');
+    expect(payload).not.toHaveProperty("username");
+    expect(payload).not.toHaveProperty("userId");
+    expect(payload.isError).toBe(true);
+  });
 
-        const payload = createMonetizationErrorPayload({
-            notificationType: 'platform:gift',
-            platform: 'twitch',
-            timestamp: '2024-01-01T00:00:00.000Z',
-            username: 'TestUser',
-            userId: '123',
-            giftType: 'bits',
-            giftCount: 1,
-            amount: 5,
-            currency: 'bits'
-        });
+  it("includes username when provided", () => {
+    const {
+      createMonetizationErrorPayload,
+    } = require("../../../src/utils/monetization-error-utils.ts");
 
-        expect(payload.username).toBe('TestUser');
-        expect(payload.userId).toBe('123');
-        expect(payload.isError).toBe(true);
+    const payload = createMonetizationErrorPayload({
+      notificationType: "platform:gift",
+      platform: "twitch",
+      timestamp: "2024-01-01T00:00:00.000Z",
+      username: "TestUser",
+      userId: "123",
+      giftType: "bits",
+      giftCount: 1,
+      amount: 5,
+      currency: "bits",
     });
 
-    it('includes avatarUrl when provided', () => {
-        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils.ts');
+    expect(payload.username).toBe("TestUser");
+    expect(payload.userId).toBe("123");
+    expect(payload.isError).toBe(true);
+  });
 
-        const payload = createMonetizationErrorPayload({
-            notificationType: 'platform:gift',
-            platform: 'twitch',
-            timestamp: '2024-01-01T00:00:00.000Z',
-            avatarUrl: 'https://example.invalid/avatar-error.png'
-        });
+  it("includes avatarUrl when provided", () => {
+    const {
+      createMonetizationErrorPayload,
+    } = require("../../../src/utils/monetization-error-utils.ts");
 
-        expect(payload.avatarUrl).toBe('https://example.invalid/avatar-error.png');
+    const payload = createMonetizationErrorPayload({
+      notificationType: "platform:gift",
+      platform: "twitch",
+      timestamp: "2024-01-01T00:00:00.000Z",
+      avatarUrl: "https://example.invalid/avatar-error.png",
     });
 
-    it('normalizes shorthand notificationType to canonical platform:* type', () => {
-        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils.ts');
+    expect(payload.avatarUrl).toBe("https://example.invalid/avatar-error.png");
+  });
 
-        const payload = createMonetizationErrorPayload({
-            notificationType: 'gift',
-            platform: 'twitch',
-            timestamp: '2024-01-01T00:00:00.000Z'
-        });
+  it("normalizes shorthand notificationType to canonical platform:* type", () => {
+    const {
+      createMonetizationErrorPayload,
+    } = require("../../../src/utils/monetization-error-utils.ts");
 
-        expect(payload.type).toBe('platform:gift');
+    const payload = createMonetizationErrorPayload({
+      notificationType: "gift",
+      platform: "twitch",
+      timestamp: "2024-01-01T00:00:00.000Z",
     });
 
-    it('normalizes platform casing to canonical lowercase value', () => {
-        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils.ts');
+    expect(payload.type).toBe("platform:gift");
+  });
 
-        const payload = createMonetizationErrorPayload({
-            notificationType: 'gift',
-            platform: 'Twitch',
-            timestamp: '2024-01-01T00:00:00.000Z'
-        });
+  it("normalizes platform casing to canonical lowercase value", () => {
+    const {
+      createMonetizationErrorPayload,
+    } = require("../../../src/utils/monetization-error-utils.ts");
 
-        expect(payload.platform).toBe('twitch');
+    const payload = createMonetizationErrorPayload({
+      notificationType: "gift",
+      platform: "Twitch",
+      timestamp: "2024-01-01T00:00:00.000Z",
     });
 
-    it('omits gift fields when not provided', () => {
-        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils.ts');
+    expect(payload.platform).toBe("twitch");
+  });
 
-        const payload = createMonetizationErrorPayload({
-            notificationType: 'platform:gift',
-            platform: 'twitch',
-            timestamp: '2024-01-01T00:00:00.000Z'
-        });
+  it("omits gift fields when not provided", () => {
+    const {
+      createMonetizationErrorPayload,
+    } = require("../../../src/utils/monetization-error-utils.ts");
 
-        expect(payload).not.toHaveProperty('giftType');
-        expect(payload).not.toHaveProperty('giftCount');
-        expect(payload).not.toHaveProperty('amount');
-        expect(payload).not.toHaveProperty('currency');
+    const payload = createMonetizationErrorPayload({
+      notificationType: "platform:gift",
+      platform: "twitch",
+      timestamp: "2024-01-01T00:00:00.000Z",
     });
 
-    it('requires a timestamp when building error payloads', () => {
-        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils.ts');
+    expect(payload).not.toHaveProperty("giftType");
+    expect(payload).not.toHaveProperty("giftCount");
+    expect(payload).not.toHaveProperty("amount");
+    expect(payload).not.toHaveProperty("currency");
+  });
 
-        expect(() => createMonetizationErrorPayload({
-            notificationType: 'platform:gift',
-            platform: 'twitch'
-        })).toThrow('Monetization error payload requires ISO timestamp');
+  it("requires a timestamp when building error payloads", () => {
+    const {
+      createMonetizationErrorPayload,
+    } = require("../../../src/utils/monetization-error-utils.ts");
+
+    expect(() =>
+      createMonetizationErrorPayload({
+        notificationType: "platform:gift",
+        platform: "twitch",
+      }),
+    ).toThrow("Monetization error payload requires ISO timestamp");
+  });
+
+  it("includes timestamp when provided", () => {
+    const {
+      createMonetizationErrorPayload,
+    } = require("../../../src/utils/monetization-error-utils.ts");
+
+    const payload = createMonetizationErrorPayload({
+      notificationType: "platform:gift",
+      platform: "twitch",
+      timestamp: "2024-01-01T00:00:00.000Z",
     });
 
-    it('includes timestamp when provided', () => {
-        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils.ts');
+    expect(payload.timestamp).toBe("2024-01-01T00:00:00.000Z");
+  });
 
-        const payload = createMonetizationErrorPayload({
-            notificationType: 'platform:gift',
-            platform: 'twitch',
-            timestamp: '2024-01-01T00:00:00.000Z'
-        });
+  it("omits zero gift values for gift error payloads", () => {
+    const {
+      createMonetizationErrorPayload,
+    } = require("../../../src/utils/monetization-error-utils.ts");
 
-        expect(payload.timestamp).toBe('2024-01-01T00:00:00.000Z');
+    const payload = createMonetizationErrorPayload({
+      notificationType: "platform:gift",
+      platform: "twitch",
+      timestamp: "2024-01-01T00:00:00.000Z",
+      giftType: "bits",
+      giftCount: 0,
+      amount: 0,
+      currency: "bits",
     });
 
-    it('omits zero gift values for gift error payloads', () => {
-        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils.ts');
+    expect(payload.giftType).toBe("bits");
+    expect(payload.currency).toBe("bits");
+    expect(payload).not.toHaveProperty("giftCount");
+    expect(payload).not.toHaveProperty("amount");
+  });
 
-        const payload = createMonetizationErrorPayload({
-            notificationType: 'platform:gift',
-            platform: 'twitch',
-            timestamp: '2024-01-01T00:00:00.000Z',
-            giftType: 'bits',
-            giftCount: 0,
-            amount: 0,
-            currency: 'bits'
-        });
+  it("omits zero giftCount for giftpaypiggy error payloads", () => {
+    const {
+      createMonetizationErrorPayload,
+    } = require("../../../src/utils/monetization-error-utils.ts");
 
-        expect(payload.giftType).toBe('bits');
-        expect(payload.currency).toBe('bits');
-        expect(payload).not.toHaveProperty('giftCount');
-        expect(payload).not.toHaveProperty('amount');
+    const payload = createMonetizationErrorPayload({
+      notificationType: "platform:giftpaypiggy",
+      platform: "twitch",
+      timestamp: "2024-01-01T00:00:00.000Z",
+      giftCount: 0,
+      tier: "1000",
     });
 
-    it('omits zero giftCount for giftpaypiggy error payloads', () => {
-        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils.ts');
+    expect(payload).not.toHaveProperty("giftCount");
+  });
 
-        const payload = createMonetizationErrorPayload({
-            notificationType: 'platform:giftpaypiggy',
-            platform: 'twitch',
-            timestamp: '2024-01-01T00:00:00.000Z',
-            giftCount: 0,
-            tier: '1000'
-        });
+  it("omits zero months for paypiggy error payloads", () => {
+    const {
+      createMonetizationErrorPayload,
+    } = require("../../../src/utils/monetization-error-utils.ts");
 
-        expect(payload).not.toHaveProperty('giftCount');
+    const payload = createMonetizationErrorPayload({
+      notificationType: "platform:paypiggy",
+      platform: "youtube",
+      timestamp: "2024-01-01T00:00:00.000Z",
+      months: 0,
     });
 
-    it('omits zero months for paypiggy error payloads', () => {
-        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils.ts');
+    expect(payload).not.toHaveProperty("months");
+  });
 
-        const payload = createMonetizationErrorPayload({
-            notificationType: 'platform:paypiggy',
-            platform: 'youtube',
-            timestamp: '2024-01-01T00:00:00.000Z',
-            months: 0
-        });
+  it("rejects object userIds instead of stringifying to [object Object]", () => {
+    const {
+      createMonetizationErrorPayload,
+    } = require("../../../src/utils/monetization-error-utils.ts");
 
-        expect(payload).not.toHaveProperty('months');
+    const payload = createMonetizationErrorPayload({
+      notificationType: "platform:gift",
+      platform: "twitch",
+      timestamp: "2024-01-01T00:00:00.000Z",
+      userId: { invalid: "object" },
     });
 
-    it('rejects object userIds instead of stringifying to [object Object]', () => {
-        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils.ts');
+    expect(payload).not.toHaveProperty("userId");
+  });
 
-        const payload = createMonetizationErrorPayload({
-            notificationType: 'platform:gift',
-            platform: 'twitch',
-            timestamp: '2024-01-01T00:00:00.000Z',
-            userId: { invalid: 'object' }
-        });
+  it("rejects boolean values for numeric fields", () => {
+    const {
+      createMonetizationErrorPayload,
+    } = require("../../../src/utils/monetization-error-utils.ts");
 
-        expect(payload).not.toHaveProperty('userId');
+    const payload = createMonetizationErrorPayload({
+      notificationType: "platform:gift",
+      platform: "twitch",
+      timestamp: "2024-01-01T00:00:00.000Z",
+      giftCount: true,
+      amount: true,
     });
 
-    it('rejects boolean values for numeric fields', () => {
-        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils.ts');
+    expect(payload).not.toHaveProperty("giftCount");
+    expect(payload).not.toHaveProperty("amount");
+  });
 
-        const payload = createMonetizationErrorPayload({
-            notificationType: 'platform:gift',
-            platform: 'twitch',
-            timestamp: '2024-01-01T00:00:00.000Z',
-            giftCount: true,
-            amount: true
-        });
+  it("throws for whitespace-only platform", () => {
+    const {
+      createMonetizationErrorPayload,
+    } = require("../../../src/utils/monetization-error-utils.ts");
 
-        expect(payload).not.toHaveProperty('giftCount');
-        expect(payload).not.toHaveProperty('amount');
+    expect(() =>
+      createMonetizationErrorPayload({
+        notificationType: "platform:gift",
+        platform: "   ",
+        timestamp: "2024-01-01T00:00:00.000Z",
+      }),
+    ).toThrow("Monetization error payload requires platform");
+  });
+
+  it("includes tier for Twitch regardless of casing", () => {
+    const {
+      createMonetizationErrorPayload,
+    } = require("../../../src/utils/monetization-error-utils.ts");
+
+    const payload = createMonetizationErrorPayload({
+      notificationType: "platform:giftpaypiggy",
+      platform: "Twitch",
+      timestamp: "2024-01-01T00:00:00.000Z",
+      tier: "2000",
     });
 
-    it('throws for whitespace-only platform', () => {
-        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils.ts');
+    expect(payload.tier).toBe("2000");
+  });
 
-        expect(() => createMonetizationErrorPayload({
-            notificationType: 'platform:gift',
-            platform: '   ',
-            timestamp: '2024-01-01T00:00:00.000Z'
-        })).toThrow('Monetization error payload requires platform');
+  it("handles gift fields for notification type regardless of casing", () => {
+    const {
+      createMonetizationErrorPayload,
+    } = require("../../../src/utils/monetization-error-utils.ts");
+
+    const payload = createMonetizationErrorPayload({
+      notificationType: "PLATFORM:GIFT",
+      platform: "tiktok",
+      timestamp: "2024-01-01T00:00:00.000Z",
+      giftType: "rose",
+      giftCount: 5,
     });
 
-    it('includes tier for Twitch regardless of casing', () => {
-        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils.ts');
+    expect(payload.giftType).toBe("rose");
+    expect(payload.giftCount).toBe(5);
+  });
 
-        const payload = createMonetizationErrorPayload({
-            notificationType: 'platform:giftpaypiggy',
-            platform: 'Twitch',
-            timestamp: '2024-01-01T00:00:00.000Z',
-            tier: '2000'
-        });
+  it("includes metadata.missingFields using normalized unique field names", () => {
+    const {
+      createMonetizationErrorPayload,
+    } = require("../../../src/utils/monetization-error-utils.ts");
 
-        expect(payload.tier).toBe('2000');
+    const payload = createMonetizationErrorPayload({
+      notificationType: "platform:gift",
+      platform: "twitch",
+      timestamp: "2024-01-01T00:00:00.000Z",
+      missingFields: [" username ", "username", "amount", "", 123],
     });
 
-    it('handles gift fields for notification type regardless of casing', () => {
-        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils.ts');
+    expect(payload.metadata.missingFields).toEqual(["username", "amount"]);
+  });
 
-        const payload = createMonetizationErrorPayload({
-            notificationType: 'PLATFORM:GIFT',
-            platform: 'tiktok',
-            timestamp: '2024-01-01T00:00:00.000Z',
-            giftType: 'rose',
-            giftCount: 5
-        });
+  it("includes metadata.sourceTimestamp when provided as ISO timestamp", () => {
+    const {
+      createMonetizationErrorPayload,
+    } = require("../../../src/utils/monetization-error-utils.ts");
 
-        expect(payload.giftType).toBe('rose');
-        expect(payload.giftCount).toBe(5);
+    const payload = createMonetizationErrorPayload({
+      notificationType: "platform:gift",
+      platform: "twitch",
+      timestamp: "2024-01-01T00:00:00.000Z",
+      sourceTimestamp: "2024-01-01T00:00:00.000Z",
     });
 
-    it('includes metadata.missingFields using normalized unique field names', () => {
-        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils.ts');
+    expect(payload.metadata.sourceTimestamp).toBe("2024-01-01T00:00:00.000Z");
+  });
 
-        const payload = createMonetizationErrorPayload({
-            notificationType: 'platform:gift',
-            platform: 'twitch',
-            timestamp: '2024-01-01T00:00:00.000Z',
-            missingFields: [' username ', 'username', 'amount', '', 123]
-        });
+  it("omits metadata when neither missingFields nor sourceTimestamp are provided", () => {
+    const {
+      createMonetizationErrorPayload,
+    } = require("../../../src/utils/monetization-error-utils.ts");
 
-        expect(payload.metadata.missingFields).toEqual(['username', 'amount']);
+    const payload = createMonetizationErrorPayload({
+      notificationType: "platform:gift",
+      platform: "twitch",
+      timestamp: "2024-01-01T00:00:00.000Z",
     });
 
-    it('includes metadata.sourceTimestamp when provided as ISO timestamp', () => {
-        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils.ts');
-
-        const payload = createMonetizationErrorPayload({
-            notificationType: 'platform:gift',
-            platform: 'twitch',
-            timestamp: '2024-01-01T00:00:00.000Z',
-            sourceTimestamp: '2024-01-01T00:00:00.000Z'
-        });
-
-        expect(payload.metadata.sourceTimestamp).toBe('2024-01-01T00:00:00.000Z');
-    });
-
-    it('omits metadata when neither missingFields nor sourceTimestamp are provided', () => {
-        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils.ts');
-
-        const payload = createMonetizationErrorPayload({
-            notificationType: 'platform:gift',
-            platform: 'twitch',
-            timestamp: '2024-01-01T00:00:00.000Z'
-        });
-
-        expect(payload).not.toHaveProperty('metadata');
-    });
+    expect(payload).not.toHaveProperty("metadata");
+  });
 });
-
-export {};

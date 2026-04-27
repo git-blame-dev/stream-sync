@@ -1,216 +1,293 @@
-const { describe, test, expect, afterEach } = require('bun:test');
-export {};
-const { noOpLogger } = require('../../helpers/mock-factories');
-const { PlatformConnectionFactory } = require('../../../src/utils/platform-connection-factory');
-const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../../src/core/secrets');
-
+import { describe, test, expect, afterEach } from "bun:test";
+import { noOpLogger } from "../../helpers/mock-factories";
+import { PlatformConnectionFactory } from "../../../src/utils/platform-connection-factory";
+import {
+  secrets,
+  _resetForTesting,
+  initializeStaticSecrets,
+} from "../../../src/core/secrets";
 type LogEntry = {
-    level: string;
-    message: string;
+  level: string;
+  message: string;
 };
 
-describe('platform-connection-factory behavior', () => {
-    afterEach(() => {
-        _resetForTesting();
-        initializeStaticSecrets();
-    });
+describe("platform-connection-factory behavior", () => {
+  afterEach(() => {
+    _resetForTesting();
+    initializeStaticSecrets();
+  });
 
-    const createLogCollector = (): {
-        entries: LogEntry[];
-        debug: (message: string) => void;
-        info: (message: string) => void;
-        warn: (message: string) => void;
-        error: (message: string) => void;
-    } => {
-        const entries: LogEntry[] = [];
-        const collect = (level: string) => (message: string): void => {
-            entries.push({ level, message });
-        };
-        return {
-            entries,
-            debug: collect('debug'),
-            info: collect('info'),
-            warn: collect('warn'),
-            error: collect('error')
-        };
+  const createLogCollector = (): {
+    entries: LogEntry[];
+    debug: (message: string) => void;
+    info: (message: string) => void;
+    warn: (message: string) => void;
+    error: (message: string) => void;
+  } => {
+    const entries: LogEntry[] = [];
+    const collect =
+      (level: string) =>
+      (message: string): void => {
+        entries.push({ level, message });
+      };
+    return {
+      entries,
+      debug: collect("debug"),
+      info: collect("info"),
+      warn: collect("warn"),
+      error: collect("error"),
+    };
+  };
+
+  test("wraps non-emitter connections returned by TikTok constructor", () => {
+    const factory = new PlatformConnectionFactory(noOpLogger);
+    const deps = {
+      logger: noOpLogger,
+      TikTokWebSocketClient: function (this: { connect: () => void }) {
+        this.connect = () => {};
+      },
     };
 
-    test('wraps non-emitter connections returned by TikTok constructor', () => {
-        const factory = new PlatformConnectionFactory(noOpLogger);
-        const deps = {
-            logger: noOpLogger,
-            TikTokWebSocketClient: function(this: { connect: () => void }) { this.connect = () => {}; }
-        };
+    const conn = factory.createConnection(
+      "tiktok",
+      { username: "testuser" },
+      deps,
+    );
+    expect(typeof conn.on).toBe("function");
+    expect(typeof conn.removeAllListeners).toBe("function");
+  });
 
-        const conn = factory.createConnection('tiktok', { username: 'testuser' }, deps);
-        expect(typeof conn.on).toBe('function');
-        expect(typeof conn.removeAllListeners).toBe('function');
-    });
+  test("throws on missing inputs", () => {
+    const factory = new PlatformConnectionFactory(noOpLogger);
+    expect(() =>
+      factory.createConnection(null, {}, { logger: noOpLogger }),
+    ).toThrow("Platform name is required");
+    expect(() =>
+      factory.createConnection("tiktok", null, { logger: noOpLogger }),
+    ).toThrow("Configuration is required");
+    expect(() => factory.createConnection("tiktok", {}, null)).toThrow(
+      "missing dependencies",
+    );
+    expect(() =>
+      factory.createConnection("tiktok", {}, { logger: null }),
+    ).toThrow("missing dependencies (logger)");
+  });
 
-    test('throws on missing inputs', () => {
-        const factory = new PlatformConnectionFactory(noOpLogger);
-        expect(() => factory.createConnection(null, {}, { logger: noOpLogger })).toThrow('Platform name is required');
-        expect(() => factory.createConnection('tiktok', null, { logger: noOpLogger })).toThrow('Configuration is required');
-        expect(() => factory.createConnection('tiktok', {}, null)).toThrow('missing dependencies');
-        expect(() => factory.createConnection('tiktok', {}, { logger: null })).toThrow('missing dependencies (logger)');
-    });
+  test("creates TikTok connections and propagates constructor errors", () => {
+    const factory = new PlatformConnectionFactory(noOpLogger);
+    const deps = {
+      logger: noOpLogger,
+      TikTokWebSocketClient: function () {
+        throw new Error("construct fail");
+      },
+    };
 
-    test('creates TikTok connections and propagates constructor errors', () => {
-        const factory = new PlatformConnectionFactory(noOpLogger);
-        const deps = {
-            logger: noOpLogger,
-            TikTokWebSocketClient: function() { throw new Error('construct fail'); }
-        };
+    expect(() =>
+      factory.createConnection("tiktok", { username: "testuser" }, deps),
+    ).toThrow("construct fail");
+  });
 
-        expect(() => factory.createConnection('tiktok', { username: 'testuser' }, deps)).toThrow('construct fail');
-    });
+  test("throws for unsupported platform", () => {
+    const factory = new PlatformConnectionFactory(noOpLogger);
+    expect(() =>
+      factory.createConnection("unknown", {}, { logger: noOpLogger }),
+    ).toThrow("Unsupported platform");
+  });
 
-    test('throws for unsupported platform', () => {
-        const factory = new PlatformConnectionFactory(noOpLogger);
-        expect(() => factory.createConnection('unknown', {}, { logger: noOpLogger })).toThrow('Unsupported platform');
-    });
+  test("logs masked apiKey when building TikTok connection config", () => {
+    const logCollector = createLogCollector();
+    const factory = new PlatformConnectionFactory(logCollector);
 
-    test('logs masked apiKey when building TikTok connection config', () => {
-        const logCollector = createLogCollector();
-        const factory = new PlatformConnectionFactory(logCollector);
+    const apiKey = "euler_1234567890abcdef";
+    secrets.tiktok.apiKey = apiKey;
+    const config = factory.buildTikTokConnectionConfig({});
 
-        const apiKey = 'euler_1234567890abcdef';
-        secrets.tiktok.apiKey = apiKey;
-        const config = factory.buildTikTokConnectionConfig({});
+    expect(config.apiKey).toBe(apiKey);
+    expect(
+      logCollector.entries.some(
+        (entry) =>
+          entry.level === "debug" &&
+          entry.message.includes("EulerStream API key"),
+      ),
+    ).toBe(true);
+    expect(
+      logCollector.entries.every((entry) => !entry.message.includes(apiKey)),
+    ).toBe(true);
+  });
 
-        expect(config.apiKey).toBe(apiKey);
-        expect(logCollector.entries.some((entry) => entry.level === 'debug' && entry.message.includes('EulerStream API key'))).toBe(true);
-        expect(logCollector.entries.every((entry) => !entry.message.includes(apiKey))).toBe(true);
-    });
+  test("warns when TikTok apiKey is missing from config", () => {
+    const logCollector = createLogCollector();
+    const factory = new PlatformConnectionFactory(logCollector);
 
-    test('warns when TikTok apiKey is missing from config', () => {
-        const logCollector = createLogCollector();
-        const factory = new PlatformConnectionFactory(logCollector);
+    _resetForTesting();
+    const config = factory.buildTikTokConnectionConfig({});
 
-        _resetForTesting();
-        const config = factory.buildTikTokConnectionConfig({});
+    expect(config.apiKey).toBeNull();
+    expect(
+      logCollector.entries.some(
+        (entry) =>
+          entry.level === "warn" &&
+          entry.message.toLowerCase().includes("no api key"),
+      ),
+    ).toBe(true);
+  });
 
-        expect(config.apiKey).toBeNull();
-        expect(logCollector.entries.some((entry) => entry.level === 'warn' && entry.message.toLowerCase().includes('no api key'))).toBe(true);
-    });
+  test("preserves class-based logger prototype methods", () => {
+    let warnCalls = 0;
 
-    test('preserves class-based logger prototype methods', () => {
-        let warnCalls = 0;
+    class PrototypeLogger {
+      debug(): void {}
 
-        class PrototypeLogger {
-            debug(): void {}
+      info(): void {}
 
-            info(): void {}
+      warn(): void {
+        warnCalls += 1;
+      }
 
-            warn(): void {
-                warnCalls += 1;
-            }
+      error(): void {}
+    }
 
-            error(): void {}
-        }
+    const logger = new PrototypeLogger();
+    const factory = new PlatformConnectionFactory(logger);
 
-        const logger = new PrototypeLogger();
-        const factory = new PlatformConnectionFactory(logger);
+    _resetForTesting();
+    factory.buildTikTokConnectionConfig({});
 
-        _resetForTesting();
-        factory.buildTikTokConnectionConfig({});
+    expect(warnCalls).toBeGreaterThan(0);
+  });
 
-        expect(warnCalls).toBeGreaterThan(0);
-    });
+  test("supports incomplete logger implementations via normalized behavior", () => {
+    const loggerWithOnlyDebug = {
+      debug: () => {},
+    };
 
-    test('supports incomplete logger implementations via normalized behavior', () => {
-        const loggerWithOnlyDebug = {
-            debug: () => {}
-        };
+    const factory = new PlatformConnectionFactory(loggerWithOnlyDebug);
 
-        const factory = new PlatformConnectionFactory(loggerWithOnlyDebug);
+    _resetForTesting();
+    expect(() => factory.buildTikTokConnectionConfig({})).not.toThrow();
+  });
 
-        _resetForTesting();
-        expect(() => factory.buildTikTokConnectionConfig({})).not.toThrow();
-    });
+  test("creates YouTube connection with compatibility methods", async () => {
+    const factory = new PlatformConnectionFactory(noOpLogger);
+    const connection = factory.createConnection(
+      "youtube",
+      { username: "test-youtube-user" },
+      { logger: noOpLogger },
+    );
 
-    test('creates YouTube connection with compatibility methods', async () => {
-        const factory = new PlatformConnectionFactory(noOpLogger);
-        const connection = factory.createConnection('youtube', { username: 'test-youtube-user' }, { logger: noOpLogger });
+    expect(connection.platform).toBe("youtube");
+    expect(connection.isConnected()).toBe(false);
 
-        expect(connection.platform).toBe('youtube');
-        expect(connection.isConnected()).toBe(false);
+    await connection.connect();
+    expect(connection.isConnected()).toBe(true);
 
-        await connection.connect();
-        expect(connection.isConnected()).toBe(true);
+    await connection.disconnect();
+    expect(connection.isConnected()).toBe(false);
+    expect(connection.getUsername()).toBe("test-youtube-user");
+  });
 
-        await connection.disconnect();
-        expect(connection.isConnected()).toBe(false);
-        expect(connection.getUsername()).toBe('test-youtube-user');
-    });
+  test("throws for twitch creation placeholder path", () => {
+    const factory = new PlatformConnectionFactory(noOpLogger);
 
-    test('throws for twitch creation placeholder path', () => {
-        const factory = new PlatformConnectionFactory(noOpLogger);
+    expect(() =>
+      factory.createConnection(
+        "twitch",
+        { username: "test-user" },
+        { logger: noOpLogger },
+      ),
+    ).toThrow("Twitch connection creation not yet implemented");
+  });
 
-        expect(() => factory.createConnection('twitch', { username: 'test-user' }, { logger: noOpLogger }))
-            .toThrow('Twitch connection creation not yet implemented');
-    });
+  test("fails dependency logger validation before platform creation", () => {
+    const factory = new PlatformConnectionFactory(noOpLogger);
+    const deps = {
+      logger: {},
+      TikTokWebSocketClient: function (this: { connect: () => void }) {
+        this.connect = () => {};
+      },
+    };
 
-    test('fails dependency logger validation before platform creation', () => {
-        const factory = new PlatformConnectionFactory(noOpLogger);
-        const deps = {
-            logger: {},
-            TikTokWebSocketClient: function(this: { connect: () => void }) { this.connect = () => {}; }
-        };
+    expect(() =>
+      factory.createConnection("tiktok", { username: "testuser" }, deps),
+    ).toThrow("Platform creation failed for tiktok");
+  });
 
-        expect(() => factory.createConnection('tiktok', { username: 'testuser' }, deps))
-            .toThrow('Platform creation failed for tiktok');
-    });
+  test("strips @ prefix from tiktok username before constructing connection", () => {
+    const factory = new PlatformConnectionFactory(noOpLogger);
+    let capturedUsername: string | null = null;
 
-    test('strips @ prefix from tiktok username before constructing connection', () => {
-        const factory = new PlatformConnectionFactory(noOpLogger);
-        let capturedUsername: string | null = null;
+    function TikTokWebSocketClient(
+      this: {
+        connect: () => void;
+        on: () => void;
+        emit: () => void;
+        removeAllListeners: () => void;
+      },
+      username: string,
+    ): void {
+      capturedUsername = username;
+      this.connect = () => {};
+      this.on = () => {};
+      this.emit = () => {};
+      this.removeAllListeners = () => {};
+    }
 
-        function TikTokWebSocketClient(this: { connect: () => void; on: () => void; emit: () => void; removeAllListeners: () => void }, username: string): void {
-            capturedUsername = username;
-            this.connect = () => {};
-            this.on = () => {};
-            this.emit = () => {};
-            this.removeAllListeners = () => {};
-        }
+    factory.createConnection(
+      "tiktok",
+      { username: "@testuser" },
+      {
+        logger: noOpLogger,
+        TikTokWebSocketClient,
+      },
+    );
 
-        factory.createConnection('tiktok', { username: '@testuser' }, {
-            logger: noOpLogger,
-            TikTokWebSocketClient
-        });
+    expect(capturedUsername).toBe("testuser");
+  });
 
-        expect(capturedUsername).toBe('testuser');
-    });
+  test("fails when TikTokWebSocketClient dependency is missing", () => {
+    const factory = new PlatformConnectionFactory(noOpLogger);
 
-    test('fails when TikTokWebSocketClient dependency is missing', () => {
-        const factory = new PlatformConnectionFactory(noOpLogger);
+    expect(() =>
+      factory.createConnection(
+        "tiktok",
+        { username: "testuser" },
+        { logger: noOpLogger },
+      ),
+    ).toThrow("missing TikTokWebSocketClient");
+  });
 
-        expect(() => factory.createConnection('tiktok', { username: 'testuser' }, { logger: noOpLogger }))
-            .toThrow('missing TikTokWebSocketClient');
-    });
+  test("fails when constructed TikTok connection lacks connect method", () => {
+    const factory = new PlatformConnectionFactory(noOpLogger);
 
-    test('fails when constructed TikTok connection lacks connect method', () => {
-        const factory = new PlatformConnectionFactory(noOpLogger);
+    function TikTokWebSocketClient(this: {
+      on: () => void;
+      emit: () => void;
+      removeAllListeners: () => void;
+    }): void {
+      this.on = () => {};
+      this.emit = () => {};
+      this.removeAllListeners = () => {};
+    }
 
-        function TikTokWebSocketClient(this: { on: () => void; emit: () => void; removeAllListeners: () => void }): void {
-            this.on = () => {};
-            this.emit = () => {};
-            this.removeAllListeners = () => {};
-        }
+    expect(() =>
+      factory.createConnection(
+        "tiktok",
+        { username: "testuser" },
+        {
+          logger: noOpLogger,
+          TikTokWebSocketClient,
+        },
+      ),
+    ).toThrow("missing essential method: connect");
+  });
 
-        expect(() => factory.createConnection('tiktok', { username: 'testuser' }, {
-            logger: noOpLogger,
-            TikTokWebSocketClient
-        })).toThrow('missing essential method: connect');
-    });
+  test("supports platform helpers for supported and unsupported values", () => {
+    const factory = new PlatformConnectionFactory(noOpLogger);
 
-    test('supports platform helpers for supported and unsupported values', () => {
-        const factory = new PlatformConnectionFactory(noOpLogger);
-
-        expect(factory.getSupportedPlatforms()).toEqual(['tiktok', 'youtube']);
-        expect(factory.isPlatformSupported('tiktok')).toBe(true);
-        expect(factory.isPlatformSupported('youtube')).toBe(true);
-        expect(factory.isPlatformSupported('twitch')).toBe(false);
-        expect(factory.isPlatformSupported(null)).toBe(false);
-    });
+    expect(factory.getSupportedPlatforms()).toEqual(["tiktok", "youtube"]);
+    expect(factory.isPlatformSupported("tiktok")).toBe(true);
+    expect(factory.isPlatformSupported("youtube")).toBe(true);
+    expect(factory.isPlatformSupported("twitch")).toBe(false);
+    expect(factory.isPlatformSupported(null)).toBe(false);
+  });
 });

@@ -1,150 +1,164 @@
-const { describe, expect, it, afterEach } = require('bun:test');
-export {};
-const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { noOpLogger } = require('../../helpers/mock-factories');
-const { EnhancedHttpClient } = require('../../../src/utils/enhanced-http-client');
+import { describe, expect, it, afterEach } from "bun:test";
+import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
+import { noOpLogger } from "../../helpers/mock-factories";
+import { EnhancedHttpClient } from "../../../src/utils/enhanced-http-client";
+describe("EnhancedHttpClient behavior", () => {
+  afterEach(() => {
+    restoreAllMocks();
+  });
 
-describe('EnhancedHttpClient behavior', () => {
-    afterEach(() => {
-        restoreAllMocks();
+  it("rotates user agents across requests", () => {
+    const axios = { get: createMockFn().mockResolvedValue({ status: 200 }) };
+    const logger = noOpLogger;
+
+    const client = new EnhancedHttpClient({ axios, logger });
+    client.userAgents = ["testAgentA", "testAgentB"];
+
+    const firstConfig = client.buildRequestConfig({});
+    const secondConfig = client.buildRequestConfig({});
+    const thirdConfig = client.buildRequestConfig({});
+
+    expect(firstConfig.headers["User-Agent"]).toBe("testAgentA");
+    expect(secondConfig.headers["User-Agent"]).toBe("testAgentB");
+    expect(thirdConfig.headers["User-Agent"]).toBe("testAgentA");
+  });
+
+  it("uses explicit timeout when provided", () => {
+    const axios = { get: createMockFn().mockResolvedValue({ status: 200 }) };
+    const logger = noOpLogger;
+
+    const client = new EnhancedHttpClient({ axios, logger });
+    const config = client.buildRequestConfig({ timeout: 5000 });
+
+    expect(config.timeout).toBe(5000);
+  });
+
+  it("uses default timeout when no explicit timeout provided", () => {
+    const axios = { get: createMockFn().mockResolvedValue({ status: 200 }) };
+    const logger = noOpLogger;
+
+    const client = new EnhancedHttpClient({ axios, logger, timeout: 3000 });
+    const config = client.buildRequestConfig({});
+
+    expect(config.timeout).toBe(3000);
+  });
+
+  it("wraps requests with retry system when platform is provided", async () => {
+    const axios = { get: createMockFn().mockResolvedValue({ status: 204 }) };
+    const logger = noOpLogger;
+    let executedThroughRetry = false;
+
+    const retrySystem = {
+      executeWithRetry: createMockFn(async (_platform, handler) => {
+        executedThroughRetry = true;
+        return handler();
+      }),
+    };
+
+    const client = new EnhancedHttpClient({ axios, logger, retrySystem });
+    const response = await client.get("https://example.com", {
+      platform: "twitch",
     });
 
-    it('rotates user agents across requests', () => {
-        const axios = { get: createMockFn().mockResolvedValue({ status: 200 }) };
-        const logger = noOpLogger;
+    expect(executedThroughRetry).toBe(true);
+    expect(response.status).toBe(204);
+  });
 
-        const client = new EnhancedHttpClient({ axios, logger });
-        client.userAgents = ['testAgentA', 'testAgentB'];
+  it("bypasses retry system when disableRetry is true", async () => {
+    const axios = {
+      get: createMockFn().mockRejectedValue(new Error("testNetworkError")),
+    };
+    const logger = noOpLogger;
+    const retrySystem = {
+      executeWithRetry: createMockFn(async (_platform, handler) => handler()),
+    };
 
-        const firstConfig = client.buildRequestConfig({});
-        const secondConfig = client.buildRequestConfig({});
-        const thirdConfig = client.buildRequestConfig({});
+    const client = new EnhancedHttpClient({ axios, logger, retrySystem });
 
-        expect(firstConfig.headers['User-Agent']).toBe('testAgentA');
-        expect(secondConfig.headers['User-Agent']).toBe('testAgentB');
-        expect(thirdConfig.headers['User-Agent']).toBe('testAgentA');
-    });
+    await expect(
+      client.get("https://example.com", {
+        platform: "twitch",
+        disableRetry: true,
+      }),
+    ).rejects.toThrow("testNetworkError");
+    expect(retrySystem.executeWithRetry).not.toHaveBeenCalled();
+  });
 
-    it('uses explicit timeout when provided', () => {
-        const axios = { get: createMockFn().mockResolvedValue({ status: 200 }) };
-        const logger = noOpLogger;
+  it("encodes urlencoded post bodies", async () => {
+    let postedBody!: string;
+    let postedConfig!: { headers: Record<string, string> };
+    const axios = {
+      post: createMockFn(async (_url, body, config) => {
+        postedBody = body;
+        postedConfig = config;
+        return { status: 201 };
+      }),
+    };
+    const logger = noOpLogger;
+    const client = new EnhancedHttpClient({ axios, logger });
 
-        const client = new EnhancedHttpClient({ axios, logger });
-        const config = client.buildRequestConfig({ timeout: 5000 });
+    const response = await client.post(
+      "https://example.com",
+      { a: 1, b: "two" },
+      {
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      },
+    );
 
-        expect(config.timeout).toBe(5000);
-    });
+    expect(typeof postedBody).toBe("string");
+    expect(postedBody).toContain("a=1");
+    expect(postedBody).toContain("b=two");
+    expect(postedConfig.headers["Content-Type"]).toBe(
+      "application/x-www-form-urlencoded",
+    );
+    expect(response.status).toBe(201);
+  });
 
-    it('uses default timeout when no explicit timeout provided', () => {
-        const axios = { get: createMockFn().mockResolvedValue({ status: 200 }) };
-        const logger = noOpLogger;
+  it("returns false when reachability check fails", async () => {
+    const axios = {
+      get: createMockFn().mockRejectedValue(new Error("testNetworkFailure")),
+    };
+    const logger = noOpLogger;
+    const client = new EnhancedHttpClient({ axios, logger });
 
-        const client = new EnhancedHttpClient({ axios, logger, timeout: 3000 });
-        const config = client.buildRequestConfig({});
+    const reachable = await client.isReachable("https://example.com");
 
-        expect(config.timeout).toBe(3000);
-    });
+    expect(reachable).toBe(false);
+  });
 
-    it('wraps requests with retry system when platform is provided', async () => {
-        const axios = { get: createMockFn().mockResolvedValue({ status: 204 }) };
-        const logger = noOpLogger;
-        let executedThroughRetry = false;
+  it("builds auth headers for bearer tokens", () => {
+    const axios = { get: createMockFn() };
+    const logger = noOpLogger;
+    const client = new EnhancedHttpClient({ axios, logger });
 
-        const retrySystem = {
-            executeWithRetry: createMockFn(async (_platform, handler) => {
-                executedThroughRetry = true;
-                return handler();
-            })
-        };
+    const bearerHeaders = client.buildAuthHeaders("testToken123", "bearer");
+    const oauthHeaders = client.buildAuthHeaders("testToken456", "oauth");
 
-        const client = new EnhancedHttpClient({ axios, logger, retrySystem });
-        const response = await client.get('https://example.com', { platform: 'twitch' });
+    expect(bearerHeaders.Authorization).toBe("Bearer testToken123");
+    expect(oauthHeaders.Authorization).toBe("OAuth testToken456");
+  });
 
-        expect(executedThroughRetry).toBe(true);
-        expect(response.status).toBe(204);
-    });
+  it("preserves class-based logger prototype methods", async () => {
+    let debugCalls = 0;
 
-    it('bypasses retry system when disableRetry is true', async () => {
-        const axios = { get: createMockFn().mockRejectedValue(new Error('testNetworkError')) };
-        const logger = noOpLogger;
-        const retrySystem = {
-            executeWithRetry: createMockFn(async (_platform, handler) => handler())
-        };
+    class PrototypeLogger {
+      debug() {
+        debugCalls += 1;
+      }
 
-        const client = new EnhancedHttpClient({ axios, logger, retrySystem });
+      info() {}
 
-        await expect(client.get('https://example.com', { platform: 'twitch', disableRetry: true }))
-            .rejects.toThrow('testNetworkError');
-        expect(retrySystem.executeWithRetry).not.toHaveBeenCalled();
-    });
+      warn() {}
 
-    it('encodes urlencoded post bodies', async () => {
-        let postedBody!: string;
-        let postedConfig!: { headers: Record<string, string> };
-        const axios = {
-            post: createMockFn(async (_url, body, config) => {
-                postedBody = body;
-                postedConfig = config;
-                return { status: 201 };
-            })
-        };
-        const logger = noOpLogger;
-        const client = new EnhancedHttpClient({ axios, logger });
+      error() {}
+    }
 
-        const response = await client.post('https://example.com', { a: 1, b: 'two' }, {
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-        });
+    const axios = { get: createMockFn().mockResolvedValue({ status: 200 }) };
+    const logger = new PrototypeLogger();
+    const client = new EnhancedHttpClient({ axios, logger });
 
-        expect(typeof postedBody).toBe('string');
-        expect(postedBody).toContain('a=1');
-        expect(postedBody).toContain('b=two');
-        expect(postedConfig.headers['Content-Type']).toBe('application/x-www-form-urlencoded');
-        expect(response.status).toBe(201);
-    });
+    await client.get("https://example.com");
 
-    it('returns false when reachability check fails', async () => {
-        const axios = { get: createMockFn().mockRejectedValue(new Error('testNetworkFailure')) };
-        const logger = noOpLogger;
-        const client = new EnhancedHttpClient({ axios, logger });
-
-        const reachable = await client.isReachable('https://example.com');
-
-        expect(reachable).toBe(false);
-    });
-
-    it('builds auth headers for bearer tokens', () => {
-        const axios = { get: createMockFn() };
-        const logger = noOpLogger;
-        const client = new EnhancedHttpClient({ axios, logger });
-
-        const bearerHeaders = client.buildAuthHeaders('testToken123', 'bearer');
-        const oauthHeaders = client.buildAuthHeaders('testToken456', 'oauth');
-
-        expect(bearerHeaders.Authorization).toBe('Bearer testToken123');
-        expect(oauthHeaders.Authorization).toBe('OAuth testToken456');
-    });
-
-    it('preserves class-based logger prototype methods', async () => {
-        let debugCalls = 0;
-
-        class PrototypeLogger {
-            debug() {
-                debugCalls += 1;
-            }
-
-            info() {}
-
-            warn() {}
-
-            error() {}
-        }
-
-        const axios = { get: createMockFn().mockResolvedValue({ status: 200 }) };
-        const logger = new PrototypeLogger();
-        const client = new EnhancedHttpClient({ axios, logger });
-
-        await client.get('https://example.com');
-
-        expect(debugCalls).toBeGreaterThan(0);
-    });
+    expect(debugCalls).toBeGreaterThan(0);
+  });
 });

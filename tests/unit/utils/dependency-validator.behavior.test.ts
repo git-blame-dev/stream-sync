@@ -1,77 +1,112 @@
-const { describe, expect, it } = require('bun:test');
-const { noOpLogger } = require('../../helpers/mock-factories');
-const {
-    validateLoggerInterface,
-    validateNotificationManagerInterface,
-    validateConnectionFactoryInterface,
-    validateYouTubePlatformDependencies,
-    validateConnectionStateManagerDependencies,
-    validateFactoryCanCreateConnections,
-    createStandardDependencies
-} = require('../../../src/utils/dependency-validator.ts');
+import { describe, expect, it } from "bun:test";
+import { noOpLogger } from "../../helpers/mock-factories";
+import {
+  validateLoggerInterface,
+  validateNotificationManagerInterface,
+  validateConnectionFactoryInterface,
+  validateYouTubePlatformDependencies,
+  validateConnectionStateManagerDependencies,
+  validateFactoryCanCreateConnections,
+  createStandardDependencies,
+} from "../../../src/utils/dependency-validator.ts";
+describe("dependency-validator behavior", () => {
+  it("validates logger interfaces and surfaces missing method guidance", () => {
+    expect(() => validateLoggerInterface(null)).toThrow(
+      /Logger dependency is required/,
+    );
+    expect(() => validateLoggerInterface({})).toThrow(
+      /Logger interface missing required methods: debug, info, error, warn/,
+    );
+    expect(() => validateLoggerInterface(noOpLogger)).not.toThrow();
+  });
 
-export {};
+  it("validates notification manager and YouTube platform dependencies", () => {
+    expect(() => validateNotificationManagerInterface(null)).toThrow(
+      /NotificationManager dependency is required/,
+    );
+    expect(() =>
+      validateNotificationManagerInterface({ emit: () => {} }),
+    ).toThrow(/missing required methods: on/);
 
-describe('dependency-validator behavior', () => {
-    it('validates logger interfaces and surfaces missing method guidance', () => {
-        expect(() => validateLoggerInterface(null)).toThrow(/Logger dependency is required/);
-        expect(() => validateLoggerInterface({})).toThrow(/Logger interface missing required methods: debug, info, error, warn/);
-        expect(() => validateLoggerInterface(noOpLogger)).not.toThrow();
-    });
+    const deps = {
+      logger: noOpLogger,
+      streamDetectionService: { detectLiveStreams: () => {} },
+    };
+    expect(() => validateYouTubePlatformDependencies(deps)).not.toThrow();
 
-    it('validates notification manager and YouTube platform dependencies', () => {
-        expect(() => validateNotificationManagerInterface(null)).toThrow(/NotificationManager dependency is required/);
-        expect(() => validateNotificationManagerInterface({ emit: () => {} })).toThrow(/missing required methods: on/);
+    const missingLogger = {
+      streamDetectionService: { detectLiveStreams: () => {} },
+    };
+    expect(() => validateYouTubePlatformDependencies(missingLogger)).toThrow(
+      /Missing required dependencies: logger/,
+    );
 
-        const deps = { logger: noOpLogger, streamDetectionService: { detectLiveStreams: () => {} } };
-        expect(() => validateYouTubePlatformDependencies(deps)).not.toThrow();
+    const invalidViewerProvider = { ...deps, viewerCountProvider: {} };
+    expect(() =>
+      validateYouTubePlatformDependencies(invalidViewerProvider),
+    ).toThrow(/viewerCountProvider must implement getViewerCount/);
 
-        const missingLogger = { streamDetectionService: { detectLiveStreams: () => {} } };
-        expect(() => validateYouTubePlatformDependencies(missingLogger)).toThrow(/Missing required dependencies: logger/);
+    expect(() =>
+      validateYouTubePlatformDependencies({
+        logger: "invalid",
+        streamDetectionService: { detectLiveStreams: () => {} },
+      }),
+    ).toThrow(/Logger expected object/);
+  });
 
-        const invalidViewerProvider = { ...deps, viewerCountProvider: {} };
-        expect(() => validateYouTubePlatformDependencies(invalidViewerProvider)).toThrow(/viewerCountProvider must implement getViewerCount/);
+  it("validates connection factory and state manager dependency contracts", () => {
+    expect(() => validateConnectionFactoryInterface(null)).toThrow(
+      /Connection factory is required/,
+    );
+    expect(() => validateConnectionFactoryInterface({})).toThrow(
+      /missing createConnection method/,
+    );
+    expect(() =>
+      validateConnectionFactoryInterface({ createConnection: () => ({}) }),
+    ).not.toThrow();
 
-        expect(() => validateYouTubePlatformDependencies({ logger: 'invalid', streamDetectionService: { detectLiveStreams: () => {} } }))
-            .toThrow(/Logger expected object/);
-    });
+    expect(() =>
+      validateConnectionStateManagerDependencies(null, { logger: noOpLogger }),
+    ).toThrow(/missing required configuration/);
+    expect(() => validateConnectionStateManagerDependencies({}, null)).toThrow(
+      /missing required dependencies/,
+    );
+    expect(() => validateConnectionStateManagerDependencies({}, {})).toThrow(
+      /missing required dependencies \(logger\)/,
+    );
+    expect(() =>
+      validateConnectionStateManagerDependencies({}, { logger: noOpLogger }),
+    ).not.toThrow();
+  });
 
-    it('validates connection factory and state manager dependency contracts', () => {
-        expect(() => validateConnectionFactoryInterface(null)).toThrow(/Connection factory is required/);
-        expect(() => validateConnectionFactoryInterface({})).toThrow(/missing createConnection method/);
-        expect(() => validateConnectionFactoryInterface({ createConnection: () => ({}) })).not.toThrow();
+  it("wraps connection factory errors with platform context", () => {
+    const factory = {
+      createConnection: () => {
+        throw new Error("factory boom");
+      },
+    };
 
-        expect(() => validateConnectionStateManagerDependencies(null, { logger: noOpLogger }))
-            .toThrow(/missing required configuration/);
-        expect(() => validateConnectionStateManagerDependencies({}, null))
-            .toThrow(/missing required dependencies/);
-        expect(() => validateConnectionStateManagerDependencies({}, {}))
-            .toThrow(/missing required dependencies \(logger\)/);
-        expect(() => validateConnectionStateManagerDependencies({}, { logger: noOpLogger }))
-            .not.toThrow();
-    });
+    expect(() =>
+      validateFactoryCanCreateConnections(factory, "youtube", {}, {}),
+    ).toThrow(
+      /Factory failed to create valid connection for youtube: factory boom/,
+    );
 
-    it('wraps connection factory errors with platform context', () => {
-        const factory = {
-            createConnection: () => { throw new Error('factory boom'); }
-        };
+    const nullFactory = { createConnection: () => null };
+    expect(() =>
+      validateFactoryCanCreateConnections(nullFactory, "tiktok", {}, {}),
+    ).toThrow(/Factory returned null\/undefined connection for tiktok/);
 
-        expect(() => validateFactoryCanCreateConnections(factory, 'youtube', {}, {}))
-            .toThrow(/Factory failed to create valid connection for youtube: factory boom/);
+    const invalidTypeFactory = { createConnection: () => "bad-connection" };
+    expect(() =>
+      validateFactoryCanCreateConnections(invalidTypeFactory, "twitch", {}, {}),
+    ).toThrow(/Factory returned invalid connection type for twitch/);
+  });
 
-        const nullFactory = { createConnection: () => null };
-        expect(() => validateFactoryCanCreateConnections(nullFactory, 'tiktok', {}, {}))
-            .toThrow(/Factory returned null\/undefined connection for tiktok/);
-
-        const invalidTypeFactory = { createConnection: () => 'bad-connection' };
-        expect(() => validateFactoryCanCreateConnections(invalidTypeFactory, 'twitch', {}, {}))
-            .toThrow(/Factory returned invalid connection type for twitch/);
-    });
-
-    it('creates standard dependencies structure once logger validates', () => {
-        const deps = createStandardDependencies('youtube', noOpLogger);
-        expect(deps.logger).toBeDefined();
-        expect(typeof deps.notificationManager.emit).toBe('function');
-        expect(typeof deps.displayQueue.add).toBe('function');
-    });
+  it("creates standard dependencies structure once logger validates", () => {
+    const deps = createStandardDependencies("youtube", noOpLogger);
+    expect(deps.logger).toBeDefined();
+    expect(typeof deps.notificationManager.emit).toBe("function");
+    expect(typeof deps.displayQueue.add).toBe("function");
+  });
 });
