@@ -200,20 +200,20 @@ export function GiftAnimationLayer({ effect, onComplete }: GiftAnimationLayerPro
           const pixelCount = compositeWidth * compositeHeight
           for (let pixelIndex = 0; pixelIndex < pixelCount; pixelIndex += 1) {
             const offset = pixelIndex * 4
-            const alpha = alphaData.data[offset]
+const alpha = alphaData.data[offset] ?? 0
 
-            if (alpha <= 2) {
-              mergedData.data[offset] = 0
-              mergedData.data[offset + 1] = 0
-              mergedData.data[offset + 2] = 0
-              mergedData.data[offset + 3] = 0
-              continue
-            }
+if (alpha <= 2) {
+mergedData.data[offset] = 0
+mergedData.data[offset + 1] = 0
+mergedData.data[offset + 2] = 0
+mergedData.data[offset + 3] = 0
+continue
+}
 
-            mergedData.data[offset] = rgbData.data[offset]
-            mergedData.data[offset + 1] = rgbData.data[offset + 1]
-            mergedData.data[offset + 2] = rgbData.data[offset + 2]
-            mergedData.data[offset + 3] = alpha
+mergedData.data[offset] = rgbData.data[offset] ?? 0
+mergedData.data[offset + 1] = rgbData.data[offset + 1] ?? 0
+mergedData.data[offset + 2] = rgbData.data[offset + 2] ?? 0
+mergedData.data[offset + 3] = alpha
           }
 
           rgbContext.putImageData(mergedData, 0, 0)

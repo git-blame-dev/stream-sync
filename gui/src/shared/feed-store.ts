@@ -93,18 +93,22 @@ function normalizeRow(input: unknown): GuiRowDto {
     return { ...EMPTY_ROW }
   }
 
-  return {
-    type: normalizeString(row.type),
-    kind,
-    platform: normalizeString(row.platform),
-    username: normalizeString(row.username),
-    text: normalizeString(row.text),
-    parts: normalizeParts(row.parts),
-    badgeImages: normalizeBadgeImages(row.badgeImages),
-    isPaypiggy: typeof row.isPaypiggy === 'boolean' ? row.isPaypiggy : undefined,
-    avatarUrl: normalizeString(row.avatarUrl),
-    timestamp: row.timestamp === null ? null : normalizeString(row.timestamp)
-  }
+const parts = normalizeParts(row.parts)
+const badgeImages = normalizeBadgeImages(row.badgeImages)
+const isPaypiggy = typeof row.isPaypiggy === 'boolean' ? row.isPaypiggy : null
+
+return {
+type: normalizeString(row.type),
+kind,
+platform: normalizeString(row.platform),
+username: normalizeString(row.username),
+text: normalizeString(row.text),
+...(parts ? { parts } : {}),
+...(badgeImages ? { badgeImages } : {}),
+...(isPaypiggy === null ? {} : { isPaypiggy }),
+avatarUrl: normalizeString(row.avatarUrl),
+timestamp: row.timestamp === null ? null : normalizeString(row.timestamp)
+}
 }
 
 export interface GuiFeedStoreOptions {

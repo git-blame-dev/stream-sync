@@ -80,7 +80,11 @@ function collectOverlayVisibility(
     .filter((key) => !suppressedRowKeys.has(key))
 
   for (let index = rowEntries.length - 1; index >= 0; index -= 1) {
-    const key = rowEntries[index].key
+const rowEntry = rowEntries[index]
+if (!rowEntry) {
+continue
+}
+const key = rowEntry.key
     if (suppressedRowKeys.has(key)) {
       continue
     }
@@ -109,7 +113,11 @@ function collectOverlayVisibility(
       const exitCandidateKeys: string[] = [key]
 
       for (let olderIndex = index - 1; olderIndex >= 0; olderIndex -= 1) {
-        const olderKey = rowEntries[olderIndex].key
+const olderEntry = rowEntries[olderIndex]
+if (!olderEntry) {
+continue
+}
+const olderKey = olderEntry.key
         if (suppressedRowKeys.has(olderKey)) {
           continue
         }
