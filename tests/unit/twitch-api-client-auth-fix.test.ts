@@ -1,292 +1,311 @@
-const { describe, expect, it, beforeEach, afterEach } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { noOpLogger } = require('../helpers/mock-factories');
-const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../src/core/secrets');
-const { TwitchApiClient } = require('../../src/utils/api-clients/twitch-api-client.ts');
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
+import { noOpLogger } from "../helpers/mock-factories";
+import {
+  initializeStaticSecrets,
+  secrets,
+  _resetForTesting,
+} from "../../src/core/secrets";
+import { TwitchApiClient } from "../../src/utils/api-clients/twitch-api-client.ts";
 
-describe('TwitchApiClient authentication', () => {
-    let mockLogger;
-    let mockHttpClient;
-    let mockTwitchAuth;
-    let apiClient;
+describe("TwitchApiClient authentication", () => {
+  let mockLogger;
+  let mockHttpClient;
+  let mockTwitchAuth;
+  let apiClient;
 
-    const createMockHttpClient = () => ({
-        get: createMockFn(),
-        post: createMockFn()
+  const createMockHttpClient = () => ({
+    get: createMockFn(),
+    post: createMockFn(),
+  });
+
+  const createMockTwitchAuth = (overrides = {}) => ({
+    refreshTokens: createMockFn().mockResolvedValue(true),
+    isReady: createMockFn().mockReturnValue(true),
+    ...overrides,
+  });
+
+  beforeEach(() => {
+    _resetForTesting();
+    initializeStaticSecrets();
+    secrets.twitch.accessToken = "test-access-token";
+    mockLogger = noOpLogger;
+    mockHttpClient = createMockHttpClient();
+    mockTwitchAuth = createMockTwitchAuth();
+
+    apiClient = new TwitchApiClient(
+      mockTwitchAuth,
+      { clientId: "test-client-id", channel: "test-channel" },
+      mockLogger,
+      { enhancedHttpClient: mockHttpClient },
+    );
+  });
+
+  afterEach(() => {
+    restoreAllMocks();
+    _resetForTesting();
+    initializeStaticSecrets();
+  });
+
+  describe("API request authentication", () => {
+    it("includes Bearer token and Client-Id in requests", async () => {
+      mockHttpClient.get.mockResolvedValue({
+        status: 200,
+        data: { data: [] },
+      });
+
+      await apiClient.makeRequest("/test-endpoint");
+
+      const requestOptions = mockHttpClient.get.mock.calls[0][1];
+      expect(requestOptions.authToken).toBe("test-access-token");
+      expect(requestOptions.clientId).toBe("test-client-id");
     });
 
-    const createMockTwitchAuth = (overrides = {}) => ({
-        refreshTokens: createMockFn().mockResolvedValue(true),
-        isReady: createMockFn().mockReturnValue(true),
-        ...overrides
+    it("returns stream info when channel is live", async () => {
+      mockHttpClient.get.mockResolvedValue({
+        status: 200,
+        data: {
+          data: [
+            {
+              viewer_count: 42,
+              game_name: "Test Game",
+            },
+          ],
+        },
+      });
+
+      const result = await apiClient.getStreamInfo("test-channel");
+
+      expect(result.isLive).toBe(true);
+      expect(result.viewerCount).toBe(42);
     });
 
-    beforeEach(() => {
-        _resetForTesting();
-        initializeStaticSecrets();
-        secrets.twitch.accessToken = 'test-access-token';
-        mockLogger = noOpLogger;
-        mockHttpClient = createMockHttpClient();
-        mockTwitchAuth = createMockTwitchAuth();
+    it("returns offline status when channel is not live", async () => {
+      mockHttpClient.get.mockResolvedValue({
+        status: 200,
+        data: { data: [] },
+      });
 
-        apiClient = new TwitchApiClient(
-            mockTwitchAuth,
-            { clientId: 'test-client-id', channel: 'test-channel' },
-            mockLogger,
-            { enhancedHttpClient: mockHttpClient }
-        );
+      const result = await apiClient.getStreamInfo("test-channel");
+
+      expect(result.isLive).toBe(false);
+      expect(result.viewerCount).toBe(0);
+    });
+  });
+
+  describe("getBroadcasterId", () => {
+    it("returns user ID from channel name", async () => {
+      mockHttpClient.get.mockResolvedValue({
+        status: 200,
+        data: { data: [{ id: "123456789", login: "testchannel" }] },
+      });
+
+      const broadcasterId = await apiClient.getBroadcasterId("testchannel");
+
+      expect(broadcasterId).toBe("123456789");
     });
 
-    afterEach(() => {
-        restoreAllMocks();
-        _resetForTesting();
-        initializeStaticSecrets();
+    it("throws when channel not found", async () => {
+      mockHttpClient.get.mockResolvedValue({
+        status: 200,
+        data: { data: [] },
+      });
+
+      await expect(apiClient.getBroadcasterId("nonexistent")).rejects.toThrow(
+        "Could not resolve broadcaster ID for channel: nonexistent",
+      );
     });
 
-    describe('API request authentication', () => {
-        it('includes Bearer token and Client-Id in requests', async () => {
-            mockHttpClient.get.mockResolvedValue({
-                status: 200,
-                data: { data: [] }
-            });
+    it("throws when API returns null user", async () => {
+      mockHttpClient.get.mockResolvedValue({
+        status: 200,
+        data: { data: null },
+      });
 
-            await apiClient.makeRequest('/test-endpoint');
+      await expect(apiClient.getBroadcasterId("badchannel")).rejects.toThrow(
+        "Could not resolve broadcaster ID for channel: badchannel",
+      );
+    });
+  });
 
-            const requestOptions = mockHttpClient.get.mock.calls[0][1];
-            expect(requestOptions.authToken).toBe('test-access-token');
-            expect(requestOptions.clientId).toBe('test-client-id');
-        });
+  describe("getUserById", () => {
+    it("returns user payload when id lookup succeeds", async () => {
+      mockHttpClient.get.mockResolvedValue({
+        status: 200,
+        data: {
+          data: [
+            {
+              id: "test-user-id",
+              login: "testuser",
+              profile_image_url: "https://example.invalid/avatar.png",
+            },
+          ],
+        },
+      });
 
-        it('returns stream info when channel is live', async () => {
-            mockHttpClient.get.mockResolvedValue({
-                status: 200,
-                data: {
-                    data: [{
-                        viewer_count: 42,
-                        game_name: 'Test Game'
-                    }]
-                }
-            });
+      const user = await apiClient.getUserById("test-user-id");
 
-            const result = await apiClient.getStreamInfo('test-channel');
-
-            expect(result.isLive).toBe(true);
-            expect(result.viewerCount).toBe(42);
-        });
-
-        it('returns offline status when channel is not live', async () => {
-            mockHttpClient.get.mockResolvedValue({
-                status: 200,
-                data: { data: [] }
-            });
-
-            const result = await apiClient.getStreamInfo('test-channel');
-
-            expect(result.isLive).toBe(false);
-            expect(result.viewerCount).toBe(0);
-        });
+      expect(user).toEqual({
+        id: "test-user-id",
+        login: "testuser",
+        profile_image_url: "https://example.invalid/avatar.png",
+      });
     });
 
-    describe('getBroadcasterId', () => {
-        it('returns user ID from channel name', async () => {
-            mockHttpClient.get.mockResolvedValue({
-                status: 200,
-                data: { data: [{ id: '123456789', login: 'testchannel' }] }
-            });
+    it("returns null when id lookup has no rows", async () => {
+      mockHttpClient.get.mockResolvedValue({
+        status: 200,
+        data: { data: [] },
+      });
 
-            const broadcasterId = await apiClient.getBroadcasterId('testchannel');
+      const user = await apiClient.getUserById("missing-user-id");
 
-            expect(broadcasterId).toBe('123456789');
+      expect(user).toBeNull();
+    });
+  });
+
+  describe("401 retry with token refresh", () => {
+    it("retries request after refreshing token on 401", async () => {
+      mockHttpClient.get
+        .mockRejectedValueOnce({ response: { status: 401 } })
+        .mockResolvedValueOnce({
+          status: 200,
+          data: { data: [{ id: "test-user-id", login: "testuser" }] },
         });
 
-        it('throws when channel not found', async () => {
-            mockHttpClient.get.mockResolvedValue({
-                status: 200,
-                data: { data: [] }
-            });
+      secrets.twitch.accessToken = "expired-token";
+      mockTwitchAuth.refreshTokens = createMockFn().mockImplementation(
+        async () => {
+          secrets.twitch.accessToken = "refreshed-token";
+          return true;
+        },
+      );
 
-            await expect(apiClient.getBroadcasterId('nonexistent')).rejects.toThrow(
-                'Could not resolve broadcaster ID for channel: nonexistent'
-            );
-        });
+      const result = await apiClient.getUserInfo("testuser");
 
-        it('throws when API returns null user', async () => {
-            mockHttpClient.get.mockResolvedValue({
-                status: 200,
-                data: { data: null }
-            });
-
-            await expect(apiClient.getBroadcasterId('badchannel')).rejects.toThrow(
-                'Could not resolve broadcaster ID for channel: badchannel'
-            );
-        });
+      expect(result).toEqual({ id: "test-user-id", login: "testuser" });
     });
 
-    describe('getUserById', () => {
-        it('returns user payload when id lookup succeeds', async () => {
-            mockHttpClient.get.mockResolvedValue({
-                status: 200,
-                data: {
-                    data: [{ id: 'test-user-id', login: 'testuser', profile_image_url: 'https://example.invalid/avatar.png' }]
-                }
-            });
-
-            const user = await apiClient.getUserById('test-user-id');
-
-            expect(user).toEqual({
-                id: 'test-user-id',
-                login: 'testuser',
-                profile_image_url: 'https://example.invalid/avatar.png'
-            });
+    it("uses refreshed token in retry request", async () => {
+      mockHttpClient.get
+        .mockRejectedValueOnce({ response: { status: 401 } })
+        .mockResolvedValueOnce({
+          status: 200,
+          data: { data: [{ id: "user-123" }] },
         });
 
-        it('returns null when id lookup has no rows', async () => {
-            mockHttpClient.get.mockResolvedValue({
-                status: 200,
-                data: { data: [] }
-            });
+      secrets.twitch.accessToken = "old-token";
+      mockTwitchAuth.refreshTokens = createMockFn().mockImplementation(
+        async () => {
+          secrets.twitch.accessToken = "new-refreshed-token";
+          return true;
+        },
+      );
 
-            const user = await apiClient.getUserById('missing-user-id');
+      await apiClient.getUserInfo("testuser");
 
-            expect(user).toBeNull();
-        });
+      const retryRequestOptions = mockHttpClient.get.mock.calls[1][1];
+      expect(retryRequestOptions.authToken).toBe("new-refreshed-token");
     });
 
-    describe('401 retry with token refresh', () => {
-        it('retries request after refreshing token on 401', async () => {
-            mockHttpClient.get
-                .mockRejectedValueOnce({ response: { status: 401 } })
-                .mockResolvedValueOnce({
-                    status: 200,
-                    data: { data: [{ id: 'test-user-id', login: 'testuser' }] }
-                });
+    it("throws when retry after 401 also fails", async () => {
+      mockHttpClient.get
+        .mockRejectedValueOnce({ response: { status: 401 } })
+        .mockRejectedValueOnce({ response: { status: 401 } });
 
-            secrets.twitch.accessToken = 'expired-token';
-            mockTwitchAuth.refreshTokens = createMockFn().mockImplementation(async () => {
-                secrets.twitch.accessToken = 'refreshed-token';
-                return true;
-            });
-
-            const result = await apiClient.getUserInfo('testuser');
-
-            expect(result).toEqual({ id: 'test-user-id', login: 'testuser' });
-        });
-
-        it('uses refreshed token in retry request', async () => {
-            mockHttpClient.get
-                .mockRejectedValueOnce({ response: { status: 401 } })
-                .mockResolvedValueOnce({
-                    status: 200,
-                    data: { data: [{ id: 'user-123' }] }
-                });
-
-            secrets.twitch.accessToken = 'old-token';
-            mockTwitchAuth.refreshTokens = createMockFn().mockImplementation(async () => {
-                secrets.twitch.accessToken = 'new-refreshed-token';
-                return true;
-            });
-
-            await apiClient.getUserInfo('testuser');
-
-            const retryRequestOptions = mockHttpClient.get.mock.calls[1][1];
-            expect(retryRequestOptions.authToken).toBe('new-refreshed-token');
-        });
-
-        it('throws when retry after 401 also fails', async () => {
-            mockHttpClient.get
-                .mockRejectedValueOnce({ response: { status: 401 } })
-                .mockRejectedValueOnce({ response: { status: 401 } });
-
-            await expect(apiClient.makeRequest('/test')).rejects.toMatchObject({
-                response: { status: 401 }
-            });
-        });
-
-        it('does not retry on non-401 errors', async () => {
-            mockHttpClient.get.mockRejectedValueOnce({
-                response: { status: 500 }
-            });
-
-            await expect(apiClient.makeRequest('/test')).rejects.toMatchObject({
-                response: { status: 500 }
-            });
-        });
+      await expect(apiClient.makeRequest("/test")).rejects.toMatchObject({
+        response: { status: 401 },
+      });
     });
 
-    describe('auth failure handling', () => {
-        it('returns offline status when getAccessToken throws', async () => {
-            secrets.twitch.accessToken = null;
+    it("does not retry on non-401 errors", async () => {
+      mockHttpClient.get.mockRejectedValueOnce({
+        response: { status: 500 },
+      });
 
-            const result = await apiClient.getStreamInfo('test-channel');
+      await expect(apiClient.makeRequest("/test")).rejects.toMatchObject({
+        response: { status: 500 },
+      });
+    });
+  });
 
-            expect(result.isLive).toBe(false);
-            expect(result.viewerCount).toBe(0);
-        });
+  describe("auth failure handling", () => {
+    it("returns offline status when getAccessToken throws", async () => {
+      secrets.twitch.accessToken = null;
 
-        it('throws when no access token available', async () => {
-            secrets.twitch.accessToken = null;
+      const result = await apiClient.getStreamInfo("test-channel");
 
-            await expect(apiClient.makeRequest('/test')).rejects.toThrow(
-                'No access token available for Twitch API'
-            );
-        });
+      expect(result.isLive).toBe(false);
+      expect(result.viewerCount).toBe(0);
     });
 
-    describe('getCheermotes', () => {
-        it('requests broadcaster-aware cheermotes and returns catalog rows', async () => {
-            mockHttpClient.get.mockImplementation(async (url) => {
-                if (typeof url === 'string' && url.includes('/bits/cheermotes?broadcaster_id=test-broadcaster-id')) {
-                    return {
-                        status: 200,
-                        data: {
-                            data: [
-                                {
-                                    prefix: 'Cheer',
-                                    tiers: [
-                                        {
-                                            id: '100',
-                                            images: {
-                                                dark: {
-                                                    animated: {
-                                                        '3': 'https://example.invalid/cheer-100-dark-animated-3.gif'
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    ]
-                                }
-                            ]
-                        }
-                    };
-                }
+    it("throws when no access token available", async () => {
+      secrets.twitch.accessToken = null;
 
-                return {
-                    status: 200,
-                    data: {
-                        data: []
-                    }
-                };
-            });
+      await expect(apiClient.makeRequest("/test")).rejects.toThrow(
+        "No access token available for Twitch API",
+      );
+    });
+  });
 
-            const cheermotes = await apiClient.getCheermotes('test-broadcaster-id');
-
-            expect(cheermotes).toEqual([
+  describe("getCheermotes", () => {
+    it("requests broadcaster-aware cheermotes and returns catalog rows", async () => {
+      mockHttpClient.get.mockImplementation(async (url) => {
+        if (
+          typeof url === "string" &&
+          url.includes("/bits/cheermotes?broadcaster_id=test-broadcaster-id")
+        ) {
+          return {
+            status: 200,
+            data: {
+              data: [
                 {
-                    prefix: 'Cheer',
-                    tiers: [
-                        {
-                            id: '100',
-                            images: {
-                                dark: {
-                                    animated: {
-                                        '3': 'https://example.invalid/cheer-100-dark-animated-3.gif'
-                                    }
-                                }
-                            }
-                        }
-                    ]
-                }
-            ]);
-        });
+                  prefix: "Cheer",
+                  tiers: [
+                    {
+                      id: "100",
+                      images: {
+                        dark: {
+                          animated: {
+                            "3": "https://example.invalid/cheer-100-dark-animated-3.gif",
+                          },
+                        },
+                      },
+                    },
+                  ],
+                },
+              ],
+            },
+          };
+        }
+
+        return {
+          status: 200,
+          data: {
+            data: [],
+          },
+        };
+      });
+
+      const cheermotes = await apiClient.getCheermotes("test-broadcaster-id");
+
+      expect(cheermotes).toEqual([
+        {
+          prefix: "Cheer",
+          tiers: [
+            {
+              id: "100",
+              images: {
+                dark: {
+                  animated: {
+                    "3": "https://example.invalid/cheer-100-dark-animated-3.gif",
+                  },
+                },
+              },
+            },
+          ],
+        },
+      ]);
     });
+  });
 });

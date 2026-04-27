@@ -1,139 +1,139 @@
-import { describe, test, expect, afterEach } from 'bun:test';
-import { createRequire } from 'node:module';
+import { describe, test, expect, afterEach } from "bun:test";
+import { EventEmitter } from "events";
+import { noOpLogger } from "../helpers/mock-factories";
+import { TikTokPlatform } from "../../src/platforms/tiktok";
 
-const load = createRequire(__filename);
-const { EventEmitter } = load('events');
-const { noOpLogger } = load('../helpers/mock-factories');
-const { TikTokPlatform } = load('../../src/platforms/tiktok');
+describe("TikTok Connection State Management", () => {
+  let platform: InstanceType<typeof TikTokPlatform>;
 
-describe('TikTok Connection State Management', () => {
-    let platform: InstanceType<typeof TikTokPlatform>;
+  afterEach(() => {
+    if (platform) {
+      platform.removeAllListeners?.();
+    }
+  });
 
-    afterEach(() => {
-        if (platform) {
-            platform.removeAllListeners?.();
-        }
-    });
+  const createMockConnection = () => {
+    const emitter = new EventEmitter();
+    return {
+      connect: async () => ({ roomId: "testRoom123" }),
+      disconnect: async () => true,
+      fetchIsLive: async () => true,
+      waitUntilLive: async () => {},
+      on: emitter.on.bind(emitter),
+      emit: emitter.emit.bind(emitter),
+      removeAllListeners: emitter.removeAllListeners.bind(emitter),
+      isConnected: false,
+      isConnecting: false,
+      roomId: "testRoom123",
+    };
+  };
 
-    const createMockConnection = () => {
-        const emitter = new EventEmitter();
-        return {
-            connect: async () => ({ roomId: 'testRoom123' }),
-            disconnect: async () => true,
-            fetchIsLive: async () => true,
-            waitUntilLive: async () => {},
-            on: emitter.on.bind(emitter),
-            emit: emitter.emit.bind(emitter),
-            removeAllListeners: emitter.removeAllListeners.bind(emitter),
-            isConnected: false,
-            isConnecting: false,
-            roomId: 'testRoom123'
-        };
+  const buildPlatform = () => {
+    const mockConnection = createMockConnection();
+
+    const config = {
+      enabled: true,
+      username: "testTikTokUser",
+      dataLoggingEnabled: false,
     };
 
-    const buildPlatform = () => {
-        const mockConnection = createMockConnection();
-
-        const config = {
-            enabled: true,
-            username: 'testTikTokUser',
-            dataLoggingEnabled: false
-        };
-
-        const deps = {
-            logger: noOpLogger,
-            connectionStateManager: {
-                initialize: () => {},
-                markDisconnected: () => {},
-                markConnecting: () => {},
-                markConnected: () => {},
-                markError: () => {},
-                ensureConnection: () => mockConnection,
-                getState: () => 'disconnected',
-                isConnected: () => false,
-                getConnectionInfo: () => ({
-                    platform: 'tiktok',
-                    state: 'disconnected',
-                    hasConnection: false
-                })
-            },
-            connectionFactory: {
-                createConnection: () => mockConnection
-            },
-            intervalManager: {
-                createInterval: () => {},
-                hasInterval: () => false,
-                clearInterval: () => {},
-                clearAllIntervals: () => {}
-            },
-            retrySystem: { resetRetryCount: () => {}, handleConnectionError: () => {} },
-            TikTokWebSocketClient: class {},
-            WebcastEvent: {},
-            ControlEvent: { CONNECTED: 'connected' },
-            initializationManager: {
-                beginInitialization: () => true,
-                markInitializationSuccess: () => {},
-                markInitializationFailure: () => {},
-                reset: () => {}
-            },
-            initializationStats: {
-                startInitializationAttempt: () => 'test-attempt',
-                recordSuccess: () => {},
-                recordFailure: () => {},
-                reset: () => {}
-            }
-        };
-
-        return new TikTokPlatform(config, deps);
+    const deps = {
+      logger: noOpLogger,
+      connectionStateManager: {
+        initialize: () => {},
+        markDisconnected: () => {},
+        markConnecting: () => {},
+        markConnected: () => {},
+        markError: () => {},
+        ensureConnection: () => mockConnection,
+        getState: () => "disconnected",
+        isConnected: () => false,
+        getConnectionInfo: () => ({
+          platform: "tiktok",
+          state: "disconnected",
+          hasConnection: false,
+        }),
+      },
+      connectionFactory: {
+        createConnection: () => mockConnection,
+      },
+      intervalManager: {
+        createInterval: () => {},
+        hasInterval: () => false,
+        clearInterval: () => {},
+        clearAllIntervals: () => {},
+      },
+      retrySystem: {
+        resetRetryCount: () => {},
+        handleConnectionError: () => {},
+      },
+      TikTokWebSocketClient: class {},
+      WebcastEvent: {},
+      ControlEvent: { CONNECTED: "connected" },
+      initializationManager: {
+        beginInitialization: () => true,
+        markInitializationSuccess: () => {},
+        markInitializationFailure: () => {},
+        reset: () => {},
+      },
+      initializationStats: {
+        startInitializationAttempt: () => "test-attempt",
+        recordSuccess: () => {},
+        recordFailure: () => {},
+        reset: () => {},
+      },
     };
 
-    test('has connectionStateManager defined', () => {
-        platform = buildPlatform();
+    return new TikTokPlatform(config, deps);
+  };
 
-        expect(platform.connectionStateManager).toBeDefined();
-    });
+  test("has connectionStateManager defined", () => {
+    platform = buildPlatform();
 
-    test('has connectionFactory defined', () => {
-        platform = buildPlatform();
+    expect(platform.connectionStateManager).toBeDefined();
+  });
 
-        expect(platform.connectionFactory).toBeDefined();
-    });
+  test("has connectionFactory defined", () => {
+    platform = buildPlatform();
 
-    test('connectionStateManager reports disconnected state initially', () => {
-        platform = buildPlatform();
+    expect(platform.connectionFactory).toBeDefined();
+  });
 
-        expect(platform.connectionStateManager.getState()).toBe('disconnected');
-        expect(platform.connectionStateManager.isConnected()).toBe(false);
-    });
+  test("connectionStateManager reports disconnected state initially", () => {
+    platform = buildPlatform();
 
-    test('connectionStateManager provides connection info', () => {
-        platform = buildPlatform();
+    expect(platform.connectionStateManager.getState()).toBe("disconnected");
+    expect(platform.connectionStateManager.isConnected()).toBe(false);
+  });
 
-        const info = platform.connectionStateManager.getConnectionInfo();
+  test("connectionStateManager provides connection info", () => {
+    platform = buildPlatform();
 
-        expect(info.platform).toBe('tiktok');
-        expect(info.state).toBe('disconnected');
-        expect(info.hasConnection).toBe(false);
-    });
+    const info = platform.connectionStateManager.getConnectionInfo();
 
-    test('connectionFactory creates connection with required methods', () => {
-        platform = buildPlatform();
+    expect(info.platform).toBe("tiktok");
+    expect(info.state).toBe("disconnected");
+    expect(info.hasConnection).toBe(false);
+  });
 
-        const connection = platform.connectionFactory.createConnection();
+  test("connectionFactory creates connection with required methods", () => {
+    platform = buildPlatform();
 
-        expect(connection).not.toBeNull();
-        expect(typeof connection.connect).toBe('function');
-        expect(typeof connection.disconnect).toBe('function');
-    });
+    const connection = platform.connectionFactory.createConnection();
 
-    test('cleanup sets connection to null', async () => {
-        platform = buildPlatform();
-        platform.connection = createMockConnection();
+    expect(connection).not.toBeNull();
+    expect(typeof connection.connect).toBe("function");
+    expect(typeof connection.disconnect).toBe("function");
+  });
 
-        expect(platform.connection).not.toBeNull();
+  test("cleanup sets connection to null", async () => {
+    platform = buildPlatform();
+    platform.connection = createMockConnection();
 
-        await platform.cleanup();
+    expect(platform.connection).not.toBeNull();
 
-        expect(platform.connection).toBeNull();
-    });
+    await platform.cleanup();
+
+    expect(platform.connection).toBeNull();
+  });
 });
