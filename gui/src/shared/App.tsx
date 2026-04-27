@@ -103,7 +103,7 @@ export function App({
   )
   const [rows, setRows] = useState<GuiRowDto[]>([])
   const [effectQueue, setEffectQueue] = useState<GuiGiftAnimationEffectEnvelope[]>([])
-  const activeEffect = effectQueue.length > 0 ? effectQueue[0] : null
+const activeEffect = effectQueue[0] ?? null
 
   useEffect(() => {
     const dispose = createEventFeedImpl({
@@ -143,7 +143,8 @@ export function App({
             return currentQueue
           }
 
-          if (currentQueue[0].playbackId !== playbackId) {
+const nextEffect = currentQueue[0]
+if (!nextEffect || nextEffect.playbackId !== playbackId) {
             return currentQueue
           }
 
