@@ -1,52 +1,55 @@
-import { describe, expect, afterEach, it, beforeEach } from 'bun:test';
-import { createRequire } from 'node:module';
+import { describe, expect, afterEach, it, beforeEach } from "bun:test";
+import { createRequire } from "node:module";
 
-const load = createRequire(__filename);
-const { createMockFn, restoreAllMocks } = load('../../helpers/bun-mock-utils');
-const { noOpLogger } = load('../../helpers/mock-factories');
+import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
+import { noOpLogger } from "../../helpers/mock-factories";
 
-describe('ViewerCountSystem cleanup resilience', () => {
-    let ViewerCountSystem;
+const load = createRequire(import.meta.url);
 
-    beforeEach(() => {
-        ({ ViewerCountSystem } = load('../../../src/utils/viewer-count.ts'));
+describe("ViewerCountSystem cleanup resilience", () => {
+  let ViewerCountSystem;
+
+  beforeEach(() => {
+    ({ ViewerCountSystem } = load("../../../src/utils/viewer-count.ts"));
+  });
+
+  afterEach(() => {
+    restoreAllMocks();
+  });
+
+  it("completes cleanup even when observer cleanup throws", async () => {
+    const platform = { getViewerCount: createMockFn().mockResolvedValue(100) };
+    const system = new ViewerCountSystem({
+      logger: noOpLogger,
+      platforms: { youtube: platform },
+      config: { general: { viewerCountPollingIntervalMs: 15000 } },
     });
 
-    afterEach(() => {
-        restoreAllMocks();
+    system.addObserver({
+      getObserverId: () => "testFailingObserver",
+      cleanup: () => {
+        throw new Error("cleanup fail");
+      },
     });
 
-    it('completes cleanup even when observer cleanup throws', async () => {
-        const platform = { getViewerCount: createMockFn().mockResolvedValue(100) };
-        const system = new ViewerCountSystem({
-            logger: noOpLogger,
-            platforms: { youtube: platform },
-            config: { general: { viewerCountPollingIntervalMs: 15000 } }
-        });
+    await expect(system.cleanup()).resolves.toBeUndefined();
+    expect(system.observers.size).toBe(0);
+  });
 
-        system.addObserver({
-            getObserverId: () => 'testFailingObserver',
-            cleanup: () => { throw new Error('cleanup fail'); }
-        });
-
-        await expect(system.cleanup()).resolves.toBeUndefined();
-        expect(system.observers.size).toBe(0);
+  it("completes cleanup even when observer cleanup rejects", async () => {
+    const platform = { getViewerCount: createMockFn().mockResolvedValue(100) };
+    const system = new ViewerCountSystem({
+      logger: noOpLogger,
+      platforms: { youtube: platform },
+      config: { general: { viewerCountPollingIntervalMs: 15000 } },
     });
 
-    it('completes cleanup even when observer cleanup rejects', async () => {
-        const platform = { getViewerCount: createMockFn().mockResolvedValue(100) };
-        const system = new ViewerCountSystem({
-            logger: noOpLogger,
-            platforms: { youtube: platform },
-            config: { general: { viewerCountPollingIntervalMs: 15000 } }
-        });
-
-        system.addObserver({
-            getObserverId: () => 'testRejectingObserver',
-            cleanup: () => Promise.reject(new Error('async cleanup fail'))
-        });
-
-        await expect(system.cleanup()).resolves.toBeUndefined();
-        expect(system.observers.size).toBe(0);
+    system.addObserver({
+      getObserverId: () => "testRejectingObserver",
+      cleanup: () => Promise.reject(new Error("async cleanup fail")),
     });
+
+    await expect(system.cleanup()).resolves.toBeUndefined();
+    expect(system.observers.size).toBe(0);
+  });
 });

@@ -1,90 +1,83 @@
-import { beforeEach, describe, expect, test } from 'bun:test';
-import { createRequire } from 'node:module';
+import { beforeEach, describe, expect, test } from "bun:test";
+import { getDebugMode, setDebugMode } from "../../src/core/logging";
 
-const nodeRequire = createRequire(import.meta.url);
+describe("Debug Mode Command Line Argument", () => {
+  beforeEach(() => {
+    setDebugMode(false);
+  });
 
-const { setDebugMode, getDebugMode } = nodeRequire('../../src/core/logging') as {
-    setDebugMode: (enabled: boolean) => void;
-    getDebugMode: () => boolean;
-};
+  test("enables debug mode when --debug argument is provided", () => {
+    const args = ["--debug"];
+    const hasDebugArg = args.includes("--debug");
 
-describe('Debug Mode Command Line Argument', () => {
-    beforeEach(() => {
-        setDebugMode(false);
-    });
+    if (hasDebugArg) {
+      setDebugMode(true);
+    }
 
-    test('enables debug mode when --debug argument is provided', () => {
-        const args = ['--debug'];
-        const hasDebugArg = args.includes('--debug');
+    expect(getDebugMode()).toBe(true);
+  });
 
-        if (hasDebugArg) {
-            setDebugMode(true);
-        }
+  test("debug mode remains disabled when no --debug argument is provided", () => {
+    const args: string[] = [];
+    const hasDebugArg = args.includes("--debug");
 
-        expect(getDebugMode()).toBe(true);
-    });
+    if (hasDebugArg) {
+      setDebugMode(true);
+    }
 
-    test('debug mode remains disabled when no --debug argument is provided', () => {
-        const args: string[] = [];
-        const hasDebugArg = args.includes('--debug');
+    expect(getDebugMode()).toBe(false);
+  });
 
-        if (hasDebugArg) {
-            setDebugMode(true);
-        }
+  test("--debug argument overrides config.ini setting", () => {
+    const configDebugEnabled = false;
+    setDebugMode(configDebugEnabled);
+    expect(getDebugMode()).toBe(false);
 
-        expect(getDebugMode()).toBe(false);
-    });
+    const args = ["--debug"];
+    const hasDebugArg = args.includes("--debug");
 
-    test('--debug argument overrides config.ini setting', () => {
-        const configDebugEnabled = false;
-        setDebugMode(configDebugEnabled);
-        expect(getDebugMode()).toBe(false);
+    if (hasDebugArg) {
+      setDebugMode(true);
+    }
 
-        const args = ['--debug'];
-        const hasDebugArg = args.includes('--debug');
+    expect(getDebugMode()).toBe(true);
+  });
 
-        if (hasDebugArg) {
-            setDebugMode(true);
-        }
+  test("uses config.ini setting when no --debug argument is provided", () => {
+    const configDebugEnabled = true;
+    const args: string[] = [];
+    const hasDebugArg = args.includes("--debug");
 
-        expect(getDebugMode()).toBe(true);
-    });
+    if (hasDebugArg) {
+      setDebugMode(true);
+    } else {
+      setDebugMode(configDebugEnabled);
+    }
 
-    test('uses config.ini setting when no --debug argument is provided', () => {
-        const configDebugEnabled = true;
-        const args: string[] = [];
-        const hasDebugArg = args.includes('--debug');
+    expect(getDebugMode()).toBe(true);
+  });
 
-        if (hasDebugArg) {
-            setDebugMode(true);
-        } else {
-            setDebugMode(configDebugEnabled);
-        }
+  test("handles multiple command line arguments correctly", () => {
+    const args = ["--debug"];
+    const hasDebugArg = args.includes("--debug");
 
-        expect(getDebugMode()).toBe(true);
-    });
+    if (hasDebugArg) {
+      setDebugMode(true);
+    }
 
-    test('handles multiple command line arguments correctly', () => {
-        const args = ['--debug'];
-        const hasDebugArg = args.includes('--debug');
+    expect(getDebugMode()).toBe(true);
+  });
 
-        if (hasDebugArg) {
-            setDebugMode(true);
-        }
+  test("toggles debug mode correctly", () => {
+    expect(getDebugMode()).toBe(false);
 
-        expect(getDebugMode()).toBe(true);
-    });
+    setDebugMode(true);
+    expect(getDebugMode()).toBe(true);
 
-    test('toggles debug mode correctly', () => {
-        expect(getDebugMode()).toBe(false);
+    setDebugMode(false);
+    expect(getDebugMode()).toBe(false);
 
-        setDebugMode(true);
-        expect(getDebugMode()).toBe(true);
-
-        setDebugMode(false);
-        expect(getDebugMode()).toBe(false);
-
-        setDebugMode(true);
-        expect(getDebugMode()).toBe(true);
-    });
+    setDebugMode(true);
+    expect(getDebugMode()).toBe(true);
+  });
 });

@@ -1,127 +1,127 @@
-import { describe, test, expect, afterEach } from 'bun:test';
-import { createRequire } from 'node:module';
+import { describe, test, expect, afterEach } from "bun:test";
+import { EventEmitter } from "events";
+import { noOpLogger } from "../helpers/mock-factories";
+import { TikTokPlatform } from "../../src/platforms/tiktok";
 
-const load = createRequire(__filename);
-const { EventEmitter } = load('events');
-const { noOpLogger } = load('../helpers/mock-factories');
-const { TikTokPlatform } = load('../../src/platforms/tiktok');
+describe("TikTokPlatform connection state", () => {
+  let platform: InstanceType<typeof TikTokPlatform>;
 
-describe('TikTokPlatform connection state', () => {
-    let platform: InstanceType<typeof TikTokPlatform>;
+  afterEach(() => {
+    if (platform) {
+      platform.removeAllListeners?.();
+    }
+  });
 
-    afterEach(() => {
-        if (platform) {
-            platform.removeAllListeners?.();
-        }
-    });
+  const createMockConnection = () => {
+    const emitter = new EventEmitter();
+    return {
+      connect: async () => ({ roomId: "testRoom123" }),
+      disconnect: async () => true,
+      on: emitter.on.bind(emitter),
+      emit: emitter.emit.bind(emitter),
+      removeAllListeners: emitter.removeAllListeners.bind(emitter),
+      isConnected: false,
+      isConnecting: false,
+      roomId: "testRoom123",
+    };
+  };
 
-    const createMockConnection = () => {
-        const emitter = new EventEmitter();
-        return {
-            connect: async () => ({ roomId: 'testRoom123' }),
-            disconnect: async () => true,
-            on: emitter.on.bind(emitter),
-            emit: emitter.emit.bind(emitter),
-            removeAllListeners: emitter.removeAllListeners.bind(emitter),
-            isConnected: false,
-            isConnecting: false,
-            roomId: 'testRoom123'
-        };
+  const buildPlatform = () => {
+    const config = {
+      enabled: true,
+      username: "testTikTokUser",
+      dataLoggingEnabled: false,
     };
 
-    const buildPlatform = () => {
-        const config = {
-            enabled: true,
-            username: 'testTikTokUser',
-            dataLoggingEnabled: false
-        };
-
-        const deps = {
-            logger: noOpLogger,
-            connectionStateManager: {
-                initialize: () => {},
-                markDisconnected: () => {},
-                markConnecting: () => {},
-                markConnected: () => {},
-                markError: () => {},
-                ensureConnection: () => createMockConnection()
-            },
-            intervalManager: {
-                createInterval: () => {},
-                hasInterval: () => false,
-                clearInterval: () => {},
-                clearAllIntervals: () => {}
-            },
-            retrySystem: { resetRetryCount: () => {}, handleConnectionError: () => {} },
-            TikTokWebSocketClient: class {},
-            WebcastEvent: {},
-            ControlEvent: { CONNECTED: 'connected' },
-            initializationManager: {
-                beginInitialization: () => true,
-                markInitializationSuccess: () => {},
-                markInitializationFailure: () => {},
-                reset: () => {}
-            },
-            initializationStats: {
-                startInitializationAttempt: () => 'test-attempt',
-                recordSuccess: () => {},
-                recordFailure: () => {}
-            }
-        };
-
-        return new TikTokPlatform(config, deps);
+    const deps = {
+      logger: noOpLogger,
+      connectionStateManager: {
+        initialize: () => {},
+        markDisconnected: () => {},
+        markConnecting: () => {},
+        markConnected: () => {},
+        markError: () => {},
+        ensureConnection: () => createMockConnection(),
+      },
+      intervalManager: {
+        createInterval: () => {},
+        hasInterval: () => false,
+        clearInterval: () => {},
+        clearAllIntervals: () => {},
+      },
+      retrySystem: {
+        resetRetryCount: () => {},
+        handleConnectionError: () => {},
+      },
+      TikTokWebSocketClient: class {},
+      WebcastEvent: {},
+      ControlEvent: { CONNECTED: "connected" },
+      initializationManager: {
+        beginInitialization: () => true,
+        markInitializationSuccess: () => {},
+        markInitializationFailure: () => {},
+        reset: () => {},
+      },
+      initializationStats: {
+        startInitializationAttempt: () => "test-attempt",
+        recordSuccess: () => {},
+        recordFailure: () => {},
+      },
     };
 
-    test('starts with connectionActive as false', () => {
-        platform = buildPlatform();
+    return new TikTokPlatform(config, deps);
+  };
 
-        expect(platform.connectionActive).toBe(false);
-    });
+  test("starts with connectionActive as false", () => {
+    platform = buildPlatform();
 
-    test('handleConnectionSuccess sets connectionActive to true', async () => {
-        platform = buildPlatform();
-        platform.connectionStateManager = {
-            markConnected: () => {}
-        };
+    expect(platform.connectionActive).toBe(false);
+  });
 
-        expect(platform.connectionActive).toBe(false);
+  test("handleConnectionSuccess sets connectionActive to true", async () => {
+    platform = buildPlatform();
+    platform.connectionStateManager = {
+      markConnected: () => {},
+    };
 
-        await platform.handleConnectionSuccess();
+    expect(platform.connectionActive).toBe(false);
 
-        expect(platform.connectionActive).toBe(true);
-    });
+    await platform.handleConnectionSuccess();
 
-    test('handleConnectionSuccess is idempotent', async () => {
-        platform = buildPlatform();
-        platform.connectionStateManager = {
-            markConnected: () => {}
-        };
+    expect(platform.connectionActive).toBe(true);
+  });
 
-        await platform.handleConnectionSuccess();
-        const connectionTime1 = platform.connectionTime;
+  test("handleConnectionSuccess is idempotent", async () => {
+    platform = buildPlatform();
+    platform.connectionStateManager = {
+      markConnected: () => {},
+    };
 
-        await platform.handleConnectionSuccess();
-        const connectionTime2 = platform.connectionTime;
+    await platform.handleConnectionSuccess();
+    const connectionTime1 = platform.connectionTime;
 
-        expect(connectionTime1).toBe(connectionTime2);
-    });
+    await platform.handleConnectionSuccess();
+    const connectionTime2 = platform.connectionTime;
 
-    test('_handleStreamEnd sets connectionActive to false', async () => {
-        platform = buildPlatform();
-        platform.connection = createMockConnection();
-        platform.connectionActive = true;
+    expect(connectionTime1).toBe(connectionTime2);
+  });
 
-        await platform._handleStreamEnd();
+  test("_handleStreamEnd sets connectionActive to false", async () => {
+    platform = buildPlatform();
+    platform.connection = createMockConnection();
+    platform.connectionActive = true;
 
-        expect(platform.connectionActive).toBe(false);
-    });
+    await platform._handleStreamEnd();
 
-    test('stores handlers in handlers object', () => {
-        platform = buildPlatform();
-        const testHandler = () => {};
+    expect(platform.connectionActive).toBe(false);
+  });
 
-        platform.handlers.onViewerCount = testHandler;
+  test("stores handlers in handlers object", () => {
+    platform = buildPlatform();
+    const testHandler = () => {};
 
-        expect(platform.handlers.onViewerCount).toBe(testHandler);
-    });
+    platform.handlers.onViewerCount = testHandler;
+
+    expect(platform.handlers.onViewerCount).toBe(testHandler);
+  });
 });

@@ -1,102 +1,134 @@
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
-import { createRequire } from 'node:module';
+import { describe, test, expect, beforeEach, afterEach } from "bun:test";
+import { createRequire } from "node:module";
 
-const load = createRequire(__filename);
-const { createMockFn, restoreAllMocks } = load('../../helpers/bun-mock-utils');
-const { noOpLogger } = load('../../helpers/mock-factories');
-const { createConfigFixture } = load('../../helpers/config-fixture');
+import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
+import { noOpLogger } from "../../helpers/mock-factories";
+import { createConfigFixture } from "../../helpers/config-fixture";
 
-describe('ViewerCountSystem stream status observer notifications', () => {
-    let ViewerCountSystem;
+const load = createRequire(import.meta.url);
 
-    beforeEach(() => {
-        ({ ViewerCountSystem } = load('../../../src/utils/viewer-count.ts'));
+describe("ViewerCountSystem stream status observer notifications", () => {
+  let ViewerCountSystem;
+
+  beforeEach(() => {
+    ({ ViewerCountSystem } = load("../../../src/utils/viewer-count.ts"));
+  });
+
+  afterEach(() => {
+    restoreAllMocks();
+  });
+
+  function createSystem() {
+    return new ViewerCountSystem({
+      platforms: { youtube: {} },
+      logger: noOpLogger,
+      config: createConfigFixture(),
     });
+  }
 
-    afterEach(() => {
-        restoreAllMocks();
-    });
+  test("notifies observers on stream status change for known platform", async () => {
+    const system = createSystem();
+    const statusEvents: Array<{
+      platform: string;
+      isLive: boolean;
+      wasLive: boolean;
+    }> = [];
+    const observer = {
+      getObserverId: () => "testObserver1",
+      onStreamStatusChange: createMockFn(
+        (payload: { platform: string; isLive: boolean; wasLive: boolean }) =>
+          statusEvents.push(payload),
+      ),
+    };
 
-    function createSystem() {
-        return new ViewerCountSystem({
-            platforms: { youtube: {} },
-            logger: noOpLogger,
-            config: createConfigFixture()
-        });
-    }
+    system.addObserver(observer);
 
-    test('notifies observers on stream status change for known platform', async () => {
-        const system = createSystem();
-        const statusEvents: Array<{ platform: string; isLive: boolean; wasLive: boolean }> = [];
-        const observer = {
-            getObserverId: () => 'testObserver1',
-            onStreamStatusChange: createMockFn((payload: { platform: string; isLive: boolean; wasLive: boolean }) => statusEvents.push(payload))
-        };
+    await system.updateStreamStatus("youtube", true);
 
-        system.addObserver(observer);
+    expect(observer.onStreamStatusChange).toHaveBeenCalledTimes(1);
+    expect(statusEvents[0]).toEqual(
+      expect.objectContaining({
+        platform: "youtube",
+        isLive: true,
+        wasLive: false,
+      }),
+    );
+  });
 
-        await system.updateStreamStatus('youtube', true);
+  test("skips observer notification for unknown platform", async () => {
+    const system = createSystem();
+    const observer = {
+      getObserverId: () => "testObserver2",
+      onStreamStatusChange: createMockFn(),
+    };
 
-        expect(observer.onStreamStatusChange).toHaveBeenCalledTimes(1);
-        expect(statusEvents[0]).toEqual(
-            expect.objectContaining({ platform: 'youtube', isLive: true, wasLive: false })
-        );
-    });
+    system.addObserver(observer);
 
-    test('skips observer notification for unknown platform', async () => {
-        const system = createSystem();
-        const observer = {
-            getObserverId: () => 'testObserver2',
-            onStreamStatusChange: createMockFn()
-        };
+    await system.updateStreamStatus("unknownPlatform", true);
 
-        system.addObserver(observer);
+    expect(observer.onStreamStatusChange).not.toHaveBeenCalled();
+  });
 
-        await system.updateStreamStatus('unknownPlatform', true);
+  test("resets counts and notifies observers when stream goes offline", async () => {
+    const system = createSystem();
+    const statusEvents: Array<{
+      platform: string;
+      isLive: boolean;
+      wasLive: boolean;
+    }> = [];
+    const countEvents: Array<{ platform: string; count: number }> = [];
+    const observer = {
+      getObserverId: () => "testObserver3",
+      onStreamStatusChange: createMockFn(
+        (payload: { platform: string; isLive: boolean; wasLive: boolean }) =>
+          statusEvents.push(payload),
+      ),
+      onViewerCountUpdate: createMockFn(
+        (payload: { platform: string; count: number }) =>
+          countEvents.push(payload),
+      ),
+    };
 
-        expect(observer.onStreamStatusChange).not.toHaveBeenCalled();
-    });
+    system.addObserver(observer);
 
-    test('resets counts and notifies observers when stream goes offline', async () => {
-        const system = createSystem();
-        const statusEvents: Array<{ platform: string; isLive: boolean; wasLive: boolean }> = [];
-        const countEvents: Array<{ platform: string; count: number }> = [];
-        const observer = {
-            getObserverId: () => 'testObserver3',
-            onStreamStatusChange: createMockFn((payload: { platform: string; isLive: boolean; wasLive: boolean }) => statusEvents.push(payload)),
-            onViewerCountUpdate: createMockFn((payload: { platform: string; count: number }) => countEvents.push(payload))
-        };
+    await system.updateStreamStatus("youtube", true);
+    await system.updateStreamStatus("youtube", false);
 
-        system.addObserver(observer);
+    expect(statusEvents).toEqual([
+      expect.objectContaining({
+        platform: "youtube",
+        isLive: true,
+        wasLive: false,
+      }),
+      expect.objectContaining({
+        platform: "youtube",
+        isLive: false,
+        wasLive: true,
+      }),
+    ]);
 
-        await system.updateStreamStatus('youtube', true);
-        await system.updateStreamStatus('youtube', false);
+    expect(
+      countEvents.some((evt) => evt.platform === "youtube" && evt.count === 0),
+    ).toBe(true);
+    expect(system.counts.youtube).toBe(0);
+  });
 
-        expect(statusEvents).toEqual([
-            expect.objectContaining({ platform: 'youtube', isLive: true, wasLive: false }),
-            expect.objectContaining({ platform: 'youtube', isLive: false, wasLive: true })
-        ]);
+  test("ignores updates for unknown platform without mutating counts", async () => {
+    const system = createSystem();
+    const observer = {
+      getObserverId: () => "testObserver4",
+      onStreamStatusChange: createMockFn(),
+      onViewerCountUpdate: createMockFn(),
+    };
 
-        expect(countEvents.some((evt) => evt.platform === 'youtube' && evt.count === 0)).toBe(true);
-        expect(system.counts.youtube).toBe(0);
-    });
+    system.addObserver(observer);
 
-    test('ignores updates for unknown platform without mutating counts', async () => {
-        const system = createSystem();
-        const observer = {
-            getObserverId: () => 'testObserver4',
-            onStreamStatusChange: createMockFn(),
-            onViewerCountUpdate: createMockFn()
-        };
+    await system.updateStreamStatus("unknownPlatform", false);
 
-        system.addObserver(observer);
-
-        await system.updateStreamStatus('unknownPlatform', false);
-
-        expect(observer.onStreamStatusChange).not.toHaveBeenCalled();
-        expect(observer.onViewerCountUpdate).not.toHaveBeenCalled();
-        expect(system.counts).toEqual(
-            expect.objectContaining({ youtube: 0, twitch: 0, tiktok: 0 })
-        );
-    });
+    expect(observer.onStreamStatusChange).not.toHaveBeenCalled();
+    expect(observer.onViewerCountUpdate).not.toHaveBeenCalled();
+    expect(system.counts).toEqual(
+      expect.objectContaining({ youtube: 0, twitch: 0, tiktok: 0 }),
+    );
+  });
 });

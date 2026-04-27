@@ -1,51 +1,54 @@
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
-import { createRequire } from 'node:module';
+import { describe, test, expect, beforeEach, afterEach } from "bun:test";
+import { createRequire } from "node:module";
 
-const load = createRequire(__filename);
-const { createMockFn, restoreAllMocks } = load('../../helpers/bun-mock-utils');
-const { noOpLogger } = load('../../helpers/mock-factories');
-const { createConfigFixture } = load('../../helpers/config-fixture');
+import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
+import { noOpLogger } from "../../helpers/mock-factories";
+import { createConfigFixture } from "../../helpers/config-fixture";
 
-describe('ViewerCountSystem polling resilience', () => {
-    let ViewerCountSystem;
+const load = createRequire(import.meta.url);
 
-    beforeEach(() => {
-        ({ ViewerCountSystem } = load('../../../src/utils/viewer-count.ts'));
+describe("ViewerCountSystem polling resilience", () => {
+  let ViewerCountSystem;
+
+  beforeEach(() => {
+    ({ ViewerCountSystem } = load("../../../src/utils/viewer-count.ts"));
+  });
+
+  afterEach(() => {
+    restoreAllMocks();
+  });
+
+  function createSystem({ streamLive = true } = {}) {
+    const platform = {
+      getViewerCount: createMockFn().mockRejectedValue(
+        new Error("fetch failed"),
+      ),
+    };
+
+    const system = new ViewerCountSystem({
+      platforms: { twitch: platform },
+      logger: noOpLogger,
+      config: createConfigFixture(),
     });
 
-    afterEach(() => {
-        restoreAllMocks();
-    });
+    system.streamStatus.twitch = streamLive;
 
-    function createSystem({ streamLive = true } = {}) {
-        const platform = {
-            getViewerCount: createMockFn().mockRejectedValue(new Error('fetch failed'))
-        };
+    return { system, platform };
+  }
 
-        const system = new ViewerCountSystem({
-            platforms: { twitch: platform },
-            logger: noOpLogger,
-            config: createConfigFixture()
-        });
+  test("skips polling when stream is offline", async () => {
+    const { system } = createSystem({ streamLive: false });
 
-        system.streamStatus.twitch = streamLive;
+    await system.pollPlatform("twitch");
 
-        return { system, platform };
-    }
+    expect(system.counts.twitch).toBe(0);
+  });
 
-    test('skips polling when stream is offline', async () => {
-        const { system } = createSystem({ streamLive: false });
+  test("continues polling cycle when provider throws", async () => {
+    const { system } = createSystem({ streamLive: true });
 
-        await system.pollPlatform('twitch');
+    await system.pollPlatform("twitch");
 
-        expect(system.counts.twitch).toBe(0);
-    });
-
-    test('continues polling cycle when provider throws', async () => {
-        const { system } = createSystem({ streamLive: true });
-
-        await system.pollPlatform('twitch');
-
-        expect(system.counts.twitch).toBe(0);
-    });
+    expect(system.counts.twitch).toBe(0);
+  });
 });

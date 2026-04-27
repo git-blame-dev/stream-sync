@@ -1,603 +1,613 @@
-import { beforeEach, describe, expect, test } from 'bun:test';
-import { createRequire } from 'node:module';
-
-import { createMockFn } from '../../helpers/bun-mock-utils';
-
-const nodeRequire = createRequire(import.meta.url);
-
-type LoggerLike = {
-    debug: (...args: unknown[]) => void;
-    info: (...args: unknown[]) => void;
-    warn: (...args: unknown[]) => void;
-    error: (...args: unknown[]) => void;
-};
+import { beforeEach, describe, expect, test } from "bun:test";
+import { createMockFn } from "../../helpers/bun-mock-utils";
+import { createMockOBSManager, noOpLogger } from "../../helpers/mock-factories";
+import { expectNoTechnicalArtifacts } from "../../helpers/behavior-validation";
+import { OBSViewerCountObserver } from "../../../src/observers/obs-viewer-count-observer";
+import { ViewerCountObserver } from "../../../src/observers/viewer-count-observer";
 
 type FlexibleMock = ReturnType<typeof createMockFn> & {
-    mockResolvedValue: (value: unknown) => FlexibleMock;
-    mockRejectedValue: (error: unknown) => FlexibleMock;
-    mockResolvedValueOnce: (value: unknown) => FlexibleMock;
-    mockRejectedValueOnce: (error: unknown) => FlexibleMock;
-    mockReturnValue: (value: unknown) => FlexibleMock;
-    mockClear: () => FlexibleMock;
+  mockResolvedValue: (value: unknown) => FlexibleMock;
+  mockRejectedValue: (error: unknown) => FlexibleMock;
+  mockResolvedValueOnce: (value: unknown) => FlexibleMock;
+  mockRejectedValueOnce: (error: unknown) => FlexibleMock;
+  mockReturnValue: (value: unknown) => FlexibleMock;
+  mockClear: () => FlexibleMock;
 };
 
-type MockObsManager = {
-    call: FlexibleMock;
-    isConnected: FlexibleMock;
-};
-
-type CreateMockObsManager = (connectionState?: string, overrides?: Record<string, unknown>) => MockObsManager;
-
-const { OBSViewerCountObserver } = nodeRequire('../../../src/observers/obs-viewer-count-observer') as {
-    OBSViewerCountObserver: new (obsManager: MockObsManager, logger: LoggerLike, deps?: { config?: ViewerConfigMap }) => {
-        obsManager: MockObsManager;
-        onViewerCountUpdate: (update: Record<string, unknown>) => Promise<void>;
-        onStreamStatusChange: (statusUpdate: Record<string, unknown>) => Promise<void>;
-        initialize: () => Promise<void>;
-        cleanup: () => Promise<void>;
-        getObserverId: () => string;
-    };
-};
-const { ViewerCountObserver } = nodeRequire('../../../src/observers/viewer-count-observer') as {
-    ViewerCountObserver: new (...args: unknown[]) => unknown;
-};
-const { createMockOBSManager, noOpLogger } = nodeRequire('../../helpers/mock-factories') as {
-    createMockOBSManager: CreateMockObsManager;
-    noOpLogger: LoggerLike;
-};
-const { expectNoTechnicalArtifacts } = nodeRequire('../../helpers/behavior-validation') as {
-    expectNoTechnicalArtifacts: (value: string) => void;
-};
-
-const defaultPlatforms = ['twitch', 'youtube', 'tiktok'];
+const defaultPlatforms = ["twitch", "youtube", "tiktok"];
 
 type PlatformViewerConfig = {
-    viewerCountEnabled: boolean;
-    viewerCountSource: string;
+  viewerCountEnabled: boolean;
+  viewerCountSource: string;
 };
 
 type ViewerConfigMap = Record<string, PlatformViewerConfig>;
 
-function createConfigFixture(overrides: Record<string, Partial<PlatformViewerConfig>> = {}): ViewerConfigMap {
-    const config: ViewerConfigMap = {};
-    for (const platform of defaultPlatforms) {
-        config[platform] = {
-            viewerCountEnabled: true,
-            viewerCountSource: `${platform} viewer count`,
-            ...overrides[platform]
-        };
-    }
-    return config;
+function createConfigFixture(
+  overrides: Record<string, Partial<PlatformViewerConfig>> = {},
+): ViewerConfigMap {
+  const config: ViewerConfigMap = {};
+  for (const platform of defaultPlatforms) {
+    config[platform] = {
+      viewerCountEnabled: true,
+      viewerCountSource: `${platform} viewer count`,
+      ...overrides[platform],
+    };
+  }
+  return config;
 }
 
-describe('OBSViewerCountObserver - Behavior-Focused Testing', () => {
-    let obsManager: ReturnType<typeof createMockOBSManager>;
-    let observer: InstanceType<typeof OBSViewerCountObserver>;
-    let logger: typeof noOpLogger;
-    let configFixture: ViewerConfigMap;
+describe("OBSViewerCountObserver - Behavior-Focused Testing", () => {
+  let obsManager: ReturnType<typeof createMockOBSManager>;
+  let observer: InstanceType<typeof OBSViewerCountObserver>;
+  let logger: typeof noOpLogger;
+  let configFixture: ViewerConfigMap;
 
-    beforeEach(() => {
-        configFixture = createConfigFixture();
-        logger = noOpLogger;
+  beforeEach(() => {
+    configFixture = createConfigFixture();
+    logger = noOpLogger;
 
-        obsManager = createMockOBSManager('connected', {
-            call: (createMockFn() as FlexibleMock).mockResolvedValue({ status: 'success' }),
-            isConnected: (createMockFn() as FlexibleMock).mockReturnValue(true)
-        });
-
-        observer = new OBSViewerCountObserver(obsManager, logger, { config: configFixture });
+    obsManager = createMockOBSManager("connected", {
+      call: (createMockFn() as FlexibleMock).mockResolvedValue({
+        status: "success",
+      }),
+      isConnected: (createMockFn() as FlexibleMock).mockReturnValue(true),
     });
 
-    describe('Observer Initialization & Interface Compliance', () => {
-        test('should properly implement observer interface contract', () => {
-            expect(observer).toBeInstanceOf(ViewerCountObserver);
-            expect(observer).toBeInstanceOf(OBSViewerCountObserver);
-            expect(typeof observer.onViewerCountUpdate).toBe('function');
-            expect(typeof observer.onStreamStatusChange).toBe('function');
-            expect(typeof observer.initialize).toBe('function');
-            expect(typeof observer.cleanup).toBe('function');
-            expect(typeof observer.getObserverId).toBe('function');
-        });
+    observer = new OBSViewerCountObserver(obsManager, logger, {
+      config: configFixture,
+    });
+  });
 
-        test('should provide unique observer ID for system registration', () => {
-            const observerId = observer.getObserverId();
-
-            expect(observerId).toBe('obs-viewer-count-observer');
-            expect(typeof observerId).toBe('string');
-            expect(observerId.length).toBeGreaterThan(0);
-
-            expectNoTechnicalArtifacts(observerId);
-        });
-
-        test('should initialize with provided OBS manager dependency', () => {
-            const testObserver = new OBSViewerCountObserver(obsManager, logger, { config: configFixture });
-
-            expect(testObserver).toBeDefined();
-            expect(testObserver.obsManager).toBe(obsManager);
-        });
-
-        test('should handle initialization without OBS connection gracefully', async () => {
-            const disconnectedOBS = createMockOBSManager('disconnected');
-            const testObserver = new OBSViewerCountObserver(disconnectedOBS, logger, { config: configFixture });
-
-            const initPromise = testObserver.initialize();
-
-            await expect(initPromise).resolves.toBeUndefined();
-        });
-
-        test('should initialize all platform counts to zero when OBS connected', async () => {
-            await observer.initialize();
-
-            expect(obsManager.call).toHaveBeenCalledWith('SetInputSettings',
-                expect.objectContaining({
-                    inputSettings: { text: '0' }
-                })
-            );
-
-            expect(obsManager.call).toHaveBeenCalledTimes(3);
-        });
+  describe("Observer Initialization & Interface Compliance", () => {
+    test("exposes the viewer-count observer interface contract", () => {
+      expect(observer).toBeInstanceOf(ViewerCountObserver);
+      expect(observer).toBeInstanceOf(OBSViewerCountObserver);
+      expect(typeof observer.onViewerCountUpdate).toBe("function");
+      expect(typeof observer.onStreamStatusChange).toBe("function");
+      expect(typeof observer.initialize).toBe("function");
+      expect(typeof observer.cleanup).toBe("function");
+      expect(typeof observer.getObserverId).toBe("function");
     });
 
-    describe('Viewer Count Update Behavior', () => {
-        test('should update OBS text sources when stream is live', async () => {
-            const updateData = {
-                platform: 'youtube',
-                count: 1234,
-                previousCount: 1000,
-                isStreamLive: true,
-                timestamp: new Date()
-            };
+    test("should provide unique observer ID for system registration", () => {
+      const observerId = observer.getObserverId();
 
-            await observer.onViewerCountUpdate(updateData);
+      expect(observerId).toBe("obs-viewer-count-observer");
+      expect(typeof observerId).toBe("string");
+      expect(observerId.length).toBeGreaterThan(0);
 
-            expect(obsManager.call).toHaveBeenCalledWith('SetInputSettings',
-                expect.objectContaining({
-                    inputName: 'youtube viewer count',
-                    inputSettings: { text: '1.2K' },
-                    overlay: true
-                })
-            );
-        });
-
-        test('should format viewer counts according to platform standards', async () => {
-            const testCases = [
-                { count: 999, expectedFormat: '999' },
-                { count: 1500, expectedFormat: '1.5K' },
-                { count: 10000, expectedFormat: '10K' },
-                { count: 1500000, expectedFormat: '1.5M' }
-            ];
-
-            for (const testCase of testCases) {
-                await observer.onViewerCountUpdate({
-                    platform: 'twitch',
-                    count: testCase.count,
-                    isStreamLive: true,
-                    timestamp: new Date()
-                });
-
-                expect(obsManager.call).toHaveBeenCalledWith('SetInputSettings',
-                    expect.objectContaining({
-                        inputSettings: { text: testCase.expectedFormat }
-                    })
-                );
-            }
-        });
-
-        test('should skip updates when stream is offline', async () => {
-            const updateData = {
-                platform: 'youtube',
-                count: 1234,
-                previousCount: 1000,
-                isStreamLive: false,
-                timestamp: new Date()
-            };
-
-            obsManager.call.mockClear();
-
-            await observer.onViewerCountUpdate(updateData);
-
-            expect(obsManager.call).not.toHaveBeenCalled();
-        });
-
-        test('should handle multiple platform updates simultaneously', async () => {
-            const updates = [
-                { platform: 'youtube', count: 1000, isStreamLive: true },
-                { platform: 'twitch', count: 2000, isStreamLive: true },
-                { platform: 'tiktok', count: 500, isStreamLive: true }
-            ];
-
-            await Promise.all(updates.map(update =>
-                observer.onViewerCountUpdate({
-                    ...update,
-                    timestamp: new Date()
-                })
-            ));
-
-            expect(obsManager.call).toHaveBeenCalledTimes(3);
-
-            const expectedCalls = [
-                { platform: 'youtube', expectedText: '1K' },
-                { platform: 'twitch', expectedText: '2K' },
-                { platform: 'tiktok', expectedText: '500' }
-            ];
-
-            expectedCalls.forEach(({ platform, expectedText }) => {
-                expect(obsManager.call).toHaveBeenCalledWith('SetInputSettings',
-                    expect.objectContaining({
-                        inputName: `${platform} viewer count`,
-                        inputSettings: { text: expectedText }
-                    })
-                );
-            });
-        });
-
-        test('should maintain viewer count accuracy across updates', async () => {
-            const updates = [
-                { count: 100, expectedText: '100' },
-                { count: 1500, expectedText: '1.5K' },
-                { count: 999, expectedText: '999' },
-                { count: 2000000, expectedText: '2M' }
-            ];
-
-            for (const update of updates) {
-                await observer.onViewerCountUpdate({
-                    platform: 'youtube',
-                    count: update.count,
-                    isStreamLive: true,
-                    timestamp: new Date()
-                });
-
-                expect(obsManager.call).toHaveBeenCalledWith('SetInputSettings',
-                    expect.objectContaining({
-                        inputSettings: { text: update.expectedText }
-                    })
-                );
-            }
-        });
+      expectNoTechnicalArtifacts(observerId);
     });
 
-    describe('Stream Status Change Behavior', () => {
-        test('should reset viewer counts to 0 when stream goes offline', async () => {
-            const statusUpdate = {
-                platform: 'youtube',
-                isLive: false,
-                wasLive: true,
-                timestamp: new Date()
-            };
+    test("should initialize with provided OBS manager dependency", () => {
+      const testObserver = new OBSViewerCountObserver(obsManager, logger, {
+        config: configFixture,
+      });
 
-            await observer.onStreamStatusChange(statusUpdate);
-
-            expect(obsManager.call).toHaveBeenCalledWith('SetInputSettings',
-                expect.objectContaining({
-                    inputSettings: { text: '0' }
-                })
-            );
-        });
-
-        test('should enable updates when stream comes online', async () => {
-            const statusUpdate = {
-                platform: 'youtube',
-                isLive: true,
-                wasLive: false,
-                timestamp: new Date()
-            };
-
-            await observer.onStreamStatusChange(statusUpdate);
-
-            expect(statusUpdate.isLive).toBe(true);
-        });
-
-        test('should handle rapid online/offline transitions', async () => {
-            const transitions = [
-                { isLive: true, wasLive: false },
-                { isLive: false, wasLive: true },
-                { isLive: true, wasLive: false },
-                { isLive: false, wasLive: true }
-            ];
-
-            let obsCallCount = 0;
-
-            for (const transition of transitions) {
-                await observer.onStreamStatusChange({
-                    platform: 'twitch',
-                    ...transition,
-                    timestamp: new Date()
-                });
-
-                if (!transition.isLive && transition.wasLive) {
-                    obsCallCount++;
-                }
-            }
-
-            expect(obsManager.call).toHaveBeenCalledTimes(obsCallCount);
-        });
-
-        test('should maintain state consistency during status changes', async () => {
-            const scenarios = [
-                { isLive: true, wasLive: false, shouldReset: false },
-                { isLive: false, wasLive: true, shouldReset: true },
-                { isLive: false, wasLive: false, shouldReset: false },
-                { isLive: true, wasLive: true, shouldReset: false }
-            ];
-
-            for (const scenario of scenarios) {
-                obsManager.call.mockClear();
-
-                await observer.onStreamStatusChange({
-                    platform: 'tiktok',
-                    isLive: scenario.isLive,
-                    wasLive: scenario.wasLive,
-                    timestamp: new Date()
-                });
-
-                if (scenario.shouldReset) {
-                    expect(obsManager.call).toHaveBeenCalledWith('SetInputSettings',
-                        expect.objectContaining({
-                            inputSettings: { text: '0' }
-                        })
-                    );
-                } else {
-                    expect(obsManager.call).not.toHaveBeenCalled();
-                }
-            }
-        });
+      expect(testObserver).toBeDefined();
+      expect(testObserver.obsManager).toBe(obsManager);
     });
 
-    describe('Configuration-Driven Behavior', () => {
-        test('should respect platform-specific enable/disable settings', async () => {
-            configFixture.youtube = {
-                viewerCountEnabled: false,
-                viewerCountSource: 'youtube viewer count'
-            };
+    test("should handle initialization without OBS connection gracefully", async () => {
+      const disconnectedOBS = createMockOBSManager("disconnected");
+      const testObserver = new OBSViewerCountObserver(disconnectedOBS, logger, {
+        config: configFixture,
+      });
 
-            await observer.onViewerCountUpdate({
-                platform: 'youtube',
-                count: 1000,
-                isStreamLive: true,
-                timestamp: new Date()
-            });
+      const initPromise = testObserver.initialize();
 
-            expect(obsManager.call).not.toHaveBeenCalled();
-        });
-
-        test('should use configured OBS source names per platform', async () => {
-            configFixture.youtube = { viewerCountEnabled: true, viewerCountSource: 'yt_viewers' };
-            configFixture.twitch = { viewerCountEnabled: true, viewerCountSource: 'ttv_viewers' };
-            configFixture.tiktok = { viewerCountEnabled: true, viewerCountSource: 'tt_viewers' };
-
-            for (const [platform, config] of Object.entries({ youtube: configFixture.youtube, twitch: configFixture.twitch, tiktok: configFixture.tiktok })) {
-                obsManager.call.mockClear();
-
-                await observer.onViewerCountUpdate({
-                    platform,
-                    count: 500,
-                    isStreamLive: true,
-                    timestamp: new Date()
-                });
-
-                expect(obsManager.call).toHaveBeenCalledWith('SetInputSettings',
-                    expect.objectContaining({
-                        inputName: config.viewerCountSource,
-                        inputSettings: { text: '500' }
-                    })
-                );
-            }
-        });
-
-        test('should handle missing configuration gracefully', async () => {
-            delete configFixture.unknown;
-
-            const updatePromise = observer.onViewerCountUpdate({
-                platform: 'unknown',
-                count: 1000,
-                isStreamLive: true,
-                timestamp: new Date()
-            });
-
-            await expect(updatePromise).resolves.toBeUndefined();
-            expect(obsManager.call).not.toHaveBeenCalled();
-        });
-
-        test('should adapt to configuration changes at runtime', async () => {
-            configFixture.youtube = { viewerCountEnabled: false, viewerCountSource: 'source1' };
-
-            await observer.onViewerCountUpdate({
-                platform: 'youtube',
-                count: 1000,
-                isStreamLive: true,
-                timestamp: new Date()
-            });
-
-            expect(obsManager.call).not.toHaveBeenCalled();
-
-            configFixture.youtube = { viewerCountEnabled: true, viewerCountSource: 'source2' };
-
-            await observer.onViewerCountUpdate({
-                platform: 'youtube',
-                count: 2000,
-                isStreamLive: true,
-                timestamp: new Date()
-            });
-
-            expect(obsManager.call).toHaveBeenCalledWith('SetInputSettings',
-                expect.objectContaining({
-                    inputName: 'source2',
-                    inputSettings: { text: '2K' }
-                })
-            );
-        });
+      await expect(initPromise).resolves.toBeUndefined();
     });
 
-    describe('Error Recovery & Resilience', () => {
-        test('should continue operating when OBS connection unavailable', async () => {
-            const disconnectedOBS = createMockOBSManager('disconnected');
-            const resilientObserver = new OBSViewerCountObserver(disconnectedOBS, logger, { config: configFixture });
+    test("should initialize all platform counts to zero when OBS connected", async () => {
+      await observer.initialize();
 
-            const updatePromise = resilientObserver.onViewerCountUpdate({
-                platform: 'youtube',
-                count: 1000,
-                isStreamLive: true,
-                timestamp: new Date()
-            });
+      expect(obsManager.call.mock.calls).toContainEqual([
+        "SetInputSettings",
+        expect.objectContaining({
+          inputSettings: { text: "0" },
+        }),
+      ]);
 
-            await expect(updatePromise).resolves.toBeUndefined();
-        });
+      expect(obsManager.call).toHaveBeenCalledTimes(3);
+    });
+  });
 
-        test('should handle missing OBS sources gracefully', async () => {
-            obsManager.call.mockRejectedValue(new Error('Source not found'));
+  describe("Viewer Count Update Behavior", () => {
+    test("should update OBS text sources when stream is live", async () => {
+      const updateData = {
+        platform: "youtube",
+        count: 1234,
+        previousCount: 1000,
+        isStreamLive: true,
+        timestamp: new Date(),
+      };
 
-            configFixture.youtube = {
-                viewerCountEnabled: true,
-                viewerCountSource: 'missing_source'
-            };
+      await observer.onViewerCountUpdate(updateData);
 
-            const updatePromise = observer.onViewerCountUpdate({
-                platform: 'youtube',
-                count: 1000,
-                isStreamLive: true,
-                timestamp: new Date()
-            });
-
-            await expect(updatePromise).resolves.toBeUndefined();
-        });
-
-        test('should recover from temporary OBS failures', async () => {
-            obsManager.call
-                .mockRejectedValueOnce(new Error('Temporary failure'))
-                .mockResolvedValueOnce({ status: 'success' });
-
-            configFixture.youtube = {
-                viewerCountEnabled: true,
-                viewerCountSource: 'test_source'
-            };
-
-            await observer.onViewerCountUpdate({
-                platform: 'youtube',
-                count: 1000,
-                isStreamLive: true,
-                timestamp: new Date()
-            });
-
-            await observer.onViewerCountUpdate({
-                platform: 'youtube',
-                count: 2000,
-                isStreamLive: true,
-                timestamp: new Date()
-            });
-
-            expect(obsManager.call).toHaveBeenCalledTimes(2);
-        });
-
-        test('should maintain system stability during OBS errors', async () => {
-            obsManager.call.mockRejectedValue(new Error('OBS disconnected'));
-
-            configFixture.youtube = {
-                viewerCountEnabled: true,
-                viewerCountSource: 'test_source'
-            };
-
-            const operations = [
-                observer.onViewerCountUpdate({
-                    platform: 'youtube',
-                    count: 1000,
-                    isStreamLive: true,
-                    timestamp: new Date()
-                }),
-                observer.onStreamStatusChange({
-                    platform: 'youtube',
-                    isLive: false,
-                    wasLive: true,
-                    timestamp: new Date()
-                }),
-                observer.initialize()
-            ];
-
-            await expect(Promise.all(operations)).resolves.toBeDefined();
-        });
+      expect(obsManager.call.mock.calls).toContainEqual([
+        "SetInputSettings",
+        expect.objectContaining({
+          inputName: "youtube viewer count",
+          inputSettings: { text: "1.2K" },
+          overlay: true,
+        }),
+      ]);
     });
 
-    describe('Platform-Specific Behavior', () => {
-        const testCases = [
-            { platform: 'tiktok', count: 1234, expectedFormat: '1.2K' },
-            { platform: 'youtube', count: 5500, expectedFormat: '5.5K' },
-            { platform: 'twitch', count: 1000000, expectedFormat: '1M' }
-        ];
+    test("should format viewer counts according to platform standards", async () => {
+      const testCases = [
+        { count: 999, expectedFormat: "999" },
+        { count: 1500, expectedFormat: "1.5K" },
+        { count: 10000, expectedFormat: "10K" },
+        { count: 1500000, expectedFormat: "1.5M" },
+      ];
 
-        testCases.forEach(({ platform, count, expectedFormat }) => {
-            test(`should handle ${platform} viewer count formatting correctly`, async () => {
-                await observer.onViewerCountUpdate({
-                    platform,
-                    count,
-                    isStreamLive: true,
-                    timestamp: new Date()
-                });
-
-                expect(obsManager.call).toHaveBeenCalledWith('SetInputSettings',
-                    expect.objectContaining({
-                        inputName: `${platform} viewer count`,
-                        inputSettings: { text: expectedFormat }
-                    })
-                );
-            });
+      for (const testCase of testCases) {
+        await observer.onViewerCountUpdate({
+          platform: "twitch",
+          count: testCase.count,
+          isStreamLive: true,
+          timestamp: new Date(),
         });
 
-        test('should validate platform names and reject invalid platforms', async () => {
-            const updatePromise = observer.onViewerCountUpdate({
-                platform: 'invalid-platform',
-                count: 1000,
-                isStreamLive: true,
-                timestamp: new Date()
-            });
-
-            await expect(updatePromise).resolves.toBeUndefined();
-            expect(obsManager.call).not.toHaveBeenCalled();
-        });
+        expect(obsManager.call.mock.calls).toContainEqual([
+          "SetInputSettings",
+          expect.objectContaining({
+            inputSettings: { text: testCase.expectedFormat },
+          }),
+        ]);
+      }
     });
 
-    describe('Memory & Resource Management', () => {
-        test('should clean up resources during observer removal', async () => {
-            await observer.initialize();
+    test("should skip updates when stream is offline", async () => {
+      const updateData = {
+        platform: "youtube",
+        count: 1234,
+        previousCount: 1000,
+        isStreamLive: false,
+        timestamp: new Date(),
+      };
 
-            const cleanupPromise = observer.cleanup();
+      obsManager.call.mockClear();
 
-            await expect(cleanupPromise).resolves.toBeUndefined();
-        });
+      await observer.onViewerCountUpdate(updateData);
 
-        test('should not leak memory during extended operation', async () => {
-            const initialMemory = process.memoryUsage().heapUsed;
-
-            for (let i = 0; i < 100; i++) {
-                await observer.onViewerCountUpdate({
-                    platform: 'youtube',
-                    count: i * 10,
-                    isStreamLive: true,
-                    timestamp: new Date()
-                });
-            }
-
-            if (global.gc) {
-                global.gc();
-            }
-
-            const finalMemory = process.memoryUsage().heapUsed;
-            const memoryIncrease = finalMemory - initialMemory;
-
-            expect(memoryIncrease).toBeLessThan(10 * 1024 * 1024);
-        });
-
-        test('should handle observer lifecycle correctly', async () => {
-            await observer.initialize();
-
-            await observer.onViewerCountUpdate({
-                platform: 'youtube',
-                count: 1000,
-                isStreamLive: true,
-                timestamp: new Date()
-            });
-
-            await observer.cleanup();
-
-            expect(observer.getObserverId()).toBe('obs-viewer-count-observer');
-        });
+      expect(obsManager.call).not.toHaveBeenCalled();
     });
+
+    test("should handle multiple platform updates simultaneously", async () => {
+      const updates = [
+        { platform: "youtube", count: 1000, isStreamLive: true },
+        { platform: "twitch", count: 2000, isStreamLive: true },
+        { platform: "tiktok", count: 500, isStreamLive: true },
+      ];
+
+      await Promise.all(
+        updates.map((update) =>
+          observer.onViewerCountUpdate({
+            ...update,
+            timestamp: new Date(),
+          }),
+        ),
+      );
+
+      expect(obsManager.call).toHaveBeenCalledTimes(3);
+
+      const expectedCalls = [
+        { platform: "youtube", expectedText: "1K" },
+        { platform: "twitch", expectedText: "2K" },
+        { platform: "tiktok", expectedText: "500" },
+      ];
+
+      expectedCalls.forEach(({ platform, expectedText }) => {
+        expect(obsManager.call.mock.calls).toContainEqual([
+          "SetInputSettings",
+          expect.objectContaining({
+            inputName: `${platform} viewer count`,
+            inputSettings: { text: expectedText },
+          }),
+        ]);
+      });
+    });
+
+    test("should maintain viewer count accuracy across updates", async () => {
+      const updates = [
+        { count: 100, expectedText: "100" },
+        { count: 1500, expectedText: "1.5K" },
+        { count: 999, expectedText: "999" },
+        { count: 2000000, expectedText: "2M" },
+      ];
+
+      for (const update of updates) {
+        await observer.onViewerCountUpdate({
+          platform: "youtube",
+          count: update.count,
+          isStreamLive: true,
+          timestamp: new Date(),
+        });
+
+        expect(obsManager.call.mock.calls).toContainEqual([
+          "SetInputSettings",
+          expect.objectContaining({
+            inputSettings: { text: update.expectedText },
+          }),
+        ]);
+      }
+    });
+  });
+
+  describe("Stream Status Change Behavior", () => {
+    test("should reset viewer counts to 0 when stream goes offline", async () => {
+      const statusUpdate = {
+        platform: "youtube",
+        isLive: false,
+        wasLive: true,
+        timestamp: new Date(),
+      };
+
+      await observer.onStreamStatusChange(statusUpdate);
+
+      expect(obsManager.call.mock.calls).toContainEqual([
+        "SetInputSettings",
+        expect.objectContaining({
+          inputSettings: { text: "0" },
+        }),
+      ]);
+    });
+
+    test("should enable updates when stream comes online", async () => {
+      const statusUpdate = {
+        platform: "youtube",
+        isLive: true,
+        wasLive: false,
+        timestamp: new Date(),
+      };
+
+      await observer.onStreamStatusChange(statusUpdate);
+
+      expect(statusUpdate.isLive).toBe(true);
+    });
+
+    test("should handle rapid online/offline transitions", async () => {
+      const transitions = [
+        { isLive: true, wasLive: false },
+        { isLive: false, wasLive: true },
+        { isLive: true, wasLive: false },
+        { isLive: false, wasLive: true },
+      ];
+
+      let obsCallCount = 0;
+
+      for (const transition of transitions) {
+        await observer.onStreamStatusChange({
+          platform: "twitch",
+          ...transition,
+          timestamp: new Date(),
+        });
+
+        if (!transition.isLive && transition.wasLive) {
+          obsCallCount++;
+        }
+      }
+
+      expect(obsManager.call).toHaveBeenCalledTimes(obsCallCount);
+    });
+
+    test("should maintain state consistency during status changes", async () => {
+      const scenarios = [
+        { isLive: true, wasLive: false, shouldReset: false },
+        { isLive: false, wasLive: true, shouldReset: true },
+        { isLive: false, wasLive: false, shouldReset: false },
+        { isLive: true, wasLive: true, shouldReset: false },
+      ];
+
+      for (const scenario of scenarios) {
+        obsManager.call.mockClear();
+
+        await observer.onStreamStatusChange({
+          platform: "tiktok",
+          isLive: scenario.isLive,
+          wasLive: scenario.wasLive,
+          timestamp: new Date(),
+        });
+
+        if (scenario.shouldReset) {
+          expect(obsManager.call.mock.calls).toContainEqual([
+            "SetInputSettings",
+            expect.objectContaining({
+              inputSettings: { text: "0" },
+            }),
+          ]);
+        } else {
+          expect(obsManager.call).not.toHaveBeenCalled();
+        }
+      }
+    });
+  });
+
+  describe("Configuration-Driven Behavior", () => {
+    test("should respect platform-specific enable/disable settings", async () => {
+      configFixture.youtube = {
+        viewerCountEnabled: false,
+        viewerCountSource: "youtube viewer count",
+      };
+
+      await observer.onViewerCountUpdate({
+        platform: "youtube",
+        count: 1000,
+        isStreamLive: true,
+        timestamp: new Date(),
+      });
+
+      expect(obsManager.call).not.toHaveBeenCalled();
+    });
+
+    test("should use configured OBS source names per platform", async () => {
+      configFixture.youtube = {
+        viewerCountEnabled: true,
+        viewerCountSource: "yt_viewers",
+      };
+      configFixture.twitch = {
+        viewerCountEnabled: true,
+        viewerCountSource: "ttv_viewers",
+      };
+      configFixture.tiktok = {
+        viewerCountEnabled: true,
+        viewerCountSource: "tt_viewers",
+      };
+
+      for (const [platform, config] of Object.entries({
+        youtube: configFixture.youtube,
+        twitch: configFixture.twitch,
+        tiktok: configFixture.tiktok,
+      })) {
+        obsManager.call.mockClear();
+
+        await observer.onViewerCountUpdate({
+          platform,
+          count: 500,
+          isStreamLive: true,
+          timestamp: new Date(),
+        });
+
+        expect(obsManager.call.mock.calls).toContainEqual([
+          "SetInputSettings",
+          expect.objectContaining({
+            inputName: config.viewerCountSource,
+            inputSettings: { text: "500" },
+          }),
+        ]);
+      }
+    });
+
+    test("should handle missing configuration gracefully", async () => {
+      delete configFixture.unknown;
+
+      const updatePromise = observer.onViewerCountUpdate({
+        platform: "unknown",
+        count: 1000,
+        isStreamLive: true,
+        timestamp: new Date(),
+      });
+
+      await expect(updatePromise).resolves.toBeUndefined();
+      expect(obsManager.call).not.toHaveBeenCalled();
+    });
+
+    test("should adapt to configuration changes at runtime", async () => {
+      configFixture.youtube = {
+        viewerCountEnabled: false,
+        viewerCountSource: "source1",
+      };
+
+      await observer.onViewerCountUpdate({
+        platform: "youtube",
+        count: 1000,
+        isStreamLive: true,
+        timestamp: new Date(),
+      });
+
+      expect(obsManager.call).not.toHaveBeenCalled();
+
+      configFixture.youtube = {
+        viewerCountEnabled: true,
+        viewerCountSource: "source2",
+      };
+
+      await observer.onViewerCountUpdate({
+        platform: "youtube",
+        count: 2000,
+        isStreamLive: true,
+        timestamp: new Date(),
+      });
+
+      expect(obsManager.call.mock.calls).toContainEqual([
+        "SetInputSettings",
+        expect.objectContaining({
+          inputName: "source2",
+          inputSettings: { text: "2K" },
+        }),
+      ]);
+    });
+  });
+
+  describe("Error Recovery & Resilience", () => {
+    test("should continue operating when OBS connection unavailable", async () => {
+      const disconnectedOBS = createMockOBSManager("disconnected");
+      const resilientObserver = new OBSViewerCountObserver(
+        disconnectedOBS,
+        logger,
+        { config: configFixture },
+      );
+
+      const updatePromise = resilientObserver.onViewerCountUpdate({
+        platform: "youtube",
+        count: 1000,
+        isStreamLive: true,
+        timestamp: new Date(),
+      });
+
+      await expect(updatePromise).resolves.toBeUndefined();
+    });
+
+    test("should handle missing OBS sources gracefully", async () => {
+      obsManager.call.mockRejectedValue(new Error("Source not found"));
+
+      configFixture.youtube = {
+        viewerCountEnabled: true,
+        viewerCountSource: "missing_source",
+      };
+
+      const updatePromise = observer.onViewerCountUpdate({
+        platform: "youtube",
+        count: 1000,
+        isStreamLive: true,
+        timestamp: new Date(),
+      });
+
+      await expect(updatePromise).resolves.toBeUndefined();
+    });
+
+    test("should recover from temporary OBS failures", async () => {
+      obsManager.call
+        .mockRejectedValueOnce(new Error("Temporary failure"))
+        .mockResolvedValueOnce({ status: "success" });
+
+      configFixture.youtube = {
+        viewerCountEnabled: true,
+        viewerCountSource: "test_source",
+      };
+
+      await observer.onViewerCountUpdate({
+        platform: "youtube",
+        count: 1000,
+        isStreamLive: true,
+        timestamp: new Date(),
+      });
+
+      await observer.onViewerCountUpdate({
+        platform: "youtube",
+        count: 2000,
+        isStreamLive: true,
+        timestamp: new Date(),
+      });
+
+      expect(obsManager.call).toHaveBeenCalledTimes(2);
+    });
+
+    test("should maintain system stability during OBS errors", async () => {
+      obsManager.call.mockRejectedValue(new Error("OBS disconnected"));
+
+      configFixture.youtube = {
+        viewerCountEnabled: true,
+        viewerCountSource: "test_source",
+      };
+
+      const operations = [
+        observer.onViewerCountUpdate({
+          platform: "youtube",
+          count: 1000,
+          isStreamLive: true,
+          timestamp: new Date(),
+        }),
+        observer.onStreamStatusChange({
+          platform: "youtube",
+          isLive: false,
+          wasLive: true,
+          timestamp: new Date(),
+        }),
+        observer.initialize(),
+      ];
+
+      await expect(Promise.all(operations)).resolves.toBeDefined();
+    });
+  });
+
+  describe("Platform-Specific Behavior", () => {
+    const testCases = [
+      { platform: "tiktok", count: 1234, expectedFormat: "1.2K" },
+      { platform: "youtube", count: 5500, expectedFormat: "5.5K" },
+      { platform: "twitch", count: 1000000, expectedFormat: "1M" },
+    ];
+
+    testCases.forEach(({ platform, count, expectedFormat }) => {
+      test(`should handle ${platform} viewer count formatting correctly`, async () => {
+        await observer.onViewerCountUpdate({
+          platform,
+          count,
+          isStreamLive: true,
+          timestamp: new Date(),
+        });
+
+        expect(obsManager.call.mock.calls).toContainEqual([
+          "SetInputSettings",
+          expect.objectContaining({
+            inputName: `${platform} viewer count`,
+            inputSettings: { text: expectedFormat },
+          }),
+        ]);
+      });
+    });
+
+    test("should validate platform names and reject invalid platforms", async () => {
+      const updatePromise = observer.onViewerCountUpdate({
+        platform: "invalid-platform",
+        count: 1000,
+        isStreamLive: true,
+        timestamp: new Date(),
+      });
+
+      await expect(updatePromise).resolves.toBeUndefined();
+      expect(obsManager.call).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("Memory & Resource Management", () => {
+    test("should clean up resources during observer removal", async () => {
+      await observer.initialize();
+
+      const cleanupPromise = observer.cleanup();
+
+      await expect(cleanupPromise).resolves.toBeUndefined();
+    });
+
+    test("should not leak memory during extended operation", async () => {
+      const initialMemory = process.memoryUsage().heapUsed;
+
+      for (let i = 0; i < 100; i++) {
+        await observer.onViewerCountUpdate({
+          platform: "youtube",
+          count: i * 10,
+          isStreamLive: true,
+          timestamp: new Date(),
+        });
+      }
+
+      if (global.gc) {
+        global.gc();
+      }
+
+      const finalMemory = process.memoryUsage().heapUsed;
+      const memoryIncrease = finalMemory - initialMemory;
+
+      expect(memoryIncrease).toBeLessThan(10 * 1024 * 1024);
+    });
+
+    test("should handle observer lifecycle correctly", async () => {
+      await observer.initialize();
+
+      await observer.onViewerCountUpdate({
+        platform: "youtube",
+        count: 1000,
+        isStreamLive: true,
+        timestamp: new Date(),
+      });
+
+      await observer.cleanup();
+
+      expect(observer.getObserverId()).toBe("obs-viewer-count-observer");
+    });
+  });
 });
