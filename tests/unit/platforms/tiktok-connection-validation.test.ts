@@ -1,28 +1,29 @@
-const { describe, it, expect } = require('bun:test');
-export {};
-const { createMockFn } = require('../../helpers/bun-mock-utils');
-const { noOpLogger } = require('../../helpers/mock-factories');
-const { PlatformConnectionFactory } = require('../../../src/utils/platform-connection-factory');
+import { describe, it, expect } from "bun:test";
+import { createMockFn } from "../../helpers/bun-mock-utils";
+import { noOpLogger } from "../../helpers/mock-factories";
+import { PlatformConnectionFactory } from "../../../src/utils/platform-connection-factory";
 
-describe('TikTok connection creation', () => {
-  it('wraps connector instances so they expose EventEmitter methods for listener setup', async () => {
-    const bareConnectorInstance = { connect: createMockFn().mockResolvedValue(true) };
+describe("TikTok connection creation", () => {
+  it("wraps connector instances so they expose EventEmitter methods for listener setup", async () => {
+    const bareConnectorInstance = {
+      connect: createMockFn().mockResolvedValue(true),
+    };
     const TikTokWebSocketClient = createMockFn(() => bareConnectorInstance);
     const factory = new PlatformConnectionFactory(noOpLogger);
 
     const connection = factory.createTikTokConnection(
-      { username: 'testStream' },
-      { logger: noOpLogger, TikTokWebSocketClient }
+      { username: "testStream" },
+      { logger: noOpLogger, TikTokWebSocketClient },
     );
 
     const handlerCalls: string[] = [];
-    connection.on('connected', (payload: string) => handlerCalls.push(payload));
-    connection.emit('connected', 'payload');
+    connection.on("connected", (payload: string) => handlerCalls.push(payload));
+    connection.emit("connected", "payload");
 
-    expect(typeof connection.on).toBe('function');
-    expect(typeof connection.emit).toBe('function');
-    expect(typeof connection.removeAllListeners).toBe('function');
+    expect(typeof connection.on).toBe("function");
+    expect(typeof connection.emit).toBe("function");
+    expect(typeof connection.removeAllListeners).toBe("function");
     expect(handlerCalls).toHaveLength(1);
-    expect(handlerCalls[0]).toBe('payload');
+    expect(handlerCalls[0]).toBe("payload");
   });
 });

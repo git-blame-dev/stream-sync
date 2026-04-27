@@ -1,190 +1,213 @@
-const { describe, test, expect, beforeEach } = require('bun:test');
-const { createMockFn } = require('../../../../helpers/bun-mock-utils');
-const { noOpLogger } = require('../../../../helpers/mock-factories');
-const { YouTubeConnectionManager } = require('../../../../../src/platforms/youtube/youtube-connection-manager');
+import { describe, test, expect, beforeEach } from "bun:test";
+import { createMockFn } from "../../../../helpers/bun-mock-utils";
+import { noOpLogger } from "../../../../helpers/mock-factories";
+import { YouTubeConnectionManager } from "../../../../../src/platforms/youtube/youtube-connection-manager";
 
 const createMockConnection = (videoId, isReady = false) => ({
-    videoId,
-    ready: isReady,
-    disconnect: createMockFn(),
-    status: 'connected'
+  videoId,
+  ready: isReady,
+  disconnect: createMockFn(),
+  status: "connected",
 });
 
 const expectValidConnectionStatus = (status) => {
-    expect(status).toBeDefined();
-    expect(status).toHaveProperty('totalConnections');
-    expect(status).toHaveProperty('readyConnections');
-    expect(status).toHaveProperty('activeVideoIds');
-    expect(typeof status.totalConnections).toBe('number');
-    expect(typeof status.readyConnections).toBe('number');
-    expect(Array.isArray(status.activeVideoIds)).toBe(true);
+  expect(status).toBeDefined();
+  expect(status).toHaveProperty("totalConnections");
+  expect(status).toHaveProperty("readyConnections");
+  expect(status).toHaveProperty("activeVideoIds");
+  expect(typeof status.totalConnections).toBe("number");
+  expect(typeof status.readyConnections).toBe("number");
+  expect(Array.isArray(status.activeVideoIds)).toBe(true);
 };
 
 const expectNoTechnicalArtifacts = (content) => {
-    if (typeof content === 'string') {
-        expect(content).not.toMatch(/undefined/i);
-        expect(content).not.toMatch(/\[object Object\]/i);
-        expect(content).not.toMatch(/function\s*\(/i);
-        expect(content).not.toMatch(/Promise\s*\{/i);
-    }
+  if (typeof content === "string") {
+    expect(content).not.toMatch(/undefined/i);
+    expect(content).not.toMatch(/\[object Object\]/i);
+    expect(content).not.toMatch(/function\s*\(/i);
+    expect(content).not.toMatch(/Promise\s*\{/i);
+  }
 };
 
-describe('YouTube Premiere Connection Handling', () => {
-    let connectionManager;
+describe("YouTube Premiere Connection Handling", () => {
+  let connectionManager;
 
-    beforeEach(() => {
-        connectionManager = new YouTubeConnectionManager(noOpLogger);
+  beforeEach(() => {
+    connectionManager = new YouTubeConnectionManager(noOpLogger);
+  });
+
+  describe("User Behavior: Premiere connection state tracking", () => {
+    test("should track Premiere connections as not-ready until start event", async () => {
+      const premiereVideoId = "premiere_ghi789";
+      const premiereConnection = createMockConnection(premiereVideoId, false);
+
+      await connectionManager.connectToStream(
+        premiereVideoId,
+        async () => premiereConnection,
+      );
+
+      const isReady = connectionManager.isConnectionReady(premiereVideoId);
+      const hasConnection = connectionManager.hasConnection(premiereVideoId);
+
+      expect(hasConnection).toBe(true);
+      expect(isReady).toBe(false);
+
+      const allVideoIds = connectionManager.getActiveVideoIds();
+      expect(allVideoIds).toContain(premiereVideoId);
     });
 
-    describe('User Behavior: Premiere connection state tracking', () => {
-        test('should track Premiere connections as not-ready until start event', async () => {
-            const premiereVideoId = 'premiere_ghi789';
-            const premiereConnection = createMockConnection(premiereVideoId, false);
+    test("should demonstrate ready vs stored connection distinction for Premieres", async () => {
+      const premiereVideoIds = ["premiere1", "premiere2", "premiere3"];
 
-            await connectionManager.connectToStream(premiereVideoId, async () => premiereConnection);
+      for (const videoId of premiereVideoIds) {
+        const connection = createMockConnection(videoId, false);
+        await connectionManager.connectToStream(
+          videoId,
+          async () => connection,
+        );
+      }
 
-            const isReady = connectionManager.isConnectionReady(premiereVideoId);
-            const hasConnection = connectionManager.hasConnection(premiereVideoId);
+      connectionManager.setConnectionReady("premiere2");
 
-            expect(hasConnection).toBe(true);
-            expect(isReady).toBe(false);
+      const totalConnections = connectionManager.getConnectionCount();
+      const readyConnections = connectionManager.getReadyConnectionCount();
 
-            const allVideoIds = connectionManager.getActiveVideoIds();
-            expect(allVideoIds).toContain(premiereVideoId);
-        });
+      expect(totalConnections).toBe(3);
+      expect(readyConnections).toBe(1);
 
-        test('should demonstrate ready vs stored connection distinction for Premieres', async () => {
-            const premiereVideoIds = ['premiere1', 'premiere2', 'premiere3'];
+      const allVideoIds = connectionManager.getActiveVideoIds();
+      expect(allVideoIds).toHaveLength(3);
+      expect(allVideoIds).toEqual(expect.arrayContaining(premiereVideoIds));
 
-            for (const videoId of premiereVideoIds) {
-                const connection = createMockConnection(videoId, false);
-                await connectionManager.connectToStream(videoId, async () => connection);
-            }
+      const readyVideoIds = allVideoIds.filter((id) =>
+        connectionManager.isConnectionReady(id),
+      );
+      expect(readyVideoIds).toEqual(["premiere2"]);
+    });
+  });
 
-            connectionManager.setConnectionReady('premiere2');
+  describe("User Behavior: Premiere status reporting accuracy", () => {
+    test("should report accurate status for mixed Premiere states", async () => {
+      const premieres = [
+        { id: "premiere_waiting1", ready: false },
+        { id: "premiere_live1", ready: true },
+        { id: "premiere_waiting2", ready: false },
+        { id: "premiere_live2", ready: true },
+      ];
 
-            const totalConnections = connectionManager.getConnectionCount();
-            const readyConnections = connectionManager.getReadyConnectionCount();
+      for (const { id, ready } of premieres) {
+        const connection = createMockConnection(id, ready);
+        await connectionManager.connectToStream(id, async () => connection);
+        if (ready) {
+          connectionManager.setConnectionReady(id);
+        }
+      }
 
-            expect(totalConnections).toBe(3);
-            expect(readyConnections).toBe(1);
+      const state = connectionManager.getConnectionState();
 
-            const allVideoIds = connectionManager.getActiveVideoIds();
-            expect(allVideoIds).toHaveLength(3);
-            expect(allVideoIds).toEqual(expect.arrayContaining(premiereVideoIds));
+      expectValidConnectionStatus(state);
+      expect(state.totalConnections).toBe(4);
+      expect(state.readyConnections).toBe(2);
+      expect(state.activeVideoIds).toHaveLength(4);
+      expect(state.hasAnyReady).toBe(true);
 
-            const readyVideoIds = allVideoIds.filter(id => connectionManager.isConnectionReady(id));
-            expect(readyVideoIds).toEqual(['premiere2']);
-        });
+      const statusMessage = `Multi-stream status: ${state.readyConnections} ready, ${state.totalConnections} total connections`;
+      expectNoTechnicalArtifacts(statusMessage);
+      expect(statusMessage).toContain("2 ready");
+      expect(statusMessage).toContain("4 total");
     });
 
-    describe('User Behavior: Premiere status reporting accuracy', () => {
-        test('should report accurate status for mixed Premiere states', async () => {
-            const premieres = [
-                { id: 'premiere_waiting1', ready: false },
-                { id: 'premiere_live1', ready: true },
-                { id: 'premiere_waiting2', ready: false },
-                { id: 'premiere_live2', ready: true }
-            ];
+    test("should handle Premiere connection lifecycle transitions", async () => {
+      const premiereId = "premiere_lifecycle";
+      const connection = createMockConnection(premiereId, false);
 
-            for (const { id, ready } of premieres) {
-                const connection = createMockConnection(id, ready);
-                await connectionManager.connectToStream(id, async () => connection);
-                if (ready) {
-                    connectionManager.setConnectionReady(id);
-                }
-            }
+      await connectionManager.connectToStream(
+        premiereId,
+        async () => connection,
+      );
 
-            const state = connectionManager.getConnectionState();
+      expect(connectionManager.hasConnection(premiereId)).toBe(true);
+      expect(connectionManager.isConnectionReady(premiereId)).toBe(false);
+      expect(connectionManager.getConnectionCount()).toBe(1);
+      expect(connectionManager.getReadyConnectionCount()).toBe(0);
 
-            expectValidConnectionStatus(state);
-            expect(state.totalConnections).toBe(4);
-            expect(state.readyConnections).toBe(2);
-            expect(state.activeVideoIds).toHaveLength(4);
-            expect(state.hasAnyReady).toBe(true);
+      connectionManager.setConnectionReady(premiereId);
 
-            const statusMessage = `Multi-stream status: ${state.readyConnections} ready, ${state.totalConnections} total connections`;
-            expectNoTechnicalArtifacts(statusMessage);
-            expect(statusMessage).toContain('2 ready');
-            expect(statusMessage).toContain('4 total');
-        });
+      expect(connectionManager.isConnectionReady(premiereId)).toBe(true);
+      expect(connectionManager.getConnectionCount()).toBe(1);
+      expect(connectionManager.getReadyConnectionCount()).toBe(1);
+    });
+  });
 
-        test('should handle Premiere connection lifecycle transitions', async () => {
-            const premiereId = 'premiere_lifecycle';
-            const connection = createMockConnection(premiereId, false);
+  describe("Integration: Premiere connection workflow with real behavior", () => {
+    test("should demonstrate end-to-end Premiere connection handling", async () => {
+      expect(connectionManager.getConnectionCount()).toBe(0);
+      expect(connectionManager.getReadyConnectionCount()).toBe(0);
 
-            await connectionManager.connectToStream(premiereId, async () => connection);
+      const premiereConnections = [
+        { id: "premiere_stream1", title: "Morning Show Premiere" },
+        { id: "premiere_stream2", title: "Evening Event Premiere" },
+        { id: "premiere_stream3", title: "Special Announcement Premiere" },
+      ];
 
-            expect(connectionManager.hasConnection(premiereId)).toBe(true);
-            expect(connectionManager.isConnectionReady(premiereId)).toBe(false);
-            expect(connectionManager.getConnectionCount()).toBe(1);
-            expect(connectionManager.getReadyConnectionCount()).toBe(0);
+      for (const { id, title } of premiereConnections) {
+        const connection = createMockConnection(id, false);
+        connection.title = title;
+        await connectionManager.connectToStream(id, async () => connection);
+      }
 
-            connectionManager.setConnectionReady(premiereId);
+      expect(connectionManager.getConnectionCount()).toBe(3);
+      expect(connectionManager.getReadyConnectionCount()).toBe(0);
 
-            expect(connectionManager.isConnectionReady(premiereId)).toBe(true);
-            expect(connectionManager.getConnectionCount()).toBe(1);
-            expect(connectionManager.getReadyConnectionCount()).toBe(1);
-        });
+      connectionManager.setConnectionReady("premiere_stream1");
+      connectionManager.setConnectionReady("premiere_stream3");
+
+      const finalState = connectionManager.getConnectionState();
+      expect(finalState.totalConnections).toBe(3);
+      expect(finalState.readyConnections).toBe(2);
+      expect(finalState.hasAnyReady).toBe(true);
+
+      expect(connectionManager.isConnectionReady("premiere_stream1")).toBe(
+        true,
+      );
+      expect(connectionManager.isConnectionReady("premiere_stream2")).toBe(
+        false,
+      );
+      expect(connectionManager.isConnectionReady("premiere_stream3")).toBe(
+        true,
+      );
+    });
+  });
+
+  describe("Edge Cases: Premiere connection error scenarios", () => {
+    test("should handle invalid Premiere connection gracefully", async () => {
+      const invalidVideoId = "";
+      const invalidConnection = null;
+
+      await connectionManager.connectToStream(
+        invalidVideoId,
+        async () => invalidConnection,
+      );
+
+      expect(connectionManager.getConnectionCount()).toBe(1);
+      expect(connectionManager.isConnectionReady(invalidVideoId)).toBe(false);
     });
 
-    describe('Integration: Premiere connection workflow with real behavior', () => {
-        test('should demonstrate end-to-end Premiere connection handling', async () => {
-            expect(connectionManager.getConnectionCount()).toBe(0);
-            expect(connectionManager.getReadyConnectionCount()).toBe(0);
+    test("should handle Premiere connection removal during lifecycle", async () => {
+      const premiereId = "premiere_to_remove";
+      const connection = createMockConnection(premiereId, false);
 
-            const premiereConnections = [
-                { id: 'premiere_stream1', title: 'Morning Show Premiere' },
-                { id: 'premiere_stream2', title: 'Evening Event Premiere' },
-                { id: 'premiere_stream3', title: 'Special Announcement Premiere' }
-            ];
+      await connectionManager.connectToStream(
+        premiereId,
+        async () => connection,
+      );
+      expect(connectionManager.hasConnection(premiereId)).toBe(true);
 
-            for (const { id, title } of premiereConnections) {
-                const connection = createMockConnection(id, false);
-                connection.title = title;
-                await connectionManager.connectToStream(id, async () => connection);
-            }
+      await connectionManager.removeConnection(premiereId);
 
-            expect(connectionManager.getConnectionCount()).toBe(3);
-            expect(connectionManager.getReadyConnectionCount()).toBe(0);
-
-            connectionManager.setConnectionReady('premiere_stream1');
-            connectionManager.setConnectionReady('premiere_stream3');
-
-            const finalState = connectionManager.getConnectionState();
-            expect(finalState.totalConnections).toBe(3);
-            expect(finalState.readyConnections).toBe(2);
-            expect(finalState.hasAnyReady).toBe(true);
-
-            expect(connectionManager.isConnectionReady('premiere_stream1')).toBe(true);
-            expect(connectionManager.isConnectionReady('premiere_stream2')).toBe(false);
-            expect(connectionManager.isConnectionReady('premiere_stream3')).toBe(true);
-        });
+      expect(connectionManager.hasConnection(premiereId)).toBe(false);
+      expect(connectionManager.getConnectionCount()).toBe(0);
+      expect(connectionManager.getReadyConnectionCount()).toBe(0);
     });
-
-    describe('Edge Cases: Premiere connection error scenarios', () => {
-        test('should handle invalid Premiere connection gracefully', async () => {
-            const invalidVideoId = '';
-            const invalidConnection = null;
-
-            await connectionManager.connectToStream(invalidVideoId, async () => invalidConnection);
-
-            expect(connectionManager.getConnectionCount()).toBe(1);
-            expect(connectionManager.isConnectionReady(invalidVideoId)).toBe(false);
-        });
-
-        test('should handle Premiere connection removal during lifecycle', async () => {
-            const premiereId = 'premiere_to_remove';
-            const connection = createMockConnection(premiereId, false);
-
-            await connectionManager.connectToStream(premiereId, async () => connection);
-            expect(connectionManager.hasConnection(premiereId)).toBe(true);
-
-            await connectionManager.removeConnection(premiereId);
-
-            expect(connectionManager.hasConnection(premiereId)).toBe(false);
-            expect(connectionManager.getConnectionCount()).toBe(0);
-            expect(connectionManager.getReadyConnectionCount()).toBe(0);
-        });
-    });
+  });
 });

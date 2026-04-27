@@ -1,694 +1,819 @@
-const { PlatformEvents } = require('../../../../../src/interfaces/PlatformEvents');
-const { DEFAULT_AVATAR_URL } = require('../../../../../src/constants/avatar');
+import { PlatformEvents } from "../../../../../src/interfaces/PlatformEvents";
+import { DEFAULT_AVATAR_URL } from "../../../../../src/constants/avatar";
 
 const FALLBACK_AVATAR_URL = DEFAULT_AVATAR_URL;
 
-describe('YouTube event factory behavior', () => {
-    it('builds chat-connected events with deterministic timestamp', () => {
-        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
+describe("YouTube event factory behavior", () => {
+  it("builds chat-connected events with deterministic timestamp", () => {
+    const {
+      createYouTubeEventFactory,
+    } = require("../../../../../src/platforms/youtube/events/event-factory.ts");
 
-        const eventFactory = createYouTubeEventFactory({
-            nowIso: () => '2024-01-01T00:00:00.000Z',
-            generateCorrelationId: () => 'corr-ignored'
-        });
-
-        const event = eventFactory.createChatConnectedEvent({
-            videoId: 'video-123',
-            connectionId: 'youtube-video-123',
-            timestamp: '2024-01-01T00:00:00.000Z'
-        });
-
-        expect(event).toEqual({
-            type: PlatformEvents.CHAT_CONNECTED,
-            platform: 'youtube',
-            videoId: 'video-123',
-            connectionId: 'youtube-video-123',
-            timestamp: '2024-01-01T00:00:00.000Z'
-        });
+    const eventFactory = createYouTubeEventFactory({
+      nowIso: () => "2024-01-01T00:00:00.000Z",
+      generateCorrelationId: () => "corr-ignored",
     });
 
-    it('builds chat-message events matching the platform contract', () => {
-        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
-
-        const eventFactory = createYouTubeEventFactory({
-            nowIso: () => '2024-01-01T00:00:00.000Z',
-            generateCorrelationId: () => 'corr-123'
-        });
-
-        const event = eventFactory.createChatMessageEvent({
-            userId: 'user-id',
-            authorChannelId: 'author-channel-id',
-            username: 'user',
-            authorName: 'user-alt',
-            displayName: 'User',
-            message: 'Hello world',
-            timestamp: '2024-01-01T00:00:00.111Z',
-            videoId: 'vid-1',
-            isMod: false,
-            isOwner: false,
-            isVerified: true
-        });
-
-        expect(event.type).toBe(PlatformEvents.CHAT_MESSAGE);
-        expect(event.platform).toBe('youtube');
-        expect(event.username).toBe('user');
-        expect(event.userId).toBe('user-id');
-        expect(event.message).toEqual({ text: 'Hello world' });
-        expect(event.timestamp).toBe('2024-01-01T00:00:00.111Z');
-        expect(event.isMod).toBe(false);
-        expect(event.isPaypiggy).toBe(false);
-        expect(event.isBroadcaster).toBe(false);
-        expect(event.metadata).toEqual({
-            platform: 'youtube',
-            videoId: 'vid-1',
-            isMod: false,
-            isOwner: false,
-            isVerified: true,
-            correlationId: 'corr-123'
-        });
+    const event = eventFactory.createChatConnectedEvent({
+      videoId: "video-123",
+      connectionId: "youtube-video-123",
+      timestamp: "2024-01-01T00:00:00.000Z",
     });
 
-    it('uses canonical message.parts from message object', () => {
-        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
+    expect(event).toEqual({
+      type: PlatformEvents.CHAT_CONNECTED,
+      platform: "youtube",
+      videoId: "video-123",
+      connectionId: "youtube-video-123",
+      timestamp: "2024-01-01T00:00:00.000Z",
+    });
+  });
 
-        const eventFactory = createYouTubeEventFactory({
-            generateCorrelationId: () => 'corr-parts-1'
-        });
+  it("builds chat-message events matching the platform contract", () => {
+    const {
+      createYouTubeEventFactory,
+    } = require("../../../../../src/platforms/youtube/events/event-factory.ts");
 
-        const event = eventFactory.createChatMessageEvent({
-            userId: 'test-user-id',
-            username: 'test-user',
-            avatarUrl: 'https://example.invalid/test-youtube-avatar-with-parts.jpg',
-            videoId: 'test-video-id-with-parts',
-            isMod: true,
-            isOwner: false,
-            isVerified: true,
-            message: {
-                text: '',
-                parts: [
-                    {
-                        type: 'emote',
-                        emoteId: ' UC_TEST_EMOTE_200/TEST_EMOTE_200 ',
-                        imageUrl: ' https://yt3.ggpht.example.invalid/test-200=w48-h48-c-k-nd '
-                    }
-                ]
-            },
-            timestamp: '2024-01-01T00:00:00.111Z'
-        });
-
-        expect(event.message).toEqual({
-            text: '',
-            parts: [
-                {
-                    type: 'emote',
-                    platform: 'youtube',
-                    emoteId: 'UC_TEST_EMOTE_200/TEST_EMOTE_200',
-                    imageUrl: 'https://yt3.ggpht.example.invalid/test-200=w48-h48-c-k-nd'
-                }
-            ]
-        });
-        expect(event.avatarUrl).toBe('https://example.invalid/test-youtube-avatar-with-parts.jpg');
-        expect(event.metadata).toEqual({
-            platform: 'youtube',
-            videoId: 'test-video-id-with-parts',
-            isMod: true,
-            isOwner: false,
-            isVerified: true,
-            correlationId: 'corr-parts-1'
-        });
+    const eventFactory = createYouTubeEventFactory({
+      nowIso: () => "2024-01-01T00:00:00.000Z",
+      generateCorrelationId: () => "corr-123",
     });
 
-    it('emits text-only message when canonical message.parts is unavailable', () => {
-        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
-
-        const eventFactory = createYouTubeEventFactory({
-            generateCorrelationId: () => 'corr-parts-2'
-        });
-
-        const event = eventFactory.createChatMessageEvent({
-            userId: 'test-user-id',
-            username: 'test-user',
-            message: {
-                text: 'hello'
-            },
-            timestamp: '2024-01-01T00:00:00.111Z'
-        });
-
-        expect(event.message).toEqual({ text: 'hello' });
+    const event = eventFactory.createChatMessageEvent({
+      userId: "user-id",
+      authorChannelId: "author-channel-id",
+      username: "user",
+      authorName: "user-alt",
+      displayName: "User",
+      message: "Hello world",
+      timestamp: "2024-01-01T00:00:00.111Z",
+      videoId: "vid-1",
+      isMod: false,
+      isOwner: false,
+      isVerified: true,
     });
 
-    it('filters invalid message parts and preserves no-parts shape when all are invalid', () => {
-        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
+    expect(event.type).toBe(PlatformEvents.CHAT_MESSAGE);
+    expect(event.platform).toBe("youtube");
+    expect(event.username).toBe("user");
+    expect(event.userId).toBe("user-id");
+    expect(event.message).toEqual({ text: "Hello world" });
+    expect(event.timestamp).toBe("2024-01-01T00:00:00.111Z");
+    expect(event.isMod).toBe(false);
+    expect(event.isPaypiggy).toBe(false);
+    expect(event.isBroadcaster).toBe(false);
+    expect(event.metadata).toEqual({
+      platform: "youtube",
+      videoId: "vid-1",
+      isMod: false,
+      isOwner: false,
+      isVerified: true,
+      correlationId: "corr-123",
+    });
+  });
 
-        const eventFactory = createYouTubeEventFactory({
-            generateCorrelationId: () => 'corr-parts-3'
-        });
+  it("uses canonical message.parts from message object", () => {
+    const {
+      createYouTubeEventFactory,
+    } = require("../../../../../src/platforms/youtube/events/event-factory.ts");
 
-        const event = eventFactory.createChatMessageEvent({
-            userId: 'test-user-id',
-            username: 'test-user',
-            message: {
-                text: 'test',
-                parts: [
-                    { type: 'text', text: '' },
-                    { type: 'emote', emoteId: '   ', imageUrl: 'https://yt3.ggpht.example.invalid/invalid=w48-h48-c-k-nd' }
-                ]
-            },
-            timestamp: '2024-01-01T00:00:00.111Z'
-        });
-
-        expect(event.message).toEqual({ text: 'test' });
+    const eventFactory = createYouTubeEventFactory({
+      generateCorrelationId: () => "corr-parts-1",
     });
 
-    it('supports text sources from string message and object message.text', () => {
-        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
-
-        const eventFactory = createYouTubeEventFactory({
-            generateCorrelationId: () => 'corr-parts-4'
-        });
-
-        const fromString = eventFactory.createChatMessageEvent({
-            userId: 'test-user-id-a',
-            username: 'test-user-a',
-            message: 'string message',
-            timestamp: '2024-01-01T00:00:00.111Z'
-        });
-        const fromObject = eventFactory.createChatMessageEvent({
-            userId: 'test-user-id-b',
-            username: 'test-user-b',
-            message: { text: 'object message' },
-            timestamp: '2024-01-01T00:00:00.222Z'
-        });
-
-        expect(fromString.message).toEqual({ text: 'string message' });
-        expect(fromObject.message).toEqual({ text: 'object message' });
+    const event = eventFactory.createChatMessageEvent({
+      userId: "test-user-id",
+      username: "test-user",
+      avatarUrl: "https://example.invalid/test-youtube-avatar-with-parts.jpg",
+      videoId: "test-video-id-with-parts",
+      isMod: true,
+      isOwner: false,
+      isVerified: true,
+      message: {
+        text: "",
+        parts: [
+          {
+            type: "emote",
+            emoteId: " UC_TEST_EMOTE_200/TEST_EMOTE_200 ",
+            imageUrl:
+              " https://yt3.ggpht.example.invalid/test-200=w48-h48-c-k-nd ",
+          },
+        ],
+      },
+      timestamp: "2024-01-01T00:00:00.111Z",
     });
 
-    it('preserves avatarUrl on chat-message events', () => {
-        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
+    expect(event.message).toEqual({
+      text: "",
+      parts: [
+        {
+          type: "emote",
+          platform: "youtube",
+          emoteId: "UC_TEST_EMOTE_200/TEST_EMOTE_200",
+          imageUrl: "https://yt3.ggpht.example.invalid/test-200=w48-h48-c-k-nd",
+        },
+      ],
+    });
+    expect(event.avatarUrl).toBe(
+      "https://example.invalid/test-youtube-avatar-with-parts.jpg",
+    );
+    expect(event.metadata).toEqual({
+      platform: "youtube",
+      videoId: "test-video-id-with-parts",
+      isMod: true,
+      isOwner: false,
+      isVerified: true,
+      correlationId: "corr-parts-1",
+    });
+  });
 
-        const eventFactory = createYouTubeEventFactory({
-            generateCorrelationId: () => 'corr-avatar-chat'
-        });
+  it("emits text-only message when canonical message.parts is unavailable", () => {
+    const {
+      createYouTubeEventFactory,
+    } = require("../../../../../src/platforms/youtube/events/event-factory.ts");
 
-        const event = eventFactory.createChatMessageEvent({
-            userId: 'user-id',
-            username: 'user',
-            message: 'Hello world',
-            avatarUrl: 'https://example.invalid/youtube-chat-avatar.jpg',
-            timestamp: '2024-01-01T00:00:00.111Z'
-        });
-
-        expect(event.avatarUrl).toBe('https://example.invalid/youtube-chat-avatar.jpg');
+    const eventFactory = createYouTubeEventFactory({
+      generateCorrelationId: () => "corr-parts-2",
     });
 
-    it('emits canonical badgeImages on chat-message events', () => {
-        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
-
-        const eventFactory = createYouTubeEventFactory({
-            generateCorrelationId: () => 'corr-badges-chat'
-        });
-
-        const event = eventFactory.createChatMessageEvent({
-            userId: 'test-user-id-badge',
-            username: 'test-user-badge',
-            message: 'Hello world',
-            badgeImages: [
-                { imageUrl: '   ', source: 'youtube', label: 'invalid' },
-                { imageUrl: ' https://example.invalid/member-s32.png ', source: 'youtube', label: 'Member (6 months)' },
-                { imageUrl: 'https://example.invalid/member-s32.png', source: 'youtube', label: 'Member (6 months)' },
-                { imageUrl: 'https://example.invalid/member-s16.png', source: 'youtube', label: 'Member (6 months)' }
-            ],
-            timestamp: '2024-01-01T00:00:00.111Z'
-        });
-
-        expect(event.badgeImages).toEqual([
-            { imageUrl: 'https://example.invalid/member-s32.png', source: 'youtube', label: 'Member (6 months)' },
-            { imageUrl: 'https://example.invalid/member-s16.png', source: 'youtube', label: 'Member (6 months)' }
-        ]);
+    const event = eventFactory.createChatMessageEvent({
+      userId: "test-user-id",
+      username: "test-user",
+      message: {
+        text: "hello",
+      },
+      timestamp: "2024-01-01T00:00:00.111Z",
     });
 
-    it('rejects chat-message events missing timestamp', () => {
-        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
+    expect(event.message).toEqual({ text: "hello" });
+  });
 
-        const eventFactory = createYouTubeEventFactory({
-            nowIso: () => '2024-01-01T00:00:00.000Z',
-            generateCorrelationId: () => 'corr-123'
-        });
+  it("filters invalid message parts and preserves no-parts shape when all are invalid", () => {
+    const {
+      createYouTubeEventFactory,
+    } = require("../../../../../src/platforms/youtube/events/event-factory.ts");
 
-        expect(() => eventFactory.createChatMessageEvent({
-            userId: 'user-id',
-            authorChannelId: 'author-channel-id',
-            username: 'user',
-            authorName: 'user-alt',
-            displayName: 'User',
-            message: 'Hello world',
-            videoId: 'vid-1',
-            isMod: false,
-            isOwner: false,
-            isVerified: false
-        })).toThrow('YouTube chat message event requires timestamp');
+    const eventFactory = createYouTubeEventFactory({
+      generateCorrelationId: () => "corr-parts-3",
     });
 
-    it('rejects non-object chat-message payloads with contract error', () => {
-        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
-
-        const eventFactory = createYouTubeEventFactory({
-            generateCorrelationId: () => 'corr-non-object-chat'
-        });
-
-        expect(() => eventFactory.createChatMessageEvent(null)).toThrow('YouTube chat message event requires timestamp');
+    const event = eventFactory.createChatMessageEvent({
+      userId: "test-user-id",
+      username: "test-user",
+      message: {
+        text: "test",
+        parts: [
+          { type: "text", text: "" },
+          {
+            type: "emote",
+            emoteId: "   ",
+            imageUrl:
+              "https://yt3.ggpht.example.invalid/invalid=w48-h48-c-k-nd",
+          },
+        ],
+      },
+      timestamp: "2024-01-01T00:00:00.111Z",
     });
 
-    it('rejects chat-message events missing canonical identity fields', () => {
-        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
+    expect(event.message).toEqual({ text: "test" });
+  });
 
-        const eventFactory = createYouTubeEventFactory({
-            generateCorrelationId: () => 'corr-identity'
-        });
+  it("supports text sources from string message and object message.text", () => {
+    const {
+      createYouTubeEventFactory,
+    } = require("../../../../../src/platforms/youtube/events/event-factory.ts");
 
-        expect(() => eventFactory.createChatMessageEvent({
-            userId: '',
-            username: '   ',
-            message: 'Hello world',
-            timestamp: '2024-01-01T00:00:00.111Z'
-        })).toThrow('YouTube event payload requires userId and username');
+    const eventFactory = createYouTubeEventFactory({
+      generateCorrelationId: () => "corr-parts-4",
     });
 
-    it('allows degraded chat events when metadata.missingFields marks missing identity and timestamp', () => {
-        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
-
-        const eventFactory = createYouTubeEventFactory({
-            generateCorrelationId: () => 'corr-youtube-missing-identity'
-        });
-
-        const event = eventFactory.createChatMessageEvent({
-            message: {
-                text: 'partial youtube chat message'
-            },
-            metadata: {
-                missingFields: ['userId', 'username', 'timestamp']
-            }
-        });
-
-        expect(event.username).toBe('Unknown Username');
-        expect(event.userId).toBeUndefined();
-        expect(event.timestamp).toBeUndefined();
-        expect(event.message).toEqual({ text: 'partial youtube chat message' });
-        expect(event.metadata.missingFields).toEqual(['userId', 'username', 'timestamp']);
+    const fromString = eventFactory.createChatMessageEvent({
+      userId: "test-user-id-a",
+      username: "test-user-a",
+      message: "string message",
+      timestamp: "2024-01-01T00:00:00.111Z",
+    });
+    const fromObject = eventFactory.createChatMessageEvent({
+      userId: "test-user-id-b",
+      username: "test-user-b",
+      message: { text: "object message" },
+      timestamp: "2024-01-01T00:00:00.222Z",
     });
 
-    it('allows degraded chat events with unknown-message placeholder when message is marked missing', () => {
-        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
+    expect(fromString.message).toEqual({ text: "string message" });
+    expect(fromObject.message).toEqual({ text: "object message" });
+  });
 
-        const eventFactory = createYouTubeEventFactory({
-            generateCorrelationId: () => 'corr-youtube-missing-message'
-        });
+  it("preserves avatarUrl on chat-message events", () => {
+    const {
+      createYouTubeEventFactory,
+    } = require("../../../../../src/platforms/youtube/events/event-factory.ts");
 
-        const event = eventFactory.createChatMessageEvent({
-            metadata: {
-                missingFields: ['message', 'userId', 'username', 'timestamp']
-            }
-        });
-
-        expect(event.username).toBe('Unknown Username');
-        expect(event.userId).toBeUndefined();
-        expect(event.timestamp).toBeUndefined();
-        expect(event.message).toEqual({ text: 'Unknown Message' });
-        expect(event.metadata.missingFields).toEqual(['message', 'userId', 'username', 'timestamp']);
+    const eventFactory = createYouTubeEventFactory({
+      generateCorrelationId: () => "corr-avatar-chat",
     });
 
-    it('builds viewer-count events matching the current YouTube payload shape', () => {
-        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
-
-        const eventFactory = createYouTubeEventFactory({
-            nowIso: () => '2024-01-01T00:00:00.000Z',
-            generateCorrelationId: () => 'corr-999'
-        });
-
-        const event = eventFactory.createViewerCountEvent({
-            count: 12,
-            streamId: 'stream-2',
-            streamViewerCount: 7,
-            timestamp: '2024-01-01T00:00:00.000Z'
-        });
-
-        expect(event).toEqual({
-            type: PlatformEvents.VIEWER_COUNT,
-            platform: 'youtube',
-            count: 12,
-            streamId: 'stream-2',
-            streamViewerCount: 7,
-            timestamp: '2024-01-01T00:00:00.000Z',
-            metadata: {
-                platform: 'youtube',
-                correlationId: 'corr-999'
-            }
-        });
+    const event = eventFactory.createChatMessageEvent({
+      userId: "user-id",
+      username: "user",
+      message: "Hello world",
+      avatarUrl: "https://example.invalid/youtube-chat-avatar.jpg",
+      timestamp: "2024-01-01T00:00:00.111Z",
     });
 
-    it('builds error events with metadata and context', () => {
-        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
+    expect(event.avatarUrl).toBe(
+      "https://example.invalid/youtube-chat-avatar.jpg",
+    );
+  });
 
-        const eventFactory = createYouTubeEventFactory({
-            nowIso: () => '2024-01-01T00:00:00.000Z',
-            generateCorrelationId: () => 'corr-error'
-        });
+  it("emits canonical badgeImages on chat-message events", () => {
+    const {
+      createYouTubeEventFactory,
+    } = require("../../../../../src/platforms/youtube/events/event-factory.ts");
 
-        const error = new Error('Boom');
-        error.name = 'BoomError';
-
-        const event = eventFactory.createErrorEvent({
-            error,
-            context: { operation: 'connect' },
-            recoverable: false,
-            videoId: 'video-1',
-            timestamp: '2024-01-01T00:00:00.000Z'
-        });
-
-        expect(event).toEqual({
-            type: PlatformEvents.ERROR,
-            platform: 'youtube',
-            error: {
-                message: 'Boom',
-                name: 'BoomError'
-            },
-            context: { operation: 'connect' },
-            recoverable: false,
-            timestamp: '2024-01-01T00:00:00.000Z',
-            metadata: {
-                platform: 'youtube',
-                videoId: 'video-1',
-                correlationId: 'corr-error'
-            }
-        });
+    const eventFactory = createYouTubeEventFactory({
+      generateCorrelationId: () => "corr-badges-chat",
     });
 
-    it('normalizes non-object error context to empty object', () => {
-        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
-
-        const eventFactory = createYouTubeEventFactory({
-            generateCorrelationId: () => 'corr-error-context'
-        });
-
-        const event = eventFactory.createErrorEvent({
-            error: new Error('Boom'),
-            context: 'invalid-context',
-            timestamp: '2024-01-01T00:00:00.000Z'
-        });
-
-        expect(event.context).toEqual({});
+    const event = eventFactory.createChatMessageEvent({
+      userId: "test-user-id-badge",
+      username: "test-user-badge",
+      message: "Hello world",
+      badgeImages: [
+        { imageUrl: "   ", source: "youtube", label: "invalid" },
+        {
+          imageUrl: " https://example.invalid/member-s32.png ",
+          source: "youtube",
+          label: "Member (6 months)",
+        },
+        {
+          imageUrl: "https://example.invalid/member-s32.png",
+          source: "youtube",
+          label: "Member (6 months)",
+        },
+        {
+          imageUrl: "https://example.invalid/member-s16.png",
+          source: "youtube",
+          label: "Member (6 months)",
+        },
+      ],
+      timestamp: "2024-01-01T00:00:00.111Z",
     });
 
-    it('defaults recoverable to true when provided value is not boolean', () => {
-        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
+    expect(event.badgeImages).toEqual([
+      {
+        imageUrl: "https://example.invalid/member-s32.png",
+        source: "youtube",
+        label: "Member (6 months)",
+      },
+      {
+        imageUrl: "https://example.invalid/member-s16.png",
+        source: "youtube",
+        label: "Member (6 months)",
+      },
+    ]);
+  });
 
-        const eventFactory = createYouTubeEventFactory({
-            generateCorrelationId: () => 'corr-error-recoverable'
-        });
+  it("rejects chat-message events missing timestamp", () => {
+    const {
+      createYouTubeEventFactory,
+    } = require("../../../../../src/platforms/youtube/events/event-factory.ts");
 
-        const event = eventFactory.createErrorEvent({
-            error: new Error('Boom'),
-            recoverable: 'nope',
-            timestamp: '2024-01-01T00:00:00.000Z'
-        });
-
-        expect(event.recoverable).toBe(true);
+    const eventFactory = createYouTubeEventFactory({
+      nowIso: () => "2024-01-01T00:00:00.000Z",
+      generateCorrelationId: () => "corr-123",
     });
 
-    it('rejects non-object error payloads with contract error', () => {
-        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
+    expect(() =>
+      eventFactory.createChatMessageEvent({
+        userId: "user-id",
+        authorChannelId: "author-channel-id",
+        username: "user",
+        authorName: "user-alt",
+        displayName: "User",
+        message: "Hello world",
+        videoId: "vid-1",
+        isMod: false,
+        isOwner: false,
+        isVerified: false,
+      }),
+    ).toThrow("YouTube chat message event requires timestamp");
+  });
 
-        const eventFactory = createYouTubeEventFactory({
-            generateCorrelationId: () => 'corr-error-non-object'
-        });
+  it("rejects non-object chat-message payloads with contract error", () => {
+    const {
+      createYouTubeEventFactory,
+    } = require("../../../../../src/platforms/youtube/events/event-factory.ts");
 
-        expect(() => eventFactory.createErrorEvent(null)).toThrow('YouTube error event requires timestamp');
+    const eventFactory = createYouTubeEventFactory({
+      generateCorrelationId: () => "corr-non-object-chat",
     });
 
-    it('builds gift events with monetization fields', () => {
-        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
+    expect(() => eventFactory.createChatMessageEvent(null)).toThrow(
+      "YouTube chat message event requires timestamp",
+    );
+  });
 
-        const eventFactory = createYouTubeEventFactory({
-            generateCorrelationId: () => 'corr-ignored'
-        });
+  it("rejects chat-message events missing canonical identity fields", () => {
+    const {
+      createYouTubeEventFactory,
+    } = require("../../../../../src/platforms/youtube/events/event-factory.ts");
 
-        const event = eventFactory.createGiftEvent({
-            username: 'SuperChatUser',
-            userId: 'user-123',
-            id: 'gift-123',
-            giftType: 'Super Chat',
-            giftCount: 1,
-            amount: 10,
-            currency: 'USD',
-            message: 'Thanks!',
-            giftImageUrl: 'https://lh3.googleusercontent.com/test-supersticker=s176-rwa',
-            timestamp: '2024-01-01T00:00:00.000Z'
-        });
-
-        expect(event).toEqual({
-            type: PlatformEvents.GIFT,
-            platform: 'youtube',
-            username: 'SuperChatUser',
-            userId: 'user-123',
-            avatarUrl: FALLBACK_AVATAR_URL,
-            id: 'gift-123',
-            giftType: 'Super Chat',
-            giftCount: 1,
-            amount: 10,
-            currency: 'USD',
-            message: 'Thanks!',
-            giftImageUrl: 'https://lh3.googleusercontent.com/test-supersticker=s176-rwa',
-            timestamp: '2024-01-01T00:00:00.000Z'
-        });
+    const eventFactory = createYouTubeEventFactory({
+      generateCorrelationId: () => "corr-identity",
     });
 
-    it('preserves avatarUrl on gift events', () => {
-        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
+    expect(() =>
+      eventFactory.createChatMessageEvent({
+        userId: "",
+        username: "   ",
+        message: "Hello world",
+        timestamp: "2024-01-01T00:00:00.111Z",
+      }),
+    ).toThrow("YouTube event payload requires userId and username");
+  });
 
-        const eventFactory = createYouTubeEventFactory();
+  it("allows degraded chat events when metadata.missingFields marks missing identity and timestamp", () => {
+    const {
+      createYouTubeEventFactory,
+    } = require("../../../../../src/platforms/youtube/events/event-factory.ts");
 
-        const event = eventFactory.createGiftEvent({
-            username: 'SuperChatUser',
-            userId: 'user-123',
-            id: 'gift-123',
-            giftType: 'Super Chat',
-            giftCount: 1,
-            amount: 10,
-            currency: 'USD',
-            avatarUrl: 'https://example.invalid/youtube-gift-avatar.jpg',
-            timestamp: '2024-01-01T00:00:00.000Z'
-        });
-
-        expect(event.avatarUrl).toBe('https://example.invalid/youtube-gift-avatar.jpg');
+    const eventFactory = createYouTubeEventFactory({
+      generateCorrelationId: () => "corr-youtube-missing-identity",
     });
 
-    it('allows YouTube jewels gift events with missing userId when metadata marks missing userId', () => {
-        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
-
-        const eventFactory = createYouTubeEventFactory();
-
-        const event = eventFactory.createGiftEvent({
-            username: 'test-jewels-user',
-            id: 'gift-jewels-123',
-            giftType: 'Girl power',
-            giftCount: 1,
-            amount: 300,
-            currency: 'jewels',
-            timestamp: '2024-01-01T00:00:00.000Z',
-            metadata: {
-                missingFields: ['userId']
-            }
-        });
-
-        expect(event).toMatchObject({
-            type: PlatformEvents.GIFT,
-            platform: 'youtube',
-            username: 'test-jewels-user',
-            giftType: 'Girl power',
-            amount: 300,
-            currency: 'jewels',
-            metadata: {
-                missingFields: ['userId']
-            }
-        });
-        expect(event.userId).toBeUndefined();
+    const event = eventFactory.createChatMessageEvent({
+      message: {
+        text: "partial youtube chat message",
+      },
+      metadata: {
+        missingFields: ["userId", "username", "timestamp"],
+      },
     });
 
-    it('rejects YouTube jewels gift events with missing userId when metadata is absent', () => {
-        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
+    expect(event.username).toBe("Unknown Username");
+    expect(event.userId).toBeUndefined();
+    expect(event.timestamp).toBeUndefined();
+    expect(event.message).toEqual({ text: "partial youtube chat message" });
+    expect(event.metadata.missingFields).toEqual([
+      "userId",
+      "username",
+      "timestamp",
+    ]);
+  });
 
-        const eventFactory = createYouTubeEventFactory();
+  it("allows degraded chat events with unknown-message placeholder when message is marked missing", () => {
+    const {
+      createYouTubeEventFactory,
+    } = require("../../../../../src/platforms/youtube/events/event-factory.ts");
 
-        expect(() => eventFactory.createGiftEvent({
-            username: 'test-jewels-user',
-            id: 'gift-jewels-123',
-            giftType: 'Girl power',
-            giftCount: 1,
-            amount: 300,
-            currency: 'jewels',
-            timestamp: '2024-01-01T00:00:00.000Z'
-        })).toThrow('YouTube event payload requires userId and username');
+    const eventFactory = createYouTubeEventFactory({
+      generateCorrelationId: () => "corr-youtube-missing-message",
     });
 
-    it('builds giftpaypiggy events with optional id', () => {
-        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
-
-        const eventFactory = createYouTubeEventFactory({
-            generateCorrelationId: () => 'corr-ignored'
-        });
-
-        const event = eventFactory.createGiftPaypiggyEvent({
-            username: 'GiftGiver',
-            userId: 'user-456',
-            id: 'giftpay-456',
-            giftCount: 5,
-            timestamp: '2024-01-01T00:00:00.000Z'
-        });
-
-        expect(event).toEqual({
-            type: PlatformEvents.GIFTPAYPIGGY,
-            platform: 'youtube',
-            username: 'GiftGiver',
-            userId: 'user-456',
-            avatarUrl: FALLBACK_AVATAR_URL,
-            giftCount: 5,
-            id: 'giftpay-456',
-            timestamp: '2024-01-01T00:00:00.000Z'
-        });
+    const event = eventFactory.createChatMessageEvent({
+      metadata: {
+        missingFields: ["message", "userId", "username", "timestamp"],
+      },
     });
 
-    it('preserves avatarUrl on giftpaypiggy events', () => {
-        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
+    expect(event.username).toBe("Unknown Username");
+    expect(event.userId).toBeUndefined();
+    expect(event.timestamp).toBeUndefined();
+    expect(event.message).toEqual({ text: "Unknown Message" });
+    expect(event.metadata.missingFields).toEqual([
+      "message",
+      "userId",
+      "username",
+      "timestamp",
+    ]);
+  });
 
-        const eventFactory = createYouTubeEventFactory();
+  it("builds viewer-count events matching the current YouTube payload shape", () => {
+    const {
+      createYouTubeEventFactory,
+    } = require("../../../../../src/platforms/youtube/events/event-factory.ts");
 
-        const event = eventFactory.createGiftPaypiggyEvent({
-            username: 'GiftGiver',
-            userId: 'user-456',
-            giftCount: 5,
-            avatarUrl: 'https://example.invalid/youtube-giftpaypiggy-avatar.jpg',
-            timestamp: '2024-01-01T00:00:00.000Z'
-        });
-
-        expect(event.avatarUrl).toBe('https://example.invalid/youtube-giftpaypiggy-avatar.jpg');
+    const eventFactory = createYouTubeEventFactory({
+      nowIso: () => "2024-01-01T00:00:00.000Z",
+      generateCorrelationId: () => "corr-999",
     });
 
-    it('builds paypiggy events with membership metadata', () => {
-        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
-
-        const eventFactory = createYouTubeEventFactory({
-            generateCorrelationId: () => 'corr-ignored'
-        });
-
-        const event = eventFactory.createPaypiggyEvent({
-            username: 'MemberUser',
-            userId: 'user-789',
-            membershipLevel: 'Gold',
-            months: 3,
-            timestamp: '2024-01-01T00:00:00.000Z'
-        });
-
-        expect(event).toEqual({
-            type: PlatformEvents.PAYPIGGY,
-            platform: 'youtube',
-            username: 'MemberUser',
-            userId: 'user-789',
-            avatarUrl: FALLBACK_AVATAR_URL,
-            membershipLevel: 'Gold',
-            months: 3,
-            timestamp: '2024-01-01T00:00:00.000Z'
-        });
+    const event = eventFactory.createViewerCountEvent({
+      count: 12,
+      streamId: "stream-2",
+      streamViewerCount: 7,
+      timestamp: "2024-01-01T00:00:00.000Z",
     });
 
-    it('preserves avatarUrl on paypiggy events', () => {
-        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
+    expect(event).toEqual({
+      type: PlatformEvents.VIEWER_COUNT,
+      platform: "youtube",
+      count: 12,
+      streamId: "stream-2",
+      streamViewerCount: 7,
+      timestamp: "2024-01-01T00:00:00.000Z",
+      metadata: {
+        platform: "youtube",
+        correlationId: "corr-999",
+      },
+    });
+  });
 
-        const eventFactory = createYouTubeEventFactory();
+  it("builds error events with metadata and context", () => {
+    const {
+      createYouTubeEventFactory,
+    } = require("../../../../../src/platforms/youtube/events/event-factory.ts");
 
-        const event = eventFactory.createPaypiggyEvent({
-            username: 'MemberUser',
-            userId: 'user-789',
-            avatarUrl: 'https://example.invalid/youtube-paypiggy-avatar.jpg',
-            timestamp: '2024-01-01T00:00:00.000Z'
-        });
-
-        expect(event.avatarUrl).toBe('https://example.invalid/youtube-paypiggy-avatar.jpg');
+    const eventFactory = createYouTubeEventFactory({
+      nowIso: () => "2024-01-01T00:00:00.000Z",
+      generateCorrelationId: () => "corr-error",
     });
 
-    describe('createViewerCountEvent validation', () => {
-        it('rejects non-numeric count values', () => {
-            const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
+    const error = new Error("Boom");
+    error.name = "BoomError";
 
-            const eventFactory = createYouTubeEventFactory({
-                generateCorrelationId: () => 'corr-ignored'
-            });
-
-            expect(() => eventFactory.createViewerCountEvent({
-                count: 'not-a-number',
-                streamId: 'stream-1',
-                timestamp: '2024-01-01T00:00:00.000Z'
-            })).toThrow('YouTube viewer count event requires numeric count');
-        });
-
-        it('rejects NaN count values', () => {
-            const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
-
-            const eventFactory = createYouTubeEventFactory({
-                generateCorrelationId: () => 'corr-ignored'
-            });
-
-            expect(() => eventFactory.createViewerCountEvent({
-                count: NaN,
-                streamId: 'stream-1',
-                timestamp: '2024-01-01T00:00:00.000Z'
-            })).toThrow('YouTube viewer count event requires numeric count');
-        });
-
-        it('rejects Infinity count values', () => {
-            const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
-
-            const eventFactory = createYouTubeEventFactory({
-                generateCorrelationId: () => 'corr-ignored'
-            });
-
-            expect(() => eventFactory.createViewerCountEvent({
-                count: Infinity,
-                streamId: 'stream-1',
-                timestamp: '2024-01-01T00:00:00.000Z'
-            })).toThrow('YouTube viewer count event requires numeric count');
-        });
-
-        it('accepts numeric string count values via coercion', () => {
-            const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
-
-            const eventFactory = createYouTubeEventFactory({
-                generateCorrelationId: () => 'corr-999'
-            });
-
-            const event = eventFactory.createViewerCountEvent({
-                count: '42',
-                streamId: 'stream-1',
-                timestamp: '2024-01-01T00:00:00.000Z'
-            });
-
-            expect(event.count).toBe(42);
-        });
-
-        it('accepts zero count', () => {
-            const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
-
-            const eventFactory = createYouTubeEventFactory({
-                generateCorrelationId: () => 'corr-999'
-            });
-
-            const event = eventFactory.createViewerCountEvent({
-                count: 0,
-                streamId: 'stream-1',
-                timestamp: '2024-01-01T00:00:00.000Z'
-            });
-
-            expect(event.count).toBe(0);
-        });
+    const event = eventFactory.createErrorEvent({
+      error,
+      context: { operation: "connect" },
+      recoverable: false,
+      videoId: "video-1",
+      timestamp: "2024-01-01T00:00:00.000Z",
     });
+
+    expect(event).toEqual({
+      type: PlatformEvents.ERROR,
+      platform: "youtube",
+      error: {
+        message: "Boom",
+        name: "BoomError",
+      },
+      context: { operation: "connect" },
+      recoverable: false,
+      timestamp: "2024-01-01T00:00:00.000Z",
+      metadata: {
+        platform: "youtube",
+        videoId: "video-1",
+        correlationId: "corr-error",
+      },
+    });
+  });
+
+  it("normalizes non-object error context to empty object", () => {
+    const {
+      createYouTubeEventFactory,
+    } = require("../../../../../src/platforms/youtube/events/event-factory.ts");
+
+    const eventFactory = createYouTubeEventFactory({
+      generateCorrelationId: () => "corr-error-context",
+    });
+
+    const event = eventFactory.createErrorEvent({
+      error: new Error("Boom"),
+      context: "invalid-context",
+      timestamp: "2024-01-01T00:00:00.000Z",
+    });
+
+    expect(event.context).toEqual({});
+  });
+
+  it("defaults recoverable to true when provided value is not boolean", () => {
+    const {
+      createYouTubeEventFactory,
+    } = require("../../../../../src/platforms/youtube/events/event-factory.ts");
+
+    const eventFactory = createYouTubeEventFactory({
+      generateCorrelationId: () => "corr-error-recoverable",
+    });
+
+    const event = eventFactory.createErrorEvent({
+      error: new Error("Boom"),
+      recoverable: "nope",
+      timestamp: "2024-01-01T00:00:00.000Z",
+    });
+
+    expect(event.recoverable).toBe(true);
+  });
+
+  it("rejects non-object error payloads with contract error", () => {
+    const {
+      createYouTubeEventFactory,
+    } = require("../../../../../src/platforms/youtube/events/event-factory.ts");
+
+    const eventFactory = createYouTubeEventFactory({
+      generateCorrelationId: () => "corr-error-non-object",
+    });
+
+    expect(() => eventFactory.createErrorEvent(null)).toThrow(
+      "YouTube error event requires timestamp",
+    );
+  });
+
+  it("builds gift events with monetization fields", () => {
+    const {
+      createYouTubeEventFactory,
+    } = require("../../../../../src/platforms/youtube/events/event-factory.ts");
+
+    const eventFactory = createYouTubeEventFactory({
+      generateCorrelationId: () => "corr-ignored",
+    });
+
+    const event = eventFactory.createGiftEvent({
+      username: "SuperChatUser",
+      userId: "user-123",
+      id: "gift-123",
+      giftType: "Super Chat",
+      giftCount: 1,
+      amount: 10,
+      currency: "USD",
+      message: "Thanks!",
+      giftImageUrl:
+        "https://lh3.googleusercontent.com/test-supersticker=s176-rwa",
+      timestamp: "2024-01-01T00:00:00.000Z",
+    });
+
+    expect(event).toEqual({
+      type: PlatformEvents.GIFT,
+      platform: "youtube",
+      username: "SuperChatUser",
+      userId: "user-123",
+      avatarUrl: FALLBACK_AVATAR_URL,
+      id: "gift-123",
+      giftType: "Super Chat",
+      giftCount: 1,
+      amount: 10,
+      currency: "USD",
+      message: "Thanks!",
+      giftImageUrl:
+        "https://lh3.googleusercontent.com/test-supersticker=s176-rwa",
+      timestamp: "2024-01-01T00:00:00.000Z",
+    });
+  });
+
+  it("preserves avatarUrl on gift events", () => {
+    const {
+      createYouTubeEventFactory,
+    } = require("../../../../../src/platforms/youtube/events/event-factory.ts");
+
+    const eventFactory = createYouTubeEventFactory();
+
+    const event = eventFactory.createGiftEvent({
+      username: "SuperChatUser",
+      userId: "user-123",
+      id: "gift-123",
+      giftType: "Super Chat",
+      giftCount: 1,
+      amount: 10,
+      currency: "USD",
+      avatarUrl: "https://example.invalid/youtube-gift-avatar.jpg",
+      timestamp: "2024-01-01T00:00:00.000Z",
+    });
+
+    expect(event.avatarUrl).toBe(
+      "https://example.invalid/youtube-gift-avatar.jpg",
+    );
+  });
+
+  it("allows YouTube jewels gift events with missing userId when metadata marks missing userId", () => {
+    const {
+      createYouTubeEventFactory,
+    } = require("../../../../../src/platforms/youtube/events/event-factory.ts");
+
+    const eventFactory = createYouTubeEventFactory();
+
+    const event = eventFactory.createGiftEvent({
+      username: "test-jewels-user",
+      id: "gift-jewels-123",
+      giftType: "Girl power",
+      giftCount: 1,
+      amount: 300,
+      currency: "jewels",
+      timestamp: "2024-01-01T00:00:00.000Z",
+      metadata: {
+        missingFields: ["userId"],
+      },
+    });
+
+    expect(event).toMatchObject({
+      type: PlatformEvents.GIFT,
+      platform: "youtube",
+      username: "test-jewels-user",
+      giftType: "Girl power",
+      amount: 300,
+      currency: "jewels",
+      metadata: {
+        missingFields: ["userId"],
+      },
+    });
+    expect(event.userId).toBeUndefined();
+  });
+
+  it("rejects YouTube jewels gift events with missing userId when metadata is absent", () => {
+    const {
+      createYouTubeEventFactory,
+    } = require("../../../../../src/platforms/youtube/events/event-factory.ts");
+
+    const eventFactory = createYouTubeEventFactory();
+
+    expect(() =>
+      eventFactory.createGiftEvent({
+        username: "test-jewels-user",
+        id: "gift-jewels-123",
+        giftType: "Girl power",
+        giftCount: 1,
+        amount: 300,
+        currency: "jewels",
+        timestamp: "2024-01-01T00:00:00.000Z",
+      }),
+    ).toThrow("YouTube event payload requires userId and username");
+  });
+
+  it("builds giftpaypiggy events with optional id", () => {
+    const {
+      createYouTubeEventFactory,
+    } = require("../../../../../src/platforms/youtube/events/event-factory.ts");
+
+    const eventFactory = createYouTubeEventFactory({
+      generateCorrelationId: () => "corr-ignored",
+    });
+
+    const event = eventFactory.createGiftPaypiggyEvent({
+      username: "GiftGiver",
+      userId: "user-456",
+      id: "giftpay-456",
+      giftCount: 5,
+      timestamp: "2024-01-01T00:00:00.000Z",
+    });
+
+    expect(event).toEqual({
+      type: PlatformEvents.GIFTPAYPIGGY,
+      platform: "youtube",
+      username: "GiftGiver",
+      userId: "user-456",
+      avatarUrl: FALLBACK_AVATAR_URL,
+      giftCount: 5,
+      id: "giftpay-456",
+      timestamp: "2024-01-01T00:00:00.000Z",
+    });
+  });
+
+  it("preserves avatarUrl on giftpaypiggy events", () => {
+    const {
+      createYouTubeEventFactory,
+    } = require("../../../../../src/platforms/youtube/events/event-factory.ts");
+
+    const eventFactory = createYouTubeEventFactory();
+
+    const event = eventFactory.createGiftPaypiggyEvent({
+      username: "GiftGiver",
+      userId: "user-456",
+      giftCount: 5,
+      avatarUrl: "https://example.invalid/youtube-giftpaypiggy-avatar.jpg",
+      timestamp: "2024-01-01T00:00:00.000Z",
+    });
+
+    expect(event.avatarUrl).toBe(
+      "https://example.invalid/youtube-giftpaypiggy-avatar.jpg",
+    );
+  });
+
+  it("builds paypiggy events with membership metadata", () => {
+    const {
+      createYouTubeEventFactory,
+    } = require("../../../../../src/platforms/youtube/events/event-factory.ts");
+
+    const eventFactory = createYouTubeEventFactory({
+      generateCorrelationId: () => "corr-ignored",
+    });
+
+    const event = eventFactory.createPaypiggyEvent({
+      username: "MemberUser",
+      userId: "user-789",
+      membershipLevel: "Gold",
+      months: 3,
+      timestamp: "2024-01-01T00:00:00.000Z",
+    });
+
+    expect(event).toEqual({
+      type: PlatformEvents.PAYPIGGY,
+      platform: "youtube",
+      username: "MemberUser",
+      userId: "user-789",
+      avatarUrl: FALLBACK_AVATAR_URL,
+      membershipLevel: "Gold",
+      months: 3,
+      timestamp: "2024-01-01T00:00:00.000Z",
+    });
+  });
+
+  it("preserves avatarUrl on paypiggy events", () => {
+    const {
+      createYouTubeEventFactory,
+    } = require("../../../../../src/platforms/youtube/events/event-factory.ts");
+
+    const eventFactory = createYouTubeEventFactory();
+
+    const event = eventFactory.createPaypiggyEvent({
+      username: "MemberUser",
+      userId: "user-789",
+      avatarUrl: "https://example.invalid/youtube-paypiggy-avatar.jpg",
+      timestamp: "2024-01-01T00:00:00.000Z",
+    });
+
+    expect(event.avatarUrl).toBe(
+      "https://example.invalid/youtube-paypiggy-avatar.jpg",
+    );
+  });
+
+  describe("createViewerCountEvent validation", () => {
+    it("rejects non-numeric count values", () => {
+      const {
+        createYouTubeEventFactory,
+      } = require("../../../../../src/platforms/youtube/events/event-factory.ts");
+
+      const eventFactory = createYouTubeEventFactory({
+        generateCorrelationId: () => "corr-ignored",
+      });
+
+      expect(() =>
+        eventFactory.createViewerCountEvent({
+          count: "not-a-number",
+          streamId: "stream-1",
+          timestamp: "2024-01-01T00:00:00.000Z",
+        }),
+      ).toThrow("YouTube viewer count event requires numeric count");
+    });
+
+    it("rejects NaN count values", () => {
+      const {
+        createYouTubeEventFactory,
+      } = require("../../../../../src/platforms/youtube/events/event-factory.ts");
+
+      const eventFactory = createYouTubeEventFactory({
+        generateCorrelationId: () => "corr-ignored",
+      });
+
+      expect(() =>
+        eventFactory.createViewerCountEvent({
+          count: NaN,
+          streamId: "stream-1",
+          timestamp: "2024-01-01T00:00:00.000Z",
+        }),
+      ).toThrow("YouTube viewer count event requires numeric count");
+    });
+
+    it("rejects Infinity count values", () => {
+      const {
+        createYouTubeEventFactory,
+      } = require("../../../../../src/platforms/youtube/events/event-factory.ts");
+
+      const eventFactory = createYouTubeEventFactory({
+        generateCorrelationId: () => "corr-ignored",
+      });
+
+      expect(() =>
+        eventFactory.createViewerCountEvent({
+          count: Infinity,
+          streamId: "stream-1",
+          timestamp: "2024-01-01T00:00:00.000Z",
+        }),
+      ).toThrow("YouTube viewer count event requires numeric count");
+    });
+
+    it("accepts numeric string count values via coercion", () => {
+      const {
+        createYouTubeEventFactory,
+      } = require("../../../../../src/platforms/youtube/events/event-factory.ts");
+
+      const eventFactory = createYouTubeEventFactory({
+        generateCorrelationId: () => "corr-999",
+      });
+
+      const event = eventFactory.createViewerCountEvent({
+        count: "42",
+        streamId: "stream-1",
+        timestamp: "2024-01-01T00:00:00.000Z",
+      });
+
+      expect(event.count).toBe(42);
+    });
+
+    it("accepts zero count", () => {
+      const {
+        createYouTubeEventFactory,
+      } = require("../../../../../src/platforms/youtube/events/event-factory.ts");
+
+      const eventFactory = createYouTubeEventFactory({
+        generateCorrelationId: () => "corr-999",
+      });
+
+      const event = eventFactory.createViewerCountEvent({
+        count: 0,
+        streamId: "stream-1",
+        timestamp: "2024-01-01T00:00:00.000Z",
+      });
+
+      expect(event.count).toBe(0);
+    });
+  });
 });

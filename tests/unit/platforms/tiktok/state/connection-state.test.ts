@@ -1,279 +1,287 @@
-const { describe, it, expect, afterEach } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../../../../helpers/bun-mock-utils');
-const { noOpLogger } = require('../../../../helpers/mock-factories');
-const { TikTokPlatform } = require('../../../../../src/platforms/tiktok.ts');
+import { describe, it, expect, afterEach } from "bun:test";
+import {
+  createMockFn,
+  restoreAllMocks,
+} from "../../../../helpers/bun-mock-utils";
+import { noOpLogger } from "../../../../helpers/mock-factories";
+import { TikTokPlatform } from "../../../../../src/platforms/tiktok.ts";
 
 const createPlatform = (configOverrides = {}, dependencyOverrides = {}) => {
-    const logger = dependencyOverrides.logger || noOpLogger;
-    const notificationManager = dependencyOverrides.notificationManager || {
-        emit: createMockFn(),
-        on: createMockFn(),
-        removeListener: createMockFn(),
-        handleNotification: createMockFn().mockResolvedValue()
-    };
-    const connectionFactory = dependencyOverrides.connectionFactory || {
-        createConnection: createMockFn().mockReturnValue({
-            on: createMockFn(),
-            emit: createMockFn(),
-            removeAllListeners: createMockFn(),
-            connect: createMockFn(),
-            disconnect: createMockFn()
-        })
-    };
+  const logger = dependencyOverrides.logger || noOpLogger;
+  const notificationManager = dependencyOverrides.notificationManager || {
+    emit: createMockFn(),
+    on: createMockFn(),
+    removeListener: createMockFn(),
+    handleNotification: createMockFn().mockResolvedValue(),
+  };
+  const connectionFactory = dependencyOverrides.connectionFactory || {
+    createConnection: createMockFn().mockReturnValue({
+      on: createMockFn(),
+      emit: createMockFn(),
+      removeAllListeners: createMockFn(),
+      connect: createMockFn(),
+      disconnect: createMockFn(),
+    }),
+  };
 
-    const TikTokWebSocketClient = dependencyOverrides.TikTokWebSocketClient || createMockFn().mockImplementation(() => ({
-        on: createMockFn(),
-        off: createMockFn(),
-        connect: createMockFn(),
-        disconnect: createMockFn(),
-        getState: createMockFn().mockReturnValue('DISCONNECTED'),
-        isConnecting: false,
-        isConnected: false
+  const TikTokWebSocketClient =
+    dependencyOverrides.TikTokWebSocketClient ||
+    createMockFn().mockImplementation(() => ({
+      on: createMockFn(),
+      off: createMockFn(),
+      connect: createMockFn(),
+      disconnect: createMockFn(),
+      getState: createMockFn().mockReturnValue("DISCONNECTED"),
+      isConnecting: false,
+      isConnected: false,
     }));
 
-    const WebcastEvent = dependencyOverrides.WebcastEvent || { ERROR: 'error', DISCONNECT: 'disconnect' };
-    const ControlEvent = dependencyOverrides.ControlEvent || {};
+  const WebcastEvent = dependencyOverrides.WebcastEvent || {
+    ERROR: "error",
+    DISCONNECT: "disconnect",
+  };
+  const ControlEvent = dependencyOverrides.ControlEvent || {};
 
-    const config = {
-        enabled: true,
-        username: 'testUser',
-        ...configOverrides
-    };
+  const config = {
+    enabled: true,
+    username: "testUser",
+    ...configOverrides,
+  };
 
-    return new TikTokPlatform(config, {
-        logger,
-        notificationManager,
-        TikTokWebSocketClient,
-        WebcastEvent,
-        ControlEvent,
-        connectionFactory,
-        ...dependencyOverrides
-    });
+  return new TikTokPlatform(config, {
+    logger,
+    notificationManager,
+    TikTokWebSocketClient,
+    WebcastEvent,
+    ControlEvent,
+    connectionFactory,
+    ...dependencyOverrides,
+  });
 };
 
-describe('TikTokPlatform connection state', () => {
-    afterEach(() => {
-        restoreAllMocks();
+describe("TikTokPlatform connection state", () => {
+  afterEach(() => {
+    restoreAllMocks();
+  });
+
+  describe("checkConnectionPrerequisites", () => {
+    it("returns canConnect=false when platform disabled", () => {
+      const platform = createPlatform({ enabled: false, username: "testUser" });
+
+      const result = platform.checkConnectionPrerequisites();
+
+      expect(result.canConnect).toBe(false);
+      expect(result.reasons).toContain("Platform disabled in configuration");
+      expect(result.reason).toBe("Platform disabled in configuration");
     });
 
-    describe('checkConnectionPrerequisites', () => {
-        it('returns canConnect=false when platform disabled', () => {
-            const platform = createPlatform({ enabled: false, username: 'testUser' });
+    it("returns canConnect=false when connection.isConnecting is true", () => {
+      const platform = createPlatform();
+      platform.connection = { isConnecting: true, isConnected: false };
 
-            const result = platform.checkConnectionPrerequisites();
+      const result = platform.checkConnectionPrerequisites();
 
-            expect(result.canConnect).toBe(false);
-            expect(result.reasons).toContain('Platform disabled in configuration');
-            expect(result.reason).toBe('Platform disabled in configuration');
-        });
-
-        it('returns canConnect=false when connection.isConnecting is true', () => {
-            const platform = createPlatform();
-            platform.connection = { isConnecting: true, isConnected: false };
-
-            const result = platform.checkConnectionPrerequisites();
-
-            expect(result.canConnect).toBe(false);
-            expect(result.reasons).toContain('Already connecting');
-        });
-
-        it('returns canConnect=false when connection.isConnected is true', () => {
-            const platform = createPlatform();
-            platform.connection = { isConnecting: false, isConnected: true };
-
-            const result = platform.checkConnectionPrerequisites();
-
-            expect(result.canConnect).toBe(false);
-            expect(result.reasons).toContain('Already connected');
-        });
-
-        it('returns canConnect=true when all prerequisites met', () => {
-            const platform = createPlatform({ enabled: true, username: 'testUser' });
-            platform.connection = null;
-
-            const result = platform.checkConnectionPrerequisites();
-
-            expect(result.canConnect).toBe(true);
-            expect(result.reasons).toEqual([]);
-            expect(result.reason).toBeUndefined();
-        });
+      expect(result.canConnect).toBe(false);
+      expect(result.reasons).toContain("Already connecting");
     });
 
-    describe('connectionStatus getter', () => {
-        it('returns false when connection is null', () => {
-            const platform = createPlatform();
-            platform.connection = null;
+    it("returns canConnect=false when connection.isConnected is true", () => {
+      const platform = createPlatform();
+      platform.connection = { isConnecting: false, isConnected: true };
 
-            expect(platform.connectionStatus).toBe(false);
-        });
+      const result = platform.checkConnectionPrerequisites();
 
-        it('returns true when connection.isConnected is true', () => {
-            const platform = createPlatform();
-            platform.connection = { isConnected: true };
-
-            expect(platform.connectionStatus).toBe(true);
-        });
-
-        it('returns false when connection.isConnected is false', () => {
-            const platform = createPlatform();
-            platform.connection = { isConnected: false };
-
-            expect(platform.connectionStatus).toBe(false);
-        });
+      expect(result.canConnect).toBe(false);
+      expect(result.reasons).toContain("Already connected");
     });
 
-    describe('isConnecting getter', () => {
-        it('returns false when connection is null', () => {
-            const platform = createPlatform();
-            platform.connection = null;
+    it("returns canConnect=true when all prerequisites met", () => {
+      const platform = createPlatform({ enabled: true, username: "testUser" });
+      platform.connection = null;
 
-            expect(platform.isConnecting).toBe(false);
-        });
+      const result = platform.checkConnectionPrerequisites();
 
-        it('returns true when connection.isConnecting is true', () => {
-            const platform = createPlatform();
-            platform.connection = { isConnecting: true };
+      expect(result.canConnect).toBe(true);
+      expect(result.reasons).toEqual([]);
+      expect(result.reason).toBeUndefined();
+    });
+  });
 
-            expect(platform.isConnecting).toBe(true);
-        });
+  describe("connectionStatus getter", () => {
+    it("returns false when connection is null", () => {
+      const platform = createPlatform();
+      platform.connection = null;
 
-        it('returns false when connection.isConnecting is false', () => {
-            const platform = createPlatform();
-            platform.connection = { isConnecting: false };
-
-            expect(platform.isConnecting).toBe(false);
-        });
+      expect(platform.connectionStatus).toBe(false);
     });
 
-    describe('getConnectionState', () => {
-        it('returns isConnected/isConnecting from connection when present', () => {
-            const platform = createPlatform();
-            platform.connection = {
-                isConnected: true,
-                isConnecting: false,
-                connectionId: 'test-conn-123'
-            };
-            platform.connectionTime = 1704067200000;
+    it("returns true when connection.isConnected is true", () => {
+      const platform = createPlatform();
+      platform.connection = { isConnected: true };
 
-            const state = platform.getConnectionState();
-
-            expect(state.isConnected).toBe(true);
-            expect(state.isConnecting).toBe(false);
-            expect(state.hasConnection).toBe(true);
-            expect(state.connectionId).toBe('test-conn-123');
-            expect(state.connectionTime).toBe(1704067200000);
-        });
-
-        it('returns hasConnection=false when connection is null', () => {
-            const platform = createPlatform();
-            platform.connection = null;
-
-            const state = platform.getConnectionState();
-
-            expect(state.hasConnection).toBe(false);
-            expect(state.isConnected).toBe(false);
-            expect(state.isConnecting).toBe(false);
-            expect(state.connectionId).toBe('N/A');
-        });
+      expect(platform.connectionStatus).toBe(true);
     });
 
-    describe('getStats', () => {
-        it('returns platform, enabled, connected state', () => {
-            const platform = createPlatform({ enabled: true, username: 'testUser' });
-            platform.connection = { isConnected: true, isConnecting: false };
+    it("returns false when connection.isConnected is false", () => {
+      const platform = createPlatform();
+      platform.connection = { isConnected: false };
 
-            const stats = platform.getStats();
+      expect(platform.connectionStatus).toBe(false);
+    });
+  });
 
-            expect(stats.platform).toBe('tiktok');
-            expect(stats.enabled).toBe(true);
-            expect(stats.connected).toBe(true);
-            expect(stats.connecting).toBe(false);
-        });
+  describe("isConnecting getter", () => {
+    it("returns false when connection is null", () => {
+      const platform = createPlatform();
+      platform.connection = null;
 
-        it('returns config subset with username, viewerCountEnabled, greetingsEnabled', () => {
-            const platform = createPlatform({
-                enabled: true,
-                username: 'testStreamer',
-                viewerCountEnabled: true,
-                greetingsEnabled: false
-            });
-
-            const stats = platform.getStats();
-
-            expect(stats.config.username).toBe('testStreamer');
-            expect(stats.config.viewerCountEnabled).toBe(true);
-            expect(stats.config.greetingsEnabled).toBe(false);
-        });
+      expect(platform.isConnecting).toBe(false);
     });
 
-    describe('getStatus', () => {
-        it('returns isReady=true when enabled and connected', () => {
-            const platform = createPlatform({
-                enabled: true,
-                username: 'testStreamer'
-            });
-            platform.connection = {
-                isConnected: true,
-                isConnecting: false,
-                connectionId: 'conn-456'
-            };
+    it("returns true when connection.isConnecting is true", () => {
+      const platform = createPlatform();
+      platform.connection = { isConnecting: true };
 
-            const status = platform.getStatus();
-
-            expect(status.isReady).toBe(true);
-            expect(status.issues).toEqual([]);
-        });
-
-        it('returns isReady=false with issues when not connected', () => {
-            const platform = createPlatform({ enabled: true, username: 'testUser' });
-            platform.connection = null;
-
-            const status = platform.getStatus();
-
-            expect(status.isReady).toBe(false);
-            expect(status.issues).toContain('Not connected');
-        });
+      expect(platform.isConnecting).toBe(true);
     });
 
-    describe('isConfigured', () => {
-        it('returns true when enabled and username set', () => {
-            const platform = createPlatform({ enabled: true, username: 'testUser' });
+    it("returns false when connection.isConnecting is false", () => {
+      const platform = createPlatform();
+      platform.connection = { isConnecting: false };
 
-            expect(platform.isConfigured()).toBe(true);
-        });
+      expect(platform.isConnecting).toBe(false);
+    });
+  });
 
-        it('returns false when disabled', () => {
-            const platform = createPlatform({ enabled: false, username: 'testUser' });
+  describe("getConnectionState", () => {
+    it("returns isConnected/isConnecting from connection when present", () => {
+      const platform = createPlatform();
+      platform.connection = {
+        isConnected: true,
+        isConnecting: false,
+        connectionId: "test-conn-123",
+      };
+      platform.connectionTime = 1704067200000;
 
-            expect(platform.isConfigured()).toBe(false);
-        });
+      const state = platform.getConnectionState();
 
-        it('returns false when username missing', () => {
-            const platform = createPlatform({ enabled: true, username: '' });
-
-            expect(platform.isConfigured()).toBe(false);
-        });
+      expect(state.isConnected).toBe(true);
+      expect(state.isConnecting).toBe(false);
+      expect(state.hasConnection).toBe(true);
+      expect(state.connectionId).toBe("test-conn-123");
+      expect(state.connectionTime).toBe(1704067200000);
     });
 
-    describe('validateConfig', () => {
-        it('delegates to getStatus for standardized interface', () => {
-            const platform = createPlatform({ enabled: true, username: 'testUser' });
-            platform.connection = { isConnected: true };
+    it("returns hasConnection=false when connection is null", () => {
+      const platform = createPlatform();
+      platform.connection = null;
 
-            const result = platform.validateConfig();
+      const state = platform.getConnectionState();
 
-            expect(result.isReady).toBe(true);
-            expect(result.issues).toEqual([]);
-        });
-
-        it('returns issues for runtime state problems', () => {
-            const platform = createPlatform({ enabled: true, username: 'testUser' });
-            platform.connection = null;
-
-            const result = platform.validateConfig();
-
-            expect(result.isReady).toBe(false);
-            expect(result.issues).toContain('Not connected');
-        });
+      expect(state.hasConnection).toBe(false);
+      expect(state.isConnected).toBe(false);
+      expect(state.isConnecting).toBe(false);
+      expect(state.connectionId).toBe("N/A");
     });
+  });
+
+  describe("getStats", () => {
+    it("returns platform, enabled, connected state", () => {
+      const platform = createPlatform({ enabled: true, username: "testUser" });
+      platform.connection = { isConnected: true, isConnecting: false };
+
+      const stats = platform.getStats();
+
+      expect(stats.platform).toBe("tiktok");
+      expect(stats.enabled).toBe(true);
+      expect(stats.connected).toBe(true);
+      expect(stats.connecting).toBe(false);
+    });
+
+    it("returns config subset with username, viewerCountEnabled, greetingsEnabled", () => {
+      const platform = createPlatform({
+        enabled: true,
+        username: "testStreamer",
+        viewerCountEnabled: true,
+        greetingsEnabled: false,
+      });
+
+      const stats = platform.getStats();
+
+      expect(stats.config.username).toBe("testStreamer");
+      expect(stats.config.viewerCountEnabled).toBe(true);
+      expect(stats.config.greetingsEnabled).toBe(false);
+    });
+  });
+
+  describe("getStatus", () => {
+    it("returns isReady=true when enabled and connected", () => {
+      const platform = createPlatform({
+        enabled: true,
+        username: "testStreamer",
+      });
+      platform.connection = {
+        isConnected: true,
+        isConnecting: false,
+        connectionId: "conn-456",
+      };
+
+      const status = platform.getStatus();
+
+      expect(status.isReady).toBe(true);
+      expect(status.issues).toEqual([]);
+    });
+
+    it("returns isReady=false with issues when not connected", () => {
+      const platform = createPlatform({ enabled: true, username: "testUser" });
+      platform.connection = null;
+
+      const status = platform.getStatus();
+
+      expect(status.isReady).toBe(false);
+      expect(status.issues).toContain("Not connected");
+    });
+  });
+
+  describe("isConfigured", () => {
+    it("returns true when enabled and username set", () => {
+      const platform = createPlatform({ enabled: true, username: "testUser" });
+
+      expect(platform.isConfigured()).toBe(true);
+    });
+
+    it("returns false when disabled", () => {
+      const platform = createPlatform({ enabled: false, username: "testUser" });
+
+      expect(platform.isConfigured()).toBe(false);
+    });
+
+    it("returns false when username missing", () => {
+      const platform = createPlatform({ enabled: true, username: "" });
+
+      expect(platform.isConfigured()).toBe(false);
+    });
+  });
+
+  describe("validateConfig", () => {
+    it("delegates to getStatus for standardized interface", () => {
+      const platform = createPlatform({ enabled: true, username: "testUser" });
+      platform.connection = { isConnected: true };
+
+      const result = platform.validateConfig();
+
+      expect(result.isReady).toBe(true);
+      expect(result.issues).toEqual([]);
+    });
+
+    it("returns issues for runtime state problems", () => {
+      const platform = createPlatform({ enabled: true, username: "testUser" });
+      platform.connection = null;
+
+      const result = platform.validateConfig();
+
+      expect(result.isReady).toBe(false);
+      expect(result.issues).toContain("Not connected");
+    });
+  });
 });

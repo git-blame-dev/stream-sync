@@ -1,153 +1,165 @@
-const { describe, test, expect, afterEach } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../../../../helpers/bun-mock-utils');
+import { describe, test, expect, afterEach } from "bun:test";
+import {
+  createMockFn,
+  restoreAllMocks,
+} from "../../../../helpers/bun-mock-utils";
 
-const { YouTubePlatform } = require('../../../../../src/platforms/youtube');
-const { getSyntheticFixture } = require('../../../../helpers/platform-test-data');
+import { YouTubePlatform } from "../../../../../src/platforms/youtube";
+import { getSyntheticFixture } from "../../../../helpers/platform-test-data";
 const {
-    initializeTestLogging,
-    createMockPlatformDependencies
-} = require('../../../../helpers/test-setup');
-const { createYouTubeConfigFixture } = require('../../../../helpers/config-fixture');
+  initializeTestLogging,
+  createMockPlatformDependencies,
+} = require("../../../../helpers/test-setup");
+import { createYouTubeConfigFixture } from "../../../../helpers/config-fixture";
 
 initializeTestLogging();
 
 const flushPromises = () => new Promise((resolve) => setImmediate(resolve));
-const getDebugCalls = (logger) => logger.debug.mock.calls.map(([message, _scope, metadata]) => ({
+const getDebugCalls = (logger) =>
+  logger.debug.mock.calls.map(([message, _scope, metadata]) => ({
     message,
-    metadata: metadata || null
-}));
+    metadata: metadata || null,
+  }));
 
-describe('YouTubePlatform event routing behavior', () => {
-    afterEach(() => {
-        restoreAllMocks();
+describe("YouTubePlatform event routing behavior", () => {
+  afterEach(() => {
+    restoreAllMocks();
+  });
+
+  const baseConfig = createYouTubeConfigFixture({
+    enabled: true,
+    username: "test-channel",
+  });
+
+  const createPlatform = () =>
+    new YouTubePlatform(baseConfig, {
+      ...createMockPlatformDependencies("youtube"),
+      streamDetectionService: {
+        detectLiveStreams: createMockFn().mockResolvedValue({
+          success: true,
+          videoIds: [],
+        }),
+      },
     });
 
-    const baseConfig = createYouTubeConfigFixture({
-        enabled: true,
-        username: 'test-channel'
+  test("routes gift membership purchase announcements to giftpaypiggy notifications", async () => {
+    const platform = createPlatform();
+    const giftEvents = [];
+    platform.handlers = {
+      ...(platform.handlers || {}),
+      onGiftPaypiggy: (event) => giftEvents.push(event),
+    };
+
+    const giftPurchase = getSyntheticFixture("youtube", "gift-purchase-header");
+    await platform.handleChatMessage(giftPurchase);
+    await flushPromises();
+
+    expect(giftEvents).toHaveLength(1);
+    const [event] = giftEvents;
+    expect(event.type).toBe("platform:giftpaypiggy");
+    expect(event.platform).toBe("youtube");
+    expect(event.giftCount).toBe(5);
+    expect(event.username).toBe("GiftGiver");
+    expect(event.id).toBe(giftPurchase.item.id);
+    expect(typeof event.timestamp).toBe("string");
+    expect(event.timestamp.trim()).not.toBe("");
+  });
+
+  test("ignores gift membership redemption announcements", async () => {
+    const platform = createPlatform();
+    const giftEvents = [];
+    platform.handlers = {
+      ...(platform.handlers || {}),
+      onGiftPaypiggy: (event) => giftEvents.push(event),
+    };
+
+    await platform.handleChatMessage({
+      type: "AddChatItemAction",
+      item: {
+        type: "LiveChatSponsorshipsGiftRedemptionAnnouncement",
+        id: "LCC.test-gift-redemption-001",
+        timestamp_usec: "1704067200000000",
+        author: {
+          id: "UC_TEST_CHANNEL_000001",
+          name: "@GiftedViewer",
+        },
+      },
     });
+    await flushPromises();
 
-    const createPlatform = () => new YouTubePlatform(baseConfig, {
-        ...createMockPlatformDependencies('youtube'),
-        streamDetectionService: {
-            detectLiveStreams: createMockFn().mockResolvedValue({ success: true, videoIds: [] })
-        }
+    expect(giftEvents).toHaveLength(0);
+    const debugCalls = getDebugCalls(platform.logger);
+    const giftLog = debugCalls.find(({ message }) =>
+      message.includes(
+        "ignored gifted membership announcement for GiftedViewer",
+      ),
+    );
+    expect(giftLog).toBeTruthy();
+    expect(giftLog.metadata).toMatchObject({
+      action: "ignored_gifted_membership_announcement",
+      recipient: "GiftedViewer",
+      eventType: "LiveChatSponsorshipsGiftRedemptionAnnouncement",
     });
+  });
 
-    test('routes gift membership purchase announcements to giftpaypiggy notifications', async () => {
-        const platform = createPlatform();
-        const giftEvents = [];
-        platform.handlers = {
-            ...(platform.handlers || {}),
-            onGiftPaypiggy: (event) => giftEvents.push(event)
-        };
+  test("uses fallback username when gift redemption recipient is missing", async () => {
+    const platform = createPlatform();
 
-        const giftPurchase = getSyntheticFixture('youtube', 'gift-purchase-header');
-        await platform.handleChatMessage(giftPurchase);
-        await flushPromises();
-
-        expect(giftEvents).toHaveLength(1);
-        const [event] = giftEvents;
-        expect(event.type).toBe('platform:giftpaypiggy');
-        expect(event.platform).toBe('youtube');
-        expect(event.giftCount).toBe(5);
-        expect(event.username).toBe('GiftGiver');
-        expect(event.id).toBe(giftPurchase.item.id);
-        expect(typeof event.timestamp).toBe('string');
-        expect(event.timestamp.trim()).not.toBe('');
+    await platform.handleChatMessage({
+      type: "AddChatItemAction",
+      item: {
+        type: "LiveChatSponsorshipsGiftRedemptionAnnouncement",
+        id: "LCC.test-gift-redemption-002",
+        timestamp_usec: "1704067201000000",
+        author: {
+          id: "UC_TEST_CHANNEL_000002",
+          name: "N/A",
+        },
+      },
     });
+    await flushPromises();
 
-    test('ignores gift membership redemption announcements', async () => {
-        const platform = createPlatform();
-        const giftEvents = [];
-        platform.handlers = {
-            ...(platform.handlers || {}),
-            onGiftPaypiggy: (event) => giftEvents.push(event)
-        };
-
-        await platform.handleChatMessage({
-            type: 'AddChatItemAction',
-            item: {
-                type: 'LiveChatSponsorshipsGiftRedemptionAnnouncement',
-                id: 'LCC.test-gift-redemption-001',
-                timestamp_usec: '1704067200000000',
-                author: {
-                    id: 'UC_TEST_CHANNEL_000001',
-                    name: '@GiftedViewer'
-                }
-            }
-        });
-        await flushPromises();
-
-        expect(giftEvents).toHaveLength(0);
-        const debugCalls = getDebugCalls(platform.logger);
-        const giftLog = debugCalls.find(({ message }) =>
-            message.includes('ignored gifted membership announcement for GiftedViewer')
-        );
-        expect(giftLog).toBeTruthy();
-        expect(giftLog.metadata).toMatchObject({
-            action: 'ignored_gifted_membership_announcement',
-            recipient: 'GiftedViewer',
-            eventType: 'LiveChatSponsorshipsGiftRedemptionAnnouncement'
-        });
+    const debugCalls = getDebugCalls(platform.logger);
+    const giftLog = debugCalls.find(({ message }) =>
+      message.includes(
+        "ignored gifted membership announcement for Unknown User",
+      ),
+    );
+    expect(giftLog).toBeTruthy();
+    expect(giftLog.metadata).toMatchObject({
+      action: "ignored_gifted_membership_announcement",
+      recipient: "Unknown User",
+      eventType: "LiveChatSponsorshipsGiftRedemptionAnnouncement",
     });
+  });
 
-    test('uses fallback username when gift redemption recipient is missing', async () => {
-        const platform = createPlatform();
+  test("logs ignored duplicates for renderer variants without unknown-event logging", async () => {
+    const platform = createPlatform();
+    platform.logRawPlatformData = createMockFn().mockResolvedValue();
 
-        await platform.handleChatMessage({
-            type: 'AddChatItemAction',
-            item: {
-                type: 'LiveChatSponsorshipsGiftRedemptionAnnouncement',
-                id: 'LCC.test-gift-redemption-002',
-                timestamp_usec: '1704067201000000',
-                author: {
-                    id: 'UC_TEST_CHANNEL_000002',
-                    name: 'N/A'
-                }
-            }
-        });
-        await flushPromises();
-
-        const debugCalls = getDebugCalls(platform.logger);
-        const giftLog = debugCalls.find(({ message }) =>
-            message.includes('ignored gifted membership announcement for Unknown User')
-        );
-        expect(giftLog).toBeTruthy();
-        expect(giftLog.metadata).toMatchObject({
-            action: 'ignored_gifted_membership_announcement',
-            recipient: 'Unknown User',
-            eventType: 'LiveChatSponsorshipsGiftRedemptionAnnouncement'
-        });
+    await platform.handleChatMessage({
+      type: "AddChatItemAction",
+      item: {
+        type: "LiveChatPaidMessageRenderer",
+        id: "LCC.test-renderer-001",
+        timestamp_usec: "1704067202000000",
+        author: {
+          id: "UC_TEST_CHANNEL_000003",
+          name: "@RendererUser",
+        },
+      },
     });
+    await flushPromises();
 
-    test('logs ignored duplicates for renderer variants without unknown-event logging', async () => {
-        const platform = createPlatform();
-        platform.logRawPlatformData = createMockFn().mockResolvedValue();
-
-        await platform.handleChatMessage({
-            type: 'AddChatItemAction',
-            item: {
-                type: 'LiveChatPaidMessageRenderer',
-                id: 'LCC.test-renderer-001',
-                timestamp_usec: '1704067202000000',
-                author: {
-                    id: 'UC_TEST_CHANNEL_000003',
-                    name: '@RendererUser'
-                }
-            }
-        });
-        await flushPromises();
-
-        const debugCalls = getDebugCalls(platform.logger);
-        const duplicateLog = debugCalls.find(({ message }) =>
-            message.includes('ignored duplicate LiveChatPaidMessageRenderer')
-        );
-        expect(duplicateLog).toBeTruthy();
-        expect(duplicateLog.metadata).toMatchObject({
-            action: 'ignored_duplicate',
-            eventType: 'LiveChatPaidMessageRenderer',
-            author: 'RendererUser'
-        });
+    const debugCalls = getDebugCalls(platform.logger);
+    const duplicateLog = debugCalls.find(({ message }) =>
+      message.includes("ignored duplicate LiveChatPaidMessageRenderer"),
+    );
+    expect(duplicateLog).toBeTruthy();
+    expect(duplicateLog.metadata).toMatchObject({
+      action: "ignored_duplicate",
+      eventType: "LiveChatPaidMessageRenderer",
+      author: "RendererUser",
     });
+  });
 });

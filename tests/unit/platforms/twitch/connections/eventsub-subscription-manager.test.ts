@@ -1,411 +1,514 @@
-const { describe, test, expect } = require('bun:test');
-const { noOpLogger } = require('../../../../helpers/mock-factories');
-const { createTwitchEventSubSubscriptionManager } = require('../../../../../src/platforms/twitch/connections/eventsub-subscription-manager.ts');
-const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../../../../src/core/secrets');
+import { describe, test, expect } from "bun:test";
+import { noOpLogger } from "../../../../helpers/mock-factories";
+import { createTwitchEventSubSubscriptionManager } from "../../../../../src/platforms/twitch/connections/eventsub-subscription-manager.ts";
+import {
+  secrets,
+  _resetForTesting,
+  initializeStaticSecrets,
+} from "../../../../../src/core/secrets";
 
 const createTwitchAuth = (overrides = {}) => ({
-    refreshTokens: async () => true,
-    isReady: () => true,
-    ...overrides
+  refreshTokens: async () => true,
+  isReady: () => true,
+  ...overrides,
 });
 
 const createManager = (overrides = {}) => {
-    _resetForTesting();
-    initializeStaticSecrets();
-    secrets.twitch.accessToken = 'testAccessToken';
-    return createTwitchEventSubSubscriptionManager({
-        logger: noOpLogger,
-        twitchAuth: createTwitchAuth(),
-        config: { clientId: 'testClientId' },
-        subscriptions: new Map(),
-        getClientId: () => 'testClientId',
-        validateConnectionForSubscriptions: () => true,
-        logError: () => {},
-        ...overrides
-    });
+  _resetForTesting();
+  initializeStaticSecrets();
+  secrets.twitch.accessToken = "testAccessToken";
+  return createTwitchEventSubSubscriptionManager({
+    logger: noOpLogger,
+    twitchAuth: createTwitchAuth(),
+    config: { clientId: "testClientId" },
+    subscriptions: new Map(),
+    getClientId: () => "testClientId",
+    validateConnectionForSubscriptions: () => true,
+    logError: () => {},
+    ...overrides,
+  });
 };
 
-describe('Twitch EventSub subscription manager', () => {
-    test('categorizes subscription errors as critical or retryable', () => {
-        const manager = createManager();
+describe("Twitch EventSub subscription manager", () => {
+  test("categorizes subscription errors as critical or retryable", () => {
+    const manager = createManager();
 
-        const critical = manager.parseSubscriptionError(
-            { response: { data: { error: 'Unauthorized', message: 'bad' }, status: 401 } },
-            { type: 'channel.follow' }
-        );
-        const retryable = manager.parseSubscriptionError(
-            { response: { data: { error: 'Too Many Requests', message: 'rate' }, status: 429 } },
-            { type: 'channel.follow' }
-        );
+    const critical = manager.parseSubscriptionError(
+      {
+        response: {
+          data: { error: "Unauthorized", message: "bad" },
+          status: 401,
+        },
+      },
+      { type: "channel.follow" },
+    );
+    const retryable = manager.parseSubscriptionError(
+      {
+        response: {
+          data: { error: "Too Many Requests", message: "rate" },
+          status: 429,
+        },
+      },
+      { type: "channel.follow" },
+    );
 
-        expect(critical.isCritical).toBe(true);
-        expect(retryable.isRetryable).toBe(true);
+    expect(critical.isCritical).toBe(true);
+    expect(retryable.isRetryable).toBe(true);
+  });
+
+  test("retries subscription creation for retryable failures", async () => {
+    const postCalls = [];
+    let callCount = 0;
+    const post = async (url, payload, options) => {
+      postCalls.push({ url, payload, headers: options?.headers });
+      callCount++;
+      if (callCount === 1) {
+        const error = new Error("Too Many Requests");
+        error.response = {
+          data: { error: "Too Many Requests", message: "rate" },
+          status: 429,
+        };
+        throw error;
+      }
+      return { data: { data: [{ id: "sub-1", status: "enabled" }] } };
+    };
+    const manager = createManager({
+      axios: { post },
+      getClientId: () => "testClientId",
     });
 
-    test('retries subscription creation for retryable failures', async () => {
-        const postCalls = [];
-        let callCount = 0;
-        const post = async (url, payload, options) => {
-            postCalls.push({ url, payload, headers: options?.headers });
-            callCount++;
-            if (callCount === 1) {
-                const error = new Error('Too Many Requests');
-                error.response = { data: { error: 'Too Many Requests', message: 'rate' }, status: 429 };
-                throw error;
-            }
-            return { data: { data: [{ id: 'sub-1', status: 'enabled' }] } };
-        };
-        const manager = createManager({ axios: { post }, getClientId: () => 'testClientId' });
-
-        const result = await manager.setupEventSubscriptions({
-            requiredSubscriptions: [{
-                name: 'Follows',
-                type: 'channel.follow',
-                version: '2',
-                getCondition: () => ({ broadcaster_user_id: 'broadcaster-1' })
-            }],
-            userId: 'user-1',
-            broadcasterId: 'broadcaster-1',
-            sessionId: 'session-1',
-            subscriptionDelay: 0,
-            isConnected: true
-        });
-
-        expect(result.failures).toHaveLength(0);
-        expect(result.successful).toBe(1);
-        expect(postCalls.length).toBeGreaterThan(1);
-        expect(postCalls[0].url).toContain('/eventsub/subscriptions');
-        expect(postCalls[0].payload.type).toBe('channel.follow');
+    const result = await manager.setupEventSubscriptions({
+      requiredSubscriptions: [
+        {
+          name: "Follows",
+          type: "channel.follow",
+          version: "2",
+          getCondition: () => ({ broadcaster_user_id: "broadcaster-1" }),
+        },
+      ],
+      userId: "user-1",
+      broadcasterId: "broadcaster-1",
+      sessionId: "session-1",
+      subscriptionDelay: 0,
+      isConnected: true,
     });
 
-    test('uses config clientId and secrets token for subscription requests', async () => {
-        const postCalls = [];
-        const post = async (url, payload, options) => {
-            postCalls.push({ url, payload, headers: options?.headers });
-            return { data: { data: [{ id: 'sub-1', status: 'enabled' }] } };
-        };
-        const manager = createManager({ axios: { post } });
-        secrets.twitch.accessToken = 'authToken';
+    expect(result.failures).toHaveLength(0);
+    expect(result.successful).toBe(1);
+    expect(postCalls.length).toBeGreaterThan(1);
+    expect(postCalls[0].url).toContain("/eventsub/subscriptions");
+    expect(postCalls[0].payload.type).toBe("channel.follow");
+  });
 
-        const result = await manager.setupEventSubscriptions({
-            requiredSubscriptions: [{
-                name: 'Chat',
-                type: 'channel.chat.message',
-                version: '1',
-                getCondition: () => ({ broadcaster_user_id: 'broadcaster-1', user_id: 'user-1' })
-            }],
-            userId: 'user-1',
-            broadcasterId: 'broadcaster-1',
-            sessionId: 'session-1',
-            subscriptionDelay: 0,
-            isConnected: true
-        });
+  test("uses config clientId and secrets token for subscription requests", async () => {
+    const postCalls = [];
+    const post = async (url, payload, options) => {
+      postCalls.push({ url, payload, headers: options?.headers });
+      return { data: { data: [{ id: "sub-1", status: "enabled" }] } };
+    };
+    const manager = createManager({ axios: { post } });
+    secrets.twitch.accessToken = "authToken";
 
-        expect(result.successful).toBe(1);
-        expect(postCalls).toHaveLength(1);
-        expect(postCalls[0].headers['Client-Id']).toBe('testClientId');
-        expect(postCalls[0].headers['Authorization']).toBe('Bearer authToken');
-        expect(postCalls[0].payload.type).toBe('channel.chat.message');
+    const result = await manager.setupEventSubscriptions({
+      requiredSubscriptions: [
+        {
+          name: "Chat",
+          type: "channel.chat.message",
+          version: "1",
+          getCondition: () => ({
+            broadcaster_user_id: "broadcaster-1",
+            user_id: "user-1",
+          }),
+        },
+      ],
+      userId: "user-1",
+      broadcasterId: "broadcaster-1",
+      sessionId: "session-1",
+      subscriptionDelay: 0,
+      isConnected: true,
     });
 
-    test('processes multiple subscriptions successfully when subscriptionDelay is zero', async () => {
-        const post = async (_url, payload) => {
-            return { data: { data: [{ id: `sub-${payload.type}`, status: 'enabled' }] } };
-        };
-        const manager = createManager({ axios: { post } });
+    expect(result.successful).toBe(1);
+    expect(postCalls).toHaveLength(1);
+    expect(postCalls[0].headers["Client-Id"]).toBe("testClientId");
+    expect(postCalls[0].headers["Authorization"]).toBe("Bearer authToken");
+    expect(postCalls[0].payload.type).toBe("channel.chat.message");
+  });
 
-        const result = await manager.setupEventSubscriptions({
-            requiredSubscriptions: [
-                {
-                    name: 'Chat',
-                    type: 'channel.chat.message',
-                    version: '1',
-                    getCondition: () => ({ broadcaster_user_id: 'test-broadcaster-1', user_id: 'test-user-1' })
-                },
-                {
-                    name: 'Follows',
-                    type: 'channel.follow',
-                    version: '2',
-                    getCondition: () => ({ broadcaster_user_id: 'test-broadcaster-1', moderator_user_id: 'test-user-1' })
-                }
-            ],
-            userId: 'test-user-1',
-            broadcasterId: 'test-broadcaster-1',
-            sessionId: 'test-session-1',
-            subscriptionDelay: 0,
-            isConnected: true
-        });
+  test("processes multiple subscriptions successfully when subscriptionDelay is zero", async () => {
+    const post = async (_url, payload) => {
+      return {
+        data: { data: [{ id: `sub-${payload.type}`, status: "enabled" }] },
+      };
+    };
+    const manager = createManager({ axios: { post } });
 
-        expect(result.successful).toBe(2);
-        expect(result.failures).toHaveLength(0);
+    const result = await manager.setupEventSubscriptions({
+      requiredSubscriptions: [
+        {
+          name: "Chat",
+          type: "channel.chat.message",
+          version: "1",
+          getCondition: () => ({
+            broadcaster_user_id: "test-broadcaster-1",
+            user_id: "test-user-1",
+          }),
+        },
+        {
+          name: "Follows",
+          type: "channel.follow",
+          version: "2",
+          getCondition: () => ({
+            broadcaster_user_id: "test-broadcaster-1",
+            moderator_user_id: "test-user-1",
+          }),
+        },
+      ],
+      userId: "test-user-1",
+      broadcasterId: "test-broadcaster-1",
+      sessionId: "test-session-1",
+      subscriptionDelay: 0,
+      isConnected: true,
     });
 
-    test('stops subscription setup immediately when connection validation fails before the next request', async () => {
-        const postCalls = [];
-        const post = async (_url, payload) => {
-            postCalls.push(payload.type);
-            return { data: { data: [{ id: `sub-${payload.type}`, status: 'enabled' }] } };
+    expect(result.successful).toBe(2);
+    expect(result.failures).toHaveLength(0);
+  });
+
+  test("stops subscription setup immediately when connection validation fails before the next request", async () => {
+    const postCalls = [];
+    const post = async (_url, payload) => {
+      postCalls.push(payload.type);
+      return {
+        data: { data: [{ id: `sub-${payload.type}`, status: "enabled" }] },
+      };
+    };
+    let validationCalls = 0;
+    const manager = createManager({
+      axios: { post },
+      validateConnectionForSubscriptions: () => {
+        validationCalls += 1;
+        return validationCalls <= 2;
+      },
+      now: (() => {
+        const values = [0, 1000, 1000, 1000];
+        return () => values.shift() ?? 1000;
+      })(),
+    });
+
+    const result = await manager.setupEventSubscriptions({
+      requiredSubscriptions: [
+        {
+          name: "Chat",
+          type: "channel.chat.message",
+          version: "1",
+          getCondition: () => ({
+            broadcaster_user_id: "test-broadcaster-1",
+            user_id: "test-user-1",
+          }),
+        },
+        {
+          name: "Follows",
+          type: "channel.follow",
+          version: "2",
+          getCondition: () => ({
+            broadcaster_user_id: "test-broadcaster-1",
+            moderator_user_id: "test-user-1",
+          }),
+        },
+      ],
+      userId: "test-user-1",
+      broadcasterId: "test-broadcaster-1",
+      sessionId: "test-session-1",
+      subscriptionDelay: 0,
+      isConnected: true,
+    });
+
+    expect(postCalls).toEqual(["channel.chat.message"]);
+    expect(result.successful).toBe(1);
+  });
+
+  test("treats dead websocket session responses as terminal for the current setup pass", async () => {
+    const postCalls = [];
+    const post = async (_url, payload) => {
+      postCalls.push(payload.type);
+      if (payload.type === "channel.chat.message") {
+        const error = new Error("dead session");
+        error.response = {
+          data: {
+            error: "Bad Request",
+            message: "websocket session has already disconnected",
+          },
+          status: 400,
         };
-        let validationCalls = 0;
-        const manager = createManager({
-            axios: { post },
-            validateConnectionForSubscriptions: () => {
-                validationCalls += 1;
-                return validationCalls <= 2;
+        throw error;
+      }
+      return {
+        data: { data: [{ id: `sub-${payload.type}`, status: "enabled" }] },
+      };
+    };
+    const manager = createManager({ axios: { post } });
+
+    const result = await manager.setupEventSubscriptions({
+      requiredSubscriptions: [
+        {
+          name: "Chat",
+          type: "channel.chat.message",
+          version: "1",
+          getCondition: () => ({
+            broadcaster_user_id: "test-broadcaster-1",
+            user_id: "test-user-1",
+          }),
+        },
+        {
+          name: "Follows",
+          type: "channel.follow",
+          version: "2",
+          getCondition: () => ({
+            broadcaster_user_id: "test-broadcaster-1",
+            moderator_user_id: "test-user-1",
+          }),
+        },
+      ],
+      userId: "test-user-1",
+      broadcasterId: "test-broadcaster-1",
+      sessionId: "test-session-1",
+      subscriptionDelay: 0,
+      isConnected: true,
+    });
+
+    expect(postCalls).toEqual(["channel.chat.message"]);
+    expect(result.failures).toHaveLength(1);
+    expect(result.failures[0].error.message).toContain(
+      "websocket session has already disconnected",
+    );
+  });
+
+  test("uses config clientId and secrets token for cleanup", async () => {
+    const getCalls = [];
+    const deleteCalls = [];
+    const get = async (url, options) => {
+      getCalls.push({ url, headers: options?.headers });
+      return {
+        data: {
+          data: [
+            {
+              id: "sub-1",
+              status: "websocket_disconnected",
+              transport: { method: "websocket", session_id: "session-1" },
             },
-            now: (() => {
-                const values = [0, 1000, 1000, 1000];
-                return () => values.shift() ?? 1000;
-            })()
-        });
+          ],
+        },
+      };
+    };
+    const deleteCall = async (url, options) => {
+      deleteCalls.push({ url, headers: options?.headers });
+      return {};
+    };
+    const manager = createManager({ axios: { get, delete: deleteCall } });
+    secrets.twitch.accessToken = "authToken";
 
-        const result = await manager.setupEventSubscriptions({
-            requiredSubscriptions: [
-                {
-                    name: 'Chat',
-                    type: 'channel.chat.message',
-                    version: '1',
-                    getCondition: () => ({ broadcaster_user_id: 'test-broadcaster-1', user_id: 'test-user-1' })
-                },
-                {
-                    name: 'Follows',
-                    type: 'channel.follow',
-                    version: '2',
-                    getCondition: () => ({ broadcaster_user_id: 'test-broadcaster-1', moderator_user_id: 'test-user-1' })
-                }
-            ],
-            userId: 'test-user-1',
-            broadcasterId: 'test-broadcaster-1',
-            sessionId: 'test-session-1',
-            subscriptionDelay: 0,
-            isConnected: true
-        });
+    await manager.cleanupAllWebSocketSubscriptions({ sessionId: "session-1" });
 
-        expect(postCalls).toEqual(['channel.chat.message']);
-        expect(result.successful).toBe(1);
+    expect(getCalls).toHaveLength(1);
+    expect(getCalls[0].headers["Client-Id"]).toBe("testClientId");
+    expect(getCalls[0].headers["Authorization"]).toBe("Bearer authToken");
+    expect(deleteCalls).toHaveLength(1);
+    expect(deleteCalls[0].url).toContain("sub-1");
+  });
+
+  test("cleanup deletes websocket subscriptions with bounded parallelism", async () => {
+    let inFlightDeletes = 0;
+    let maxInFlightDeletes = 0;
+    let releaseDeletes;
+    const deleteBarrier = new Promise((resolve) => {
+      releaseDeletes = resolve;
     });
 
-    test('treats dead websocket session responses as terminal for the current setup pass', async () => {
-        const postCalls = [];
-        const post = async (_url, payload) => {
-            postCalls.push(payload.type);
-            if (payload.type === 'channel.chat.message') {
-                const error = new Error('dead session');
-                error.response = {
-                    data: {
-                        error: 'Bad Request',
-                        message: 'websocket session has already disconnected'
-                    },
-                    status: 400
-                };
-                throw error;
-            }
-            return { data: { data: [{ id: `sub-${payload.type}`, status: 'enabled' }] } };
-        };
-        const manager = createManager({ axios: { post } });
-
-        const result = await manager.setupEventSubscriptions({
-            requiredSubscriptions: [
-                {
-                    name: 'Chat',
-                    type: 'channel.chat.message',
-                    version: '1',
-                    getCondition: () => ({ broadcaster_user_id: 'test-broadcaster-1', user_id: 'test-user-1' })
-                },
-                {
-                    name: 'Follows',
-                    type: 'channel.follow',
-                    version: '2',
-                    getCondition: () => ({ broadcaster_user_id: 'test-broadcaster-1', moderator_user_id: 'test-user-1' })
-                }
-            ],
-            userId: 'test-user-1',
-            broadcasterId: 'test-broadcaster-1',
-            sessionId: 'test-session-1',
-            subscriptionDelay: 0,
-            isConnected: true
-        });
-
-        expect(postCalls).toEqual(['channel.chat.message']);
-        expect(result.failures).toHaveLength(1);
-        expect(result.failures[0].error.message).toContain('websocket session has already disconnected');
-    });
-
-    test('uses config clientId and secrets token for cleanup', async () => {
-        const getCalls = [];
-        const deleteCalls = [];
-        const get = async (url, options) => {
-            getCalls.push({ url, headers: options?.headers });
-            return {
-                data: {
-                    data: [{ id: 'sub-1', status: 'websocket_disconnected', transport: { method: 'websocket', session_id: 'session-1' } }]
-                }
-            };
-        };
-        const deleteCall = async (url, options) => {
-            deleteCalls.push({ url, headers: options?.headers });
-            return {};
-        };
-        const manager = createManager({ axios: { get, delete: deleteCall } });
-        secrets.twitch.accessToken = 'authToken';
-
-        await manager.cleanupAllWebSocketSubscriptions({ sessionId: 'session-1' });
-
-        expect(getCalls).toHaveLength(1);
-        expect(getCalls[0].headers['Client-Id']).toBe('testClientId');
-        expect(getCalls[0].headers['Authorization']).toBe('Bearer authToken');
-        expect(deleteCalls).toHaveLength(1);
-        expect(deleteCalls[0].url).toContain('sub-1');
-    });
-
-    test('cleanup deletes websocket subscriptions with bounded parallelism', async () => {
-        let inFlightDeletes = 0;
-        let maxInFlightDeletes = 0;
-        let releaseDeletes;
-        const deleteBarrier = new Promise((resolve) => {
-            releaseDeletes = resolve;
-        });
-
-        const get = async () => {
-            return {
-                data: {
-                    data: [
-                        { id: 'sub-1', status: 'websocket_disconnected', transport: { method: 'websocket', session_id: 'session-a' } },
-                        { id: 'sub-2', status: 'websocket_disconnected', transport: { method: 'websocket', session_id: 'session-b' } },
-                        { id: 'sub-3', status: 'websocket_disconnected', transport: { method: 'websocket', session_id: 'session-c' } },
-                        { id: 'sub-4', status: 'websocket_disconnected', transport: { method: 'websocket', session_id: 'session-d' } }
-                    ]
-                }
-            };
-        };
-
-        const deleteCall = async () => {
-            inFlightDeletes += 1;
-            if (inFlightDeletes > maxInFlightDeletes) {
-                maxInFlightDeletes = inFlightDeletes;
-            }
-
-            await deleteBarrier;
-            inFlightDeletes -= 1;
-            return {};
-        };
-
-        const manager = createManager({ axios: { get, delete: deleteCall } });
-
-        const cleanupPromise = manager.cleanupAllWebSocketSubscriptions();
-
-        for (let i = 0; i < 20 && maxInFlightDeletes <= 1; i++) {
-            await Promise.resolve();
-        }
-
-        expect(maxInFlightDeletes).toBeGreaterThan(1);
-        expect(maxInFlightDeletes).toBeLessThanOrEqual(3);
-
-        releaseDeletes();
-
-        await cleanupPromise;
-    });
-
-    test('cleanup skips websocket_connected subscriptions when no sessionId is provided', async () => {
-        const deleteCalls = [];
-        const get = async () => ({
-            data: {
-                data: [
-                    { id: 'enabled-sub', status: 'enabled', transport: { method: 'websocket', session_id: 'session-other' } },
-                    { id: 'connected-sub', status: 'websocket_connected', transport: { method: 'websocket', session_id: 'session-live' } },
-                    { id: 'disconnected-sub', status: 'websocket_disconnected', transport: { method: 'websocket', session_id: 'session-stale' } }
-                ]
-            }
-        });
-        const deleteCall = async (url) => {
-            deleteCalls.push(url);
-            return {};
-        };
-
-        const manager = createManager({ axios: { get, delete: deleteCall } });
-        await manager.cleanupAllWebSocketSubscriptions();
-
-        expect(deleteCalls).toHaveLength(1);
-        expect(deleteCalls[0]).toContain('disconnected-sub');
-    });
-
-    test('deletes only current session subscriptions and updates local state', async () => {
-        const deleteCalls = [];
-        const errorLogs = [];
-        const subscriptions = new Map([
-            ['test-ours-ok', { id: 'test-ours-ok' }],
-            ['test-ours-fail', { id: 'test-ours-fail' }],
-            ['test-other', { id: 'test-other' }]
-        ]);
-
-        const get = async () => ({
-            data: {
-                data: [
-                    { id: 'test-ours-ok', type: 'channel.chat.message', transport: { method: 'websocket', session_id: 'test-session-1' } },
-                    { id: 'test-ours-fail', type: 'channel.follow', transport: { method: 'websocket', session_id: 'test-session-1' } },
-                    { id: 'test-other', type: 'channel.subscribe', transport: { method: 'websocket', session_id: 'test-session-2' } },
-                    { id: 'test-ignored', type: 'channel.raid', transport: { method: 'webhook' } }
-                ]
-            }
-        });
-        const deleteCall = async (url) => {
-            deleteCalls.push(url);
-            if (url.includes('test-ours-fail')) {
-                throw new Error('delete failed');
-            }
-            return {};
-        };
-
-        const manager = createManager({
-            subscriptions,
-            axios: { get, delete: deleteCall },
-            logError: (message) => errorLogs.push(message)
-        });
-
-        await manager.deleteAllSubscriptions({ sessionId: 'test-session-1' });
-
-        expect(deleteCalls).toHaveLength(2);
-        expect(deleteCalls[0]).toContain('test-ours-ok');
-        expect(deleteCalls[1]).toContain('test-ours-fail');
-        expect(subscriptions.has('test-ours-ok')).toBe(false);
-        expect(subscriptions.has('test-ours-fail')).toBe(true);
-        expect(subscriptions.has('test-other')).toBe(true);
-        expect(errorLogs.length).toBe(1);
-    });
-
-    test('skips deleteAllSubscriptions when authentication is missing', async () => {
-        let getCalls = 0;
-        const manager = createManager({
-            axios: {
-                get: async () => {
-                    getCalls += 1;
-                    return { data: { data: [] } };
-                },
-                delete: async () => ({})
-            }
-        });
-        secrets.twitch.accessToken = '';
-
-        await manager.deleteAllSubscriptions({ sessionId: 'test-session-1' });
-
-        expect(getCalls).toBe(0);
-    });
-
-    test('reports top-level cleanup failure when listing subscriptions fails', async () => {
-        const errorLogs = [];
-        const manager = createManager({
-            axios: {
-                get: async () => {
-                    throw new Error('list failed');
-                },
-                delete: async () => ({})
+    const get = async () => {
+      return {
+        data: {
+          data: [
+            {
+              id: "sub-1",
+              status: "websocket_disconnected",
+              transport: { method: "websocket", session_id: "session-a" },
             },
-            logError: (message) => errorLogs.push(message)
-        });
+            {
+              id: "sub-2",
+              status: "websocket_disconnected",
+              transport: { method: "websocket", session_id: "session-b" },
+            },
+            {
+              id: "sub-3",
+              status: "websocket_disconnected",
+              transport: { method: "websocket", session_id: "session-c" },
+            },
+            {
+              id: "sub-4",
+              status: "websocket_disconnected",
+              transport: { method: "websocket", session_id: "session-d" },
+            },
+          ],
+        },
+      };
+    };
 
-        await manager.deleteAllSubscriptions({ sessionId: 'test-session-1' });
+    const deleteCall = async () => {
+      inFlightDeletes += 1;
+      if (inFlightDeletes > maxInFlightDeletes) {
+        maxInFlightDeletes = inFlightDeletes;
+      }
 
-        expect(errorLogs.length).toBe(1);
-        expect(errorLogs[0]).toContain('Failed to cleanup EventSub subscriptions');
+      await deleteBarrier;
+      inFlightDeletes -= 1;
+      return {};
+    };
+
+    const manager = createManager({ axios: { get, delete: deleteCall } });
+
+    const cleanupPromise = manager.cleanupAllWebSocketSubscriptions();
+
+    for (let i = 0; i < 20 && maxInFlightDeletes <= 1; i++) {
+      await Promise.resolve();
+    }
+
+    expect(maxInFlightDeletes).toBeGreaterThan(1);
+    expect(maxInFlightDeletes).toBeLessThanOrEqual(3);
+
+    releaseDeletes();
+
+    await cleanupPromise;
+  });
+
+  test("cleanup skips websocket_connected subscriptions when no sessionId is provided", async () => {
+    const deleteCalls = [];
+    const get = async () => ({
+      data: {
+        data: [
+          {
+            id: "enabled-sub",
+            status: "enabled",
+            transport: { method: "websocket", session_id: "session-other" },
+          },
+          {
+            id: "connected-sub",
+            status: "websocket_connected",
+            transport: { method: "websocket", session_id: "session-live" },
+          },
+          {
+            id: "disconnected-sub",
+            status: "websocket_disconnected",
+            transport: { method: "websocket", session_id: "session-stale" },
+          },
+        ],
+      },
     });
+    const deleteCall = async (url) => {
+      deleteCalls.push(url);
+      return {};
+    };
+
+    const manager = createManager({ axios: { get, delete: deleteCall } });
+    await manager.cleanupAllWebSocketSubscriptions();
+
+    expect(deleteCalls).toHaveLength(1);
+    expect(deleteCalls[0]).toContain("disconnected-sub");
+  });
+
+  test("deletes only current session subscriptions and updates local state", async () => {
+    const deleteCalls = [];
+    const errorLogs = [];
+    const subscriptions = new Map([
+      ["test-ours-ok", { id: "test-ours-ok" }],
+      ["test-ours-fail", { id: "test-ours-fail" }],
+      ["test-other", { id: "test-other" }],
+    ]);
+
+    const get = async () => ({
+      data: {
+        data: [
+          {
+            id: "test-ours-ok",
+            type: "channel.chat.message",
+            transport: { method: "websocket", session_id: "test-session-1" },
+          },
+          {
+            id: "test-ours-fail",
+            type: "channel.follow",
+            transport: { method: "websocket", session_id: "test-session-1" },
+          },
+          {
+            id: "test-other",
+            type: "channel.subscribe",
+            transport: { method: "websocket", session_id: "test-session-2" },
+          },
+          {
+            id: "test-ignored",
+            type: "channel.raid",
+            transport: { method: "webhook" },
+          },
+        ],
+      },
+    });
+    const deleteCall = async (url) => {
+      deleteCalls.push(url);
+      if (url.includes("test-ours-fail")) {
+        throw new Error("delete failed");
+      }
+      return {};
+    };
+
+    const manager = createManager({
+      subscriptions,
+      axios: { get, delete: deleteCall },
+      logError: (message) => errorLogs.push(message),
+    });
+
+    await manager.deleteAllSubscriptions({ sessionId: "test-session-1" });
+
+    expect(deleteCalls).toHaveLength(2);
+    expect(deleteCalls[0]).toContain("test-ours-ok");
+    expect(deleteCalls[1]).toContain("test-ours-fail");
+    expect(subscriptions.has("test-ours-ok")).toBe(false);
+    expect(subscriptions.has("test-ours-fail")).toBe(true);
+    expect(subscriptions.has("test-other")).toBe(true);
+    expect(errorLogs.length).toBe(1);
+  });
+
+  test("skips deleteAllSubscriptions when authentication is missing", async () => {
+    let getCalls = 0;
+    const manager = createManager({
+      axios: {
+        get: async () => {
+          getCalls += 1;
+          return { data: { data: [] } };
+        },
+        delete: async () => ({}),
+      },
+    });
+    secrets.twitch.accessToken = "";
+
+    await manager.deleteAllSubscriptions({ sessionId: "test-session-1" });
+
+    expect(getCalls).toBe(0);
+  });
+
+  test("reports top-level cleanup failure when listing subscriptions fails", async () => {
+    const errorLogs = [];
+    const manager = createManager({
+      axios: {
+        get: async () => {
+          throw new Error("list failed");
+        },
+        delete: async () => ({}),
+      },
+      logError: (message) => errorLogs.push(message),
+    });
+
+    await manager.deleteAllSubscriptions({ sessionId: "test-session-1" });
+
+    expect(errorLogs.length).toBe(1);
+    expect(errorLogs[0]).toContain("Failed to cleanup EventSub subscriptions");
+  });
 });

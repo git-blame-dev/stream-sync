@@ -1,147 +1,173 @@
-
-const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
-export {};
-const { createMockFn, spyOn, restoreAllMocks } = require('../../../helpers/bun-mock-utils');
-const { noOpLogger } = require('../../../helpers/mock-factories');
-const { initializeTestLogging, createMockPlatformDependencies } = require('../../../helpers/test-setup');
-const { createYouTubeConfigFixture } = require('../../../helpers/config-fixture');
+import { describe, test, expect, beforeEach, afterEach } from "bun:test";
+import {
+  createMockFn,
+  spyOn,
+  restoreAllMocks,
+} from "../../../helpers/bun-mock-utils";
+import { noOpLogger } from "../../../helpers/mock-factories";
+import {
+  initializeTestLogging,
+  createMockPlatformDependencies,
+} from "../../../helpers/test-setup";
+import { createYouTubeConfigFixture } from "../../../helpers/config-fixture";
 
 initializeTestLogging();
 
-const { YouTubePlatform } = require('../../../../src/platforms/youtube');
+import { YouTubePlatform } from "../../../../src/platforms/youtube";
 
-describe('YouTube Platform Configuration Validation', () => {
-    afterEach(() => {
-        restoreAllMocks();
+describe("YouTube Platform Configuration Validation", () => {
+  afterEach(() => {
+    restoreAllMocks();
+  });
+
+  let mockDependencies: ReturnType<typeof createMockPlatformDependencies>;
+
+  beforeEach(() => {
+    mockDependencies = createMockPlatformDependencies("youtube");
+  });
+
+  describe("Configuration Key Normalization (After Refactor)", () => {
+    test("should handle config with required username", async () => {
+      const configWithCamelCase = createYouTubeConfigFixture({
+        enabled: true,
+        username: "testuser",
+      });
+
+      const platform = new YouTubePlatform(
+        configWithCamelCase,
+        mockDependencies,
+      );
+
+      expect(platform).toBeDefined();
+      expect(typeof platform).toBe("object");
+    });
+  });
+
+  describe("Configuration Validation Edge Cases", () => {
+    test("should handle missing API key gracefully", async () => {
+      const configWithoutApiKey = createYouTubeConfigFixture({
+        enabled: true,
+        username: "testuser",
+      });
+
+      const platform = new YouTubePlatform(
+        configWithoutApiKey,
+        mockDependencies,
+      );
+
+      expect(platform).toBeDefined();
+      expect(typeof platform).toBe("object");
     });
 
-    let mockDependencies: ReturnType<typeof createMockPlatformDependencies>;
-    
-    beforeEach(() => {
-        mockDependencies = createMockPlatformDependencies('youtube');
-    });
-    
-    describe('Configuration Key Normalization (After Refactor)', () => {
-        test('should handle config with required username', async () => {
-            const configWithCamelCase = createYouTubeConfigFixture({
-                enabled: true,
-                username: 'testuser'
-            });
+    test("should handle disabled platform", async () => {
+      const disabledConfig = createYouTubeConfigFixture({
+        enabled: false,
+        username: "testuser",
+      });
 
-            const platform = new YouTubePlatform(configWithCamelCase, mockDependencies);
+      const platform = new YouTubePlatform(disabledConfig, mockDependencies);
 
-            expect(platform).toBeDefined();
-            expect(typeof platform).toBe('object');
-        });
-    });
-    
-    describe('Configuration Validation Edge Cases', () => {
-        test('should handle missing API key gracefully', async () => {
-            const configWithoutApiKey = createYouTubeConfigFixture({
-                enabled: true,
-                username: 'testuser'
-            });
-
-            const platform = new YouTubePlatform(configWithoutApiKey, mockDependencies);
-
-            expect(platform).toBeDefined();
-            expect(typeof platform).toBe('object');
-        });
-        
-        test('should handle disabled platform', async () => {
-            const disabledConfig = createYouTubeConfigFixture({
-                enabled: false,
-                username: 'testuser'
-            });
-
-            const platform = new YouTubePlatform(disabledConfig, mockDependencies);
-
-            expect(platform).toBeDefined();
-            expect(typeof platform).toBe('object');
-        });
-
-        test('should handle missing username', async () => {
-            const configWithoutUsername = createYouTubeConfigFixture({
-                enabled: true
-            });
-
-            const platform = new YouTubePlatform(configWithoutUsername, mockDependencies);
-
-            expect(platform).toBeDefined();
-            expect(typeof platform).toBe('object');
-        });
+      expect(platform).toBeDefined();
+      expect(typeof platform).toBe("object");
     });
 
-    describe('Platform initialization', () => {
-        test('initializes disabled platform without errors', async () => {
-            const platform = new YouTubePlatform(
-                createYouTubeConfigFixture({ enabled: false, username: '' }),
-                { ...mockDependencies, logger: noOpLogger }
-            );
+    test("should handle missing username", async () => {
+      const configWithoutUsername = createYouTubeConfigFixture({
+        enabled: true,
+      });
 
-            await platform.initialize();
+      const platform = new YouTubePlatform(
+        configWithoutUsername,
+        mockDependencies,
+      );
 
-            expect(platform.isInitialized).toBe(true);
-            expect(platform.monitoringInterval).toBeFalsy();
-        });
+      expect(platform).toBeDefined();
+      expect(typeof platform).toBe("object");
+    });
+  });
+
+  describe("Platform initialization", () => {
+    test("initializes disabled platform without errors", async () => {
+      const platform = new YouTubePlatform(
+        createYouTubeConfigFixture({ enabled: false, username: "" }),
+        { ...mockDependencies, logger: noOpLogger },
+      );
+
+      await platform.initialize();
+
+      expect(platform.isInitialized).toBe(true);
+      expect(platform.monitoringInterval).toBeFalsy();
+    });
+  });
+
+  describe("Dependency Validation", () => {
+    const baseConfig = createYouTubeConfigFixture({
+      enabled: true,
+      username: "channel-owner",
     });
 
-    describe('Dependency Validation', () => {
-        const baseConfig = createYouTubeConfigFixture({
-            enabled: true,
-            username: 'channel-owner'
-        });
+    test("should fail fast when stream detection service is missing", () => {
+      const dependenciesWithoutDetection = {
+        ...createMockPlatformDependencies("youtube"),
+        streamDetectionService: null,
+        forceStreamDetectionValidation: true,
+      };
 
-        test('should fail fast when stream detection service is missing', () => {
-            const dependenciesWithoutDetection = {
-                ...createMockPlatformDependencies('youtube'),
-                streamDetectionService: null,
-                forceStreamDetectionValidation: true
-            };
+      const createPlatform = () =>
+        new YouTubePlatform(baseConfig, dependenciesWithoutDetection);
 
-            const createPlatform = () => new YouTubePlatform(baseConfig, dependenciesWithoutDetection);
-
-            expect(createPlatform).toThrow(/stream detection/i);
-        });
-
-        test('should accept dependencies that include a stream detection service', async () => {
-            const detectionResult = ['live-stream-123'];
-            const dependenciesWithDetection = createMockPlatformDependencies('youtube', {
-                streamDetectionService: {
-                    detectLiveStreams: createMockFn().mockResolvedValue({
-                        success: true,
-                        videoIds: detectionResult
-                    })
-                }
-            });
-
-            const platform = new YouTubePlatform(baseConfig, dependenciesWithDetection);
-            const videoIds = await platform.getLiveVideoIdsByYoutubei();
-
-            expect(videoIds).toEqual(detectionResult);
-        });
-
-        test('should surface data logging path errors via error handler', () => {
-            const mkdirMock = spyOn(require('fs'), 'mkdirSync').mockImplementation(() => {
-                throw new Error('disk full');
-            });
-
-            const dependencies = createMockPlatformDependencies('youtube', {
-                streamDetectionService: {
-                    detectLiveStreams: createMockFn().mockResolvedValue({ success: true, videoIds: [] })
-                }
-            });
-
-            const platform = new YouTubePlatform(baseConfig, dependencies);
-            const errorCalls: unknown[][] = [];
-            platform.errorHandler = {
-                handleDataLoggingError: (...args) => errorCalls.push(args)
-            };
-
-            platform._ensureDataLoggingPath();
-
-            expect(errorCalls.length).toBeGreaterThan(0);
-            mkdirMock.mockRestore();
-        });
+      expect(createPlatform).toThrow(/stream detection/i);
     });
+
+    test("should accept dependencies that include a stream detection service", async () => {
+      const detectionResult = ["live-stream-123"];
+      const dependenciesWithDetection = createMockPlatformDependencies(
+        "youtube",
+        {
+          streamDetectionService: {
+            detectLiveStreams: createMockFn().mockResolvedValue({
+              success: true,
+              videoIds: detectionResult,
+            }),
+          },
+        },
+      );
+
+      const platform = new YouTubePlatform(
+        baseConfig,
+        dependenciesWithDetection,
+      );
+      const videoIds = await platform.getLiveVideoIdsByYoutubei();
+
+      expect(videoIds).toEqual(detectionResult);
+    });
+
+    test("should surface data logging path errors via error handler", () => {
+      const mkdirMock = spyOn(require("fs"), "mkdirSync").mockImplementation(
+        () => {
+          throw new Error("disk full");
+        },
+      );
+
+      const dependencies = createMockPlatformDependencies("youtube", {
+        streamDetectionService: {
+          detectLiveStreams: createMockFn().mockResolvedValue({
+            success: true,
+            videoIds: [],
+          }),
+        },
+      });
+
+      const platform = new YouTubePlatform(baseConfig, dependencies);
+      const errorCalls: unknown[][] = [];
+      platform.errorHandler = {
+        handleDataLoggingError: (...args) => errorCalls.push(args),
+      };
+
+      platform._ensureDataLoggingPath();
+
+      expect(errorCalls.length).toBeGreaterThan(0);
+      mkdirMock.mockRestore();
+    });
+  });
 });
