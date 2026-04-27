@@ -1,188 +1,220 @@
-import { describe, test, beforeEach, afterEach, expect } from 'bun:test';
-import { createRequire } from 'node:module';
-
-const load = createRequire(__filename);
-const { restoreAllMocks } = load('../helpers/bun-mock-utils');
-
-const { CommandParser } = load('../../src/chat/commands');
-const testClock = load('../helpers/test-clock');
+import { describe, test, beforeEach, afterEach, expect } from "bun:test";
+import { restoreAllMocks } from "../helpers/bun-mock-utils";
+import testClock from "../helpers/test-clock";
+import { CommandParser } from "../../src/chat/commands";
 
 type KeywordConfigFixture = {
-    commands: Record<string, string>;
-    farewell: {
-        command: string;
-    };
-    vfx: {
-        filePath: string;
-    };
-    general: {
-        keywordParsingEnabled: boolean;
-    };
+  commands: Record<string, string>;
+  farewell: {
+    command: string;
+  };
+  vfx: {
+    filePath: string;
+  };
+  general: {
+    keywordParsingEnabled: boolean;
+  };
 };
 
 type VfxConfigResult = {
-    filename: string;
-    command: string;
-    keyword: string | null;
+  filename: string;
+  command: string;
+  keyword: string | null;
 };
 
 type CommandParserUnderTest = {
-    getVFXConfig: (command: string | null | undefined, message: string | null | undefined) => VfxConfigResult;
-    getMatchingFarewell: (input: string, token: string) => string;
+  getVFXConfig: (
+    command: string | null | undefined,
+    message: string | null | undefined,
+  ) => VfxConfigResult;
+  getMatchingFarewell: (input: string, token: string) => string;
 };
 
-describe('Keyword Parsing Integration', () => {
-    let commandParser: CommandParserUnderTest;
-    let configFixture: KeywordConfigFixture;
+describe("Keyword Parsing Integration", () => {
+  let commandParser: CommandParserUnderTest;
+  let configFixture: KeywordConfigFixture;
 
+  beforeEach(() => {
+    testClock.reset();
+    configFixture = {
+      commands: {
+        "hello-there": "!hello, vfx bottom green",
+        "im-a-mod": "!mod, vfx top, mod|mods",
+        "span-lol": "!lol, vfx top, haha|hehe",
+      },
+      farewell: {
+        command: "!bye|!bye1|!bye2|!bye3",
+      },
+      vfx: {
+        filePath: "/path/to/vfx",
+      },
+      general: {
+        keywordParsingEnabled: true,
+      },
+    };
+  });
+
+  afterEach(() => {
+    restoreAllMocks();
+  });
+
+  describe("Complete Flow - Keyword Parsing Enabled", () => {
     beforeEach(() => {
-        testClock.reset();
-        configFixture = {
-            commands: {
-                'hello-there': '!hello, vfx bottom green',
-                'im-a-mod': '!mod, vfx top, mod|mods',
-                'span-lol': '!lol, vfx top, haha|hehe'
-            },
-            farewell: {
-                command: '!bye|!bye1|!bye2|!bye3'
-            },
-            vfx: {
-                filePath: '/path/to/vfx'
-            },
-            general: {
-                keywordParsingEnabled: true
-            }
-        };
+      configFixture.general = { keywordParsingEnabled: true };
+      commandParser = new CommandParser(configFixture);
     });
 
-    afterEach(() => {
-        restoreAllMocks();
+    test("should detect both ! prefix and keyword commands when enabled", () => {
+      const prefixResult = commandParser.getVFXConfig(
+        "!hello",
+        "!hello everyone!",
+      );
+      expect(prefixResult).toBeDefined();
+      expect(prefixResult.filename).toBe("hello-there");
+      expect(prefixResult.command).toBe("!hello");
+
+      const keywordResult = commandParser.getVFXConfig(
+        "i",
+        "I am a mod and I approve this message",
+      );
+      expect(keywordResult).toBeDefined();
+      expect(keywordResult.filename).toBe("im-a-mod");
+      expect(keywordResult.keyword).toBe("mod");
     });
 
-    describe('Complete Flow - Keyword Parsing Enabled', () => {
-        beforeEach(() => {
-            configFixture.general = { keywordParsingEnabled: true };
-            commandParser = new CommandParser(configFixture);
-        });
+    test("should detect farewell commands when enabled", () => {
+      const result = commandParser.getMatchingFarewell(
+        "!bye everyone!",
+        "!bye",
+      );
+      expect(result).toBe("!bye");
+    });
+  });
 
-        test('should detect both ! prefix and keyword commands when enabled', () => {
-            const prefixResult = commandParser.getVFXConfig('!hello', '!hello everyone!');
-            expect(prefixResult).toBeDefined();
-            expect(prefixResult.filename).toBe('hello-there');
-            expect(prefixResult.command).toBe('!hello');
-
-            const keywordResult = commandParser.getVFXConfig('i', 'I am a mod and I approve this message');
-            expect(keywordResult).toBeDefined();
-            expect(keywordResult.filename).toBe('im-a-mod');
-            expect(keywordResult.keyword).toBe('mod');
-        });
-
-        test('should detect farewell commands when enabled', () => {
-            const result = commandParser.getMatchingFarewell('!bye everyone!', '!bye');
-            expect(result).toBe('!bye');
-        });
+  describe("Complete Flow - Keyword Parsing Disabled via Config", () => {
+    beforeEach(() => {
+      configFixture.general = { keywordParsingEnabled: false };
+      commandParser = new CommandParser(configFixture);
     });
 
-    describe('Complete Flow - Keyword Parsing Disabled via Config', () => {
-        beforeEach(() => {
-            configFixture.general = { keywordParsingEnabled: false };
-            commandParser = new CommandParser(configFixture);
-        });
+    test("should detect ! prefix commands but not keyword commands when disabled via config", () => {
+      const prefixResult = commandParser.getVFXConfig(
+        "!hello",
+        "!hello everyone!",
+      );
+      expect(prefixResult).toBeDefined();
+      expect(prefixResult.filename).toBe("hello-there");
+      expect(prefixResult.command).toBe("!hello");
 
-        test('should detect ! prefix commands but not keyword commands when disabled via config', () => {
-            const prefixResult = commandParser.getVFXConfig('!hello', '!hello everyone!');
-            expect(prefixResult).toBeDefined();
-            expect(prefixResult.filename).toBe('hello-there');
-            expect(prefixResult.command).toBe('!hello');
-
-            const keywordResult = commandParser.getVFXConfig('i', 'I am a mod and I approve this message');
-            expect(keywordResult).toBeNull();
-        });
-
-        test('should detect farewell commands but not keywords when disabled via config', () => {
-            const commandResult = commandParser.getMatchingFarewell('!bye everyone!', '!bye');
-            expect(commandResult).toBe('!bye');
-
-            const keywordResult = commandParser.getMatchingFarewell('Goodbye everyone!', 'goodbye');
-            expect(keywordResult).toBeNull();
-        });
+      const keywordResult = commandParser.getVFXConfig(
+        "i",
+        "I am a mod and I approve this message",
+      );
+      expect(keywordResult).toBeNull();
     });
 
-    describe('Performance and Memory', () => {
-        test('should not create memory leaks when keyword parsing is disabled', () => {
-            configFixture.general = { keywordParsingEnabled: false };
-            commandParser = new CommandParser(configFixture);
+    test("should detect farewell commands but not keywords when disabled via config", () => {
+      const commandResult = commandParser.getMatchingFarewell(
+        "!bye everyone!",
+        "!bye",
+      );
+      expect(commandResult).toBe("!bye");
 
-            const initialMemory = process.memoryUsage().heapUsed;
+      const keywordResult = commandParser.getMatchingFarewell(
+        "Goodbye everyone!",
+        "goodbye",
+      );
+      expect(keywordResult).toBeNull();
+    });
+  });
 
-            for (let i = 0; i < 1000; i++) {
-                commandParser.getVFXConfig('!hello', '!hello everyone!');
-                commandParser.getVFXConfig('i', 'I am a mod and I approve this message');
-            }
+  describe("Performance and Memory", () => {
+    test("should not create memory leaks when keyword parsing is disabled", () => {
+      configFixture.general = { keywordParsingEnabled: false };
+      commandParser = new CommandParser(configFixture);
 
-            const finalMemory = process.memoryUsage().heapUsed;
-            const memoryIncrease = finalMemory - initialMemory;
+      const initialMemory = process.memoryUsage().heapUsed;
 
-            expect(memoryIncrease).toBeLessThan(10 * 1024 * 1024);
-        });
+      for (let i = 0; i < 1000; i++) {
+        commandParser.getVFXConfig("!hello", "!hello everyone!");
+        commandParser.getVFXConfig(
+          "i",
+          "I am a mod and I approve this message",
+        );
+      }
 
-        test('should maintain performance when keyword parsing is disabled', () => {
-            configFixture.general = { keywordParsingEnabled: false };
-            commandParser = new CommandParser(configFixture);
+      const finalMemory = process.memoryUsage().heapUsed;
+      const memoryIncrease = finalMemory - initialMemory;
 
-            const startTime = testClock.now();
-
-            const iterations = 1000;
-            for (let i = 0; i < iterations; i++) {
-                commandParser.getVFXConfig('!hello', '!hello everyone!');
-            }
-
-            testClock.advance(iterations - 1);
-            const endTime = testClock.now();
-            const duration = endTime - startTime;
-
-            expect(duration).toBeLessThan(1000);
-        });
+      expect(memoryIncrease).toBeLessThan(10 * 1024 * 1024);
     });
 
-    describe('Real-world Scenarios', () => {
-        test('should handle mixed messages correctly when keyword parsing is disabled', () => {
-            configFixture.general = { keywordParsingEnabled: false };
-            commandParser = new CommandParser(configFixture);
+    test("should maintain performance when keyword parsing is disabled", () => {
+      configFixture.general = { keywordParsingEnabled: false };
+      commandParser = new CommandParser(configFixture);
 
-            const mixedResult = commandParser.getVFXConfig('!hello', '!hello hehe this is funny');
+      const startTime = testClock.now();
 
-            expect(mixedResult).toBeDefined();
-            expect(mixedResult.filename).toBe('hello-there');
-            expect(mixedResult.command).toBe('!hello');
-            expect(mixedResult.keyword).toBeNull();
-        });
+      const iterations = 1000;
+      for (let i = 0; i < iterations; i++) {
+        commandParser.getVFXConfig("!hello", "!hello everyone!");
+      }
 
-        test('should handle case sensitivity correctly when keyword parsing is disabled', () => {
-            configFixture.general = { keywordParsingEnabled: false };
-            commandParser = new CommandParser(configFixture);
+      testClock.advance(iterations - 1);
+      const endTime = testClock.now();
+      const duration = endTime - startTime;
 
-            const upperResult = commandParser.getVFXConfig('!HELLO', '!HELLO everyone!');
-            expect(upperResult).toBeDefined();
-            expect(upperResult.filename).toBe('hello-there');
-
-            const mixedResult = commandParser.getVFXConfig('!Hello', '!Hello everyone!');
-            expect(mixedResult).toBeDefined();
-            expect(mixedResult.filename).toBe('hello-there');
-        });
-
-        test('should handle edge cases when keyword parsing is disabled', () => {
-            configFixture.general = { keywordParsingEnabled: false };
-            commandParser = new CommandParser(configFixture);
-
-            const emptyResult = commandParser.getVFXConfig('', '');
-            expect(emptyResult).toBeNull();
-
-            const nullResult = commandParser.getVFXConfig(null, null);
-            expect(nullResult).toBeNull();
-
-            const undefinedResult = commandParser.getVFXConfig(undefined, undefined);
-            expect(undefinedResult).toBeNull();
-        });
+      expect(duration).toBeLessThan(1000);
     });
+  });
+
+  describe("Real-world Scenarios", () => {
+    test("should handle mixed messages correctly when keyword parsing is disabled", () => {
+      configFixture.general = { keywordParsingEnabled: false };
+      commandParser = new CommandParser(configFixture);
+
+      const mixedResult = commandParser.getVFXConfig(
+        "!hello",
+        "!hello hehe this is funny",
+      );
+
+      expect(mixedResult).toBeDefined();
+      expect(mixedResult.filename).toBe("hello-there");
+      expect(mixedResult.command).toBe("!hello");
+      expect(mixedResult.keyword).toBeNull();
+    });
+
+    test("should handle case sensitivity correctly when keyword parsing is disabled", () => {
+      configFixture.general = { keywordParsingEnabled: false };
+      commandParser = new CommandParser(configFixture);
+
+      const upperResult = commandParser.getVFXConfig(
+        "!HELLO",
+        "!HELLO everyone!",
+      );
+      expect(upperResult).toBeDefined();
+      expect(upperResult.filename).toBe("hello-there");
+
+      const mixedResult = commandParser.getVFXConfig(
+        "!Hello",
+        "!Hello everyone!",
+      );
+      expect(mixedResult).toBeDefined();
+      expect(mixedResult.filename).toBe("hello-there");
+    });
+
+    test("should handle edge cases when keyword parsing is disabled", () => {
+      configFixture.general = { keywordParsingEnabled: false };
+      commandParser = new CommandParser(configFixture);
+
+      const emptyResult = commandParser.getVFXConfig("", "");
+      expect(emptyResult).toBeNull();
+
+      const nullResult = commandParser.getVFXConfig(null, null);
+      expect(nullResult).toBeNull();
+
+      const undefinedResult = commandParser.getVFXConfig(undefined, undefined);
+      expect(undefinedResult).toBeNull();
+    });
+  });
 });

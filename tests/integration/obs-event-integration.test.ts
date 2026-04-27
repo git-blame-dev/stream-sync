@@ -1,166 +1,169 @@
-import { describe, test, beforeEach, afterEach, expect } from 'bun:test';
-import { createRequire } from 'node:module';
+import { describe, test, beforeEach, afterEach, expect } from "bun:test";
+import {
+  clearAllMocks,
+  createMockFn,
+  restoreAllMocks,
+} from "../helpers/bun-mock-utils";
+import testClock from "../helpers/test-clock";
+import { noOpLogger } from "../helpers/mock-factories";
+import { createEventBus } from "../../src/core/EventBus";
+import { createOBSEventService } from "../../src/obs/obs-event-service";
+import { safeSetTimeout } from "../../src/utils/timeout-validator";
 
-const load = createRequire(__filename);
-const { createMockFn, clearAllMocks, restoreAllMocks } = load('../helpers/bun-mock-utils');
-const { noOpLogger } = load('../helpers/mock-factories');
-const { createEventBus } = load('../../src/core/EventBus');
-const { createOBSEventService } = load('../../src/obs/obs-event-service');
-const { safeSetTimeout } = load('../../src/utils/timeout-validator');
-const testClock = load('../helpers/test-clock');
+describe("OBS Event Integration", () => {
+  let eventBus: ReturnType<typeof createEventBus>;
+  let obsEventService: ReturnType<typeof createOBSEventService>;
+  let mockOBSConnection: ReturnType<typeof createMockOBSConnection>;
+  let mockObsSources: ReturnType<typeof createMockObsSources>;
 
-describe('OBS Event Integration', () => {
-    let eventBus: ReturnType<typeof createEventBus>;
-    let obsEventService: ReturnType<typeof createOBSEventService>;
-    let mockOBSConnection: ReturnType<typeof createMockOBSConnection>;
-    let mockObsSources: ReturnType<typeof createMockObsSources>;
+  beforeEach(() => {
+    eventBus = createEventBus({ debugEnabled: false });
 
-    beforeEach(() => {
-        eventBus = createEventBus({ debugEnabled: false });
+    mockOBSConnection = createMockOBSConnection();
+    mockObsSources = createMockObsSources();
 
-        mockOBSConnection = createMockOBSConnection();
-        mockObsSources = createMockObsSources();
+    obsEventService = createOBSEventService({
+      eventBus,
+      obsConnection: mockOBSConnection,
+      obsSources: mockObsSources,
+      logger: noOpLogger,
+    });
+  });
 
-        obsEventService = createOBSEventService({
-            eventBus,
-            obsConnection: mockOBSConnection,
-            obsSources: mockObsSources,
-            logger: noOpLogger
-        });
+  afterEach(() => {
+    obsEventService.destroy();
+    eventBus.reset();
+    clearAllMocks();
+    restoreAllMocks();
+  });
+
+  test("text update flows through EventBus to OBS", async () => {
+    eventBus.emit("obs:update-text", {
+      sourceName: "ChatMessage",
+      text: "Hello from EventBus!",
     });
 
-    afterEach(() => {
-        obsEventService.destroy();
-        eventBus.reset();
-        clearAllMocks();
-        restoreAllMocks();
+    await waitForDelay(20);
+
+    expect(mockObsSources.updateTextSource).toHaveBeenCalled();
+    const [sourceName, text] = mockObsSources.updateTextSource.mock.calls[0];
+    expect(sourceName).toBe("ChatMessage");
+    expect(text).toBe("Hello from EventBus!");
+  });
+
+  test("error while updating text does not break EventBus usage", async () => {
+    mockObsSources.updateTextSource.mockRejectedValue(
+      new Error("Text update failed"),
+    );
+
+    eventBus.emit("obs:update-text", {
+      sourceName: "Broken",
+      text: "Test",
     });
 
-    test('text update flows through EventBus to OBS', async () => {
-        eventBus.emit('obs:update-text', {
-            sourceName: 'ChatMessage',
-            text: 'Hello from EventBus!'
-        });
+    eventBus.emit("test:event", { id: "test-id" });
 
-        await waitForDelay(20);
+    await waitForDelay(20);
 
-        expect(mockObsSources.updateTextSource).toHaveBeenCalled();
-        const [sourceName, text] = mockObsSources.updateTextSource.mock.calls[0];
-        expect(sourceName).toBe('ChatMessage');
-        expect(text).toBe('Hello from EventBus!');
-    });
+    expect(mockObsSources.updateTextSource).toHaveBeenCalled();
+  });
 
-    test('error while updating text does not break EventBus usage', async () => {
-        mockObsSources.updateTextSource.mockRejectedValue(new Error('Text update failed'));
+  test("handles rapid text-update bursts without memory leaks", async () => {
+    const initialMemory = process.memoryUsage().heapUsed;
 
-        eventBus.emit('obs:update-text', {
-            sourceName: 'Broken',
-            text: 'Test'
-        });
+    for (let i = 0; i < 200; i++) {
+      eventBus.emit("obs:update-text", {
+        sourceName: "Message",
+        text: `Message ${i}`,
+      });
+    }
 
-        eventBus.emit('test:event', { id: 'test-id' });
+    await waitForDelay(100);
 
-        await waitForDelay(20);
+    const finalMemory = process.memoryUsage().heapUsed;
+    const memoryIncrease = (finalMemory - initialMemory) / 1024 / 1024;
 
-        expect(mockObsSources.updateTextSource).toHaveBeenCalled();
-    });
+    expect(memoryIncrease).toBeLessThan(10);
+  });
 
-    test('handles rapid text-update bursts without memory leaks', async () => {
-        const initialMemory = process.memoryUsage().heapUsed;
+  test("maintains event latency under load", async () => {
+    const latencies: number[] = [];
 
-        for (let i = 0; i < 200; i++) {
-            eventBus.emit('obs:update-text', {
-                sourceName: 'Message',
-                text: `Message ${i}`
-            });
-        }
+    for (let i = 0; i < 50; i++) {
+      const startTime = testClock.now();
 
-        await waitForDelay(100);
+      eventBus.emit("obs:update-text", {
+        sourceName: "Message",
+        text: `Test ${i}`,
+      });
 
-        const finalMemory = process.memoryUsage().heapUsed;
-        const memoryIncrease = (finalMemory - initialMemory) / 1024 / 1024;
+      await waitForDelay(1);
+      testClock.advance(1);
 
-        expect(memoryIncrease).toBeLessThan(10);
-    });
+      const latency = testClock.now() - startTime;
+      latencies.push(latency);
+    }
 
-    test('maintains event latency under load', async () => {
-        const latencies: number[] = [];
+    const avgLatency = latencies.reduce((a, b) => a + b, 0) / latencies.length;
+    expect(avgLatency).toBeLessThan(30);
+  });
 
-        for (let i = 0; i < 50; i++) {
-            const startTime = testClock.now();
+  test("service wiring includes OBS text handlers only", () => {
+    const listeners = eventBus.getListenerSummary();
 
-            eventBus.emit('obs:update-text', {
-                sourceName: 'Message',
-                text: `Test ${i}`
-            });
+    expect(listeners["obs:update-text"]).toBeGreaterThan(0);
+    expect(listeners["scene:switch"]).toBeUndefined();
+  });
 
-            await waitForDelay(1);
-            testClock.advance(1);
+  test("event bus remains functional after OBS event service destruction", async () => {
+    obsEventService.destroy();
 
-            const latency = testClock.now() - startTime;
-            latencies.push(latency);
-        }
+    const handler = createMockFn();
+    eventBus.subscribe("test:event", handler);
 
-        const avgLatency = latencies.reduce((a, b) => a + b, 0) / latencies.length;
-        expect(avgLatency).toBeLessThan(30);
-    });
+    eventBus.emit("test:event", { data: "test" });
 
-    test('service wiring includes OBS text handlers only', () => {
-        const listeners = eventBus.getListenerSummary();
+    await waitForDelay(10);
 
-        expect(listeners['obs:update-text']).toBeGreaterThan(0);
-        expect(listeners['scene:switch']).toBeUndefined();
-    });
+    expect(handler).toHaveBeenCalled();
+  });
 
-    test('event bus remains functional after OBS event service destruction', async () => {
-        obsEventService.destroy();
+  test("connection state is tracked correctly", async () => {
+    await obsEventService.connect();
 
-        const handler = createMockFn();
-        eventBus.subscribe('test:event', handler);
+    const state = obsEventService.getConnectionState();
 
-        eventBus.emit('test:event', { data: 'test' });
-
-        await waitForDelay(10);
-
-        expect(handler).toHaveBeenCalled();
-    });
-
-    test('connection state is tracked correctly', async () => {
-        await obsEventService.connect();
-
-        const state = obsEventService.getConnectionState();
-
-        expect(state.connected).toBe(true);
-        expect(state.ready).toBe(true);
-    });
+    expect(state.connected).toBe(true);
+    expect(state.ready).toBe(true);
+  });
 });
 
 function createMockOBSConnection() {
-    return {
-        connect: createMockFn().mockResolvedValue(true),
-        disconnect: createMockFn().mockResolvedValue(undefined),
-        isConnected: createMockFn(() => true),
-        isReady: createMockFn().mockResolvedValue(true),
-        call: createMockFn().mockResolvedValue({}),
-        addEventListener: createMockFn(),
-        removeEventListener: createMockFn(),
-        getConnectionState: createMockFn(() => ({
-            isConnected: true,
-            isConnecting: false
-        }))
-    };
+  return {
+    connect: createMockFn().mockResolvedValue(true),
+    disconnect: createMockFn().mockResolvedValue(undefined),
+    isConnected: createMockFn(() => true),
+    isReady: createMockFn().mockResolvedValue(true),
+    call: createMockFn().mockResolvedValue({}),
+    addEventListener: createMockFn(),
+    removeEventListener: createMockFn(),
+    getConnectionState: createMockFn(() => ({
+      isConnected: true,
+      isConnecting: false,
+    })),
+  };
 }
 
 function createMockObsSources() {
-    return {
-        updateTextSource: createMockFn().mockResolvedValue(undefined),
-        setSourceVisibility: createMockFn().mockResolvedValue(undefined),
-        clearTextSource: createMockFn().mockResolvedValue(undefined)
-    };
+  return {
+    updateTextSource: createMockFn().mockResolvedValue(undefined),
+    setSourceVisibility: createMockFn().mockResolvedValue(undefined),
+    clearTextSource: createMockFn().mockResolvedValue(undefined),
+  };
 }
 
 function waitForDelay(ms: number) {
-    return new Promise<void>((resolve) => {
-        safeSetTimeout(resolve, ms, 'obs-event-integration test delay');
-    });
+  return new Promise<void>((resolve) => {
+    safeSetTimeout(resolve, ms, "obs-event-integration test delay");
+  });
 }
