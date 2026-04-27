@@ -1,19 +1,15 @@
-const { describe, test, expect } = require('bun:test');
-const {
-    assertPlatformInterface
-} = require('../../../src/utils/platform-interface-validator');
-export {};
+import { describe, test, expect } from "bun:test";
+import { assertPlatformInterface } from "../../../src/utils/platform-interface-validator";
+describe("platform-interface-validator behavior", () => {
+  test("assertPlatformInterface throws a user-friendly error for invalid platforms", () => {
+    expect(() => assertPlatformInterface("youtube", null)).toThrow(/youtube/i);
+    expect(() => assertPlatformInterface("youtube", null)).toThrow(/platform/i);
+    expect(() => assertPlatformInterface("youtube", null)).toThrow(/object/i);
+  });
 
-describe('platform-interface-validator behavior', () => {
-    test('assertPlatformInterface throws a user-friendly error for invalid platforms', () => {
-        expect(() => assertPlatformInterface('youtube', null)).toThrow(/youtube/i);
-        expect(() => assertPlatformInterface('youtube', null)).toThrow(/platform/i);
-        expect(() => assertPlatformInterface('youtube', null)).toThrow(/object/i);
-    });
+  test("assertPlatformInterface returns the instance when valid", () => {
+    const instance = { initialize: () => {}, cleanup: () => {}, on: () => {} };
 
-    test('assertPlatformInterface returns the instance when valid', () => {
-        const instance = { initialize: () => {}, cleanup: () => {}, on: () => {} };
-
-        expect(assertPlatformInterface('tiktok', instance)).toBe(instance);
-    });
+    expect(assertPlatformInterface("tiktok", instance)).toBe(instance);
+  });
 });

@@ -1,230 +1,244 @@
-const { describe, test, expect } = require('bun:test');
-export {};
-const { NotificationBuilder } = require('../../../src/utils/notification-builder.ts');
-
-describe('Notification Builder Edge Cases', () => {
-    describe('Input Validation Edge Cases', () => {
-        test('returns null for null or undefined input', () => {
-            expect(NotificationBuilder.build(null)).toBeNull();
-            expect(NotificationBuilder.build(undefined)).toBeNull();
-        });
-
-        test('returns null for non-object input', () => {
-            expect(NotificationBuilder.build('string')).toBeNull();
-            expect(NotificationBuilder.build(123)).toBeNull();
-        });
-
-        test('returns null for array input', () => {
-            expect(NotificationBuilder.build([])).toBeNull();
-        });
-
-        test('returns null for empty object input', () => {
-            expect(NotificationBuilder.build({})).toBeNull();
-        });
+import { describe, test, expect } from "bun:test";
+import { NotificationBuilder } from "../../../src/utils/notification-builder.ts";
+describe("Notification Builder Edge Cases", () => {
+  describe("Input Validation Edge Cases", () => {
+    test("returns null for null or undefined input", () => {
+      expect(NotificationBuilder.build(null)).toBeNull();
+      expect(NotificationBuilder.build(undefined)).toBeNull();
     });
 
-    describe('Required Fields Edge Cases', () => {
-        test('returns null when username is missing', () => {
-            const data = {
-                platform: 'youtube',
-                type: 'chat',
-                message: 'Hello'
-            };
-
-            expect(NotificationBuilder.build(data)).toBeNull();
-        });
-
-        test('throws when platform is missing', () => {
-            const data = {
-                type: 'chat',
-                username: 'TestUser',
-                message: 'Hello'
-            };
-
-            expect(() => NotificationBuilder.build(data)).toThrow('Notification requires platform');
-        });
-
-        test('throws when type is missing', () => {
-            const data = {
-                platform: 'youtube',
-                username: 'TestUser',
-                message: 'Hello'
-            };
-
-            expect(() => NotificationBuilder.build(data)).toThrow('Notification requires type');
-        });
+    test("returns null for non-object input", () => {
+      expect(NotificationBuilder.build("string")).toBeNull();
+      expect(NotificationBuilder.build(123)).toBeNull();
     });
 
-    describe('Canonical Type Enforcement', () => {
-        test('throws when short notification types are used', () => {
-            const baseData = {
-                platform: 'twitch',
-                username: 'TestUser',
-                userId: 'user-1'
-            };
-            const shortTypes = ['gift', 'paypiggy', 'giftpaypiggy', 'follow', 'raid', 'share', 'envelope'];
-
-            shortTypes.forEach((type) => {
-                expect(() => NotificationBuilder.build({ ...baseData, type })).toThrow('canonical');
-            });
-        });
+    test("returns null for array input", () => {
+      expect(NotificationBuilder.build([])).toBeNull();
     });
 
-    describe('Username Normalization Edge Cases', () => {
-        test('trims surrounding whitespace in username', () => {
-            const data = {
-                platform: 'youtube',
-                type: 'chat',
-                username: '  TrimMe  ',
-                message: 'Hello'
-            };
+    test("returns null for empty object input", () => {
+      expect(NotificationBuilder.build({})).toBeNull();
+    });
+  });
 
-            const notification = NotificationBuilder.build(data);
-            expect(notification.username).toBe('TrimMe');
-        });
+  describe("Required Fields Edge Cases", () => {
+    test("returns null when username is missing", () => {
+      const data = {
+        platform: "youtube",
+        type: "chat",
+        message: "Hello",
+      };
 
-        test('preserves special characters in username', () => {
-            const data = {
-                platform: 'youtube',
-                type: 'chat',
-                username: 'User_123',
-                message: 'Hello'
-            };
-
-            const notification = NotificationBuilder.build(data);
-            expect(notification.username).toBe('User_123');
-        });
+      expect(NotificationBuilder.build(data)).toBeNull();
     });
 
-    describe('Message and Amount Edge Cases', () => {
-        test('throws when chat message is null', () => {
-            const data = {
-                platform: 'youtube',
-                type: 'chat',
-                username: 'TestUser',
-                message: null
-            };
+    test("throws when platform is missing", () => {
+      const data = {
+        type: "chat",
+        username: "TestUser",
+        message: "Hello",
+      };
 
-            expect(() => NotificationBuilder.build(data)).toThrow('Notification of type "chat" requires message content');
-        });
-
-        test('preserves numeric amounts', () => {
-            const data = {
-                platform: 'youtube',
-                type: 'platform:gift',
-                username: 'TestUser',
-                giftType: 'Super Chat',
-                giftCount: 1,
-                amount: 5.5,
-                currency: 'USD'
-            };
-
-            const notification = NotificationBuilder.build(data);
-            expect(notification.amount).toBe(5.5);
-        });
+      expect(() => NotificationBuilder.build(data)).toThrow(
+        "Notification requires platform",
+      );
     });
 
-    describe('UserId Normalization Edge Cases', () => {
-        test('coerces userId to string when provided', () => {
-            const data = {
-                platform: 'twitch',
-                type: 'chat',
-                username: 'TestUser',
-                userId: 12345,
-                message: 'Hello'
-            };
+    test("throws when type is missing", () => {
+      const data = {
+        platform: "youtube",
+        username: "TestUser",
+        message: "Hello",
+      };
 
-            const notification = NotificationBuilder.build(data);
-            expect(notification.userId).toBe('12345');
-        });
+      expect(() => NotificationBuilder.build(data)).toThrow(
+        "Notification requires type",
+      );
+    });
+  });
+
+  describe("Canonical Type Enforcement", () => {
+    test("throws when short notification types are used", () => {
+      const baseData = {
+        platform: "twitch",
+        username: "TestUser",
+        userId: "user-1",
+      };
+      const shortTypes = [
+        "gift",
+        "paypiggy",
+        "giftpaypiggy",
+        "follow",
+        "raid",
+        "share",
+        "envelope",
+      ];
+
+      shortTypes.forEach((type) => {
+        expect(() => NotificationBuilder.build({ ...baseData, type })).toThrow(
+          "canonical",
+        );
+      });
+    });
+  });
+
+  describe("Username Normalization Edge Cases", () => {
+    test("trims surrounding whitespace in username", () => {
+      const data = {
+        platform: "youtube",
+        type: "chat",
+        username: "  TrimMe  ",
+        message: "Hello",
+      };
+
+      const notification = NotificationBuilder.build(data);
+      expect(notification.username).toBe("TrimMe");
     });
 
-    describe('Numeric String Normalization', () => {
-        test('normalizes numeric-string giftCount to number', () => {
-            const data = {
-                platform: 'tiktok',
-                type: 'platform:gift',
-                username: 'TestUser',
-                giftType: 'Rose',
-                giftCount: '5',
-                amount: 10,
-                currency: 'coins'
-            };
+    test("preserves special characters in username", () => {
+      const data = {
+        platform: "youtube",
+        type: "chat",
+        username: "User_123",
+        message: "Hello",
+      };
 
-            const notification = NotificationBuilder.build(data);
-            expect(notification).not.toBeNull();
-            expect(notification.giftCount).toBe(5);
-        });
+      const notification = NotificationBuilder.build(data);
+      expect(notification.username).toBe("User_123");
+    });
+  });
 
-        test('normalizes numeric-string amount to number', () => {
-            const data = {
-                platform: 'tiktok',
-                type: 'platform:gift',
-                username: 'TestUser',
-                giftType: 'Rose',
-                giftCount: 1,
-                amount: '10.50',
-                currency: 'USD'
-            };
+  describe("Message and Amount Edge Cases", () => {
+    test("throws when chat message is null", () => {
+      const data = {
+        platform: "youtube",
+        type: "chat",
+        username: "TestUser",
+        message: null,
+      };
 
-            const notification = NotificationBuilder.build(data);
-            expect(notification).not.toBeNull();
-            expect(notification.amount).toBe(10.50);
-        });
+      expect(() => NotificationBuilder.build(data)).toThrow(
+        'Notification of type "chat" requires message content',
+      );
     });
 
-    describe('Message Type Coercion', () => {
-        test('coerces non-string message to string', () => {
-            const data = {
-                platform: 'youtube',
-                type: 'chat',
-                username: 'TestUser',
-                message: { text: 'Hello' }
-            };
+    test("preserves numeric amounts", () => {
+      const data = {
+        platform: "youtube",
+        type: "platform:gift",
+        username: "TestUser",
+        giftType: "Super Chat",
+        giftCount: 1,
+        amount: 5.5,
+        currency: "USD",
+      };
 
-            const notification = NotificationBuilder.build(data);
-            expect(typeof notification.message).toBe('string');
-        });
+      const notification = NotificationBuilder.build(data);
+      expect(notification.amount).toBe(5.5);
+    });
+  });
 
-        test('coerces number message to string', () => {
-            const data = {
-                platform: 'youtube',
-                type: 'chat',
-                username: 'TestUser',
-                message: 12345
-            };
+  describe("UserId Normalization Edge Cases", () => {
+    test("coerces userId to string when provided", () => {
+      const data = {
+        platform: "twitch",
+        type: "chat",
+        username: "TestUser",
+        userId: 12345,
+        message: "Hello",
+      };
 
-            const notification = NotificationBuilder.build(data);
-            expect(notification.message).toBe('12345');
-        });
+      const notification = NotificationBuilder.build(data);
+      expect(notification.userId).toBe("12345");
+    });
+  });
+
+  describe("Numeric String Normalization", () => {
+    test("normalizes numeric-string giftCount to number", () => {
+      const data = {
+        platform: "tiktok",
+        type: "platform:gift",
+        username: "TestUser",
+        giftType: "Rose",
+        giftCount: "5",
+        amount: 10,
+        currency: "coins",
+      };
+
+      const notification = NotificationBuilder.build(data);
+      expect(notification).not.toBeNull();
+      expect(notification.giftCount).toBe(5);
     });
 
-    describe('Error Notification Edge Cases', () => {
-        test('allows isError notification without username', () => {
-            const data = {
-                platform: 'twitch',
-                type: 'platform:gift',
-                isError: true
-            };
+    test("normalizes numeric-string amount to number", () => {
+      const data = {
+        platform: "tiktok",
+        type: "platform:gift",
+        username: "TestUser",
+        giftType: "Rose",
+        giftCount: 1,
+        amount: "10.50",
+        currency: "USD",
+      };
 
-            const notification = NotificationBuilder.build(data);
-            expect(notification).not.toBeNull();
-            expect(notification.isError).toBe(true);
-            expect(notification).not.toHaveProperty('username');
-            expect(notification.displayMessage).toContain('Error');
-        });
-
-        test('error notification generates generic display message', () => {
-            const data = {
-                platform: 'twitch',
-                type: 'platform:gift',
-                isError: true
-            };
-
-            const notification = NotificationBuilder.build(data);
-            expect(notification.displayMessage).toBe('Error processing gift');
-            expect(notification.ttsMessage).toBe('Error processing gift');
-            expect(notification.logMessage).toBe('Error processing gift');
-        });
+      const notification = NotificationBuilder.build(data);
+      expect(notification).not.toBeNull();
+      expect(notification.amount).toBe(10.5);
     });
+  });
+
+  describe("Message Type Coercion", () => {
+    test("coerces non-string message to string", () => {
+      const data = {
+        platform: "youtube",
+        type: "chat",
+        username: "TestUser",
+        message: { text: "Hello" },
+      };
+
+      const notification = NotificationBuilder.build(data);
+      expect(typeof notification.message).toBe("string");
+    });
+
+    test("coerces number message to string", () => {
+      const data = {
+        platform: "youtube",
+        type: "chat",
+        username: "TestUser",
+        message: 12345,
+      };
+
+      const notification = NotificationBuilder.build(data);
+      expect(notification.message).toBe("12345");
+    });
+  });
+
+  describe("Error Notification Edge Cases", () => {
+    test("allows isError notification without username", () => {
+      const data = {
+        platform: "twitch",
+        type: "platform:gift",
+        isError: true,
+      };
+
+      const notification = NotificationBuilder.build(data);
+      expect(notification).not.toBeNull();
+      expect(notification.isError).toBe(true);
+      expect(notification).not.toHaveProperty("username");
+      expect(notification.displayMessage).toContain("Error");
+    });
+
+    test("error notification generates generic display message", () => {
+      const data = {
+        platform: "twitch",
+        type: "platform:gift",
+        isError: true,
+      };
+
+      const notification = NotificationBuilder.build(data);
+      expect(notification.displayMessage).toBe("Error processing gift");
+      expect(notification.ttsMessage).toBe("Error processing gift");
+      expect(notification.logMessage).toBe("Error processing gift");
+    });
+  });
 });

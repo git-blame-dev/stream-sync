@@ -1,507 +1,517 @@
-
-const { describe, expect, beforeEach, it, afterEach } = require('bun:test');
-export {};
-const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { createConfigFixture } = require('../../helpers/config-fixture');
-
-const { YouTubeiCurrencyParser } = require('../../../src/platforms/youtube/youtubei-currency-parser');
-const NotificationManager = require('../../../src/notifications/NotificationManager');
-const { createTextProcessingManager } = require('../../../src/utils/text-processing');
-const { noOpLogger } = require('../../helpers/mock-factories');
-const { 
-    setupAutomatedCleanup 
-} = require('../../helpers/mock-lifecycle');
-const testClock = require('../../helpers/test-clock');
-
+import { describe, expect, beforeEach, it, afterEach } from "bun:test";
+import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
+import { createConfigFixture } from "../../helpers/config-fixture";
+import { YouTubeiCurrencyParser } from "../../../src/platforms/youtube/youtubei-currency-parser";
+import NotificationManager from "../../../src/notifications/NotificationManager";
+import { createTextProcessingManager } from "../../../src/utils/text-processing";
+import { noOpLogger } from "../../helpers/mock-factories";
+const { setupAutomatedCleanup } = require("../../helpers/mock-lifecycle");
+import testClock from "../../helpers/test-clock";
 setupAutomatedCleanup({
-    clearCallsBeforeEach: true,
-    validateAfterCleanup: true
+  clearCallsBeforeEach: true,
+  validateAfterCleanup: true,
 });
 
-const createTestConfig = () => createConfigFixture({
+const createTestConfig = () =>
+  createConfigFixture({
     general: {
-        chatEnabled: true,
-        greetingsEnabled: true,
-        giftsEnabled: true,
-        
-    }
-});
+      chatEnabled: true,
+      greetingsEnabled: true,
+      giftsEnabled: true,
+    },
+  });
 
-describe('YouTube Turkish Lira (TRY) Currency Parsing', () => {
-    afterEach(() => {
-        restoreAllMocks();
-    });
+describe("YouTube Turkish Lira (TRY) Currency Parsing", () => {
+  afterEach(() => {
+    restoreAllMocks();
+  });
 
-    describe('YouTubei Currency Parser - TRY Format Support', () => {
-        let parser;
-        let mockLogger;
-
-        beforeEach(() => {
-            mockLogger = noOpLogger;
-            parser = new YouTubeiCurrencyParser({ logger: mockLogger });
-        });
-
-        describe('Turkish Lira Code+Space Format (TRY XXX.XX)', () => {
-            it('should parse "TRY 219.99" correctly', () => {
-                const result = parser.parse('TRY 219.99');
-                
-                expect(result.success).toBe(true);
-                expect(result.amount).toBe(219.99);
-                expect(result.currency).toBe('TRY');
-                expect(result.symbol).toBe('₺');
-                expect(result.originalString).toBe('TRY 219.99');
-            });
-
-            it('should parse "TRY 1000" without decimals', () => {
-                const result = parser.parse('TRY 1000');
-                
-                expect(result.success).toBe(true);
-                expect(result.amount).toBe(1000);
-                expect(result.currency).toBe('TRY');
-                expect(result.symbol).toBe('₺');
-            });
-
-            it('should parse "TRY 5,999.99" with thousands separator', () => {
-                const result = parser.parse('TRY 5,999.99');
-                
-                expect(result.success).toBe(true);
-                expect(result.amount).toBe(5999.99);
-                expect(result.currency).toBe('TRY');
-                expect(result.symbol).toBe('₺');
-            });
-
-            it('should parse "TRY 0.50" small amounts', () => {
-                const result = parser.parse('TRY 0.50');
-                
-                expect(result.success).toBe(true);
-                expect(result.amount).toBe(0.50);
-                expect(result.currency).toBe('TRY');
-                expect(result.symbol).toBe('₺');
-            });
-        });
-
-        describe('Turkish Lira Symbol Format (₺XXX.XX)', () => {
-            it('should parse "₺219.99" symbol-prefixed format', () => {
-                const result = parser.parse('₺219.99');
-                
-                expect(result.success).toBe(true);
-                expect(result.amount).toBe(219.99);
-                expect(result.currency).toBe('TRY');
-                expect(result.symbol).toBe('₺');
-            });
-
-            it('should parse "₺1,000.00" with thousands separator', () => {
-                const result = parser.parse('₺1,000.00');
-                
-                expect(result.success).toBe(true);
-                expect(result.amount).toBe(1000.00);
-                expect(result.currency).toBe('TRY');
-                expect(result.symbol).toBe('₺');
-            });
-        });
-
-        describe('Other International Currency Code+Space Formats', () => {
-            it('should parse "EUR 50.00" European format', () => {
-                const result = parser.parse('EUR 50.00');
-                
-                expect(result.success).toBe(true);
-                expect(result.amount).toBe(50.00);
-                expect(result.currency).toBe('EUR');
-                expect(result.symbol).toBe('€');
-            });
-
-            it('should parse "GBP 25.50" British format', () => {
-                const result = parser.parse('GBP 25.50');
-                
-                expect(result.success).toBe(true);
-                expect(result.amount).toBe(25.50);
-                expect(result.currency).toBe('GBP');
-                expect(result.symbol).toBe('£');
-            });
-
-            it('should parse "JPY 5000" Japanese format (no decimals)', () => {
-                const result = parser.parse('JPY 5000');
-                
-                expect(result.success).toBe(true);
-                expect(result.amount).toBe(5000);
-                expect(result.currency).toBe('JPY');
-                expect(result.symbol).toBe('¥');
-            });
-
-            it('should parse "KRW 50000" Korean format (no decimals)', () => {
-                const result = parser.parse('KRW 50000');
-                
-                expect(result.success).toBe(true);
-                expect(result.amount).toBe(50000);
-                expect(result.currency).toBe('KRW');
-                expect(result.symbol).toBe('₩');
-            });
-
-            it('should parse "BRL 100.00" Brazilian format', () => {
-                const result = parser.parse('BRL 100.00');
-                
-                expect(result.success).toBe(true);
-                expect(result.amount).toBe(100.00);
-                expect(result.currency).toBe('BRL');
-                expect(result.symbol).toBe('R$');
-            });
-
-            it('should parse "RUB 1500.00" Russian format', () => {
-                const result = parser.parse('RUB 1500.00');
-                
-                expect(result.success).toBe(true);
-                expect(result.amount).toBe(1500.00);
-                expect(result.currency).toBe('RUB');
-                expect(result.symbol).toBe('₽');
-            });
-
-            it('should parse "PLN 75.50" Polish format', () => {
-                const result = parser.parse('PLN 75.50');
-                
-                expect(result.success).toBe(true);
-                expect(result.amount).toBe(75.50);
-                expect(result.currency).toBe('PLN');
-                expect(result.symbol).toBe('zł');
-            });
-
-            it('should parse "THB 1000.00" Thai format', () => {
-                const result = parser.parse('THB 1000.00');
-                
-                expect(result.success).toBe(true);
-                expect(result.amount).toBe(1000.00);
-                expect(result.currency).toBe('THB');
-                expect(result.symbol).toBe('฿');
-            });
-
-            it('should parse "PHP 2500.00" Philippine format', () => {
-                const result = parser.parse('PHP 2500.00');
-                
-                expect(result.success).toBe(true);
-                expect(result.amount).toBe(2500.00);
-                expect(result.currency).toBe('PHP');
-                expect(result.symbol).toBe('₱');
-            });
-
-            it('should parse "MYR 50.00" Malaysian format', () => {
-                const result = parser.parse('MYR 50.00');
-                
-                expect(result.success).toBe(true);
-                expect(result.amount).toBe(50.00);
-                expect(result.currency).toBe('MYR');
-                expect(result.symbol).toBe('RM');
-            });
-
-            it('should parse "ZAR 200.00" South African format', () => {
-                const result = parser.parse('ZAR 200.00');
-                
-                expect(result.success).toBe(true);
-                expect(result.amount).toBe(200.00);
-                expect(result.currency).toBe('ZAR');
-                expect(result.symbol).toBe('R');
-            });
-
-            it('should parse "NGN 5000.00" Nigerian format', () => {
-                const result = parser.parse('NGN 5000.00');
-                
-                expect(result.success).toBe(true);
-                expect(result.amount).toBe(5000.00);
-                expect(result.currency).toBe('NGN');
-                expect(result.symbol).toBe('₦');
-            });
-        });
-
-        describe('Edge Cases and Error Conditions', () => {
-            it('should handle TRY with European decimal format "TRY 219,99"', () => {
-                const result = parser.parse('TRY 219,99');
-                
-                expect(result.success).toBe(true);
-                expect(result.amount).toBe(219.99);
-                expect(result.currency).toBe('TRY');
-            });
-
-            it('should handle extra spaces "TRY  219.99"', () => {
-                const result = parser.parse('TRY  219.99');
-                
-                expect(result.success).toBe(true);
-                expect(result.amount).toBe(219.99);
-                expect(result.currency).toBe('TRY');
-            });
-
-            it('should handle lowercase "try 219.99"', () => {
-                const result = parser.parse('try 219.99');
-                
-                expect(result.success).toBe(true);
-                expect(result.amount).toBe(219.99);
-                expect(result.currency).toBe('TRY');
-            });
-
-            it('should NOT parse as zero when format is unrecognized', () => {
-                const result = parser.parse('TRY 219.99');
-                expect(result.amount).not.toBe(0);
-            });
-        });
-    });
-
-    describe('Notification Manager - Zero Amount Filtering', () => {
-        let notificationManager;
-        let mockConfig;
-        let mockDisplayQueue;
-        let mockLogger;
-
-        beforeEach(() => {
-            mockLogger = noOpLogger;
-            mockDisplayQueue = {
-                add: createMockFn().mockReturnValue(true),
-                addItem: createMockFn().mockReturnValue(true),
-                getQueueLength: createMockFn().mockReturnValue(0)
-            };
-            mockConfig = createTestConfig();
-
-            const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
-            const constants = require('../../../src/core/constants');
-            const textProcessing = createTextProcessingManager({ logger: mockLogger });
-            const obsGoals = require('../../../src/obs/goals').getDefaultGoalsManager();
-            const vfxCommandService = { getVFXConfig: createMockFn().mockResolvedValue(null) };
-            notificationManager = new NotificationManager({
-                displayQueue: mockDisplayQueue,
-                logger: mockLogger,
-                eventBus: mockEventBus,
-                config: mockConfig,
-                constants,
-                textProcessing,
-                obsGoals,
-                vfxCommandService
-            });
-        });
-
-        describe('SuperChat with Parsing Failures', () => {
-            it('should NOT filter out TRY 219.99 SuperChat', async () => {
-                const superChatData = {
-                    username: 'TurkishUser',
-                    userId: 'user123',
-                    giftType: 'Super Chat',
-                    giftCount: 1,
-                    amount: 219.99,
-                    currency: 'TRY',
-                    message: 'Merhaba!',
-                    displayString: 'TRY 219.99'
-                };
-
-                const result = await notificationManager.handleNotification(
-                    'platform:gift',
-                    'youtube',
-                    superChatData
-                );
-
-                expect(result.success).toBe(true);
-                expect(result.filtered).not.toBe(true);
-                expect(result.reason).not.toBe('Zero amount not displayed');
-                expect(mockDisplayQueue.addItem).toHaveBeenCalled();
-            });
-
-            it('should correctly filter actual zero-amount gifts', async () => {
-                const zeroGiftData = {
-                    username: 'TestUser',
-                    userId: 'user456',
-                    giftType: 'Super Chat',
-                    giftCount: 1,
-                    amount: 0,
-                    currency: 'USD',
-                    message: 'Test'
-                };
-
-                const result = await notificationManager.handleNotification(
-                    'platform:gift',
-                    'youtube',
-                    zeroGiftData
-                );
-
-                expect(result.success).toBe(false);
-                expect(result.filtered).toBe(true);
-                expect(result.reason).toBe('Zero amount not displayed');
-                expect(mockDisplayQueue.add).not.toHaveBeenCalled();
-            });
-
-            it('should handle SuperChat with unparseable currency gracefully', async () => {
-                const superChatData = {
-                    username: 'TestUser',
-                    userId: 'user789',
-                    giftType: 'Super Chat',
-                    giftCount: 1,
-                    amount: null,
-                    currency: 'UNKNOWN',
-                    displayString: 'XYZ 100.00',
-                    message: 'Test message'
-                };
-
-                const result = await notificationManager.handleNotification(
-                    'platform:gift',
-                    'youtube',
-                    superChatData
-                );
-
-                expect(result).toBeDefined();
-                expect(result.success).toBeDefined();
-            });
-        });
-
-        describe('International Currency Support in Notifications', () => {
-            const testCurrencies = [
-                { code: 'TRY', amount: 219.99, symbol: '₺' },
-                { code: 'EUR', amount: 50.00, symbol: '€' },
-                { code: 'GBP', amount: 25.50, symbol: '£' },
-                { code: 'JPY', amount: 5000, symbol: '¥' },
-                { code: 'KRW', amount: 50000, symbol: '₩' },
-                { code: 'BRL', amount: 100.00, symbol: 'R$' },
-                { code: 'RUB', amount: 1500.00, symbol: '₽' },
-                { code: 'PLN', amount: 75.50, symbol: 'zł' }
-            ];
-
-            testCurrencies.forEach(({ code, amount, symbol }) => {
-                it(`should process ${code} SuperChat with amount ${amount}`, async () => {
-                    const superChatData = {
-                        username: `${code}User`,
-                        userId: `user_${code}`,
-                        giftType: 'Super Chat',
-                        giftCount: 1,
-                        amount: amount,
-                        currency: code,
-                        message: `Test ${code} donation`,
-                        displayString: `${code} ${amount}`
-                    };
-
-                const result = await notificationManager.handleNotification(
-                    'platform:gift',
-                    'youtube',
-                    superChatData
-                );
-
-                    expect(result.success).toBe(true);
-                    expect(result.filtered).not.toBe(true);
-                    expect(mockDisplayQueue.addItem).toHaveBeenCalled();
-                    
-                    const addedNotification = mockDisplayQueue.addItem.mock.calls[0][0];
-                    expect(addedNotification).toBeDefined();
-                    expect(addedNotification.data).toBeDefined();
-                    expect(addedNotification.data.amount).toBe(amount);
-                });
-            });
-        });
-    });
-
-    describe('End-to-End Integration Test', () => {
-        it('should correctly process a Turkish Lira SuperChat from YouTube event', async () => {
-            const youtubeEvent = {
-                type: 'superchat',
-                data: {
-                    author: {
-                        name: 'TurkishViewer',
-                        channelId: 'UC123456'
-                    },
-                    superchat: {
-                        amount: 'TRY 219.99',
-                        message: 'Harika yayın!'
-                    }
-                }
-            };
-
-            const parser = new YouTubeiCurrencyParser();
-            const parseResult = parser.parse(youtubeEvent.data.superchat.amount);
-
-            expect(parseResult.success).toBe(true);
-            expect(parseResult.amount).toBe(219.99);
-            expect(parseResult.currency).toBe('TRY');
-
-            const notificationData = {
-                username: youtubeEvent.data.author.name,
-                userId: youtubeEvent.data.author.channelId,
-                giftType: 'Super Chat',
-                giftCount: 1,
-                amount: parseResult.amount,
-                currency: parseResult.currency,
-                message: youtubeEvent.data.superchat.message,
-                displayString: youtubeEvent.data.superchat.amount
-            };
-
-            const mockDisplayQueue = {
-                add: createMockFn().mockReturnValue(true),
-                addItem: createMockFn().mockReturnValue(true),
-                getQueueLength: createMockFn().mockReturnValue(0)
-            };
-            const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
-            const constants = require('../../../src/core/constants');
-            const logger = noOpLogger;
-            const textProcessing = createTextProcessingManager({ logger });
-            const obsGoals = require('../../../src/obs/goals').getDefaultGoalsManager();
-            const vfxCommandService = { getVFXConfig: createMockFn().mockResolvedValue(null) };
-            const notificationManager = new NotificationManager({
-                displayQueue: mockDisplayQueue,
-                logger,
-                eventBus: mockEventBus,
-                config: createTestConfig(),
-                constants,
-                textProcessing,
-                obsGoals,
-                vfxCommandService
-            });
-
-            const result = await notificationManager.handleNotification(
-                'platform:gift',
-                'youtube',
-                notificationData
-            );
-
-            expect(result.success).toBe(true);
-            expect(result.filtered).not.toBe(true);
-        });
-    });
-});
-
-describe('Currency Parsing Performance and Reliability', () => {
+  describe("YouTubei Currency Parser - TRY Format Support", () => {
     let parser;
+    let mockLogger;
 
     beforeEach(() => {
-        parser = new YouTubeiCurrencyParser({ logger: noOpLogger });
+      mockLogger = noOpLogger;
+      parser = new YouTubeiCurrencyParser({ logger: mockLogger });
     });
 
-    it('should parse 1000 TRY amounts quickly', () => {
-        const startTime = testClock.now();
-        
-        for (let i = 0; i < 1000; i++) {
-            const amount = (100 + (i / 10)).toFixed(2);
-            const result = parser.parse(`TRY ${amount}`);
-            expect(result.success).toBe(true);
-        }
-        
-        const simulatedDurationMs = 250;
-        testClock.advance(simulatedDurationMs);
-        const duration = testClock.now() - startTime;
-        expect(duration).toBeLessThan(1300); // Keep within a reasonable CI-safe bound
+    describe("Turkish Lira Code+Space Format (TRY XXX.XX)", () => {
+      it('should parse "TRY 219.99" correctly', () => {
+        const result = parser.parse("TRY 219.99");
+
+        expect(result.success).toBe(true);
+        expect(result.amount).toBe(219.99);
+        expect(result.currency).toBe("TRY");
+        expect(result.symbol).toBe("₺");
+        expect(result.originalString).toBe("TRY 219.99");
+      });
+
+      it('should parse "TRY 1000" without decimals', () => {
+        const result = parser.parse("TRY 1000");
+
+        expect(result.success).toBe(true);
+        expect(result.amount).toBe(1000);
+        expect(result.currency).toBe("TRY");
+        expect(result.symbol).toBe("₺");
+      });
+
+      it('should parse "TRY 5,999.99" with thousands separator', () => {
+        const result = parser.parse("TRY 5,999.99");
+
+        expect(result.success).toBe(true);
+        expect(result.amount).toBe(5999.99);
+        expect(result.currency).toBe("TRY");
+        expect(result.symbol).toBe("₺");
+      });
+
+      it('should parse "TRY 0.50" small amounts', () => {
+        const result = parser.parse("TRY 0.50");
+
+        expect(result.success).toBe(true);
+        expect(result.amount).toBe(0.5);
+        expect(result.currency).toBe("TRY");
+        expect(result.symbol).toBe("₺");
+      });
     });
 
-    it('should handle malformed inputs without crashing', () => {
-        const malformedInputs = [
-            'TRY',
-            'TRY ',
-            ' TRY',
-            'TRY NaN',
-            'TRY infinity',
-            'TRY -100',
-            'TRY 1.2.3.4',
-            'TRY 1,2,3,4',
-            null,
-            undefined,
-            {},
-            [],
-            123,
-            true
-        ];
+    describe("Turkish Lira Symbol Format (₺XXX.XX)", () => {
+      it('should parse "₺219.99" symbol-prefixed format', () => {
+        const result = parser.parse("₺219.99");
 
-        malformedInputs.forEach(input => {
-            expect(() => parser.parse(input)).not.toThrow();
-            const result = parser.parse(input);
-            expect(result).toBeDefined();
-            expect(result.success).toBeDefined();
+        expect(result.success).toBe(true);
+        expect(result.amount).toBe(219.99);
+        expect(result.currency).toBe("TRY");
+        expect(result.symbol).toBe("₺");
+      });
+
+      it('should parse "₺1,000.00" with thousands separator', () => {
+        const result = parser.parse("₺1,000.00");
+
+        expect(result.success).toBe(true);
+        expect(result.amount).toBe(1000.0);
+        expect(result.currency).toBe("TRY");
+        expect(result.symbol).toBe("₺");
+      });
+    });
+
+    describe("Other International Currency Code+Space Formats", () => {
+      it('should parse "EUR 50.00" European format', () => {
+        const result = parser.parse("EUR 50.00");
+
+        expect(result.success).toBe(true);
+        expect(result.amount).toBe(50.0);
+        expect(result.currency).toBe("EUR");
+        expect(result.symbol).toBe("€");
+      });
+
+      it('should parse "GBP 25.50" British format', () => {
+        const result = parser.parse("GBP 25.50");
+
+        expect(result.success).toBe(true);
+        expect(result.amount).toBe(25.5);
+        expect(result.currency).toBe("GBP");
+        expect(result.symbol).toBe("£");
+      });
+
+      it('should parse "JPY 5000" Japanese format (no decimals)', () => {
+        const result = parser.parse("JPY 5000");
+
+        expect(result.success).toBe(true);
+        expect(result.amount).toBe(5000);
+        expect(result.currency).toBe("JPY");
+        expect(result.symbol).toBe("¥");
+      });
+
+      it('should parse "KRW 50000" Korean format (no decimals)', () => {
+        const result = parser.parse("KRW 50000");
+
+        expect(result.success).toBe(true);
+        expect(result.amount).toBe(50000);
+        expect(result.currency).toBe("KRW");
+        expect(result.symbol).toBe("₩");
+      });
+
+      it('should parse "BRL 100.00" Brazilian format', () => {
+        const result = parser.parse("BRL 100.00");
+
+        expect(result.success).toBe(true);
+        expect(result.amount).toBe(100.0);
+        expect(result.currency).toBe("BRL");
+        expect(result.symbol).toBe("R$");
+      });
+
+      it('should parse "RUB 1500.00" Russian format', () => {
+        const result = parser.parse("RUB 1500.00");
+
+        expect(result.success).toBe(true);
+        expect(result.amount).toBe(1500.0);
+        expect(result.currency).toBe("RUB");
+        expect(result.symbol).toBe("₽");
+      });
+
+      it('should parse "PLN 75.50" Polish format', () => {
+        const result = parser.parse("PLN 75.50");
+
+        expect(result.success).toBe(true);
+        expect(result.amount).toBe(75.5);
+        expect(result.currency).toBe("PLN");
+        expect(result.symbol).toBe("zł");
+      });
+
+      it('should parse "THB 1000.00" Thai format', () => {
+        const result = parser.parse("THB 1000.00");
+
+        expect(result.success).toBe(true);
+        expect(result.amount).toBe(1000.0);
+        expect(result.currency).toBe("THB");
+        expect(result.symbol).toBe("฿");
+      });
+
+      it('should parse "PHP 2500.00" Philippine format', () => {
+        const result = parser.parse("PHP 2500.00");
+
+        expect(result.success).toBe(true);
+        expect(result.amount).toBe(2500.0);
+        expect(result.currency).toBe("PHP");
+        expect(result.symbol).toBe("₱");
+      });
+
+      it('should parse "MYR 50.00" Malaysian format', () => {
+        const result = parser.parse("MYR 50.00");
+
+        expect(result.success).toBe(true);
+        expect(result.amount).toBe(50.0);
+        expect(result.currency).toBe("MYR");
+        expect(result.symbol).toBe("RM");
+      });
+
+      it('should parse "ZAR 200.00" South African format', () => {
+        const result = parser.parse("ZAR 200.00");
+
+        expect(result.success).toBe(true);
+        expect(result.amount).toBe(200.0);
+        expect(result.currency).toBe("ZAR");
+        expect(result.symbol).toBe("R");
+      });
+
+      it('should parse "NGN 5000.00" Nigerian format', () => {
+        const result = parser.parse("NGN 5000.00");
+
+        expect(result.success).toBe(true);
+        expect(result.amount).toBe(5000.0);
+        expect(result.currency).toBe("NGN");
+        expect(result.symbol).toBe("₦");
+      });
+    });
+
+    describe("Edge Cases and Error Conditions", () => {
+      it('should handle TRY with European decimal format "TRY 219,99"', () => {
+        const result = parser.parse("TRY 219,99");
+
+        expect(result.success).toBe(true);
+        expect(result.amount).toBe(219.99);
+        expect(result.currency).toBe("TRY");
+      });
+
+      it('should handle extra spaces "TRY  219.99"', () => {
+        const result = parser.parse("TRY  219.99");
+
+        expect(result.success).toBe(true);
+        expect(result.amount).toBe(219.99);
+        expect(result.currency).toBe("TRY");
+      });
+
+      it('should handle lowercase "try 219.99"', () => {
+        const result = parser.parse("try 219.99");
+
+        expect(result.success).toBe(true);
+        expect(result.amount).toBe(219.99);
+        expect(result.currency).toBe("TRY");
+      });
+
+      it("should NOT parse as zero when format is unrecognized", () => {
+        const result = parser.parse("TRY 219.99");
+        expect(result.amount).not.toBe(0);
+      });
+    });
+  });
+
+  describe("Notification Manager - Zero Amount Filtering", () => {
+    let notificationManager;
+    let mockConfig;
+    let mockDisplayQueue;
+    let mockLogger;
+
+    beforeEach(() => {
+      mockLogger = noOpLogger;
+      mockDisplayQueue = {
+        add: createMockFn().mockReturnValue(true),
+        addItem: createMockFn().mockReturnValue(true),
+        getQueueLength: createMockFn().mockReturnValue(0),
+      };
+      mockConfig = createTestConfig();
+
+      const mockEventBus = {
+        emit: createMockFn(),
+        on: createMockFn(),
+        off: createMockFn(),
+      };
+      const constants = require("../../../src/core/constants");
+      const textProcessing = createTextProcessingManager({
+        logger: mockLogger,
+      });
+      const obsGoals =
+        require("../../../src/obs/goals").getDefaultGoalsManager();
+      const vfxCommandService = {
+        getVFXConfig: createMockFn().mockResolvedValue(null),
+      };
+      notificationManager = new NotificationManager({
+        displayQueue: mockDisplayQueue,
+        logger: mockLogger,
+        eventBus: mockEventBus,
+        config: mockConfig,
+        constants,
+        textProcessing,
+        obsGoals,
+        vfxCommandService,
+      });
+    });
+
+    describe("SuperChat with Parsing Failures", () => {
+      it("should NOT filter out TRY 219.99 SuperChat", async () => {
+        const superChatData = {
+          username: "TurkishUser",
+          userId: "user123",
+          giftType: "Super Chat",
+          giftCount: 1,
+          amount: 219.99,
+          currency: "TRY",
+          message: "Merhaba!",
+          displayString: "TRY 219.99",
+        };
+
+        const result = await notificationManager.handleNotification(
+          "platform:gift",
+          "youtube",
+          superChatData,
+        );
+
+        expect(result.success).toBe(true);
+        expect(result.filtered).not.toBe(true);
+        expect(result.reason).not.toBe("Zero amount not displayed");
+        expect(mockDisplayQueue.addItem).toHaveBeenCalled();
+      });
+
+      it("should correctly filter actual zero-amount gifts", async () => {
+        const zeroGiftData = {
+          username: "TestUser",
+          userId: "user456",
+          giftType: "Super Chat",
+          giftCount: 1,
+          amount: 0,
+          currency: "USD",
+          message: "Test",
+        };
+
+        const result = await notificationManager.handleNotification(
+          "platform:gift",
+          "youtube",
+          zeroGiftData,
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.filtered).toBe(true);
+        expect(result.reason).toBe("Zero amount not displayed");
+        expect(mockDisplayQueue.add).not.toHaveBeenCalled();
+      });
+
+      it("should handle SuperChat with unparseable currency gracefully", async () => {
+        const superChatData = {
+          username: "TestUser",
+          userId: "user789",
+          giftType: "Super Chat",
+          giftCount: 1,
+          amount: null,
+          currency: "UNKNOWN",
+          displayString: "XYZ 100.00",
+          message: "Test message",
+        };
+
+        const result = await notificationManager.handleNotification(
+          "platform:gift",
+          "youtube",
+          superChatData,
+        );
+
+        expect(result).toBeDefined();
+        expect(result.success).toBeDefined();
+      });
+    });
+
+    describe("International Currency Support in Notifications", () => {
+      const testCurrencies = [
+        { code: "TRY", amount: 219.99, symbol: "₺" },
+        { code: "EUR", amount: 50.0, symbol: "€" },
+        { code: "GBP", amount: 25.5, symbol: "£" },
+        { code: "JPY", amount: 5000, symbol: "¥" },
+        { code: "KRW", amount: 50000, symbol: "₩" },
+        { code: "BRL", amount: 100.0, symbol: "R$" },
+        { code: "RUB", amount: 1500.0, symbol: "₽" },
+        { code: "PLN", amount: 75.5, symbol: "zł" },
+      ];
+
+      testCurrencies.forEach(({ code, amount, symbol }) => {
+        it(`should process ${code} SuperChat with amount ${amount}`, async () => {
+          const superChatData = {
+            username: `${code}User`,
+            userId: `user_${code}`,
+            giftType: "Super Chat",
+            giftCount: 1,
+            amount: amount,
+            currency: code,
+            message: `Test ${code} donation`,
+            displayString: `${code} ${amount}`,
+          };
+
+          const result = await notificationManager.handleNotification(
+            "platform:gift",
+            "youtube",
+            superChatData,
+          );
+
+          expect(result.success).toBe(true);
+          expect(result.filtered).not.toBe(true);
+          expect(mockDisplayQueue.addItem).toHaveBeenCalled();
+
+          const addedNotification = mockDisplayQueue.addItem.mock.calls[0][0];
+          expect(addedNotification).toBeDefined();
+          expect(addedNotification.data).toBeDefined();
+          expect(addedNotification.data.amount).toBe(amount);
         });
+      });
     });
+  });
+
+  describe("End-to-End Integration Test", () => {
+    it("should correctly process a Turkish Lira SuperChat from YouTube event", async () => {
+      const youtubeEvent = {
+        type: "superchat",
+        data: {
+          author: {
+            name: "TurkishViewer",
+            channelId: "UC123456",
+          },
+          superchat: {
+            amount: "TRY 219.99",
+            message: "Harika yayın!",
+          },
+        },
+      };
+
+      const parser = new YouTubeiCurrencyParser();
+      const parseResult = parser.parse(youtubeEvent.data.superchat.amount);
+
+      expect(parseResult.success).toBe(true);
+      expect(parseResult.amount).toBe(219.99);
+      expect(parseResult.currency).toBe("TRY");
+
+      const notificationData = {
+        username: youtubeEvent.data.author.name,
+        userId: youtubeEvent.data.author.channelId,
+        giftType: "Super Chat",
+        giftCount: 1,
+        amount: parseResult.amount,
+        currency: parseResult.currency,
+        message: youtubeEvent.data.superchat.message,
+        displayString: youtubeEvent.data.superchat.amount,
+      };
+
+      const mockDisplayQueue = {
+        add: createMockFn().mockReturnValue(true),
+        addItem: createMockFn().mockReturnValue(true),
+        getQueueLength: createMockFn().mockReturnValue(0),
+      };
+      const mockEventBus = {
+        emit: createMockFn(),
+        on: createMockFn(),
+        off: createMockFn(),
+      };
+      const constants = require("../../../src/core/constants");
+      const logger = noOpLogger;
+      const textProcessing = createTextProcessingManager({ logger });
+      const obsGoals =
+        require("../../../src/obs/goals").getDefaultGoalsManager();
+      const vfxCommandService = {
+        getVFXConfig: createMockFn().mockResolvedValue(null),
+      };
+      const notificationManager = new NotificationManager({
+        displayQueue: mockDisplayQueue,
+        logger,
+        eventBus: mockEventBus,
+        config: createTestConfig(),
+        constants,
+        textProcessing,
+        obsGoals,
+        vfxCommandService,
+      });
+
+      const result = await notificationManager.handleNotification(
+        "platform:gift",
+        "youtube",
+        notificationData,
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.filtered).not.toBe(true);
+    });
+  });
+});
+
+describe("Currency Parsing Performance and Reliability", () => {
+  let parser;
+
+  beforeEach(() => {
+    parser = new YouTubeiCurrencyParser({ logger: noOpLogger });
+  });
+
+  it("should parse 1000 TRY amounts quickly", () => {
+    const startTime = testClock.now();
+
+    for (let i = 0; i < 1000; i++) {
+      const amount = (100 + i / 10).toFixed(2);
+      const result = parser.parse(`TRY ${amount}`);
+      expect(result.success).toBe(true);
+    }
+
+    const simulatedDurationMs = 250;
+    testClock.advance(simulatedDurationMs);
+    const duration = testClock.now() - startTime;
+    expect(duration).toBeLessThan(1300); // Keep within a reasonable CI-safe bound
+  });
+
+  it("should handle malformed inputs without crashing", () => {
+    const malformedInputs = [
+      "TRY",
+      "TRY ",
+      " TRY",
+      "TRY NaN",
+      "TRY infinity",
+      "TRY -100",
+      "TRY 1.2.3.4",
+      "TRY 1,2,3,4",
+      null,
+      undefined,
+      {},
+      [],
+      123,
+      true,
+    ];
+
+    malformedInputs.forEach((input) => {
+      expect(() => parser.parse(input)).not.toThrow();
+      const result = parser.parse(input);
+      expect(result).toBeDefined();
+      expect(result.success).toBeDefined();
+    });
+  });
 });

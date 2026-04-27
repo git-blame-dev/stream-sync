@@ -1,247 +1,278 @@
-const { describe, expect, beforeEach, it } = require('bun:test');
-export {};
-const { createMockFn, clearAllMocks } = require('../../helpers/bun-mock-utils');
-const { noOpLogger } = require('../../helpers/mock-factories');
+import { describe, expect, beforeEach, it } from "bun:test";
+import { createMockFn, clearAllMocks } from "../../helpers/bun-mock-utils";
+import { noOpLogger } from "../../helpers/mock-factories";
+import {
+  ViewerCountProvider,
+  TwitchViewerCountProvider,
+  YouTubeViewerCountProvider,
+  TikTokViewerCountProvider,
+} from "../../../src/utils/viewer-count-providers";
+describe("ViewerCountProvider base behavior", () => {
+  it("tracks error stats and categorizes network errors", () => {
+    const provider = new ViewerCountProvider("testPlatform", noOpLogger);
+    const result = provider._handleProviderError(
+      new Error("Network timeout"),
+      "fetch",
+    );
 
-const {
-    ViewerCountProvider,
-    TwitchViewerCountProvider,
-    YouTubeViewerCountProvider,
-    TikTokViewerCountProvider
-} = require('../../../src/utils/viewer-count-providers');
+    expect(result).toBe(0);
+    const stats = provider.getErrorStats();
+    expect(stats.totalErrors).toBe(1);
+    expect(stats.consecutiveErrors).toBe(1);
+    expect(stats.lastError).toBe("Network timeout");
+    expect(stats.errorTypes.network).toBe(1);
+  });
 
-describe('ViewerCountProvider base behavior', () => {
-    it('tracks error stats and categorizes network errors', () => {
-        const provider = new ViewerCountProvider('testPlatform', noOpLogger);
-        const result = provider._handleProviderError(new Error('Network timeout'), 'fetch');
+  it("categorizes auth, rate limit, and resource errors", () => {
+    const provider = new ViewerCountProvider("testPlatform", noOpLogger);
+    provider._handleProviderError(new Error("auth failure"), "testOperation");
+    provider._handleProviderError(
+      new Error("rate limit exceeded"),
+      "testOperation",
+    );
+    provider._handleProviderError(
+      new Error("stream not found"),
+      "testOperation",
+    );
 
-        expect(result).toBe(0);
-        const stats = provider.getErrorStats();
-        expect(stats.totalErrors).toBe(1);
-        expect(stats.consecutiveErrors).toBe(1);
-        expect(stats.lastError).toBe('Network timeout');
-        expect(stats.errorTypes.network).toBe(1);
-    });
+    const stats = provider.getErrorStats();
+    expect(stats.errorTypes.authentication).toBe(1);
+    expect(stats.errorTypes.rate_limit).toBe(1);
+    expect(stats.errorTypes.resource_not_found).toBe(1);
+  });
 
-    it('categorizes auth, rate limit, and resource errors', () => {
-        const provider = new ViewerCountProvider('testPlatform', noOpLogger);
-        provider._handleProviderError(new Error('auth failure'), 'testOperation');
-        provider._handleProviderError(new Error('rate limit exceeded'), 'testOperation');
-        provider._handleProviderError(new Error('stream not found'), 'testOperation');
+  it("converts error type map to plain object and tracks unknown errors", () => {
+    const provider = new ViewerCountProvider("testPlatform", noOpLogger);
 
-        const stats = provider.getErrorStats();
-        expect(stats.errorTypes.authentication).toBe(1);
-        expect(stats.errorTypes.rate_limit).toBe(1);
-        expect(stats.errorTypes.resource_not_found).toBe(1);
-    });
+    provider._handleProviderError(new Error("weird failure"), "testOperation");
+    const stats = provider.getErrorStats();
 
-    it('converts error type map to plain object and tracks unknown errors', () => {
-        const provider = new ViewerCountProvider('testPlatform', noOpLogger);
+    expect(stats.errorTypes.unknown).toBe(1);
+    expect(typeof stats.errorTypes).toBe("object");
+  });
 
-        provider._handleProviderError(new Error('weird failure'), 'testOperation');
-        const stats = provider.getErrorStats();
+  it("handles non-Error inputs without message gracefully", () => {
+    const provider = new ViewerCountProvider("testPlatform", noOpLogger);
 
-        expect(stats.errorTypes.unknown).toBe(1);
-        expect(typeof stats.errorTypes).toBe('object');
-    });
+    const result = provider._handleProviderError({}, "testOperation");
 
-    it('handles non-Error inputs without message gracefully', () => {
-        const provider = new ViewerCountProvider('testPlatform', noOpLogger);
-
-        const result = provider._handleProviderError({}, 'testOperation');
-
-        expect(result).toBe(0);
-        const stats = provider.getErrorStats();
-        expect(stats.errorTypes.unknown).toBe(1);
-        expect(stats.lastError).toBe('Unknown error');
-    });
+    expect(result).toBe(0);
+    const stats = provider.getErrorStats();
+    expect(stats.errorTypes.unknown).toBe(1);
+    expect(stats.lastError).toBe("Unknown error");
+  });
 });
 
-describe('TwitchViewerCountProvider', () => {
-    beforeEach(() => {
-        clearAllMocks();
-    });
+describe("TwitchViewerCountProvider", () => {
+  beforeEach(() => {
+    clearAllMocks();
+  });
 
-    it('returns 0 when not ready', async () => {
-        const provider = new TwitchViewerCountProvider({ getStreamInfo: createMockFn() }, {}, {}, null, noOpLogger);
+  it("returns 0 when not ready", async () => {
+    const provider = new TwitchViewerCountProvider(
+      { getStreamInfo: createMockFn() },
+      {},
+      {},
+      null,
+      noOpLogger,
+    );
 
-        await expect(provider.getViewerCount()).resolves.toBe(0);
-    });
+    await expect(provider.getViewerCount()).resolves.toBe(0);
+  });
 
-    it('returns live viewer count and resets error counters', async () => {
-        const provider = new TwitchViewerCountProvider(
-            { getStreamInfo: createMockFn().mockResolvedValue({ isLive: true, viewerCount: 42 }) },
-            {},
-            { channel: 'testStreamer' },
-            null,
-            noOpLogger
-        );
+  it("returns live viewer count and resets error counters", async () => {
+    const provider = new TwitchViewerCountProvider(
+      {
+        getStreamInfo: createMockFn().mockResolvedValue({
+          isLive: true,
+          viewerCount: 42,
+        }),
+      },
+      {},
+      { channel: "testStreamer" },
+      null,
+      noOpLogger,
+    );
 
-        const count = await provider.getViewerCount();
+    const count = await provider.getViewerCount();
 
-        expect(count).toBe(42);
-        expect(provider.errorStats.consecutiveErrors).toBe(0);
-    });
+    expect(count).toBe(42);
+    expect(provider.errorStats.consecutiveErrors).toBe(0);
+  });
 });
 
-describe('YouTubeViewerCountProvider', () => {
-    beforeEach(() => {
-        clearAllMocks();
+describe("YouTubeViewerCountProvider", () => {
+  beforeEach(() => {
+    clearAllMocks();
+  });
+
+  it("returns 0 when required dependencies are missing", async () => {
+    const provider = new YouTubeViewerCountProvider({}, {}, null, null, {
+      logger: noOpLogger,
     });
 
-    it('returns 0 when required dependencies are missing', async () => {
-        const provider = new YouTubeViewerCountProvider({}, {}, null, null, { logger: noOpLogger });
+    await expect(provider.getViewerCount()).resolves.toBe(0);
+  });
 
-        await expect(provider.getViewerCount()).resolves.toBe(0);
+  it("aggregates counts across active streams via service layer", async () => {
+    const viewerExtractionService = {
+      getAggregatedViewerCount: createMockFn().mockResolvedValue({
+        success: true,
+        totalCount: 75,
+        successfulStreams: 1,
+      }),
+    };
+    const provider = new YouTubeViewerCountProvider(
+      {},
+      {},
+      () => ["testVideoId1"],
+      null,
+      { viewerExtractionService, logger: noOpLogger },
+    );
+
+    const count = await provider.getViewerCount();
+    expect(count).toBe(75);
+
+    const stats = provider.getStats();
+    expect(stats.successRate).toBe("100.00%");
+  });
+
+  it("returns unavailable and tracks an error when aggregation fails", async () => {
+    const viewerExtractionService = {
+      getAggregatedViewerCount: createMockFn().mockResolvedValue({
+        success: false,
+      }),
+    };
+    const provider = new YouTubeViewerCountProvider(
+      {},
+      {},
+      () => ["testVideoId1"],
+      null,
+      { viewerExtractionService, logger: noOpLogger },
+    );
+
+    const count = await provider.getViewerCount();
+    expect(count).toBeNull();
+    expect(provider.getErrorStats().totalErrors).toBe(1);
+  });
+
+  it("returns unavailable when all active stream extractions fail", async () => {
+    const viewerExtractionService = {
+      getAggregatedViewerCount: createMockFn().mockResolvedValue({
+        success: false,
+        totalCount: 0,
+        successfulStreams: 0,
+        failedStreams: 2,
+      }),
+    };
+    const provider = new YouTubeViewerCountProvider(
+      {},
+      {},
+      () => ["testVideoId1", "testVideoId2"],
+      null,
+      { viewerExtractionService, logger: noOpLogger },
+    );
+
+    const count = await provider.getViewerCount();
+
+    expect(count).toBeNull();
+    expect(provider.getErrorStats().totalErrors).toBe(1);
+  });
+
+  it("returns 0 without incrementing errors when no active streams", async () => {
+    const provider = new YouTubeViewerCountProvider({}, {}, () => [], null, {
+      viewerExtractionService: { getAggregatedViewerCount: createMockFn() },
+      logger: noOpLogger,
     });
 
-    it('aggregates counts across active streams via service layer', async () => {
-        const viewerExtractionService = {
-            getAggregatedViewerCount: createMockFn().mockResolvedValue({
-                success: true,
-                totalCount: 75,
-                successfulStreams: 1
-            })
-        };
-        const provider = new YouTubeViewerCountProvider(
-            {},
-            {},
-            () => ['testVideoId1'],
-            null,
-            { viewerExtractionService, logger: noOpLogger }
-        );
+    const count = await provider.getViewerCount();
 
-        const count = await provider.getViewerCount();
-        expect(count).toBe(75);
+    expect(count).toBe(0);
+    expect(provider.getErrorStats().totalErrors).toBe(0);
+  });
 
-        const stats = provider.getStats();
-        expect(stats.successRate).toBe('100.00%');
-    });
+  it("resets consecutive errors after successful aggregation following a failure", async () => {
+    const viewerExtractionService = {
+      getAggregatedViewerCount: createMockFn()
+        .mockRejectedValueOnce(new Error("network down"))
+        .mockResolvedValueOnce({
+          success: true,
+          totalCount: 5,
+          successfulStreams: 1,
+        }),
+    };
+    const provider = new YouTubeViewerCountProvider(
+      {},
+      {},
+      () => ["testVideoId1"],
+      null,
+      { viewerExtractionService, logger: noOpLogger },
+    );
 
-    it('returns unavailable and tracks an error when aggregation fails', async () => {
-        const viewerExtractionService = {
-            getAggregatedViewerCount: createMockFn().mockResolvedValue({ success: false })
-        };
-        const provider = new YouTubeViewerCountProvider(
-            {},
-            {},
-            () => ['testVideoId1'],
-            null,
-            { viewerExtractionService, logger: noOpLogger }
-        );
+    await provider.getViewerCount();
+    expect(provider.errorStats.consecutiveErrors).toBe(1);
 
-        const count = await provider.getViewerCount();
-        expect(count).toBeNull();
-        expect(provider.getErrorStats().totalErrors).toBe(1);
-    });
+    const count = await provider.getViewerCount();
 
-    it('returns unavailable when all active stream extractions fail', async () => {
-        const viewerExtractionService = {
-            getAggregatedViewerCount: createMockFn().mockResolvedValue({
-                success: false,
-                totalCount: 0,
-                successfulStreams: 0,
-                failedStreams: 2
-            })
-        };
-        const provider = new YouTubeViewerCountProvider(
-            {},
-            {},
-            () => ['testVideoId1', 'testVideoId2'],
-            null,
-            { viewerExtractionService, logger: noOpLogger }
-        );
-
-        const count = await provider.getViewerCount();
-
-        expect(count).toBeNull();
-        expect(provider.getErrorStats().totalErrors).toBe(1);
-    });
-
-    it('returns 0 without incrementing errors when no active streams', async () => {
-        const provider = new YouTubeViewerCountProvider(
-            {},
-            {},
-            () => [],
-            null,
-            { viewerExtractionService: { getAggregatedViewerCount: createMockFn() }, logger: noOpLogger }
-        );
-
-        const count = await provider.getViewerCount();
-
-        expect(count).toBe(0);
-        expect(provider.getErrorStats().totalErrors).toBe(0);
-    });
-
-    it('resets consecutive errors after successful aggregation following a failure', async () => {
-        const viewerExtractionService = {
-            getAggregatedViewerCount: createMockFn()
-                .mockRejectedValueOnce(new Error('network down'))
-                .mockResolvedValueOnce({ success: true, totalCount: 5, successfulStreams: 1 })
-        };
-        const provider = new YouTubeViewerCountProvider(
-            {},
-            {},
-            () => ['testVideoId1'],
-            null,
-            { viewerExtractionService, logger: noOpLogger }
-        );
-
-        await provider.getViewerCount();
-        expect(provider.errorStats.consecutiveErrors).toBe(1);
-
-        const count = await provider.getViewerCount();
-
-        expect(count).toBe(5);
-        expect(provider.errorStats.consecutiveErrors).toBe(0);
-    });
+    expect(count).toBe(5);
+    expect(provider.errorStats.consecutiveErrors).toBe(0);
+  });
 });
 
-describe('TikTokViewerCountProvider', () => {
-    beforeEach(() => {
-        clearAllMocks();
+describe("TikTokViewerCountProvider", () => {
+  beforeEach(() => {
+    clearAllMocks();
+  });
+
+  it("handles missing platform gracefully", async () => {
+    const provider = new TikTokViewerCountProvider(null, {
+      logger: noOpLogger,
     });
 
-    it('handles missing platform gracefully', async () => {
-        const provider = new TikTokViewerCountProvider(null, { logger: noOpLogger });
+    const count = await provider.getViewerCount();
+    expect(count).toBe(0);
+    expect(provider.getErrorStats().totalErrors).toBe(1);
+  });
 
-        const count = await provider.getViewerCount();
-        expect(count).toBe(0);
-        expect(provider.getErrorStats().totalErrors).toBe(1);
+  it("returns platform viewer count when available", async () => {
+    const platform = {
+      connection: { isConnected: true },
+      getViewerCount: createMockFn().mockResolvedValue(33),
+    };
+    const provider = new TikTokViewerCountProvider(platform, {
+      logger: noOpLogger,
     });
 
-    it('returns platform viewer count when available', async () => {
-        const platform = {
-            connection: { isConnected: true },
-            getViewerCount: createMockFn().mockResolvedValue(33)
-        };
-        const provider = new TikTokViewerCountProvider(platform, { logger: noOpLogger });
+    const count = await provider.getViewerCount();
+    expect(count).toBe(33);
+    expect(provider.errorStats.consecutiveErrors).toBe(0);
+  });
 
-        const count = await provider.getViewerCount();
-        expect(count).toBe(33);
-        expect(provider.errorStats.consecutiveErrors).toBe(0);
+  it("resets error count on success after previous failure", async () => {
+    const platform = {
+      connection: { isConnected: true },
+      getViewerCount: createMockFn()
+        .mockRejectedValueOnce(new Error("network"))
+        .mockResolvedValueOnce(10),
+    };
+    const provider = new TikTokViewerCountProvider(platform, {
+      logger: noOpLogger,
     });
 
-    it('resets error count on success after previous failure', async () => {
-        const platform = {
-            connection: { isConnected: true },
-            getViewerCount: createMockFn()
-                .mockRejectedValueOnce(new Error('network'))
-                .mockResolvedValueOnce(10)
-        };
-        const provider = new TikTokViewerCountProvider(platform, { logger: noOpLogger });
+    await provider.getViewerCount();
+    expect(provider.errorStats.consecutiveErrors).toBe(1);
 
-        await provider.getViewerCount();
-        expect(provider.errorStats.consecutiveErrors).toBe(1);
+    const count = await provider.getViewerCount();
+    expect(count).toBe(10);
+    expect(provider.errorStats.consecutiveErrors).toBe(0);
+  });
 
-        const count = await provider.getViewerCount();
-        expect(count).toBe(10);
-        expect(provider.errorStats.consecutiveErrors).toBe(0);
-    });
+  it("is not ready when connection missing or disconnected", () => {
+    const provider = new TikTokViewerCountProvider(
+      { connection: { connected: false } },
+      { logger: noOpLogger },
+    );
 
-    it('is not ready when connection missing or disconnected', () => {
-        const provider = new TikTokViewerCountProvider({ connection: { connected: false } }, { logger: noOpLogger });
-
-        expect(provider.isReady()).toBe(false);
-    });
+    expect(provider.isReady()).toBe(false);
+  });
 });

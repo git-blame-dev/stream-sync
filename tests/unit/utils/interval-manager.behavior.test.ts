@@ -1,61 +1,71 @@
-const { describe, expect, beforeEach, afterEach, it } = require('bun:test');
-export {};
-const { createMockFn, spyOn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { noOpLogger } = require('../../helpers/mock-factories');
-const { IntervalManager } = require('../../../src/utils/interval-manager.ts');
-const testClock = require('../../helpers/test-clock');
+import { describe, expect, beforeEach, afterEach, it } from "bun:test";
+import {
+  createMockFn,
+  spyOn,
+  restoreAllMocks,
+} from "../../helpers/bun-mock-utils";
+import { noOpLogger } from "../../helpers/mock-factories";
+import { IntervalManager } from "../../../src/utils/interval-manager.ts";
+import testClock from "../../helpers/test-clock";
+describe("IntervalManager behavior", () => {
+  let intervalIdCounter: number;
+  let mockSafeSetInterval: ReturnType<typeof createMockFn>;
+  let clearIntervalSpy: ReturnType<typeof spyOn>;
 
-describe('IntervalManager behavior', () => {
-    let intervalIdCounter: number;
-    let mockSafeSetInterval: ReturnType<typeof createMockFn>;
-    let clearIntervalSpy: ReturnType<typeof spyOn>;
-
-    beforeEach(() => {
-        clearIntervalSpy = spyOn(global, 'clearInterval').mockImplementation(() => {});
-        intervalIdCounter = 0;
-        mockSafeSetInterval = createMockFn((callback) => {
-            intervalIdCounter += 1;
-            return { id: `interval-${intervalIdCounter}`, callback };
-        });
+  beforeEach(() => {
+    clearIntervalSpy = spyOn(global, "clearInterval").mockImplementation(
+      () => {},
+    );
+    intervalIdCounter = 0;
+    mockSafeSetInterval = createMockFn((callback) => {
+      intervalIdCounter += 1;
+      return { id: `interval-${intervalIdCounter}`, callback };
     });
+  });
 
-    afterEach(() => {
-        clearIntervalSpy.mockRestore();
-        restoreAllMocks();
+  afterEach(() => {
+    clearIntervalSpy.mockRestore();
+    restoreAllMocks();
+  });
+
+  it("creates intervals with tracking for out-of-range durations", () => {
+    const manager = new IntervalManager("platform", noOpLogger, {
+      safeSetInterval: mockSafeSetInterval,
     });
+    const callback = createMockFn();
 
-    it('creates intervals with tracking for out-of-range durations', () => {
-        const manager = new IntervalManager('platform', noOpLogger, { safeSetInterval: mockSafeSetInterval });
-        const callback = createMockFn();
+    expect(() => manager.createInterval("poll", callback, 50)).not.toThrow();
+    expect(manager.hasInterval("poll")).toBe(true);
+    expect(manager.getActiveIntervals().length).toBe(1);
+  });
 
-        expect(() => manager.createInterval('poll', callback, 50)).not.toThrow();
-        expect(manager.hasInterval('poll')).toBe(true);
-        expect(manager.getActiveIntervals().length).toBe(1);
+  it("clears intervals individually and in bulk with stats updates", () => {
+    const manager = new IntervalManager("platform", noOpLogger, {
+      safeSetInterval: mockSafeSetInterval,
     });
+    manager.createPollingInterval("p1", () => {}, 2000);
+    manager.createMonitoringInterval("m1", () => {}, 2000);
 
-    it('clears intervals individually and in bulk with stats updates', () => {
-        const manager = new IntervalManager('platform', noOpLogger, { safeSetInterval: mockSafeSetInterval });
-        manager.createPollingInterval('p1', () => {}, 2000);
-        manager.createMonitoringInterval('m1', () => {}, 2000);
+    const cleared = manager.clearAllIntervals("polling");
+    expect(cleared).toBe(1);
+    expect(manager.getActiveIntervals().length).toBe(1);
 
-        const cleared = manager.clearAllIntervals('polling');
-        expect(cleared).toBe(1);
-        expect(manager.getActiveIntervals().length).toBe(1);
+    manager.cleanup();
+    expect(manager.getStatistics().activeCount).toBe(0);
+  });
 
-        manager.cleanup();
-        expect(manager.getStatistics().activeCount).toBe(0);
+  it("reports health including long-running intervals", () => {
+    const manager = new IntervalManager("platform", noOpLogger, {
+      safeSetInterval: mockSafeSetInterval,
     });
+    manager.createInterval("old", () => {}, 1000, "monitoring");
+    const info = manager.getIntervalInfo("old");
+    info.startTime = new Date(testClock.now() - 7200000).toISOString();
 
-    it('reports health including long-running intervals', () => {
-        const manager = new IntervalManager('platform', noOpLogger, { safeSetInterval: mockSafeSetInterval });
-        manager.createInterval('old', () => {}, 1000, 'monitoring');
-        const info = manager.getIntervalInfo('old');
-        info.startTime = new Date(testClock.now() - 7200000).toISOString();
+    const health = manager.getHealthCheck();
 
-        const health = manager.getHealthCheck();
-
-        expect(health.healthy).toBe(false);
-        expect(health.longRunningCount).toBe(1);
-        expect(health.longRunningIntervals[0].name).toBe('old');
-    });
+    expect(health.healthy).toBe(false);
+    expect(health.longRunningCount).toBe(1);
+    expect(health.longRunningIntervals[0].name).toBe("old");
+  });
 });
