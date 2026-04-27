@@ -1,80 +1,112 @@
-import { mock } from 'bun:test';
-import { createRequire } from 'node:module';
-import path from 'node:path';
+import { mock } from "bun:test";
+import { createRequire } from "node:module";
 
 const nodeRequire = createRequire(import.meta.url);
 
 type ModuleMockEntry = {
-    moduleName: string;
-    factory: () => unknown;
+  moduleName: string;
+  moduleId: string;
+  factory: () => unknown;
+  hasActualModule: boolean;
+  actualModule: unknown;
 };
 
 const restoreMockModule = (moduleName: string) => {
-    (mock.restore as unknown as (targetModule: string) => void)(moduleName);
+  (mock.restore as unknown as (targetModule: string) => void)(moduleName);
 };
 
 const activeMocks = new Map<string, ModuleMockEntry>();
 
 const resolveModuleId = (moduleName: string) => {
-    try {
-        return nodeRequire.resolve(moduleName);
-    } catch {
-        return moduleName;
-    }
+  try {
+    return nodeRequire.resolve(moduleName);
+  } catch {
+    return moduleName;
+  }
+};
+
+const isPathSpecifier = (moduleName: string) => {
+  return (
+    moduleName.startsWith("./") ||
+    moduleName.startsWith("../") ||
+    moduleName.startsWith("/") ||
+    /^[A-Za-z]:[\\/]/.test(moduleName)
+  );
+};
+
+const resolveActualModule = (moduleName: string) => {
+  if (!isPathSpecifier(moduleName)) {
+    return { hasActualModule: false, actualModule: undefined };
+  }
+
+  try {
+    return { hasActualModule: true, actualModule: nodeRequire(moduleName) };
+  } catch {
+    return { hasActualModule: false, actualModule: undefined };
+  }
 };
 
 const mockModule = (moduleName: string, factory: () => unknown) => {
-    const moduleId = resolveModuleId(moduleName);
-    activeMocks.set(moduleId, { moduleName, factory });
-    mock.module(moduleName, factory);
-    return moduleId;
+  const moduleId = resolveModuleId(moduleName);
+  const currentEntry = activeMocks.get(moduleId);
+  const actualModuleResolution =
+    currentEntry ??
+    ({ moduleName, moduleId, factory, ...resolveActualModule(moduleName) } as ModuleMockEntry);
+
+  activeMocks.set(moduleId, {
+    moduleName,
+    moduleId,
+    factory,
+    hasActualModule: actualModuleResolution.hasActualModule,
+    actualModule: actualModuleResolution.actualModule,
+  });
+  mock.module(moduleName, factory);
+  return moduleId;
 };
 
 const unmockModule = (moduleName: string) => {
-    const moduleId = resolveModuleId(moduleName);
-    activeMocks.delete(moduleId);
-    restoreMockModule(moduleName);
+  const moduleId = resolveModuleId(moduleName);
+  const entry = activeMocks.get(moduleId);
+  if (!entry) {
+    return;
+  }
+
+  restoreMockModule(entry.moduleName);
+  if (entry.hasActualModule) {
+    mock.module(entry.moduleName, () => entry.actualModule);
+  }
+  activeMocks.delete(entry.moduleId);
 };
 
 const requireActual = (moduleName: string) => {
-    const moduleId = resolveModuleId(moduleName);
-    const entry = activeMocks.get(moduleId);
-    if (entry) {
-        restoreMockModule(entry.moduleName);
-    }
-    if (path.isAbsolute(moduleId)) {
-        delete nodeRequire.cache[moduleId];
-    }
-    const actual = nodeRequire(moduleName);
-    if (entry) {
-        mock.module(entry.moduleName, entry.factory);
-    }
-    return actual;
-};
+  const moduleId = resolveModuleId(moduleName);
+  const entry = activeMocks.get(moduleId);
+  if (!entry) {
+    return nodeRequire(moduleName);
+  }
 
-const resetModules = () => {
-    Object.keys(nodeRequire.cache).forEach((cacheKey) => {
-        if (cacheKey.startsWith(process.cwd()) && !cacheKey.includes(`${path.sep}node_modules${path.sep}`)) {
-            delete nodeRequire.cache[cacheKey];
-        }
-    });
+  if (entry.hasActualModule) {
+    return entry.actualModule;
+  }
+
+  restoreMockModule(entry.moduleName);
+  const actualModule = nodeRequire(moduleName);
+  mock.module(entry.moduleName, entry.factory);
+  return actualModule;
 };
 
 const restoreAllModuleMocks = () => {
-    activeMocks.forEach((entry, moduleId) => {
-        restoreMockModule(entry.moduleName);
-        // Also clear the require cache to ensure next require gets fresh module
-        if (path.isAbsolute(moduleId)) {
-            delete nodeRequire.cache[moduleId];
-        }
-    });
-    activeMocks.clear();
+  activeMocks.forEach((entry) => {
+    restoreMockModule(entry.moduleName);
+    if (entry.hasActualModule) {
+      mock.module(entry.moduleName, () => entry.actualModule);
+    }
+  });
+  activeMocks.clear();
 };
 
-export {
-    mockModule,
-    unmockModule,
-    requireActual,
-    resetModules,
-    restoreAllModuleMocks
+const resetModules = () => {
+  restoreAllModuleMocks();
 };
+
+export { mockModule, unmockModule, requireActual, resetModules, restoreAllModuleMocks };
