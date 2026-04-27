@@ -1,36 +1,37 @@
-const { describe, expect, it } = require('bun:test');
-export {};
+import { describe, expect, it } from "bun:test";
 
-const { NotificationGate } = require('../../../src/notifications/notification-gate');
+import { NotificationGate } from "../../../src/notifications/notification-gate";
 
-describe('NotificationGate', () => {
-    it('reports missing configuration access', () => {
-        const gate = new NotificationGate(null);
+describe("NotificationGate", () => {
+  it("reports missing configuration access", () => {
+    const gate = new NotificationGate(null);
 
-        expect(gate.hasConfigAccess()).toBe(false);
+    expect(gate.hasConfigAccess()).toBe(false);
+  });
+
+  it("returns enabled state for valid config entries", () => {
+    const gate = new NotificationGate({
+      tiktok: { followsEnabled: true },
     });
 
-    it('returns enabled state for valid config entries', () => {
-        const gate = new NotificationGate({
-            tiktok: { followsEnabled: true }
-        });
+    expect(gate.isEnabled("followsEnabled", "tiktok")).toBe(true);
+  });
 
-        expect(gate.isEnabled('followsEnabled', 'tiktok')).toBe(true);
+  it("returns disabled state for falsy config entries", () => {
+    const gate = new NotificationGate({
+      twitch: { giftsEnabled: false },
     });
 
-    it('returns disabled state for falsy config entries', () => {
-        const gate = new NotificationGate({
-            twitch: { giftsEnabled: false }
-        });
+    expect(gate.isEnabled("giftsEnabled", "twitch")).toBe(false);
+  });
 
-        expect(gate.isEnabled('giftsEnabled', 'twitch')).toBe(false);
+  it("throws when the setting key is missing", () => {
+    const gate = new NotificationGate({
+      youtube: { messagesEnabled: true },
     });
 
-    it('throws when the setting key is missing', () => {
-        const gate = new NotificationGate({
-            youtube: { messagesEnabled: true }
-        });
-
-        expect(() => gate.isEnabled('followsEnabled', 'youtube')).toThrow('Config missing youtube.followsEnabled');
-    });
+    expect(() => gate.isEnabled("followsEnabled", "youtube")).toThrow(
+      "Config missing youtube.followsEnabled",
+    );
+  });
 });

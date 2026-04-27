@@ -1,167 +1,165 @@
-const { describe, it, expect } = require('bun:test')
+import { describe, expect, it } from "bun:test";
 
-const {
-    calculateOverlayRowShiftDeltas,
-    applyOverlayRowShiftMotion
-} = require('../../../gui/src/shared/overlay-row-motion')
+import {
+  applyOverlayRowShiftMotion,
+  calculateOverlayRowShiftDeltas,
+} from "../../../gui/src/shared/overlay-row-motion";
 
 function createFakeElement(top: number) {
-    return {
-        style: {
-            transition: '',
-            transform: ''
-        },
-        offsetHeight: 42,
-        getBoundingClientRect: () => ({ top })
-    }
+  return {
+    style: {
+      transition: "",
+      transform: "",
+    },
+    offsetHeight: 42,
+    getBoundingClientRect: () => ({ top }),
+  };
 }
 
-describe('overlay row motion behavior', () => {
-    it('computes upward shift deltas for rows that persist across renders', () => {
-        const previousTopByKey = new Map([
-            ['row-a', 120],
-            ['row-b', 180]
-        ])
-        const currentTopByKey = new Map([
-            ['row-a', 90],
-            ['row-b', 150],
-            ['row-c', 210]
-        ])
+describe("overlay row motion behavior", () => {
+  it("computes upward shift deltas for rows that persist across renders", () => {
+    const previousTopByKey = new Map([
+      ["row-a", 120],
+      ["row-b", 180],
+    ]);
+    const currentTopByKey = new Map([
+      ["row-a", 90],
+      ["row-b", 150],
+      ["row-c", 210],
+    ]);
 
-        const deltas = calculateOverlayRowShiftDeltas(previousTopByKey, currentTopByKey)
+    const deltas = calculateOverlayRowShiftDeltas(
+      previousTopByKey,
+      currentTopByKey,
+    );
 
-        expect(deltas.get('row-a')).toBe(30)
-        expect(deltas.get('row-b')).toBe(30)
-        expect(deltas.has('row-c')).toBe(false)
-    })
+    expect(deltas.get("row-a")).toBe(30);
+    expect(deltas.get("row-b")).toBe(30);
+    expect(deltas.has("row-c")).toBe(false);
+  });
 
-    it('ignores rows whose vertical position did not change', () => {
-        const previousTopByKey = new Map([
-            ['row-a', 100]
-        ])
-        const currentTopByKey = new Map([
-            ['row-a', 100]
-        ])
+  it("ignores rows whose vertical position did not change", () => {
+    const previousTopByKey = new Map([["row-a", 100]]);
+    const currentTopByKey = new Map([["row-a", 100]]);
 
-        const deltas = calculateOverlayRowShiftDeltas(previousTopByKey, currentTopByKey)
+    const deltas = calculateOverlayRowShiftDeltas(
+      previousTopByKey,
+      currentTopByKey,
+    );
 
-        expect(deltas.size).toBe(0)
-    })
+    expect(deltas.size).toBe(0);
+  });
 
-    it('applies transform transition to rows that moved upward', () => {
-        const rowA = createFakeElement(90)
-        const rowB = createFakeElement(150)
-        const rowElementsByKey = new Map([
-            ['row-a', rowA],
-            ['row-b', rowB]
-        ])
+  it("applies transform transition to rows that moved upward", () => {
+    const rowA = createFakeElement(90);
+    const rowB = createFakeElement(150);
+    const rowElementsByKey = new Map([
+      ["row-a", rowA],
+      ["row-b", rowB],
+    ]);
 
-        const currentTopByKey = applyOverlayRowShiftMotion({
-            rowKeys: ['row-a', 'row-b'],
-            rowElementsByKey,
-            previousTopByKey: new Map([
-                ['row-a', 120],
-                ['row-b', 180]
-            ]),
-            durationMs: 1000
-        })
+    const currentTopByKey = applyOverlayRowShiftMotion({
+      rowKeys: ["row-a", "row-b"],
+      rowElementsByKey,
+      previousTopByKey: new Map([
+        ["row-a", 120],
+        ["row-b", 180],
+      ]),
+      durationMs: 1000,
+    });
 
-        expect(rowA.style.transition).toBe('transform 1000ms ease-out')
-        expect(rowA.style.transform).toBe('translateY(0)')
-        expect(rowB.style.transition).toBe('transform 1000ms ease-out')
-        expect(rowB.style.transform).toBe('translateY(0)')
-        expect(currentTopByKey.get('row-a')).toBe(90)
-        expect(currentTopByKey.get('row-b')).toBe(150)
-    })
+    expect(rowA.style.transition).toBe("transform 1000ms ease-out");
+    expect(rowA.style.transform).toBe("translateY(0)");
+    expect(rowB.style.transition).toBe("transform 1000ms ease-out");
+    expect(rowB.style.transform).toBe("translateY(0)");
+    expect(currentTopByKey.get("row-a")).toBe(90);
+    expect(currentTopByKey.get("row-b")).toBe(150);
+  });
 
-    it('uses synchronized initial shift for existing and new rows before transition frame', () => {
-        const previousRaf = global.requestAnimationFrame
-        const queuedCallbacks: FrameRequestCallback[] = []
-        global.requestAnimationFrame = (callback) => {
-            queuedCallbacks.push(callback)
-            return queuedCallbacks.length
-        }
+  it("uses synchronized initial shift for existing and new rows before transition frame", () => {
+    const previousRaf = global.requestAnimationFrame;
+    const queuedCallbacks: FrameRequestCallback[] = [];
+    global.requestAnimationFrame = (callback) => {
+      queuedCallbacks.push(callback);
+      return queuedCallbacks.length;
+    };
 
-        try {
-            const rowA = createFakeElement(90)
-            const rowB = createFakeElement(150)
-            const rowElementsByKey = new Map([
-                ['row-a', rowA],
-                ['row-b', rowB]
-            ])
+    try {
+      const rowA = createFakeElement(90);
+      const rowB = createFakeElement(150);
+      const rowElementsByKey = new Map([
+        ["row-a", rowA],
+        ["row-b", rowB],
+      ]);
 
-            const currentTopByKey = applyOverlayRowShiftMotion({
-                rowKeys: ['row-a', 'row-b'],
-                rowElementsByKey,
-                previousTopByKey: new Map([
-                    ['row-a', 120]
-                ]),
-                durationMs: 1000
-            })
+      const currentTopByKey = applyOverlayRowShiftMotion({
+        rowKeys: ["row-a", "row-b"],
+        rowElementsByKey,
+        previousTopByKey: new Map([["row-a", 120]]),
+        durationMs: 1000,
+      });
 
-            expect(currentTopByKey.size).toBe(2)
-            expect(currentTopByKey.get('row-a')).toBe(90)
-            expect(currentTopByKey.get('row-b')).toBe(150)
+      expect(currentTopByKey.size).toBe(2);
+      expect(currentTopByKey.get("row-a")).toBe(90);
+      expect(currentTopByKey.get("row-b")).toBe(150);
 
-            expect(rowA.style.transition).toBe('none')
-            expect(rowB.style.transition).toBe('none')
-            expect(rowA.style.transform).toBe('translateY(30px)')
-            expect(rowB.style.transform).toBe('translateY(30px)')
+      expect(rowA.style.transition).toBe("none");
+      expect(rowB.style.transition).toBe("none");
+      expect(rowA.style.transform).toBe("translateY(30px)");
+      expect(rowB.style.transform).toBe("translateY(30px)");
 
-            for (const callback of queuedCallbacks) {
-                callback(0)
-            }
+      for (const callback of queuedCallbacks) {
+        callback(0);
+      }
 
-            expect(rowA.style.transition).toBe('transform 1000ms ease-out')
-            expect(rowA.style.transform).toBe('translateY(0)')
-            expect(rowB.style.transition).toBe('transform 1000ms ease-out')
-            expect(rowB.style.transform).toBe('translateY(0)')
-        } finally {
-            if (typeof previousRaf === 'function') {
-                global.requestAnimationFrame = previousRaf
-            } else {
-                Reflect.deleteProperty(global, 'requestAnimationFrame')
-            }
-        }
-    })
+      expect(rowA.style.transition).toBe("transform 1000ms ease-out");
+      expect(rowA.style.transform).toBe("translateY(0)");
+      expect(rowB.style.transition).toBe("transform 1000ms ease-out");
+      expect(rowB.style.transform).toBe("translateY(0)");
+    } finally {
+      if (typeof previousRaf === "function") {
+        global.requestAnimationFrame = previousRaf;
+      } else {
+        Reflect.deleteProperty(global, "requestAnimationFrame");
+      }
+    }
+  });
 
-    it('uses requestAnimationFrame transition scheduling when available', () => {
-        const previousRaf = global.requestAnimationFrame
-        let rafCalls = 0
-        global.requestAnimationFrame = (callback) => {
-            rafCalls += 1
-            callback(0)
-            return 1
-        }
+  it("uses requestAnimationFrame transition scheduling when available", () => {
+    const previousRaf = global.requestAnimationFrame;
+    let rafCalls = 0;
+    global.requestAnimationFrame = (callback) => {
+      rafCalls += 1;
+      callback(0);
+      return 1;
+    };
 
-        try {
-            const rowA = createFakeElement(90)
-            const rowB = createFakeElement(150)
-            const rowElementsByKey = new Map([
-                ['row-a', rowA],
-                ['row-b', rowB]
-            ])
+    try {
+      const rowA = createFakeElement(90);
+      const rowB = createFakeElement(150);
+      const rowElementsByKey = new Map([
+        ["row-a", rowA],
+        ["row-b", rowB],
+      ]);
 
-            applyOverlayRowShiftMotion({
-                rowKeys: ['row-a', 'row-b', 'row-missing'],
-                rowElementsByKey,
-                previousTopByKey: new Map([
-                    ['row-a', 120]
-                ]),
-                durationMs: 1000
-            })
+      applyOverlayRowShiftMotion({
+        rowKeys: ["row-a", "row-b", "row-missing"],
+        rowElementsByKey,
+        previousTopByKey: new Map([["row-a", 120]]),
+        durationMs: 1000,
+      });
 
-            expect(rafCalls).toBeGreaterThan(0)
-            expect(rowA.style.transition).toBe('transform 1000ms ease-out')
-            expect(rowA.style.transform).toBe('translateY(0)')
-            expect(rowB.style.transition).toBe('transform 1000ms ease-out')
-            expect(rowB.style.transform).toBe('translateY(0)')
-        } finally {
-            if (typeof previousRaf === 'function') {
-                global.requestAnimationFrame = previousRaf
-            } else {
-                Reflect.deleteProperty(global, 'requestAnimationFrame')
-            }
-        }
-    })
-})
+      expect(rafCalls).toBeGreaterThan(0);
+      expect(rowA.style.transition).toBe("transform 1000ms ease-out");
+      expect(rowA.style.transform).toBe("translateY(0)");
+      expect(rowB.style.transition).toBe("transform 1000ms ease-out");
+      expect(rowB.style.transform).toBe("translateY(0)");
+    } finally {
+      if (typeof previousRaf === "function") {
+        global.requestAnimationFrame = previousRaf;
+      } else {
+        Reflect.deleteProperty(global, "requestAnimationFrame");
+      }
+    }
+  });
+});

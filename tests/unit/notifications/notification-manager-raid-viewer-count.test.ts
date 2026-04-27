@@ -1,47 +1,53 @@
-const { describe, test, expect, afterEach } = require('bun:test');
-export {};
-const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { noOpLogger } = require('../../helpers/mock-factories');
-const { createConfigFixture } = require('../../helpers/config-fixture');
+import { afterEach, describe, expect, test } from "bun:test";
+import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
+import { noOpLogger } from "../../helpers/mock-factories";
+import { createConfigFixture } from "../../helpers/config-fixture";
 
-const EventEmitter = require('events');
-const NotificationManager = require('../../../src/notifications/NotificationManager');
+import { EventEmitter } from "node:events";
+import NotificationManager from "../../../src/notifications/NotificationManager";
 
-describe('NotificationManager raid viewer count fallback', () => {
-    afterEach(() => {
-        restoreAllMocks();
-    });
+describe("NotificationManager raid viewer count fallback", () => {
+  afterEach(() => {
+    restoreAllMocks();
+  });
 
-    const createManager = () => {
-        const displayQueue = {
-            addToQueue: createMockFn(),
-            processQueue: createMockFn(),
-            isQueueEmpty: createMockFn().mockReturnValue(true),
-            clearQueue: createMockFn()
-        };
-
-        const config = createConfigFixture({
-            general: {
-                raidsEnabled: true
-            }
-        });
-
-        return new NotificationManager({
-            logger: noOpLogger,
-            displayQueue,
-            eventBus: new EventEmitter(),
-            config,
-            constants: require('../../../src/core/constants'),
-            textProcessing: { formatChatMessage: createMockFn() },
-            obsGoals: { processDonationGoal: createMockFn() },
-            vfxCommandService: { executeCommand: createMockFn().mockResolvedValue({ success: true }) },
-            userTrackingService: { isFirstMessage: createMockFn().mockResolvedValue(false) }
-        });
+  const createManager = () => {
+    const displayQueue = {
+      addToQueue: createMockFn(),
+      processQueue: createMockFn(),
+      isQueueEmpty: createMockFn().mockReturnValue(true),
+      clearQueue: createMockFn(),
     };
 
-    test('throws when raid viewer count is missing', () => {
-        const manager = createManager();
-        expect(() => manager.generateLogMessage('platform:raid', { username: 'MysteryRaider' }))
-            .toThrow('Raid log message requires viewerCount');
+    const config = createConfigFixture({
+      general: {
+        raidsEnabled: true,
+      },
     });
+
+    return new NotificationManager({
+      logger: noOpLogger,
+      displayQueue,
+      eventBus: new EventEmitter(),
+      config,
+      constants: require("../../../src/core/constants"),
+      textProcessing: { formatChatMessage: createMockFn() },
+      obsGoals: { processDonationGoal: createMockFn() },
+      vfxCommandService: {
+        executeCommand: createMockFn().mockResolvedValue({ success: true }),
+      },
+      userTrackingService: {
+        isFirstMessage: createMockFn().mockResolvedValue(false),
+      },
+    });
+  };
+
+  test("throws when raid viewer count is missing", () => {
+    const manager = createManager();
+    expect(() =>
+      manager.generateLogMessage("platform:raid", {
+        username: "MysteryRaider",
+      }),
+    ).toThrow("Raid log message requires viewerCount");
+  });
 });

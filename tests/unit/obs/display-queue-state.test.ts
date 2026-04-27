@@ -1,62 +1,106 @@
-const { describe, expect, it } = require('bun:test');
+import { describe, expect, it } from "bun:test";
 
-const { DisplayQueueState } = require('../../../src/obs/display-queue-state.ts');
+import { DisplayQueueState } from "../../../src/obs/display-queue-state.ts";
 
-describe('DisplayQueueState', () => {
-    const getPriority = (type) => ({
-        high: 10,
-        medium: 5,
-        low: 1,
-        chat: 2
+describe("DisplayQueueState", () => {
+  const getPriority = (type) =>
+    ({
+      high: 10,
+      medium: 5,
+      low: 1,
+      chat: 2,
     })[type] ?? 0;
 
-    it('orders items by priority with higher values first', () => {
-        const state = new DisplayQueueState({ maxQueueSize: 10, getPriority });
+  it("orders items by priority with higher values first", () => {
+    const state = new DisplayQueueState({ maxQueueSize: 10, getPriority });
 
-        state.addItem({ type: 'low', platform: 'test', data: { username: 'test-user' } });
-        state.addItem({ type: 'high', platform: 'test', data: { username: 'test-user' } });
-
-        expect(state.queue.map(item => item.type)).toEqual(['high', 'low']);
+    state.addItem({
+      type: "low",
+      platform: "test",
+      data: { username: "test-user" },
+    });
+    state.addItem({
+      type: "high",
+      platform: "test",
+      data: { username: "test-user" },
     });
 
-    it('preserves FIFO ordering for same-priority items', () => {
-        const state = new DisplayQueueState({ maxQueueSize: 10, getPriority });
+    expect(state.queue.map((item) => item.type)).toEqual(["high", "low"]);
+  });
 
-        state.addItem({ type: 'medium', platform: 'test', data: { username: 'test-user-1' } });
-        state.addItem({ type: 'medium', platform: 'test', data: { username: 'test-user-2' } });
+  it("preserves FIFO ordering for same-priority items", () => {
+    const state = new DisplayQueueState({ maxQueueSize: 10, getPriority });
 
-        expect(state.queue.map(item => item.data.username)).toEqual(['test-user-1', 'test-user-2']);
+    state.addItem({
+      type: "medium",
+      platform: "test",
+      data: { username: "test-user-1" },
+    });
+    state.addItem({
+      type: "medium",
+      platform: "test",
+      data: { username: "test-user-2" },
     });
 
-    it('replaces older chat items and records last chat item', () => {
-        const state = new DisplayQueueState({ maxQueueSize: 10, getPriority });
+    expect(state.queue.map((item) => item.data.username)).toEqual([
+      "test-user-1",
+      "test-user-2",
+    ]);
+  });
 
-        state.addItem({ type: 'chat', platform: 'test', data: { username: 'test-user-1', message: 'first' } });
-        state.addItem({ type: 'chat', platform: 'test', data: { username: 'test-user-2', message: 'second' } });
+  it("replaces older chat items and records last chat item", () => {
+    const state = new DisplayQueueState({ maxQueueSize: 10, getPriority });
 
-        expect(state.queue.length).toBe(1);
-        expect(state.queue[0].data.message).toBe('second');
-        expect(state.lastChatItem.data.message).toBe('second');
+    state.addItem({
+      type: "chat",
+      platform: "test",
+      data: { username: "test-user-1", message: "first" },
+    });
+    state.addItem({
+      type: "chat",
+      platform: "test",
+      data: { username: "test-user-2", message: "second" },
     });
 
-    it('enforces maxQueueSize limits', () => {
-        const state = new DisplayQueueState({ maxQueueSize: 1, getPriority });
+    expect(state.queue.length).toBe(1);
+    expect(state.queue[0].data.message).toBe("second");
+    expect(state.lastChatItem.data.message).toBe("second");
+  });
 
-        state.addItem({ type: 'low', platform: 'test', data: { username: 'test-user' } });
+  it("enforces maxQueueSize limits", () => {
+    const state = new DisplayQueueState({ maxQueueSize: 1, getPriority });
 
-        expect(() => {
-            state.addItem({ type: 'high', platform: 'test', data: { username: 'test-user' } });
-        }).toThrow('Queue at capacity (1)');
+    state.addItem({
+      type: "low",
+      platform: "test",
+      data: { username: "test-user" },
     });
 
-    it('accepts latest chat item at capacity by replacing stale queued chat', () => {
-        const state = new DisplayQueueState({ maxQueueSize: 1, getPriority });
+    expect(() => {
+      state.addItem({
+        type: "high",
+        platform: "test",
+        data: { username: "test-user" },
+      });
+    }).toThrow("Queue at capacity (1)");
+  });
 
-        state.addItem({ type: 'chat', platform: 'test', data: { username: 'test-user-1', message: 'first' } });
-        state.addItem({ type: 'chat', platform: 'test', data: { username: 'test-user-2', message: 'second' } });
+  it("accepts latest chat item at capacity by replacing stale queued chat", () => {
+    const state = new DisplayQueueState({ maxQueueSize: 1, getPriority });
 
-        expect(state.queue).toHaveLength(1);
-        expect(state.queue[0].data.message).toBe('second');
-        expect(state.lastChatItem.data.message).toBe('second');
+    state.addItem({
+      type: "chat",
+      platform: "test",
+      data: { username: "test-user-1", message: "first" },
     });
+    state.addItem({
+      type: "chat",
+      platform: "test",
+      data: { username: "test-user-2", message: "second" },
+    });
+
+    expect(state.queue).toHaveLength(1);
+    expect(state.queue[0].data.message).toBe("second");
+    expect(state.lastChatItem.data.message).toBe("second");
+  });
 });

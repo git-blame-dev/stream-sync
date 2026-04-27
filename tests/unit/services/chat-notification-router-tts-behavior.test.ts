@@ -1,81 +1,94 @@
-const { describe, it, beforeEach, expect } = require('bun:test');
-const { createMockFn } = require('../../helpers/bun-mock-utils');
-const { noOpLogger } = require('../../helpers/mock-factories');
-const { createConfigFixture } = require('../../helpers/config-fixture');
-const { ChatNotificationRouter } = require('../../../src/services/ChatNotificationRouter.ts');
+import { describe, it, beforeEach, expect } from "bun:test";
+import { createMockFn } from "../../helpers/bun-mock-utils";
+import { noOpLogger } from "../../helpers/mock-factories";
+import { createConfigFixture } from "../../helpers/config-fixture";
+import { ChatNotificationRouter } from "../../../src/services/ChatNotificationRouter.ts";
 
-describe('ChatNotificationRouter TTS behavior', () => {
-    let mockLogger;
-    let testConfig;
+describe("ChatNotificationRouter TTS behavior", () => {
+  let mockLogger;
+  let testConfig;
 
-    beforeEach(() => {
-        mockLogger = noOpLogger;
-        testConfig = createConfigFixture();
-    });
+  beforeEach(() => {
+    mockLogger = noOpLogger;
+    testConfig = createConfigFixture();
+  });
 
-    const baseMessage = {
-        message: 'Test message',
-        displayName: 'testViewer',
-        username: 'testviewer',
-        userId: 'test-user-1',
-        timestamp: new Date().toISOString()
+  const baseMessage = {
+    message: "Test message",
+    displayName: "testViewer",
+    username: "testviewer",
+    userId: "test-user-1",
+    timestamp: new Date().toISOString(),
+  };
+
+  const createRouter = ({
+    runtime: runtimeOverrides,
+    config = testConfig,
+  } = {}) => {
+    const baseRuntime = {
+      config: {
+        general: { greetingsEnabled: true, messagesEnabled: true },
+        twitch: { greetingsEnabled: true, messagesEnabled: true },
+        tiktok: { greetingsEnabled: true, messagesEnabled: true },
+      },
+      displayQueue: {
+        addItem: createMockFn(),
+      },
+      platformLifecycleService: {
+        getPlatformConnectionTime: createMockFn().mockReturnValue(null),
+      },
+      commandCooldownService: {
+        checkUserCooldown: createMockFn().mockReturnValue(true),
+        checkGlobalCooldown: createMockFn().mockReturnValue(true),
+        updateUserCooldown: createMockFn(),
+        updateGlobalCooldown: createMockFn(),
+      },
+      userTrackingService: {
+        isFirstMessage: createMockFn().mockReturnValue(false),
+      },
+      commandParser: {
+        getVFXConfig: createMockFn().mockReturnValue(null),
+      },
+      isFirstMessage: createMockFn().mockReturnValue(false),
     };
 
-    const createRouter = ({ runtime: runtimeOverrides, config = testConfig } = {}) => {
-        const baseRuntime = {
-            config: {
-                general: { greetingsEnabled: true, messagesEnabled: true },
-                twitch: { greetingsEnabled: true, messagesEnabled: true },
-                tiktok: { greetingsEnabled: true, messagesEnabled: true }
-            },
-            displayQueue: {
-                addItem: createMockFn()
-            },
-            platformLifecycleService: {
-                getPlatformConnectionTime: createMockFn().mockReturnValue(null)
-            },
-            commandCooldownService: {
-                checkUserCooldown: createMockFn().mockReturnValue(true),
-                checkGlobalCooldown: createMockFn().mockReturnValue(true),
-                updateUserCooldown: createMockFn(),
-                updateGlobalCooldown: createMockFn()
-            },
-            userTrackingService: {
-                isFirstMessage: createMockFn().mockReturnValue(false)
-            },
-            commandParser: {
-                getVFXConfig: createMockFn().mockReturnValue(null)
-            },
-            isFirstMessage: createMockFn().mockReturnValue(false)
-        };
+    const runtime = { ...baseRuntime, ...runtimeOverrides };
 
-        const runtime = { ...baseRuntime, ...runtimeOverrides };
-
-        const router = new ChatNotificationRouter({
-            runtime,
-            logger: mockLogger,
-            config
-        });
-
-        return { router, runtime };
-    };
-
-    it('enqueues chat message with expected data structure', async () => {
-        const { router, runtime } = createRouter();
-
-        await router.handleChatMessage('tiktok', { ...baseMessage, message: 'test great stream' });
-
-        const queuedChat = runtime.displayQueue.addItem.mock.calls.map(c => c[0]).find(i => i.type === 'chat');
-        expect(queuedChat).toBeDefined();
-        expect(queuedChat.data.message).toEqual({ text: 'test great stream' });
+    const router = new ChatNotificationRouter({
+      runtime,
+      logger: mockLogger,
+      config,
     });
 
-    it('enqueues valid chat messages', async () => {
-        const { router, runtime } = createRouter();
+    return { router, runtime };
+  };
 
-        await router.handleChatMessage('tiktok', { ...baseMessage, message: 'test cheer100' });
+  it("enqueues chat message with expected data structure", async () => {
+    const { router, runtime } = createRouter();
 
-        const queuedChat = runtime.displayQueue.addItem.mock.calls.map(c => c[0]).find(i => i.type === 'chat');
-        expect(queuedChat).toBeDefined();
+    await router.handleChatMessage("tiktok", {
+      ...baseMessage,
+      message: "test great stream",
     });
+
+    const queuedChat = runtime.displayQueue.addItem.mock.calls
+      .map((c) => c[0])
+      .find((i) => i.type === "chat");
+    expect(queuedChat).toBeDefined();
+    expect(queuedChat.data.message).toEqual({ text: "test great stream" });
+  });
+
+  it("enqueues valid chat messages", async () => {
+    const { router, runtime } = createRouter();
+
+    await router.handleChatMessage("tiktok", {
+      ...baseMessage,
+      message: "test cheer100",
+    });
+
+    const queuedChat = runtime.displayQueue.addItem.mock.calls
+      .map((c) => c[0])
+      .find((i) => i.type === "chat");
+    expect(queuedChat).toBeDefined();
+  });
 });

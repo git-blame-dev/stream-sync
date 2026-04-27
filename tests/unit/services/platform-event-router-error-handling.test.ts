@@ -1,86 +1,88 @@
-const { describe, expect, it, beforeEach } = require('bun:test');
-const { createMockFn } = require('../../helpers/bun-mock-utils');
-const { noOpLogger } = require('../../helpers/mock-factories');
-const { createConfigFixture } = require('../../helpers/config-fixture');
-const { PlatformEventRouter } = require('../../../src/services/PlatformEventRouter.ts');
+import { describe, expect, it, beforeEach } from "bun:test";
+import { createMockFn } from "../../helpers/bun-mock-utils";
+import { noOpLogger } from "../../helpers/mock-factories";
+import { createConfigFixture } from "../../helpers/config-fixture";
+import { PlatformEventRouter } from "../../../src/services/PlatformEventRouter.ts";
 
-describe('PlatformEventRouter error handling', () => {
-    let mockLogger;
-    let mockEventBus;
-    let mockRuntime;
-    let mockNotificationManager;
-    let mockConfig;
-    let subscriber;
+describe("PlatformEventRouter error handling", () => {
+  let mockLogger;
+  let mockEventBus;
+  let mockRuntime;
+  let mockNotificationManager;
+  let mockConfig;
+  let subscriber;
 
-    const baseEvent = {
-        platform: 'twitch',
-        type: 'platform:chat-message',
-        data: {
-            username: 'testUser',
-            message: { text: 'test message' },
-            userId: 'test-user-1',
-            timestamp: new Date().toISOString(),
-            metadata: {}
+  const baseEvent = {
+    platform: "twitch",
+    type: "platform:chat-message",
+    data: {
+      username: "testUser",
+      message: { text: "test message" },
+      userId: "test-user-1",
+      timestamp: new Date().toISOString(),
+      metadata: {},
+    },
+  };
+
+  beforeEach(() => {
+    mockLogger = noOpLogger;
+
+    subscriber = null;
+    mockEventBus = {
+      subscribe: createMockFn((event, handler) => {
+        subscriber = handler;
+        return () => {};
+      }),
+      emit: async (event, payload) => {
+        if (subscriber) {
+          await subscriber(payload);
         }
+      },
     };
 
-    beforeEach(() => {
-        mockLogger = noOpLogger;
+    mockRuntime = {
+      handleChatMessage: createMockFn().mockResolvedValue(),
+    };
 
-        subscriber = null;
-        mockEventBus = {
-            subscribe: createMockFn((event, handler) => {
-                subscriber = handler;
-                return () => {};
-            }),
-            emit: async (event, payload) => {
-                if (subscriber) {
-                    await subscriber(payload);
-                }
-            }
-        };
+    mockNotificationManager = {
+      handleNotification: createMockFn(),
+    };
 
-        mockRuntime = {
-            handleChatMessage: createMockFn().mockResolvedValue()
-        };
+    mockConfig = createConfigFixture({ general: { messagesEnabled: true } });
+  });
 
-        mockNotificationManager = {
-            handleNotification: createMockFn()
-        };
+  it("continues processing events after handler throws an error", async () => {
+    mockRuntime.handleChatMessage
+      .mockRejectedValueOnce(new Error("first call fails"))
+      .mockResolvedValueOnce();
 
-        mockConfig = createConfigFixture({ general: { messagesEnabled: true } });
+    new PlatformEventRouter({
+      eventBus: mockEventBus,
+      runtime: mockRuntime,
+      notificationManager: mockNotificationManager,
+      config: mockConfig,
+      logger: mockLogger,
     });
 
-    it('continues processing events after handler throws an error', async () => {
-        mockRuntime.handleChatMessage
-            .mockRejectedValueOnce(new Error('first call fails'))
-            .mockResolvedValueOnce();
+    await mockEventBus.emit("platform:event", baseEvent);
+    await mockEventBus.emit("platform:event", baseEvent);
 
-        new PlatformEventRouter({
-            eventBus: mockEventBus,
-            runtime: mockRuntime,
-            notificationManager: mockNotificationManager,
-            config: mockConfig,
-            logger: mockLogger
-        });
+    expect(mockRuntime.handleChatMessage).toHaveBeenCalledTimes(2);
+  });
 
-        await mockEventBus.emit('platform:event', baseEvent);
-        await mockEventBus.emit('platform:event', baseEvent);
+  it("does not crash when handler throws non-Error value", async () => {
+    mockRuntime.handleChatMessage.mockRejectedValueOnce("string error");
 
-        expect(mockRuntime.handleChatMessage).toHaveBeenCalledTimes(2);
+    new PlatformEventRouter({
+      eventBus: mockEventBus,
+      runtime: mockRuntime,
+      notificationManager: mockNotificationManager,
+      config: mockConfig,
+      logger: mockLogger,
     });
 
-    it('does not crash when handler throws non-Error value', async () => {
-        mockRuntime.handleChatMessage.mockRejectedValueOnce('string error');
-
-        new PlatformEventRouter({
-            eventBus: mockEventBus,
-            runtime: mockRuntime,
-            notificationManager: mockNotificationManager,
-            config: mockConfig,
-            logger: mockLogger
-        });
-
-        await expect(mockEventBus.emit('platform:event', baseEvent)).resolves.toBeUndefined();
-    });
+    await expect(
+      mockEventBus.emit("platform:event", baseEvent),
+    ).resolves.toBeUndefined();
+  });
 });

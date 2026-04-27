@@ -1,67 +1,71 @@
-const { describe, it, beforeEach, afterEach, expect } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { CommandCooldownService } = require('../../../src/services/CommandCooldownService.ts');
-const { createConfigFixture } = require('../../helpers/config-fixture');
+import { describe, it, beforeEach, afterEach, expect } from "bun:test";
+import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
+import { CommandCooldownService } from "../../../src/services/CommandCooldownService.ts";
+import { createConfigFixture } from "../../helpers/config-fixture";
 
-describe('CommandCooldownService error handler integration', () => {
-    let service;
-    let mockLogger;
-    let testConfig;
+describe("CommandCooldownService error handler integration", () => {
+  let service;
+  let mockLogger;
+  let testConfig;
 
-    beforeEach(() => {
-        mockLogger = {
-            debug: createMockFn(),
-            info: createMockFn(),
-            warn: createMockFn(),
-            error: createMockFn()
-        };
-        testConfig = createConfigFixture();
-        service = new CommandCooldownService({
-            logger: mockLogger,
-            config: testConfig
-        });
+  beforeEach(() => {
+    mockLogger = {
+      debug: createMockFn(),
+      info: createMockFn(),
+      warn: createMockFn(),
+      error: createMockFn(),
+    };
+    testConfig = createConfigFixture();
+    service = new CommandCooldownService({
+      logger: mockLogger,
+      config: testConfig,
     });
+  });
 
-    afterEach(() => {
-        if (service) {
-            service.dispose();
-        }
-        restoreAllMocks();
-    });
+  afterEach(() => {
+    if (service) {
+      service.dispose();
+    }
+    restoreAllMocks();
+  });
 
-    it('routes invalid userId validation error through error handler', () => {
-        service.checkUserCooldown(null, 60000, 300000);
+  it("routes invalid userId validation error through error handler", () => {
+    service.checkUserCooldown(null, 60000, 300000);
 
-        expect(mockLogger.error).toHaveBeenCalled();
-        const errorCall = mockLogger.error.mock.calls[0];
-        expect(errorCall[0]).toContain('Invalid userId');
-    });
+    expect(mockLogger.error).toHaveBeenCalled();
+    const errorCall = mockLogger.error.mock.calls[0];
+    expect(errorCall[0]).toContain("Invalid userId");
+  });
 
-    it('routes negative cooldown validation error through error handler', () => {
-        service.checkUserCooldown('test-user-1', -1, 300000);
+  it("routes negative cooldown validation error through error handler", () => {
+    service.checkUserCooldown("test-user-1", -1, 300000);
 
-        expect(mockLogger.error).toHaveBeenCalled();
-        const errorCall = mockLogger.error.mock.calls[0];
-        expect(errorCall[0]).toContain('Negative cooldown');
-    });
+    expect(mockLogger.error).toHaveBeenCalled();
+    const errorCall = mockLogger.error.mock.calls[0];
+    expect(errorCall[0]).toContain("Negative cooldown");
+  });
 
-    it('routes invalid userId in updateUserCooldown through error handler', () => {
-        service.updateUserCooldown(null);
+  it("routes invalid userId in updateUserCooldown through error handler", () => {
+    service.updateUserCooldown(null);
 
-        expect(mockLogger.error).toHaveBeenCalled();
-        const errorCall = mockLogger.error.mock.calls[0];
-        expect(errorCall[0]).toContain('Invalid userId');
-    });
+    expect(mockLogger.error).toHaveBeenCalled();
+    const errorCall = mockLogger.error.mock.calls[0];
+    expect(errorCall[0]).toContain("Invalid userId");
+  });
 
-    it('routes dispose unsubscribe error through error handler', () => {
-        service.configSubscriptions = [() => { throw new Error('unsub failed'); }];
+  it("routes dispose unsubscribe error through error handler", () => {
+    service.configSubscriptions = [
+      () => {
+        throw new Error("unsub failed");
+      },
+    ];
 
-        service.dispose();
+    service.dispose();
 
-        expect(mockLogger.warn).toHaveBeenCalled();
-        const warnCall = mockLogger.warn.mock.calls.find(
-            call => call[0].includes('unsubscrib')
-        );
-        expect(warnCall).toBeTruthy();
-    });
+    expect(mockLogger.warn).toHaveBeenCalled();
+    const warnCall = mockLogger.warn.mock.calls.find((call) =>
+      call[0].includes("unsubscrib"),
+    );
+    expect(warnCall).toBeTruthy();
+  });
 });

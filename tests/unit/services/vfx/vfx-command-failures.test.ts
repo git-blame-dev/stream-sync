@@ -1,133 +1,141 @@
-const { describe, expect, afterEach, it, beforeEach } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../../../helpers/bun-mock-utils');
-const { createConfigFixture } = require('../../../helpers/config-fixture');
+import { describe, expect, afterEach, it, beforeEach } from "bun:test";
+import { createMockFn, restoreAllMocks } from "../../../helpers/bun-mock-utils";
+import { createConfigFixture } from "../../../helpers/config-fixture";
 
-describe('VFXCommandService failure paths', () => {
-    let VFXCommandService;
+describe("VFXCommandService failure paths", () => {
+  let VFXCommandService;
 
-    const createConfig = (commandValue = '!hello') => createConfigFixture({
-        greetings: { command: commandValue },
-        farewell: {},
-        vfx: { filePath: '/tmp' },
-        cooldowns: { cmdCooldown: 60, globalCmdCooldownMs: 60000 }
+  const createConfig = (commandValue = "!hello") =>
+    createConfigFixture({
+      greetings: { command: commandValue },
+      farewell: {},
+      vfx: { filePath: "/tmp" },
+      cooldowns: { cmdCooldown: 60, globalCmdCooldownMs: 60000 },
     });
 
-    beforeEach(() => {
-        ({ VFXCommandService } = require('../../../../src/services/VFXCommandService.ts'));
+  beforeEach(() => {
+    ({
+      VFXCommandService,
+    } = require("../../../../src/services/VFXCommandService.ts"));
+  });
+
+  afterEach(() => {
+    restoreAllMocks();
+  });
+
+  it("returns friendly error when parser is missing", async () => {
+    const service = new VFXCommandService(createConfig(), null);
+    service.commandParser = null;
+
+    const result = await service.executeCommand("!hello", {
+      username: "testUser",
+      platform: "tiktok",
+      userId: "testUserId",
+      skipCooldown: true,
     });
 
-    afterEach(() => {
-        restoreAllMocks();
+    expect(result.success).toBe(false);
+    expect(result.error).toBe("VFXCommandService requires commandParser");
+  });
+
+  it("returns friendly error when parser finds no VFX command", async () => {
+    const service = new VFXCommandService(createConfig(), null);
+    service.commandParser = {
+      getVFXConfig: createMockFn().mockReturnValue(null),
+    };
+
+    const result = await service.executeCommand("not-a-command", {
+      username: "testUser",
+      platform: "tiktok",
+      userId: "testUserId",
+      skipCooldown: true,
     });
 
-    it('returns friendly error when parser is missing', async () => {
-        const service = new VFXCommandService(createConfig(), null);
-        service.commandParser = null;
+    expect(result.success).toBe(false);
+    expect(result.error).toBe("Command not found");
+  });
 
-        const result = await service.executeCommand('!hello', {
-            username: 'testUser',
-            platform: 'tiktok',
-            userId: 'testUserId',
-            skipCooldown: true
-        });
+  it("returns friendly error when parser throws while selecting command", async () => {
+    const service = new VFXCommandService(createConfig(), null);
+    service.commandParser = {
+      getVFXConfig: createMockFn(() => {
+        throw new Error("parser explode");
+      }),
+    };
 
-        expect(result.success).toBe(false);
-        expect(result.error).toBe('VFXCommandService requires commandParser');
+    const result = await service.executeCommand("!boom", {
+      username: "testUser",
+      platform: "tiktok",
+      userId: "testUserId",
+      skipCooldown: true,
     });
 
-    it('returns friendly error when parser finds no VFX command', async () => {
-        const service = new VFXCommandService(createConfig(), null);
-        service.commandParser = {
-            getVFXConfig: createMockFn().mockReturnValue(null)
-        };
+    expect(result.success).toBe(false);
+    expect(result.error).toBe("parser explode");
+  });
 
-        const result = await service.executeCommand('not-a-command', {
-            username: 'testUser',
-            platform: 'tiktok',
-            userId: 'testUserId',
-            skipCooldown: true
-        });
+  it("returns friendly error when command string is empty", async () => {
+    const service = new VFXCommandService(createConfig(), null);
 
-        expect(result.success).toBe(false);
-        expect(result.error).toBe('Command not found');
+    const result = await service.executeCommand("", {
+      username: "testUser",
+      platform: "tiktok",
+      userId: "testUserId",
+      skipCooldown: true,
     });
 
-    it('returns friendly error when parser throws while selecting command', async () => {
-        const service = new VFXCommandService(createConfig(), null);
-        service.commandParser = {
-            getVFXConfig: createMockFn(() => { throw new Error('parser explode'); })
-        };
+    expect(result.success).toBe(false);
+    expect(result.error).toBe("VFXCommandService requires message");
+  });
 
-        const result = await service.executeCommand('!boom', {
-            username: 'testUser',
-            platform: 'tiktok',
-            userId: 'testUserId',
-            skipCooldown: true
-        });
+  it("returns friendly error when command is whitespace only", async () => {
+    const service = new VFXCommandService(createConfig(), null);
+    service.commandParser = {
+      getVFXConfig: createMockFn().mockReturnValue(null),
+    };
 
-        expect(result.success).toBe(false);
-        expect(result.error).toBe('parser explode');
+    const result = await service.executeCommand("   ", {
+      username: "testUser",
+      platform: "tiktok",
+      userId: "testUserId",
+      skipCooldown: true,
     });
 
-    it('returns friendly error when command string is empty', async () => {
-        const service = new VFXCommandService(createConfig(), null);
+    expect(result.success).toBe(false);
+    expect(result.error).toBe("Command not found");
+  });
 
-        const result = await service.executeCommand('', {
-            username: 'testUser',
-            platform: 'tiktok',
-            userId: 'testUserId',
-            skipCooldown: true
-        });
+  it("returns missing key error when commandKey is absent", async () => {
+    const service = new VFXCommandService(createConfig(null), null);
 
-        expect(result.success).toBe(false);
-        expect(result.error).toBe('VFXCommandService requires message');
+    const result = await service.executeCommandForKey("", {
+      username: "testUser",
+      platform: "twitch",
+      userId: "testUserId",
+      skipCooldown: true,
     });
 
-    it('returns friendly error when command is whitespace only', async () => {
-        const service = new VFXCommandService(createConfig(), null);
-        service.commandParser = { getVFXConfig: createMockFn().mockReturnValue(null) };
+    expect(result.success).toBe(false);
+    expect(result.error).toBe("Missing command key");
+  });
 
-        const result = await service.executeCommand('   ', {
-            username: 'testUser',
-            platform: 'tiktok',
-            userId: 'testUserId',
-            skipCooldown: true
-        });
+  it("returns friendly error when config has no command for key", async () => {
+    const service = new VFXCommandService(createConfig(null), null);
 
-        expect(result.success).toBe(false);
-        expect(result.error).toBe('Command not found');
+    const result = await service.executeCommandForKey("missing", {
+      username: "testUser",
+      platform: "twitch",
+      userId: "testUserId",
+      skipCooldown: true,
     });
 
-    it('returns missing key error when commandKey is absent', async () => {
-        const service = new VFXCommandService(createConfig(null), null);
+    expect(result.success).toBe(false);
+    expect(result.error).toBe("No VFX configured for missing");
+  });
 
-        const result = await service.executeCommandForKey('', {
-            username: 'testUser',
-            platform: 'twitch',
-            userId: 'testUserId',
-            skipCooldown: true
-        });
-
-        expect(result.success).toBe(false);
-        expect(result.error).toBe('Missing command key');
-    });
-
-    it('returns friendly error when config has no command for key', async () => {
-        const service = new VFXCommandService(createConfig(null), null);
-
-        const result = await service.executeCommandForKey('missing', {
-            username: 'testUser',
-            platform: 'twitch',
-            userId: 'testUserId',
-            skipCooldown: true
-        });
-
-        expect(result.success).toBe(false);
-        expect(result.error).toBe('No VFX configured for missing');
-    });
-
-    it('throws when config is missing', () => {
-        expect(() => new VFXCommandService(null, null))
-            .toThrow('VFXCommandService requires config');
-    });
+  it("throws when config is missing", () => {
+    expect(() => new VFXCommandService(null, null)).toThrow(
+      "VFXCommandService requires config",
+    );
+  });
 });

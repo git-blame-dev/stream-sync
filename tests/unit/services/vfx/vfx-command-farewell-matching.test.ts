@@ -1,41 +1,45 @@
-const { describe, it, expect } = require('bun:test');
-const { createConfigFixture } = require('../../../helpers/config-fixture');
-const { VFXCommandService } = require('../../../../src/services/VFXCommandService.ts');
+import { describe, it, expect } from "bun:test";
+import { createConfigFixture } from "../../../helpers/config-fixture";
+import { VFXCommandService } from "../../../../src/services/VFXCommandService.ts";
 
-const createService = (keywordParsingEnabled) => new VFXCommandService(createConfigFixture({
-    farewell: {
-        command: '!bye, goodbye|cya'
-    },
-    general: {
-        keywordParsingEnabled
-    },
-    vfx: {
-        filePath: '/tmp'
-    }
-}), null);
+const createService = (keywordParsingEnabled) =>
+  new VFXCommandService(
+    createConfigFixture({
+      farewell: {
+        command: "!bye, goodbye|cya",
+      },
+      general: {
+        keywordParsingEnabled,
+      },
+      vfx: {
+        filePath: "/tmp",
+      },
+    }),
+    null,
+  );
 
-describe('VFXCommandService farewell matching', () => {
-    it('matches farewell trigger regardless of keyword parsing toggle', () => {
-        const service = createService(false);
+describe("VFXCommandService farewell matching", () => {
+  it("matches farewell trigger regardless of keyword parsing toggle", () => {
+    const service = createService(false);
 
-        const result = service.matchFarewell('!bye everyone', '!bye');
+    const result = service.matchFarewell("!bye everyone", "!bye");
 
-        expect(result).toBe('!bye');
-    });
+    expect(result).toBe("!bye");
+  });
 
-    it('does not match farewell keywords when keyword parsing is disabled', () => {
-        const service = createService(false);
+  it("does not match farewell keywords when keyword parsing is disabled", () => {
+    const service = createService(false);
 
-        const result = service.matchFarewell('goodbye everyone', 'goodbye');
+    const result = service.matchFarewell("goodbye everyone", "goodbye");
 
-        expect(result).toBeNull();
-    });
+    expect(result).toBeNull();
+  });
 
-    it('matches farewell keywords when keyword parsing is enabled', () => {
-        const service = createService(true);
+  it("matches farewell keywords when keyword parsing is enabled", () => {
+    const service = createService(true);
 
-        const result = service.matchFarewell('goodbye everyone', 'goodbye');
+    const result = service.matchFarewell("goodbye everyone", "goodbye");
 
-        expect(result).toBe('goodbye');
-    });
+    expect(result).toBe("goodbye");
+  });
 });

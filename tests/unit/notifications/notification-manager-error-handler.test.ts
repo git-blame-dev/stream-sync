@@ -1,106 +1,119 @@
-const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
-export {};
-const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { noOpLogger } = require('../../helpers/mock-factories');
-const { createConfigFixture } = require('../../helpers/config-fixture');
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
+import { noOpLogger } from "../../helpers/mock-factories";
+import { createConfigFixture } from "../../helpers/config-fixture";
 
-const NotificationManager = require('../../../src/notifications/NotificationManager');
-const constants = require('../../../src/core/constants');
+import NotificationManager from "../../../src/notifications/NotificationManager";
+import * as constants from "../../../src/core/constants";
 
 type NotificationManagerLike = {
-    handleNotification: (type: string, platform: string, data: Record<string, unknown>) => Promise<{ success?: boolean; error?: string; details?: string }>;
+  handleNotification: (
+    type: string,
+    platform: string,
+    data: Record<string, unknown>,
+  ) => Promise<{ success?: boolean; error?: string; details?: string }>;
 };
 
 type DisplayQueueMock = {
-    addItem: ReturnType<typeof createMockFn>;
-    addToQueue: ReturnType<typeof createMockFn>;
-    processQueue: ReturnType<typeof createMockFn>;
-    isQueueEmpty: ReturnType<typeof createMockFn>;
-    clearQueue: ReturnType<typeof createMockFn>;
+  addItem: ReturnType<typeof createMockFn>;
+  addToQueue: ReturnType<typeof createMockFn>;
+  processQueue: ReturnType<typeof createMockFn>;
+  isQueueEmpty: ReturnType<typeof createMockFn>;
+  clearQueue: ReturnType<typeof createMockFn>;
 };
 
 type EventBusMock = {
-    emit: ReturnType<typeof createMockFn>;
-    on: ReturnType<typeof createMockFn>;
-    off: ReturnType<typeof createMockFn>;
+  emit: ReturnType<typeof createMockFn>;
+  on: ReturnType<typeof createMockFn>;
+  off: ReturnType<typeof createMockFn>;
 };
 
-describe('NotificationManager error handling', () => {
-    let manager: NotificationManagerLike;
-    let mockDisplayQueue: DisplayQueueMock;
-    let mockEventBus: EventBusMock;
+describe("NotificationManager error handling", () => {
+  let manager: NotificationManagerLike;
+  let mockDisplayQueue: DisplayQueueMock;
+  let mockEventBus: EventBusMock;
 
-    beforeEach(() => {
-        mockDisplayQueue = {
-            addItem: createMockFn(),
-            addToQueue: createMockFn(),
-            processQueue: createMockFn(),
-            isQueueEmpty: createMockFn().mockReturnValue(true),
-            clearQueue: createMockFn()
-        };
+  beforeEach(() => {
+    mockDisplayQueue = {
+      addItem: createMockFn(),
+      addToQueue: createMockFn(),
+      processQueue: createMockFn(),
+      isQueueEmpty: createMockFn().mockReturnValue(true),
+      clearQueue: createMockFn(),
+    };
 
-        mockEventBus = {
-            emit: createMockFn(),
-            on: createMockFn(),
-            off: createMockFn()
-        };
+    mockEventBus = {
+      emit: createMockFn(),
+      on: createMockFn(),
+      off: createMockFn(),
+    };
 
-        manager = new NotificationManager({
-            logger: noOpLogger,
-            displayQueue: mockDisplayQueue,
-            eventBus: mockEventBus,
-            constants,
-            textProcessing: { formatChatMessage: createMockFn() },
-            obsGoals: { processDonationGoal: createMockFn() },
-            config: createConfigFixture(),
-            vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) }
-        });
+    manager = new NotificationManager({
+      logger: noOpLogger,
+      displayQueue: mockDisplayQueue,
+      eventBus: mockEventBus,
+      constants,
+      textProcessing: { formatChatMessage: createMockFn() },
+      obsGoals: { processDonationGoal: createMockFn() },
+      config: createConfigFixture(),
+      vfxCommandService: {
+        getVFXConfig: createMockFn().mockResolvedValue(null),
+      },
+    });
+  });
+
+  afterEach(() => {
+    restoreAllMocks();
+  });
+
+  test("returns failure result when display queue throws error", async () => {
+    mockDisplayQueue.addItem.mockImplementation(() => {
+      throw new Error("queue fail");
     });
 
-    afterEach(() => {
-        restoreAllMocks();
+    const result = await manager.handleNotification(
+      "platform:follow",
+      "tiktok",
+      {
+        username: "testUser",
+        userId: "test-user-id-001",
+      },
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe("Display queue error");
+    expect(result.details).toBe("queue fail");
+  });
+
+  test("does not emit notification:processed event on display queue failure", async () => {
+    mockDisplayQueue.addItem.mockImplementation(() => {
+      throw new Error("queue fail");
     });
 
-    test('returns failure result when display queue throws error', async () => {
-        mockDisplayQueue.addItem.mockImplementation(() => {
-            throw new Error('queue fail');
-        });
-
-        const result = await manager.handleNotification('platform:follow', 'tiktok', {
-            username: 'testUser',
-            userId: 'test-user-id-001'
-        });
-
-        expect(result.success).toBe(false);
-        expect(result.error).toBe('Display queue error');
-        expect(result.details).toBe('queue fail');
+    await manager.handleNotification("platform:follow", "tiktok", {
+      username: "testUser",
+      userId: "test-user-id-002",
     });
 
-    test('does not emit notification:processed event on display queue failure', async () => {
-        mockDisplayQueue.addItem.mockImplementation(() => {
-            throw new Error('queue fail');
-        });
+    const processedEvents = mockEventBus.emit.mock.calls.filter(
+      ([event]) => event === "notification:processed",
+    );
+    expect(processedEvents).toHaveLength(0);
+  });
 
-        await manager.handleNotification('platform:follow', 'tiktok', {
-            username: 'testUser',
-            userId: 'test-user-id-002'
-        });
+  test("handles notification successfully when display queue works", async () => {
+    mockDisplayQueue.addItem.mockReturnValue(undefined);
 
-        const processedEvents = mockEventBus.emit.mock.calls.filter(
-            ([event]) => event === 'notification:processed'
-        );
-        expect(processedEvents).toHaveLength(0);
-    });
+    const result = await manager.handleNotification(
+      "platform:follow",
+      "tiktok",
+      {
+        username: "testUser",
+        userId: "test-user-id-003",
+      },
+    );
 
-    test('handles notification successfully when display queue works', async () => {
-        mockDisplayQueue.addItem.mockReturnValue(undefined);
-
-        const result = await manager.handleNotification('platform:follow', 'tiktok', {
-            username: 'testUser',
-            userId: 'test-user-id-003'
-        });
-
-        expect(result.success).toBe(true);
-        expect(mockDisplayQueue.addItem).toHaveBeenCalled();
-    });
+    expect(result.success).toBe(true);
+    expect(mockDisplayQueue.addItem).toHaveBeenCalled();
+  });
 });

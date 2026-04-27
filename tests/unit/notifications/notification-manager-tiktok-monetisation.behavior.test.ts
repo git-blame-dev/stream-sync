@@ -1,111 +1,124 @@
-const { describe, expect, beforeEach, it, afterEach } = require('bun:test');
-export {};
-const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { noOpLogger } = require('../../helpers/mock-factories');
-const { createConfigFixture } = require('../../helpers/config-fixture');
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
+import { noOpLogger } from "../../helpers/mock-factories";
+import { createConfigFixture } from "../../helpers/config-fixture";
 
-const EventEmitter = require('events');
-const NotificationManager = require('../../../src/notifications/NotificationManager');
+import { EventEmitter } from "node:events";
+import NotificationManager from "../../../src/notifications/NotificationManager";
 
 type DisplayQueueMock = {
-    addItem: ReturnType<typeof createMockFn>;
+  addItem: ReturnType<typeof createMockFn>;
 };
 
 type NotificationManagerLike = {
-    handleNotification: (type: string, platform: string, data: Record<string, unknown>) => Promise<unknown>;
-    PRIORITY_LEVELS: {
-        PAYPIGGY: number;
-        GIFT: number;
-    };
+  handleNotification: (
+    type: string,
+    platform: string,
+    data: Record<string, unknown>,
+  ) => Promise<unknown>;
+  PRIORITY_LEVELS: {
+    PAYPIGGY: number;
+    GIFT: number;
+  };
 };
 
-describe('NotificationManager TikTok monetisation behavior', () => {
-    afterEach(() => {
-        restoreAllMocks();
+describe("NotificationManager TikTok monetisation behavior", () => {
+  afterEach(() => {
+    restoreAllMocks();
+  });
+
+  let displayQueue: DisplayQueueMock;
+  let notificationManager: NotificationManagerLike;
+  let config: ReturnType<typeof createConfigFixture>;
+
+  const baseDependencies = () => ({
+    logger: noOpLogger,
+    displayQueue,
+    eventBus: new EventEmitter(),
+    constants: require("../../../src/core/constants"),
+    textProcessing: { formatChatMessage: createMockFn() },
+    obsGoals: { processDonationGoal: createMockFn() },
+    config,
+    vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) },
+    userTrackingService: {
+      isFirstMessage: createMockFn().mockResolvedValue(false),
+    },
+  });
+
+  beforeEach(() => {
+    displayQueue = { addItem: createMockFn() };
+    config = createConfigFixture({
+      general: {
+        giftsEnabled: true,
+        paypiggiesEnabled: true,
+      },
+    });
+    notificationManager = new NotificationManager(baseDependencies());
+  });
+
+  it("enqueues SUPER_FAN paypiggy with paypiggy priority", async () => {
+    await notificationManager.handleNotification(
+      "platform:paypiggy",
+      "tiktok",
+      {
+        username: "SuperFan",
+        userId: "tk-user-1",
+        tier: "superfan",
+        level: "S2",
+        months: 2,
+      },
+    );
+
+    expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
+    const item = displayQueue.addItem.mock.calls[0][0];
+    expect(item.type).toBe("platform:paypiggy");
+    expect(item.platform).toBe("tiktok");
+    expect(item.priority).toBe(notificationManager.PRIORITY_LEVELS.PAYPIGGY);
+    expect(item.data.username).toBe("SuperFan");
+  });
+
+  it("enqueues coin gifts with gift priority", async () => {
+    await notificationManager.handleNotification("platform:gift", "tiktok", {
+      username: "CoinHero",
+      userId: "tk-user-2",
+      giftType: "Rose",
+      giftCount: 3,
+      amount: 150,
+      currency: "coins",
     });
 
-    let displayQueue: DisplayQueueMock;
-    let notificationManager: NotificationManagerLike;
-    let config: ReturnType<typeof createConfigFixture>;
+    expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
+    const item = displayQueue.addItem.mock.calls[0][0];
+    expect(item.type).toBe("platform:gift");
+    expect(item.platform).toBe("tiktok");
+    expect(item.priority).toBe(notificationManager.PRIORITY_LEVELS.GIFT);
+    expect(item.data.username).toBe("CoinHero");
+  });
 
-    const baseDependencies = () => ({
-        logger: noOpLogger,
-        displayQueue,
-        eventBus: new EventEmitter(),
-        constants: require('../../../src/core/constants'),
-        textProcessing: { formatChatMessage: createMockFn() },
-        obsGoals: { processDonationGoal: createMockFn() },
-        config,
-        vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) },
-        userTrackingService: { isFirstMessage: createMockFn().mockResolvedValue(false) }
+  it("respects config gating and skips when notifications are disabled", async () => {
+    const disabledConfig = createConfigFixture({
+      general: { paypiggiesEnabled: false },
+    });
+    const disabledManager = new NotificationManager({
+      logger: noOpLogger,
+      displayQueue,
+      eventBus: new EventEmitter(),
+      constants: require("../../../src/core/constants"),
+      textProcessing: { formatChatMessage: createMockFn() },
+      obsGoals: { processDonationGoal: createMockFn() },
+      config: disabledConfig,
+      vfxCommandService: {
+        getVFXConfig: createMockFn().mockResolvedValue(null),
+      },
+      userTrackingService: {
+        isFirstMessage: createMockFn().mockResolvedValue(false),
+      },
     });
 
-    beforeEach(() => {
-        displayQueue = { addItem: createMockFn() };
-        config = createConfigFixture({
-            general: {
-                giftsEnabled: true,
-                paypiggiesEnabled: true
-            }
-        });
-        notificationManager = new NotificationManager(baseDependencies());
+    await disabledManager.handleNotification("platform:paypiggy", "tiktok", {
+      username: "GatedUser",
     });
 
-    it('enqueues SUPER_FAN paypiggy with paypiggy priority', async () => {
-        await notificationManager.handleNotification('platform:paypiggy', 'tiktok', {
-            username: 'SuperFan',
-            userId: 'tk-user-1',
-            tier: 'superfan',
-            level: 'S2',
-            months: 2
-        });
-
-        expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
-        const item = displayQueue.addItem.mock.calls[0][0];
-        expect(item.type).toBe('platform:paypiggy');
-        expect(item.platform).toBe('tiktok');
-        expect(item.priority).toBe(notificationManager.PRIORITY_LEVELS.PAYPIGGY);
-        expect(item.data.username).toBe('SuperFan');
-    });
-
-    it('enqueues coin gifts with gift priority', async () => {
-        await notificationManager.handleNotification('platform:gift', 'tiktok', {
-            username: 'CoinHero',
-            userId: 'tk-user-2',
-            giftType: 'Rose',
-            giftCount: 3,
-            amount: 150,
-            currency: 'coins'
-        });
-
-        expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
-        const item = displayQueue.addItem.mock.calls[0][0];
-        expect(item.type).toBe('platform:gift');
-        expect(item.platform).toBe('tiktok');
-        expect(item.priority).toBe(notificationManager.PRIORITY_LEVELS.GIFT);
-        expect(item.data.username).toBe('CoinHero');
-    });
-
-    it('respects config gating and skips when notifications are disabled', async () => {
-        const disabledConfig = createConfigFixture({
-            general: { paypiggiesEnabled: false }
-        });
-        const disabledManager = new NotificationManager({
-            logger: noOpLogger,
-            displayQueue,
-            eventBus: new EventEmitter(),
-            constants: require('../../../src/core/constants'),
-            textProcessing: { formatChatMessage: createMockFn() },
-            obsGoals: { processDonationGoal: createMockFn() },
-            config: disabledConfig,
-            vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) },
-            userTrackingService: { isFirstMessage: createMockFn().mockResolvedValue(false) }
-        });
-
-        await disabledManager.handleNotification('platform:paypiggy', 'tiktok', {
-            username: 'GatedUser'
-        });
-
-        expect(displayQueue.addItem).not.toHaveBeenCalled();
-    });
+    expect(displayQueue.addItem).not.toHaveBeenCalled();
+  });
 });

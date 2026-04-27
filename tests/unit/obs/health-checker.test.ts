@@ -1,241 +1,250 @@
-const { describe, expect, beforeEach, afterEach, it } = require('bun:test');
-const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { useRealTimers } = require('../../helpers/bun-timers');
+import { describe, expect, beforeEach, afterEach, it } from "bun:test";
+import {
+  createMockFn,
+  clearAllMocks,
+  restoreAllMocks,
+} from "../../helpers/bun-mock-utils";
+import { useRealTimers } from "../../helpers/bun-timers";
 
-const testClock = require('../../helpers/test-clock');
-const { OBSHealthChecker } = require('../../../src/obs/health-checker.ts');
-const OBSHealthCheckerCompat = require('../../../src/obs/health-checker.ts');
+import * as testClock from "../../helpers/test-clock";
+import { OBSHealthChecker } from "../../../src/obs/health-checker.ts";
+import * as OBSHealthCheckerCompat from "../../../src/obs/health-checker.ts";
 
-describe('OBSHealthChecker', () => {
-    let mockOBSManager;
-    let healthChecker;
+describe("OBSHealthChecker", () => {
+  let mockOBSManager;
+  let healthChecker;
 
-    const createHealthChecker = (config = {}) => new OBSHealthChecker(mockOBSManager, {
-        timeProvider: () => testClock.now(),
-        ...config
+  const createHealthChecker = (config = {}) =>
+    new OBSHealthChecker(mockOBSManager, {
+      timeProvider: () => testClock.now(),
+      ...config,
     });
 
+  beforeEach(() => {
+    mockOBSManager = {
+      isConnected: createMockFn(),
+      call: createMockFn(),
+    };
+  });
+
+  afterEach(() => {
+    restoreAllMocks();
+    clearAllMocks();
+    useRealTimers();
+  });
+
+  describe("Constructor", () => {
+    it("should expose OBSHealthChecker on the module namespace export", () => {
+      expect(OBSHealthCheckerCompat.OBSHealthChecker).toBe(OBSHealthChecker);
+    });
+
+    it("should initialize with default configuration", () => {
+      healthChecker = createHealthChecker();
+
+      expect(healthChecker.obsManager).toBe(mockOBSManager);
+      expect(healthChecker.cacheTimeout).toBe(2000); // 2 seconds default
+      expect(healthChecker.maxFailures).toBe(3); // 3 failures default
+      expect(healthChecker.lastCheck).toBeNull();
+      expect(healthChecker.lastResult).toBeNull();
+      expect(healthChecker.consecutiveFailures).toBe(0);
+    });
+
+    it("should accept custom configuration", () => {
+      const customConfig = {
+        cacheTimeout: 5000,
+        maxFailures: 5,
+      };
+
+      healthChecker = createHealthChecker(customConfig);
+
+      expect(healthChecker.cacheTimeout).toBe(5000);
+      expect(healthChecker.maxFailures).toBe(5);
+    });
+
+    it("should require OBS connection manager", () => {
+      expect(() => new OBSHealthChecker(null)).toThrow(
+        "OBS connection manager is required",
+      );
+    });
+  });
+
+  describe("isReady()", () => {
     beforeEach(() => {
-        mockOBSManager = {
-            isConnected: createMockFn(),
-            call: createMockFn()
-        };
+      healthChecker = createHealthChecker();
     });
 
-    afterEach(() => {
-        restoreAllMocks();
-        clearAllMocks();
-        useRealTimers();
+    it("should return false when OBS is not connected", async () => {
+      mockOBSManager.isConnected.mockReturnValue(false);
+
+      const result = await healthChecker.isReady();
+
+      expect(result).toBe(false);
+      expect(mockOBSManager.call).not.toHaveBeenCalled();
     });
 
-    describe('Constructor', () => {
-        it('should expose OBSHealthChecker on the module namespace export', () => {
-            expect(OBSHealthCheckerCompat.OBSHealthChecker).toBe(OBSHealthChecker);
-        });
+    it("should return true when OBS is connected and GetVersion succeeds", async () => {
+      mockOBSManager.isConnected.mockReturnValue(true);
+      mockOBSManager.call.mockResolvedValue({ version: "28.0.0" });
 
-        it('should initialize with default configuration', () => {
-            healthChecker = createHealthChecker();
-            
-            expect(healthChecker.obsManager).toBe(mockOBSManager);
-            expect(healthChecker.cacheTimeout).toBe(2000); // 2 seconds default
-            expect(healthChecker.maxFailures).toBe(3); // 3 failures default
-            expect(healthChecker.lastCheck).toBeNull();
-            expect(healthChecker.lastResult).toBeNull();
-            expect(healthChecker.consecutiveFailures).toBe(0);
-        });
+      const result = await healthChecker.isReady();
 
-        it('should accept custom configuration', () => {
-            const customConfig = {
-                cacheTimeout: 5000,
-                maxFailures: 5
-            };
-            
-            healthChecker = createHealthChecker(customConfig);
-            
-            expect(healthChecker.cacheTimeout).toBe(5000);
-            expect(healthChecker.maxFailures).toBe(5);
-        });
-
-        it('should require OBS connection manager', () => {
-            expect(() => new OBSHealthChecker(null)).toThrow('OBS connection manager is required');
-        });
+      expect(result).toBe(true);
+      const [method, payload] = mockOBSManager.call.mock.calls[0];
+      expect(method).toBe("GetVersion");
+      expect(payload).toEqual({});
     });
 
-    describe('isReady()', () => {
-        beforeEach(() => {
-            healthChecker = createHealthChecker();
-        });
+    it("should return false when OBS is connected but GetVersion fails", async () => {
+      mockOBSManager.isConnected.mockReturnValue(true);
+      mockOBSManager.call.mockRejectedValue(
+        new Error("OBS is not ready to perform the request."),
+      );
 
-        it('should return false when OBS is not connected', async () => {
-            mockOBSManager.isConnected.mockReturnValue(false);
-            
-            const result = await healthChecker.isReady();
-            
-            expect(result).toBe(false);
-            expect(mockOBSManager.call).not.toHaveBeenCalled();
-        });
+      const result = await healthChecker.isReady();
 
-        it('should return true when OBS is connected and GetVersion succeeds', async () => {
-            mockOBSManager.isConnected.mockReturnValue(true);
-            mockOBSManager.call.mockResolvedValue({ version: '28.0.0' });
-            
-            const result = await healthChecker.isReady();
-            
-            expect(result).toBe(true);
-            const [method, payload] = mockOBSManager.call.mock.calls[0];
-            expect(method).toBe('GetVersion');
-            expect(payload).toEqual({});
-        });
-
-        it('should return false when OBS is connected but GetVersion fails', async () => {
-            mockOBSManager.isConnected.mockReturnValue(true);
-            mockOBSManager.call.mockRejectedValue(new Error('OBS is not ready to perform the request.'));
-            
-            const result = await healthChecker.isReady();
-            
-            expect(result).toBe(false);
-            const [method, payload] = mockOBSManager.call.mock.calls[0];
-            expect(method).toBe('GetVersion');
-            expect(payload).toEqual({});
-        });
-
-        it('should use cached result when cache is valid', async () => {
-            mockOBSManager.isConnected.mockReturnValue(true);
-            mockOBSManager.call.mockResolvedValue({ version: '28.0.0' });
-
-            const result1 = await healthChecker.isReady();
-            expect(result1).toBe(true);
-            expect(mockOBSManager.call).toHaveBeenCalledTimes(1);
-
-            testClock.advance(1000);
-            const result2 = await healthChecker.isReady();
-            expect(result2).toBe(true);
-            expect(mockOBSManager.call).toHaveBeenCalledTimes(1);
-        });
-
-        it('should perform new health check when cache expires', async () => {
-            mockOBSManager.isConnected.mockReturnValue(true);
-            mockOBSManager.call.mockResolvedValue({ version: '28.0.0' });
-
-            await healthChecker.isReady();
-            expect(mockOBSManager.call).toHaveBeenCalledTimes(1);
-
-            testClock.advance(3000);
-            await healthChecker.isReady();
-            expect(mockOBSManager.call).toHaveBeenCalledTimes(2);
-        });
-
-        it('should track consecutive failures', async () => {
-            mockOBSManager.isConnected.mockReturnValue(true);
-            mockOBSManager.call.mockRejectedValue(new Error('OBS error'));
-            
-            expect(healthChecker.consecutiveFailures).toBe(0);
-            
-            await healthChecker.isReady();
-            expect(healthChecker.consecutiveFailures).toBe(1);
-            
-            await healthChecker.isReady();
-            expect(healthChecker.consecutiveFailures).toBe(2);
-        });
-
-        it('should reset consecutive failures on successful health check', async () => {
-            mockOBSManager.isConnected.mockReturnValue(true);
-
-            mockOBSManager.call.mockRejectedValueOnce(new Error('OBS error'));
-            await healthChecker.isReady();
-            expect(healthChecker.consecutiveFailures).toBe(1);
-
-            mockOBSManager.call.mockResolvedValue({ version: '28.0.0' });
-            await healthChecker.isReady();
-            expect(healthChecker.consecutiveFailures).toBe(0);
-        });
+      expect(result).toBe(false);
+      const [method, payload] = mockOBSManager.call.mock.calls[0];
+      expect(method).toBe("GetVersion");
+      expect(payload).toEqual({});
     });
 
-    describe('Circuit Breaker', () => {
-        beforeEach(() => {
-            healthChecker = createHealthChecker({ maxFailures: 2 });
-        });
+    it("should use cached result when cache is valid", async () => {
+      mockOBSManager.isConnected.mockReturnValue(true);
+      mockOBSManager.call.mockResolvedValue({ version: "28.0.0" });
 
-        it('should open circuit after maximum failures', async () => {
-            mockOBSManager.isConnected.mockReturnValue(true);
-            mockOBSManager.call.mockRejectedValue(new Error('OBS error'));
+      const result1 = await healthChecker.isReady();
+      expect(result1).toBe(true);
+      expect(mockOBSManager.call).toHaveBeenCalledTimes(1);
 
-            await healthChecker.isReady();
-            await healthChecker.isReady();
-
-            expect(healthChecker.isCircuitOpen()).toBe(true);
-        });
-
-        it('should not open circuit before maximum failures', async () => {
-            mockOBSManager.isConnected.mockReturnValue(true);
-            mockOBSManager.call.mockRejectedValue(new Error('OBS error'));
-            
-            await healthChecker.isReady();
-            
-            expect(healthChecker.isCircuitOpen()).toBe(false);
-        });
-
-        it('should close circuit after successful health check', async () => {
-            mockOBSManager.isConnected.mockReturnValue(true);
-
-            mockOBSManager.call.mockRejectedValue(new Error('OBS error'));
-            await healthChecker.isReady();
-            await healthChecker.isReady();
-            expect(healthChecker.isCircuitOpen()).toBe(true);
-
-            mockOBSManager.call.mockResolvedValue({ version: '28.0.0' });
-            await healthChecker.isReady();
-            expect(healthChecker.isCircuitOpen()).toBe(false);
-        });
+      testClock.advance(1000);
+      const result2 = await healthChecker.isReady();
+      expect(result2).toBe(true);
+      expect(mockOBSManager.call).toHaveBeenCalledTimes(1);
     });
 
-    describe('Performance Considerations', () => {
-        beforeEach(() => {
-            healthChecker = createHealthChecker();
-        });
+    it("should perform new health check when cache expires", async () => {
+      mockOBSManager.isConnected.mockReturnValue(true);
+      mockOBSManager.call.mockResolvedValue({ version: "28.0.0" });
 
-        it('should issue a GetVersion health check call', async () => {
-            mockOBSManager.isConnected.mockReturnValue(true);
-            mockOBSManager.call.mockResolvedValue({ version: '28.0.0' });
-            
-            await healthChecker.isReady();
-            
-            const [method, payload] = mockOBSManager.call.mock.calls[0];
-            expect(method).toBe('GetVersion');
-            expect(payload).toEqual({});
-        });
+      await healthChecker.isReady();
+      expect(mockOBSManager.call).toHaveBeenCalledTimes(1);
 
-        it('should handle timeout errors gracefully', async () => {
-            mockOBSManager.isConnected.mockReturnValue(true);
-            mockOBSManager.call.mockRejectedValue(new Error('Timeout'));
-            
-            const result = await healthChecker.isReady();
-            
-            expect(result).toBe(false);
-            expect(healthChecker.consecutiveFailures).toBe(1);
-        });
+      testClock.advance(3000);
+      await healthChecker.isReady();
+      expect(mockOBSManager.call).toHaveBeenCalledTimes(2);
     });
 
-    describe('Cache Management', () => {
-        beforeEach(() => {
-            healthChecker = createHealthChecker();
-        });
+    it("should track consecutive failures", async () => {
+      mockOBSManager.isConnected.mockReturnValue(true);
+      mockOBSManager.call.mockRejectedValue(new Error("OBS error"));
 
-        it('should invalidate cache on connection state change', () => {
-            healthChecker.lastCheck = testClock.now();
-            healthChecker.lastResult = true;
+      expect(healthChecker.consecutiveFailures).toBe(0);
 
-            healthChecker.invalidateCache();
+      await healthChecker.isReady();
+      expect(healthChecker.consecutiveFailures).toBe(1);
 
-            expect(healthChecker.lastCheck).toBeNull();
-            expect(healthChecker.lastResult).toBeNull();
-        });
-
-        it('should provide method to get cache status', () => {
-            expect(healthChecker.isCacheValid()).toBe(false);
-            
-            healthChecker.lastCheck = testClock.now();
-            expect(healthChecker.isCacheValid()).toBe(true);
-        });
+      await healthChecker.isReady();
+      expect(healthChecker.consecutiveFailures).toBe(2);
     });
+
+    it("should reset consecutive failures on successful health check", async () => {
+      mockOBSManager.isConnected.mockReturnValue(true);
+
+      mockOBSManager.call.mockRejectedValueOnce(new Error("OBS error"));
+      await healthChecker.isReady();
+      expect(healthChecker.consecutiveFailures).toBe(1);
+
+      mockOBSManager.call.mockResolvedValue({ version: "28.0.0" });
+      await healthChecker.isReady();
+      expect(healthChecker.consecutiveFailures).toBe(0);
+    });
+  });
+
+  describe("Circuit Breaker", () => {
+    beforeEach(() => {
+      healthChecker = createHealthChecker({ maxFailures: 2 });
+    });
+
+    it("should open circuit after maximum failures", async () => {
+      mockOBSManager.isConnected.mockReturnValue(true);
+      mockOBSManager.call.mockRejectedValue(new Error("OBS error"));
+
+      await healthChecker.isReady();
+      await healthChecker.isReady();
+
+      expect(healthChecker.isCircuitOpen()).toBe(true);
+    });
+
+    it("should not open circuit before maximum failures", async () => {
+      mockOBSManager.isConnected.mockReturnValue(true);
+      mockOBSManager.call.mockRejectedValue(new Error("OBS error"));
+
+      await healthChecker.isReady();
+
+      expect(healthChecker.isCircuitOpen()).toBe(false);
+    });
+
+    it("should close circuit after successful health check", async () => {
+      mockOBSManager.isConnected.mockReturnValue(true);
+
+      mockOBSManager.call.mockRejectedValue(new Error("OBS error"));
+      await healthChecker.isReady();
+      await healthChecker.isReady();
+      expect(healthChecker.isCircuitOpen()).toBe(true);
+
+      mockOBSManager.call.mockResolvedValue({ version: "28.0.0" });
+      await healthChecker.isReady();
+      expect(healthChecker.isCircuitOpen()).toBe(false);
+    });
+  });
+
+  describe("Performance Considerations", () => {
+    beforeEach(() => {
+      healthChecker = createHealthChecker();
+    });
+
+    it("should issue a GetVersion health check call", async () => {
+      mockOBSManager.isConnected.mockReturnValue(true);
+      mockOBSManager.call.mockResolvedValue({ version: "28.0.0" });
+
+      await healthChecker.isReady();
+
+      const [method, payload] = mockOBSManager.call.mock.calls[0];
+      expect(method).toBe("GetVersion");
+      expect(payload).toEqual({});
+    });
+
+    it("should handle timeout errors gracefully", async () => {
+      mockOBSManager.isConnected.mockReturnValue(true);
+      mockOBSManager.call.mockRejectedValue(new Error("Timeout"));
+
+      const result = await healthChecker.isReady();
+
+      expect(result).toBe(false);
+      expect(healthChecker.consecutiveFailures).toBe(1);
+    });
+  });
+
+  describe("Cache Management", () => {
+    beforeEach(() => {
+      healthChecker = createHealthChecker();
+    });
+
+    it("should invalidate cache on connection state change", () => {
+      healthChecker.lastCheck = testClock.now();
+      healthChecker.lastResult = true;
+
+      healthChecker.invalidateCache();
+
+      expect(healthChecker.lastCheck).toBeNull();
+      expect(healthChecker.lastResult).toBeNull();
+    });
+
+    it("should provide method to get cache status", () => {
+      expect(healthChecker.isCacheValid()).toBe(false);
+
+      healthChecker.lastCheck = testClock.now();
+      expect(healthChecker.isCacheValid()).toBe(true);
+    });
+  });
 });
