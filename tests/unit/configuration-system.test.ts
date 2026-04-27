@@ -1,85 +1,79 @@
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { createRequire } from 'node:module';
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import fs from "node:fs";
+import { createRequire } from "node:module";
 
-import { createMockFn, restoreAllMocks } from '../helpers/bun-mock-utils';
+import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
+import { expectNoTechnicalArtifacts } from "../helpers/assertion-helpers";
+import { captureStderr } from "../helpers/output-capture";
 
 const nodeRequire = createRequire(import.meta.url);
 
-const { expectNoTechnicalArtifacts } = nodeRequire('../helpers/assertion-helpers') as {
-    expectNoTechnicalArtifacts: (value: string) => void;
-};
-const { captureStderr } = nodeRequire('../helpers/output-capture') as {
-    captureStderr: () => {
-        output: string[];
-        restore: () => void;
-    };
-};
-
 type FsLike = {
-    readFileSync: (...args: unknown[]) => unknown;
-    existsSync: (...args: unknown[]) => boolean;
-    writeFileSync: (...args: unknown[]) => unknown;
+  readFileSync: (...args: unknown[]) => unknown;
+  existsSync: (...args: unknown[]) => boolean;
+  writeFileSync: (...args: unknown[]) => unknown;
 };
 
 type LoadedConfig = {
-    general: {
-        debugEnabled: boolean;
-        messagesEnabled: boolean;
-        greetingsEnabled: boolean;
-        viewerCountPollingIntervalMs: number;
-        [key: string]: unknown;
-    };
-    obs: {
-        enabled: boolean;
-        ttsEnabled: boolean;
-        address: string;
-        notificationTxt?: string;
-        password?: string;
-        [key: string]: unknown;
-    };
-    youtube: {
-        enabled: boolean;
-        username: string;
-        apiKey?: string;
-        messagesEnabled: boolean;
-        followsEnabled: boolean;
-        giftsEnabled: boolean;
-        [key: string]: unknown;
-    };
-    twitch: {
-        enabled: boolean;
-        username: string;
-        [key: string]: unknown;
-    };
-    tiktok: {
-        enabled: boolean;
-        username: string;
-        [key: string]: unknown;
-    };
-    cooldowns: {
-        cmdCooldownMs: number;
-        [key: string]: unknown;
-    };
+  general: {
+    debugEnabled: boolean;
+    messagesEnabled: boolean;
+    greetingsEnabled: boolean;
+    viewerCountPollingIntervalMs: number;
     [key: string]: unknown;
+  };
+  obs: {
+    enabled: boolean;
+    ttsEnabled: boolean;
+    address: string;
+    notificationTxt?: string;
+    password?: string;
+    [key: string]: unknown;
+  };
+  youtube: {
+    enabled: boolean;
+    username: string;
+    apiKey?: string;
+    messagesEnabled: boolean;
+    followsEnabled: boolean;
+    giftsEnabled: boolean;
+    [key: string]: unknown;
+  };
+  twitch: {
+    enabled: boolean;
+    username: string;
+    [key: string]: unknown;
+  };
+  tiktok: {
+    enabled: boolean;
+    username: string;
+    [key: string]: unknown;
+  };
+  cooldowns: {
+    cmdCooldownMs: number;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
 };
 
-const fs = nodeRequire('fs') as FsLike;
-const CONFIG_MODULE_PATH = nodeRequire.resolve('../../src/core/config');
+const CONFIG_MODULE_PATH = nodeRequire.resolve("../../src/core/config");
 
 function resetConfigModule() {
-    delete nodeRequire.cache[CONFIG_MODULE_PATH];
+  delete nodeRequire.cache[CONFIG_MODULE_PATH];
 }
 
 function loadFreshConfig(): { config: LoadedConfig } {
-    resetConfigModule();
-    const { config } = nodeRequire('../../src/core/config') as { config: LoadedConfig };
-    void config.general;
-    return { config };
+  resetConfigModule();
+  const { config } = nodeRequire("../../src/core/config") as {
+    config: LoadedConfig;
+  };
+  void config.general;
+  return { config };
 }
 
-let originalReadFileSync: FsLike['readFileSync'];
-let originalExistsSync: FsLike['existsSync'];
-let originalWriteFileSync: FsLike['writeFileSync'];
+let originalReadFileSync: FsLike["readFileSync"];
+let originalExistsSync: FsLike["existsSync"];
+let originalWriteFileSync: FsLike["writeFileSync"];
 let originalConfigPath: string | undefined;
 
 const testConfigContent = `
@@ -151,58 +145,63 @@ heavyCommandWindow = 360
 maxEntries = 1000
 `;
 
-describe('Configuration System Behavior Tests', () => {
-    let currentConfig: LoadedConfig;
-    const testConfigPath = '/test/config.ini';
+describe("Configuration System Behavior Tests", () => {
+  let currentConfig: LoadedConfig;
+  const testConfigPath = "/test/config.ini";
 
-    const setupConfigMocks = (content: string, configPath = testConfigPath) => {
-        fs.existsSync = createMockFn((filePath) => filePath === configPath) as FsLike['existsSync'];
-        fs.readFileSync = createMockFn((filePath) => {
-            if (filePath === configPath) return content;
-            throw new Error(`ENOENT: no such file: ${filePath}`);
-        }) as FsLike['readFileSync'];
-    };
+  const setupConfigMocks = (content: string, configPath = testConfigPath) => {
+    fs.existsSync = createMockFn(
+      (filePath) => filePath === configPath,
+    ) as FsLike["existsSync"];
+    fs.readFileSync = createMockFn((filePath) => {
+      if (filePath === configPath) return content;
+      throw new Error(`ENOENT: no such file: ${filePath}`);
+    }) as FsLike["readFileSync"];
+  };
 
-    const reloadConfig = (content = testConfigContent, configPath = testConfigPath): { config: LoadedConfig } => {
-        setupConfigMocks(content, configPath);
-        process.env.CHAT_BOT_CONFIG_PATH = configPath;
-        const { config } = loadFreshConfig();
-        currentConfig = config;
-        return { config };
-    };
+  const reloadConfig = (
+    content = testConfigContent,
+    configPath = testConfigPath,
+  ): { config: LoadedConfig } => {
+    setupConfigMocks(content, configPath);
+    process.env.CHAT_BOT_CONFIG_PATH = configPath;
+    const { config } = loadFreshConfig();
+    currentConfig = config;
+    return { config };
+  };
 
-    beforeEach(() => {
-        originalReadFileSync = fs.readFileSync;
-        originalExistsSync = fs.existsSync;
-        originalWriteFileSync = fs.writeFileSync;
-        originalConfigPath = process.env.CHAT_BOT_CONFIG_PATH;
-        reloadConfig();
+  beforeEach(() => {
+    originalReadFileSync = fs.readFileSync;
+    originalExistsSync = fs.existsSync;
+    originalWriteFileSync = fs.writeFileSync;
+    originalConfigPath = process.env.CHAT_BOT_CONFIG_PATH;
+    reloadConfig();
+  });
+
+  afterEach(() => {
+    fs.readFileSync = originalReadFileSync;
+    fs.existsSync = originalExistsSync;
+    fs.writeFileSync = originalWriteFileSync;
+    restoreAllMocks();
+    resetConfigModule();
+    process.env.CHAT_BOT_CONFIG_PATH = originalConfigPath;
+  });
+
+  describe("System Startup Behavior", () => {
+    it("should enable platform connections when configuration enables them", () => {
+      const youtubeEnabled = currentConfig.youtube.enabled;
+      const youtubeUsername = currentConfig.youtube.username;
+      const youtubeApiKey = currentConfig.youtube.apiKey;
+
+      expect(youtubeEnabled).toBe(true);
+      expect(youtubeUsername).toBe("TestChannel");
+      expect(youtubeApiKey).toBeUndefined();
+
+      expectNoTechnicalArtifacts(youtubeUsername);
     });
 
-    afterEach(() => {
-        fs.readFileSync = originalReadFileSync;
-        fs.existsSync = originalExistsSync;
-        fs.writeFileSync = originalWriteFileSync;
-        restoreAllMocks();
-        resetConfigModule();
-        process.env.CHAT_BOT_CONFIG_PATH = originalConfigPath;
-    });
-
-    describe('System Startup Behavior', () => {
-        it('should enable platform connections when configuration enables them', () => {
-            const youtubeEnabled = currentConfig.youtube.enabled;
-            const youtubeUsername = currentConfig.youtube.username;
-            const youtubeApiKey = currentConfig.youtube.apiKey;
-
-            expect(youtubeEnabled).toBe(true);
-            expect(youtubeUsername).toBe('TestChannel');
-            expect(youtubeApiKey).toBeUndefined();
-
-            expectNoTechnicalArtifacts(youtubeUsername);
-        });
-
-    it('should prevent startup when an enabled platform is missing a username', () => {
-        const missingUsernameConfig = `
+    it("should prevent startup when an enabled platform is missing a username", () => {
+      const missingUsernameConfig = `
 ${testConfigContent}
 
 [twitch]
@@ -222,63 +221,67 @@ innertubeInstanceTtlMs = 300000
 innertubeMinTtlMs = 60000
 userAgents = test-agent-1|test-agent-2
 `;
+      expect(() => {
+        reloadConfig(missingUsernameConfig);
+      }).toThrow(/Twitch.*username/i);
+    });
+
+    it("should provide helpful error messages for missing config files", () => {
+      const originalNodeEnv = process.env.NODE_ENV;
+      const stderrCapture = captureStderr();
+      process.env.NODE_ENV = "production";
+      try {
+        fs.existsSync = createMockFn(() => false) as FsLike["existsSync"];
+        process.env.CHAT_BOT_CONFIG_PATH = "/nonexistent/config.ini";
+
         expect(() => {
-            reloadConfig(missingUsernameConfig);
-        }).toThrow(/Twitch.*username/i);
+          loadFreshConfig();
+        }).toThrow(/Configuration file not found/);
+        expect(stderrCapture.output.join("")).toContain(
+          "SETTINGS FILE MISSING",
+        );
+      } finally {
+        process.env.NODE_ENV = originalNodeEnv;
+        stderrCapture.restore();
+      }
     });
 
-    it('should provide helpful error messages for missing config files', () => {
-        const originalNodeEnv = process.env.NODE_ENV;
-        const stderrCapture = captureStderr();
-        process.env.NODE_ENV = 'production';
-        try {
-            fs.existsSync = createMockFn(() => false) as FsLike['existsSync'];
-            process.env.CHAT_BOT_CONFIG_PATH = '/nonexistent/config.ini';
+    it("should not fall back when the configured path is missing", () => {
+      const originalNodeEnv = process.env.NODE_ENV;
+      process.env.NODE_ENV = "production";
+      try {
+        fs.existsSync = createMockFn(
+          (path) => path === "/default/config.ini",
+        ) as FsLike["existsSync"];
+        process.env.CHAT_BOT_CONFIG_PATH = "/nonexistent/config.ini";
 
-            expect(() => {
-                loadFreshConfig();
-            }).toThrow(/Configuration file not found/);
-            expect(stderrCapture.output.join('')).toContain('SETTINGS FILE MISSING');
-        } finally {
-            process.env.NODE_ENV = originalNodeEnv;
-            stderrCapture.restore();
-        }
+        expect(() => loadFreshConfig()).toThrow(/Configuration file not found/);
+      } finally {
+        process.env.NODE_ENV = originalNodeEnv;
+      }
+    });
+  });
+
+  describe("Platform Integration Behavior", () => {
+    it("should deliver correct configuration to platform factories", () => {
+      const youtubeConfig = currentConfig.youtube;
+      const twitchConfig = currentConfig.twitch;
+      const tiktokConfig = currentConfig.tiktok;
+
+      expect(youtubeConfig.enabled).toBe(true);
+      expect(youtubeConfig.username).toBe("TestChannel");
+      expect(youtubeConfig.apiKey).toBeUndefined();
+
+      expect(twitchConfig.enabled).toBe(false);
+      expect(tiktokConfig.enabled).toBe(false);
+
+      expect(youtubeConfig.messagesEnabled).toBe(true);
+      expect(youtubeConfig.followsEnabled).toBe(true);
+      expect(youtubeConfig.giftsEnabled).toBe(true);
     });
 
-    it('should not fall back when the configured path is missing', () => {
-        const originalNodeEnv = process.env.NODE_ENV;
-        process.env.NODE_ENV = 'production';
-        try {
-            fs.existsSync = createMockFn((path) => path === '/default/config.ini') as FsLike['existsSync'];
-            process.env.CHAT_BOT_CONFIG_PATH = '/nonexistent/config.ini';
-
-            expect(() => loadFreshConfig()).toThrow(/Configuration file not found/);
-        } finally {
-            process.env.NODE_ENV = originalNodeEnv;
-        }
-    });
-    });
-
-    describe('Platform Integration Behavior', () => {
-        it('should deliver correct configuration to platform factories', () => {
-            const youtubeConfig = currentConfig.youtube;
-            const twitchConfig = currentConfig.twitch;
-            const tiktokConfig = currentConfig.tiktok;
-
-            expect(youtubeConfig.enabled).toBe(true);
-            expect(youtubeConfig.username).toBe('TestChannel');
-            expect(youtubeConfig.apiKey).toBeUndefined();
-
-            expect(twitchConfig.enabled).toBe(false);
-            expect(tiktokConfig.enabled).toBe(false);
-
-            expect(youtubeConfig.messagesEnabled).toBe(true);
-            expect(youtubeConfig.followsEnabled).toBe(true);
-            expect(youtubeConfig.giftsEnabled).toBe(true);
-        });
-
-        it('should apply platform-specific overrides correctly', () => {
-            const configWithOverrides = `
+    it("should apply platform-specific overrides correctly", () => {
+      const configWithOverrides = `
 ${testConfigContent}
 
 [youtube]
@@ -291,18 +294,18 @@ messagesEnabled = false
 followsEnabled = false
 giftsEnabled = true
 `;
-            reloadConfig(configWithOverrides);
+      reloadConfig(configWithOverrides);
 
-            const youtubeConfig = currentConfig.youtube;
+      const youtubeConfig = currentConfig.youtube;
 
-            expect(youtubeConfig.messagesEnabled).toBe(false);
-            expect(youtubeConfig.followsEnabled).toBe(false);
-            expect(youtubeConfig.giftsEnabled).toBe(true);
-            expect(youtubeConfig.enabled).toBe(true);
-        });
+      expect(youtubeConfig.messagesEnabled).toBe(false);
+      expect(youtubeConfig.followsEnabled).toBe(false);
+      expect(youtubeConfig.giftsEnabled).toBe(true);
+      expect(youtubeConfig.enabled).toBe(true);
+    });
 
-        it('should handle boolean configuration values correctly for user experience', () => {
-            const booleanConfig = `
+    it("should handle boolean configuration values correctly for user experience", () => {
+      const booleanConfig = `
 ${testConfigContent}
 
 [general]
@@ -329,22 +332,22 @@ notificationPlatformLogoTikTok = tiktok-img
 [commands]
 enabled = 1
 `;
-            reloadConfig(booleanConfig);
+      reloadConfig(booleanConfig);
 
-            expect(currentConfig.general.debugEnabled).toBe(true);
-            expect(currentConfig.general.messagesEnabled).toBe(false);
-            expect(currentConfig.obs.ttsEnabled).toBe(true);
-            expect(currentConfig.general.greetingsEnabled).toBe(false);
-            expect(currentConfig.obs.enabled).toBe(false);
-        });
+      expect(currentConfig.general.debugEnabled).toBe(true);
+      expect(currentConfig.general.messagesEnabled).toBe(false);
+      expect(currentConfig.obs.ttsEnabled).toBe(true);
+      expect(currentConfig.general.greetingsEnabled).toBe(false);
+      expect(currentConfig.obs.enabled).toBe(false);
     });
+  });
 
-    describe('Runtime Configuration Behavior', () => {
-        it('should apply dynamic config path changes correctly', () => {
-            const initialEnabled = currentConfig.youtube.enabled;
-            expect(initialEnabled).toBe(true);
+  describe("Runtime Configuration Behavior", () => {
+    it("should apply dynamic config path changes correctly", () => {
+      const initialEnabled = currentConfig.youtube.enabled;
+      expect(initialEnabled).toBe(true);
 
-            const newConfigContent = `
+      const newConfigContent = `
 [general]
 debugEnabled = false
 messagesEnabled = false
@@ -411,26 +414,29 @@ heavyCommandThreshold = 4
 heavyCommandWindow = 360
 maxEntries = 1000
 `;
-            reloadConfig(newConfigContent);
+      reloadConfig(newConfigContent);
 
-            expect(currentConfig.youtube.enabled).toBe(false);
-            expect(currentConfig.youtube.username).toBe('DifferentChannel');
-            expect(currentConfig.general.debugEnabled).toBe(false);
-        });
+      expect(currentConfig.youtube.enabled).toBe(false);
+      expect(currentConfig.youtube.username).toBe("DifferentChannel");
+      expect(currentConfig.general.debugEnabled).toBe(false);
+    });
 
-        it('should handle configuration reloading without system restart', () => {
-            const initialUsername = currentConfig.youtube.username;
-            expect(initialUsername).toBe('TestChannel');
+    it("should handle configuration reloading without system restart", () => {
+      const initialUsername = currentConfig.youtube.username;
+      expect(initialUsername).toBe("TestChannel");
 
-            const updatedConfig = testConfigContent.replace('TestChannel', 'UpdatedChannel');
-            reloadConfig(updatedConfig);
+      const updatedConfig = testConfigContent.replace(
+        "TestChannel",
+        "UpdatedChannel",
+      );
+      reloadConfig(updatedConfig);
 
-            expect(currentConfig.youtube.username).toBe('UpdatedChannel');
-            expect(currentConfig.youtube.enabled).toBe(true);
-        });
+      expect(currentConfig.youtube.username).toBe("UpdatedChannel");
+      expect(currentConfig.youtube.enabled).toBe(true);
+    });
 
-        it('should support explicit config path overrides', () => {
-            const overrideConfig = `
+    it("should support explicit config path overrides", () => {
+      const overrideConfig = `
 ${testConfigContent}
 
 [general]
@@ -462,63 +468,65 @@ innertubeInstanceTtlMs = 300000
 innertubeMinTtlMs = 60000
 userAgents = test-agent-1|test-agent-2
 `;
-            reloadConfig(overrideConfig);
+      reloadConfig(overrideConfig);
 
-            expect(currentConfig.general.debugEnabled).toBe(false);
-            expect(currentConfig.youtube.username).toBe('CLIChannel');
-            expect(currentConfig.obs.password).toBeUndefined();
+      expect(currentConfig.general.debugEnabled).toBe(false);
+      expect(currentConfig.youtube.username).toBe("CLIChannel");
+      expect(currentConfig.obs.password).toBeUndefined();
+    });
+  });
+
+  describe("Error Recovery Behavior", () => {
+    it("should surface missing config errors without fallback", () => {
+      const originalNodeEnv = process.env.NODE_ENV;
+      process.env.NODE_ENV = "production";
+      try {
+        const fallbackPath = "/fallback/config.ini";
+
+        fs.existsSync = createMockFn(
+          (path) => path === fallbackPath,
+        ) as FsLike["existsSync"];
+        fs.readFileSync = createMockFn((path) => {
+          if (path === fallbackPath) return testConfigContent;
+          throw new Error(`ENOENT: no such file: ${path}`);
         });
+
+        process.env.CHAT_BOT_CONFIG_PATH = "/nonexistent/missing.ini";
+
+        expect(() => loadFreshConfig()).toThrow(/Configuration file not found/);
+      } finally {
+        process.env.NODE_ENV = originalNodeEnv;
+      }
     });
 
-    describe('Error Recovery Behavior', () => {
-        it('should surface missing config errors without fallback', () => {
-            const originalNodeEnv = process.env.NODE_ENV;
-            process.env.NODE_ENV = 'production';
-            try {
-                const fallbackPath = '/fallback/config.ini';
-
-                fs.existsSync = createMockFn((path) => path === fallbackPath) as FsLike['existsSync'];
-                fs.readFileSync = createMockFn((path) => {
-                    if (path === fallbackPath) return testConfigContent;
-                    throw new Error(`ENOENT: no such file: ${path}`);
-                });
-
-                process.env.CHAT_BOT_CONFIG_PATH = '/nonexistent/missing.ini';
-
-                expect(() => loadFreshConfig()).toThrow(/Configuration file not found/);
-            } finally {
-                process.env.NODE_ENV = originalNodeEnv;
-            }
-        });
-
-        it('should provide helpful errors for corrupted config files', () => {
-            const corruptedConfig = `
+    it("should provide helpful errors for corrupted config files", () => {
+      const corruptedConfig = `
 [general
 debugEnabled = true
 broken syntax here
 [obs]
 enabled =
 `;
-            expect(() => {
-                reloadConfig(corruptedConfig);
-            }).toThrow();
-        });
+      expect(() => {
+        reloadConfig(corruptedConfig);
+      }).toThrow();
+    });
 
-        it('should maintain system stability during config errors', () => {
-            reloadConfig();
+    it("should maintain system stability during config errors", () => {
+      reloadConfig();
 
-            const initialYoutubeEnabled = currentConfig.youtube.enabled;
-            expect(initialYoutubeEnabled).toBe(true);
+      const initialYoutubeEnabled = currentConfig.youtube.enabled;
+      expect(initialYoutubeEnabled).toBe(true);
 
-            expect(currentConfig.youtube.enabled).toBe(true);
-            expect(currentConfig.youtube.username).toBe('TestChannel');
+      expect(currentConfig.youtube.enabled).toBe(true);
+      expect(currentConfig.youtube.username).toBe("TestChannel");
 
-            expect(currentConfig.general.debugEnabled).toBe(true);
-            expect(currentConfig.obs.enabled).toBe(true);
-        });
+      expect(currentConfig.general.debugEnabled).toBe(true);
+      expect(currentConfig.obs.enabled).toBe(true);
+    });
 
-        it('should handle invalid boolean values gracefully', () => {
-            const invalidBooleanConfig = `
+    it("should handle invalid boolean values gracefully", () => {
+      const invalidBooleanConfig = `
 ${testConfigContent}
 
 [general]
@@ -544,18 +552,18 @@ notificationPlatformLogoTikTok = tiktok-img
 [commands]
 enabled = notabool
 `;
-            reloadConfig(invalidBooleanConfig);
+      reloadConfig(invalidBooleanConfig);
 
-            expect(currentConfig.general.debugEnabled).toBe(false);
-            expect(currentConfig.general.messagesEnabled).toBe(true);
-            expect(currentConfig.obs.ttsEnabled).toBe(false);
-            expect(currentConfig.obs.enabled).toBe(false);
-        });
+      expect(currentConfig.general.debugEnabled).toBe(false);
+      expect(currentConfig.general.messagesEnabled).toBe(true);
+      expect(currentConfig.obs.ttsEnabled).toBe(false);
+      expect(currentConfig.obs.enabled).toBe(false);
     });
+  });
 
-    describe('User Experience Configuration Behavior', () => {
-        it('should deliver notification settings that affect user-visible behavior', () => {
-            const notificationConfig = `
+  describe("User Experience Configuration Behavior", () => {
+    it("should deliver notification settings that affect user-visible behavior", () => {
+      const notificationConfig = `
 ${testConfigContent}
 
 [youtube]
@@ -568,20 +576,20 @@ messagesEnabled = true
 giftsEnabled = false
 followsEnabled = true
 `;
-            reloadConfig(notificationConfig);
+      reloadConfig(notificationConfig);
 
-            const youtubeConfig = currentConfig.youtube;
+      const youtubeConfig = currentConfig.youtube;
 
-            expect(youtubeConfig.messagesEnabled).toBe(true);
-            expect(youtubeConfig.giftsEnabled).toBe(false);
-            expect(youtubeConfig.followsEnabled).toBe(true);
-            expect(youtubeConfig.apiKey).toBeUndefined();
+      expect(youtubeConfig.messagesEnabled).toBe(true);
+      expect(youtubeConfig.giftsEnabled).toBe(false);
+      expect(youtubeConfig.followsEnabled).toBe(true);
+      expect(youtubeConfig.apiKey).toBeUndefined();
 
-            expectNoTechnicalArtifacts(youtubeConfig.username);
-        });
+      expectNoTechnicalArtifacts(youtubeConfig.username);
+    });
 
-        it('should handle TTS configuration that affects speech behavior', () => {
-            const ttsConfig = `
+    it("should handle TTS configuration that affects speech behavior", () => {
+      const ttsConfig = `
 ${testConfigContent}
 
 [general]
@@ -592,14 +600,14 @@ maxMessageLength = 500
 [obs]
 ttsEnabled = true
 `;
-            reloadConfig(ttsConfig);
+      reloadConfig(ttsConfig);
 
-            expect(currentConfig.obs.ttsEnabled).toBe(true);
-            expect(currentConfig.general.messagesEnabled).toBe(true);
-        });
+      expect(currentConfig.obs.ttsEnabled).toBe(true);
+      expect(currentConfig.general.messagesEnabled).toBe(true);
+    });
 
-        it('should provide OBS integration settings that affect visual output', () => {
-            const obsConfig = `
+    it("should provide OBS integration settings that affect visual output", () => {
+      const obsConfig = `
 ${testConfigContent}
 
 [obs]
@@ -615,26 +623,26 @@ notificationPlatformLogoTwitch = twitch-img
 notificationPlatformLogoYouTube = youtube-img
 notificationPlatformLogoTikTok = tiktok-img
 `;
-            reloadConfig(obsConfig);
+      reloadConfig(obsConfig);
 
-            const obsSettings = currentConfig.obs;
-            const notificationText = obsSettings.notificationTxt;
+      const obsSettings = currentConfig.obs;
+      const notificationText = obsSettings.notificationTxt;
 
-            expect(obsSettings.enabled).toBe(true);
-            expect(obsSettings.address).toBe('ws://localhost:4455');
-            expect(notificationText).toBe('Live Notifications');
-            expect(notificationText).toBeDefined();
+      expect(obsSettings.enabled).toBe(true);
+      expect(obsSettings.address).toBe("ws://localhost:4455");
+      expect(notificationText).toBe("Live Notifications");
+      expect(notificationText).toBeDefined();
 
-            if (notificationText === undefined) {
-                throw new Error('Expected OBS notification text to be defined');
-            }
+      if (notificationText === undefined) {
+        throw new Error("Expected OBS notification text to be defined");
+      }
 
-            expectNoTechnicalArtifacts(notificationText);
-        });
+      expectNoTechnicalArtifacts(notificationText);
+    });
 
-        it('should handle platform username configuration for user identification', () => {
-            const originalTwitchClientId = process.env.TWITCH_CLIENT_ID;
-            const internationalConfig = `
+    it("should handle platform username configuration for user identification", () => {
+      const originalTwitchClientId = process.env.TWITCH_CLIENT_ID;
+      const internationalConfig = `
 ${testConfigContent}
 
 [youtube]
@@ -659,35 +667,34 @@ cheermoteDefaultType = cheer
 enabled = true
 username = 李小明直播
 `;
-            try {
-                process.env.TWITCH_CLIENT_ID = 'test-env-client-id';
-                reloadConfig(internationalConfig);
+      try {
+        process.env.TWITCH_CLIENT_ID = "test-env-client-id";
+        reloadConfig(internationalConfig);
 
-                const youtubeUsername = currentConfig.youtube.username;
-                const twitchUsername = currentConfig.twitch.username;
-                const tiktokUsername = currentConfig.tiktok.username;
+        const youtubeUsername = currentConfig.youtube.username;
+        const twitchUsername = currentConfig.twitch.username;
+        const tiktokUsername = currentConfig.tiktok.username;
 
-                expect(youtubeUsername).toBe('김철수_Gaming');
-                expect(twitchUsername).toBe('José_Streamer');
-                expect(tiktokUsername).toBe('李小明直播');
+        expect(youtubeUsername).toBe("김철수_Gaming");
+        expect(twitchUsername).toBe("José_Streamer");
+        expect(tiktokUsername).toBe("李小明直播");
 
-                expectNoTechnicalArtifacts(youtubeUsername);
-                expectNoTechnicalArtifacts(twitchUsername);
-                expectNoTechnicalArtifacts(tiktokUsername);
-            } finally {
-                if (originalTwitchClientId === undefined) {
-                    delete process.env.TWITCH_CLIENT_ID;
-                } else {
-                    process.env.TWITCH_CLIENT_ID = originalTwitchClientId;
-                }
-            }
-        });
-
+        expectNoTechnicalArtifacts(youtubeUsername);
+        expectNoTechnicalArtifacts(twitchUsername);
+        expectNoTechnicalArtifacts(tiktokUsername);
+      } finally {
+        if (originalTwitchClientId === undefined) {
+          delete process.env.TWITCH_CLIENT_ID;
+        } else {
+          process.env.TWITCH_CLIENT_ID = originalTwitchClientId;
+        }
+      }
     });
+  });
 
-    describe('Configuration Schema Validation Behavior', () => {
-        it('should provide guidance for incomplete platform configuration', () => {
-            const incompleteConfig = `
+  describe("Configuration Schema Validation Behavior", () => {
+    it("should provide guidance for incomplete platform configuration", () => {
+      const incompleteConfig = `
 ${testConfigContent}
 
 [youtube]
@@ -697,13 +704,13 @@ innertubeInstanceTtlMs = 300000
 innertubeMinTtlMs = 60000
 userAgents = test-agent-1|test-agent-2
 `;
-            expect(() => {
-                reloadConfig(incompleteConfig);
-            }).toThrow(/YouTube.*username/i);
-        });
+      expect(() => {
+        reloadConfig(incompleteConfig);
+      }).toThrow(/YouTube.*username/i);
+    });
 
-        it('should handle numeric configuration values for timing behavior', () => {
-            const timingConfig = `
+    it("should handle numeric configuration values for timing behavior", () => {
+      const timingConfig = `
 ${testConfigContent}
 
 [general]
@@ -719,18 +726,19 @@ notificationClearDelay = 500
 [cooldowns]
 cmdCooldown = 30
 `;
-            reloadConfig(timingConfig);
+      reloadConfig(timingConfig);
 
-            const cmdCooldown = currentConfig.cooldowns.cmdCooldownMs;
-            const pollingInterval = currentConfig.general.viewerCountPollingIntervalMs;
+      const cmdCooldown = currentConfig.cooldowns.cmdCooldownMs;
+      const pollingInterval =
+        currentConfig.general.viewerCountPollingIntervalMs;
 
-            expect(cmdCooldown).toBe(30000);
-            expect(pollingInterval).toBe(45000);
+      expect(cmdCooldown).toBe(30000);
+      expect(pollingInterval).toBe(45000);
 
-            expect(cmdCooldown).toBeGreaterThan(1000);
-            expect(cmdCooldown).toBeLessThan(300000);
-            expect(pollingInterval).toBeGreaterThan(5000);
-            expect(pollingInterval).toBeLessThan(600000);
-        });
+      expect(cmdCooldown).toBeGreaterThan(1000);
+      expect(cmdCooldown).toBeLessThan(300000);
+      expect(pollingInterval).toBeGreaterThan(5000);
+      expect(pollingInterval).toBeLessThan(600000);
     });
+  });
 });

@@ -1,187 +1,192 @@
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { createRequire } from 'node:module';
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import fs from "node:fs";
+import { createRequire } from "node:module";
 
-import { createMockFn, restoreAllMocks } from '../../helpers/bun-mock-utils';
+import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
 
 const nodeRequire: NodeJS.Require = createRequire(import.meta.url);
 
 type FsLike = {
-    readFileSync: (...args: unknown[]) => unknown;
-    existsSync: (...args: unknown[]) => boolean;
+  readFileSync: (...args: unknown[]) => unknown;
+  existsSync: (...args: unknown[]) => boolean;
 };
 
 type ConfigShape = {
-    obs: {
-        chatMsgScene: string;
-        ttsEnabled: boolean;
-        chatMsgTxt: string;
-    };
+  obs: {
+    chatMsgScene: string;
+    ttsEnabled: boolean;
+    chatMsgTxt: string;
+  };
 };
 
-const fs = nodeRequire('fs') as FsLike;
-
-let originalReadFileSync: FsLike['readFileSync'];
-let originalExistsSync: FsLike['existsSync'];
+let originalReadFileSync: typeof fs.readFileSync;
+let originalExistsSync: typeof fs.existsSync;
 let originalConfigPath: string | undefined;
 
-const CONFIG_MODULE_PATH = nodeRequire.resolve('../../../src/core/config');
+const CONFIG_MODULE_PATH = nodeRequire.resolve("../../../src/core/config");
 
 function resetConfigModule() {
-    delete nodeRequire.cache[CONFIG_MODULE_PATH];
+  delete nodeRequire.cache[CONFIG_MODULE_PATH];
 }
 
 function loadFreshConfig() {
+  resetConfigModule();
+  const { config } = nodeRequire("../../../src/core/config") as {
+    config: ConfigShape;
+  };
+  return { config };
+}
+
+function buildMinimalConfig(
+  overrides: Record<string, Record<string, string>> = {},
+) {
+  const base = {
+    general: {
+      debugEnabled: "false",
+      viewerCountPollingInterval: "60",
+      maxMessageLength: "500",
+    },
+    obs: {
+      enabled: "false",
+      chatMsgScene: "__smoke_scene__",
+      chatMsgTxt: "smoke chat txt",
+      chatMsgGroup: "",
+      ttsEnabled: "false",
+      notificationTxt: "smoke notification txt",
+      notificationScene: "smoke notification scene",
+      notificationMsgGroup: "smoke notification group",
+      chatPlatformLogoTwitch: "smoke chat twitch",
+      chatPlatformLogoYouTube: "smoke chat youtube",
+      chatPlatformLogoTikTok: "smoke chat tiktok",
+      notificationPlatformLogoTwitch: "smoke notification twitch",
+      notificationPlatformLogoYouTube: "smoke notification youtube",
+      notificationPlatformLogoTikTok: "smoke notification tiktok",
+      connectionTimeoutMs: "1000",
+    },
+    timing: {
+      fadeDuration: "250",
+      notificationClearDelay: "1000",
+      transitionDelay: "250",
+      chatMessageDuration: "3000",
+    },
+    youtube: {
+      enabled: "false",
+      innertubeInstanceTtlMs: "60000",
+      innertubeMinTtlMs: "30000",
+      userAgents: "smoke-agent",
+      streamDetectionMethod: "api",
+    },
+    handcam: {
+      enabled: "false",
+      sourceName: "smoke handcam",
+      glowFilterName: "smoke glow",
+      maxSize: "50",
+      rampUpDuration: "0.5",
+      holdDuration: "1",
+      rampDownDuration: "0.5",
+      totalSteps: "10",
+      easingEnabled: "true",
+    },
+    cooldowns: {
+      defaultCooldown: "10",
+      heavyCommandCooldown: "60",
+      heavyCommandThreshold: "3",
+      heavyCommandWindow: "60",
+      maxEntries: "100",
+    },
+    twitch: {
+      enabled: "false",
+      cheermoteDefaultGiftCount: "1",
+      cheermoteGenericCheerName: "cheer",
+      cheermoteGenericBitsName: "bits",
+      cheermoteUnknownUserIdPrefix: "unknown",
+      cheermoteDefaultType: "bits",
+    },
+    commands: {
+      enabled: "false",
+    },
+  };
+
+  const merged = {
+    general: { ...base.general, ...(overrides.general || {}) },
+    obs: { ...base.obs, ...(overrides.obs || {}) },
+    timing: { ...base.timing, ...(overrides.timing || {}) },
+    youtube: { ...base.youtube, ...(overrides.youtube || {}) },
+    handcam: { ...base.handcam, ...(overrides.handcam || {}) },
+    cooldowns: { ...base.cooldowns, ...(overrides.cooldowns || {}) },
+    twitch: { ...base.twitch, ...(overrides.twitch || {}) },
+    commands: { ...base.commands, ...(overrides.commands || {}) },
+  };
+
+  const lines: string[] = [];
+  Object.entries(merged).forEach(([section, values]) => {
+    lines.push(`[${section}]`);
+    Object.entries(values).forEach(([key, value]) => {
+      lines.push(`${key}=${value}`);
+    });
+    lines.push("");
+  });
+
+  return lines.join("\n");
+}
+
+describe("Config path override", () => {
+  beforeEach(() => {
+    originalReadFileSync = fs.readFileSync;
+    originalExistsSync = fs.existsSync;
+    originalConfigPath = process.env.CHAT_BOT_CONFIG_PATH;
+  });
+
+  afterEach(() => {
+    fs.readFileSync = originalReadFileSync;
+    fs.existsSync = originalExistsSync;
+    restoreAllMocks();
     resetConfigModule();
-    const { config } = nodeRequire('../../../src/core/config') as {
-        config: ConfigShape;
-    };
-    return { config };
-}
+    process.env.CHAT_BOT_CONFIG_PATH = originalConfigPath;
+  });
 
-function buildMinimalConfig(overrides: Record<string, Record<string, string>> = {}) {
-    const base = {
-        general: {
-            debugEnabled: 'false',
-            viewerCountPollingInterval: '60',
-            maxMessageLength: '500'
-        },
-        obs: {
-            enabled: 'false',
-            chatMsgScene: '__smoke_scene__',
-            chatMsgTxt: 'smoke chat txt',
-            chatMsgGroup: '',
-            ttsEnabled: 'false',
-            notificationTxt: 'smoke notification txt',
-            notificationScene: 'smoke notification scene',
-            notificationMsgGroup: 'smoke notification group',
-            chatPlatformLogoTwitch: 'smoke chat twitch',
-            chatPlatformLogoYouTube: 'smoke chat youtube',
-            chatPlatformLogoTikTok: 'smoke chat tiktok',
-            notificationPlatformLogoTwitch: 'smoke notification twitch',
-            notificationPlatformLogoYouTube: 'smoke notification youtube',
-            notificationPlatformLogoTikTok: 'smoke notification tiktok',
-            connectionTimeoutMs: '1000'
-        },
-        timing: {
-            fadeDuration: '250',
-            notificationClearDelay: '1000',
-            transitionDelay: '250',
-            chatMessageDuration: '3000'
-        },
-        youtube: {
-            enabled: 'false',
-            innertubeInstanceTtlMs: '60000',
-            innertubeMinTtlMs: '30000',
-            userAgents: 'smoke-agent',
-            streamDetectionMethod: 'api'
-        },
-        handcam: {
-            enabled: 'false',
-            sourceName: 'smoke handcam',
-            glowFilterName: 'smoke glow',
-            maxSize: '50',
-            rampUpDuration: '0.5',
-            holdDuration: '1',
-            rampDownDuration: '0.5',
-            totalSteps: '10',
-            easingEnabled: 'true'
-        },
-        cooldowns: {
-            defaultCooldown: '10',
-            heavyCommandCooldown: '60',
-            heavyCommandThreshold: '3',
-            heavyCommandWindow: '60',
-            maxEntries: '100'
-        },
-        twitch: {
-            enabled: 'false',
-            cheermoteDefaultGiftCount: '1',
-            cheermoteGenericCheerName: 'cheer',
-            cheermoteGenericBitsName: 'bits',
-            cheermoteUnknownUserIdPrefix: 'unknown',
-            cheermoteDefaultType: 'bits'
-        },
-        commands: {
-            enabled: 'false'
-        }
-    };
+  it("loads config from CHAT_BOT_CONFIG_PATH when set", () => {
+    const uniqueScene = "__smoke_scene_override__";
+    const configContent = buildMinimalConfig({
+      obs: { chatMsgScene: uniqueScene },
+    });
+    const testConfigPath = "/test/override/config.ini";
 
-    const merged = {
-        general: { ...base.general, ...(overrides.general || {}) },
-        obs: { ...base.obs, ...(overrides.obs || {}) },
-        timing: { ...base.timing, ...(overrides.timing || {}) },
-        youtube: { ...base.youtube, ...(overrides.youtube || {}) },
-        handcam: { ...base.handcam, ...(overrides.handcam || {}) },
-        cooldowns: { ...base.cooldowns, ...(overrides.cooldowns || {}) },
-        twitch: { ...base.twitch, ...(overrides.twitch || {}) },
-        commands: { ...base.commands, ...(overrides.commands || {}) }
-    };
-
-    const lines: string[] = [];
-    Object.entries(merged).forEach(([section, values]) => {
-        lines.push(`[${section}]`);
-        Object.entries(values).forEach(([key, value]) => {
-            lines.push(`${key}=${value}`);
-        });
-        lines.push('');
+    fs.existsSync = createMockFn(
+      (filePath) => filePath === testConfigPath,
+    ) as FsLike["existsSync"];
+    fs.readFileSync = createMockFn((filePath) => {
+      if (filePath === testConfigPath) return configContent;
+      throw new Error(`ENOENT: no such file: ${filePath}`);
     });
 
-    return lines.join('\n');
-}
+    process.env.CHAT_BOT_CONFIG_PATH = testConfigPath;
+    const { config } = loadFreshConfig();
 
-describe('Config path override', () => {
-    beforeEach(() => {
-        originalReadFileSync = fs.readFileSync;
-        originalExistsSync = fs.existsSync;
-        originalConfigPath = process.env.CHAT_BOT_CONFIG_PATH;
+    expect(config.obs.chatMsgScene).toBe(uniqueScene);
+  });
+
+  it("provides startup-critical defaults when values are missing", () => {
+    const configContent = buildMinimalConfig({
+      obs: { chatMsgScene: "__smoke_scene_defaults__" },
+    });
+    const testConfigPath = "/test/defaults/config.ini";
+
+    fs.existsSync = createMockFn(
+      (filePath) => filePath === testConfigPath,
+    ) as FsLike["existsSync"];
+    fs.readFileSync = createMockFn((filePath) => {
+      if (filePath === testConfigPath) return configContent;
+      throw new Error(`ENOENT: no such file: ${filePath}`);
     });
 
-    afterEach(() => {
-        fs.readFileSync = originalReadFileSync;
-        fs.existsSync = originalExistsSync;
-        restoreAllMocks();
-        resetConfigModule();
-        process.env.CHAT_BOT_CONFIG_PATH = originalConfigPath;
-    });
+    process.env.CHAT_BOT_CONFIG_PATH = testConfigPath;
+    const { config } = loadFreshConfig();
 
-    it('loads config from CHAT_BOT_CONFIG_PATH when set', () => {
-        const uniqueScene = '__smoke_scene_override__';
-        const configContent = buildMinimalConfig({
-            obs: { chatMsgScene: uniqueScene }
-        });
-        const testConfigPath = '/test/override/config.ini';
-
-        fs.existsSync = createMockFn((filePath) => filePath === testConfigPath) as FsLike['existsSync'];
-        fs.readFileSync = createMockFn((filePath) => {
-            if (filePath === testConfigPath) return configContent;
-            throw new Error(`ENOENT: no such file: ${filePath}`);
-        });
-
-        process.env.CHAT_BOT_CONFIG_PATH = testConfigPath;
-        const { config } = loadFreshConfig();
-
-        expect(config.obs.chatMsgScene).toBe(uniqueScene);
-    });
-
-    it('provides startup-critical defaults when values are missing', () => {
-        const configContent = buildMinimalConfig({
-            obs: { chatMsgScene: '__smoke_scene_defaults__' }
-        });
-        const testConfigPath = '/test/defaults/config.ini';
-
-        fs.existsSync = createMockFn((filePath) => filePath === testConfigPath) as FsLike['existsSync'];
-        fs.readFileSync = createMockFn((filePath) => {
-            if (filePath === testConfigPath) return configContent;
-            throw new Error(`ENOENT: no such file: ${filePath}`);
-        });
-
-        process.env.CHAT_BOT_CONFIG_PATH = testConfigPath;
-        const { config } = loadFreshConfig();
-
-        expect(typeof config.obs.ttsEnabled).toBe('boolean');
-        expect(typeof config.obs.chatMsgTxt).toBe('string');
-        expect(config.obs.chatMsgTxt.length).toBeGreaterThan(0);
-        expect(typeof config.obs.chatMsgScene).toBe('string');
-        expect(config.obs.chatMsgScene.length).toBeGreaterThan(0);
-    });
+    expect(typeof config.obs.ttsEnabled).toBe("boolean");
+    expect(typeof config.obs.chatMsgTxt).toBe("string");
+    expect(config.obs.chatMsgTxt.length).toBeGreaterThan(0);
+    expect(typeof config.obs.chatMsgScene).toBe("string");
+    expect(config.obs.chatMsgScene.length).toBeGreaterThan(0);
+  });
 });

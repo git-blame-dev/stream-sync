@@ -1,129 +1,158 @@
+import { describe, test, expect } from "bun:test";
 
-const { describe, test, expect } = require('bun:test');
-const { createMockFn } = require('../../helpers/bun-mock-utils');
-const { createConfigFixture } = require('../../helpers/config-fixture');
-
-const { createTestUser, TEST_TIMEOUTS } = require('../../helpers/test-setup');
-const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
-const { PlatformEventRouter } = require('../../../src/services/PlatformEventRouter.ts');
-const { generateLogMessage } = require('../../helpers/notification-test-utils');
-const { PlatformEvents } = require('../../../src/interfaces/PlatformEvents');
-const constants = require('../../../src/core/constants');
-export {};
+import { createMockFn } from "../../helpers/bun-mock-utils";
+import { createConfigFixture } from "../../helpers/config-fixture";
+import { setupAutomatedCleanup } from "../../helpers/mock-lifecycle";
+import { generateLogMessage } from "../../helpers/notification-test-utils";
+import { createTestUser, TEST_TIMEOUTS } from "../../helpers/test-setup";
+import * as constants from "../../../src/core/constants";
+import { PlatformEvents } from "../../../src/interfaces/PlatformEvents";
+import { PlatformEventRouter } from "../../../src/services/PlatformEventRouter.ts";
 
 setupAutomatedCleanup({
-    clearCallsBeforeEach: true,
-    validateAfterCleanup: true,
-    logPerformanceMetrics: true
+  clearCallsBeforeEach: true,
+  validateAfterCleanup: true,
+  logPerformanceMetrics: true,
 });
 
-describe('Terminology Consistency', () => {
-    const testOptions = { timeout: TEST_TIMEOUTS.UNIT };
+describe("Terminology Consistency", () => {
+  const testOptions = { timeout: TEST_TIMEOUTS.UNIT };
 
-    const buildRouterHarness = () => {
-        const handled = [];
-        const runtime = {
-            handlePaypiggyNotification: async (platform, username, data) => {
-                handled.push({ platform, username, data });
-            }
-        };
-        const eventBus = { subscribe: createMockFn(() => () => {}) };
-        const notificationManager = { handleNotification: createMockFn(async () => true) };
-        const config = createConfigFixture({ general: { paypiggiesEnabled: true } });
-        const logger = {
-            debug: createMockFn(),
-            info: createMockFn(),
-            warn: createMockFn(),
-            error: createMockFn()
-        };
-        const router = new PlatformEventRouter({
-            eventBus,
-            runtime,
-            notificationManager,
-            config,
-            logger
-        });
-        return { handled, router };
+  const buildRouterHarness = () => {
+    const handled = [];
+    const runtime = {
+      handlePaypiggyNotification: async (platform, username, data) => {
+        handled.push({ platform, username, data });
+      },
     };
-
-    describe('Event routing', () => {
-        test('YouTube paypiggy routes through PlatformEventRouter', async () => {
-            const { handled, router } = buildRouterHarness();
-            const user = createTestUser({ username: 'TestMember', platform: 'youtube' });
-            const membershipData = {
-                username: user.username,
-                userId: 'user-1',
-                timestamp: '2024-01-01T00:00:00Z'
-            };
-
-            await router.routeEvent({
-                platform: 'youtube',
-                type: 'platform:paypiggy',
-                data: membershipData
-            });
-
-            expect(handled).toHaveLength(1);
-            expect(handled[0].platform).toBe('youtube');
-            expect(handled[0].username).toBe(user.username);
-            expect(handled[0].data.userId).toBe('user-1');
-            expect(handled[0].data.platform).toBe('youtube');
-        }, testOptions);
-
-        test('Twitch subscription routes through PlatformEventRouter', async () => {
-            const { handled, router } = buildRouterHarness();
-            const user = createTestUser({ username: 'SubUser', platform: 'twitch' });
-            const subscriptionData = {
-                username: user.username,
-                userId: 'user-2',
-                timestamp: '2024-01-01T00:00:00Z'
-            };
-
-            await router.routeEvent({
-                platform: 'twitch',
-                type: 'platform:paypiggy',
-                data: subscriptionData
-            });
-
-            expect(handled).toHaveLength(1);
-            expect(handled[0].platform).toBe('twitch');
-            expect(handled[0].username).toBe(user.username);
-            expect(handled[0].data.userId).toBe('user-2');
-            expect(handled[0].data.platform).toBe('twitch');
-        }, testOptions);
+    const eventBus = { subscribe: createMockFn(() => () => {}) };
+    const notificationManager = {
+      handleNotification: createMockFn(async () => true),
+    };
+    const config = createConfigFixture({
+      general: { paypiggiesEnabled: true },
     });
-
-    describe('Log terminology', () => {
-        test('YouTube membership log uses membership terminology', () => {
-            const logMessage = generateLogMessage('platform:paypiggy', {
-                username: 'TestMember',
-                platform: 'youtube',
-                rewardTitle: 'Member'
-            });
-            expect(logMessage).toContain('New member');
-            expect(logMessage).toContain('TestMember');
-        }, testOptions);
-
-        test('Twitch subscription log uses "subscription"', () => {
-            const logMessage = generateLogMessage('platform:paypiggy', {
-                username: 'TwitchSub',
-                platform: 'twitch',
-                tier: 'Tier1',
-                months: 3
-            });
-            expect(logMessage.toLowerCase()).toContain('subscriber');
-            expect(logMessage).toContain('TwitchSub');
-        }, testOptions);
+    const logger = {
+      debug: createMockFn(),
+      info: createMockFn(),
+      warn: createMockFn(),
+      error: createMockFn(),
+    };
+    const router = new PlatformEventRouter({
+      eventBus,
+      runtime,
+      notificationManager,
+      config,
+      logger,
     });
+    return { handled, router };
+  };
 
-    describe('Alias removal', () => {
-        test('resubscription aliases are not exposed in configs or priorities', () => {
-            expect(constants.NOTIFICATION_CONFIGS.resub).toBeUndefined();
-            expect(constants.NOTIFICATION_CONFIGS.resubscription).toBeUndefined();
-            expect(constants.PRIORITY_LEVELS.RESUB).toBeUndefined();
-            expect(constants.NOTIFICATION_TYPES).toBeUndefined();
-            expect(PlatformEvents.NOTIFICATION_TYPES.RESUB).toBeUndefined();
-            expect(PlatformEvents.NOTIFICATION_TYPES.RESUBSCRIPTION).toBeUndefined();
-        }, testOptions);
-    });
+  describe("Event routing", () => {
+    test(
+      "YouTube paypiggy routes through PlatformEventRouter",
+      async () => {
+        const { handled, router } = buildRouterHarness();
+        const user = createTestUser({
+          username: "TestMember",
+          platform: "youtube",
+        });
+        const membershipData = {
+          username: user.username,
+          userId: "user-1",
+          timestamp: "2024-01-01T00:00:00Z",
+        };
 
+        await router.routeEvent({
+          platform: "youtube",
+          type: "platform:paypiggy",
+          data: membershipData,
+        });
+
+        expect(handled).toHaveLength(1);
+        expect(handled[0].platform).toBe("youtube");
+        expect(handled[0].username).toBe(user.username);
+        expect(handled[0].data.userId).toBe("user-1");
+        expect(handled[0].data.platform).toBe("youtube");
+      },
+      testOptions,
+    );
+
+    test(
+      "Twitch subscription routes through PlatformEventRouter",
+      async () => {
+        const { handled, router } = buildRouterHarness();
+        const user = createTestUser({
+          username: "SubUser",
+          platform: "twitch",
+        });
+        const subscriptionData = {
+          username: user.username,
+          userId: "user-2",
+          timestamp: "2024-01-01T00:00:00Z",
+        };
+
+        await router.routeEvent({
+          platform: "twitch",
+          type: "platform:paypiggy",
+          data: subscriptionData,
+        });
+
+        expect(handled).toHaveLength(1);
+        expect(handled[0].platform).toBe("twitch");
+        expect(handled[0].username).toBe(user.username);
+        expect(handled[0].data.userId).toBe("user-2");
+        expect(handled[0].data.platform).toBe("twitch");
+      },
+      testOptions,
+    );
+  });
+
+  describe("Log terminology", () => {
+    test(
+      "YouTube membership log uses membership terminology",
+      () => {
+        const logMessage = generateLogMessage("platform:paypiggy", {
+          username: "TestMember",
+          platform: "youtube",
+          rewardTitle: "Member",
+        });
+        expect(logMessage).toContain("New member");
+        expect(logMessage).toContain("TestMember");
+      },
+      testOptions,
+    );
+
+    test(
+      'Twitch subscription log uses "subscription"',
+      () => {
+        const logMessage = generateLogMessage("platform:paypiggy", {
+          username: "TwitchSub",
+          platform: "twitch",
+          tier: "Tier1",
+          months: 3,
+        });
+        expect(logMessage.toLowerCase()).toContain("subscriber");
+        expect(logMessage).toContain("TwitchSub");
+      },
+      testOptions,
+    );
+  });
+
+  describe("Alias removal", () => {
+    test(
+      "resubscription aliases are not exposed in configs or priorities",
+      () => {
+        expect(constants.NOTIFICATION_CONFIGS.resub).toBeUndefined();
+        expect(constants.NOTIFICATION_CONFIGS.resubscription).toBeUndefined();
+        expect(constants.PRIORITY_LEVELS.RESUB).toBeUndefined();
+        expect(constants.NOTIFICATION_TYPES).toBeUndefined();
+        expect(PlatformEvents.NOTIFICATION_TYPES.RESUB).toBeUndefined();
+        expect(
+          PlatformEvents.NOTIFICATION_TYPES.RESUBSCRIPTION,
+        ).toBeUndefined();
+      },
+      testOptions,
+    );
+  });
 });
