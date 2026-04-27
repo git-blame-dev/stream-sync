@@ -1,412 +1,479 @@
-const { describe, expect, beforeEach, afterEach, it } = require('bun:test');
-export {};
-const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { noOpLogger } = require('../../helpers/mock-factories');
-const { createConfigFixture } = require('../../helpers/config-fixture');
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
+import { noOpLogger } from "../../helpers/mock-factories";
+import { createConfigFixture } from "../../helpers/config-fixture";
 
-const { initializeTestLogging } = require('../../helpers/test-setup');
+import { initializeTestLogging } from "../../helpers/test-setup";
 
 initializeTestLogging();
 
-const NotificationManager = require('../../../src/notifications/NotificationManager');
+import NotificationManager from "../../../src/notifications/NotificationManager";
 
 type DisplayQueueMock = {
-    addItem: ReturnType<typeof createMockFn>;
-    getQueueLength: ReturnType<typeof createMockFn>;
+  addItem: ReturnType<typeof createMockFn>;
+  getQueueLength: ReturnType<typeof createMockFn>;
 };
 
 type VfxCommandServiceMock = {
-    executeCommand: ReturnType<typeof createMockFn>;
-    getVFXConfig: ReturnType<typeof createMockFn>;
+  executeCommand: ReturnType<typeof createMockFn>;
+  getVFXConfig: ReturnType<typeof createMockFn>;
 };
 
 type UserTrackingServiceMock = {
-    isFirstMessage: ReturnType<typeof createMockFn>;
-    trackUser: ReturnType<typeof createMockFn>;
+  isFirstMessage: ReturnType<typeof createMockFn>;
+  trackUser: ReturnType<typeof createMockFn>;
 };
 
 type EventBusMock = {
-    emit: ReturnType<typeof createMockFn>;
-    on: ReturnType<typeof createMockFn>;
-    off: ReturnType<typeof createMockFn>;
+  emit: ReturnType<typeof createMockFn>;
+  on: ReturnType<typeof createMockFn>;
+  off: ReturnType<typeof createMockFn>;
 };
 
 type NotificationManagerLike = {
-    handleNotification: (...args: unknown[]) => Promise<{ success?: boolean }>;
-    donationSpamDetector?: { destroy?: () => void };
-    eventBus?: unknown;
-    config?: unknown;
-    vfxCommandService?: unknown;
-    userTrackingService?: unknown;
+  handleNotification: (...args: unknown[]) => Promise<{ success?: boolean }>;
+  donationSpamDetector?: { destroy?: () => void };
+  eventBus?: unknown;
+  config?: unknown;
+  vfxCommandService?: unknown;
+  userTrackingService?: unknown;
 };
 
-describe('NotificationManager Service Dependency Injection - Modernized', () => {
-    let mockDisplayQueue: DisplayQueueMock;
-    let mockConfig: ReturnType<typeof createConfigFixture>;
-    let mockVFXCommandService: VfxCommandServiceMock;
-    let mockUserTrackingService: UserTrackingServiceMock;
-    let mockEventBus: EventBusMock;
-    let notificationManager!: NotificationManagerLike;
+describe("NotificationManager Service Dependency Injection - Modernized", () => {
+  let mockDisplayQueue: DisplayQueueMock;
+  let mockConfig: ReturnType<typeof createConfigFixture>;
+  let mockVFXCommandService: VfxCommandServiceMock;
+  let mockUserTrackingService: UserTrackingServiceMock;
+  let mockEventBus: EventBusMock;
+  let notificationManager!: NotificationManagerLike;
 
-    beforeEach(() => {
-        mockDisplayQueue = {
-            addItem: createMockFn(),
-            getQueueLength: createMockFn().mockReturnValue(0)
-        };
+  beforeEach(() => {
+    mockDisplayQueue = {
+      addItem: createMockFn(),
+      getQueueLength: createMockFn().mockReturnValue(0),
+    };
 
-        mockConfig = createConfigFixture({
-            general: {
-                ttsEnabled: true,
-                debugEnabled: false,
-                followsEnabled: true,
-                giftsEnabled: true,
-                paypiggiesEnabled: true
-            }
-        });
-
-        mockVFXCommandService = {
-            executeCommand: createMockFn().mockResolvedValue({ success: true }),
-            getVFXConfig: createMockFn().mockResolvedValue({ filename: 'test.mp4' })
-        };
-
-        mockUserTrackingService = {
-            isFirstMessage: createMockFn().mockResolvedValue(false),
-            trackUser: createMockFn()
-        };
-
-        mockEventBus = {
-            emit: createMockFn(),
-            on: createMockFn(),
-            off: createMockFn()
-        };
+    mockConfig = createConfigFixture({
+      general: {
+        ttsEnabled: true,
+        debugEnabled: false,
+        followsEnabled: true,
+        giftsEnabled: true,
+        paypiggiesEnabled: true,
+      },
     });
 
-    afterEach(() => {
-        restoreAllMocks();
-        // Clean up any notification manager instances to prevent hanging tests
-        if (notificationManager) {
-            // Clean up spam detection intervals too
-            if (notificationManager.donationSpamDetector && notificationManager.donationSpamDetector.destroy) {
-                notificationManager.donationSpamDetector.destroy();
-            }
-        }
+    mockVFXCommandService = {
+      executeCommand: createMockFn().mockResolvedValue({ success: true }),
+      getVFXConfig: createMockFn().mockResolvedValue({ filename: "test.mp4" }),
+    };
+
+    mockUserTrackingService = {
+      isFirstMessage: createMockFn().mockResolvedValue(false),
+      trackUser: createMockFn(),
+    };
+
+    mockEventBus = {
+      emit: createMockFn(),
+      on: createMockFn(),
+      off: createMockFn(),
+    };
+  });
+
+  afterEach(() => {
+    restoreAllMocks();
+    // Clean up any notification manager instances to prevent hanging tests
+    if (notificationManager) {
+      // Clean up spam detection intervals too
+      if (
+        notificationManager.donationSpamDetector &&
+        notificationManager.donationSpamDetector.destroy
+      ) {
+        notificationManager.donationSpamDetector.destroy();
+      }
+    }
+  });
+
+  describe("Constructor Service Injection", () => {
+    it("should initialize with minimal required dependencies", () => {
+      const mockEventBus = {
+        emit: createMockFn(),
+        on: createMockFn(),
+        off: createMockFn(),
+      };
+      notificationManager = new NotificationManager({
+        displayQueue: mockDisplayQueue,
+        logger: noOpLogger,
+        eventBus: mockEventBus,
+        constants: require("../../../src/core/constants"),
+        textProcessing: { formatChatMessage: createMockFn() },
+        obsGoals: { processDonationGoal: createMockFn() },
+        config: mockConfig,
+      });
+
+      expect(notificationManager).toBeDefined();
+      expect(typeof notificationManager.handleNotification).toBe("function");
     });
 
-    describe('Constructor Service Injection', () => {
-        it('should initialize with minimal required dependencies', () => {
-            const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
-            notificationManager = new NotificationManager({
-                displayQueue: mockDisplayQueue,
-                logger: noOpLogger,
-                eventBus: mockEventBus,
-                constants: require('../../../src/core/constants'),
-                textProcessing: { formatChatMessage: createMockFn() },
-                obsGoals: { processDonationGoal: createMockFn() },
-                config: mockConfig
-            });
+    it("should accept all service dependencies via constructor", () => {
+      notificationManager = new NotificationManager({
+        displayQueue: mockDisplayQueue,
+        logger: noOpLogger,
+        eventBus: mockEventBus,
+        constants: require("../../../src/core/constants"),
+        textProcessing: { formatChatMessage: createMockFn() },
+        obsGoals: { processDonationGoal: createMockFn() },
+        config: mockConfig,
+        vfxCommandService: mockVFXCommandService,
 
-            expect(notificationManager).toBeDefined();
-            expect(typeof notificationManager.handleNotification).toBe('function');
-        });
+        userTrackingService: mockUserTrackingService,
+      });
 
-        it('should accept all service dependencies via constructor', () => {
-            notificationManager = new NotificationManager({
-                displayQueue: mockDisplayQueue,
-                logger: noOpLogger,
-                eventBus: mockEventBus,
-                constants: require('../../../src/core/constants'),
-                textProcessing: { formatChatMessage: createMockFn() },
-                obsGoals: { processDonationGoal: createMockFn() },
-                config: mockConfig,
-                vfxCommandService: mockVFXCommandService,
-                
-                userTrackingService: mockUserTrackingService
-            });
+      expect(notificationManager.eventBus).toBe(mockEventBus);
+      expect(notificationManager.config).toBe(mockConfig);
+      expect(notificationManager.vfxCommandService).toBe(mockVFXCommandService);
 
-            expect(notificationManager.eventBus).toBe(mockEventBus);
-            expect(notificationManager.config).toBe(mockConfig);
-            expect(notificationManager.vfxCommandService).toBe(mockVFXCommandService);
-            
-            expect(notificationManager.userTrackingService).toBe(mockUserTrackingService);
-        });
-
-        it('should prevent notifications without display system', () => {
-            expect(() => {
-                new NotificationManager({
-                    logger: noOpLogger,
-                    eventBus: mockEventBus,
-                    constants: require('../../../src/core/constants'),
-                    textProcessing: { formatChatMessage: createMockFn() },
-                    obsGoals: { processDonationGoal: createMockFn() },
-                    config: mockConfig
-                });
-            }).toThrow('NotificationManager requires displayQueue dependency');
-        });
-
-        it('should be ready for notifications when fully configured', () => {
-            notificationManager = new NotificationManager({
-                displayQueue: mockDisplayQueue,
-                logger: noOpLogger,
-                eventBus: mockEventBus,
-                constants: require('../../../src/core/constants'),
-                textProcessing: { formatChatMessage: createMockFn() },
-                obsGoals: { processDonationGoal: createMockFn() },
-                config: mockConfig
-            });
-
-            expect(typeof notificationManager.handleNotification).toBe('function');
-        });
+      expect(notificationManager.userTrackingService).toBe(
+        mockUserTrackingService,
+      );
     });
 
-    describe('Required Service Dependencies', () => {
-        it('should require EventBus for event-driven architecture', () => {
-            expect(() => {
-                new NotificationManager({
-                    displayQueue: mockDisplayQueue,
-                    logger: noOpLogger,
-                    constants: require('../../../src/core/constants'),
-                    textProcessing: { formatChatMessage: createMockFn() },
-                    obsGoals: { processDonationGoal: createMockFn() },
-                    config: mockConfig
-                });
-            }).toThrow('NotificationManager requires EventBus dependency');
+    it("should prevent notifications without display system", () => {
+      expect(() => {
+        new NotificationManager({
+          logger: noOpLogger,
+          eventBus: mockEventBus,
+          constants: require("../../../src/core/constants"),
+          textProcessing: { formatChatMessage: createMockFn() },
+          obsGoals: { processDonationGoal: createMockFn() },
+          config: mockConfig,
         });
-
-        it('should require config for notification setup', () => {
-            const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
-            expect(() => {
-                new NotificationManager({
-                    displayQueue: mockDisplayQueue,
-                    logger: noOpLogger,
-                    eventBus: mockEventBus,
-                    constants: require('../../../src/core/constants'),
-                    textProcessing: { formatChatMessage: createMockFn() },
-                    obsGoals: { processDonationGoal: createMockFn() }
-                });
-            }).toThrow('NotificationManager requires config dependency');
-        });
-
-        it('should work without spam detector gracefully', () => {
-            const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
-            notificationManager = new NotificationManager({
-                displayQueue: mockDisplayQueue,
-                logger: noOpLogger,
-                eventBus: mockEventBus,
-                constants: require('../../../src/core/constants'),
-                textProcessing: { formatChatMessage: createMockFn() },
-                obsGoals: { processDonationGoal: createMockFn() },
-                config: mockConfig
-            });
-
-            expect(notificationManager.donationSpamDetector).toBeUndefined();
-        });
-
-        it('should continue processing notifications without VFX services', async () => {
-            const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
-            notificationManager = new NotificationManager({
-                displayQueue: mockDisplayQueue,
-                logger: noOpLogger,
-                eventBus: mockEventBus,
-                constants: require('../../../src/core/constants'),
-                textProcessing: { formatChatMessage: createMockFn() },
-                obsGoals: { processDonationGoal: createMockFn() },
-                config: mockConfig
-            });
-
-            const result = await notificationManager.handleNotification('platform:gift', 'tiktok', {
-                username: 'TestUser',
-                userId: '123',
-                giftType: 'Rose',
-                giftCount: 1,
-                amount: 1,
-                currency: 'coins'
-            });
-
-            expect(result.success).toBe(true);
-        });
+      }).toThrow("NotificationManager requires displayQueue dependency");
     });
 
-    describe('Notification Processing With Services', () => {
-        it('should process notifications with full service integration', async () => {
-            notificationManager = new NotificationManager({
-                displayQueue: mockDisplayQueue,
-                logger: noOpLogger,
-                eventBus: mockEventBus,
-                constants: require('../../../src/core/constants'),
-                textProcessing: { formatChatMessage: createMockFn() },
-                obsGoals: { processDonationGoal: createMockFn() },
-                config: mockConfig,
-                vfxCommandService: mockVFXCommandService,
-                
-                userTrackingService: mockUserTrackingService
-            });
+    it("should be ready for notifications when fully configured", () => {
+      notificationManager = new NotificationManager({
+        displayQueue: mockDisplayQueue,
+        logger: noOpLogger,
+        eventBus: mockEventBus,
+        constants: require("../../../src/core/constants"),
+        textProcessing: { formatChatMessage: createMockFn() },
+        obsGoals: { processDonationGoal: createMockFn() },
+        config: mockConfig,
+      });
 
-            await notificationManager.handleNotification('platform:gift', 'tiktok', {
-                username: 'TestUser',
-                userId: '123',
-                giftType: 'Rose',
-                giftCount: 1,
-                amount: 1,
-                currency: 'coins'
-            });
+      expect(typeof notificationManager.handleNotification).toBe("function");
+    });
+  });
 
-            expect(mockDisplayQueue.addItem).toHaveBeenCalled();
-
-            const addedItem = mockDisplayQueue.addItem.mock.calls[0][0];
-            expect(addedItem).toBeDefined();
-            expect(addedItem.data).toBeDefined();
+  describe("Required Service Dependencies", () => {
+    it("should require EventBus for event-driven architecture", () => {
+      expect(() => {
+        new NotificationManager({
+          displayQueue: mockDisplayQueue,
+          logger: noOpLogger,
+          constants: require("../../../src/core/constants"),
+          textProcessing: { formatChatMessage: createMockFn() },
+          obsGoals: { processDonationGoal: createMockFn() },
+          config: mockConfig,
         });
-
-        it('should display notifications with minimal services', async () => {
-            const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
-            notificationManager = new NotificationManager({
-                displayQueue: mockDisplayQueue,
-                logger: noOpLogger,
-                eventBus: mockEventBus,
-                constants: require('../../../src/core/constants'),
-                textProcessing: { formatChatMessage: createMockFn() },
-                obsGoals: { processDonationGoal: createMockFn() },
-                config: mockConfig,
-                vfxCommandService: mockVFXCommandService,
-                
-                userTrackingService: mockUserTrackingService
-            });
-
-            await notificationManager.handleNotification('platform:gift', 'tiktok', {
-                username: 'TestUser',
-                userId: '123',
-                giftType: 'Rose',
-                giftCount: 1,
-                amount: 1,
-                currency: 'coins'
-            });
-
-            expect(mockDisplayQueue.addItem).toHaveBeenCalled();
-        });
+      }).toThrow("NotificationManager requires EventBus dependency");
     });
 
-    describe('Configuration Loading via plain config', () => {
-        it('should require config instead of relying on defaults', () => {
-            const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
-            expect(() => {
-                new NotificationManager({
-                    displayQueue: mockDisplayQueue,
-                    logger: noOpLogger,
-                    eventBus: mockEventBus,
-                    constants: require('../../../src/core/constants'),
-                    textProcessing: { formatChatMessage: createMockFn() },
-                    obsGoals: { processDonationGoal: createMockFn() }
-                });
-            }).toThrow('NotificationManager requires config dependency');
+    it("should require config for notification setup", () => {
+      const mockEventBus = {
+        emit: createMockFn(),
+        on: createMockFn(),
+        off: createMockFn(),
+      };
+      expect(() => {
+        new NotificationManager({
+          displayQueue: mockDisplayQueue,
+          logger: noOpLogger,
+          eventBus: mockEventBus,
+          constants: require("../../../src/core/constants"),
+          textProcessing: { formatChatMessage: createMockFn() },
+          obsGoals: { processDonationGoal: createMockFn() },
         });
+      }).toThrow("NotificationManager requires config dependency");
     });
 
-    describe('Spam Detection Integration', () => {
-        it('should use spam detector when provided', async () => {
-            const mockSpamDetector = {
-                handleDonationSpam: createMockFn().mockReturnValue({ shouldShow: true })
-            };
+    it("should work without spam detector gracefully", () => {
+      const mockEventBus = {
+        emit: createMockFn(),
+        on: createMockFn(),
+        off: createMockFn(),
+      };
+      notificationManager = new NotificationManager({
+        displayQueue: mockDisplayQueue,
+        logger: noOpLogger,
+        eventBus: mockEventBus,
+        constants: require("../../../src/core/constants"),
+        textProcessing: { formatChatMessage: createMockFn() },
+        obsGoals: { processDonationGoal: createMockFn() },
+        config: mockConfig,
+      });
 
-            const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
-            notificationManager = new NotificationManager({
-                displayQueue: mockDisplayQueue,
-                logger: noOpLogger,
-                eventBus: mockEventBus,
-                constants: require('../../../src/core/constants'),
-                textProcessing: { formatChatMessage: createMockFn() },
-                obsGoals: { processDonationGoal: createMockFn() },
-                config: mockConfig,
-                vfxCommandService: mockVFXCommandService,
-                
-                userTrackingService: mockUserTrackingService,
-                donationSpamDetector: mockSpamDetector
-            });
-
-            await notificationManager.handleNotification('platform:gift', 'tiktok', {
-                username: 'TestUser',
-                userId: '123',
-                giftType: 'Rose',
-                giftCount: 1,
-                amount: 1,
-                currency: 'coins'
-            });
-
-            expect(mockSpamDetector.handleDonationSpam).toHaveBeenCalled();
-        });
-
-        it('should work without spam detector', async () => {
-            const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
-            notificationManager = new NotificationManager({
-                displayQueue: mockDisplayQueue,
-                logger: noOpLogger,
-                eventBus: mockEventBus,
-                constants: require('../../../src/core/constants'),
-                textProcessing: { formatChatMessage: createMockFn() },
-                obsGoals: { processDonationGoal: createMockFn() },
-                config: mockConfig,
-                vfxCommandService: mockVFXCommandService,
-                
-                userTrackingService: mockUserTrackingService
-            });
-
-            await notificationManager.handleNotification('platform:gift', 'tiktok', {
-                username: 'TestUser',
-                userId: '123',
-                giftType: 'Rose',
-                giftCount: 1,
-                amount: 1,
-                currency: 'coins'
-            });
-
-            expect(mockDisplayQueue.addItem).toHaveBeenCalled();
-        });
+      expect(notificationManager.donationSpamDetector).toBeUndefined();
     });
 
-    describe('Graceful Degradation', () => {
-        it('should handle missing services gracefully during notification processing', async () => {
-            const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
-            notificationManager = new NotificationManager({
-                displayQueue: mockDisplayQueue,
-                logger: noOpLogger,
-                eventBus: mockEventBus,
-                constants: require('../../../src/core/constants'),
-                textProcessing: { formatChatMessage: createMockFn() },
-                obsGoals: { processDonationGoal: createMockFn() },
-                config: mockConfig,
-                vfxCommandService: mockVFXCommandService,
-                
-                userTrackingService: mockUserTrackingService
-            });
+    it("should continue processing notifications without VFX services", async () => {
+      const mockEventBus = {
+        emit: createMockFn(),
+        on: createMockFn(),
+        off: createMockFn(),
+      };
+      notificationManager = new NotificationManager({
+        displayQueue: mockDisplayQueue,
+        logger: noOpLogger,
+        eventBus: mockEventBus,
+        constants: require("../../../src/core/constants"),
+        textProcessing: { formatChatMessage: createMockFn() },
+        obsGoals: { processDonationGoal: createMockFn() },
+        config: mockConfig,
+      });
 
-            const notifications = [
-                { type: 'platform:follow', data: { username: 'User1', userId: '1' } },
-                { type: 'platform:gift', data: { username: 'User2', userId: '2', giftType: 'Rose', giftCount: 1, amount: 1, currency: 'coins' } },
-                { type: 'platform:paypiggy', data: { username: 'User3', userId: '3', tier: '1' } }
-            ];
+      const result = await notificationManager.handleNotification(
+        "platform:gift",
+        "tiktok",
+        {
+          username: "TestUser",
+          userId: "123",
+          giftType: "Rose",
+          giftCount: 1,
+          amount: 1,
+          currency: "coins",
+        },
+      );
 
-            for (const notif of notifications) {
-                await notificationManager.handleNotification(notif.type, 'tiktok', notif.data);
-            }
-
-            expect(mockDisplayQueue.addItem).toHaveBeenCalledTimes(3);
-        });
-
-        it('should reject null config dependency', () => {
-            const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
-            expect(() => {
-                new NotificationManager({
-                    displayQueue: mockDisplayQueue,
-                    logger: noOpLogger,
-                    eventBus: mockEventBus,
-                    constants: require('../../../src/core/constants'),
-                    textProcessing: { formatChatMessage: createMockFn() },
-                    obsGoals: { processDonationGoal: createMockFn() },
-                    config: null,
-                    vfxCommandService: null,
-                    
-                    userTrackingService: null
-                });
-            }).toThrow('NotificationManager requires config dependency');
-        });
+      expect(result.success).toBe(true);
     });
+  });
+
+  describe("Notification Processing With Services", () => {
+    it("should process notifications with full service integration", async () => {
+      notificationManager = new NotificationManager({
+        displayQueue: mockDisplayQueue,
+        logger: noOpLogger,
+        eventBus: mockEventBus,
+        constants: require("../../../src/core/constants"),
+        textProcessing: { formatChatMessage: createMockFn() },
+        obsGoals: { processDonationGoal: createMockFn() },
+        config: mockConfig,
+        vfxCommandService: mockVFXCommandService,
+
+        userTrackingService: mockUserTrackingService,
+      });
+
+      await notificationManager.handleNotification("platform:gift", "tiktok", {
+        username: "TestUser",
+        userId: "123",
+        giftType: "Rose",
+        giftCount: 1,
+        amount: 1,
+        currency: "coins",
+      });
+
+      expect(mockDisplayQueue.addItem).toHaveBeenCalled();
+
+      const addedItem = mockDisplayQueue.addItem.mock.calls[0][0];
+      expect(addedItem).toBeDefined();
+      expect(addedItem.data).toBeDefined();
+    });
+
+    it("should display notifications with minimal services", async () => {
+      const mockEventBus = {
+        emit: createMockFn(),
+        on: createMockFn(),
+        off: createMockFn(),
+      };
+      notificationManager = new NotificationManager({
+        displayQueue: mockDisplayQueue,
+        logger: noOpLogger,
+        eventBus: mockEventBus,
+        constants: require("../../../src/core/constants"),
+        textProcessing: { formatChatMessage: createMockFn() },
+        obsGoals: { processDonationGoal: createMockFn() },
+        config: mockConfig,
+        vfxCommandService: mockVFXCommandService,
+
+        userTrackingService: mockUserTrackingService,
+      });
+
+      await notificationManager.handleNotification("platform:gift", "tiktok", {
+        username: "TestUser",
+        userId: "123",
+        giftType: "Rose",
+        giftCount: 1,
+        amount: 1,
+        currency: "coins",
+      });
+
+      expect(mockDisplayQueue.addItem).toHaveBeenCalled();
+    });
+  });
+
+  describe("Configuration Loading via plain config", () => {
+    it("should require config instead of relying on defaults", () => {
+      const mockEventBus = {
+        emit: createMockFn(),
+        on: createMockFn(),
+        off: createMockFn(),
+      };
+      expect(() => {
+        new NotificationManager({
+          displayQueue: mockDisplayQueue,
+          logger: noOpLogger,
+          eventBus: mockEventBus,
+          constants: require("../../../src/core/constants"),
+          textProcessing: { formatChatMessage: createMockFn() },
+          obsGoals: { processDonationGoal: createMockFn() },
+        });
+      }).toThrow("NotificationManager requires config dependency");
+    });
+  });
+
+  describe("Spam Detection Integration", () => {
+    it("should use spam detector when provided", async () => {
+      const mockSpamDetector = {
+        handleDonationSpam: createMockFn().mockReturnValue({
+          shouldShow: true,
+        }),
+      };
+
+      const mockEventBus = {
+        emit: createMockFn(),
+        on: createMockFn(),
+        off: createMockFn(),
+      };
+      notificationManager = new NotificationManager({
+        displayQueue: mockDisplayQueue,
+        logger: noOpLogger,
+        eventBus: mockEventBus,
+        constants: require("../../../src/core/constants"),
+        textProcessing: { formatChatMessage: createMockFn() },
+        obsGoals: { processDonationGoal: createMockFn() },
+        config: mockConfig,
+        vfxCommandService: mockVFXCommandService,
+
+        userTrackingService: mockUserTrackingService,
+        donationSpamDetector: mockSpamDetector,
+      });
+
+      await notificationManager.handleNotification("platform:gift", "tiktok", {
+        username: "TestUser",
+        userId: "123",
+        giftType: "Rose",
+        giftCount: 1,
+        amount: 1,
+        currency: "coins",
+      });
+
+      expect(mockSpamDetector.handleDonationSpam).toHaveBeenCalled();
+    });
+
+    it("should work without spam detector", async () => {
+      const mockEventBus = {
+        emit: createMockFn(),
+        on: createMockFn(),
+        off: createMockFn(),
+      };
+      notificationManager = new NotificationManager({
+        displayQueue: mockDisplayQueue,
+        logger: noOpLogger,
+        eventBus: mockEventBus,
+        constants: require("../../../src/core/constants"),
+        textProcessing: { formatChatMessage: createMockFn() },
+        obsGoals: { processDonationGoal: createMockFn() },
+        config: mockConfig,
+        vfxCommandService: mockVFXCommandService,
+
+        userTrackingService: mockUserTrackingService,
+      });
+
+      await notificationManager.handleNotification("platform:gift", "tiktok", {
+        username: "TestUser",
+        userId: "123",
+        giftType: "Rose",
+        giftCount: 1,
+        amount: 1,
+        currency: "coins",
+      });
+
+      expect(mockDisplayQueue.addItem).toHaveBeenCalled();
+    });
+  });
+
+  describe("Graceful Degradation", () => {
+    it("should handle missing services gracefully during notification processing", async () => {
+      const mockEventBus = {
+        emit: createMockFn(),
+        on: createMockFn(),
+        off: createMockFn(),
+      };
+      notificationManager = new NotificationManager({
+        displayQueue: mockDisplayQueue,
+        logger: noOpLogger,
+        eventBus: mockEventBus,
+        constants: require("../../../src/core/constants"),
+        textProcessing: { formatChatMessage: createMockFn() },
+        obsGoals: { processDonationGoal: createMockFn() },
+        config: mockConfig,
+        vfxCommandService: mockVFXCommandService,
+
+        userTrackingService: mockUserTrackingService,
+      });
+
+      const notifications = [
+        { type: "platform:follow", data: { username: "User1", userId: "1" } },
+        {
+          type: "platform:gift",
+          data: {
+            username: "User2",
+            userId: "2",
+            giftType: "Rose",
+            giftCount: 1,
+            amount: 1,
+            currency: "coins",
+          },
+        },
+        {
+          type: "platform:paypiggy",
+          data: { username: "User3", userId: "3", tier: "1" },
+        },
+      ];
+
+      for (const notif of notifications) {
+        await notificationManager.handleNotification(
+          notif.type,
+          "tiktok",
+          notif.data,
+        );
+      }
+
+      expect(mockDisplayQueue.addItem).toHaveBeenCalledTimes(3);
+    });
+
+    it("should reject null config dependency", () => {
+      const mockEventBus = {
+        emit: createMockFn(),
+        on: createMockFn(),
+        off: createMockFn(),
+      };
+      expect(() => {
+        new NotificationManager({
+          displayQueue: mockDisplayQueue,
+          logger: noOpLogger,
+          eventBus: mockEventBus,
+          constants: require("../../../src/core/constants"),
+          textProcessing: { formatChatMessage: createMockFn() },
+          obsGoals: { processDonationGoal: createMockFn() },
+          config: null,
+          vfxCommandService: null,
+
+          userTrackingService: null,
+        });
+      }).toThrow("NotificationManager requires config dependency");
+    });
+  });
 });

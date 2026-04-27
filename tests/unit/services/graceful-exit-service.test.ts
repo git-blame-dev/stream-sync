@@ -1,187 +1,201 @@
-const { describe, it, beforeEach, afterEach, expect } = require('bun:test');
-const { createMockFn, clearAllMocks, restoreAllMocks, spyOn } = require('../../helpers/bun-mock-utils');
-const { useFakeTimers, useRealTimers, advanceTimersByTime } = require('../../helpers/bun-timers');
+import { describe, it, beforeEach, afterEach, expect } from "bun:test";
+import {
+  createMockFn,
+  clearAllMocks,
+  restoreAllMocks,
+  spyOn,
+} from "../../helpers/bun-mock-utils";
+import {
+  useFakeTimers,
+  useRealTimers,
+  advanceTimersByTime,
+} from "../../helpers/bun-timers";
 
-const { GracefulExitService } = require('../../../src/services/GracefulExitService.ts');
+import { GracefulExitService } from "../../../src/services/GracefulExitService.ts";
 
-describe('GracefulExitService', () => {
-    let gracefulExitService;
-    let mockAppRuntime;
+describe("GracefulExitService", () => {
+  let gracefulExitService;
+  let mockAppRuntime;
 
-    beforeEach(() => {
-        clearAllMocks();
-        useFakeTimers();
+  beforeEach(() => {
+    clearAllMocks();
+    useFakeTimers();
 
-        mockAppRuntime = {
-            shutdown: createMockFn().mockResolvedValue(undefined),
-            getPlatforms: createMockFn().mockReturnValue({ tiktok: {}, twitch: {}, youtube: {} })
-        };
+    mockAppRuntime = {
+      shutdown: createMockFn().mockResolvedValue(undefined),
+      getPlatforms: createMockFn().mockReturnValue({
+        tiktok: {},
+        twitch: {},
+        youtube: {},
+      }),
+    };
 
-        spyOn(process, 'exit').mockImplementation(() => {});
+    spyOn(process, "exit").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    if (gracefulExitService && typeof gracefulExitService.stop === "function") {
+      gracefulExitService.stop();
+    }
+    useRealTimers();
+    restoreAllMocks();
+  });
+
+  describe("Service Initialization", () => {
+    it("should initialize with target message count", () => {
+      gracefulExitService = new GracefulExitService(mockAppRuntime, 10);
+
+      expect(gracefulExitService.isEnabled()).toBe(true);
+      expect(gracefulExitService.getTargetMessageCount()).toBe(10);
+      expect(gracefulExitService.getProcessedMessageCount()).toBe(0);
     });
 
-    afterEach(() => {
-        if (gracefulExitService && typeof gracefulExitService.stop === 'function') {
-            gracefulExitService.stop();
-        }
-        useRealTimers();
-        restoreAllMocks();
+    it("should be disabled when target message count is null", () => {
+      gracefulExitService = new GracefulExitService(mockAppRuntime, null);
+
+      expect(gracefulExitService.isEnabled()).toBe(false);
+    });
+  });
+
+  describe("Message Counting", () => {
+    it("should increment message count when message is processed", () => {
+      gracefulExitService = new GracefulExitService(mockAppRuntime, 10);
+
+      gracefulExitService.incrementMessageCount();
+      expect(gracefulExitService.getProcessedMessageCount()).toBe(1);
+
+      gracefulExitService.incrementMessageCount();
+      expect(gracefulExitService.getProcessedMessageCount()).toBe(2);
     });
 
-    describe('Service Initialization', () => {
-        it('should initialize with target message count', () => {
-            gracefulExitService = new GracefulExitService(mockAppRuntime, 10);
+    it("should not count messages when service is disabled", () => {
+      gracefulExitService = new GracefulExitService(mockAppRuntime, null);
 
-            expect(gracefulExitService.isEnabled()).toBe(true);
-            expect(gracefulExitService.getTargetMessageCount()).toBe(10);
-            expect(gracefulExitService.getProcessedMessageCount()).toBe(0);
-        });
+      gracefulExitService.incrementMessageCount();
+      expect(gracefulExitService.getProcessedMessageCount()).toBe(0);
+    });
+  });
 
-        it('should be disabled when target message count is null', () => {
-            gracefulExitService = new GracefulExitService(mockAppRuntime, null);
+  describe("Graceful Exit Trigger", () => {
+    it("should trigger graceful exit when target count is reached", async () => {
+      gracefulExitService = new GracefulExitService(mockAppRuntime, 3);
 
-            expect(gracefulExitService.isEnabled()).toBe(false);
-        });
+      gracefulExitService.incrementMessageCount();
+      gracefulExitService.incrementMessageCount();
+
+      const shouldExit = gracefulExitService.incrementMessageCount();
+
+      expect(shouldExit).toBe(true);
+      expect(gracefulExitService.getProcessedMessageCount()).toBe(3);
     });
 
-    describe('Message Counting', () => {
-        it('should increment message count when message is processed', () => {
-            gracefulExitService = new GracefulExitService(mockAppRuntime, 10);
+    it("should enter shutdown state when target is reached", async () => {
+      gracefulExitService = new GracefulExitService(mockAppRuntime, 2);
 
-            gracefulExitService.incrementMessageCount();
-            expect(gracefulExitService.getProcessedMessageCount()).toBe(1);
+      gracefulExitService.incrementMessageCount();
+      gracefulExitService.incrementMessageCount();
 
-            gracefulExitService.incrementMessageCount();
-            expect(gracefulExitService.getProcessedMessageCount()).toBe(2);
-        });
+      const exitPromise = gracefulExitService.triggerExit();
 
-        it('should not count messages when service is disabled', () => {
-            gracefulExitService = new GracefulExitService(mockAppRuntime, null);
+      expect(gracefulExitService.isShuttingDown).toBe(true);
 
-            gracefulExitService.incrementMessageCount();
-            expect(gracefulExitService.getProcessedMessageCount()).toBe(0);
-        });
+      await exitPromise;
     });
 
-    describe('Graceful Exit Trigger', () => {
-        it('should trigger graceful exit when target count is reached', async () => {
-            gracefulExitService = new GracefulExitService(mockAppRuntime, 3);
+    it("should complete shutdown sequence when exit is triggered", async () => {
+      gracefulExitService = new GracefulExitService(mockAppRuntime, 5);
 
-            gracefulExitService.incrementMessageCount();
-            gracefulExitService.incrementMessageCount();
+      for (let i = 0; i < 5; i++) {
+        gracefulExitService.incrementMessageCount();
+      }
 
-            const shouldExit = gracefulExitService.incrementMessageCount();
+      const exitPromise = gracefulExitService.triggerExit();
 
-            expect(shouldExit).toBe(true);
-            expect(gracefulExitService.getProcessedMessageCount()).toBe(3);
-        });
+      expect(gracefulExitService.isShuttingDown).toBe(true);
 
-        it('should enter shutdown state when target is reached', async () => {
-            gracefulExitService = new GracefulExitService(mockAppRuntime, 2);
-
-            gracefulExitService.incrementMessageCount();
-            gracefulExitService.incrementMessageCount();
-
-            const exitPromise = gracefulExitService.triggerExit();
-
-            expect(gracefulExitService.isShuttingDown).toBe(true);
-
-            await exitPromise;
-        });
-
-        it('should complete shutdown sequence when exit is triggered', async () => {
-            gracefulExitService = new GracefulExitService(mockAppRuntime, 5);
-
-            for (let i = 0; i < 5; i++) {
-                gracefulExitService.incrementMessageCount();
-            }
-
-            const exitPromise = gracefulExitService.triggerExit();
-
-            expect(gracefulExitService.isShuttingDown).toBe(true);
-
-            await exitPromise;
-        });
-
-        it('should not trigger exit before target is reached', () => {
-            gracefulExitService = new GracefulExitService(mockAppRuntime, 10);
-
-            let shouldExit = false;
-            for (let i = 0; i < 5; i++) {
-                shouldExit = gracefulExitService.incrementMessageCount();
-            }
-
-            expect(shouldExit).toBe(false);
-        });
+      await exitPromise;
     });
 
-    describe('Error Handling', () => {
-        it('should handle shutdown errors gracefully', async () => {
-            mockAppRuntime.shutdown.mockRejectedValue(new Error('Shutdown failed'));
+    it("should not trigger exit before target is reached", () => {
+      gracefulExitService = new GracefulExitService(mockAppRuntime, 10);
 
-            gracefulExitService = new GracefulExitService(mockAppRuntime, 1);
-            gracefulExitService.incrementMessageCount();
+      let shouldExit = false;
+      for (let i = 0; i < 5; i++) {
+        shouldExit = gracefulExitService.incrementMessageCount();
+      }
 
-            await gracefulExitService.triggerExit();
+      expect(shouldExit).toBe(false);
+    });
+  });
 
-            expect(gracefulExitService.isShuttingDown).toBe(true);
-        });
+  describe("Error Handling", () => {
+    it("should handle shutdown errors gracefully", async () => {
+      mockAppRuntime.shutdown.mockRejectedValue(new Error("Shutdown failed"));
 
-        it('should force exit after timeout if shutdown hangs', async () => {
-            mockAppRuntime.shutdown.mockImplementation(() => new Promise(() => {}));
+      gracefulExitService = new GracefulExitService(mockAppRuntime, 1);
+      gracefulExitService.incrementMessageCount();
 
-            gracefulExitService = new GracefulExitService(mockAppRuntime, 1);
-            gracefulExitService.incrementMessageCount();
+      await gracefulExitService.triggerExit();
 
-            gracefulExitService.triggerExit();
-
-            advanceTimersByTime(10000);
-
-            await Promise.resolve();
-
-            expect(process.exit).toHaveBeenCalledWith(1);
-        });
+      expect(gracefulExitService.isShuttingDown).toBe(true);
     });
 
-    describe('Statistics and Reporting', () => {
-        it('should provide current statistics', () => {
-            gracefulExitService = new GracefulExitService(mockAppRuntime, 10);
+    it("should force exit after timeout if shutdown hangs", async () => {
+      mockAppRuntime.shutdown.mockImplementation(() => new Promise(() => {}));
 
-            gracefulExitService.incrementMessageCount();
-            gracefulExitService.incrementMessageCount();
+      gracefulExitService = new GracefulExitService(mockAppRuntime, 1);
+      gracefulExitService.incrementMessageCount();
 
-            const stats = gracefulExitService.getStats();
+      gracefulExitService.triggerExit();
 
-            expect(stats).toMatchObject({
-                enabled: true,
-                processed: 2,
-                target: 10,
-                remaining: 8,
-                percentage: 20
-            });
-        });
+      advanceTimersByTime(10000);
 
-        it('should indicate when target is close to being reached', () => {
-            gracefulExitService = new GracefulExitService(mockAppRuntime, 10);
+      await Promise.resolve();
 
-            for (let i = 0; i < 9; i++) {
-                gracefulExitService.incrementMessageCount();
-            }
+      expect(process.exit).toHaveBeenCalledTimes(1);
+      expect(process.exit.mock.calls[0]?.[0]).toBe(1);
+    });
+  });
 
-            const stats = gracefulExitService.getStats();
+  describe("Statistics and Reporting", () => {
+    it("should provide current statistics", () => {
+      gracefulExitService = new GracefulExitService(mockAppRuntime, 10);
 
-            expect(stats.percentage).toBeGreaterThanOrEqual(90);
-            expect(stats.remaining).toBe(1);
-        });
+      gracefulExitService.incrementMessageCount();
+      gracefulExitService.incrementMessageCount();
+
+      const stats = gracefulExitService.getStats();
+
+      expect(stats).toMatchObject({
+        enabled: true,
+        processed: 2,
+        target: 10,
+        remaining: 8,
+        percentage: 20,
+      });
     });
 
-    describe('Service Lifecycle', () => {
-        it('should clean up resources when stopped', () => {
-            gracefulExitService = new GracefulExitService(mockAppRuntime, 10);
+    it("should indicate when target is close to being reached", () => {
+      gracefulExitService = new GracefulExitService(mockAppRuntime, 10);
 
-            gracefulExitService.stop();
+      for (let i = 0; i < 9; i++) {
+        gracefulExitService.incrementMessageCount();
+      }
 
-            expect(() => gracefulExitService.incrementMessageCount()).not.toThrow();
-        });
+      const stats = gracefulExitService.getStats();
+
+      expect(stats.percentage).toBeGreaterThanOrEqual(90);
+      expect(stats.remaining).toBe(1);
     });
+  });
+
+  describe("Service Lifecycle", () => {
+    it("should clean up resources when stopped", () => {
+      gracefulExitService = new GracefulExitService(mockAppRuntime, 10);
+
+      gracefulExitService.stop();
+
+      expect(() => gracefulExitService.incrementMessageCount()).not.toThrow();
+    });
+  });
 });

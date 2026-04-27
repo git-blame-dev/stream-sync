@@ -1,99 +1,106 @@
-const { describe, expect, it, afterEach } = require('bun:test');
-export {};
-const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { noOpLogger } = require('../../helpers/mock-factories');
-const { createConfigFixture } = require('../../helpers/config-fixture');
+import { afterEach, describe, expect, it } from "bun:test";
+import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
+import { noOpLogger } from "../../helpers/mock-factories";
+import { createConfigFixture } from "../../helpers/config-fixture";
 
-const NotificationManager = require('../../../src/notifications/NotificationManager');
-const constants = require('../../../src/core/constants');
+import NotificationManager from "../../../src/notifications/NotificationManager";
+import * as constants from "../../../src/core/constants";
 
 type ErrorQueueItem = {
-    data?: {
-        isError?: boolean;
-        displayMessage?: string;
-        ttsMessage?: string;
-        logMessage?: string;
-        [key: string]: unknown;
-    };
+  data?: {
+    isError?: boolean;
+    displayMessage?: string;
+    ttsMessage?: string;
+    logMessage?: string;
     [key: string]: unknown;
+  };
+  [key: string]: unknown;
 };
 
 const createDisplayQueueStub = () => {
-    const items: ErrorQueueItem[] = [];
-    return {
-        items,
-        addItem: (item: ErrorQueueItem) => items.push(item),
-        getQueueLength: () => items.length
-    };
+  const items: ErrorQueueItem[] = [];
+  return {
+    items,
+    addItem: (item: ErrorQueueItem) => items.push(item),
+    getQueueLength: () => items.length,
+  };
 };
 
+describe("NotificationManager monetization error path", () => {
+  afterEach(() => {
+    restoreAllMocks();
+  });
 
-
-describe('NotificationManager monetization error path', () => {
-    afterEach(() => {
-        restoreAllMocks();
+  it("queues gift error notifications with placeholder values", async () => {
+    const displayQueue = createDisplayQueueStub();
+    const manager = new NotificationManager({
+      displayQueue,
+      eventBus: { emit: createMockFn(), subscribe: createMockFn() },
+      config: createConfigFixture(),
+      vfxCommandService: {
+        getVFXConfig: createMockFn().mockResolvedValue(null),
+      },
+      logger: noOpLogger,
+      constants,
+      textProcessing: { formatChatMessage: createMockFn() },
+      obsGoals: { processDonationGoal: createMockFn() },
     });
 
-    it('queues gift error notifications with placeholder values', async () => {
-        const displayQueue = createDisplayQueueStub();
-        const manager = new NotificationManager({
-            displayQueue,
-            eventBus: { emit: createMockFn(), subscribe: createMockFn() },
-            config: createConfigFixture(),
-            vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) },
-            logger: noOpLogger,
-            constants,
-            textProcessing: { formatChatMessage: createMockFn() },
-            obsGoals: { processDonationGoal: createMockFn() }
-        });
-
-        const result = await manager.handleNotification('platform:gift', 'twitch', {
-            username: 'Unknown User',
-            userId: 'unknown',
-            giftType: 'Unknown gift',
-            giftCount: 0,
-            amount: 0,
-            currency: 'unknown',
-            isError: true
-        });
-
-        expect(result).toEqual(expect.objectContaining({ success: true }));
-        expect(displayQueue.items).toHaveLength(1);
-        const queued = displayQueue.items[0];
-        expect(queued.data?.isError).toBe(true);
-        expect(queued.data?.displayMessage).toMatch(/error/i);
-        expect(queued.data?.ttsMessage).toMatch(/error/i);
-        expect(queued.data?.logMessage).toMatch(/error/i);
+    const result = await manager.handleNotification("platform:gift", "twitch", {
+      username: "Unknown User",
+      userId: "unknown",
+      giftType: "Unknown gift",
+      giftCount: 0,
+      amount: 0,
+      currency: "unknown",
+      isError: true,
     });
 
-    it('returns safe queue error details when non-Error values are thrown', async () => {
-        const displayQueue = {
-            addItem: () => {
-                throw 'queue-string-failure';
-            },
-            getQueueLength: () => 0
-        };
-        const manager = new NotificationManager({
-            displayQueue,
-            eventBus: { emit: createMockFn(), subscribe: createMockFn() },
-            config: createConfigFixture(),
-            vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) },
-            logger: noOpLogger,
-            constants,
-            textProcessing: { formatChatMessage: createMockFn() },
-            obsGoals: { processDonationGoal: createMockFn() }
-        });
+    expect(result).toEqual(expect.objectContaining({ success: true }));
+    expect(displayQueue.items).toHaveLength(1);
+    const queued = displayQueue.items[0];
+    expect(queued.data?.isError).toBe(true);
+    expect(queued.data?.displayMessage).toMatch(/error/i);
+    expect(queued.data?.ttsMessage).toMatch(/error/i);
+    expect(queued.data?.logMessage).toMatch(/error/i);
+  });
 
-        const result = await manager.handleNotification('platform:follow', 'twitch', {
-            username: 'test-user',
-            userId: 'test-user-id',
-            timestamp: '2024-01-01T00:00:00.000Z'
-        });
-
-        expect(result).toEqual(expect.objectContaining({
-            success: false,
-            error: 'Display queue error',
-            details: 'queue-string-failure'
-        }));
+  it("returns safe queue error details when non-Error values are thrown", async () => {
+    const displayQueue = {
+      addItem: () => {
+        throw "queue-string-failure";
+      },
+      getQueueLength: () => 0,
+    };
+    const manager = new NotificationManager({
+      displayQueue,
+      eventBus: { emit: createMockFn(), subscribe: createMockFn() },
+      config: createConfigFixture(),
+      vfxCommandService: {
+        getVFXConfig: createMockFn().mockResolvedValue(null),
+      },
+      logger: noOpLogger,
+      constants,
+      textProcessing: { formatChatMessage: createMockFn() },
+      obsGoals: { processDonationGoal: createMockFn() },
     });
+
+    const result = await manager.handleNotification(
+      "platform:follow",
+      "twitch",
+      {
+        username: "test-user",
+        userId: "test-user-id",
+        timestamp: "2024-01-01T00:00:00.000Z",
+      },
+    );
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        success: false,
+        error: "Display queue error",
+        details: "queue-string-failure",
+      }),
+    );
+  });
 });
