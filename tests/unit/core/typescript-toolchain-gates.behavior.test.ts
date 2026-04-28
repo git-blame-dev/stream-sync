@@ -2,6 +2,7 @@ import { describe, it, expect } from 'bun:test';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import ts from 'typescript';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -53,6 +54,18 @@ type ExecutableJavaScriptInventory = {
     wrapperProxyCount: number;
     withTypeScriptSiblingNonWrapperCount: number;
     withoutTypeScriptSiblingCount: number;
+};
+
+type TypeScriptCommonJsInventory = {
+    filesWithCommonJsSyntax: number;
+    totalRequireOccurrences: number;
+    filesWithModuleExports: number;
+    filesWithExportsObject: number;
+};
+
+type StrictnessPolicyOwnership = {
+    requiredEnabled: string[];
+    candidateExplicit: string[];
 };
 
 const WRAPPER_PROXY_PATTERN = /^module\.exports\s*=\s*require\((['"])\.\/[^'"]+\.ts\1\);?$/;
@@ -133,6 +146,112 @@ function findCommonJsModuleSyntax(content: string) {
     return null;
 }
 
+function collectTypeScriptCommonJsInventory(directoryPath: string): TypeScriptCommonJsInventory {
+    const inventory: TypeScriptCommonJsInventory = {
+        filesWithCommonJsSyntax: 0,
+        totalRequireOccurrences: 0,
+        filesWithModuleExports: 0,
+        filesWithExportsObject: 0
+    };
+
+    if (!existsSync(directoryPath)) {
+        return inventory;
+    }
+
+    const typeScriptFiles = collectExecutableTypeScriptFiles(directoryPath);
+    for (const filePath of typeScriptFiles) {
+        const sourceText = readFileSync(filePath, 'utf8');
+        const sourceFile = ts.createSourceFile(
+            filePath,
+            sourceText,
+            ts.ScriptTarget.Latest,
+            true,
+            filePath.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS
+        );
+
+        let requireOccurrences = 0;
+        let hasModuleExports = false;
+        let hasExportsObject = false;
+
+        const visit = (node: ts.Node): void => {
+            if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'require') {
+                requireOccurrences += 1;
+            }
+
+            if (ts.isPropertyAccessExpression(node)) {
+                if (ts.isIdentifier(node.expression) && node.expression.text === 'module' && node.name.text === 'exports') {
+                    hasModuleExports = true;
+                }
+
+                if (ts.isIdentifier(node.expression) && node.expression.text === 'exports') {
+                    hasExportsObject = true;
+                }
+            }
+
+            if (ts.isElementAccessExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'module') {
+                if (ts.isStringLiteral(node.argumentExpression) && node.argumentExpression.text === 'exports') {
+                    hasModuleExports = true;
+                }
+            }
+
+            if (ts.isBinaryExpression(node) && ts.isIdentifier(node.left) && node.left.text === 'exports') {
+                hasExportsObject = true;
+            }
+
+            ts.forEachChild(node, visit);
+        };
+
+        visit(sourceFile);
+
+        if (requireOccurrences > 0 || hasModuleExports || hasExportsObject) {
+            inventory.filesWithCommonJsSyntax += 1;
+        }
+
+        inventory.totalRequireOccurrences += requireOccurrences;
+
+        if (hasModuleExports) {
+            inventory.filesWithModuleExports += 1;
+        }
+
+        if (hasExportsObject) {
+            inventory.filesWithExportsObject += 1;
+        }
+    }
+
+    return inventory;
+}
+
+function collectStrictnessOptionOwnership(): StrictnessPolicyOwnership {
+    const baseConfig = JSON.parse(readFileSync(join(repoRoot, 'tsconfig.base.json'), 'utf8')) as {
+        compilerOptions?: Record<string, unknown>;
+    };
+    const compilerOptions = baseConfig.compilerOptions ?? {};
+
+    const requiredStrictOptions = [
+        'strict',
+        'useUnknownInCatchVariables',
+        'noImplicitOverride',
+        'noFallthroughCasesInSwitch',
+        'exactOptionalPropertyTypes',
+        'noUncheckedIndexedAccess'
+    ];
+    const candidateStrictOptions = [
+        'noImplicitReturns',
+        'noUnusedLocals',
+        'noUnusedParameters',
+        'noPropertyAccessFromIndexSignature',
+        'noImplicitThis',
+        'alwaysStrict'
+    ];
+
+    return {
+        requiredEnabled: requiredStrictOptions.filter((optionName) => compilerOptions[optionName] === true),
+        candidateExplicit: candidateStrictOptions.filter((optionName) =>
+            Object.prototype.hasOwnProperty.call(compilerOptions, optionName)
+        )
+    };
+}
+
 describe('TypeScript toolchain migration gates behavior', () => {
     it('keeps this toolchain gates module free of top-level commonjs declarations', () => {
         const content = readFileSync(__filename, 'utf8');
@@ -174,6 +293,38 @@ describe('TypeScript toolchain migration gates behavior', () => {
         expect(sourceInventory.wrapperProxyCount).toBe(0);
         expect(sourceInventory.withTypeScriptSiblingNonWrapperCount).toBe(0);
         expect(sourceInventory.withoutTypeScriptSiblingCount).toBe(0);
+    });
+
+    it('tracks source typescript commonjs ownership baseline explicitly', () => {
+        const sourceCommonJsInventory = collectTypeScriptCommonJsInventory(join(repoRoot, 'src'));
+
+        expect(sourceCommonJsInventory.filesWithCommonJsSyntax).toBe(11);
+        expect(sourceCommonJsInventory.totalRequireOccurrences).toBe(86);
+        expect(sourceCommonJsInventory.filesWithModuleExports).toBe(7);
+        expect(sourceCommonJsInventory.filesWithExportsObject).toBe(0);
+    });
+
+    it('tracks test typescript commonjs ownership baseline explicitly', () => {
+        const testCommonJsInventory = collectTypeScriptCommonJsInventory(join(repoRoot, 'tests'));
+
+        expect(testCommonJsInventory.filesWithCommonJsSyntax).toBe(77);
+        expect(testCommonJsInventory.totalRequireOccurrences).toBe(199);
+        expect(testCommonJsInventory.filesWithModuleExports).toBe(0);
+        expect(testCommonJsInventory.filesWithExportsObject).toBe(0);
+    });
+
+    it('tracks strictness option ownership baseline explicitly', () => {
+        const strictnessPolicyOwnership = collectStrictnessOptionOwnership();
+
+        expect(strictnessPolicyOwnership.requiredEnabled).toEqual([
+            'strict',
+            'useUnknownInCatchVariables',
+            'noImplicitOverride',
+            'noFallthroughCasesInSwitch',
+            'exactOptionalPropertyTypes',
+            'noUncheckedIndexedAccess'
+        ]);
+        expect(strictnessPolicyOwnership.candidateExplicit).toEqual([]);
     });
 
     it('uses TypeScript bootstrap entrypoints without javascript proxy wrappers', () => {
