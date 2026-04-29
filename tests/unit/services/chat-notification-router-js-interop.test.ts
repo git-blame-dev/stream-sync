@@ -1,14 +1,13 @@
 import { describe, expect, it } from 'bun:test';
-
-const chatNotificationRouterModule = require('../../../src/services/ChatNotificationRouter.ts');
+import { ChatNotificationRouter } from '../../../src/services/ChatNotificationRouter';
 
 describe('chat notification router JS interop', () => {
-    it('exposes ChatNotificationRouter as a named export from the JS wrapper', () => {
-        expect(typeof chatNotificationRouterModule.ChatNotificationRouter).toBe('function');
-    });
+it('exposes ChatNotificationRouter as a named export from the JS wrapper', () => {
+expect(typeof ChatNotificationRouter).toBe('function');
+});
 
-    it('constructs the named wrapper export with runtime dependencies', () => {
-        const router = new chatNotificationRouterModule.ChatNotificationRouter({
+it('constructs the named wrapper export with runtime dependencies', () => {
+const router = new ChatNotificationRouter({
             runtime: {
                 userTrackingService: { isFirstMessage: () => false },
                 displayQueue: { addItem() {} },

@@ -1,5 +1,6 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
+import { ADAPTIVE_RETRY_CONFIG, RetrySystem } from "../../../src/utils/retry-system";
 describe("Timeout NaN Warning Fix", () => {
   let originalConsoleWarn;
   let originalConsoleError;
@@ -40,10 +41,6 @@ describe("Timeout NaN Warning Fix", () => {
 
   describe("Retry System NaN Timeout", () => {
     test("should handle invalid BACKOFF_MULTIPLIER resulting in NaN", () => {
-      const {
-        RetrySystem,
-        ADAPTIVE_RETRY_CONFIG,
-      } = require("../../../src/utils/retry-system");
 
       const originalMultiplier = ADAPTIVE_RETRY_CONFIG.BACKOFF_MULTIPLIER;
       ADAPTIVE_RETRY_CONFIG.BACKOFF_MULTIPLIER = undefined;
@@ -60,10 +57,6 @@ describe("Timeout NaN Warning Fix", () => {
     });
 
     test("should handle invalid BASE_DELAY resulting in NaN", () => {
-      const {
-        RetrySystem,
-        ADAPTIVE_RETRY_CONFIG,
-      } = require("../../../src/utils/retry-system");
 
       const originalBaseDelay = ADAPTIVE_RETRY_CONFIG.BASE_DELAY;
       ADAPTIVE_RETRY_CONFIG.BASE_DELAY = null;
@@ -78,7 +71,6 @@ describe("Timeout NaN Warning Fix", () => {
     });
 
     test("should handle handleConnectionError with valid timeout", () => {
-      const { RetrySystem } = require("../../../src/utils/retry-system");
 
       const retrySystem = new RetrySystem();
       const mockReconnectFn = createMockFn();
@@ -95,7 +87,6 @@ describe("Timeout NaN Warning Fix", () => {
 
   describe("General Timeout Validation", () => {
     test("should validate all setTimeout calls have numeric delays", () => {
-      const { RetrySystem } = require("../../../src/utils/retry-system");
 
       const retrySystem = new RetrySystem();
 

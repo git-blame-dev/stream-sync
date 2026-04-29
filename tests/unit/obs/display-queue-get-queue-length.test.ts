@@ -1,6 +1,8 @@
 import { describe, expect, it, afterEach } from "bun:test";
 import { restoreAllMocks } from "../../helpers/bun-mock-utils";
 import { createMockOBSForTesting } from "../../helpers/display-queue-test-factory";
+import { PRIORITY_LEVELS } from "../../../src/core/constants";
+import { DisplayQueue } from "../../../src/obs/display-queue";
 
 describe("DisplayQueue getQueueLength", () => {
   afterEach(() => {
@@ -14,8 +16,6 @@ describe("DisplayQueue getQueueLength", () => {
       autoProcess: false,
       timing: { transitionDelay: 100 },
     };
-    const { DisplayQueue } = require("../../../src/obs/display-queue.ts");
-    const { PRIORITY_LEVELS } = require("../../../src/core/constants");
     return new DisplayQueue(mockOBS, config, { PRIORITY_LEVELS });
   }
 

@@ -1,8 +1,8 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
+import crypto from 'node:crypto';
 import { createMockFn } from "../../../helpers/bun-mock-utils";
 import { createConfigFixture } from "../../../helpers/config-fixture";
 
-const crypto = require("crypto");
 import { VFXCommandService } from "../../../../src/services/VFXCommandService.ts";
 
 describe("VFXCommandService random variant selection", () => {

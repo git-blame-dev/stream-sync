@@ -2,13 +2,16 @@
   "compilerOptions": {
     "target": "ES2022",
     "strict": true,
-    "useUnknownInCatchVariables": true,
-    "noImplicitOverride": true,
-    "noFallthroughCasesInSwitch": true,
-    "exactOptionalPropertyTypes": true,
-    "noUncheckedIndexedAccess": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
+"useUnknownInCatchVariables": true,
+"noImplicitOverride": true,
+"noFallthroughCasesInSwitch": true,
+"exactOptionalPropertyTypes": true,
+"noUncheckedIndexedAccess": true,
+"noImplicitReturns": true,
+"noImplicitThis": true,
+"alwaysStrict": true,
+"esModuleInterop": true,
+"skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
   }
 }

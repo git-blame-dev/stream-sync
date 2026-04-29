@@ -3,7 +3,11 @@ import { createRequire } from 'node:module';
 
 const load = createRequire(__filename);
 const EventEmitter = load('events');
-const NotificationManager = load('../../src/notifications/NotificationManager');
+const NotificationManagerModule = load('../../src/notifications/NotificationManager') as {
+    default?: new (...args: unknown[]) => unknown;
+    NotificationManager?: new (...args: unknown[]) => unknown;
+};
+const NotificationManager = NotificationManagerModule.default || NotificationManagerModule.NotificationManager;
 const { PlatformEventRouter } = load('../../src/services/PlatformEventRouter.ts');
 const { YouTubePlatform } = load('../../src/platforms/youtube');
 const { PlatformEvents } = load('../../src/interfaces/PlatformEvents');

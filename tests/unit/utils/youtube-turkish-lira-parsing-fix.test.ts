@@ -4,8 +4,10 @@ import { createConfigFixture } from "../../helpers/config-fixture";
 import { YouTubeiCurrencyParser } from "../../../src/platforms/youtube/youtubei-currency-parser";
 import NotificationManager from "../../../src/notifications/NotificationManager";
 import { createTextProcessingManager } from "../../../src/utils/text-processing";
+import * as constants from "../../../src/core/constants";
+import { getDefaultGoalsManager } from "../../../src/obs/goals";
 import { noOpLogger } from "../../helpers/mock-factories";
-const { setupAutomatedCleanup } = require("../../helpers/mock-lifecycle");
+import { setupAutomatedCleanup } from "../../helpers/mock-lifecycle";
 import testClock from "../../helpers/test-clock";
 setupAutomatedCleanup({
   clearCallsBeforeEach: true,
@@ -256,12 +258,10 @@ describe("YouTube Turkish Lira (TRY) Currency Parsing", () => {
         on: createMockFn(),
         off: createMockFn(),
       };
-      const constants = require("../../../src/core/constants");
-      const textProcessing = createTextProcessingManager({
-        logger: mockLogger,
-      });
-      const obsGoals =
-        require("../../../src/obs/goals").getDefaultGoalsManager();
+    const textProcessing = createTextProcessingManager({
+      logger: mockLogger,
+    });
+    const obsGoals = getDefaultGoalsManager();
       const vfxCommandService = {
         getVFXConfig: createMockFn().mockResolvedValue(null),
       };
@@ -436,11 +436,9 @@ describe("YouTube Turkish Lira (TRY) Currency Parsing", () => {
         on: createMockFn(),
         off: createMockFn(),
       };
-      const constants = require("../../../src/core/constants");
-      const logger = noOpLogger;
-      const textProcessing = createTextProcessingManager({ logger });
-      const obsGoals =
-        require("../../../src/obs/goals").getDefaultGoalsManager();
+    const logger = noOpLogger;
+    const textProcessing = createTextProcessingManager({ logger });
+    const obsGoals = getDefaultGoalsManager();
       const vfxCommandService = {
         getVFXConfig: createMockFn().mockResolvedValue(null),
       };

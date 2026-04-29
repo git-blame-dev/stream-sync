@@ -9,6 +9,7 @@ import {
   resetDefaultSourcesManager,
 } from "../../../src/obs/sources.ts";
 import { resetOBSConnectionManager } from "../../../src/obs/connection.ts";
+import * as sourcesModule from "../../../src/obs/sources";
 
 describe("OBSSourcesManager DI requirements", () => {
   afterEach(() => {
@@ -18,7 +19,7 @@ describe("OBSSourcesManager DI requirements", () => {
   });
 
   it("exposes only DI-focused exports (no wrapper functions)", () => {
-    const sources = require("../../../src/obs/sources.ts");
+    const sources = sourcesModule;
     const exportedKeys = Object.keys(sources).sort();
     expect(exportedKeys).toEqual([
       "OBSSourcesManager",

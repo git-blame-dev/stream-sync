@@ -1,5 +1,6 @@
-const { CONFIG_SCHEMA, getFieldsRequiredWhenEnabled, DEFAULTS } = require('../core/config-schema');
-const { normalizeGreetingIdentityKey } = require('./greeting-identity-key-normalizer');
+import { CONFIG_SCHEMA, DEFAULTS, getFieldsRequiredWhenEnabled } from '../core/config-schema';
+import { DEFAULT_HTTP_USER_AGENTS, parseUserAgentList } from '../core/http-config';
+import { normalizeGreetingIdentityKey } from './greeting-identity-key-normalizer';
 
 class ConfigValidator {
     static _parseGreetingCustomProfileLine(profileId, rawValue) {
@@ -225,7 +226,6 @@ class ConfigValidator {
     }
 
     static _normalizeHttpSection(raw) {
-        const { DEFAULT_HTTP_USER_AGENTS, parseUserAgentList } = require('../core/http-config');
         const parsedAgents = parseUserAgentList(raw.userAgents);
 
         return {
@@ -568,6 +568,5 @@ class ConfigValidator {
 
 }
 
-module.exports = {
-    ConfigValidator
-};
+export { ConfigValidator };
+export default { ConfigValidator };

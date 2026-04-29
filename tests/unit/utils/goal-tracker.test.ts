@@ -3,6 +3,7 @@ import { restoreAllMocks } from "../../helpers/bun-mock-utils";
 import { TEST_TIMEOUTS } from "../../helpers/test-setup";
 import { noOpLogger, createMockFileSystem } from "../../helpers/mock-factories";
 import testClock from "../../helpers/test-clock";
+import { GoalTracker } from "../../../src/utils/goal-tracker";
 type GoalResult = {
   success: boolean;
   newTotal?: number;
@@ -75,7 +76,6 @@ describe("Goal Tracker - Core Functionality", () => {
       twitchPaypiggyEquivalent: 350,
     };
 
-    const { GoalTracker } = require("../../../src/utils/goal-tracker");
     goalTracker = new GoalTracker({
       logger: noOpLogger,
       config: { goals: configFixture },

@@ -1,32 +1,30 @@
-const fs = require('fs');
+import fs from 'node:fs';
+import { EventEmitter } from 'node:events';
 
-const { EventEmitter } = require('events');
-
-const { createRetrySystem } = require('../utils/retry-system');
-
-const { safeSetInterval, validateTimeout } = require('../utils/timeout-validator');
-const { withTimeout } = require('../utils/timeout-wrapper');
-const innertubeInstanceManager = require('../services/innertube-instance-manager');
-const { ViewerCountProviderFactory } = require('../utils/viewer-count-providers');
-const { YouTubeConnectionManager } = require('./youtube/youtube-connection-manager');
-const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
-const { getSystemTimestampISO } = require('../utils/timestamp');
-const { getFallbackUsername } = require('../utils/validation');
-const { normalizeYouTubeUsername } = require('./youtube/youtube-username-normalizer');
-const { extractAuthor } = require('./youtube/youtube-author-extractor');
-const { PlatformEvents } = require('../interfaces/PlatformEvents');
-const { YouTubeLiveStreamService } = require('../services/youtube-live-stream-service');
-const { createYouTubeEventRouter } = require('./youtube/events/event-router');
-const { normalizeYouTubeEvent } = require('./youtube/events/event-normalizer');
-const { createYouTubeEventFactory } = require('./youtube/events/event-factory');
-const { createYouTubeMonetizationParser } = require('./youtube/monetization/monetization-parser');
-const { createYouTubeConnectionFactory } = require('./youtube/connections/youtube-connection-factory');
-const { createYouTubeMultiStreamManager } = require('./youtube/streams/youtube-multistream-manager');
-const { UNKNOWN_CHAT_MESSAGE, UNKNOWN_CHAT_USERNAME } = require('../constants/degraded-chat');
-const { getValidMessageParts } = require('../utils/message-parts');
-const { extractMessageText } = require('./youtube/youtube-message-extractor');
-const { resolveYouTubeTimestampISO } = require('../utils/platform-timestamp');
-const { collectMissingFields, getMissingFields, mergeMissingFieldsMetadata } = require('../utils/missing-fields');
+import { UNKNOWN_CHAT_MESSAGE, UNKNOWN_CHAT_USERNAME } from '../constants/degraded-chat';
+import { PlatformEvents } from '../interfaces/PlatformEvents';
+import { YouTubeLiveStreamService } from '../services/youtube-live-stream-service';
+import * as innertubeInstanceManager from '../services/innertube-instance-manager';
+import { collectMissingFields, getMissingFields, mergeMissingFieldsMetadata } from '../utils/missing-fields';
+import { getValidMessageParts } from '../utils/message-parts';
+import { createPlatformErrorHandler } from '../utils/platform-error-handler';
+import { resolveYouTubeTimestampISO } from '../utils/platform-timestamp';
+import { createRetrySystem } from '../utils/retry-system';
+import { getSystemTimestampISO } from '../utils/timestamp';
+import { safeSetInterval, validateTimeout } from '../utils/timeout-validator';
+import { withTimeout } from '../utils/timeout-wrapper';
+import { getFallbackUsername } from '../utils/validation';
+import { ViewerCountProviderFactory } from '../utils/viewer-count-providers';
+import { createYouTubeConnectionFactory } from './youtube/connections/youtube-connection-factory';
+import { createYouTubeEventFactory } from './youtube/events/event-factory';
+import { normalizeYouTubeEvent } from './youtube/events/event-normalizer';
+import { createYouTubeEventRouter } from './youtube/events/event-router';
+import { createYouTubeMonetizationParser } from './youtube/monetization/monetization-parser';
+import { createYouTubeMultiStreamManager } from './youtube/streams/youtube-multistream-manager';
+import { extractAuthor } from './youtube/youtube-author-extractor';
+import { YouTubeConnectionManager } from './youtube/youtube-connection-manager';
+import { extractMessageText } from './youtube/youtube-message-extractor';
+import { normalizeYouTubeUsername } from './youtube/youtube-username-normalizer';
 
 // Timeout and limit constants
 const INNERTUBE_CREATION_TIMEOUT_MS = 3000; // 3 seconds for Innertube instance creation
@@ -1530,6 +1528,4 @@ class YouTubePlatform extends EventEmitter {
     }
 }
 
-module.exports = {
-    YouTubePlatform
-};
+export { YouTubePlatform };

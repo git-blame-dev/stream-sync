@@ -1,6 +1,9 @@
 
+import { initializeLoggingConfig } from '../../src/core/logging';
+
 import testClock from './test-clock';
 import { createMockFn, isMockFunction, clearAllMocks } from './bun-mock-utils';
+import { loadPlatformFixture as loadSyntheticFixture } from './platform-test-data';
 const BASE_TIMESTAMP_MS = Date.parse('2024-01-01T00:00:00.000Z');
 let sequence = 0;
 const nextSequence = () => {
@@ -24,7 +27,6 @@ const createMockLoggingConfig = (platformOverrides = {}) => ({
 
 const initializeTestLogging = (platformOverrides = {}) => {
     try {
-        const { initializeLoggingConfig } = require('../../src/core/logging');
         initializeLoggingConfig({ logging: createMockLoggingConfig(platformOverrides) });
     } catch {
         // Logging module is mocked or not available, skip initialization
@@ -313,7 +315,6 @@ const TEST_COMMANDS = {
 };
 
 const loadPlatformFixture = (platform, eventType) => {
-    const { loadPlatformFixture: loadSyntheticFixture } = require('./platform-test-data');
     return loadSyntheticFixture(platform, eventType);
 };
 

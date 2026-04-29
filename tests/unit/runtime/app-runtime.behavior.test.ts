@@ -14,6 +14,7 @@ import {
 import testClock from "../../helpers/test-clock";
 import { DEFAULT_AVATAR_URL } from "../../../src/constants/avatar";
 import { PlatformEvents } from "../../../src/interfaces/PlatformEvents";
+import { AppRuntime } from "../../../src/runtime/AppRuntime";
 
 const createDeps = (overrides = {}) => ({
   logging: overrides.logging || noOpLogger,
@@ -65,7 +66,6 @@ const createDeps = (overrides = {}) => ({
 });
 
 const createRuntime = (depsOverrides = {}, configOverrides = {}) => {
-  const { AppRuntime } = require("../../../src/runtime/AppRuntime.ts");
   const config = createConfigFixture(configOverrides);
   const deps = createDeps(depsOverrides);
   return new AppRuntime(config, deps);

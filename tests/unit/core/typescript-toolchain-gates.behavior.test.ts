@@ -298,17 +298,17 @@ describe('TypeScript toolchain migration gates behavior', () => {
     it('tracks source typescript commonjs ownership baseline explicitly', () => {
         const sourceCommonJsInventory = collectTypeScriptCommonJsInventory(join(repoRoot, 'src'));
 
-        expect(sourceCommonJsInventory.filesWithCommonJsSyntax).toBe(11);
-        expect(sourceCommonJsInventory.totalRequireOccurrences).toBe(86);
-        expect(sourceCommonJsInventory.filesWithModuleExports).toBe(7);
+        expect(sourceCommonJsInventory.filesWithCommonJsSyntax).toBe(4);
+        expect(sourceCommonJsInventory.totalRequireOccurrences).toBe(23);
+        expect(sourceCommonJsInventory.filesWithModuleExports).toBe(0);
         expect(sourceCommonJsInventory.filesWithExportsObject).toBe(0);
     });
 
     it('tracks test typescript commonjs ownership baseline explicitly', () => {
         const testCommonJsInventory = collectTypeScriptCommonJsInventory(join(repoRoot, 'tests'));
 
-        expect(testCommonJsInventory.filesWithCommonJsSyntax).toBe(77);
-        expect(testCommonJsInventory.totalRequireOccurrences).toBe(199);
+        expect(testCommonJsInventory.filesWithCommonJsSyntax).toBe(52);
+        expect(testCommonJsInventory.totalRequireOccurrences).toBe(156);
         expect(testCommonJsInventory.filesWithModuleExports).toBe(0);
         expect(testCommonJsInventory.filesWithExportsObject).toBe(0);
     });
@@ -324,7 +324,11 @@ describe('TypeScript toolchain migration gates behavior', () => {
             'exactOptionalPropertyTypes',
             'noUncheckedIndexedAccess'
         ]);
-        expect(strictnessPolicyOwnership.candidateExplicit).toEqual([]);
+    expect(strictnessPolicyOwnership.candidateExplicit).toEqual([
+        'noImplicitReturns',
+        'noImplicitThis',
+        'alwaysStrict'
+    ]);
     });
 
     it('uses TypeScript bootstrap entrypoints without javascript proxy wrappers', () => {

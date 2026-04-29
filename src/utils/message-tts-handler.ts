@@ -1,8 +1,4 @@
-const { NotificationBuilder } = require('./notification-builder') as {
-    NotificationBuilder: {
-        sanitizeUsernameForTts: (username: string, maxLength?: number | null) => string;
-    };
-};
+import { NotificationBuilder } from './notification-builder';
 
 type MessageTtsNotification = {
     ttsMessage?: unknown;
@@ -124,5 +120,5 @@ class MessageTTSHandler {
     }
 }
 
-module.exports = MessageTTSHandler;
-module.exports.MessageTTSHandler = MessageTTSHandler;
+export { MessageTTSHandler };
+export default MessageTTSHandler;

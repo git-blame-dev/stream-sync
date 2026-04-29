@@ -1,14 +1,15 @@
-const crypto = require('crypto');
-const fs = require('fs');
-const fsp = require('fs/promises');
-const os = require('os');
-const path = require('path');
-const { execFile } = require('child_process');
-const { promisify } = require('util');
-const axios = require('axios');
+import { execFile } from 'node:child_process';
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import fsp from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { promisify } from 'node:util';
 
-const { logger } = require('../../core/logging');
-const { createPlatformErrorHandler } = require('../../utils/platform-error-handler');
+import * as axios from 'axios';
+
+import { logger } from '../../core/logging';
+import { createPlatformErrorHandler } from '../../utils/platform-error-handler';
 
 const execFileAsyncDefault = promisify(execFile);
 
@@ -580,7 +581,7 @@ function createTikTokGiftAnimationResolver(options = {}) {
     };
 }
 
-module.exports = {
+export {
     createTikTokGiftAnimationResolver,
     GIFT_ANIMATION_CACHE_DIR,
     getGiftAnimationDependencyStatus

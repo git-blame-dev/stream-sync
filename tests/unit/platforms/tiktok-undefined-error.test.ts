@@ -1,6 +1,7 @@
 import { describe, it, expect } from "bun:test";
 import { createMockFn } from "../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../helpers/mock-factories";
+import { TikTokPlatform } from "../../../src/platforms/tiktok";
 
 type MessageError = {
   message?: string;
@@ -19,7 +20,6 @@ describe("TikTok Error Message Handling", () => {
   });
 
   it("handles error objects without message property gracefully", () => {
-    const { TikTokPlatform } = require("../../../src/platforms/tiktok");
 
     const mockConnection = {
       on: createMockFn(),

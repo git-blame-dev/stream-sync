@@ -143,7 +143,6 @@ describe("secret-manager", () => {
   });
 
   it("prompts in interactive mode, persists secrets to .env, and preserves existing entries", async () => {
-    const { ensureSecrets } = require("../../../src/utils/secret-manager.ts");
 
     const promptValues = {
       TIKTOK_API_KEY: "prompt_tiktok",
@@ -191,7 +190,6 @@ describe("secret-manager", () => {
   });
 
   it("writes the env file with restricted permissions", async () => {
-    const { ensureSecrets } = require("../../../src/utils/secret-manager.ts");
 
     const promptValues = {
       TIKTOK_API_KEY: "prompt_tiktok",
@@ -258,7 +256,6 @@ describe("secret-manager", () => {
   });
 
   it("shows colon-terminated prompts for interactive clarity", async () => {
-    const { ensureSecrets } = require("../../../src/utils/secret-manager.ts");
 
     const promptValues = {
       TIKTOK_API_KEY: "prompt_tiktok",

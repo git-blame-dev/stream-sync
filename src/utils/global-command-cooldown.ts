@@ -1,3 +1,4 @@
+import { logger as coreLogger } from '../core/logging';
 import { createPlatformErrorHandler } from './platform-error-handler';
 
 type CooldownLogger = {
@@ -184,8 +185,7 @@ let globalCooldownManager: GlobalCommandCooldownManager | null = null;
 
 function getGlobalCooldownManager(): GlobalCommandCooldownManager {
     if (!globalCooldownManager) {
-        const { logger } = require('../core/logging') as { logger: CooldownLogger };
-        globalCooldownManager = new GlobalCommandCooldownManager(logger);
+        globalCooldownManager = new GlobalCommandCooldownManager(coreLogger as CooldownLogger);
     }
     return globalCooldownManager;
 }

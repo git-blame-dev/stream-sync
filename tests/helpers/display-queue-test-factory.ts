@@ -1,4 +1,5 @@
 import { createOBSSourcesManager } from '../../src/obs/sources';
+import { createOBSGoalsManager } from '../../src/obs/goals';
 import { createGoalTracker } from '../../src/utils/goal-tracker';
 
 import { createMockFn } from './bun-mock-utils';
@@ -44,7 +45,6 @@ function createRealGoalTracker(config = createTestConfig()) {
 }
 
 function createRealGoalsManager(mockOBS, realSourcesManager, realGoalTracker) {
-    const { createOBSGoalsManager } = require('../../src/obs/goals');
     const config = createTestConfig();
 
     return createOBSGoalsManager(mockOBS, {

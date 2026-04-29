@@ -4,6 +4,7 @@ import {
   restoreAllMocks,
   spyOn,
 } from "../helpers/bun-mock-utils";
+import { AppRuntime } from "../../src/main";
 
 describe("main.js event handler wiring", () => {
   let processOnSpy;
@@ -65,7 +66,6 @@ describe("main.js event handler wiring", () => {
   const baseConfig = { general: {} };
 
   it("rejects construction when EventBus is unavailable", () => {
-    const { AppRuntime } = require("../../src/main.ts");
     expect(
       () => new AppRuntime(baseConfig, createDeps({ eventBus: null })),
     ).toThrow("AppRuntime missing required dependencies");

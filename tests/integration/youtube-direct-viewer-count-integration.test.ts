@@ -4,6 +4,7 @@ import { noOpLogger } from "../helpers/mock-factories";
 import { createMockPlatformDependencies } from "../helpers/test-setup";
 import { createYouTubeConfigFixture } from "../helpers/config-fixture";
 import testClock from "../helpers/test-clock";
+import { YouTubePlatform } from "../../src/platforms/youtube";
 
 const createMockViewerCountProvider = (overrides = {}) => ({
   getViewerCount: createMockFn().mockResolvedValue(100),
@@ -23,7 +24,6 @@ describe("YouTube Direct getViewerCount() Integration", () => {
     expectedViewerCount = 100,
     providerOverrides = {},
   ) => {
-    const { YouTubePlatform } = require("../../src/platforms/youtube");
 
     const mockProvider = createMockViewerCountProvider({
       getViewerCount: createMockFn().mockResolvedValue(expectedViewerCount),

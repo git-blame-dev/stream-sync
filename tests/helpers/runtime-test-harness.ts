@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events';
+import { AppRuntime } from '../../src/runtime/AppRuntime';
 
 import { createMockFn } from './bun-mock-utils';
 import { createConfigFixture } from './config-fixture';
@@ -114,7 +115,6 @@ function createAppRuntimeTestDependencies(options = {}) {
 }
 
 const createTestAppRuntime = (configOverrides = {}, options = {}) => {
-    const { AppRuntime } = require('../../src/runtime/AppRuntime');
     const harness = createAppRuntimeTestDependencies({
         configOverrides,
         ...options

@@ -3,33 +3,10 @@ import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../helpers/mock-factories";
 import { createConfigFixture } from "../../helpers/config-fixture";
 import { PRIORITY_LEVELS } from "../../../src/core/constants";
+import { config as appConfig } from "../../../src/core/config";
+import NotificationManager from "../../../src/notifications/NotificationManager";
 
 import { setupAutomatedCleanup } from "../../helpers/mock-lifecycle";
-
-type NotificationManagerLike = {
-  handleNotification: (
-    type: string,
-    platform: string,
-    data: Record<string, unknown>,
-  ) => Promise<unknown>;
-  handleNotificationInternal: (
-    type: string,
-    platform: string,
-    data: Record<string, unknown>,
-    isTextOnly: boolean,
-  ) => Promise<{
-    success?: boolean;
-    suppressed?: boolean;
-    reason?: string;
-    notificationType?: string;
-    platform?: string;
-  }>;
-  donationSpamDetector?: unknown;
-};
-
-type NotificationManagerCtor = new (
-  deps: Record<string, unknown>,
-) => NotificationManagerLike;
 
 type NotificationConstants = {
   PRIORITY_LEVELS: typeof PRIORITY_LEVELS;
@@ -63,7 +40,6 @@ describe("NotificationManager Spam Protection Behavior - Modernized", () => {
     restoreAllMocks();
   });
 
-  let NotificationManager: NotificationManagerCtor;
   let mockLogger: typeof noOpLogger;
   let mockConstants: NotificationConstants;
   let mockDisplayQueue: DisplayQueueMock;
@@ -100,8 +76,6 @@ describe("NotificationManager Spam Protection Behavior - Modernized", () => {
       },
     });
 
-    NotificationManager =
-      require("../../../src/notifications/NotificationManager") as NotificationManagerCtor;
   });
 
   describe("when spam protection is properly configured", () => {
@@ -129,7 +103,7 @@ describe("NotificationManager Spam Protection Behavior - Modernized", () => {
     });
 
     it("should access spam configuration for effective spam protection", () => {
-      const { config } = require("../../../src/core/config");
+      const config = appConfig;
 
       expect(config).toBeDefined();
       expect(config.spam).toBeDefined();
@@ -248,7 +222,7 @@ describe("NotificationManager Spam Protection Behavior - Modernized", () => {
   describe("when checking configuration availability", () => {
     describe("and verifying spam configuration structure", () => {
       it("should provide spam config compatible with SpamDetectionConfig constructor", () => {
-        const { config } = require("../../../src/core/config");
+        const config = appConfig;
         const spamConfig = config.spam;
 
         expect(spamConfig.enabled).toBeDefined();
@@ -263,7 +237,7 @@ describe("NotificationManager Spam Protection Behavior - Modernized", () => {
       });
 
       it("should have valid spam configuration values", () => {
-        const { config } = require("../../../src/core/config");
+        const config = appConfig;
         const spamConfig = config.spam;
 
         expect(spamConfig).toBeTruthy();

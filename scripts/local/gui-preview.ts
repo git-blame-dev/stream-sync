@@ -83,7 +83,14 @@ const { safeSetInterval, safeSetTimeout, safeDelay } = load('../../src/utils/tim
 const { createGuiTransportService } = load('../../src/services/gui/gui-transport-service');
 const { PlatformEventRouter } = load('../../src/services/PlatformEventRouter.ts');
 const { ChatNotificationRouter } = load('../../src/services/ChatNotificationRouter.ts');
-const NotificationManager = load('../../src/notifications/NotificationManager');
+const NotificationManagerModule = load('../../src/notifications/NotificationManager') as {
+    default?: new (...args: unknown[]) => unknown;
+    NotificationManager?: new (...args: unknown[]) => unknown;
+};
+const NotificationManager = NotificationManagerModule.default || NotificationManagerModule.NotificationManager;
+if (typeof NotificationManager !== 'function') {
+    throw new Error('gui-preview requires NotificationManager constructor export');
+}
 const { DisplayQueue } = load('../../src/obs/display-queue');
 const { createTikTokGiftAnimationResolver } = load('../../src/services/tiktok-gift-animation/resolver');
 const { createYouTubeEventRouter } = load('../../src/platforms/youtube/events/event-router');

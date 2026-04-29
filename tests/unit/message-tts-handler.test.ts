@@ -22,7 +22,11 @@ type MessageTTSHandlerLike = {
     };
 };
 
-const MessageTTSHandler = nodeRequire('../../src/utils/message-tts-handler') as MessageTTSHandlerLike;
+const MessageTTSHandlerModule = nodeRequire('../../src/utils/message-tts-handler') as {
+    default?: MessageTTSHandlerLike;
+    MessageTTSHandler?: MessageTTSHandlerLike;
+};
+const MessageTTSHandler = MessageTTSHandlerModule.default || MessageTTSHandlerModule.MessageTTSHandler as MessageTTSHandlerLike;
 
 describe('MessageTTSHandler', () => {
     describe('createTTSStages', () => {

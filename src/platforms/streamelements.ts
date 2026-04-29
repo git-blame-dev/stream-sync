@@ -1,11 +1,12 @@
-const { EventEmitter } = require('events');
-const { safeSetTimeout, safeSetInterval } = require('../utils/timeout-validator');
-const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
-const { createRetrySystem } = require('../utils/retry-system');
-const { STREAMELEMENTS } = require('../core/endpoints');
-const { secrets } = require('../core/secrets');
-const { getSystemTimestampISO } = require('../utils/timestamp');
-const { PlatformEvents } = require('../interfaces/PlatformEvents');
+import { EventEmitter } from 'node:events';
+
+import { STREAMELEMENTS } from '../core/endpoints';
+import { secrets } from '../core/secrets';
+import { PlatformEvents } from '../interfaces/PlatformEvents';
+import { createPlatformErrorHandler } from '../utils/platform-error-handler';
+import { createRetrySystem } from '../utils/retry-system';
+import { getSystemTimestampISO } from '../utils/timestamp';
+import { safeSetInterval, safeSetTimeout } from '../utils/timeout-validator';
 
 
 class StreamElementsPlatform extends EventEmitter {
@@ -509,6 +510,4 @@ class StreamElementsPlatform extends EventEmitter {
     }
 }
 
-module.exports = {
-    StreamElementsPlatform
-}; 
+export { StreamElementsPlatform };

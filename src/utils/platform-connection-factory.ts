@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 
 import { createPlatformErrorHandler } from './platform-error-handler';
-import { validateLoggerInterface } from './dependency-validator';
+import { createStandardDependencies as createStandardValidatorDependencies, validateLoggerInterface } from './dependency-validator';
 import { normalizeLoggerMethods } from './logger-resolver';
 import { secrets } from '../core/secrets';
 
@@ -276,10 +276,7 @@ class PlatformConnectionFactory {
     }
 
     createStandardDependencies(platform: string, baseLogger: unknown): unknown {
-        const { createStandardDependencies } = require('./dependency-validator') as {
-            createStandardDependencies: (platformName: string, loggerCandidate: unknown) => unknown;
-        };
-        return createStandardDependencies(platform, baseLogger);
+        return createStandardValidatorDependencies(platform, baseLogger);
     }
 
     private handleFactoryError(message: string, error: unknown, platform: string): void {

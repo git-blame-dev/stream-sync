@@ -1,14 +1,13 @@
 import { describe, expect, it } from 'bun:test';
-
-const platformLifecycleModule = require('../../../src/services/PlatformLifecycleService.ts');
+import { PlatformLifecycleService } from '../../../src/services/PlatformLifecycleService';
 
 describe('platform lifecycle JS interop', () => {
-    it('exposes PlatformLifecycleService as a named export from the JS wrapper', () => {
-        expect(typeof platformLifecycleModule.PlatformLifecycleService).toBe('function');
-    });
+it('exposes PlatformLifecycleService as a named export from the JS wrapper', () => {
+expect(typeof PlatformLifecycleService).toBe('function');
+});
 
-    it('constructs the named wrapper export with config and event bus', () => {
-        const service = new platformLifecycleModule.PlatformLifecycleService({
+it('constructs the named wrapper export with config and event bus', () => {
+const service = new PlatformLifecycleService({
             config: {
                 twitch: { enabled: false },
                 youtube: { enabled: false },

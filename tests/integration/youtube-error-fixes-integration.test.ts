@@ -7,6 +7,7 @@ import {
   restoreAllMocks,
   spyOn,
 } from "../helpers/bun-mock-utils";
+import { YouTubePlatform } from "../../src/platforms/youtube";
 
 describe("YouTube Error Fixes Integration", () => {
   let mockApp;
@@ -51,7 +52,6 @@ describe("YouTube Error Fixes Integration", () => {
       }),
     };
 
-    const { YouTubePlatform } = require("../../src/platforms/youtube");
     const config = {
       enabled: true,
       username: "test-channel",

@@ -3,14 +3,11 @@ import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
 import { createConfigFixture } from "../../helpers/config-fixture";
 import { PRIORITY_LEVELS } from "../../../src/core/constants";
 import { setupAutomatedCleanup } from "../../helpers/mock-lifecycle";
+import NotificationManager from "../../../src/notifications/NotificationManager";
 
 type NotificationManagerLike = {
   handleNotificationInternal: (...args: unknown[]) => Promise<unknown>;
 };
-
-type NotificationManagerCtor = new (
-  deps: Record<string, unknown>,
-) => NotificationManagerLike;
 
 type LoggerSpy = {
   debug: ReturnType<typeof createMockFn>;
@@ -48,7 +45,6 @@ describe("NotificationManager logger argument order", () => {
     restoreAllMocks();
   });
 
-  let NotificationManager: NotificationManagerCtor;
   let spyLogger: LoggerSpy;
   let mockConstants: NotificationConstants;
   let mockDisplayQueue: DisplayQueueMock;
@@ -87,8 +83,6 @@ describe("NotificationManager logger argument order", () => {
       },
     });
 
-    NotificationManager =
-      require("../../../src/notifications/NotificationManager") as NotificationManagerCtor;
   });
 
   function createManager(

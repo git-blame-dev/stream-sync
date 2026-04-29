@@ -1,5 +1,5 @@
-const { PlatformConnectionFactory } = require('./platform-connection-factory');
-const { secrets } = require('../core/secrets');
+import { secrets } from '../core/secrets';
+import { PlatformConnectionFactory } from './platform-connection-factory';
 
 class DependencyFactory {
     constructor() {
@@ -580,4 +580,5 @@ class DependencyFactory {
     }
 }
 
-module.exports = { DependencyFactory };
+export { DependencyFactory };
+export default { DependencyFactory };

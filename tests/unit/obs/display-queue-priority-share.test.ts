@@ -1,7 +1,8 @@
+import { beforeEach, describe, expect, test } from 'bun:test';
 
-const { DisplayQueue } = require('../../../src/obs/display-queue.ts');
-const { createMockOBSManager } = require('../../helpers/mock-factories');
-const { PRIORITY_LEVELS } = require('../../../src/core/constants');
+import { PRIORITY_LEVELS } from '../../../src/core/constants';
+import { DisplayQueue } from '../../../src/obs/display-queue';
+import { createMockOBSManager } from '../../helpers/mock-factories';
 
 describe('DisplayQueue share priority mapping', () => {
     let displayQueue;

@@ -1,13 +1,16 @@
-const axios = require('axios') as {
+import * as axios from 'axios';
+
+import { AuthConstants } from './auth-constants';
+import { resolveLogger } from './logger-resolver';
+import { createRetrySystem, type RetrySystem } from './retry-system';
+import { config as appConfig } from '../core/config';
+
+const axiosClient = axios as unknown as {
     get: (url: string, config: Record<string, unknown>) => Promise<Record<string, unknown>>;
     post: (url: string, data: unknown, config: Record<string, unknown>) => Promise<Record<string, unknown>>;
     put: (url: string, data: unknown, config: Record<string, unknown>) => Promise<Record<string, unknown>>;
     delete: (url: string, config: Record<string, unknown>) => Promise<Record<string, unknown>>;
 };
-
-import { resolveLogger } from './logger-resolver';
-import { createRetrySystem, type RetrySystem } from './retry-system';
-import { config as appConfig } from '../core/config';
 
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE';
 
@@ -55,7 +58,7 @@ class EnhancedHttpClient {
     currentUserAgentIndex: number;
 
     constructor(config: EnhancedHttpClientConfig = {}) {
-        this.axios = config.axios || axios;
+        this.axios = config.axios || axiosClient;
         this.logger = resolveLogger(config.logger, 'EnhancedHttpClient');
         this.defaultTimeout = resolveTimeout(config.timeout, appConfig.http.enhancedTimeoutMs);
         this.reachabilityTimeoutMs = resolveTimeout(config.reachabilityTimeoutMs, appConfig.http.enhancedReachabilityTimeoutMs);
@@ -115,12 +118,6 @@ class EnhancedHttpClient {
         }
 
         try {
-            const { AuthConstants } = require('./auth-constants') as {
-                AuthConstants: {
-                    determineOperationCriticality: (ctx: unknown) => unknown;
-                    getStreamingOptimizedTimeout: (criticality: unknown, operationType: string) => number;
-                };
-            };
             const criticality = AuthConstants.determineOperationCriticality(context);
             const operationType = typeof context?.operationType === 'string' ? context.operationType : 'tokenValidation';
             return AuthConstants.getStreamingOptimizedTimeout(criticality, operationType);

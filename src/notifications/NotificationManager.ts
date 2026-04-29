@@ -1,10 +1,12 @@
-const EventEmitter = require('events');
-const { randomUUID } = require('node:crypto');
-const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
-const { createSyntheticGiftFromAggregated } = require('./aggregated-donation-transformer');
-const { NotificationInputValidator } = require('./notification-input-validator');
-const { NotificationPayloadBuilder } = require('./notification-payload-builder');
-const { NotificationGate } = require('./notification-gate');
+import { randomUUID } from 'node:crypto';
+import { EventEmitter } from 'node:events';
+
+import { NotificationBuilder } from '../utils/notification-builder';
+import { createPlatformErrorHandler } from '../utils/platform-error-handler';
+import { createSyntheticGiftFromAggregated } from './aggregated-donation-transformer';
+import { NotificationGate } from './notification-gate';
+import { NotificationInputValidator } from './notification-input-validator';
+import { NotificationPayloadBuilder } from './notification-payload-builder';
 
 function getErrorMessage(error) {
     if (error instanceof Error) {
@@ -61,7 +63,6 @@ class NotificationManager extends EventEmitter {
         const { PRIORITY_LEVELS, NOTIFICATION_CONFIGS } = this.constants;
         this.PRIORITY_LEVELS = PRIORITY_LEVELS;
         this.NOTIFICATION_CONFIGS = NOTIFICATION_CONFIGS;
-        const { NotificationBuilder } = require('../utils/notification-builder.ts');
         this.NotificationBuilder = NotificationBuilder;
         this.inputValidator = new NotificationInputValidator(this.NOTIFICATION_CONFIGS);
         this.notificationGate = new NotificationGate(this.config);
@@ -75,7 +76,6 @@ class NotificationManager extends EventEmitter {
 
 
     build(input) {
-        const { NotificationBuilder } = require('../utils/notification-builder.ts');
         return NotificationBuilder.build(input);
     }
 
@@ -577,4 +577,5 @@ class NotificationManager extends EventEmitter {
     }
 }
 
-module.exports = NotificationManager;
+export { NotificationManager };
+export default NotificationManager;
