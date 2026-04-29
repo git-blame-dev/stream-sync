@@ -122,8 +122,8 @@ function createYouTubeConnectionFactory(options: YouTubeConnectionFactoryOptions
             installYouTubeLiveChatUnknownRendererCapture({
                 ...captureOptions,
                 parser,
-                logUnknownRenderer: async (entry) => {
-                    await platform.logRawPlatformData('unknown-renderer', entry);
+                logUnknownRenderer: async (_entry) => {
+                    return;
                 }
             });
         };
