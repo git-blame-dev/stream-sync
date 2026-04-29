@@ -37,7 +37,35 @@ describe("YouTube monetization parser", () => {
       amount: 300,
       currency: "jewels",
       message: "sent Girl power for 300 Jewels",
+      giftImageUrl: "https://www.gstatic.com/youtube/img/pdg/gift/assets/girl_power.png=w480-h480",
     });
+  });
+
+  test("resolves jewels gift image URL variants for known gift types", () => {
+    const parser = createYouTubeMonetizationParser({ logger: noOpLogger });
+
+    const partyHat = parser.parseGiftMessageView(createGiftMessageViewItem({
+      text: { content: "sent Party hat for 20 Jewels" },
+    }));
+    const pressF = parser.parseGiftMessageView(createGiftMessageViewItem({
+      text: { content: "sent Press F for 10 Jewels" },
+    }));
+    const goldCoin = parser.parseGiftMessageView(createGiftMessageViewItem({
+      text: { content: "sent Gold coin for 10 Jewels" },
+    }));
+
+    expect(partyHat.giftImageUrl).toBe("https://www.gstatic.com/youtube/img/pdg/gift/assets/party_hat_320x320.png=w480-h480");
+    expect(pressF.giftImageUrl).toBe("https://www.gstatic.com/youtube/img/pdg/gift/assets/press_f.png=w480-h480");
+    expect(goldCoin.giftImageUrl).toBe("https://www.gstatic.com/youtube/img/pdg/gift/assets/gold_coin_v2_320x320.png=w480-h480");
+  });
+
+  test("leaves jewels giftImageUrl undefined when mapping is unknown", () => {
+    const parser = createYouTubeMonetizationParser({ logger: noOpLogger });
+    const result = parser.parseGiftMessageView(createGiftMessageViewItem({
+      text: { content: "sent Star for 2 Jewels" },
+    }));
+
+    expect(result.giftImageUrl).toBeUndefined();
   });
 
   test("parses avatarUrl for Super Chat from author thumbnails", () => {

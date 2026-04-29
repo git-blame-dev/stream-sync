@@ -44,6 +44,7 @@ interface ParsedGiftMessageView {
     amount: number;
     currency: 'jewels';
     message: string;
+    giftImageUrl?: string;
 }
 
 interface MembershipLevelInput {
@@ -56,6 +57,19 @@ const isRecord = (value: unknown): value is UnknownRecord => (
 );
 
 const toRecord = (value: unknown): UnknownRecord => (isRecord(value) ? value : {});
+
+const YOUTUBE_GIFT_ASSET_BASE_URL = 'https://www.gstatic.com/youtube/img/pdg/gift/assets/';
+const YOUTUBE_GIFT_ASSET_QUERY_SUFFIX = '=w480-h480';
+const YOUTUBE_JEWELS_GIFT_ASSET_FILES: Record<string, string> = {
+    'clapping seal': 'clapping_seal.png',
+    'ggez': 'ggez.png',
+    'girl power': 'girl_power.png',
+    'gold coin': 'gold_coin_v2_320x320.png',
+    'party hat': 'party_hat_320x320.png',
+    'press f': 'press_f.png',
+    'silver star': 'silver_star_v2_320x320.png',
+    'six seven': 'six_seven.png'
+};
 
 function createYouTubeMonetizationParser(options: YouTubeMonetizationParserOptions = {}) {
     const currencyParser = new YouTubeiCurrencyParser({ logger: options.logger });
@@ -226,6 +240,16 @@ function createYouTubeMonetizationParser(options: YouTubeMonetizationParserOptio
         }
 
         return { giftType, amount };
+    };
+
+    const resolveJewelsGiftImageUrl = (giftType: string): string => {
+        const normalizedGiftType = giftType.trim().toLowerCase().replace(/\s+/g, ' ');
+        const assetFile = YOUTUBE_JEWELS_GIFT_ASSET_FILES[normalizedGiftType];
+        if (!assetFile) {
+            return '';
+        }
+
+        return `${YOUTUBE_GIFT_ASSET_BASE_URL}${assetFile}${YOUTUBE_GIFT_ASSET_QUERY_SUFFIX}`;
     };
 
     const parseMembershipMonthsFromHeaderText = (text: unknown): number | undefined => {
@@ -444,7 +468,9 @@ function createYouTubeMonetizationParser(options: YouTubeMonetizationParserOptio
         }
 
         const { giftType, amount } = parseJewelsGiftText(message);
-        return {
+        const giftImageUrl = resolveJewelsGiftImageUrl(giftType);
+
+        const payload: ParsedGiftMessageView = {
             id: resolveId(chatItem, 'YouTube GiftMessageView'),
             timestamp: resolveTimestamp(chatItem, 'YouTube GiftMessageView'),
             giftType,
@@ -453,6 +479,12 @@ function createYouTubeMonetizationParser(options: YouTubeMonetizationParserOptio
             currency: 'jewels',
             message
         };
+
+        if (giftImageUrl) {
+            payload.giftImageUrl = giftImageUrl;
+        }
+
+        return payload;
     };
 
     return {

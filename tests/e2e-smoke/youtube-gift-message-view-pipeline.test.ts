@@ -133,7 +133,7 @@ describe('YouTube GiftMessageView pipeline (smoke E2E)', () => {
             expect(queued.data.giftCount).toBe(1);
             expect(queued.data.amount).toBe(300);
             expect(queued.data.currency).toBe('jewels');
-            expect(queued.data.giftImageUrl).toBeUndefined();
+            expect(queued.data.giftImageUrl).toBe('https://www.gstatic.com/youtube/img/pdg/gift/assets/girl_power.png=w480-h480');
 
             assertNonEmptyString(queued.data.displayMessage);
             assertNonEmptyString(queued.data.ttsMessage);
