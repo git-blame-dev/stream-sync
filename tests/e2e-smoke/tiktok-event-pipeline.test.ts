@@ -547,4 +547,48 @@ describe("TikTok event pipeline (smoke E2E)", () => {
       useRealTimers();
     }
   });
+
+  test("emits terminal no-reconnect lifecycle signal for terminal disconnect reasons", async () => {
+    const connection = new EventEmitter();
+    const WebcastEvent = {
+      DISCONNECT: "disconnect",
+      ERROR: "error",
+    };
+    const ControlEvent = {
+      DISCONNECTED: "disconnected",
+      ERROR: "error",
+    };
+
+    const platform = new TikTokPlatform(
+      {
+        enabled: true,
+        username: "test-user",
+      },
+      {
+        logger: noOpLogger,
+        TikTokWebSocketClient: createMockFn(),
+        WebcastEvent,
+        ControlEvent,
+        connectionFactory: { createConnection: createMockFn() },
+      },
+    );
+
+    platform.connection = connection;
+    setupTikTokEventListeners(platform);
+    const emittedEvents = [];
+    platform.on("platform:event", (event) => emittedEvents.push(event));
+
+    try {
+      connection.emit(ControlEvent.DISCONNECTED, { message: "private account" });
+      await new Promise(setImmediate);
+
+      const statusEvent = emittedEvents.find(
+        (event) => event.type === "platform:stream-status",
+      );
+      expect(statusEvent).toBeDefined();
+      expect(statusEvent.data.willReconnect).toBe(false);
+    } finally {
+      cleanupTikTokEventListeners(platform);
+    }
+  });
 });

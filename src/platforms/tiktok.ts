@@ -413,21 +413,37 @@ class TikTokPlatform extends EventEmitter {
         this.handleRetry(err);
     }
 
-    handleRetry(err) {
-        const username = this.config.username;
-        const errorMessage = err?.message || err?.toString() || 'Unknown error';
+  handleRetry(err) {
+    const username = this.config.username;
+    const errorMessage = err?.message || err?.toString() || 'Unknown error';
+    const decision = this._classifyReconnectPolicy({
+      message: errorMessage,
+      source: 'retry',
+    });
 
-        if (!this.retrySystem) {
-            this.logger.warn(`No retry system available for TikTok user '${username}', connection will not be retried`, 'tiktok');
-            return { action: 'skipped', reason: 'no-retry-system' };
-        }
+    if (decision.shouldDeferReconnect) {
+      this.isPlannedDisconnection = false;
+      const deferredReconnect = this._ensureDeferredReconnectChecks('stream-not-live');
+      if (deferredReconnect.scheduled) {
+        this.logger.debug(
+          `Scheduled deferred reconnect checks for TikTok user '${username}' after not-live signal`,
+          'tiktok',
+        );
+        return { action: 'deferred-reconnect-scheduled' };
+      }
 
-        const isRecoverableError = this._isRecoverableError(errorMessage);
+      return { action: 'deferred-reconnect-active', reason: deferredReconnect.reason };
+    }
 
-        if (!isRecoverableError) {
-            this.logger.warn(`Non-recoverable error for TikTok user '${username}', skipping retry: ${errorMessage}`, 'tiktok');
-            return { action: 'skipped', reason: 'non-recoverable' };
-        }
+    if (decision.skipReason === 'terminal-error') {
+      this.logger.warn(`Non-recoverable error for TikTok user '${username}', skipping retry: ${errorMessage}`, 'tiktok');
+      return { action: 'skipped', reason: 'non-recoverable' };
+    }
+
+    if (!this.retrySystem) {
+      this.logger.warn(`No retry system available for TikTok user '${username}', connection will not be retried`, 'tiktok');
+      return { action: 'skipped', reason: 'no-retry-system' };
+    }
 
         this.logger.debug(`Attempting retry for TikTok user '${username}' after error: ${errorMessage}`, 'tiktok');
         this.queueRetry(err);
@@ -527,23 +543,95 @@ class TikTokPlatform extends EventEmitter {
         this._lastNotLiveWarningAt = Date.now();
     }
 
-    _wasRecentlyNotLiveLogged() {
-        if (!this._lastNotLiveWarningAt) {
-            return false;
-        }
-        return Date.now() - this._lastNotLiveWarningAt < 2000;
+  _wasRecentlyNotLiveLogged() {
+    if (!this._lastNotLiveWarningAt) {
+      return false;
+    }
+    return Date.now() - this._lastNotLiveWarningAt < 2000;
+  }
+
+  _ensureDeferredReconnectChecks(context = 'offline') {
+    if (!this.config.enabled) {
+      return { scheduled: false, reason: 'platform-disabled' };
     }
 
-    _isRecoverableError(errorMessage) {
+    if (this.intervalManager.hasInterval('tiktok-stream-reconnect')) {
+      return { scheduled: false, reason: 'already-active' };
+    }
+
+    this.intervalManager.createInterval(
+      'tiktok-stream-reconnect',
+      async () => {
+        try {
+          await this._connect(this.handlers);
+        } catch (err) {
+          this.logger.debug(
+            `Deferred reconnect check failed (${context}): ${err?.message || err}`,
+            'tiktok',
+          );
+        }
+      },
+      60000,
+      'reconnect',
+    );
+
+    return { scheduled: true, reason: 'scheduled' };
+  }
+
+  _classifyReconnectPolicy({ message = 'Unknown error', code, isError = false, source = 'connection-issue' } = {}) {
+    const isStreamNotLive = this._isStreamNotLive({ message, code });
+    const isTerminalError = !isStreamNotLive && !this._isRecoverableError(message);
+    const reconnectAllowed = !this.isPlannedDisconnection && this.config.enabled;
+    const willReconnect = reconnectAllowed && !isTerminalError;
+
+    const issueType = isStreamNotLive
+      ? 'stream-not-live'
+      : (isError ? 'error' : 'disconnection');
+
+    if (!willReconnect) {
+      return {
+        issueType,
+        isStreamNotLive,
+        isTerminalError,
+        willReconnect,
+        shouldDeferReconnect: false,
+        shouldImmediateRetry: false,
+        skipReason: isTerminalError ? 'terminal-error' : 'no-retry-needed',
+      };
+    }
+
+    if (isStreamNotLive || source === 'stream-end') {
+      return {
+        issueType,
+        isStreamNotLive,
+        isTerminalError,
+        willReconnect,
+        shouldDeferReconnect: true,
+        shouldImmediateRetry: false,
+        skipReason: null,
+      };
+    }
+
+    return {
+      issueType,
+      isStreamNotLive,
+      isTerminalError,
+      willReconnect,
+      shouldDeferReconnect: false,
+      shouldImmediateRetry: true,
+      skipReason: null,
+    };
+  }
+
+  _isRecoverableError(errorMessage) {
         // Non-recoverable errors (likely configuration issues)
-        const nonRecoverablePatterns = [
-            'username is required',
-            'invalid username',
-            'user not found',
-            'private account',
-            'banned account',
-            'not live'
-        ];
+    const nonRecoverablePatterns = [
+      'username is required',
+      'invalid username',
+      'user not found',
+      'private account',
+      'banned account'
+    ];
         
         for (const pattern of nonRecoverablePatterns) {
             if (errorMessage.toLowerCase().includes(pattern)) {
@@ -610,50 +698,57 @@ class TikTokPlatform extends EventEmitter {
         }
         this._disconnectionInProgress = true;
 
-        try {
-            const username = this.config.username;
-            const normalizedIssue = this._normalizeConnectionIssue(issue);
-            const message = normalizedIssue.message;
-            const isStreamNotLive = this._isStreamNotLive(normalizedIssue);
+    try {
+      const username = this.config.username;
+      const normalizedIssue = this._normalizeConnectionIssue(issue);
+      const message = normalizedIssue.message;
+      const decision = this._classifyReconnectPolicy({
+        message,
+        code: normalizedIssue.code,
+        isError,
+        source: 'connection-issue',
+      });
 
-            let issueType;
-            if (isStreamNotLive) {
-                this._resetShareActorTracking('stream-not-live');
-                this.logger.warn(this._formatStreamNotLiveMessage(username, normalizedIssue), 'tiktok');
-                this._recordNotLiveWarning();
-                issueType = 'stream-not-live';
-            } else if (isError) {
-                this.errorHandler.handleConnectionError(issue, 'connection issue', `Connection issue: ${message}`);
-                issueType = 'error';
-            } else {
-                this.logger.warn(`Connection issue: ${message}`, 'tiktok');
-                issueType = 'disconnection';
-            }
+      if (decision.isStreamNotLive) {
+        this._resetShareActorTracking('stream-not-live');
+        this.logger.warn(this._formatStreamNotLiveMessage(username, normalizedIssue), 'tiktok');
+        this._recordNotLiveWarning();
+      } else if (isError) {
+        this.errorHandler.handleConnectionError(issue, 'connection issue', `Connection issue: ${message}`);
+      } else {
+        this.logger.warn(`Connection issue: ${message}`, 'tiktok');
+      }
 
-            // Compute willReconnect BEFORE cleanup (which sets isPlannedDisconnection)
-            const willReconnect = !isStreamNotLive && !this.isPlannedDisconnection && this.config.enabled;
+      this.connectionActive = false;
+      await this.cleanup();
+      this.connection = null;
+      this.listenersConfigured = false;
 
-            this.connectionActive = false;
-            await this.cleanup();
-            this.connection = null;
-            this.listenersConfigured = false;
+      const disconnectionMessage = decision.isStreamNotLive ? 'Stream is not live' : message;
+      await this._handleDisconnection(disconnectionMessage, decision.willReconnect);
 
-            const disconnectionMessage = isStreamNotLive ? 'Stream is not live' : message;
-            await this._handleDisconnection(disconnectionMessage, willReconnect);
+      let retryResult = null;
+      if (decision.shouldDeferReconnect) {
+        this.isPlannedDisconnection = false;
+        const deferredReconnect = this._ensureDeferredReconnectChecks('stream-not-live-disconnect');
+        retryResult = {
+          queued: false,
+          reason: deferredReconnect.scheduled
+            ? 'deferred-reconnect-scheduled'
+            : 'deferred-reconnect-already-active',
+        };
+      } else if (decision.shouldImmediateRetry && this.retrySystem) {
+        const errorForRetry = isError ? issue : new Error(`TikTok disconnected: ${disconnectionMessage}`);
+        retryResult = this.queueRetry(errorForRetry);
+      } else if (decision.skipReason) {
+        this.logger.debug(`Skipping retry: ${decision.skipReason}`, 'tiktok');
+        retryResult = { queued: false, reason: decision.skipReason };
+      } else {
+        this.logger.warn('No retry system available, connection will not be retried', 'tiktok');
+        retryResult = { queued: false, reason: 'no-retry-system' };
+      }
 
-            let retryResult = null;
-            if (this.retrySystem && willReconnect) {
-                const errorForRetry = isError ? issue : new Error(`TikTok disconnected: ${disconnectionMessage}`);
-                retryResult = this.queueRetry(errorForRetry);
-            } else if (!willReconnect) {
-                this.logger.debug('Skipping retry: planned disconnection or platform disabled', 'tiktok');
-                retryResult = { queued: false, reason: 'no-retry-needed' };
-            } else {
-                this.logger.warn('No retry system available, connection will not be retried', 'tiktok');
-                retryResult = { queued: false, reason: 'no-retry-system' };
-            }
-
-            return { issueType, retryResult };
+      return { issueType: decision.issueType, retryResult };
         } finally {
             this._disconnectionInProgress = false;
         }
@@ -1457,7 +1552,7 @@ class TikTokPlatform extends EventEmitter {
         }
     }
 
-    async _handleStreamEnd(payload = null) {
+  async _handleStreamEnd(payload = null) {
         // Prevent double-handling when both DISCONNECTED and STREAM_END fire (e.g., 4404)
         if (this._disconnectionInProgress) {
             this.logger.debug('Skipping stream-end handling: disconnection already in progress', 'tiktok');
@@ -1465,34 +1560,38 @@ class TikTokPlatform extends EventEmitter {
         }
         this._disconnectionInProgress = true;
 
-        try {
-            if (this._isStreamNotLive(payload)) {
-                this.logger.debug('Skipping stream-end reconnect scheduling after offline disconnect cycle', 'tiktok');
-                return;
-            }
+    try {
+      const normalizedPayload = this._normalizeConnectionIssue(payload);
+      const decision = this._classifyReconnectPolicy({
+        message: normalizedPayload.message,
+        code: normalizedPayload.code,
+        source: 'stream-end',
+      });
+      const deferredContext = decision.isStreamNotLive ? 'stream-not-live-end' : 'stream-end';
 
-            this.logger.info('TikTok stream ended; scheduling reconnect checks', 'tiktok');
-            this._resetShareActorTracking('stream-end');
-            this.isPlannedDisconnection = false;
-            this.connectionActive = false;
-            this.connectionStateManager.markDisconnected();
-            this.cleanupEventListeners();
-            this.connection = null;
-            await this._handleDisconnection('stream-end');
-            if (!this.intervalManager.hasInterval('tiktok-stream-reconnect')) {
-                this.intervalManager.createInterval(
-                    'tiktok-stream-reconnect',
-                    async () => {
-                        try {
-                            await this._connect(this.handlers);
-                        } catch (err) {
-                            this.logger.debug(`Reconnect attempt after stream end failed: ${err?.message || err}`, 'tiktok');
-                        }
-                    },
-                    60000,
-                    'reconnect'
-                );
-            }
+      if (decision.shouldDeferReconnect) {
+        this.isPlannedDisconnection = false;
+        const deferredReconnect = this._ensureDeferredReconnectChecks(deferredContext);
+        if (decision.isStreamNotLive && !deferredReconnect.scheduled && deferredReconnect.reason === 'already-active') {
+          this.logger.debug('Deferred reconnect checks remain active after offline disconnect cycle', 'tiktok');
+          return;
+        }
+      }
+
+      if (decision.isStreamNotLive) {
+        this._resetShareActorTracking('stream-not-live');
+      } else {
+        this.logger.info('TikTok stream ended; scheduling reconnect checks', 'tiktok');
+        this._resetShareActorTracking('stream-end');
+      }
+
+      this.isPlannedDisconnection = false;
+      this.connectionActive = false;
+      this.connectionStateManager.markDisconnected();
+      this.cleanupEventListeners();
+      this.connection = null;
+      const disconnectionReason = decision.isStreamNotLive ? 'Stream is not live' : 'stream-end';
+      await this._handleDisconnection(disconnectionReason, decision.willReconnect);
         } finally {
             this._disconnectionInProgress = false;
         }

@@ -348,13 +348,21 @@ describe("TikTokPlatform error normalization", () => {
       );
     });
 
-    it('returns false for "banned account"', () => {
-      const platform = createPlatform();
+  it('returns false for "banned account"', () => {
+    const platform = createPlatform();
 
-      expect(platform._isRecoverableError("This is a banned account")).toBe(
-        false,
-      );
-    });
+    expect(platform._isRecoverableError("This is a banned account")).toBe(
+      false,
+    );
+  });
+
+  it('returns true for "not live" errors to enable deferred reconnect', () => {
+    const platform = createPlatform();
+
+    expect(platform._isRecoverableError("Connection closed: User is not live")).toBe(
+      true,
+    );
+  });
 
     it('returns true for "timeout" errors', () => {
       const platform = createPlatform();

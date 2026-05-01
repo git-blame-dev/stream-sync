@@ -104,13 +104,15 @@ describe("TikTokPlatform connection lifecycle", () => {
       );
     });
 
-    it("does not queue retry for offline initialization failures", async () => {
+    it("schedules deferred reconnect checks for offline initialization failures", async () => {
       const retrySystem = {
         resetRetryCount: createMockFn(),
         handleConnectionError: createMockFn(),
         isConnected: createMockFn(),
       };
       const platform = createPlatform({}, { retrySystem });
+      platform.intervalManager.hasInterval = createMockFn().mockReturnValue(false);
+      platform.intervalManager.createInterval = createMockFn();
       platform._connect = createMockFn().mockRejectedValue(
         new Error("Connection closed: User is not live"),
       );
@@ -119,6 +121,10 @@ describe("TikTokPlatform connection lifecycle", () => {
         "Connection closed: User is not live",
       );
       expect(retrySystem.handleConnectionError).not.toHaveBeenCalled();
+      expect(platform.intervalManager.createInterval).toHaveBeenCalledTimes(1);
+      expect(platform.intervalManager.createInterval.mock.calls[0][0]).toBe(
+        "tiktok-stream-reconnect",
+      );
     });
   });
 
@@ -270,14 +276,17 @@ describe("TikTokPlatform connection lifecycle", () => {
       expect(result).toEqual({ action: "retry-queued" });
     });
 
-    it("treats not-live disconnects as non-recoverable", () => {
+    it("schedules deferred reconnect checks for not-live disconnects", () => {
       const platform = createPlatform();
+      platform.intervalManager.hasInterval = createMockFn().mockReturnValue(false);
+      platform.intervalManager.createInterval = createMockFn();
 
       const result = platform.handleRetry(
         new Error("Connection closed: User is not live"),
       );
 
-      expect(result).toEqual({ action: "skipped", reason: "non-recoverable" });
+      expect(result).toEqual({ action: "deferred-reconnect-scheduled" });
+      expect(platform.intervalManager.createInterval).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -418,17 +427,19 @@ describe("TikTokPlatform connection lifecycle", () => {
       expect(result.issueType).toBe("stream-not-live");
       expect(result.retryResult).toEqual({
         queued: false,
-        reason: "no-retry-needed",
+        reason: "deferred-reconnect-scheduled",
       });
     });
 
-    it("emits stream-status disconnects with willReconnect=false for not-live issues", async () => {
+    it("emits stream-status disconnects with willReconnect=true for not-live issues", async () => {
       const retrySystem = {
         resetRetryCount: createMockFn(),
         handleConnectionError: createMockFn(),
         isConnected: createMockFn(),
       };
       const platform = createPlatform({}, { retrySystem });
+      platform.intervalManager.hasInterval = createMockFn().mockReturnValue(false);
+      platform.intervalManager.createInterval = createMockFn();
       const emittedEvents = [];
       platform.on("platform:event", (e) => emittedEvents.push(e));
 
@@ -441,7 +452,7 @@ describe("TikTokPlatform connection lifecycle", () => {
         (e) => e.type === PlatformEvents.CHAT_DISCONNECTED,
       );
       expect(disconnectEvent).toBeDefined();
-      expect(disconnectEvent.data.willReconnect).toBe(false);
+      expect(disconnectEvent.data.willReconnect).toBe(true);
     });
 
     it("keeps tracked share actors on transient disconnection", async () => {
@@ -549,6 +560,24 @@ describe("TikTokPlatform connection lifecycle", () => {
         reason: "no-retry-needed",
       });
     });
+
+    it("skips retry for terminal account/config disconnect reasons", async () => {
+      const retrySystem = {
+        resetRetryCount: createMockFn(),
+        handleConnectionError: createMockFn(),
+        isConnected: createMockFn(),
+      };
+      const platform = createPlatform({}, { retrySystem });
+      platform.queueRetry = createMockFn().mockReturnValue({ queued: true });
+
+      const result = await platform.handleConnectionIssue("private account");
+
+      expect(result.retryResult).toEqual({
+        queued: false,
+        reason: "terminal-error",
+      });
+      expect(platform.queueRetry).not.toHaveBeenCalled();
+    });
   });
 
   describe("_handleStreamEnd", () => {
@@ -583,10 +612,10 @@ describe("TikTokPlatform connection lifecycle", () => {
       expect(shares).toHaveLength(2);
     });
 
-    it("does not start stream-end reconnect polling after an offline disconnect cycle", async () => {
+    it("keeps stream-end reconnect polling active after an offline disconnect cycle", async () => {
       const platform = createPlatform();
       platform.intervalManager.hasInterval =
-        createMockFn().mockReturnValue(false);
+        createMockFn().mockReturnValueOnce(false).mockReturnValue(true);
       platform.intervalManager.createInterval = createMockFn();
 
       await platform.handleConnectionIssue({
@@ -595,7 +624,10 @@ describe("TikTokPlatform connection lifecycle", () => {
       });
       await platform._handleStreamEnd({ reason: "User is not live" });
 
-      expect(platform.intervalManager.createInterval).not.toHaveBeenCalled();
+      expect(platform.intervalManager.createInterval).toHaveBeenCalledTimes(1);
+      expect(platform.intervalManager.createInterval.mock.calls[0][0]).toBe(
+        "tiktok-stream-reconnect",
+      );
     });
 
     it("starts stream-end reconnect polling for normal stream-end handling", async () => {
@@ -610,6 +642,27 @@ describe("TikTokPlatform connection lifecycle", () => {
       expect(platform.intervalManager.createInterval.mock.calls[0][0]).toBe(
         "tiktok-stream-reconnect",
       );
+    });
+
+    it("emits disconnect lifecycle with willReconnect=true for stream-not-live end", async () => {
+      const platform = createPlatform();
+      platform.intervalManager.hasInterval =
+        createMockFn().mockReturnValue(false);
+      platform.intervalManager.createInterval = createMockFn();
+      const emittedEvents = [];
+      platform.on("platform:event", (e) => emittedEvents.push(e));
+
+      await platform._handleStreamEnd({
+        message: "Stream is not live",
+        code: 4404,
+      });
+
+      const disconnectEvent = emittedEvents.find(
+        (e) => e.type === PlatformEvents.CHAT_DISCONNECTED,
+      );
+      expect(disconnectEvent).toBeDefined();
+      expect(disconnectEvent.data.willReconnect).toBe(true);
+      expect(platform.intervalManager.createInterval).toHaveBeenCalledTimes(1);
     });
   });
 });
