@@ -1,10 +1,10 @@
 import { describe, it, expect } from "bun:test";
-const {
+import {
   normalizeChannelHandle,
   normalizeHandleForCache,
   isChannelId,
   resolveChannelId,
-} = require("../../../src/services/youtube-channel-resolver.ts");
+} from "../../../src/services/youtube-channel-resolver";
 
 describe("youtube-channel-resolver", () => {
   it("normalizes channel handle input", () => {
@@ -23,7 +23,7 @@ describe("youtube-channel-resolver", () => {
   });
 
   it("returns null and reports error when channel handle is missing", async () => {
-    const errors = [] as any[];
+    const errors: unknown[][] = [];
     const result = await resolveChannelId(null, "", {
       onError: (...args) => errors.push(args),
     });
@@ -43,7 +43,7 @@ describe("youtube-channel-resolver", () => {
   });
 
   it("returns null when resolver client is unavailable", async () => {
-    const errors = [] as any[];
+    const errors: unknown[][] = [];
     const result = await resolveChannelId({}, "@creator", {
       onError: (...args) => errors.push(args),
     });
@@ -102,7 +102,7 @@ describe("youtube-channel-resolver", () => {
 
   it("returns null when resolved payload has no browse id", async () => {
     const client = { resolveURL: () => Promise.resolve({ payload: {} }) };
-    const errors = [] as any[];
+    const errors: unknown[][] = [];
     const result = await resolveChannelId(client, "@MissingCreator", {
       onError: (...args) => errors.push(args),
     });

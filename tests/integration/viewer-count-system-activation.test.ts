@@ -14,6 +14,8 @@ import { setupAutomatedCleanup } from "../helpers/mock-lifecycle";
 import { createAppRuntimeTestDependencies } from "../helpers/runtime-test-harness";
 import testClock from "../helpers/test-clock";
 import { safeDelay } from "../../src/utils/timeout-validator";
+import { AppRuntime } from "../../src/main";
+import { ViewerCountSystem } from "../../src/utils/viewer-count";
 
 const createMockPlatformLifecycleService = () => ({
   platforms: {},
@@ -43,8 +45,6 @@ describe("ViewerCount System Activation Integration", () => {
     restoreAllMocks();
   });
 
-  let AppRuntime;
-  let ViewerCountSystem;
   let configOverrides;
   let configFixture;
   let mockOBSManager;
@@ -144,9 +144,6 @@ describe("ViewerCount System Activation Integration", () => {
       }).dependencies;
     };
 
-    ViewerCountSystem =
-      require("../../src/utils/viewer-count.ts").ViewerCountSystem;
-    AppRuntime = require("../../src/main").AppRuntime;
   });
 
   describe("when system starts with YouTube enabled and live", () => {

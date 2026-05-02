@@ -5,8 +5,11 @@ import { UNKNOWN_CHAT_MESSAGE, UNKNOWN_CHAT_USERNAME } from '../constants/degrad
 import { PlatformEvents } from '../interfaces/PlatformEvents';
 import { YouTubeLiveStreamService } from '../services/youtube-live-stream-service';
 import * as innertubeInstanceManager from '../services/innertube-instance-manager';
+import { ChatFileLoggingService } from '../services/ChatFileLoggingService';
 import { collectMissingFields, getMissingFields, mergeMissingFieldsMetadata } from '../utils/missing-fields';
+import { normalizeYouTubeMessage } from '../utils/message-normalization';
 import { getValidMessageParts } from '../utils/message-parts';
+import { validateYouTubePlatformDependencies } from '../utils/dependency-validator';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 import { resolveYouTubeTimestampISO } from '../utils/platform-timestamp';
 import { createRetrySystem } from '../utils/retry-system';
@@ -24,6 +27,7 @@ import { createYouTubeMultiStreamManager } from './youtube/streams/youtube-multi
 import { extractAuthor } from './youtube/youtube-author-extractor';
 import { YouTubeConnectionManager } from './youtube/youtube-connection-manager';
 import { extractMessageText } from './youtube/youtube-message-extractor';
+import { YouTubeUserAgentManager } from './youtube/youtube-user-agent-manager';
 import { normalizeYouTubeUsername } from './youtube/youtube-username-normalizer';
 
 // Timeout and limit constants
@@ -58,7 +62,6 @@ class YouTubePlatform extends EventEmitter {
         dependencies = dependencies || {};
         
         // FAIL-FAST: Validate dependencies before proceeding
-        const { validateYouTubePlatformDependencies } = require('../utils/dependency-validator');
         
         // Allow flexible constructor patterns - handle incorrect dependency injection patterns
         if (typeof dependencies === 'string' || typeof dependencies === 'number') {
@@ -94,10 +97,8 @@ class YouTubePlatform extends EventEmitter {
         this.timestampService = dependencies.timestampService || null; // Timestamp extraction service
         this.viewerService = dependencies.viewerService || null;
 
-        const { ChatFileLoggingService } = dependencies.ChatFileLoggingService
-            ? { ChatFileLoggingService: dependencies.ChatFileLoggingService }
-            : require('../services/ChatFileLoggingService.ts');
-        this.chatFileLoggingService = dependencies.chatFileLoggingService || new ChatFileLoggingService({
+        const ResolvedChatFileLoggingService = dependencies.ChatFileLoggingService || ChatFileLoggingService;
+        this.chatFileLoggingService = dependencies.chatFileLoggingService || new ResolvedChatFileLoggingService({
             logger: this.logger,
             config: this.config
         });
@@ -117,7 +118,6 @@ class YouTubePlatform extends EventEmitter {
         };
 
         // Initialize user agent manager
-        const { YouTubeUserAgentManager } = require('./youtube/youtube-user-agent-manager');
         this.userAgentManager = new YouTubeUserAgentManager(this.logger, {
             userAgents: this.USER_AGENTS
         });
@@ -636,7 +636,6 @@ class YouTubePlatform extends EventEmitter {
     _processRegularChatMessage(chatItem) {
 
         // Normalize message
-        const { normalizeYouTubeMessage } = require('../utils/message-normalization');
         let normalizedData;
         try {
             normalizedData = normalizeYouTubeMessage(chatItem, 'youtube', this.timestampService);

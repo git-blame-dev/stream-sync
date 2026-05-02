@@ -1,5 +1,15 @@
 import { secrets } from '../core/secrets';
+import { getUnifiedLogger } from '../core/logging';
+import { InnertubeFactory } from '../factories/innertube-factory';
+import { TikTokWebSocketClient } from '../platforms/tiktok-websocket-client';
+import { ChatFileLoggingService } from '../services/ChatFileLoggingService';
+import { InnertubeService } from '../services/innertube-service';
+import { SelfMessageDetectionService } from '../services/SelfMessageDetectionService';
+import { ViewerCountExtractionService } from '../services/viewer-count-extraction-service';
+import { YouTubeStreamDetectionService } from '../services/youtube-stream-detection-service';
+import { YouTubeViewerExtractor } from '../extractors/youtube-viewer-extractor';
 import { PlatformConnectionFactory } from './platform-connection-factory';
+import { withTimeout } from './timeout-wrapper';
 
 class DependencyFactory {
     constructor() {
@@ -34,10 +44,7 @@ class DependencyFactory {
             const innertubeService = this._createInnertubeService(innertubeFactory, logger, normalizedOptions);
             const viewerExtractionService = this._createViewerExtractionService(innertubeService, logger, normalizedOptions);
             
-            const { ChatFileLoggingService } = normalizedOptions.ChatFileLoggingService
-                ? { ChatFileLoggingService: normalizedOptions.ChatFileLoggingService }
-                : require('../services/ChatFileLoggingService.ts');
-            const { SelfMessageDetectionService } = require('../services/SelfMessageDetectionService.ts');
+            const ResolvedChatFileLoggingService = normalizedOptions.ChatFileLoggingService || ChatFileLoggingService;
             
             if (!normalizedOptions.config) {
                 throw new Error('createYoutubeDependencies requires config object in options');
@@ -60,7 +67,7 @@ class DependencyFactory {
                 viewerExtractionService,
                 
                 // Extracted services
-                ChatFileLoggingService,
+                ChatFileLoggingService: ResolvedChatFileLoggingService,
                 selfMessageDetectionService,
                 
                 ...normalizedOptions // Allow options to override defaults
@@ -99,10 +106,7 @@ class DependencyFactory {
             delete sanitizedOptions.modulePreloader;
             
             // Create extracted services for clean architecture
-            const { ChatFileLoggingService } = options.ChatFileLoggingService
-                ? { ChatFileLoggingService: options.ChatFileLoggingService }
-                : require('../services/ChatFileLoggingService.ts');
-            const { SelfMessageDetectionService } = require('../services/SelfMessageDetectionService.ts');
+            const ResolvedChatFileLoggingService = options.ChatFileLoggingService || ChatFileLoggingService;
             
             if (!options.config) {
                 throw new Error('createTikTokDependencies requires config object in options');
@@ -120,7 +124,7 @@ class DependencyFactory {
                 WebcastPushConnection,
                 connectionFactory: this._createTikTokConnectionFactory(config, logger),
                 stateManager: this._createTikTokStateManager(config, logger),
-                ChatFileLoggingService, // Include extracted service
+                ChatFileLoggingService: ResolvedChatFileLoggingService, // Include extracted service
                 selfMessageDetectionService,
                 ...sanitizedOptions // Allow options to override defaults
             };
@@ -171,10 +175,7 @@ class DependencyFactory {
             }
 
             // Create extracted services for clean architecture
-            const { ChatFileLoggingService } = options.ChatFileLoggingService
-                ? { ChatFileLoggingService: options.ChatFileLoggingService }
-                : require('../services/ChatFileLoggingService.ts');
-            const { SelfMessageDetectionService } = require('../services/SelfMessageDetectionService.ts');
+            const ResolvedChatFileLoggingService = options.ChatFileLoggingService || ChatFileLoggingService;
             
             if (!options.config) {
                 throw new Error('createTwitchDependencies requires config object in options');
@@ -188,7 +189,7 @@ class DependencyFactory {
                 logger,
                 twitchAuth: injectedTwitchAuth,
                 apiClient: this._createTwitchApiClient(normalizedConfig, logger),
-                ChatFileLoggingService, // Include extracted service
+                ChatFileLoggingService: ResolvedChatFileLoggingService, // Include extracted service
                 selfMessageDetectionService,
                 axios: options.axios,
                 WebSocketCtor: options.WebSocketCtor,
@@ -214,7 +215,6 @@ class DependencyFactory {
 
         try {
             // Import logger utilities with explicit failure if missing
-            const { getUnifiedLogger } = require('../core/logging');
             const logger = getUnifiedLogger();
 
             // Validate the created logger
@@ -289,7 +289,6 @@ class DependencyFactory {
     _createYouTubeStreamDetectionService(config, logger, options = {}) {
         try {
             // Try to load the actual YouTubeStreamDetectionService
-            const { YouTubeStreamDetectionService } = require('../services/youtube-stream-detection-service');
             
             // Use the Innertube class from options if available (preferred for youtubei method)
             // Support both direct class references and lazy loading functions for modular design
@@ -448,7 +447,6 @@ class DependencyFactory {
         if (needsConnectorLoad) {
             if (!resolved.TikTokWebSocketClient) {
                 try {
-                    const { TikTokWebSocketClient } = require('../platforms/tiktok-websocket-client');
                     resolved.TikTokWebSocketClient = TikTokWebSocketClient;
                 } catch {
                     // Fallback handled below
@@ -546,14 +544,10 @@ class DependencyFactory {
     }
 
     _createInnertubeFactory() {
-        const { InnertubeFactory } = require('../factories/innertube-factory');
         return InnertubeFactory;
     }
     
     _createInnertubeService(factory, logger, options = {}) {
-        const { InnertubeService } = require('../services/innertube-service');
-        const { withTimeout } = require('../utils/timeout-wrapper');
-        
         return new InnertubeService(factory, {
             logger,
             withTimeout,
@@ -562,9 +556,6 @@ class DependencyFactory {
     }
     
     _createViewerExtractionService(innertubeService, logger, options = {}) {
-        const { ViewerCountExtractionService } = require('../services/viewer-count-extraction-service');
-        const { YouTubeViewerExtractor } = require('../extractors/youtube-viewer-extractor');
-        
         return new ViewerCountExtractionService(innertubeService, {
             logger,
             YouTubeViewerExtractor,

@@ -1,6 +1,10 @@
 import { EventEmitter } from 'node:events';
+import path from 'node:path';
+import { promises as fs } from 'node:fs';
+import * as wsModule from 'ws';
 
 import { STREAMELEMENTS } from '../core/endpoints';
+import { getUnifiedLogger } from '../core/logging';
 import { secrets } from '../core/secrets';
 import { PlatformEvents } from '../interfaces/PlatformEvents';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
@@ -14,7 +18,6 @@ class StreamElementsPlatform extends EventEmitter {
         super();
         
         // Extract dependencies with fallbacks
-        const { getUnifiedLogger } = require('../core/logging');
         const logger = dependencies.logger || getUnifiedLogger();
         const retrySystem = dependencies.retrySystem || createRetrySystem({ logger });
         
@@ -24,7 +27,7 @@ class StreamElementsPlatform extends EventEmitter {
         this.logger = logger;
         this.platformLogger = logger;
         this.eventBus = dependencies.eventBus || null;
-        this.WebSocketCtor = dependencies.WebSocketCtor || require('ws');
+        this.WebSocketCtor = dependencies.WebSocketCtor || wsModule.WebSocket || wsModule.default || wsModule;
         this.incrementRetryCount = retrySystem.incrementRetryCount.bind(retrySystem);
         this.resetRetryCount = retrySystem.resetRetryCount.bind(retrySystem);
         this.retryHandleConnectionError = retrySystem.handleConnectionError.bind(retrySystem);
@@ -470,9 +473,6 @@ class StreamElementsPlatform extends EventEmitter {
         }
 
         try {
-            const fs = require('fs').promises;
-            const path = require('path');
-
             const logsDir = this.config.dataLoggingPath;
             await fs.mkdir(logsDir, { recursive: true });
 

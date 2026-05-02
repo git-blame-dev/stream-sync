@@ -1,3 +1,4 @@
+import { getUnifiedLogger, logger as globalLogger } from '../core/logging';
 import { validateLoggerInterface } from './dependency-validator';
 
 type LoggerMethod = (message: unknown, source?: string, data?: unknown) => void;
@@ -36,20 +37,13 @@ function gatherCandidates(candidate: unknown): unknown[] {
     }
 
     try {
-        const loggingModule = require('../core/logging') as {
-            getUnifiedLogger?: () => unknown;
-            logger?: unknown;
-        };
-
-        if (loggingModule.getUnifiedLogger) {
-            const unifiedLogger = loggingModule.getUnifiedLogger();
-            if (unifiedLogger) {
-                candidates.push(unifiedLogger);
-            }
+        const unifiedLogger = getUnifiedLogger();
+        if (unifiedLogger) {
+            candidates.push(unifiedLogger);
         }
 
-        if (loggingModule.logger) {
-            candidates.push(loggingModule.logger);
+        if (globalLogger) {
+            candidates.push(globalLogger);
         }
     } catch {
         return candidates;

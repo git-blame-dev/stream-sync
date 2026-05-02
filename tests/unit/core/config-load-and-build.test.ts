@@ -5,6 +5,9 @@ import path from 'path';
 import ini from 'ini';
 import { getRawTestConfig } from '../../helpers/config-fixture';
 import { captureStdout } from '../../helpers/output-capture';
+import * as configModuleRef from '../../../src/core/config.ts';
+import { buildLoggingConfig } from '../../../src/core/config-builders.ts';
+import { ConfigValidator } from '../../../src/utils/config-validator';
 
 describe('config load and build behavior', () => {
     let tempDir;
@@ -12,7 +15,7 @@ describe('config load and build behavior', () => {
     let tempEnvPath;
     let originalConfigPath;
     let originalTwitchClientId;
-    let configModule;
+let configModule = configModuleRef;
 
     beforeEach(() => {
         tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'test-config-'));
@@ -43,7 +46,7 @@ describe('config load and build behavior', () => {
     it('loads and builds configuration from ini file with debug enabled', () => {
         const stdoutCapture = captureStdout();
         try {
-            configModule = require('../../../src/core/config.ts');
+configModule = configModuleRef;
             const rawConfig = getRawTestConfig();
             rawConfig.general.debugEnabled = 'true';
             rawConfig.tiktok.enabled = 'true';
@@ -104,8 +107,7 @@ describe('config load and build behavior', () => {
     });
 
     it('normalizes out-of-range values to defaults and exposes config path', () => {
-        configModule = require('../../../src/core/config.ts');
-        const { ConfigValidator } = require('../../../src/utils/config-validator');
+configModule = configModuleRef;
         const rawConfig = getRawTestConfig();
         rawConfig.cooldowns.defaultCooldown = '5';
         rawConfig.cooldowns.heavyCommandCooldown = '30';
@@ -134,7 +136,7 @@ describe('config load and build behavior', () => {
     });
 
     it('throws when configuration file is missing', () => {
-        configModule = require('../../../src/core/config.ts');
+configModule = configModuleRef;
         const originalExistsSync = fs.existsSync;
         process.env.CHAT_BOT_CONFIG_PATH = tempConfigPath;
         configModule._resetConfigForTesting();
@@ -148,7 +150,7 @@ describe('config load and build behavior', () => {
     });
 
     it('throws with validation errors when required fields are missing', () => {
-        configModule = require('../../../src/core/config.ts');
+configModule = configModuleRef;
         const rawConfig = getRawTestConfig();
         rawConfig.tiktok.enabled = 'true';
         rawConfig.tiktok.username = '';
@@ -161,7 +163,7 @@ describe('config load and build behavior', () => {
     });
 
     it('uses TWITCH_CLIENT_ID from environment when config twitch clientId is empty', () => {
-        configModule = require('../../../src/core/config.ts');
+configModule = configModuleRef;
         const rawConfig = getRawTestConfig();
         rawConfig.twitch = {
             ...rawConfig.twitch,
@@ -185,7 +187,7 @@ describe('config load and build behavior', () => {
     });
 
     it('fails when TWITCH_CLIENT_ID is missing even if config twitch clientId is populated', () => {
-        configModule = require('../../../src/core/config.ts');
+configModule = configModuleRef;
         const rawConfig = getRawTestConfig();
         rawConfig.twitch = {
             ...rawConfig.twitch,
@@ -208,7 +210,7 @@ describe('config load and build behavior', () => {
     });
 
     it('loads TWITCH_CLIENT_ID from env file when env file read is enabled', () => {
-        configModule = require('../../../src/core/config.ts');
+configModule = configModuleRef;
         const rawConfig = getRawTestConfig();
         rawConfig.twitch = {
             ...rawConfig.twitch,
@@ -234,7 +236,7 @@ describe('config load and build behavior', () => {
     });
 
     it('keeps existing TWITCH_CLIENT_ID when env file also defines it', () => {
-        configModule = require('../../../src/core/config.ts');
+configModule = configModuleRef;
         const rawConfig = getRawTestConfig();
         rawConfig.twitch = {
             ...rawConfig.twitch,
@@ -260,7 +262,7 @@ describe('config load and build behavior', () => {
     });
 
     it('handles read errors with ENOENT code', () => {
-        configModule = require('../../../src/core/config.ts');
+configModule = configModuleRef;
         const originalExistsSync = fs.existsSync;
         const originalReadFileSync = fs.readFileSync;
 
@@ -282,7 +284,6 @@ describe('config load and build behavior', () => {
     });
 
     it('normalizes logging config levels and respects debug overrides', () => {
-        const { buildLoggingConfig } = require('../../../src/core/config-builders.ts');
 
         const config = buildLoggingConfig({
             logging: {
