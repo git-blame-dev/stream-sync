@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, test } from 'bun:test';
 
 import testClock from './test-clock';
 
-const setClockWithUnknownValue = testClock.set as unknown as (value: unknown) => number;
+const setClockWithUnknownValue = (value: unknown) => Reflect.apply(testClock.set as (nextValue: number) => number, testClock, [value as number]);
 
 describe('testClock', () => {
     beforeEach(() => {

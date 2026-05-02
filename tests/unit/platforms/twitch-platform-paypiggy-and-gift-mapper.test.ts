@@ -21,8 +21,8 @@ describe("TwitchPlatform monetisation mapping", () => {
     restoreAllMocks();
   });
 
-  let twitch: any;
-  let emitted: Array<{ evt: string; payload: any }>;
+  let twitch: TwitchPlatform & { eventFactory?: Record<string, unknown>; emit: (evt: string, payload: unknown) => void };
+  let emitted: Array<{ evt: string; payload: unknown }>;
 
   beforeEach(() => {
     emitted = [];

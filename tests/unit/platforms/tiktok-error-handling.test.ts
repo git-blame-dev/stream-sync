@@ -1,20 +1,26 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../helpers/mock-factories";
+import { TikTokPlatform } from "../../../src/platforms/tiktok";
 
 describe("TikTokPlatform Error Handling", () => {
-  let TikTokPlatform: any;
   let mockConnection: Record<string, unknown>;
-  let mockRetrySystem: any;
+  let mockRetrySystem: {
+    handleConnectionError: (err: unknown) => void;
+    handleConnectionSuccess: ReturnType<typeof createMockFn>;
+    resetRetryCount: ReturnType<typeof createMockFn>;
+    incrementRetryCount: ReturnType<typeof createMockFn>;
+    executeWithRetry: ReturnType<typeof createMockFn>;
+    _calls: { handleConnectionError: unknown[] };
+  };
   let baseConfig: {
     enabled: boolean;
     username: string;
     dataLoggingEnabled: boolean;
   };
-  let baseDependencies: any;
+  let baseDependencies: Record<string, unknown>;
 
   beforeEach(() => {
-    ({ TikTokPlatform } = require("../../../src/platforms/tiktok"));
 
     mockConnection = {
       connect: createMockFn(),
@@ -24,9 +30,9 @@ describe("TikTokPlatform Error Handling", () => {
       getState: createMockFn().mockReturnValue({ isConnected: false }),
     };
 
-    const retrySystemCalls = { handleConnectionError: [] };
+    const retrySystemCalls: { handleConnectionError: unknown[] } = { handleConnectionError: [] };
     mockRetrySystem = {
-      handleConnectionError: (err) =>
+      handleConnectionError: (err: unknown) =>
         retrySystemCalls.handleConnectionError.push(err),
       handleConnectionSuccess: createMockFn(),
       resetRetryCount: createMockFn(),

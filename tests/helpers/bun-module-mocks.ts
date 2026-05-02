@@ -12,7 +12,7 @@ type ModuleMockEntry = {
 };
 
 const restoreMockModule = (moduleName: string) => {
-  (mock.restore as unknown as (targetModule: string) => void)(moduleName);
+  mock.restore(moduleName);
 };
 
 const activeMocks = new Map<string, ModuleMockEntry>();

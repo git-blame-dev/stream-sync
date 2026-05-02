@@ -234,13 +234,15 @@ beforeAll(() => {
     process.exit = createMockFn((code = 0) => noopProcessExit(code));
 
     setupGlobal.originalConsole = originalConsole;
-    setupGlobal.console = {
+    const mockedConsole: Console = {
+        ...originalConsole,
         log: createMockFn(),
         info: createMockFn(),
         warn: createMockFn(),
         error: createMockFn(),
         debug: createMockFn()
-    } as unknown as Console;
+    };
+    setupGlobal.console = mockedConsole;
 
     installTimerTracking();
 });
