@@ -20,23 +20,27 @@ import { ViewerCountProviderFactory } from '../utils/viewer-count-providers';
 import { TwitchEventSub } from './twitch-eventsub';
 
 const PlatformEvents = {
-    CHAT_MESSAGE: 'platform:chat-message',
-    FOLLOW: 'platform:follow',
-    PAYPIGGY: 'platform:paypiggy',
-    GIFT: 'platform:gift',
-    GIFTPAYPIGGY: 'platform:giftpaypiggy',
-    RAID: 'platform:raid',
-    STREAM_STATUS: 'platform:stream-status',
-    PLATFORM_CONNECTION: 'platform:connection',
-    _generateCorrelationId: () => crypto.randomUUID(),
-    createConnectionEvent: (platform, status, error = null) => ({
-        type: 'platform:connection',
-        platform,
-        status,
-        isConnected: status === 'connected',
-        error,
-        timestamp: getSystemTimestampISO()
-    })
+CHAT_MESSAGE: 'platform:chat-message',
+FOLLOW: 'platform:follow',
+PAYPIGGY: 'platform:paypiggy',
+GIFT: 'platform:gift',
+GIFTPAYPIGGY: 'platform:giftpaypiggy',
+RAID: 'platform:raid',
+STREAM_STATUS: 'platform:stream-status',
+PLATFORM_CONNECTION: 'platform:connection',
+_generateCorrelationId: () => crypto.randomUUID(),
+createConnectionEvent: (
+platform: string,
+status: 'connected' | 'disconnected',
+error: Record<string, unknown> | Error | null = null
+) => ({
+type: 'platform:connection',
+platform,
+status,
+isConnected: status === 'connected',
+error,
+timestamp: getSystemTimestampISO()
+})
 } as const;
 
 class TwitchPlatform extends EventEmitter {
@@ -129,7 +133,7 @@ class TwitchPlatform extends EventEmitter {
         });
     }
 
-    async initializeEventSub(broadcasterId) {
+    async initializeEventSub(broadcasterId: string): Promise<void> {
         this.logger.debug('initializeEventSub called', 'twitch', {
             authReady: this.twitchAuth?.isReady?.(),
             hasTwitchAuth: !!this.twitchAuth,
@@ -160,7 +164,7 @@ class TwitchPlatform extends EventEmitter {
         }
     }
 
-    _clearEventSubWiringState() {
+    _clearEventSubWiringState(): void {
         this.eventSubWiring?.unbindAll?.();
         this.eventSubListeners.length = 0;
         this.eventSubWiring = null;
@@ -283,7 +287,7 @@ class TwitchPlatform extends EventEmitter {
         }
     }
 
-    async onMessageHandler(event) {
+    async onMessageHandler(event: Record<string, unknown>): Promise<void> {
         const isSelf = event?.broadcaster_user_id && event?.chatter_user_id
             ? event.broadcaster_user_id === event.chatter_user_id
             : false;
@@ -427,11 +431,11 @@ class TwitchPlatform extends EventEmitter {
         }
     }
 
-    _capitalize(str) {
+    _capitalize(str: string): string {
         return str.charAt(0).toUpperCase() + str.slice(1);
     }
 
-    _normalizeBadgeKeyList(event = {}) {
+    _normalizeBadgeKeyList(event: Record<string, unknown> = {}): Array<{ setId: string; version: string; info: string }> {
         if (Array.isArray(event.badges)) {
             return event.badges
                 .filter((badge) => badge && typeof badge === 'object')
@@ -667,11 +671,11 @@ class TwitchPlatform extends EventEmitter {
         }
     }
 
-    _getTimestamp(data) {
+    _getTimestamp(data: Record<string, unknown>): ReturnType<typeof resolveTwitchTimestampISO> {
         return resolveTwitchTimestampISO(data);
     }
 
-    _getAvatarCacheKey(userId) {
+    _getAvatarCacheKey(userId: unknown): string {
         const normalizedUserId = typeof userId === 'string' ? userId.trim() : '';
         if (!normalizedUserId) {
             return '';
@@ -679,7 +683,7 @@ class TwitchPlatform extends EventEmitter {
         return `twitch:${normalizedUserId}`;
     }
 
-    _setCachedAvatarUrl(cacheKey, avatarUrl) {
+    _setCachedAvatarUrl(cacheKey: string, avatarUrl: string): void {
         if (!cacheKey || !avatarUrl) {
             return;
         }
@@ -694,7 +698,7 @@ class TwitchPlatform extends EventEmitter {
         }
     }
 
-    _setAvatarLookupMiss(cacheKey) {
+    _setAvatarLookupMiss(cacheKey: string): void {
         if (!cacheKey) {
             return;
         }
@@ -764,7 +768,7 @@ class TwitchPlatform extends EventEmitter {
         return this.fallbackAvatarUrl;
     }
 
-    _getErrorEnvelopeTimestamp() {
+    _getErrorEnvelopeTimestamp(): string {
         return this.getErrorEnvelopeTimestampISO();
     }
 
@@ -922,7 +926,7 @@ class TwitchPlatform extends EventEmitter {
         });
     }
 
-    _resolvePlatformEventType(eventType: string) {
+    _resolvePlatformEventType(eventType: string): string {
         const mapping = {
             chat: PlatformEvents.CHAT_MESSAGE,
             follow: PlatformEvents.FOLLOW,
@@ -936,7 +940,7 @@ class TwitchPlatform extends EventEmitter {
         return mapping[eventType] || eventType;
     }
 
-    _getMonetizationMissingFields(eventType, data, payloadTimestamp) {
+    _getMonetizationMissingFields(eventType: string, data: Record<string, unknown>, payloadTimestamp: string | null): string[] {
         const fieldPresence = {
             timestamp: !!payloadTimestamp,
             username: typeof data?.username === 'string' && data.username.trim().length > 0,
@@ -960,7 +964,7 @@ class TwitchPlatform extends EventEmitter {
         return collectMissingFields(fieldPresence);
     }
 
-    handleStreamOnlineEvent(data) {
+    handleStreamOnlineEvent(data: Record<string, unknown>): void {
         this.logger.info('Stream went online, starting viewer count polling', 'twitch');
 
         this._logRawEvent('stream-online', data);
@@ -983,7 +987,7 @@ class TwitchPlatform extends EventEmitter {
         this.initializeViewerCountProvider();
     }
 
-    handleStreamOfflineEvent(data) {
+    handleStreamOfflineEvent(data: Record<string, unknown>): void {
         this.logger.info('Stream went offline, stopping viewer count polling', 'twitch');
 
         this._logRawEvent('stream-offline', data);
@@ -1012,7 +1016,7 @@ class TwitchPlatform extends EventEmitter {
         }
     }
 
-    async sendMessage(message) {
+    async sendMessage(message: string): Promise<void> {
         if (!this.eventSub) {
             const userFriendlyError = new Error('Twitch chat is unavailable: EventSub connection is not initialized');
             this.errorHandler.handleMessageSendError(userFriendlyError, 'eventsub-not-initialized');
@@ -1037,7 +1041,7 @@ class TwitchPlatform extends EventEmitter {
         }
     }
 
-    async cleanup() {
+    async cleanup(): Promise<void> {
         // Mark this as a planned disconnection to prevent reconnection loops
         this.isPlannedDisconnection = true;
 
@@ -1087,7 +1091,7 @@ class TwitchPlatform extends EventEmitter {
         }
     }
 
-    _queuePlatformRecovery(error) {
+    _queuePlatformRecovery(error: Error): void {
         if (this.recoveryInFlight || !this.retrySystem) {
             return;
         }
@@ -1116,7 +1120,15 @@ class TwitchPlatform extends EventEmitter {
         );
     }
 
-    getConnectionState() {
+    getConnectionState(): {
+        platform: string;
+        status: 'connected' | 'connecting' | 'disconnected';
+        isConnected: boolean;
+        channel: unknown;
+        username: unknown;
+        eventSubActive: boolean;
+        platformEnabled: unknown;
+    } {
         const active = this.eventSub?.isActive?.() || false;
         const connecting = this.isConnecting || false;
         const status = active ? 'connected' : (connecting ? 'connecting' : 'disconnected');
@@ -1132,7 +1144,17 @@ class TwitchPlatform extends EventEmitter {
         };
     }
 
-    getStats() {
+    getStats(): {
+        platform: string;
+        enabled: unknown;
+        connected: boolean;
+        channel: unknown;
+        eventsub: boolean;
+        config: {
+            enabled: unknown;
+            debug: unknown;
+        };
+    } {
         const state = this.getConnectionState();
         return {
             platform: this.platformName,
@@ -1147,11 +1169,11 @@ class TwitchPlatform extends EventEmitter {
         };
     }
 
-    isConfigured() {
+    isConfigured(): boolean {
         return !!(this.config.enabled && this.config.username && this.config.clientId);
     }
 
-    getStatus() {
+    getStatus(): { isReady: boolean; issues: string[] } {
         const issues = [];
         const isConnected = this.eventSub?.isConnected?.() || false;
         const isActive = this.eventSub?.isActive?.() || false;
@@ -1169,11 +1191,11 @@ class TwitchPlatform extends EventEmitter {
         };
     }
 
-    validateConfig() {
+    validateConfig(): { isReady: boolean; issues: string[] } {
         return this.getStatus();
     }
 
-    initializeViewerCountProvider() {
+    initializeViewerCountProvider(): void {
         if (this.viewerCountProvider && this.config.enabled) {
             if (typeof this.viewerCountProvider.startPolling === 'function') {
                 this.viewerCountProvider.startPolling();
@@ -1183,7 +1205,7 @@ class TwitchPlatform extends EventEmitter {
         }
     }
 
-    async getViewerCount() {
+    async getViewerCount(): Promise<number> {
         // Delegate to modular viewer count provider for DRY principle
         if (!this.viewerCountProvider) {
             this.logger.debug('Viewer count provider not initialized, returning 0', 'twitch');
@@ -1198,7 +1220,7 @@ class TwitchPlatform extends EventEmitter {
         }
     }
 
-    async _logRawEvent(eventType, data) {
+    async _logRawEvent(eventType: string, data: unknown): Promise<void> {
         if (!this.config.dataLoggingEnabled) {
             return;
         }
@@ -1210,12 +1232,12 @@ class TwitchPlatform extends EventEmitter {
         }
     }
 
-    async logRawPlatformData(eventType, data) {
+    async logRawPlatformData(eventType: string, data: unknown): Promise<unknown> {
         // Delegate to centralized service
         return this.chatFileLoggingService.logRawPlatformData('twitch', eventType, data, this.config);
     }
 
-    async getConnectionStatus() {
+    async getConnectionStatus(): Promise<{ platform: 'twitch'; status: 'connected' | 'disconnected'; timestamp: string }> {
         return {
             platform: 'twitch',
             status: this.isConnected ? 'connected' : 'disconnected',
@@ -1223,7 +1245,7 @@ class TwitchPlatform extends EventEmitter {
         };
     }
 
-    _emitPlatformEvent(type, payload) {
+    _emitPlatformEvent(type: string, payload: Record<string, unknown>): void {
         const platform = payload?.platform || 'twitch';
 
         // Emit unified platform:event for local listeners
@@ -1255,7 +1277,7 @@ class TwitchPlatform extends EventEmitter {
         }
     }
 
-    _handleEventSubConnectionChange(isConnected, details = {}) {
+    _handleEventSubConnectionChange(isConnected: boolean, details: Record<string, unknown> = {}): void {
         const status = isConnected ? 'connected' : 'disconnected';
         const error = details.error || (details.reason ? { message: details.reason } : null);
         const payload = PlatformEvents.createConnectionEvent(this.platformName, status, error);
@@ -1284,7 +1306,7 @@ class TwitchPlatform extends EventEmitter {
         error: unknown = null,
         eventType = 'twitch-platform',
         payload: Record<string, unknown> | null = null
-    ) {
+    ): void {
         if (this.errorHandler && error instanceof Error) {
             this.errorHandler.handleEventProcessingError(error, eventType, payload, message);
         } else if (this.errorHandler) {
