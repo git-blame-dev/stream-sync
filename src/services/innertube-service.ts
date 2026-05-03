@@ -62,7 +62,7 @@ class InnertubeService {
         };
     }
 
-    async getSharedInstance(key = 'shared') {
+async getSharedInstance(key = 'shared'): Promise<InnertubeInfoClient> {
         try {
             this._periodicCleanup();
 
@@ -98,7 +98,7 @@ class InnertubeService {
         }
     }
 
-    async getVideoInfo(videoId: string, options: { instanceKey?: string; timeout?: number; [key: string]: unknown } = {}) {
+async getVideoInfo(videoId: string, options: { instanceKey?: string; timeout?: number; [key: string]: unknown } = {}): Promise<unknown> {
         try {
             const yt = await this.getSharedInstance(options.instanceKey);
 
@@ -125,7 +125,7 @@ class InnertubeService {
         }
     }
 
-    getStats() {
+getStats(): ServiceStats & { cachedInstances: number; uptime: number } {
         return {
             ...this.stats,
             cachedInstances: this.instanceCache.size,
@@ -133,7 +133,7 @@ class InnertubeService {
         };
     }
 
-    cleanup(maxAge = 600000) {
+cleanup(maxAge = 600000): void {
         const now = Date.now();
         let cleaned = 0;
 
@@ -151,19 +151,19 @@ class InnertubeService {
         this.lastCleanup = now;
     }
 
-    dispose() {
+dispose(): void {
         this.instanceCache.clear();
         this.logger.debug?.('[InnertubeService] All instances disposed', 'innertube-service');
     }
 
-    _periodicCleanup() {
+_periodicCleanup(): void {
         const now = Date.now();
         if (now - this.lastCleanup > this.cleanupInterval) {
             this.cleanup();
         }
     }
 
-    _logServiceError(message: string, error: unknown = null, payload: Record<string, unknown> | null = null) {
+_logServiceError(message: string, error: unknown = null, payload: Record<string, unknown> | null = null): void {
         if (this.errorHandler && error instanceof Error) {
             this.errorHandler.handleEventProcessingError(error, 'innertube-service', payload, message);
         } else if (this.errorHandler) {

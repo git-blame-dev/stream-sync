@@ -45,7 +45,7 @@ type ManagerOptions = {
 
 let defaultInnertubeImporter: InnertubeImporter | null = null;
 
-function resolveInstanceTimeout(explicitTimeout?: number) {
+function resolveInstanceTimeout(explicitTimeout?: number): number {
     const candidate = explicitTimeout ?? INNERTUBE_INSTANCE_TTL;
     const validatedTimeout = validateTimeout(candidate, INNERTUBE_MIN_TTL, 'innertube-instance-timeout');
     return Math.max(validatedTimeout, INNERTUBE_MIN_TTL);
@@ -80,7 +80,7 @@ class InnertubeInstanceManager {
         this._startCleanupMonitoring();
     }
 
-    async getInstance(identifier = 'default', createFunction: (() => Promise<ManagedInstance>) | null = null) {
+async getInstance(identifier = 'default', createFunction: (() => Promise<ManagedInstance>) | null = null): Promise<ManagedInstance> {
         if (this.disposed) {
             throw new Error('InnertubeInstanceManager has been disposed');
         }
@@ -118,7 +118,7 @@ class InnertubeInstanceManager {
         }
     }
 
-    markInstanceUnhealthy(identifier: string, error: unknown = null) {
+markInstanceUnhealthy(identifier: string, error: unknown = null): void {
         const cached = this.activeInstances.get(identifier);
         if (cached) {
             cached.healthy = false;
@@ -127,7 +127,7 @@ class InnertubeInstanceManager {
         }
     }
 
-    async disposeInstance(identifier: string) {
+async disposeInstance(identifier: string): Promise<void> {
         const cached = this.activeInstances.get(identifier);
         if (cached) {
             await this._disposeInstanceSafely(cached.instance);
@@ -136,7 +136,7 @@ class InnertubeInstanceManager {
         }
     }
 
-    async cleanup() {
+async cleanup(): Promise<void> {
         if (this.disposed) {
             return;
         }
@@ -159,7 +159,11 @@ class InnertubeInstanceManager {
         logger.info('[InnertubeManager] Cleanup completed', 'youtube');
     }
 
-    getStats() {
+getStats(): {
+activeInstances: number;
+maxInstances: number;
+instanceDetails: Array<{ identifier: string; healthy: boolean; lastAccessed: number; age: number }>;
+} {
         return {
             activeInstances: this.activeInstances.size,
             maxInstances: this.maxInstances,
@@ -172,11 +176,11 @@ class InnertubeInstanceManager {
         };
     }
 
-    _getCachedInstance(identifier: string) {
+_getCachedInstance(identifier: string): CachedInstance | undefined {
         return this.activeInstances.get(identifier);
     }
 
-    _isInstanceHealthy(cached: CachedInstance) {
+_isInstanceHealthy(cached: CachedInstance): boolean {
         if (!cached.healthy) {
             return false;
         }
@@ -189,14 +193,14 @@ class InnertubeInstanceManager {
         return true;
     }
 
-    _updateInstanceAccess(identifier: string) {
+_updateInstanceAccess(identifier: string): void {
         const cached = this.activeInstances.get(identifier);
         if (cached) {
             cached.lastAccessed = Date.now();
         }
     }
 
-    _cacheInstance(identifier: string, instance: ManagedInstance) {
+_cacheInstance(identifier: string, instance: ManagedInstance): ManagedInstance {
         const cached: CachedInstance = {
             instance,
             created: Date.now(),
@@ -211,7 +215,7 @@ class InnertubeInstanceManager {
         return instance;
     }
 
-    async _cleanupOldestInstance() {
+async _cleanupOldestInstance(): Promise<void> {
         let oldest: string | null = null;
         let oldestTime = Date.now();
 
@@ -227,7 +231,7 @@ class InnertubeInstanceManager {
         }
     }
 
-    async _disposeInstanceSafely(instance: ManagedInstance) {
+async _disposeInstanceSafely(instance: ManagedInstance): Promise<void> {
         try {
             if (instance && typeof instance.session?.close === 'function') {
                 await instance.session.close();
@@ -240,7 +244,7 @@ class InnertubeInstanceManager {
         }
     }
 
-    _startCleanupMonitoring() {
+_startCleanupMonitoring(): void {
         const cleanupInterval = validateTimeout(30000, 30000);
 
         this.cleanupInterval = safeSetInterval(() => {
@@ -248,7 +252,7 @@ class InnertubeInstanceManager {
         }, cleanupInterval);
     }
 
-    async _performPeriodicCleanup() {
+async _performPeriodicCleanup(): Promise<void> {
         const now = Date.now();
         const expiredInstances: string[] = [];
 
@@ -270,7 +274,7 @@ class InnertubeInstanceManager {
 
 let instance: InnertubeInstanceManager | null = null;
 
-function setInnertubeImporter(importer: InnertubeImporter | null) {
+function setInnertubeImporter(importer: InnertubeImporter | null): void {
     if (importer && typeof importer !== 'function') {
         throw new Error('Innertube importer must be a function');
     }
@@ -281,7 +285,7 @@ function setInnertubeImporter(importer: InnertubeImporter | null) {
     }
 }
 
-function getInstance(options: ManagerOptions = {}) {
+function getInstance(options: ManagerOptions = {}): InnertubeInstanceManager {
     if (!instance) {
         instance = new InnertubeInstanceManager({
             ...options,
@@ -292,14 +296,14 @@ function getInstance(options: ManagerOptions = {}) {
     return instance;
 }
 
-async function cleanup() {
+async function cleanup(): Promise<void> {
     if (instance) {
         await instance.cleanup();
         instance = null;
     }
 }
 
-function _resetInstance() {
+function _resetInstance(): void {
     instance = null;
 }
 

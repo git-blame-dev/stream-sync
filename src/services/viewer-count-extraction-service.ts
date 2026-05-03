@@ -82,7 +82,7 @@ function getErrorType(error: unknown): string {
     return 'UnknownError';
 }
 
-function resolvePositiveNumber(value: unknown, fallback: number) {
+function resolvePositiveNumber(value: unknown, fallback: number): number {
     return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
@@ -244,7 +244,13 @@ class ViewerCountExtractionService {
         return results;
     }
     
-    async getAggregatedViewerCount(videoIds: string[], options: ExtractViewerCountOptions = {}) {
+async getAggregatedViewerCount(videoIds: string[], options: ExtractViewerCountOptions = {}): Promise<{
+success: boolean;
+totalCount: number;
+successfulStreams: number;
+failedStreams: number;
+streams: Array<{ videoId: string; count: number; success: boolean; strategy?: string | null; error?: string }>;
+}> {
         if (!videoIds || videoIds.length === 0) {
             return {
                 success: true,
@@ -310,7 +316,7 @@ class ViewerCountExtractionService {
         };
     }
     
-    getStats() {
+getStats(): ExtractionStats & { uptime: number; successRate: string } {
         return {
             ...this.stats,
             uptime: Date.now() - this.stats.startTime,
@@ -319,12 +325,12 @@ class ViewerCountExtractionService {
         };
     }
     
-    updateConfig(newConfig: Record<string, unknown>) {
+updateConfig(newConfig: Record<string, unknown>): void {
         this.config = { ...this.config, ...newConfig };
         this.logger?.debug?.('[ViewerCountExtraction] Configuration updated', 'viewer-extraction', this.config);
     }
     
-    _updateStats(success: boolean, responseTime: number, error: unknown = null) {
+_updateStats(success: boolean, responseTime: number, error: unknown = null): void {
         if (success) {
             this.stats.successfulExtractions++;
         } else {
@@ -341,7 +347,7 @@ class ViewerCountExtractionService {
         this.stats.averageResponseTime = Math.round(totalTime / this.stats.totalRequests);
     }
 
-    _handleExtractionError(message: string, error: unknown) {
+_handleExtractionError(message: string, error: unknown): void {
         if (this.errorHandler && error instanceof Error) {
             this.errorHandler.handleEventProcessingError(error, 'viewer-extraction', null, message);
         } else {

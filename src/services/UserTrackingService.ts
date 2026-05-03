@@ -8,7 +8,7 @@ type TrackingContext = {
     [key: string]: unknown;
 };
 
-function handleServiceError(message: string, error: unknown, context: TrackingContext = {}) {
+function handleServiceError(message: string, error: unknown, context: TrackingContext = {}): void {
     if (errorHandler && error instanceof Error) {
         errorHandler.handleEventProcessingError(error, 'user-tracking', context, message);
         return;
@@ -21,7 +21,7 @@ function handleServiceError(message: string, error: unknown, context: TrackingCo
 }
 
 class UserTrackingService {
-    seenUsers;
+seenUsers: Set<string>;
 
     constructor() {
         this.seenUsers = new Set();
@@ -30,7 +30,7 @@ class UserTrackingService {
         });
     }
 
-    hasSeenUser(userId: string | null | undefined, context: TrackingContext = {}) {
+hasSeenUser(userId: string | null | undefined, context: TrackingContext = {}): boolean {
         if (!userId) {
             logger.warn('[UserTrackingService] No userId provided for seen-user check', 'user-tracking');
             return true;
@@ -47,7 +47,7 @@ class UserTrackingService {
         }
     }
 
-    markMessageSeen(userId: string | null | undefined, context: TrackingContext = {}) {
+markMessageSeen(userId: string | null | undefined, context: TrackingContext = {}): boolean {
         if (!userId) {
             logger.warn('[UserTrackingService] No userId provided for message tracking', 'user-tracking');
             return false;
@@ -69,7 +69,7 @@ class UserTrackingService {
         }
     }
 
-    isFirstMessage(userId: string | null | undefined, context: TrackingContext = {}) {
+isFirstMessage(userId: string | null | undefined, context: TrackingContext = {}): boolean {
         if (this.hasSeenUser(userId, context)) {
             return false;
         }
@@ -78,7 +78,7 @@ class UserTrackingService {
     }
 }
 
-function createUserTrackingService() {
+function createUserTrackingService(): UserTrackingService {
     return new UserTrackingService();
 }
 

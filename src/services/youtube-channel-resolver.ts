@@ -25,7 +25,7 @@ type ResolveOptions = {
     throwOnError?: boolean;
 };
 
-function createResolverErrorHandler(logger?: ResolverLogger) {
+function createResolverErrorHandler(logger?: ResolverLogger): ResolverErrorHandler | null {
     if (!logger || typeof logger.error !== 'function') {
         return null;
     }
@@ -42,7 +42,7 @@ function createResolverErrorHandler(logger?: ResolverLogger) {
     };
 }
 
-function normalizeChannelHandle(channelHandle: unknown) {
+function normalizeChannelHandle(channelHandle: unknown): string {
     if (!channelHandle || typeof channelHandle !== 'string') {
         return '';
     }
@@ -50,7 +50,7 @@ function normalizeChannelHandle(channelHandle: unknown) {
     return channelHandle.trim();
 }
 
-function isChannelId(channelHandle: unknown) {
+function isChannelId(channelHandle: unknown): boolean {
     if (!channelHandle || typeof channelHandle !== 'string') {
         return false;
     }
@@ -58,7 +58,7 @@ function isChannelId(channelHandle: unknown) {
     return /^UC[a-zA-Z0-9_\-]{22}$/.test(channelHandle);
 }
 
-function normalizeHandleForCache(channelHandle: unknown) {
+function normalizeHandleForCache(channelHandle: unknown): string {
     const trimmed = normalizeChannelHandle(channelHandle);
     if (!trimmed || isChannelId(trimmed)) {
         return '';
@@ -67,11 +67,11 @@ function normalizeHandleForCache(channelHandle: unknown) {
     return trimmed.replace(/^@/, '').toLowerCase();
 }
 
-function buildHandleUrl(handleKey: string) {
+function buildHandleUrl(handleKey: string): string {
     return YOUTUBE.buildChannelUrl(handleKey);
 }
 
-async function resolveChannelId(innertubeClient: ResolverClient | null, channelHandle: unknown, options: ResolveOptions = {}) {
+async function resolveChannelId(innertubeClient: ResolverClient | null, channelHandle: unknown, options: ResolveOptions = {}): Promise<string | null> {
     const timeout = Number.isFinite(options.timeout) ? Number(options.timeout) : DEFAULT_TIMEOUT_MS;
     const logger = options.logger;
     const onError = options.onError;
