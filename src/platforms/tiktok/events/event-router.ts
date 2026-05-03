@@ -139,24 +139,24 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 }
 
 function asTikTokRawEvent(value: unknown): TikTokRawEvent {
-    const record = asRecord(value);
-    return (record || {}) as TikTokRawEvent;
+const record = asRecord(value);
+return record ? { ...record } : {};
 }
 
-function hasCanonicalMessageParts(normalizedData: Record<string, unknown>) {
-    return getValidMessageParts({ message: normalizedData?.message }).length > 0;
+function hasCanonicalMessageParts(normalizedData: Record<string, unknown>): boolean {
+return getValidMessageParts({ message: normalizedData?.message }).length > 0;
 }
 
-function isRecoverableTikTokChatNormalizationError(error: unknown) {
-    const message = error instanceof Error ? error.message : '';
-    return message === 'Missing TikTok message data'
-        || message === 'Missing TikTok userId (uniqueId)'
-        || message === 'Missing TikTok username (nickname)'
-        || message === 'Missing TikTok message text'
-        || message === 'Missing TikTok timestamp';
+function isRecoverableTikTokChatNormalizationError(error: unknown): boolean {
+const message = error instanceof Error ? error.message : '';
+return message === 'Missing TikTok message data'
+|| message === 'Missing TikTok userId (uniqueId)'
+|| message === 'Missing TikTok username (nickname)'
+|| message === 'Missing TikTok message text'
+|| message === 'Missing TikTok timestamp';
 }
 
-function buildDegradedTikTokChatEvent(platform: TikTokPlatformRouterContract, data: TikTokRawEvent = {}) {
+function buildDegradedTikTokChatEvent(platform: TikTokPlatformRouterContract, data: TikTokRawEvent = {}): Record<string, unknown> {
     const userData = data?.user && typeof data.user === 'object' ? data.user : {};
     const userId = typeof userData.uniqueId === 'string' ? userData.uniqueId.trim() : '';
     const username = typeof userData.nickname === 'string' ? userData.nickname.trim() : '';
@@ -202,7 +202,7 @@ function buildDegradedTikTokChatEvent(platform: TikTokPlatformRouterContract, da
     };
 }
 
-function getChatReplayConfig(platform: TikTokPlatformRouterContract) {
+function getChatReplayConfig(platform: TikTokPlatformRouterContract): { ttlMs: number; maxCacheSize: number; maxAgeMs: number } {
     const provided = platform?.chatReplayProtectionConfig;
     const ttlMs = Number.isFinite(provided?.ttlMs) && provided.ttlMs > 0
         ? provided.ttlMs
@@ -221,7 +221,7 @@ function getChatReplayConfig(platform: TikTokPlatformRouterContract) {
     };
 }
 
-function getChatReplayState(platform: TikTokPlatformRouterContract) {
+function getChatReplayState(platform: TikTokPlatformRouterContract): { recentMessageIds: Map<string, number> } {
     if (!platform._chatReplayIngressState || typeof platform._chatReplayIngressState !== 'object') {
         platform._chatReplayIngressState = {
             recentMessageIds: new Map()
@@ -235,7 +235,7 @@ function getChatReplayState(platform: TikTokPlatformRouterContract) {
     return platform._chatReplayIngressState;
 }
 
-function getPlatformMessageId(platform: TikTokPlatformRouterContract, data: TikTokRawEvent) {
+function getPlatformMessageId(platform: TikTokPlatformRouterContract, data: TikTokRawEvent): string | null {
     if (typeof platform?._getPlatformMessageId !== 'function') {
         return null;
     }

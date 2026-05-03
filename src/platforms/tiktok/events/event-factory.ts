@@ -28,9 +28,9 @@ type NormalizedIdentity = {
 };
 
 type EventFactoryOptions = {
-    platformName?: string;
-    timestampService?: unknown;
-    getTimestamp?: (data: Record<string, unknown>) => string | null | undefined;
+platformName?: string;
+timestampService?: unknown;
+getTimestamp?: (data: Record<string, unknown>) => unknown;
     normalizeUserData?: (data: NormalizedIdentity) => NormalizedIdentity;
     getPlatformMessageId?: (data: Record<string, unknown>) => string | number | null | undefined;
     generateCorrelationId?: () => string;
@@ -48,7 +48,7 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 
 function createTikTokEventFactory(options: EventFactoryOptions = {}) {
     const platformName = options.platformName || 'tiktok';
-    const getTimestamp = options.getTimestamp || ((data: Record<string, unknown>) => data.timestamp as string | undefined);
+const getTimestamp = options.getTimestamp || ((data: Record<string, unknown>) => data.timestamp);
     const normalizeUserData = options.normalizeUserData || ((data: NormalizedIdentity) => data);
     const getPlatformMessageId = options.getPlatformMessageId || ((data: Record<string, unknown>) => data.id ?? data.msgId);
     const generateCorrelationId = options.generateCorrelationId || (() => PlatformEvents._generateCorrelationId());
@@ -66,7 +66,7 @@ function createTikTokEventFactory(options: EventFactoryOptions = {}) {
         return context as EventFactoryMetadata;
     };
 
-    const normalizeRecoverable = (recoverable: unknown) => (typeof recoverable === 'boolean' ? recoverable : true);
+const normalizeRecoverable = (recoverable: unknown): boolean => (typeof recoverable === 'boolean' ? recoverable : true);
     const normalizeChatEvent = options.normalizeChatEvent
         || ((data: Record<string, unknown>) => normalizeTikTokMessage(data, platformName, options.timestampService) as Record<string, unknown>);
 
@@ -158,7 +158,7 @@ function createTikTokEventFactory(options: EventFactoryOptions = {}) {
             delete normalizedMetadata.messageParts;
 
             const missingFields = getMissingFields(normalizedMetadata);
-            const isMissingField = (fieldName) => missingFields.includes(fieldName);
+const isMissingField = (fieldName: string): boolean => missingFields.includes(fieldName);
 
             const rawTimestamp = typeof normalized?.timestamp === 'string' ? normalized.timestamp.trim() : '';
             const timestamp = rawTimestamp || undefined;

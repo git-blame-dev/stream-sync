@@ -107,7 +107,7 @@ function createTikTokGiftAggregator(options: TikTokGiftAggregatorOptions = {}) {
         throw new Error('platform is required to create TikTok gift aggregator');
     }
 
-    const normalizeRequiredString = (value: unknown, label: string) => {
+const normalizeRequiredString = (value: unknown, label: string): string => {
         const normalized = typeof value === 'string'
             ? value.trim()
             : (typeof value === 'number' ? String(value).trim() : '');
@@ -117,7 +117,7 @@ function createTikTokGiftAggregator(options: TikTokGiftAggregatorOptions = {}) {
         return normalized;
     };
 
-    const normalizeRequiredPositive = (value: unknown, label: string) => {
+const normalizeRequiredPositive = (value: unknown, label: string): number => {
         const numeric = Number(value);
         if (!Number.isFinite(numeric) || numeric <= 0) {
             throw new Error(`TikTok gift aggregation requires ${label}`);
@@ -125,7 +125,7 @@ function createTikTokGiftAggregator(options: TikTokGiftAggregatorOptions = {}) {
         return numeric;
     };
 
-    const cleanupGiftAggregation = () => {
+const cleanupGiftAggregation = (): void => {
         for (const key in platform.giftAggregation) {
             if (platform.giftAggregation[key].timer) {
                 clearTimeoutFn(platform.giftAggregation[key].timer);
@@ -134,7 +134,7 @@ function createTikTokGiftAggregator(options: TikTokGiftAggregatorOptions = {}) {
         platform.giftAggregation = {};
     };
 
-    const handleStandardGift = async (gift: TikTokGiftPayload) => {
+const handleStandardGift = async (gift: TikTokGiftPayload): Promise<void> => {
         if (!gift || typeof gift !== 'object') {
             throw new Error('TikTok gift aggregation requires gift payload');
         }
