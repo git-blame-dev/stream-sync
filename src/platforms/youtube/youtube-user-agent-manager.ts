@@ -10,6 +10,12 @@ type UserAgentManagerOptions = {
     userAgents?: string[];
 };
 
+type UserAgentStats = {
+  totalAgents: number;
+  currentIndex: number;
+  rotationCount: number;
+};
+
 class YouTubeUserAgentManager {
     private logger: UserAgentLogger;
     private userAgents: string[];
@@ -76,13 +82,13 @@ class YouTubeUserAgentManager {
         this.rotationCount = 0;
     }
 
-    getStats() {
-        return {
-            totalAgents: this.userAgents.length,
-            currentIndex: this.currentIndex,
-            rotationCount: this.rotationCount
-        };
-    }
+  getStats(): UserAgentStats {
+    return {
+      totalAgents: this.userAgents.length,
+      currentIndex: this.currentIndex,
+      rotationCount: this.rotationCount
+    };
+  }
 
     getRandomUserAgent(): string {
         if (this.userAgents.length === 0) {
