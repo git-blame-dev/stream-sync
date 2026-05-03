@@ -34,6 +34,10 @@ interface CreateYouTubeEventRouterOptions {
     platform?: RouteablePlatform;
 }
 
+interface YouTubeEventRouter {
+routeEvent: (chatItem: unknown, eventType: unknown) => Promise<boolean>;
+}
+
 const EVENT_HANDLER_MAP = new Map<string, keyof MappedEventHandlers>([
     ['LiveChatPaidMessage', 'handleSuperChat'],
     ['LiveChatPaidSticker', 'handleSuperSticker'],
@@ -71,14 +75,30 @@ function toErrorMessage(error: unknown): string {
 }
 
 function asEventData(value: unknown): UnknownRecord | null {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) {
-        return null;
-    }
-
-    return value as UnknownRecord;
+if (!value || typeof value !== 'object' || Array.isArray(value)) {
+return null;
 }
 
-function createYouTubeEventRouter(options: CreateYouTubeEventRouterOptions = {}) {
+return value as UnknownRecord;
+}
+
+function canEmitPlatformErrorEvent(
+platform: RouteablePlatform
+): platform is RouteablePlatform & {
+eventFactory: {
+createErrorEvent: (options: {
+error: Error;
+context: UnknownRecord;
+recoverable: boolean;
+timestamp: string;
+}) => unknown;
+};
+_emitPlatformEvent: (eventType: string, payload: unknown) => void;
+} {
+return !!platform.eventFactory && typeof platform._emitPlatformEvent === 'function';
+}
+
+function createYouTubeEventRouter(options: CreateYouTubeEventRouterOptions = {}): YouTubeEventRouter {
     const { platform } = options;
     if (!platform) {
         throw new Error('YouTube event router requires platform');
@@ -95,9 +115,9 @@ function createYouTubeEventRouter(options: CreateYouTubeEventRouterOptions = {})
         const error = new Error(message);
         errorHandler.handleEventProcessingError(error, eventType, asEventData(chatItem), message, 'youtube-event-router');
 
-        if (!platform.eventFactory || typeof platform._emitPlatformEvent !== 'function') {
-            return;
-        }
+if (!canEmitPlatformErrorEvent(platform)) {
+return;
+}
 
         try {
             const payload = platform.eventFactory.createErrorEvent({

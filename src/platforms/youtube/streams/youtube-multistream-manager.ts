@@ -100,7 +100,7 @@ function createYouTubeMultiStreamManager(options: MultiStreamManagerOptions = {}
         throw new Error('YouTube multistream manager requires now function');
     }
 
-    const startMonitoring = async () => {
+const startMonitoring = async (): Promise<void> => {
         if (platform.monitoringInterval) {
             platform.logger.debug(
                 `Cleaning up existing monitoring interval: ${platform.monitoringInterval}`,
@@ -139,7 +139,7 @@ function createYouTubeMultiStreamManager(options: MultiStreamManagerOptions = {}
     let currentCheckPromise: Promise<void> | null = null;
     let immediateRefreshPromise: Promise<void> | null = null;
 
-    const runCheckMultiStream = async (throwOnError: boolean) => {
+const runCheckMultiStream = async (throwOnError: boolean): Promise<void> => {
         try {
             const maxStreams = platform.config.maxStreams;
             const currentConnections = platform.connectionManager.getConnectionCount();
@@ -287,7 +287,7 @@ function createYouTubeMultiStreamManager(options: MultiStreamManagerOptions = {}
         }
     };
 
-    const checkMultiStream = async (options: CheckMultiStreamOptions = {}) => {
+const checkMultiStream = async (options: CheckMultiStreamOptions = {}): Promise<void> => {
         const throwOnError = options.throwOnError === true;
 
         if (currentCheckPromise) {
@@ -305,7 +305,7 @@ function createYouTubeMultiStreamManager(options: MultiStreamManagerOptions = {}
         }
     };
 
-    const requestImmediateRefresh = async (context: UnknownRecord = {}) => {
+const requestImmediateRefresh = async (context: UnknownRecord = {}): Promise<void> => {
         if (immediateRefreshPromise) {
             return immediateRefreshPromise;
         }
@@ -332,9 +332,9 @@ function createYouTubeMultiStreamManager(options: MultiStreamManagerOptions = {}
         }
     };
 
-    const isCheckInProgress = () => currentCheckPromise !== null;
+const isCheckInProgress = (): boolean => currentCheckPromise !== null;
 
-    const checkStreamShortageAndWarn = (availableCount: number, maxStreams: number) => {
+const checkStreamShortageAndWarn = (availableCount: number, maxStreams: number): void => {
         const currentTimeMs = now();
         const isShortage = maxStreams > 0 && availableCount < maxStreams;
         const warningThrottleMs = validateTimeout(
@@ -373,7 +373,7 @@ function createYouTubeMultiStreamManager(options: MultiStreamManagerOptions = {}
         }
     };
 
-    const logStatus = (includeDetails = false, includeActiveStreamsList = false) => {
+const logStatus = (includeDetails = false, includeActiveStreamsList = false): void => {
         const storedConnections = platform.connectionManager.getAllVideoIds();
         const readyConnections = platform.getActiveYouTubeVideoIds();
 

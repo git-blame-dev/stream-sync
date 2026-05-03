@@ -22,7 +22,11 @@ const asEventType = (value: unknown): string | null => {
 };
 
 const asTrimmedString = (value: unknown): string => {
-    return typeof value === 'string' ? value.trim() : '';
+return typeof value === 'string' ? value.trim() : '';
+};
+
+const hasDirectEventType = (value: UnknownRecord): boolean => {
+return typeof value.type === 'string' && value.type.trim().length > 0;
 };
 
 function normalizeYouTubeEvent(chatItem: unknown): NormalizeYouTubeEventResult {
@@ -46,11 +50,11 @@ function normalizeYouTubeEvent(chatItem: unknown): NormalizeYouTubeEventResult {
         normalizedChatItem = rawChatItem;
         eventType = asEventType(wrappedItem.type);
         structure = 'wrapped';
-    } else if (rawChatItem.type) {
-        normalizedChatItem = { item: rawChatItem };
-        eventType = asEventType(rawChatItem.type);
-        structure = 'direct';
-    }
+} else if (hasDirectEventType(rawChatItem)) {
+normalizedChatItem = { item: rawChatItem };
+eventType = asEventType(rawChatItem.type);
+structure = 'direct';
+}
 
     if (!normalizedChatItem || !eventType) {
         return {

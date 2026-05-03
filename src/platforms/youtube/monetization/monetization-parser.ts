@@ -3,13 +3,25 @@ import { YouTubeiCurrencyParser } from '../youtubei-currency-parser';
 import type { UnknownRecord } from '../../../utils/record-contracts';
 
 interface YouTubeMonetizationParserOptions {
-    logger?: unknown;
+logger?: unknown;
+}
+
+
+interface ParsedSuperChat {
+id: string;
+timestamp: string;
+giftType: 'Super Chat';
+giftCount: 1;
+amount: number;
+currency: string;
+avatarUrl: string;
+message: string;
 }
 
 
 interface ParsedSuperSticker {
-    id: string;
-    timestamp: string;
+id: string;
+timestamp: string;
     giftType: 'Super Sticker';
     giftCount: number;
     amount: number;
@@ -48,8 +60,18 @@ interface ParsedGiftMessageView {
 }
 
 interface MembershipLevelInput {
-    headerPrimaryText: string;
-    headerSubtext: string;
+headerPrimaryText: string;
+headerSubtext: string;
+}
+
+interface YouTubeMonetizationParser {
+parseSuperChat: (chatItem: UnknownRecord) => ParsedSuperChat;
+parseSuperSticker: (chatItem: UnknownRecord) => ParsedSuperSticker;
+parseMembership: (chatItem: UnknownRecord) => ParsedMembership;
+parseGiftPurchase: (chatItem: UnknownRecord) => ParsedGiftPurchase;
+parseGiftMessageView: (chatItem: UnknownRecord) => ParsedGiftMessageView;
+resolveTimestamp: (chatItem: UnknownRecord, label: string) => string;
+resolveOptionalId: (chatItem: UnknownRecord) => string | undefined;
 }
 
 const isRecord = (value: unknown): value is UnknownRecord => (
@@ -71,7 +93,7 @@ const YOUTUBE_JEWELS_GIFT_ASSET_FILES: Record<string, string> = {
     'six seven': 'six_seven.png'
 };
 
-function createYouTubeMonetizationParser(options: YouTubeMonetizationParserOptions = {}) {
+function createYouTubeMonetizationParser(options: YouTubeMonetizationParserOptions = {}): YouTubeMonetizationParser {
     const currencyParser = new YouTubeiCurrencyParser({ logger: options.logger });
 
     const resolveTimestamp = (chatItem: UnknownRecord, label: string): string => {
@@ -355,7 +377,7 @@ function createYouTubeMonetizationParser(options: YouTubeMonetizationParserOptio
         return candidates[0].imageUrl;
     };
 
-    const parseSuperChat = (chatItem: UnknownRecord) => {
+const parseSuperChat = (chatItem: UnknownRecord): ParsedSuperChat => {
         const { amount, currency } = parsePurchaseAmount(chatItem, 'YouTube Super Chat');
         const item = toRecord(chatItem.item);
         return {
