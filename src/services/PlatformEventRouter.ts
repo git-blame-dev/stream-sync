@@ -88,6 +88,10 @@ type NormalizedChatPayload = {
     badgeImages?: ReturnType<typeof normalizeBadgeImages>;
 };
 
+type CanonicalMessagePart =
+| { type: 'emote'; platform?: string; emoteId: string; imageUrl: string; placeInComment?: number }
+| { type: 'text'; text: string };
+
 function asRouterRecord(value: unknown): RouterRecord {
     return value && typeof value === 'object' ? (value as RouterRecord) : {};
 }
@@ -96,7 +100,7 @@ function isNotificationType(value: string): value is NotificationType {
     return Object.prototype.hasOwnProperty.call(NOTIFICATION_CONFIGS, value);
 }
 
-function resolveCanonicalMessageParts(data: unknown = {}) {
+function resolveCanonicalMessageParts(data: unknown = {}): CanonicalMessagePart[] {
     return getValidMessageParts(asRouterRecord(data))
         .map((part) => {
             if (part.type === 'emote') {
@@ -146,7 +150,7 @@ class PlatformEventRouter {
         this.start();
     }
 
-    start() {
+    start(): void {
         if (!this.eventBus || typeof this.eventBus.subscribe !== 'function') {
             throw new Error('PlatformEventRouter requires eventBus.subscribe');
         }
@@ -164,7 +168,7 @@ class PlatformEventRouter {
         this.subscription = typeof unsubscribe === 'function' ? unsubscribe : null;
     }
 
-    async routeEvent(event: unknown) {
+    async routeEvent(event: unknown): Promise<void> {
         const eventRecord = asRouterRecord(event);
         if (!event || typeof event !== 'object') {
             throw new Error('PlatformEventRouter requires event object');
@@ -268,7 +272,7 @@ class PlatformEventRouter {
         }
     }
 
-    _isNotificationEnabled(type: NotificationType, platform: string) {
+    _isNotificationEnabled(type: NotificationType, platform: string): boolean {
         const settingKey = NOTIFICATION_CONFIGS[type]?.settingKey;
         if (!settingKey) {
             throw new Error(`Unknown notification type: ${type}`);
@@ -281,7 +285,7 @@ class PlatformEventRouter {
         return !!value;
     }
 
-    async forwardToNotificationManager(type: string, platform: string, data: RouterRecord) {
+    async forwardToNotificationManager(type: string, platform: string, data: RouterRecord): Promise<void> {
         if (this.notificationManager?.handleNotification) {
             const sanitized = this._sanitizeNotificationPayload(data, type, platform);
             if (!sanitized) {
@@ -293,7 +297,7 @@ class PlatformEventRouter {
         }
     }
 
-    dispose() {
+    dispose(): void {
         if (this.subscription) {
             try {
                 this.subscription();
@@ -305,7 +309,7 @@ class PlatformEventRouter {
         this.subscription = null;
     }
 
-    _handleRouterError(message: string, error: unknown, eventType = 'event-routing') {
+    _handleRouterError(message: string, error: unknown, eventType = 'event-routing'): void {
         if (this.errorHandler && error instanceof Error) {
             this.errorHandler.handleEventProcessingError(error, eventType, null, message);
         } else {
@@ -313,7 +317,7 @@ class PlatformEventRouter {
         }
     }
 
-    _normalizeChatEvent(data: unknown = {}, platform = 'unknown') {
+    _normalizeChatEvent(data: unknown = {}, platform = 'unknown'): NormalizedChatPayload {
         const payload = asRouterRecord(data);
         const metadataValue = payload.metadata;
         const metadata = (metadataValue && typeof metadataValue === 'object')
@@ -391,7 +395,7 @@ class PlatformEventRouter {
         return normalized;
     }
 
-    async _routeRuntimeNotification(handlerName: string, type: string, platform: string, data: RouterRecord, payloadBuilder: ((sanitized: RouterRecord) => RouterRecord) | null = null) {
+    async _routeRuntimeNotification(handlerName: string, type: string, platform: string, data: RouterRecord, payloadBuilder: ((sanitized: RouterRecord) => RouterRecord) | null = null): Promise<void> {
         const handler = this.runtime?.[handlerName];
         if (!handler) {
             return;
@@ -405,7 +409,7 @@ class PlatformEventRouter {
         await (handler as RuntimeNotificationHandler).call(this.runtime, platform, sanitized.username, payload);
     }
 
-    _sanitizeNotificationPayload(data: unknown = {}, sourceType: string | null = null, sourcePlatform: string | null = null) {
+    _sanitizeNotificationPayload(data: unknown = {}, sourceType: string | null = null, sourcePlatform: string | null = null): RouterRecord {
         if (!data || typeof data !== 'object') {
             throw new Error('Notification payload must be an object');
         }

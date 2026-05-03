@@ -17,7 +17,7 @@ const SECTION_COMMAND_KEYS = new Set(
         .filter((commandKey) => commandKey && !['commands', 'chat', 'general'].includes(commandKey))
 );
 
-function handleVFXCommandError(message, error, eventType) {
+function handleVFXCommandError(message: string, error: unknown, eventType: string): void {
     if (!eventType) {
         throw new Error('handleVFXCommandError requires eventType');
     }
@@ -28,7 +28,7 @@ function handleVFXCommandError(message, error, eventType) {
     }
 }
 
-function getErrorMessage(error) {
+function getErrorMessage(error: unknown): string {
     if (error instanceof Error) {
         return error.message;
     }

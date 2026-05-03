@@ -40,20 +40,27 @@ type RuntimeAssetRecord = {
     expiresAt: number;
 };
 
+type GuiTransportService = {
+start: () => Promise<void>;
+stop: () => Promise<void>;
+getAddress: () => ReturnType<Server['address']> | null;
+isActive: () => boolean;
+};
+
 function toTransportRecord(value: unknown): TransportRecord {
     return value && typeof value === 'object' ? (value as TransportRecord) : {};
 }
 
-function isGuiActive(config: unknown = {}) {
+function isGuiActive(config: unknown = {}): boolean {
     const gui = toTransportRecord(toTransportRecord(config).gui);
     return gui.enableDock === true || gui.enableOverlay === true;
 }
 
-function createGuiTransportErrorHandler(logger: GuiTransportLogger | undefined) {
+function createGuiTransportErrorHandler(logger: GuiTransportLogger | undefined): ReturnType<typeof createPlatformErrorHandler> {
     return createPlatformErrorHandler(logger, 'gui-transport');
 }
 
-function createGuiTransportService(options: GuiTransportOptions = {}) {
+function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransportService {
     const config = toTransportRecord(options.config);
     const guiConfig = toTransportRecord(config.gui);
     const logger = options.logger;
@@ -744,14 +751,14 @@ function createGuiTransportService(options: GuiTransportOptions = {}) {
         });
     };
 
-    const getAddress = () => {
+    const getAddress = (): ReturnType<Server['address']> | null => {
         if (!server || !active) {
             return null;
         }
         return server.address();
     };
 
-    const isActive = () => active;
+    const isActive = (): boolean => active;
 
     return {
         start,
