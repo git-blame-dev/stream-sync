@@ -114,6 +114,30 @@ describe("EnhancedHttpClient behavior", () => {
     expect(response.status).toBe(201);
   });
 
+  it("encodes urlencoded bodies when content type includes charset", async () => {
+    let postedBody!: string;
+    const axios = {
+      post: createMockFn(async (_url, body) => {
+        postedBody = body;
+        return { status: 201 };
+      }),
+    };
+    const logger = noOpLogger;
+    const client = new EnhancedHttpClient({ axios, logger });
+
+    await client.post(
+      "https://example.com",
+      { a: 1, b: "two" },
+      {
+        headers: { "Content-Type": "application/x-www-form-urlencoded; charset=utf-8" },
+      },
+    );
+
+    expect(typeof postedBody).toBe("string");
+    expect(postedBody).toContain("a=1");
+    expect(postedBody).toContain("b=two");
+  });
+
   it("returns false when reachability check fails", async () => {
     const axios = {
       get: createMockFn().mockRejectedValue(new Error("testNetworkFailure")),

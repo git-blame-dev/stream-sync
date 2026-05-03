@@ -5,22 +5,25 @@ import { resolveLogger } from './logger-resolver';
 import { createRetrySystem, type RetrySystem } from './retry-system';
 import { config as appConfig } from '../core/config';
 
-const axiosClient = axios as unknown as {
+type HttpClientAdapter = {
     get: (url: string, config: Record<string, unknown>) => Promise<Record<string, unknown>>;
     post: (url: string, data: unknown, config: Record<string, unknown>) => Promise<Record<string, unknown>>;
     put: (url: string, data: unknown, config: Record<string, unknown>) => Promise<Record<string, unknown>>;
     delete: (url: string, config: Record<string, unknown>) => Promise<Record<string, unknown>>;
 };
 
+const axiosModule = (axios as typeof axios & { default?: typeof axios }).default || axios;
+const axiosClient: HttpClientAdapter = {
+    get: (url: string, config: Record<string, unknown>) => axiosModule.get(url, config),
+    post: (url: string, data: unknown, config: Record<string, unknown>) => axiosModule.post(url, data, config),
+    put: (url: string, data: unknown, config: Record<string, unknown>) => axiosModule.put(url, data, config),
+    delete: (url: string, config: Record<string, unknown>) => axiosModule.delete(url, config),
+};
+
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE';
 
 type EnhancedHttpClientConfig = {
-    axios?: {
-        get: (url: string, config: Record<string, unknown>) => Promise<Record<string, unknown>>;
-        post: (url: string, data: unknown, config: Record<string, unknown>) => Promise<Record<string, unknown>>;
-        put: (url: string, data: unknown, config: Record<string, unknown>) => Promise<Record<string, unknown>>;
-        delete: (url: string, config: Record<string, unknown>) => Promise<Record<string, unknown>>;
-    };
+    axios?: HttpClientAdapter;
     logger?: unknown;
     timeout?: unknown;
     reachabilityTimeoutMs?: unknown;
@@ -155,14 +158,18 @@ class EnhancedHttpClient {
 
                     let postData = data;
                     const contentTypeHeaderKey = Object.keys(headers).find((key) => key.toLowerCase() === 'content-type');
+                    const contentTypeHeaderValue = contentTypeHeaderKey ? headers[contentTypeHeaderKey].trim().toLowerCase() : '';
                     if (
-                        contentTypeHeaderKey
-                        && headers[contentTypeHeaderKey] === 'application/x-www-form-urlencoded'
+                        contentTypeHeaderValue.startsWith('application/x-www-form-urlencoded')
                         && data
                         && typeof data === 'object'
                         && !(data instanceof URLSearchParams)
+                        && !Array.isArray(data)
                     ) {
-                        postData = new URLSearchParams(data as Record<string, string>).toString();
+                        const encodedParams = new URLSearchParams(
+                            Object.entries(data as Record<string, unknown>).map(([key, value]) => [key, String(value)])
+                        );
+                        postData = encodedParams.toString();
                     }
 
                     response = await this.axios.post(url, postData, config);
