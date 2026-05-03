@@ -39,6 +39,23 @@ const PlatformEvents = {
     _generateCorrelationId: () => crypto.randomUUID()
 } as const;
 
+type TikTokErrorContext = Record<string, unknown>;
+
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error && typeof error.message === 'string' && error.message.length > 0) {
+    return error.message;
+  }
+
+  if (error && typeof error === 'object' && 'message' in error) {
+    const message = error.message;
+    if (typeof message === 'string' && message.length > 0) {
+      return message;
+    }
+  }
+
+  return String(error ?? 'Unknown error');
+};
+
 class TikTokPlatform extends EventEmitter {
     constructor(config = {}, dependencies = {}) {
         super(); // Call EventEmitter constructor first to ensure proper prototype chain
@@ -413,9 +430,9 @@ class TikTokPlatform extends EventEmitter {
         this.handleRetry(err);
     }
 
-  handleRetry(err) {
+  handleRetry(err: unknown): { action: string; reason?: string } {
     const username = this.config.username;
-    const errorMessage = err?.message || err?.toString() || 'Unknown error';
+    const errorMessage = getErrorMessage(err);
     const decision = this._classifyReconnectPolicy({
       message: errorMessage,
       source: 'retry',
@@ -539,11 +556,11 @@ class TikTokPlatform extends EventEmitter {
         return `Stream is not live for TikTok user '${username}'${codeSuffix}`;
     }
 
-    _recordNotLiveWarning() {
+    _recordNotLiveWarning(): void {
         this._lastNotLiveWarningAt = Date.now();
     }
 
-  _wasRecentlyNotLiveLogged() {
+  _wasRecentlyNotLiveLogged(): boolean {
     if (!this._lastNotLiveWarningAt) {
       return false;
     }
@@ -623,7 +640,7 @@ class TikTokPlatform extends EventEmitter {
     };
   }
 
-  _isRecoverableError(errorMessage) {
+    _isRecoverableError(errorMessage: string): boolean {
         // Non-recoverable errors (likely configuration issues)
     const nonRecoverablePatterns = [
       'username is required',
@@ -662,7 +679,7 @@ class TikTokPlatform extends EventEmitter {
         return true;
     }
     
-    queueRetry(error) {
+  queueRetry(error: unknown): { queued: boolean; reason?: string } {
         if (!this.retrySystem) {
             return { queued: false, reason: 'no-retry-system' };
         }
@@ -960,7 +977,7 @@ class TikTokPlatform extends EventEmitter {
                 err,
                 'follow-processing',
                 data,
-                `[TikTok Follow] Error processing follow event: ${err.message}`
+                `[TikTok Follow] Error processing follow event: ${getErrorMessage(err)}`
             );
         }
     }
@@ -1008,7 +1025,7 @@ class TikTokPlatform extends EventEmitter {
                 err,
                 'social-processing',
                 data,
-                `[TikTok Social] Error processing social event: ${err.message}`
+                `[TikTok Social] Error processing social event: ${getErrorMessage(err)}`
             );
         }
     }
@@ -1597,12 +1614,13 @@ class TikTokPlatform extends EventEmitter {
         }
     }
 
-    async _handleError(error, context) {
+    async _handleError(error: unknown, context: TikTokErrorContext): Promise<void> {
         try {
+            const errorMessage = getErrorMessage(error);
             const eventData = this.eventFactory.createError(error, {
                 ...context,
                 platform: 'tiktok',
-                recoverable: !error.message.includes('fatal')
+                recoverable: !errorMessage.includes('fatal')
             });
 
             const eventPlatform = eventData.platform;
