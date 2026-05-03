@@ -7,7 +7,45 @@ import { secrets } from '../../../core/secrets';
 const STARTUP_CLEANUP_DELETE_CONCURRENCY = 3;
 const STARTUP_STALE_WEBSOCKET_STATUS = 'websocket_disconnected';
 
-function createTwitchEventSubSubscriptionManager(options = {}) {
+type LoggerLike = {
+  info: (message: string, scope?: string, payload?: unknown) => void;
+  warn: (message: string, scope?: string, payload?: unknown) => void;
+  debug: (message: string, scope?: string, payload?: unknown) => void;
+};
+
+type TwitchAuthLike = {
+  refreshTokens: () => Promise<boolean>;
+};
+
+type SubscriptionDefinition = {
+  name: string;
+  type: string;
+  version: string;
+  getCondition: (input: { userId: string; broadcasterId: string }) => Record<string, unknown>;
+};
+
+type SubscriptionManagerOptions = {
+  logger?: LoggerLike;
+  twitchAuth?: TwitchAuthLike;
+  config?: Record<string, unknown>;
+  subscriptions?: Map<string, Record<string, unknown>>;
+  axios?: typeof axiosModule;
+  getClientId?: () => string | null;
+  validateConnectionForSubscriptions?: () => boolean;
+  logError?: (message: string, error?: unknown, eventType?: string, payload?: Record<string, unknown>) => void;
+  now?: () => number;
+};
+
+type SubscriptionErrorDetails = {
+  code: string;
+  message: string;
+  status: number | null;
+  isCritical: boolean;
+  isRetryable: boolean;
+  details: Record<string, unknown>;
+};
+
+function createTwitchEventSubSubscriptionManager(options: SubscriptionManagerOptions = {}) {
     const {
         logger,
         twitchAuth,
@@ -38,7 +76,7 @@ function createTwitchEventSubSubscriptionManager(options = {}) {
         ? validateConnectionForSubscriptions
         : () => false;
 
-    const parseSubscriptionError = (error, subscription) => {
+  const parseSubscriptionError = (error: unknown, subscription: SubscriptionDefinition): SubscriptionErrorDetails => {
         const httpDetails = extractHttpErrorDetails(error);
 
         if (error.response?.data) {
@@ -92,7 +130,7 @@ function createTwitchEventSubSubscriptionManager(options = {}) {
         return true;
     };
 
-    const requestWithAuthRetry = async (requestFn) => {
+  const requestWithAuthRetry = async <T>(requestFn: () => Promise<T>): Promise<T> => {
         try {
             return await requestFn();
         } catch (error) {
@@ -107,14 +145,22 @@ function createTwitchEventSubSubscriptionManager(options = {}) {
         }
     };
 
-    const shouldRetrySubscription = (errorDetails) => !!errorDetails?.isRetryable && !errorDetails?.isCritical;
+  const shouldRetrySubscription = (errorDetails: SubscriptionErrorDetails): boolean => !!errorDetails?.isRetryable && !errorDetails?.isCritical;
 
-    const isTerminalSessionLoss = (errorDetails) => {
+  const isTerminalSessionLoss = (errorDetails: SubscriptionErrorDetails): boolean => {
         const message = typeof errorDetails?.message === 'string' ? errorDetails.message.trim().toLowerCase() : '';
         return message.includes('websocket session has already disconnected');
     };
 
-    const retrySubscription = async ({ subscription, payload, retriesRemaining }) => {
+  const retrySubscription = async ({
+    subscription,
+    payload,
+    retriesRemaining
+  }: {
+    subscription: SubscriptionDefinition;
+    payload: Record<string, unknown>;
+    retriesRemaining: number;
+  }): Promise<{ success: boolean; error?: string }> => {
         if (retriesRemaining <= 0) {
             return { success: false, error: 'retry-exhausted' };
         }
@@ -147,14 +193,21 @@ function createTwitchEventSubSubscriptionManager(options = {}) {
         return { success: true };
     };
 
-    const setupEventSubscriptions = async ({
-        requiredSubscriptions,
-        userId,
-        broadcasterId,
-        sessionId,
-        subscriptionDelay,
-        validationAlreadyDone = false
-    }) => {
+  const setupEventSubscriptions = async ({
+    requiredSubscriptions,
+    userId,
+    broadcasterId,
+    sessionId,
+    subscriptionDelay,
+    validationAlreadyDone = false
+  }: {
+    requiredSubscriptions: SubscriptionDefinition[];
+    userId: string;
+    broadcasterId: string;
+    sessionId: string | null;
+    subscriptionDelay: number;
+    validationAlreadyDone?: boolean;
+  }) => {
         if (!validationAlreadyDone && !safeValidateConnection()) {
             return null;
         }
@@ -298,7 +351,7 @@ function createTwitchEventSubSubscriptionManager(options = {}) {
         };
     };
 
-    const cleanupAllWebSocketSubscriptions = async ({ sessionId } = {}) => {
+  const cleanupAllWebSocketSubscriptions = async ({ sessionId }: { sessionId?: string | null } = {}) => {
         safeLogger.info('Starting cleanup method...', 'twitch');
 
         if (!(await ensureAuthReady())) {
@@ -379,7 +432,7 @@ function createTwitchEventSubSubscriptionManager(options = {}) {
         }
     };
 
-    const deleteAllSubscriptions = async ({ sessionId } = {}) => {
+  const deleteAllSubscriptions = async ({ sessionId }: { sessionId?: string | null } = {}) => {
         if (!(await ensureAuthReady())) {
             safeLogger.warn('Cannot delete subscriptions - missing authentication tokens', 'twitch');
             return;

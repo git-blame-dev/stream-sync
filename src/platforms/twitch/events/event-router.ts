@@ -36,12 +36,12 @@ function createTwitchEventSubEventRouter(options: EventRouterOptions = {}) {
     const safeLogRaw = typeof logRawPlatformData === 'function' ? logRawPlatformData : async () => {};
     const errorHandler = createPlatformErrorHandler(safeLogger, 'twitch-eventsub-router');
 
-    const logRawIfEnabled = (
-        eventType: string,
-        event: unknown,
-        failureStage: string,
-        failureMessagePrefix: string
-    ) => {
+const logRawIfEnabled = (
+  eventType: string,
+  event: unknown,
+  failureStage: string,
+  failureMessagePrefix: string
+): void => {
         if (!config.dataLoggingEnabled) {
             return;
         }
@@ -146,7 +146,7 @@ function createTwitchEventSubEventRouter(options: EventRouterOptions = {}) {
         });
     };
 
-    const resolveBitsGiftType = (cheermoteInfo = {}) => {
+const resolveBitsGiftType = (cheermoteInfo: { isMixed?: boolean } = {}): string => {
         if (cheermoteInfo.isMixed) {
             return 'mixed bits';
         }
@@ -302,7 +302,7 @@ function createTwitchEventSubEventRouter(options: EventRouterOptions = {}) {
         subscriptionType: string,
         event: Record<string, unknown> | null | undefined,
         metadata: Record<string, unknown> | null | undefined
-    ) => {
+) => {
         safeLogger.debug(`EventSub notification received: ${subscriptionType}`, 'twitch', event);
         const normalizedEvent = applyNotificationMetadataFallback(event, metadata, subscriptionType);
 

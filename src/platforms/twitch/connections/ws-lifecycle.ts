@@ -1,6 +1,57 @@
 import crypto from 'node:crypto';
 
-function createTwitchEventSubWsLifecycle(options = {}) {
+type LifecycleLogger = {
+  debug?: (message: string, scope?: string, payload?: unknown) => void;
+  info?: (message: string, scope?: string, payload?: unknown) => void;
+  warn?: (message: string, scope?: string, payload?: unknown) => void;
+};
+
+type LifecycleWebSocket = {
+  readyState: number;
+  on: (eventName: string, handler: (...args: unknown[]) => void) => void;
+  close: (code?: number, reason?: string) => void;
+};
+
+type LifecycleState = {
+  logger?: LifecycleLogger;
+  _logEventSubError?: (message: string, error?: unknown, eventType?: string, payload?: Record<string, unknown>) => void;
+  emit?: (eventName: string, payload?: unknown) => void;
+  handleWebSocketMessage?: (message: Record<string, unknown>) => Promise<void> | void;
+  _validateConnectionForSubscriptions?: () => boolean;
+  _setupEventSubscriptions?: (validationAlreadyDone?: boolean) => Promise<{ failures?: unknown[] } | null | void>;
+  _scheduleReconnect?: () => void;
+  _deleteAllSubscriptions?: (options: { sessionId?: string | null }) => Promise<void>;
+  _connectWebSocket?: () => Promise<void>;
+  _reconnect?: () => Promise<void>;
+  connectionStartTime?: number | null;
+  reconnectUrl?: string | null;
+  ws?: LifecycleWebSocket | null;
+  sessionId?: string | null;
+  welcomeTimer?: ReturnType<typeof setTimeout> | null;
+  twitchAuth?: { isReady?: () => boolean } | null;
+  userId?: string;
+  config?: { clientId?: string };
+  _isConnected: boolean;
+  subscriptionsReady: boolean;
+  isInitialized: boolean;
+  subscriptions?: { clear?: () => void };
+  reconnectTimeout?: ReturnType<typeof setTimeout> | null;
+  retryAttempts: number;
+  maxRetryAttempts: number;
+  retryDelay: number;
+};
+
+type WsLifecycleOptions = {
+  WebSocketCtor?: new (url: string) => LifecycleWebSocket;
+  safeSetTimeout?: (handler: () => void, timeoutMs: number) => ReturnType<typeof setTimeout>;
+  safeDelay?: (timeoutMs: number, minMs: number, tag?: string) => Promise<void>;
+  validateTimeout?: (timeoutMs: number, minMs: number) => number;
+  now?: () => number;
+  random?: () => number;
+  setImmediateFn?: (handler: () => void | Promise<void>) => void;
+};
+
+function createTwitchEventSubWsLifecycle(options: WsLifecycleOptions = {}) {
     const {
         WebSocketCtor,
         safeSetTimeout,
@@ -18,15 +69,19 @@ function createTwitchEventSubWsLifecycle(options = {}) {
         throw new Error('timeout utilities are required');
     }
 
-    const connectWebSocket = (state) => {
+  const connectWebSocket = (state: LifecycleState): Promise<void> => {
         return new Promise((resolve, reject) => {
             state.logger?.debug?.('Connecting to EventSub WebSocket...', 'twitch');
 
-            const logError = typeof state._logEventSubError === 'function' ? (...args) => state._logEventSubError(...args) : () => {};
-            const emit = typeof state.emit === 'function' ? (...args) => state.emit(...args) : () => {};
-            const handleWebSocketMessage = typeof state.handleWebSocketMessage === 'function'
-                ? (...args) => state.handleWebSocketMessage(...args)
-                : async () => {};
+      const logError = typeof state._logEventSubError === 'function'
+        ? (message: string, error?: unknown, eventType?: string, payload?: Record<string, unknown>) => state._logEventSubError?.(message, error, eventType, payload)
+        : () => {};
+      const emit = typeof state.emit === 'function'
+        ? (eventName: string, payload?: unknown) => state.emit?.(eventName, payload)
+        : () => {};
+      const handleWebSocketMessage = typeof state.handleWebSocketMessage === 'function'
+        ? (message: Record<string, unknown>) => state.handleWebSocketMessage?.(message)
+        : async () => {};
 
             let connectionResolved = false;
             let connectionTimeout;
@@ -71,9 +126,9 @@ function createTwitchEventSubWsLifecycle(options = {}) {
                     }, 5000);
                 });
 
-                state.ws.on('message', async (data) => {
-                    try {
-                        const message = JSON.parse(data.toString());
+      state.ws.on('message', async (data) => {
+        try {
+          const message = JSON.parse(data.toString());
                         await handleWebSocketMessage(message);
 
                         if (message.metadata.message_type === 'session_welcome' && !state.sessionId && !connectionResolved) {
@@ -204,7 +259,7 @@ function createTwitchEventSubWsLifecycle(options = {}) {
                     state.logger?.debug?.('EventSub pong received', 'twitch');
                 });
 
-                state.ws.on('close', (code, reason) => {
+      state.ws.on('close', (code, reason) => {
                     if (state.welcomeTimer) {
                         clearTimeout(state.welcomeTimer);
                     }
@@ -300,7 +355,7 @@ function createTwitchEventSubWsLifecycle(options = {}) {
         });
     };
 
-    const handleReconnectRequest = (state, payload) => {
+  const handleReconnectRequest = (state: LifecycleState, payload: Record<string, unknown> | null | undefined): void => {
         if (payload?.session?.reconnect_url) {
             state.logger?.info?.('EventSub requesting reconnection to new URL', 'twitch', {
                 reconnectUrl: payload.session.reconnect_url
@@ -310,7 +365,7 @@ function createTwitchEventSubWsLifecycle(options = {}) {
         }
     };
 
-    const scheduleReconnect = (state) => {
+  const scheduleReconnect = (state: LifecycleState): void => {
         if (state.reconnectTimeout) {
             clearTimeout(state.reconnectTimeout);
         }
@@ -346,7 +401,7 @@ function createTwitchEventSubWsLifecycle(options = {}) {
         }, validateTimeout(delay, 5000));
     };
 
-    const reconnect = async (state) => {
+  const reconnect = async (state: LifecycleState): Promise<void> => {
         if (!state.isInitialized) {
             state.logger?.debug?.('Skipping reconnect - EventSub not initialized', 'twitch');
             return;

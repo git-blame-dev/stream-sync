@@ -1,6 +1,23 @@
 import { createPlatformErrorHandler } from '../../../utils/platform-error-handler';
 
-function createTwitchEventSubWiring(options = {}) {
+type EventSubListener = {
+  eventName: string;
+  handler: (...args: unknown[]) => void;
+};
+
+type EventEmitterLike = {
+  on?: (eventName: string, handler: (...args: unknown[]) => void) => void;
+  off?: (eventName: string, handler: (...args: unknown[]) => void) => void;
+  removeListener?: (eventName: string, handler: (...args: unknown[]) => void) => void;
+};
+
+type WiringOptions = {
+  eventSub?: EventEmitterLike;
+  eventSubListeners?: EventSubListener[];
+  logger?: unknown;
+};
+
+function createTwitchEventSubWiring(options: WiringOptions = {}) {
     const {
         eventSub,
         eventSubListeners,
@@ -10,7 +27,7 @@ function createTwitchEventSubWiring(options = {}) {
 
     const errorHandler = createPlatformErrorHandler(logger, 'twitch-eventsub-wiring');
 
-    const bind = (eventName, handler) => {
+  const bind = (eventName: string, handler: (...args: unknown[]) => void): void => {
         if (!eventSub || typeof eventSub.on !== 'function') {
             return;
         }
@@ -26,16 +43,16 @@ function createTwitchEventSubWiring(options = {}) {
         listenerStore.push({ eventName, handler });
     };
 
-    const bindAll = (handlersByEventName = {}) => {
+  const bindAll = (handlersByEventName: Record<string, unknown> = {}): void => {
         Object.entries(handlersByEventName).forEach(([eventName, handler]) => {
-            if (typeof handler !== 'function') {
-                return;
-            }
-            bind(eventName, handler);
-        });
-    };
+      if (typeof handler !== 'function') {
+        return;
+      }
+      bind(eventName, handler as (...args: unknown[]) => void);
+    });
+  };
 
-    const unbindAll = () => {
+  const unbindAll = (): void => {
         if (!listenerStore.length || !eventSub) {
             listenerStore.length = 0;
             return;

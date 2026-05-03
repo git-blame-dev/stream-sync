@@ -98,14 +98,14 @@ class TwitchEventSub extends EventEmitter {
         this._startPeriodicCleanup();
     }
 
-    _startPeriodicCleanup() {
+  _startPeriodicCleanup(): void {
         // Run cleanup every 5 minutes
         this.cleanupInterval = safeSetInterval(() => {
             this._performPeriodicCleanup();
         }, 5 * 60 * 1000);
     }
 
-    _performPeriodicCleanup() {
+  _performPeriodicCleanup(): void {
         const now = Date.now();
 
         // Only run if enough time has passed since last cleanup
@@ -130,7 +130,7 @@ class TwitchEventSub extends EventEmitter {
         }
     }
 
-    _pruneMessageIds(now) {
+  _pruneMessageIds(now: number): void {
         for (const [messageId, seenAt] of this.recentMessageIds.entries()) {
             if (now - seenAt > this.messageIdTtlMs) {
                 this.recentMessageIds.delete(messageId);
@@ -138,9 +138,9 @@ class TwitchEventSub extends EventEmitter {
         }
     }
 
-    _isDuplicateMessageId(metadata: Record<string, unknown> | null | undefined) {
-        const messageId = metadata?.message_id;
-        if (!messageId) {
+  _isDuplicateMessageId(metadata: Record<string, unknown> | null | undefined): boolean {
+    const messageId = typeof metadata?.message_id === 'string' ? metadata.message_id : '';
+    if (!messageId) {
             return false;
         }
 
@@ -184,7 +184,7 @@ class TwitchEventSub extends EventEmitter {
         return validation;
     }
 
-    _validateTwitchAuth() {
+  _validateTwitchAuth(): { valid: boolean; issues: string[]; details: Record<string, unknown> } {
         const issues = [];
         const details = {};
 
@@ -206,7 +206,7 @@ class TwitchEventSub extends EventEmitter {
         };
     }
 
-    _validateConfigurationFields() {
+  _validateConfigurationFields(): { valid: boolean; issues: string[]; warnings: string[]; details: Record<string, unknown> } {
         const issues = [];
         const warnings = [];
         const details = {};
@@ -272,13 +272,13 @@ class TwitchEventSub extends EventEmitter {
         };
     }
 
-    _isCentralizedAuthReady() {
+  _isCentralizedAuthReady(): boolean {
         return !!this.twitchAuth?.isReady?.();
     }
 
-    _getAvailableClientId() {
-        return this.config.clientId || null;
-    }
+  _getAvailableClientId(): string | null {
+    return typeof this.config.clientId === 'string' ? this.config.clientId : null;
+  }
 
     async initialize() {
         try {
@@ -425,15 +425,15 @@ class TwitchEventSub extends EventEmitter {
         }
     }
 
-    isActive() {
+  isActive(): boolean {
         return !!(this.isInitialized && this._isConnected && this.subscriptionsReady);
     }
 
-    isConnected() {
+  isConnected(): boolean {
         return this._isConnected && this.ws && this.ws.readyState === 1;
     }
 
-    _validateConnectionForSubscriptions() {
+  _validateConnectionForSubscriptions(): boolean {
         // Check session ID
         if (!this.sessionId || this.sessionId.trim() === '') {
             this._logEventSubError('Cannot set up subscriptions: no session ID', null, 'subscription-setup');
@@ -485,7 +485,11 @@ class TwitchEventSub extends EventEmitter {
         return true;
     }
 
-    handleNotificationEvent(subscriptionType, event, metadata) {
+  handleNotificationEvent(
+    subscriptionType: string,
+    event: Record<string, unknown> | null | undefined,
+    metadata: Record<string, unknown> | null | undefined
+  ): void {
         this.eventRouter.handleNotificationEvent(subscriptionType, event, metadata);
     }
 
@@ -613,11 +617,11 @@ class TwitchEventSub extends EventEmitter {
         this.eventRouter.handleStreamOfflineEvent(event);
     }
 
-    _handleReconnectRequest(payload) {
+  _handleReconnectRequest(payload: Record<string, unknown> | null | undefined): void {
         this.wsLifecycle.handleReconnectRequest(this, payload);
     }
 
-    _scheduleReconnect() {
+  _scheduleReconnect(): void {
         this.wsLifecycle.scheduleReconnect(this);
     }
 
@@ -625,7 +629,7 @@ class TwitchEventSub extends EventEmitter {
         await this.wsLifecycle.reconnect(this);
     }
 
-    _handleInitializationError(error) {
+  _handleInitializationError(_error: unknown): void {
         this.isInitialized = false;
         this._isConnected = false;
         this.subscriptionsReady = false;
@@ -694,7 +698,7 @@ class TwitchEventSub extends EventEmitter {
         await this.subscriptionManager.deleteAllSubscriptions({ sessionId: this.sessionId });
     }
 
-    async logRawPlatformData(eventType, data) {
+  async logRawPlatformData(eventType: string, data: unknown): Promise<unknown> {
         return this.chatFileLoggingService.logRawPlatformData('twitch', eventType, data, this.config);
     }
 

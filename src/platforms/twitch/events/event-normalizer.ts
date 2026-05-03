@@ -43,13 +43,18 @@ const normalizeCanonicalIdValue = (value: unknown): string | null => {
 };
 
 const metadataMessageTimestamp = (
-    _event: Record<string, unknown> | null | undefined,
-    metadata: Record<string, unknown> | null | undefined
+  _event: Record<string, unknown> | null | undefined,
+  metadata: Record<string, unknown> | null | undefined
 ) => normalizeTimestampValue(metadata?.message_timestamp);
 
-const TIMESTAMP_RESOLVERS = {
-    'stream.online': (event: Record<string, unknown> | null | undefined) => normalizeTimestampValue(event?.started_at),
-    'channel.follow': (event: Record<string, unknown> | null | undefined) => normalizeTimestampValue(event?.followed_at),
+type TimestampResolver = (
+  event: Record<string, unknown> | null | undefined,
+  metadata: Record<string, unknown> | null | undefined
+) => string | null;
+
+const TIMESTAMP_RESOLVERS: Record<string, TimestampResolver> = {
+  'stream.online': (event: Record<string, unknown> | null | undefined) => normalizeTimestampValue(event?.started_at),
+  'channel.follow': (event: Record<string, unknown> | null | undefined) => normalizeTimestampValue(event?.followed_at),
     'channel.chat.message': metadataMessageTimestamp,
     'channel.subscribe': metadataMessageTimestamp,
     'channel.subscription.message': metadataMessageTimestamp,
@@ -75,10 +80,10 @@ const resolveNotificationTimestamp = (
 };
 
 const applyTimestampFallback = (
-    event: Record<string, unknown> | null | undefined,
-    metadata: Record<string, unknown> | null | undefined,
-    subscriptionType: string
-) => {
+  event: Record<string, unknown> | null | undefined,
+  metadata: Record<string, unknown> | null | undefined,
+  subscriptionType: string
+): Record<string, unknown> | null | undefined => {
     const resolvedTimestamp = resolveNotificationTimestamp(event, metadata, subscriptionType);
     if (!event || typeof event !== 'object') {
         return event;
@@ -105,10 +110,10 @@ const applyTimestampFallback = (
 };
 
 const applyIdFallback = (
-    event: Record<string, unknown> | null | undefined,
-    metadata: Record<string, unknown> | null | undefined,
-    subscriptionType: string
-) => {
+  event: Record<string, unknown> | null | undefined,
+  metadata: Record<string, unknown> | null | undefined,
+  subscriptionType: string
+): Record<string, unknown> | null | undefined => {
     if (!event || typeof event !== 'object') {
         return event;
     }
@@ -132,10 +137,10 @@ const applyIdFallback = (
 };
 
 const applyNotificationMetadataFallback = (
-    event: Record<string, unknown> | null | undefined,
-    metadata: Record<string, unknown> | null | undefined,
-    subscriptionType: string
-) => {
+  event: Record<string, unknown> | null | undefined,
+  metadata: Record<string, unknown> | null | undefined,
+  subscriptionType: string
+): Record<string, unknown> | null | undefined => {
     const timestampNormalizedEvent = applyTimestampFallback(event, metadata, subscriptionType);
     return applyIdFallback(timestampNormalizedEvent, metadata, subscriptionType);
 };

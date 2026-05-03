@@ -1,4 +1,36 @@
-function createSubscriptionCondition({ userId, broadcasterId }, config) {
+type SubscriptionConditionInput = {
+  userId?: string;
+  broadcasterId: string;
+};
+
+type SubscriptionCondition = {
+  broadcaster_user_id?: string;
+  user_id?: string;
+  moderator_user_id?: string;
+  to_broadcaster_user_id?: string;
+};
+
+type SubscriptionConfig = {
+  name: string;
+  type: string;
+  version: string;
+  requiresUserScope?: boolean;
+  requiresModeratorScope?: boolean;
+  usesToBroadcaster?: boolean;
+};
+
+type EventSubSubscriptionDefinition = {
+  name: string;
+  type: string;
+  version: string;
+  getCondition: (input: SubscriptionConditionInput) => SubscriptionCondition;
+  handler: string;
+};
+
+function createSubscriptionCondition(
+  { userId, broadcasterId }: SubscriptionConditionInput,
+  config: SubscriptionConfig
+): SubscriptionCondition {
     const baseCondition = { broadcaster_user_id: broadcasterId };
 
     if (config.requiresUserScope) {
@@ -14,7 +46,7 @@ function createSubscriptionCondition({ userId, broadcasterId }, config) {
     return baseCondition;
 }
 
-function getHandlerName(subscriptionType) {
+function getHandlerName(subscriptionType: string): string {
     const handlerMap = {
         'channel.chat.message': 'handleChatMessage',
         'channel.follow': 'handleFollow',
@@ -30,7 +62,7 @@ function getHandlerName(subscriptionType) {
     return handlerMap[subscriptionType] || 'handleUnknown';
 }
 
-function createTwitchEventSubSubscriptions() {
+function createTwitchEventSubSubscriptions(): EventSubSubscriptionDefinition[] {
     const subscriptionConfigs = [
         { name: 'Chat Messages', type: 'channel.chat.message', version: '1', requiresUserScope: true },
         { name: 'Follows', type: 'channel.follow', version: '2', requiresModeratorScope: true },
@@ -43,11 +75,12 @@ function createTwitchEventSubSubscriptions() {
         { name: 'Stream Offline', type: 'stream.offline', version: '1' }
     ];
 
-    return subscriptionConfigs.map(config => ({
+  return subscriptionConfigs.map((config): EventSubSubscriptionDefinition => ({
         name: config.name,
         type: config.type,
         version: config.version,
-        getCondition: ({ userId, broadcasterId }) => createSubscriptionCondition({ userId, broadcasterId }, config),
+    getCondition: ({ userId, broadcasterId }: SubscriptionConditionInput) =>
+      createSubscriptionCondition({ userId, broadcasterId }, config),
         handler: getHandlerName(config.type)
     }));
 }

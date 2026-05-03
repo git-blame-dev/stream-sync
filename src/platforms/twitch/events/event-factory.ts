@@ -12,35 +12,49 @@ const PlatformEvents = {
     _generateCorrelationId: () => crypto.randomUUID()
 } as const;
 
-function normalizeIdentity(data) {
-    if (!data || typeof data !== 'object') {
-        throw new Error('Twitch event payload requires identity data');
-    }
-    if (!data.userId || !data.username) {
-        throw new Error('Twitch event payload requires userId and username');
-    }
-    return {
-        userId: data.userId,
-        username: data.username
-    };
+type Identity = {
+  userId: string;
+  username: string;
+};
+
+type EventFactoryOptions = {
+  platformName?: string;
+  generateCorrelationId?: () => string;
+};
+
+type EventPayload = Record<string, unknown>;
+
+function normalizeIdentity(data: EventPayload | null | undefined): Identity {
+  if (!data || typeof data !== 'object') {
+    throw new Error('Twitch event payload requires identity data');
+  }
+  const userId = typeof data.userId === 'string' ? data.userId : '';
+  const username = typeof data.username === 'string' ? data.username : '';
+  if (!userId || !username) {
+    throw new Error('Twitch event payload requires userId and username');
+  }
+  return {
+    userId,
+    username
+  };
 }
 
-function normalizeOptionalIdentity(data) {
-    const hasUsername = typeof data?.username === 'string' && data.username.trim();
-    const hasUserId = typeof data?.userId === 'string' && data.userId.trim();
-    if (hasUsername && hasUserId) {
-        return {
+function normalizeOptionalIdentity(data: EventPayload | null | undefined): Identity | null {
+  const hasUsername = typeof data?.username === 'string' && data.username.trim();
+  const hasUserId = typeof data?.userId === 'string' && data.userId.trim();
+  if (hasUsername && hasUserId) {
+    return {
             userId: data.userId,
             username: data.username
         };
     }
     if (data?.isAnonymous === true && !hasUsername && !hasUserId) {
         return null;
-    }
-    throw new Error('Twitch event payload requires userId and username');
+  }
+  throw new Error('Twitch event payload requires userId and username');
 }
 
-function normalizePositiveInteger(value) {
+function normalizePositiveInteger(value: unknown): number | undefined {
     const numericValue = Number(value);
     if (!Number.isFinite(numericValue)) {
         return undefined;
@@ -53,7 +67,7 @@ function normalizePositiveInteger(value) {
     return undefined;
 }
 
-function normalizeNonNegativeNumber(value) {
+function normalizeNonNegativeNumber(value: unknown): number | undefined {
     const numericValue = Number(value);
     if (!Number.isFinite(numericValue)) {
         return undefined;
@@ -66,32 +80,32 @@ function normalizeNonNegativeNumber(value) {
     return undefined;
 }
 
-function resolveAvatarUrl(data) {
-    const avatarUrl = typeof data?.avatarUrl === 'string' ? data.avatarUrl.trim() : '';
-    return avatarUrl || DEFAULT_AVATAR_URL;
+function resolveAvatarUrl(data: EventPayload | null | undefined): string {
+  const avatarUrl = typeof data?.avatarUrl === 'string' ? data.avatarUrl.trim() : '';
+  return avatarUrl || DEFAULT_AVATAR_URL;
 }
 
-function createTwitchEventFactory(options = {}) {
-    const platformName = options.platformName || 'twitch';
-    const generateCorrelationId = options.generateCorrelationId || (() => PlatformEvents._generateCorrelationId());
+function createTwitchEventFactory(options: EventFactoryOptions = {}) {
+  const platformName = options.platformName || 'twitch';
+  const generateCorrelationId = options.generateCorrelationId || (() => PlatformEvents._generateCorrelationId());
 
-    const getTimestamp = (data) => {
-        if (!data || data.timestamp === undefined || data.timestamp === null) {
-            throw new Error('Twitch event payload requires timestamp');
-        }
-        if (!isIsoTimestamp(data.timestamp)) {
-            throw new Error('Twitch event payload requires ISO timestamp');
-        }
-        return data.timestamp;
-    };
-    const buildEventMetadata = (additionalMetadata = {}) => ({
-        platform: platformName,
-        correlationId: generateCorrelationId(),
-        ...additionalMetadata
-    });
+  const getTimestamp = (data: EventPayload | null | undefined): string => {
+    if (!data || data.timestamp === undefined || data.timestamp === null) {
+      throw new Error('Twitch event payload requires timestamp');
+    }
+    if (typeof data.timestamp !== 'string' || !isIsoTimestamp(data.timestamp)) {
+      throw new Error('Twitch event payload requires ISO timestamp');
+    }
+    return data.timestamp;
+  };
+  const buildEventMetadata = (additionalMetadata: Record<string, unknown> = {}): Record<string, unknown> => ({
+    platform: platformName,
+    correlationId: generateCorrelationId(),
+    ...additionalMetadata
+  });
 
     return {
-        createFollowEvent: (data) => {
+    createFollowEvent: (data: EventPayload) => {
             const identity = normalizeIdentity(data);
             const avatarUrl = resolveAvatarUrl(data);
             return {
@@ -105,7 +119,7 @@ function createTwitchEventFactory(options = {}) {
             };
         },
 
-        createPaypiggyEvent: (data) => {
+    createPaypiggyEvent: (data: EventPayload) => {
             const identity = normalizeIdentity(data);
             const avatarUrl = resolveAvatarUrl(data);
             const months = normalizePositiveInteger(data.months);
@@ -131,7 +145,7 @@ function createTwitchEventFactory(options = {}) {
             return result;
         },
 
-        createPaypiggyMessageEvent: (data) => {
+    createPaypiggyMessageEvent: (data: EventPayload) => {
             const identity = normalizeIdentity(data);
             const avatarUrl = resolveAvatarUrl(data);
             const months = normalizePositiveInteger(data.months);
@@ -157,7 +171,7 @@ function createTwitchEventFactory(options = {}) {
             return result;
         },
 
-        createGiftPaypiggyEvent: (data) => {
+    createGiftPaypiggyEvent: (data: EventPayload) => {
             const identity = normalizeOptionalIdentity(data);
             const avatarUrl = resolveAvatarUrl(data);
             const giftCount = normalizePositiveInteger(data.giftCount);
@@ -187,7 +201,7 @@ function createTwitchEventFactory(options = {}) {
             return result;
         },
 
-        createRaidEvent: (data) => {
+    createRaidEvent: (data: EventPayload) => {
             const identity = normalizeIdentity(data);
             const avatarUrl = resolveAvatarUrl(data);
             if (typeof data.viewerCount !== 'number' || !Number.isFinite(data.viewerCount)) {
@@ -205,7 +219,7 @@ function createTwitchEventFactory(options = {}) {
             };
         },
 
-        createGiftEvent: (data) => {
+    createGiftEvent: (data: EventPayload) => {
             const identity = normalizeOptionalIdentity(data);
             const avatarUrl = resolveAvatarUrl(data);
             const isError = data.isError === true;
@@ -282,7 +296,7 @@ function createTwitchEventFactory(options = {}) {
             return result;
         },
 
-        createStreamOnlineEvent: (data) => ({
+    createStreamOnlineEvent: (data: EventPayload) => ({
             type: PlatformEvents.STREAM_STATUS,
             platform: platformName,
             isLive: true,
@@ -290,7 +304,7 @@ function createTwitchEventFactory(options = {}) {
             metadata: buildEventMetadata()
         }),
 
-        createStreamOfflineEvent: (data) => ({
+    createStreamOfflineEvent: (data: EventPayload) => ({
             type: PlatformEvents.STREAM_STATUS,
             platform: platformName,
             isLive: false,
