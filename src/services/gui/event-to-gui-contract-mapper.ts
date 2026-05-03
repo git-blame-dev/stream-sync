@@ -142,20 +142,23 @@ function resolveMessageParts(type: string, platform: string, data: MapperRecord)
 
     const validParts = getValidMessageParts({ message: { parts: sourceParts } }, { allowWhitespaceText: true }) as RawPart[];
     return validParts.map((part): GuiMessagePart => {
-        if (part.type === 'emote') {
-            return {
-                type: 'emote',
-                platform: normalizeString(part.platform),
-                emoteId: (part.emoteId as string).trim(),
-                imageUrl: (part.imageUrl as string).trim()
-            };
-        }
+if (part.type === 'emote') {
+const emoteId = typeof part.emoteId === 'string' ? part.emoteId.trim() : '';
+const imageUrl = typeof part.imageUrl === 'string' ? part.imageUrl.trim() : '';
+return {
+type: 'emote',
+platform: normalizeString(part.platform),
+emoteId,
+imageUrl
+};
+}
 
-        return {
-            type: 'text',
-            text: part.text as string
-        };
-    });
+const text = typeof part.text === 'string' ? part.text : '';
+return {
+type: 'text',
+text
+};
+});
 }
 
 function createEventToGuiContractMapper(options: MapperOptions = {}) {
@@ -190,20 +193,26 @@ function createEventToGuiContractMapper(options: MapperOptions = {}) {
         const key = avatarCacheKey(platform, userId);
 
         if (payloadAvatar) {
-            if (payloadAvatar === fallbackAvatarUrl) {
-                if (key && cache.has(key)) {
-                    return cache.get(key) as string;
-                }
-                return fallbackAvatarUrl;
-            }
+if (payloadAvatar === fallbackAvatarUrl) {
+if (key && cache.has(key)) {
+const cachedAvatar = cache.get(key);
+if (cachedAvatar) {
+return cachedAvatar;
+}
+}
+return fallbackAvatarUrl;
+}
 
             setCachedAvatar(key, payloadAvatar);
             return payloadAvatar;
         }
 
-        if (key && cache.has(key)) {
-            return cache.get(key) as string;
-        }
+if (key && cache.has(key)) {
+const cachedAvatar = cache.get(key);
+if (cachedAvatar) {
+return cachedAvatar;
+}
+}
 
         return fallbackAvatarUrl;
     };

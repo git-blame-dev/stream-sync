@@ -189,7 +189,14 @@ class YouTubeStreamDetectionService {
         }
     }
 
-    getUsageMetrics() {
+getUsageMetrics(): {
+totalRequests: number;
+successfulRequests: number;
+failedRequests: number;
+averageResponseTime: number;
+errorRate: number;
+errorsByType: Record<string, number>;
+} {
         const avgResponseTime = this._metrics.successfulRequests > 0
             ? this._metrics.totalResponseTime / this._metrics.successfulRequests
             : 0;
@@ -206,7 +213,7 @@ class YouTubeStreamDetectionService {
         };
     }
 
-    updateConfiguration(newConfig: { timeout?: number; username?: string }) {
+updateConfiguration(newConfig: { timeout?: number; username?: string }): boolean {
         try {
             if (newConfig.timeout && typeof newConfig.timeout === 'number' && newConfig.timeout > 0) {
                 this.timeout = newConfig.timeout;
@@ -225,15 +232,15 @@ class YouTubeStreamDetectionService {
         }
     }
 
-    isConfigured() {
+isConfigured(): boolean {
         return this.client !== null && typeof this.client !== 'undefined';
     }
 
-    isActive() {
+isActive(): boolean {
         return this.isConfigured() && !this._isShuttingDown;
     }
 
-    async cleanup() {
+async cleanup(): Promise<void> {
         try {
             this._isShuttingDown = true;
             this._metrics = {
@@ -298,7 +305,7 @@ channelHandle,
         };
     }
 
-    _cleanChannelHandle(handle: unknown) {
+_cleanChannelHandle(handle: unknown): string {
         if (!handle || typeof handle !== 'string') {
             return '';
         }
@@ -311,13 +318,13 @@ channelHandle,
         return cleanHandle;
     }
 
-    _validateVideoIds(streams: DetectionStream[]) {
+_validateVideoIds(streams: DetectionStream[]): string[] {
         return streams
             .map((stream) => stream.videoId)
             .filter((videoId): videoId is string => this._isValidVideoId(videoId));
     }
 
-    _isValidVideoId(videoId: unknown) {
+_isValidVideoId(videoId: unknown): boolean {
         if (!videoId || typeof videoId !== 'string') {
             return false;
         }
@@ -425,7 +432,7 @@ channelHandle,
         return response;
     }
 
-    _isChannelNotFoundError(error: ErrorWithStatus) {
+_isChannelNotFoundError(error: ErrorWithStatus): boolean {
         if (!error) {
             return false;
         }
@@ -437,12 +444,12 @@ channelHandle,
         return error.message.toLowerCase().includes('channel not found');
     }
 
-    _updateErrorMetrics(error: Error) {
+_updateErrorMetrics(error: Error): void {
         const errorType = error.constructor.name;
         this._metrics.errorsByType[errorType] = (this._metrics.errorsByType[errorType] || 0) + 1;
     }
 
-    _isCircuitBreakerOpen() {
+_isCircuitBreakerOpen(): boolean {
         if (!this._circuitBreaker.isOpen) {
             return false;
         }
@@ -462,7 +469,7 @@ channelHandle,
         return true;
     }
 
-    _recordCircuitBreakerFailure(error: Error) {
+_recordCircuitBreakerFailure(error: Error): void {
         if (error.message && (
             error.message.includes('timeout')
             || error.message.includes('hanging')
@@ -480,13 +487,13 @@ channelHandle,
         }
     }
 
-    _resetCircuitBreaker() {
+_resetCircuitBreaker(): void {
         this._circuitBreaker.consecutiveFailures = 0;
         this._circuitBreaker.lastFailureTime = null;
         this._circuitBreaker.isOpen = false;
     }
 
-    _handleDetectionError(message: string, error: unknown, eventType: string) {
+_handleDetectionError(message: string, error: unknown, eventType: string): void {
         if (error instanceof Error) {
             this.errorHandler.handleEventProcessingError(error, eventType, null, message);
             return;

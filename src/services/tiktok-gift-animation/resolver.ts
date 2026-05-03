@@ -16,7 +16,28 @@ const execFileAsyncDefault = promisify(execFile);
 const GIFT_ANIMATION_CACHE_DIR = path.join(os.tmpdir(), 'stream-sync-tiktok-gift-animation');
 const GIFT_ANIMATION_MAX_ENTRIES = 12;
 
-function fileExists(candidatePath) {
+type ResolverLogger = {
+debug?: (message: string, scope?: string, payload?: unknown) => void;
+};
+
+type ResolverOptions = {
+logger?: ResolverLogger;
+cacheDirectory?: unknown;
+maxEntries?: unknown;
+fetchBinary?: (url: string, requestOptions: { timeout: number }) => Promise<{ data: ArrayBuffer | Buffer | Uint8Array | string }>;
+executeFile?: (file: string, args: string[]) => Promise<{ stdout?: string; stderr?: string }>;
+unzipBinary?: unknown;
+unzipBinaries?: unknown;
+fileExists?: (candidatePath: string) => boolean;
+platform?: unknown;
+pathEnv?: unknown;
+pathext?: unknown;
+};
+
+type AnimationCandidate = { url: string; label: string };
+type RankedAnimationCandidate = AnimationCandidate & { score: number };
+
+function fileExists(candidatePath: unknown): boolean {
     if (typeof candidatePath !== 'string' || candidatePath.trim().length === 0) {
         return false;
     }
@@ -28,11 +49,11 @@ function fileExists(candidatePath) {
     }
 }
 
-function normalizeString(value) {
+function normalizeString(value: unknown): string {
     return typeof value === 'string' ? value.trim() : '';
 }
 
-function uniqueNonEmpty(values = []) {
+function uniqueNonEmpty(values: unknown[] = []): string[] {
     const seen = new Set();
     const result = [];
 
@@ -48,7 +69,7 @@ function uniqueNonEmpty(values = []) {
     return result;
 }
 
-function buildUnzipBinaryCandidates(options = {}) {
+function buildUnzipBinaryCandidates(options: ResolverOptions = {}): string[] {
     const configuredUnzipBinaries = Array.isArray(options.unzipBinaries)
         ? options.unzipBinaries
         : [options.unzipBinary];
@@ -61,7 +82,7 @@ function buildUnzipBinaryCandidates(options = {}) {
     return uniqueNonEmpty(candidates);
 }
 
-function resolveMetadataDurationMs(profile = {}) {
+function resolveMetadataDurationMs(profile: Record<string, unknown> = {}): number {
     const frameCount = Number(profile.f);
     if (Number.isFinite(frameCount) && frameCount > 0) {
         return Math.round((frameCount / 30) * 1000);
@@ -80,7 +101,7 @@ function resolveMetadataDurationMs(profile = {}) {
     return 0;
 }
 
-function resolveCommandInPath(commandName, options = {}) {
+function resolveCommandInPath(commandName: unknown, options: ResolverOptions = {}): string | null {
     const command = normalizeString(commandName);
     if (!command) {
         return null;
@@ -118,7 +139,7 @@ function resolveCommandInPath(commandName, options = {}) {
     return null;
 }
 
-function resolveFirstAvailableCommand(candidates, options = {}) {
+function resolveFirstAvailableCommand(candidates: unknown[], options: ResolverOptions = {}): string | null {
     for (const candidate of uniqueNonEmpty(candidates)) {
         const resolved = resolveCommandInPath(candidate, options);
         if (resolved) {
@@ -128,7 +149,10 @@ function resolveFirstAvailableCommand(candidates, options = {}) {
     return null;
 }
 
-function getGiftAnimationDependencyStatus(options = {}) {
+function getGiftAnimationDependencyStatus(options: ResolverOptions = {}): {
+unzip: { available: boolean; command: string | null; candidates: string[] };
+extraction: { available: boolean; command: string | null };
+} {
     const unzipCandidates = buildUnzipBinaryCandidates(options);
 
     const unzipCommand = resolveFirstAvailableCommand(unzipCandidates, options);
@@ -146,7 +170,7 @@ function getGiftAnimationDependencyStatus(options = {}) {
     };
 }
 
-function normalizeFrame(value) {
+function normalizeFrame(value: unknown): number[] | null {
     if (!Array.isArray(value) || value.length < 4) {
         return null;
     }
@@ -159,7 +183,15 @@ function normalizeFrame(value) {
     return parsed;
 }
 
-function sanitizeAnimationConfig(profileInfo) {
+function sanitizeAnimationConfig(profileInfo: { profileName?: unknown; profile?: Record<string, unknown> } | null | undefined): {
+profileName: unknown;
+sourceWidth: number;
+sourceHeight: number;
+renderWidth: number;
+renderHeight: number;
+rgbFrame: number[];
+aFrame: number[] | null;
+} | null {
     if (!profileInfo || !profileInfo.profile) {
         return null;
     }
@@ -199,7 +231,19 @@ function sanitizeAnimationConfig(profileInfo) {
     };
 }
 
-function resolveAnimationProfile(configObject) {
+function resolveAnimationProfile(configObject: Record<string, unknown> | null | undefined): {
+profileName: unknown;
+profile: Record<string, unknown>;
+animationConfig: {
+profileName: unknown;
+sourceWidth: number;
+sourceHeight: number;
+renderWidth: number;
+renderHeight: number;
+rgbFrame: number[];
+aFrame: number[] | null;
+};
+} | null {
     if (!configObject || typeof configObject !== 'object') {
         return null;
     }
@@ -234,7 +278,7 @@ function resolveAnimationProfile(configObject) {
     return null;
 }
 
-function scoreAnimationCandidate(candidate) {
+function scoreAnimationCandidate(candidate: AnimationCandidate): number {
     const label = normalizeString(candidate.label).toLowerCase();
     const url = normalizeString(candidate.url).toLowerCase();
     if (!url || label.includes('encrypt') || url.includes('encrypt')) {
@@ -251,7 +295,7 @@ function scoreAnimationCandidate(candidate) {
     return score;
 }
 
-function extractAnimationCandidates(originalData) {
+function extractAnimationCandidates(originalData: unknown): RankedAnimationCandidate[] {
     if (!originalData || typeof originalData !== 'object') {
         return [];
     }
@@ -261,7 +305,7 @@ function extractAnimationCandidates(originalData) {
         : {};
     const candidates = [];
 
-    const pushCandidate = (url, label) => {
+const pushCandidate = (url: unknown, label: unknown): void => {
         const normalizedUrl = normalizeString(url);
         if (!normalizedUrl) {
             return;
@@ -302,14 +346,14 @@ function extractAnimationCandidates(originalData) {
         .sort((left, right) => right.score - left.score);
 }
 
-function isPathWithin(rootPath, candidatePath) {
+function isPathWithin(rootPath: string, candidatePath: string): boolean {
     const normalizedRoot = path.resolve(rootPath);
     const normalizedCandidate = path.resolve(candidatePath);
     return normalizedCandidate === normalizedRoot
         || normalizedCandidate.startsWith(`${normalizedRoot}${path.sep}`);
 }
 
-function isMissingExecutableError(error, executableName) {
+function isMissingExecutableError(error: unknown, executableName: unknown): boolean {
     const name = normalizeString(executableName).toLowerCase();
     if (!name) {
         return false;
@@ -323,7 +367,7 @@ function isMissingExecutableError(error, executableName) {
     return message.includes('executable not found') && message.includes(name);
 }
 
-function createTikTokGiftAnimationResolver(options = {}) {
+function createTikTokGiftAnimationResolver(options: ResolverOptions = {}) {
     const resolverLogger = options.logger || logger;
     const errorHandler = createPlatformErrorHandler(resolverLogger, 'tiktok-gift-animation');
     const cacheDirectory = normalizeString(options.cacheDirectory) || GIFT_ANIMATION_CACHE_DIR;
@@ -337,16 +381,29 @@ function createTikTokGiftAnimationResolver(options = {}) {
     }));
     const executeFile = options.executeFile || execFileAsyncDefault;
 
-    const logDebug = (message, data = null) => {
+const logDebug = (message: string, data: unknown = null): void => {
         if (!resolverLogger || typeof resolverLogger.debug !== 'function') {
             return;
         }
         resolverLogger.debug(message, 'tiktok-gift-animation', data);
     };
 
-    const inFlight = new Map();
+const inFlight = new Map<string, Promise<{
+mediaFilePath: string;
+mediaContentType: string;
+durationMs: number;
+animationConfig: {
+profileName: unknown;
+sourceWidth: number;
+sourceHeight: number;
+renderWidth: number;
+renderHeight: number;
+rgbFrame: number[];
+aFrame: number[] | null;
+};
+}>>();
 
-    const extractZipArchive = async (zipPath, extractDirectory) => {
+const extractZipArchive = async (zipPath: string, extractDirectory: string): Promise<void> => {
         const unzipBinaries = buildUnzipBinaryCandidates(options);
 
         const tried = new Set();
@@ -377,7 +434,7 @@ function createTikTokGiftAnimationResolver(options = {}) {
         throw new Error('Gift animation extraction requires unzip in PATH');
     };
 
-    const pruneCache = async () => {
+const pruneCache = async (): Promise<void> => {
         await fsp.mkdir(cacheDirectory, { recursive: true });
         const entries = await fsp.readdir(cacheDirectory, { withFileTypes: true });
         const directories = [];
@@ -402,7 +459,7 @@ function createTikTokGiftAnimationResolver(options = {}) {
         }
     };
 
-    const touchCacheEntry = async (entryDirectory) => {
+const touchCacheEntry = async (entryDirectory: string): Promise<void> => {
         const now = new Date();
         try {
             await fsp.utimes(entryDirectory, now, now);
@@ -411,12 +468,12 @@ function createTikTokGiftAnimationResolver(options = {}) {
         }
     };
 
-    const readJson = async (filePath) => {
+const readJson = async (filePath: string): Promise<unknown> => {
         const raw = await fsp.readFile(filePath, 'utf8');
         return JSON.parse(raw);
     };
 
-    const ensureMediaPathWithinExtractDirectory = async (extractDirectory, mediaFilePath) => {
+const ensureMediaPathWithinExtractDirectory = async (extractDirectory: string, mediaFilePath: string): Promise<string> => {
         const extractDirectoryRealPath = await fsp.realpath(extractDirectory);
         const mediaFileRealPath = await fsp.realpath(mediaFilePath);
         if (!isPathWithin(extractDirectoryRealPath, mediaFileRealPath)) {
@@ -425,7 +482,7 @@ function createTikTokGiftAnimationResolver(options = {}) {
         return mediaFileRealPath;
     };
 
-    const resolveCandidate = async (candidate) => {
+const resolveCandidate = async (candidate: RankedAnimationCandidate) => {
         const cacheKey = crypto.createHash('sha1').update(candidate.url).digest('hex');
         const existingPromise = inFlight.get(cacheKey);
         if (existingPromise) {
@@ -533,7 +590,7 @@ function createTikTokGiftAnimationResolver(options = {}) {
 
     const initPromise = pruneCache();
 
-    const resolveFromNotificationData = async (notificationData) => {
+const resolveFromNotificationData = async (notificationData: unknown) => {
         await initPromise;
 
         const candidates = extractAnimationCandidates(notificationData?.enhancedGiftData?.originalData);

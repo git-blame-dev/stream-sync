@@ -49,14 +49,25 @@ type LiveStreamRecord = {
     videoId: string;
     title: string;
     isLive: true;
-    author: string | null;
+author: string | null;
+};
+
+type LiveStreamsResult = {
+success: boolean;
+streams: LiveStreamRecord[];
+videoIds: string[];
+count: number;
+hasContent: boolean;
+detectionMethod?: string;
+parserError?: boolean;
+error?: string;
 };
 
 class YouTubeLiveStreamService {
     static _channelCache = new Map<string, { channelId: string; timestamp: number }>();
     static _channelCacheTtl = 10 * 60 * 1000;
 
-    static isVideoLive(video: ChannelVideo | null | undefined) {
+static isVideoLive(video: ChannelVideo | null | undefined): boolean {
         if (!video) {
             return false;
         }
@@ -72,7 +83,7 @@ class YouTubeLiveStreamService {
         );
     }
 
-    static async getLiveStreams(innertubeClient: InnertubeClientLike, channelHandle: unknown, options: GetLiveStreamOptions = {}) {
+static async getLiveStreams(innertubeClient: InnertubeClientLike, channelHandle: unknown, options: GetLiveStreamOptions = {}): Promise<LiveStreamsResult> {
         const timeout = options.timeout || 2000;
         const logger = options.logger;
 
@@ -171,7 +182,7 @@ class YouTubeLiveStreamService {
         }
     }
 
-    static async getLiveStreamsWithParserTolerance(innertubeClient: InnertubeClientLike, channelHandle: unknown, options: GetLiveStreamOptions = {}) {
+static async getLiveStreamsWithParserTolerance(innertubeClient: InnertubeClientLike, channelHandle: unknown, options: GetLiveStreamOptions = {}): Promise<LiveStreamsResult> {
         try {
             return await this.getLiveStreams(innertubeClient, channelHandle, options);
         } catch (error) {
@@ -197,7 +208,7 @@ class YouTubeLiveStreamService {
         }
     }
 
-    static extractVideoIds(result: { streams?: Array<{ videoId?: string }> } | null | undefined) {
+static extractVideoIds(result: { streams?: Array<{ videoId?: string }> } | null | undefined): string[] {
         if (!result || !result.streams) {
             return [];
         }
@@ -205,11 +216,11 @@ class YouTubeLiveStreamService {
         return result.streams.map((stream) => stream.videoId).filter((id): id is string => !!id);
     }
 
-    static isChannelId(channelHandle: unknown) {
+static isChannelId(channelHandle: unknown): boolean {
         return isChannelId(channelHandle);
     }
 
-    static _isChannelNotFoundError(error: unknown) {
+static _isChannelNotFoundError(error: unknown): boolean {
         if (!error || typeof error !== 'object') {
             return false;
         }
@@ -224,16 +235,16 @@ class YouTubeLiveStreamService {
         return message.includes('channel not found');
     }
 
-    static _channelHasVideoContent(channel: ChannelLike) {
+static _channelHasVideoContent(channel: ChannelLike): boolean {
         return Array.isArray(channel?.videos?.contents) && channel.videos.contents.length > 0;
     }
 
-    static _extractLiveStreamsFromChannelVideos(channel: ChannelLike, logger?: LoggerLike) {
+static _extractLiveStreamsFromChannelVideos(channel: ChannelLike, logger?: LoggerLike): LiveStreamRecord[] {
         const videos = Array.isArray(channel?.videos?.contents) ? channel.videos.contents : [];
         return this._mapLiveVideos(videos, logger, 'channel_videos');
     }
 
-    static async _getLiveStreamsFromChannelApi(channel: ChannelLike, timeout: number, logger?: LoggerLike) {
+static async _getLiveStreamsFromChannelApi(channel: ChannelLike, timeout: number, logger?: LoggerLike): Promise<{ streams: LiveStreamRecord[]; hasContent: boolean }> {
         try {
             const liveStreams = await withTimeout(
                 channel.getLiveStreams ? channel.getLiveStreams() : Promise.resolve({ videos: [] }),
@@ -275,12 +286,12 @@ class YouTubeLiveStreamService {
             .filter((stream) => !!stream.videoId);
     }
 
-    static async _getOrResolveChannelId(
-        innertubeClient: InnertubeClientLike,
-        channelHandle: string,
-        timeout: number,
-        logger?: LoggerLike
-    ) {
+static async _getOrResolveChannelId(
+innertubeClient: InnertubeClientLike,
+channelHandle: string,
+timeout: number,
+logger?: LoggerLike
+): Promise<string | null> {
         if (isChannelId(channelHandle)) {
             return channelHandle;
         }
@@ -309,23 +320,23 @@ class YouTubeLiveStreamService {
                 timestamp: now
             });
         }
-        return resolvedChannelId;
-    }
+return resolvedChannelId;
+}
 
-    static async _detectLiveStreamsViaSearch(
-        innertubeClient: InnertubeClientLike,
-        {
-            channelId,
-            channelHandle,
-            timeout,
-            logger
-        }: {
-            channelId: string;
-            channelHandle: string;
-            timeout: number;
-            logger?: LoggerLike;
-        }
-    ) {
+static async _detectLiveStreamsViaSearch(
+innertubeClient: InnertubeClientLike,
+{
+channelId,
+channelHandle,
+timeout,
+logger
+}: {
+channelId: string;
+channelHandle: string;
+timeout: number;
+logger?: LoggerLike;
+}
+): Promise<{ streams: LiveStreamRecord[]; hasContent: boolean }> {
         try {
             if (typeof innertubeClient.search !== 'function') {
                 return {
@@ -375,7 +386,7 @@ class YouTubeLiveStreamService {
         }
     }
 
-    static _log(logger: LoggerLike | undefined, level: 'error' | 'warn' | 'debug', message: string, error?: unknown) {
+static _log(logger: LoggerLike | undefined, level: 'error' | 'warn' | 'debug', message: string, error?: unknown): void {
         if (level === 'error' || level === 'warn') {
             const handler = createPlatformErrorHandler(logger, 'youtube-live-stream');
             if (error instanceof Error) {
