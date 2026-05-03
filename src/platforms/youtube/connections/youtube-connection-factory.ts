@@ -25,7 +25,7 @@ interface YouTubePlatform {
         videoId: string,
         reason: string,
         options?: { requestImmediateRefresh?: boolean; source?: string }
-    ) => void;
+  ) => Promise<boolean>;
     handleChatMessage: (message: UnknownRecord) => void;
     logRawPlatformData: (channel: string, payload: unknown) => Promise<void>;
     _validateVideoForConnection: (videoId: string, info: unknown) => { shouldConnect: boolean; reason?: string };
@@ -39,7 +39,7 @@ interface YouTubeConnectionFactoryOptions {
     platform?: YouTubePlatform;
     innertubeInstanceManager?: {
         getInstance: (options: { logger: LoggerLike }) => {
-            getInstance: (key: string, factory: () => Promise<unknown>) => Promise<unknown>;
+      getInstance: <T>(key: string, factory: () => Promise<T>) => Promise<T>;
         };
     };
     withTimeout?: <T>(promise: Promise<T>, timeoutMs: number, operationName: string) => Promise<T>;
@@ -82,6 +82,18 @@ type LiveChatUnknownRendererCaptureInstaller = (options: LiveChatUnknownRenderer
 
 function isParserLike(value: ParserModuleLike['Parser']): value is { parseResponse: (data: unknown) => unknown } {
     return !!value && typeof value.parseResponse === 'function';
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function isYouTubeClient(value: unknown): value is YouTubeClient {
+  return isRecord(value) && typeof value.getInfo === 'function';
+}
+
+function isYouTubeInfo(value: unknown): value is YouTubeInfo {
+  return isRecord(value) && typeof value.getLiveChat === 'function';
 }
 
 function createYouTubeConnectionFactory(options: YouTubeConnectionFactoryOptions = {}) {
@@ -143,16 +155,12 @@ function createYouTubeConnectionFactory(options: YouTubeConnectionFactoryOptions
             return;
         }
 
-        const startDataRecord = startData && typeof startData === 'object' ? startData as UnknownRecord : null;
-        const header = startDataRecord?.header && typeof startDataRecord.header === 'object'
-            ? startDataRecord.header as UnknownRecord
-            : null;
-        const viewSelector = header?.view_selector && typeof header.view_selector === 'object'
-            ? header.view_selector as UnknownRecord
-            : null;
-        const menuItems = Array.isArray(viewSelector?.sub_menu_items)
-            ? viewSelector.sub_menu_items
-            : null;
+    const startDataRecord = isRecord(startData) ? startData : null;
+    const header = isRecord(startDataRecord?.header) ? startDataRecord.header : null;
+    const viewSelector = isRecord(header?.view_selector) ? header.view_selector : null;
+    const menuItems = Array.isArray(viewSelector?.sub_menu_items)
+      ? viewSelector.sub_menu_items
+      : null;
         if (!Array.isArray(menuItems) || menuItems.length === 0) {
             platform.logger.warn(
                 `Cannot apply YouTube chat mode for ${videoId}: selector unavailable`,
@@ -201,15 +209,23 @@ function createYouTubeConnectionFactory(options: YouTubeConnectionFactoryOptions
     const createConnection = async (videoId: string) => {
         const manager = innertubeInstanceManager.getInstance({ logger: platform.logger });
 
-        const yt = await manager.getInstance('shared-youtube-instance',
-            () => InnertubeFactory.createWithTimeout(timeoutMs)
-        ) as YouTubeClient;
+    const youtubeCandidate = await manager.getInstance('shared-youtube-instance',
+      () => InnertubeFactory.createWithTimeout(timeoutMs)
+    );
+    if (!isYouTubeClient(youtubeCandidate)) {
+      throw new Error('YouTube instance manager returned invalid YouTube client');
+    }
+    const yt = youtubeCandidate;
 
-        const info = await withTimeout(
-            yt.getInfo(videoId, { client: 'WEB' }),
-            timeoutMs,
-            'YouTube getInfo stream info call'
-        );
+    const infoCandidate = await withTimeout(
+      yt.getInfo(videoId, { client: 'WEB' }),
+      timeoutMs,
+      'YouTube getInfo stream info call'
+    );
+    if (!isYouTubeInfo(infoCandidate)) {
+      throw new Error(`YouTube getInfo returned invalid stream info for ${videoId}`);
+    }
+    const info = infoCandidate;
 
         const validationResult = platform._validateVideoForConnection(videoId, info);
         if (!validationResult.shouldConnect) {
@@ -218,7 +234,7 @@ function createYouTubeConnectionFactory(options: YouTubeConnectionFactoryOptions
 
         if (info.actions && typeof info.actions.execute === 'function') {
             await captureInstaller({
-                actions: info.actions as { execute: (endpoint: string, args?: Record<string, unknown>) => Promise<unknown> },
+        actions: info.actions,
                 videoId,
                 initialContinuation: typeof info.livechat?.continuation === 'string'
                     ? info.livechat.continuation

@@ -54,17 +54,33 @@ const GIFT_MEMBERSHIP_REDEMPTION_EVENT_TYPES = new Set([
     'LiveChatSponsorshipsGiftRedemptionAnnouncementRenderer'
 ]);
 
+type UnknownMap = Record<string, unknown>;
+type StreamRefreshRequest = {
+  requestImmediateRefresh?: boolean;
+  source?: string;
+  reason?: string;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 class YouTubePlatform extends EventEmitter {
-    constructor(config = {}, dependencies) {
+  constructor(config: UnknownMap = {}, dependencyInput: unknown = {}) {
         super();
 
         this.handlers = {};
-        dependencies = dependencies || {};
+    const resolvedDependencies = isRecord(dependencyInput) ? dependencyInput : {};
+    const dependencies = resolvedDependencies;
         
         // FAIL-FAST: Validate dependencies before proceeding
         
         // Allow flexible constructor patterns - handle incorrect dependency injection patterns
-        if (typeof dependencies === 'string' || typeof dependencies === 'number') {
+    if (typeof dependencyInput === 'string' || typeof dependencyInput === 'number') {
             throw new Error('Dependencies should be a single object with logger property, not separate parameters. ' +
                            'Use: new YouTubePlatform(config, { logger, notificationManager, ... }) instead of separate arguments.');
         }
@@ -201,7 +217,7 @@ class YouTubePlatform extends EventEmitter {
 
     // Multi-stream helper functions
     
-    removeYouTubeConnection(videoId) {
+  removeYouTubeConnection(videoId: string) {
         this.connectionManager.removeConnection(videoId);
         
         // Clear active stream in viewer service if this was the active stream
@@ -212,13 +228,13 @@ class YouTubePlatform extends EventEmitter {
                     this.viewerService.clearActiveStream();
                     this.logger.debug(`Cleared active stream from viewer service: ${videoId}`, 'youtube');
                 }
-            } catch (serviceError) {
-                this.logger.warn(`Failed to clear active stream in viewer service: ${serviceError.message}`, 'youtube');
+            } catch (serviceError: unknown) {
+                this.logger.warn(`Failed to clear active stream in viewer service: ${getErrorMessage(serviceError)}`, 'youtube');
             }
         }
     }
 
-    async disconnectFromYouTubeStream(videoId, reason = 'unknown', options = {}) {
+    async disconnectFromYouTubeStream(videoId: string, reason = 'unknown', options: StreamRefreshRequest = {}): Promise<boolean> {
         if (!this.connectionManager) {
             return false;
         }
@@ -241,7 +257,7 @@ class YouTubePlatform extends EventEmitter {
             if (checkInProgress) {
                 this.requestImmediateYouTubeStreamRefresh(refreshContext).catch((error) => {
                     this._handleConnectionErrorLogging(
-                        `Immediate stream refresh failed after disconnect: ${error.message}`,
+                        `Immediate stream refresh failed after disconnect: ${getErrorMessage(error)}`,
                         error,
                         'stream-refresh'
                     );
@@ -254,7 +270,7 @@ class YouTubePlatform extends EventEmitter {
         return result;
     }
 
-    async requestImmediateYouTubeStreamRefresh(context = {}) {
+    async requestImmediateYouTubeStreamRefresh(context: UnknownMap = {}): Promise<void> {
         if (!this._youtubeMultiStreamManager || typeof this._youtubeMultiStreamManager.requestImmediateRefresh !== 'function') {
             return;
         }
@@ -404,7 +420,7 @@ class YouTubePlatform extends EventEmitter {
     }
 
 
-    async connectToYouTubeStream(videoId, options = {}) {
+    async connectToYouTubeStream(videoId: string, options: StreamRefreshRequest = {}): Promise<boolean> {
         // Check existing connection status before attempting
         const hasExisting = this.connectionManager.hasConnection(videoId);
         
@@ -444,23 +460,23 @@ class YouTubePlatform extends EventEmitter {
             return success;
             
         } catch (error) {
-            this._handleConnectionErrorLogging(`Failed to connect to YouTube stream: ${error.message}`, error, 'stream-connect');
+            this._handleConnectionErrorLogging(`Failed to connect to YouTube stream: ${getErrorMessage(error)}`, error, 'stream-connect');
             throw error;
         }
     }
 
-    async _createYouTubeConnection(videoId) {
+    async _createYouTubeConnection(videoId: string): Promise<unknown> {
         try {
             const connection = await this._youtubeConnectionFactory.createConnection(videoId);
             await this._setupConnectionEventListeners(connection, videoId);
             return connection;
         } catch (error) {
-            this._handleConnectionErrorLogging(`Failed to create YouTube connection: ${error.message}`, error, 'connection-create');
+            this._handleConnectionErrorLogging(`Failed to create YouTube connection: ${getErrorMessage(error)}`, error, 'connection-create');
             throw error;
         }
     }
     
-    async _setupConnectionEventListeners(connection, videoId) {
+    async _setupConnectionEventListeners(connection: unknown, videoId: string): Promise<void> {
         return await this._youtubeConnectionFactory.setupConnectionEventListeners(connection, videoId);
 	    }
 
