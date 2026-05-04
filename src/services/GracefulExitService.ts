@@ -22,11 +22,31 @@ type GracefulExitStats = {
     lastMessageTime: number | null;
 };
 
+type GracefulExitStatus = {
+    enabled: boolean;
+    processed: number;
+    target: number | null;
+    remaining: number;
+    percentage: number;
+    isNearingCompletion: boolean;
+    startTime: number;
+    lastMessageTime: number | null;
+};
+
+type ExitSummary = {
+    processedMessages: number;
+    targetMessages: number | null;
+    exitReason: string;
+    timestamp: string;
+    platforms: string[];
+    uptime: number;
+};
+
 function resolveErrorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
 }
 
-function handleGracefulExitError(message: string, error: unknown, eventType = 'graceful-exit', target = 'graceful-exit') {
+function handleGracefulExitError(message: string, error: unknown, eventType = 'graceful-exit', target = 'graceful-exit'): void {
     const handler = target === 'system' ? systemErrorHandler : gracefulExitErrorHandler;
     if (error instanceof Error) {
         handler.handleEventProcessingError(error, eventType, null, message);
@@ -51,9 +71,9 @@ class GracefulExitService {
 
         // Configuration with defaults
         this.config = {
-            progressEventInterval: config.progressEventInterval || 5,
-            forceExitTimeoutMs: config.forceExitTimeoutMs || 10000,
-            nearCompletionThreshold: config.nearCompletionThreshold || 0.9
+            progressEventInterval: config.progressEventInterval ?? 5,
+            forceExitTimeoutMs: config.forceExitTimeoutMs ?? 10000,
+            nearCompletionThreshold: config.nearCompletionThreshold ?? 0.9
         };
 
         // Statistics
@@ -69,19 +89,19 @@ class GracefulExitService {
 
     }
 
-    isEnabled() {
+    isEnabled(): boolean {
         return this.targetMessageCount !== null && this.targetMessageCount > 0;
     }
 
-    getTargetMessageCount() {
+    getTargetMessageCount(): number | null {
         return this.targetMessageCount;
     }
 
-    getProcessedMessageCount() {
+    getProcessedMessageCount(): number {
         return this.processedMessageCount;
     }
 
-    incrementMessageCount() {
+    incrementMessageCount(): boolean {
         if (!this.isEnabled() || this.isShuttingDown) {
             return false;
         }
@@ -107,7 +127,7 @@ class GracefulExitService {
         return false;
     }
 
-    async triggerExit() {
+    async triggerExit(): Promise<void> {
         if (this.isShuttingDown) {
             logger.warn('[GracefulExitService] Shutdown already in progress', 'graceful-exit');
             return;
@@ -162,7 +182,7 @@ class GracefulExitService {
         }
     }
 
-    getStats() {
+    getStats(): GracefulExitStatus {
         const targetCount = this.targetMessageCount ?? 0;
         const percentage = this.isEnabled()
             ? Math.round((this.processedMessageCount / targetCount) * 100)
@@ -180,12 +200,12 @@ class GracefulExitService {
         };
     }
 
-    stop() {
+    stop(): void {
         logger.debug('[GracefulExitService] Stopping service', 'graceful-exit');
         this.isShuttingDown = true;
     }
 
-    _buildExitSummary() {
+    _buildExitSummary(): ExitSummary {
         const platformSnapshot = this.runtime.getPlatforms ?
             this.runtime.getPlatforms() :
             null;
@@ -202,7 +222,7 @@ class GracefulExitService {
     }
 }
 
-function createGracefulExitService(runtime: GracefulRuntime, targetMessageCount: number | null, config: GracefulExitConfig = {}) {
+function createGracefulExitService(runtime: GracefulRuntime, targetMessageCount: number | null, config: GracefulExitConfig = {}): GracefulExitService {
     return new GracefulExitService(runtime, targetMessageCount, config);
 }
 
