@@ -41,6 +41,13 @@ type SourceRow = {
     data?: unknown;
 };
 
+type EventToGuiContractMapper = {
+mapDisplayRow: (row?: SourceRow) => Promise<GuiRowDto | null>;
+resolveAvatarUrl: (args: { platform: string; data: MapperRecord }) => Promise<string>;
+avatarCacheKey: (platform: unknown, userId: unknown) => string;
+applyMessageLimit: (text: string, limit: number) => string;
+};
+
 type RawPart = {
     type?: unknown;
     platform?: unknown;
@@ -86,6 +93,11 @@ function applyMessageLimit(text: string, limit: number): string {
         return text;
     }
     return text.slice(0, limit);
+}
+
+function normalizeTimestamp(value: unknown): string | null {
+const normalized = normalizeString(value);
+return normalized || null;
 }
 
 function resolveText(type: string, data: MapperRecord): string {
@@ -161,7 +173,7 @@ text
 });
 }
 
-function createEventToGuiContractMapper(options: MapperOptions = {}) {
+function createEventToGuiContractMapper(options: MapperOptions = {}): EventToGuiContractMapper {
     const config = toRecord(options.config);
     const guiConfig = toRecord(config.gui) as GuiMapperConfig;
     const fallbackAvatarUrl = normalizeString(options.fallbackAvatarUrl) || DEFAULT_AVATAR_URL;
@@ -247,7 +259,7 @@ return cachedAvatar;
             username,
             text,
             avatarUrl,
-            timestamp: (data.timestamp || row.timestamp || null) as string | null
+timestamp: normalizeTimestamp(data.timestamp || row.timestamp)
         };
 
         if (rule.kind === 'chat') {
