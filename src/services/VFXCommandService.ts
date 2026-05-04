@@ -11,6 +11,98 @@ const PlatformEvents = {
 
 const vfxCommandErrorHandler = createPlatformErrorHandler(logger, 'vfx-service');
 
+type EventBusLike = {
+    emit: (event: string, payload: unknown) => void;
+};
+
+type EffectsManagerLike = {
+    playMediaInOBS?: (...args: unknown[]) => Promise<unknown> | unknown;
+};
+
+type VFXServiceConfig = Record<string, unknown> & {
+    commands: Record<string, string>;
+    farewell: Record<string, string>;
+    vfx: {
+        filePath: string;
+    };
+    general?: {
+        keywordParsingEnabled?: boolean;
+    };
+    cooldowns: {
+        cmdCooldown: number;
+        globalCmdCooldownMs: number;
+    };
+};
+
+type VFXServiceOptions = {
+    effectsManager?: EffectsManagerLike | null;
+};
+
+type VFXConfig = {
+    command?: string;
+    commandKey?: string;
+    filename?: string;
+    mediaSource?: string;
+    vfxFilePath?: string;
+    duration?: number;
+    [key: string]: unknown;
+};
+
+type CommandParserLike = {
+    getVFXConfig: (commandTrigger: string, message: string) => VFXConfig | null;
+    getMatchingFarewell?: (message: string, commandTrigger: string) => string | null;
+};
+
+type CommandExecutionContext = {
+    username?: string;
+    platform: string;
+    userId: string;
+    skipCooldown: boolean;
+    correlationId?: string;
+    message?: string | null;
+    [key: string]: unknown;
+};
+
+type CooldownCheck =
+    | {
+        allowed: true;
+        type: 'none';
+    }
+    | {
+        allowed: false;
+        type: 'user' | 'global';
+        remainingMs: number;
+        cooldownMs: number;
+    };
+
+type CommandExecutionResult = {
+    success: boolean;
+    error?: string;
+    command?: string;
+    username?: string | null;
+    platform?: string | null;
+    cooldownInfo?: CooldownCheck;
+    vfxConfig?: VFXConfig;
+    executedAt?: number;
+    [key: string]: unknown;
+};
+
+type VFXServiceStatus = {
+    isActive: boolean;
+    activeCooldowns: {
+        users: number;
+        globalCommands: number;
+    };
+    stats: {
+        totalCommands: number;
+        timedCommands: number;
+        successfulCommands: number;
+        failedCommands: number;
+        cooldownBlocked: number;
+        avgExecutionTime: number;
+    };
+};
+
 const SECTION_COMMAND_KEYS = new Set(
     Object.values(NOTIFICATION_CONFIGS)
         .map((notifConfig) => notifConfig.commandKey)
@@ -36,7 +128,23 @@ function getErrorMessage(error: unknown): string {
 }
 
 class VFXCommandService {
-    constructor(config, eventBus, options = {}) {
+    config: VFXServiceConfig;
+    eventBus: EventBusLike | null;
+    _effectsManager: EffectsManagerLike | null;
+    commandParser: CommandParserLike | null;
+    userLastCommand: Map<string, number>;
+    globalCommandCooldowns: Map<string, number>;
+    userCommandTimestamps: Map<string, number[]>;
+    stats: {
+        totalCommands: number;
+        timedCommands: number;
+        successfulCommands: number;
+        failedCommands: number;
+        cooldownBlocked: number;
+        avgExecutionTime: number;
+    };
+
+    constructor(config: VFXServiceConfig, eventBus: EventBusLike | null, options: VFXServiceOptions = {}) {
         if (!config || typeof config !== 'object') {
             throw new Error('VFXCommandService requires config object');
         }
@@ -70,7 +178,7 @@ class VFXCommandService {
         });
     }
 
-    async executeCommand(command, context) {
+    async executeCommand(command: string, context: CommandExecutionContext): Promise<CommandExecutionResult> {
         const startTime = Date.now();
         this.stats.totalCommands++;
         let timedExecutionRecorded = false;
@@ -197,7 +305,7 @@ class VFXCommandService {
         } catch (error) {
             this.stats.failedCommands++;
             handleVFXCommandError(`[VFXCommandService] Command execution error: ${getErrorMessage(error)}`, error, 'command-execution');
-            const safeContext = context && typeof context === 'object' ? context : {};
+            const safeContext: Record<string, unknown> = context && typeof context === 'object' ? context : {};
             return {
                 success: false,
                 error: getErrorMessage(error),
@@ -209,7 +317,7 @@ class VFXCommandService {
     }
 
 
-    async selectVFXCommand(message, contextMessage) {
+    async selectVFXCommand(message: string, contextMessage: string | null): Promise<VFXConfig | null> {
         if (!this.commandParser) {
             throw new Error('VFXCommandService requires commandParser');
         }
@@ -243,7 +351,7 @@ class VFXCommandService {
         }
     }
 
-    async getVFXConfig(commandKey, message) {
+    async getVFXConfig(commandKey: string, message: string | null): Promise<VFXConfig | null> {
         if (arguments.length < 2) {
             throw new Error('getVFXConfig requires message (use null when none)');
         }
@@ -280,7 +388,7 @@ class VFXCommandService {
         }
     }
 
-    matchFarewell(message, commandTrigger) {
+    matchFarewell(message: string, commandTrigger: string): string | null {
         if (!this.commandParser) {
             throw new Error('VFXCommandService requires commandParser');
         }
@@ -291,10 +399,14 @@ class VFXCommandService {
             return null;
         }
 
+        if (typeof this.commandParser.getMatchingFarewell !== 'function') {
+            return null;
+        }
+
         return this.commandParser.getMatchingFarewell(message, commandTrigger);
     }
 
-    async executeCommandForKey(commandKey, context) {
+    async executeCommandForKey(commandKey: string, context: CommandExecutionContext): Promise<CommandExecutionResult> {
         try {
             if (!commandKey) {
                 return {
@@ -353,7 +465,7 @@ class VFXCommandService {
         }
     }
 
-    checkCommandCooldown(userId, command) {
+    checkCommandCooldown(userId: string, command: string): CooldownCheck {
         try {
             const now = Date.now();
             const userCooldownSec = this.config.cooldowns.cmdCooldown;
@@ -399,7 +511,7 @@ class VFXCommandService {
         }
     }
 
-    getStatus() {
+    getStatus(): VFXServiceStatus {
         this._pruneCooldownBookkeeping(Date.now());
         return {
             isActive: !!this.commandParser,
@@ -411,7 +523,7 @@ class VFXCommandService {
         };
     }
 
-    reloadConfig() {
+    reloadConfig(): boolean {
         try {
             const oldParser = this.commandParser;
             this._initializeCommandParser();
@@ -429,7 +541,7 @@ class VFXCommandService {
         }
     }
 
-    _initializeCommandParser() {
+    _initializeCommandParser(): void {
         try {
             const parserConfig = {
                 commands: this.config.commands,
@@ -449,13 +561,16 @@ class VFXCommandService {
         }
     }
 
-    _getCommand(commandKey) {
+    _getCommand(commandKey: string): string | null {
         if (commandKey === 'members') {
             return null;
         }
 
         if (SECTION_COMMAND_KEYS.has(commandKey)) {
-            const sectionCommand = this.config[commandKey]?.command;
+            const sectionValue = this.config[commandKey];
+            const sectionCommand = typeof sectionValue === 'object' && sectionValue !== null && 'command' in sectionValue
+                ? (typeof (sectionValue as { command?: unknown }).command === 'string' ? (sectionValue as { command?: string }).command : undefined)
+                : undefined;
             if (sectionCommand) {
                 return sectionCommand;
             }
@@ -466,7 +581,7 @@ class VFXCommandService {
         return null;
     }
 
-    async _executeVFXCommand(vfxConfig, context) {
+    async _executeVFXCommand(vfxConfig: VFXConfig, context: { username: string; platform: string }): Promise<CommandExecutionResult> {
         try {
             // Prepare command data in format expected by runCommand
             const commandData = {
@@ -497,7 +612,7 @@ class VFXCommandService {
         }
     }
 
-    _updateCooldowns(userId, command) {
+    _updateCooldowns(userId: string, command: string): void {
         const now = Date.now();
         const userCooldownSec = this.config.cooldowns.cmdCooldown;
         const globalCooldownMs = this.config.cooldowns.globalCmdCooldownMs;
@@ -527,7 +642,7 @@ class VFXCommandService {
         this._pruneCooldownBookkeeping(now);
     }
 
-    _pruneCooldownBookkeeping(now) {
+    _pruneCooldownBookkeeping(now: number): void {
         const userCooldownSec = this.config.cooldowns.cmdCooldown;
         const globalCooldownMs = this.config.cooldowns.globalCmdCooldownMs;
         if (!Number.isFinite(userCooldownSec) || !Number.isFinite(globalCooldownMs)) {
@@ -568,7 +683,7 @@ class VFXCommandService {
         }
     }
 
-    _selectCommandVariant(commandSpec) {
+    _selectCommandVariant(commandSpec: string | null | undefined): string | null {
         if (!commandSpec || typeof commandSpec !== 'string') {
             return null;
         }
@@ -595,7 +710,7 @@ class VFXCommandService {
         return options[randomIndex];
     }
 
-    _resolveSelectableCommandSpec(commandKey, commandSpec) {
+    _resolveSelectableCommandSpec(commandKey: string, commandSpec: string): string {
         if (typeof commandSpec !== 'string') {
             return commandSpec;
         }
@@ -615,7 +730,7 @@ class VFXCommandService {
 
 }
 
-function createVFXCommandService(config, eventBus = null, options = {}) {
+function createVFXCommandService(config: VFXServiceConfig, eventBus: EventBusLike | null = null, options: VFXServiceOptions = {}): VFXCommandService {
     if (arguments.length < 2) {
         throw new Error('createVFXCommandService requires config and eventBus (use null when none)');
     }
