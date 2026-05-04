@@ -21,6 +21,14 @@ type PlatformLoggingConfig = {
     dataLoggingVerbose?: boolean;
 };
 
+type LogStatisticsResult = {
+size?: number;
+lastModified?: Date;
+path?: string;
+error?: string;
+exists?: boolean;
+};
+
 class ChatFileLoggingService {
     logger: LoggerLike;
     errorHandler: {
@@ -31,13 +39,13 @@ class ChatFileLoggingService {
     dataLoggingPath?: string;
 
     constructor(dependencies: LoggingDependencies = {}) {
-        this.logger = dependencies.logger || defaultLogger;
+        this.logger = dependencies.logger ?? defaultLogger;
         this.errorHandler = createPlatformErrorHandler(this.logger, 'chat-file-logging');
-        this.config = dependencies.config || {};
+        this.config = dependencies.config ?? {};
         this.dataLoggingPath = this.config.dataLoggingPath;
     }
 
-    async logRawPlatformData(platform, eventType, data, platformConfig: PlatformLoggingConfig = {}) {
+    async logRawPlatformData(platform: string, eventType: string, data: unknown, platformConfig: PlatformLoggingConfig = {}): Promise<void> {
         if (!platformConfig.dataLoggingEnabled) {
             return;
         }
@@ -68,11 +76,11 @@ class ChatFileLoggingService {
                 this.logger.debug?.(`Logged ${eventType} data for ${platform} to ${logFilePath}`, 'ChatFileLoggingService');
             }
         } catch (error) {
-            this._handleLoggingError(`Error logging platform data for ${platform}: ${error.message}`, error);
+            this._handleLoggingError(`Error logging platform data for ${platform}: ${this.resolveErrorMessage(error)}`, error);
         }
     }
 
-    async ensureDirectoryExists(dirPath) {
+    async ensureDirectoryExists(dirPath: string): Promise<void> {
         try {
             await fs.access(dirPath);
         } catch {
@@ -84,7 +92,7 @@ class ChatFileLoggingService {
         }
     }
 
-    async getLogStatistics(platform, platformConfig: PlatformLoggingConfig = {}) {
+    async getLogStatistics(platform: string, platformConfig: PlatformLoggingConfig = {}): Promise<LogStatisticsResult> {
         if (!this.dataLoggingPath) {
             return {
                 error: 'Data logging path is not configured',
@@ -104,29 +112,37 @@ class ChatFileLoggingService {
             };
         } catch (error) {
             return {
-                error: error.message,
+                error: this.resolveErrorMessage(error),
                 exists: false
             };
         }
     }
 
-    _handleLoggingError(message, error, dataType = 'platform-data') {
+    _handleLoggingError(message: string, error: unknown, dataType = 'platform-data'): void {
         if (this.errorHandler && error instanceof Error) {
             this.errorHandler.handleDataLoggingError?.(error, dataType, message);
         } else {
             this.errorHandler?.logOperationalError?.(message, 'ChatFileLoggingService', {
                 dataType,
-                error: error?.message || error
+                error: this.resolveErrorMessage(error)
             });
         }
     }
 
-    resolveLogFileName(platform, eventType) {
+    resolveLogFileName(platform: string, eventType: string): string {
         if (platform === 'youtube' && eventType === 'unknown-renderer') {
             return 'youtube-unknown-renderer-log.ndjson';
         }
 
         return `${platform}-data-log.ndjson`;
+    }
+
+    resolveErrorMessage(error: unknown): string {
+        if (error instanceof Error) {
+            return error.message;
+        }
+
+        return String(error);
     }
 }
 
