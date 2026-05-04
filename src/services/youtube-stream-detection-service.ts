@@ -297,9 +297,9 @@ channelHandle,
         }
 
         return {
-            streams: result.streams || [],
+            streams: result.streams ?? [],
             malformed: parserError,
-            hasContent: result.hasContent || false,
+            hasContent: result.hasContent ?? false,
             parserError,
             detectionMethod
         };
@@ -324,7 +324,7 @@ _validateVideoIds(streams: DetectionStream[]): string[] {
             .filter((videoId): videoId is string => this._isValidVideoId(videoId));
     }
 
-_isValidVideoId(videoId: unknown): boolean {
+_isValidVideoId(videoId: unknown): videoId is string {
         if (!videoId || typeof videoId !== 'string') {
             return false;
         }
@@ -341,7 +341,7 @@ _isValidVideoId(videoId: unknown): boolean {
     ): DetectionServiceResponse {
         const responseTime = Date.now() - startTime;
 
-        let message;
+        let message: string;
         if (videoIds.length === 0) {
             if (detectionResult.malformed) {
                 message = 'No streams found';

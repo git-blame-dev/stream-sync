@@ -253,7 +253,7 @@ static async _getLiveStreamsFromChannelApi(channel: ChannelLike, timeout: number
             );
 
             return {
-                streams: this._mapLiveVideos(liveStreams?.videos || [], logger, 'channel_api'),
+                streams: this._mapLiveVideos(liveStreams?.videos ?? [], logger, 'channel_api'),
                 hasContent: !!liveStreams?.videos?.length
             };
         } catch (error) {
@@ -352,7 +352,7 @@ logger?: LoggerLike;
                 'YouTube search live videos'
             );
 
-            const videos = searchResult?.videos || [];
+            const videos: ChannelVideo[] = searchResult?.videos ?? [];
             const normalizedHandle = channelHandle.replace(/^@/, '').toLowerCase();
 
             const streams = videos

@@ -10,8 +10,8 @@ userId?: string;
 type MessageData = {
 self?: unknown;
 username?: string;
-context?: { username?: string };
-author?: { isChatOwner?: unknown };
+context?: { username?: string } | null;
+author?: { isChatOwner?: unknown } | null;
 isBroadcaster?: unknown;
 badges?: unknown;
 userId?: string;
@@ -86,9 +86,9 @@ return messageData.username.toLowerCase() === platformConfig.username.toLowerCas
 
         if (messageData.badges) {
             const badges = Array.isArray(messageData.badges) ? messageData.badges : [];
-            return badges.some(badge => 
-                badge.toLowerCase().includes('owner') || 
-                badge.toLowerCase().includes('broadcaster')
+            return badges.some((badge): boolean =>
+                typeof badge === 'string'
+                && (badge.toLowerCase().includes('owner') || badge.toLowerCase().includes('broadcaster'))
             );
         }
 
