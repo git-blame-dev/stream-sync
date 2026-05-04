@@ -37,6 +37,23 @@ pathext?: unknown;
 type AnimationCandidate = { url: string; label: string };
 type RankedAnimationCandidate = AnimationCandidate & { score: number };
 
+type AnimationConfig = {
+profileName: unknown;
+sourceWidth: number;
+sourceHeight: number;
+renderWidth: number;
+renderHeight: number;
+rgbFrame: number[];
+aFrame: number[] | null;
+};
+
+type ResolvedGiftAnimation = {
+mediaFilePath: string;
+mediaContentType: string;
+durationMs: number;
+animationConfig: AnimationConfig;
+};
+
 function fileExists(candidatePath: unknown): boolean {
     if (typeof candidatePath !== 'string' || candidatePath.trim().length === 0) {
         return false;
@@ -183,15 +200,7 @@ function normalizeFrame(value: unknown): number[] | null {
     return parsed;
 }
 
-function sanitizeAnimationConfig(profileInfo: { profileName?: unknown; profile?: Record<string, unknown> } | null | undefined): {
-profileName: unknown;
-sourceWidth: number;
-sourceHeight: number;
-renderWidth: number;
-renderHeight: number;
-rgbFrame: number[];
-aFrame: number[] | null;
-} | null {
+function sanitizeAnimationConfig(profileInfo: { profileName?: unknown; profile?: Record<string, unknown> } | null | undefined): AnimationConfig | null {
     if (!profileInfo || !profileInfo.profile) {
         return null;
     }
@@ -234,21 +243,13 @@ aFrame: number[] | null;
 function resolveAnimationProfile(configObject: Record<string, unknown> | null | undefined): {
 profileName: unknown;
 profile: Record<string, unknown>;
-animationConfig: {
-profileName: unknown;
-sourceWidth: number;
-sourceHeight: number;
-renderWidth: number;
-renderHeight: number;
-rgbFrame: number[];
-aFrame: number[] | null;
-};
+animationConfig: AnimationConfig;
 } | null {
     if (!configObject || typeof configObject !== 'object') {
         return null;
     }
 
-    const orderedProfiles = [];
+const orderedProfiles: Array<{ profileName: unknown; profile: Record<string, unknown> }> = [];
     if (configObject.portrait && typeof configObject.portrait === 'object') {
         orderedProfiles.push({ profileName: 'portrait', profile: configObject.portrait });
     }
@@ -303,7 +304,7 @@ function extractAnimationCandidates(originalData: unknown): RankedAnimationCandi
     const asset = originalData.asset && typeof originalData.asset === 'object'
         ? originalData.asset
         : {};
-    const candidates = [];
+const candidates: AnimationCandidate[] = [];
 
 const pushCandidate = (url: unknown, label: unknown): void => {
         const normalizedUrl = normalizeString(url);
@@ -367,7 +368,7 @@ function isMissingExecutableError(error: unknown, executableName: unknown): bool
     return message.includes('executable not found') && message.includes(name);
 }
 
-function createTikTokGiftAnimationResolver(options: ResolverOptions = {}) {
+function createTikTokGiftAnimationResolver(options: ResolverOptions = {}): { resolveFromNotificationData: (notificationData: unknown) => Promise<ResolvedGiftAnimation | null> } {
     const resolverLogger = options.logger || logger;
     const errorHandler = createPlatformErrorHandler(resolverLogger, 'tiktok-gift-animation');
     const cacheDirectory = normalizeString(options.cacheDirectory) || GIFT_ANIMATION_CACHE_DIR;
@@ -388,20 +389,7 @@ const logDebug = (message: string, data: unknown = null): void => {
         resolverLogger.debug(message, 'tiktok-gift-animation', data);
     };
 
-const inFlight = new Map<string, Promise<{
-mediaFilePath: string;
-mediaContentType: string;
-durationMs: number;
-animationConfig: {
-profileName: unknown;
-sourceWidth: number;
-sourceHeight: number;
-renderWidth: number;
-renderHeight: number;
-rgbFrame: number[];
-aFrame: number[] | null;
-};
-}>>();
+const inFlight = new Map<string, Promise<ResolvedGiftAnimation>>();
 
 const extractZipArchive = async (zipPath: string, extractDirectory: string): Promise<void> => {
         const unzipBinaries = buildUnzipBinaryCandidates(options);
@@ -437,7 +425,7 @@ const extractZipArchive = async (zipPath: string, extractDirectory: string): Pro
 const pruneCache = async (): Promise<void> => {
         await fsp.mkdir(cacheDirectory, { recursive: true });
         const entries = await fsp.readdir(cacheDirectory, { withFileTypes: true });
-        const directories = [];
+const directories: Array<{ entryPath: string; modifiedAtMs: number }> = [];
 
         for (const entry of entries) {
             if (!entry.isDirectory()) {
@@ -482,7 +470,7 @@ const ensureMediaPathWithinExtractDirectory = async (extractDirectory: string, m
         return mediaFileRealPath;
     };
 
-const resolveCandidate = async (candidate: RankedAnimationCandidate) => {
+const resolveCandidate = async (candidate: RankedAnimationCandidate): Promise<ResolvedGiftAnimation> => {
         const cacheKey = crypto.createHash('sha1').update(candidate.url).digest('hex');
         const existingPromise = inFlight.get(cacheKey);
         if (existingPromise) {
@@ -590,7 +578,7 @@ const resolveCandidate = async (candidate: RankedAnimationCandidate) => {
 
     const initPromise = pruneCache();
 
-const resolveFromNotificationData = async (notificationData: unknown) => {
+const resolveFromNotificationData = async (notificationData: unknown): Promise<ResolvedGiftAnimation | null> => {
         await initPromise;
 
         const candidates = extractAnimationCandidates(notificationData?.enhancedGiftData?.originalData);
