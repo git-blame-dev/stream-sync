@@ -50,7 +50,7 @@ function applyConfigChangePayload(
     payload: ConfigChangePayload | null | undefined,
     onConfigChange: (value: Partial<CooldownConfig> | null | undefined) => void
 ): void {
-    const payloadWithDefault: ConfigChangePayload = payload || {};
+    const payloadWithDefault: ConfigChangePayload = payload ?? {};
     if (!payloadWithDefault.section || payloadWithDefault.section === COOLDOWN_CONFIG_SECTION) {
         onConfigChange(payloadWithDefault.value);
     }
@@ -68,7 +68,7 @@ class CommandCooldownService {
     userCommandTimestamps: Map<string, number[]>;
     globalCommandCooldowns: Map<string, number>;
     cleanupInterval: ReturnType<typeof setInterval> | null;
-    cooldownConfig!: CooldownConfig;
+    cooldownConfig: CooldownConfig;
 
     constructor(options: CommandCooldownServiceOptions = {}) {
         this.eventBus = options.eventBus || null;
@@ -85,6 +85,15 @@ class CommandCooldownService {
         this.userHeavyLimit = new Map();
         this.userCommandTimestamps = new Map();
         this.globalCommandCooldowns = new Map();
+
+        this.cooldownConfig = {
+            defaultCooldown: this.cooldownsConfig.defaultCooldownMs,
+            heavyCommandCooldown: this.cooldownsConfig.heavyCommandCooldownMs,
+            heavyCommandThreshold: this.cooldownsConfig.heavyCommandThreshold,
+            heavyCommandWindow: this.cooldownsConfig.heavyCommandWindowMs,
+            globalCooldown: this.cooldownsConfig.globalCmdCooldownMs,
+            maxEntries: this.cooldownsConfig.maxEntries
+        };
 
         this.loadCooldownConfig();
         this.registerConfigListeners();
@@ -375,7 +384,13 @@ class CommandCooldownService {
         }
     }
 
-    getStatus() {
+    getStatus(): {
+        config: CooldownConfig;
+        activeUsers: number;
+        heavyLimitUsers: number;
+        globalCommandsTracked: number;
+        lastConfigRefresh: string | null;
+    } {
         const heavyLimitUsers = Array.from(this.userHeavyLimit.values()).filter(Boolean).length;
 
         return {
