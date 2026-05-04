@@ -2,8 +2,14 @@ import { extractMessageText } from '../youtube-message-extractor';
 import { YouTubeiCurrencyParser } from '../youtubei-currency-parser';
 import type { UnknownRecord } from '../../../utils/record-contracts';
 
+interface ParserLogger {
+debug?: (message: string, scope?: string, payload?: unknown) => void;
+warn?: (message: string, scope?: string, payload?: unknown) => void;
+error?: (message: string, scope?: string, payload?: unknown) => void;
+}
+
 interface YouTubeMonetizationParserOptions {
-logger?: unknown;
+logger?: ParserLogger;
 }
 
 
@@ -340,7 +346,7 @@ function createYouTubeMonetizationParser(options: YouTubeMonetizationParserOptio
     };
 
     const resolveStickerImageUrl = (stickerField: unknown): string => {
-        const rawCandidates = Array.isArray(stickerField)
+        const rawCandidates: unknown[] = Array.isArray(stickerField)
             ? stickerField
             : (stickerField && typeof stickerField === 'object' ? [stickerField] : []);
 

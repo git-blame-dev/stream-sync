@@ -102,6 +102,26 @@ function resolveNonNegativeInteger(value: unknown, fallback = 0): number {
     return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : fallback;
 }
 
+function resolveRejectedReasonMessage(reason: unknown): string {
+    if (reason instanceof Error) {
+        return reason.message;
+    }
+
+    if (typeof reason === 'string' && reason.trim()) {
+        return reason;
+    }
+
+    return 'Promise rejected';
+}
+
+function toMetadataRecord(metadata: unknown): Record<string, unknown> | undefined {
+    if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+        return undefined;
+    }
+
+    return { ...metadata };
+}
+
 class ViewerCountExtractionService {
     innertubeService: InnertubeServiceLike;
     logger?: ServiceDependencies['logger'];
@@ -173,7 +193,7 @@ class ViewerCountExtractionService {
                     strategy: extractionResult.strategy,
                     videoId,
                     responseTime,
-                    metadata: extractionResult.metadata as Record<string, unknown> | undefined
+                    metadata: toMetadataRecord(extractionResult.metadata)
                 };
             } else {
                 this.logger?.debug?.(
@@ -187,7 +207,7 @@ class ViewerCountExtractionService {
                     videoId,
                     responseTime,
                     error: 'Extraction failed',
-                    metadata: extractionResult.metadata as Record<string, unknown> | undefined
+                    metadata: toMetadataRecord(extractionResult.metadata)
                 };
             }
             
@@ -209,7 +229,7 @@ class ViewerCountExtractionService {
     }
     
     async extractViewerCountsBatch(videoIds: string[], options: ExtractViewerCountOptions = {}): Promise<ExtractionResponse[]> {
-        const maxConcurrency = resolveNonNegativeInteger(options.maxConcurrency, 3) || 3;
+        const maxConcurrency = Math.max(1, resolveNonNegativeInteger(options.maxConcurrency, 3));
         const results: ExtractionResponse[] = [];
         
         this.logger?.debug?.(`[ViewerCountExtraction] Batch extracting ${videoIds.length} videos with concurrency ${maxConcurrency}`, 'viewer-extraction');
@@ -232,7 +252,7 @@ class ViewerCountExtractionService {
                         success: false,
                         count: 0,
                         videoId: batch[index] || '',
-                        error: result.reason?.message || 'Promise rejected',
+                        error: resolveRejectedReasonMessage(result.reason),
                         errorType: 'Promise'
                     };
                 }
