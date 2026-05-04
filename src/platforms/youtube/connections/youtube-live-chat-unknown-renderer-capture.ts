@@ -156,10 +156,10 @@ function findActionAncestor(ancestors: TraversalAncestor[]): TraversalAncestor |
     return null;
 }
 
-function collectMatchedRenderers(rawData: unknown, classNames: Set<string>) {
+function collectMatchedRenderers(rawData: unknown, classNames: Set<string>): UnknownRendererLogEntry['matchedRenderers'] {
     const matches: UnknownRendererLogEntry['matchedRenderers'] = [];
 
-    const visit = (value: unknown, path: string, ancestors: TraversalAncestor[]) => {
+    const visit = (value: unknown, path: string, ancestors: TraversalAncestor[]): void => {
         const nextAncestors = [...ancestors, { path, value }];
 
         if (Array.isArray(value)) {
@@ -173,8 +173,8 @@ function collectMatchedRenderers(rawData: unknown, classNames: Set<string>) {
 
         for (const [rawKey, child] of Object.entries(value)) {
             const childPath = `${path}.${rawKey}`;
-            if (classNames.has(normalizeRendererKey(rawKey)) && child !== undefined) {
-                const className = normalizeRendererKey(rawKey);
+            const className = normalizeRendererKey(rawKey);
+            if (classNames.has(className) && child !== undefined) {
                 const match: UnknownRendererLogEntry['matchedRenderers'][number] = {
                     className,
                     rawKey,
@@ -251,8 +251,8 @@ function resolveFallbackVideoId(state: WrappedState): string | null {
         return null;
     }
 
-    const [videoId] = knownVideoIds;
-    return videoId ?? null;
+    const firstVideoId = knownVideoIds.values().next();
+    return firstVideoId.done ? null : firstVideoId.value;
 }
 
 function registerContinuationOwner(state: WrappedState, continuation: string | null, videoId: string): void {
