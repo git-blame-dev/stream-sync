@@ -47,8 +47,16 @@ getAddress: () => ReturnType<Server['address']> | null;
 isActive: () => boolean;
 };
 
+type GuiMapperConfig = {
+gui?: Record<string, unknown>;
+};
+
 function toTransportRecord(value: unknown): TransportRecord {
-    return value && typeof value === 'object' ? (value as TransportRecord) : {};
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        return {};
+    }
+
+    return { ...value };
 }
 
 function isGuiActive(config: unknown = {}): boolean {
@@ -65,8 +73,9 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
     const guiConfig = toTransportRecord(config.gui);
     const logger = options.logger;
     const eventBus = options.eventBus;
+    const mapperConfig: GuiMapperConfig = { gui: guiConfig };
     const mapper = options.mapper ?? (createEventToGuiContractMapper({
-        config: config as { gui?: Record<string, unknown> }
+        config: mapperConfig
     }) as GuiTransportMapper);
     const createServer = typeof options.createServer === 'function'
         ? options.createServer
