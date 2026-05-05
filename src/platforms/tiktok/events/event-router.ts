@@ -107,7 +107,7 @@ type TikTokPlatformRouterContract = {
     _logIncomingEvent: (eventType: string, data: unknown) => Promise<void> | void;
     _emitPlatformEvent: (type: string, payload: Record<string, unknown>) => void;
     _handleStandardEvent: (eventType: string, data: TikTokRawEvent, options?: Record<string, unknown>) => Promise<unknown>;
-    _handleStreamEnd: () => Promise<void>;
+    _handleStreamEnd: (data?: TikTokRawEvent) => Promise<void>;
     handleConnectionIssue: (issue: unknown, isError?: boolean) => Promise<unknown>;
     handleConnectionError: (error: unknown) => void;
     handleRetry: (error: unknown) => unknown;
@@ -287,6 +287,15 @@ function isStaleChatReplay(platform: TikTokPlatformRouterContract, eventTimestam
 
     const { maxAgeMs } = getChatReplayConfig(platform);
     return (Date.now() - eventTimestampMs) > maxAgeMs;
+}
+
+function parseViewerCount(value: unknown): number | null {
+    const numericValue = typeof value === 'number' ? value : Number(value);
+    if (!Number.isFinite(numericValue)) {
+        return null;
+    }
+
+    return numericValue;
 }
 
 function cleanupTikTokEventListeners(platform: TikTokPlatformRouterContract) {
@@ -582,7 +591,15 @@ function setupTikTokEventListeners(platform: TikTokPlatformRouterContract) {
     platform.connection.on(platform.WebcastEvent.ROOM_USER, (payload: unknown) => {
         const data = asTikTokRawEvent(payload);
         platform._logIncomingEvent('roomUser', data);
-        const viewerCount = data.viewerCount as number;
+        const viewerCount = parseViewerCount(data.viewerCount);
+        if (viewerCount === null) {
+            platform.logger.warn('[TikTok Viewer Count] Invalid viewer count in room user payload', 'tiktok', {
+                data,
+                viewerCount: data.viewerCount
+            });
+            return;
+        }
+
         platform.cachedViewerCount = viewerCount;
 
         const timestamp = typeof platform._getTimestamp === 'function'

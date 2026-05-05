@@ -125,10 +125,10 @@ const normalizeRequiredPositive = (value: unknown, label: string): number => {
         return numeric;
     };
 
-const cleanupGiftAggregation = (): void => {
-        for (const key in platform.giftAggregation) {
-            if (platform.giftAggregation[key].timer) {
-                clearTimeoutFn(platform.giftAggregation[key].timer);
+    const cleanupGiftAggregation = (): void => {
+        for (const aggregationState of Object.values(platform.giftAggregation)) {
+            if (aggregationState.timer !== null) {
+                clearTimeoutFn(aggregationState.timer);
             }
         }
         platform.giftAggregation = {};
@@ -202,7 +202,7 @@ const handleStandardGift = async (gift: TikTokGiftPayload): Promise<void> => {
             identityValue = groupId || giftId;
         }
 
-        const previousCount = Number(highWaterMap.get(identityValue) || 0);
+        const previousCount = Number(highWaterMap.get(identityValue) ?? 0);
         const deltaCount = giftCount > previousCount ? giftCount - previousCount : 0;
 
         if (deltaCount <= 0) {

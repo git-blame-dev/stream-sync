@@ -38,6 +38,9 @@ getTimestamp?: (data: Record<string, unknown>) => unknown;
     normalizeChatEvent?: (data: Record<string, unknown>) => Record<string, unknown>;
 };
 
+type EventFactoryPayload = Record<string, unknown>;
+type EventFactoryChatOptions = { normalizedData?: EventFactoryPayload };
+
 function asRecord(value: unknown): Record<string, unknown> | null {
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
         return null;
@@ -150,7 +153,7 @@ const normalizeRecoverable = (recoverable: unknown): boolean => (typeof recovera
     };
 
     return {
-        createChatMessage: (data = {}, eventOptions = {}) => {
+        createChatMessage: (data: EventFactoryPayload = {}, eventOptions: EventFactoryChatOptions = {}) => {
             const normalized = eventOptions.normalizedData || normalizeChatEvent(data);
             const normalizedMetadata = normalized?.metadata && typeof normalized.metadata === 'object'
                 ? { ...normalized.metadata }
@@ -232,7 +235,7 @@ const isMissingField = (fieldName: string): boolean => missingFields.includes(fi
 
             return eventData;
         },
-        createGift: (data = {}) => {
+        createGift: (data: EventFactoryPayload = {}) => {
             const identity = normalizeIdentityFromCanonical(data);
             const avatarUrl = resolveAvatarUrl(data);
             const hasEnhancedGiftData = data.enhancedGiftData && typeof data.enhancedGiftData === 'object';
@@ -304,7 +307,7 @@ const isMissingField = (fieldName: string): boolean => missingFields.includes(fi
             }
             return result;
         },
-        createFollow: (params = {}) => {
+        createFollow: (params: EventFactoryPayload = {}) => {
             const identity = normalizeUserData({
                 userId: params.userId,
                 username: params.username
@@ -321,7 +324,7 @@ const isMissingField = (fieldName: string): boolean => missingFields.includes(fi
                 metadata: buildEventMetadata(params.metadata)
             };
         },
-        createShare: (params = {}) => {
+        createShare: (params: EventFactoryPayload = {}) => {
             const identity = normalizeUserData({
                 userId: params.userId,
                 username: params.username
@@ -341,7 +344,7 @@ const isMissingField = (fieldName: string): boolean => missingFields.includes(fi
                 })
             };
         },
-        createEnvelope: (data = {}) => {
+        createEnvelope: (data: EventFactoryPayload = {}) => {
             const identity = normalizeIdentityFromPayload(data);
             const avatarUrl = resolveAvatarUrl(data);
             const messageId = getPlatformMessageId(data);
@@ -373,7 +376,7 @@ const isMissingField = (fieldName: string): boolean => missingFields.includes(fi
                 timestamp: getTimestamp(data)
             };
         },
-        createSubscription: (data = {}) => {
+        createSubscription: (data: EventFactoryPayload = {}) => {
             const identity = normalizeIdentityFromPayload(data);
             const avatarUrl = resolveAvatarUrl(data);
             const tier = typeof data?.tier === 'string' ? data.tier.trim() : '';
@@ -398,7 +401,7 @@ const isMissingField = (fieldName: string): boolean => missingFields.includes(fi
             }
             return payload;
         },
-        createSuperfan: (data = {}) => {
+        createSuperfan: (data: EventFactoryPayload = {}) => {
             const identity = normalizeIdentityFromPayload(data);
             const avatarUrl = resolveAvatarUrl(data);
             const message = typeof data?.message === 'string' ? data.message.trim() : '';
@@ -420,7 +423,7 @@ const isMissingField = (fieldName: string): boolean => missingFields.includes(fi
             }
             return payload;
         },
-        createConnection: (connectionId = PlatformEvents._generateCorrelationId()) => {
+        createConnection: (connectionId: string = PlatformEvents._generateCorrelationId()) => {
             const correlationId = generateCorrelationId();
             const timestamp = getSystemTimestampISO();
 
@@ -435,7 +438,7 @@ const isMissingField = (fieldName: string): boolean => missingFields.includes(fi
                 }
             };
         },
-        createDisconnection: (reason, willReconnect) => {
+        createDisconnection: (reason: string, willReconnect: boolean) => {
             const correlationId = generateCorrelationId();
             const timestamp = getSystemTimestampISO();
 
@@ -451,7 +454,7 @@ const isMissingField = (fieldName: string): boolean => missingFields.includes(fi
                 }
             };
         },
-        createError: (error, context) => {
+        createError: (error: Error, context?: unknown) => {
             const correlationId = generateCorrelationId();
             const timestamp = getSystemTimestampISO();
             const normalizedContext = normalizeContext(context);
