@@ -103,7 +103,7 @@ class YouTubeStreamDetectionService {
 
         this.logger = options.logger;
         this.errorHandler = createPlatformErrorHandler(this.logger, 'youtube-stream-detection');
-        this.timeout = options.timeout || 2000;
+        this.timeout = options.timeout ?? 2000;
         this._isShuttingDown = false;
 
         this._metrics = {
@@ -275,11 +275,11 @@ channelHandle,
             }
         );
 
-        const parserError = 'parserError' in result && result.parserError === true;
-        const detectionMethod = 'detectionMethod' in result && typeof result.detectionMethod === 'string'
+        const parserError: boolean = result.parserError === true;
+        const detectionMethod: string = typeof result.detectionMethod === 'string'
             ? result.detectionMethod
             : 'unknown';
-        const responseError = 'error' in result && typeof result.error === 'string'
+        const responseError: string = typeof result.error === 'string'
             ? result.error
             : 'Stream detection failed';
 
@@ -359,8 +359,8 @@ _isValidVideoId(videoId: unknown): videoId is string {
             videoIds,
             message,
             responseTime,
-            detectionMethod: detectionResult.detectionMethod || null,
-            hasContent: detectionResult.hasContent || false
+            detectionMethod: detectionResult.detectionMethod ?? null,
+            hasContent: detectionResult.hasContent ?? false
         };
 
         if (includeDebug) {
@@ -387,7 +387,7 @@ _isValidVideoId(videoId: unknown): videoId is string {
         const responseTime = Date.now() - startTime;
 
         let message = 'Unable to detect streams';
-        let isRetryable = retryable;
+        let isRetryable: boolean | null = retryable;
         let retryAfter: number | undefined;
 
         if (error.message.includes('timeout')) {

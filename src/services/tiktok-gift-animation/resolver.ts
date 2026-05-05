@@ -71,8 +71,8 @@ function normalizeString(value: unknown): string {
 }
 
 function uniqueNonEmpty(values: unknown[] = []): string[] {
-    const seen = new Set();
-    const result = [];
+    const seen = new Set<string>();
+    const result: string[] = [];
 
     for (const value of values) {
         const normalized = normalizeString(value);
@@ -301,10 +301,11 @@ function extractAnimationCandidates(originalData: unknown): RankedAnimationCandi
         return [];
     }
 
-    const asset = originalData.asset && typeof originalData.asset === 'object'
-        ? originalData.asset
+    const originalRecord = originalData as Record<string, unknown>;
+    const asset = originalRecord.asset && typeof originalRecord.asset === 'object'
+        ? originalRecord.asset as Record<string, unknown>
         : {};
-const candidates: AnimationCandidate[] = [];
+    const candidates: AnimationCandidate[] = [];
 
 const pushCandidate = (url: unknown, label: unknown): void => {
         const normalizedUrl = normalizeString(url);
@@ -314,27 +315,34 @@ const pushCandidate = (url: unknown, label: unknown): void => {
         candidates.push({ url: normalizedUrl, label: normalizeString(label) });
     };
 
-    const resources = Array.isArray(asset.videoResourceList) ? asset.videoResourceList : [];
+    const resources: unknown[] = Array.isArray(asset.videoResourceList) ? asset.videoResourceList : [];
     for (const resource of resources) {
         if (!resource || typeof resource !== 'object') {
             continue;
         }
 
-        const label = resource.videoTypeName || resource.format || resource.qualityType;
-        const urlList = Array.isArray(resource.videoUrl?.urlList) ? resource.videoUrl.urlList : [];
+        const resourceRecord = resource as Record<string, unknown>;
+        const label = resourceRecord.videoTypeName || resourceRecord.format || resourceRecord.qualityType;
+        const videoUrlRecord = resourceRecord.videoUrl && typeof resourceRecord.videoUrl === 'object'
+            ? resourceRecord.videoUrl as Record<string, unknown>
+            : {};
+        const urlList: unknown[] = Array.isArray(videoUrlRecord.urlList) ? videoUrlRecord.urlList : [];
         for (const url of urlList) {
             pushCandidate(url, label);
         }
-        pushCandidate(resource.mainUrl, label);
+        pushCandidate(resourceRecord.mainUrl, label);
     }
 
-    const resourceModelUrls = Array.isArray(asset.resourceModel?.urlList) ? asset.resourceModel.urlList : [];
+    const resourceModel = asset.resourceModel && typeof asset.resourceModel === 'object'
+        ? asset.resourceModel as Record<string, unknown>
+        : {};
+    const resourceModelUrls: unknown[] = Array.isArray(resourceModel.urlList) ? resourceModel.urlList : [];
     for (const url of resourceModelUrls) {
         pushCandidate(url, 'resourceModel');
     }
     pushCandidate(asset.resourceUri, 'resourceUri');
 
-    const deduped = new Map();
+    const deduped = new Map<string, AnimationCandidate>();
     for (const candidate of candidates) {
         if (!deduped.has(candidate.url)) {
             deduped.set(candidate.url, candidate);

@@ -84,7 +84,7 @@ static isVideoLive(video: ChannelVideo | null | undefined): boolean {
     }
 
 static async getLiveStreams(innertubeClient: InnertubeClientLike, channelHandle: unknown, options: GetLiveStreamOptions = {}): Promise<LiveStreamsResult> {
-        const timeout = options.timeout || 2000;
+        const timeout: number = options.timeout ?? 2000;
         const logger = options.logger;
 
         try {
@@ -118,7 +118,10 @@ static async getLiveStreams(innertubeClient: InnertubeClientLike, channelHandle:
                 throw new Error(`Channel not found for ID: ${channelId}`);
             }
 
-            const detectionMeta = {
+            const detectionMeta: {
+                detectionMethod: 'channel_videos' | 'channel_api' | 'search';
+                hasContent: boolean;
+            } = {
                 detectionMethod: 'channel_videos',
                 hasContent: false
             };
@@ -213,7 +216,9 @@ static extractVideoIds(result: { streams?: Array<{ videoId?: string }> } | null 
             return [];
         }
 
-        return result.streams.map((stream) => stream.videoId).filter((id): id is string => !!id);
+        return result.streams
+            .map((stream) => stream.videoId)
+            .filter((id): id is string => typeof id === 'string' && id.length > 0);
     }
 
 static isChannelId(channelHandle: unknown): boolean {
@@ -283,7 +288,7 @@ static async _getLiveStreamsFromChannelApi(channel: ChannelLike, timeout: number
                 isLive: true as const,
                 author: video.author?.name || null
             }))
-            .filter((stream) => !!stream.videoId);
+            .filter((stream): stream is LiveStreamRecord => typeof stream.videoId === 'string' && stream.videoId.length > 0);
     }
 
 static async _getOrResolveChannelId(
@@ -306,9 +311,11 @@ logger?: LoggerLike
 
         this._log(logger, 'debug', '[YouTube] Resolving channel handle to Channel ID');
 
+        const safeLogger: LoggerLike | undefined = logger && typeof logger.error === 'function' ? logger : undefined;
+
         const resolvedChannelId = await resolveChannelId(innertubeClient, channelHandle, {
             timeout,
-            logger: logger && typeof logger.error === 'function' ? logger : undefined,
+            logger: safeLogger,
             throwOnError: true
         });
         if (resolvedChannelId && cacheKey) {

@@ -56,6 +56,10 @@ type RawPart = {
     text?: unknown;
 };
 
+function toRawParts(parts: unknown): RawPart[] {
+    return Array.isArray(parts) ? (parts as RawPart[]) : [];
+}
+
 const EVENT_RULES: Record<string, EventRule> = {
     chat: { kind: 'chat', toggleKey: 'showMessages' },
     command: { kind: 'command', toggleKey: 'showCommands' },
@@ -77,6 +81,11 @@ function toRecord(value: unknown): MapperRecord {
 
 function normalizeString(value: unknown): string {
     return typeof value === 'string' ? value.trim() : '';
+}
+
+function toFiniteNumber(value: unknown, fallback: number): number {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
 }
 
 function avatarCacheKey(platform: unknown, userId: unknown): string {
@@ -152,7 +161,7 @@ function resolveMessageParts(type: string, platform: string, data: MapperRecord)
         }
     }
 
-    const validParts = getValidMessageParts({ message: { parts: sourceParts } }, { allowWhitespaceText: true }) as RawPart[];
+    const validParts = toRawParts(getValidMessageParts({ message: { parts: sourceParts } }, { allowWhitespaceText: true }));
     return validParts.map((part): GuiMessagePart => {
 if (part.type === 'emote') {
 const emoteId = typeof part.emoteId === 'string' ? part.emoteId.trim() : '';
@@ -246,7 +255,7 @@ return cachedAvatar;
         const platform = normalizeString(row.platform || data.platform).toLowerCase();
         const username = normalizeString(data.username);
         const textSource = resolveText(type, data);
-        const messageLimit = Number(guiConfig.messageCharacterLimit) || 0;
+        const messageLimit = toFiniteNumber(guiConfig.messageCharacterLimit, 0);
         const text = applyMessageLimit(textSource, messageLimit);
         const parts = resolveMessageParts(type, platform, data);
         const badgeImages = normalizeBadgeImages(data.badgeImages) as GuiBadgeImage[];

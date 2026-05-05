@@ -22,9 +22,9 @@ config: Record<string, PlatformConfig>;
 logger: typeof defaultLogger;
 errorHandler: ReturnType<typeof createPlatformErrorHandler>;
 
-constructor(config: Record<string, PlatformConfig>, dependencies: { logger?: typeof defaultLogger } = {}) {
+constructor(config: Record<string, PlatformConfig>, dependencies: Readonly<{ logger?: typeof defaultLogger }> = {}) {
 this.config = config;
-this.logger = dependencies.logger || defaultLogger;
+this.logger = dependencies.logger ?? defaultLogger;
 this.errorHandler = createPlatformErrorHandler(this.logger, 'self-message-detection');
 }
 
@@ -85,8 +85,8 @@ return messageData.username.toLowerCase() === platformConfig.username.toLowerCas
         }
 
         if (messageData.badges) {
-            const badges = Array.isArray(messageData.badges) ? messageData.badges : [];
-            return badges.some((badge): boolean =>
+            const badges: unknown[] = Array.isArray(messageData.badges) ? messageData.badges : [];
+            return badges.some((badge: unknown): boolean =>
                 typeof badge === 'string'
                 && (badge.toLowerCase().includes('owner') || badge.toLowerCase().includes('broadcaster'))
             );
@@ -111,7 +111,7 @@ return messageData.username.toLowerCase() === platformConfig.username.toLowerCas
 return false;
 }
 
-_handleDetectionError(message: string, error: unknown = null): void {
+_handleDetectionError(message: string, error: unknown | null = null): void {
 if (this.errorHandler && error instanceof Error) {
 this.errorHandler.handleEventProcessingError(error, 'self-message-detection', null, message);
 } else {
