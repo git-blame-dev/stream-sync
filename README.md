@@ -1,5 +1,7 @@
 # StreamSync
 
+[![CI](https://github.com/git-blame-dev/stream-sync/actions/workflows/ci.yml/badge.svg)](https://github.com/git-blame-dev/stream-sync/actions/workflows/ci.yml)
+
 StreamSync is a multi-platform live chat and event pipeline for streamers. It normalizes Twitch, YouTube, and TikTok events and drives user-facing notifications, TTS, and OBS overlays with a consistent, test-driven architecture.
 
 ## Why StreamSync
@@ -30,6 +32,8 @@ npm start
 ## Development Commands
 ```bash
 bun lint
+bunx tsc -p tsconfig.all.json --noEmit
+bun test --coverage --coverage-reporter=text --coverage-dir=/tmp/bun-coverage tests
 bun test
 npm run start:debug
 ```
