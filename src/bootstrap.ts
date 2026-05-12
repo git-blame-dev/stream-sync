@@ -62,9 +62,13 @@ if (!bootstrapProcess.__streamSyncUnhandledRejectionHandlerInstalled) {
         if (isDebugModeEnabled()) {
             console.log('[DEBUG] [Bootstrap] Main application imported, starting...'); // BOOTSTRAP: Logger not fully initialized
         }
-        console.log('[DEBUG] [Bootstrap] About to call main()...');
+        if (isDebugModeEnabled()) {
+            console.log('[DEBUG] [Bootstrap] About to call main()...');
+        }
         await main();
-        console.log('[DEBUG] [Bootstrap] main() completed successfully');
+        if (isDebugModeEnabled()) {
+            console.log('[DEBUG] [Bootstrap] main() completed successfully');
+        }
     } catch (error) {
         // Use console.error for fatal bootstrap errors since logging might not be available
         console.error('[FATAL] [Bootstrap] Main function failed:', error); // BOOTSTRAP: Critical error handling

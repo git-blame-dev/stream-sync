@@ -191,6 +191,19 @@ describe('TypeScript toolchain migration gates behavior', () => {
         expect(existsSync(join(repoRoot, 'src/main.js'))).toBe(false);
     });
 
+    it('keeps bootstrap debug progress output gated by debug mode', () => {
+        const content = readFileSync(join(repoRoot, 'src/bootstrap.ts'), 'utf8');
+        const contentLines = content.split('\n');
+        const debugConsoleLines = contentLines
+            .map((line, index) => ({ line: line.trim(), index }))
+            .filter(({ line }) => line.startsWith("console.log('[DEBUG] [Bootstrap]"));
+
+        for (const { index } of debugConsoleLines) {
+            const previousLine = contentLines[index - 1]?.trim();
+            expect(previousLine).toBe('if (isDebugModeEnabled()) {');
+        }
+    });
+
     it('removes first safe ts-proxy wrapper batch from source lane', () => {
         const removedWrapperPaths = [
             'src/core/EventBus.js',
