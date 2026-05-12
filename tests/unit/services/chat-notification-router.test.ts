@@ -2,6 +2,7 @@ import { describe, it, beforeEach, expect } from "bun:test";
 import { createMockFn } from "../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../helpers/mock-factories";
 import { createConfigFixture } from "../../helpers/config-fixture";
+import { createRecordingLogger } from "../../helpers/recording-logger";
 import { ChatNotificationRouter } from "../../../src/services/ChatNotificationRouter.ts";
 import * as testClock from "../../helpers/test-clock";
 
@@ -106,6 +107,22 @@ describe("ChatNotificationRouter", () => {
     const [queuedItem] = runtime.displayQueue.addItem.mock.calls[0];
     expect(queuedItem?.type).toBe("chat");
     expect(queuedItem?.platform).toBe("twitch");
+  });
+
+  it("logs routine chat summaries without removing display message content", async () => {
+    mockLogger = createRecordingLogger();
+    const { router, runtime } = createRouter();
+
+    await router.handleChatMessage("twitch", {
+      ...baseMessage,
+      message: "test-private-router-message",
+    });
+
+    const [queuedItem] = runtime.displayQueue.addItem.mock.calls[0];
+    const serializedLogs = JSON.stringify(mockLogger.entries);
+    expect(queuedItem?.data?.message?.text).toBe("test-private-router-message");
+    expect(serializedLogs).toContain("messageLength");
+    expect(serializedLogs).not.toContain("test-private-router-message");
   });
 
   it("preserves timestamp on queued chat rows", async () => {

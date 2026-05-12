@@ -1,5 +1,5 @@
 import { DEFAULT_LOGGING_CONFIG } from './config-builders';
-import { safeObjectStringify } from '../utils/logger-utils';
+import { safeObjectStringify, sanitizeLogText } from '../utils/logger-utils';
 import { FileLogger } from '../utils/file-logger';
 import { formatTimestampCompact } from '../utils/text-processing';
 
@@ -16,6 +16,9 @@ let globalLoggingConfig: LoggingConfig | null = null;
 
 function initializeLoggingConfig(appConfig: { logging?: LoggingConfig }) {
     globalLoggingConfig = appConfig.logging || null;
+    if (globalLogger) {
+        globalLogger.reconfigure(getLoggingConfig());
+    }
     return globalLoggingConfig;
 }
 
@@ -69,11 +72,19 @@ class UnifiedLogger {
             file: new FileOutputter(config.file)
         };
     }
+
+    reconfigure(config: LoggingConfig): void {
+        this.config = config;
+        this.outputs = {
+            console: new ConsoleOutputter(),
+            file: new FileOutputter(config.file)
+        };
+    }
     
     log(level: LogLevel, message: unknown, source = 'system', data: LogData = null) {
         const timestamp = formatTimestampCompact(new Date());
-        const safeMessage = typeof message === 'string' ? message : safeObjectStringify(message);
-        const safeSource = typeof source === 'string' ? source : safeObjectStringify(source);
+        const safeMessage = typeof message === 'string' ? sanitizeLogText(message) : safeObjectStringify(message);
+        const safeSource = typeof source === 'string' ? sanitizeLogText(source) : safeObjectStringify(source);
         
         const logEntry = {
             timestamp,

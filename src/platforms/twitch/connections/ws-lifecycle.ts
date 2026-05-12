@@ -51,6 +51,17 @@ type WsLifecycleOptions = {
   setImmediateFn?: (handler: () => void | Promise<void>) => void;
 };
 
+function stripUrlQueryAndFragment(value: string): string {
+    try {
+        const parsed = new URL(value);
+        parsed.search = '';
+        parsed.hash = '';
+        return parsed.toString();
+    } catch {
+        return value;
+    }
+}
+
 function createTwitchEventSubWsLifecycle(options: WsLifecycleOptions = {}) {
     const {
         WebSocketCtor,
@@ -150,7 +161,10 @@ function createTwitchEventSubWsLifecycle(options: WsLifecycleOptions = {}) {
                             state.sessionId = sessionId;
                             state._isConnected = true;
                             state.reconnectUrl = null;
-                            state.logger?.info?.(`EventSub session established: ${state.sessionId}`, 'twitch');
+                            state.logger?.info?.('EventSub session established', 'twitch', {
+                                hasSessionId: true,
+                                keepaliveTimeout: message?.payload?.session?.keepalive_timeout_seconds ?? null
+                            });
 
                             emit('eventSubConnected', {
                                 sessionId: state.sessionId
@@ -229,7 +243,7 @@ function createTwitchEventSubWsLifecycle(options: WsLifecycleOptions = {}) {
                             }
                         }
                         logError('Error parsing WebSocket message', error, 'ws-parse', {
-                            rawData: data.toString()
+                            rawDataLength: data.toString().length
                         });
                         reject(error);
                     }
@@ -358,7 +372,8 @@ function createTwitchEventSubWsLifecycle(options: WsLifecycleOptions = {}) {
   const handleReconnectRequest = (state: LifecycleState, payload: Record<string, unknown> | null | undefined): void => {
         if (payload?.session?.reconnect_url) {
             state.logger?.info?.('EventSub requesting reconnection to new URL', 'twitch', {
-                reconnectUrl: payload.session.reconnect_url
+                reconnectUrl: stripUrlQueryAndFragment(String(payload.session.reconnect_url)),
+                hasReconnectUrl: true
             });
             state.reconnectUrl = payload.session.reconnect_url;
             state._scheduleReconnect?.();

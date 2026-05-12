@@ -1,6 +1,7 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { createMockFn } from "../../../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../../../helpers/mock-factories";
+import { createRecordingLogger } from "../../../../helpers/recording-logger";
 import {
   useFakeTimers,
   useRealTimers,
@@ -510,6 +511,50 @@ describe("Twitch EventSub WS lifecycle", () => {
       "Error parsing WebSocket message",
     );
     expect(state.logEventSubErrorCalls[0].type).toBe("ws-parse");
+    expect(JSON.stringify(state.logEventSubErrorCalls[0].data)).not.toContain("not valid json");
+  });
+
+  test("connectWebSocket logs session establishment without the full session id", async () => {
+    const lifecycle = buildLifecycle();
+    const logger = createRecordingLogger();
+    const state = createState({ logger });
+    const connectPromise = lifecycle.connectWebSocket(state);
+
+    state.ws.readyState = 1;
+    state.ws.emit("open");
+    state.ws.emit(
+      "message",
+      Buffer.from(
+        JSON.stringify({
+          metadata: { message_type: "session_welcome" },
+          payload: { session: { id: "test-session-sensitive-123", keepalive_timeout_seconds: 30 } },
+        }),
+      ),
+    );
+
+    await connectPromise;
+    const serializedLogs = JSON.stringify(logger.entries);
+    expect(state.sessionId).toBe("test-session-sensitive-123");
+    expect(serializedLogs).toContain("hasSessionId");
+    expect(serializedLogs).not.toContain("test-session-sensitive-123");
+  });
+
+  test("handleReconnectRequest logs reconnect URLs without query strings", () => {
+    const lifecycle = buildLifecycle();
+    const logger = createRecordingLogger();
+    const state = createState({ logger });
+
+    lifecycle.handleReconnectRequest(state, {
+      session: {
+        reconnect_url: "wss://eventsub.wss.twitch.tv/ws?token=test-reconnect-token#secret-fragment",
+      },
+    });
+
+    const serializedLogs = JSON.stringify(logger.entries);
+    expect(state.reconnectUrl).toBe("wss://eventsub.wss.twitch.tv/ws?token=test-reconnect-token#secret-fragment");
+    expect(serializedLogs).toContain("wss://eventsub.wss.twitch.tv/ws");
+    expect(serializedLogs).not.toContain("test-reconnect-token");
+    expect(serializedLogs).not.toContain("secret-fragment");
   });
 
   test("connectWebSocket rejects on WebSocket error before connection resolved", async () => {

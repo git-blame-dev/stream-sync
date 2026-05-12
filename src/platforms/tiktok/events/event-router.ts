@@ -395,16 +395,16 @@ function setupTikTokEventListeners(platform: TikTokPlatformRouterContract) {
             if (!payloadRecord) {
                 platform.logger.warn('Received invalid chat data:', 'tiktok', {
                     dataType: typeof payload,
-                    data: payload
+                    hasPayload: payload !== null && payload !== undefined
                 });
                 return;
             }
 
             if (typeof data.comment !== 'string') {
                 platform.logger.warn('Received chat data with invalid comment:', 'tiktok', {
-                    comment: data.comment,
                     commentType: typeof data.comment,
-                    data
+                    hasComment: data.comment !== null && data.comment !== undefined,
+                    eventKeys: Object.keys(data).sort()
                 });
             }
 
@@ -414,9 +414,10 @@ function setupTikTokEventListeners(platform: TikTokPlatformRouterContract) {
                 : null;
 
             if (platform.connectionTime > 0 && eventTimestampMs !== null && eventTimestampMs < platform.connectionTime) {
-                platform.logger.debug(`Filtering historical message (pre-connection): "${data.comment}"`, 'tiktok', {
+                platform.logger.debug('Filtering historical message (pre-connection)', 'tiktok', {
                     eventTimestamp: eventTimestampMs,
-                    connectionRecordedAt: platform.connectionTime
+                    connectionRecordedAt: platform.connectionTime,
+                    messageLength: typeof data.comment === 'string' ? data.comment.length : 0
                 });
                 return;
             }
@@ -455,7 +456,8 @@ function setupTikTokEventListeners(platform: TikTokPlatformRouterContract) {
             if (!validation.isValid) {
                 platform.logger.warn('Message normalization validation failed', 'tiktok', {
                     issues: validation.errors,
-                    originalData: data
+                    eventKeys: Object.keys(data).sort(),
+                    hasComment: typeof data.comment === 'string' && data.comment.length > 0
                 });
             }
 
@@ -483,9 +485,9 @@ function setupTikTokEventListeners(platform: TikTokPlatformRouterContract) {
             const isMessageMarkedMissing = missingFields.includes('message');
             if ((!messageText || messageText.trim() === '') && !hasCanonicalMessageParts(normalizedData) && !isMessageMarkedMissing) {
                 platform.logger.debug('Skipping empty message after normalization', 'tiktok', {
-                    originalComment: data.comment,
-                    normalizedMessage: messageText,
-                    messageParts: Array.isArray(normalizedMessageRecord?.parts) ? normalizedMessageRecord.parts : []
+                    originalMessageLength: typeof data.comment === 'string' ? data.comment.length : 0,
+                    normalizedMessageLength: messageText.length,
+                    messagePartCount: Array.isArray(normalizedMessageRecord?.parts) ? normalizedMessageRecord.parts.length : 0
                 });
                 return;
             }
@@ -594,8 +596,9 @@ function setupTikTokEventListeners(platform: TikTokPlatformRouterContract) {
         const viewerCount = parseViewerCount(data.viewerCount);
         if (viewerCount === null) {
             platform.logger.warn('[TikTok Viewer Count] Invalid viewer count in room user payload', 'tiktok', {
-                data,
-                viewerCount: data.viewerCount
+                viewerCountType: typeof data.viewerCount,
+                hasViewerCount: data.viewerCount !== null && data.viewerCount !== undefined,
+                eventKeys: Object.keys(data).sort()
             });
             return;
         }
@@ -606,7 +609,10 @@ function setupTikTokEventListeners(platform: TikTokPlatformRouterContract) {
             ? platform._getTimestamp(data)
             : null;
         if (!timestamp) {
-            platform.logger.warn('[TikTok Viewer Count] Missing timestamp in room user payload', 'tiktok', { data });
+            platform.logger.warn('[TikTok Viewer Count] Missing timestamp in room user payload', 'tiktok', {
+                eventKeys: Object.keys(data).sort(),
+                hasViewerCount: data.viewerCount !== null && data.viewerCount !== undefined
+            });
             return;
         }
 

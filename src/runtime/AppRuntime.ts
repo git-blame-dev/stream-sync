@@ -366,9 +366,18 @@ class AppRuntime {
             const messageText = typeof normalizedData?.message === 'string'
                 ? normalizedData.message
                 : (typeof normalizedData?.message?.text === 'string' ? normalizedData.message.text : '');
-            this.logger.debug(`Received message from ${platform}: ${normalizedData?.username} - ${messageText}`, 'chat-handler');
+            this.logger.debug('Received chat message', 'chat-handler', {
+                platform,
+                username: normalizedData?.username,
+                messageLength: messageText.length,
+                hasMessageText: messageText.length > 0
+            });
             if (platform === 'tiktok') {
-                this.logger.debug(`[TikTok Debug] Message received in main handler: ${normalizedData?.username}: ${messageText}`, 'system');
+                this.logger.debug('[TikTok Debug] Message received in main handler', 'system', {
+                    username: normalizedData?.username,
+                    messageLength: messageText.length,
+                    hasMessageText: messageText.length > 0
+                });
             }
 
             if (this.chatNotificationRouter) {
@@ -380,7 +389,7 @@ class AppRuntime {
             this._handleAppRuntimeError(
                 `Error processing chat message from ${platform}: ${getErrorMessage(error)}`,
                 error,
-                { platform, normalizedData },
+                { platform, username: normalizedData?.username, hasNormalizedData: !!normalizedData },
                 { eventType: 'chat-message', logContext: 'system' }
             );
         }

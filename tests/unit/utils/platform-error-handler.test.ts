@@ -1,5 +1,6 @@
 import { describe, test, expect, beforeEach } from "bun:test";
 import { noOpLogger } from "../../helpers/mock-factories";
+import { createRecordingLogger } from "../../helpers/recording-logger";
 import {
   PlatformErrorHandler,
   createPlatformErrorHandler,
@@ -141,5 +142,34 @@ describe("Platform Error Handler - User Experience Behavior", () => {
         expect(context).not.toMatch(/\{.*\}/);
       });
     });
+  });
+
+  test("records event errors without promoting raw event data or allowing metadata overwrite", () => {
+    const logger = createRecordingLogger();
+    const handler = new PlatformErrorHandler(logger, "twitch");
+
+    handler.handleEventProcessingError(
+      new Error("test event failure"),
+      "platform:chat-message",
+      {
+        error: "malicious overwrite",
+        eventType: "malicious-type",
+        message: "test-private-chat-text",
+        access_token: "test-access-token",
+      },
+      "Event processing failed",
+      "twitch",
+    );
+
+    expect(logger.entries).toHaveLength(1);
+    const payload = logger.entries[0].payload as Record<string, unknown>;
+    const serializedPayload = JSON.stringify(payload);
+    expect(payload.error).toBe("test event failure");
+    expect(payload.eventType).toBe("platform:chat-message");
+    expect(serializedPayload).toContain("eventDataSummary");
+    expect(serializedPayload).not.toContain("malicious overwrite");
+    expect(serializedPayload).not.toContain("malicious-type");
+    expect(serializedPayload).not.toContain("test-private-chat-text");
+    expect(serializedPayload).not.toContain("test-access-token");
   });
 });

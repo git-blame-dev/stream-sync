@@ -222,6 +222,16 @@ function getErrorMessage(error: unknown): string {
     return String(error);
 }
 
+function summarizeTwitchConfig(twitchConfig: MainConfig['twitch']): Record<string, unknown> {
+    return {
+        enabled: twitchConfig.enabled,
+        hasClientId: typeof twitchConfig.clientId === 'string' && twitchConfig.clientId.length > 0,
+        hasUsername: typeof twitchConfig.username === 'string' && twitchConfig.username.length > 0,
+        hasTokenStorePath: typeof twitchConfig.tokenStorePath === 'string' && twitchConfig.tokenStorePath.length > 0,
+        dataLoggingEnabled: twitchConfig.dataLoggingEnabled === true
+    };
+}
+
 const textProcessing = createTextProcessingManager({ logger });
 const coreConstants = {
     PRIORITY_LEVELS,
@@ -360,7 +370,7 @@ async function main(overrides: MainOverrides = {}) {
         logger.info('Debug mode enabled via command line argument', 'system');
     }
     if (config.general.debugEnabled) {
-        logger.debug('Raw twitch config:', 'system', config.twitch);
+        logger.debug('Twitch config loaded', 'system', summarizeTwitchConfig(config.twitch));
     }
     const ensureSecretsFn = runtimeOverrides.ensureSecrets || ensureSecrets;
     const TwitchAuthCtor = runtimeOverrides.TwitchAuth || TwitchAuth;
@@ -377,7 +387,7 @@ async function main(overrides: MainOverrides = {}) {
     const createGracefulExitServiceFn = runtimeOverrides.createGracefulExitService || createGracefulExitService;
     const createProductionDependenciesFn = runtimeOverrides.createProductionDependencies || createProductionDependencies;
     try {
-        logger.console('Starting main application...', 'main');
+        logger.info('Starting main application...', 'main');
         logger.info('Main application started, beginning initialization...', 'Main');
         logger.debug('About to set up display queue configuration...', 'Main');
         logger.info('Setting up display queue configuration...', 'Main');

@@ -35,13 +35,19 @@ class ChatNotificationRouter {
         const safeNormalizedData = normalizedData || {};
         try {
             const messageText = this.getMessageText(safeNormalizedData);
-            this.logger.debug(`Chat message via router from ${platform}: ${safeNormalizedData.username} - ${messageText}`, 'chat-router');
+            this.logger.debug('Chat message via router', 'chat-router', {
+                platform,
+                username: safeNormalizedData.username,
+                messageLength: messageText.length,
+                hasMessageText: messageText.length > 0
+            });
 
             const validation = validateNormalizedMessage(safeNormalizedData) || { isValid: true };
             if (!validation.isValid) {
                 this.logger.warn(`Invalid normalized message from ${platform}`, 'chat-router', {
                     issues: validation.errors,
-                    data: safeNormalizedData
+                    username: safeNormalizedData.username,
+                    hasMessage: this.hasMessageContent(safeNormalizedData)
                 });
             }
 
@@ -75,9 +81,18 @@ class ChatNotificationRouter {
                 return;
             }
 
-            const logSafeData = { ...safeNormalizedData, message: sanitizedMessage.message };
             const level = this.runtime.config.general.logChatMessages ? 'console' : 'debug';
-            this.logger[level](this._formatChatMessage(platform, logSafeData), 'chat-router');
+            if (level === 'console') {
+                const logSafeData = { ...safeNormalizedData, message: sanitizedMessage.message };
+                this.logger.console(this._formatChatMessage(platform, logSafeData), 'chat-router');
+            } else {
+                this.logger.debug('Chat message accepted for routing', 'chat-router', {
+                    platform,
+                    username: safeNormalizedData.username,
+                    messageLength: sanitizedMessage.message.length,
+                    hasRenderableParts
+                });
+            }
 
             const greetingIdentity = platform === 'tiktok'
                 ? safeNormalizedData.userId

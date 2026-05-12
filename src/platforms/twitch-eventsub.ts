@@ -334,7 +334,7 @@ class TwitchEventSub extends EventEmitter {
         switch (metadata.message_type) {
             case 'session_welcome':
                 this.logger.info('EventSub welcome message received!', 'twitch', {
-                    sessionId: payload.session.id,
+                    hasSessionId: typeof payload.session.id === 'string' && payload.session.id.length > 0,
                     keepaliveTimeout: payload.session.keepalive_timeout_seconds,
                     status: payload.session.status,
                     connectedAt: payload.session.connected_at
@@ -354,7 +354,9 @@ class TwitchEventSub extends EventEmitter {
                 break;
 
             case 'session_reconnect':
-                this.logger.warn('EventSub reconnect requested', 'twitch', payload);
+                this.logger.warn('EventSub reconnect requested', 'twitch', {
+                    hasReconnectUrl: typeof payload?.session?.reconnect_url === 'string' && payload.session.reconnect_url.length > 0
+                });
                 this._handleReconnectRequest(payload);
                 break;
 
@@ -368,7 +370,11 @@ class TwitchEventSub extends EventEmitter {
                 break;
 
             default:
-                this.logger.debug(`Unknown EventSub message type: ${metadata.message_type}`, 'twitch', message);
+                this.logger.debug('Unknown EventSub message type', 'twitch', {
+                    messageType: metadata.message_type,
+                    metadataKeys: metadata && typeof metadata === 'object' ? Object.keys(metadata).sort() : [],
+                    hasPayload: !!payload
+                });
         }
     }
 

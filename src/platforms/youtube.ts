@@ -69,6 +69,16 @@ function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function summarizeYouTubeConfig(config: UnknownMap): Record<string, unknown> {
+    return {
+        enabled: config.enabled === true,
+        hasUsername: typeof config.username === 'string' && config.username.length > 0,
+        maxStreams: typeof config.maxStreams === 'number' ? config.maxStreams : null,
+        chatMode: typeof config.chatMode === 'string' ? config.chatMode : null,
+        dataLoggingEnabled: config.dataLoggingEnabled === true
+    };
+}
+
 class YouTubePlatform extends EventEmitter {
   constructor(config: UnknownMap = {}, dependencyInput: unknown = {}) {
         super();
@@ -164,7 +174,7 @@ class YouTubePlatform extends EventEmitter {
 
         // Multi-stream support - track multiple live streams and their connections
 
-        this.logger.debug('Platform initialized with configuration', 'youtube', this.config);
+        this.logger.debug('YouTube platform initialized', 'youtube', summarizeYouTubeConfig(this.config));
 
         // Validate critical properties are defined
         if (!this.handleChatMessage) {
@@ -683,7 +693,8 @@ class YouTubePlatform extends EventEmitter {
         if (!messageText && !hasMessageParts && !isMessageMarkedMissing) {
             this.logger.debug('Skipping empty message', 'youtube', {
                 author: this._resolveChatItemAuthorNameForLog(chatItem),
-                extractedMessage: messageText
+                hasMessageText: messageText.length > 0,
+                messageLength: messageText.length
             });
             return;
         }
@@ -691,7 +702,12 @@ class YouTubePlatform extends EventEmitter {
         // Add video ID context
         normalizedData.videoId = chatItem.videoId;
         
-        this.logger.debug(`Processing multi-stream chat from ${chatItem.videoId || 'unknown'}: ${normalizedData.username} - ${messageText}`, 'youtube');
+        this.logger.debug('Processing multi-stream chat', 'youtube', {
+            videoId: chatItem.videoId || 'unknown',
+            username: normalizedData.username,
+            messageLength: messageText.length,
+            hasMessageParts
+        });
 
         // Emit standardized chat message event
         try {

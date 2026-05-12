@@ -387,7 +387,8 @@ class TwitchPlatform extends EventEmitter {
             if (!validation.isValid) {
                 this.logger.warn('Message normalization validation failed', 'twitch', {
                     issues: validation.errors,
-                    originalEvent: event
+                    eventKeys: event && typeof event === 'object' ? Object.keys(event).sort() : [],
+                    hasMessage: typeof normalizedData.message === 'string' && normalizedData.message.length > 0
                 });
                 // Continue processing with potentially incomplete data
             }
@@ -856,7 +857,11 @@ class TwitchPlatform extends EventEmitter {
             const allowAnonymous = data?.isAnonymous === true &&
                 (eventType === 'gift' || eventType === 'giftpaypiggy');
             if (options.validateUser && !data.username && !allowAnonymous) {
-                this.logger.warn(`Incomplete ${eventType} data received`, 'twitch', data);
+                this.logger.warn(`Incomplete ${eventType} data received`, 'twitch', {
+                    eventType,
+                    hasUsername: typeof data.username === 'string' && data.username.length > 0,
+                    eventKeys: Object.keys(data).sort()
+                });
                 await emitMonetizationError(payloadTimestamp);
                 return;
             }
@@ -1033,7 +1038,10 @@ class TwitchPlatform extends EventEmitter {
 
         try {
             await this.eventSub.sendMessage(message);
-            this.logger.debug('Message sent successfully via EventSub', 'twitch', { message });
+            this.logger.debug('Message sent successfully via EventSub', 'twitch', {
+                messageLength: message.length,
+                hasMessage: message.length > 0
+            });
         } catch (error) {
             this.errorHandler.handleMessageSendError(error, 'EventSub sendMessage');
             const reason = error?.message || 'message delivery failed';

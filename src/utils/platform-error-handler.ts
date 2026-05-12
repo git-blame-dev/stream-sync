@@ -1,3 +1,5 @@
+import { sanitizeLogText } from './logger-utils';
+
 type LogMethod = (message: string, context?: string, payload?: unknown) => void;
 
 type LoggerLike = {
@@ -15,10 +17,24 @@ function hasErrorLogger(logger: unknown): logger is LoggerLike {
 
 function resolveErrorMessage(error: unknown): string {
     if (error instanceof Error) {
-        return error.message;
+        return sanitizeLogText(error.message);
     }
 
-    return String(error);
+    return sanitizeLogText(String(error));
+}
+
+function summarizeEventData(eventData: Record<string, unknown> | null): Record<string, unknown> | null {
+    if (!eventData) {
+        return null;
+    }
+    const keys = Object.keys(eventData).sort();
+    return {
+        fieldCount: keys.length,
+        keys,
+        hasMessage: keys.includes('message'),
+        hasRawData: keys.includes('rawData'),
+        hasPayload: keys.includes('payload')
+    };
 }
 
 class PlatformErrorHandler {
@@ -57,11 +73,8 @@ class PlatformErrorHandler {
         const metadata: Record<string, unknown> = {
             error: resolveErrorMessage(error),
             eventType,
-            eventData: eventData || null
+            eventDataSummary: summarizeEventData(eventData)
         };
-        if (eventData && typeof eventData === 'object') {
-            Object.assign(metadata, eventData);
-        }
         this.logger.error(logMessage, contextName, metadata);
     }
 

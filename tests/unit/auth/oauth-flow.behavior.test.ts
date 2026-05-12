@@ -7,6 +7,7 @@ import path from "path";
 import selfsigned from "selfsigned";
 import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../helpers/mock-factories";
+import { createRecordingLogger } from "../../helpers/recording-logger";
 import {
   initializeStaticSecrets,
   secrets,
@@ -444,5 +445,51 @@ it("exposes oauth-flow helper functions", () => {
     await expect(
       runOAuthFlow({ clientId: "test-client-id", logger: noOpLogger }),
     ).rejects.toThrow("tokenStorePath");
+  });
+
+  it("exchangeCodeForTokens logs invalid token responses without token values", async () => {
+    const attrs = [{ name: "commonName", value: "localhost" }];
+    const pems = selfsigned.generate(attrs, {
+      days: 1,
+      keySize: 2048,
+      algorithm: "sha256",
+    });
+    const server = https.createServer(
+      { key: pems.private, cert: pems.cert },
+      (_req, res) => {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ access_token: "test-access-token", error: "invalid_grant" }));
+      },
+    );
+
+    await new Promise((resolve) => server.listen(0, resolve));
+    const port = server.address().port;
+    const originalUrl = TWITCH.OAUTH.TOKEN;
+    TWITCH.OAUTH.TOKEN = `https://localhost:${port}/oauth2/token`;
+    const localHttpsAgent = new https.Agent({ rejectUnauthorized: false });
+    const httpsRequest = (options, callback) =>
+      https.request({ ...options, agent: localHttpsAgent }, callback);
+    const logger = createRecordingLogger();
+
+    try {
+      await expect(
+        exchangeCodeForTokens("test-code", {
+          clientId: "test-client-id",
+          clientSecret: "test-client-secret",
+          redirectUri: "https://example.test/callback",
+          logger,
+          httpsRequest,
+        }),
+      ).rejects.toThrow("Token exchange failed");
+
+      const serializedLogs = JSON.stringify(logger.entries);
+      expect(serializedLogs).toContain("Invalid token response");
+      expect(serializedLogs).toContain("hasAccessToken");
+      expect(serializedLogs).not.toContain("test-access-token");
+      expect(serializedLogs).not.toContain("test-client-secret");
+    } finally {
+      TWITCH.OAUTH.TOKEN = originalUrl;
+      server.close();
+    }
   });
 });

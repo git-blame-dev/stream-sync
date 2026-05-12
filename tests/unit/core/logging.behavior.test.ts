@@ -72,9 +72,6 @@ describe('core/logging behavior', () => {
             logging.initializeLoggingConfig({ logging: loggingConfig });
 
             const logger = logging.getUnifiedLogger();
-            logger.config = loggingConfig;
-            logger.outputs.console = new logger.outputs.console.constructor();
-            logger.outputs.file = new logger.outputs.file.constructor(loggingConfig.file);
             logger.info('test-info', 'test-source');
             logger.error('test-error', 'test-source');
 
@@ -89,6 +86,60 @@ describe('core/logging behavior', () => {
             stdoutCapture.restore();
             stderrCapture.restore();
             fs.rmSync(tempDir, { recursive: true, force: true });
+        }
+    });
+
+    it('reconfigures an existing logger instance when logging config changes', () => {
+        const stdoutCapture = captureStdout();
+
+        try {
+            const logger = logging.getUnifiedLogger();
+            logging.initializeLoggingConfig({ logging: { console: { enabled: false }, file: { enabled: false } } });
+            logger.info('test-hidden-before-reconfigure', 'test-source');
+
+            logging.initializeLoggingConfig({ logging: { console: { enabled: true, level: 'info' }, file: { enabled: false } } });
+            logger.info('test-visible-after-reconfigure', 'test-source');
+
+            const stdout = stdoutCapture.output.join('');
+            expect(stdout).not.toContain('test-hidden-before-reconfigure');
+            expect(stdout).toContain('test-visible-after-reconfigure');
+        } finally {
+            stdoutCapture.restore();
+        }
+    });
+
+    it('redacts sensitive metadata and strips URL query strings at the logging boundary', () => {
+        const stdoutCapture = captureStdout();
+
+        try {
+            logging.initializeLoggingConfig({ logging: { console: { enabled: true, level: 'debug' }, file: { enabled: false } } });
+            logging.setDebugMode(true);
+            const logger = logging.getUnifiedLogger();
+            const circular: Record<string, unknown> = { access_token: 'test-access-token' };
+            circular.self = circular;
+
+            logger.debug('test-sensitive-payload', 'test-source', {
+                access_token: 'test-access-token',
+                refreshToken: 'test-refresh-token',
+                authorization: 'Bearer test-token',
+                reconnect_url: 'wss://eventsub.wss.twitch.tv/ws?token=test-reconnect-token#fragment',
+                error: new Error('test-error-with-stack'),
+                circular
+            });
+
+            const stdout = stdoutCapture.output.join('');
+            expect(stdout).toContain('test-sensitive-payload');
+            expect(stdout).toContain('[REDACTED]');
+            expect(stdout).toContain('wss://eventsub.wss.twitch.tv/ws');
+            expect(stdout).not.toContain('test-access-token');
+            expect(stdout).not.toContain('test-refresh-token');
+            expect(stdout).not.toContain('Bearer test-token');
+            expect(stdout).not.toContain('test-reconnect-token');
+            expect(stdout).not.toContain('fragment');
+            expect(stdout).not.toContain('"stack"');
+        } finally {
+            logging.setDebugMode(false);
+            stdoutCapture.restore();
         }
     });
 });

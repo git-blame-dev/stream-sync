@@ -384,10 +384,11 @@ function createYouTubeConnectionFactory(options: YouTubeConnectionFactoryOptions
                     videoId
                 };
 
-                platform.logger.debug(
-                    `Direct YouTube.js message for ${videoId}: ${authorName} - ${messageText}`,
-                    'youtube'
-                );
+                platform.logger.debug('Direct YouTube.js message received', 'youtube', {
+                    videoId,
+                    authorName,
+                    messageLength: messageText.length
+                });
                 platform.handleChatMessage(normalizedChatItem);
                 return;
             }
@@ -433,10 +434,11 @@ function createYouTubeConnectionFactory(options: YouTubeConnectionFactoryOptions
                     ? itemMessage.text
                     : 'No text';
 
-                platform.logger.debug(
-                    `Single chat-update event received for ${videoId}: ${authorName || getFallbackUsername()} - ${messageText}`,
-                    'youtube'
-                );
+                platform.logger.debug('Single chat-update event received', 'youtube', {
+                    videoId,
+                    authorName: authorName || getFallbackUsername(),
+                    messageLength: messageText.length
+                });
 
                 platform.handleChatMessage(enhancedMessage);
             }

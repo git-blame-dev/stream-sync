@@ -83,6 +83,17 @@ const safeCloseServer = (server: { close?: () => void } | null | undefined) => {
     server.close();
 };
 
+function summarizeInvalidTokenResponse(response: Record<string, unknown>): Record<string, unknown> {
+    return {
+        hasAccessToken: typeof response.access_token === 'string' && response.access_token.length > 0,
+        hasRefreshToken: typeof response.refresh_token === 'string' && response.refresh_token.length > 0,
+        hasExpiresIn: response.expires_in !== undefined,
+        error: typeof response.error === 'string' ? response.error : null,
+        errorDescriptionPresent: typeof response.error_description === 'string' && response.error_description.length > 0,
+        keys: Object.keys(response).sort()
+    };
+}
+
 function generateSelfSignedCert() {
     if (cachedCerts) {
         return cachedCerts;
@@ -349,7 +360,7 @@ async function exchangeCodeForTokens(
                         return;
                     }
 
-                    handler.logOperationalError('Invalid token response', 'oauth-flow', response);
+                    handler.logOperationalError('Invalid token response', 'oauth-flow', summarizeInvalidTokenResponse(response));
                     reject(new Error(`Token exchange failed: ${response.error || 'Unknown error'}`));
                 } catch (error) {
                     handler.handleEventProcessingError(error, 'oauth-flow', null, 'Failed to parse token response');

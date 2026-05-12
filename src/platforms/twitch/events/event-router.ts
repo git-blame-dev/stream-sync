@@ -303,7 +303,11 @@ const resolveBitsGiftType = (cheermoteInfo: { isMixed?: boolean } = {}): string 
         event: Record<string, unknown> | null | undefined,
         metadata: Record<string, unknown> | null | undefined
 ) => {
-        safeLogger.debug(`EventSub notification received: ${subscriptionType}`, 'twitch', event);
+        safeLogger.debug('EventSub notification received', 'twitch', {
+            subscriptionType,
+            eventKeys: event && typeof event === 'object' ? Object.keys(event).sort() : [],
+            hasEvent: !!event
+        });
         const normalizedEvent = applyNotificationMetadataFallback(event, metadata, subscriptionType);
 
         switch (subscriptionType) {
@@ -335,7 +339,11 @@ const resolveBitsGiftType = (cheermoteInfo: { isMixed?: boolean } = {}): string 
                 handleStreamOfflineEvent(normalizedEvent, event);
                 break;
             default:
-                safeLogger.debug(`Unknown EventSub notification type: ${subscriptionType}`, 'twitch', event);
+                safeLogger.debug('Unknown EventSub notification type', 'twitch', {
+                    subscriptionType,
+                    eventKeys: event && typeof event === 'object' ? Object.keys(event).sort() : [],
+                    hasEvent: !!event
+                });
         }
     };
 

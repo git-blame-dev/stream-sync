@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach } from "bun:test";
 import { createMockFn, restoreAllMocks } from "../../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../../helpers/mock-factories";
+import { createRecordingLogger } from "../../../helpers/recording-logger";
 import { YouTubePlatform } from "../../../../src/platforms/youtube";
 import { DEFAULT_AVATAR_URL } from "../../../../src/constants/avatar";
 
@@ -54,6 +55,17 @@ describe("YouTubePlatform behavior", () => {
     expect(() => new YouTubePlatform({}, 123)).toThrow(
       "Dependencies should be a single object",
     );
+  });
+
+  it("logs platform configuration summaries without raw config values", () => {
+    const logger = createRecordingLogger();
+
+    createPlatform({ logger });
+
+    const serializedLogs = JSON.stringify(logger.entries);
+    expect(serializedLogs).toContain("YouTube platform initialized");
+    expect(serializedLogs).toContain("hasUsername");
+    expect(serializedLogs).not.toContain("test-channel");
   });
 
   it("connects to live videos and uses connection manager", async () => {
