@@ -6,6 +6,7 @@ import {
   spyOn,
 } from "../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../helpers/mock-factories";
+import { createRecordingLogger } from "../../helpers/recording-logger";
 import { createStreamElementsConfigFixture } from "../../helpers/config-fixture";
 import {
   useFakeTimers,
@@ -233,6 +234,120 @@ describe("StreamElementsPlatform behavior", () => {
     expect(platform.handlePing.mock.calls).toHaveLength(1);
   });
 
+  it("summarizes inbound websocket messages without routine raw payload logging", () => {
+    const logger = createRecordingLogger();
+    const { platform } = createPlatform({}, { logger });
+    platform.handleFollowEvent = createMockFn().mockResolvedValue();
+    const inboundPayload = {
+      type: "event",
+      success: true,
+      data: {
+        platform: "youtube",
+        displayName: "test-private-follower",
+        userId: "test-user-id",
+        rawText: "test-private-raw-payload",
+      },
+    };
+
+    platform.handleMessage(Buffer.from(JSON.stringify(inboundPayload)));
+
+    const serializedLogs = JSON.stringify(logger.entries);
+    expect(serializedLogs).toContain("messageType");
+    expect(serializedLogs).toContain("hasData");
+    expect(serializedLogs).not.toContain("test-private-follower");
+    expect(serializedLogs).not.toContain("test-private-raw-payload");
+  });
+
+  it("summarizes unknown websocket message types without logging provider values", () => {
+    const logger = createRecordingLogger();
+    const { platform } = createPlatform({}, { logger });
+
+    platform.handleMessage(Buffer.from(JSON.stringify({
+      type: "test-private-chat-text test-access-token",
+      data: { rawText: "test-private-raw-payload" },
+    })));
+
+    const serializedLogs = JSON.stringify(logger.entries);
+    expect(serializedLogs).toContain("hasType");
+    expect(serializedLogs).not.toContain("test-private-chat-text");
+    expect(serializedLogs).not.toContain("test-access-token");
+    expect(serializedLogs).not.toContain("test-private-raw-payload");
+  });
+
+  it("summarizes auth failures without logging provider error text", () => {
+    const logger = createRecordingLogger();
+    const { platform } = createPlatform({}, { logger });
+    platform.disconnect = createMockFn().mockResolvedValue();
+
+    platform.handleAuthResponse({
+      success: false,
+      error: "test-private-auth-error test-jwt-token",
+    });
+
+    const serializedLogs = JSON.stringify(logger.entries);
+    expect(serializedLogs).toContain("authentication failed");
+    expect(serializedLogs).not.toContain("test-private-auth-error");
+    expect(serializedLogs).not.toContain("test-jwt-token");
+  });
+
+  it("summarizes unknown follow platforms without logging provider values", async () => {
+    const logger = createRecordingLogger();
+    const { platform } = createPlatform({ dataLoggingEnabled: false }, { logger });
+
+    await platform.handleFollowEvent({
+      data: {
+        platform: "test-private-platform test-access-token",
+        displayName: "test-private-follower",
+      },
+    });
+
+    const serializedLogs = JSON.stringify(logger.entries);
+    expect(serializedLogs).toContain("hasPlatform");
+    expect(serializedLogs).not.toContain("test-private-platform");
+    expect(serializedLogs).not.toContain("test-access-token");
+    expect(serializedLogs).not.toContain("test-private-follower");
+  });
+
+  it("does not log raw follower display names in routine logs", async () => {
+    const logger = createRecordingLogger();
+    const { platform } = createPlatform({ dataLoggingEnabled: false }, { logger });
+    const emitted = [];
+    platform.on("platform:event", (payload) => emitted.push(payload));
+
+    await platform.handleFollowEvent({
+      data: {
+        platform: "youtube",
+        displayName: "test-private-follower",
+        userId: "test-user-id",
+      },
+    });
+
+    const serializedLogs = JSON.stringify(logger.entries);
+    expect(emitted[0].data.username).toBe("test-private-follower");
+    expect(serializedLogs).toContain("hasUsername");
+    expect(serializedLogs).not.toContain("test-private-follower");
+  });
+
+  it("summarizes missing username follow events without provider payload logging", async () => {
+    const logger = createRecordingLogger();
+    const { platform } = createPlatform({}, { logger });
+    const followMessage = {
+      data: {
+        platform: "youtube",
+        displayName: "",
+        userId: "test-user-id",
+        rawText: "test-private-raw-payload",
+      },
+    };
+
+    await platform.handleFollowEvent(followMessage);
+
+    const serializedLogs = JSON.stringify(logger.entries);
+    expect(serializedLogs).toContain("hasDisplayName");
+    expect(serializedLogs).toContain("hasUserId");
+    expect(serializedLogs).not.toContain("test-private-raw-payload");
+  });
+
   it("handles auth responses for success and failure", () => {
     const { platform } = createPlatform();
     const errorHandler = { handleAuthenticationError: createMockFn() };
@@ -392,6 +507,21 @@ describe("StreamElementsPlatform behavior", () => {
     await platform.logRawPlatformData("follow", { id: "test-follow" });
 
     expect(errorHandler.handleDataLoggingError.mock.calls).toHaveLength(1);
+  });
+
+  it("summarizes websocket close reasons without logging provider text", () => {
+    const logger = createRecordingLogger();
+    const { platform } = createPlatform({}, { logger });
+    platform.stopKeepAlive = createMockFn();
+    platform.cleanup = createMockFn();
+    platform.scheduleReconnection = createMockFn();
+
+    platform.handleConnectionClose(4000, "test-private-close-reason test-access-token");
+
+    const serializedLogs = JSON.stringify(logger.entries);
+    expect(serializedLogs).toContain("hasReason");
+    expect(serializedLogs).not.toContain("test-private-close-reason");
+    expect(serializedLogs).not.toContain("test-access-token");
   });
 
   it("sends auth and ping messages when connected", () => {

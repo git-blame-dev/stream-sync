@@ -1,15 +1,13 @@
 import { EventEmitter } from 'node:events';
-import path from 'node:path';
-import { promises as fs } from 'node:fs';
 import * as wsModule from 'ws';
 
 import { STREAMELEMENTS } from '../core/endpoints';
 import { getUnifiedLogger } from '../core/logging';
 import { secrets } from '../core/secrets';
 import { PlatformEvents } from '../interfaces/PlatformEvents';
+import { RawEventLogWriter } from '../services/RawEventLogWriter';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 import { createRetrySystem } from '../utils/retry-system';
-import { getSystemTimestampISO } from '../utils/timestamp';
 import { safeSetInterval, safeSetTimeout } from '../utils/timeout-validator';
 
 type StreamElementsConfig = {
@@ -41,6 +39,7 @@ type StreamElementsDependencies = {
     eventBus?: {
         emit: (eventName: string, payload: unknown) => void;
     } | null;
+    rawEventLogWriter?: Pick<RawEventLogWriter, 'writeRawEvent'>;
     WebSocketCtor?: {
         OPEN: number;
         new(url: string): {
@@ -76,6 +75,14 @@ type StreamElementsEventPayload = {
     sourceType?: string;
 };
 
+const KNOWN_MESSAGE_TYPES = ['auth', 'event', 'ping'] as const;
+
+function resolveKnownMessageType(messageType: unknown): string {
+    return typeof messageType === 'string' && (KNOWN_MESSAGE_TYPES as readonly string[]).includes(messageType)
+        ? messageType
+        : 'unknown';
+}
+
 
 class StreamElementsPlatform extends EventEmitter {
     constructor(config: StreamElementsConfig = {}, dependencies: StreamElementsDependencies = {}) {
@@ -91,6 +98,7 @@ class StreamElementsPlatform extends EventEmitter {
         this.logger = logger;
         this.platformLogger = logger;
         this.eventBus = dependencies.eventBus || null;
+        this.rawEventLogWriter = dependencies.rawEventLogWriter || new RawEventLogWriter();
         this.WebSocketCtor = dependencies.WebSocketCtor || wsModule.WebSocket || wsModule.default || wsModule;
         this.incrementRetryCount = retrySystem.incrementRetryCount.bind(retrySystem);
         this.resetRetryCount = retrySystem.resetRetryCount.bind(retrySystem);
@@ -294,7 +302,11 @@ class StreamElementsPlatform extends EventEmitter {
         let message: StreamElementsMessage | undefined;
         try {
             message = JSON.parse(data.toString()) as StreamElementsMessage;
-            this.logger.debug(`[StreamElements] Received message:`, 'streamelements', message);
+            this.logger.debug('[StreamElements] Received message', 'streamelements', {
+                messageType: resolveKnownMessageType(message.type),
+                hasData: !!message.data,
+                success: message.success
+            });
             
             switch (message.type) {
                 case 'auth':
@@ -307,7 +319,10 @@ class StreamElementsPlatform extends EventEmitter {
                     this.handlePing();
                     break;
                 default:
-                    this.logger.debug(`[StreamElements] Unknown message type: ${message.type}`, 'streamelements');
+                    this.logger.debug('[StreamElements] Unknown message type', 'streamelements', {
+                        hasType: typeof message.type === 'string',
+                        hasData: !!message.data
+                    });
             }
         } catch (err) {
             this.errorHandler.handleEventProcessingError(err, 'message', message);
@@ -319,7 +334,7 @@ class StreamElementsPlatform extends EventEmitter {
             this.logger.debug('[StreamElements] Authentication successful', 'streamelements');
             this.subscribeToFollowEvents();
         } else {
-            this.errorHandler.handleAuthenticationError(`failed: ${message.error || 'Unknown error'}`);
+            this.errorHandler.handleAuthenticationError('failed');
             this.disconnect();
         }
     }
@@ -337,14 +352,20 @@ class StreamElementsPlatform extends EventEmitter {
             const platform = this.mapStreamElementsPlatform(eventData.platform);
             
             if (!platform) {
-                this.logger.debug(`[StreamElements] Unknown platform in follow event: ${eventData.platform}`, 'streamelements');
+                this.logger.debug('[StreamElements] Unknown platform in follow event', 'streamelements', {
+                    hasPlatform: typeof eventData.platform === 'string' && eventData.platform.trim().length > 0
+                });
                 return;
             }
             
             const username = typeof eventData.displayName === 'string' ? eventData.displayName.trim() : '';
             const userId = typeof eventData.userId === 'string' ? eventData.userId.trim() : null;
             if (!username) {
-                this.logger.warn('[StreamElements] Follow event missing username; skipping', 'streamelements', { eventData });
+                this.logger.warn('[StreamElements] Follow event missing username; skipping', 'streamelements', {
+                    platform,
+                    hasDisplayName: typeof eventData.displayName === 'string',
+                    hasUserId: typeof eventData.userId === 'string'
+                });
                 return;
             }
 
@@ -355,7 +376,11 @@ class StreamElementsPlatform extends EventEmitter {
                 source: 'StreamElements'
             };
             
-            this.logger.debug(`[StreamElements] Processing ${platform} follow: ${followData.username}`, 'streamelements');
+            this.logger.debug('[StreamElements] Processing follow event', 'streamelements', {
+                platform,
+                hasUsername: username.length > 0,
+                hasUserId: !!userId
+            });
 
             this._emitPlatformEvent(PlatformEvents.FOLLOW, {
                 platform,
@@ -366,7 +391,11 @@ class StreamElementsPlatform extends EventEmitter {
                 sourceType: 'streamelements:follow'
             });
             
-            this.platformLogger.info(`New follower from StreamElements: ${followData.username}`, platform);
+            this.platformLogger.info('New follower from StreamElements', platform, {
+                platform,
+                hasUsername: true,
+                hasUserId: !!userId
+            });
 
         } catch (error) {
             this.errorHandler.handleEventProcessingError(error, 'follow', message?.data);
@@ -454,7 +483,10 @@ class StreamElementsPlatform extends EventEmitter {
     }
 
     handleConnectionClose(code: number, reason: unknown): void {
-        this.logger.info(`[StreamElements] Connection closed (${code}): ${reason}`);
+        this.logger.info('[StreamElements] Connection closed', 'streamelements', {
+            code,
+            hasReason: reason !== null && reason !== undefined && String(reason).length > 0
+        });
         
         this.isConnecting = false;
         this.isReady = false;
@@ -538,21 +570,19 @@ class StreamElementsPlatform extends EventEmitter {
         }
 
         try {
-            const logsDir = this.config.dataLoggingPath;
-            await fs.mkdir(logsDir, { recursive: true });
+            if (!this.config.dataLoggingPath) {
+                this.errorHandler.handleDataLoggingError(new Error('Data logging path is not configured'), 'platform');
+                return;
+            }
 
-            const ingestTimestamp = getSystemTimestampISO();
-            const logEntry = {
-                ingestTimestamp,
+            const result = await this.rawEventLogWriter.writeRawEvent({
+                dataLoggingPath: this.config.dataLoggingPath,
                 platform: 'streamelements',
                 eventType,
                 payload: data
-            };
+            });
 
-            const logFile = path.join(logsDir, 'streamelements-data-log.ndjson');
-            await fs.appendFile(logFile, `${JSON.stringify(logEntry)}\n`);
-
-            this.logger.debug(`Raw platform data logged to ${logFile}`, 'streamelements-platform');
+            this.logger.debug(`Raw platform data logged to ${result.fileName}`, 'streamelements-platform');
         } catch (error) {
             this.errorHandler.handleDataLoggingError(error, 'platform');
             // Don't throw - logging failures shouldn't break the main flow
