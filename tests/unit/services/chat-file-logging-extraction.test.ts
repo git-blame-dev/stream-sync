@@ -144,6 +144,31 @@ describe("ChatFileLoggingService - Behavior-Focused Regression Tests", () => {
       expect(logEntry.payload).toEqual(giftData);
     });
 
+    it("preserves the StreamElements raw event log filename and wrapper", async () => {
+      const followPayload = {
+        type: "event",
+        data: {
+          platform: "youtube",
+          displayName: "test-follower",
+        },
+      };
+
+      await service.logRawPlatformData("streamelements", "follow", followPayload, {
+        dataLoggingEnabled: true,
+      });
+
+      const [[filePath, logLine]] = appendSpy.mock.calls;
+      const logEntry = JSON.parse(logLine);
+
+      expect(filePath).toBe(path.join(logDir, "streamelements-data-log.ndjson"));
+      expect(logEntry).toMatchObject({
+        platform: "streamelements",
+        eventType: "follow",
+        payload: followPayload,
+      });
+      expect(typeof logEntry.ingestTimestamp).toBe("string");
+    });
+
     it("provides statistics for monitoring system health", async () => {
       const stats = await service.getLogStatistics("youtube", {
         dataLoggingEnabled: true,
