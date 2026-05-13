@@ -458,7 +458,11 @@ it("exposes oauth-flow helper functions", () => {
       { key: pems.private, cert: pems.cert },
       (_req, res) => {
         res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ access_token: "test-access-token", error: "invalid_grant" }));
+        res.end(JSON.stringify({
+          access_token: "test-access-token",
+          error: "invalid_grant",
+          "test-private-dynamic-key test-client-secret": "value",
+        }));
       },
     );
 
@@ -487,6 +491,7 @@ it("exposes oauth-flow helper functions", () => {
       expect(serializedLogs).toContain("hasAccessToken");
       expect(serializedLogs).not.toContain("test-access-token");
       expect(serializedLogs).not.toContain("test-client-secret");
+      expect(serializedLogs).not.toContain("test-private-dynamic-key");
     } finally {
       TWITCH.OAUTH.TOKEN = originalUrl;
       server.close();

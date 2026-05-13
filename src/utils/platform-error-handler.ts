@@ -1,18 +1,30 @@
-import { sanitizeLogText } from './logger-utils';
+import { logger as globalLogger } from '../core/logging';
+import type { AppLogger } from '../core/logger/types';
+import { sanitizeLogText } from '../core/logger/safe-log-serializer';
 
-type LogMethod = (message: string, context?: string, payload?: unknown) => void;
-
-type LoggerLike = {
-    debug?: LogMethod;
-    info?: LogMethod;
-    warn?: LogMethod;
-    error: LogMethod;
-};
+type LoggerLike = Pick<AppLogger, 'warn' | 'error'>;
+const REQUIRED_PLATFORM_ERROR_LOGGER_METHODS = ['warn', 'error'] as const;
 
 function hasErrorLogger(logger: unknown): logger is LoggerLike {
     return !!logger
         && typeof logger === 'object'
-        && typeof (logger as { error?: unknown }).error === 'function';
+        && REQUIRED_PLATFORM_ERROR_LOGGER_METHODS.every((method) => typeof (logger as Record<string, unknown>)[method] === 'function');
+}
+
+function assertErrorLogger(logger: unknown, platformName: string): asserts logger is LoggerLike {
+    if (!hasErrorLogger(logger)) {
+        const missingMethods = REQUIRED_PLATFORM_ERROR_LOGGER_METHODS.filter((method) => typeof (logger as Record<string, unknown> | null)?.[method] !== 'function');
+        throw new Error(`${platformName} requires a logger dependency with ${missingMethods.map((method) => `${method}()`).join(', ')}`);
+    }
+}
+
+function resolveErrorLogger(logger: unknown, platformName: string): LoggerLike {
+    if (logger === null || logger === undefined) {
+        return globalLogger;
+    }
+
+    assertErrorLogger(logger, platformName);
+    return logger;
 }
 
 function resolveErrorMessage(error: unknown): string {
@@ -30,7 +42,44 @@ function summarizeEventData(eventData: Record<string, unknown> | null): Record<s
     const keys = Object.keys(eventData).sort();
     return {
         fieldCount: keys.length,
-        keys,
+        hasMessage: keys.includes('message'),
+        hasRawData: keys.includes('rawData'),
+        hasPayload: keys.includes('payload')
+    };
+}
+
+function isCuratedOperationalSummaryKey(key: string): boolean {
+    return /^(?:has[A-Z][A-Za-z0-9]*|is[A-Z][A-Za-z0-9]*|[a-z][A-Za-z0-9]*Present|fieldCount|error|errorType|statusCode|code)$/.test(key);
+}
+
+function summarizeCuratedOperationalPayload(payload: Record<string, unknown>): Record<string, unknown> | null {
+    const entries = Object.entries(payload);
+    if (!entries.every(([key]) => isCuratedOperationalSummaryKey(key))) {
+        return null;
+    }
+    if (!entries.every(([, value]) => value === null || ['boolean', 'number', 'string'].includes(typeof value))) {
+        return null;
+    }
+
+    return Object.fromEntries(entries.map(([key, value]) => [
+        key,
+        typeof value === 'string' ? sanitizeLogText(value) : value
+    ]));
+}
+
+function summarizeOperationalPayload(payload: unknown): Record<string, unknown> | null {
+    if (!payload || typeof payload !== 'object') {
+        return null;
+    }
+    const record = payload as Record<string, unknown>;
+    const curatedPayload = summarizeCuratedOperationalPayload(record);
+    if (curatedPayload) {
+        return curatedPayload;
+    }
+
+    const keys = Object.keys(record).sort();
+    return {
+        fieldCount: keys.length,
         hasMessage: keys.includes('message'),
         hasRawData: keys.includes('rawData'),
         hasPayload: keys.includes('payload')
@@ -42,17 +91,7 @@ class PlatformErrorHandler {
     platformName: string;
 
     constructor(logger: unknown, platformName: string) {
-        if (!hasErrorLogger(logger)) {
-            const noop: LogMethod = () => {};
-            this.logger = {
-                debug: noop,
-                info: noop,
-                warn: noop,
-                error: noop
-            };
-        } else {
-            this.logger = logger;
-        }
+        this.logger = resolveErrorLogger(logger, platformName);
         this.platformName = platformName;
     }
 
@@ -93,12 +132,9 @@ class PlatformErrorHandler {
     }
 
     logOperationalError(message: string, context = this.platformName, payload: unknown = null): void {
-        if (!this.logger || typeof this.logger.error !== 'function') {
-            return;
-        }
-
-        if (payload !== null && payload !== undefined) {
-            this.logger.error(message, context, payload);
+        const payloadSummary = summarizeOperationalPayload(payload);
+        if (payloadSummary) {
+            this.logger.error(message, context, { payloadSummary });
         } else if (context !== undefined) {
             this.logger.error(message, context);
         } else {
@@ -130,5 +166,6 @@ function createPlatformErrorHandler(logger: unknown, platformName: string): Plat
 
 export {
     PlatformErrorHandler,
-    createPlatformErrorHandler
+    createPlatformErrorHandler,
+    summarizeOperationalPayload
 };

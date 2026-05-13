@@ -89,8 +89,7 @@ function summarizeInvalidTokenResponse(response: Record<string, unknown>): Recor
         hasRefreshToken: typeof response.refresh_token === 'string' && response.refresh_token.length > 0,
         hasExpiresIn: response.expires_in !== undefined,
         error: typeof response.error === 'string' ? response.error : null,
-        errorDescriptionPresent: typeof response.error_description === 'string' && response.error_description.length > 0,
-        keys: Object.keys(response).sort()
+        errorDescriptionPresent: typeof response.error_description === 'string' && response.error_description.length > 0
     };
 }
 
