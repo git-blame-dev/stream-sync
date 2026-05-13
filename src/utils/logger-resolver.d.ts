@@ -5,9 +5,9 @@ export type ResolvedLogger = {
     info: LoggerMethod;
     warn: LoggerMethod;
     error: LoggerMethod;
-    console: LoggerMethod;
+    console?: LoggerMethod;
 };
 
-export function normalizeLoggerMethods<T extends object>(logger: T): T & ResolvedLogger;
+export function normalizeLoggerMethods<T extends object>(logger: T, moduleName?: string): T & ResolvedLogger;
 
 export function resolveLogger(candidate?: unknown, moduleName?: string): ResolvedLogger;

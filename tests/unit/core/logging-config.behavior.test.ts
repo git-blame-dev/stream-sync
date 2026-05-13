@@ -36,4 +36,17 @@ describe("logging config behavior", () => {
     expect(config.file.directory).toBe("./logs");
     expect(config.chat.directory).toBe("./logs");
   });
+
+  it("uses severity thresholds only for configured log levels", () => {
+    const config = buildLoggingConfig({
+      general: { debugEnabled: false },
+      logging: {
+        consoleLevel: "console",
+        fileLevel: "console",
+      },
+    });
+
+    expect(config.console.level).toBe("warn");
+    expect(config.file.level).toBe("debug");
+  });
 });

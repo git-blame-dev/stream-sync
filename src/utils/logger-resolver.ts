@@ -1,32 +1,30 @@
 import { getUnifiedLogger, logger as globalLogger } from '../core/logging';
+import type { AppLogger, LogMethod } from '../core/logger/types';
 import { validateLoggerInterface } from './dependency-validator';
 
-type LoggerMethod = (message: unknown, source?: string, data?: unknown) => void;
 type LoggerRecord = Record<string, unknown>;
-const REQUIRED_LOGGER_METHODS = ['debug', 'info', 'warn', 'error', 'console'] as const;
+const REQUIRED_LOGGER_METHODS = ['debug', 'info', 'warn', 'error'] as const;
 
-type NormalizedLogger = LoggerRecord & {
-    debug: LoggerMethod;
-    info: LoggerMethod;
-    warn: LoggerMethod;
-    error: LoggerMethod;
-    console: LoggerMethod;
-};
+type NormalizedLogger = LoggerRecord & AppLogger;
 
 function isLoggerRecord(candidate: unknown): candidate is LoggerRecord {
     return typeof candidate === 'object' && candidate !== null;
 }
 
-function normalizeLoggerMethods(logger: LoggerRecord): NormalizedLogger {
-    const normalized = Object.assign(Object.create(Object.getPrototypeOf(logger)), logger) as LoggerRecord;
+function isLoggerMethod(value: unknown): value is LogMethod {
+    return typeof value === 'function';
+}
 
-    for (const method of REQUIRED_LOGGER_METHODS) {
-        if (typeof normalized[method] !== 'function') {
-            normalized[method] = () => {};
-        }
+function assertLoggerMethods(logger: LoggerRecord, moduleName: string): asserts logger is NormalizedLogger {
+    const missingMethods = REQUIRED_LOGGER_METHODS.filter((method) => !isLoggerMethod(logger[method]));
+    if (missingMethods.length > 0) {
+        throw new Error(`${moduleName} logger is missing required methods: ${missingMethods.map((method) => `${method}()`).join(', ')}`);
     }
+}
 
-    return normalized as NormalizedLogger;
+function normalizeLoggerMethods(logger: LoggerRecord, moduleName = 'logger'): NormalizedLogger {
+    assertLoggerMethods(logger, moduleName);
+    return logger;
 }
 
 function gatherCandidates(candidate: unknown): unknown[] {
@@ -53,13 +51,17 @@ function gatherCandidates(candidate: unknown): unknown[] {
 }
 
 function resolveLogger(candidate: unknown = null, moduleName = 'logger'): NormalizedLogger {
+    if (candidate !== null && candidate !== undefined && !isLoggerRecord(candidate)) {
+        throw new Error(`${moduleName} logger dependency must be an object, received ${typeof candidate}`);
+    }
+
     const candidates = gatherCandidates(candidate);
     const selectedCandidate = candidates.find(isLoggerRecord);
     if (!selectedCandidate) {
         throw new Error(`${moduleName} requires a logger dependency`);
     }
 
-    const normalizedLogger = normalizeLoggerMethods(selectedCandidate);
+    const normalizedLogger = normalizeLoggerMethods(selectedCandidate, moduleName);
     validateLoggerInterface(normalizedLogger);
     return normalizedLogger;
 }

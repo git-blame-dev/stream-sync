@@ -1,13 +1,12 @@
 import { DEFAULTS } from './config-schema';
-
-const VALID_LOG_LEVELS = ['error', 'warn', 'console', 'info', 'debug'];
+import { isLogThreshold } from './logger/levels';
 
 type NormalizedConfig = Record<string, Record<string, unknown>>;
 type GenericRecord = Record<string, unknown>;
 type PlatformConfigRecord = Record<string, unknown>;
 
 const DEFAULT_LOGGING_CONFIG = {
-    console: { enabled: true, level: 'console' },
+    console: { enabled: true, level: 'warn' },
     file: { enabled: true, level: 'debug', directory: DEFAULTS.LOG_DIRECTORY },
     platforms: {
         twitch: { enabled: true, fileLogging: true },
@@ -28,10 +27,10 @@ function buildLoggingConfig(normalized: NormalizedConfig, options: { debugMode?:
         debugEnabled?: boolean;
     };
 
-    if (logging.consoleLevel && VALID_LOG_LEVELS.includes(logging.consoleLevel)) {
+    if (isLogThreshold(logging.consoleLevel)) {
         config.console.level = logging.consoleLevel;
     }
-    if (logging.fileLevel && VALID_LOG_LEVELS.includes(logging.fileLevel)) {
+    if (isLogThreshold(logging.fileLevel)) {
         config.file.level = logging.fileLevel;
     }
     if (logging.fileLoggingEnabled !== undefined && logging.fileLoggingEnabled !== null) {

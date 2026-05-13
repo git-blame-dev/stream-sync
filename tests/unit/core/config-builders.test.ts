@@ -380,7 +380,7 @@ describe('config-builders', () => {
         it('returns default nested shape when no overrides', () => {
             const result = buildLoggingConfig(minNormalized);
 
-            expect(result.console).toEqual({ enabled: true, level: 'console' });
+        expect(result.console).toEqual({ enabled: true, level: 'warn' });
             expect(result.file.enabled).toBe(true);
             expect(result.file.level).toBe('debug');
             expect(result.file.directory).toBe('./logs');
@@ -434,14 +434,24 @@ describe('config-builders', () => {
             expect(result.chat.enabled).toBe(false);
         });
 
-        it('rejects invalid console level and falls back to console', () => {
-            const result = buildLoggingConfig({
-                general: { debugEnabled: false },
-                logging: { consoleLevel: 'invalid-level' }
-            });
-
-            expect(result.console.level).toBe('console');
+    it('rejects invalid console level and falls back to warn', () => {
+        const result = buildLoggingConfig({
+            general: { debugEnabled: false },
+            logging: { consoleLevel: 'invalid-level' }
         });
+
+        expect(result.console.level).toBe('warn');
+    });
+
+    it('rejects console as a configured threshold level', () => {
+        const result = buildLoggingConfig({
+            general: { debugEnabled: false },
+            logging: { consoleLevel: 'console', fileLevel: 'console' }
+        });
+
+        expect(result.console.level).toBe('warn');
+        expect(result.file.level).toBe('debug');
+    });
 
         it('rejects invalid file level and falls back to debug', () => {
             const result = buildLoggingConfig({

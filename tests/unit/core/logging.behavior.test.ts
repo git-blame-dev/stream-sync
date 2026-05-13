@@ -91,6 +91,7 @@ describe('core/logging behavior', () => {
 
     it('reconfigures an existing logger instance when logging config changes', () => {
         const stdoutCapture = captureStdout();
+        const stderrCapture = captureStderr();
 
         try {
             const logger = logging.getUnifiedLogger();
@@ -103,13 +104,38 @@ describe('core/logging behavior', () => {
             const stdout = stdoutCapture.output.join('');
             expect(stdout).not.toContain('test-hidden-before-reconfigure');
             expect(stdout).toContain('test-visible-after-reconfigure');
+            expect(stderrCapture.output.join('')).toBe('');
         } finally {
             stdoutCapture.restore();
+            stderrCapture.restore();
+        }
+    });
+
+    it('treats console output as user-facing output instead of a severity threshold', () => {
+        const stdoutCapture = captureStdout();
+        const stderrCapture = captureStderr();
+
+        try {
+            logging.initializeLoggingConfig({ logging: { console: { enabled: true, level: 'error' }, file: { enabled: false } } });
+            const logger = logging.getUnifiedLogger();
+
+            logger.info('test-hidden-info', 'test-source');
+            logger.console('test-visible-user-output', 'test-source');
+
+            const stdout = stdoutCapture.output.join('');
+            expect(stdout).not.toContain('test-hidden-info');
+            expect(stdout).toContain('test-visible-user-output');
+            expect(stdout).not.toContain('[CONSOLE]');
+            expect(stderrCapture.output.join('')).toBe('');
+        } finally {
+            stdoutCapture.restore();
+            stderrCapture.restore();
         }
     });
 
     it('redacts sensitive metadata and strips URL query strings at the logging boundary', () => {
         const stdoutCapture = captureStdout();
+        const stderrCapture = captureStderr();
 
         try {
             logging.initializeLoggingConfig({ logging: { console: { enabled: true, level: 'debug' }, file: { enabled: false } } });
@@ -137,9 +163,11 @@ describe('core/logging behavior', () => {
             expect(stdout).not.toContain('test-reconnect-token');
             expect(stdout).not.toContain('fragment');
             expect(stdout).not.toContain('"stack"');
+            expect(stderrCapture.output.join('')).toBe('');
         } finally {
             logging.setDebugMode(false);
             stdoutCapture.restore();
+            stderrCapture.restore();
         }
     });
 });

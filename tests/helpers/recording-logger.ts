@@ -1,25 +1,22 @@
+import type { AppLogger, LogMethod } from "../../src/core/logger/types";
+
 type RecordedLogEntry = {
   level: string;
   message: string;
-  context?: string;
-  payload?: unknown;
+  source?: string;
+  data?: unknown;
 };
 
-type RecordingLogger = {
+type RecordingLogger = AppLogger & {
   entries: RecordedLogEntry[];
-  debug: (message: string, context?: string, payload?: unknown) => void;
-  info: (message: string, context?: string, payload?: unknown) => void;
-  warn: (message: string, context?: string, payload?: unknown) => void;
-  error: (message: string, context?: string, payload?: unknown) => void;
-  console: (message: string, context?: string, payload?: unknown) => void;
 };
 
 function createRecordingLogger(): RecordingLogger {
   const entries: RecordedLogEntry[] = [];
   const record =
-    (level: string) =>
-    (message: string, context?: string, payload?: unknown): void => {
-      entries.push({ level, message, context, payload });
+    (level: string): LogMethod =>
+    (message: unknown, source?: string, data?: unknown): void => {
+      entries.push({ level, message: String(message), source, data });
     };
 
   return {

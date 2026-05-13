@@ -156,15 +156,12 @@ describe("platform-connection-factory behavior", () => {
     expect(warnCalls).toBeGreaterThan(0);
   });
 
-  test("supports incomplete logger implementations via normalized behavior", () => {
+  test("rejects incomplete logger implementations instead of filling missing methods", () => {
     const loggerWithOnlyDebug = {
       debug: () => {},
     };
 
-    const factory = new PlatformConnectionFactory(loggerWithOnlyDebug);
-
-    _resetForTesting();
-    expect(() => factory.buildTikTokConnectionConfig({})).not.toThrow();
+    expect(() => new PlatformConnectionFactory(loggerWithOnlyDebug)).toThrow(/logger|info|warn|error/i);
   });
 
   test("creates YouTube connection with compatibility methods", async () => {

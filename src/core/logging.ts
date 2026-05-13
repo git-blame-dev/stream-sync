@@ -1,15 +1,14 @@
 import { DEFAULT_LOGGING_CONFIG } from './config-builders';
-import { safeObjectStringify, sanitizeLogText } from '../utils/logger-utils';
+import { shouldLogAtThreshold } from './logger/levels';
+import type { AppLogger, LogLevel, LogThreshold } from './logger/types';
+import { safeObjectStringify, sanitizeLogText } from './logger/safe-log-serializer';
 import { FileLogger } from '../utils/file-logger';
 import { formatTimestampCompact } from '../utils/text-processing';
 
-const LOG_LEVELS: readonly LogLevel[] = ['debug', 'info', 'console', 'warn', 'error', 'emergency'];
-
-type LogLevel = 'debug' | 'info' | 'console' | 'warn' | 'error' | 'emergency';
 type LogData = unknown;
 type LogEntry = { timestamp: string; level: LogLevel; message: string; source: string; data: LogData };
 type Destination = 'console' | 'file';
-type OutputConfig = { enabled?: boolean; level?: LogLevel; directory?: string; filename?: string };
+type OutputConfig = { enabled?: boolean; level?: LogThreshold; directory?: string; filename?: string };
 type LoggingConfig = { console?: OutputConfig; file?: OutputConfig; [key: string]: unknown };
 
 let globalLoggingConfig: LoggingConfig | null = null;
@@ -61,7 +60,7 @@ function setDebugMode(enabled: unknown) {
     debugMode = !!enabled;
 }
 
-class UnifiedLogger {
+class UnifiedLogger implements AppLogger {
     config: LoggingConfig;
     outputs: { console: ConsoleOutputter; file: FileOutputter };
 
@@ -109,18 +108,16 @@ class UnifiedLogger {
         if (destination === 'file' && !destinationConfig.directory) {
             return false;
         }
-        
-        if (destination === 'console' && (level === 'console' || level === 'warn' || level === 'error')) {
-            return true;
+
+        if (level === 'console') {
+            return destination === 'console';
         }
         
         if (level === 'debug' && getDebugMode()) {
             return true;
         }
         
-        const messageLevel = LOG_LEVELS.indexOf(level);
-        const configLevel = LOG_LEVELS.indexOf(destinationConfig.level || 'info');
-        return messageLevel >= configLevel;
+        return shouldLogAtThreshold(level, destinationConfig.level || 'info');
     }
     
     info(message: unknown, source = 'system', data: LogData = null) {
