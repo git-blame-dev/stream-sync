@@ -1,10 +1,11 @@
-import { appendFileSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createBootstrapEmergencyLogger } from './core/bootstrap-emergency-logger';
 import { isDebugModeEnabled } from './utils/logger-utils';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+const bootstrapEmergencyLogger = createBootstrapEmergencyLogger({ logsDir: join(__dirname, '..', 'logs') });
 const bootstrapProcess = process as typeof process & {
     __streamSyncUncaughtExceptionHandlerInstalled?: boolean;
     __streamSyncUnhandledRejectionHandlerInstalled?: boolean;
@@ -16,20 +17,11 @@ if (isDebugModeEnabled()) {
     console.log('[DEBUG] [Bootstrap] Script starting...'); // BOOTSTRAP: Pre-logger initialization
 }
 
-// BOOTSTRAP ERROR HANDLING: Use console.error for fatal errors before logger is available
+// BOOTSTRAP ERROR HANDLING: Use emergency output for fatal errors before logger is available
 if (!bootstrapProcess.__streamSyncUncaughtExceptionHandlerInstalled) {
     bootstrapProcess.__streamSyncUncaughtExceptionHandlerInstalled = true;
     bootstrapProcess.on('uncaughtException', (err) => {
-        console.error('[FATAL] Uncaught Exception:', err); // BOOTSTRAP: Critical error before logger ready
-        try {
-            const logsDir = join(__dirname, '..', 'logs');
-            if (!existsSync(logsDir)) {
-                mkdirSync(logsDir, { recursive: true });
-            }
-            appendFileSync(join(logsDir, 'program-log.txt'), `[FATAL] Uncaught Exception: ${err.stack || err}\n`);
-        } catch (e) {
-            console.error('[FATAL] Failed to write to log file:', e);
-        }
+        bootstrapEmergencyLogger.writeUncaughtException(err);
         process.exit(1);
     });
 }
@@ -37,17 +29,7 @@ if (!bootstrapProcess.__streamSyncUncaughtExceptionHandlerInstalled) {
 if (!bootstrapProcess.__streamSyncUnhandledRejectionHandlerInstalled) {
     bootstrapProcess.__streamSyncUnhandledRejectionHandlerInstalled = true;
     bootstrapProcess.on('unhandledRejection', (reason) => {
-        console.error('[BOOTSTRAP] Unhandled Rejection:', reason); // BOOTSTRAP: Critical error before logger ready
-        try {
-            const logsDir = join(__dirname, '..', 'logs');
-            if (!existsSync(logsDir)) {
-                mkdirSync(logsDir, { recursive: true });
-            }
-            const rejectionDetails = reason instanceof Error ? (reason.stack || reason.message) : String(reason);
-            appendFileSync(join(logsDir, 'program-log.txt'), `[BOOTSTRAP] Unhandled Rejection: ${rejectionDetails}\n`);
-        } catch (e) {
-            console.error('[BOOTSTRAP] Failed to write to log file:', e); // BOOTSTRAP: Emergency fallback logging
-        }
+        bootstrapEmergencyLogger.writeUnhandledRejection(reason);
     });
 }
 
@@ -70,8 +52,7 @@ if (!bootstrapProcess.__streamSyncUnhandledRejectionHandlerInstalled) {
             console.log('[DEBUG] [Bootstrap] main() completed successfully');
         }
     } catch (error) {
-        // Use console.error for fatal bootstrap errors since logging might not be available
-        console.error('[FATAL] [Bootstrap] Main function failed:', error); // BOOTSTRAP: Critical error handling
+        bootstrapEmergencyLogger.writeMainFailure(error);
         process.exit(1);
     }
 })(); 
