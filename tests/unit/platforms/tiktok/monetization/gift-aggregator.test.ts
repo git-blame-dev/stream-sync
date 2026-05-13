@@ -1,5 +1,6 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { noOpLogger } from "../../../../helpers/mock-factories";
+import { createRecordingLogger } from "../../../../helpers/recording-logger";
 const {
   useFakeTimers,
   useRealTimers,
@@ -427,8 +428,8 @@ describe("TikTok gift aggregator", () => {
     });
 
     test("cleans up aggregation state when delivery fails", async () => {
-      const platform = createTestPlatform({
-        _handleGift: async () => {
+        const platform = createTestPlatform({
+            _handleGift: async () => {
           throw new Error("Handler failed");
         },
       });
@@ -439,6 +440,32 @@ describe("TikTok gift aggregator", () => {
       await advanceTimersByTime(platform.giftAggregationDelay);
 
       expect(platform.giftAggregation["tt-user1-Rose"]).toBeUndefined();
+    });
+
+    test("summarizes gift delivery failures without raw provider payloads", async () => {
+      const logger = createRecordingLogger();
+      const platform = createTestPlatform({
+        logger,
+        _handleGift: async () => {
+          throw new Error("Handler failed");
+        },
+      });
+
+      const giftAggregator = createTikTokGiftAggregator({ platform });
+
+      await giftAggregator.handleStandardGift(buildGift({
+        rawData: {
+          message: "test-private-chat-text",
+          access_token: "test-access-token",
+        },
+      }));
+      await advanceTimersByTime(platform.giftAggregationDelay);
+
+      const serializedLogs = JSON.stringify(logger.entries);
+      expect(serializedLogs).toContain("Gift data unavailable after notification handling error");
+      expect(serializedLogs).toContain("hasOriginalData");
+      expect(serializedLogs).not.toContain("test-private-chat-text");
+      expect(serializedLogs).not.toContain("test-access-token");
     });
   });
 

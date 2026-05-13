@@ -1,5 +1,4 @@
 import { safeSetTimeout as defaultSafeSetTimeout } from '../../../utils/timeout-validator';
-import { safeObjectStringify as defaultSafeObjectStringify } from '../../../utils/logger-utils';
 import { formatCoinAmount as defaultFormatCoinAmount } from '../../../utils/tiktok-data-extraction';
 
 type TikTokGiftPayload = Record<string, unknown> & {
@@ -91,17 +90,15 @@ type TikTokGiftAggregatorOptions = {
     safeSetTimeout?: (handler: () => Promise<void>, delayMs: number) => ReturnType<typeof setTimeout> | number;
     clearTimeoutFn?: (timer: ReturnType<typeof setTimeout> | number) => void;
     formatCoinAmount?: (amount: number, currency?: string) => string;
-    safeObjectStringify?: (value: unknown) => string;
 };
 
 function createTikTokGiftAggregator(options: TikTokGiftAggregatorOptions = {}) {
     const {
-        platform,
-        safeSetTimeout = defaultSafeSetTimeout,
-        clearTimeoutFn = clearTimeout,
-        formatCoinAmount = defaultFormatCoinAmount,
-        safeObjectStringify = defaultSafeObjectStringify
-    } = options;
+    platform,
+    safeSetTimeout = defaultSafeSetTimeout,
+    clearTimeoutFn = clearTimeout,
+    formatCoinAmount = defaultFormatCoinAmount
+} = options;
 
     if (!platform) {
         throw new Error('platform is required to create TikTok gift aggregator');
@@ -259,11 +256,13 @@ const handleStandardGift = async (gift: TikTokGiftPayload): Promise<void> => {
                 const finalUsername = aggregationData.username;
 
                 if (typeof finalUsername !== 'string' || !finalUsername.trim()) {
-                    platform.logger.warn(`Gift aggregation missing username for key ${key}`, 'tiktok', {
-                        aggregationData,
-                        giftType,
-                        giftCount
-                    });
+            platform.logger.warn('Gift aggregation missing username', 'tiktok', {
+                hasAggregationData: true,
+                hasUserId: typeof aggregationData.userId === 'string' && aggregationData.userId.length > 0,
+                hasOriginalData: aggregationData.lastGift?.rawData !== undefined,
+                giftType,
+                giftCount
+            });
                     return;
                 }
 
@@ -285,11 +284,13 @@ const handleStandardGift = async (gift: TikTokGiftPayload): Promise<void> => {
                 };
 
                 if (!enhancedGiftData.giftType || !enhancedGiftData.giftCount || enhancedGiftData.giftCount <= 0) {
-                    platform.logger.warn(`Invalid enhanced gift data for ${finalUsername}`, 'tiktok', {
-                        enhancedGiftData,
-                        aggregatedCount,
-                        totalAmount,
-                        originalGiftType: giftType,
+            platform.logger.warn('Invalid enhanced gift data', 'tiktok', {
+                hasEnhancedGiftData: true,
+                hasGiftType: typeof enhancedGiftData.giftType === 'string' && enhancedGiftData.giftType.length > 0,
+                hasOriginalData: enhancedGiftData.originalData !== undefined,
+                aggregatedCount,
+                totalAmount,
+                originalGiftType: giftType,
                         originalGiftCount: giftCount
                     });
                     return;
@@ -322,15 +323,21 @@ const handleStandardGift = async (gift: TikTokGiftPayload): Promise<void> => {
                     await platform._handleGift(giftPayload);
                 } catch (error) {
                     platform.errorHandler.handleEventProcessingError(
-                        error,
-                        'gift-notification',
-                        enhancedGiftData,
-                        `Error handling gift notification for ${finalUsername}`
-                    );
-                    platform.logger.warn(
-                        `Gift data when error occurred: ${safeObjectStringify({ enhancedGiftData, aggregatedCount, totalAmount })}`,
-                        'tiktok'
-                    );
+                error,
+                'gift-notification',
+                enhancedGiftData,
+                'Error handling gift notification'
+            );
+            platform.logger.warn(
+                'Gift data unavailable after notification handling error',
+                'tiktok',
+                {
+                    aggregatedCount,
+                    totalAmount,
+                    hasEnhancedGiftData: true,
+                    hasOriginalData: enhancedGiftData.originalData !== undefined
+                }
+            );
                 }
 
                 delete platform.giftAggregation[key];
