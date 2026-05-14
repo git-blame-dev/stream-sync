@@ -1308,6 +1308,83 @@ describe("GUI transport routes and SSE integration", () => {
     }
   });
 
+  it("serves isolated demo shell only when demo mode is enabled", async () => {
+    const assetsRoot = fs.mkdtempSync(path.join(os.tmpdir(), "gui-demo-assets-"));
+    const assetsDir = path.join(assetsRoot, "assets");
+    fs.mkdirSync(assetsDir, { recursive: true });
+    fs.writeFileSync(path.join(assetsDir, "demo.js"), 'console.log("demo");');
+    fs.writeFileSync(path.join(assetsDir, "styles.css"), ".demo{display:block}");
+
+    const port = 0;
+    const eventBus = new TestEventBus();
+    const normalConfig = buildConfig({
+      enableDock: true,
+      enableOverlay: false,
+      port,
+    });
+    const normalService = createGuiTransportService({
+      config: normalConfig,
+      eventBus,
+      logger: null,
+      assetsRoot,
+    });
+    await normalService.start();
+
+    try {
+      const baseUrl = getBaseUrl(normalService);
+      const demoResponse = await fetch(`${baseUrl}/demo`);
+      const demoHtml = await demoResponse.text();
+      expect(demoResponse.status).toBe(404);
+      expect(demoHtml).toContain("Not Found");
+    } finally {
+      await normalService.stop();
+    }
+
+    const demoConfig = buildConfig({
+      enableDock: false,
+      enableOverlay: false,
+      port,
+    });
+    const demoService = createGuiTransportService({
+      config: demoConfig,
+      eventBus,
+      logger: null,
+      assetsRoot,
+      demoOnly: true,
+    });
+    await demoService.start();
+
+    const baseUrl = getBaseUrl(demoService);
+    try {
+      const demoResponse = await fetch(`${baseUrl}/demo`);
+      const demoHtml = await demoResponse.text();
+      expect(demoResponse.status).toBe(200);
+      expect(demoResponse.headers.get("cache-control")).toContain("no-cache");
+      expect(demoHtml).toContain("Stream Sync Demo");
+      expect(demoHtml).toContain('data-kind="demo"');
+      expect(demoHtml).not.toContain("/gui/events");
+      expect(demoHtml).toContain("/gui/assets/demo.js");
+      expect(demoHtml).toContain("/gui/assets/styles.css");
+
+      const demoScriptResponse = await fetch(`${baseUrl}/gui/assets/demo.js`);
+      const demoScriptBody = await demoScriptResponse.text();
+      expect(demoScriptResponse.status).toBe(200);
+      expect(demoScriptResponse.headers.get("content-type")).toContain(
+        "application/javascript",
+      );
+      expect(demoScriptBody).toContain('console.log("demo")');
+
+      const dockResponse = await fetch(`${baseUrl}/dock`);
+      expect(dockResponse.status).toBe(404);
+
+      const eventsResponse = await fetch(`${baseUrl}/gui/events`);
+      expect(eventsResponse.status).toBe(404);
+    } finally {
+      await demoService.stop();
+      fs.rmSync(assetsRoot, { recursive: true, force: true });
+    }
+  });
+
   it("serves enabled dock, overlay, and tiktok animations pages with built GUI asset entry paths", async () => {
     const port = 0;
     const eventBus = new TestEventBus();

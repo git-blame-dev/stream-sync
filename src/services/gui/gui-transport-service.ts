@@ -32,6 +32,7 @@ type GuiTransportOptions = {
     createServer?: typeof http.createServer;
     assetsRoot?: string;
     runtimeAssetRoots?: readonly string[];
+    demoOnly?: boolean;
 };
 
 type RuntimeAssetRecord = {
@@ -73,6 +74,7 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
     const guiConfig = toTransportRecord(config.gui);
     const logger = options.logger;
     const eventBus = options.eventBus;
+    const demoOnly = options.demoOnly === true;
     const mapperConfig: GuiMapperConfig = { gui: guiConfig };
     const mapper = options.mapper ?? (createEventToGuiContractMapper({
         config: mapperConfig
@@ -279,7 +281,7 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
         return `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title></head><body style="${bodyStyle}"><div data-gui-disabled="true" style="padding:12px;opacity:0.9">${message}</div></body></html>`;
     };
 
-    const renderActivePage = (title: string, runtimeKind: string, scriptKind = runtimeKind, transparent = false) => {
+    const renderActivePage = (title: string, runtimeKind: string, scriptKind = runtimeKind, transparent = false, includeEventGlobals = true) => {
         const assetVersion = Date.now().toString(36);
         const bodyStyle = transparent
             ? 'margin:0;background:transparent;color:#ffffff;font-family:Georgia,serif;'
@@ -289,7 +291,10 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
             overlayMaxLinesPerMessage: guiConfig.overlayMaxLinesPerMessage,
             uiCompareMode: guiConfig.uiCompareMode === true
         };
-        return `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><link rel="stylesheet" href="/gui/assets/styles.css?v=${assetVersion}"></head><body style="${bodyStyle}"><div id="app" data-kind="${runtimeKind}"></div><script>window.__STREAM_SYNC_GUI_KIND__=${JSON.stringify(runtimeKind)};window.__STREAM_SYNC_GUI_EVENTS__='/gui/events';window.__STREAM_SYNC_GUI_CONFIG__=${JSON.stringify(runtimeGuiConfig)};</script><script type="module" src="/gui/assets/${scriptKind}.js?v=${assetVersion}"></script></body></html>`;
+        const runtimeGlobals = includeEventGlobals
+            ? `window.__STREAM_SYNC_GUI_KIND__=${JSON.stringify(runtimeKind)};window.__STREAM_SYNC_GUI_EVENTS__='/gui/events';window.__STREAM_SYNC_GUI_CONFIG__=${JSON.stringify(runtimeGuiConfig)};`
+            : `window.__STREAM_SYNC_GUI_KIND__=${JSON.stringify(runtimeKind)};`;
+        return `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><link rel="stylesheet" href="/gui/assets/styles.css?v=${assetVersion}"></head><body style="${bodyStyle}"><div id="app" data-kind="${runtimeKind}"></div><script>${runtimeGlobals}</script><script type="module" src="/gui/assets/${scriptKind}.js?v=${assetVersion}"></script></body></html>`;
     };
 
     const sendSse = (payload: unknown) => {
@@ -412,6 +417,12 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
         }
 
         if (url === '/gui/events') {
+            if (demoOnly) {
+                res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+                res.end('Not Found');
+                return;
+            }
+
             res.writeHead(200, {
                 'Content-Type': 'text/event-stream; charset=utf-8',
                 'Cache-Control': 'no-cache, no-transform',
@@ -435,6 +446,12 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
 
         const runtimeAssetMatch = url.match(/^\/gui\/runtime\/([a-f0-9]+)\.mp4$/);
         if (runtimeAssetMatch) {
+            if (demoOnly) {
+                res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+                res.end('Not Found');
+                return;
+            }
+
             const runtimeAsset = resolveRuntimeAsset(runtimeAssetMatch[1]);
             if (!runtimeAsset || !fs.existsSync(runtimeAsset.filePath)) {
                 res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
@@ -590,6 +607,27 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
             return;
         }
 
+        if (url === '/demo') {
+            if (!demoOnly) {
+                res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+                res.end('Not Found');
+                return;
+            }
+
+            res.writeHead(200, {
+                'Content-Type': 'text/html; charset=utf-8',
+                'Cache-Control': 'no-cache, no-store, must-revalidate'
+            });
+            res.end(renderActivePage('Stream Sync Demo', 'demo', 'demo', true, false));
+            return;
+        }
+
+        if (demoOnly) {
+            res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+            res.end('Not Found');
+            return;
+        }
+
         if (url === '/dock') {
             res.writeHead(200, {
                 'Content-Type': 'text/html; charset=utf-8',
@@ -647,7 +685,7 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
                 await stop();
             }
 
-            if (!isGuiActive(config)) {
+            if (!demoOnly && !isGuiActive(config)) {
                 active = false;
                 return;
             }
