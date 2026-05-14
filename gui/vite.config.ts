@@ -10,6 +10,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         dock: resolve(__dirname, 'src/dock/main.tsx'),
+        demo: resolve(__dirname, 'src/demo/main.tsx'),
         overlay: resolve(__dirname, 'src/overlay/main.tsx')
       },
       output: {
