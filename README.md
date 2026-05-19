@@ -4,7 +4,7 @@
 
 Combine YouTube, Twitch, and TikTok stream events, chat, TTS, and OBS overlays into one polished live-show control layer.
 
-![StreamSync chat demo](demo.gif)
+![StreamSync chat demo](demo.webp)
 
 StreamSync is a multi-platform live chat and event pipeline for streamers. It normalizes Twitch, YouTube, and TikTok events and drives user-facing notifications, TTS, and OBS overlays with a consistent, test-driven architecture.
 
