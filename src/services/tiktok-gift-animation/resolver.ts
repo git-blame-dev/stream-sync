@@ -12,6 +12,7 @@ import { logger } from '../../core/logging';
 import { createPlatformErrorHandler } from '../../utils/platform-error-handler';
 
 const execFileAsyncDefault = promisify(execFile);
+const axiosClient = axios.default || axios;
 
 const GIFT_ANIMATION_CACHE_DIR = path.join(os.tmpdir(), 'stream-sync-tiktok-gift-animation');
 const GIFT_ANIMATION_MAX_ENTRIES = 12;
@@ -384,7 +385,7 @@ function createTikTokGiftAnimationResolver(options: ResolverOptions = {}): { res
         ? options.maxEntries
         : GIFT_ANIMATION_MAX_ENTRIES;
 
-    const fetchBinary = options.fetchBinary || ((url, requestOptions) => axios.get(url, {
+    const fetchBinary = options.fetchBinary || ((url, requestOptions) => axiosClient.get(url, {
         responseType: 'arraybuffer',
         timeout: requestOptions.timeout
     }));

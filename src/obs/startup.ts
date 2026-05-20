@@ -1,5 +1,6 @@
-import { createRequire } from 'node:module';
 import { logger as defaultLogger } from '../core/logging';
+import { getOBSConnectionManager as defaultGetOBSConnectionManager } from './connection';
+import { getDefaultSourcesManager as defaultGetDefaultSourcesManager } from './sources';
 
 type LoggerLike = {
     debug: (message: string, scope?: string, payload?: unknown) => void;
@@ -38,14 +39,6 @@ type StartupDeps = {
     sourcesManager?: SourcesManagerLike;
     getOBSConnectionManager?: () => ObsManagerLike | null;
     getDefaultSourcesManager?: () => SourcesManagerLike;
-};
-
-const nodeRequire = createRequire(import.meta.url);
-const { getOBSConnectionManager: defaultGetOBSConnectionManager } = nodeRequire('./connection') as {
-    getOBSConnectionManager: () => ObsManagerLike | null;
-};
-const { getDefaultSourcesManager: defaultGetDefaultSourcesManager } = nodeRequire('./sources') as {
-    getDefaultSourcesManager: () => SourcesManagerLike;
 };
 
 async function clearStartupDisplays(config: StartupConfig | null | undefined, deps: StartupDeps = {}) {
