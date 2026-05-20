@@ -16,8 +16,7 @@ const EXCLUDED_SCAN_DIRECTORIES = new Set([
     'node_modules',
     '.git',
     'coverage',
-    'dist',
-    'tasks'
+    'dist'
 ]);
 
 function collectExecutableTypeScriptFiles(directoryPath: string, output: string[] = []) {
@@ -183,7 +182,7 @@ describe('TypeScript toolchain migration gates behavior', () => {
         expect(packageJson.main).toBe('src/bootstrap.ts');
         expect(packageJson.scripts.start).toBe('tsx src/bootstrap.ts');
         expect(packageJson.scripts['start:debug']).toBe('tsx src/bootstrap.ts --debug');
-        expect(packageJson.scripts['start:debug:build']).toBe('npm run build && tsx src/bootstrap.ts --debug');
+        expect(packageJson.scripts['start:debug:build']).toBe('bun run build && tsx src/bootstrap.ts --debug');
 
         expect(existsSync(join(repoRoot, 'src/bootstrap.ts'))).toBe(true);
         expect(existsSync(join(repoRoot, 'src/main.ts'))).toBe(true);

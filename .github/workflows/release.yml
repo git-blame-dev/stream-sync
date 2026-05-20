@@ -1,0 +1,253 @@
+name: Release
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: release-main
+  cancel-in-progress: false
+
+jobs:
+  publish-release:
+    name: Publish GitHub release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+
+    steps:
+      - name: Check out released commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
+      - name: Generate release version
+        id: version
+        run: |
+          printf 'version=v%s.%s\n' "$(date -u +'%Y.%m.%d')" "${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+
+      - name: Determine release scope
+        id: scope
+        env:
+          TARGET_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          git fetch --tags --force
+
+          previous_tag="$(git describe --tags --match 'v[0-9]*' --abbrev=0 "${TARGET_SHA}^" 2>/dev/null || true)"
+          if [ -z "$previous_tag" ]; then
+            printf 'previous_tag=\n' >> "$GITHUB_OUTPUT"
+            printf 'publish=true\n' >> "$GITHUB_OUTPUT"
+            printf 'No previous release tag found; publishing initial release.\n'
+            exit 0
+          fi
+
+          printf 'previous_tag=%s\n' "$previous_tag" >> "$GITHUB_OUTPUT"
+
+          changed_files="$(git diff --name-only "$previous_tag".."$TARGET_SHA")"
+
+          if [ -z "$changed_files" ]; then
+            printf 'publish=true\n' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          has_release_relevant_change=false
+          while IFS= read -r path; do
+            [ -n "$path" ] || continue
+
+            case "$path" in
+              .env.example|config.example.ini|bun.lock|bunfig.toml|package.json|src/*|gui/*|scripts/release/*|tsconfig*.json)
+                has_release_relevant_change=true
+                ;;
+            esac
+          done <<EOF
+          $changed_files
+          EOF
+
+          if [ "$has_release_relevant_change" != true ]; then
+            printf 'publish=false\n' >> "$GITHUB_OUTPUT"
+            printf 'No runtime or release-packaging files changed; skipping release.\n'
+            exit 0
+          fi
+
+          printf 'publish=true\n' >> "$GITHUB_OUTPUT"
+
+      - name: Check for existing release for this commit
+        id: duplicate
+        if: steps.scope.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SHA: ${{ github.event.workflow_run.head_sha }}
+          REPOSITORY: ${{ github.repository }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          git fetch --tags --force
+
+          if git rev-parse -q --verify "refs/tags/${VERSION}" >/dev/null; then
+            tag_target="$(git rev-list -n 1 "$VERSION")"
+            if [ "$tag_target" != "$TARGET_SHA" ]; then
+              printf 'Refusing to publish %s because tag %s already points at %s.\n' "$TARGET_SHA" "$VERSION" "$tag_target" >&2
+              exit 1
+            fi
+          fi
+
+          existing_tag="$(git tag --points-at "$TARGET_SHA" --list 'v[0-9]*' | head -n 1)"
+          if [ -z "$existing_tag" ]; then
+            existing_tag="$(gh api "repos/${REPOSITORY}/releases" --paginate --jq ".[] | select(.target_commitish == \"${TARGET_SHA}\") | .tag_name" | head -n 1)"
+          fi
+
+          if [ -n "$existing_tag" ]; then
+            release_assets="$(gh release view "$existing_tag" --repo "$REPOSITORY" --json assets --jq '.assets[].name' 2>/dev/null || true)"
+            missing_assets=false
+
+            for required_asset in \
+              "stream-sync-${existing_tag}-linux-x64.tar.gz" \
+              "stream-sync-${existing_tag}-windows-x64.zip" \
+              'SHA256SUMS'; do
+              if ! printf '%s\n' "$release_assets" | grep -Fxq "$required_asset"; then
+                printf 'Existing release %s is missing required asset %s.\n' "$existing_tag" "$required_asset" >&2
+                missing_assets=true
+              fi
+            done
+
+            if [ "$missing_assets" = true ]; then
+              printf 'Refusing to create a second release for %s while %s is incomplete.\n' "$TARGET_SHA" "$existing_tag" >&2
+              exit 1
+            fi
+
+            printf 'publish=false\n' >> "$GITHUB_OUTPUT"
+            printf 'Release %s already targets %s; skipping duplicate release.\n' "$existing_tag" "$TARGET_SHA"
+            exit 0
+          fi
+
+          printf 'publish=true\n' >> "$GITHUB_OUTPUT"
+
+      - name: Confirm main still targets released commit
+        if: steps.scope.outputs.publish == 'true' && steps.duplicate.outputs.publish == 'true'
+        env:
+          TARGET_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          git fetch origin main
+          current_main="$(git rev-parse FETCH_HEAD)"
+
+          if [ "$current_main" != "$TARGET_SHA" ]; then
+            printf 'Refusing to publish %s because origin/main is now %s.\n' "$TARGET_SHA" "$current_main" >&2
+            exit 1
+          fi
+
+      - name: Download CI release artifacts
+        if: steps.scope.outputs.publish == 'true' && steps.duplicate.outputs.publish == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+          path: dist/release-assets
+
+      - name: Prepare release assets
+        if: steps.scope.outputs.publish == 'true' && steps.duplicate.outputs.publish == 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          mkdir -p dist/release
+          cp dist/release-assets/stream-sync-linux-x64/stream-sync-linux-x64.tar.gz "dist/release/stream-sync-${VERSION}-linux-x64.tar.gz"
+          cp dist/release-assets/stream-sync-windows-x64/stream-sync-windows-x64.zip "dist/release/stream-sync-${VERSION}-windows-x64.zip"
+          cd dist/release
+          sha256sum "stream-sync-${VERSION}-linux-x64.tar.gz" "stream-sync-${VERSION}-windows-x64.zip" > SHA256SUMS
+
+      - name: Verify release assets
+        if: steps.scope.outputs.publish == 'true' && steps.duplicate.outputs.publish == 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          tar -tzf "dist/release/stream-sync-${VERSION}-linux-x64.tar.gz" > linux-files.txt
+          unzip -l "dist/release/stream-sync-${VERSION}-windows-x64.zip" > windows-files.txt
+
+          grep -q 'stream-sync-linux-x64/stream-sync$' linux-files.txt
+          grep -q 'stream-sync-linux-x64/config.example.ini$' linux-files.txt
+          grep -q 'stream-sync-linux-x64/.env.example$' linux-files.txt
+          grep -q 'stream-sync-linux-x64/gui/dist/' linux-files.txt
+
+          grep -q 'stream-sync-windows-x64/stream-sync.exe' windows-files.txt
+          grep -q 'stream-sync-windows-x64/config.example.ini' windows-files.txt
+          grep -q 'stream-sync-windows-x64/.env.example' windows-files.txt
+          grep -q 'stream-sync-windows-x64/gui/dist/' windows-files.txt
+
+      - name: Generate release notes
+        if: steps.scope.outputs.publish == 'true' && steps.duplicate.outputs.publish == 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          TARGET_SHA: ${{ github.event.workflow_run.head_sha }}
+          PREVIOUS_TAG: ${{ steps.scope.outputs.previous_tag }}
+        run: |
+          set -euo pipefail
+
+          if [ -n "$PREVIOUS_TAG" ]; then
+            commit_range="${PREVIOUS_TAG}..${TARGET_SHA}"
+            compare_url="https://github.com/${GITHUB_REPOSITORY}/compare/${PREVIOUS_TAG}...${VERSION}"
+          else
+            commit_range="$TARGET_SHA"
+            compare_url=""
+          fi
+
+          commit_lines="$(git log --reverse --pretty=format:'- %s (%h)' "$commit_range")"
+
+          {
+            printf '## Changes\n\n'
+
+            if [ -n "$commit_lines" ]; then
+              printf '%s\n' "$commit_lines"
+            else
+              printf -- '- No commit changes detected.\n'
+            fi
+
+            printf '\n## Artifacts\n\n'
+            printf -- "- Linux x64 archive: \`%s\`\n" "stream-sync-${VERSION}-linux-x64.tar.gz"
+            printf -- "- Windows x64 archive: \`%s\`\n" "stream-sync-${VERSION}-windows-x64.zip"
+            printf -- "- Checksums: \`SHA256SUMS\`\n"
+
+            printf '\n## Verification\n\n'
+            printf -- '- CI completed successfully for the released commit.\n'
+            printf -- '- CI jobs include workflow lint, lint, typecheck, coverage tests, GUI build, and Linux/Windows packaging.\n'
+            printf -- '- Release asset verification checked packaged executables, config templates, environment examples, and bundled GUI assets.\n'
+
+            printf '\n## Full changelog\n\n'
+
+            if [ -n "$compare_url" ]; then
+              printf '%s\n' "$compare_url"
+            else
+              printf 'Initial release from %s.\n' "$TARGET_SHA"
+            fi
+          } > release-notes.md
+
+      - name: Publish release
+        if: steps.scope.outputs.publish == 'true' && steps.duplicate.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          TARGET_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          git fetch origin main
+          current_main="$(git rev-parse FETCH_HEAD)"
+
+          if [ "$current_main" != "$TARGET_SHA" ]; then
+            printf 'Refusing to publish %s because origin/main is now %s.\n' "$TARGET_SHA" "$current_main" >&2
+            exit 1
+          fi
+
+          gh release create "$VERSION" dist/release/* \
+            --target "$TARGET_SHA" \
+            --title "StreamSync $VERSION" \
+            --notes-file release-notes.md \
+            --latest
