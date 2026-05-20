@@ -71,7 +71,7 @@ function main() {
     if (hasViolations) {
         console.error('\n✗ Implicit mock defaults found for required production dependencies.');
         console.error('  Use explicit null and let tests fail-fast if they access unset dependencies.');
-        console.error('  See AGENTS.md Testing Standards for details.\n');
+        console.error('  See the testing standards for details.\n');
         process.exit(1);
     }
     

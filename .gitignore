@@ -1,6 +1,7 @@
 node_modules/
 logs/
 data/
+dist/
 
 .env
 .env.local
