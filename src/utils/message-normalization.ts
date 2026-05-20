@@ -1,11 +1,8 @@
 import { logger } from '../core/logging';
-import { createRequire } from 'node:module';
 import { resolveTikTokTimestampMs, resolveTikTokTimestampISO, resolveYouTubeTimestampISO } from './platform-timestamp';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 import { normalizeBadgeImages } from './message-parts';
-
-const nodeRequire = createRequire(import.meta.url);
-const { CheermoteProcessor } = nodeRequire('./cheermote-processor');
+import { CheermoteProcessor } from './cheermote-processor';
 
 const normalizationErrorHandler = createPlatformErrorHandler(logger, 'message-normalization');
 

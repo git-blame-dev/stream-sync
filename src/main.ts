@@ -155,7 +155,7 @@ for (let i = 0; i < args.length; i++) {
 
 if (cliArgs.help) {
     process.stdout.write(`
-Usage: bun src/main.ts [options]
+Usage: stream-sync [options]
 
 Options:
   --debug              Enable debug mode
@@ -163,8 +163,8 @@ Options:
   --help, -h           Show this help message
 
 Examples:
-  bun src/main.ts --debug
-  bun src/main.ts --chat 10
+  stream-sync --debug
+  stream-sync --chat 10
 `);
     process.exit(0);
 }

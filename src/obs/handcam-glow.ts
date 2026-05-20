@@ -1,7 +1,7 @@
-import { createRequire } from 'node:module';
 import { logger as defaultLogger } from '../core/logging';
 import { safeDelay as defaultDelay } from '../utils/timeout-validator';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
+import { ensureOBSConnected as defaultEnsureConnected } from './connection';
 
 type GlowLogger = {
     debug: (message: string, context?: string, payload?: unknown) => void;
@@ -58,11 +58,6 @@ class HandcamGlowSupersededError extends Error {
 function getErrorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
 }
-
-const nodeRequire = createRequire(import.meta.url);
-const { ensureOBSConnected: defaultEnsureConnected } = nodeRequire('./connection.js') as {
-    ensureOBSConnected: () => Promise<void>;
-};
 
 let moduleDeps: HandcamModuleDeps = {
     ensureConnected: defaultEnsureConnected,

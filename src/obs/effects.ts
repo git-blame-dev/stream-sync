@@ -1,7 +1,9 @@
 import { logger } from '../core/logging';
-import { createRequire } from 'node:module';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
+import { createRetrySystem } from '../utils/retry-system';
 import { safeDelay } from '../utils/timeout-validator';
+import { getOBSConnectionManager } from './connection';
+import { getDefaultSourcesManager } from './sources';
 
 type EffectsLogger = {
     debug: (message: string, context?: string, payload?: unknown) => void;
@@ -36,17 +38,6 @@ type EffectsDependencies = {
     eventBus?: unknown;
     retrySystem?: RetrySystemLike;
     delay?: (ms: number, minMs: number, context: string) => Promise<void>;
-};
-
-const nodeRequire = createRequire(import.meta.url);
-const { createRetrySystem } = nodeRequire('../utils/retry-system') as {
-    createRetrySystem: (dependencies: { logger: EffectsLogger }) => RetrySystemLike;
-};
-const { getOBSConnectionManager } = nodeRequire('./connection') as {
-    getOBSConnectionManager: () => ObsManagerLike;
-};
-const { getDefaultSourcesManager } = nodeRequire('./sources') as {
-    getDefaultSourcesManager: () => SourcesManagerLike;
 };
 
 function hasObsEventListeners(obsManager: ObsManagerLike): obsManager is ObsManagerWithEvents {

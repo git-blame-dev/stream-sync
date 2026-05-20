@@ -26,7 +26,7 @@ type GuiTransportMapper = {
 
 type GuiTransportOptions = {
     config?: TransportRecord;
-    logger?: GuiTransportLogger;
+    logger?: GuiTransportLogger | null;
     eventBus?: GuiTransportEventBus;
     mapper?: GuiTransportMapper;
     createServer?: typeof http.createServer;
@@ -69,6 +69,25 @@ function createGuiTransportErrorHandler(logger: GuiTransportLogger | undefined):
     return createPlatformErrorHandler(logger, 'gui-transport');
 }
 
+function directoryExists(directoryPath: string): boolean {
+    try {
+        return fs.statSync(directoryPath).isDirectory();
+    } catch {
+        return false;
+    }
+}
+
+function resolveDefaultAssetsRoot(): string {
+    const sourceTreeAssetsRoot = path.resolve(__dirname, '../../../gui/dist');
+    const candidateRoots = [
+        path.resolve(path.dirname(process.execPath), 'gui/dist'),
+        path.resolve(process.cwd(), 'gui/dist'),
+        sourceTreeAssetsRoot
+    ];
+
+    return candidateRoots.find(directoryExists) ?? sourceTreeAssetsRoot;
+}
+
 function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransportService {
     const config = toTransportRecord(options.config);
     const guiConfig = toTransportRecord(config.gui);
@@ -95,7 +114,7 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
     };
     const assetsRoot = typeof options.assetsRoot === 'string' && options.assetsRoot.trim()
         ? options.assetsRoot
-        : path.resolve(__dirname, '../../../gui/dist');
+        : resolveDefaultAssetsRoot();
     const runtimeAssetRoots = Array.isArray(options.runtimeAssetRoots) && options.runtimeAssetRoots.length > 0
         ? options.runtimeAssetRoots
         : [GIFT_ANIMATION_CACHE_DIR];
@@ -452,7 +471,14 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
                 return;
             }
 
-            const runtimeAsset = resolveRuntimeAsset(runtimeAssetMatch[1]);
+            const runtimeAssetId = runtimeAssetMatch[1];
+            if (!runtimeAssetId) {
+                res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+                res.end('Not Found');
+                return;
+            }
+
+            const runtimeAsset = resolveRuntimeAsset(runtimeAssetId);
             if (!runtimeAsset || !fs.existsSync(runtimeAsset.filePath)) {
                 res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
                 res.end('Not Found');
@@ -507,8 +533,8 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
                     return;
                 }
 
-                const startToken = match[1];
-                const endToken = match[2];
+                const startToken = match[1] ?? '';
+                const endToken = match[2] ?? '';
 
                 if (startToken.length === 0 && endToken.length === 0) {
                     res.writeHead(416, {

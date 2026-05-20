@@ -1,23 +1,12 @@
-import { createRequire } from 'node:module';
 import { logger as defaultLogger } from '../core/logging';
+import { config as defaultConfig } from '../core/config';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 import { createGoalTracker } from '../utils/goal-tracker';
 import { getOBSConnectionManager } from './connection';
+import { getDefaultSourcesManager as getDefaultSourcesManagerFromSources } from './sources';
 
-const nodeRequire = createRequire(import.meta.url);
-const { config: defaultConfig } = nodeRequire('../core/config') as {
-    config: {
-        goals: Record<string, unknown>;
-    };
-};
 const getDefaultSourcesManager = () => {
-    const { getDefaultSourcesManager: getter } = nodeRequire('./sources') as {
-        getDefaultSourcesManager: () => {
-            updateTextSource: (sourceName: string, text?: string) => Promise<void>;
-        };
-    };
-
-    return getter();
+    return getDefaultSourcesManagerFromSources();
 };
 
 type GoalsLogger = typeof defaultLogger;

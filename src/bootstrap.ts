@@ -1,11 +1,9 @@
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 import { createBootstrapEmergencyLogger } from './core/bootstrap-emergency-logger';
+import { main } from './main';
 import { isDebugModeEnabled } from './utils/logger-utils';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const bootstrapEmergencyLogger = createBootstrapEmergencyLogger({ logsDir: join(__dirname, '..', 'logs') });
+const bootstrapEmergencyLogger = createBootstrapEmergencyLogger({ logsDir: resolve(process.cwd(), 'logs') });
 const bootstrapProcess = process as typeof process & {
     __streamSyncUncaughtExceptionHandlerInstalled?: boolean;
     __streamSyncUnhandledRejectionHandlerInstalled?: boolean;
@@ -40,7 +38,6 @@ if (!bootstrapProcess.__streamSyncUnhandledRejectionHandlerInstalled) {
         if (isDebugModeEnabled()) {
             console.log('[DEBUG] [Bootstrap] Importing main application...'); // BOOTSTRAP: Logger not fully initialized
         }
-        const { main } = await import('./main');
         if (isDebugModeEnabled()) {
             console.log('[DEBUG] [Bootstrap] Main application imported, starting...'); // BOOTSTRAP: Logger not fully initialized
         }

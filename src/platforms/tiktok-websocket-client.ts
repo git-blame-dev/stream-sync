@@ -1,10 +1,7 @@
 import { EventEmitter } from 'node:events';
-import { createRequire } from 'node:module';
+import * as WebSocketModule from 'ws';
 import { safeSetTimeout, safeSetInterval } from '../utils/timeout-validator';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
-
-const nodeRequire = createRequire(__filename);
-const defaultWebSocketCtor = nodeRequire('ws');
 
 type JsonObject = Record<string, unknown>;
 
@@ -31,6 +28,12 @@ type TikTokWebSocketClientOptions = {
     logger?: unknown;
     WebSocketCtor?: WebSocketClientConstructor;
 };
+
+const defaultWebSocketCtor = (
+    'WebSocket' in WebSocketModule
+        ? WebSocketModule.WebSocket
+        : WebSocketModule
+) as unknown as WebSocketClientConstructor;
 
 function getErrorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
