@@ -1,6 +1,7 @@
 const tsParser = require('@typescript-eslint/parser');
 const tsPlugin = require('@typescript-eslint/eslint-plugin');
 const globals = require('globals');
+require('tsx/cjs');
 const noLoggerErrorRuleModule = require('./tools/eslint-rules/no-logger-error.ts');
 const noLoggerErrorRule = noLoggerErrorRuleModule.default || noLoggerErrorRuleModule;
 

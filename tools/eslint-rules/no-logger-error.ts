@@ -4,8 +4,14 @@
  */
 'use strict';
 
-function isLoggerReference(node) {
-  if (!node) {
+type AstRecord = Record<string, unknown> & { type: string };
+
+function isAstRecord(node: unknown): node is AstRecord {
+  return !!node && typeof node === 'object' && typeof (node as Record<string, unknown>).type === 'string';
+}
+
+function isLoggerReference(node: unknown): boolean {
+  if (!isAstRecord(node)) {
     return false;
   }
 
@@ -13,12 +19,11 @@ function isLoggerReference(node) {
     return node.name === 'logger';
   }
 
-  if (node.type === 'MemberExpression' || node.type === 'OptionalMemberExpression') {
+  if (node.type === 'MemberExpression') {
     const property = node.property;
     if (
       !node.computed &&
-      property &&
-      property.type === 'Identifier' &&
+      isAstRecord(property) &&
       property.name === 'logger'
     ) {
       return true;
@@ -30,7 +35,7 @@ function isLoggerReference(node) {
   return false;
 }
 
-const noLoggerErrorRule = {
+const noLoggerErrorRule: import('eslint').Rule.RuleModule = {
   meta: {
     type: 'problem',
     docs: {
@@ -47,7 +52,7 @@ const noLoggerErrorRule = {
       CallExpression(node) {
         const callee = node.callee;
         if (
-          (callee.type === 'MemberExpression' || callee.type === 'OptionalMemberExpression') &&
+          callee.type === 'MemberExpression' &&
           !callee.computed &&
           callee.property &&
           callee.property.type === 'Identifier' &&
@@ -64,4 +69,4 @@ const noLoggerErrorRule = {
   }
 };
 
-export default noLoggerErrorRule;
+module.exports = noLoggerErrorRule;
