@@ -1199,6 +1199,127 @@ describe("GUI transport routes and SSE integration", () => {
     }
   });
 
+  it("serves a CORS-enabled GUI health check for OBS wrapper readiness", async () => {
+    const port = 0;
+    const eventBus = new TestEventBus();
+    const config = buildConfig({
+      enableDock: false,
+      enableOverlay: true,
+      port,
+    });
+    const service = createGuiTransportService({
+      config,
+      eventBus,
+      logger: null,
+    });
+    await service.start();
+
+    const baseUrl = getBaseUrl(service);
+    try {
+      const response = await fetch(`${baseUrl}/health`);
+      const body = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get("content-type")).toContain(
+        "application/json",
+      );
+      expect(response.headers.get("cache-control")).toContain("no-cache");
+      expect(response.headers.get("access-control-allow-origin")).toBe("*");
+      expect(body).toEqual({
+        ok: true,
+        service: "stream-sync-gui",
+        route: null,
+      });
+    } finally {
+      await service.stop();
+    }
+  });
+
+  it("reports route-specific GUI readiness for OBS wrappers", async () => {
+    const port = 0;
+    const eventBus = new TestEventBus();
+    const normalConfig = buildConfig({
+      enableDock: true,
+      enableOverlay: true,
+      port,
+    });
+    const normalService = createGuiTransportService({
+      config: normalConfig,
+      eventBus,
+      logger: null,
+    });
+    await normalService.start();
+
+    try {
+      const baseUrl = getBaseUrl(normalService);
+      const overlay = await fetch(`${baseUrl}/health?route=/overlay`);
+      const dock = await fetch(`${baseUrl}/health?route=/dock`);
+      const tiktokAnimations = await fetch(
+        `${baseUrl}/health?route=/tiktok-animations`,
+      );
+      const demo = await fetch(`${baseUrl}/health?route=/demo`);
+
+      expect(await overlay.json()).toEqual({
+        ok: true,
+        service: "stream-sync-gui",
+        route: "/overlay",
+      });
+      expect(await dock.json()).toEqual({
+        ok: true,
+        service: "stream-sync-gui",
+        route: "/dock",
+      });
+      expect(await tiktokAnimations.json()).toEqual({
+        ok: true,
+        service: "stream-sync-gui",
+        route: "/tiktok-animations",
+      });
+      expect(await demo.json()).toEqual({
+        ok: false,
+        service: "stream-sync-gui",
+        route: "/demo",
+      });
+    } finally {
+      await normalService.stop();
+    }
+  });
+
+  it("reports demo-only route readiness for OBS wrappers", async () => {
+    const port = 0;
+    const eventBus = new TestEventBus();
+    const demoConfig = buildConfig({
+      enableDock: false,
+      enableOverlay: false,
+      port,
+    });
+    const demoService = createGuiTransportService({
+      config: demoConfig,
+      eventBus,
+      logger: null,
+      demoOnly: true,
+    });
+    await demoService.start();
+
+    try {
+      const baseUrl = getBaseUrl(demoService);
+      const demo = await fetch(`${baseUrl}/health?route=/demo`);
+      const overlay = await fetch(`${baseUrl}/health?route=/overlay`);
+
+      expect(await demo.json()).toEqual({
+        ok: true,
+        service: "stream-sync-gui",
+        route: "/demo",
+      });
+      expect(await overlay.json()).toEqual({
+        ok: false,
+        service: "stream-sync-gui",
+        route: "/overlay",
+      });
+    } finally {
+      await demoService.stop();
+    }
+  });
+
   it("returns enabled dock shell and disabled overlay shell", async () => {
     const port = 0;
     const eventBus = new TestEventBus();

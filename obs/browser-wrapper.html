@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Stream Sync OBS Browser Wrapper</title>
+  <style>
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: transparent;
+    }
+
+    iframe {
+      width: 100vw;
+      height: 100vh;
+      border: 0;
+      display: none;
+      background: transparent;
+    }
+
+    #status { display: none; }
+  </style>
+</head>
+<body>
+  <div id="status" role="status" aria-live="polite"></div>
+  <iframe id="stream-sync-frame" title="Stream Sync OBS view"></iframe>
+
+  <script>
+    (() => {
+      'use strict';
+
+      const DEFAULT_ORIGIN = 'http://127.0.0.1:3399';
+      const DEFAULT_ROUTE = '/overlay';
+      const INITIAL_RETRY_MS = 500;
+      const MAX_RETRY_MS = 5000;
+      const HEALTH_TIMEOUT_MS = 1500;
+
+      const frame = document.getElementById('stream-sync-frame');
+      const status = document.getElementById('status');
+
+      function parseHashConfig() {
+        const rawHash = window.location.hash.startsWith('#')
+          ? window.location.hash.slice(1)
+          : window.location.hash;
+        let hash = rawHash || '';
+        try {
+          hash = decodeURIComponent(hash);
+        } catch {
+          hash = '';
+        }
+        hash = hash.trim();
+
+        if (!hash || hash.startsWith('/')) {
+          return { route: hash || DEFAULT_ROUTE, origin: DEFAULT_ORIGIN };
+        }
+
+        const params = new URLSearchParams(hash);
+        const route = params.get('route') || DEFAULT_ROUTE;
+        const explicitOrigin = params.get('origin');
+        if (explicitOrigin) {
+          return { route, origin: explicitOrigin };
+        }
+        const host = params.get('host') || '127.0.0.1';
+        const port = params.get('port') || '3399';
+        const protocol = params.get('protocol') || 'http';
+        return { route, origin: `${protocol}://${host}:${port}` };
+      }
+
+      function normalizeRoute(route) {
+        try {
+          const normalized = route.startsWith('/') ? route : `/${route}`;
+          const url = new URL(normalized, DEFAULT_ORIGIN);
+          if (url.origin !== DEFAULT_ORIGIN || url.pathname.includes('..')) {
+            return DEFAULT_ROUTE;
+          }
+          return url.pathname;
+        } catch {
+          return DEFAULT_ROUTE;
+        }
+      }
+
+      function normalizeOrigin(origin) {
+        try {
+          const url = new URL(origin);
+          if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+            return DEFAULT_ORIGIN;
+          }
+          return url.origin;
+        } catch {
+          return DEFAULT_ORIGIN;
+        }
+      }
+
+      function showStatus(message) {
+        status.textContent = message;
+      }
+
+      function showFrame(url) {
+        frame.src = url;
+        frame.style.display = 'block';
+        status.style.display = 'none';
+      }
+
+      async function fetchWithTimeout(url) {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), HEALTH_TIMEOUT_MS);
+        try {
+          const response = await fetch(url, {
+            cache: 'no-store',
+            credentials: 'omit',
+            signal: controller.signal
+          });
+          if (!response.ok) {
+            return false;
+          }
+          const body = await response.json();
+          return body && body.ok === true;
+        } catch {
+          return false;
+        } finally {
+          clearTimeout(timeout);
+        }
+      }
+
+      async function waitForStreamSync() {
+        const config = parseHashConfig();
+        const route = normalizeRoute(config.route);
+        const origin = normalizeOrigin(config.origin);
+        const healthUrl = `${origin}/health?route=${encodeURIComponent(route)}`;
+        const targetUrl = `${origin}${route}`;
+        let retryMs = INITIAL_RETRY_MS;
+
+        while (true) {
+          showStatus(`Waiting for Stream Sync at ${healthUrl}...`);
+          if (await fetchWithTimeout(healthUrl)) {
+            showFrame(targetUrl);
+            return;
+          }
+          await new Promise((resolve) => setTimeout(resolve, retryMs));
+          retryMs = Math.min(Math.round(retryMs * 1.5), MAX_RETRY_MS);
+        }
+      }
+
+      waitForStreamSync();
+    })();
+  </script>
+</body>
+</html>

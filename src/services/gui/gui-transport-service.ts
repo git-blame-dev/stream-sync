@@ -426,11 +426,28 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
         unsubscribeDisplayEffects = null;
     };
 
+    const isRouteAvailable = (route: string): boolean => {
+        if (route === '/health') {
+            return true;
+        }
+
+        if (demoOnly) {
+            return route === '/demo';
+        }
+
+        return route === '/dock'
+            || route === '/overlay'
+            || route === '/tiktok-animations';
+    };
+
     const requestHandler = (req: IncomingMessage, res: ServerResponse<IncomingMessage>) => {
         const rawUrl = typeof req.url === 'string' ? req.url : '/';
         let url = rawUrl;
+        let routeProbe: string | null = null;
         try {
-            url = new URL(rawUrl, 'http://localhost').pathname;
+            const parsedUrl = new URL(rawUrl, 'http://localhost');
+            url = parsedUrl.pathname;
+            routeProbe = parsedUrl.searchParams.get('route');
         } catch {
             url = rawUrl;
         }
@@ -630,6 +647,18 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
                 'Cache-Control': 'no-cache, no-store, must-revalidate'
             });
             res.end(fs.readFileSync(assetPath));
+            return;
+        }
+
+        if (url === '/health') {
+            const requestedRoute = routeProbe && routeProbe.startsWith('/') ? routeProbe : null;
+            const ok = requestedRoute ? isRouteAvailable(requestedRoute) : true;
+            res.writeHead(200, {
+                'Content-Type': 'application/json; charset=utf-8',
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                'Access-Control-Allow-Origin': '*'
+            });
+            res.end(JSON.stringify({ ok, service: 'stream-sync-gui', route: requestedRoute }));
             return;
         }
 
