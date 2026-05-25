@@ -22,7 +22,7 @@
     "typecheck:tests": "tsc --noEmit -p tsconfig.tests.json",
     "typecheck:scripts": "tsc --noEmit -p tsconfig.scripts.json",
     "typecheck:tools": "tsc --noEmit -p tsconfig.tools.json",
-    "typecheck:all": "tsc --noEmit -p tsconfig.all.json",
+    "typecheck:all": "bun run typecheck:src && bun run typecheck:tests && bun run typecheck:scripts && bun run typecheck:tools && bun run typecheck:gui && bun run typecheck:gui-node",
     "test": "NODE_ENV=test bun test",
     "test:coverage": "NODE_ENV=test bun test --coverage --coverage-reporter=text --coverage-dir=/tmp/bun-coverage tests",
     "verify": "bun run lint && bun run typecheck:all && bun run test:coverage && bun run build"

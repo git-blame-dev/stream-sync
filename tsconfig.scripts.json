@@ -9,10 +9,8 @@
     "noEmit": true,
     "types": ["node", "bun"],
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "jsx": "react-jsx",
-    "composite": true
+    "jsx": "react-jsx"
   },
-  "references": [{ "path": "./tsconfig.src.json" }],
   "include": ["scripts/**/*.ts"],
   "exclude": ["node_modules", "gui/dist"]
 }

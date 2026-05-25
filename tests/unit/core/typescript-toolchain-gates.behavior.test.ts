@@ -147,7 +147,7 @@ describe('TypeScript toolchain migration gates behavior', () => {
         expect(packageJson.scripts['typecheck:tests']).toBe('tsc --noEmit -p tsconfig.tests.json');
         expect(packageJson.scripts['typecheck:scripts']).toBe('tsc --noEmit -p tsconfig.scripts.json');
         expect(packageJson.scripts['typecheck:tools']).toBe('tsc --noEmit -p tsconfig.tools.json');
-        expect(packageJson.scripts['typecheck:all']).toBe('tsc --noEmit -p tsconfig.all.json');
+        expect(packageJson.scripts['typecheck:all']).toBe('bun run typecheck:src && bun run typecheck:tests && bun run typecheck:scripts && bun run typecheck:tools && bun run typecheck:gui && bun run typecheck:gui-node');
     });
 
     it('ships the repo-wide TypeScript project files', () => {
@@ -155,7 +155,7 @@ describe('TypeScript toolchain migration gates behavior', () => {
         expect(existsSync(join(repoRoot, 'tsconfig.tests.json'))).toBe(true);
         expect(existsSync(join(repoRoot, 'tsconfig.scripts.json'))).toBe(true);
         expect(existsSync(join(repoRoot, 'tsconfig.tools.json'))).toBe(true);
-        expect(existsSync(join(repoRoot, 'tsconfig.all.json'))).toBe(true);
+        expect(existsSync(join(repoRoot, 'tsconfig.all.json'))).toBe(false);
     });
 
     it('keeps executable tests, scripts, and tools lanes free of javascript files', () => {

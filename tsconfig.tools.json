@@ -9,8 +9,7 @@
     "noEmit": true,
     "types": ["node", "bun"],
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "jsx": "react-jsx",
-    "composite": true
+    "jsx": "react-jsx"
   },
   "include": ["tools/**/*.ts"],
   "exclude": ["node_modules", "gui/dist"]
