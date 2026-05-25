@@ -275,10 +275,7 @@ class DisplayQueue {
     }
     
     addItem(item: QueueItem) {
-        const { insertIndex, removedChatCount } = this.state.addItem(item);
-        if (removedChatCount > 0) {
-            logger.debug(`[Display Queue] Removing ${removedChatCount} stale chat messages to show latest`, 'display-queue');
-        }
+        const { insertIndex } = this.state.addItem(item);
         logger.debug(`[Display Queue] Added ${item.type} (priority ${item.priority}) at position ${insertIndex}. Queue length: ${this.queue.length}`, 'display-queue');
         
         if (!this.isProcessing && !this.isRetryScheduled && this.config.autoProcess) {

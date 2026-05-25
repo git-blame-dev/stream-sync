@@ -162,8 +162,8 @@ describe("DisplayQueue control", () => {
     });
   });
 
-  describe("chat item replacement", () => {
-    it("replaces earlier chat entries with the latest message", () => {
+  describe("chat item preservation", () => {
+    it("preserves earlier chat entries and records the latest message", () => {
       const queue = createQueue();
 
       queue.addItem({
@@ -177,7 +177,10 @@ describe("DisplayQueue control", () => {
         data: { username: "test-user", message: "second" },
       });
 
-      expect(queue.queue.length).toBe(1);
+      expect(queue.queue.map((item) => item.data.message)).toEqual([
+        "first",
+        "second",
+      ]);
       expect(queue.lastChatItem.data.message).toBe("second");
     });
   });
@@ -521,6 +524,67 @@ describe("DisplayQueue control", () => {
       expect(displayed).toEqual(["chat", "platform:follow", "lingering"]);
       expect(hidden).toEqual(["chat", "platform:follow"]);
       expect(queue.isProcessing).toBe(false);
+    });
+
+    it("preserves chat messages queued behind gift and greeting blockers", async () => {
+      const queue = createQueue({
+        maxQueueSize: 10,
+        timing: { transitionDelay: 0, notificationClearDelay: 0 },
+      });
+      const displayedChatMessages = [];
+
+      queue.delay = async () => {};
+      queue.getDuration = () => 0;
+      queue.displayItem = async (item) => {
+        if (item.type === "chat") {
+          displayedChatMessages.push(item.data.message);
+        }
+      };
+      queue.hideCurrentDisplay = async () => {};
+      queue.displayLingeringChat = async () => {};
+
+      queue.addItem({
+        type: "platform:gift",
+        platform: "tiktok",
+        priority: PRIORITY_LEVELS.GIFT,
+        data: {
+          username: "test-gifter",
+          giftType: "Test Gift",
+          giftCount: 3,
+          amount: 15,
+          currency: "coins",
+          displayMessage: "test-gifter sent 3x Test Gift (15 coins)",
+        },
+      });
+      queue.addItem({
+        type: "chat",
+        platform: "tiktok",
+        priority: PRIORITY_LEVELS.CHAT,
+        data: { username: "test-viewer", message: "first queued chat" },
+      });
+      queue.addItem({
+        type: "greeting",
+        platform: "tiktok",
+        priority: PRIORITY_LEVELS.GREETING,
+        data: {
+          username: "test-viewer",
+          displayMessage: "Welcome, test-viewer!",
+        },
+      });
+      queue.addItem({
+        type: "chat",
+        platform: "tiktok",
+        priority: PRIORITY_LEVELS.CHAT,
+        data: { username: "test-viewer", message: "second queued chat" },
+      });
+
+      await queue.processQueue();
+
+      expect(displayedChatMessages).toEqual([
+        "first queued chat",
+        "second queued chat",
+      ]);
+      expect(queue.lastChatItem.data.message).toBe("second queued chat");
     });
 
     it("continues draining when new work arrives during teardown", async () => {

@@ -31,19 +31,17 @@ class DisplayQueueState {
             item.priority = this.getPriority(item.type);
         }
 
-        let removedChatCount = 0;
-        if (item.type === 'chat') {
-            this.lastChatItem = { ...item };
-            removedChatCount = this._removeQueuedChatItems();
-        }
-
         if (this.maxQueueSize && this.queue.length >= this.maxQueueSize) {
             throw new Error(`Queue at capacity (${this.maxQueueSize})`);
         }
 
+        if (item.type === 'chat') {
+            this.lastChatItem = { ...item };
+        }
+
         const insertIndex = this._findInsertIndex(item.priority);
         this.queue.splice(insertIndex, 0, item);
-        return { insertIndex, removedChatCount };
+        return { insertIndex };
     }
 
     shift(): DisplayItem | undefined {
@@ -72,16 +70,6 @@ class DisplayQueueState {
         return insertIndex;
     }
 
-    _removeQueuedChatItems() {
-        let removed = 0;
-        for (let i = this.queue.length - 1; i >= 0; i--) {
-            if (this.queue[i].type === 'chat') {
-                this.queue.splice(i, 1);
-                removed += 1;
-            }
-        }
-        return removed;
-    }
 }
 
 export {

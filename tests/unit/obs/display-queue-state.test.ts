@@ -48,7 +48,7 @@ describe("DisplayQueueState", () => {
     ]);
   });
 
-  it("replaces older chat items and records last chat item", () => {
+  it("preserves queued chat items and records the latest chat item", () => {
     const state = new DisplayQueueState({ maxQueueSize: 10, getPriority });
 
     state.addItem({
@@ -62,8 +62,10 @@ describe("DisplayQueueState", () => {
       data: { username: "test-user-2", message: "second" },
     });
 
-    expect(state.queue.length).toBe(1);
-    expect(state.queue[0].data.message).toBe("second");
+    expect(state.queue.map((item) => item.data.message)).toEqual([
+      "first",
+      "second",
+    ]);
     expect(state.lastChatItem.data.message).toBe("second");
   });
 
@@ -85,7 +87,7 @@ describe("DisplayQueueState", () => {
     }).toThrow("Queue at capacity (1)");
   });
 
-  it("accepts latest chat item at capacity by replacing stale queued chat", () => {
+  it("rejects additional chat at capacity instead of dropping queued chat", () => {
     const state = new DisplayQueueState({ maxQueueSize: 1, getPriority });
 
     state.addItem({
@@ -93,14 +95,16 @@ describe("DisplayQueueState", () => {
       platform: "test",
       data: { username: "test-user-1", message: "first" },
     });
-    state.addItem({
-      type: "chat",
-      platform: "test",
-      data: { username: "test-user-2", message: "second" },
-    });
+    expect(() => {
+      state.addItem({
+        type: "chat",
+        platform: "test",
+        data: { username: "test-user-2", message: "second" },
+      });
+    }).toThrow("Queue at capacity (1)");
 
     expect(state.queue).toHaveLength(1);
-    expect(state.queue[0].data.message).toBe("second");
-    expect(state.lastChatItem.data.message).toBe("second");
+    expect(state.queue[0].data.message).toBe("first");
+    expect(state.lastChatItem.data.message).toBe("first");
   });
 });
