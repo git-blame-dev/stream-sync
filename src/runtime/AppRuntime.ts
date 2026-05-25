@@ -8,6 +8,7 @@ import { getDefaultGoalsManager } from '../obs/goals';
 import { ChatNotificationRouter } from '../services/ChatNotificationRouter';
 import { PlatformEventRouter } from '../services/PlatformEventRouter';
 import { createGuiTransportService, isGuiActive } from '../services/gui/gui-transport-service';
+import type { AppLogger } from '../core/logger/types';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 import { allowsYouTubeJewelsMissingUserId } from '../utils/missing-fields';
 import { getSystemTimestampISO } from '../utils/timestamp';
@@ -15,7 +16,173 @@ import { safeSetTimeout } from '../utils/timeout-validator';
 import { ViewerCountSystem } from '../utils/viewer-count';
 import { wireStreamStatusHandlers } from '../viewer-count/stream-status-handler';
 
-const createAppRuntimeErrorHandler = (logger) => createPlatformErrorHandler(logger, 'AppRuntime');
+type RuntimeRecord = Record<string, unknown>;
+
+type RuntimeObsConfig = RuntimeRecord & {
+    address?: string;
+    password?: string;
+    enabled?: boolean;
+    connectionTimeoutMs?: number;
+    chatMsgScene: string;
+    notificationScene: string;
+    chatPlatformLogos: Record<string, string>;
+    notificationPlatformLogos: Record<string, string>;
+    ttsTxt: string;
+    notificationTxt: string;
+};
+
+type RuntimeHandcamConfig = RuntimeRecord & {
+    enabled: boolean;
+    maxSize: number | string;
+    rampUpDuration: number | string;
+    holdDuration: number | string;
+    rampDownDuration: number | string;
+    totalSteps: number | string;
+    easingEnabled: boolean;
+    sourceName: string;
+    glowFilterName: string;
+};
+
+type RuntimeConfig = Record<string, RuntimeRecord> & {
+    general?: RuntimeRecord & { viewerCountPollingIntervalMs?: number };
+    obs: RuntimeObsConfig;
+    handcam: RuntimeHandcamConfig;
+    youtube?: RuntimeRecord;
+};
+
+type RuntimeViewerCountPlatform = {
+    getViewerCount?: () => Promise<unknown> | unknown;
+};
+
+type RuntimeObsManager = {
+    isConnected: () => boolean;
+    disconnect?: () => Promise<unknown> | unknown;
+    call: (requestType: string, requestData: Record<string, unknown>) => Promise<unknown>;
+};
+
+type RuntimeSourcesManager = {
+    hideAllDisplays: (
+        chatSceneName: string,
+        notificationSceneName: string,
+        chatPlatformLogos: Record<string, string>,
+        notificationPlatformLogos: Record<string, string>,
+        ttsSourceName: string,
+        notificationSourceName: string
+    ) => Promise<void>;
+};
+
+type RuntimeEventBus = {
+    emit?: (eventName: string, payload: unknown) => void;
+    subscribe: (eventName: string, handler: (event: RuntimeRecord) => Promise<void> | void) => (() => void) | void;
+};
+
+type RuntimeNotificationManager = {
+    handleNotification: (type: string, platform: string, payload: RuntimeRecord) => Promise<unknown>;
+};
+
+type RuntimeVfxCommandService = RuntimeRecord & {
+    executeCommand?: (command: unknown, context: RuntimeRecord) => Promise<unknown> | unknown;
+    executeCommandForKey?: (commandKey: unknown, context: RuntimeRecord) => Promise<unknown> | unknown;
+    getVFXConfig?: (commandKey: string, message: string | null) => Promise<unknown> | unknown;
+};
+
+type RuntimeUserTrackingService = {
+    isFirstMessage?: (userId: unknown, context?: RuntimeRecord) => boolean;
+};
+
+type RuntimePlatformLifecycleService = {
+    getAllPlatforms: () => Record<string, RuntimeViewerCountPlatform>;
+    initializeAllPlatforms: (platformModules: RuntimeRecord) => Promise<unknown>;
+    disconnectAll: () => Promise<unknown>;
+    getStatus?: () => {
+        failedPlatforms?: Array<{ name?: unknown }>;
+        [key: string]: unknown;
+    };
+};
+
+type RuntimeCommandCooldownService = {
+    getStatus?: () => unknown;
+};
+
+type RuntimeObsEventService = RuntimeRecord & {
+    connect?: () => Promise<void>;
+    disconnect?: () => Promise<unknown> | unknown;
+    destroy?: () => void;
+};
+
+type RuntimeGuiTransportService = {
+    start?: () => Promise<unknown> | unknown;
+    stop?: () => Promise<unknown> | unknown;
+};
+
+type RuntimeGracefulExitService = {
+    isEnabled: () => boolean;
+    getTargetMessageCount: () => number;
+};
+
+type RuntimeDependencies = RuntimeRecord & {
+    logging: AppLogger;
+    twitchAuth?: unknown;
+    lazyInnertube?: unknown;
+    displayQueue: unknown;
+    notificationManager: RuntimeNotificationManager;
+    eventBus: RuntimeEventBus;
+    vfxCommandService: RuntimeVfxCommandService;
+    userTrackingService: RuntimeUserTrackingService;
+    guiTransportService?: RuntimeGuiTransportService;
+    obsEventService: RuntimeObsEventService;
+    commandCooldownService: RuntimeCommandCooldownService;
+    platformLifecycleService: RuntimePlatformLifecycleService;
+    gracefulExitService?: RuntimeGracefulExitService;
+    obs?: {
+        connectionManager?: RuntimeObsManager;
+        goalsManager?: { initializeGoalDisplay: () => Promise<unknown> | unknown };
+        sourcesManager?: RuntimeSourcesManager;
+    };
+};
+
+type NotificationOptions = RuntimeRecord & {
+    isError?: boolean;
+    isAnonymous?: boolean;
+    userId?: unknown;
+    timestamp?: unknown;
+    avatarUrl?: unknown;
+    currency?: unknown;
+    metadata?: unknown;
+    type?: unknown;
+    id?: unknown;
+    giftType?: unknown;
+    giftCount?: unknown;
+    amount?: unknown;
+    repeatCount?: unknown;
+    viewerCount?: unknown;
+    command?: unknown;
+    tier?: unknown;
+    months?: unknown;
+    message?: unknown;
+    cumulativeTotal?: unknown;
+};
+
+type AppRuntimeErrorOptions = {
+    eventType: string;
+    logContext: string;
+};
+
+type SystemReadyOptions = {
+    correlationId?: string;
+};
+
+type SystemReadyPayload = RuntimeRecord & {
+    services: string[];
+    timestamp: string;
+    correlationId?: string;
+    platforms?: unknown;
+    degraded?: boolean;
+    degradationReasons?: string[];
+    cooldowns?: unknown;
+};
+
+const createAppRuntimeErrorHandler = (logger: AppLogger) => createPlatformErrorHandler(logger, 'AppRuntime');
 
 const AVATAR_REQUIRED_NOTIFICATION_TYPES = new Set([
     PlatformEvents.CHAT_MESSAGE,
@@ -28,7 +195,7 @@ const AVATAR_REQUIRED_NOTIFICATION_TYPES = new Set([
     PlatformEvents.ENVELOPE
 ]);
 
-function resolveNotificationAvatarUrl(type, options = {}) {
+function resolveNotificationAvatarUrl(type: string, options: NotificationOptions = {}) {
     if (!AVATAR_REQUIRED_NOTIFICATION_TYPES.has(type)) {
         return undefined;
     }
@@ -37,7 +204,7 @@ function resolveNotificationAvatarUrl(type, options = {}) {
     return avatarUrl || DEFAULT_AVATAR_URL;
 }
 
-function getErrorMessage(error) {
+function getErrorMessage(error: unknown): string {
     if (error instanceof Error) {
         return error.message;
     }
@@ -45,7 +212,35 @@ function getErrorMessage(error) {
 }
 
 class AppRuntime {
-    async handleUnifiedNotification(type, platform, username, options) {
+    dependencies: RuntimeDependencies;
+    logger: AppLogger;
+    config: RuntimeConfig;
+    twitchAuth: unknown;
+    errorHandler: ReturnType<typeof createPlatformErrorHandler> | null;
+    lazyInnertube: unknown;
+    displayQueue: unknown;
+    notificationManager: RuntimeNotificationManager;
+    eventBus: RuntimeEventBus;
+    vfxCommandService: RuntimeVfxCommandService;
+    userTrackingService: RuntimeUserTrackingService;
+    guiTransportService: RuntimeGuiTransportService;
+    obsEventService: RuntimeObsEventService;
+    viewerCountSystem: ViewerCountSystem;
+    viewerCountSystemStarted: boolean;
+    commandCooldownService: RuntimeCommandCooldownService;
+    platformLifecycleService: RuntimePlatformLifecycleService;
+    gracefulExitService: RuntimeGracefulExitService | null;
+    vfxCommandUnsubscribe: (() => void) | void | null;
+    viewerCountStatusCleanup: (() => void) | void | null = null;
+    keepAliveInterval?: ReturnType<typeof setInterval>;
+    isStarting: boolean;
+    isStarted: boolean;
+    isShuttingDown: boolean;
+    platformEventRouter: PlatformEventRouter;
+    chatNotificationRouter: ChatNotificationRouter;
+    youtube?: { initialize?: (handlers?: RuntimeRecord, reconnect?: boolean) => Promise<unknown> | unknown };
+
+    async handleUnifiedNotification(type: string, platform: string, username: unknown, options: NotificationOptions) {
         if (!options || typeof options !== 'object') {
             throw new Error('handleUnifiedNotification requires options');
         }
@@ -101,7 +296,8 @@ class AppRuntime {
             }
 
             const managerResult = await this.notificationManager.handleNotification(type, platform, notificationData);
-            if (managerResult && typeof managerResult === 'object' && typeof managerResult.success === 'boolean') {
+            const managerRecord = managerResult && typeof managerResult === 'object' ? managerResult as RuntimeRecord : null;
+            if (managerRecord && typeof managerRecord.success === 'boolean') {
                 return managerResult;
             }
             throw new Error('Notification manager returned invalid result shape');
@@ -124,7 +320,7 @@ class AppRuntime {
         }
     }
 
-    constructor(config, dependencies) {
+    constructor(config: RuntimeConfig, dependencies: RuntimeDependencies) {
         if (!dependencies) {
             throw new Error('AppRuntime requires dependencies');
         }
@@ -176,16 +372,18 @@ class AppRuntime {
             throw new Error('AppRuntime requires platformLifecycleService.getAllPlatforms function');
         }
         const requiredDependencies = [
-            'displayQueue',
-            'notificationManager',
-            'eventBus',
-            'vfxCommandService',
-            'userTrackingService',
-            'obsEventService',
-            'commandCooldownService',
-            'platformLifecycleService'
-        ];
-        const missingDeps = requiredDependencies.filter((dep) => !this[dep]);
+            ['displayQueue', this.displayQueue],
+            ['notificationManager', this.notificationManager],
+            ['eventBus', this.eventBus],
+            ['vfxCommandService', this.vfxCommandService],
+            ['userTrackingService', this.userTrackingService],
+            ['obsEventService', this.obsEventService],
+            ['commandCooldownService', this.commandCooldownService],
+            ['platformLifecycleService', this.platformLifecycleService]
+        ] as const;
+        const missingDeps = requiredDependencies
+            .filter(([, dependency]) => !dependency)
+            .map(([name]) => name);
         if (missingDeps.length > 0) {
             throw new Error(`AppRuntime missing required dependencies: ${missingDeps.join(', ')}`);
         }
@@ -198,9 +396,21 @@ class AppRuntime {
         this.isStarted = false;
         this.isShuttingDown = false;
 
+        const routerRuntime = {
+            handleChatMessage: this.handleChatMessage.bind(this),
+            updateViewerCount: this.updateViewerCount.bind(this),
+            handleGiftNotification: this.handleGiftNotification.bind(this),
+            handlePaypiggyNotification: this.handlePaypiggyNotification.bind(this),
+            handleGiftPaypiggyNotification: this.handleGiftPaypiggyNotification.bind(this),
+            handleFollowNotification: this.handleFollowNotification.bind(this),
+            handleShareNotification: this.handleShareNotification.bind(this),
+            handleRaidNotification: this.handleRaidNotification.bind(this),
+            handleStreamDetected: this.handleStreamDetected.bind(this),
+            handleEnvelopeNotification: this.handleEnvelopeNotification.bind(this)
+        };
         this.platformEventRouter = new PlatformEventRouter({
             eventBus: this.eventBus,
-            runtime: this,
+            runtime: routerRuntime,
             notificationManager: this.notificationManager,
             config: this.config,
             logger: this.logger
@@ -233,7 +443,7 @@ class AppRuntime {
             logger: this.logger
         });
 
-        this.vfxCommandUnsubscribe = this.eventBus.subscribe(PlatformEvents.VFX_COMMAND_RECEIVED, async (event) => {
+        this.vfxCommandUnsubscribe = this.eventBus.subscribe(PlatformEvents.VFX_COMMAND_RECEIVED, async (event: RuntimeRecord) => {
             try {
                 const { command, commandKey, username, platform, userId, context, source } = event;
                 if (!context || typeof context !== 'object') {
@@ -254,17 +464,18 @@ class AppRuntime {
                 if (!userId) {
                     throw new Error('VFX command event requires userId');
                 }
-                const skipCooldown = context?.skipCooldown;
+                const contextRecord = context && typeof context === 'object' ? context as RuntimeRecord : {};
+                const skipCooldown = contextRecord.skipCooldown;
                 if (typeof skipCooldown !== 'boolean') {
                     throw new Error('VFX command event requires skipCooldown boolean');
                 }
-                const correlationId = context?.correlationId || event.correlationId;
+                const correlationId = contextRecord.correlationId || event.correlationId;
                 if (!correlationId) {
                     throw new Error('VFX command event requires correlationId');
                 }
 
                 const executionContext = {
-                    ...context,
+                    ...contextRecord,
                     username,
                     platform,
                     userId,
@@ -299,7 +510,7 @@ class AppRuntime {
         this.logger.debug('Event handlers registered successfully', 'AppRuntime');
     }
 
-    async handleStreamDetected(platform, data) {
+    async handleStreamDetected(platform: string, data: RuntimeRecord) {
         if (!platform) {
             throw new Error('Stream detection event requires platform');
         }
@@ -330,7 +541,7 @@ class AppRuntime {
         }
     }
 
-    isFirstMessage(userId, context = {}) {
+    isFirstMessage(userId: unknown, context: RuntimeRecord = {}) {
         if (!this.userTrackingService || typeof this.userTrackingService.isFirstMessage !== 'function') {
             throw new Error('UserTrackingService not available for first message check');
         }
@@ -361,11 +572,14 @@ class AppRuntime {
         this.logger.debug('Platform initialization delegated to service', 'AppRuntime');
     }
 
-    async handleChatMessage(platform, normalizedData) {
+    async handleChatMessage(platform: string, normalizedData: RuntimeRecord) {
         try {
-            const messageText = typeof normalizedData?.message === 'string'
+            const messageRecord = normalizedData.message && typeof normalizedData.message === 'object'
+                ? normalizedData.message as RuntimeRecord
+                : null;
+            const messageText = typeof normalizedData.message === 'string'
                 ? normalizedData.message
-                : (typeof normalizedData?.message?.text === 'string' ? normalizedData.message.text : '');
+                : (typeof messageRecord?.text === 'string' ? messageRecord.text : '');
             this.logger.debug('Received chat message', 'chat-handler', {
                 platform,
                 username: normalizedData?.username,
@@ -395,7 +609,7 @@ class AppRuntime {
         }
     }
 
-    updateViewerCount(platform, count) {
+    updateViewerCount(platform: string, count: number) {
         this.logger.debug(`[${platform}] Viewer count updated: ${count}`, 'system');
 
         if (this.viewerCountSystem) {
@@ -404,7 +618,7 @@ class AppRuntime {
 
             const notificationPromise = this.viewerCountSystem.notifyObservers(platform, count, previousCount);
             if (notificationPromise && notificationPromise.catch) {
-                notificationPromise.catch((error) => {
+                notificationPromise.catch((error: unknown) => {
                     this.logger.warn(`Observer notification failed for ${platform}: ${getErrorMessage(error)}`, 'system');
                 });
             }
@@ -442,6 +656,9 @@ class AppRuntime {
 
         if (this.obsEventService) {
             try {
+                if (typeof this.obsEventService.disconnect !== 'function') {
+                    throw new Error('OBSEventService missing disconnect function');
+                }
                 await this.obsEventService.disconnect();
                 this.logger.info('Disconnected from OBS via OBSEventService.', 'system');
             } catch (error) {
@@ -468,7 +685,7 @@ class AppRuntime {
         } else {
             try {
                 const obsManager = this._getObsConnectionManager();
-                if (obsManager && obsManager.isConnected()) {
+                if (obsManager && obsManager.isConnected() && typeof obsManager.disconnect === 'function') {
                     await obsManager.disconnect();
                     this.logger.info('Disconnected from OBS.', 'system');
                 }
@@ -543,7 +760,7 @@ class AppRuntime {
         this.emitSystemShutdown({ reason: 'manual-shutdown' });
     }
 
-    emitSystemShutdown({ reason, restartRequested = false } = {}) {
+    emitSystemShutdown({ reason, restartRequested = false }: { reason?: unknown; restartRequested?: boolean } = {}) {
         const shutdownReason = typeof reason === 'string' && reason.trim() ? reason : 'unknown';
         const shutdownMode = restartRequested ? 'restart' : 'exit';
         if (this.eventBus && typeof this.eventBus.emit === 'function') {
@@ -611,9 +828,14 @@ class AppRuntime {
 
             this.logger.info('Initializing OBS connection...', 'AppRuntime');
             try {
-                await initializeOBSConnection(this.config.obs, {
+                const obsConnectionDependencies = {
                     handcam: this.config.handcam,
-                    obsEventService: this.obsEventService
+                    ...(typeof this.obsEventService.connect === 'function'
+                        ? { obsEventService: { connect: this.obsEventService.connect.bind(this.obsEventService) } }
+                        : {})
+                };
+                await initializeOBSConnection(this.config.obs, {
+                    ...obsConnectionDependencies
                 });
                 this.logger.info('OBS connection initialized', 'AppRuntime');
             } catch (obsError) {
@@ -655,7 +877,7 @@ class AppRuntime {
 
             await this.viewerCountSystem.startPolling();
 
-            this.gracefulExitService = this.dependencies.gracefulExitService;
+            this.gracefulExitService = this.dependencies.gracefulExitService ?? null;
             if (!this.gracefulExitService) {
                 throw new Error('GracefulExitService dependency required');
             }
@@ -673,7 +895,7 @@ class AppRuntime {
         }
     }
 
-    _getFailedPlatformInitializations() {
+    _getFailedPlatformInitializations(): string[] {
         if (!this.platformLifecycleService || typeof this.platformLifecycleService.getStatus !== 'function') {
             return [];
         }
@@ -683,8 +905,8 @@ class AppRuntime {
             ? status.failedPlatforms
             : [];
         return failedPlatforms
-            .map((entry) => entry?.name)
-            .filter((name) => typeof name === 'string' && name.length > 0);
+            .map((entry: { name?: unknown }) => entry?.name)
+            .filter((name: unknown): name is string => typeof name === 'string' && name.length > 0);
     }
 
     async rollbackStartup() {
@@ -719,7 +941,7 @@ class AppRuntime {
         this.isStarted = false;
     }
 
-    async _runStartupRollbackStep(stepName, stepFn) {
+    async _runStartupRollbackStep(stepName: string, stepFn: () => Promise<unknown> | unknown) {
         try {
             await stepFn();
         } catch (error) {
@@ -758,13 +980,13 @@ class AppRuntime {
         return this.platformLifecycleService.getAllPlatforms();
     }
 
-    emitSystemReady(options) {
+    emitSystemReady(options: SystemReadyOptions): SystemReadyPayload {
         if (!options || typeof options !== 'object') {
             throw new Error('emitSystemReady requires options');
         }
         const { correlationId } = options;
 
-        const readyPayload = {
+        const readyPayload: SystemReadyPayload = {
             services: this.getReadyServices(),
             timestamp: getSystemTimestampISO()
         };
@@ -775,8 +997,11 @@ class AppRuntime {
 
         if (this.platformLifecycleService?.getStatus) {
             readyPayload.platforms = this.platformLifecycleService.getStatus();
-            const failedPlatforms = Array.isArray(readyPayload.platforms?.failedPlatforms)
-                ? readyPayload.platforms.failedPlatforms
+            const platformStatus = readyPayload.platforms && typeof readyPayload.platforms === 'object'
+                ? readyPayload.platforms as RuntimeRecord
+                : null;
+            const failedPlatforms = Array.isArray(platformStatus?.failedPlatforms)
+                ? platformStatus.failedPlatforms
                 : [];
             if (failedPlatforms.length > 0) {
                 readyPayload.degraded = true;
@@ -809,28 +1034,28 @@ class AppRuntime {
             .map(([name]) => name);
     }
 
-    async handleFollowNotification(platform, username, options) {
+    async handleFollowNotification(platform: string, username: unknown, options: NotificationOptions) {
         if (!options || typeof options !== 'object') {
             throw new Error('handleFollowNotification requires options');
         }
         return this.handleUnifiedNotification('platform:follow', platform, username, options);
     }
 
-    async handleShareNotification(platform, username, options) {
+    async handleShareNotification(platform: string, username: unknown, options: NotificationOptions) {
         if (!options || typeof options !== 'object') {
             throw new Error('handleShareNotification requires options');
         }
         return this.handleUnifiedNotification('platform:share', platform, username, options);
     }
 
-    async handlePaypiggyNotification(platform, username, options) {
+    async handlePaypiggyNotification(platform: string, username: unknown, options: NotificationOptions) {
         if (!options || typeof options !== 'object') {
             throw new Error('handlePaypiggyNotification requires options');
         }
         return this.handleUnifiedNotification('platform:paypiggy', platform, username, options);
     }
 
-    async handleRaidNotification(platform, raiderName, options) {
+    async handleRaidNotification(platform: string, raiderName: unknown, options: NotificationOptions) {
         if (!options || typeof options !== 'object') {
             throw new Error('handleRaidNotification requires options');
         }
@@ -843,7 +1068,7 @@ class AppRuntime {
         });
     }
 
-    async handleGiftNotification(platform, username, options) {
+    async handleGiftNotification(platform: string, username: unknown, options: NotificationOptions) {
         if (!options || typeof options !== 'object') {
             throw new Error('handleGiftNotification requires options');
         }
@@ -880,20 +1105,20 @@ class AppRuntime {
             }
         }
 
-        let giftType = typeof options.giftType === 'string' ? options.giftType.trim() : '';
+        let giftType: string | undefined = typeof options.giftType === 'string' ? options.giftType.trim() : '';
         const rawGiftCount = options.giftCount;
         let giftCount = rawGiftCount === undefined || rawGiftCount === null ? undefined : Number(rawGiftCount);
         const rawAmount = options.amount;
         let amount = rawAmount === undefined || rawAmount === null ? undefined : Number(rawAmount);
-        let currency = typeof options.currency === 'string' ? options.currency.trim() : '';
+        let currency: string | undefined = typeof options.currency === 'string' ? options.currency.trim() : '';
         const repeatCount = options.repeatCount;
 
         if (!isError) {
-            if (!giftType || !Number.isFinite(giftCount) || giftCount < 0 || !Number.isFinite(amount) || amount < 0 || !currency) {
+            if (!giftType || giftCount === undefined || !Number.isFinite(giftCount) || giftCount < 0 || amount === undefined || !Number.isFinite(amount) || amount < 0 || !currency) {
                 throw new Error('Gift notification requires giftType, giftCount, amount, and currency');
             }
         }
-        if (!isError && (giftCount <= 0 || amount <= 0)) {
+        if (!isError && (giftCount === undefined || amount === undefined || giftCount <= 0 || amount <= 0)) {
             throw new Error('Gift notification requires giftType, giftCount, amount, and currency');
         }
 
@@ -957,7 +1182,7 @@ class AppRuntime {
         return this.handleUnifiedNotification(notificationType, platform, username, notificationPayload);
     }
 
-    async handleFarewellNotification(platform, username, options) {
+    async handleFarewellNotification(platform: string, username: unknown, options: NotificationOptions) {
         if (!options || typeof options !== 'object') {
             throw new Error('handleFarewellNotification requires options');
         }
@@ -970,7 +1195,7 @@ class AppRuntime {
         });
     }
 
-    async handleGiftPaypiggyEvent(platform, username, options) {
+    async handleGiftPaypiggyEvent(platform: string, username: unknown, options: NotificationOptions) {
         if (!options || typeof options !== 'object') {
             throw new Error('handleGiftPaypiggyEvent requires options');
         }
@@ -990,7 +1215,7 @@ class AppRuntime {
         } else if (giftCount !== undefined && (!Number.isFinite(giftCount) || giftCount < 0)) {
             giftCount = undefined;
         }
-        const payload = {
+        const payload: NotificationOptions = {
             ...(giftCount !== undefined ? { giftCount } : {}),
             userId: options.userId,
             timestamp: options.timestamp,
@@ -1010,7 +1235,7 @@ class AppRuntime {
         return this.handleUnifiedNotification('platform:giftpaypiggy', platform, username, payload);
     }
 
-    async handleResubEvent(platform, username, options) {
+    async handleResubEvent(platform: string, username: unknown, options: NotificationOptions) {
         if (!options || typeof options !== 'object') {
             throw new Error('handleResubEvent requires options');
         }
@@ -1026,7 +1251,7 @@ class AppRuntime {
         });
     }
 
-    async handleEnvelopeNotification(platform, data) {
+    async handleEnvelopeNotification(platform: string, data: NotificationOptions) {
         try {
             this.logger.info(`[Envelope] Treasure chest event on ${platform}`, platform);
             if (!data || typeof data !== 'object') {
@@ -1044,10 +1269,10 @@ class AppRuntime {
                 if (!data.userId || !data.username) {
                     throw new Error('Envelope notification requires userId and username');
                 }
-                if (!giftType || !Number.isFinite(giftCount) || giftCount < 0 || !Number.isFinite(amount) || amount < 0 || !currency || !data.timestamp) {
+                if (!giftType || giftCount === undefined || !Number.isFinite(giftCount) || giftCount < 0 || amount === undefined || !Number.isFinite(amount) || amount < 0 || !currency || !data.timestamp) {
                     throw new Error('Envelope notification requires giftType, giftCount, amount, currency, timestamp, and id');
                 }
-                if (giftCount <= 0 || amount <= 0 || !data.id) {
+                if (giftCount === undefined || amount === undefined || giftCount <= 0 || amount <= 0 || !data.id) {
                     throw new Error('Envelope notification requires giftType, giftCount, amount, currency, timestamp, and id');
                 }
             }
@@ -1090,7 +1315,7 @@ class AppRuntime {
         }
     }
 
-    async handleGiftPaypiggyNotification(platform, username, options) {
+    async handleGiftPaypiggyNotification(platform: string, username: unknown, options: NotificationOptions) {
         try {
             return await this.handleGiftPaypiggyEvent(platform, username, options);
         } catch (error) {
@@ -1110,7 +1335,7 @@ class AppRuntime {
         }
     }
 
-    async handleResubNotification(platform, username, options) {
+    async handleResubNotification(platform: string, username: unknown, options: NotificationOptions) {
         try {
             return await this.handleResubEvent(platform, username, options);
         } catch (error) {
@@ -1130,7 +1355,7 @@ class AppRuntime {
         }
     }
 
-    _handleAppRuntimeError(message, error, payload, options) {
+    _handleAppRuntimeError(message: string, error: unknown, payload: RuntimeRecord | null, options: AppRuntimeErrorOptions) {
         if (!options) {
             throw new Error('_handleAppRuntimeError requires options');
         }
@@ -1161,21 +1386,21 @@ class AppRuntime {
         handler.logOperationalError(message, logContext, payload);
     }
 
-    _getObsConnectionManager() {
+    _getObsConnectionManager(): RuntimeObsManager {
         if (this.dependencies?.obs?.connectionManager) {
             return this.dependencies.obs.connectionManager;
         }
         return getOBSConnectionManager({ config: this.config.obs });
     }
 
-    _getDefaultGoalsManager() {
+    _getDefaultGoalsManager(): { initializeGoalDisplay: () => Promise<unknown> | unknown } {
         if (this.dependencies?.obs?.goalsManager) {
             return this.dependencies.obs.goalsManager;
         }
         return getDefaultGoalsManager();
     }
 
-    _getObsSourcesManager() {
+    _getObsSourcesManager(): RuntimeSourcesManager | null {
         if (this.dependencies?.obs?.sourcesManager) {
             return this.dependencies.obs.sourcesManager;
         }
