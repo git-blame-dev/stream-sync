@@ -1,5 +1,6 @@
 import { secrets } from '../core/secrets';
 import { getUnifiedLogger } from '../core/logging';
+import type { AppLogger } from '../core/logger/types';
 import { InnertubeFactory } from '../factories/innertube-factory';
 import { TikTokWebSocketClient } from '../platforms/tiktok-websocket-client';
 import { ChatFileLoggingService } from '../services/ChatFileLoggingService';
@@ -11,12 +12,106 @@ import { YouTubeViewerExtractor } from '../extractors/youtube-viewer-extractor';
 import { PlatformConnectionFactory } from './platform-connection-factory';
 import { withTimeout } from './timeout-wrapper';
 
+type PlatformDependencyConfig = Record<string, unknown> & {
+    username?: unknown;
+    channel?: unknown;
+    clientId?: unknown;
+    clientSecret?: unknown;
+    apiKey?: unknown;
+    enableAPI?: boolean;
+    streamDetectionMethod?: string;
+    viewerCountMethod?: string;
+};
+
+type SelfMessageConfig = ConstructorParameters<typeof SelfMessageDetectionService>[0];
+
+type ChatFileLoggingServiceCtor = typeof ChatFileLoggingService;
+
+type TikTokConnectorDependencyMap = {
+    TikTokWebSocketClient?: unknown;
+    WebcastEvent?: unknown;
+    ControlEvent?: unknown;
+    WebcastPushConnection?: unknown;
+};
+
+type InnertubeDetectionClient = ConstructorParameters<typeof YouTubeStreamDetectionService>[0];
+type InnertubeInfoClient = Awaited<ReturnType<ConstructorParameters<typeof InnertubeService>[0]['createWithTimeout']>>;
+
+type InnertubeClassLike = {
+    create: () => Promise<InnertubeDetectionClient>;
+};
+
+type InnertubeDependency = InnertubeClassLike | (() => Promise<InnertubeClassLike> | InnertubeClassLike);
+
+type DependencyFactoryOptions = Record<string, unknown> & {
+    logger?: AppLogger;
+    config?: SelfMessageConfig;
+    streamDetectionService?: unknown;
+    ChatFileLoggingService?: ChatFileLoggingServiceCtor;
+    TikTokWebSocketClient?: unknown;
+    WebcastEvent?: unknown;
+    ControlEvent?: unknown;
+    WebcastPushConnection?: unknown;
+    tiktokConnector?: TikTokConnectorDependencyMap;
+    modulePreloader?: unknown;
+    twitchAuth?: unknown;
+    axios?: unknown;
+    WebSocketCtor?: unknown;
+    Innertube?: InnertubeDependency;
+    cleanupInterval?: number;
+    timeout?: number;
+    strategies?: string[];
+    debug?: boolean;
+    retries?: number;
+};
+
+type DependencyInterfaceType = 'logger' | 'notificationManager' | 'apiClient';
+type InterfaceValidator = (dependency: Record<string, unknown>) => void;
+type InterfaceValidators = Record<DependencyInterfaceType, InterfaceValidator>;
+
+type DeferredYouTubeStreamDetectionService = {
+    _innertubeInstance: InnertubeDetectionClient | null;
+    _initializePromise: Promise<InnertubeDetectionClient> | null;
+    _innertubeClient: InnertubeDetectionClient | null;
+    _streamDetectionService: YouTubeStreamDetectionService | null;
+    _getInnertubeInstance: () => Promise<InnertubeDetectionClient>;
+    _getStreamDetectionService: () => Promise<YouTubeStreamDetectionService>;
+    detectLiveStreams: (channel: string, detectOptions?: Record<string, unknown>) => Promise<unknown>;
+    getUsageMetrics: () => Record<string, unknown>;
+};
+
+function getErrorMessage(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
+}
+
+function isDependencyInterfaceType(value: string): value is DependencyInterfaceType {
+    return value === 'logger' || value === 'notificationManager' || value === 'apiClient';
+}
+
+function toDependencyRecord(dependency: unknown): Record<string, unknown> {
+    if (!dependency || typeof dependency !== 'object') {
+        throw new Error('Dependency must be an object');
+    }
+
+    return dependency as Record<string, unknown>;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isInnertubeInfoClient(value: unknown): value is InnertubeInfoClient {
+    return isRecord(value) && typeof value.getInfo === 'function';
+}
+
 class DependencyFactory {
+    interfaceValidators: InterfaceValidators;
+
     constructor() {
         this.interfaceValidators = this._createInterfaceValidators();
     }
 
-    createYoutubeDependencies(config, options = {}) {
+    createYoutubeDependencies(config: PlatformDependencyConfig, options: DependencyFactoryOptions = {}) {
         this._validateConfiguration(config, 'YouTube');
         this._validateOptions(options);
 
@@ -81,11 +176,11 @@ class DependencyFactory {
             return dependencies;
 
         } catch (error) {
-            throw new Error(`Failed to create YouTube dependencies: ${error.message}`);
+            throw new Error(`Failed to create YouTube dependencies: ${getErrorMessage(error)}`);
         }
     }
 
-    createTiktokDependencies(config, options = {}) {
+    createTiktokDependencies(config: PlatformDependencyConfig, options: DependencyFactoryOptions = {}) {
         this._validateConfiguration(config, 'TikTok');
         this._validateOptions(options);
 
@@ -137,11 +232,11 @@ class DependencyFactory {
             return dependencies;
 
         } catch (error) {
-            throw new Error(`Failed to create TikTok dependencies: ${error.message}`);
+            throw new Error(`Failed to create TikTok dependencies: ${getErrorMessage(error)}`);
         }
     }
 
-    createTwitchDependencies(config, options = {}) {
+    createTwitchDependencies(config: PlatformDependencyConfig, options: DependencyFactoryOptions = {}) {
         // Validate inputs
         this._validateConfiguration(config, 'Twitch');
         this._validateOptions(options);
@@ -158,10 +253,9 @@ class DependencyFactory {
             const logger = this.createValidatedLogger('twitch');
 
             // Create normalized config
-            const normalizedConfig = {
+            const normalizedConfig: PlatformDependencyConfig = {
                 ...config,
-                channel: channel,
-                clientId: config.clientId
+                channel: channel
             };
             delete normalizedConfig.clientSecret;
             delete normalizedConfig.apiKey;
@@ -204,11 +298,11 @@ class DependencyFactory {
             return dependencies;
 
         } catch (error) {
-            throw new Error(`Failed to create Twitch dependencies: ${error.message}`);
+            throw new Error(`Failed to create Twitch dependencies: ${getErrorMessage(error)}`);
         }
     }
 
-    createValidatedLogger(type) {
+    createValidatedLogger(type: unknown): AppLogger {
         if (!type || typeof type !== 'string') {
             throw new Error('Logger type is required and must be a string');
         }
@@ -223,42 +317,41 @@ class DependencyFactory {
             return logger;
 
         } catch (error) {
-            throw new Error(`Failed to create logger for ${type}: ${error.message}`);
+            throw new Error(`Failed to create logger for ${type}: ${getErrorMessage(error)}`);
         }
     }
 
-    validateDependencyInterface(dependency, interfaceType) {
-        if (!dependency || typeof dependency !== 'object') {
-            throw new Error('Dependency must be an object');
-        }
+    validateDependencyInterface(dependency: unknown, interfaceType: string) {
+        const dependencyRecord = toDependencyRecord(dependency);
 
-        const validator = this.interfaceValidators[interfaceType];
-        if (!validator) {
+        if (!isDependencyInterfaceType(interfaceType)) {
             throw new Error(`Unknown interface type: ${interfaceType}`);
         }
 
+        const validator = this.interfaceValidators[interfaceType];
+
         try {
-            validator(dependency);
+            validator(dependencyRecord);
         } catch (error) {
-            throw new Error(`${this._capitalizeFirst(interfaceType)} interface validation failed: ${error.message}`);
+            throw new Error(`${this._capitalizeFirst(interfaceType)} interface validation failed: ${getErrorMessage(error)}`);
         }
     }
 
     // Private helper methods
 
-    _validateConfiguration(config, platform) {
+    _validateConfiguration(config: unknown, _platform: string) {
         if (!config || typeof config !== 'object') {
             throw new Error('Configuration is required and must be an object');
         }
     }
 
-    _validateOptions(options) {
+    _validateOptions(options: unknown) {
         if (options === null || (options !== undefined && typeof options !== 'object')) {
             throw new Error('Options must be an object');
         }
     }
 
-    _createYouTubeApiClient(config, logger) {
+    _createYouTubeApiClient(config: PlatformDependencyConfig, logger: AppLogger) {
         return {
             apiKey: secrets.youtube.apiKey || null,
             username: config.username,
@@ -272,11 +365,10 @@ class DependencyFactory {
         };
     }
 
-    _createYouTubeConnectionManager(config, logger) {
+    _createYouTubeConnectionManager(config: PlatformDependencyConfig, logger: AppLogger) {
         return {
             config,
             logger,
-            isConnected: false,
             
             // Connection manager interface methods
             connect: async () => Promise.resolve(true),
@@ -286,7 +378,7 @@ class DependencyFactory {
         };
     }
 
-    _createYouTubeStreamDetectionService(config, logger, options = {}) {
+    _createYouTubeStreamDetectionService(config: PlatformDependencyConfig, logger: AppLogger, options: DependencyFactoryOptions = {}) {
         try {
             // Try to load the actual YouTubeStreamDetectionService
             
@@ -297,24 +389,25 @@ class DependencyFactory {
                     throw new Error('Innertube dependency required for youtubei stream detection');
                 }
                 logger.debug('Creating Innertube instance for stream detection service', 'dependency-factory');
+                const innertubeDependency = options.Innertube;
                 
                 // Create a deferred service that will initialize Innertube when first used
-                const deferredService = {
+                const deferredService: DeferredYouTubeStreamDetectionService = {
                     _innertubeInstance: null,
                     _initializePromise: null,
                     _innertubeClient: null, // Expose for testing
                     _streamDetectionService: null, // Cache the detection service instance
 
-                    async _getInnertubeInstance() {
+                    async _getInnertubeInstance(): Promise<InnertubeDetectionClient> {
                         if (this._innertubeInstance) {
                             return this._innertubeInstance;
                         }
 
                         if (!this._initializePromise) {
                             // Handle both direct class and lazy loading function references
-                            const InnertubeClass = typeof options.Innertube === 'function' ?
-                                await options.Innertube() : // Lazy loading function
-                                options.Innertube;         // Direct class reference
+                            const InnertubeClass = typeof innertubeDependency === 'function' ?
+                                await innertubeDependency() : // Lazy loading function
+                                innertubeDependency;         // Direct class reference
 
                             this._initializePromise = InnertubeClass.create();
                         }
@@ -324,7 +417,7 @@ class DependencyFactory {
                         return this._innertubeInstance;
                     },
 
-                    async _getStreamDetectionService() {
+                    async _getStreamDetectionService(): Promise<YouTubeStreamDetectionService> {
                         // Cache the detection service instance to ensure API consistency
                         if (this._streamDetectionService) {
                             return this._streamDetectionService;
@@ -338,7 +431,7 @@ class DependencyFactory {
                         return this._streamDetectionService;
                     },
 
-                    async detectLiveStreams(channel, detectOptions = {}) {
+                    async detectLiveStreams(channel: string, detectOptions: Record<string, unknown> = {}) {
                         const service = await this._getStreamDetectionService();
                         return service.detectLiveStreams(channel, detectOptions);
                     },
@@ -361,9 +454,9 @@ class DependencyFactory {
             
             // Create mock client as fallback (for non-youtubei methods or when Innertube not available)
             logger.debug('Using mock Innertube client for stream detection service', 'dependency-factory');
-            const mockInnertubeClient = {
-                search: async (query) => ({ results: [] }),
-                getChannel: async (handle) => ({ videos: [] })
+            const mockInnertubeClient: InnertubeDetectionClient = {
+                search: async (_query: string) => ({ videos: [] }),
+                getChannel: async (_handle: string) => ({ videos: { contents: [] } })
             };
             
             return new YouTubeStreamDetectionService(mockInnertubeClient, {
@@ -382,7 +475,7 @@ class DependencyFactory {
                 logger,
                 
                 // Stream detection interface methods
-                detectLiveStreams: async (channelHandle, options = {}) => {
+                detectLiveStreams: async (_channelHandle: string, _options: Record<string, unknown> = {}) => {
                     return {
                         success: false,
                         videoIds: [],
@@ -404,7 +497,7 @@ class DependencyFactory {
         }
     }
 
-    _resolveTikTokConnectorDependencies(options = {}) {
+    _resolveTikTokConnectorDependencies(options: DependencyFactoryOptions = {}) {
         const connectorOverrides = options.tiktokConnector || {};
         const resolved = {
             TikTokWebSocketClient: options.TikTokWebSocketClient || connectorOverrides.TikTokWebSocketClient,
@@ -456,7 +549,7 @@ class DependencyFactory {
             // No connector fallback; WebSocket client is required
         }
 
-        const missingDependencies = [];
+        const missingDependencies: string[] = [];
         if (typeof resolved.TikTokWebSocketClient !== 'function') {
             missingDependencies.push('TikTokWebSocketClient');
         }
@@ -479,12 +572,12 @@ class DependencyFactory {
         return resolved;
     }
 
-    _createTikTokConnectionFactory(config, logger) {
+    _createTikTokConnectionFactory(_config: PlatformDependencyConfig, logger: AppLogger) {
         // Use the shared platform connection factory to ensure consistent, validated connections
         return new PlatformConnectionFactory(logger);
     }
 
-    _createTikTokStateManager(config, logger) {
+    _createTikTokStateManager(config: PlatformDependencyConfig, logger: AppLogger) {
         return {
             config,
             logger,
@@ -492,13 +585,13 @@ class DependencyFactory {
             
             // State manager interface methods
             getState: () => 'disconnected',
-            setState: (state) => {},
+            setState: (_state: string) => {},
             isConnected: () => false,
             reset: () => {}
         };
     }
 
-    _createTwitchApiClient(config, logger) {
+    _createTwitchApiClient(config: PlatformDependencyConfig, logger: AppLogger) {
         return {
             config,
             logger,
@@ -511,9 +604,9 @@ class DependencyFactory {
         };
     }
 
-    _createInterfaceValidators() {
+    _createInterfaceValidators(): InterfaceValidators {
         return {
-            logger: (logger) => {
+            logger: (logger: Record<string, unknown>) => {
                 const requiredMethods = ['debug', 'info', 'warn', 'error'];
                 for (const method of requiredMethods) {
                     if (typeof logger[method] !== 'function') {
@@ -522,7 +615,7 @@ class DependencyFactory {
                 }
             },
 
-            notificationManager: (manager) => {
+            notificationManager: (manager: Record<string, unknown>) => {
                 // Flexible validation - accept different notification manager patterns
                 const hasEventEmitter = typeof manager.emit === 'function' && typeof manager.on === 'function';
                 const hasHandlerMethods = typeof manager.handleNotification === 'function';
@@ -532,7 +625,7 @@ class DependencyFactory {
                 }
             },
 
-            apiClient: (client) => {
+            apiClient: (client: Record<string, unknown>) => {
                 const requiredMethods = ['get', 'post'];
                 for (const method of requiredMethods) {
                     if (typeof client[method] !== 'function') {
@@ -543,20 +636,45 @@ class DependencyFactory {
         };
     }
 
-    _createInnertubeFactory() {
+    _createInnertubeFactory(): typeof InnertubeFactory {
         return InnertubeFactory;
     }
     
-    _createInnertubeService(factory, logger, options = {}) {
-        return new InnertubeService(factory, {
+    _createInnertubeService(factory: typeof InnertubeFactory, logger: AppLogger, options: DependencyFactoryOptions = {}) {
+        const serviceFactory: ConstructorParameters<typeof InnertubeService>[0] = {
+            createWithTimeout: async (timeoutMs?: number) => {
+                const instance = await factory.createWithTimeout(timeoutMs);
+                if (!isInnertubeInfoClient(instance)) {
+                    throw new Error('InnertubeFactory returned an invalid client');
+                }
+                return instance;
+            }
+        };
+
+        return new InnertubeService(serviceFactory, {
             logger,
             withTimeout,
             cleanupInterval: options.cleanupInterval || 300000
         });
     }
     
-    _createViewerExtractionService(innertubeService, logger, options = {}) {
-        return new ViewerCountExtractionService(innertubeService, {
+    _createViewerExtractionService(innertubeService: InnertubeService, logger: AppLogger, options: DependencyFactoryOptions = {}) {
+        const viewerInnertubeService: ConstructorParameters<typeof ViewerCountExtractionService>[0] = {
+            getVideoInfo: async (videoId, videoOptions) => {
+                const normalizedVideoOptions: { timeout?: number; instanceKey?: string } = {};
+                if (typeof videoOptions?.timeout === 'number') {
+                    normalizedVideoOptions.timeout = videoOptions.timeout;
+                }
+                if (typeof videoOptions?.instanceKey === 'string') {
+                    normalizedVideoOptions.instanceKey = videoOptions.instanceKey;
+                }
+
+                const videoInfo = await innertubeService.getVideoInfo(videoId, normalizedVideoOptions);
+                return isRecord(videoInfo) ? videoInfo : {};
+            }
+        };
+
+        return new ViewerCountExtractionService(viewerInnertubeService, {
             logger,
             YouTubeViewerExtractor,
             timeout: options.timeout || 8000,
@@ -566,7 +684,7 @@ class DependencyFactory {
         });
     }
 
-    _capitalizeFirst(str) {
+    _capitalizeFirst(str: string) {
         return str.charAt(0).toUpperCase() + str.slice(1);
     }
 }

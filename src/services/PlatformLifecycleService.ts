@@ -3,6 +3,7 @@ import { safeDelay } from '../utils/timeout-validator';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 import { assertPlatformInterface } from '../utils/platform-interface-validator';
 import { getSystemTimestampISO } from '../utils/timestamp';
+import type { DependencyFactory } from '../utils/dependency-factory';
 
 const PlatformEvents = {
     CHAT_MESSAGE: 'platform:chat-message',
@@ -25,6 +26,10 @@ function getErrorMessage(error: unknown): string {
         return error.message;
     }
     return String(error);
+}
+
+function isDependencyFactoryMethod(value: unknown): value is DependencyFactoryMethod {
+    return typeof value === 'function';
 }
 
 type LifecycleRecord = Record<string, unknown>;
@@ -63,10 +68,18 @@ type PlatformConfig = LifecycleRecord & {
     username?: unknown;
 };
 
+type DependencyFactoryMethod = (config: PlatformConfig, sharedDependencies: LifecycleRecord) => unknown;
+
+type PlatformDependencyFactory = Pick<DependencyFactory,
+    'createYoutubeDependencies' |
+    'createTiktokDependencies' |
+    'createTwitchDependencies'
+> & Record<string, unknown>;
+
 type PlatformLifecycleOptions = {
     config?: Record<string, PlatformConfig>;
     eventBus?: PlatformEventBus | null;
-    dependencyFactory?: Record<string, unknown>;
+    dependencyFactory?: PlatformDependencyFactory;
     logger?: PlatformLifecycleLogger;
     sharedDependencies?: LifecycleRecord;
     handlerFactory?: ((platformName: string) => PlatformEventHandlers | null | undefined) | null;
@@ -92,7 +105,7 @@ type PlatformHealthEntry = {
 class PlatformLifecycleService {
     config: Record<string, PlatformConfig> | undefined;
     eventBus: PlatformEventBus | null;
-    dependencyFactory: Record<string, unknown> | undefined;
+    dependencyFactory: PlatformDependencyFactory | undefined;
     logger: PlatformLifecycleLogger;
     errorHandler: ReturnType<typeof createPlatformErrorHandler>;
     sharedDependencies: LifecycleRecord;
@@ -403,9 +416,8 @@ class PlatformLifecycleService {
         } else {
             // Check if factory has method for this platform
             const factoryMethodName = `create${platformName.charAt(0).toUpperCase() + platformName.slice(1)}Dependencies`;
-
             const factoryCandidate = this.dependencyFactory[factoryMethodName];
-            if (typeof factoryCandidate !== 'function') {
+            if (!isDependencyFactoryMethod(factoryCandidate)) {
                 this.logger.debug(`No factory method ${factoryMethodName}, creating ${platformName} without DI`, 'PlatformLifecycleService');
                 instance = new PlatformClass(config);
             } else {
@@ -544,10 +556,11 @@ class PlatformLifecycleService {
 
     getStatus() {
         const platformNames = Object.keys(this.platformHealth);
-        const ready = platformNames.filter((name) => this.platformHealth[name].state === 'ready');
-        const initializing = platformNames.filter((name) => this.platformHealth[name].state === 'initializing');
-        const failed = platformNames.filter((name) => this.platformHealth[name].state === 'failed');
-        const disabled = platformNames.filter((name) => this.platformHealth[name].state === 'disabled');
+        const getHealthEntry = (name: string) => this.platformHealth[name] ?? this.ensurePlatformHealthEntry(name);
+        const ready = platformNames.filter((name) => getHealthEntry(name).state === 'ready');
+        const initializing = platformNames.filter((name) => getHealthEntry(name).state === 'initializing');
+        const failed = platformNames.filter((name) => getHealthEntry(name).state === 'failed');
+        const disabled = platformNames.filter((name) => getHealthEntry(name).state === 'disabled');
         const totalConfigured = PLATFORM_CONFIG_KEYS
             .filter((platformName) => this.config?.[platformName] && typeof this.config[platformName] === 'object')
             .length;
@@ -560,9 +573,9 @@ class PlatformLifecycleService {
             initializingPlatforms: initializing,
             failedPlatforms: failed.map((name) => ({
                 name,
-                lastError: this.platformHealth[name].lastError || null,
-                failures: this.platformHealth[name].failures || 0,
-                lastUpdated: this.platformHealth[name].lastUpdated
+                lastError: getHealthEntry(name).lastError || null,
+                failures: getHealthEntry(name).failures || 0,
+                lastUpdated: getHealthEntry(name).lastUpdated
             })),
             disabledPlatforms: disabled,
             platformHealth: { ...this.platformHealth },
