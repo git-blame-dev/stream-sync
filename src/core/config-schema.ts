@@ -1,4 +1,4 @@
-import type { ConfigFieldSpec, ConfigSchema, ConfigSectionSpec } from './types/config-types';
+import type { ConfigDefaults, ConfigFieldSpec, ConfigSchema, ConfigSectionSpec } from './types/config-types';
 
 const CONFIG_SCHEMA: ConfigSchema = {
     general: {
@@ -278,7 +278,7 @@ function getFieldsRequiredWhenEnabled(sectionName: string): string[] {
         .map(([fieldName]) => fieldName);
 }
 
-function buildDefaultsFromSchema(): Record<string, Record<string, unknown>> {
+function buildDefaultsFromSchema(): Partial<ConfigDefaults> {
     const defaults: Record<string, Record<string, unknown>> = {};
     for (const [sectionName, sectionSpec] of Object.entries(CONFIG_SCHEMA)) {
         if (sectionSpec._dynamic) continue;
@@ -289,16 +289,17 @@ function buildDefaultsFromSchema(): Record<string, Record<string, unknown>> {
             }
         }
     }
-    return defaults;
+    return defaults as Partial<ConfigDefaults>;
 }
 
 const DEFAULTS = {
     LOG_DIRECTORY: './logs',
     ...buildDefaultsFromSchema()
-};
+} as ConfigDefaults;
 
 export {
     CONFIG_SCHEMA,
+    isConfigFieldSpec,
     getFieldsRequiredWhenEnabled,
     buildDefaultsFromSchema,
     DEFAULTS
