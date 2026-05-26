@@ -50,6 +50,10 @@ import {
 
 type UnknownRecord = Record<string, unknown>;
 
+const isUnknownRecord = (value: unknown): value is UnknownRecord => {
+    return typeof value === 'object' && value !== null;
+};
+
 type PlatformMock = {
     connectToChat: () => Promise<unknown>;
     processMessage: (message: unknown) => UnknownRecord;
@@ -245,10 +249,10 @@ describe('mock-factories helper behavior', () => {
         const rapid = simulator.generateRapidMessages(3, 'channel.chat.message');
         expect(rapid.length).toBe(3);
         const malformed = simulator.generateMalformedMessage('tiktok');
-        expect(malformed.type).toBeUndefined();
+        expect('type' in malformed ? malformed.type : undefined).toBeUndefined();
 
         const highValue = simulator.generateHighValueEvents('tiktok');
-        expect(highValue.type).toBe('gift');
+        expect('type' in highValue ? highValue.type : undefined).toBe('gift');
     });
 
     it('builds scenario helpers for gift workflows and invalid events', () => {
@@ -376,7 +380,11 @@ describe('mock-factories helper behavior', () => {
             { username: 'test-user', giftType: 'Rose', giftCount: 1 },
             { username: 'test-user', giftType: 'Rose', giftCount: 2 }
         ]);
-        expect(aggregated[0].giftCount).toBe(3);
+        const firstAggregated = Array.isArray(aggregated) ? aggregated.at(0) : undefined;
+        expect(isUnknownRecord(firstAggregated) ? firstAggregated.giftCount : undefined).toBe(3);
+        const passThroughPlatform = createMockTikTokPlatform();
+        const passThroughGifts = [{ username: 'test-user', giftType: 'Rose', giftCount: 1 }];
+        await expect(passThroughPlatform.aggregateGifts(passThroughGifts)).resolves.toBe(passThroughGifts);
 
         const spamDetector = createMockSpamDetector({ shouldShow: false, isLowValue: true });
         expect(spamDetector.handleDonationSpam().shouldShow).toBe(false);
@@ -411,8 +419,8 @@ describe('mock-factories helper behavior', () => {
         expect(perf.getElapsedTime()).toBeGreaterThanOrEqual(0);
 
         const bulkGifts = createBulkGiftEvents(2, { platform: 'twitch', username: 'test-user' });
-        expect(bulkGifts[0].platform).toBe('twitch');
-        expect(bulkGifts[1].id).toBe('gift-1');
+        expect(bulkGifts.at(0)?.platform).toBe('twitch');
+        expect(bulkGifts.at(1)?.id).toBe('gift-1');
     });
 
     it('covers platform event processors and transport branch surfaces', async () => {
@@ -522,11 +530,11 @@ describe('mock-factories helper behavior', () => {
         expect(twitchSubMessage.payload.event.tier).toBe('2000');
 
         const youtubeSuperChatMessage = createYouTubeWebSocketMessage('superChatEvent', { amount: 25, message: 'amazing' });
-        expect(youtubeSuperChatMessage.snippet.superChatDetails.amountMicros).toBe(25000000);
+        expect(youtubeSuperChatMessage.snippet.superChatDetails?.amountMicros).toBe(25000000);
         const youtubeSponsorMessage = createYouTubeWebSocketMessage('newSponsorEvent', { username: 'new-member' });
         expect(youtubeSponsorMessage.snippet.type).toBe('newSponsorEvent');
         const youtubeMilestoneMessage = createYouTubeWebSocketMessage('memberMilestoneChatEvent', { memberMonth: 9 });
-        expect(youtubeMilestoneMessage.snippet.memberMilestoneChatDetails.memberMonth).toBe(9);
+        expect(youtubeMilestoneMessage.snippet.memberMilestoneChatDetails?.memberMonth).toBe(9);
 
         const tiktokSocialMessage = createTikTokWebSocketMessage('social', { userId: 'u-social', username: 'social-user' });
         expect(tiktokSocialMessage.type).toBe('social');
