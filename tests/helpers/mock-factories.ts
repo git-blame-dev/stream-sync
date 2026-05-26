@@ -48,6 +48,12 @@ type BuiltRequestResult = {
     };
     requestSpec: UnknownRecord;
 };
+type MockMethodMap = Record<string, unknown>;
+type MockPlatformBehavior = UnknownRecord & {
+    connectsBehavior: unknown;
+    processingSpeed: unknown;
+    errorRate: unknown;
+};
 type YouTubeConnectionService = {
     connect: () => Promise<boolean>;
     disconnect: () => Promise<boolean>;
@@ -1516,9 +1522,9 @@ const createInvalidEventBuilder = () => {
 // EXPORTS
 // ================================================================================================
 
-const createMockPlatform = (platformName, behaviorConfig = {}) => {
-    const methodOverrides = {};
-    const behaviorOverrides = {};
+const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord = {}) => {
+    const methodOverrides: MockMethodMap = {};
+    const behaviorOverrides: UnknownRecord = {};
     Object.entries(behaviorConfig || {}).forEach(([key, value]) => {
         if (typeof value === 'function') {
             methodOverrides[key] = value;
@@ -1528,22 +1534,91 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
     });
 
     // Behavior-focused approach
-    const defaultBehavior = {
+    const defaultBehavior: MockPlatformBehavior = {
         connectsBehavior: 'stable',
         processingSpeed: 'fast',
         errorRate: 0,
         ...behaviorOverrides
     };
+    const getErrorRate = () => Number(defaultBehavior.errorRate) || 0;
+
+    const processGiftForPlatform = (giftData: unknown): UnknownRecord => {
+        if (defaultBehavior.processingSpeed === 'slow') {
+            // Simulate slow processing without actual delay in tests
+        }
+
+        const giftRecord = giftData as UnknownRecord;
+
+        // Normalize user data for consistent access
+        const normalizedUser = normalizeUserData(giftRecord.user || giftRecord);
+
+        // Handle TikTok-specific gift data structure
+        let giftType: unknown;
+        let giftCount: number;
+        let amount: number;
+        let currency: unknown;
+        let giftId: unknown;
+        if (platformName === 'tiktok') {
+            const giftDetails = asRecord(giftRecord.giftDetails);
+            giftType = giftRecord.giftType || giftDetails.giftName || 'Rose';
+            giftCount = Number(giftRecord.giftCount || giftRecord.repeatCount || 1);
+            const unitAmount = giftDetails.diamondCount ?? giftRecord.unitAmount ?? null;
+            amount = Number.isFinite(Number(unitAmount)) ? Number(unitAmount) * giftCount : 0;
+            currency = giftRecord.currency || 'coins';
+            giftId = giftDetails.id ?? null;
+        } else {
+            // For other platforms, use amount-based data
+            const isTwitch = platformName === 'twitch';
+            const isYouTube = platformName === 'youtube';
+            giftType = giftRecord.giftType || (isTwitch ? 'bits' : (isYouTube ? 'Super Chat' : 'gift'));
+            giftCount = 1;
+            amount = typeof giftRecord.amount === 'number'
+                ? giftRecord.amount
+                : (Number(giftRecord.amount) || (isTwitch ? 100 : 5));
+            currency = giftRecord.currency || (isTwitch ? 'bits' : 'USD');
+            giftId = giftRecord.id || null;
+        }
+
+        // Return proper structure expected by validateUserGiftFlow
+        const timestamp = createTimestamp();
+        const notification = {
+            id: buildTestId(`gift-${platformName}`),
+            type: 'platform:gift',
+            platform: giftRecord.platform || platformName,
+            username: normalizedUser.username,
+            userId: normalizedUser.userId,
+            giftType: giftType,
+            giftCount: giftCount,
+            amount: amount,
+            currency: currency,
+            giftId: giftId,
+            repeatCount: giftCount,
+            displayMessage: `${normalizedUser.username} sent ${giftCount}x ${giftType}`,
+            ttsMessage: `${normalizedUser.username} sent ${giftCount} ${giftType}`,
+            logMessage: `Gift: ${giftCount}x ${giftType} from ${normalizedUser.username}`,
+            processedAt: timestamp.ms,
+            timestamp: timestamp.iso
+        };
+
+        // Return wrapped structure for user journey validation
+        return {
+            processed: true,
+            notification: notification,
+            displayed: true,
+            vfxTriggered: true,
+            obsUpdated: true
+        };
+    };
     
     // Behavior-focused methods (3-5 max)
     const behaviorMethods = {
-        connectToChat: createMockFn().mockImplementation(async () => {
-            if (defaultBehavior.connectsBehavior === 'unstable' && nextPseudoRandom() < defaultBehavior.errorRate) {
+        connectToChat: createMockFn<[], Promise<boolean>>().mockImplementation(async () => {
+            if (defaultBehavior.connectsBehavior === 'unstable' && nextPseudoRandom() < getErrorRate()) {
                 throw new Error('Connection unstable');
             }
             return true;
         }),
-        processMessage: createMockFn().mockImplementation((message) => {
+        processMessage: createMockFn<[unknown], UnknownRecord>().mockImplementation((message) => {
             // Error handling for malformed input
             if (message === null) {
                 throw new Error('Message data is missing - unable to process chat message');
@@ -1554,8 +1629,15 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
             if (typeof message !== 'object') {
                 throw new Error('Message format is invalid - unable to process chat message');
             }
+            const messageRecord = message as UnknownRecord;
+            const messageUser = asRecord(messageRecord.user);
+            const nestedMessage = asRecord(messageRecord.message);
+            const item = asRecord(messageRecord.item);
+            const itemMessage = asRecord(item.message);
+            const itemAuthor = asRecord(item.author);
+            const author = asRecord(messageRecord.author);
             
-            if (defaultBehavior.connectsBehavior === 'unstable' && nextPseudoRandom() < defaultBehavior.errorRate) {
+            if (defaultBehavior.connectsBehavior === 'unstable' && nextPseudoRandom() < getErrorRate()) {
                 throw new Error('Network connection unstable - message processing failed');
             }
             if (defaultBehavior.processingSpeed === 'slow') {
@@ -1572,18 +1654,18 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
                 messageType: 'chat',
                 platform: platformName,
                 username: normalizedUser.username,
-                messageContent: message.content || message.message || message.comment || 'Test message',
+                messageContent: messageRecord.content || messageRecord.message || messageRecord.comment || 'Test message',
                 userId: normalizedUser.userId,
-                timestamp: typeof message.timestamp === 'number'
-                    ? new Date(message.timestamp).toISOString()
-                    : (message.timestamp || fallbackTimestamp.iso),
+                timestamp: typeof messageRecord.timestamp === 'number'
+                    ? new Date(messageRecord.timestamp).toISOString()
+                    : (messageRecord.timestamp || fallbackTimestamp.iso),
                 processed: true
             };
             
             // Add platform-specific properties
             if (platformName === 'tiktok') {
                 // TikTok-specific validation - only enforce for realistic chat messages, not test messages
-                if (message.user?.uniqueId === null && message.type !== 'test') {
+                if (messageUser.uniqueId === null && messageRecord.type !== 'test') {
                     throw new Error('TikTok user identifier is missing - unable to process message');
                 }
                 
@@ -1592,32 +1674,32 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
                 return {
                     ...baseResult,
                     username: tiktokUser.username,
-                    messageContent: message.comment === null ? 'Empty message' : (message.comment || message.content || 'Test message'),
+                    messageContent: messageRecord.comment === null ? 'Empty message' : (messageRecord.comment || messageRecord.content || 'Test message'),
                     userId: tiktokUser.userId,
                     gifterLevel: tiktokUser.gifterLevel || 23,
                     isSubscriber: tiktokUser.isSubscriber || true,
                     userBadges: tiktokUser.userBadges || ['follower', 'verified'],
                     followRole: tiktokUser.followRole || 'new_follower',
-                    displayMessage: `${tiktokUser.username}: ${message.comment === null ? 'Empty message' : (message.comment || message.content || 'Test message')}`,
-                    emotes: message.emotes || []
+                    displayMessage: `${tiktokUser.username}: ${messageRecord.comment === null ? 'Empty message' : (messageRecord.comment || messageRecord.content || 'Test message')}`,
+                    emotes: messageRecord.emotes || []
                 };
             } else if (platformName === 'twitch') {
-                const messageText = message.message?.text === '' ? 'Empty message' : (message.message?.text || 'Test message');
-                const userName = message.chatter_user_name || message.user?.displayName || 'TestUser';
+                const messageText = nestedMessage.text === '' ? 'Empty message' : (nestedMessage.text || 'Test message');
+                const userName = messageRecord.chatter_user_name || messageUser.displayName || 'TestUser';
                 return {
                     ...baseResult,
                     username: userName,
                     messageContent: messageText,
                     displayMessage: `${userName}: ${messageText}`,
-                    badges: message.user?.badges || [],
-                    fragments: message.message?.fragments || []
+                    badges: messageUser.badges || [],
+                    fragments: nestedMessage.fragments || []
                 };
             } else if (platformName === 'youtube') {
                 const authorThumbnails = [
                     { url: 'https://yt4.ggpht.example.invalid/a/default-user=s64-c-k-c0x00ffffff-no-rj', width: 64, height: 64 },
                     { url: 'https://yt4.ggpht.example.invalid/a/default-user=s32-c-k-c0x00ffffff-no-rj', width: 32, height: 32 }
                 ];
-                const messageRuns = message.item?.message?.runs || message.message?.runs || [
+                const messageRuns = itemMessage.runs || nestedMessage.runs || [
                     { text: 'Test ', bold: false, italics: false },
                     { text: 'bold', bold: true, italics: false },
                     { text: ' and ', bold: false, italics: false },
@@ -1625,15 +1707,15 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
                     { text: ' text', bold: false, italics: false }
                 ];
                 
-                const messageText = message.item?.message === null || message.message === null ? 'Empty message' : (message.item?.message?.text || message.message?.text || 'Test message');
-                const userName = message.item?.author?.name || message.author?.name || 'TestUser';
+                const messageText = item.message === null || messageRecord.message === null ? 'Empty message' : (itemMessage.text || nestedMessage.text || 'Test message');
+                const userName = itemAuthor.name || author.name || 'TestUser';
                 const timestamp = createTimestamp();
                 return {
                     ...baseResult,
                     username: userName,
                     messageContent: messageText,
-                    authorId: message.item?.author?.id || message.author?.id || 'UC_TEST_CHANNEL_00000003',
-                    timestamp: message.item?.timestamp || message.timestamp || timestamp.iso,
+                    authorId: itemAuthor.id || author.id || 'UC_TEST_CHANNEL_00000003',
+                    timestamp: item.timestamp || messageRecord.timestamp || timestamp.iso,
                     displayMessage: `${userName}: ${messageText}`,
                     authorThumbnails: authorThumbnails,
                     messageRuns: messageRuns,
@@ -1649,94 +1731,35 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
                 displayMessage: `${baseResult.username}: ${baseResult.messageContent}`
             };
         }),
-        processGift: createMockFn().mockImplementation((giftData) => {
+        processGift: createMockFn<[unknown], UnknownRecord>().mockImplementation(processGiftForPlatform),
+        processEvent: createMockFn<[unknown], UnknownRecord>().mockImplementation((event) => {
             if (defaultBehavior.processingSpeed === 'slow') {
                 // Simulate slow processing without actual delay in tests
             }
-            
-            // Normalize user data for consistent access
-            const normalizedUser = normalizeUserData(giftData.user || giftData);
-            
-            // Handle TikTok-specific gift data structure
-            let giftType, giftCount, amount, currency, giftId;
-            if (platformName === 'tiktok') {
-                const giftDetails = giftData.giftDetails || {};
-                giftType = giftData.giftType || giftDetails.giftName || 'Rose';
-                giftCount = giftData.giftCount || giftData.repeatCount || 1;
-                const unitAmount = giftDetails.diamondCount ?? giftData.unitAmount ?? null;
-                amount = Number.isFinite(Number(unitAmount)) ? Number(unitAmount) * giftCount : 0;
-                currency = giftData.currency || 'coins';
-                giftId = giftDetails.id ?? null;
-            } else {
-                // For other platforms, use amount-based data
-                const isTwitch = platformName === 'twitch';
-                const isYouTube = platformName === 'youtube';
-                giftType = giftData.giftType || (isTwitch ? 'bits' : (isYouTube ? 'Super Chat' : 'gift'));
-                giftCount = 1;
-                amount = typeof giftData.amount === 'number'
-                    ? giftData.amount
-                    : (Number(giftData.amount) || (isTwitch ? 100 : 5));
-                currency = giftData.currency || (isTwitch ? 'bits' : 'USD');
-                giftId = giftData.id || null;
-            }
-            
-            // Return proper structure expected by validateUserGiftFlow
-            const timestamp = createTimestamp();
-            const notification = {
-                id: buildTestId(`gift-${platformName}`),
-                type: 'platform:gift',
-                platform: giftData.platform || platformName,
-                username: normalizedUser.username,
-                userId: normalizedUser.userId,
-                giftType: giftType,
-                giftCount: giftCount,
-                amount: amount,
-                currency: currency,
-                giftId: giftId,
-                repeatCount: giftCount,
-                displayMessage: `${normalizedUser.username} sent ${giftCount}x ${giftType}`,
-                ttsMessage: `${normalizedUser.username} sent ${giftCount} ${giftType}`,
-                logMessage: `Gift: ${giftCount}x ${giftType} from ${normalizedUser.username}`,
-                processedAt: timestamp.ms,
-                timestamp: timestamp.iso
-            };
-
-            // Return wrapped structure for user journey validation
-            return {
-                processed: true,
-                notification: notification,
-                displayed: true,
-                vfxTriggered: true,
-                obsUpdated: true
-            };
-        }),
-        processEvent: createMockFn().mockImplementation((event) => {
-            if (defaultBehavior.processingSpeed === 'slow') {
-                // Simulate slow processing without actual delay in tests
-            }
+            const eventRecord = event as UnknownRecord;
             
             // Route to appropriate processor based on event type
-            if (event.type === 'gift') {
-                return behaviorMethods.processGift(event);
+            if (eventRecord.type === 'gift') {
+                return processGiftForPlatform(eventRecord);
             }
             
             // Generic event processing
             const timestamp = createTimestamp();
             return {
                 id: buildTestId(`event-${platformName}`),
-                type: event.type || 'generic',
+                type: eventRecord.type || 'generic',
                 processed: true,
-                event,
+                event: eventRecord,
                 platform: platformName,
                 timestamp: timestamp.iso
             };
         }),
-        handleNotification: createMockFn().mockImplementation((notification) => {
+        handleNotification: createMockFn<[unknown], UnknownRecord>().mockImplementation((notification) => {
             return { handled: true, notification };
         }),
         
         // TikTok-specific methods
-        processFollow: createMockFn().mockImplementation((followData) => {
+        processFollow: createMockFn<[unknown], UnknownRecord>().mockImplementation((followData) => {
             // For TikTok, follow data contains user info under the user field
             const normalizedUser = normalizeUserData(followData);
             const timestamp = createTimestamp();
@@ -1757,7 +1780,8 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
             };
         }),
         
-        processMemberJoin: createMockFn().mockImplementation((memberData) => {
+        processMemberJoin: createMockFn<[unknown], UnknownRecord>().mockImplementation((memberData) => {
+            const memberRecord = memberData as UnknownRecord;
             // For TikTok, member data contains user info under the user field
             const normalizedUser = normalizeUserData(memberData);
             const timestamp = createTimestamp();
@@ -1767,11 +1791,11 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
                 platform: 'tiktok', 
                 username: normalizedUser.username,
                 userId: normalizedUser.userId,
-                actionId: memberData.actionId || 1,
-                label: memberData.label || '{0:user} joined', // Added missing label field
+                actionId: memberRecord.actionId || 1,
+                label: memberRecord.label || '{0:user} joined', // Added missing label field
                 teamMemberLevel: normalizedUser.teamMemberLevel || 1,
                 userLevel: normalizedUser.teamMemberLevel || 1, // Added missing userLevel field
-                userBadges: memberData.userBadges || [{ type: 'privilege' }],
+                userBadges: memberRecord.userBadges || [{ type: 'privilege' }],
                 hasBadges: true, // Added missing hasBadges field
                 displayMessage: `${normalizedUser.username} joined as a member!`,
                 processed: true,
@@ -1779,9 +1803,11 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
             };
         }),
         
-        processLike: createMockFn().mockImplementation((likeData) => {
-            const username = likeData.user?.uniqueId || 'TestLiker';
-            const userId = likeData.user?.userId;
+        processLike: createMockFn<[unknown], UnknownRecord>().mockImplementation((likeData) => {
+            const likeRecord = likeData as UnknownRecord;
+            const user = asRecord(likeRecord.user);
+            const username = user.uniqueId || 'TestLiker';
+            const userId = user.userId;
             const timestamp = createTimestamp();
             
             return {
@@ -1790,42 +1816,47 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
                 platform: 'tiktok',
                 username: username,
                 userId: userId,
-                likeCount: likeData.likeCount || likeData.count || 1,
-                totalLikes: likeData.totalLikes || 50,
-                totalLikeCount: likeData.totalLikeCount || likeData.totalLikes || 50, // Added missing field
+                likeCount: likeRecord.likeCount || likeRecord.count || 1,
+                totalLikes: likeRecord.totalLikes || 50,
+                totalLikeCount: likeRecord.totalLikeCount || likeRecord.totalLikes || 50, // Added missing field
                 displayMessage: `${username} likes the stream!`,
                 processed: true,
                 timestamp: timestamp.iso
             };
         }),
         
-        processSocial: createMockFn().mockImplementation((socialData) => {
-            const username = socialData.user?.uniqueId || 'TestUser';
+        processSocial: createMockFn<[unknown], UnknownRecord>().mockImplementation((socialData) => {
+            const socialRecord = socialData as UnknownRecord;
+            const user = asRecord(socialRecord.user);
+            const username = user.uniqueId || 'TestUser';
             const timestamp = createTimestamp();
             return {
                 eventType: 'social',
                 messageType: 'social',
                 platform: 'tiktok',
                 username: username,
-                userId: socialData.user?.userId,
-                socialType: socialData.socialType || socialData.action || 'share',
+                userId: user.userId,
+                socialType: socialRecord.socialType || socialRecord.action || 'share',
                 displayMessage: `${username} shared the stream!`,
                 processed: true,
                 timestamp: timestamp.iso
             };
         }),
         
-        processEmote: createMockFn().mockImplementation((emoteData) => {
-            const username = emoteData.user?.uniqueId || 'TestUser';
-            const emoteName = emoteData.emoteName || emoteData.emote?.name || 'Fire';
+        processEmote: createMockFn<[unknown], UnknownRecord>().mockImplementation((emoteData) => {
+            const emoteRecord = emoteData as UnknownRecord;
+            const user = asRecord(emoteRecord.user);
+            const emote = asRecord(emoteRecord.emote);
+            const username = user.uniqueId || 'TestUser';
+            const emoteName = emoteRecord.emoteName || emote.name || 'Fire';
             const timestamp = createTimestamp();
             return {
                 eventType: 'emote',
                 messageType: 'emote',
                 platform: 'tiktok',
                 username: username,
-                userId: emoteData.user?.userId,
-                emoteId: emoteData.emoteId || emoteData.emote?.id || 'emote_fire_123',
+                userId: user.userId,
+                emoteId: emoteRecord.emoteId || emote.id || 'emote_fire_123',
                 emoteName: emoteName,
                 displayMessage: `${username} sent ${emoteName} emote!`,
                 processed: true,
@@ -1833,54 +1864,62 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
             };
         }),
         
-        processViewerCount: createMockFn().mockImplementation((viewerData) => {
+        processViewerCount: createMockFn<[unknown], UnknownRecord>().mockImplementation((viewerData) => {
+            const viewerRecord = viewerData as UnknownRecord;
             const timestamp = createTimestamp();
             return {
                 messageType: 'viewerCount',
                 platform: 'tiktok',
-                viewerCount: viewerData.viewerCount || 100,
-                totalUsers: viewerData.totalUsers || 150,
+                viewerCount: viewerRecord.viewerCount || 100,
+                totalUsers: viewerRecord.totalUsers || 150,
                 processed: true,
                 timestamp: timestamp.iso
             };
         }),
         
-        processRoomUser: createMockFn().mockImplementation((roomUserData) => {
+        processRoomUser: createMockFn<[unknown], UnknownRecord>().mockImplementation((roomUserData) => {
+            const roomUserRecord = roomUserData as UnknownRecord;
             const timestamp = createTimestamp();
             return {
                 eventType: 'viewer_count',
                 messageType: 'viewerCount',
                 platform: 'tiktok',
-                viewerCount: roomUserData.viewerCount || 1847,
-                totalUserCount: roomUserData.totalUserCount || roomUserData.totalUsers || 2156,
+                viewerCount: roomUserRecord.viewerCount || 1847,
+                totalUserCount: roomUserRecord.totalUserCount || roomUserRecord.totalUsers || 2156,
                 processed: true,
                 timestamp: timestamp.iso
             };
         }),
         
         // Twitch EventSub methods
-        processEventSubMessage: createMockFn().mockImplementation((messageData) => {
+        processEventSubMessage: createMockFn<[unknown], UnknownRecord>().mockImplementation((messageData) => {
+            const messageRecord = messageData as UnknownRecord;
+            const chatter = asRecord(messageRecord.chatter);
+            const user = asRecord(messageRecord.user);
+            const message = asRecord(messageRecord.message);
             const timestamp = createTimestamp();
             return {
                 eventType: 'chat',
                 messageType: 'chat',
                 platform: 'twitch',
-                username: messageData.chatter_user_name || messageData.chatter?.display_name || messageData.user?.display_name || 'TestUser',
-                messageContent: messageData.message?.text || 'Test message',
-                userId: messageData.chatter_user_id,
-                badges: messageData.badges || [],
-                fragments: messageData.message?.fragments || [],
-                messageFragments: messageData.message?.fragments || [],
-                color: messageData.color || '#FFFFFF',
-                displayMessage: `${messageData.chatter_user_name || messageData.chatter?.display_name || 'TestUser'}: ${messageData.message?.text || 'Test message'}`,
+                username: messageRecord.chatter_user_name || chatter.display_name || user.display_name || 'TestUser',
+                messageContent: message.text || 'Test message',
+                userId: messageRecord.chatter_user_id,
+                badges: messageRecord.badges || [],
+                fragments: message.fragments || [],
+                messageFragments: message.fragments || [],
+                color: messageRecord.color || '#FFFFFF',
+                displayMessage: `${messageRecord.chatter_user_name || chatter.display_name || 'TestUser'}: ${message.text || 'Test message'}`,
                 processed: true,
                 timestamp: timestamp.iso
             };
         }),
         
-        processEventSubFollow: createMockFn().mockImplementation((followData) => {
-            const username = followData.user_name || followData.user?.display_name || 'TestFollower';
-            const userId = followData.user_id;
+        processEventSubFollow: createMockFn<[unknown], UnknownRecord>().mockImplementation((followData) => {
+            const followRecord = followData as UnknownRecord;
+            const user = asRecord(followRecord.user);
+            const username = followRecord.user_name || user.display_name || 'TestFollower';
+            const userId = followRecord.user_id;
             const timestamp = createTimestamp();
 
             return {
@@ -1891,8 +1930,8 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
                 platform: 'twitch',
                 username,
                 userId,
-                broadcasterId: followData.broadcaster_user_id,
-                followedAt: followData.followed_at || timestamp.iso,
+                broadcasterId: followRecord.broadcaster_user_id,
+                followedAt: followRecord.followed_at || timestamp.iso,
                 displayMessage: `${username} followed you!`,
                 ttsMessage: `${username} followed`,
                 logMessage: `Follow from ${username}`,
@@ -1902,9 +1941,10 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
             };
         }),
         
-        processEventSubRaid: createMockFn().mockImplementation((raidData) => {
-            const username = raidData.from_broadcaster_user_name || 'RaiderUser';
-            const viewerCount = raidData.viewerCount || 42;
+        processEventSubRaid: createMockFn<[unknown], UnknownRecord>().mockImplementation((raidData) => {
+            const raidRecord = raidData as UnknownRecord;
+            const username = raidRecord.from_broadcaster_user_name || 'RaiderUser';
+            const viewerCount = raidRecord.viewerCount || 42;
             const displayMessage = `${username} raided with ${viewerCount} viewers!`;
             const timestamp = createTimestamp();
             
@@ -1915,9 +1955,9 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
                 messageType: 'raid',
                 platform: 'twitch',
                 username,
-                userId: raidData.from_broadcaster_user_id,
-                fromUserId: raidData.from_broadcaster_user_id,
-                toUserId: raidData.to_broadcaster_user_id,
+                userId: raidRecord.from_broadcaster_user_id,
+                fromUserId: raidRecord.from_broadcaster_user_id,
+                toUserId: raidRecord.to_broadcaster_user_id,
                 viewerCount: viewerCount,
                 displayMessage: displayMessage,
                 ttsMessage: displayMessage,
@@ -1928,12 +1968,15 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
             };
         }),
         
-        processEventSubBits: createMockFn().mockImplementation((bitsData) => {
-            const username = bitsData.user_name || 'CheererUser';
-            const bitsAmount = bitsData.bits || 0;
+        processEventSubBits: createMockFn<[unknown], UnknownRecord>().mockImplementation((bitsData) => {
+            const bitsRecord = bitsData as UnknownRecord;
+            const message = asRecord(bitsRecord.message);
+            const username = bitsRecord.user_name || 'CheererUser';
+            const bitsAmount = bitsRecord.bits || 0;
             const totalBits = bitsAmount;
-            const messageText = Array.isArray(bitsData.message?.fragments)
-                ? bitsData.message.fragments
+            const messageText = Array.isArray(message.fragments)
+                ? message.fragments
+                    .map(asRecord)
                     .filter(fragment => fragment.type === 'text')
                     .map(fragment => fragment.text || '')
                     .join('')
@@ -1949,13 +1992,13 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
                 messageType: 'cheer',
                 platform: 'twitch',
                 username,
-                userId: bitsData.user_id,
+                userId: bitsRecord.user_id,
                 bits: bitsAmount,
                 bitsAmount: bitsAmount,
                 totalBits: totalBits,
                 messageContent: messageText,
                 message: messageText,
-                isAnonymous: bitsData.is_anonymous || false,
+                isAnonymous: bitsRecord.is_anonymous || false,
                 cheermotePrefix: 'Cheer',
                 displayMessage: displayMessage,
                 ttsMessage: displayMessage,
@@ -1967,9 +2010,10 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
         }),
         
         // YouTube-specific methods
-        processSuperSticker: createMockFn().mockImplementation((stickerData) => {
-            const item = stickerData.item || {};
-            const author = item.author || {};
+        processSuperSticker: createMockFn<[unknown], UnknownRecord>().mockImplementation((stickerData) => {
+            const stickerRecord = stickerData as UnknownRecord;
+            const item = asRecord(stickerRecord.item);
+            const author = asRecord(item.author);
             const username = author.name || 'StickerSupporter';
             const userId = author.id || YOUTUBE_TEST_CHANNEL_ID;
             const amount = item.purchase_amount || '$3.99';
@@ -2000,84 +2044,96 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
             };
         }),
         
-        processViewerJoin: createMockFn().mockImplementation((viewerData) => {
+        processViewerJoin: createMockFn<[unknown], UnknownRecord>().mockImplementation((viewerData) => {
+            const viewerRecord = viewerData as UnknownRecord;
+            const user = asRecord(viewerRecord.user);
             const timestamp = createTimestamp();
             return {
                 messageType: 'viewerJoin',
                 platform: 'youtube',
-                username: viewerData.user?.name || 'TestViewer',
-                userId: viewerData.user?.id,
-                displayMessage: `${viewerData.user?.name || 'TestViewer'} joined the stream`,
+                username: user.name || 'TestViewer',
+                userId: user.id,
+                displayMessage: `${user.name || 'TestViewer'} joined the stream`,
                 processed: true,
                 timestamp: timestamp.iso
             };
         }),
         
-        processViewerLeave: createMockFn().mockImplementation((viewerData) => {
+        processViewerLeave: createMockFn<[unknown], UnknownRecord>().mockImplementation((viewerData) => {
+            const viewerRecord = viewerData as UnknownRecord;
+            const user = asRecord(viewerRecord.user);
             const timestamp = createTimestamp();
             return {
                 messageType: 'viewerLeave',
                 platform: 'youtube',
-                username: viewerData.user?.name || 'TestViewer',
-                userId: viewerData.user?.id,
-                displayMessage: `${viewerData.user?.name || 'TestViewer'} left the stream`,
+                username: user.name || 'TestViewer',
+                userId: user.id,
+                displayMessage: `${user.name || 'TestViewer'} left the stream`,
                 processed: true,
                 timestamp: timestamp.iso
             };
         }),
         
         // StreamElements methods
-        processFollowWebhook: createMockFn().mockImplementation((followData) => {
-            const resolvedUsername = followData.username || followData.data?.displayName || followData.data?.username || 'TestFollower';
-            const resolvedUserId = followData.userId;
+        processFollowWebhook: createMockFn<[unknown], UnknownRecord>().mockImplementation((followData) => {
+            const followRecord = followData as UnknownRecord;
+            const data = asRecord(followRecord.data);
+            const resolvedUsername = followRecord.username || data.displayName || data.username || 'TestFollower';
+            const resolvedUserId = followRecord.userId;
             const timestamp = createTimestamp();
-            const resolvedPlatform = (followData.data?.provider || followData.platform || 'youtube').toString().toLowerCase();
+            const resolvedPlatform = (data.provider || followRecord.platform || 'youtube').toString().toLowerCase();
             return {
                 messageType: 'follow',
                 platform: resolvedPlatform,
                 username: resolvedUsername,
                 userId: resolvedUserId,
-                provider: followData.data?.provider || 'youtube',
-                displayMessage: `${resolvedUsername} followed you on ${followData.data?.provider || 'YouTube'}!`,
+                provider: data.provider || 'youtube',
+                displayMessage: `${resolvedUsername} followed you on ${data.provider || 'YouTube'}!`,
                 processed: true,
                 timestamp: timestamp.iso
             };
         }),
         
-        processSubscriberWebhook: createMockFn().mockImplementation((subData) => {
-            const resolvedUsername = subData.username || subData.data?.displayName || 'TestSubscriber';
-            const resolvedUserId = subData.userId;
+        processSubscriberWebhook: createMockFn<[unknown], UnknownRecord>().mockImplementation((subData) => {
+            const subRecord = subData as UnknownRecord;
+            const data = asRecord(subRecord.data);
+            const resolvedUsername = subRecord.username || data.displayName || 'TestSubscriber';
+            const resolvedUserId = subRecord.userId;
             const timestamp = createTimestamp();
-            const resolvedPlatform = (subData.data?.provider || subData.platform || 'youtube').toString().toLowerCase();
+            const resolvedPlatform = (data.provider || subRecord.platform || 'youtube').toString().toLowerCase();
             return {
                 messageType: 'subscription',
                 platform: resolvedPlatform,
                 username: resolvedUsername,
                 userId: resolvedUserId,
-                tier: subData.data?.tier || '1',
+                tier: data.tier || '1',
                 displayMessage: `${resolvedUsername} subscribed!`,
                 processed: true,
                 timestamp: timestamp.iso
             };
         }),
         
-        processWebhook: createMockFn().mockImplementation((webhookData) => {
+        processWebhook: createMockFn<[unknown], UnknownRecord>().mockImplementation((webhookData) => {
+            const webhookRecord = webhookData as UnknownRecord;
+            const user = asRecord(webhookRecord.user);
             // Determine event type - StreamElements subscriber webhook has 'subscriber_' in eventId
-            const isSubscriber = webhookData.eventId?.includes('subscriber_') || 
-                                 webhookData.activity?.includes('subscriber_new') || 
-                                 webhookData.listener === 'subscriber-latest';
+            const eventId = typeof webhookRecord.eventId === 'string' ? webhookRecord.eventId : '';
+            const activity = typeof webhookRecord.activity === 'string' ? webhookRecord.activity : '';
+            const isSubscriber = eventId.includes('subscriber_') ||
+                                 activity.includes('subscriber_new') ||
+                                 webhookRecord.listener === 'subscriber-latest';
             const eventType = isSubscriber ? 'subscriber' : 'follow';
-            const targetPlatform = webhookData.platform || 'youtube'; // Route to the actual platform
+            const targetPlatform = webhookRecord.platform || 'youtube'; // Route to the actual platform
             
             if (eventType === 'follow') {
-                const username = webhookData.username || webhookData.user?.displayName || 'TestFollower';
-                const userId = webhookData.userId;
+                const username = webhookRecord.username || user.displayName || 'TestFollower';
+                const userId = webhookRecord.userId;
                 const displayMessage = `${username} followed on ${targetPlatform}!`;
                 const timestamp = createTimestamp();
                 
                 return {
-                    id: webhookData.eventId || buildTestId(`follow-${targetPlatform}`),
-                    eventId: webhookData.eventId || buildTestId(`follow-${targetPlatform}`),
+                    id: webhookRecord.eventId || buildTestId(`follow-${targetPlatform}`),
+                    eventId: webhookRecord.eventId || buildTestId(`follow-${targetPlatform}`),
                     type: 'platform:follow',
                     eventType: 'follow',
                     messageType: 'follow',
@@ -2090,11 +2146,11 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
                     logMessage: displayMessage,
                     processedAt: timestamp.ms,
                     processed: true,
-                    timestamp: webhookData.timestamp || timestamp.iso
+                    timestamp: webhookRecord.timestamp || timestamp.iso
                 };
             } else {
-                const username = webhookData.username || webhookData.user?.displayName || 'TestSubscriber';
-                const userId = webhookData.userId;
+                const username = webhookRecord.username || user.displayName || 'TestSubscriber';
+                const userId = webhookRecord.userId;
                 const displayMessage = `${username} subscribed!`;
                 const timestamp = createTimestamp();
                 
@@ -2106,98 +2162,109 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
                     platform: targetPlatform,
                     username,
                     userId,
-                    tier: webhookData.tier || '1',
+                    tier: webhookRecord.tier || '1',
                     source: 'streamelements',
                     displayMessage: displayMessage,
                     ttsMessage: displayMessage,
                     logMessage: displayMessage,
                     processedAt: timestamp.ms,
                     processed: true,
-                    timestamp: webhookData.timestamp || timestamp.iso
+                    timestamp: webhookRecord.timestamp || timestamp.iso
                 };
             }
         }),
         
         // OBS WebSocket methods
-        processSceneTransition: createMockFn().mockImplementation((sceneData) => {
+        processSceneTransition: createMockFn<[unknown], UnknownRecord>().mockImplementation((sceneData) => {
+            const sceneRecord = sceneData as UnknownRecord;
+            const eventData = asRecord(sceneRecord.eventData);
             const timestamp = createTimestamp();
             return {
                 messageType: 'sceneChange',
                 platform: 'obs',
-                sceneName: sceneData.eventData?.sceneName || 'Main Scene',
-                sceneUuid: sceneData.eventData?.sceneUuid || 'scene-uuid',
+                sceneName: eventData.sceneName || 'Main Scene',
+                sceneUuid: eventData.sceneUuid || 'scene-uuid',
                 processed: true,
                 timestamp: timestamp.iso
             };
         }),
         
-        processSourceUpdate: createMockFn().mockImplementation((sourceData) => {
+        processSourceUpdate: createMockFn<[unknown], UnknownRecord>().mockImplementation((sourceData) => {
+            const sourceRecord = sourceData as UnknownRecord;
+            const eventData = asRecord(sourceRecord.eventData);
             const timestamp = createTimestamp();
             return {
                 messageType: 'sourceUpdate',
                 platform: 'obs',
-                sourceName: sourceData.eventData?.sourceName || 'Test Source',
-                sourceUuid: sourceData.eventData?.sourceUuid || 'source-uuid',
-                inputKind: sourceData.eventData?.inputKind || 'text_source',
+                sourceName: eventData.sourceName || 'Test Source',
+                sourceUuid: eventData.sourceUuid || 'source-uuid',
+                inputKind: eventData.inputKind || 'text_source',
                 processed: true,
                 timestamp: timestamp.iso
             };
         }),
         
-        processConnectionEvent: createMockFn().mockImplementation((connectionData) => {
+        processConnectionEvent: createMockFn<[unknown], UnknownRecord>().mockImplementation((connectionData) => {
+            const connectionRecord = connectionData as UnknownRecord;
             const timestamp = createTimestamp();
             return {
-                eventType: connectionData.eventType || 'ConnectionClosed',
+                eventType: connectionRecord.eventType || 'ConnectionClosed',
                 messageType: 'connection',
                 platform: 'obs',
-                connectionState: connectionData.state || 'connected',
-                reason: connectionData.reason || 'Normal Closure',
-                code: connectionData.code || 1000,
+                connectionState: connectionRecord.state || 'connected',
+                reason: connectionRecord.reason || 'Normal Closure',
+                code: connectionRecord.code || 1000,
                 processed: true,
                 timestamp: timestamp.iso
             };
         }),
         
-        processSceneEvent: createMockFn().mockImplementation((sceneData) => {
+        processSceneEvent: createMockFn<[unknown], UnknownRecord>().mockImplementation((sceneData) => {
+            const sceneRecord = sceneData as UnknownRecord;
+            const eventData = asRecord(sceneRecord.eventData);
             const timestamp = createTimestamp();
             return {
-                eventType: sceneData.eventType || 'SceneTransitionStarted',
+                eventType: sceneRecord.eventType || 'SceneTransitionStarted',
                 messageType: 'sceneChange',
                 platform: 'obs',
-                sceneName: sceneData.eventData?.sceneName || sceneData.eventData?.toSceneName || 'Main Scene',
-                sceneUuid: sceneData.eventData?.sceneUuid || sceneData.eventData?.toSceneUuid || 'scene-uuid',
+                sceneName: eventData.sceneName || eventData.toSceneName || 'Main Scene',
+                sceneUuid: eventData.sceneUuid || eventData.toSceneUuid || 'scene-uuid',
                 // Scene transition specific properties
-                transitionName: sceneData.eventData?.transitionName || 'Fade',
-                fromScene: sceneData.eventData?.fromSceneName || 'Main Scene',
-                toScene: sceneData.eventData?.toSceneName || 'BRB Scene',
-                fromSceneUuid: sceneData.eventData?.fromSceneUuid || '00000000-0000-0000-0000-000000000010',
-                toSceneUuid: sceneData.eventData?.toSceneUuid || '00000000-0000-0000-0000-000000000011',
+                transitionName: eventData.transitionName || 'Fade',
+                fromScene: eventData.fromSceneName || 'Main Scene',
+                toScene: eventData.toSceneName || 'BRB Scene',
+                fromSceneUuid: eventData.fromSceneUuid || '00000000-0000-0000-0000-000000000010',
+                toSceneUuid: eventData.toSceneUuid || '00000000-0000-0000-0000-000000000011',
                 success: true,
                 processed: true,
                 timestamp: timestamp.iso
             };
         }),
         
-        processSourceEvent: createMockFn().mockImplementation((sourceData) => {
+        processSourceEvent: createMockFn<[unknown], UnknownRecord>().mockImplementation((sourceData) => {
+            const sourceRecord = sourceData as UnknownRecord;
+            const eventData = asRecord(sourceRecord.eventData);
+            const inputSettings = asRecord(eventData.inputSettings);
+            const font = asRecord(inputSettings.font);
             const timestamp = createTimestamp();
             return {
-                eventType: sourceData.eventType || 'InputSettingsChanged',
+                eventType: sourceRecord.eventType || 'InputSettingsChanged',
                 messageType: 'sourceUpdate',
                 platform: 'obs',
-                sourceName: sourceData.eventData?.sourceName || sourceData.eventData?.inputName || 'Test Source',
-                sourceUuid: sourceData.eventData?.sourceUuid || sourceData.eventData?.inputUuid || 'source-uuid',
-                inputKind: sourceData.eventData?.inputKind || 'text_source',
+                sourceName: eventData.sourceName || eventData.inputName || 'Test Source',
+                sourceUuid: eventData.sourceUuid || eventData.inputUuid || 'source-uuid',
+                inputKind: eventData.inputKind || 'text_source',
                 // Add expected fields from integration tests
-                inputName: sourceData.eventData?.inputName || sourceData.eventData?.sourceName || 'Chat Display',
-                inputUuid: sourceData.eventData?.inputUuid || sourceData.eventData?.sourceUuid || '00000000-0000-0000-0000-000000000012',
-                newText: sourceData.eventData?.inputSettings?.text || 'New chat message from viewer',
-                fontSize: sourceData.eventData?.inputSettings?.font?.size || 24,
+                inputName: eventData.inputName || eventData.sourceName || 'Chat Display',
+                inputUuid: eventData.inputUuid || eventData.sourceUuid || '00000000-0000-0000-0000-000000000012',
+                newText: inputSettings.text || 'New chat message from viewer',
+                fontSize: font.size || 24,
                 newSettings: {
-                    text: sourceData.eventData?.inputSettings?.text || 'New chat message from viewer',
+                    text: inputSettings.text || 'New chat message from viewer',
                     font: {
-                        size: sourceData.eventData?.inputSettings?.font?.size || 24
+                        size: font.size || 24
                     },
-                    color: sourceData.eventData?.inputSettings?.color || 4294967295
+                    color: inputSettings.color || 4294967295
                 },
                 success: true,
                 processed: true,
@@ -2205,9 +2272,11 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
             };
         }),
         
-        processViewerEvent: createMockFn().mockImplementation((viewerData) => {
+        processViewerEvent: createMockFn<[unknown], UnknownRecord>().mockImplementation((viewerData) => {
+            const viewerRecord = viewerData as UnknownRecord;
+            const user = asRecord(viewerRecord.user);
             // Normalize event type from PascalCase to snake_case
-            let eventType = viewerData.type || 'viewer_join';
+            let eventType = viewerRecord.type || 'viewer_join';
             if (eventType === 'ViewerJoin') eventType = 'viewer_join';
             if (eventType === 'ViewerLeave') eventType = 'viewer_leave';
             const timestamp = createTimestamp();
@@ -2216,26 +2285,28 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
                 eventType: eventType,
                 messageType: eventType === 'viewer_leave' ? 'viewerLeave' : 'viewerJoin',
                 platform: 'youtube',
-                username: viewerData.username || viewerData.user?.name || 'NewViewer123',
-                userId: viewerData.userId,
-                viewerCount: viewerData.viewerCount || 1245,
-                displayMessage: `${viewerData.username || viewerData.user?.name || 'NewViewer123'} ${eventType === 'viewer_leave' ? 'left' : 'joined'} the stream`,
+                username: viewerRecord.username || user.name || 'NewViewer123',
+                userId: viewerRecord.userId,
+                viewerCount: viewerRecord.viewerCount || 1245,
+                displayMessage: `${viewerRecord.username || user.name || 'NewViewer123'} ${eventType === 'viewer_leave' ? 'left' : 'joined'} the stream`,
                 processed: true,
                 timestamp: timestamp.iso
             };
         }),
 
-        handleWebSocketMessage: createMockFn().mockImplementation(async (message) => {
+        handleWebSocketMessage: createMockFn<[unknown], Promise<UnknownRecord>>().mockImplementation(async (message) => {
+            const messageRecord = message as UnknownRecord;
+            const metadata = asRecord(messageRecord.metadata);
             const timestamp = createTimestamp();
             return {
                 success: true,
-                messageType: message.metadata?.message_type || 'notification',
+                messageType: metadata.message_type || 'notification',
                 processedAt: timestamp.ms,
                 platform: platformName
             };
         }),
 
-        handleNotificationEvent: createMockFn().mockImplementation((subscriptionType, event) => {
+        handleNotificationEvent: createMockFn<[unknown, unknown], UnknownRecord>().mockImplementation((subscriptionType, event) => {
             const timestamp = createTimestamp();
             return {
                 success: true,
@@ -2246,7 +2317,7 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
             };
         }),
 
-        handleNotificationEventWithDispatcher: createMockFn().mockImplementation(async (subscriptionType, event) => {
+        handleNotificationEventWithDispatcher: createMockFn<[unknown, unknown], Promise<UnknownRecord>>().mockImplementation(async (subscriptionType, event) => {
             const timestamp = createTimestamp();
             return {
                 success: true,
@@ -2259,96 +2330,106 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
         }),
 
         // Platform-specific handlers that are expected by E2E tests
-        handleChatMessage: createMockFn().mockImplementation(async (message) => {
+        handleChatMessage: createMockFn<[unknown], Promise<UnknownRecord>>().mockImplementation(async (message) => {
+            const messageRecord = message as UnknownRecord;
             const timestamp = createTimestamp();
             return {
                 success: true,
-                messageId: message.id,
+                messageId: messageRecord.id,
                 type: 'chat',
                 timestamp: timestamp.ms
             };
         }),
 
-        handleSuperChat: createMockFn().mockImplementation(async (message) => {
+        handleSuperChat: createMockFn<[unknown], Promise<UnknownRecord>>().mockImplementation(async (message) => {
+            const messageRecord = message as UnknownRecord;
             const timestamp = createTimestamp();
             return {
                 success: true,
-                messageId: message.id,
+                messageId: messageRecord.id,
                 type: 'platform:gift',
                 timestamp: timestamp.ms
             };
         }),
 
-        handleMembershipGift: createMockFn().mockImplementation(async (message) => {
+        handleMembershipGift: createMockFn<[unknown], Promise<UnknownRecord>>().mockImplementation(async (message) => {
+            const messageRecord = message as UnknownRecord;
             const timestamp = createTimestamp();
             return {
                 success: true,
-                messageId: message.id,
+                messageId: messageRecord.id,
                 type: 'membership_gift',
                 timestamp: timestamp.ms
             };
         }),
 
-        handleNewSponsor: createMockFn().mockImplementation(async (message) => {
+        handleNewSponsor: createMockFn<[unknown], Promise<UnknownRecord>>().mockImplementation(async (message) => {
+            const messageRecord = message as UnknownRecord;
             const timestamp = createTimestamp();
             return {
                 success: true,
-                messageId: message.id,
+                messageId: messageRecord.id,
                 type: 'new_sponsor',
                 timestamp: timestamp.ms
             };
         }),
 
-        handleGift: createMockFn().mockImplementation(async (event) => {
+        handleGift: createMockFn<[unknown], Promise<UnknownRecord>>().mockImplementation(async (event) => {
+            const eventRecord = event as UnknownRecord;
+            const gift = asRecord(eventRecord.gift);
             const timestamp = createTimestamp();
             return {
                 success: true,
                 eventType: 'gift',
-                giftType: event.gift?.name,
+                giftType: gift.name,
                 timestamp: timestamp.ms
             };
         }),
 
-        handleFollow: createMockFn().mockImplementation(async (event) => {
+        handleFollow: createMockFn<[unknown], Promise<UnknownRecord>>().mockImplementation(async (event) => {
+            const eventRecord = event as UnknownRecord;
+            const user = asRecord(eventRecord.user);
             const timestamp = createTimestamp();
             return {
                 success: true,
                 eventType: 'follow',
-                username: event.user?.uniqueId,
+                username: user.uniqueId,
                 timestamp: timestamp.ms
             };
         }),
 
-        handleViewerCount: createMockFn().mockImplementation(async (event) => {
+        handleViewerCount: createMockFn<[unknown], Promise<UnknownRecord>>().mockImplementation(async (event) => {
+            const eventRecord = event as UnknownRecord;
             const timestamp = createTimestamp();
             return {
                 success: true,
                 eventType: 'viewer_count',
-                viewerCount: event.viewerCount,
+                viewerCount: eventRecord.viewerCount,
                 timestamp: timestamp.ms
             };
         }),
 
-        handleWebcastEvent: createMockFn().mockImplementation(async (event) => {
+        handleWebcastEvent: createMockFn<[unknown], Promise<UnknownRecord>>().mockImplementation(async (event) => {
+            const eventRecord = event as UnknownRecord;
             const timestamp = createTimestamp();
             return {
                 success: true,
-                eventType: event.type,
+                eventType: eventRecord.type,
                 timestamp: timestamp.ms,
                 platform: platformName
             };
         }),
 
         // Connection status methods
-        isConnected: createMockFn().mockImplementation(() => {
+        isConnected: createMockFn<[], boolean>().mockImplementation(() => {
             return defaultBehavior.connectsBehavior !== 'disconnected';
         }),
 
-        isActive: createMockFn().mockImplementation(() => {
+        isActive: createMockFn<[], boolean>().mockImplementation(() => {
             return defaultBehavior.connectsBehavior !== 'disconnected';
         }),
 
-        getViewerCount: createMockFn().mockImplementation(() => {
+        getViewerCount: createMockFn<[], number>().mockImplementation(() => {
             return 1000;
         }),
 
@@ -2359,18 +2440,19 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
     };
 
     // Add platform-specific methods
-    let platformSpecificMethods = {};
+    let platformSpecificMethods: MockMethodMap = {};
     
     if (platformName === 'youtube') {
         platformSpecificMethods = {
-            processSuperChat: createMockFn().mockImplementation((superChatData) => {
-                const item = superChatData.item || {};
-                const author = item.author || {};
+            processSuperChat: createMockFn<[unknown], UnknownRecord>().mockImplementation((superChatData) => {
+                const superChatRecord = superChatData as UnknownRecord;
+                const item = asRecord(superChatRecord.item);
+                const author = asRecord(item.author);
                 const userName = author.name || 'TestUser';
                 const userId = author.id || YOUTUBE_TEST_CHANNEL_ID;
                 const purchaseAmount = item.purchase_amount || '$5.00';
                 const numericAmount = Number.parseFloat(String(purchaseAmount).replace(/[^0-9.]/g, '')) || 0;
-                const message = item.message?.text || '';
+                const message = asRecord(item.message).text || '';
                 const timestamp = createTimestamp();
 
                 return {
@@ -2407,30 +2489,32 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
         let cachedViewerCount = 100;
         
         platformSpecificMethods = {
-            getCachedViewerCount: createMockFn().mockImplementation(() => cachedViewerCount),
+            getCachedViewerCount: createMockFn<[], number>().mockImplementation(() => cachedViewerCount),
             // Override processRoomUser to update cache
-            processRoomUser: createMockFn().mockImplementation((roomUserData) => {
-                cachedViewerCount = roomUserData.viewerCount || 1847;
+            processRoomUser: createMockFn<[unknown], UnknownRecord>().mockImplementation((roomUserData) => {
+                const roomUserRecord = roomUserData as UnknownRecord;
+                cachedViewerCount = Number(roomUserRecord.viewerCount || 1847);
                 const timestamp = createTimestamp();
                 return {
                     eventType: 'viewer_count',
                     messageType: 'viewerCount',
                     platform: 'tiktok',
-                    viewerCount: roomUserData.viewerCount || 1847,
-                    totalUserCount: roomUserData.totalUserCount || roomUserData.totalUsers || 2156,
+                    viewerCount: roomUserRecord.viewerCount || 1847,
+                    totalUserCount: roomUserRecord.totalUserCount || roomUserRecord.totalUsers || 2156,
                     processed: true,
                     timestamp: timestamp.iso
                 };
             }),
             // Override processGift to return notification directly (not nested)
-            processGift: createMockFn().mockImplementation((giftData) => {
-                const normalizedUser = normalizeUserData(giftData);
-                const giftDetails = giftData.giftDetails || {};
-                const giftType = giftData.giftType || giftDetails.giftName || 'Rose';
-                const giftCount = giftData.giftCount || giftData.repeatCount || 1;
+            processGift: createMockFn<[unknown], UnknownRecord>().mockImplementation((giftData) => {
+                const giftRecord = giftData as UnknownRecord;
+                const normalizedUser = normalizeUserData(giftRecord);
+                const giftDetails = asRecord(giftRecord.giftDetails);
+                const giftType = giftRecord.giftType || giftDetails.giftName || 'Rose';
+                const giftCount = Number(giftRecord.giftCount || giftRecord.repeatCount || 1);
                 const giftId = giftDetails.id ?? null;
-                const amount = Number.isFinite(Number(giftData.amount))
-                    ? Number(giftData.amount)
+                const amount = Number.isFinite(Number(giftRecord.amount))
+                    ? Number(giftRecord.amount)
                     : (Number(giftDetails.diamondCount) * giftCount || 0);
                 const timestamp = createTimestamp();
                 
@@ -2570,6 +2654,7 @@ const createMockTikTokPlatformDependencies = (behaviorOverrides: UnknownRecord =
             on: createMockFn(),
             off: createMockFn(),
             removeAllListeners: createMockFn(),
+            getState: createMockFn().mockReturnValue('DISCONNECTED'),
             getRoomInfo: createMockFn().mockResolvedValue({
                 room_id: '12345',
                 title: 'Test Room',
@@ -3220,12 +3305,13 @@ const createYouTubeWebSocketMessage = (eventType: string, eventData: UnknownReco
             break;
 
         case 'superChatEvent':
+            const amount = Number.isFinite(Number(eventData.amount)) ? Number(eventData.amount) : 5;
             baseMessage.snippet.type = 'superChatEvent';
             baseMessage.snippet.displayMessage = eventData.message || 'Great stream!';
             baseMessage.snippet.superChatDetails = {
-                amountMicros: (eventData.amount || 5) * 1000000,
+                amountMicros: amount * 1000000,
                 currency: eventData.currency || 'USD',
-                amountDisplayString: `$${eventData.amount || 5}.00`,
+                amountDisplayString: `$${amount}.00`,
                 userComment: eventData.message || 'Great stream!',
                 tier: 1
             };
@@ -3344,12 +3430,13 @@ const createWebSocketMessageSimulator = (options: { platform?: SupportedPlatform
         generateMalformedMessage: (targetPlatform: SupportedPlatform) => {
             if (targetPlatform === 'twitch') {
                 const validMessage = createMockWebSocketMessage('twitch', 'channel.chat.message');
-                delete validMessage.metadata.message_type;
+                const metadata = validMessage.metadata as Omit<typeof validMessage.metadata, 'message_type'> & { message_type?: string };
+                delete metadata.message_type;
                 return validMessage;
             }
             if (targetPlatform === 'youtube') {
                 const validMessage = createMockWebSocketMessage('youtube', 'textMessageEvent');
-                delete validMessage.snippet;
+                delete (validMessage as Partial<YouTubeWebSocketMessage>).snippet;
                 return validMessage;
             }
 
