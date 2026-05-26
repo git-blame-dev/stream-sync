@@ -11,8 +11,25 @@ type ModuleMockEntry = {
   actualModule: unknown;
 };
 
-const restoreMockModule = (moduleName: string) => {
-  mock.restore(moduleName);
+const restoreRegisteredModuleMocks = (actualEntries: ModuleMockEntry[] = []) => {
+  mock.restore();
+  actualEntries.forEach((entry) => {
+    if (entry.hasActualModule) {
+      mock.module(entry.moduleName, () => entry.actualModule);
+    }
+  });
+  activeMocks.forEach((entry) => {
+    mock.module(entry.moduleName, entry.factory);
+  });
+};
+
+const restoreActualModules = () => {
+  mock.restore();
+  activeMocks.forEach((entry) => {
+    if (entry.hasActualModule) {
+      mock.module(entry.moduleName, () => entry.actualModule);
+    }
+  });
 };
 
 const activeMocks = new Map<string, ModuleMockEntry>();
@@ -71,11 +88,8 @@ const unmockModule = (moduleName: string) => {
     return;
   }
 
-  restoreMockModule(entry.moduleName);
-  if (entry.hasActualModule) {
-    mock.module(entry.moduleName, () => entry.actualModule);
-  }
   activeMocks.delete(entry.moduleId);
+  restoreRegisteredModuleMocks([entry]);
 };
 
 const requireActual = (moduleName: string) => {
@@ -89,19 +103,14 @@ const requireActual = (moduleName: string) => {
     return entry.actualModule;
   }
 
-  restoreMockModule(entry.moduleName);
+  restoreActualModules();
   const actualModule = nodeRequire(moduleName);
-  mock.module(entry.moduleName, entry.factory);
+  restoreRegisteredModuleMocks();
   return actualModule;
 };
 
 const restoreAllModuleMocks = () => {
-  activeMocks.forEach((entry) => {
-    restoreMockModule(entry.moduleName);
-    if (entry.hasActualModule) {
-      mock.module(entry.moduleName, () => entry.actualModule);
-    }
-  });
+  restoreActualModules();
   activeMocks.clear();
 };
 

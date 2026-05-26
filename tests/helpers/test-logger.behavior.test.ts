@@ -17,6 +17,8 @@ import {
 import testClock from './test-clock';
 import { resetTestIds } from './test-id';
 
+type LogLevelKey = keyof typeof LOG_LEVEL_NAMES;
+
 describe('test-logger behavior', () => {
     beforeEach(() => {
         testClock.reset();
@@ -31,7 +33,7 @@ describe('test-logger behavior', () => {
         const entry = new LogEntry(LOG_LEVELS.INFO, 'test message', { key: 'value' }, testClock.now());
 
         expect(entry.level).toBe(LOG_LEVELS.INFO);
-        expect(entry.levelName).toBe(LOG_LEVEL_NAMES[LOG_LEVELS.INFO]);
+        expect(entry.levelName).toBe(LOG_LEVEL_NAMES[LOG_LEVELS.INFO as LogLevelKey]);
         expect(entry.id.startsWith('log-')).toBe(true);
 
         const json = entry.toJSON();
@@ -45,8 +47,8 @@ describe('test-logger behavior', () => {
 
     it('applies level gating, max entries, filters, and hooks', () => {
         const logger = new TestLogger({ level: LOG_LEVELS.INFO, maxEntries: 2, enableConsole: false });
-        const beforeLevels = [];
-        const afterMessages = [];
+        const beforeLevels: number[] = [];
+        const afterMessages: string[] = [];
 
         logger.addFilter((_level, message) => !message.includes('skip'));
         logger.addHook('beforeLog', (level) => {
@@ -71,8 +73,8 @@ describe('test-logger behavior', () => {
         expect(beforeLevels.length).toBe(4);
         expect(afterMessages).toEqual(['debug ignored by level', 'message one', 'message two', 'message three']);
         expect(logger.entries.length).toBe(2);
-        expect(logger.entries[0].message).toBe('message two');
-        expect(logger.entries[1].message).toBe('message three');
+        expect(logger.entries[0]?.message).toBe('message two');
+        expect(logger.entries[1]?.message).toBe('message three');
     });
 
     it('supports logger convenience methods and entry filtering', () => {
@@ -135,7 +137,7 @@ describe('test-logger behavior', () => {
 
     it('uses console output when enabled and preserves factory defaults', () => {
         const originalConsoleLog = console.log;
-        const captured = [];
+        const captured: string[] = [];
 
         console.log = (message) => {
             captured.push(String(message));
@@ -156,7 +158,7 @@ describe('test-logger behavior', () => {
         performanceLogger.debug('hidden-debug');
         performanceLogger.info('visible-info');
         expect(performanceLogger.getEntries().length).toBe(1);
-        expect(performanceLogger.getEntries()[0].message).toBe('visible-info');
+        expect(performanceLogger.getEntries()[0]?.message).toBe('visible-info');
     });
 
     it('provides assertion helper contracts for log outcomes', () => {

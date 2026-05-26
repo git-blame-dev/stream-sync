@@ -1,50 +1,49 @@
 import { vi } from 'bun:test';
 
-type MockImplementation<Args extends readonly unknown[] = readonly unknown[], Return = never> = (...args: Args) => Return;
+type MockImplementation<Args extends unknown[] = unknown[], Return = unknown> = (...args: Args) => Return;
 
-type MockReturnValue<Return> = [Return] extends [never] ? unknown : Return;
+type MockReturnValue<Return> = unknown extends Return ? unknown : Return;
+type MockReturnResult<Return, Value> = unknown extends Return ? Value : Return;
+type MockResolvedResult<Return, Value> = unknown extends Return ? Promise<Value> : Return;
+type MockRejectedResult<Return> = unknown extends Return ? Promise<never> : Return;
 
-type MockResolvedValue<Return> = [Return] extends [never]
-    ? unknown
-    : Return extends PromiseLike<infer Resolved>
+type MockResolvedValue<Return> = Return extends PromiseLike<infer Resolved>
     ? Resolved
     : unknown extends Return
         ? unknown
         : never;
 
-type MockRejectedValue<Return> = [Return] extends [never]
-    ? unknown
-    : Return extends PromiseLike<unknown>
+type MockRejectedValue<Return> = Return extends PromiseLike<unknown>
     ? unknown
     : unknown extends Return
         ? unknown
         : never;
 
-type TestMockFn<Args extends readonly unknown[] = readonly unknown[], Return = never> = MockImplementation<Args, Return> & {
+type TestMockFn<Args extends unknown[] = unknown[], Return = unknown> = MockImplementation<Args, Return> & {
     mock: {
         calls: Args[];
         invocationCallOrder?: number[];
     };
     mockImplementation: (implementation: MockImplementation<Args, Return>) => TestMockFn<Args, Return>;
     mockImplementationOnce: (implementation: MockImplementation<Args, Return>) => TestMockFn<Args, Return>;
-    mockReturnValue: (value: MockReturnValue<Return>) => TestMockFn<Args, Return>;
-    mockReturnValueOnce: (value: MockReturnValue<Return>) => TestMockFn<Args, Return>;
-    mockResolvedValue: (value?: MockResolvedValue<Return>) => TestMockFn<Args, Return>;
-    mockResolvedValueOnce: (value?: MockResolvedValue<Return>) => TestMockFn<Args, Return>;
-    mockRejectedValue: (error: MockRejectedValue<Return>) => TestMockFn<Args, Return>;
-    mockRejectedValueOnce: (error: MockRejectedValue<Return>) => TestMockFn<Args, Return>;
+    mockReturnValue: <Value extends MockReturnValue<Return>>(value: Value) => TestMockFn<Args, MockReturnResult<Return, Value>>;
+    mockReturnValueOnce: <Value extends MockReturnValue<Return>>(value: Value) => TestMockFn<Args, MockReturnResult<Return, Value>>;
+    mockResolvedValue: <Value extends MockResolvedValue<Return>>(value?: Value) => TestMockFn<Args, MockResolvedResult<Return, Value>>;
+    mockResolvedValueOnce: <Value extends MockResolvedValue<Return>>(value?: Value) => TestMockFn<Args, MockResolvedResult<Return, Value>>;
+    mockRejectedValue: (error: MockRejectedValue<Return>) => TestMockFn<Args, MockRejectedResult<Return>>;
+    mockRejectedValueOnce: (error: MockRejectedValue<Return>) => TestMockFn<Args, MockRejectedResult<Return>>;
     mockClear: () => TestMockFn<Args, Return>;
     mockReset: () => TestMockFn<Args, Return>;
 };
 
-const createMockFn = <Args extends readonly unknown[] = readonly unknown[], Return = never>(
+const createMockFn = <Args extends unknown[] = unknown[], Return = unknown>(
     implementation?: MockImplementation<Args, Return>
 ): TestMockFn<Args, Return> => {
     const mockFn = implementation === undefined
         ? vi.fn<MockImplementation<Args, Return>>()
         : vi.fn<MockImplementation<Args, Return>>(implementation);
 
-    return mockFn as TestMockFn<Args, Return>;
+    return mockFn as unknown as TestMockFn<Args, Return>;
 };
 
 const isMockFunction = (value: unknown): value is TestMockFn => {
@@ -57,19 +56,29 @@ const isMockFunction = (value: unknown): value is TestMockFn => {
     );
 };
 
-const mockResolvedValue = <T>(fn: T, value: unknown): T => {
+function mockResolvedValue<Args extends unknown[], Return, Value extends MockResolvedValue<Return>>(
+    fn: TestMockFn<Args, Return>,
+    value: Value
+): TestMockFn<Args, MockResolvedResult<Return, Value>>;
+function mockResolvedValue<T>(fn: T, value: unknown): T;
+function mockResolvedValue(fn: unknown, value: unknown): unknown {
     if (isMockFunction(fn)) {
         fn.mockResolvedValue(value);
     }
     return fn;
-};
+}
 
-const mockRejectedValue = <T>(fn: T, error: unknown): T => {
+function mockRejectedValue<Args extends unknown[], Return>(
+    fn: TestMockFn<Args, Return>,
+    error: MockRejectedValue<Return>
+): TestMockFn<Args, MockRejectedResult<Return>>;
+function mockRejectedValue<T>(fn: T, error: unknown): T;
+function mockRejectedValue(fn: unknown, error: unknown): unknown {
     if (isMockFunction(fn)) {
         fn.mockRejectedValue(error);
     }
     return fn;
-};
+}
 
 const clearMock = (fn: unknown) => {
     if (isMockFunction(fn)) {

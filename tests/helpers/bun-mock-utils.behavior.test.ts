@@ -37,15 +37,12 @@ describe('bun-mock-utils behavior', () => {
     });
 
     it('wraps async behavior for mocked functions only', async () => {
-        const resolvedMock = createMockFn();
-        const rejectedMock = createMockFn();
+        const resolvedMock = mockResolvedValue(createMockFn(), 'resolved-value');
+        const rejectedMock = mockRejectedValue(createMockFn(), new Error('rejected-value'));
         const plainFunction = () => 'plain';
 
         expect(mockResolvedValue(plainFunction, 'noop')).toBe(plainFunction);
         expect(mockRejectedValue(plainFunction, new Error('noop'))).toBe(plainFunction);
-
-        mockResolvedValue(resolvedMock, 'resolved-value');
-        mockRejectedValue(rejectedMock, new Error('rejected-value'));
 
         await expect(resolvedMock()).resolves.toBe('resolved-value');
         await expect(rejectedMock()).rejects.toThrow('rejected-value');
@@ -61,7 +58,7 @@ describe('bun-mock-utils behavior', () => {
         expect(mockFn.mock.calls.length).toBe(0);
 
         resetMock(mockFn);
-        expect(mockFn()).toBeUndefined();
+        expect(mockFn(undefined)).toBeUndefined();
         expect(mockFn.mock.calls.length).toBe(1);
     });
 
