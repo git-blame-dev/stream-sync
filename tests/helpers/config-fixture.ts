@@ -1,6 +1,119 @@
 import { ConfigValidator } from '../../src/utils/config-validator';
 import { buildConfig } from '../../src/core/config-builders';
 
+type ConfigSectionFixture = Record<string, unknown>;
+type RawTestConfig = Record<string, ConfigSectionFixture> & {
+    general: ConfigSectionFixture;
+    obs: ConfigSectionFixture;
+    cooldowns: ConfigSectionFixture;
+    gui: ConfigSectionFixture;
+    tiktok: ConfigSectionFixture;
+    twitch: ConfigSectionFixture;
+    youtube: ConfigSectionFixture;
+};
+type BuiltTestConfig = ReturnType<typeof buildConfig>;
+type TestConfigKnownSections = {
+    general: {
+        debugEnabled: boolean;
+        gracefulExit: unknown;
+        maxMessageLength: number;
+        viewerCountPollingIntervalMs: number;
+        keywordParsingEnabled?: boolean;
+        logChatMessages?: boolean;
+        filterOldMessages?: boolean;
+    };
+    obs: {
+        address?: string;
+        password?: string;
+        enabled?: boolean;
+        connectionTimeoutMs?: number;
+        chatMsgTxt: string;
+        chatMsgScene: string;
+        chatMsgGroup: string;
+        ttsEnabled: boolean;
+        notificationMsgGroup: string;
+        notificationTxt: string;
+        notificationScene: string;
+        chatPlatformLogos: Record<string, string>;
+        notificationPlatformLogos: Record<string, string>;
+    };
+    displayQueue: {
+        autoProcess: boolean;
+        maxQueueSize: number;
+    };
+    cooldowns: {
+        cmdCooldown: number;
+        cmdCooldownMs: number;
+        defaultCooldownMs: number;
+        heavyCommandCooldownMs: number;
+        heavyCommandThreshold: number;
+        heavyCommandWindowMs: number;
+        globalCmdCooldownMs: number;
+        maxEntries: number;
+    };
+    timing: {
+        transitionDelay: number;
+        notificationClearDelay: number;
+        chatMessageDuration: number;
+        fadeDuration: number;
+    };
+    http: {
+        userAgents: string[];
+    };
+    twitch: {
+        enabled: boolean;
+        tokenStorePath?: string;
+        clientId?: string;
+        username?: string;
+    };
+    youtube: ConfigSectionFixture;
+    tiktok: ConfigSectionFixture;
+    handcam: {
+        enabled: boolean;
+        maxSize: number | string;
+        rampUpDuration: number | string;
+        holdDuration: number | string;
+        rampDownDuration: number | string;
+        totalSteps: number | string;
+        easingEnabled: boolean;
+        sourceName: string;
+        glowFilterName: string;
+    };
+    gifts: ConfigSectionFixture;
+    gui?: {
+        enableDock?: boolean;
+        enableOverlay?: boolean;
+        port?: number;
+        showGifts?: boolean;
+    };
+    spam: ConfigSectionFixture;
+    commands: Record<string, string>;
+    farewell: Record<string, string> & {
+        timeout: number;
+    };
+    greetings?: ConfigSectionFixture & {
+        customVfxProfiles?: Record<string, ConfigSectionFixture>;
+    };
+    vfx: {
+        filePath: string;
+    };
+};
+type TestConfigFixture = Record<string, ConfigSectionFixture> & BuiltTestConfig & {
+    [Section in keyof TestConfigKnownSections]: ConfigSectionFixture & TestConfigKnownSections[Section];
+};
+type ConfigFixtureSectionName = keyof BuiltTestConfig | keyof TestConfigKnownSections;
+type ConfigFixtureSection<Section extends ConfigFixtureSectionName> = Section extends keyof TestConfigKnownSections
+    ? TestConfigKnownSections[Section]
+    : Section extends keyof BuiltTestConfig
+        ? BuiltTestConfig[Section]
+        : never;
+type ConfigSectionOverride<Section> = Section extends object
+    ? { [Key in keyof Section]?: Section[Key] | undefined } & ConfigSectionFixture
+    : ConfigSectionFixture;
+type ConfigFixtureOverrides = Partial<{
+    [Section in ConfigFixtureSectionName]: ConfigSectionOverride<ConfigFixtureSection<Section>>;
+}>;
+
 const RAW_TEST_CONFIG = {
     general: {
         debugEnabled: 'false',
@@ -79,11 +192,11 @@ const RAW_TEST_CONFIG = {
     }
 };
 
-function getRawTestConfig() {
-    return JSON.parse(JSON.stringify(RAW_TEST_CONFIG));
+function getRawTestConfig(): RawTestConfig {
+    return JSON.parse(JSON.stringify(RAW_TEST_CONFIG)) as RawTestConfig;
 }
 
-function createSourcesConfigFixture(overrides = {}) {
+function createSourcesConfigFixture(overrides: ConfigSectionFixture = {}) {
     return {
         chatGroupName: 'test-chat-group',
         notificationGroupName: 'test-notification-group',
@@ -92,7 +205,7 @@ function createSourcesConfigFixture(overrides = {}) {
     };
 }
 
-function createStreamElementsConfigFixture(overrides = {}) {
+function createStreamElementsConfigFixture(overrides: ConfigSectionFixture = {}) {
     return {
         enabled: true,
         dataLoggingEnabled: false,
@@ -101,7 +214,7 @@ function createStreamElementsConfigFixture(overrides = {}) {
     };
 }
 
-function createHandcamConfigFixture(overrides = {}) {
+function createHandcamConfigFixture(overrides: ConfigSectionFixture = {}) {
     return {
         enabled: true,
         sourceName: 'test-handcam-source',
@@ -116,7 +229,7 @@ function createHandcamConfigFixture(overrides = {}) {
     };
 }
 
-function createTikTokConfigFixture(overrides = {}) {
+function createTikTokConfigFixture(overrides: ConfigSectionFixture = {}) {
     return {
         enabled: true,
         username: 'test-tiktok-user',
@@ -126,7 +239,7 @@ function createTikTokConfigFixture(overrides = {}) {
     };
 }
 
-function createTwitchConfigFixture(overrides = {}) {
+function createTwitchConfigFixture(overrides: ConfigSectionFixture = {}) {
     return {
         enabled: true,
         username: 'test-twitch-user',
@@ -139,7 +252,7 @@ function createTwitchConfigFixture(overrides = {}) {
     };
 }
 
-function createYouTubeConfigFixture(overrides = {}) {
+function createYouTubeConfigFixture(overrides: ConfigSectionFixture = {}) {
     return {
         enabled: true,
         username: 'test-youtube-channel',
@@ -151,11 +264,15 @@ function createYouTubeConfigFixture(overrides = {}) {
     };
 }
 
-function applyInheritableOverrides(generalOverrides, platformConfig, platformOverrides) {
+function applyInheritableOverrides(
+    generalOverrides: ConfigFixtureOverrides['general'] | undefined,
+    platformConfig: TestConfigFixture['tiktok'],
+    platformOverrides: ConfigFixtureOverrides['tiktok'] | undefined
+): TestConfigFixture['tiktok'] {
     if (!generalOverrides) return { ...platformConfig, ...platformOverrides };
     
     const inheritableFlags = Object.keys(ConfigValidator._parseInheritableFlags({}));
-    const propagated = { ...platformConfig };
+    const propagated: ConfigSectionFixture = { ...platformConfig };
     
     for (const flag of inheritableFlags) {
         if (generalOverrides[flag] !== undefined) {
@@ -170,7 +287,7 @@ function applyInheritableOverrides(generalOverrides, platformConfig, platformOve
     return { ...propagated, ...platformOverrides };
 }
 
-function createConfigFixture(overrides = {}) {
+function createConfigFixture(overrides: ConfigFixtureOverrides = {}): TestConfigFixture {
     const normalized = ConfigValidator.normalize(getRawTestConfig());
     const base = buildConfig(normalized);
     
@@ -190,7 +307,7 @@ function createConfigFixture(overrides = {}) {
         ...restOverrides
     } = overrides;
     
-    return {
+    const config = {
         ...base,
         general: { ...base.general, ...generalOverrides },
         cooldowns: { ...base.cooldowns, ...cooldownsOverrides },
@@ -203,9 +320,10 @@ function createConfigFixture(overrides = {}) {
         handcam: { ...base.handcam, ...handcamOverrides },
         tiktok: applyInheritableOverrides(generalOverrides, base.tiktok, tiktokOverrides),
         twitch: applyInheritableOverrides(generalOverrides, base.twitch, twitchOverrides),
-        youtube: applyInheritableOverrides(generalOverrides, base.youtube, youtubeOverrides),
-        ...restOverrides
-    };
+        youtube: applyInheritableOverrides(generalOverrides, base.youtube, youtubeOverrides)
+    } as TestConfigFixture;
+
+    return { ...config, ...restOverrides } as TestConfigFixture;
 }
 
 export {
