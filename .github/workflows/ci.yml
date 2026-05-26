@@ -35,6 +35,59 @@ jobs:
       - name: Lint workflows
         run: ./actionlint
 
+  release-scope:
+    name: Release artifact scope
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      package: ${{ steps.scope.outputs.package }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Determine release artifact scope
+        id: scope
+        env:
+          TARGET_SHA: ${{ github.sha }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = 'workflow_dispatch' ]; then
+            printf 'package=true\n' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "$GITHUB_EVENT_NAME" = 'pull_request' ]; then
+            printf 'package=false\n' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git fetch --tags --force
+          previous_tag="$(git describe --tags --match 'v[0-9]*' --abbrev=0 "${TARGET_SHA}^" 2>/dev/null || true)"
+
+          if [ -z "$previous_tag" ]; then
+            printf 'package=true\n' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          changed_files="$(git diff --name-only "$previous_tag".."$TARGET_SHA")"
+          has_release_artifact_input_change=false
+
+          while IFS= read -r path; do
+            [ -n "$path" ] || continue
+
+            case "$path" in
+              .env.example|config.example.ini|bun.lock|bunfig.toml|package.json|src/*|gui/*|scripts/release/*|tsconfig*.json)
+                has_release_artifact_input_change=true
+                ;;
+            esac
+          done <<EOF
+          $changed_files
+          EOF
+
+          printf 'package=%s\n' "$has_release_artifact_input_change" >> "$GITHUB_OUTPUT"
+
   lint:
     name: Lint
     runs-on: ubuntu-24.04
@@ -123,7 +176,8 @@ jobs:
     name: GUI build
     runs-on: ubuntu-24.04
     timeout-minutes: 15
-    needs: [lint, typecheck, test]
+    needs: [lint, typecheck, test, release-scope]
+    if: github.event_name == 'pull_request' || needs.release-scope.outputs.package == 'true'
 
     steps:
       - name: Check out repository
@@ -148,11 +202,22 @@ jobs:
       - name: Build GUI
         run: bun run build
 
+      - name: Upload GUI build output
+        if: needs.release-scope.outputs.package == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: stream-sync-gui-dist
+          path: gui/dist
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
   package:
     name: Package ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
-    needs: [workflow-lint, build]
+    needs: [workflow-lint, build, release-scope]
+    if: needs.release-scope.outputs.package == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -188,7 +253,15 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Download GUI build output
+        uses: actions/download-artifact@v8
+        with:
+          name: stream-sync-gui-dist
+          path: gui/dist
+
       - name: Build release package directory
+        env:
+          STREAM_SYNC_REUSE_GUI_DIST: 'true'
         run: bun run ${{ matrix.script }}
 
       - name: Smoke test Linux binary
@@ -214,3 +287,4 @@ jobs:
           path: ${{ matrix.archive-path }}
           if-no-files-found: error
           retention-days: 14
+          compression-level: 0

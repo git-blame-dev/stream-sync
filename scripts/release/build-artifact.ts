@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { cp, mkdir, rm } from 'node:fs/promises';
+import { access, cp, mkdir, rm } from 'node:fs/promises';
 import path from 'node:path';
 
 type ReleaseTarget = 'linux-x64' | 'windows-x64';
@@ -67,6 +67,15 @@ async function copyReleaseSupportFiles(packageRoot: string): Promise<void> {
   await mkdir(path.join(packageRoot, 'data'), { recursive: true });
 }
 
+async function prepareGuiDist(): Promise<void> {
+  if (process.env.STREAM_SYNC_REUSE_GUI_DIST === 'true') {
+    await access(repoPath('gui', 'dist', 'assets', 'dock.js'));
+    return;
+  }
+
+  await run('bun', ['run', 'build']);
+}
+
 async function buildArtifact(target: ReleaseTarget): Promise<void> {
   const config = TARGETS[target];
   const packageRoot = path.join(RELEASE_ROOT, config.packageDirectory);
@@ -75,7 +84,7 @@ async function buildArtifact(target: ReleaseTarget): Promise<void> {
   await rm(packageRoot, { recursive: true, force: true });
   await mkdir(packageRoot, { recursive: true });
 
-  await run('bun', ['run', 'build']);
+  await prepareGuiDist();
   await run('bun', [
     'build',
     ENTRYPOINT,
