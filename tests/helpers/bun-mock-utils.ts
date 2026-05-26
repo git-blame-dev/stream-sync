@@ -1,18 +1,53 @@
 import { vi } from 'bun:test';
 
-type MockLike = {
+type MockImplementation<Args extends readonly unknown[] = readonly unknown[], Return = never> = (...args: Args) => Return;
+
+type MockReturnValue<Return> = [Return] extends [never] ? unknown : Return;
+
+type MockResolvedValue<Return> = [Return] extends [never]
+    ? unknown
+    : Return extends PromiseLike<infer Resolved>
+    ? Resolved
+    : unknown extends Return
+        ? unknown
+        : never;
+
+type MockRejectedValue<Return> = [Return] extends [never]
+    ? unknown
+    : Return extends PromiseLike<unknown>
+    ? unknown
+    : unknown extends Return
+        ? unknown
+        : never;
+
+type TestMockFn<Args extends readonly unknown[] = readonly unknown[], Return = never> = MockImplementation<Args, Return> & {
     mock: {
-        calls: unknown[];
+        calls: Args[];
+        invocationCallOrder?: number[];
     };
-    mockResolvedValue: (value: unknown) => void;
-    mockRejectedValue: (error: unknown) => void;
-    mockClear: () => void;
-    mockReset: () => void;
+    mockImplementation: (implementation: MockImplementation<Args, Return>) => TestMockFn<Args, Return>;
+    mockImplementationOnce: (implementation: MockImplementation<Args, Return>) => TestMockFn<Args, Return>;
+    mockReturnValue: (value: MockReturnValue<Return>) => TestMockFn<Args, Return>;
+    mockReturnValueOnce: (value: MockReturnValue<Return>) => TestMockFn<Args, Return>;
+    mockResolvedValue: (value?: MockResolvedValue<Return>) => TestMockFn<Args, Return>;
+    mockResolvedValueOnce: (value?: MockResolvedValue<Return>) => TestMockFn<Args, Return>;
+    mockRejectedValue: (error: MockRejectedValue<Return>) => TestMockFn<Args, Return>;
+    mockRejectedValueOnce: (error: MockRejectedValue<Return>) => TestMockFn<Args, Return>;
+    mockClear: () => TestMockFn<Args, Return>;
+    mockReset: () => TestMockFn<Args, Return>;
 };
 
-const createMockFn = (implementation?: (...args: unknown[]) => unknown) => vi.fn(implementation);
+const createMockFn = <Args extends readonly unknown[] = readonly unknown[], Return = never>(
+    implementation?: MockImplementation<Args, Return>
+): TestMockFn<Args, Return> => {
+    const mockFn = implementation === undefined
+        ? vi.fn<MockImplementation<Args, Return>>()
+        : vi.fn<MockImplementation<Args, Return>>(implementation);
 
-const isMockFunction = (value: unknown): value is MockLike => {
+    return mockFn as TestMockFn<Args, Return>;
+};
+
+const isMockFunction = (value: unknown): value is TestMockFn => {
     return !!(
         value &&
         typeof value === 'function' &&
@@ -54,6 +89,7 @@ const resetAllMocks = () => vi.resetAllMocks();
 const spyOn = (...args: Parameters<typeof vi.spyOn>) => vi.spyOn(...args);
 
 export {
+    type TestMockFn,
     createMockFn,
     isMockFunction,
     mockResolvedValue,
