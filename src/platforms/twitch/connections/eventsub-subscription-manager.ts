@@ -1,4 +1,5 @@
 import * as axiosModule from 'axios';
+import type { AxiosResponse } from 'axios';
 import { safeDelay, validateTimeout } from '../../../utils/timeout-validator';
 import { extractHttpErrorDetails } from '../../../utils/http-error-utils';
 import { validateLoggerInterface } from '../../../utils/dependency-validator';
@@ -17,6 +18,14 @@ type TwitchAuthLike = {
   refreshTokens: () => Promise<boolean>;
 };
 
+type AxiosClientLike = {
+  get: <T = unknown>(url: string, config?: unknown) => Promise<AxiosResponse<T>>;
+  post: <T = unknown>(url: string, data?: unknown, config?: unknown) => Promise<AxiosResponse<T>>;
+  delete: <T = unknown>(url: string, config?: unknown) => Promise<AxiosResponse<T>>;
+};
+
+type AxiosMethodName = keyof AxiosClientLike;
+
 type SubscriptionDefinition = {
   name: string;
   type: string;
@@ -29,7 +38,7 @@ type SubscriptionManagerOptions = {
   twitchAuth?: TwitchAuthLike;
   config?: Record<string, unknown>;
   subscriptions?: Map<string, Record<string, unknown>>;
-  axios?: typeof axiosModule;
+  axios?: AxiosClientLike;
   getClientId?: () => string | null;
   validateConnectionForSubscriptions?: () => boolean;
   logError?: (message: string, error?: unknown, eventType?: string, payload?: Record<string, unknown>) => void;
@@ -45,6 +54,99 @@ type SubscriptionErrorDetails = {
   details: Record<string, unknown>;
 };
 
+type EventSubRemoteSubscription = {
+  id: string;
+  status: string;
+  type: string;
+  transport?: {
+    method?: string;
+    session_id?: string;
+  };
+};
+
+type EventSubSubscriptionResponse = {
+  data: EventSubRemoteSubscription[];
+};
+
+const getRecord = (value: unknown): Record<string, unknown> | null =>
+    value && typeof value === 'object' ? value as Record<string, unknown> : null;
+
+const getMember = (value: unknown, key: string): unknown => {
+    if ((value && typeof value === 'object') || typeof value === 'function') {
+        return (value as Record<string, unknown>)[key];
+    }
+
+    return undefined;
+};
+
+const isAxiosClientLike = (value: unknown): value is AxiosClientLike => (
+    typeof getMember(value, 'get') === 'function'
+    && typeof getMember(value, 'post') === 'function'
+    && typeof getMember(value, 'delete') === 'function'
+);
+
+const hasAnyAxiosMethod = (value: unknown): boolean => (
+    typeof getMember(value, 'get') === 'function'
+    || typeof getMember(value, 'post') === 'function'
+    || typeof getMember(value, 'delete') === 'function'
+);
+
+const createMissingAxiosMethod = (methodName: AxiosMethodName): AxiosClientLike[AxiosMethodName] => {
+    return async () => {
+        throw new Error(`TwitchEventSub subscription manager axios client is missing ${methodName}`);
+    };
+};
+
+const resolveAxiosMethod = (candidate: unknown, methodName: AxiosMethodName): AxiosClientLike[AxiosMethodName] => {
+    const method = getMember(candidate, methodName);
+    if (typeof method === 'function') {
+        return method.bind(candidate) as AxiosClientLike[AxiosMethodName];
+    }
+
+    return createMissingAxiosMethod(methodName);
+};
+
+const resolveAxiosClient = (candidate: unknown): AxiosClientLike => {
+    if (isAxiosClientLike(candidate)) {
+        return candidate;
+    }
+
+    const defaultExport = getMember(candidate, 'default');
+    if (isAxiosClientLike(defaultExport)) {
+        return defaultExport;
+    }
+
+    const partialClient = hasAnyAxiosMethod(candidate)
+        ? candidate
+        : defaultExport;
+    if (hasAnyAxiosMethod(partialClient)) {
+        return {
+            get: resolveAxiosMethod(partialClient, 'get'),
+            post: resolveAxiosMethod(partialClient, 'post'),
+            delete: resolveAxiosMethod(partialClient, 'delete')
+        };
+    }
+
+    throw new Error('TwitchEventSub subscription manager requires an axios-compatible HTTP client');
+};
+
+const getErrorMessage = (error: unknown): string => error instanceof Error ? error.message : String(error);
+
+const getAxiosErrorResponse = (error: unknown): { status?: number; data?: unknown } | null => {
+    const response = getRecord(error)?.response;
+    return response && typeof response === 'object' ? response as { status?: number; data?: unknown } : null;
+};
+
+const getSubscriptionResponseData = (response: AxiosResponse<EventSubSubscriptionResponse>): EventSubRemoteSubscription[] => response.data.data;
+
+const getFirstSubscription = (response: AxiosResponse<EventSubSubscriptionResponse>): EventSubRemoteSubscription => {
+    const [subscription] = getSubscriptionResponseData(response);
+    if (!subscription) {
+        throw new Error('Twitch EventSub response did not include subscription data');
+    }
+    return subscription;
+};
+
 function createTwitchEventSubSubscriptionManager(options: SubscriptionManagerOptions = {}) {
     const {
         logger,
@@ -58,7 +160,7 @@ function createTwitchEventSubSubscriptionManager(options: SubscriptionManagerOpt
         now = () => Date.now()
     } = options;
 
-    const axios = injectedAxios || axiosModule.default || axiosModule;
+    const axios = resolveAxiosClient(injectedAxios ?? axiosModule);
 
     const safeLogger = (() => {
         if (!logger) {
@@ -72,6 +174,10 @@ function createTwitchEventSubSubscriptionManager(options: SubscriptionManagerOpt
     if (!twitchAuth) {
         throw new Error('TwitchEventSub subscription manager requires twitchAuth');
     }
+    if (!subscriptions) {
+        throw new Error('TwitchEventSub subscription manager requires subscriptions');
+    }
+    const safeSubscriptions = subscriptions;
     const safeValidateConnection = typeof validateConnectionForSubscriptions === 'function'
         ? validateConnectionForSubscriptions
         : () => false;
@@ -79,10 +185,11 @@ function createTwitchEventSubSubscriptionManager(options: SubscriptionManagerOpt
   const parseSubscriptionError = (error: unknown, subscription: SubscriptionDefinition): SubscriptionErrorDetails => {
         const httpDetails = extractHttpErrorDetails(error);
 
-        if (error.response?.data) {
-            const errorData = error.response.data;
-            const errorCode = errorData.error;
-            const errorMessage = errorData.message;
+        const response = getAxiosErrorResponse(error);
+        const errorData = getRecord(response?.data);
+        if (errorData) {
+            const errorCode = typeof errorData.error === 'string' ? errorData.error : 'HTTP_ERROR';
+            const errorMessage = typeof errorData.message === 'string' ? errorData.message : httpDetails.message;
 
             const isCritical = ['Unauthorized', 'Forbidden'].includes(errorCode);
             const isRetryable = ['Too Many Requests', 'Internal Server Error'].includes(errorCode);
@@ -90,7 +197,7 @@ function createTwitchEventSubSubscriptionManager(options: SubscriptionManagerOpt
             return {
                 code: errorCode,
                 message: errorMessage,
-                status: error.response.status,
+                status: typeof response?.status === 'number' ? response.status : null,
                 isCritical,
                 isRetryable,
                 details: httpDetails
@@ -134,7 +241,7 @@ function createTwitchEventSubSubscriptionManager(options: SubscriptionManagerOpt
         try {
             return await requestFn();
         } catch (error) {
-            if (error?.response?.status !== 401) {
+            if (getAxiosErrorResponse(error)?.status !== 401) {
                 throw error;
             }
             const refreshed = await twitchAuth.refreshTokens();
@@ -172,13 +279,13 @@ function createTwitchEventSubSubscriptionManager(options: SubscriptionManagerOpt
         );
 
         const response = await requestWithAuthRetry(async () => {
-            return await axios.post('https://api.twitch.tv/helix/eventsub/subscriptions', payload, {
+            return await axios.post<EventSubSubscriptionResponse>('https://api.twitch.tv/helix/eventsub/subscriptions', payload, {
                 headers: await getAuthHeaders()
             });
         });
 
-        const subData = response.data.data[0];
-        subscriptions.set(subData.id, {
+        const subData = getFirstSubscription(response);
+        safeSubscriptions.set(subData.id, {
             ...subscription,
             id: subData.id,
             status: subData.status
@@ -227,7 +334,7 @@ function createTwitchEventSubSubscriptionManager(options: SubscriptionManagerOpt
         safeLogger.info('Setting up EventSub subscriptions', 'twitch');
 
         let successCount = 0;
-        const failedSubscriptions = [];
+        const failedSubscriptions: Array<{ subscription: string; error: SubscriptionErrorDetails }> = [];
         for (const subscription of requiredSubscriptions) {
             try {
                 if (!safeValidateConnection()) {
@@ -254,13 +361,13 @@ function createTwitchEventSubSubscriptionManager(options: SubscriptionManagerOpt
                 });
 
                 const response = await requestWithAuthRetry(async () => {
-                    return await axios.post('https://api.twitch.tv/helix/eventsub/subscriptions', subscriptionPayload, {
+                    return await axios.post<EventSubSubscriptionResponse>('https://api.twitch.tv/helix/eventsub/subscriptions', subscriptionPayload, {
                         headers: await getAuthHeaders()
                     });
                 });
 
-                const subData = response.data.data[0];
-                subscriptions.set(subData.id, {
+                const subData = getFirstSubscription(response);
+                safeSubscriptions.set(subData.id, {
                     ...subscription,
                     id: subData.id,
                     status: subData.status
@@ -301,7 +408,7 @@ function createTwitchEventSubSubscriptionManager(options: SubscriptionManagerOpt
                             retriesRemaining: 1
                         });
                     } catch (retryError) {
-                        retryResult = { success: false, error: retryError.message };
+                        retryResult = { success: false, error: getErrorMessage(retryError) };
                     }
                 }
 
@@ -366,13 +473,13 @@ function createTwitchEventSubSubscriptionManager(options: SubscriptionManagerOpt
             safeLogger.info('Cleaning up existing WebSocket subscriptions before connecting...', 'twitch');
 
             const response = await requestWithAuthRetry(async () => {
-                return await axios.get('https://api.twitch.tv/helix/eventsub/subscriptions', {
+                return await axios.get<EventSubSubscriptionResponse>('https://api.twitch.tv/helix/eventsub/subscriptions', {
                     headers: await getAuthHeaders(),
                     timeout: 5000
                 });
             });
 
-            const allSubscriptions = response.data.data;
+            const allSubscriptions = getSubscriptionResponseData(response);
             const webSocketSubscriptions = allSubscriptions
                 .filter((sub) => sub.transport?.method === 'websocket')
                 .filter((sub) => {
@@ -403,6 +510,9 @@ function createTwitchEventSubSubscriptionManager(options: SubscriptionManagerOpt
             const runDeleteWorker = async () => {
                 while (nextIndex < webSocketSubscriptions.length) {
                     const subscription = webSocketSubscriptions[nextIndex++];
+                    if (!subscription) {
+                        break;
+                    }
                     try {
                         await requestWithAuthRetry(async () => {
                             return await axios.delete(`https://api.twitch.tv/helix/eventsub/subscriptions?id=${subscription.id}`, {
@@ -442,12 +552,12 @@ function createTwitchEventSubSubscriptionManager(options: SubscriptionManagerOpt
             safeLogger.info('Fetching existing EventSub subscriptions for cleanup...', 'twitch');
 
             const response = await requestWithAuthRetry(async () => {
-                return await axios.get('https://api.twitch.tv/helix/eventsub/subscriptions', {
+                return await axios.get<EventSubSubscriptionResponse>('https://api.twitch.tv/helix/eventsub/subscriptions', {
                     headers: await getAuthHeaders()
                 });
             });
 
-            const allSubscriptions = response.data.data;
+            const allSubscriptions = getSubscriptionResponseData(response);
             safeLogger.info(`Found ${allSubscriptions.length} total subscriptions`, 'twitch');
 
             const ourSubscriptions = allSubscriptions.filter((sub) => {
@@ -475,7 +585,7 @@ function createTwitchEventSubSubscriptionManager(options: SubscriptionManagerOpt
 
                     safeLogger.info(`   Deleted: ${subscription.type} (${subscription.id})`, 'twitch');
                     deleted++;
-                    subscriptions.delete(subscription.id);
+                    safeSubscriptions.delete(subscription.id);
 
                     await safeDelay(
                         validateTimeout(100, 100),

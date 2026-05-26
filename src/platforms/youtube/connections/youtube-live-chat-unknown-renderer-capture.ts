@@ -148,6 +148,10 @@ function shouldCaptureExpandedContext(className: string): boolean {
 function findActionAncestor(ancestors: TraversalAncestor[]): TraversalAncestor | null {
     for (let index = ancestors.length - 1; index >= 0; index -= 1) {
         const ancestor = ancestors[index];
+        if (!ancestor) {
+            continue;
+        }
+
         if (/\.actions\[\d+\]$/.test(ancestor.path)) {
             return ancestor;
         }

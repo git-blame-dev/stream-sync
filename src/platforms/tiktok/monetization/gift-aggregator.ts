@@ -169,7 +169,7 @@ const handleStandardGift = async (gift: TikTokGiftPayload): Promise<void> => {
         }
 
         if (!platform.giftAggregation[key]) {
-            platform.giftAggregation[key] = {
+            const initialState: TikTokGiftAggregationState = {
                 platform: gift.platform || 'tiktok',
                 userId,
                 username,
@@ -183,13 +183,19 @@ const handleStandardGift = async (gift: TikTokGiftPayload): Promise<void> => {
                 lastGift: gift,
                 lastId: giftId,
                 lastTimestamp: timestamp,
-                sourceType: typeof gift.sourceType === 'string' ? gift.sourceType : undefined,
                 messageHighWaterCounts: new Map(),
                 comboGroupHighWaterCounts: new Map()
             };
+            if (typeof gift.sourceType === 'string') {
+                initialState.sourceType = gift.sourceType;
+            }
+            platform.giftAggregation[key] = initialState;
         }
 
         const aggregationState = platform.giftAggregation[key];
+        if (!aggregationState) {
+            throw new Error('TikTok gift aggregation state was not initialized');
+        }
 
         let highWaterMap = aggregationState.messageHighWaterCounts;
         let identityValue = giftId;
@@ -217,7 +223,11 @@ const handleStandardGift = async (gift: TikTokGiftPayload): Promise<void> => {
         aggregationState.lastGift = gift;
         aggregationState.lastId = giftId;
         aggregationState.lastTimestamp = timestamp;
-        aggregationState.sourceType = typeof gift.sourceType === 'string' ? gift.sourceType : undefined;
+        if (typeof gift.sourceType === 'string') {
+            aggregationState.sourceType = gift.sourceType;
+        } else {
+            delete aggregationState.sourceType;
+        }
         if (resolvedAvatarUrl) {
             aggregationState.avatarUrl = resolvedAvatarUrl;
         }

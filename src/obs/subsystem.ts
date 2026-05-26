@@ -7,11 +7,15 @@ type ObsManagerLike = {
     ensureConnected: () => Promise<void>;
     call: (requestType: string, payload?: Record<string, unknown>) => Promise<unknown>;
     isConnected: () => boolean;
-    isReady?: () => Promise<boolean>;
+    isReady: () => Promise<boolean>;
     connect?: () => Promise<boolean>;
     disconnect?: () => Promise<void>;
-    addEventListener?: (...args: unknown[]) => void;
-    removeEventListener?: (...args: unknown[]) => void;
+    addEventListener?: (eventName: string, handler: (data?: Record<string, unknown>) => void) => void;
+    removeEventListener?: (eventName: string, handler: (data?: Record<string, unknown>) => void) => void;
+};
+
+type RawObsManagerLike = Omit<ObsManagerLike, 'isReady'> & {
+    isReady?: () => Promise<boolean>;
 };
 
 type LoggerLike = typeof defaultLogger;
@@ -32,7 +36,7 @@ type ObsSubsystemDeps = {
     config: ObsSubsystemConfig;
     logger: LoggerLike;
     eventBus: unknown;
-    getOBSConnectionManager: (deps?: { config?: Record<string, unknown> }) => ObsManagerLike;
+    getOBSConnectionManager: (deps?: { config?: Record<string, unknown> }) => RawObsManagerLike;
     createOBSEventService: (deps: {
         eventBus: unknown;
         obsConnection: ObsManagerLike;
@@ -58,19 +62,19 @@ function createOBSSubsystem(deps: ObsSubsystemDeps) {
         isConnected: rawConnectionManager.isConnected.bind(rawConnectionManager),
         isReady: typeof rawConnectionManager.isReady === 'function'
             ? rawConnectionManager.isReady.bind(rawConnectionManager)
-            : undefined,
-        connect: typeof rawConnectionManager.connect === 'function'
-            ? rawConnectionManager.connect.bind(rawConnectionManager)
-            : undefined,
-        disconnect: typeof rawConnectionManager.disconnect === 'function'
-            ? rawConnectionManager.disconnect.bind(rawConnectionManager)
-            : undefined,
-        addEventListener: typeof rawConnectionManager.addEventListener === 'function'
-            ? rawConnectionManager.addEventListener.bind(rawConnectionManager)
-            : undefined,
-        removeEventListener: typeof rawConnectionManager.removeEventListener === 'function'
-            ? rawConnectionManager.removeEventListener.bind(rawConnectionManager)
-            : undefined
+            : async () => rawConnectionManager.isConnected(),
+        ...(typeof rawConnectionManager.connect === 'function'
+            ? { connect: rawConnectionManager.connect.bind(rawConnectionManager) }
+            : {}),
+        ...(typeof rawConnectionManager.disconnect === 'function'
+            ? { disconnect: rawConnectionManager.disconnect.bind(rawConnectionManager) }
+            : {}),
+        ...(typeof rawConnectionManager.addEventListener === 'function'
+            ? { addEventListener: rawConnectionManager.addEventListener.bind(rawConnectionManager) }
+            : {}),
+        ...(typeof rawConnectionManager.removeEventListener === 'function'
+            ? { removeEventListener: rawConnectionManager.removeEventListener.bind(rawConnectionManager) }
+            : {})
     };
 
     const sourcesManager = createOBSSourcesManager(connectionManager, {

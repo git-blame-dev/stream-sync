@@ -328,7 +328,10 @@ class TextProcessingManager {
         const mentionPattern = /(^|[^A-Za-z0-9_@])(@[A-Za-z0-9_]+)/g;
         let match: RegExpExecArray | null;
         while ((match = mentionPattern.exec(text)) !== null) {
-            matches.push(match[2]);
+            const mention = match[2];
+            if (mention) {
+                matches.push(mention);
+            }
         }
 
         return matches;
@@ -416,7 +419,7 @@ class TextProcessingManager {
     formatLogEntry(timestamp: unknown, username: string, message: string, platform: string): string {
         let formattedTimestamp = String(timestamp);
         if (timestamp instanceof Date) {
-            formattedTimestamp = timestamp.toISOString().split('T')[0];
+            formattedTimestamp = timestamp.toISOString().split('T')[0] ?? formattedTimestamp;
         }
 
         return `[${formattedTimestamp}] [${platform}] ${username}: ${message}`;

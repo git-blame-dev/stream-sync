@@ -168,10 +168,15 @@ class YouTubeiCurrencyParser {
         }
 
         const currencyRaw = match[1];
-        const currency = currencyRaw.length === 3 && currencyRaw[0] >= 'A' && currencyRaw[0] <= 'Z'
+        const amountStr = match[2];
+        if (!currencyRaw || !amountStr) {
+            return { success: false };
+        }
+
+        const firstCurrencyCharacter = currencyRaw.charAt(0);
+        const currency = currencyRaw.length === 3 && firstCurrencyCharacter >= 'A' && firstCurrencyCharacter <= 'Z'
             ? currencyRaw
             : currencyRaw.toUpperCase();
-        const amountStr = match[2];
         const amount = amountStr.indexOf(',') === -1
             ? parseFloat(amountStr)
             : this._parseAmount(amountStr);
@@ -220,8 +225,13 @@ class YouTubeiCurrencyParser {
             return { success: false };
         }
 
-        const currency = match[1].toUpperCase();
+        const currencyRaw = match[1];
         const amountStr = match[2];
+        if (!currencyRaw || !amountStr) {
+            return { success: false };
+        }
+
+        const currency = currencyRaw.toUpperCase();
         const amount = this._parseAmount(amountStr);
 
         return {
@@ -241,6 +251,10 @@ class YouTubeiCurrencyParser {
             }
 
             const amountStr = match[1];
+            if (!amountStr) {
+                continue;
+            }
+
             const amount = this._parseAmount(amountStr);
             return {
                 amount,

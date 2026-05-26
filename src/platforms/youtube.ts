@@ -61,12 +61,152 @@ type StreamRefreshRequest = {
   reason?: string;
 };
 
+type LoggerLike = {
+  debug: (...args: unknown[]) => void;
+  info: (...args: unknown[]) => void;
+  warn: (...args: unknown[]) => void;
+  error?: (...args: unknown[]) => void;
+};
+
+type ErrorHandlerLike = {
+  handleEventProcessingError?: (error: Error, eventType: string, eventData?: unknown, message?: string, source?: string) => void;
+  handleConnectionError?: (error: Error, action?: string, message?: string) => void;
+  handleCleanupError?: (error: unknown, resource: string, message?: string | null) => void;
+  handleDataLoggingError?: (error: unknown, resource: string) => void;
+  logOperationalError?: (message: string, action: string, metadata?: unknown) => void;
+};
+
+type ChatFileLoggingServiceLike = {
+  logRawPlatformData: (platform: string, eventType: string, data: unknown, config: UnknownMap) => Promise<unknown>;
+};
+
+type ChatFileLoggingServiceConstructor = new (options: { logger: unknown; config: UnknownMap }) => ChatFileLoggingServiceLike;
+
+type ViewerServiceLike = {
+  _activeStream?: { videoId?: string };
+  clearActiveStream?: () => void;
+  cleanup?: () => void;
+  setActiveStream?: (videoId: string) => Promise<void>;
+};
+
+type ViewerCountProviderLike = {
+  getViewerCount: () => Promise<number | null>;
+  getViewerCountForVideo?: (videoId: string) => Promise<number | null>;
+};
+
+type RetrySystemLike = {
+  resetRetryCount: (platform: string) => void;
+  handleConnectionSuccess: (platform: string, connections: unknown, label: string) => void;
+  handleConnectionError: (
+    platform: string,
+    error: unknown,
+    reconnect: () => Promise<void>,
+    cleanup: () => Promise<void>
+  ) => void | Promise<void>;
+};
+
+type StreamDetectionServiceLike = {
+  detectLiveStreams: (channelHandle: unknown) => Promise<{
+    success?: boolean;
+    videoIds?: unknown;
+    detectionMethod?: string;
+    error?: string;
+    message?: string;
+  }>;
+};
+
+type YouTubeExtractionServiceLike = {
+  getAggregatedViewerCount: (activeVideoIds: string[]) => Promise<{
+    success: boolean;
+    totalCount: number;
+    successfulStreams: number;
+    failedStreams?: number;
+  }>;
+  extractViewerCount?: (videoId: string) => Promise<{
+    success: boolean;
+    count: number;
+  }>;
+};
+
+type YouTubeProviderExtractionServiceLike = YouTubeExtractionServiceLike & {
+  extractViewerCount: (videoId: string) => Promise<{
+    success: boolean;
+    count: number;
+  }>;
+};
+
+type ProviderLoggerLike = {
+  debug: (message: string, context?: string, payload?: unknown) => void;
+  info: (message: string, context?: string, payload?: unknown) => void;
+  warn: (message: string, context?: string, payload?: unknown) => void;
+  error: (message: string, context?: string, payload?: unknown) => void;
+};
+
+type YouTubeConnectionLike = {
+  on: (event: string, handler: (payload?: unknown) => void) => void;
+  start: () => void;
+  applyFilter?: (filterName: string) => void;
+  [key: string]: unknown;
+};
+
+type EventFactoryLike = ReturnType<typeof createYouTubeEventFactory>;
+type EventRouterLike = ReturnType<typeof createYouTubeEventRouter>;
+type MonetizationParserLike = ReturnType<typeof createYouTubeMonetizationParser>;
+type YouTubeConnectionFactoryLike = ReturnType<typeof createYouTubeConnectionFactory>;
+type YouTubeMultiStreamManagerLike = ReturnType<typeof createYouTubeMultiStreamManager>;
+
+type HandlerMap = Record<string, (payload: unknown) => unknown>;
+
+type YouTubeDependencies = UnknownMap & {
+  logger: LoggerLike;
+  USER_AGENTS?: string[] | undefined;
+  Innertube?: unknown;
+  timestampService?: unknown;
+  viewerService?: ViewerServiceLike;
+  ChatFileLoggingService?: ChatFileLoggingServiceConstructor;
+  chatFileLoggingService?: ChatFileLoggingServiceLike;
+  retrySystem?: RetrySystemLike;
+  streamDetectionService?: StreamDetectionServiceLike;
+  viewerCountProvider?: ViewerCountProviderLike;
+  viewerExtractionService?: YouTubeExtractionServiceLike;
+  innertubeService?: unknown;
+};
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function isYouTubeDependencies(value: UnknownMap): value is YouTubeDependencies {
+  return isRecord(value.logger)
+    && typeof value.logger.debug === 'function'
+    && typeof value.logger.info === 'function'
+    && typeof value.logger.warn === 'function';
+}
+
+function hasSendMessage(value: unknown): value is { sendMessage: (message: unknown) => Promise<boolean> } {
+  return isRecord(value) && typeof value.sendMessage === 'function';
+}
+
+function isYouTubeConnectionLike(value: unknown): value is YouTubeConnectionLike {
+  return isRecord(value) && typeof value.on === 'function' && typeof value.start === 'function';
+}
+
+function toUnknownMap(value: unknown): UnknownMap {
+  return isRecord(value) ? value : {};
+}
+
+function isYouTubeExtractionService(value: unknown): value is YouTubeExtractionServiceLike {
+  return isRecord(value)
+    && typeof value.getAggregatedViewerCount === 'function';
+}
+
+function isYouTubeProviderExtractionService(value: unknown): value is YouTubeProviderExtractionServiceLike {
+  return isYouTubeExtractionService(value)
+    && typeof value.extractViewerCount === 'function';
 }
 
 function summarizeYouTubeConfig(config: UnknownMap): Record<string, unknown> {
@@ -80,26 +220,67 @@ function summarizeYouTubeConfig(config: UnknownMap): Record<string, unknown> {
 }
 
 class YouTubePlatform extends EventEmitter {
+  handlers: HandlerMap;
+  logger: LoggerLike;
+  errorHandler: ErrorHandlerLike;
+  platformLogger: LoggerLike;
+  config: UnknownMap;
+  platformName: string;
+  eventFactory: EventFactoryLike;
+  eventRouter: EventRouterLike;
+  monetizationParser: MonetizationParserLike;
+  USER_AGENTS?: string[] | undefined;
+  Innertube: unknown;
+  timestampService: unknown;
+  viewerService: ViewerServiceLike | null;
+  chatFileLoggingService: ChatFileLoggingServiceLike;
+  isInitialized: boolean;
+  monitoringInterval: ReturnType<typeof setInterval> | number | null;
+  monitoringIntervalStart?: number | undefined;
+  shortageState: {
+    lastWarningTime: number | null;
+    isInShortage: boolean;
+    lastKnownAvailable: number;
+    lastKnownRequired: number;
+  };
+  userAgentManager: YouTubeUserAgentManager;
+  retrySystem: RetrySystemLike;
+  connectionManager: YouTubeConnectionManager;
+  _youtubeConnectionFactory: YouTubeConnectionFactoryLike;
+  _youtubeMultiStreamManager: YouTubeMultiStreamManagerLike;
+  streamDetectionService?: StreamDetectionServiceLike;
+  viewerExtractionService: YouTubeExtractionServiceLike | null;
+  viewerCountProvider: ViewerCountProviderLike | null;
+  lastFullStreamCheck: number | null = null;
+  lastYouTubeVideoIdsUpdateTime?: number | undefined;
+  streamViewerCounts?: Map<string, number>;
+  lastRecoveryTime?: number;
+  currentVideoId?: string;
+
   constructor(config: UnknownMap = {}, dependencyInput: unknown = {}) {
         super();
 
         this.handlers = {};
-    const resolvedDependencies = isRecord(dependencyInput) ? dependencyInput : {};
-    const dependencies = resolvedDependencies;
-        
         // FAIL-FAST: Validate dependencies before proceeding
-        
+
         // Allow flexible constructor patterns - handle incorrect dependency injection patterns
     if (typeof dependencyInput === 'string' || typeof dependencyInput === 'number') {
             throw new Error('Dependencies should be a single object with logger property, not separate parameters. ' +
                            'Use: new YouTubePlatform(config, { logger, notificationManager, ... }) instead of separate arguments.');
         }
 
+    const dependenciesInputRecord = isRecord(dependencyInput) ? dependencyInput : {};
+
         try {
-            validateYouTubePlatformDependencies(dependencies);
+            validateYouTubePlatformDependencies(dependenciesInputRecord);
         } catch (error) {
-            throw new Error(`YouTube platform initialization failed: ${error.message}`);
+            throw new Error(`YouTube platform initialization failed: ${getErrorMessage(error)}`);
         }
+
+    if (!isYouTubeDependencies(dependenciesInputRecord)) {
+            throw new Error('YouTube platform initialization failed: missing required dependencies: logger dependency is required');
+    }
+    const dependencies = dependenciesInputRecord;
 
         this.logger = dependencies.logger;
         this.errorHandler = createPlatformErrorHandler(this.logger, 'youtube');
@@ -109,7 +290,7 @@ class YouTubePlatform extends EventEmitter {
         this.platformName = 'youtube';
         this.eventFactory = createYouTubeEventFactory();
         try {
-            this.eventRouter = createYouTubeEventRouter({ platform: this });
+            this.eventRouter = createYouTubeEventRouter({ platform: this._createEventRouterPlatformAdapter() });
         } catch (error) {
             this._handleProcessingError('Failed to create event router', error, 'configuration');
             throw error;
@@ -123,11 +304,13 @@ class YouTubePlatform extends EventEmitter {
         this.timestampService = dependencies.timestampService || null; // Timestamp extraction service
         this.viewerService = dependencies.viewerService || null;
 
-        const ResolvedChatFileLoggingService = dependencies.ChatFileLoggingService || ChatFileLoggingService;
-        this.chatFileLoggingService = dependencies.chatFileLoggingService || new ResolvedChatFileLoggingService({
+        const defaultChatLoggingDependencies = {
             logger: this.logger,
             config: this.config
-        });
+        } as ConstructorParameters<typeof ChatFileLoggingService>[0];
+        this.chatFileLoggingService = dependencies.chatFileLoggingService || (dependencies.ChatFileLoggingService
+            ? new dependencies.ChatFileLoggingService({ logger: this.logger, config: this.config })
+            : new ChatFileLoggingService(defaultChatLoggingDependencies));
 
         // Logger reference for debug calls
 
@@ -145,7 +328,7 @@ class YouTubePlatform extends EventEmitter {
 
         // Initialize user agent manager
         this.userAgentManager = new YouTubeUserAgentManager(this.logger, {
-            userAgents: this.USER_AGENTS
+            ...(this.USER_AGENTS ? { userAgents: this.USER_AGENTS } : {})
         });
 
         this.retrySystem = dependencies.retrySystem || createRetrySystem({ logger: this.logger });
@@ -156,14 +339,14 @@ class YouTubePlatform extends EventEmitter {
         });
 
         this._youtubeConnectionFactory = createYouTubeConnectionFactory({
-            platform: this,
-            innertubeInstanceManager,
+            platform: this._createConnectionFactoryPlatformAdapter(),
+            innertubeInstanceManager: this._createInnertubeInstanceManagerAdapter(),
             withTimeout,
             innertubeCreationTimeoutMs: INNERTUBE_CREATION_TIMEOUT_MS
         });
 
         this._youtubeMultiStreamManager = createYouTubeMultiStreamManager({
-            platform: this,
+            platform: this._createMultiStreamPlatformAdapter(),
             safeSetInterval,
             validateTimeout,
             now: () => Date.now()
@@ -193,23 +376,35 @@ class YouTubePlatform extends EventEmitter {
         }
         
         // Initialize viewer count provider with dependency injection support
+        this.viewerExtractionService = isYouTubeExtractionService(dependencies.viewerExtractionService)
+            ? dependencies.viewerExtractionService
+            : null;
+
         if (dependencies.viewerCountProvider) {
             this.viewerCountProvider = dependencies.viewerCountProvider;
             this.logger.debug('Using injected viewer count provider', 'youtube');
         } else {
             // Create default provider using service layer dependencies
             try {
+                const providerDependencies: {
+                    viewerExtractionService?: YouTubeProviderExtractionServiceLike;
+                    innertubeService?: unknown;
+                    logger?: ProviderLoggerLike;
+                } = {
+                    innertubeService: dependencies.innertubeService,
+                    logger: this._createProviderLoggerAdapter()
+                };
+
+                if (isYouTubeProviderExtractionService(this.viewerExtractionService)) {
+                    providerDependencies.viewerExtractionService = this.viewerExtractionService;
+                }
+
                 this.viewerCountProvider = ViewerCountProviderFactory.createYouTubeProvider(
                     innertubeInstanceManager,
                     this.config,
                     () => this.getDetectedStreamIds(),
                     this.Innertube, // Can be null initially, service layer handles YouTube.js loading
-                    {
-                        // Pass service layer dependencies for clean architecture
-                        viewerExtractionService: dependencies.viewerExtractionService,
-                        innertubeService: dependencies.innertubeService,
-                        logger: this.logger
-                    }
+                    providerDependencies
                 );
                 this.logger.debug('Created YouTube viewer count provider with service layer dependencies', 'youtube');
             } catch (error) {
@@ -217,6 +412,143 @@ class YouTubePlatform extends EventEmitter {
                 this.viewerCountProvider = null;
             }
         }
+    }
+
+
+    _createInnertubeInstanceManagerAdapter() {
+        return {
+            getInstance: (_options: { logger: LoggerLike }) => {
+                const manager = innertubeInstanceManager.getInstance();
+                return {
+                    getInstance: async <T>(key: string, factory: () => Promise<T>): Promise<T> => {
+                        const instance = await manager.getInstance(key, factory as () => Promise<{ [key: string]: unknown }>);
+                        return instance as T;
+                    }
+                };
+            }
+        };
+    }
+
+    _createProviderLoggerAdapter(): ProviderLoggerLike {
+        return {
+            debug: (message: string, context?: string, payload?: unknown) => this.logger.debug(message, context, payload),
+            info: (message: string, context?: string, payload?: unknown) => this.logger.info(message, context, payload),
+            warn: (message: string, context?: string, payload?: unknown) => this.logger.warn(message, context, payload),
+            error: (message: string, context?: string, payload?: unknown) => {
+                if (this.errorHandler && typeof this.errorHandler.logOperationalError === 'function') {
+                    this.errorHandler.logOperationalError(message, context || 'youtube', payload);
+                    return;
+                }
+                this.logger.warn(message, context, payload);
+            }
+        };
+    }
+
+    _createEventRouterPlatformAdapter() {
+        return {
+            logger: this.logger,
+            eventFactory: this.eventFactory,
+            _emitPlatformEvent: (eventType: string, payload: unknown) => this._emitPlatformEvent(eventType, payload),
+            handleLowPriorityEvent: (chatItem: unknown, eventType: string) => this.handleLowPriorityEvent(chatItem, eventType),
+            handleSuperChat: (chatItem: unknown) => this.handleSuperChat(chatItem),
+            handleSuperSticker: (chatItem: unknown) => this.handleSuperSticker(chatItem),
+            handleGiftMessageView: (chatItem: unknown) => this.handleGiftMessageView(chatItem),
+            handleMembership: (chatItem: unknown) => this.handleMembership(chatItem),
+            handleGiftMembershipPurchase: (chatItem: unknown) => this.handleGiftMembershipPurchase(chatItem),
+            handleChatTextMessage: (chatItem: unknown) => this.handleChatTextMessage(chatItem)
+        };
+    }
+
+    _createConnectionFactoryPlatformAdapter() {
+        return {
+            logger: this.logger,
+            config: this.config,
+            ...(this.viewerService ? { viewerService: this.viewerService } : {}),
+            setYouTubeConnectionReady: (videoId: string) => this.setYouTubeConnectionReady(videoId),
+            disconnectFromYouTubeStream: (
+                videoId: string,
+                reason: string,
+                options?: { requestImmediateRefresh?: boolean; source?: string }
+            ) => this.disconnectFromYouTubeStream(videoId, reason, options),
+            handleChatMessage: (message: UnknownMap) => {
+                void this.handleChatMessage(message);
+            },
+            logRawPlatformData: async (channel: string, payload: unknown): Promise<void> => {
+                await this.logRawPlatformData(channel, payload);
+            },
+            _validateVideoForConnection: (videoId: string, info: unknown) => this._validateVideoForConnection(videoId, info),
+            _handleProcessingError: (message: string, error: unknown, category: string, metadata?: UnknownMap) => {
+                this._handleProcessingError(message, error, category, metadata);
+            },
+            _extractMessagesFromChatItem: (chatItem: UnknownMap) => this._extractMessagesFromChatItem(chatItem),
+            _shouldSkipMessage: (message: UnknownMap) => this._shouldSkipMessage(message),
+            _resolveChatItemAuthorName: (message: UnknownMap) => this._resolveChatItemAuthorName(message)
+        };
+    }
+
+    _createMultiStreamPlatformAdapter() {
+        const thisPlatform = this;
+        return {
+            config: this.config as UnknownMap & { maxStreams: number; streamPollingInterval: number; fullCheckInterval: number },
+            connectionManager: this.connectionManager,
+            logger: this.logger,
+            shortageState: this.shortageState,
+            get monitoringInterval() {
+                return thisPlatform.monitoringInterval;
+            },
+            set monitoringInterval(value: ReturnType<typeof setInterval> | number | null) {
+                thisPlatform.monitoringInterval = value;
+            },
+            get monitoringIntervalStart() {
+                return thisPlatform.monitoringIntervalStart ?? 0;
+            },
+            set monitoringIntervalStart(value: number) {
+                thisPlatform.monitoringIntervalStart = value;
+            },
+            get lastFullStreamCheck() {
+                return thisPlatform.lastFullStreamCheck;
+            },
+            set lastFullStreamCheck(value: number | null) {
+                thisPlatform.lastFullStreamCheck = value;
+            },
+            get lastYouTubeVideoIdsUpdateTime() {
+                return thisPlatform.lastYouTubeVideoIdsUpdateTime ?? 0;
+            },
+            set lastYouTubeVideoIdsUpdateTime(value: number) {
+                thisPlatform.lastYouTubeVideoIdsUpdateTime = value;
+            },
+            checkMultiStream: (options?: { throwOnError?: boolean }) => this.checkMultiStream(options),
+            checkStreamShortageAndWarn: (availableCount: number, maxStreams: number) => {
+                this.checkStreamShortageAndWarn(availableCount, maxStreams);
+            },
+            getActiveYouTubeVideoIds: () => this.getActiveYouTubeVideoIds(),
+            getLiveVideoIds: () => this.getLiveVideoIds(),
+            connectToYouTubeStream: async (videoId: string) => {
+                await this.connectToYouTubeStream(videoId);
+            },
+            disconnectFromYouTubeStream: async (
+                videoId: string,
+                reason: string,
+                options?: { requestImmediateRefresh?: boolean; source?: string }
+            ) => {
+                await this.disconnectFromYouTubeStream(videoId, reason, options);
+            },
+            _logMultiStreamStatus: (includeDetails?: boolean, includeActiveStreamsList?: boolean) => {
+                this._logMultiStreamStatus(includeDetails, includeActiveStreamsList);
+            },
+            _handleProcessingError: (message: string, error: unknown, category: string) => {
+                this._handleProcessingError(message, error, category);
+            },
+            _handleConnectionErrorLogging: (message: string, error: unknown, category: string) => {
+                this._handleConnectionErrorLogging(message, error, category);
+            },
+            _handleError: (error: unknown, context: string) => {
+                this._handleError(error, context);
+            },
+            _emitPlatformEvent: (type: string, payload: UnknownMap) => {
+                this._emitPlatformEvent(type, payload);
+            }
+        };
     }
 
 
@@ -288,25 +620,25 @@ class YouTubePlatform extends EventEmitter {
         await this._youtubeMultiStreamManager.requestImmediateRefresh(context);
     }
 
-    setYouTubeConnectionReady(videoId) {
+    setYouTubeConnectionReady(videoId: string) {
         this.connectionManager.setConnectionReady(videoId);
     }
 
-    isAnyYouTubeStreamReady() {
+    isAnyYouTubeStreamReady(): boolean {
         return this.connectionManager.isAnyConnectionReady();
     }
 
-    getActiveYouTubeVideoIds() {
+    getActiveYouTubeVideoIds(): string[] {
         if (!this.connectionManager) {
             return [];
         }
         // Only return connections that are actually ready (have received start event)
-        return this.connectionManager.getActiveVideoIds().filter(videoId => 
+        return this.connectionManager.getActiveVideoIds().filter((videoId: string) =>
             this.connectionManager.isConnectionReady(videoId)
         );
     }
 
-    getDetectedStreamIds() {
+    getDetectedStreamIds(): string[] {
         if (!this.connectionManager) {
             return [];
         }
@@ -314,7 +646,7 @@ class YouTubePlatform extends EventEmitter {
         return this.connectionManager.getActiveVideoIds();
     }
 
-    async initialize(handlers = {}, forceReconnect = false) {
+    async initialize(handlers: HandlerMap = {}, forceReconnect = false): Promise<void> {
         // SMART GUARD: Allow reconnection when new streams are detected
         // Only skip reinitialization if BOTH conditions are true:
         // 1. Already initialized (isInitialized = true)
@@ -361,7 +693,7 @@ class YouTubePlatform extends EventEmitter {
                 try {
                     await this.startMultiStreamMonitoring();
                 } catch (error) {
-                    this._handleConnectionErrorLogging(`Failed to start multi-stream monitoring: ${error.message}`, error, 'multi-stream monitoring');
+                    this._handleConnectionErrorLogging(`Failed to start multi-stream monitoring: ${getErrorMessage(error)}`, error, 'multi-stream monitoring');
                     throw error;
                 }
             }
@@ -373,7 +705,7 @@ class YouTubePlatform extends EventEmitter {
             this.isInitialized = true;
             
         } catch (error) {
-            this._handleProcessingError(`Error during initialization: ${error.message}`, error, 'initialization');
+            this._handleProcessingError(`Error during initialization: ${getErrorMessage(error)}`, error, 'initialization');
             // Handle connection error with retry logic
             await this.retrySystem.handleConnectionError(
                 'YouTube',
@@ -385,27 +717,27 @@ class YouTubePlatform extends EventEmitter {
         }
     }
 
-    async startMultiStreamMonitoring() {
+    async startMultiStreamMonitoring(): Promise<void> {
         return await this._youtubeMultiStreamManager.startMonitoring();
     }
 
-    async checkMultiStream(options = {}) {
+    async checkMultiStream(options: { throwOnError?: boolean } = {}): Promise<void> {
         return await this._youtubeMultiStreamManager.checkMultiStream(options);
     }
 
-    checkStreamShortageAndWarn(availableCount, maxStreams) {
+    checkStreamShortageAndWarn(availableCount: number, maxStreams: number): void {
         return this._youtubeMultiStreamManager.checkStreamShortageAndWarn(availableCount, maxStreams);
     }
 
 
-    async getLiveVideoIds() {
+    async getLiveVideoIds(): Promise<string[]> {
         this.logger.debug('Using youtubei method for stream detection', 'youtube');
         return this.getLiveVideoIdsByYoutubei();
     }
 
 
 
-    async getLiveVideoIdsByYoutubei() {
+    async getLiveVideoIdsByYoutubei(): Promise<string[]> {
         this.logger.debug('[YouTube] getLiveVideoIdsByYoutubei() called', 'youtube');
         
         const channelHandle = this.config.username;
@@ -421,7 +753,7 @@ class YouTubePlatform extends EventEmitter {
         if (result.success && Array.isArray(result.videoIds) && result.videoIds.length > 0) {
             const method = result.detectionMethod || 'youtubei';
             this.logger.debug(`[YouTube] Found ${result.videoIds.length} live streams via youtubei service (method: ${method})`, 'youtube');
-            return result.videoIds;
+            return result.videoIds.filter((videoId: unknown): videoId is string => typeof videoId === 'string');
         }
 
         const message = result.error || result.message || 'No live streams detected';
@@ -444,7 +776,7 @@ class YouTubePlatform extends EventEmitter {
             // Use the centralized connection manager
             const success = await this.connectionManager.connectToStream(
                 videoId, 
-                (videoId) => this._createYouTubeConnection(videoId),
+                (videoId: string) => this._createYouTubeConnection(videoId),
                 { reason: 'stream detected', ...options }
             );
             
@@ -475,9 +807,12 @@ class YouTubePlatform extends EventEmitter {
         }
     }
 
-    async _createYouTubeConnection(videoId: string): Promise<unknown> {
+    async _createYouTubeConnection(videoId: string): Promise<{ [key: string]: unknown }> {
         try {
             const connection = await this._youtubeConnectionFactory.createConnection(videoId);
+            if (!isYouTubeConnectionLike(connection)) {
+                throw new Error('YouTube connection factory returned invalid connection');
+            }
             await this._setupConnectionEventListeners(connection, videoId);
             return connection;
         } catch (error) {
@@ -486,11 +821,11 @@ class YouTubePlatform extends EventEmitter {
         }
     }
     
-    async _setupConnectionEventListeners(connection: unknown, videoId: string): Promise<void> {
+    async _setupConnectionEventListeners(connection: YouTubeConnectionLike, videoId: string): Promise<void> {
         return await this._youtubeConnectionFactory.setupConnectionEventListeners(connection, videoId);
 	    }
 
-    async handleChatMessage(chatItem) {
+    async handleChatMessage(chatItem: unknown): Promise<void> {
         this.logger.debug('handleChatMessage() called', 'youtube');
         
         // Enhanced validation with better error handling
@@ -501,7 +836,8 @@ class YouTubePlatform extends EventEmitter {
 
         // Rate limiting removed - unified processing eliminates spam naturally
         
-        const modernEventType = chatItem.item?.type;
+        const chatRecord = toUnknownMap(chatItem);
+        const modernEventType = toUnknownMap(chatRecord.item).type;
         const { normalizedChatItem, eventType, debugMetadata } = normalizeYouTubeEvent(chatItem);
         const resolvedEventType = eventType || modernEventType;
         if (!normalizedChatItem) {
@@ -541,25 +877,25 @@ class YouTubePlatform extends EventEmitter {
             }
         } catch (error) {
             this._handleProcessingError(
-                `Error handling event type ${resolvedEventType}: ${error.message}`,
+                `Error handling event type ${resolvedEventType}: ${getErrorMessage(error)}`,
                 error,
-                resolvedEventType,
+                String(resolvedEventType),
                 normalizedChatItem
             );
         }
     }
 
-    async handleSuperChat(chatItem) {
+    async handleSuperChat(chatItem: unknown): Promise<void> {
         const author = this._resolveMonetizationAuthor(chatItem);
         try {
-            const parsed = this.monetizationParser.parseSuperChat(chatItem);
+            const parsed = this.monetizationParser.parseSuperChat(toUnknownMap(chatItem));
             const payload = this.eventFactory.createGiftEvent({
                 ...parsed,
                 ...author
             });
             this._emitPlatformEvent(PlatformEvents.GIFT, payload);
         } catch (error) {
-            this._handleProcessingError(`Error processing Super Chat: ${error.message}`, error, 'superchat', chatItem);
+            this._handleProcessingError(`Error processing Super Chat: ${getErrorMessage(error)}`, error, 'superchat', chatItem);
             this._emitGiftError(chatItem, {
                 giftType: 'Super Chat',
                 giftCount: 1,
@@ -568,17 +904,17 @@ class YouTubePlatform extends EventEmitter {
         }
     }
 
-    async handleSuperSticker(chatItem) {
+    async handleSuperSticker(chatItem: unknown): Promise<void> {
         const author = this._resolveMonetizationAuthor(chatItem);
         try {
-            const parsed = this.monetizationParser.parseSuperSticker(chatItem);
+            const parsed = this.monetizationParser.parseSuperSticker(toUnknownMap(chatItem));
             const payload = this.eventFactory.createGiftEvent({
                 ...parsed,
                 ...author
             });
             this._emitPlatformEvent(PlatformEvents.GIFT, payload);
         } catch (error) {
-            this._handleProcessingError(`Error processing Super Sticker: ${error.message}`, error, 'supersticker', chatItem);
+            this._handleProcessingError(`Error processing Super Sticker: ${getErrorMessage(error)}`, error, 'supersticker', chatItem);
             this._emitGiftError(chatItem, {
                 giftType: 'Super Sticker',
                 giftCount: 1,
@@ -587,10 +923,10 @@ class YouTubePlatform extends EventEmitter {
         }
     }
 
-    async handleGiftMessageView(chatItem) {
+    async handleGiftMessageView(chatItem: unknown): Promise<void> {
         const author = this._resolveGiftMessageViewAuthor(chatItem);
         try {
-            const parsed = this.monetizationParser.parseGiftMessageView(chatItem);
+            const parsed = this.monetizationParser.parseGiftMessageView(toUnknownMap(chatItem));
             const missingFields = collectMissingFields({
                 userId: !!author.userId
             });
@@ -603,7 +939,7 @@ class YouTubePlatform extends EventEmitter {
             });
             this._emitPlatformEvent(PlatformEvents.GIFT, payload);
         } catch (error) {
-            this._handleProcessingError(`Error processing GiftMessageView: ${error.message}`, error, 'gift-message-view', chatItem);
+            this._handleProcessingError(`Error processing GiftMessageView: ${getErrorMessage(error)}`, error, 'gift-message-view', chatItem);
             this._emitGiftError(chatItem, {
                 giftType: 'YouTube Gift',
                 giftCount: 1,
@@ -613,62 +949,63 @@ class YouTubePlatform extends EventEmitter {
         }
     }
 
-    handleChatTextMessage(chatItem) {
-        if (!chatItem || typeof chatItem !== 'object' || !chatItem.item || typeof chatItem.item !== 'object') {
+    handleChatTextMessage(chatItem: unknown): void {
+        const chatRecord = toUnknownMap(chatItem);
+        if (!isRecord(chatRecord.item)) {
             this.logger.warn('Skipping chat message: missing chat item payload', 'youtube');
             return;
         }
-        this._processRegularChatMessage(chatItem);
+        this._processRegularChatMessage(chatRecord);
     }
 
-    async handleMembership(chatItem) {
+    async handleMembership(chatItem: unknown): Promise<void> {
         const author = this._resolveMonetizationAuthor(chatItem);
         try {
-            const parsed = this.monetizationParser.parseMembership(chatItem);
+            const parsed = this.monetizationParser.parseMembership(toUnknownMap(chatItem));
             const payload = this.eventFactory.createPaypiggyEvent({
                 ...parsed,
                 ...author
             });
             this._emitPlatformEvent(PlatformEvents.PAYPIGGY, payload);
         } catch (error) {
-            this._handleProcessingError(`Error processing membership: ${error.message}`, error, 'membership', chatItem);
+            this._handleProcessingError(`Error processing membership: ${getErrorMessage(error)}`, error, 'membership', chatItem);
             this._emitPaypiggyError(chatItem, { author });
         }
     }
 
-    async handleGiftMembershipPurchase(chatItem) {
+    async handleGiftMembershipPurchase(chatItem: unknown): Promise<void> {
         const author = this._resolveMonetizationAuthor(chatItem);
         try {
-            const parsed = this.monetizationParser.parseGiftPurchase(chatItem);
+            const parsed = this.monetizationParser.parseGiftPurchase(toUnknownMap(chatItem));
             const payload = this.eventFactory.createGiftPaypiggyEvent({
                 ...parsed,
                 ...author
             });
             this._emitPlatformEvent(PlatformEvents.GIFTPAYPIGGY, payload);
         } catch (error) {
-            this._handleProcessingError(`Error processing gift membership purchase: ${error.message}`, error, 'gift-membership', chatItem);
+            this._handleProcessingError(`Error processing gift membership purchase: ${getErrorMessage(error)}`, error, 'gift-membership', chatItem);
             this._emitGiftPaypiggyError(chatItem, { author });
         }
     }
 
 
 
-    _shouldSkipEvent(chatItem) {
+    _shouldSkipEvent(chatItem: UnknownMap): boolean {
         return chatItem.type === 'RemoveChatItemByAuthorAction' ||
                chatItem.type === 'RemoveChatItemAction' ||
                chatItem.type === 'MarkChatItemsByAuthorAsDeletedAction';
     }
 
-    _processRegularChatMessage(chatItem) {
+    _processRegularChatMessage(chatItem: UnknownMap): void {
 
         // Normalize message
         let normalizedData;
         try {
-            normalizedData = normalizeYouTubeMessage(chatItem, 'youtube', this.timestampService);
+            normalizedData = normalizeYouTubeMessage(chatItem, 'youtube');
         } catch (error) {
             if (!this._isRecoverableYouTubeChatNormalizationError(error)) {
                 this._handleProcessingError(
-                    `Error normalizing chat message: ${error.message}`,
+                    `Error normalizing chat message: ${getErrorMessage(error)}`,
                     error,
                     'chat-normalization',
                     chatItem
@@ -679,15 +1016,17 @@ class YouTubePlatform extends EventEmitter {
             normalizedData = this._buildDegradedYouTubeChatData(chatItem);
         }
 
-        const messageParts = getValidMessageParts({ message: normalizedData.message }, { allowWhitespaceText: true });
+        const normalizedRecord = toUnknownMap(normalizedData);
+        const normalizedMessageRecord = isRecord(normalizedRecord.message) ? normalizedRecord.message : {};
+        const messageParts = getValidMessageParts({ message: { parts: normalizedMessageRecord.parts } }, { allowWhitespaceText: true });
         const hasMessageParts = messageParts.length > 0;
-        const missingFields = getMissingFields(normalizedData?.metadata);
+        const missingFields = getMissingFields(normalizedRecord.metadata);
         const isMessageMarkedMissing = missingFields.includes('message');
 
 
         // Skip empty messages
-        const messageText = typeof normalizedData.message?.text === 'string'
-            ? normalizedData.message.text
+        const messageText = typeof normalizedMessageRecord.text === 'string'
+            ? normalizedMessageRecord.text
             : '';
 
         if (!messageText && !hasMessageParts && !isMessageMarkedMissing) {
@@ -700,11 +1039,12 @@ class YouTubePlatform extends EventEmitter {
         }
         
         // Add video ID context
-        normalizedData.videoId = chatItem.videoId;
+        const normalizedDataWithVideoId = normalizedData as UnknownMap & { videoId?: unknown; username?: unknown; message?: { text?: unknown } };
+        normalizedDataWithVideoId.videoId = chatItem.videoId;
         
         this.logger.debug('Processing multi-stream chat', 'youtube', {
             videoId: chatItem.videoId || 'unknown',
-            username: normalizedData.username,
+            username: normalizedDataWithVideoId.username,
             messageLength: messageText.length,
             hasMessageParts
         });
@@ -713,13 +1053,13 @@ class YouTubePlatform extends EventEmitter {
         try {
             const eventData = this.eventFactory.createChatMessageEvent(normalizedData);
             this._emitPlatformEvent(PlatformEvents.CHAT_MESSAGE, eventData);
-            this.logger.debug(`Chat message event emitted for ${normalizedData.username}`, 'youtube');
+            this.logger.debug(`Chat message event emitted for ${String(normalizedDataWithVideoId.username)}`, 'youtube');
         } catch (eventError) {
-            this._handleProcessingError(`Error emitting chat message event: ${eventError.message}`, eventError, 'chat-message', normalizedData);
+            this._handleProcessingError(`Error emitting chat message event: ${getErrorMessage(eventError)}`, eventError, 'chat-message', normalizedDataWithVideoId);
         }
     }
 
-    _isRecoverableYouTubeChatNormalizationError(error) {
+    _isRecoverableYouTubeChatNormalizationError(error: unknown): boolean {
         const message = error instanceof Error ? error.message : '';
         return message === 'Missing YouTube author data'
             || message === 'Missing YouTube userId'
@@ -728,20 +1068,23 @@ class YouTubePlatform extends EventEmitter {
             || message === 'Missing YouTube timestamp';
     }
 
-    _buildDegradedYouTubeChatData(chatItem = {}) {
-        const messageData = chatItem?.item && typeof chatItem.item === 'object'
+    _buildDegradedYouTubeChatData(chatItem: UnknownMap = {}) {
+        const messageData = isRecord(chatItem.item)
             ? chatItem.item
             : {};
-        const author = messageData?.author && typeof messageData.author === 'object'
+        const author = isRecord(messageData.author)
             ? messageData.author
             : {};
         const userId = typeof author.id === 'string' ? author.id.trim() : '';
         const username = this._resolveChatItemAuthorName(chatItem);
         const messageText = extractMessageText(messageData.message).trim();
-        const messageParts = getValidMessageParts({ message: messageData.message }, { allowWhitespaceText: true });
+        const messagePartsSource = isRecord(messageData.message)
+            ? messageData.message.parts
+            : messageData.message;
+        const messageParts = getValidMessageParts({ message: { parts: messagePartsSource } }, { allowWhitespaceText: true });
         const timestamp = resolveYouTubeTimestampISO(chatItem);
 
-        const hasBadgeTooltip = (fragment) => {
+        const hasBadgeTooltip = (fragment: unknown): boolean => {
             if (typeof fragment !== 'string') {
                 return false;
             }
@@ -749,8 +1092,8 @@ class YouTubePlatform extends EventEmitter {
         };
 
         const authorBadges = Array.isArray(author.badges) ? author.badges : [];
-        const isBroadcaster = authorBadges.some((badge) => badge?.icon_type === 'OWNER');
-        const isPaypiggy = authorBadges.some((badge) => hasBadgeTooltip(badge?.tooltip));
+        const isBroadcaster = authorBadges.some((badge: unknown) => isRecord(badge) && badge.icon_type === 'OWNER');
+        const isPaypiggy = authorBadges.some((badge: unknown) => isRecord(badge) && hasBadgeTooltip(badge.tooltip));
         const missingFields = collectMissingFields({
             userId: !!userId,
             username: !!username,
@@ -758,19 +1101,21 @@ class YouTubePlatform extends EventEmitter {
             timestamp: typeof timestamp === 'string' && timestamp.trim().length > 0
         });
 
-        const degradedMessage = {
+        const degradedMessage: { text: string; parts?: unknown } = {
             text: messageText || (messageParts.length > 0 ? '' : UNKNOWN_CHAT_MESSAGE)
         };
         if (messageParts.length > 0) {
             degradedMessage.parts = messageParts;
         }
 
+        const firstThumbnail = Array.isArray(author.thumbnails) ? toUnknownMap(author.thumbnails[0]) : {};
+
         return {
             platform: 'youtube',
             ...(userId ? { userId } : {}),
             username: username || UNKNOWN_CHAT_USERNAME,
-            avatarUrl: typeof author?.thumbnails?.[0]?.url === 'string'
-                ? author.thumbnails[0].url.trim()
+            avatarUrl: typeof firstThumbnail.url === 'string'
+                ? firstThumbnail.url.trim()
                 : '',
             message: degradedMessage,
             ...(typeof timestamp === 'string' && timestamp.trim().length > 0 ? { timestamp } : {}),
@@ -782,14 +1127,14 @@ class YouTubePlatform extends EventEmitter {
                 isSuperChat: !!messageData.superchat,
                 isSuperSticker: !!messageData.supersticker,
                 isMembership: !!messageData.isMembership,
-                authorPhoto: author?.thumbnails?.[0]?.url || null
+                authorPhoto: firstThumbnail.url || null
             }, missingFields, {
                 ...(typeof timestamp === 'string' && timestamp.trim().length > 0 ? { sourceTimestamp: timestamp } : {})
             })
         };
     }
 
-    _resolveMonetizationAuthor(chatItem) {
+    _resolveMonetizationAuthor(chatItem: unknown): UnknownMap {
         const author = extractAuthor(chatItem);
         if (!author) {
             return {};
@@ -800,54 +1145,57 @@ class YouTubePlatform extends EventEmitter {
         };
     }
 
-    _resolveGiftMessageViewAuthor(chatItem) {
-        const item = chatItem?.item && typeof chatItem.item === 'object'
-            ? chatItem.item
+    _resolveGiftMessageViewAuthor(chatItem: unknown): UnknownMap {
+        const chatRecord = toUnknownMap(chatItem);
+        const item = isRecord(chatRecord.item)
+            ? chatRecord.item
             : {};
-        const resolveName = (candidate) => {
+        const resolveName = (candidate: unknown): string | null => {
             if (typeof candidate === 'string') {
                 return normalizeYouTubeUsername(candidate);
             }
             if (!candidate || typeof candidate !== 'object') {
                 return null;
             }
-            if (typeof candidate.content === 'string') {
-                return normalizeYouTubeUsername(candidate.content);
+            const candidateRecord = toUnknownMap(candidate);
+            if (typeof candidateRecord.content === 'string') {
+                return normalizeYouTubeUsername(candidateRecord.content);
             }
-            if (typeof candidate.text === 'string') {
-                return normalizeYouTubeUsername(candidate.text);
+            if (typeof candidateRecord.text === 'string') {
+                return normalizeYouTubeUsername(candidateRecord.text);
             }
-            if (typeof candidate.simpleText === 'string') {
-                return normalizeYouTubeUsername(candidate.simpleText);
+            if (typeof candidateRecord.simpleText === 'string') {
+                return normalizeYouTubeUsername(candidateRecord.simpleText);
             }
             return null;
         };
 
+        const itemAuthor = toUnknownMap(item.author);
         const username = resolveName(item.authorName)
             || resolveName(item.author_name)
-            || resolveName(item.author?.name);
+            || resolveName(itemAuthor.name);
 
-        const rawUserId = typeof item.author?.id === 'string' ? item.author.id.trim() : '';
+        const rawUserId = typeof itemAuthor.id === 'string' ? itemAuthor.id.trim() : '';
         return {
             ...(username ? { username } : {}),
             ...(rawUserId ? { userId: rawUserId } : {})
         };
     }
 
-    _resolveMonetizationTimestamp(chatItem, label) {
+    _resolveMonetizationTimestamp(chatItem: unknown, label: string): string {
         try {
-            return this.monetizationParser.resolveTimestamp(chatItem, label);
+            return this.monetizationParser.resolveTimestamp(toUnknownMap(chatItem), label);
         } catch (error) {
-            this._handleProcessingError(`Missing timestamp for ${label}: ${error.message}`, error, 'monetization', chatItem);
+            this._handleProcessingError(`Missing timestamp for ${label}: ${getErrorMessage(error)}`, error, 'monetization', chatItem);
             return getSystemTimestampISO();
         }
     }
 
-    _resolveMonetizationId(chatItem) {
-        return this.monetizationParser.resolveOptionalId(chatItem);
+    _resolveMonetizationId(chatItem: unknown): unknown {
+        return this.monetizationParser.resolveOptionalId(toUnknownMap(chatItem));
     }
 
-    _emitGiftError(chatItem, options = {}) {
+    _emitGiftError(chatItem: unknown, options: { label?: string; giftType?: string; giftCount?: number; author?: UnknownMap } = {}): void {
         const timestamp = this._resolveMonetizationTimestamp(chatItem, options.label || 'YouTube gift');
         if (!timestamp) {
             return;
@@ -864,7 +1212,7 @@ class YouTubePlatform extends EventEmitter {
         this._emitPlatformEvent(PlatformEvents.GIFT, payload);
     }
 
-    _emitGiftPaypiggyError(chatItem, options = {}) {
+    _emitGiftPaypiggyError(chatItem: unknown, options: { label?: string; giftCount?: number; author?: UnknownMap } = {}): void {
         const timestamp = this._resolveMonetizationTimestamp(chatItem, options.label || 'YouTube gift membership');
         if (!timestamp) {
             return;
@@ -880,7 +1228,7 @@ class YouTubePlatform extends EventEmitter {
         this._emitPlatformEvent(PlatformEvents.GIFTPAYPIGGY, payload);
     }
 
-    _emitPaypiggyError(chatItem, options = {}) {
+    _emitPaypiggyError(chatItem: unknown, options: { label?: string; author?: UnknownMap } = {}): void {
         const timestamp = this._resolveMonetizationTimestamp(chatItem, options.label || 'YouTube membership');
         if (!timestamp) {
             return;
@@ -895,7 +1243,7 @@ class YouTubePlatform extends EventEmitter {
         this._emitPlatformEvent(PlatformEvents.PAYPIGGY, payload);
     }
 
-    async handleLowPriorityEvent(chatItem, eventType) {
+    async handleLowPriorityEvent(chatItem: unknown, eventType: string): Promise<void> {
         const author = this._resolveChatItemAuthorName(chatItem);
         const resolvedAuthor = author || getFallbackUsername();
         const authorLabel = ` from ${resolvedAuthor}`;
@@ -917,7 +1265,7 @@ class YouTubePlatform extends EventEmitter {
         // These events are not critical for core streaming functionality
     }
 
-    handleIgnoredDuplicateEvent(chatItem, eventType) {
+    handleIgnoredDuplicateEvent(chatItem: unknown, eventType: string): void {
         if (!this.logger) {
             return;
         }
@@ -944,14 +1292,17 @@ class YouTubePlatform extends EventEmitter {
         });
     }
 
-    _getGiftRedemptionRecipientName(chatItem) {
-        const rawName = chatItem?.item?.author?.name || '';
+    _getGiftRedemptionRecipientName(chatItem: unknown): string {
+        const item = toUnknownMap(toUnknownMap(chatItem).item);
+        const author = toUnknownMap(item.author);
+        const rawName = typeof author.name === 'string' ? author.name : '';
         const normalizedName = normalizeYouTubeUsername(rawName);
         return normalizedName || getFallbackUsername();
     }
 
-    _handleMissingGiftPurchaseAuthor(chatItem, debugMetadata) {
-        const giftCount = chatItem?.item?.giftMembershipsCount;
+    _handleMissingGiftPurchaseAuthor(chatItem: unknown, debugMetadata: UnknownMap | null | undefined): void {
+        const item = toUnknownMap(toUnknownMap(chatItem).item);
+        const giftCount = item.giftMembershipsCount;
         const resolvedGiftCount = Number.isFinite(Number(giftCount)) ? Number(giftCount) : undefined;
 
         this.logger.warn('Gift membership purchase missing author data; sending error notification', 'youtube', {
@@ -959,29 +1310,36 @@ class YouTubePlatform extends EventEmitter {
             giftCount: resolvedGiftCount
         });
 
-        this._emitGiftPaypiggyError(chatItem, { giftCount: resolvedGiftCount });
+        this._emitGiftPaypiggyError(chatItem, {
+            ...(resolvedGiftCount !== undefined ? { giftCount: resolvedGiftCount } : {})
+        });
     }
 
-    _resolveChatItemAuthorName(chatItem) {
-        const rawName = chatItem?.item?.author?.name;
-        return normalizeYouTubeUsername(rawName);
+    _resolveChatItemAuthorName(chatItem: unknown): string {
+        const item = toUnknownMap(toUnknownMap(chatItem).item);
+        const author = toUnknownMap(item.author);
+        const rawName = author.name;
+        return normalizeYouTubeUsername(rawName) || '';
     }
 
-    _resolveChatItemAuthorNameForLog(chatItem) {
+    _resolveChatItemAuthorNameForLog(chatItem: unknown): string {
         return this._resolveChatItemAuthorName(chatItem) || getFallbackUsername();
     }
 
-    _isIgnoredDuplicateEventType(eventType) {
+    _isIgnoredDuplicateEventType(eventType: unknown): eventType is string {
+        if (typeof eventType !== 'string') {
+            return false;
+        }
         return IGNORED_DUPLICATE_EVENT_TYPES.has(eventType);
     }
 
-    _isGiftMembershipRedemptionEventType(eventType) {
+    _isGiftMembershipRedemptionEventType(eventType: string): boolean {
         return GIFT_MEMBERSHIP_REDEMPTION_EVENT_TYPES.has(eventType);
     }
     
 
     
-    async getViewerCount() {
+    async getViewerCount(): Promise<number | null> {
         try {
             this.logger.debug('YouTube getViewerCount() called - using provider', 'youtube');
             
@@ -992,8 +1350,8 @@ class YouTubePlatform extends EventEmitter {
             
             const viewerCount = await this.viewerCountProvider.getViewerCount();
             this.logger.debug(`Provider returned viewer count: ${viewerCount}`, 'youtube');
-            
-            return viewerCount;
+
+            return typeof viewerCount === 'number' ? viewerCount : null;
             
         } catch (error) {
             this._handleProcessingError('Error getting viewer count via provider', error, 'viewer-count');
@@ -1001,11 +1359,23 @@ class YouTubePlatform extends EventEmitter {
         }
     }
 
-    async getViewerCountByYoutubei() {
-        return await this.getViewerCount();
+    async getViewerCountByYoutubei(): Promise<number> {
+        const activeVideoIds = this.getDetectedStreamIds();
+        if (this.viewerExtractionService && activeVideoIds.length > 0) {
+            try {
+                const result = await this.viewerExtractionService.getAggregatedViewerCount(activeVideoIds);
+                if (result.success && typeof result.totalCount === 'number') {
+                    return result.totalCount;
+                }
+            } catch (error) {
+                this._handleProcessingError('Error aggregating YouTube viewer count via extraction service', error, 'viewer-count', { activeVideoIds });
+            }
+        }
+
+        return await this.getViewerCount() ?? 0;
     }
 
-    async getViewerCountForVideo(videoId) {
+    async getViewerCountForVideo(videoId: string): Promise<number> {
         this.logger.debug('Using provider for single video viewer count', 'youtube');
         
         if (!this.viewerCountProvider) {
@@ -1016,14 +1386,15 @@ class YouTubePlatform extends EventEmitter {
         try {
             // Use provider's internal method if available (for single video)
             if (typeof this.viewerCountProvider.getViewerCountForVideo === 'function') {
-                return await this.viewerCountProvider.getViewerCountForVideo(videoId);
+                const viewerCount = await this.viewerCountProvider.getViewerCountForVideo(videoId);
+                return typeof viewerCount === 'number' ? viewerCount : 0;
             } else {
                 // Fallback: provider doesn't support single video, return 0
                 this.logger.debug('Provider does not support single video viewer count', 'youtube');
                 return 0;
             }
         } catch (error) {
-            this._handleProcessingError(`Error getting viewer count for video ${videoId} via provider: ${error.message}`, error, 'viewer-count', { videoId });
+            this._handleProcessingError(`Error getting viewer count for video ${videoId} via provider: ${getErrorMessage(error)}`, error, 'viewer-count', { videoId });
             return 0;
         }
     }
@@ -1035,13 +1406,13 @@ class YouTubePlatform extends EventEmitter {
 
 
 
-    async logRawPlatformData(eventType, data) {
+    async logRawPlatformData(eventType: string, data: unknown): Promise<unknown> {
         // Delegate to centralized service
         return this.chatFileLoggingService.logRawPlatformData('youtube', eventType, data, this.config);
     }
 
 
-    getConnectionState() {
+    getConnectionState(): UnknownMap {
         const activeConnections = this.getActiveYouTubeVideoIds();
         const connectionState = {
             isConnected: this.connectionManager ? this.connectionManager.getConnectionCount() > 0 : false,
@@ -1053,10 +1424,10 @@ class YouTubePlatform extends EventEmitter {
         return connectionState;
     }
 
-    getStats() {
+    getStats(): UnknownMap {
         const stats = {
             platform: 'youtube',
-            enabled: this.config.enabled,
+            enabled: this.config.enabled === true,
             connected: this.connectionManager ? this.connectionManager.getConnectionCount() > 0 : false,
             monitoring: !!this.monitoringInterval,
             activeConnections: this.getActiveYouTubeVideoIds().length,
@@ -1066,30 +1437,30 @@ class YouTubePlatform extends EventEmitter {
         return stats;
     }
 
-    isConfigured() {
+    isConfigured(): boolean {
         return !!(this.config.enabled && this.config.username);
     }
 
-    getStatus() {
+    getStatus(): { isReady: boolean; issues: string[] } {
         const issues = [];
         const connectionCount = this.connectionManager?.getConnectionCount() ?? 0;
 
-        if (this.config.enabled && connectionCount === 0) {
+        if (this.config.enabled === true && connectionCount === 0) {
             issues.push('Not connected');
         }
 
         return {
-            isReady: this.config.enabled && connectionCount > 0,
+            isReady: this.config.enabled === true && connectionCount > 0,
             issues
         };
     }
 
-    validateConfig() {
+    validateConfig(): { isReady: boolean; issues: string[] } {
         return this.getStatus();
     }
 
 
-    isConnected() {
+    isConnected(): boolean {
         // Use extracted connection service if available
         if (this.connectionManager) {
             return this.connectionManager.getConnectionCount() > 0;
@@ -1099,11 +1470,11 @@ class YouTubePlatform extends EventEmitter {
         return this.isAnyYouTubeStreamReady();
     }
 
-    async sendMessage(message) {
+    async sendMessage(message: unknown): Promise<boolean> {
         // Try all active multi-stream connections
         for (const videoId of this.connectionManager.getAllVideoIds()) {
             const connection = this.connectionManager.getConnection(videoId);
-            if (connection && this.connectionManager.getConnectionStatus(videoId)?.ready) {
+            if (hasSendMessage(connection) && this.connectionManager.getConnectionStatus(videoId)?.ready) {
                 try {
                     const success = await connection.sendMessage(message);
                     if (success) {
@@ -1111,17 +1482,18 @@ class YouTubePlatform extends EventEmitter {
                         return true;
                     }
                 } catch (error) {
-                    this.logger.debug(`Failed to send message to stream ${videoId}: ${error.message}`, 'youtube');
+                    this.logger.debug(`Failed to send message to stream ${videoId}: ${getErrorMessage(error)}`, 'youtube');
                 }
             }
         }
         return false;
     }
 
-    _validateVideoForConnection(videoId, info) {
-        const basicInfo = info?.basic_info || {};
-        const streamingData = info?.streaming_data || {};
-        const playabilityStatus = info?.playability_status || {};
+    _validateVideoForConnection(videoId: string, info: unknown) {
+        const infoRecord = toUnknownMap(info);
+        const basicInfo = toUnknownMap(infoRecord.basic_info);
+        const streamingData = toUnknownMap(infoRecord.streaming_data);
+        const playabilityStatus = toUnknownMap(infoRecord.playability_status);
         
         const liveStatus = basicInfo.live_status;
         const liveSignals = {
@@ -1168,20 +1540,20 @@ class YouTubePlatform extends EventEmitter {
         return { shouldConnect: false, isLive, isUpcoming, liveStatus, reason: 'Video is not live content (replay/VOD)' };
     }
 
-    _handlePremiereDetection(videoId, isLive, isUpcoming, info) {
+    _handlePremiereDetection(videoId: string, isLive: boolean, isUpcoming: boolean, info: unknown): void {
         // Check if this is a YouTube Premiere (both live AND upcoming)
         if (isLive && isUpcoming) {
-            const title = info?.basic_info?.title || 'Unknown Title';
+            const title = toUnknownMap(toUnknownMap(info).basic_info).title || 'Unknown Title';
             this.logger.info(`Premiere detected: ${title} (${videoId})`, 'youtube');
             this.logger.info('Premiere connection established, waiting for start event...', 'youtube');
         }
     }
 
-    _logMultiStreamStatus(includeDetails = false, includeActiveStreamsList = false) {
+    _logMultiStreamStatus(includeDetails = false, includeActiveStreamsList = false): void {
         return this._youtubeMultiStreamManager.logStatus(includeDetails, includeActiveStreamsList);
     }
 
-    _generateErrorMessage(context, videoId = null) {
+    _generateErrorMessage(context: string, videoId: string | null = null): string {
         switch (context) {
             case 'connectToYouTubeStream':
                 return `Failed to connect to YouTube stream ${videoId}. This commonly occurs if a stream is a 'Premiere' that has ended, or is not currently live.`;
@@ -1196,10 +1568,10 @@ class YouTubePlatform extends EventEmitter {
         }
     }
 
-    _handleError(error, context, { shouldDisconnect = false, shouldEmit = true, videoId = null } = {}) {
+    _handleError(error: unknown, context: string, { shouldDisconnect = false, shouldEmit = true, videoId = null }: { shouldDisconnect?: boolean; shouldEmit?: boolean; videoId?: string | null } = {}): void {
         const errorDetails = error instanceof Error ? error : new Error(JSON.stringify(error, null, 2));
         const message = this._generateErrorMessage(context, videoId);
-        const normalizedContext = typeof context === 'object' ? context : { operation: context };
+        const normalizedContext = { operation: context };
 
         this._handleProcessingError(`${message} Raw error`, errorDetails, context, { videoId });
 
@@ -1222,7 +1594,7 @@ class YouTubePlatform extends EventEmitter {
         if (shouldDisconnect) {
             Promise.resolve(this.cleanup()).catch((cleanupError) => {
                 this._handleCleanupErrorLogging(
-                    `Error cleaning up after ${context}: ${cleanupError.message}`,
+                    `Error cleaning up after ${context}: ${getErrorMessage(cleanupError)}`,
                     cleanupError,
                     'cleanup'
                 );
@@ -1235,12 +1607,12 @@ class YouTubePlatform extends EventEmitter {
         try {
             await this.initialize(this.handlers);
         } catch (error) {
-            this._handleConnectionErrorLogging(`Reconnection failed: ${error.message}`, error, 'reconnect');
+            this._handleConnectionErrorLogging(`Reconnection failed: ${getErrorMessage(error)}`, error, 'reconnect');
             throw error;
         }
     }
 
-    updateViewerCountForStream(streamId, count) {
+    updateViewerCountForStream(streamId: string, count: number): void {
         if (!this.streamViewerCounts) {
             this.streamViewerCounts = new Map();
         }
@@ -1259,7 +1631,7 @@ class YouTubePlatform extends EventEmitter {
             });
             this._emitPlatformEvent(PlatformEvents.VIEWER_COUNT, eventData);
         } catch (eventError) {
-            this._handleProcessingError(`Error emitting viewer count event: ${eventError.message}`, eventError, 'viewer-count', {
+            this._handleProcessingError(`Error emitting viewer count event: ${getErrorMessage(eventError)}`, eventError, 'viewer-count', {
                 streamId,
                 count,
                 totalViewers
@@ -1279,8 +1651,9 @@ class YouTubePlatform extends EventEmitter {
         return total;
     }
 
-    _emitPlatformEvent(type, payload) {
-        const platform = payload?.platform || 'youtube';
+    _emitPlatformEvent(type: string, payload: unknown): void {
+        const payloadRecord = toUnknownMap(payload);
+        const platform = payloadRecord.platform || 'youtube';
 
         // Emit unified platform:event for local listeners
         this.emit('platform:event', { platform, type, data: payload });
@@ -1296,7 +1669,11 @@ class YouTubePlatform extends EventEmitter {
             [PlatformEvents.VIEWER_COUNT]: 'onViewerCount'
         };
 
-        const handlerName = handlerMap[type];
+        const handlerName = handlerMap[type as keyof typeof handlerMap];
+        if (!handlerName) {
+            this.logger.debug(`No handler registered for event type: ${type}`, 'youtube');
+            return;
+        }
         const handler = this.handlers?.[handlerName];
 
         if (typeof handler === 'function') {
@@ -1306,7 +1683,7 @@ class YouTubePlatform extends EventEmitter {
         }
     }
 
-    _emitStreamStatusIfNeeded(previousCount, context = {}) {
+    _emitStreamStatusIfNeeded(previousCount: number, context: UnknownMap = {}): void {
         if (!this.connectionManager) {
             return;
         }
@@ -1328,7 +1705,7 @@ class YouTubePlatform extends EventEmitter {
 
     }
 
-    getHealthStatus() {
+    getHealthStatus(): UnknownMap {
         const activeConnections = this.connectionManager ? this.connectionManager.getConnectionCount() : 0;
         const monitoringActive = !!this.monitoringInterval;
         const overall = activeConnections > 0 ? 'healthy' : (monitoringActive ? 'idle' : 'degraded');
@@ -1344,15 +1721,15 @@ class YouTubePlatform extends EventEmitter {
     }
 
 
-    _clearMonitoringInterval() {
+    _clearMonitoringInterval(): void {
         if (this.monitoringInterval) {
             clearInterval(this.monitoringInterval);
             this.monitoringInterval = null;
         }
     }
 
-    _ensureDataLoggingPath() {
-        if (!this.config.dataLoggingPath) {
+    _ensureDataLoggingPath(): void {
+        if (typeof this.config.dataLoggingPath !== 'string' || this.config.dataLoggingPath.length === 0) {
             return;
         }
         try {
@@ -1360,14 +1737,14 @@ class YouTubePlatform extends EventEmitter {
         } catch (error) {
             this.errorHandler?.handleDataLoggingError?.(error, 'dataLoggingPath');
             this.logger?.warn?.(
-                `Failed to prepare data logging path '${this.config.dataLoggingPath}': ${error.message}`,
+                `Failed to prepare data logging path '${this.config.dataLoggingPath}': ${getErrorMessage(error)}`,
                 'youtube'
             );
         }
     }
 
 
-    async cleanup() {
+    async cleanup(): Promise<void> {
         this.logger.debug('Cleaning up YouTube platform resources', 'youtube');
 
         try {
@@ -1381,12 +1758,12 @@ class YouTubePlatform extends EventEmitter {
                 }
             }
         } catch (error) {
-            this._handleCleanupErrorLogging(`Error disconnecting from YouTube: ${error.message}`, error, 'disconnect');
+            this._handleCleanupErrorLogging(`Error disconnecting from YouTube: ${getErrorMessage(error)}`, error, 'disconnect');
         }
 
         try {
             if (this.viewerService) {
-                this.viewerService.cleanup();
+                this.viewerService.cleanup?.();
             }
         } catch (error) {
             this._handleCleanupErrorLogging('Error during cleanup: viewerService', error, 'viewerService');
@@ -1395,7 +1772,7 @@ class YouTubePlatform extends EventEmitter {
         this.isInitialized = false;
     }
 
-    isActive() {
+    isActive(): boolean {
         try {
             return this.isConnected() && this.config.enabled === true;
         } catch (error) {
@@ -1404,30 +1781,32 @@ class YouTubePlatform extends EventEmitter {
         }
     }
 
-    _extractMessagesFromChatItem(chatItem) {
+    _extractMessagesFromChatItem(chatItem: UnknownMap): UnknownMap[] {
         try {
             if (!chatItem || typeof chatItem !== 'object') {
                 return [];
             }
 
             // Handle different chat item structures
-            const messages = [];
+            const messages: UnknownMap[] = [];
             
             // Check if this is a batched update with multiple actions
-            if (chatItem.actions && Array.isArray(chatItem.actions)) {
+            if (Array.isArray(chatItem.actions)) {
                 // Multiple messages in batch
                 for (const action of chatItem.actions) {
-                    if (action.addChatItemAction && action.addChatItemAction.item) {
+                    const actionRecord = toUnknownMap(action);
+                    const addChatItemAction = toUnknownMap(actionRecord.addChatItemAction);
+                    if (addChatItemAction.item) {
                         messages.push({
-                            type: action.addChatItemAction.item.type || 'unknown',
-                            item: action.addChatItemAction.item,
+                            type: toUnknownMap(addChatItemAction.item).type || 'unknown',
+                            item: addChatItemAction.item,
                             originalChatItem: chatItem
                         });
                     }
                 }
             } else {
                 // Single message - wrap in standardized format
-                const item = chatItem.item || chatItem;
+                const item = toUnknownMap(chatItem.item || chatItem);
                 messages.push({
                     type: item.type || chatItem.type || 'unknown',
                     item,
@@ -1437,14 +1816,14 @@ class YouTubePlatform extends EventEmitter {
 
             return messages;
         } catch (error) {
-            this.logger.debug(`Error extracting messages from chat item: ${error.message}`, 'youtube');
+            this.logger.debug(`Error extracting messages from chat item: ${getErrorMessage(error)}`, 'youtube');
             return [];
         }
     }
 
-    _shouldSkipMessage(message) {
+    _shouldSkipMessage(message: UnknownMap): boolean {
         try {
-            if (!message || !message.type) {
+            if (typeof message.type !== 'string') {
                 return true; // Skip invalid messages
             }
 
@@ -1469,12 +1848,12 @@ class YouTubePlatform extends EventEmitter {
 
             return false; // Process this message
         } catch (error) {
-            this.logger.debug(`Error checking if message should be skipped: ${error.message}`, 'youtube');
+            this.logger.debug(`Error checking if message should be skipped: ${getErrorMessage(error)}`, 'youtube');
             return true; // Skip on error to be safe
         }
     }
 
-    async getConnectionStatus() {
+    async getConnectionStatus(): Promise<UnknownMap> {
         return {
             platform: 'youtube',
             status: this.isConnected() ? 'connected' : 'disconnected',
@@ -1482,13 +1861,13 @@ class YouTubePlatform extends EventEmitter {
         };
     }
 
-    _handleProcessingError(message, error, eventType = 'general', eventData = null) {
+    _handleProcessingError(message: string, error: unknown, eventType = 'general', eventData: unknown = null): void {
         if (this.errorHandler && error instanceof Error) {
-            this.errorHandler.handleEventProcessingError(error, eventType, eventData, message);
+            this.errorHandler.handleEventProcessingError?.(error, eventType, eventData, message);
             return;
         }
 
-        const errorMessage = error && error.message ? error.message : error;
+        const errorMessage = getErrorMessage(error);
         if (this.errorHandler && typeof this.errorHandler.logOperationalError === 'function') {
             this.errorHandler.logOperationalError(message, eventType, {
                 eventData,
@@ -1497,7 +1876,7 @@ class YouTubePlatform extends EventEmitter {
         }
     }
 
-    _handleMissingChatEvent(eventType, chatItem) {
+    _handleMissingChatEvent(eventType: unknown, chatItem: unknown): void {
         const resolvedEventType = eventType || 'unknown';
         const author = this._resolveChatItemAuthorName(chatItem) || getFallbackUsername();
         if (this.logger && typeof this.logger.debug === 'function') {
@@ -1506,16 +1885,13 @@ class YouTubePlatform extends EventEmitter {
                 author
             });
         }
-        const chatItemVideoId = chatItem && typeof chatItem === 'object'
-            ? chatItem.videoId
-            : undefined;
-        const nestedVideoId = chatItem && typeof chatItem.item === 'object'
-            ? chatItem.item.videoId
-            : undefined;
+        const chatRecord = toUnknownMap(chatItem);
+        const chatItemVideoId = chatRecord.videoId;
+        const nestedVideoId = toUnknownMap(chatRecord.item).videoId;
         const resolvedVideoId = chatItemVideoId || nestedVideoId || this.currentVideoId || 'unknown';
 
         const enhancedData = {
-            ...chatItem,
+            ...chatRecord,
             author,
             metadata: {
                 handler: 'handleActions',
@@ -1523,20 +1899,20 @@ class YouTubePlatform extends EventEmitter {
             }
         };
 
-        this.logRawPlatformData(resolvedEventType, enhancedData).catch((error) => {
+        this.logRawPlatformData(String(resolvedEventType), enhancedData).catch((error: unknown) => {
             if (this.logger && typeof this.logger.debug === 'function') {
-                this.logger.debug(`Failed to log unknown event: ${error.message}`, 'youtube');
+                this.logger.debug(`Failed to log unknown event: ${getErrorMessage(error)}`, 'youtube');
             }
         });
     }
 
-    _handleConnectionErrorLogging(message, error, action = 'operation') {
+    _handleConnectionErrorLogging(message: string, error: unknown, action = 'operation'): void {
         if (this.errorHandler && error instanceof Error) {
-            this.errorHandler.handleConnectionError(error, action, message);
+            this.errorHandler.handleConnectionError?.(error, action, message);
             return;
         }
 
-        const errorMessage = error && error.message ? error.message : error;
+        const errorMessage = getErrorMessage(error);
         if (this.errorHandler && typeof this.errorHandler.logOperationalError === 'function') {
             this.errorHandler.logOperationalError(message, action, {
                 error: errorMessage
@@ -1544,13 +1920,13 @@ class YouTubePlatform extends EventEmitter {
         }
     }
 
-    _handleCleanupErrorLogging(message, error, resource = 'resource') {
+    _handleCleanupErrorLogging(message: string, error: unknown, resource = 'resource'): void {
         if (this.errorHandler && error instanceof Error) {
-            this.errorHandler.handleCleanupError(error, resource, message);
+            this.errorHandler.handleCleanupError?.(error, resource, message);
             return;
         }
 
-        const errorMessage = error && error.message ? error.message : error;
+        const errorMessage = getErrorMessage(error);
         if (this.errorHandler && typeof this.errorHandler.logOperationalError === 'function') {
             this.errorHandler.logOperationalError(message, resource, {
                 error: errorMessage

@@ -52,34 +52,39 @@ type TikTokClientLike = {
 };
 
 class ConnectionStateFactory {
+    private static createState(input: ConnectionStateInput): ConnectionState {
+        return new ConnectionState(input);
+    }
+
     static createTwitchState(config: PlatformIdentityConfig, eventSub: EventSubLike | null): ConnectionState {
-        return new ConnectionState({
-            isConnected: eventSub ? eventSub.isActive() : false,
-            platform: 'twitch',
-            channel: config.channel,
-            username: config.username
-        });
+        const input: ConnectionStateInput = { isConnected: eventSub ? eventSub.isActive() : false, platform: 'twitch' };
+        if (config.channel !== undefined) input.channel = config.channel;
+        if (config.username !== undefined) input.username = config.username;
+        return this.createState(input);
     }
 
     static createYouTubeState(
         config: PlatformIdentityConfig,
         connections: Record<string, unknown> | null | undefined
     ): ConnectionState {
-        return new ConnectionState({
+        const input: ConnectionStateInput = {
             isConnected: !!connections && Object.keys(connections).length > 0,
-            platform: 'youtube',
-            channel: config.username,
-            username: config.username
-        });
+            platform: 'youtube'
+        };
+        if (config.username !== undefined) {
+            input.channel = config.username;
+            input.username = config.username;
+        }
+        return this.createState(input);
     }
 
     static createTikTokState(config: PlatformIdentityConfig, client: TikTokClientLike | null): ConnectionState {
-        return new ConnectionState({
-            isConnected: client ? client.connected : false,
-            platform: 'tiktok',
-            channel: config.username,
-            username: config.username
-        });
+        const input: ConnectionStateInput = { isConnected: client ? client.connected : false, platform: 'tiktok' };
+        if (config.username !== undefined) {
+            input.channel = config.username;
+            input.username = config.username;
+        }
+        return this.createState(input);
     }
 }
 

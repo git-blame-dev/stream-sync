@@ -44,9 +44,25 @@ type RuntimeHandcamConfig = RuntimeRecord & {
 };
 
 type RuntimeConfig = Record<string, RuntimeRecord> & {
-    general?: RuntimeRecord & { viewerCountPollingIntervalMs?: number };
+    general: RuntimeRecord & {
+        maxMessageLength: number;
+        viewerCountPollingIntervalMs?: number;
+        logChatMessages?: boolean;
+        filterOldMessages?: boolean;
+    };
     obs: RuntimeObsConfig;
     handcam: RuntimeHandcamConfig;
+    cooldowns: RuntimeRecord & {
+        cmdCooldownMs: number;
+        heavyCommandCooldownMs: number;
+        globalCmdCooldownMs: number;
+    };
+    farewell: RuntimeRecord & {
+        timeout: number;
+    };
+    greetings?: RuntimeRecord & {
+        customVfxProfiles?: Record<string, RuntimeRecord>;
+    };
     youtube?: RuntimeRecord;
 };
 
@@ -58,6 +74,10 @@ type RuntimeObsManager = {
     isConnected: () => boolean;
     disconnect?: () => Promise<unknown> | unknown;
     call: (requestType: string, requestData: Record<string, unknown>) => Promise<unknown>;
+};
+
+type RuntimeDisplayQueue = {
+    addItem: (item: RuntimeRecord) => void;
 };
 
 type RuntimeSourcesManager = {
@@ -81,9 +101,11 @@ type RuntimeNotificationManager = {
 };
 
 type RuntimeVfxCommandService = RuntimeRecord & {
+    selectVFXCommand?: (trigger: string, message: string) => Promise<RuntimeRecord | null> | RuntimeRecord | null;
+    matchFarewell?: (message: string, trigger: string) => unknown;
     executeCommand?: (command: unknown, context: RuntimeRecord) => Promise<unknown> | unknown;
     executeCommandForKey?: (commandKey: unknown, context: RuntimeRecord) => Promise<unknown> | unknown;
-    getVFXConfig?: (commandKey: string, message: string | null) => Promise<unknown> | unknown;
+    getVFXConfig?: (commandKey: string, message: string | null) => Promise<RuntimeRecord | null> | RuntimeRecord | null;
 };
 
 type RuntimeUserTrackingService = {
@@ -94,6 +116,7 @@ type RuntimePlatformLifecycleService = {
     getAllPlatforms: () => Record<string, RuntimeViewerCountPlatform>;
     initializeAllPlatforms: (platformModules: RuntimeRecord) => Promise<unknown>;
     disconnectAll: () => Promise<unknown>;
+    getPlatformConnectionTime: (platform: string) => number | undefined | null;
     getStatus?: () => {
         failedPlatforms?: Array<{ name?: unknown }>;
         [key: string]: unknown;
@@ -102,6 +125,10 @@ type RuntimePlatformLifecycleService = {
 
 type RuntimeCommandCooldownService = {
     getStatus?: () => unknown;
+    checkUserCooldown: (userId: unknown, perUserCooldown: number, heavyCooldown: number) => boolean;
+    updateUserCooldown: (userId: unknown) => void;
+    checkGlobalCooldown?: (commandName: string, globalCooldownMs: number) => boolean;
+    updateGlobalCooldown?: (commandName: string) => void;
 };
 
 type RuntimeObsEventService = RuntimeRecord & {
@@ -117,14 +144,16 @@ type RuntimeGuiTransportService = {
 
 type RuntimeGracefulExitService = {
     isEnabled: () => boolean;
-    getTargetMessageCount: () => number;
+    getTargetMessageCount: () => number | null;
+    incrementMessageCount: () => boolean;
+    triggerExit: () => Promise<unknown> | unknown;
 };
 
 type RuntimeDependencies = RuntimeRecord & {
     logging: AppLogger;
     twitchAuth?: unknown;
     lazyInnertube?: unknown;
-    displayQueue: unknown;
+    displayQueue: RuntimeDisplayQueue;
     notificationManager: RuntimeNotificationManager;
     eventBus: RuntimeEventBus;
     vfxCommandService: RuntimeVfxCommandService;
@@ -218,7 +247,7 @@ class AppRuntime {
     twitchAuth: unknown;
     errorHandler: ReturnType<typeof createPlatformErrorHandler> | null;
     lazyInnertube: unknown;
-    displayQueue: unknown;
+    displayQueue: RuntimeDisplayQueue;
     notificationManager: RuntimeNotificationManager;
     eventBus: RuntimeEventBus;
     vfxCommandService: RuntimeVfxCommandService;
@@ -229,7 +258,7 @@ class AppRuntime {
     viewerCountSystemStarted: boolean;
     commandCooldownService: RuntimeCommandCooldownService;
     platformLifecycleService: RuntimePlatformLifecycleService;
-    gracefulExitService: RuntimeGracefulExitService | null;
+    gracefulExitService?: RuntimeGracefulExitService;
     vfxCommandUnsubscribe: (() => void) | void | null;
     viewerCountStatusCleanup: (() => void) | void | null = null;
     keepAliveInterval?: ReturnType<typeof setInterval>;
@@ -390,7 +419,6 @@ class AppRuntime {
         if (typeof this.eventBus.subscribe !== 'function') {
             throw new Error('AppRuntime requires eventBus.subscribe function');
         }
-        this.gracefulExitService = null;
         this.vfxCommandUnsubscribe = null;
         this.isStarting = false;
         this.isStarted = false;
@@ -613,7 +641,7 @@ class AppRuntime {
         this.logger.debug(`[${platform}] Viewer count updated: ${count}`, 'system');
 
         if (this.viewerCountSystem) {
-            const previousCount = this.viewerCountSystem.counts[platform.toLowerCase()];
+            const previousCount = this.viewerCountSystem.counts[platform.toLowerCase()] ?? 0;
             this.viewerCountSystem.counts[platform.toLowerCase()] = count;
 
             const notificationPromise = this.viewerCountSystem.notifyObservers(platform, count, previousCount);
@@ -877,7 +905,11 @@ class AppRuntime {
 
             await this.viewerCountSystem.startPolling();
 
-            this.gracefulExitService = this.dependencies.gracefulExitService ?? null;
+            if (this.dependencies.gracefulExitService) {
+                this.gracefulExitService = this.dependencies.gracefulExitService;
+            } else {
+                delete this.gracefulExitService;
+            }
             if (!this.gracefulExitService) {
                 throw new Error('GracefulExitService dependency required');
             }

@@ -198,8 +198,8 @@ class DisplayQueue {
             this.config = config;
 
             this.state = new DisplayQueueState({
-                maxQueueSize: this.config.maxQueueSize,
-                getPriority: (type) => this.getTypePriority(type)
+                ...(this.config.maxQueueSize === undefined ? {} : { maxQueueSize: this.config.maxQueueSize }),
+                getPriority: (type) => this.getTypePriority(type) ?? PRIORITY_LEVELS.CHAT
             });
             this.queue = this.state.queue as QueueItem[];
 
@@ -219,12 +219,16 @@ class DisplayQueue {
                 obsManager: this.obsManager,
                 sourcesManager: this.sourcesManager as ConstructorParameters<typeof DisplayQueueEffects>[0]['sourcesManager'],
                 goalsManager: this.goalsManager as ConstructorParameters<typeof DisplayQueueEffects>[0]['goalsManager'],
-                eventBus: this.eventBus as ConstructorParameters<typeof DisplayQueueEffects>[0]['eventBus'],
+                ...(this.eventBus && typeof this.eventBus.emit === 'function'
+                    ? { eventBus: this.eventBus as NonNullable<ConstructorParameters<typeof DisplayQueueEffects>[0]['eventBus']> }
+                    : {}),
                 config: this.config as ConstructorParameters<typeof DisplayQueueEffects>[0]['config'],
                 delay: this.delay,
                 handleDisplayQueueError,
                 extractUsername: (data) => this.extractUsername(data),
-                giftAnimationResolver: dependencies.giftAnimationResolver
+                ...(dependencies.giftAnimationResolver === undefined
+                    ? {}
+                    : { giftAnimationResolver: dependencies.giftAnimationResolver })
             });
         } catch (error) {
             handleDisplayQueueError('[DisplayQueue] Error during construction', error);

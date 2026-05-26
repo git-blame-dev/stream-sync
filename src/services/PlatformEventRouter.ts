@@ -107,7 +107,7 @@ function resolveCanonicalMessageParts(data: unknown = {}): CanonicalMessagePart[
                 const placeInComment = Number((part as { placeInComment?: unknown }).placeInComment);
                 return {
                     type: 'emote',
-                    platform: typeof part.platform === 'string' ? part.platform : undefined,
+                    ...(typeof part.platform === 'string' ? { platform: part.platform } : {}),
                     emoteId: part.emoteId.trim(),
                     imageUrl: part.imageUrl.trim(),
                     ...(Number.isInteger(placeInComment) && placeInComment >= 0

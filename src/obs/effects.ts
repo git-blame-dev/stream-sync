@@ -12,14 +12,14 @@ type EffectsLogger = {
 
 type ObsManagerLike = {
     ensureConnected: () => Promise<void>;
-    call: (requestType: string, payload: Record<string, unknown>) => Promise<unknown>;
-    addEventListener?: (eventName: string, handler: (event: { inputName?: string }) => void) => void;
-    removeEventListener?: (eventName: string, handler: (event: { inputName?: string }) => void) => void;
+    call: (requestType: string, payload?: Record<string, unknown>) => Promise<unknown>;
+    addEventListener?: (eventName: string, handler: (event?: Record<string, unknown>) => void) => void;
+    removeEventListener?: (eventName: string, handler: (event?: Record<string, unknown>) => void) => void;
 };
 
 type ObsManagerWithEvents = ObsManagerLike & {
-    addEventListener: (eventName: string, handler: (event: { inputName?: string }) => void) => void;
-    removeEventListener: (eventName: string, handler: (event: { inputName?: string }) => void) => void;
+    addEventListener: (eventName: string, handler: (event?: Record<string, unknown>) => void) => void;
+    removeEventListener: (eventName: string, handler: (event?: Record<string, unknown>) => void) => void;
 };
 
 type SourcesManagerLike = {
@@ -73,7 +73,7 @@ class OBSEffectsManager {
         this.log = this.logger;
         this.sourcesManager = dependencies.sourcesManager;
         this.eventBus = dependencies.eventBus;
-        this.retrySystem = dependencies.retrySystem ?? createRetrySystem({ logger: this.logger });
+        this.retrySystem = dependencies.retrySystem ?? (createRetrySystem({ logger: this.logger }) as RetrySystemLike);
 
         // Convenience bindings for OBS manager methods
         this.ensureOBSConnected = this.obsManager.ensureConnected.bind(this.obsManager);
@@ -81,9 +81,15 @@ class OBSEffectsManager {
 
         // Bind sources manager methods if available
         if (this.sourcesManager) {
-            this.setSourceFilterEnabled = this.sourcesManager.setSourceFilterEnabled?.bind(this.sourcesManager);
-            this.getSourceFilterSettings = this.sourcesManager.getSourceFilterSettings?.bind(this.sourcesManager);
-            this.setSourceFilterSettings = this.sourcesManager.setSourceFilterSettings?.bind(this.sourcesManager);
+            if (this.sourcesManager.setSourceFilterEnabled) {
+                this.setSourceFilterEnabled = this.sourcesManager.setSourceFilterEnabled.bind(this.sourcesManager);
+            }
+            if (this.sourcesManager.getSourceFilterSettings) {
+                this.getSourceFilterSettings = this.sourcesManager.getSourceFilterSettings.bind(this.sourcesManager);
+            }
+            if (this.sourcesManager.setSourceFilterSettings) {
+                this.setSourceFilterSettings = this.sourcesManager.setSourceFilterSettings.bind(this.sourcesManager);
+            }
         }
 
         this.delay = dependencies.delay || this.retrySystem.delay || safeDelay;
@@ -149,12 +155,12 @@ class OBSEffectsManager {
 
         return new Promise<void>((resolve) => {
             let settled = false;
-            const mediaEndHandler = (data: { inputName?: string }) => {
+            const mediaEndHandler = (data?: Record<string, unknown>) => {
                 if (settled) {
                     return;
                 }
 
-                if (data.inputName === mediaSourceName) {
+                if (data?.inputName === mediaSourceName) {
                     settled = true;
                     removeEventListener.call(this.obsManager, 'MediaInputPlaybackEnded', mediaEndHandler);
                     this.logger.debug(`[VFX] Media playback ended: ${mediaSourceName}`, 'effects');

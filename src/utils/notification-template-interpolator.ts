@@ -1,4 +1,10 @@
-function sanitizeStringValue(value) {
+type TemplateRecord = Record<string, unknown>;
+
+function isTemplateRecord(value: unknown): value is TemplateRecord {
+    return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function sanitizeStringValue(value: unknown): string {
     if (value === null || value === undefined) {
         return '';
     }
@@ -14,7 +20,7 @@ function sanitizeStringValue(value) {
     return stringValue;
 }
 
-function convertValueToString(value) {
+function convertValueToString(value: unknown): string {
     if (value === null || value === undefined) {
         return '';
     }
@@ -45,15 +51,16 @@ function convertValueToString(value) {
             return value.toISOString();
         }
 
-        if (value.name && typeof value.name === 'string') return value.name;
-        if (value.username && typeof value.username === 'string') return value.username;
-        if (value.value && typeof value.value === 'string') return value.value;
-        if (value.text && typeof value.text === 'string') return value.text;
-        if (value.title && typeof value.title === 'string') return value.title;
+        const record = value as TemplateRecord;
+        if (typeof record.name === 'string') return record.name;
+        if (typeof record.username === 'string') return record.username;
+        if (typeof record.value === 'string') return record.value;
+        if (typeof record.text === 'string') return record.text;
+        if (typeof record.title === 'string') return record.title;
 
         try {
-            const seen = new WeakSet();
-            function extractFromNestedObject(obj, depth = 0) {
+            const seen = new WeakSet<object>();
+            function extractFromNestedObject(obj: unknown, depth = 0): string {
                 if (depth > 3 || !obj || typeof obj !== 'object' || Array.isArray(obj)) {
                     return '';
                 }
@@ -110,15 +117,15 @@ function convertValueToString(value) {
     return '';
 }
 
-function sanitizeDataForInterpolation(data) {
-    if (!data || typeof data !== 'object') {
+function sanitizeDataForInterpolation(data: unknown): TemplateRecord {
+    if (!isTemplateRecord(data)) {
         return {};
     }
 
-    const sanitized = {};
-    const seen = new WeakSet();
+    const sanitized: TemplateRecord = {};
+    const seen = new WeakSet<object>();
 
-    function sanitizeValue(value) {
+    function sanitizeValue(value: unknown): unknown {
         if (value === null || value === undefined) {
             return value;
         }
@@ -150,10 +157,11 @@ function sanitizeDataForInterpolation(data) {
                 } catch { /* noop */ }
             }
 
-            if (value.name) return sanitizeStringValue(value.name);
-            if (value.username) return sanitizeStringValue(value.username);
-            if (value.value) return sanitizeStringValue(value.value);
-            if (value.text) return sanitizeStringValue(value.text);
+            const record = value as TemplateRecord;
+            if (record.name) return sanitizeStringValue(record.name);
+            if (record.username) return sanitizeStringValue(record.username);
+            if (record.value) return sanitizeStringValue(record.value);
+            if (record.text) return sanitizeStringValue(record.text);
 
             return '';
         }
@@ -168,10 +176,9 @@ function sanitizeDataForInterpolation(data) {
     return sanitized;
 }
 
-function resolvePaypiggyCopy(data) {
-    const safeData = data || {};
-    const platform = (safeData.platform || '').toLowerCase();
-    const isSuperfan = safeData.tier === 'superfan';
+function resolvePaypiggyCopy(data: TemplateRecord) {
+    const platform = typeof data.platform === 'string' ? data.platform.toLowerCase() : '';
+    const isSuperfan = data.tier === 'superfan';
 
     if (isSuperfan) {
         return {
@@ -211,8 +218,8 @@ function resolvePaypiggyCopy(data) {
     };
 }
 
-function enrichPaypiggyData(data) {
-    if (!data || typeof data !== 'object') {
+function enrichPaypiggyData(data: unknown): TemplateRecord {
+    if (!isTemplateRecord(data)) {
         return {};
     }
 
@@ -224,7 +231,7 @@ function enrichPaypiggyData(data) {
     return { ...data, ...copy };
 }
 
-function interpolateTemplate(template, data) {
+function interpolateTemplate(template: unknown, data: unknown): string {
     if (!template || typeof template !== 'string') {
         throw new Error('Template must be a string');
     }
@@ -232,7 +239,7 @@ function interpolateTemplate(template, data) {
     const enrichedData = enrichPaypiggyData(data);
     const safeData = sanitizeDataForInterpolation(enrichedData);
 
-    return template.replace(/\{(\w+)\}/g, (match, variable) => {
+    return template.replace(/\{(\w+)\}/g, (_match: string, variable: string) => {
         if (!Object.prototype.hasOwnProperty.call(safeData, variable) ||
             safeData[variable] === null ||
             safeData[variable] === undefined) {

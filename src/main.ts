@@ -31,13 +31,25 @@ import { createTextProcessingManager } from './utils/text-processing';
 import { safeSetInterval } from './utils/timeout-validator';
 import { createOBSSubsystem } from './obs/subsystem';
 
-const NotificationManager = NotificationManagerModule as new (...args: unknown[]) => {
+type YouTubeModuleLike = {
+    Innertube: {
+        create: (config?: Record<string, unknown>) => Promise<unknown>;
+    };
+    Parser?: {
+        setParserErrorHandler: (handler: (context?: Record<string, unknown>) => void) => void;
+    };
+    [key: string]: unknown;
+};
+
+type InnertubeImporter = () => Promise<YouTubeModuleLike>;
+
+type MainNotificationManager = {
     handleAggregatedDonation: (data: unknown) => void;
     donationSpamDetector?: unknown;
 };
-const { DependencyFactory } = dependencyFactoryModule as {
-    DependencyFactory: new () => unknown;
-};
+
+const NotificationManager = NotificationManagerModule as new (...args: unknown[]) => MainNotificationManager;
+const { DependencyFactory } = dependencyFactoryModule;
 
 type MainCliArgs = {
     debug: boolean;
@@ -50,25 +62,90 @@ type MainLogOptions = {
     logContext: string;
 };
 
+type ProductionDependencies = Record<string, unknown> & {
+    obs: Record<string, unknown>;
+    dependencyFactory: PlatformLifecycleDependencyFactory;
+    lazyInnertube: unknown;
+    axios?: TwitchHttpClient;
+    WebSocketCtor?: unknown;
+    tiktokConnector?: unknown;
+};
+type AppRuntimeConfig = ConstructorParameters<typeof AppRuntime>[0];
+type AppRuntimeDependencies = ConstructorParameters<typeof AppRuntime>[1];
+type TwitchHttpClient = ConstructorParameters<typeof TwitchAuth>[0]['httpClient'];
+type PlatformLifecycleDependencyFactory = NonNullable<NonNullable<ConstructorParameters<typeof PlatformLifecycleService>[0]>['dependencyFactory']>;
+type InitializeLoggingConfig = Parameters<typeof initializeLoggingConfig>[0];
+type MainLoggingConfig = NonNullable<InitializeLoggingConfig['logging']>;
+type LogOutputConfig = NonNullable<MainLoggingConfig['console']>;
+type LogLevelConfigValue = NonNullable<LogOutputConfig['level']>;
+type MainLoggingOutputCandidate = {
+    enabled?: boolean;
+    level?: string;
+    directory?: string;
+    filename?: string;
+};
+type MainConfigChangePayload = {
+    section?: string;
+    value?: Partial<{
+        defaultCooldown: number;
+        heavyCommandCooldown: number;
+        heavyCommandThreshold: number;
+        heavyCommandWindow: number;
+        globalCooldown: number;
+        maxEntries: number;
+    }>;
+};
+type MainGracefulExitConfig = Parameters<typeof createGracefulExitService>[2];
+
 type MainOverrides = Record<string, unknown> & {
     cliArgs?: Partial<MainCliArgs>;
     config?: MainConfig;
-    innertubeImporter?: (...args: unknown[]) => unknown;
-    axios?: unknown;
+    innertubeImporter?: InnertubeImporter;
+    axios?: TwitchHttpClient;
     WebSocketCtor?: unknown;
     tiktokConnector?: unknown;
-    dependencyFactory?: unknown;
+    dependencyFactory?: PlatformLifecycleDependencyFactory;
+    ensureSecrets?: typeof ensureSecrets;
+    TwitchAuth?: typeof TwitchAuth;
+    createEventBus?: typeof createEventBus;
+    createDisplayQueue?: typeof createDisplayQueue;
+    initializeDisplayQueue?: typeof initializeDisplayQueue;
+    getOBSConnectionManager?: typeof getOBSConnectionManager;
+    createVFXCommandService?: typeof createVFXCommandService;
+    createUserTrackingService?: typeof createUserTrackingService;
+    createOBSEventService?: typeof createOBSEventService;
+    NotificationManager?: new (...args: unknown[]) => MainNotificationManager;
+    createSpamDetectionConfig?: typeof createSpamDetectionConfig;
+    createDonationSpamDetection?: typeof createDonationSpamDetection;
+    createGracefulExitService?: typeof createGracefulExitService;
+    createProductionDependencies?: typeof createProductionDependencies;
 };
 
-type MainConfig = BuiltConfig & {
+type CooldownsConfig = {
+    cmdCooldown: number;
+    defaultCooldownMs: number;
+    heavyCommandCooldownMs: number;
+    heavyCommandThreshold: number;
+    heavyCommandWindowMs: number;
+    globalCmdCooldownMs: number;
+    maxEntries: number;
+};
+
+type MainConfig = Record<string, Record<string, unknown>> & BuiltConfig & {
+    logging?: ReturnType<typeof buildLoggingConfig>;
     general: {
         debugEnabled: boolean;
+        keywordParsingEnabled?: boolean;
         gracefulExit: unknown;
         envFilePath?: string;
         envFileReadEnabled?: unknown;
         envFileWriteEnabled?: unknown;
     };
-    obs: {
+    obs: Record<string, unknown> & {
+        address?: string;
+        password?: string;
+        enabled?: boolean;
+        connectionTimeoutMs?: number;
         chatMsgTxt: string;
         chatMsgScene: string;
         chatMsgGroup: string;
@@ -79,17 +156,18 @@ type MainConfig = BuiltConfig & {
         chatPlatformLogos: Record<string, unknown>;
         notificationPlatformLogos: Record<string, unknown>;
     } & Record<string, unknown>;
-    displayQueue: {
+    displayQueue: Record<string, unknown> & {
         autoProcess: boolean;
         maxQueueSize: number;
     };
-    cooldowns: Record<string, unknown>;
-    timing: {
+    cooldowns: Record<string, unknown> & CooldownsConfig;
+    timing: Record<string, unknown> & {
         transitionDelay: number;
         notificationClearDelay: number;
         chatMessageDuration: number;
+        fadeDuration: number;
     };
-    http: {
+    http: Record<string, unknown> & {
         userAgents: string[];
     };
     twitch: Record<string, unknown> & {
@@ -108,7 +186,100 @@ type MainConfig = BuiltConfig & {
         showGifts?: boolean;
     };
     spam: Record<string, unknown>;
+    commands: Record<string, string>;
+    farewell: Record<string, string>;
+    vfx: {
+        filePath: string;
+    };
 };
+
+function createDefaultDependencyFactory(): PlatformLifecycleDependencyFactory {
+    const factory = new DependencyFactory();
+    return {
+        createYoutubeDependencies: factory.createYoutubeDependencies.bind(factory),
+        createTiktokDependencies: factory.createTiktokDependencies.bind(factory),
+        createTwitchDependencies: factory.createTwitchDependencies.bind(factory)
+    };
+}
+
+function isLogLevelConfigValue(value: unknown): value is LogLevelConfigValue {
+    return value === 'debug' || value === 'info' || value === 'warn' || value === 'error';
+}
+
+function normalizeLogOutputConfig(output: MainLoggingOutputCandidate | undefined): LogOutputConfig | undefined {
+    if (!output) {
+        return undefined;
+    }
+
+    const normalized: LogOutputConfig = {};
+    if (typeof output.enabled === 'boolean') {
+        normalized.enabled = output.enabled;
+    }
+    if (isLogLevelConfigValue(output.level)) {
+        normalized.level = output.level;
+    }
+    if (typeof output.directory === 'string') {
+        normalized.directory = output.directory;
+    }
+    if (typeof output.filename === 'string') {
+        normalized.filename = output.filename;
+    }
+
+    return normalized;
+}
+
+function createLoggingInitializerConfig(loggingConfig: MainConfig['logging']): InitializeLoggingConfig {
+    if (!loggingConfig) {
+        return {};
+    }
+
+    const logging: MainLoggingConfig = {};
+    for (const [key, value] of Object.entries(loggingConfig)) {
+        if (key !== 'console' && key !== 'file') {
+            logging[key] = value;
+        }
+    }
+    const consoleConfig = normalizeLogOutputConfig(loggingConfig.console);
+    const fileConfig = normalizeLogOutputConfig(loggingConfig.file);
+    if (consoleConfig) {
+        logging.console = consoleConfig;
+    }
+    if (fileConfig) {
+        logging.file = fileConfig;
+    }
+
+    return { logging };
+}
+
+function toGracefulExitConfig(candidate: unknown): MainGracefulExitConfig | undefined {
+    return candidate && typeof candidate === 'object'
+        ? candidate
+        : undefined;
+}
+
+function toMainConfigChangePayload(payload: unknown): MainConfigChangePayload | undefined {
+    return payload && typeof payload === 'object'
+        ? payload
+        : undefined;
+}
+
+function assertRuntimeDependencies(dependencies: ProductionDependencies): asserts dependencies is ProductionDependencies & AppRuntimeDependencies {
+    const requiredKeys: Array<keyof AppRuntimeDependencies> = [
+        'logging',
+        'displayQueue',
+        'notificationManager',
+        'eventBus',
+        'vfxCommandService',
+        'userTrackingService',
+        'obsEventService',
+        'commandCooldownService',
+        'platformLifecycleService'
+    ];
+    const missingKeys = requiredKeys.filter((key) => dependencies[key] === undefined || dependencies[key] === null);
+    if (missingKeys.length > 0) {
+        throw new Error(`Runtime dependencies missing required keys: ${missingKeys.join(', ')}`);
+    }
+}
 
 type MainApp = AppRuntime & {
     keepAliveInterval?: ReturnType<typeof safeSetInterval>;
@@ -139,7 +310,13 @@ for (let i = 0; i < args.length; i++) {
 
         case '--chat':
             if (i + 1 < args.length) {
-                const chatCount = Number.parseInt(args[++i], 10);
+                i += 1;
+                const chatArg = args[i];
+                if (chatArg === undefined) {
+                    process.stderr.write('Error: --chat argument requires a number\n');
+                    process.exit(1);
+                }
+                const chatCount = Number.parseInt(chatArg, 10);
                 if (isNaN(chatCount) || chatCount <= 0) {
                     process.stderr.write('Error: --chat argument requires a positive number\n');
                     process.exit(1);
@@ -180,7 +357,7 @@ if (cliArgs.debug) {
     config.logging = buildLoggingConfig(normalizedConfig, { debugMode: true });
 }
 
-initializeLoggingConfig(config);
+initializeLoggingConfig(createLoggingInitializerConfig(config.logging));
 
 const logger = getUnifiedLogger();
 if (!logger || typeof logger.debug !== 'function') {
@@ -220,6 +397,27 @@ function getErrorMessage(error: unknown): string {
         return error.message;
     }
     return String(error);
+}
+
+function toAppRuntimeConfig(candidate: MainConfig): AppRuntimeConfig {
+    if (!candidate.obs || typeof candidate.obs !== 'object') {
+        throw new Error('AppRuntime requires obs config');
+    }
+    if (!candidate.handcam || typeof candidate.handcam !== 'object') {
+        throw new Error('AppRuntime requires handcam config');
+    }
+    return candidate as unknown as AppRuntimeConfig;
+}
+
+function createCooldownEventBus(eventBus: ReturnType<typeof createEventBus>) {
+    return {
+        emit: (eventName: string, payload: unknown) => {
+            eventBus.emit(eventName, payload);
+        },
+        subscribe: (eventName: string, handler: (payload?: MainConfigChangePayload) => void) => eventBus.subscribe(eventName, (payload: unknown) => {
+            handler(toMainConfigChangePayload(payload));
+        })
+    };
 }
 
 function summarizeTwitchConfig(twitchConfig: MainConfig['twitch']): Record<string, unknown> {
@@ -322,7 +520,7 @@ function createProductionDependencies(
         platforms,
         displayQueue: null,
         notificationManager: null,
-        dependencyFactory: resolvedOverrides.dependencyFactory || new DependencyFactory(),
+        dependencyFactory: resolvedOverrides.dependencyFactory || createDefaultDependencyFactory(),
         lazyInnertube: InnertubeFactory.createLazyReference(),
         axios: resolvedOverrides.axios,
         WebSocketCtor: resolvedOverrides.WebSocketCtor,
@@ -335,15 +533,14 @@ function createProductionDependencies(
     };
 }
 
-function createAppRuntime(config: MainConfig, dependencies: Record<string, unknown>) {
+function createAppRuntime(config: AppRuntimeConfig, dependencies: AppRuntimeDependencies) {
     if (!dependencies) {
         throw new Error('createAppRuntime requires dependencies');
     }
-    const deps = dependencies;
 
     logger.info('Creating AppRuntime', 'system');
 
-    return new AppRuntime(config, deps);
+    return new AppRuntime(config, dependencies);
 }
 
 async function main(overrides: MainOverrides = {}) {
@@ -357,7 +554,7 @@ async function main(overrides: MainOverrides = {}) {
     if (runtimeOverrides.innertubeImporter) {
         innertubeInstanceManager.setInnertubeImporter(runtimeOverrides.innertubeImporter);
     }
-    const runtimeCliArgs = runtimeOverrides.cliArgs || cliArgs;
+    const runtimeCliArgs: MainCliArgs = { ...cliArgs, ...(runtimeOverrides.cliArgs || {}) };
     validateRuntimeCliArgs(runtimeCliArgs);
     const runtimeConfig = runtimeOverrides.config || config;
     if (runtimeConfig !== config) {
@@ -397,9 +594,9 @@ async function main(overrides: MainOverrides = {}) {
                 config,
                 logger,
                 interactive: !!(process.stdin && process.stdin.isTTY),
-                envFilePath: config.general.envFilePath,
-                envFileReadEnabled: config.general.envFileReadEnabled,
-                envFileWriteEnabled: config.general.envFileWriteEnabled
+                ...(typeof config.general.envFilePath === 'string' ? { envFilePath: config.general.envFilePath } : {}),
+                ...(config.general.envFileReadEnabled !== undefined ? { envFileReadEnabled: config.general.envFileReadEnabled } : {}),
+                ...(config.general.envFileWriteEnabled !== undefined ? { envFileWriteEnabled: config.general.envFileWriteEnabled } : {})
             });
         } catch (error) {
             logMainError('Secret setup failed - missing required secrets', error, null, {
@@ -412,12 +609,15 @@ async function main(overrides: MainOverrides = {}) {
         let twitchAuth = null;
         let authValid = true;
         if (config.twitch.enabled) {
+            if (typeof config.twitch.tokenStorePath !== 'string' || typeof config.twitch.clientId !== 'string') {
+                throw new Error('Twitch authentication requires tokenStorePath and clientId');
+            }
             twitchAuth = new TwitchAuthCtor({
                 tokenStorePath: config.twitch.tokenStorePath,
                 clientId: config.twitch.clientId,
-                expectedUsername: config.twitch.username,
+                ...(typeof config.twitch.username === 'string' ? { expectedUsername: config.twitch.username } : {}),
                 logger,
-                httpClient: runtimeOverrides?.axios
+                ...(runtimeOverrides.axios !== undefined ? { httpClient: runtimeOverrides.axios } : {})
             });
             try {
                 await twitchAuth.initialize();
@@ -524,8 +724,8 @@ async function main(overrides: MainOverrides = {}) {
             logger,
             eventBus,
             getOBSConnectionManager: getOBSConnectionManagerFn,
-            createOBSEventService: createOBSEventServiceFn
-        } as Parameters<typeof createOBSSubsystem>[0]);
+            createOBSEventService: (deps) => createOBSEventServiceFn(deps as unknown as Parameters<typeof createOBSEventService>[0])
+        });
 
         logger.debug('About to initialize display queue...', 'Main');
         const displayQueueDependencies = {
@@ -596,7 +796,7 @@ async function main(overrides: MainOverrides = {}) {
             }
         }
         
-        const dependencies = createProductionDependenciesFn(runtimeOverrides, obsSubsystem);
+        const dependencies = createProductionDependenciesFn(runtimeOverrides, obsSubsystem) as unknown as ProductionDependencies;
         dependencies.obs = {
             connectionManager: obsSubsystem.connectionManager,
             sourcesManager: obsSubsystem.sourcesManager,
@@ -625,7 +825,7 @@ async function main(overrides: MainOverrides = {}) {
         };
 
         const commandCooldownService = new CommandCooldownService({
-            eventBus,
+            eventBus: createCooldownEventBus(eventBus),
             logger,
             config
         });
@@ -641,12 +841,13 @@ async function main(overrides: MainOverrides = {}) {
         dependencies.commandCooldownService = commandCooldownService;
         dependencies.platformLifecycleService = platformLifecycleService;
         
-        app = createAppRuntime(config, dependencies);
+        assertRuntimeDependencies(dependencies);
+        app = createAppRuntime(toAppRuntimeConfig(config), dependencies);
 
         const gracefulExitService = createGracefulExitServiceFn(
             app,
             runtimeCliArgs.chat,
-            config.general.gracefulExit
+            toGracefulExitConfig(config.general.gracefulExit)
         );
         dependencies.gracefulExitService = gracefulExitService;
 
@@ -733,7 +934,7 @@ async function runMainEntrypoint(mainFn: () => Promise<unknown> = main) {
 
 process.noDeprecation = true;
 
-if (import.meta.main) {
+if (require.main === module) {
     void runMainEntrypoint();
 }
 

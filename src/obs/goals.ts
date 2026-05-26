@@ -55,6 +55,8 @@ type GoalsConfig = {
     };
 };
 
+type GoalTrackerConfig = Parameters<typeof createGoalTracker>[0]['config'];
+
 type GoalsDependencies = {
     logger?: GoalsLogger;
     config?: GoalsConfig;
@@ -426,7 +428,7 @@ let defaultInstance: GoalsManager | null = null;
 function getDefaultGoalsManager(dependencies: GoalsDependencies = {}) {
     if (!defaultInstance) {
         const logger = dependencies.logger || defaultLogger;
-        const config = dependencies.config || defaultConfig;
+        const config = (dependencies.config || defaultConfig) as GoalsConfig & GoalTrackerConfig;
         const obsManager = dependencies.obsManager || getOBSConnectionManager() || {
             isConnected: () => false
         };

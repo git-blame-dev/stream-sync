@@ -101,7 +101,7 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
     const createServer = typeof options.createServer === 'function'
         ? options.createServer
         : http.createServer;
-    const errorHandler = createGuiTransportErrorHandler(logger);
+    const errorHandler = createGuiTransportErrorHandler(logger ?? undefined);
     const logDebug = (message: string, data?: unknown) => {
         if (logger && typeof logger.debug === 'function') {
             logger.debug(message, 'gui-transport', data || null);

@@ -68,7 +68,10 @@ function buildWarningMetadata(warningType: MismatchWarningType, payload: unknown
     const normalizedPayload = payload && typeof payload === 'object'
         ? (payload as YouTubeTextWarningPayload)
         : null;
-    const inputData = normalizedPayload?.input_data;
+    const inputData = normalizedPayload?.input_data ?? null;
+    const styleRuns = inputData?.styleRuns;
+    const commandRuns = inputData?.commandRuns;
+    const attachmentRuns = inputData?.attachmentRuns;
     const content = inputData && typeof inputData.content === 'string'
         ? inputData.content
         : '';
@@ -76,9 +79,9 @@ function buildWarningMetadata(warningType: MismatchWarningType, payload: unknown
     return {
         warningType,
         contentLength: content.length,
-        styleRunCount: Array.isArray(inputData && inputData.styleRuns) ? inputData.styleRuns.length : 0,
-        commandRunCount: Array.isArray(inputData && inputData.commandRuns) ? inputData.commandRuns.length : 0,
-        attachmentRunCount: Array.isArray(inputData && inputData.attachmentRuns) ? inputData.attachmentRuns.length : 0,
+        styleRunCount: Array.isArray(styleRuns) ? styleRuns.length : 0,
+        commandRunCount: Array.isArray(commandRuns) ? commandRuns.length : 0,
+        attachmentRunCount: Array.isArray(attachmentRuns) ? attachmentRuns.length : 0,
         parsedRunCount: Array.isArray(normalizedPayload?.parsed_runs) ? normalizedPayload.parsed_runs.length : 0
     };
 }

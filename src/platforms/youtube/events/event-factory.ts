@@ -59,10 +59,14 @@ data: UnknownRecord,
             throw new Error('YouTube event payload requires userId and username');
         }
 
-        return {
-            username: username || undefined,
-            userId: userId || undefined
-        };
+        const identity: NormalizedIdentity = {};
+        if (username) {
+            identity.username = username;
+        }
+        if (userId) {
+            identity.userId = userId;
+        }
+        return identity;
     };
 
 const normalizePositiveNumber = (value: unknown): number | undefined => {
@@ -91,7 +95,8 @@ const resolveMessageText = (data: UnknownRecord = {}): string => {
     };
 
 const resolveMessageParts = (data: UnknownRecord = {}): UnknownRecord[] => {
-        return getValidMessageParts({ message: data?.message }, { allowWhitespaceText: true })
+        const message = asRecord(data.message);
+        return getValidMessageParts({ message }, { allowWhitespaceText: true })
             .map((part: ValidMessagePart) => {
                 if (part.type === 'text') {
                     return {

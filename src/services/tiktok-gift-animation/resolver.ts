@@ -52,8 +52,10 @@ type ResolvedGiftAnimation = {
 mediaFilePath: string;
 mediaContentType: string;
 durationMs: number;
-animationConfig: AnimationConfig;
+    animationConfig: AnimationConfig;
 };
+
+type FetchBinaryData = ArrayBuffer | Buffer | Uint8Array | string;
 
 function fileExists(candidatePath: unknown): boolean {
     if (typeof candidatePath !== 'string' || candidatePath.trim().length === 0) {
@@ -69,6 +71,39 @@ function fileExists(candidatePath: unknown): boolean {
 
 function normalizeString(value: unknown): string {
     return typeof value === 'string' ? value.trim() : '';
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        return null;
+    }
+
+    return value as Record<string, unknown>;
+}
+
+function hasErrorCode(error: unknown, code: string): boolean {
+    const errorRecord = asRecord(error);
+    return errorRecord?.code === code;
+}
+
+function isResolvedGiftAnimation(value: unknown): value is ResolvedGiftAnimation {
+    const record = asRecord(value);
+    const animationConfig = asRecord(record?.animationConfig);
+    return typeof record?.mediaFilePath === 'string'
+        && typeof record.mediaContentType === 'string'
+        && typeof record.durationMs === 'number'
+        && Number.isFinite(record.durationMs)
+        && animationConfig !== null;
+}
+
+function toBuffer(data: FetchBinaryData): Buffer {
+    if (typeof data === 'string') {
+        return Buffer.from(data);
+    }
+    if (data instanceof ArrayBuffer) {
+        return Buffer.from(new Uint8Array(data));
+    }
+    return Buffer.from(data);
 }
 
 function uniqueNonEmpty(values: unknown[] = []): string[] {
@@ -251,15 +286,17 @@ animationConfig: AnimationConfig;
     }
 
 const orderedProfiles: Array<{ profileName: unknown; profile: Record<string, unknown> }> = [];
-    if (configObject.portrait && typeof configObject.portrait === 'object') {
-        orderedProfiles.push({ profileName: 'portrait', profile: configObject.portrait });
+    const portraitProfile = asRecord(configObject.portrait);
+    if (portraitProfile) {
+        orderedProfiles.push({ profileName: 'portrait', profile: portraitProfile });
     }
 
     for (const [key, value] of Object.entries(configObject)) {
-        if (key === 'portrait' || !value || typeof value !== 'object') {
+        const profile = asRecord(value);
+        if (key === 'portrait' || !profile) {
             continue;
         }
-        orderedProfiles.push({ profileName: key, profile: value });
+        orderedProfiles.push({ profileName: key, profile });
     }
 
     if (normalizeString(configObject.path)) {
@@ -369,11 +406,11 @@ function isMissingExecutableError(error: unknown, executableName: unknown): bool
         return false;
     }
 
-    if (error && error.code === 'ENOENT') {
+    if (hasErrorCode(error, 'ENOENT')) {
         return true;
     }
 
-    const message = normalizeString(error && error.message).toLowerCase();
+    const message = normalizeString(asRecord(error)?.message).toLowerCase();
     return message.includes('executable not found') && message.includes(name);
 }
 
@@ -381,8 +418,9 @@ function createTikTokGiftAnimationResolver(options: ResolverOptions = {}): { res
     const resolverLogger = options.logger || logger;
     const errorHandler = createPlatformErrorHandler(resolverLogger, 'tiktok-gift-animation');
     const cacheDirectory = normalizeString(options.cacheDirectory) || GIFT_ANIMATION_CACHE_DIR;
-    const maxEntries = Number.isInteger(options.maxEntries) && options.maxEntries > 0
-        ? options.maxEntries
+    const configuredMaxEntries = Number(options.maxEntries);
+    const maxEntries = Number.isInteger(configuredMaxEntries) && configuredMaxEntries > 0
+        ? configuredMaxEntries
         : GIFT_ANIMATION_MAX_ENTRIES;
 
     const fetchBinary = options.fetchBinary || ((url, requestOptions) => axiosClient.get(url, {
@@ -403,7 +441,7 @@ const inFlight = new Map<string, Promise<ResolvedGiftAnimation>>();
 const extractZipArchive = async (zipPath: string, extractDirectory: string): Promise<void> => {
         const unzipBinaries = buildUnzipBinaryCandidates(options);
 
-        const tried = new Set();
+        const tried = new Set<string>();
         for (const unzipBinary of unzipBinaries) {
             if (tried.has(unzipBinary)) {
                 continue;
@@ -452,7 +490,11 @@ const directories: Array<{ entryPath: string; modifiedAtMs: number }> = [];
 
         directories.sort((left, right) => right.modifiedAtMs - left.modifiedAtMs);
         for (let index = maxEntries; index < directories.length; index += 1) {
-            await fsp.rm(directories[index].entryPath, { recursive: true, force: true });
+            const directory = directories[index];
+            if (!directory) {
+                continue;
+            }
+            await fsp.rm(directory.entryPath, { recursive: true, force: true });
         }
     };
 
@@ -494,20 +536,28 @@ const resolveCandidate = async (candidate: RankedAnimationCandidate): Promise<Re
 
             if (fs.existsSync(metadataPath)) {
                 const metadata = await readJson(metadataPath);
-                if (metadata && typeof metadata.mediaFilePath === 'string' && fs.existsSync(metadata.mediaFilePath)) {
+                const metadataRecord = asRecord(metadata);
+                const metadataMediaFilePath = typeof metadataRecord?.mediaFilePath === 'string'
+                    ? metadataRecord.mediaFilePath
+                    : '';
+                if (metadataRecord && metadataMediaFilePath && fs.existsSync(metadataMediaFilePath)) {
                     const extractDirectory = path.join(entryDirectory, 'asset');
-                    const safeMediaPath = await ensureMediaPathWithinExtractDirectory(extractDirectory, metadata.mediaFilePath);
+                    const safeMediaPath = await ensureMediaPathWithinExtractDirectory(extractDirectory, metadataMediaFilePath);
+                    const resolvedFromCache = {
+                        ...metadataRecord,
+                        mediaFilePath: safeMediaPath
+                    };
+                    if (!isResolvedGiftAnimation(resolvedFromCache)) {
+                        throw new Error('Cached gift animation metadata is invalid');
+                    }
                     await touchCacheEntry(entryDirectory);
                     await pruneCache();
                     logDebug('Resolved TikTok gift animation from cache', {
                         candidateUrl: candidate.url,
                         cacheKey,
-                        durationMs: metadata.durationMs
+                        durationMs: resolvedFromCache.durationMs
                     });
-                    return {
-                        ...metadata,
-                        mediaFilePath: safeMediaPath
-                    };
+                    return resolvedFromCache;
                 }
             }
 
@@ -520,11 +570,11 @@ const resolveCandidate = async (candidate: RankedAnimationCandidate): Promise<Re
                 cacheKey
             });
             const response = await fetchBinary(candidate.url, { timeout: 30000 });
-            await fsp.writeFile(zipPath, Buffer.from(response.data));
+            await fsp.writeFile(zipPath, toBuffer(response.data));
             await extractZipArchive(zipPath, extractDirectory);
 
             const configObject = await readJson(path.join(extractDirectory, 'config.json'));
-            const profileInfo = resolveAnimationProfile(configObject);
+            const profileInfo = resolveAnimationProfile(asRecord(configObject));
             if (!profileInfo || !profileInfo.animationConfig) {
                 throw new Error('Gift animation profile is invalid');
             }
@@ -558,7 +608,7 @@ const resolveCandidate = async (candidate: RankedAnimationCandidate): Promise<Re
                 throw new Error('Gift animation duration unavailable');
             }
 
-            const resolved = {
+            const resolved: ResolvedGiftAnimation = {
                 mediaFilePath,
                 mediaContentType: 'video/mp4',
                 durationMs,
@@ -590,7 +640,9 @@ const resolveCandidate = async (candidate: RankedAnimationCandidate): Promise<Re
 const resolveFromNotificationData = async (notificationData: unknown): Promise<ResolvedGiftAnimation | null> => {
         await initPromise;
 
-        const candidates = extractAnimationCandidates(notificationData?.enhancedGiftData?.originalData);
+        const notificationRecord = asRecord(notificationData);
+        const enhancedGiftData = asRecord(notificationRecord?.enhancedGiftData);
+        const candidates = extractAnimationCandidates(enhancedGiftData?.originalData);
         logDebug('Resolving TikTok gift animation candidates', {
             candidateCount: candidates.length
         });

@@ -6,6 +6,53 @@ import { getAnonymousUsername } from './validation';
 const HARDCODED_TYPES = ['platform:gift', 'platform:giftpaypiggy', 'platform:paypiggy', 'platform:follow', 'platform:share', 'platform:raid', 'platform:envelope'];
 const VIRTUAL_GIFT_CURRENCIES = new Set(['coins', 'bits', 'jewels']);
 
+type NotificationInput = Record<string, unknown> & {
+    type?: string;
+    platform?: string;
+    username?: string;
+    userId?: unknown;
+    message?: string;
+    currency?: string;
+    amount?: number | string;
+    giftCount?: number | string;
+    giftType?: string;
+    tier?: string;
+    membershipLevel?: string;
+    months?: number | string;
+    isRenewal?: boolean;
+    isError?: boolean;
+    isAnonymous?: boolean;
+    isStreakCompleted?: boolean;
+    viewerCount?: number | string;
+    giftImageUrl?: string;
+    bits?: number | string;
+    cheermoteInfo?: Record<string, unknown>;
+    mixedCheermoteInfo?: Record<string, unknown>;
+    cheermoteTypes?: unknown[];
+    cheermoteType?: string;
+    primaryCheermote?: string;
+    parts?: unknown[];
+    template?: (notification: Record<string, unknown>) => unknown;
+    vfxConfig?: unknown;
+};
+
+type NotificationTemplateKey = keyof typeof NOTIFICATION_TEMPLATES;
+
+function hasNotificationTemplate(type: unknown): type is NotificationTemplateKey {
+    return typeof type === 'string' && Object.prototype.hasOwnProperty.call(NOTIFICATION_TEMPLATES, type);
+}
+
+function toFiniteNumber(value: unknown, fallback = 0): number {
+    const numericValue = Number(value);
+    return Number.isFinite(numericValue) ? numericValue : fallback;
+}
+
+function asNotificationInput(value: unknown): NotificationInput | null {
+    return value && typeof value === 'object' && !Array.isArray(value)
+        ? value as NotificationInput
+        : null;
+}
+
 const NOTIFICATION_TEMPLATES = {
     'platform:gift': {
         display: '{username} sent {formattedGiftCountForDisplay}',
@@ -52,8 +99,9 @@ class NotificationBuilder {
     static currencyFormatters: Map<string, Intl.NumberFormat>;
     static currencyNameFormatters: Map<string, Intl.NumberFormat>;
 
-    static build(input) {
-        if (!input || typeof input !== 'object') {
+    static build(rawInput: unknown) {
+        const input = asNotificationInput(rawInput);
+        if (!input) {
             return null;
         }
         const { platform, username, userId, message, currency, vfxConfig, template } = input;
@@ -97,7 +145,7 @@ class NotificationBuilder {
         const now = Date.now();
 
         // Normalize currency symbol to code for consistent formatting
-        const normalizedInput = currency && !isError
+        const normalizedInput: NotificationInput = currency && !isError
             ? (() => {
                 const trimmedCurrency = String(currency).trim();
                 const normalizedLower = trimmedCurrency.toLowerCase();
@@ -109,8 +157,9 @@ class NotificationBuilder {
             : { ...input };
         normalizedInput.type = type;
         normalizedInput.platform = normalizedPlatform;
-        delete normalizedInput.user;
-        delete normalizedInput.displayName;
+        const userKeys = normalizedInput as Record<string, unknown>;
+        delete userKeys.user;
+        delete userKeys.displayName;
         normalizedInput.username = resolvedUsername;
         if (normalizedUserId !== undefined) {
             normalizedInput.userId = normalizedUserId;
@@ -212,7 +261,7 @@ class NotificationBuilder {
     }
 
     // Determine paypiggy variant for platform-facing wording (subscriber/member/superfan)
-    static _getPaypiggyVariant(input) {
+    static _getPaypiggyVariant(input: NotificationInput | null | undefined) {
         const safeInput = input || {};
         const type = safeInput.type;
 
@@ -224,7 +273,7 @@ class NotificationBuilder {
             return 'superfan';
         }
 
-        const platform = (safeInput.platform || '').toLowerCase();
+        const platform = typeof safeInput.platform === 'string' ? safeInput.platform.toLowerCase() : '';
         if (platform === 'youtube') {
             return 'membership';
         }
@@ -232,7 +281,7 @@ class NotificationBuilder {
         return 'subscriber';
     }
 
-    static _buildPaypiggyDisplayMessage(input) {
+    static _buildPaypiggyDisplayMessage(input: NotificationInput) {
         const variant = this._getPaypiggyVariant(input);
         const userName = this.getTruncatedUsername(input.username);
         const months = Number.isFinite(Number(input.months)) ? Number(input.months) : 0;
@@ -262,7 +311,7 @@ class NotificationBuilder {
         return `${userName} just subscribed!${tierSuffix}`;
     }
 
-    static _buildPaypiggyTtsMessage(input) {
+    static _buildPaypiggyTtsMessage(input: NotificationInput) {
         const variant = this._getPaypiggyVariant(input);
         const userName = this.sanitizeUsernameForTts(input.username);
         const months = Number.isFinite(Number(input.months)) ? Number(input.months) : 0;
@@ -292,7 +341,7 @@ class NotificationBuilder {
         return `${userName} just subscribed${tierSuffix}`;
     }
 
-    static _buildPaypiggyLogMessage(input) {
+    static _buildPaypiggyLogMessage(input: NotificationInput) {
         const variant = this._getPaypiggyVariant(input);
         const userName = input.username;
         const months = Number.isFinite(Number(input.months)) ? Number(input.months) : 0;
@@ -321,7 +370,7 @@ class NotificationBuilder {
         return `New subscriber: ${userName}!${tierSuffix}`;
     }
 
-    static _formatTierSuffix(tier, tts = false) {
+    static _formatTierSuffix(tier: unknown, _tts = false) {
         if (!tier || tier === '1000' || tier === '1') {
             return '';
         }
@@ -329,26 +378,26 @@ class NotificationBuilder {
         return ` (Tier ${tierNumber})`;
     }
 
-    static _formatLevelSuffix(level, tts = false) {
+    static _formatLevelSuffix(level: unknown, _tts = false) {
         if (!level || level === 'Member') {
             return '';
         }
         return ` (${level})`;
     }
 
-    static _formatTierLogSuffix(tier) {
+    static _formatTierLogSuffix(tier: unknown) {
         const suffix = this._formatTierSuffix(tier, true);
         return suffix ? suffix.replace('Tier ', 'Tier: ') : '';
     }
 
-    static _formatLevelLogSuffix(level) {
+    static _formatLevelLogSuffix(level: unknown) {
         if (!level || level === 'Member') {
             return '';
         }
         return ` (Level: ${level})`;
     }
 
-    static formatOrdinal(value) {
+    static formatOrdinal(value: unknown) {
         const n = Math.abs(Math.floor(Number(value)));
         const mod100 = n % 100;
         if (mod100 >= 11 && mod100 <= 13) {
@@ -362,7 +411,7 @@ class NotificationBuilder {
         }
     }
 
-    static getTruncatedUsername(username, maxLength = 40) {
+    static getTruncatedUsername(username: unknown, maxLength = 40) {
         const userName = (typeof username === 'string') ? username : '';
 
         // Performance optimization: Use simple truncation for most cases to avoid expensive TextProcessingManager instantiation
@@ -376,7 +425,7 @@ class NotificationBuilder {
         return truncated;
     }
 
-    static _getErrorLabel(type) {
+    static _getErrorLabel(type: unknown) {
         switch (type) {
             case 'platform:gift':
                 return 'gift';
@@ -391,7 +440,7 @@ class NotificationBuilder {
         }
     }
 
-    static _buildErrorMessage(type, username) {
+    static _buildErrorMessage(type: unknown, username: unknown) {
         const hasUsername = typeof username === 'string' && username.trim();
         const label = this._getErrorLabel(type);
         if (hasUsername) {
@@ -400,7 +449,7 @@ class NotificationBuilder {
         return `Error processing ${label}`;
     }
 
-    static generateDisplayMessage(input) {
+    static generateDisplayMessage(input: NotificationInput) {
         const { type, username, message, amount, currency, tier, giftCount } = input;
         const userName = this.getTruncatedUsername(username);
 
@@ -491,7 +540,7 @@ class NotificationBuilder {
             return `${userName} sent a treasure chest!`;
         }
 
-        if (!HARDCODED_TYPES.includes(type) && NOTIFICATION_TEMPLATES[type] && NOTIFICATION_TEMPLATES[type].display) {
+        if (!HARDCODED_TYPES.includes(type ?? '') && hasNotificationTemplate(type) && NOTIFICATION_TEMPLATES[type].display) {
             const templateData = {
                 username: this.getTruncatedUsername(username),
                 ttsUsername: this.sanitizeUsernameForTts(username),
@@ -504,7 +553,7 @@ class NotificationBuilder {
         return message || '';
     }
 
-    static generateTtsMessage(input) {
+    static generateTtsMessage(input: NotificationInput) {
         const { type, username, message, amount, currency, giftCount } = input;
         const userName = this.sanitizeUsernameForTts(username);
 
@@ -588,7 +637,7 @@ class NotificationBuilder {
             return `${shortUsername} sent a treasure chest`;
         }
 
-        if (!HARDCODED_TYPES.includes(type) && NOTIFICATION_TEMPLATES[type] && NOTIFICATION_TEMPLATES[type].tts) {
+        if (!HARDCODED_TYPES.includes(type ?? '') && hasNotificationTemplate(type) && NOTIFICATION_TEMPLATES[type].tts) {
             const templateData = {
                 username: this.getTruncatedUsername(username),
                 ttsUsername: this.sanitizeUsernameForTts(username),
@@ -601,7 +650,7 @@ class NotificationBuilder {
         return message || '';
     }
 
-    static generateLogMessage(input) {
+    static generateLogMessage(input: NotificationInput) {
         const { type, username, message, amount, currency, giftCount, tier } = input;
         const userName = username;
         
@@ -685,7 +734,7 @@ class NotificationBuilder {
             return `Treasure chest from ${userName}`;
         }
         
-        if (!HARDCODED_TYPES.includes(type) && NOTIFICATION_TEMPLATES[type] && NOTIFICATION_TEMPLATES[type].log) {
+        if (!HARDCODED_TYPES.includes(type ?? '') && hasNotificationTemplate(type) && NOTIFICATION_TEMPLATES[type].log) {
             const templateData = {
                 username: userName,
                 ttsUsername: this.sanitizeUsernameForTts(username),
@@ -698,7 +747,7 @@ class NotificationBuilder {
         return `${type}: ${message || ''}`;
     }
 
-    static formatCurrency(amount, currency) {
+    static formatCurrency(amount: unknown, currency: unknown) {
         if (typeof amount !== 'number' || !Number.isFinite(amount)) {
             throw new Error('formatCurrency requires numeric amount');
         }
@@ -733,7 +782,7 @@ class NotificationBuilder {
         }
     }
 
-    static formatCurrencyForTts(amount, currency) {
+    static formatCurrencyForTts(amount: unknown, currency: unknown) {
         if (typeof amount !== 'number' || !Number.isFinite(amount)) {
             throw new Error('formatCurrencyForTts requires numeric amount');
         }
@@ -787,7 +836,7 @@ class NotificationBuilder {
         return `${main} ${currencyName} ${sub}`;
     }
 
-    static sanitizeUsernameForTts(username, maxLength?: number) {
+    static sanitizeUsernameForTts(username: unknown, maxLength?: number) {
         if (!username || typeof username !== 'string' || !username.trim()) {
             return '';
         }
@@ -812,39 +861,40 @@ class NotificationBuilder {
         return sanitized || username.trim();
     }
 
-    static formatBitsAmount(amount) {
+    static formatBitsAmount(amount: number) {
         if (!amount && amount !== 0) amount = 0;
         return amount.toLocaleString(); // Adds commas for thousands
     }
 
-    static resolveGiftInlineParts(input) {
-        if (!input || typeof input !== 'object') {
+    static resolveGiftInlineParts(input: unknown) {
+        const safeInput = asNotificationInput(input);
+        if (!safeInput) {
             return [];
         }
 
-        if (input.type !== 'platform:gift') {
+        if (safeInput.type !== 'platform:gift') {
             return [];
         }
 
-        const platform = typeof input.platform === 'string' ? input.platform.trim().toLowerCase() : '';
-        const giftImageUrl = typeof input.giftImageUrl === 'string' ? input.giftImageUrl.trim() : '';
+        const platform = typeof safeInput.platform === 'string' ? safeInput.platform.trim().toLowerCase() : '';
+        const giftImageUrl = typeof safeInput.giftImageUrl === 'string' ? safeInput.giftImageUrl.trim() : '';
         if (!giftImageUrl) {
             return [];
         }
 
         if (platform === 'twitch') {
-            const currency = typeof input.currency === 'string' ? input.currency.trim().toLowerCase() : '';
-            if (currency !== 'bits' || this.hasMixedCheermotes(input)) {
+            const currency = typeof safeInput.currency === 'string' ? safeInput.currency.trim().toLowerCase() : '';
+            if (currency !== 'bits' || this.hasMixedCheermotes(safeInput)) {
                 return [];
             }
 
-            const bitsAmount = Number(this.resolveBitsAmount(input));
+            const bitsAmount = Number(this.resolveBitsAmount(safeInput));
             if (!Number.isFinite(bitsAmount) || bitsAmount <= 0) {
                 return [];
             }
             const formattedBitsAmount = this.formatBitsAmount(bitsAmount);
-            const cheermoteInfo = input.cheermoteInfo && typeof input.cheermoteInfo === 'object'
-                ? input.cheermoteInfo
+            const cheermoteInfo = safeInput.cheermoteInfo && typeof safeInput.cheermoteInfo === 'object'
+                ? safeInput.cheermoteInfo
                 : {};
             const prefix = typeof cheermoteInfo.cleanPrefix === 'string' && cheermoteInfo.cleanPrefix.trim()
                 ? cheermoteInfo.cleanPrefix.trim()
@@ -864,7 +914,7 @@ class NotificationBuilder {
                 }
             ];
 
-            const messageText = typeof input.message === 'string' ? input.message.trim() : '';
+            const messageText = typeof safeInput.message === 'string' ? safeInput.message.trim() : '';
             if (messageText) {
                 parts.push({ type: 'text', text: `: ${messageText}` });
             }
@@ -873,7 +923,7 @@ class NotificationBuilder {
         }
 
         if (platform === 'youtube') {
-            const giftType = typeof input.giftType === 'string' ? input.giftType.trim().toLowerCase() : '';
+            const giftType = typeof safeInput.giftType === 'string' ? safeInput.giftType.trim().toLowerCase() : '';
             if (giftType !== 'super sticker') {
                 return [];
             }
@@ -887,7 +937,7 @@ class NotificationBuilder {
                 }
             ];
 
-            const messageText = typeof input.message === 'string' ? input.message.trim() : '';
+            const messageText = typeof safeInput.message === 'string' ? safeInput.message.trim() : '';
             if (messageText) {
                 parts.push({ type: 'text', text: ` ${messageText}` });
             }
@@ -898,28 +948,30 @@ class NotificationBuilder {
         return [];
     }
 
-    static resolveBitsAmount(input) {
-        if (!input || typeof input !== 'object') {
+    static resolveBitsAmount(input: unknown) {
+        const safeInput = asNotificationInput(input);
+        if (!safeInput) {
             return 0;
         }
-        if (input.bits !== undefined) return input.bits;
-        if (input.amount !== undefined) return input.amount;
+        if (safeInput.bits !== undefined) return safeInput.bits;
+        if (safeInput.amount !== undefined) return safeInput.amount;
         return 0;
     }
 
-    static hasMixedCheermotes(input) {
-        if (!input || typeof input !== 'object') {
+    static hasMixedCheermotes(input: unknown) {
+        const safeInput = asNotificationInput(input);
+        if (!safeInput) {
             return false;
         }
-        if (input.mixedCheermoteInfo?.hasMixedTypes) return true;
-        if (input.cheermoteInfo?.isMixed === true) return true;
-        if (Array.isArray(input.cheermoteInfo?.types) && input.cheermoteInfo.types.length > 1) return true;
-        if (Array.isArray(input.cheermoteTypes) && input.cheermoteTypes.length > 1) return true;
-        if (Number.isFinite(Number(input.otherTypesCount)) && Number(input.otherTypesCount) > 0) return true;
+        if (safeInput.mixedCheermoteInfo?.hasMixedTypes) return true;
+        if (safeInput.cheermoteInfo?.isMixed === true) return true;
+        if (Array.isArray(safeInput.cheermoteInfo?.types) && safeInput.cheermoteInfo.types.length > 1) return true;
+        if (Array.isArray(safeInput.cheermoteTypes) && safeInput.cheermoteTypes.length > 1) return true;
+        if (Number.isFinite(Number(safeInput.otherTypesCount)) && Number(safeInput.otherTypesCount) > 0) return true;
         return false;
     }
 
-    static formatBitsAmountForTts(amount) {
+    static formatBitsAmountForTts(amount: number) {
         if (!amount && amount !== 0) amount = 0;
         
         if (amount === 0) return 'zero';
@@ -935,64 +987,64 @@ class NotificationBuilder {
         return amount.toString();
     }
 
-    static formatCheermoteDisplay(input) {
+    static formatCheermoteDisplay(input: NotificationInput) {
         const { amount, cheermoteType, primaryCheermote } = input;
         
         // Handle mixed cheermotes
         if (this.hasMixedCheermotes(input)) {
-            const formattedAmount = this.formatBitsAmount(amount);
+            const formattedAmount = this.formatBitsAmount(toFiniteNumber(amount));
             return `${formattedAmount} mixed bits`;
         }
         
         // Handle single cheermote type
         const type = cheermoteType || primaryCheermote || 'Cheermote';
-        const formattedAmount = this.formatBitsAmount(amount);
+        const formattedAmount = this.formatBitsAmount(toFiniteNumber(amount));
         return `${type} x ${formattedAmount}`;
     }
 
-    static formatCheermoteForTts(input) {
+    static formatCheermoteForTts(input: NotificationInput) {
         const { amount, cheermoteType, primaryCheermote } = input;
         
         // Handle mixed cheermotes
         if (this.hasMixedCheermotes(input)) {
-            const formattedAmount = this.formatBitsAmountForTts(amount);
+            const formattedAmount = this.formatBitsAmountForTts(toFiniteNumber(amount));
             return `${formattedAmount} mixed bits`;
         }
         
         // Handle single cheermote type or fallback to generic bits
         if (!cheermoteType && !primaryCheermote) {
             // No cheermote type specified, fall back to generic bits
-            const formattedAmount = this.formatBitsAmountForTts(amount);
+            const formattedAmount = this.formatBitsAmountForTts(toFiniteNumber(amount));
             return `${formattedAmount} bits`;
         }
         
-        const type = (cheermoteType || primaryCheermote).toLowerCase();
-        const formattedAmount = this.formatBitsAmountForTts(amount);
+        const type = String(cheermoteType || primaryCheermote).toLowerCase();
+        const formattedAmount = this.formatBitsAmountForTts(toFiniteNumber(amount));
         return `${formattedAmount} ${type} bits`;
     }
 
-    static formatCheermoteForLog(input) {
+    static formatCheermoteForLog(input: NotificationInput) {
         const { amount, cheermoteType, primaryCheermote } = input;
         
         // Handle mixed cheermotes - return just the amount info without extra "Cheermote:" prefix
         if (this.hasMixedCheermotes(input)) {
-            const formattedAmount = this.formatBitsAmount(amount);
+            const formattedAmount = this.formatBitsAmount(toFiniteNumber(amount));
             return `${formattedAmount} mixed bits`;
         }
         
         // Handle single cheermote type or fallback for missing type
         if (cheermoteType || primaryCheermote) {
             const type = cheermoteType || primaryCheermote;
-            const formattedAmount = this.formatBitsAmount(amount);
+            const formattedAmount = this.formatBitsAmount(toFiniteNumber(amount));
             return `${type} x ${formattedAmount}`;
         }
         
         // When no cheermote type is specified, just return the amount
-        const formattedAmount = this.formatBitsAmount(amount);
+        const formattedAmount = this.formatBitsAmount(toFiniteNumber(amount));
         return formattedAmount;
     }
 
-    static formatBitsLogMessage({ username, giftType, amount }) {
+    static formatBitsLogMessage({ username, giftType, amount }: { username: unknown; giftType: unknown; amount: unknown }) {
         if (!username || typeof username !== 'string') {
             throw new Error('formatBitsLogMessage requires username');
         }

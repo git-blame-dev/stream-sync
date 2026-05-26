@@ -139,15 +139,21 @@ static async getLiveStreams(innertubeClient: InnertubeClientLike, channelHandle:
             }
 
             if (!liveStreams.length) {
-                const searchStreams = await this._detectLiveStreamsViaSearch(
-                    innertubeClient,
-                    {
-                        channelId,
-                        channelHandle: normalizedHandle,
-                        timeout,
-                        logger
-                    }
-                );
+                const searchOptions: {
+                    channelId: string;
+                    channelHandle: string;
+                    timeout: number;
+                    logger?: LoggerLike;
+                } = {
+                    channelId,
+                    channelHandle: normalizedHandle,
+                    timeout
+                };
+                if (logger !== undefined) {
+                    searchOptions.logger = logger;
+                }
+
+                const searchStreams = await this._detectLiveStreamsViaSearch(innertubeClient, searchOptions);
                 detectionMeta.hasContent = detectionMeta.hasContent || searchStreams.hasContent;
                 liveStreams = searchStreams.streams;
 
@@ -313,11 +319,19 @@ logger?: LoggerLike
 
         const safeLogger: LoggerLike | undefined = logger && typeof logger.error === 'function' ? logger : undefined;
 
-        const resolvedChannelId = await resolveChannelId(innertubeClient, channelHandle, {
+        const resolveOptions: {
+            timeout: number;
+            logger?: LoggerLike;
+            throwOnError: true;
+        } = {
             timeout,
-            logger: safeLogger,
             throwOnError: true
-        });
+        };
+        if (safeLogger !== undefined) {
+            resolveOptions.logger = safeLogger;
+        }
+
+        const resolvedChannelId = await resolveChannelId(innertubeClient, channelHandle, resolveOptions);
         if (resolvedChannelId && cacheKey) {
             if (!this._channelCache) {
                 this._channelCache = new Map();

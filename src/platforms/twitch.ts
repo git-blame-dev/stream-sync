@@ -43,19 +43,247 @@ timestamp: getSystemTimestampISO()
 })
 } as const;
 
+type TwitchConfig = Record<string, unknown> & {
+    enabled?: boolean;
+    username?: string;
+    channel?: string;
+    clientId?: string;
+    debug?: unknown;
+    dataLoggingEnabled?: boolean;
+};
+
+type LoggerLike = {
+    debug: (message: string, scope?: string, payload?: unknown) => void;
+    info: (message: string, scope?: string, payload?: unknown) => void;
+    warn: (message: string, scope?: string, payload?: unknown) => void;
+    error: (message: string, scope?: string, payload?: unknown) => void;
+};
+
+type PlatformErrorHandlerLike = {
+    handleDataLoggingError: (error: unknown, context: string) => void;
+    handleEventProcessingError: (error: unknown, eventType: string, payload?: unknown, message?: string) => void;
+    handleCleanupError: (error: unknown, context: string) => void;
+    handleMessageSendError: (error: unknown, context: string) => void;
+    handleConnectionError: (error: unknown, context: string, message?: string) => void;
+    logOperationalError: (message: string, platform: string, payload?: unknown) => void;
+};
+
+type TwitchAuthLike = {
+    isReady: () => boolean;
+    refreshTokens?: () => Promise<boolean>;
+};
+
+type TwitchEventSubLike = {
+    initialize: () => Promise<void>;
+    on?: (eventName: string, handler: (...args: unknown[]) => void) => void;
+    off?: (eventName: string, handler: (...args: unknown[]) => void) => void;
+    removeListener?: (eventName: string, handler: (...args: unknown[]) => void) => void;
+    removeAllListeners?: () => void;
+    isConnected?: () => boolean;
+    isActive?: () => boolean;
+    sendMessage: (message: string) => Promise<void>;
+    cleanup?: () => Promise<void> | void;
+    disconnect?: () => Promise<void> | void;
+};
+
+type TwitchEventSubConstructor = new (
+    config: Record<string, unknown>,
+    dependencies: Record<string, unknown>
+) => TwitchEventSubLike;
+
+type TwitchApiClientLike = {
+    getBroadcasterId: (channel: string) => Promise<string>;
+    getStreamInfo: TwitchApiClient['getStreamInfo'];
+    getGlobalChatBadges: () => Promise<unknown[]>;
+    getChannelChatBadges: (broadcasterId: unknown) => Promise<unknown[]>;
+    getCheermotes?: (broadcasterId: unknown) => Promise<unknown[]>;
+    getUserById?: (userId: string) => Promise<unknown | null>;
+    getViewerCount?: () => Promise<number>;
+};
+
+type TwitchApiClientConstructor = new (twitchAuth: TwitchAuthLike, config: TwitchConfig) => TwitchApiClientLike;
+
+type ViewerCountProviderLike = {
+    startPolling?: () => void;
+    stopPolling?: () => void;
+    getViewerCount: () => Promise<number>;
+};
+
+type ChatFileLoggingServiceLike = {
+    logRawPlatformData: (platform: string, eventType: string, data: unknown, config: TwitchConfig) => Promise<unknown>;
+};
+
+type ChatFileLoggingServiceConstructor = new (options: {
+    logger: LoggerLike;
+    config: TwitchConfig;
+}) => ChatFileLoggingServiceLike;
+
+type SelfMessageDetectionServiceLike = {
+    shouldFilterMessage: (platform: string, messageData: Record<string, unknown>, config: TwitchConfig) => boolean;
+};
+
+type ValidationResult = {
+    isValid: boolean;
+    errors?: unknown;
+};
+
+type RetrySystemLike = {
+    isConnected?: (platform: string) => boolean;
+    handleConnectionError: (
+        platform: string,
+        error: Error,
+        reconnect: () => Promise<void>,
+        cleanup: () => Promise<void>,
+        updateState: (platform: string, isConnected: boolean, connection: unknown, isConnecting: boolean) => void
+    ) => void;
+    handleConnectionSuccess?: (platform: string, connection: unknown, context: string) => void;
+};
+
+type EventSubListener = {
+    eventName: string;
+    handler: (...args: unknown[]) => void;
+};
+
+type EventSubWiringLike = {
+    bindAll: (handlersByEventName: Record<string, unknown>) => void;
+    unbindAll?: () => void;
+};
+
+type TwitchEventFactory = ReturnType<typeof createTwitchEventFactory>;
+type TwitchFactoryMethod = keyof TwitchEventFactory;
+type TwitchStandardEventType = 'follow' | 'paypiggy' | 'giftpaypiggy' | 'raid' | 'gift';
+
+type TwitchPlatformDependencies = Record<string, unknown> & {
+    TwitchEventSub?: TwitchEventSubConstructor;
+    logger?: LoggerLike;
+    twitchAuth?: TwitchAuthLike;
+    retrySystem?: RetrySystemLike;
+    ChatFileLoggingService?: ChatFileLoggingServiceConstructor;
+    selfMessageDetectionService?: SelfMessageDetectionServiceLike | null;
+    validateNormalizedMessage?: (data: Record<string, unknown>) => ValidationResult;
+    getErrorEnvelopeTimestampISO?: () => string;
+    TwitchApiClient?: TwitchApiClientConstructor;
+    avatarCacheMaxSize?: number;
+    axios?: unknown;
+    WebSocketCtor?: unknown;
+};
+
+type PlatformHandlers = Record<string, ((payload: unknown) => void) | undefined>;
+
+type BadgeCatalogCache = {
+    broadcasterId: string;
+    global: unknown[];
+    channel: unknown[];
+    loaded: boolean;
+};
+
+type CheermoteCatalogCache = {
+    broadcasterId: string;
+    catalog: unknown[];
+    loaded: boolean;
+};
+
+type ChatMessagePayload = Record<string, unknown> & {
+    message: Record<string, unknown>;
+};
+
+type StandardEventOptions = {
+    validateUser?: boolean;
+    emitEventType?: string;
+    factoryMethod?: TwitchFactoryMethod;
+    logEventType?: string;
+};
+
+type TwitchBadgeSet = Record<string, unknown> & {
+    set_id?: unknown;
+    versions?: unknown;
+};
+
+type TwitchBadgeVersion = Record<string, unknown> & {
+    id?: unknown;
+    image_url_4x?: unknown;
+    title?: unknown;
+};
+
+type CheermoteTier = Record<string, unknown> & {
+    id?: unknown;
+    images?: unknown;
+};
+
+type CheermoteEntry = Record<string, unknown> & {
+    prefix?: unknown;
+    tiers?: unknown;
+};
+
+type CheermoteInfo = Record<string, unknown> & {
+    cleanPrefix?: unknown;
+    prefix?: unknown;
+    tier?: unknown;
+    isMixed?: unknown;
+    types?: unknown;
+};
+
+type GiftEventData = Record<string, unknown> & {
+    giftImageUrl?: unknown;
+    currency?: unknown;
+    cheermoteInfo?: unknown;
+};
+
+type ConnectionEventPayload = Record<string, unknown> & ReturnType<typeof PlatformEvents.createConnectionEvent> & {
+    willReconnect?: boolean;
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+    value !== null && typeof value === 'object';
+
+const getErrorMessage = (error: unknown): string => error instanceof Error ? error.message : String(error);
+
+const asRecord = (value: unknown): Record<string, unknown> => isRecord(value) ? value : {};
+
 class TwitchPlatform extends EventEmitter {
-    constructor(config: Record<string, unknown>, dependencies: Record<string, unknown> = {}) {
+    TwitchEventSub: TwitchEventSubConstructor;
+    logger: LoggerLike;
+    errorHandler: PlatformErrorHandlerLike;
+    dependencies: TwitchPlatformDependencies;
+    retrySystem: RetrySystemLike | null;
+    isConnected: boolean;
+    isPlannedDisconnection: boolean;
+    recoveryInFlight: boolean;
+    config: TwitchConfig;
+    twitchAuth: TwitchAuthLike;
+    chatFileLoggingService: ChatFileLoggingServiceLike;
+    selfMessageDetectionService: SelfMessageDetectionServiceLike | null;
+    validateNormalizedMessage: (data: Record<string, unknown>) => ValidationResult;
+    getErrorEnvelopeTimestampISO: () => string;
+    platformName: 'twitch';
+    eventSub: TwitchEventSubLike | null;
+    eventSubListeners: EventSubListener[];
+    eventSubWiring: EventSubWiringLike | null;
+    handlers: PlatformHandlers;
+    apiClient: TwitchApiClientLike | null;
+    viewerCountProvider: ViewerCountProviderLike | null;
+    avatarUrlCache: Map<string, string>;
+    avatarLookupMissCache: Set<string>;
+    badgeCatalogCache: BadgeCatalogCache;
+    broadcasterId: string;
+    cheermoteCatalogCache: CheermoteCatalogCache;
+    avatarCacheMaxSize: number;
+    fallbackAvatarUrl: string;
+    isConnecting: boolean;
+    eventFactory: TwitchEventFactory;
+
+    constructor(config: TwitchConfig, dependencies: TwitchPlatformDependencies = {}) {
         super(); // Call EventEmitter constructor first to ensure proper prototype chain
 
         // Inject dependencies with fallbacks to actual implementations
         // EventSub WebSocket implementation for all Twitch functionality
-        this.TwitchEventSub = dependencies.TwitchEventSub || TwitchEventSub;
+        this.TwitchEventSub = dependencies.TwitchEventSub || (TwitchEventSub as unknown as TwitchEventSubConstructor);
 
         // Initialize unified logger (with dependency injection support for testing)
         this.logger = dependencies.logger || getUnifiedLogger();
         this.errorHandler = createPlatformErrorHandler(this.logger, 'twitch');
         this.dependencies = { ...dependencies };
-        this.retrySystem = dependencies.retrySystem || createRetrySystem({ logger: this.logger });
+        this.retrySystem = dependencies.retrySystem || (createRetrySystem({ logger: this.logger }) as unknown as RetrySystemLike);
 
         // Initialize connection state
         this.isConnected = false;
@@ -66,13 +294,14 @@ class TwitchPlatform extends EventEmitter {
         this.config = config;
 
         // Require TwitchAuth via dependency injection
-        this.twitchAuth = dependencies.twitchAuth;
-        if (!this.twitchAuth) {
+        const twitchAuth = dependencies.twitchAuth;
+        if (!twitchAuth) {
             throw new Error('TwitchPlatform requires twitchAuth via dependency injection.');
         }
+        this.twitchAuth = twitchAuth;
 
         // Initialize chat file logging service via dependency injection
-        const ChatFileLoggingServiceClass = dependencies.ChatFileLoggingService || ChatFileLoggingService;
+        const ChatFileLoggingServiceClass = dependencies.ChatFileLoggingService || (ChatFileLoggingService as unknown as ChatFileLoggingServiceConstructor);
         this.chatFileLoggingService = new ChatFileLoggingServiceClass({
             logger: this.logger,
             config: this.config
@@ -117,7 +346,7 @@ class TwitchPlatform extends EventEmitter {
         this.isConnecting = false;
 
         if (this.retrySystem && typeof this.retrySystem === 'object') {
-            this.retrySystem.isConnected = (platform) => {
+            this.retrySystem.isConnected = (platform: string) => {
                 if (platform !== this.platformName) {
                     return false;
                 }
@@ -158,7 +387,7 @@ class TwitchPlatform extends EventEmitter {
         } catch (error) {
             this.eventSub = null;
             this._logPlatformError('Failed to initialize EventSub', error, 'eventsub-init', {
-                stack: error.stack
+                stack: error instanceof Error ? error.stack : undefined
             });
             throw error;
         }
@@ -191,17 +420,17 @@ class TwitchPlatform extends EventEmitter {
                 throw new Error('Twitch authentication is not ready');
             }
 
-            const TwitchApiClientClass = this.dependencies.TwitchApiClient || TwitchApiClient;
+            const TwitchApiClientClass = this.dependencies.TwitchApiClient || (TwitchApiClient as unknown as TwitchApiClientConstructor);
             this.apiClient = new TwitchApiClientClass(this.twitchAuth, this.config);
             this.viewerCountProvider = ViewerCountProviderFactory.createTwitchProvider(
                 this.apiClient,
                 ConnectionStateFactory,
                 this.config,
                 () => this.eventSub
-            );
+            ) as unknown as ViewerCountProviderLike;
             this.logger.debug('Modular components initialized', 'twitch');
 
-            const broadcasterId = await this.apiClient.getBroadcasterId(this.config.channel);
+            const broadcasterId = await this.apiClient.getBroadcasterId(this.config.channel || '');
             this.broadcasterId = broadcasterId;
 
             this.logger.debug('Initializing EventSub with centralized auth...', 'twitch');
@@ -254,17 +483,17 @@ class TwitchPlatform extends EventEmitter {
                 logger: this.logger
             });
             this.eventSubWiring.bindAll({
-                chatMessage: (data) => this.onMessageHandler(data),
-                follow: (data) => this.handleFollowEvent(data),
-                paypiggy: (data) => this.handlePaypiggyEvent(data),
-                paypiggyMessage: (data) => this.handlePaypiggyMessageEvent(data),
-                paypiggyGift: (data) => this.handlePaypiggyGiftEvent(data),
-                raid: (data) => this.handleRaidEvent(data),
-                gift: (data) => this.handleGiftEvent(data),
-                streamOnline: (data) => this.handleStreamOnlineEvent(data),
-                streamOffline: (data) => this.handleStreamOfflineEvent(data),
-                eventSubConnected: (details = {}) => this._handleEventSubConnectionChange(true, details),
-                eventSubDisconnected: (details = {}) => this._handleEventSubConnectionChange(false, details)
+                chatMessage: (data: unknown) => this.onMessageHandler(isRecord(data) ? data : {}),
+                follow: (data: unknown) => this.handleFollowEvent(isRecord(data) ? data : {}),
+                paypiggy: (data: unknown) => this.handlePaypiggyEvent(isRecord(data) ? data : {}),
+                paypiggyMessage: (data: unknown) => this.handlePaypiggyMessageEvent(isRecord(data) ? data : {}),
+                paypiggyGift: (data: unknown) => this.handlePaypiggyGiftEvent(isRecord(data) ? data : {}),
+                raid: (data: unknown) => this.handleRaidEvent(isRecord(data) ? data : {}),
+                gift: (data: unknown) => this.handleGiftEvent(isRecord(data) ? data : {}),
+                streamOnline: (data: unknown) => this.handleStreamOnlineEvent(isRecord(data) ? data : {}),
+                streamOffline: (data: unknown) => this.handleStreamOfflineEvent(isRecord(data) ? data : {}),
+                eventSubConnected: (details: unknown = {}) => this._handleEventSubConnectionChange(true, isRecord(details) ? details : {}),
+                eventSubDisconnected: (details: unknown = {}) => this._handleEventSubConnectionChange(false, isRecord(details) ? details : {})
             });
 
             this.logger.debug('Using EventSub for chat messages', 'twitch', {
@@ -316,8 +545,9 @@ class TwitchPlatform extends EventEmitter {
         try {
             const userId = typeof event?.chatter_user_id === 'string' ? event.chatter_user_id.trim() : '';
             const username = typeof event?.chatter_user_name === 'string' ? event.chatter_user_name.trim() : '';
-            const normalizedMessage = typeof event?.message?.text === 'string' ? event.message.text.trim() : '';
-            const messageParts = buildTwitchMessageParts(event?.message);
+            const eventMessage = isRecord(event.message) ? event.message : {};
+            const normalizedMessage = typeof eventMessage.text === 'string' ? eventMessage.text.trim() : '';
+            const messageParts = buildTwitchMessageParts(eventMessage);
             const timestamp = event?.timestamp;
             const missingFields = collectMissingFields({
                 userId: !!userId,
@@ -326,17 +556,18 @@ class TwitchPlatform extends EventEmitter {
                 timestamp: typeof timestamp === 'string' && timestamp.trim().length > 0
             });
 
-            const badges = Array.isArray(event?.badges)
-                ? event.badges.reduce((acc, badge) => {
-                    const setId = typeof badge?.set_id === 'string' ? badge.set_id.trim() : '';
+            const badges: Record<string, unknown> = Array.isArray(event?.badges)
+                ? event.badges.reduce<Record<string, unknown>>((acc, badge) => {
+                    const badgeRecord = isRecord(badge) ? badge : {};
+                    const setId = typeof badgeRecord.set_id === 'string' ? badgeRecord.set_id.trim() : '';
                     if (!setId) {
                         return acc;
                     }
-                    acc[setId] = badge?.id;
+                    acc[setId] = badgeRecord.id;
                     return acc;
                 }, {})
-                : (event?.badges && typeof event.badges === 'object' ? event.badges : {});
-            const hasBadge = (badgeName) => {
+                : (isRecord(event?.badges) ? event.badges : {});
+            const hasBadge = (badgeName: string): boolean => {
                 if (!Object.prototype.hasOwnProperty.call(badges, badgeName)) {
                     return false;
                 }
@@ -358,7 +589,18 @@ class TwitchPlatform extends EventEmitter {
             const hasFounderBadge = Object.prototype.hasOwnProperty.call(badges, 'founder');
             const isPaypiggy = hasSubscriberBadge || hasFounderBadge;
 
-            const normalizedData = {
+            const normalizedData: Record<string, unknown> & {
+                platform: 'twitch';
+                username: string;
+                message: string;
+                userId?: string;
+                timestamp?: string;
+                isMod: boolean;
+                isPaypiggy: boolean;
+                isBroadcaster: boolean;
+                badgeImages?: unknown[];
+                avatarUrl?: string;
+            } = {
                 platform: this.platformName,
                 ...(userId ? { userId } : {}),
                 username: username || UNKNOWN_CHAT_USERNAME,
@@ -370,8 +612,8 @@ class TwitchPlatform extends EventEmitter {
                 metadata: mergeMissingFieldsMetadata({
                     badges,
                     color: event?.color ?? null,
-                    emotes: (event?.message?.emotes && typeof event.message.emotes === 'object')
-                        ? event.message.emotes
+                    emotes: isRecord(eventMessage.emotes)
+                        ? eventMessage.emotes
                         : {},
                     roomId: event?.broadcaster_user_id ?? null
                 }, missingFields, {
@@ -395,7 +637,7 @@ class TwitchPlatform extends EventEmitter {
 
             // Emit chat message event instead of calling app directly
             try {
-                const eventData = {
+                const eventData: ChatMessagePayload = {
                     type: PlatformEvents.CHAT_MESSAGE,
                     platform: this.platformName,
                     username: normalizedData.username,
@@ -424,10 +666,10 @@ class TwitchPlatform extends EventEmitter {
                 }
                 this._emitPlatformEvent(PlatformEvents.CHAT_MESSAGE, eventData);
             } catch (messageError) {
-                this._logPlatformError(`Error emitting chat message event: ${messageError.message}`, messageError, 'chat-message-emission');
+                this._logPlatformError(`Error emitting chat message event: ${getErrorMessage(messageError)}`, messageError, 'chat-message-emission');
             }
         } catch (error) {
-            this._logPlatformError(`Error processing chat message: ${error.message}`, error, 'chat-message-processing');
+            this._logPlatformError(`Error processing chat message: ${getErrorMessage(error)}`, error, 'chat-message-processing');
             // Don't rethrow to prevent chat processing pipeline from stopping
         }
     }
@@ -439,7 +681,7 @@ class TwitchPlatform extends EventEmitter {
     _normalizeBadgeKeyList(event: Record<string, unknown> = {}): Array<{ setId: string; version: string; info: string }> {
         if (Array.isArray(event.badges)) {
             return event.badges
-                .filter((badge) => badge && typeof badge === 'object')
+                .filter(isRecord)
                 .map((badge) => ({
                     setId: typeof badge.set_id === 'string' ? badge.set_id.trim() : '',
                     version: badge.id === undefined || badge.id === null ? '' : String(badge.id).trim(),
@@ -496,8 +738,8 @@ class TwitchPlatform extends EventEmitter {
         this.cheermoteCatalogCache.loaded = true;
     }
 
-    _hasMixedCheermotes(cheermoteInfo = {}) {
-        if (!cheermoteInfo || typeof cheermoteInfo !== 'object') {
+    _hasMixedCheermotes(cheermoteInfo: unknown = {}): boolean {
+        if (!isRecord(cheermoteInfo)) {
             return false;
         }
         if (cheermoteInfo.isMixed === true) {
@@ -509,14 +751,17 @@ class TwitchPlatform extends EventEmitter {
         return false;
     }
 
-    _resolveCheermoteTierImageUrl(tierData = {}) {
-        const imageUrl = typeof tierData?.images?.dark?.animated?.['3'] === 'string'
-            ? tierData.images.dark.animated['3'].trim()
+    _resolveCheermoteTierImageUrl(tierData: CheermoteTier = {}): string {
+        const images = asRecord(tierData.images);
+        const darkImages = asRecord(images.dark);
+        const animatedImages = asRecord(darkImages.animated);
+        const imageUrl = typeof animatedImages['3'] === 'string'
+            ? animatedImages['3'].trim()
             : '';
         return imageUrl;
     }
 
-    _resolveCheermoteImageFromCatalog(cheermoteInfo = {}) {
+    _resolveCheermoteImageFromCatalog(cheermoteInfo: CheermoteInfo = {}): string {
         const prefixValue = typeof cheermoteInfo.cleanPrefix === 'string' && cheermoteInfo.cleanPrefix.trim()
             ? cheermoteInfo.cleanPrefix.trim()
             : (typeof cheermoteInfo.prefix === 'string' ? cheermoteInfo.prefix.trim() : '');
@@ -531,8 +776,8 @@ class TwitchPlatform extends EventEmitter {
         }
         const normalizedTier = String(parsedTier);
 
-        const catalog = Array.isArray(this.cheermoteCatalogCache.catalog)
-            ? this.cheermoteCatalogCache.catalog
+        const catalog: CheermoteEntry[] = Array.isArray(this.cheermoteCatalogCache.catalog)
+            ? this.cheermoteCatalogCache.catalog.filter(isRecord)
             : [];
         const cheermoteEntry = catalog.find((entry) => {
             const entryPrefix = typeof entry?.prefix === 'string' ? entry.prefix.trim().toLowerCase() : '';
@@ -542,7 +787,8 @@ class TwitchPlatform extends EventEmitter {
             return '';
         }
 
-        const tierEntry = cheermoteEntry.tiers.find((tierEntryCandidate) => {
+        const tiers = cheermoteEntry.tiers.filter(isRecord) as CheermoteTier[];
+        const tierEntry = tiers.find((tierEntryCandidate) => {
             const tierId = tierEntryCandidate?.id === undefined || tierEntryCandidate?.id === null
                 ? ''
                 : String(tierEntryCandidate.id).trim();
@@ -555,8 +801,8 @@ class TwitchPlatform extends EventEmitter {
         return this._resolveCheermoteTierImageUrl(tierEntry);
     }
 
-    async _resolveGiftCheermoteImageUrl(giftData = {}) {
-        if (!giftData || typeof giftData !== 'object') {
+    async _resolveGiftCheermoteImageUrl(giftData: GiftEventData = {}): Promise<string> {
+        if (!isRecord(giftData)) {
             return '';
         }
 
@@ -572,8 +818,8 @@ class TwitchPlatform extends EventEmitter {
             return '';
         }
 
-        const cheermoteInfo = giftData.cheermoteInfo;
-        if (!cheermoteInfo || typeof cheermoteInfo !== 'object' || this._hasMixedCheermotes(cheermoteInfo)) {
+        const cheermoteInfo = isRecord(giftData.cheermoteInfo) ? giftData.cheermoteInfo as CheermoteInfo : null;
+        if (!cheermoteInfo || this._hasMixedCheermotes(cheermoteInfo)) {
             return '';
         }
 
@@ -596,8 +842,8 @@ class TwitchPlatform extends EventEmitter {
         }
     }
 
-    async _enrichGiftPayload(giftData = {}) {
-        if (!giftData || typeof giftData !== 'object') {
+    async _enrichGiftPayload(giftData: Record<string, unknown> = {}): Promise<Record<string, unknown>> {
+        if (!isRecord(giftData)) {
             return giftData;
         }
 
@@ -612,28 +858,29 @@ class TwitchPlatform extends EventEmitter {
         };
     }
 
-    _findBadgeVersion(catalog = [], setId = '', version = '') {
+    _findBadgeVersion(catalog: unknown[] = [], setId = '', version = ''): TwitchBadgeVersion | null {
         if (!Array.isArray(catalog) || !setId || !version) {
             return null;
         }
-        const set = catalog.find((entry) => entry?.set_id === setId);
+        const set = catalog.filter(isRecord).find((entry): entry is TwitchBadgeSet => entry.set_id === setId);
         if (!set || !Array.isArray(set.versions)) {
             return null;
         }
-        return set.versions.find((entry) => String(entry?.id) === version) || null;
+        return set.versions.filter(isRecord).find((entry): entry is TwitchBadgeVersion => String(entry.id) === version) || null;
     }
 
-    async _resolveBadgeImages(event = {}) {
+    async _resolveBadgeImages(event: Record<string, unknown> = {}): Promise<unknown[]> {
         const badgeKeys = this._normalizeBadgeKeyList(event);
         if (badgeKeys.length === 0) {
             return [];
         }
 
         try {
-            await this._ensureBadgeCatalogs(event?.broadcaster_user_id);
+            const broadcasterUserId = typeof event.broadcaster_user_id === 'string' ? event.broadcaster_user_id : '';
+            await this._ensureBadgeCatalogs(broadcasterUserId);
             const resolveFromCache = () => {
-                const resolved = [];
-                const unresolved = [];
+                const resolved: Array<Record<string, unknown>> = [];
+                const unresolved: Array<{ setId: string; version: string; info: string }> = [];
 
                 for (const badge of badgeKeys) {
                     const fromChannel = this._findBadgeVersion(this.badgeCatalogCache.channel, badge.setId, badge.version);
@@ -656,7 +903,7 @@ class TwitchPlatform extends EventEmitter {
 
             let { resolved, unresolved } = resolveFromCache();
             if (unresolved.length > 0) {
-                await this._ensureBadgeCatalogs(event?.broadcaster_user_id, true);
+                await this._ensureBadgeCatalogs(broadcasterUserId, true);
                 ({ resolved } = resolveFromCache());
             }
 
@@ -714,7 +961,7 @@ class TwitchPlatform extends EventEmitter {
         }
     }
 
-    async _resolveAvatarUrl(data = {}) {
+    async _resolveAvatarUrl(data: Record<string, unknown> = {}): Promise<string> {
         const payloadAvatarUrl = typeof data?.avatarUrl === 'string' ? data.avatarUrl.trim() : '';
         const userId = typeof data?.userId === 'string'
             ? data.userId.trim()
@@ -730,7 +977,7 @@ class TwitchPlatform extends EventEmitter {
         }
 
         if (cacheKey && this.avatarUrlCache.has(cacheKey)) {
-            return this.avatarUrlCache.get(cacheKey);
+            return this.avatarUrlCache.get(cacheKey) || this.fallbackAvatarUrl;
         }
 
         if (cacheKey && this.avatarLookupMissCache.has(cacheKey)) {
@@ -740,8 +987,9 @@ class TwitchPlatform extends EventEmitter {
         if (userId && this.apiClient && typeof this.apiClient.getUserById === 'function') {
             try {
                 const user = await this.apiClient.getUserById(userId);
-                const resolvedAvatarUrl = typeof user?.profile_image_url === 'string'
-                    ? user.profile_image_url.trim()
+                const userRecord = asRecord(user);
+                const resolvedAvatarUrl = typeof userRecord.profile_image_url === 'string'
+                    ? userRecord.profile_image_url.trim()
                     : '';
                 if (resolvedAvatarUrl) {
                     if (cacheKey) {
@@ -773,13 +1021,25 @@ class TwitchPlatform extends EventEmitter {
         return this.getErrorEnvelopeTimestampISO();
     }
 
-    async _handleStandardEvent(eventType, data, options = {}) {
+    _resolveFactoryMethod(eventType: TwitchStandardEventType): TwitchFactoryMethod {
+        const mapping: Record<TwitchStandardEventType, TwitchFactoryMethod> = {
+            follow: 'createFollowEvent',
+            paypiggy: 'createPaypiggyEvent',
+            giftpaypiggy: 'createGiftPaypiggyEvent',
+            raid: 'createRaidEvent',
+            gift: 'createGiftEvent'
+        };
+
+        return mapping[eventType];
+    }
+
+    async _handleStandardEvent(eventType: TwitchStandardEventType, data: Record<string, unknown>, options: StandardEventOptions = {}): Promise<void> {
         const payloadTimestamp = this._getTimestamp(data);
         const errorNotificationType = eventType === 'gift'
             ? 'gift'
             : (eventType === 'paypiggy' || eventType === 'giftpaypiggy' ? eventType : null);
-        const buildErrorOverrides = (avatarUrl) => {
-            const baseOverrides = {
+        const buildErrorOverrides = (avatarUrl: string): Record<string, unknown> => {
+            const baseOverrides: Record<string, unknown> = {
                 username: data?.username,
                 userId: data?.userId,
                 avatarUrl,
@@ -815,7 +1075,7 @@ class TwitchPlatform extends EventEmitter {
             }
             return baseOverrides;
         };
-        const emitMonetizationError = async (errorEnvelopeTimestamp) => {
+        const emitMonetizationError = async (errorEnvelopeTimestamp: string): Promise<void> => {
             if (!errorNotificationType) {
                 return;
             }
@@ -871,13 +1131,13 @@ class TwitchPlatform extends EventEmitter {
             await this._logRawEvent(logEventType, data);
 
             // Build event using factory
-            const factoryMethod = options.factoryMethod || `create${this._capitalize(eventType)}Event`;
-            const normalizedPayload = { ...(data || {}), timestamp: payloadTimestamp };
+            const factoryMethod = options.factoryMethod || this._resolveFactoryMethod(eventType);
+            const normalizedPayload: Record<string, unknown> = { ...(data || {}), timestamp: payloadTimestamp };
             normalizedPayload.avatarUrl = await this._resolveAvatarUrl(normalizedPayload);
-            const eventData = this.eventFactory[factoryMethod](normalizedPayload);
+            const eventData: Record<string, unknown> = this.eventFactory[factoryMethod](normalizedPayload);
 
             // Emit standardized event (allow override for specific emit type names)
-            const emitEventType = options.emitEventType || eventData.type || this._resolvePlatformEventType(eventType);
+            const emitEventType = options.emitEventType || (typeof eventData.type === 'string' ? eventData.type : '') || this._resolvePlatformEventType(eventType);
             this._emitPlatformEvent(emitEventType, eventData);
         } catch (error) {
             this.errorHandler.handleEventProcessingError(error, eventType, data);
@@ -885,14 +1145,14 @@ class TwitchPlatform extends EventEmitter {
         }
     }
 
-    async handleFollowEvent(followData) {
+    async handleFollowEvent(followData: Record<string, unknown>): Promise<void> {
         return this._handleStandardEvent('follow', followData, {
             validateUser: true,
             emitEventType: PlatformEvents.FOLLOW
         });
     }
 
-    async handlePaypiggyEvent(subData) {
+    async handlePaypiggyEvent(subData: Record<string, unknown>): Promise<void> {
         return this._handleStandardEvent('paypiggy', subData, {
             emitEventType: PlatformEvents.PAYPIGGY,
             factoryMethod: 'createPaypiggyEvent',
@@ -900,7 +1160,7 @@ class TwitchPlatform extends EventEmitter {
         });
     }
 
-    async handlePaypiggyMessageEvent(subData) {
+    async handlePaypiggyMessageEvent(subData: Record<string, unknown>): Promise<void> {
         return this._handleStandardEvent('paypiggy', subData, {
             emitEventType: PlatformEvents.PAYPIGGY,
             factoryMethod: 'createPaypiggyMessageEvent',
@@ -908,7 +1168,7 @@ class TwitchPlatform extends EventEmitter {
         });
     }
 
-    async handlePaypiggyGiftEvent(giftData) {
+    async handlePaypiggyGiftEvent(giftData: Record<string, unknown>): Promise<void> {
         return this._handleStandardEvent('giftpaypiggy', giftData, {
             emitEventType: PlatformEvents.GIFTPAYPIGGY,
             factoryMethod: 'createGiftPaypiggyEvent',
@@ -916,14 +1176,14 @@ class TwitchPlatform extends EventEmitter {
         });
     }
 
-    async handleRaidEvent(raidData) {
+    async handleRaidEvent(raidData: Record<string, unknown>): Promise<void> {
         return this._handleStandardEvent('raid', raidData, {
             validateUser: true,
             emitEventType: PlatformEvents.RAID
         });
     }
 
-    async handleGiftEvent(giftData) {
+    async handleGiftEvent(giftData: Record<string, unknown>): Promise<void> {
         const enrichedGiftData = await this._enrichGiftPayload(giftData);
         return this._handleStandardEvent('gift', enrichedGiftData, {
             validateUser: true,
@@ -932,7 +1192,7 @@ class TwitchPlatform extends EventEmitter {
     }
 
     _resolvePlatformEventType(eventType: string): string {
-        const mapping = {
+        const mapping: Record<string, string> = {
             chat: PlatformEvents.CHAT_MESSAGE,
             follow: PlatformEvents.FOLLOW,
             paypiggy: PlatformEvents.PAYPIGGY,
@@ -946,7 +1206,7 @@ class TwitchPlatform extends EventEmitter {
     }
 
     _getMonetizationMissingFields(eventType: string, data: Record<string, unknown>, payloadTimestamp: string | null): string[] {
-        const fieldPresence = {
+        const fieldPresence: Record<string, boolean> = {
             timestamp: !!payloadTimestamp,
             username: typeof data?.username === 'string' && data.username.trim().length > 0,
             userId: typeof data?.userId === 'string' && data.userId.trim().length > 0
@@ -1044,7 +1304,7 @@ class TwitchPlatform extends EventEmitter {
             });
         } catch (error) {
             this.errorHandler.handleMessageSendError(error, 'EventSub sendMessage');
-            const reason = error?.message || 'message delivery failed';
+            const reason = error instanceof Error && error.message ? error.message : 'message delivery failed';
             throw new Error(`Twitch chat is unavailable: ${reason}`);
         }
     }
@@ -1194,7 +1454,7 @@ class TwitchPlatform extends EventEmitter {
         }
 
         return {
-            isReady: this.config.enabled && isConnected && isActive,
+            isReady: !!(this.config.enabled && isConnected && isActive),
             issues
         };
     }
@@ -1260,7 +1520,7 @@ class TwitchPlatform extends EventEmitter {
         this.emit('platform:event', { platform, type, data: payload });
 
         // Forward to injected handlers (e.g., EventBus via PlatformLifecycleService)
-        const handlerMap = {
+        const handlerMap: Record<string, string> = {
             [PlatformEvents.CHAT_MESSAGE]: 'onChat',
             [PlatformEvents.FOLLOW]: 'onFollow',
             [PlatformEvents.PAYPIGGY]: 'onPaypiggy',
@@ -1287,9 +1547,15 @@ class TwitchPlatform extends EventEmitter {
 
     _handleEventSubConnectionChange(isConnected: boolean, details: Record<string, unknown> = {}): void {
         const status = isConnected ? 'connected' : 'disconnected';
-        const error = details.error || (details.reason ? { message: details.reason } : null);
-        const payload = PlatformEvents.createConnectionEvent(this.platformName, status, error);
-        payload.willReconnect = details.willReconnect ?? (!this.isPlannedDisconnection && this.config.enabled);
+        const detailError = details.error;
+        const detailReason = typeof details.reason === 'string' ? details.reason : '';
+        const error: Error | Record<string, unknown> | null = detailError instanceof Error || isRecord(detailError)
+            ? detailError
+            : (detailReason ? { message: detailReason } : null);
+        const payload: ConnectionEventPayload = PlatformEvents.createConnectionEvent(this.platformName, status, error);
+        payload.willReconnect = typeof details.willReconnect === 'boolean'
+            ? details.willReconnect
+            : (!this.isPlannedDisconnection && !!this.config.enabled);
 
         this.isConnected = !!isConnected;
         this.isConnecting = false;
@@ -1301,7 +1567,7 @@ class TwitchPlatform extends EventEmitter {
         } else if (!payload.willReconnect && !this.isPlannedDisconnection && this.config.enabled) {
             const recoveryError = error instanceof Error
                 ? error
-                : new Error(error?.message || details.reason || 'EventSub disconnected');
+                : new Error((error && typeof error.message === 'string' ? error.message : '') || detailReason || 'EventSub disconnected');
             this._queuePlatformRecovery(recoveryError);
             payload.willReconnect = true;
         }

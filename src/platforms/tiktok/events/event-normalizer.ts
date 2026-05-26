@@ -13,6 +13,15 @@ type TikTokGiftEventPayload = Record<string, unknown> & {
     sourceType?: unknown;
 };
 
+function normalizeOptionalString(value: unknown): string | null {
+    if (typeof value !== 'string' && typeof value !== 'number') {
+        return null;
+    }
+
+    const normalized = String(value).trim();
+    return normalized || null;
+}
+
 type NormalizedTikTokGiftEvent = {
     platform: string;
     userId: string;
@@ -102,7 +111,7 @@ function normalizeTikTokGiftEvent(data: TikTokGiftEventPayload, options: TikTokE
         unitAmount: giftData.unitAmount,
         comboType: giftData.comboType,
         repeatEnd: giftData.repeatEnd,
-        groupId: giftData.groupId,
+        groupId: normalizeOptionalString(giftData.groupId),
         id: messageId,
         timestamp,
         rawData: data

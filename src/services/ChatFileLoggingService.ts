@@ -44,7 +44,9 @@ class ChatFileLoggingService {
         this.logger = dependencies.logger ?? defaultLogger;
         this.errorHandler = createPlatformErrorHandler(this.logger, 'chat-file-logging');
         this.config = dependencies.config ?? {};
-        this.dataLoggingPath = this.config.dataLoggingPath;
+        if (this.config.dataLoggingPath !== undefined) {
+            this.dataLoggingPath = this.config.dataLoggingPath;
+        }
         this.rawEventLogWriter = dependencies.rawEventLogWriter ?? new RawEventLogWriter();
     }
 

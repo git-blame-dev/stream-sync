@@ -136,15 +136,16 @@ function extractTikTokAvatarUrl(data: unknown): string {
 }
 
 function formatCoinAmount(amount: unknown, currency: unknown = 'coins'): string {
-    if (!Number.isFinite(Number(amount)) || amount <= 0) {
+    const numericAmount = Number(amount);
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
         return '';
     }
-    const coinText = Number(amount) === 1 ? 'coin' : 'coins';
+    const coinText = numericAmount === 1 ? 'coin' : 'coins';
     const label = currency && typeof currency === 'string' ? currency : 'coins';
     if (label !== 'coins') {
-        return ` [${amount} ${label}]`;
+        return ` [${numericAmount} ${label}]`;
     }
-    return ` [${amount} ${coinText}]`;
+    return ` [${numericAmount} ${coinText}]`;
 }
 
 export {

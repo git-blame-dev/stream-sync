@@ -215,7 +215,7 @@ async function startCallbackServer({ port = OAUTH_SERVER_CONFIG.DEFAULT_PORT, au
                 res.writeHead(400, { 'Content-Type': 'text/html' });
                 res.end(renderCallbackHtml('failed', {
                     error: oauthError,
-                    description: oauthErrorDescription
+                    ...(oauthErrorDescription === undefined ? {} : { description: oauthErrorDescription })
                 }));
                 clearTimeout(timeoutId);
                 server.close();
@@ -510,7 +510,7 @@ async function runOAuthFlow(
             { tokenStorePath, logger: resolvedLogger },
             {
                 accessToken: tokens.accessToken,
-                refreshToken: tokens.refreshToken,
+                ...(tokens.refreshToken === undefined ? {} : { refreshToken: tokens.refreshToken }),
                 expiresAt
             }
         );

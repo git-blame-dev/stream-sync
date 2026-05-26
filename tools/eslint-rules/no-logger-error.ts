@@ -69,4 +69,4 @@ const noLoggerErrorRule: import('eslint').Rule.RuleModule = {
   }
 };
 
-module.exports = noLoggerErrorRule;
+export default noLoggerErrorRule;

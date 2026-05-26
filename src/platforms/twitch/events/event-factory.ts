@@ -24,6 +24,8 @@ type EventFactoryOptions = {
 
 type EventPayload = Record<string, unknown>;
 
+type MutableEvent = Record<string, unknown>;
+
 function normalizeIdentity(data: EventPayload | null | undefined): Identity {
   if (!data || typeof data !== 'object') {
     throw new Error('Twitch event payload requires identity data');
@@ -40,15 +42,15 @@ function normalizeIdentity(data: EventPayload | null | undefined): Identity {
 }
 
 function normalizeOptionalIdentity(data: EventPayload | null | undefined): Identity | null {
-  const hasUsername = typeof data?.username === 'string' && data.username.trim();
-  const hasUserId = typeof data?.userId === 'string' && data.userId.trim();
-  if (hasUsername && hasUserId) {
+  const username = typeof data?.username === 'string' ? data.username.trim() : '';
+  const userId = typeof data?.userId === 'string' ? data.userId.trim() : '';
+  if (username && userId) {
     return {
-            userId: data.userId,
-            username: data.username
+            userId,
+            username
         };
     }
-    if (data?.isAnonymous === true && !hasUsername && !hasUserId) {
+    if (data?.isAnonymous === true && !username && !userId) {
         return null;
   }
   throw new Error('Twitch event payload requires userId and username');
@@ -126,7 +128,7 @@ function createTwitchEventFactory(options: EventFactoryOptions = {}) {
             const isRenewal = data.isRenewal === true ||
                 (months !== undefined && months > 1);
 
-            const result = {
+            const result: MutableEvent = {
                 type: PlatformEvents.PAYPIGGY,
                 platform: platformName,
                 username: identity.username,
@@ -152,7 +154,7 @@ function createTwitchEventFactory(options: EventFactoryOptions = {}) {
             const isRenewal = data.isRenewal === true ||
                 (months !== undefined && months > 1);
 
-            const result = {
+            const result: MutableEvent = {
                 type: PlatformEvents.PAYPIGGY,
                 platform: platformName,
                 username: identity.username,
@@ -180,7 +182,7 @@ function createTwitchEventFactory(options: EventFactoryOptions = {}) {
             }
             const cumulativeTotal = normalizePositiveInteger(data.cumulativeTotal);
 
-            const result = {
+            const result: MutableEvent = {
                 type: PlatformEvents.GIFTPAYPIGGY,
                 platform: platformName,
                 giftCount,
@@ -248,7 +250,7 @@ function createTwitchEventFactory(options: EventFactoryOptions = {}) {
             if (!data.id) {
                 throw new Error('Twitch gift payload requires id');
             }
-            const result = {
+            const result: MutableEvent = {
                 type: PlatformEvents.GIFT,
                 platform: platformName,
                 id: data.id,

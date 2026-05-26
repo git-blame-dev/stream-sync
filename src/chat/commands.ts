@@ -10,6 +10,30 @@ type ParsedCommandConfig = {
     primaryCommand: string;
 };
 
+type VfxMatchType = 'trigger' | 'keyword';
+
+type VfxRuntimeConfig = Omit<ParsedCommandConfig, 'primaryCommand'> & {
+    command: string;
+    keyword: string | null;
+    matchType: VfxMatchType;
+};
+
+type CommandParseData = {
+    comment?: unknown;
+    message?: unknown;
+    username?: unknown;
+    platform?: unknown;
+};
+
+type RunCommandData = {
+    vfx?: Partial<VfxRuntimeConfig> & { waitForCompletion?: boolean };
+    filename?: string;
+    mediaSource?: string;
+    vfxFilePath?: string;
+    duration?: number;
+    waitForCompletion?: boolean;
+};
+
 type ParsedCommands = {
     triggers: Map<string, ParsedCommandConfig>;
     keywords: Map<string, ParsedCommandConfig>;
@@ -58,10 +82,10 @@ class CommandParser {
         this.regexCache = new Map();
     }
 
-    parseDuration(parts) {
+    parseDuration(parts: string[]): number {
         // Check if there's a duration specified in the 3rd or 4th part
         for (let i = 2; i < parts.length; i++) {
-            const parsed = parseInt(parts[i], 10);
+            const parsed = parseInt(parts[i] ?? '', 10);
             if (!isNaN(parsed) && parsed > 0) {
                 return parsed;
             }
@@ -70,17 +94,18 @@ class CommandParser {
     }
 
     parseCommandConfigurations() {
-        const parsed = {
-            triggers: new Map(), // trigger -> config
-            keywords: new Map()  // keyword -> config
+        const parsed: ParsedCommands = {
+            triggers: new Map<string, ParsedCommandConfig>(), // trigger -> config
+            keywords: new Map<string, ParsedCommandConfig>()  // keyword -> config
         };
 
         for (const [key, configLine] of Object.entries(this.commands)) {
             if (typeof configLine !== 'string') continue;
 
             const parts = configLine.split(',').map(p => p.trim());
-            const triggers = parts[0].split('|').map(t => t.trim().toLowerCase());
-            const keywords = (parts.length > 2) ? parts[2].split('|').map(k => k.trim().toLowerCase()).filter(k => k) : [];
+            const triggerPart = parts[0] ?? '';
+            const triggers = triggerPart.split('|').map(t => t.trim().toLowerCase());
+            const keywords = (parts.length > 2) ? (parts[2] ?? '').split('|').map(k => k.trim().toLowerCase()).filter(k => k) : [];
 
             const config = {
                 filename: key,           // Standardized: VFX file name
@@ -88,7 +113,7 @@ class CommandParser {
                 vfxFilePath: this.vfxFilePath, // Standardized: Full path to VFX files directory
                 duration: this.parseDuration(parts), // Standardized: Duration in milliseconds
                 commandKey: key,         // Standardized: Command that triggers this VFX
-                primaryCommand: triggers[0] // Store first trigger as primary command for display
+                primaryCommand: triggers[0] ?? '' // Store first trigger as primary command for display
             };
 
             // Index by triggers
@@ -142,7 +167,7 @@ class CommandParser {
         return parsed;
     }
 
-    getCompiledRegex(keyword) {
+    getCompiledRegex(keyword: string): RegExp {
         if (!this.regexCache.has(keyword)) {
             // Escape special regex characters in the keyword
             const escapedKeyword = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -156,7 +181,7 @@ class CommandParser {
         return regex;
     }
 
-    _createVFXConfig(baseConfig, matchedText, matchType) {
+    _createVFXConfig(baseConfig: ParsedCommandConfig, matchedText: string, matchType: VfxMatchType): VfxRuntimeConfig {
         return {
             // Standardized VFX config properties
             filename: baseConfig.filename,        // Standardized: VFX file name
@@ -164,7 +189,7 @@ class CommandParser {
             vfxFilePath: baseConfig.vfxFilePath,  // Standardized: Full path to VFX files directory
             duration: baseConfig.duration || 5000, // Standardized: Duration in milliseconds
             commandKey: baseConfig.commandKey,    // Standardized: Command that triggers this VFX
-            
+
             // Additional properties for backward compatibility and debugging
             command: baseConfig.primaryCommand,   // Always use primary command for display
             keyword: matchType === 'keyword' ? matchedText : null,
@@ -172,7 +197,7 @@ class CommandParser {
         };
     }
 
-    getVFXConfig(commandTrigger, message) {
+    getVFXConfig(commandTrigger: unknown, message: unknown): VfxRuntimeConfig | null {
         if (!this.parsedCommands) {
             return null;
         }
@@ -205,7 +230,7 @@ class CommandParser {
         return null;
     }
 
-    getMatchingFarewell(message, commandTrigger) {
+    getMatchingFarewell(message: string, commandTrigger: string): string | null {
         if (!this.parsedFarewellCommands || !message) {
             return null;
         }
@@ -232,14 +257,14 @@ class CommandParser {
         return null;
     }
 
-    parse(data, isFirst) {
+    parse(data: CommandParseData, isFirst: boolean) {
         const { comment, message, username } = data;
         const messageText = comment || message; // Support both comment and message fields
         if (!messageText || typeof messageText !== 'string') {
             return null;
         }
 
-        const commandTrigger = messageText.split(' ')[0].toLowerCase();
+        const commandTrigger = (messageText.split(' ')[0] ?? '').toLowerCase();
         
         // Check for farewell commands first
         const farewellMatch = this.getMatchingFarewell(messageText, commandTrigger);
@@ -277,7 +302,7 @@ class CommandParser {
         return null; // Not a command
     }
 
-    updateConfig(newConfig) {
+    updateConfig(newConfig: Partial<CommandParserConfig>) {
         this.commands = newConfig.commands || this.commands;
         this.farewellCommands = newConfig.farewell || this.farewellCommands;
         this.vfxFilePath = newConfig.vfx?.filePath ?? this.vfxFilePath;
@@ -310,9 +335,9 @@ class CommandParser {
     }
 }
 
-async function runCommand(commandData, vfxFilePath, effectsManager = getDefaultEffectsManager()) {
+async function runCommand(commandData: RunCommandData, vfxFilePath: string, effectsManager = getDefaultEffectsManager()) {
     // Handle both old and new calling signatures
-    let vfxData;
+    let vfxData: RunCommandData | RunCommandData['vfx'];
 
     if (commandData.vfx) {
         // New signature: structured object
@@ -328,12 +353,12 @@ async function runCommand(commandData, vfxFilePath, effectsManager = getDefaultE
     }
 
     try {
-        const commandConfig = {
-            mediaSource: vfxData.mediaSource,
-            filename: vfxData.filename,
+        const commandConfig: { mediaSource?: string; filename?: string; vfxFilePath: string; duration: number } = {
             vfxFilePath: vfxData.vfxFilePath || vfxFilePath,
             duration: vfxData.duration || 5000
         };
+        if (vfxData.mediaSource !== undefined) commandConfig.mediaSource = vfxData.mediaSource;
+        if (vfxData.filename !== undefined) commandConfig.filename = vfxData.filename;
 
         // Standardize wait behavior (default true unless explicitly false)
         const waitForCompletion = vfxData.waitForCompletion !== false;

@@ -24,6 +24,21 @@ type ObserverDependencies = {
     config?: Record<string, PlatformConfig>;
 };
 
+type ViewerCountUpdate = {
+    platform: string;
+    count: number;
+    previousCount?: number;
+    isStreamLive: boolean;
+    timestamp?: unknown;
+};
+
+type StreamStatusUpdate = {
+    platform: string;
+    isLive: boolean;
+    wasLive: boolean;
+    timestamp?: unknown;
+};
+
 function getErrorMessage(error: unknown): string {
     if (error instanceof Error) {
         return error.message;
@@ -54,11 +69,11 @@ class OBSViewerCountObserver extends ViewerCountObserver {
         this.errorHandler = createPlatformErrorHandler(logger, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.OBS_OBSERVER);
     }
 
-    getObserverId() {
+    override getObserverId() {
         return VIEWER_COUNT_CONSTANTS.OBSERVER.DEFAULT_OBS_OBSERVER_ID;
     }
 
-    async initialize() {
+    override async initialize() {
         this.logger.info('Initializing OBS viewer count observer', VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.OBS_OBSERVER);
         
         // Initialize all platform viewer counts to 0 in OBS if connected
@@ -84,7 +99,7 @@ class OBSViewerCountObserver extends ViewerCountObserver {
         this.logger.info('All platform viewer counts initialized to 0 in OBS', VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.OBS_OBSERVER);
     }
 
-    async onViewerCountUpdate(update: { platform: string; count: number; isStreamLive: boolean }) {
+    override async onViewerCountUpdate(update: ViewerCountUpdate) {
         const { platform, count, isStreamLive } = update;
         
         // Only update OBS if stream is live
@@ -100,7 +115,7 @@ class OBSViewerCountObserver extends ViewerCountObserver {
         }
     }
 
-    async onStreamStatusChange(statusUpdate: { platform: string; isLive: boolean; wasLive: boolean }) {
+    override async onStreamStatusChange(statusUpdate: StreamStatusUpdate) {
         const { platform, isLive, wasLive } = statusUpdate;
         
         // If stream went offline, reset viewer count to 0
@@ -199,7 +214,7 @@ class OBSViewerCountObserver extends ViewerCountObserver {
         }
     }
 
-    async cleanup() {
+    override async cleanup() {
         this.logger.info('Cleaning up OBS viewer count observer', VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.OBS_OBSERVER);
         // No specific cleanup needed for OBS observer
     }

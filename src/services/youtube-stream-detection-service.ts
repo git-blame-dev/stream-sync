@@ -424,9 +424,11 @@ _isValidVideoId(videoId: unknown): videoId is string {
                 requestTime: getSystemTimestampISO(),
                 errorType: error.constructor.name,
                 errorMessage: error.message,
-                errorStatus: error.status,
                 responseTimeMs: responseTime
             };
+            if (error.status !== undefined) {
+                response.debug.errorStatus = error.status;
+            }
         }
 
         return response;

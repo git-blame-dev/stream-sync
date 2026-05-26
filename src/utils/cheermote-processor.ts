@@ -1,12 +1,24 @@
+type CheermoteFragment = {
+    type?: string;
+    text?: string;
+    cheermote?: {
+        prefix?: string;
+        bits?: unknown;
+    };
+};
+
+type CheermoteTypeStats = Record<string, { count: number; bits: number }>;
+
 class CheermoteProcessor {
-    static processEventSubFragments(fragments) {
+    static processEventSubFragments(fragments: unknown) {
         if (!fragments || !Array.isArray(fragments) || fragments.length === 0) {
             return this.createEmptyResult();
         }
 
         // Extract cheermote fragments
-        const cheermoteFragments = fragments.filter(frag => frag.type === 'cheermote');
-        const textFragments = fragments.filter(frag => frag.type === 'text');
+        const typedFragments = fragments as CheermoteFragment[];
+        const cheermoteFragments = typedFragments.filter(frag => frag.type === 'cheermote');
+        const textFragments = typedFragments.filter(frag => frag.type === 'text');
 
         if (cheermoteFragments.length === 0) {
             return this.createEmptyResult();
@@ -30,8 +42,8 @@ class CheermoteProcessor {
         };
     }
 
-    static analyzeCheermoteTypes(cheermoteFragments) {
-        const typeStats = {};
+    static analyzeCheermoteTypes(cheermoteFragments: CheermoteFragment[]) {
+        const typeStats: CheermoteTypeStats = {};
         let totalBits = 0;
 
         // Count each type and accumulate bits
@@ -63,6 +75,9 @@ class CheermoteProcessor {
 
         // Find primary type (most common, or first if tied)
         const primaryType = this.findPrimaryType(typeStats);
+        if (!primaryType) {
+            return this.createEmptyResult();
+        }
         const mixedTypes = typeNames.length > 1;
         const otherTypesCount = Math.max(0, typeNames.length - 1);
 
@@ -75,13 +90,13 @@ class CheermoteProcessor {
             otherTypesCount,
             types: typeNames.map(type => ({
                 prefix: type,
-                count: typeStats[type].count,
-                totalBits: typeStats[type].bits
+                count: typeStats[type]?.count ?? 0,
+                totalBits: typeStats[type]?.bits ?? 0
             }))
         };
     }
 
-    static extractCleanPrefix(prefix) {
+    static extractCleanPrefix(prefix: unknown): string {
         if (!prefix || typeof prefix !== 'string') {
             return '';
         }
@@ -90,7 +105,7 @@ class CheermoteProcessor {
         return prefix.replace(/\d+$/, '');
     }
 
-    static findPrimaryType(typeStats) {
+    static findPrimaryType(typeStats: CheermoteTypeStats): string | null {
         const entries = Object.entries(typeStats);
         
         if (entries.length === 0) {
@@ -108,7 +123,7 @@ class CheermoteProcessor {
             return a[0].localeCompare(b[0]);
         });
 
-        return entries[0][0];
+        return entries[0]?.[0] ?? null;
     }
 
     static createEmptyResult() {

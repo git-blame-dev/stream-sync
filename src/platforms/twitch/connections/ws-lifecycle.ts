@@ -51,6 +51,33 @@ type WsLifecycleOptions = {
   setImmediateFn?: (handler: () => void | Promise<void>) => void;
 };
 
+const getErrorMessage = (error: unknown): string => error instanceof Error ? error.message : String(error);
+
+const getRecord = (value: unknown): Record<string, unknown> | null =>
+    value && typeof value === 'object' ? value as Record<string, unknown> : null;
+
+const getString = (record: Record<string, unknown> | null | undefined, key: string): string | null => {
+    const value = record?.[key];
+    return typeof value === 'string' ? value : null;
+};
+
+const getSession = (message: Record<string, unknown>): Record<string, unknown> | null => {
+    const payload = getRecord(message.payload);
+    return getRecord(payload?.session);
+};
+
+const getByteLength = (value: unknown): number => {
+    if (typeof value === 'string') {
+        return value.length;
+    }
+    if (value instanceof Uint8Array || value instanceof ArrayBuffer) {
+        return value.byteLength;
+    }
+    const withLength = getRecord(value);
+    const length = withLength?.length;
+    return typeof length === 'number' ? length : 0;
+};
+
 function stripUrlQueryAndFragment(value: string): string {
     try {
         const parsed = new URL(value);
@@ -95,13 +122,14 @@ function createTwitchEventSubWsLifecycle(options: WsLifecycleOptions = {}) {
         : async () => {};
 
             let connectionResolved = false;
-            let connectionTimeout;
+            let connectionTimeout: ReturnType<typeof setTimeout> | null = null;
 
             try {
                 state.connectionStartTime = now();
 
                 const websocketUrl = state.reconnectUrl || 'wss://eventsub.wss.twitch.tv/ws?keepalive_timeout_seconds=30';
-                state.ws = new WebSocketCtor(websocketUrl);
+                const ws = new WebSocketCtor(websocketUrl);
+                state.ws = ws;
 
                 connectionTimeout = safeSetTimeout(() => {
                     if (!connectionResolved && !state.sessionId) {
@@ -114,13 +142,13 @@ function createTwitchEventSubWsLifecycle(options: WsLifecycleOptions = {}) {
                     }
                 }, 15000);
 
-                state.ws.on('open', () => {
+                ws.on('open', () => {
                     state.logger?.info?.('EventSub WebSocket connection opened successfully.', 'twitch');
                     state.logger?.info?.('Waiting for welcome message from Twitch...', 'twitch');
 
                     state.logger?.info?.('WebSocket connection details', 'twitch', {
                         url: 'wss://eventsub.wss.twitch.tv/ws',
-                        readyState: state.ws.readyState,
+                        readyState: ws.readyState,
                         hasTwitchAuth: !!state.twitchAuth,
                         authReady: state.twitchAuth?.isReady?.(),
                         userId: state.userId,
@@ -137,12 +165,19 @@ function createTwitchEventSubWsLifecycle(options: WsLifecycleOptions = {}) {
                     }, 5000);
                 });
 
-      state.ws.on('message', async (data) => {
+      ws.on('message', async (data: unknown) => {
         try {
-          const message = JSON.parse(data.toString());
+          const rawData = String(data);
+          const parsedMessage: unknown = JSON.parse(rawData);
+          const message = getRecord(parsedMessage);
+          if (!message) {
+              throw new Error('WebSocket message payload must be an object');
+          }
                         await handleWebSocketMessage(message);
 
-                        if (message.metadata.message_type === 'session_welcome' && !state.sessionId && !connectionResolved) {
+                        const metadata = getRecord(message.metadata);
+                        const session = getSession(message);
+                        if (metadata?.message_type === 'session_welcome' && !state.sessionId && !connectionResolved) {
                             if (connectionTimeout) {
                                 clearTimeout(connectionTimeout);
                             }
@@ -150,7 +185,7 @@ function createTwitchEventSubWsLifecycle(options: WsLifecycleOptions = {}) {
                                 clearTimeout(state.welcomeTimer);
                             }
 
-                            const sessionId = message?.payload?.session?.id;
+                            const sessionId = getString(session, 'id');
                             if (!sessionId || sessionId.trim() === '') {
                                 logError('Invalid session ID received', null, 'invalid-session');
                                 connectionResolved = true;
@@ -163,7 +198,7 @@ function createTwitchEventSubWsLifecycle(options: WsLifecycleOptions = {}) {
                             state.reconnectUrl = null;
                             state.logger?.info?.('EventSub session established', 'twitch', {
                                 hasSessionId: true,
-                                keepaliveTimeout: message?.payload?.session?.keepalive_timeout_seconds ?? null
+                                keepaliveTimeout: session?.keepalive_timeout_seconds ?? null
                             });
 
                             emit('eventSubConnected', {
@@ -225,7 +260,7 @@ function createTwitchEventSubWsLifecycle(options: WsLifecycleOptions = {}) {
                                     logError('Error during subscription setup', error, 'subscription-setup');
                                     emit('eventSubSubscriptionFailed', {
                                         sessionId: state.sessionId,
-                                        error: error.message
+                                        error: getErrorMessage(error)
                                     });
                                     if (state._isConnected && state.isInitialized) {
                                         state._scheduleReconnect?.();
@@ -243,13 +278,13 @@ function createTwitchEventSubWsLifecycle(options: WsLifecycleOptions = {}) {
                             }
                         }
                         logError('Error parsing WebSocket message', error, 'ws-parse', {
-                            rawDataLength: data.toString().length
+                            rawDataLength: String(data).length
                         });
                         reject(error);
                     }
                 });
 
-                state.ws.on('error', (error) => {
+                ws.on('error', (error: unknown) => {
                     if (!connectionResolved) {
                         connectionResolved = true;
                         if (connectionTimeout) {
@@ -258,22 +293,22 @@ function createTwitchEventSubWsLifecycle(options: WsLifecycleOptions = {}) {
                         reject(error);
                     }
                     logError('EventSub WebSocket error', error, 'ws-error', {
-                        code: error.code,
-                        errno: error.errno
+                        code: getRecord(error)?.code,
+                        errno: getRecord(error)?.errno
                     });
                 });
 
-                state.ws.on('ping', (data) => {
+                ws.on('ping', (data: unknown) => {
                     state.logger?.debug?.('EventSub ping received', 'twitch', {
-                        payloadLength: typeof data?.length === 'number' ? data.length : 0
+                        payloadLength: getByteLength(data)
                     });
                 });
 
-                state.ws.on('pong', () => {
+                ws.on('pong', () => {
                     state.logger?.debug?.('EventSub pong received', 'twitch');
                 });
 
-      state.ws.on('close', (code, reason) => {
+      ws.on('close', (code: unknown, reason: unknown) => {
                     if (state.welcomeTimer) {
                         clearTimeout(state.welcomeTimer);
                     }
@@ -284,7 +319,8 @@ function createTwitchEventSubWsLifecycle(options: WsLifecycleOptions = {}) {
                             clearTimeout(connectionTimeout);
                         }
 
-                        const startupError = code === 1006
+                        const closeCode = typeof code === 'number' ? code : 0;
+                        const startupError = closeCode === 1006
                             ? new Error('Connection closed abnormally during initial handshake')
                             : new Error('Connection closed before EventSub startup completed');
                         reject(startupError);
@@ -297,7 +333,8 @@ function createTwitchEventSubWsLifecycle(options: WsLifecycleOptions = {}) {
                     const connectionDuration = state.connectionStartTime ? now() - state.connectionStartTime : 'unknown';
 
                     let closeReason = 'unknown';
-                    switch (code) {
+                    const closeCode = typeof code === 'number' ? code : 0;
+                    switch (closeCode) {
                         case 1000:
                             closeReason = 'normal closure';
                             break;
@@ -329,28 +366,28 @@ function createTwitchEventSubWsLifecycle(options: WsLifecycleOptions = {}) {
                             closeReason = 'network error';
                             break;
                         default:
-                            closeReason = `code ${code}`;
+                            closeReason = `code ${closeCode}`;
                     }
 
                     state.logger?.warn?.(
-                        `EventSub WebSocket closed after ${connectionDuration}ms: ${closeReason} - ${reason?.toString() || 'no reason'}`,
+                        `EventSub WebSocket closed after ${connectionDuration}ms: ${closeReason} - ${String(reason || 'no reason')}`,
                         'twitch'
                     );
 
                     state.subscriptions?.clear?.();
 
-                    const willReconnect = code !== 1000 && !!state.isInitialized;
+                    const willReconnect = closeCode !== 1000 && !!state.isInitialized;
 
                     emit('eventSubDisconnected', {
-                        code,
-                        reason: reason?.toString(),
-                        abnormal: code !== 1000,
+                        code: closeCode,
+                        reason: String(reason || ''),
+                        abnormal: closeCode !== 1000,
                         willReconnect,
                         terminal: false
                     });
 
                     if (willReconnect) {
-                        if (code === 1006) {
+                        if (closeCode === 1006) {
                             state.logger?.warn?.('Abnormal closure detected, will retry with increased delay', 'twitch');
                         }
                         state._scheduleReconnect?.();
@@ -370,12 +407,14 @@ function createTwitchEventSubWsLifecycle(options: WsLifecycleOptions = {}) {
     };
 
   const handleReconnectRequest = (state: LifecycleState, payload: Record<string, unknown> | null | undefined): void => {
-        if (payload?.session?.reconnect_url) {
+        const session = getRecord(payload?.session);
+        const reconnectUrl = getString(session, 'reconnect_url');
+        if (reconnectUrl) {
             state.logger?.info?.('EventSub requesting reconnection to new URL', 'twitch', {
-                reconnectUrl: stripUrlQueryAndFragment(String(payload.session.reconnect_url)),
+                reconnectUrl: stripUrlQueryAndFragment(reconnectUrl),
                 hasReconnectUrl: true
             });
-            state.reconnectUrl = payload.session.reconnect_url;
+            state.reconnectUrl = reconnectUrl;
             state._scheduleReconnect?.();
         }
     };
@@ -442,7 +481,7 @@ function createTwitchEventSubWsLifecycle(options: WsLifecycleOptions = {}) {
                     }
                 } catch (error) {
                     state.logger?.debug?.('Error closing WebSocket during reconnect', 'twitch', {
-                        error: error?.message || String(error)
+                        error: getErrorMessage(error)
                     });
                 }
                 state.ws = null;
@@ -482,7 +521,7 @@ function createTwitchEventSubWsLifecycle(options: WsLifecycleOptions = {}) {
                 null,
                 'reconnect-failed',
                 {
-                    message: error.message,
+                    message: getErrorMessage(error),
                     willRetry: state.retryAttempts < state.maxRetryAttempts
                 }
             );

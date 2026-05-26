@@ -261,8 +261,14 @@ function createYouTubeMonetizationParser(options: YouTubeMonetizationParserOptio
             throw new Error('YouTube GiftMessageView requires text in "sent <gift> for <amount> Jewels" format');
         }
 
-        const giftType = match[1].trim();
-        const amount = Number(match[2]);
+        const giftTypeRaw = match[1];
+        const amountRaw = match[2];
+        if (!giftTypeRaw || !amountRaw) {
+            throw new Error('YouTube GiftMessageView requires text in "sent <gift> for <amount> Jewels" format');
+        }
+
+        const giftType = giftTypeRaw.trim();
+        const amount = Number(amountRaw);
         if (!giftType || !Number.isFinite(amount) || amount <= 0) {
             throw new Error('YouTube GiftMessageView requires text in "sent <gift> for <amount> Jewels" format');
         }
@@ -308,8 +314,9 @@ function createYouTubeMonetizationParser(options: YouTubeMonetizationParserOptio
         }
 
         const welcomeMatch = normalizedSubtext.match(/^Welcome to\s+(.+?)!?$/i);
-        if (welcomeMatch) {
-            const level = welcomeMatch[1].trim();
+        const welcomeLevel = welcomeMatch?.[1];
+        if (welcomeLevel) {
+            const level = welcomeLevel.trim();
             if (!level || /^the\s+membership$/i.test(level)) {
                 return '';
             }
@@ -380,7 +387,8 @@ function createYouTubeMonetizationParser(options: YouTubeMonetizationParserOptio
             return right.height - left.height;
         });
 
-        return candidates[0].imageUrl;
+        const bestCandidate = candidates[0];
+        return bestCandidate ? bestCandidate.imageUrl : '';
     };
 
 const parseSuperChat = (chatItem: UnknownRecord): ParsedSuperChat => {
@@ -478,9 +486,11 @@ const parseSuperChat = (chatItem: UnknownRecord): ParsedSuperChat => {
                 headerPrimaryText,
                 headerSubtext
             }),
-            message: extractMessageText(item.message) || headerSubtext,
-            months
+            message: extractMessageText(item.message) || headerSubtext
         };
+        if (months !== undefined) {
+            payload.months = months;
+        }
         const id = resolveOptionalId(chatItem);
         if (id) {
             payload.id = id;

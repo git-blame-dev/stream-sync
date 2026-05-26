@@ -145,11 +145,11 @@ class TwitchViewerCountProvider extends ViewerCountProvider {
         this.getCurrentEventSub = getCurrentEventSub;
     }
 
-    isReady() {
+    override isReady() {
         return !!(this.config && this.config.channel);
     }
 
-    async getViewerCount(): Promise<number> {
+    override async getViewerCount(): Promise<number> {
         this.logger.debug('Getting Twitch viewer count...', 'viewer-count-provider');
         
         if (!this.isReady()) {
@@ -210,11 +210,11 @@ class YouTubeViewerCountProvider extends ViewerCountProvider {
         };
     }
 
-    isReady() {
+    override isReady() {
         return !!(this.viewerExtractionService && this.config && this.getActiveVideoIds);
     }
 
-    async getViewerCount(): Promise<number | null> {
+    override async getViewerCount(): Promise<number | null> {
         this.stats.totalRequests++;
         this.logger.debug('Getting YouTube viewer count - aggregating from all active streams', 'viewer-count-provider');
         
@@ -296,13 +296,13 @@ class TikTokViewerCountProvider extends ViewerCountProvider {
         this.tiktokPlatform = platform;
     }
 
-    isReady() {
+    override isReady() {
         if (!this.tiktokPlatform) return false;
         const connection = this.tiktokPlatform.connection;
         return !!(connection && connection.isConnected);
     }
 
-    async getViewerCount(): Promise<number> {
+    override async getViewerCount(): Promise<number> {
         if (!this.tiktokPlatform || typeof this.tiktokPlatform.getViewerCount !== 'function') {
             return this._handleProviderError(new Error('TikTok platform not available'), 'platformGetViewerCount');
         }

@@ -49,10 +49,10 @@ type OAuthFlowRunner = (options: {
 }) => Promise<OAuthTokenPayload | null>;
 
 type TwitchAuthOptions = {
-    tokenStorePath: string;
-    clientId: string;
+    tokenStorePath: unknown;
+    clientId: unknown;
     logger?: unknown;
-    expectedUsername?: string | null;
+    expectedUsername?: unknown;
     httpClient?: HttpClient;
     oauthFlow?: OAuthFlowRunner;
 };
@@ -164,7 +164,7 @@ const parseRefreshResponse = (data: unknown): RefreshTokenPayload => {
 
     return {
         accessToken: dataRecord.access_token,
-        refreshToken,
+        ...(refreshToken === undefined ? {} : { refreshToken }),
         expiresIn: asFiniteNumber(dataRecord.expires_in)
     };
 };
@@ -203,15 +203,15 @@ class TwitchAuth {
     #oauthFlowRunner: OAuthFlowRunner;
 
     constructor({ tokenStorePath, clientId, logger, expectedUsername = null, httpClient, oauthFlow }: TwitchAuthOptions) {
-        this.#tokenStorePath = tokenStorePath;
-        this.#clientId = clientId;
+        this.#tokenStorePath = typeof tokenStorePath === 'string' ? tokenStorePath : '';
+        this.#clientId = typeof clientId === 'string' ? clientId : '';
         this.#logger = resolveLogger(logger, 'TwitchAuth') as ReturnType<typeof resolveLogger>;
-        this.#expectedUsername = expectedUsername;
+        this.#expectedUsername = typeof expectedUsername === 'string' ? expectedUsername : null;
         this.#httpClient = httpClient || axiosModule.default || axiosModule;
         if (oauthFlow !== undefined && typeof oauthFlow !== 'function') {
             throw new Error('oauthFlow must be a function when provided');
         }
-        this.#oauthFlowRunner = oauthFlow || runOAuthFlow;
+        this.#oauthFlowRunner = oauthFlow || (async (options) => ensureCamelTokenPayload(await runOAuthFlow(options), 'OAuth flow'));
     }
 
     async initialize() {
@@ -322,7 +322,7 @@ class TwitchAuth {
             },
             {
                 accessToken: normalized.accessToken,
-                refreshToken: normalized.refreshToken,
+                ...(normalized.refreshToken === undefined ? {} : { refreshToken: normalized.refreshToken }),
                 expiresAt: computeExpiresAt(normalized)
             }
         );
@@ -382,7 +382,7 @@ class TwitchAuth {
 
             this.#applyTokens({
                 accessToken: normalized.accessToken,
-                refreshToken: normalized.refreshToken === undefined ? undefined : normalized.refreshToken
+                ...(normalized.refreshToken === undefined ? {} : { refreshToken: normalized.refreshToken })
             });
             await this.#persistTokens({
                 accessToken: normalized.accessToken,

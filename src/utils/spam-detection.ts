@@ -351,6 +351,9 @@ class DonationSpamDetection {
 
             for (const userId in this.donationSpamTracker) {
                 const userTracker = this.donationSpamTracker[userId];
+                if (!userTracker) {
+                    continue;
+                }
                 const originalNotifications = userTracker.notifications.length;
                 userTracker.notifications = userTracker.notifications.filter(
                     (notification) => (now - notification.timestamp) <= windowMs
@@ -413,6 +416,9 @@ class DonationSpamDetection {
 
         for (const userId in this.donationSpamTracker) {
             const userTracker = this.donationSpamTracker[userId];
+            if (!userTracker) {
+                continue;
+            }
             if (userTracker.aggregationTimer) {
                 clearTimeout(userTracker.aggregationTimer);
                 userTracker.aggregationTimer = null;

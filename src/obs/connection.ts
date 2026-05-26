@@ -96,9 +96,9 @@ class OBSConnectionManager {
             ? (secrets.obs.password ?? undefined)
             : incomingConfig.password;
         this.config = {
-            address: incomingConfig.address,
-            password: resolvedPassword,
-            enabled: incomingConfig.enabled
+            ...(incomingConfig.address === undefined ? {} : { address: incomingConfig.address }),
+            ...(resolvedPassword === undefined ? {} : { password: resolvedPassword }),
+            ...(incomingConfig.enabled === undefined ? {} : { enabled: incomingConfig.enabled })
         };
         this.OBS_CONNECTION_TIMEOUT = incomingConfig.connectionTimeoutMs;
         
@@ -440,7 +440,9 @@ class OBSConnectionManager {
             maxWait,
             {
                 operationName: 'OBS connection readiness',
-                errorMessage: this.ERROR_MESSAGES.OBS_CONNECTION_TIMEOUT
+                ...(this.ERROR_MESSAGES.OBS_CONNECTION_TIMEOUT === undefined
+                    ? {}
+                    : { errorMessage: this.ERROR_MESSAGES.OBS_CONNECTION_TIMEOUT })
             }
         );
     }

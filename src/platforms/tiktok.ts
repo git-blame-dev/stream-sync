@@ -41,6 +41,302 @@ const PlatformEvents = {
 
 type TikTokErrorContext = Record<string, unknown>;
 
+type TikTokPayload = Record<string, unknown>;
+
+type ChatFileLoggingOptions = NonNullable<ConstructorParameters<typeof ChatFileLoggingService>[0]>;
+type ChatFileLogger = NonNullable<ChatFileLoggingOptions['logger']>;
+
+type TikTokRawEvent = TikTokPayload & {
+    common?: TikTokPayload & { msgId?: unknown };
+    user?: TikTokPayload;
+    displayText?: TikTokPayload;
+    displayType?: unknown;
+    actionType?: unknown;
+    type?: unknown;
+    label?: unknown;
+    avatarUrl?: unknown;
+};
+
+type TikTokConfig = Record<string, unknown> & {
+    enabled?: boolean;
+    username?: string;
+    viewerCountEnabled?: boolean;
+    greetingsEnabled?: boolean;
+    dataLoggingEnabled?: boolean;
+    giftAggregationEnabled?: boolean;
+};
+
+type TikTokEventType = typeof PlatformEvents[keyof Omit<typeof PlatformEvents, '_generateCorrelationId'>];
+
+type TikTokLogger = {
+    debug: (message: string, source?: string, details?: unknown) => void;
+    info: (message: string, source?: string, details?: unknown) => void;
+    warn: (message: string, source?: string, details?: unknown) => void;
+    error?: (message: string, source?: string, details?: unknown) => void;
+};
+
+type TikTokErrorHandler = {
+    handleConnectionError: (error: unknown, context?: string, message?: string) => void;
+    handleEventProcessingError: (error: unknown, context: string, payload?: unknown, message?: string) => void;
+    handleCleanupError: (error: unknown, context?: string, message?: string) => void;
+};
+
+type TikTokEventBus = {
+    emit: (eventName: string, payload: unknown) => void;
+};
+
+type TikTokNotificationManager = unknown;
+
+type SelfMessageDetectionService = {
+    shouldFilterMessage: (
+        platform: string,
+        messageData: { username?: string; userId?: string; isBroadcaster?: boolean },
+        config: unknown
+    ) => boolean;
+};
+
+type TikTokConnection = {
+    isConnecting?: boolean;
+    isConnected?: boolean;
+    connectionId?: string;
+    connect: () => Promise<unknown>;
+    disconnect: () => Promise<unknown>;
+    on: (eventName: string, handler: (payload: unknown) => void | Promise<void>) => void;
+    removeAllListeners?: (eventName?: string) => void;
+    [key: string]: unknown;
+};
+
+type TikTokHandlers = Record<string, (payload: unknown) => unknown>;
+
+type TikTokWebcastEventMap = {
+    CHAT: string;
+    GIFT: string;
+    FOLLOW: string;
+    SOCIAL: string;
+    ROOM_USER: string;
+    ENVELOPE?: string;
+    SUBSCRIBE?: string;
+    SUPER_FAN?: string;
+    ERROR: string;
+    DISCONNECT: string;
+    STREAM_END?: string;
+};
+
+type TikTokControlEventMap = {
+    CONNECTED?: string;
+    DISCONNECTED?: string;
+    ERROR?: string;
+};
+
+type RetrySystem = {
+    isConnected?: (platform: string) => boolean | undefined;
+    resetRetryCount: (platform: string) => void;
+    handleConnectionError: (
+        platform: string,
+        error: unknown,
+        reconnect: () => Promise<void>,
+        cleanup: () => Promise<void>
+    ) => void;
+};
+
+type ConnectionFactoryLike = {
+    createConnection: (platform: string, config: unknown, dependencies: unknown) => unknown;
+};
+
+type TikTokDependencies = {
+    logger?: TikTokLogger;
+    eventBus?: TikTokEventBus;
+    notificationManager?: TikTokNotificationManager;
+    initializationManager?: PlatformInitializationManager;
+    intervalManager?: IntervalManager;
+    initializationStats?: InitializationStatistics;
+    deduplicationMaxCacheSize?: number;
+    deduplicationTtlMs?: number;
+    TikTokWebSocketClient?: unknown;
+    WebcastEvent?: TikTokWebcastEventMap;
+    ControlEvent?: TikTokControlEventMap;
+    retrySystem?: RetrySystem;
+    connectionFactory?: ConnectionFactoryLike;
+    ChatFileLoggingService?: new (options: ChatFileLoggingOptions) => ChatFileLoggingService;
+    selfMessageDetectionService?: SelfMessageDetectionService | null;
+    viewerCountProvider?: {
+        getViewerCount: () => number;
+        isReady: () => boolean;
+    };
+};
+
+type EventFactory = ReturnType<typeof createTikTokEventFactory>;
+
+type DynamicEventFactoryMethod = (payload: TikTokPayload, options?: TikTokPayload) => TikTokPayload;
+
+type TikTokGiftAggregator = ReturnType<typeof createTikTokGiftAggregator>;
+
+type TikTokConnectionOrchestrator = ReturnType<typeof createTikTokConnectionOrchestrator>;
+
+type DeduplicationConfig = {
+    maxCacheSize: number;
+    ttlMs: number;
+};
+
+type NormalizedErrorDetails = {
+    message: string;
+    info?: unknown;
+    code?: unknown;
+    url?: unknown;
+    responseStatus?: unknown;
+    responseBody?: string;
+    causes?: NormalizedErrorDetails[];
+    remainingCauses?: number;
+};
+
+type NormalizedConnectionIssue = {
+    message: string;
+    code?: number;
+};
+
+type ReconnectPolicyInput = {
+    message?: string;
+    code?: unknown;
+    isError?: boolean;
+    source?: string;
+};
+
+type ReconnectDecision = {
+    issueType: string;
+    isStreamNotLive: boolean;
+    isTerminalError: boolean;
+    willReconnect: boolean;
+    shouldDeferReconnect: boolean;
+    shouldImmediateRetry: boolean;
+    skipReason: string | null;
+};
+
+type TikTokGiftAggregationState = {
+    platform: unknown;
+    userId: string;
+    username: string;
+    giftType: string;
+    avatarUrl: string;
+    giftImageUrl: string;
+    currency: string;
+    totalCount: number;
+    timer: ReturnType<typeof setTimeout> | number | null;
+    unitAmount: number;
+    lastGift: TikTokPayload;
+    lastId: string;
+    lastTimestamp: string;
+    sourceType?: string;
+    messageHighWaterCounts: Map<string, number>;
+    comboGroupHighWaterCounts: Map<string, number>;
+};
+
+type TikTokGiftPayload = TikTokPayload & {
+    platform?: unknown;
+    userId?: unknown;
+    username?: unknown;
+    avatarUrl?: unknown;
+    giftImageUrl?: unknown;
+    giftType?: unknown;
+    giftCount?: unknown;
+    repeatCount?: unknown;
+    amount?: unknown;
+    currency?: unknown;
+    unitAmount?: unknown;
+    id?: unknown;
+    timestamp?: unknown;
+    isAggregated?: boolean;
+    sourceType?: unknown;
+    rawData?: unknown;
+};
+
+type GiftErrorOverrides = Partial<{
+    userId: string;
+    username: string;
+    giftType: string;
+    giftCount: number;
+    amount: number;
+    currency: string;
+    avatarUrl: string;
+}>;
+
+type StandardEventOptions = TikTokPayload & {
+    factoryMethod?: string;
+    emitType?: string;
+    logEventType?: string;
+    normalizedData?: TikTokPayload | null;
+};
+
+type DefaultHandlerName =
+    | 'onChat'
+    | 'onViewerCount'
+    | 'onGift'
+    | 'onPaypiggy'
+    | 'onFollow'
+    | 'onRaid'
+    | 'onShare'
+    | 'onEnvelope'
+    | 'onStreamStatus';
+
+const isRecord = (value: unknown): value is TikTokPayload => (
+    !!value && typeof value === 'object' && !Array.isArray(value)
+);
+
+const asRecord = (value: unknown): TikTokPayload => (isRecord(value) ? value : {});
+
+const isTikTokLogger = (value: unknown): value is TikTokLogger => {
+    const candidate = asRecord(value);
+    return typeof candidate.debug === 'function'
+        && typeof candidate.info === 'function'
+        && typeof candidate.warn === 'function';
+};
+
+const isChatFileLogger = (value: unknown): value is ChatFileLogger => {
+    const candidate = asRecord(value);
+    return typeof candidate.debug === 'function'
+        && typeof candidate.info === 'function'
+        && typeof candidate.warn === 'function'
+        && typeof candidate.error === 'function';
+};
+
+const isTikTokConnection = (value: unknown): value is TikTokConnection => {
+    const candidate = asRecord(value);
+    return typeof candidate.connect === 'function'
+        && typeof candidate.disconnect === 'function'
+        && typeof candidate.on === 'function';
+};
+
+const isSelfMessageDetectionService = (value: unknown): value is SelfMessageDetectionService => (
+    typeof asRecord(value).shouldFilterMessage === 'function'
+);
+
+const resolveLogger = (candidate: unknown): TikTokLogger => {
+    if (isTikTokLogger(candidate)) {
+        return candidate;
+    }
+    throw new Error('TikTok logger dependency does not implement debug/info/warn');
+};
+
+const getOptionalString = (value: unknown): string | undefined => (
+    typeof value === 'string' && value.trim() ? value.trim() : undefined
+);
+
+const getErrorObject = (error: unknown): Error => (
+    error instanceof Error ? error : new Error(getErrorMessage(error))
+);
+
+const createConnectionFactoryAdapter = (factory: PlatformConnectionFactory): ConnectionFactoryLike => ({
+    createConnection: (platform: string, config: unknown, dependencies: unknown): unknown => (
+        factory.createConnection(platform, asRecord(config), asRecord(dependencies))
+    )
+});
+
+const getDynamicFactoryMethod = (factory: EventFactory, methodName: string): DynamicEventFactoryMethod | null => {
+    const method = asRecord(factory)[methodName];
+    return typeof method === 'function'
+        ? (method as DynamicEventFactoryMethod)
+        : null;
+};
+
 const getErrorMessage = (error: unknown): string => {
   if (error instanceof Error && typeof error.message === 'string' && error.message.length > 0) {
     return error.message;
@@ -57,19 +353,67 @@ const getErrorMessage = (error: unknown): string => {
 };
 
 class TikTokPlatform extends EventEmitter {
-    constructor(config = {}, dependencies = {}) {
+    declare logger: TikTokLogger;
+    declare errorHandler: TikTokErrorHandler;
+    declare eventBus: TikTokEventBus | null;
+    declare notificationManager: TikTokNotificationManager;
+    declare initializationManager: PlatformInitializationManager;
+    declare intervalManager: IntervalManager;
+    declare initializationStats: InitializationStatistics;
+    declare listenersConfigured: boolean;
+    declare recentPlatformMessageIds: Map<string, number>;
+    declare recentShareActors: Set<string>;
+    declare deduplicationConfig: DeduplicationConfig;
+    declare fallbackAvatarUrl: string;
+    declare config: TikTokConfig;
+    declare TikTokWebSocketClient: unknown;
+    declare WebcastEvent: TikTokWebcastEventMap;
+    declare ControlEvent: TikTokControlEventMap;
+    declare retrySystem: RetrySystem | null;
+    declare platformName: 'tiktok';
+    declare eventFactory: EventFactory;
+    declare isPlannedDisconnection: boolean;
+    declare connectionFactory: ConnectionFactoryLike;
+    declare connectionStateManager: ConnectionStateManager;
+    declare chatFileLoggingService: ChatFileLoggingService;
+    declare selfMessageDetectionService: SelfMessageDetectionService | null;
+    declare viewerCountProvider: { getViewerCount: () => number; isReady: () => boolean };
+    declare connection: TikTokConnection | null;
+    declare handlers: TikTokHandlers;
+    declare connectionActive: boolean;
+    declare connectionTime: number;
+    declare connectingPromise: Promise<unknown> | null;
+    declare retryLock: boolean;
+    declare _disconnectionInProgress: boolean;
+    declare giftAggregation: Record<string, TikTokGiftAggregationState>;
+    declare giftAggregationDelay: number;
+    declare giftAggregator: TikTokGiftAggregator;
+    declare cachedViewerCount: number;
+    declare connectionOrchestrator: TikTokConnectionOrchestrator;
+    declare _lastNotLiveWarningAt: number | undefined;
+
+    constructor(config: TikTokConfig = {}, dependencies: TikTokDependencies = {}) {
         super(); // Call EventEmitter constructor first to ensure proper prototype chain
 
         // Initialize logger with dependency injection support
         if (dependencies.logger) {
             this.logger = dependencies.logger;
         } else {
-            this.logger = getLazyUnifiedLogger();
-            if (!this.logger) {
-                this.logger = getLazyLogger();
-            }
+            const unifiedLogger = getLazyUnifiedLogger();
+            this.logger = unifiedLogger ? resolveLogger(unifiedLogger) : resolveLogger(getLazyLogger());
         }
-        this.errorHandler = createPlatformErrorHandler(this.logger, 'tiktok');
+        const errorHandlerLogger = {
+            ...this.logger,
+            error: this.logger.error ?? this.logger.warn
+        };
+        const platformErrorHandler = createPlatformErrorHandler(errorHandlerLogger, 'tiktok');
+        this.errorHandler = {
+            handleConnectionError: platformErrorHandler.handleConnectionError.bind(platformErrorHandler),
+            handleEventProcessingError: platformErrorHandler.handleEventProcessingError.bind(platformErrorHandler),
+            handleCleanupError: (error, context, message) => {
+                platformErrorHandler.handleCleanupError(error, context ?? 'cleanup', message ?? null);
+            }
+        };
         this.eventBus = dependencies.eventBus || null;
         this.notificationManager = dependencies.notificationManager;
         
@@ -88,9 +432,25 @@ class TikTokPlatform extends EventEmitter {
         this.config = config;
 
         this.TikTokWebSocketClient = dependencies.TikTokWebSocketClient;
-        this.WebcastEvent = dependencies.WebcastEvent;
-        this.ControlEvent = dependencies.ControlEvent;
-        this.retrySystem = dependencies.retrySystem || createRetrySystem({ logger: this.logger });
+        this.WebcastEvent = dependencies.WebcastEvent ?? {
+            CHAT: 'chat',
+            GIFT: 'gift',
+            FOLLOW: 'follow',
+            SOCIAL: 'social',
+            ROOM_USER: 'roomUser',
+            ERROR: 'error',
+            DISCONNECT: 'disconnect'
+        };
+        this.ControlEvent = dependencies.ControlEvent ?? {};
+        if (dependencies.retrySystem) {
+            this.retrySystem = dependencies.retrySystem;
+        } else {
+            const retrySystem = createRetrySystem({ logger: this.logger });
+            this.retrySystem = {
+                resetRetryCount: retrySystem.resetRetryCount.bind(retrySystem),
+                handleConnectionError: retrySystem.handleConnectionError.bind(retrySystem)
+            };
+        }
         this._validateDependencies(dependencies, this.config);
         
         this.platformName = 'tiktok';
@@ -113,23 +473,33 @@ class TikTokPlatform extends EventEmitter {
             this.retrySystem.isConnected = (platform) => {
                 if (platform !== 'tiktok') return false;
                 // Use connection's built-in state management
-                return this.connection && this.connection.isConnected;
+                return this.connection ? !!this.connection.isConnected : false;
             };
         }
         
-        this.connectionFactory = dependencies.connectionFactory || new PlatformConnectionFactory(this.logger);
+        this.connectionFactory = dependencies.connectionFactory || createConnectionFactoryAdapter(new PlatformConnectionFactory(this.logger));
         this.connectionStateManager = new ConnectionStateManager('tiktok', this.connectionFactory);
         this.connectionStateManager.initialize(this.config, { ...dependencies, logger: this.logger });
         
         // Initialize chat file logging service via dependency injection
         const ChatFileLoggingServiceClass = dependencies.ChatFileLoggingService || ChatFileLoggingService;
+        const chatFileLoggingOptions: ChatFileLoggingOptions = {
+            config: {
+                ...(typeof this.config.dataLoggingPath === 'string' ? { dataLoggingPath: this.config.dataLoggingPath } : {}),
+                ...(typeof this.config.dataLoggingVerbose === 'boolean' ? { dataLoggingVerbose: this.config.dataLoggingVerbose } : {})
+            }
+        };
+        if (isChatFileLogger(this.logger)) {
+            chatFileLoggingOptions.logger = this.logger;
+        }
         this.chatFileLoggingService = new ChatFileLoggingServiceClass({
-            logger: this.logger,
-            config: this.config
+            ...chatFileLoggingOptions
         });
         
         // Initialize self-message detection service via dependency injection
-        this.selfMessageDetectionService = dependencies.selfMessageDetectionService || null;
+        this.selfMessageDetectionService = isSelfMessageDetectionService(dependencies.selfMessageDetectionService)
+            ? dependencies.selfMessageDetectionService
+            : null;
 
         this.viewerCountProvider = dependencies.viewerCountProvider || {
             getViewerCount: () => 0,
@@ -151,16 +521,96 @@ class TikTokPlatform extends EventEmitter {
 
         // Viewer count cache
         this.cachedViewerCount = 0;
-        this.connectionOrchestrator = createTikTokConnectionOrchestrator({ platform: this });
+        this.connectionOrchestrator = createTikTokConnectionOrchestrator({ platform: this._createOrchestratorPlatform() });
 
     }
 
-    _validateDependencies(dependencies = {}, config = {}) {
+    _createOrchestratorPlatform() {
+        const platform = this;
+        return {
+            get logger() { return platform.logger; },
+            get config() { return { username: platform.config.username ?? '' }; },
+            get connection() { return platform.connection; },
+            set connection(connection: TikTokConnection | null) { platform.connection = connection; },
+            get connectionActive() { return platform.connectionActive; },
+            set connectionActive(connectionActive: boolean) { platform.connectionActive = connectionActive; },
+            get retryLock() { return platform.retryLock; },
+            set retryLock(retryLock: boolean) { platform.retryLock = retryLock; },
+            get listenersConfigured() { return platform.listenersConfigured; },
+            set listenersConfigured(listenersConfigured: boolean) { platform.listenersConfigured = listenersConfigured; },
+            get connectingPromise() { return platform.connectingPromise; },
+            set connectingPromise(connectingPromise: Promise<unknown> | null) { platform.connectingPromise = connectingPromise; },
+            get connectionStateManager() {
+                return {
+                    markDisconnected: () => platform.connectionStateManager.markDisconnected(),
+                    markConnecting: () => platform.connectionStateManager.markConnecting(),
+                    markError: (error: unknown) => platform.connectionStateManager.markError(error),
+                    ensureConnection: () => {
+                        const connection = platform.connectionStateManager.ensureConnection();
+                        if (!isTikTokConnection(connection)) {
+                            throw new Error('TikTok connection is missing required methods');
+                        }
+                        return connection;
+                    }
+                };
+            },
+            get errorHandler() { return platform.errorHandler; },
+            cleanupEventListeners: () => platform.cleanupEventListeners(),
+            checkConnectionPrerequisites: () => platform.checkConnectionPrerequisites(),
+            setupEventListeners: () => platform.setupEventListeners(),
+            handleConnectionSuccess: () => platform.handleConnectionSuccess(),
+            handleConnectionError: (error: unknown) => platform.handleConnectionError(error),
+            cleanup: () => platform.cleanup()
+        };
+    }
+
+    _createEventRouterPlatformAdapter() {
+        const platform = this;
+        return {
+            get listenersConfigured() { return platform.listenersConfigured; },
+            set listenersConfigured(listenersConfigured: boolean) { platform.listenersConfigured = listenersConfigured; },
+            get connection() { return platform.connection; },
+            set connection(connection: TikTokConnection | null) { platform.connection = connection; },
+            get WebcastEvent() { return platform.WebcastEvent; },
+            get ControlEvent() { return platform.ControlEvent; },
+            get platformName() { return platform.platformName; },
+            get selfMessageDetectionService() { return platform.selfMessageDetectionService; },
+            get config() { return platform.config; },
+            get logger() { return platform.logger; },
+            get errorHandler() { return platform.errorHandler; },
+            constructor: {
+                resolveEventTimestampMs: (data: TikTokRawEvent) => TikTokPlatform.resolveEventTimestampMs(data)
+            },
+            _logIncomingEvent: (eventType: string, data: unknown) => platform._logIncomingEvent(eventType, data),
+            _emitPlatformEvent: (type: string, payload: TikTokPayload) => platform._emitPlatformEvent(type, payload),
+            _handleStandardEvent: (eventType: string, data: TikTokRawEvent, options?: Record<string, unknown>) => platform._handleStandardEvent(eventType, data, options),
+            _handleStreamEnd: (data?: TikTokRawEvent) => platform._handleStreamEnd(data),
+            handleConnectionIssue: (issue: unknown, isError?: boolean) => platform.handleConnectionIssue(issue, isError),
+            handleConnectionError: (error: unknown) => platform.handleConnectionError(error),
+            handleRetry: (error: unknown) => platform.handleRetry(error),
+            handleTikTokGift: (data: TikTokRawEvent) => platform.handleTikTokGift(data),
+            handleTikTokFollow: (data: TikTokRawEvent) => platform.handleTikTokFollow(data),
+            handleTikTokSocial: (data: TikTokRawEvent) => platform.handleTikTokSocial(data),
+            get connectionActive() { return platform.connectionActive; },
+            set connectionActive(connectionActive: boolean) { platform.connectionActive = connectionActive; },
+            get cachedViewerCount() { return platform.cachedViewerCount; },
+            set cachedViewerCount(cachedViewerCount: number) { platform.cachedViewerCount = cachedViewerCount; },
+            get connectionTime() { return platform.connectionTime; },
+            set connectionTime(connectionTime: number) { platform.connectionTime = connectionTime; },
+            _getTimestamp: (data: TikTokRawEvent) => platform._getTimestamp(data),
+            _getPlatformMessageId: (data: TikTokRawEvent) => platform._getPlatformMessageId(data),
+            _handleChatMessage: async (rawData: TikTokRawEvent, normalizedData: TikTokPayload) => {
+                await platform._handleChatMessage(rawData, normalizedData);
+            }
+        };
+    }
+
+    _validateDependencies(dependencies: TikTokDependencies = {}, config: TikTokConfig = {}): void {
         if (!config.enabled) {
             return;
         }
 
-        const missing = [];
+        const missing: string[] = [];
 
         if (!dependencies.TikTokWebSocketClient) {
             missing.push('TikTokWebSocketClient');
@@ -181,8 +631,8 @@ class TikTokPlatform extends EventEmitter {
         }
     }
 
-    checkConnectionPrerequisites() {
-        const reasons = [];
+    checkConnectionPrerequisites(): { canConnect: boolean; reasons: string[]; reason?: string } {
+        const reasons: string[] = [];
         
         if (!this.config.enabled) {
             reasons.push('Platform disabled in configuration');
@@ -198,35 +648,35 @@ class TikTokPlatform extends EventEmitter {
         
         return {
             canConnect: reasons.length === 0,
-            reasons: reasons,
-            reason: reasons[0]
+            reasons,
+            ...(reasons[0] ? { reason: reasons[0] } : {})
         };
     }
     
-    get connectionStatus() {
+    get connectionStatus(): boolean {
         return !!(this.connection && this.connection.isConnected);
     }
 
-    get isConnecting() {
-        return this.connection ? this.connection.isConnecting : false;
+    get isConnecting(): boolean {
+        return this.connection ? !!this.connection.isConnecting : false;
     }
 
-    getConnectionState() {
+    getConnectionState(): TikTokPayload {
         return {
-            isConnected: this.connection ? this.connection.isConnected : false,
-            isConnecting: this.connection ? this.connection.isConnecting : false,
+            isConnected: this.connection ? !!this.connection.isConnected : false,
+            isConnecting: this.connection ? !!this.connection.isConnecting : false,
             hasConnection: !!this.connection,
             connectionId: this.connection?.connectionId || 'N/A',
             connectionTime: this.connectionTime
         };
     }
 
-    getStats() {
+    getStats(): TikTokPayload {
         return {
             platform: 'tiktok',
             enabled: this.config.enabled,
             connected: !!(this.connection && this.connection.isConnected),
-            connecting: this.connection ? this.connection.isConnecting : false,
+            connecting: this.connection ? !!this.connection.isConnecting : false,
             config: {
                 username: this.config.username,
                 viewerCountEnabled: this.config.viewerCountEnabled,
@@ -235,15 +685,15 @@ class TikTokPlatform extends EventEmitter {
         };
     }
 
-    isConfigured() {
+    isConfigured(): boolean {
         return !!(this.config.enabled && this.config.username);
     }
 
-    validateConfig() {
+    validateConfig(): { isReady: boolean; issues: string[] } {
         return this.getStatus();
     }
     
-    async initialize(handlers) {
+    async initialize(handlers: TikTokHandlers = {}): Promise<void> {
         // Check if initialization should proceed
         if (!this.initializationManager.beginInitialization()) {
             return; // Reinitialization prevented
@@ -277,8 +727,7 @@ class TikTokPlatform extends EventEmitter {
             });
             
             this.initializationStats.recordSuccess(attemptId, {
-                connectionTime,
-                handlersCount: Object.keys(this.handlers).length
+                connectionTime
             });
             
         } catch (error) {
@@ -299,7 +748,7 @@ class TikTokPlatform extends EventEmitter {
                 this.errorHandler.handleConnectionError(
                     error,
                     'connection',
-                    `Connection failed: ${error?.message || error}`
+                    `Connection failed: ${getErrorMessage(error)}`
                 );
             }
 
@@ -308,14 +757,14 @@ class TikTokPlatform extends EventEmitter {
         }
     }
 
-    async _connect(handlers) {
+    async _connect(handlers: TikTokHandlers): Promise<unknown> {
         return this.connectionOrchestrator.connect(handlers);
     }
 
 
-    _handleConnectionError(error) {
+    _handleConnectionError(error: unknown): { errorCategory: string; username?: string } {
         const username = this.config.username;
-        const errorMessage = error?.message || error?.toString() || 'Unknown error';
+        const errorMessage = getErrorMessage(error);
         this.errorHandler.handleConnectionError(
             error,
             'connection',
@@ -341,25 +790,28 @@ class TikTokPlatform extends EventEmitter {
             this.logger.warn(`Room info retrieval failed for TikTok user '${username}' - verify username is correct and user exists on TikTok`, 'tiktok');
         }
 
-        return { errorCategory, username };
+        return {
+            errorCategory,
+            ...(username ? { username } : {})
+        };
     }
 
     setupEventListeners() {
-        setupTikTokEventListeners(this);
+        setupTikTokEventListeners(this._createEventRouterPlatformAdapter());
     }
 
-    async _logIncomingEvent(eventType, data) {
+    async _logIncomingEvent(eventType: string, data: unknown): Promise<void> {
         if (!this.config.dataLoggingEnabled) {
             return;
         }
         try {
             await this.logRawPlatformData(eventType, data);
         } catch (error) {
-            this.logger.warn(`Failed to log TikTok event '${eventType}': ${error?.message || error}`, 'tiktok');
+            this.logger.warn(`Failed to log TikTok event '${eventType}': ${getErrorMessage(error)}`, 'tiktok');
         }
     }
 
-    async _logRawEvent(eventType, data) {
+    async _logRawEvent(eventType: string, data: unknown): Promise<void> {
         return this._logIncomingEvent(eventType, data);
     }
     
@@ -387,7 +839,7 @@ class TikTokPlatform extends EventEmitter {
         }
     }
     
-    handleConnectionError(err) {
+    handleConnectionError(err: unknown): void {
         const username = this.config.username;
         const details = this._normalizeErrorDetails(err);
         const errorMessage = details.message;
@@ -467,50 +919,57 @@ class TikTokPlatform extends EventEmitter {
         return { action: 'retry-queued' };
     }
     
-    _normalizeErrorDetails(err) {
-        const mapError = (source) => {
+    _normalizeErrorDetails(err: unknown): NormalizedErrorDetails {
+        const mapError = (source: unknown): NormalizedErrorDetails => {
             if (!source) {
                 return { message: 'Unknown error' };
             }
 
-            if (!source.response && source.exception && typeof source.exception === 'object') {
-                source.response = source.exception.response || source.response;
-                source.requestUrl = source.exception.requestUrl
-                    || source.requestUrl
-                    || source.exception.url
-                    || source.exception.config?.url;
-                source.code = source.code || source.exception.code || source.exception.statusCode;
-            }
+            const sourceRecord = asRecord(source);
+            const exceptionRecord = asRecord(sourceRecord.exception);
+            const response = sourceRecord.response ?? exceptionRecord.response;
+            const requestUrl = sourceRecord.requestUrl
+                ?? exceptionRecord.requestUrl
+                ?? sourceRecord.url
+                ?? exceptionRecord.url
+                ?? asRecord(exceptionRecord.config).url;
+            const code = sourceRecord.code
+                ?? exceptionRecord.code
+                ?? exceptionRecord.statusCode
+                ?? sourceRecord.status
+                ?? sourceRecord.statusCode;
 
-            const baseMessage = source.message || source.info || source.toString() || 'Unknown error';
-            const responseBody = typeof source.response?.body === 'string'
-                ? source.response.body.slice(0, 512)
-                : (typeof source.response?.data === 'string' ? source.response.data.slice(0, 512) : undefined);
+            const baseMessage = sourceRecord.message || sourceRecord.info || String(source) || 'Unknown error';
+            const responseRecord = asRecord(response);
+            const responseBody = typeof responseRecord.body === 'string'
+                ? responseRecord.body.slice(0, 512)
+                : (typeof responseRecord.data === 'string' ? responseRecord.data.slice(0, 512) : undefined);
 
             return {
-                message: baseMessage,
-                info: source.info,
-                code: source.code || source.status || source.statusCode,
-                url: source.url || source.requestUrl,
-                responseStatus: source.response?.status || source.statusCode,
-                responseBody
+                message: String(baseMessage),
+                info: sourceRecord.info,
+                code,
+                url: requestUrl,
+                responseStatus: responseRecord.status || sourceRecord.statusCode,
+                ...(responseBody !== undefined ? { responseBody } : {})
             };
         };
 
         const details = mapError(err);
+        const errRecord = asRecord(err);
 
         // Capture nested connector errors array (e.g., fetchRoomId fallbacks)
-        if (Array.isArray(err?.errors) && err.errors.length) {
-            details.causes = err.errors.slice(0, 3).map((nestedErr) => mapError(nestedErr));
-            if (err.errors.length > 3) {
-                details.remainingCauses = err.errors.length - details.causes.length;
+        if (Array.isArray(errRecord.errors) && errRecord.errors.length) {
+            details.causes = errRecord.errors.slice(0, 3).map((nestedErr: unknown) => mapError(nestedErr));
+            if (errRecord.errors.length > 3) {
+                details.remainingCauses = errRecord.errors.length - details.causes.length;
             }
         }
 
         return details;
     }
 
-    _normalizeConnectionIssue(issue) {
+    _normalizeConnectionIssue(issue: unknown): NormalizedConnectionIssue {
         if (!issue) {
             return { message: 'Unknown disconnect reason' };
         }
@@ -524,18 +983,19 @@ class TikTokPlatform extends EventEmitter {
         }
 
         if (typeof issue === 'object') {
-            const message = issue.reason || issue.message;
-            const code = typeof issue.code === 'number' ? issue.code : undefined;
+            const issueRecord = asRecord(issue);
+            const message = issueRecord.reason || issueRecord.message;
+            const code = typeof issueRecord.code === 'number' ? issueRecord.code : undefined;
             return {
-                message: message || 'Unknown disconnect reason',
-                code
+                message: String(message || 'Unknown disconnect reason'),
+                ...(code !== undefined ? { code } : {})
             };
         }
 
         return { message: String(issue) };
     }
 
-    _isStreamNotLive(detailsOrMessage) {
+    _isStreamNotLive(detailsOrMessage: string | { message?: unknown; reason?: unknown; code?: unknown }): boolean {
         const message = typeof detailsOrMessage === 'string'
             ? detailsOrMessage
             : detailsOrMessage?.message || detailsOrMessage?.reason;
@@ -548,10 +1008,10 @@ class TikTokPlatform extends EventEmitter {
         if (!message) {
             return false;
         }
-        return message.toLowerCase().includes('not live');
+        return String(message).toLowerCase().includes('not live');
     }
 
-    _formatStreamNotLiveMessage(username, details) {
+    _formatStreamNotLiveMessage(username: string | undefined, details: { code?: unknown }): string {
         const codeSuffix = details?.code ? ` (code ${details.code})` : '';
         return `Stream is not live for TikTok user '${username}'${codeSuffix}`;
     }
@@ -567,7 +1027,7 @@ class TikTokPlatform extends EventEmitter {
     return Date.now() - this._lastNotLiveWarningAt < 2000;
   }
 
-  _ensureDeferredReconnectChecks(context = 'offline') {
+  _ensureDeferredReconnectChecks(context = 'offline'): { scheduled: boolean; reason: string } {
     if (!this.config.enabled) {
       return { scheduled: false, reason: 'platform-disabled' };
     }
@@ -583,7 +1043,7 @@ class TikTokPlatform extends EventEmitter {
           await this._connect(this.handlers);
         } catch (err) {
           this.logger.debug(
-            `Deferred reconnect check failed (${context}): ${err?.message || err}`,
+            `Deferred reconnect check failed (${context}): ${getErrorMessage(err)}`,
             'tiktok',
           );
         }
@@ -595,10 +1055,10 @@ class TikTokPlatform extends EventEmitter {
     return { scheduled: true, reason: 'scheduled' };
   }
 
-  _classifyReconnectPolicy({ message = 'Unknown error', code, isError = false, source = 'connection-issue' } = {}) {
+  _classifyReconnectPolicy({ message = 'Unknown error', code, isError = false, source = 'connection-issue' }: ReconnectPolicyInput = {}): ReconnectDecision {
     const isStreamNotLive = this._isStreamNotLive({ message, code });
     const isTerminalError = !isStreamNotLive && !this._isRecoverableError(message);
-    const reconnectAllowed = !this.isPlannedDisconnection && this.config.enabled;
+    const reconnectAllowed = !!(!this.isPlannedDisconnection && this.config.enabled);
     const willReconnect = reconnectAllowed && !isTerminalError;
 
     const issueType = isStreamNotLive
@@ -708,7 +1168,7 @@ class TikTokPlatform extends EventEmitter {
         return { queued: true };
     }
     
-    async handleConnectionIssue(issue, isError = false) {
+    async handleConnectionIssue(issue: unknown, isError = false) {
         // Prevent double-handling when both DISCONNECTED and STREAM_END fire (e.g., 4404)
         if (this._disconnectionInProgress) {
             return { issueType: 'skipped', retryResult: null, reason: 'disconnection-in-progress' };
@@ -771,8 +1231,8 @@ class TikTokPlatform extends EventEmitter {
         }
     }
     
-    getStatus() {
-        const issues = [];
+    getStatus(): { isReady: boolean; issues: string[] } {
+        const issues: string[] = [];
         const isConnected = !!(this.connection && this.connection.isConnected);
 
         if (this.config.enabled && !isConnected) {
@@ -780,19 +1240,19 @@ class TikTokPlatform extends EventEmitter {
         }
 
         return {
-            isReady: this.config.enabled && isConnected,
+            isReady: !!(this.config.enabled && isConnected),
             issues
         };
     }
 
-    async handleTikTokGift(data) {
+    async handleTikTokGift(data: unknown) {
         // Fast path for invalid data - skip expensive processing
         if (!data || typeof data !== 'object' || Object.keys(data).length === 0) {
             this.logger.warn('handleTikTokGift called with empty or invalid data', 'tiktok', { data });
             return;
         }
         try {
-            const normalizedGift = normalizeTikTokGiftEvent(data, {
+            const normalizedGift = normalizeTikTokGiftEvent(asRecord(data), {
                 platformName: this.platformName,
                 getTimestamp: (payload) => this._getTimestamp(payload),
                 getPlatformMessageId: (payload) => this._getPlatformMessageId(payload)
@@ -844,7 +1304,8 @@ class TikTokPlatform extends EventEmitter {
 
         } catch (error) {
             const errorOverrides = this._buildGiftErrorOverrides(data);
-            if (error?.message && error.message.includes('repeatCount')) {
+            const errorMessage = getErrorMessage(error);
+            if (errorMessage.includes('repeatCount')) {
                 await this._handleError(error, {
                     reason: 'gift-count-invalid',
                     recoverable: true,
@@ -871,7 +1332,7 @@ class TikTokPlatform extends EventEmitter {
         }
     }
 
-    async handleOfficialGift(gift, options = {}) {
+    async handleOfficialGift(gift: TikTokGiftPayload, options: { isStreakCompleted?: boolean } = {}) {
         const isStreakCompleted = options.isStreakCompleted === true;
         const username = gift.username;
         const giftType = gift.giftType;
@@ -897,7 +1358,7 @@ class TikTokPlatform extends EventEmitter {
             originalData: gift.rawData
         };
 
-        const giftPayload = {
+        const giftPayload: TikTokGiftPayload = {
             platform: gift.platform || 'tiktok',
             userId: gift.userId,
             username,
@@ -931,7 +1392,7 @@ class TikTokPlatform extends EventEmitter {
         }
     }
 
-    async handleStandardGift(gift) {
+    async handleStandardGift(gift: TikTokGiftPayload) {
         return this.giftAggregator.handleStandardGift(gift);
     }
 
@@ -940,15 +1401,15 @@ class TikTokPlatform extends EventEmitter {
         this.giftAggregator.cleanupGiftAggregation();
     }
 
-    static resolveEventTimestampMs(data) {
+    static resolveEventTimestampMs(data: unknown) {
         return resolveTikTokTimestampMs(data);
     }
 
-    static resolveEventTimestampISO(data) {
+    static resolveEventTimestampISO(data: unknown) {
         return resolveTikTokTimestampISO(data);
     }
 
-    async handleTikTokFollow(data) {
+    async handleTikTokFollow(data: unknown) {
         try {
             const { username, userId } = extractTikTokUserData(data);
 
@@ -957,7 +1418,8 @@ class TikTokPlatform extends EventEmitter {
                 return;
             }
 
-            const inferredActionType = (data?.displayType || data?.actionType || data?.type || 'follow').toLowerCase();
+            const dataRecord = asRecord(data);
+            const inferredActionType = String(dataRecord.displayType || dataRecord.actionType || dataRecord.type || 'follow').toLowerCase();
             const actionType = this._inferSocialActionType(data, inferredActionType);
 
             if (this._shouldSkipDuplicatePlatformMessage(data).isDuplicate) {
@@ -982,7 +1444,7 @@ class TikTokPlatform extends EventEmitter {
         }
     }
 
-    async handleTikTokSocial(data) {
+    async handleTikTokSocial(data: unknown) {
         try {
             // Validate data structure
             if (!data || typeof data !== 'object') {
@@ -990,8 +1452,9 @@ class TikTokPlatform extends EventEmitter {
                 return;
             }
 
-            const { username, userId } = extractTikTokUserData(data);
-            const inferredActionType = (data.displayType || data.actionType || data.type || 'social').toLowerCase();
+            const dataRecord = asRecord(data);
+            const { username, userId } = extractTikTokUserData(dataRecord);
+            const inferredActionType = String(dataRecord.displayType || dataRecord.actionType || dataRecord.type || 'social').toLowerCase();
             const actionType = this._inferSocialActionType(data, inferredActionType);
 
             if (!userId || !username) {
@@ -1030,12 +1493,14 @@ class TikTokPlatform extends EventEmitter {
         }
     }
 
-    _inferSocialActionType(data, baseType = 'social') {
+    _inferSocialActionType(data: unknown, baseType = 'social'): string {
+        const dataRecord = asRecord(data);
         const normalizedBaseType = String(baseType || 'social').toLowerCase();
 
-        const displayText = data?.displayText || data?.common?.displayText || {};
-        const defaultPattern = String(displayText.defaultPattern || data?.label || '').toLowerCase();
-        const displayType = String(displayText.displayType || data?.displayType || '').toLowerCase();
+        const common = asRecord(dataRecord.common);
+        const displayText = asRecord(dataRecord.displayText || common.displayText);
+        const defaultPattern = String(displayText.defaultPattern || dataRecord.label || '').toLowerCase();
+        const displayType = String(displayText.displayType || dataRecord.displayType || '').toLowerCase();
 
         if (
             defaultPattern.includes('repost')
@@ -1061,17 +1526,17 @@ class TikTokPlatform extends EventEmitter {
         return normalizedBaseType;
     }
 
-    getViewerCount() {
+    getViewerCount(): number {
         return this.cachedViewerCount || 0;
     }
 
-    async logRawPlatformData(eventType, data) {
+    async logRawPlatformData(eventType: string, data: unknown): Promise<unknown> {
         // Delegate to centralized service
         return this.chatFileLoggingService.logRawPlatformData('tiktok', eventType, data, this.config);
     }
 
     cleanupEventListeners() {
-        cleanupTikTokEventListeners(this);
+        cleanupTikTokEventListeners(this._createEventRouterPlatformAdapter());
     }
 
     async cleanup() {
@@ -1091,7 +1556,7 @@ class TikTokPlatform extends EventEmitter {
                     this.errorHandler.handleCleanupError(
                         error,
                         'connection disconnect',
-                        `Error disconnecting TikTok connection: ${error?.message || error}`
+                    `Error disconnecting TikTok connection: ${getErrorMessage(error)}`
                     );
                 }
             }
@@ -1107,7 +1572,7 @@ class TikTokPlatform extends EventEmitter {
             this.errorHandler.handleCleanupError(
                 error,
                 'interval cleanup',
-                `Error clearing intervals during cleanup: ${error?.message || error}`
+                `Error clearing intervals during cleanup: ${getErrorMessage(error)}`
             );
         }
 
@@ -1131,13 +1596,14 @@ class TikTokPlatform extends EventEmitter {
         this.initializationStats?.reset();
     }
 
-    _normalizeUserData(data = {}) {
-        const userId = typeof data.userId === 'string'
-            ? data.userId.trim()
-            : (typeof data.userId === 'number' ? String(data.userId) : null);
-        const username = typeof data.username === 'string'
-            ? data.username.trim()
-            : (typeof data.username === 'number' ? String(data.username) : null);
+    _normalizeUserData(data: unknown = {}): { userId: string; username: string } {
+        const dataRecord = asRecord(data);
+        const userId = typeof dataRecord.userId === 'string'
+            ? dataRecord.userId.trim()
+            : (typeof dataRecord.userId === 'number' ? String(dataRecord.userId) : null);
+        const username = typeof dataRecord.username === 'string'
+            ? dataRecord.username.trim()
+            : (typeof dataRecord.username === 'number' ? String(dataRecord.username) : null);
 
         if (!userId) {
             throw new Error('Missing TikTok userId');
@@ -1152,7 +1618,7 @@ class TikTokPlatform extends EventEmitter {
         };
     }
 
-    _buildEventMetadata(additionalMetadata = {}) {
+    _buildEventMetadata(additionalMetadata: TikTokPayload = {}): TikTokPayload {
         return {
             platform: 'tiktok',
             correlationId: PlatformEvents._generateCorrelationId(),
@@ -1160,12 +1626,13 @@ class TikTokPlatform extends EventEmitter {
         };
     }
 
-    _getTimestamp(data) {
+    _getTimestamp(data: unknown): string | null {
         return resolveTikTokTimestampISO(data);
     }
 
-    _resolveAvatarUrl(data = {}) {
-        const payloadAvatarUrl = typeof data.avatarUrl === 'string' ? data.avatarUrl.trim() : '';
+    _resolveAvatarUrl(data: unknown = {}): string {
+        const dataRecord = asRecord(data);
+        const payloadAvatarUrl = typeof dataRecord.avatarUrl === 'string' ? dataRecord.avatarUrl.trim() : '';
         if (payloadAvatarUrl) {
             return payloadAvatarUrl;
         }
@@ -1178,12 +1645,14 @@ class TikTokPlatform extends EventEmitter {
         return this.fallbackAvatarUrl;
     }
 
-    _buildGiftErrorOverrides(data) {
+    _buildGiftErrorOverrides(data: unknown): GiftErrorOverrides {
         if (!data || typeof data !== 'object') {
             return {};
         }
 
-        const normalizeString = (value) => {
+        const dataRecord = asRecord(data);
+
+        const normalizeString = (value: unknown): string | null => {
             if (typeof value === 'string') {
                 const trimmed = value.trim();
                 return trimmed ? trimmed : null;
@@ -1195,20 +1664,20 @@ class TikTokPlatform extends EventEmitter {
             return null;
         };
 
-        const user = (data.user && typeof data.user === 'object') ? data.user : null;
-        const userId = normalizeString(user?.userId ?? data.userId);
-        const username = normalizeString(user?.uniqueId ?? data.username);
-        const giftDetails = (data.giftDetails && typeof data.giftDetails === 'object') ? data.giftDetails : null;
+        const user = asRecord(dataRecord.user);
+        const userId = normalizeString(user.userId ?? dataRecord.userId);
+        const username = normalizeString(user.uniqueId ?? dataRecord.username);
+        const giftDetails = asRecord(dataRecord.giftDetails);
         const giftType = normalizeString(giftDetails?.giftName);
 
-        const giftCountValue = Number(data.repeatCount);
+        const giftCountValue = Number(dataRecord.repeatCount);
         const giftCount = Number.isFinite(giftCountValue) && giftCountValue > 0 ? giftCountValue : null;
 
-        const amountValue = Number(data.giftCoins ?? data.amount);
+        const amountValue = Number(dataRecord.giftCoins ?? dataRecord.amount);
         const amount = Number.isFinite(amountValue) && amountValue > 0 ? amountValue : null;
-        const currency = normalizeString(data.currency);
+        const currency = normalizeString(dataRecord.currency);
 
-        const overrides = {};
+        const overrides: GiftErrorOverrides = {};
         if (userId) {
             overrides.userId = userId;
         }
@@ -1231,7 +1700,7 @@ class TikTokPlatform extends EventEmitter {
         return overrides;
     }
 
-    _createMonetizationErrorPayload(notificationType, data, overrides = {}) {
+    _createMonetizationErrorPayload(notificationType: string, data: unknown, overrides: GiftErrorOverrides = {}) {
         const id = this._getPlatformMessageId(data);
         let timestamp = this._getTimestamp(data);
         if (!timestamp) {
@@ -1244,7 +1713,7 @@ class TikTokPlatform extends EventEmitter {
             );
             timestamp = getSystemTimestampISO();
         }
-        const payloadOptions = {
+        const payloadOptions: TikTokPayload & { avatarUrl?: string } = {
             notificationType,
             platform: 'tiktok',
             timestamp,
@@ -1258,12 +1727,14 @@ class TikTokPlatform extends EventEmitter {
         return createMonetizationErrorPayload(payloadOptions);
     }
 
-    _getPlatformMessageId(data) {
+    _getPlatformMessageId(data: unknown): string | null {
         if (!data || typeof data !== 'object') {
             return null;
         }
 
-        const msgId = data.common?.msgId;
+        const dataRecord = asRecord(data);
+        const common = asRecord(dataRecord.common);
+        const msgId = common.msgId;
         if (msgId == null) {
             return null;
         }
@@ -1272,7 +1743,7 @@ class TikTokPlatform extends EventEmitter {
         return normalized || null;
     }
 
-    _shouldSkipDuplicatePlatformMessage(data, ttlMs = this.deduplicationConfig?.ttlMs ?? 2 * 60 * 1000) {
+    _shouldSkipDuplicatePlatformMessage(data: unknown, ttlMs = this.deduplicationConfig?.ttlMs ?? 2 * 60 * 1000): { isDuplicate: boolean; cleanupPerformed: boolean } {
         const messageId = this._getPlatformMessageId(data);
         if (!messageId) {
             return { isDuplicate: false, cleanupPerformed: false };
@@ -1309,7 +1780,7 @@ class TikTokPlatform extends EventEmitter {
         return { isDuplicate: false, cleanupPerformed };
     }
 
-    _shouldSkipDuplicateShareActor(userId) {
+    _shouldSkipDuplicateShareActor(userId: unknown): boolean {
         const normalizedUserId = typeof userId === 'string'
             ? userId.trim()
             : (typeof userId === 'number' ? String(userId).trim() : '');
@@ -1325,7 +1796,7 @@ class TikTokPlatform extends EventEmitter {
         return false;
     }
 
-    _resetShareActorTracking(reason) {
+    _resetShareActorTracking(reason: string): void {
         const trackedCount = this.recentShareActors.size;
         if (trackedCount === 0) {
             return;
@@ -1338,10 +1809,10 @@ class TikTokPlatform extends EventEmitter {
         });
     }
 
-    _handleEventProcessingError(emitType, data, error) {
+    _handleEventProcessingError(emitType: string, data: unknown, error: unknown) {
         this.errorHandler.handleEventProcessingError(error, emitType, data);
 
-        const monetizationTypes = new Set([
+        const monetizationTypes = new Set<string>([
             PlatformEvents.GIFT,
             PlatformEvents.PAYPIGGY,
             PlatformEvents.GIFTPAYPIGGY,
@@ -1352,16 +1823,16 @@ class TikTokPlatform extends EventEmitter {
             return { payloadEmitted: false, reason: 'non-monetization' };
         }
 
-        let errorOverrides = {};
-        const hasCanonicalIdentity = data
-            && data.userId !== undefined
-            && data.userId !== null
-            && data.username !== undefined
-            && data.username !== null;
+        let errorOverrides: GiftErrorOverrides = {};
+        const dataRecord = asRecord(data);
+        const hasCanonicalIdentity = dataRecord.userId !== undefined
+            && dataRecord.userId !== null
+            && dataRecord.username !== undefined
+            && dataRecord.username !== null;
 
         if (hasCanonicalIdentity) {
-            const normalizedUserId = String(data.userId).trim();
-            const normalizedUsername = String(data.username).trim();
+            const normalizedUserId = String(dataRecord.userId).trim();
+            const normalizedUsername = String(dataRecord.username).trim();
             if (normalizedUserId && normalizedUsername) {
                 errorOverrides = {
                     username: normalizedUsername,
@@ -1383,26 +1854,26 @@ class TikTokPlatform extends EventEmitter {
         }
 
         if (emitType === PlatformEvents.GIFT) {
-            const amount = Number(data?.giftCoins ?? data?.amount);
+            const amount = Number(dataRecord.giftCoins ?? dataRecord.amount);
             if (Number.isFinite(amount)) {
                 errorOverrides.amount = amount;
             }
-            const repeatCount = Number(data?.giftCount ?? data?.repeatCount);
+            const repeatCount = Number(dataRecord.giftCount ?? dataRecord.repeatCount);
             if (Number.isFinite(repeatCount)) {
                 errorOverrides.giftCount = repeatCount;
             }
-            if (typeof data?.currency === 'string' && data.currency.trim()) {
-                errorOverrides.currency = data.currency.trim();
+            if (typeof dataRecord.currency === 'string' && dataRecord.currency.trim()) {
+                errorOverrides.currency = dataRecord.currency.trim();
             }
         }
 
         if (emitType === PlatformEvents.ENVELOPE) {
-            const amount = Number(data?.giftCoins ?? data?.amount);
+            const amount = Number(dataRecord.giftCoins ?? dataRecord.amount);
             if (Number.isFinite(amount)) {
                 errorOverrides.amount = amount;
             }
-            if (typeof data?.currency === 'string' && data.currency.trim()) {
-                errorOverrides.currency = data.currency.trim();
+            if (typeof dataRecord.currency === 'string' && dataRecord.currency.trim()) {
+                errorOverrides.currency = dataRecord.currency.trim();
             }
         }
 
@@ -1419,16 +1890,20 @@ class TikTokPlatform extends EventEmitter {
         return { payloadEmitted: true };
     }
 
-    async _handleStandardEvent(eventType, data, options = {}) {
+    async _handleStandardEvent(eventType: string, data: unknown, options: StandardEventOptions = {}) {
         const factoryMethod = options.factoryMethod || `create${this._capitalize(eventType)}`;
         const emitType = options.emitType || eventType;
         try {
-            await this._logRawEvent?.(options.logEventType || emitType, data);
+            await this._logRawEvent(options.logEventType || emitType, data);
             const normalizedInput = {
-                ...(data || {}),
+                ...asRecord(data),
                 avatarUrl: this._resolveAvatarUrl(data)
             };
-            const eventData = this.eventFactory[factoryMethod](normalizedInput, options);
+            const eventFactoryMethod = getDynamicFactoryMethod(this.eventFactory, factoryMethod);
+            if (!eventFactoryMethod) {
+                throw new Error(`Missing TikTok event factory method: ${factoryMethod}`);
+            }
+            const eventData = eventFactoryMethod(normalizedInput, options);
             this._emitPlatformEvent(emitType, eventData);
             return { success: true };
         } catch (error) {
@@ -1436,12 +1911,12 @@ class TikTokPlatform extends EventEmitter {
         }
     }
 
-    _capitalize(str = '') {
+    _capitalize(str = ''): string {
         return str.charAt(0).toUpperCase() + str.slice(1);
     }
 
 
-    async _handleChatMessage(data, normalizedData = null) {
+    async _handleChatMessage(data: unknown, normalizedData: TikTokPayload | null = null) {
         return this._handleStandardEvent('chatMessage', data, {
             factoryMethod: 'createChatMessage',
             emitType: PlatformEvents.CHAT_MESSAGE,
@@ -1449,14 +1924,14 @@ class TikTokPlatform extends EventEmitter {
         });
     }
 
-    async _handleGift(data) {
+    async _handleGift(data: TikTokGiftPayload) {
         return this._handleStandardEvent('gift', data, {
             factoryMethod: 'createGift',
             emitType: PlatformEvents.GIFT
         });
     }
 
-    async _handleFollow(data) {
+    async _handleFollow(data: unknown) {
         try {
             const { username, userId } = extractTikTokUserData(data);
 
@@ -1487,7 +1962,7 @@ class TikTokPlatform extends EventEmitter {
         }
     }
 
-    async _handleShare(data) {
+    async _handleShare(data: unknown) {
         try {
             const { username, userId } = extractTikTokUserData(data);
 
@@ -1546,9 +2021,9 @@ class TikTokPlatform extends EventEmitter {
         }
     }
 
-    async _handleDisconnection(reason, willReconnect = null) {
+    async _handleDisconnection(reason: string, willReconnect: boolean | null = null) {
         try {
-            const reconnectFlag = willReconnect !== null ? willReconnect : (!this.isPlannedDisconnection && this.config.enabled);
+            const reconnectFlag = willReconnect !== null ? willReconnect : !!(!this.isPlannedDisconnection && this.config.enabled);
             const eventData = this.eventFactory.createDisconnection(reason, reconnectFlag);
             const eventPlatform = eventData.platform;
             this.emit('platform:event', {
@@ -1569,7 +2044,7 @@ class TikTokPlatform extends EventEmitter {
         }
     }
 
-  async _handleStreamEnd(payload = null) {
+  async _handleStreamEnd(payload: unknown = null) {
         // Prevent double-handling when both DISCONNECTED and STREAM_END fire (e.g., 4404)
         if (this._disconnectionInProgress) {
             this.logger.debug('Skipping stream-end handling: disconnection already in progress', 'tiktok');
@@ -1617,7 +2092,7 @@ class TikTokPlatform extends EventEmitter {
     async _handleError(error: unknown, context: TikTokErrorContext): Promise<void> {
         try {
             const errorMessage = getErrorMessage(error);
-            const eventData = this.eventFactory.createError(error, {
+            const eventData = this.eventFactory.createError(getErrorObject(error), {
                 ...context,
                 platform: 'tiktok',
                 recoverable: !errorMessage.includes('fatal')
@@ -1631,7 +2106,7 @@ class TikTokPlatform extends EventEmitter {
             });
 
             const connectionOperations = ['handleConnection', 'handleDisconnection'];
-            const isConnectionError = connectionOperations.includes(context?.operation);
+            const isConnectionError = connectionOperations.includes(getOptionalString(context.operation) ?? '');
 
             if (isConnectionError) {
                 this._emitPlatformEvent(PlatformEvents.STREAM_STATUS, {
@@ -1652,14 +2127,14 @@ class TikTokPlatform extends EventEmitter {
         }
     }
 
-    _emitPlatformEvent(type, payload) {
-        const platform = payload?.platform || 'tiktok';
+    _emitPlatformEvent(type: string, payload: TikTokPayload): void {
+        const platform = typeof payload.platform === 'string' ? payload.platform : 'tiktok';
 
         // Emit unified platform:event for local listeners
         this.emit('platform:event', { platform, type, data: payload });
 
         // Route event through injected handler to event bus
-        const handlerMap = {
+        const handlerMap: Partial<Record<TikTokEventType, DefaultHandlerName>> = {
             [PlatformEvents.CHAT_MESSAGE]: 'onChat',
             [PlatformEvents.GIFT]: 'onGift',
             [PlatformEvents.FOLLOW]: 'onFollow',
@@ -1671,7 +2146,10 @@ class TikTokPlatform extends EventEmitter {
             [PlatformEvents.VIEWER_COUNT]: 'onViewerCount'
         };
 
-        const handlerName = handlerMap[type];
+        const handlerName = handlerMap[type as TikTokEventType];
+        if (!handlerName) {
+            return;
+        }
         const handler = this.handlers?.[handlerName];
 
         if (typeof handler === 'function') {
@@ -1679,22 +2157,22 @@ class TikTokPlatform extends EventEmitter {
         }
     }
 
-    _createDefaultHandlers() {
-        const emitToBus = (type, data) => this._emitToEventBus(type, data);
+    _createDefaultHandlers(): TikTokHandlers {
+        const emitToBus = (type: string, data: unknown) => this._emitToEventBus(type, data);
         return {
-            onChat: (data) => emitToBus(PlatformEvents.CHAT_MESSAGE, data),
-            onViewerCount: (data) => emitToBus(PlatformEvents.VIEWER_COUNT, data),
-            onGift: (data) => emitToBus(PlatformEvents.GIFT, data),
-            onPaypiggy: (data) => emitToBus(PlatformEvents.PAYPIGGY, data),
-            onFollow: (data) => emitToBus(PlatformEvents.FOLLOW, data),
-            onShare: (data) => emitToBus(PlatformEvents.SHARE, data),
-            onRaid: (data) => emitToBus(PlatformEvents.RAID, data),
-            onEnvelope: (data) => emitToBus(PlatformEvents.ENVELOPE, data),
-            onStreamStatus: (data) => emitToBus(PlatformEvents.STREAM_STATUS, data)
+            onChat: (data: unknown) => emitToBus(PlatformEvents.CHAT_MESSAGE, data),
+            onViewerCount: (data: unknown) => emitToBus(PlatformEvents.VIEWER_COUNT, data),
+            onGift: (data: unknown) => emitToBus(PlatformEvents.GIFT, data),
+            onPaypiggy: (data: unknown) => emitToBus(PlatformEvents.PAYPIGGY, data),
+            onFollow: (data: unknown) => emitToBus(PlatformEvents.FOLLOW, data),
+            onShare: (data: unknown) => emitToBus(PlatformEvents.SHARE, data),
+            onRaid: (data: unknown) => emitToBus(PlatformEvents.RAID, data),
+            onEnvelope: (data: unknown) => emitToBus(PlatformEvents.ENVELOPE, data),
+            onStreamStatus: (data: unknown) => emitToBus(PlatformEvents.STREAM_STATUS, data)
         };
     }
 
-    _emitToEventBus(type, data) {
+    _emitToEventBus(type: string, data: unknown): void {
         if (!this.eventBus || typeof this.eventBus.emit !== 'function') {
             return;
         }

@@ -6,7 +6,31 @@ import { CheermoteProcessor } from './cheermote-processor';
 
 const normalizationErrorHandler = createPlatformErrorHandler(logger, 'message-normalization');
 
-function handleNormalizationError(message, error, eventType = 'normalization', eventData = null) {
+type MessageRecord = Record<string, unknown>;
+type MessagePart = Record<string, unknown> & { type: 'text' | 'emote'; text?: string; platform?: string; emoteId?: string; imageUrl?: string };
+type NormalizedChatMessage = Record<string, unknown> & {
+    platform: string;
+    userId: string;
+    username: string;
+    avatarUrl?: string;
+    message: { text: string; parts?: MessagePart[] };
+    timestamp: string;
+    metadata: Record<string, unknown>;
+    badgeImages?: ReturnType<typeof normalizeBadgeImages>;
+};
+
+function isRecord(value: unknown): value is MessageRecord {
+    return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function getRecord(value: MessageRecord, key: string): MessageRecord | null {
+    if (!isRecord(value[key])) {
+        return null;
+    }
+    return value[key];
+}
+
+function handleNormalizationError(message: string, error: unknown, eventType = 'normalization', eventData: unknown = null) {
     if (error instanceof Error) {
         normalizationErrorHandler.handleEventProcessingError(error, eventType, eventData, message);
         return;
@@ -19,27 +43,28 @@ function handleNormalizationError(message, error, eventType = 'normalization', e
     });
 }
 
-function isValidTikTokEmoteEntry(entry) {
-    if (!entry || typeof entry !== 'object') {
+function isValidTikTokEmoteEntry(entry: unknown): entry is { placeInComment: number; emote: { emoteId: string; image: { imageUrl: string } } } {
+    if (!isRecord(entry)) {
         return false;
     }
 
-    if (!Number.isInteger(entry.placeInComment) || entry.placeInComment < 0) {
+    if (typeof entry.placeInComment !== 'number' || !Number.isInteger(entry.placeInComment) || entry.placeInComment < 0) {
         return false;
     }
 
-    const emote = entry.emote;
-    if (!emote || typeof emote !== 'object') {
+    const emote = getRecord(entry, 'emote');
+    if (!emote) {
         return false;
     }
 
     const emoteId = typeof emote.emoteId === 'string' ? emote.emoteId.trim() : '';
-    const imageUrl = typeof emote?.image?.imageUrl === 'string' ? emote.image.imageUrl.trim() : '';
+    const image = getRecord(emote, 'image');
+    const imageUrl = typeof image?.imageUrl === 'string' ? image.imageUrl.trim() : '';
 
     return !!emoteId && !!imageUrl;
 }
 
-function buildTikTokMessageParts(rawComment, emotes = []) {
+function buildTikTokMessageParts(rawComment: unknown, emotes: unknown[] = []): MessagePart[] {
     if (typeof rawComment !== 'string') {
         return [];
     }
@@ -50,8 +75,7 @@ function buildTikTokMessageParts(rawComment, emotes = []) {
 
     const commentCodepoints = Array.from(rawComment);
     const sortedEmotes = emotes
-        .map((entry, index) => ({ entry, index }))
-        .filter(({ entry }) => isValidTikTokEmoteEntry(entry))
+        .flatMap((entry, index) => isValidTikTokEmoteEntry(entry) ? [{ entry, index }] : [])
         .sort((left, right) => {
             if (left.entry.placeInComment !== right.entry.placeInComment) {
                 return left.entry.placeInComment - right.entry.placeInComment;
@@ -60,7 +84,7 @@ function buildTikTokMessageParts(rawComment, emotes = []) {
             return left.index - right.index;
         });
 
-    const parts = [];
+    const parts: MessagePart[] = [];
     let cursor = 0;
     let insertedEmoteCount = 0;
 
@@ -105,7 +129,7 @@ function buildTikTokMessageParts(rawComment, emotes = []) {
 
 const TWITCH_DEFAULT_EMOTE_IMAGE_URL = 'https://static-cdn.jtvnw.net/emoticons/v2/emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7/animated/dark/3.0';
 
-function resolveTwitchEmoteScale(scaleOptions = []) {
+function resolveTwitchEmoteScale(scaleOptions: unknown[] = []): string {
     if (!Array.isArray(scaleOptions) || scaleOptions.length === 0) {
         return '3.0';
     }
@@ -124,10 +148,10 @@ function resolveTwitchEmoteScale(scaleOptions = []) {
     }
 
     return normalizedScales
-        .sort((left, right) => Number(right) - Number(left))[0];
+        .sort((left, right) => Number(right) - Number(left))[0] ?? '3.0';
 }
 
-function resolveTwitchEmoteImageUrl(emoteId, formatOptions = [], scaleOptions = []) {
+function resolveTwitchEmoteImageUrl(emoteId: unknown, formatOptions: unknown[] = [], scaleOptions: unknown[] = []): string {
     const normalizedEmoteId = typeof emoteId === 'string' ? emoteId.trim() : '';
     if (!normalizedEmoteId) {
         return '';
@@ -155,8 +179,8 @@ function resolveTwitchEmoteImageUrl(emoteId, formatOptions = [], scaleOptions = 
     return resolvedUrl.toString();
 }
 
-function buildTwitchMessageParts(messageObj) {
-    if (!messageObj || typeof messageObj !== 'object') {
+function buildTwitchMessageParts(messageObj: unknown): MessagePart[] {
+    if (!isRecord(messageObj)) {
         return [];
     }
 
@@ -165,8 +189,8 @@ function buildTwitchMessageParts(messageObj) {
     }
 
     return messageObj.fragments
-        .map((fragment) => {
-            if (!fragment || typeof fragment !== 'object') {
+        .map((fragment): MessagePart | null => {
+            if (!isRecord(fragment)) {
                 return null;
             }
 
@@ -186,9 +210,9 @@ function buildTwitchMessageParts(messageObj) {
                 return null;
             }
 
-            const emote = fragment.emote;
+            const emote = getRecord(fragment, 'emote');
             const emoteId = typeof emote?.id === 'string' ? emote.id.trim() : '';
-            const imageUrl = resolveTwitchEmoteImageUrl(emoteId, emote?.format, emote?.scale);
+            const imageUrl = resolveTwitchEmoteImageUrl(emoteId, Array.isArray(emote?.format) ? emote.format : [], Array.isArray(emote?.scale) ? emote.scale : []);
 
             if (!emoteId || !imageUrl) {
                 return null;
@@ -204,13 +228,13 @@ function buildTwitchMessageParts(messageObj) {
         .filter((part) => part !== null);
 }
 
-function resolveYouTubeEmojiImageUrl(images = []) {
+function resolveYouTubeEmojiImageUrl(images: unknown[] = []): string {
     if (!Array.isArray(images) || images.length === 0) {
         return '';
     }
 
     const normalizedImages = images
-        .filter((image) => image && typeof image === 'object')
+        .filter(isRecord)
         .map((image) => ({
             url: typeof image.url === 'string' ? image.url.trim() : '',
             width: Number(image.width)
@@ -225,19 +249,19 @@ function resolveYouTubeEmojiImageUrl(images = []) {
     if (widthCandidates.length > 0) {
         return widthCandidates
             .sort((left, right) => right.width - left.width)[0]
-            .url;
+            ?.url ?? '';
     }
 
-    return normalizedImages[0].url;
+    return normalizedImages[0]?.url ?? '';
 }
 
-function resolveLargestImageUrl(images = []) {
+function resolveLargestImageUrl(images: unknown[] = []): string {
     if (!Array.isArray(images) || images.length === 0) {
         return '';
     }
 
     const normalizedImages = images
-        .filter((image) => image && typeof image === 'object')
+        .filter(isRecord)
         .map((image) => ({
             url: typeof image.url === 'string' ? image.url.trim() : '',
             width: Number(image.width)
@@ -250,36 +274,42 @@ function resolveLargestImageUrl(images = []) {
 
     const widthCandidates = normalizedImages.filter((image) => Number.isFinite(image.width));
     if (widthCandidates.length > 0) {
-        return widthCandidates.sort((left, right) => right.width - left.width)[0].url;
+        return widthCandidates.sort((left, right) => right.width - left.width)[0]?.url ?? '';
     }
 
-    return normalizedImages[0].url;
+    return normalizedImages[0]?.url ?? '';
 }
 
-function extractYouTubeBadgeImages(author = {}) {
+function extractYouTubeBadgeImages(author: MessageRecord = {}) {
     const badges = Array.isArray(author.badges) ? author.badges : [];
     return normalizeBadgeImages(
         badges.map((badge) => {
-            const imageUrl = resolveLargestImageUrl(badge?.custom_thumbnail);
+            if (!isRecord(badge)) {
+                return null;
+            }
+            const imageUrl = resolveLargestImageUrl(Array.isArray(badge.custom_thumbnail) ? badge.custom_thumbnail : []);
             if (!imageUrl) {
                 return null;
             }
             return {
                 imageUrl,
                 source: 'youtube',
-                label: typeof badge?.tooltip === 'string' ? badge.tooltip : ''
+                label: typeof badge.tooltip === 'string' ? badge.tooltip : ''
             };
         })
     );
 }
 
-function extractTikTokBadgeImages(data = {}) {
-    const userData = data?.user && typeof data.user === 'object' ? data.user : {};
-    const entries = [];
+function extractTikTokBadgeImages(data: MessageRecord = {}) {
+    const userData = isRecord(data.user) ? data.user : {};
+    const entries: Array<Record<string, string>> = [];
 
     const badgeImageList = Array.isArray(userData.badgeImageList) ? userData.badgeImageList : [];
     for (const badgeImage of badgeImageList) {
-        const firstUrl = Array.isArray(badgeImage?.url) && typeof badgeImage.url[0] === 'string'
+        if (!isRecord(badgeImage)) {
+            continue;
+        }
+        const firstUrl = Array.isArray(badgeImage.url) && typeof badgeImage.url[0] === 'string'
             ? badgeImage.url[0].trim()
             : '';
         if (!firstUrl) {
@@ -290,33 +320,40 @@ function extractTikTokBadgeImages(data = {}) {
 
     const badges = Array.isArray(userData.badges) ? userData.badges : [];
     for (const badge of badges) {
-        const firstUrl = Array.isArray(badge?.combine?.icon?.url) && typeof badge.combine.icon.url[0] === 'string'
-            ? badge.combine.icon.url[0].trim()
+        if (!isRecord(badge)) {
+            continue;
+        }
+        const combine = getRecord(badge, 'combine');
+        const icon = combine ? getRecord(combine, 'icon') : null;
+        const text = getRecord(badge, 'text');
+        const firstUrl = Array.isArray(icon?.url) && typeof icon.url[0] === 'string'
+            ? icon.url[0].trim()
             : '';
         if (!firstUrl) {
             continue;
         }
-        const label = typeof badge?.text?.defaultPattern === 'string' ? badge.text.defaultPattern : '';
+        const label = typeof text?.defaultPattern === 'string' ? text.defaultPattern : '';
         entries.push({ imageUrl: firstUrl, source: 'tiktok', label });
     }
 
     return normalizeBadgeImages(entries);
 }
 
-function buildYouTubeMessageParts(messageObj) {
-    if (!messageObj || typeof messageObj !== 'object' || !Array.isArray(messageObj.runs)) {
+function buildYouTubeMessageParts(messageObj: unknown): MessagePart[] {
+    if (!isRecord(messageObj) || !Array.isArray(messageObj.runs)) {
         return [];
     }
 
     return messageObj.runs
-        .map((run) => {
-            if (!run || typeof run !== 'object') {
+        .map((run): MessagePart | null => {
+            if (!isRecord(run)) {
                 return null;
             }
 
-            const emoteId = typeof run?.emoji?.emoji_id === 'string' ? run.emoji.emoji_id.trim() : '';
-            const imageUrl = resolveYouTubeEmojiImageUrl(run?.emoji?.image);
-            const isCustomEmote = run?.emoji?.is_custom === true || emoteId.includes('/');
+            const emoji = getRecord(run, 'emoji');
+            const emoteId = typeof emoji?.emoji_id === 'string' ? emoji.emoji_id.trim() : '';
+            const imageUrl = resolveYouTubeEmojiImageUrl(Array.isArray(emoji?.image) ? emoji.image : []);
+            const isCustomEmote = emoji?.is_custom === true || emoteId.includes('/');
             if (isCustomEmote && emoteId && imageUrl) {
                 return {
                     type: 'emote',
@@ -339,17 +376,17 @@ function buildYouTubeMessageParts(messageObj) {
 }
 
 
-function normalizeYouTubeMessage(chatItem, platformName = 'youtube') {
+function normalizeYouTubeMessage(chatItem: unknown, platformName = 'youtube') {
     try {
-        if (!chatItem || typeof chatItem !== 'object') {
+        if (!isRecord(chatItem)) {
             throw new Error('Missing YouTube chat item');
         }
-        if (!chatItem.item || typeof chatItem.item !== 'object') {
+        if (!isRecord(chatItem.item)) {
             throw new Error('Missing YouTube chat item payload');
         }
         const messageData = chatItem.item;
         const author = messageData.author;
-        if (!author || typeof author !== 'object') {
+        if (!isRecord(author)) {
             throw new Error('Missing YouTube author data');
         }
         const userId = typeof author.id === 'string' ? author.id.trim() : '';
@@ -364,7 +401,8 @@ function normalizeYouTubeMessage(chatItem, platformName = 'youtube') {
 
         let message;
         if (messageData.superchat) {
-            message = extractYouTubeMessageText(messageData.superchat.message);
+            const superchat = getRecord(messageData, 'superchat');
+            message = extractYouTubeMessageText(superchat?.message);
         } else {
             message = extractYouTubeMessageText(messageData.message);
         }
@@ -382,17 +420,18 @@ function normalizeYouTubeMessage(chatItem, platformName = 'youtube') {
             throw new Error('Missing YouTube timestamp');
         }
 
-        const badges = Array.isArray(author.badges) ? author.badges : [];
-        const isBroadcaster = badges.some(badge => badge && badge.icon_type === 'OWNER');
-        const isMember = badges.some(badge =>
-            badge && typeof badge.tooltip === 'string' &&
+        const badges = Array.isArray(author.badges) ? author.badges.filter(isRecord) : [];
+        const isBroadcaster = badges.some((badge) => badge.icon_type === 'OWNER');
+        const isMember = badges.some((badge) =>
+            typeof badge.tooltip === 'string' &&
             badge.tooltip.toLowerCase().includes('member')
         );
-        const avatarUrl = typeof author?.thumbnails?.[0]?.url === 'string'
-            ? author.thumbnails[0].url.trim()
+        const thumbnails = Array.isArray(author.thumbnails) ? author.thumbnails.filter(isRecord) : [];
+        const avatarUrl = typeof thumbnails[0]?.url === 'string'
+            ? thumbnails[0].url.trim()
             : '';
 
-        const normalized = {
+        const normalized: NormalizedChatMessage = {
             platform: String(platformName || 'youtube').toLowerCase(),
             userId,
             username,
@@ -409,7 +448,7 @@ function normalizeYouTubeMessage(chatItem, platformName = 'youtube') {
                 isSuperChat: !!messageData.superchat,
                 isSuperSticker: !!messageData.supersticker,
                 isMembership: !!messageData.isMembership,
-                authorPhoto: author?.thumbnails?.[0]?.url || null
+                authorPhoto: thumbnails[0]?.url || null
             },
             rawData: { chatItem }
         };
@@ -424,28 +463,36 @@ function normalizeYouTubeMessage(chatItem, platformName = 'youtube') {
         logger.debug(`Normalized YouTube message from ${normalized.username}`, 'message-normalization');
         return normalized;
     } catch (error) {
-        handleNormalizationError(`Failed to normalize YouTube message: ${error.message}`, error, 'youtube', {
-            author: chatItem?.item?.author?.name
+        const chatRecord = isRecord(chatItem) ? chatItem : {};
+        const itemRecord = isRecord(chatRecord.item) ? chatRecord.item : {};
+        const authorRecord = isRecord(itemRecord.author) ? itemRecord.author : {};
+        handleNormalizationError(`Failed to normalize YouTube message: ${error instanceof Error ? error.message : String(error)}`, error, 'youtube', {
+            author: authorRecord.name
         });
         throw error;
     }
 }
 
-function resolveTikTokChatIsPaypiggy(data) {
-    return data?.userIdentity?.isSubscriberOfAnchor === true;
+function resolveTikTokChatIsPaypiggy(data: MessageRecord) {
+    const userIdentity = getRecord(data, 'userIdentity');
+    return userIdentity?.isSubscriberOfAnchor === true;
 }
 
-function normalizeTikTokMessage(data, platformName = 'tiktok') {
-    let userData = null;
+function normalizeTikTokMessage(data: unknown, platformName = 'tiktok') {
+    let userData: MessageRecord | null = null;
     try {
-        if (!data || typeof data !== 'object') {
+        if (!isRecord(data)) {
             throw new Error('Missing TikTok message data');
         }
 
-        userData = (data.user && typeof data.user === 'object') ? data.user : null;
+        userData = isRecord(data.user) ? data.user : null;
 
-        const userId = typeof userData?.uniqueId === 'string' ? userData.uniqueId.trim() : '';
-        const username = typeof userData?.nickname === 'string' ? userData.nickname.trim() : '';
+        if (!userData) {
+            throw new Error('Missing TikTok userId (user data)');
+        }
+
+        const userId = typeof userData.uniqueId === 'string' ? userData.uniqueId.trim() : '';
+        const username = typeof userData.nickname === 'string' ? userData.nickname.trim() : '';
         if (!userId) {
             throw new Error('Missing TikTok userId (uniqueId)');
         }
@@ -454,7 +501,7 @@ function normalizeTikTokMessage(data, platformName = 'tiktok') {
         }
         const rawComment = typeof data.comment === 'string' ? data.comment : '';
         const message = rawComment.trim();
-        const messageParts = buildTikTokMessageParts(rawComment, data.emotes);
+        const messageParts = buildTikTokMessageParts(rawComment, Array.isArray(data.emotes) ? data.emotes : []);
         const hasRenderableEmote = messageParts.some((part) => part.type === 'emote');
         if (!message && !hasRenderableEmote) {
             throw new Error('Missing TikTok message text');
@@ -467,10 +514,10 @@ function normalizeTikTokMessage(data, platformName = 'tiktok') {
 
         const resolvedCreateTimeMs = resolveTikTokTimestampMs(data);
         const profilePicture = userData.profilePictureUrl
-            || (Array.isArray(userData.profilePicture?.url) ? userData.profilePicture.url[0] : null)
+            || (isRecord(userData.profilePicture) && Array.isArray(userData.profilePicture.url) ? userData.profilePicture.url[0] : null)
             || null;
 
-        const normalized = {
+        const normalized: NormalizedChatMessage = {
             platform: platformName.toLowerCase(),
             userId,
             username,
@@ -501,7 +548,7 @@ function normalizeTikTokMessage(data, platformName = 'tiktok') {
         logger.debug(`Normalized TikTok message from ${normalized.username}`, 'message-normalization');
         return normalized;
     } catch (error) {
-        handleNormalizationError(`Failed to normalize TikTok message: ${error.message}`, error, 'tiktok', {
+        handleNormalizationError(`Failed to normalize TikTok message: ${error instanceof Error ? error.message : String(error)}`, error, 'tiktok', {
             userId: userData?.userId,
             platform: platformName
         });
@@ -509,8 +556,8 @@ function normalizeTikTokMessage(data, platformName = 'tiktok') {
     }
 }
 
-function extractTwitchMessageData(messageObj) {
-    if (!messageObj || typeof messageObj !== 'object') {
+function extractTwitchMessageData(messageObj: unknown) {
+    if (!isRecord(messageObj)) {
         return { textContent: '', cheermoteInfo: null };
     }
     
@@ -520,18 +567,19 @@ function extractTwitchMessageData(messageObj) {
     }
     
     // Extract text from fragments, excluding cheermotes
-    const textParts = messageObj.fragments
-        .filter(fragment => fragment.type === 'text')
-        .map(fragment => fragment.text || '')
+    const fragments = messageObj.fragments.filter(isRecord);
+    const textParts = fragments
+        .filter((fragment) => fragment.type === 'text')
+        .map((fragment) => typeof fragment.text === 'string' ? fragment.text : '')
         .join('');
     
     // Extract cheermote information (get the first/primary cheermote)
-    const cheermoteFragments = messageObj.fragments.filter(fragment => fragment.type === 'cheermote');
-    let cheermoteInfo = null;
+    const cheermoteFragments = fragments.filter((fragment) => fragment.type === 'cheermote');
+    let cheermoteInfo: (Record<string, unknown> & { totalBits?: unknown }) | null = null;
     
     if (cheermoteFragments.length > 0) {
         const primaryCheermote = cheermoteFragments[0];
-        if (primaryCheermote.cheermote && primaryCheermote.text) {
+        if (isRecord(primaryCheermote) && isRecord(primaryCheermote.cheermote) && primaryCheermote.text) {
             // Use unified cheermote processor for consistent processing
             const processedData = CheermoteProcessor.processEventSubFragments(messageObj.fragments);
             const parsedTier = Number(primaryCheermote.cheermote.tier);
@@ -542,7 +590,9 @@ function extractTwitchMessageData(messageObj) {
             cheermoteInfo = {
                 prefix: primaryCheermote.cheermote.prefix,
                 text: primaryCheermote.text, // This contains "uni1", "Cheer100", etc.
-                cleanPrefix: processedData.cleanPrimaryTypeOriginalCase || primaryCheermote.cheermote.prefix, // NEW: Clean prefix without numbers, preserving case
+                cleanPrefix: ('cleanPrimaryTypeOriginalCase' in processedData && typeof processedData.cleanPrimaryTypeOriginalCase === 'string'
+                    ? processedData.cleanPrimaryTypeOriginalCase
+                    : primaryCheermote.cheermote.prefix), // NEW: Clean prefix without numbers, preserving case
                 textContent: processedData.textContent, // NEW: Clean text without cheermote patterns
                 totalBits: processedData.totalBits,
                 count: cheermoteFragments.length,
@@ -563,8 +613,8 @@ function extractTwitchMessageData(messageObj) {
     return result;
 }
 
-function extractYouTubeMessageText(messageObj) {
-    const resolveEmojiIdGlyph = (emojiId) => {
+function extractYouTubeMessageText(messageObj: unknown): string {
+    const resolveEmojiIdGlyph = (emojiId: unknown): string => {
         if (typeof emojiId !== 'string') {
             return '';
         }
@@ -589,8 +639,8 @@ function extractYouTubeMessageText(messageObj) {
         }
     };
 
-    const resolveEmojiRunText = (emoji) => {
-        if (!emoji || typeof emoji !== 'object') {
+    const resolveEmojiRunText = (emoji: unknown): string => {
+        if (!isRecord(emoji)) {
             return '';
         }
 
@@ -606,30 +656,31 @@ function extractYouTubeMessageText(messageObj) {
         return '';
     };
 
-    const resolveRunText = (run) => {
-        if (!run || typeof run !== 'object') {
+    const resolveRunText = (run: unknown): string => {
+        if (!isRecord(run)) {
             return '';
         }
 
-        const runEmojiId = typeof run.emoji?.emoji_id === 'string' ? run.emoji.emoji_id : '';
-        const isCustomEmojiRun = run.emoji?.is_custom === true || runEmojiId.includes('/');
+        const emoji = getRecord(run, 'emoji');
+        const runEmojiId = typeof emoji?.emoji_id === 'string' ? emoji.emoji_id : '';
+        const isCustomEmojiRun = emoji?.is_custom === true || runEmojiId.includes('/');
         const runText = typeof run.text === 'string' ? run.text : '';
 
         if (isCustomEmojiRun
-            && Array.isArray(run.emoji.shortcuts)
-            && run.emoji.shortcuts.length > 0
-            && typeof run.emoji.shortcuts[0] === 'string') {
-            return run.emoji.shortcuts[0];
+            && Array.isArray(emoji?.shortcuts)
+            && emoji.shortcuts.length > 0
+            && typeof emoji.shortcuts[0] === 'string') {
+            return emoji.shortcuts[0];
         }
 
         if (runText.length > 0) {
             return runText;
         }
 
-        return resolveEmojiRunText(run.emoji);
+        return resolveEmojiRunText(emoji);
     };
 
-    let result;
+    let result: string;
     if (typeof messageObj === 'string') {
         result = messageObj;
     } else if (!messageObj) {
@@ -641,15 +692,15 @@ function extractYouTubeMessageText(messageObj) {
             })
             .join('')
             .trim();
-    } else if (typeof messageObj === 'object' && Array.isArray(messageObj.runs)) {
+    } else if (isRecord(messageObj) && Array.isArray(messageObj.runs)) {
         const runsText = messageObj.runs
             .map((run) => resolveRunText(run))
             .join('')
             .trim();
         result = runsText || (typeof messageObj.text === 'string' ? messageObj.text.trim() : '');
-    } else if (typeof messageObj === 'object' && messageObj.text) {
+    } else if (isRecord(messageObj) && typeof messageObj.text === 'string') {
         result = messageObj.text.trim();
-    } else if (typeof messageObj === 'object' && messageObj.simpleText) {
+    } else if (isRecord(messageObj) && typeof messageObj.simpleText === 'string') {
         result = messageObj.simpleText.trim();
     } else {
         result = '';
@@ -658,27 +709,29 @@ function extractYouTubeMessageText(messageObj) {
     return result;
 }
 
-function validateNormalizedMessage(normalizedMessage) {
-    const issues = [];
+function validateNormalizedMessage(normalizedMessage: unknown) {
+    const issues: string[] = [];
     
     if (!normalizedMessage || typeof normalizedMessage !== 'object') {
         issues.push('Message is not an object');
         return { isValid: false, errors: issues };
     }
     
+    const messageRecord = normalizedMessage as MessageRecord;
+
     // Required fields
     const requiredFields = ['platform', 'userId', 'username', 'timestamp'];
     for (const field of requiredFields) {
-        if (normalizedMessage[field] === undefined || normalizedMessage[field] === null) {
+        if (messageRecord[field] === undefined || messageRecord[field] === null) {
             issues.push(`Missing required field: ${field}`);
-        } else if (typeof normalizedMessage[field] !== 'string') {
+        } else if (typeof messageRecord[field] !== 'string') {
             issues.push(`${field} must be a string`);
         }
     }
 
-    const messagePayload = normalizedMessage.message;
+    const messagePayload = messageRecord.message;
     if (typeof messagePayload !== 'string') {
-        if (!messagePayload || typeof messagePayload !== 'object' || typeof messagePayload.text !== 'string') {
+        if (!isRecord(messagePayload) || typeof messagePayload.text !== 'string') {
             issues.push('message must be a string or an object with string text');
         }
     }
@@ -686,26 +739,28 @@ function validateNormalizedMessage(normalizedMessage) {
     // Boolean fields
     const booleanFields = ['isMod', 'isPaypiggy', 'isBroadcaster'];
     for (const field of booleanFields) {
-        if (normalizedMessage[field] === undefined || normalizedMessage[field] === null) {
+        if (messageRecord[field] === undefined || messageRecord[field] === null) {
             issues.push(`Missing required field: ${field}`);
-        } else if (typeof normalizedMessage[field] !== 'boolean') {
+        } else if (typeof messageRecord[field] !== 'boolean') {
             issues.push(`${field} must be a boolean`);
         }
     }
     
     // Validate platform names
     const validPlatforms = ['twitch', 'youtube', 'tiktok', 'tiktok-gift'];
-    if (normalizedMessage.platform && !validPlatforms.includes(normalizedMessage.platform.toLowerCase())) {
-        issues.push(`Invalid platform: ${normalizedMessage.platform}`);
+    const platform = typeof messageRecord.platform === 'string' ? messageRecord.platform : '';
+    if (platform && !validPlatforms.includes(platform.toLowerCase())) {
+        issues.push(`Invalid platform: ${platform}`);
     }
     
     // Metadata should be an object
-    if (!normalizedMessage.metadata || typeof normalizedMessage.metadata !== 'object') {
+    if (!isRecord(messageRecord.metadata)) {
         issues.push('Missing or invalid metadata field');
     }
     
     // Timestamp should be valid ISO string
-    if (normalizedMessage.timestamp && isNaN(Date.parse(normalizedMessage.timestamp))) {
+    const timestamp = typeof messageRecord.timestamp === 'string' ? messageRecord.timestamp : '';
+    if (timestamp && isNaN(Date.parse(timestamp))) {
         issues.push('Invalid timestamp format');
     }
     

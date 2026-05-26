@@ -3,6 +3,7 @@ import { logger } from '../core/logging';
 import { CommandParser, runCommand } from '../chat/commands';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 import { NOTIFICATION_CONFIGS } from '../core/constants';
+import type { OBSEffectsManager } from '../obs/effects';
 
 const PlatformEvents = {
     VFX_COMMAND_EXECUTED: 'vfx:command-executed',
@@ -15,9 +16,7 @@ type EventBusLike = {
     emit: (event: string, payload: unknown) => void;
 };
 
-type EffectsManagerLike = {
-    playMediaInOBS?: (...args: unknown[]) => Promise<unknown> | unknown;
-};
+type EffectsManagerLike = OBSEffectsManager;
 
 type VFXServiceConfig = Record<string, unknown> & {
     commands: Record<string, string>;
@@ -42,7 +41,7 @@ type VFXConfig = {
     command?: string;
     commandKey?: string;
     filename?: string;
-    mediaSource?: string;
+    mediaSource?: string | undefined;
     vfxFilePath?: string;
     duration?: number;
     [key: string]: unknown;
@@ -103,7 +102,7 @@ type VFXServiceStatus = {
     };
 };
 
-const SECTION_COMMAND_KEYS = new Set(
+const SECTION_COMMAND_KEYS: Set<string> = new Set(
     Object.values(NOTIFICATION_CONFIGS)
         .map((notifConfig) => notifConfig.commandKey)
         .filter((commandKey) => commandKey && !['commands', 'chat', 'general'].includes(commandKey))
@@ -275,6 +274,9 @@ class VFXCommandService {
                 }
 
                 if (!skipCooldown) {
+                    if (!vfxConfig.commandKey) {
+                        throw new Error('VFX config requires commandKey for cooldown updates');
+                    }
                     this._updateCooldowns(userId, vfxConfig.commandKey);
                 }
                 this.stats.successfulCommands++;
@@ -437,7 +439,7 @@ class VFXCommandService {
                 };
             }
 
-            const commandMessage = Object.prototype.hasOwnProperty.call(context, 'message')
+            const commandMessage = Object.prototype.hasOwnProperty.call(context, 'message') && context.message !== undefined
                 ? context.message
                 : null;
             const vfxConfig = await this.getVFXConfig(commandKey, commandMessage);
@@ -477,9 +479,8 @@ class VFXCommandService {
             this._pruneCooldownBookkeeping(now);
             
             // Check user cooldown
-            const hasUserCommand = this.userLastCommand.has(userId);
             const lastUserCommand = this.userLastCommand.get(userId);
-            if (hasUserCommand && userCooldownMs > 0 && (now - lastUserCommand) < userCooldownMs) {
+            if (lastUserCommand !== undefined && userCooldownMs > 0 && (now - lastUserCommand) < userCooldownMs) {
                 return {
                     allowed: false,
                     type: 'user',
@@ -489,9 +490,8 @@ class VFXCommandService {
             }
             
             // Check global command cooldown
-            const hasGlobalCommand = this.globalCommandCooldowns.has(command);
             const lastGlobalCommand = this.globalCommandCooldowns.get(command);
-            if (hasGlobalCommand && globalCooldownMs > 0 && (now - lastGlobalCommand) < globalCooldownMs) {
+            if (lastGlobalCommand !== undefined && globalCooldownMs > 0 && (now - lastGlobalCommand) < globalCooldownMs) {
                 return {
                     allowed: false,
                     type: 'global',
@@ -549,7 +549,7 @@ class VFXCommandService {
                 vfx: {
                     filePath: this.config.vfx.filePath
                 },
-                general: this.config.general
+                ...(this.config.general === undefined ? {} : { general: this.config.general })
             };
 
             this.commandParser = new CommandParser(parserConfig);
@@ -589,6 +589,10 @@ class VFXCommandService {
                 username: context.username,
                 platform: context.platform
             };
+
+            if (!vfxConfig.vfxFilePath) {
+                throw new Error('VFX config requires vfxFilePath');
+            }
 
             if (this._effectsManager) {
                 await runCommand(commandData, vfxConfig.vfxFilePath, this._effectsManager);
@@ -631,7 +635,10 @@ class VFXCommandService {
             if (!this.userCommandTimestamps.has(userId)) {
                 this.userCommandTimestamps.set(userId, []);
             }
-            this.userCommandTimestamps.get(userId).push(now);
+            const userTimestamps = this.userCommandTimestamps.get(userId);
+            if (userTimestamps) {
+                userTimestamps.push(now);
+            }
         }
         
         // Update global command cooldown
@@ -706,8 +713,8 @@ class VFXCommandService {
             return null;
         }
 
-        const randomIndex = crypto.randomInt(options.length);
-        return options[randomIndex];
+        const selectedOption = options[crypto.randomInt(options.length)];
+        return selectedOption ?? null;
     }
 
     _resolveSelectableCommandSpec(commandKey: string, commandSpec: string): string {
@@ -725,6 +732,9 @@ class VFXCommandService {
         }
 
         const triggerSegment = normalizedSpec.split(',')[0];
+        if (triggerSegment === undefined) {
+            return normalizedSpec;
+        }
         return triggerSegment.trim();
     }
 

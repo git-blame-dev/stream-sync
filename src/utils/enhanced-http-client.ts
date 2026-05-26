@@ -46,9 +46,48 @@ type RequestOptions = Record<string, unknown> & {
     maxRetries?: number;
 };
 
+type OperationContextInput = {
+    operationType?: string;
+    userInitiated?: boolean;
+    streamingActive?: boolean;
+    viewerCount?: number;
+    userWaiting?: boolean;
+};
+
+function normalizeOperationContext(context: RequestOptions['operationContext'] | undefined): OperationContextInput | undefined {
+    if (!context) {
+        return undefined;
+    }
+    return {
+        ...(typeof context.operationType === 'string' ? { operationType: context.operationType } : {}),
+        ...(typeof context.userInitiated === 'boolean' ? { userInitiated: context.userInitiated } : {}),
+        ...(typeof context.streamingActive === 'boolean' ? { streamingActive: context.streamingActive } : {}),
+        ...(typeof context.viewerCount === 'number' ? { viewerCount: context.viewerCount } : {}),
+        ...(typeof context.userWaiting === 'boolean' ? { userWaiting: context.userWaiting } : {})
+    };
+}
+
+type HttpRuntimeConfig = {
+    enhancedTimeoutMs?: unknown;
+    enhancedReachabilityTimeoutMs?: unknown;
+    userAgents?: unknown;
+};
+
 const resolveTimeout = (value: unknown, fallback: number): number => {
     const parsed = Number(value);
     return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+const getHttpRuntimeConfig = (): HttpRuntimeConfig => {
+    const httpConfig = (appConfig as { http?: unknown }).http;
+    return httpConfig && typeof httpConfig === 'object' ? httpConfig as HttpRuntimeConfig : {};
+};
+
+const getConfiguredUserAgents = (value: unknown): string[] => {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+    return value.filter((entry): entry is string => typeof entry === 'string');
 };
 
 class EnhancedHttpClient {
@@ -63,12 +102,13 @@ class EnhancedHttpClient {
     constructor(config: EnhancedHttpClientConfig = {}) {
         this.axios = config.axios || axiosClient;
         this.logger = resolveLogger(config.logger, 'EnhancedHttpClient');
-        this.defaultTimeout = resolveTimeout(config.timeout, appConfig.http.enhancedTimeoutMs);
-        this.reachabilityTimeoutMs = resolveTimeout(config.reachabilityTimeoutMs, appConfig.http.enhancedReachabilityTimeoutMs);
+        const httpConfig = getHttpRuntimeConfig();
+        this.defaultTimeout = resolveTimeout(config.timeout, resolveTimeout(httpConfig.enhancedTimeoutMs, 10_000));
+        this.reachabilityTimeoutMs = resolveTimeout(config.reachabilityTimeoutMs, resolveTimeout(httpConfig.enhancedReachabilityTimeoutMs, 5_000));
         this.retrySystem = config.retrySystem || createRetrySystem({ logger: this.logger });
         this.userAgents = Array.isArray(config.userAgents)
             ? config.userAgents.slice()
-            : appConfig.http.userAgents.slice();
+            : getConfiguredUserAgents(httpConfig.userAgents);
         this.currentUserAgentIndex = 0;
     }
 
@@ -91,7 +131,7 @@ class EnhancedHttpClient {
 
         const userAgent = this.userAgents[this.currentUserAgentIndex];
         this.currentUserAgentIndex = (this.currentUserAgentIndex + 1) % this.userAgents.length;
-        return userAgent;
+        return userAgent ?? '';
     }
 
     buildRequestConfig(options: RequestOptions = {}): Record<string, unknown> {
@@ -100,7 +140,7 @@ class EnhancedHttpClient {
 
         let timeout = resolveTimeout(axiosOptions.timeout, this.defaultTimeout);
         if (operationContext) {
-            timeout = this.getStreamingOptimizedTimeout(operationContext, axiosOptions.timeout);
+            timeout = this.getStreamingOptimizedTimeout(normalizeOperationContext(operationContext), axiosOptions.timeout);
         }
 
         return {
@@ -114,14 +154,14 @@ class EnhancedHttpClient {
         };
     }
 
-    getStreamingOptimizedTimeout(context: RequestOptions['operationContext'], explicitTimeout: unknown): number {
+    getStreamingOptimizedTimeout(context: OperationContextInput | undefined, explicitTimeout: unknown): number {
         const resolvedTimeout = resolveTimeout(explicitTimeout, Number.NaN);
         if (Number.isFinite(resolvedTimeout) && resolvedTimeout > 0) {
             return resolvedTimeout;
         }
 
         try {
-            const criticality = AuthConstants.determineOperationCriticality(context);
+            const criticality = AuthConstants.determineOperationCriticality(context ?? {});
             const operationType = typeof context?.operationType === 'string' ? context.operationType : 'tokenValidation';
             return AuthConstants.getStreamingOptimizedTimeout(criticality, operationType);
         } catch (error) {
@@ -158,7 +198,7 @@ class EnhancedHttpClient {
 
                     let postData = data;
                     const contentTypeHeaderKey = Object.keys(headers).find((key) => key.toLowerCase() === 'content-type');
-                    const contentTypeHeaderValue = contentTypeHeaderKey ? headers[contentTypeHeaderKey].trim().toLowerCase() : '';
+                    const contentTypeHeaderValue = contentTypeHeaderKey ? (headers[contentTypeHeaderKey] ?? '').trim().toLowerCase() : '';
                     if (
                         contentTypeHeaderValue.startsWith('application/x-www-form-urlencoded')
                         && data

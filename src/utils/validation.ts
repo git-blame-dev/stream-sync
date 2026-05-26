@@ -31,7 +31,7 @@ function formatUsername12(username: unknown, forTTS = false): string {
         processedUsername = processedUsername.replace(REGEX_PATTERNS.EMOJI_UNICODE, '').trim();
         processedUsername = processedUsername.replace(/[_\-\.@]/g, ' ');
         processedUsername = processedUsername.replace(/[^a-zA-Z0-9 ]/g, '');
-        processedUsername = processedUsername.replace(/\d{2,}/g, (match) => match[0]);
+        processedUsername = processedUsername.replace(/\d{2,}/g, (match) => match[0] ?? '');
         processedUsername = processedUsername.replace(/\s+/g, ' ').trim();
         
         if (!processedUsername) {

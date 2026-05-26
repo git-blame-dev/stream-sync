@@ -46,7 +46,9 @@ class InnertubeService {
         }
 
         this.logger = dependencies.logger;
-        this.withTimeout = dependencies.withTimeout;
+        if (dependencies.withTimeout !== undefined) {
+            this.withTimeout = dependencies.withTimeout;
+        }
         this.errorHandler = createPlatformErrorHandler(this.logger, 'innertube-service');
 
         this.instanceCache = new Map();

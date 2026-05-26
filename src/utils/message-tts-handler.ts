@@ -85,7 +85,7 @@ class MessageTTSHandler {
 
         const messageNeedsTrimming = cleanMessage !== cleanMessage.trim();
         const needsTruncation = this.needsUsernameTruncation(username, messageNeedsTrimming);
-        const maxLength = needsTruncation ? 12 : null;
+        const maxLength = needsTruncation ? 12 : undefined;
         const ttsUsername = NotificationBuilder.sanitizeUsernameForTts(username, maxLength);
 
         const sanitizedMessage = cleanMessage.trim();

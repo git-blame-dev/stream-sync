@@ -96,6 +96,10 @@ function isYouTubeInfo(value: unknown): value is YouTubeInfo {
   return isRecord(value) && typeof value.getLiveChat === 'function';
 }
 
+function isActionsLike(value: unknown): value is LiveChatUnknownRendererCaptureOptions['actions'] {
+  return isRecord(value) && typeof value.execute === 'function';
+}
+
 function createYouTubeConnectionFactory(options: YouTubeConnectionFactoryOptions = {}) {
     const {
         platform,
@@ -232,7 +236,7 @@ function createYouTubeConnectionFactory(options: YouTubeConnectionFactoryOptions
             throw new Error(`Stream validation failed: ${validationResult.reason}`);
         }
 
-        if (info.actions && typeof info.actions.execute === 'function') {
+        if (isActionsLike(info.actions)) {
             await captureInstaller({
         actions: info.actions,
                 videoId,

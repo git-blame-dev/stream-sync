@@ -13,6 +13,15 @@ type EventStats = { emitted: number; success: number; error: number; totalDurati
 type WrappedEventHandler = EventHandler & { _originalHandler?: EventHandler; _context?: unknown };
 type EventBusOptions = { debugEnabled?: boolean; maxListeners?: number };
 
+function formatEventName(eventName: EventName): string {
+    return typeof eventName === 'symbol' ? String(eventName) : eventName;
+}
+
+function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
+    return !!value && (typeof value === 'object' || typeof value === 'function')
+        && typeof (value as { then?: unknown }).then === 'function';
+}
+
 function logEventBusError(message: string, error: unknown, eventType = 'event-bus', payload: EventPayload = null) {
     if (error instanceof Error) {
         eventBusErrorHandler.handleEventProcessingError(error, eventType, payload, message);
@@ -48,7 +57,7 @@ class EventBus extends EventEmitter {
 
     subscribe(eventName: EventName, handler: EventHandler, options: SubscriptionOptions = {}) {
         if (typeof handler !== 'function') {
-            throw new Error(`Handler for event '${eventName}' must be a function`);
+            throw new Error(`Handler for event '${formatEventName(eventName)}' must be a function`);
         }
 
         const { once = false, context = null } = options;
@@ -59,7 +68,7 @@ class EventBus extends EventEmitter {
 
             try {
                 if (this.debugEnabled) {
-                    logger?.debug?.(`[EventBus] Executing handler for '${eventName}'`, 'event-bus', {
+                    logger?.debug?.(`[EventBus] Executing handler for '${formatEventName(eventName)}'`, 'event-bus', {
                         argsCount: args.length,
                         context: context?.constructor?.name || 'unknown'
                     });
@@ -68,7 +77,7 @@ class EventBus extends EventEmitter {
                 // Execute handler with proper context binding
                 const result = context ? handler.apply(context, args) : handler(...args);
 
-                if (result && typeof result.then === 'function') {
+                if (isPromiseLike(result)) {
                     await result;
                 }
 
@@ -78,7 +87,7 @@ class EventBus extends EventEmitter {
                 this._updateEventStats(eventName, 'success', executionTime);
 
                 if (this.debugEnabled) {
-                    logger?.debug?.(`[EventBus] Handler completed for '${eventName}' in ${executionTime}ms`, 'event-bus');
+                    logger?.debug?.(`[EventBus] Handler completed for '${formatEventName(eventName)}' in ${executionTime}ms`, 'event-bus');
                 }
 
             } catch (error) {
@@ -86,7 +95,7 @@ class EventBus extends EventEmitter {
                 this._updateEventStats(eventName, 'error', executionTime);
 
                 const errorMessage = error instanceof Error ? error.message : String(error);
-                logEventBusError(`[EventBus] Handler error for '${eventName}': ${errorMessage}`, error, 'event-handler-error', {
+                logEventBusError(`[EventBus] Handler error for '${formatEventName(eventName)}': ${errorMessage}`, error, 'event-handler-error', {
                     eventName
                 });
 
@@ -122,7 +131,7 @@ class EventBus extends EventEmitter {
         }
 
         if (this.debugEnabled) {
-            logger?.debug?.(`[EventBus] Subscribed to '${eventName}'`, 'event-bus', {
+            logger?.debug?.(`[EventBus] Subscribed to '${formatEventName(eventName)}'`, 'event-bus', {
                 once,
                 context: context?.constructor?.name || 'unknown',
                 totalListeners: this.listenerCount(eventName)
@@ -141,7 +150,7 @@ class EventBus extends EventEmitter {
                 this.removeListener(eventName, wrappedHandler);
                 
                 if (this.debugEnabled) {
-                    logger?.debug?.(`[EventBus] Unsubscribed from '${eventName}'`, 'event-bus', {
+                    logger?.debug?.(`[EventBus] Unsubscribed from '${formatEventName(eventName)}'`, 'event-bus', {
                         context: context?.constructor?.name || 'unknown',
                         remainingListeners: this.listenerCount(eventName)
                     });
@@ -151,15 +160,15 @@ class EventBus extends EventEmitter {
             }
         }
         
-        logger?.warn?.(`[EventBus] Handler not found for unsubscription from '${eventName}'`, 'event-bus');
+        logger?.warn?.(`[EventBus] Handler not found for unsubscription from '${formatEventName(eventName)}'`, 'event-bus');
         return false;
     }
 
-    emit(eventName: EventName, ...args: unknown[]) {
+    override emit(eventName: EventName, ...args: unknown[]) {
         const startTime = Date.now();
 
         if (this.debugEnabled) {
-            logger?.debug?.(`[EventBus] Emitting '${eventName}'`, 'event-bus', {
+            logger?.debug?.(`[EventBus] Emitting '${formatEventName(eventName)}'`, 'event-bus', {
                 argsCount: args.length,
                 listenerCount: this.listenerCount(eventName)
             });
@@ -171,7 +180,7 @@ class EventBus extends EventEmitter {
         this._updateEventStats(eventName, 'emitted', emissionTime);
 
         if (!hadListeners && this.debugEnabled) {
-            logger?.debug?.(`[EventBus] No listeners for '${eventName}'`, 'event-bus');
+            logger?.debug?.(`[EventBus] No listeners for '${formatEventName(eventName)}'`, 'event-bus');
         }
 
         return hadListeners;
@@ -188,7 +197,7 @@ class EventBus extends EventEmitter {
     getEventStats() {
         const stats: Record<string, EventStats> = {};
         for (const [eventName, eventStat] of this.eventStats) {
-            stats[eventName] = { ...eventStat };
+            stats[formatEventName(eventName)] = { ...eventStat };
         }
         return stats;
     }

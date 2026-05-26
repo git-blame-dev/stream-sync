@@ -22,6 +22,20 @@ type TokenStoreData = {
     [key: string]: unknown;
 };
 
+type FsApi = {
+    chmod?: (targetPath: string, mode: number) => Promise<void> | void;
+    mkdir?: (dirPath: string, options: { recursive: boolean; mode: number }) => Promise<void> | void;
+    stat?: (targetPath: string) => Promise<unknown> | unknown;
+    readFile: (targetPath: string, encoding: 'utf8') => Promise<string> | string;
+    writeFile: (targetPath: string, content: string, options: { encoding: 'utf8'; mode: number }) => Promise<void> | void;
+    rename: (oldPath: string, newPath: string) => Promise<void> | void;
+};
+
+type FsImpl = {
+    promises?: FsApi;
+    existsSync?: (targetPath: string) => boolean;
+} & Partial<FsApi>;
+
 const getErrorCode = (error: unknown): string | null => {
     if (!error || typeof error !== 'object' || !('code' in error)) {
         return null;
@@ -38,7 +52,7 @@ const getErrorMessage = (error: unknown): string | null => {
     return typeof message === 'string' ? message : null;
 };
 
-const requireTokenStorePath = (tokenStorePath) => {
+const requireTokenStorePath = (tokenStorePath: string) => {
     if (!tokenStorePath) {
         throw new Error('tokenStorePath is required for token persistence');
     }
@@ -51,12 +65,12 @@ const requireLogger = (logger: unknown): LoggerLike => {
     return logger as LoggerLike;
 };
 
-const getFsApi = (fsImpl) => {
-    const resolved = fsImpl || fs;
-    return resolved.promises || resolved;
+const getFsApi = (fsImpl: unknown): FsApi => {
+    const resolved = (fsImpl || fs) as FsImpl;
+    return (resolved.promises || resolved) as FsApi;
 };
 
-const getErrorHandler = (logger) => createPlatformErrorHandler(logger, LOG_CONTEXT);
+const getErrorHandler = (logger: LoggerLike) => createPlatformErrorHandler(logger, LOG_CONTEXT);
 
 const logTokenStoreError = (
     logger: LoggerLike,
@@ -74,7 +88,7 @@ const logTokenStoreError = (
 
 const isPosixRuntime = () => process.platform !== 'win32';
 
-const trySetPermissions = async (fsApi, targetPath, mode, logger, contextLabel) => {
+const trySetPermissions = async (fsApi: FsApi, targetPath: string, mode: number, logger: LoggerLike, contextLabel: string) => {
     if (!isPosixRuntime() || typeof fsApi.chmod !== 'function') {
         return;
     }
@@ -89,7 +103,7 @@ const trySetPermissions = async (fsApi, targetPath, mode, logger, contextLabel) 
     }
 };
 
-const ensureDirectoryExists = async (fsImpl, tokenStorePath, logger) => {
+const ensureDirectoryExists = async (fsImpl: unknown, tokenStorePath: string, logger: LoggerLike) => {
     const dirPath = path.dirname(tokenStorePath);
     const fsApi = getFsApi(fsImpl);
 
@@ -99,33 +113,37 @@ const ensureDirectoryExists = async (fsImpl, tokenStorePath, logger) => {
         return;
     }
 
-    if (fsImpl && typeof fsImpl.existsSync === 'function') {
-        if (!fsImpl.existsSync(dirPath)) {
+    const syncFs = fsImpl as FsImpl | null | undefined;
+    if (syncFs && typeof syncFs.existsSync === 'function') {
+        if (!syncFs.existsSync(dirPath)) {
             throw new Error(`Token store directory does not exist: ${dirPath}`);
         }
         return;
     }
 
     try {
+        if (typeof fsApi.stat !== 'function') {
+            throw new Error(`Token store directory does not exist: ${dirPath}`);
+        }
         await fsApi.stat(dirPath);
     } catch (error) {
-        if (error && error.code === 'ENOENT') {
+        if (getErrorCode(error) === 'ENOENT') {
             throw new Error(`Token store directory does not exist: ${dirPath}`);
         }
         throw error;
     }
 };
 
-const readTokenStoreFile = async (fsImpl, tokenStorePath) => {
+const readTokenStoreFile = async (fsImpl: unknown, tokenStorePath: string): Promise<string> => {
     const fsApi = getFsApi(fsImpl);
     return fsApi.readFile(tokenStorePath, 'utf8');
 };
 
-const writeTokenStoreFile = async (fsImpl, tokenStorePath, payload: TokenStoreData, logger: LoggerLike) => {
+const writeTokenStoreFile = async (fsImpl: unknown, tokenStorePath: string, payload: TokenStoreData, logger: LoggerLike) => {
     const fsApi = getFsApi(fsImpl);
     const tempPath = `${tokenStorePath}.tmp`;
     const content = JSON.stringify(payload, null, 2);
-    const writeOptions = { encoding: 'utf8', mode: 0o600 };
+    const writeOptions: { encoding: 'utf8'; mode: number } = { encoding: 'utf8', mode: 0o600 };
 
     await fsApi.writeFile(tempPath, content, writeOptions);
     await trySetPermissions(fsApi, tempPath, 0o600, logger, 'token store temp file');
@@ -220,7 +238,7 @@ async function saveTokens(
     if (nextRefreshToken && nextPayload.twitch) {
         nextPayload.twitch.refreshToken = nextRefreshToken;
     }
-    if (Number.isFinite(expiresAt) && nextPayload.twitch) {
+    if (typeof expiresAt === 'number' && Number.isFinite(expiresAt) && nextPayload.twitch) {
         nextPayload.twitch.expiresAt = expiresAt;
     }
 

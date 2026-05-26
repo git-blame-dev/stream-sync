@@ -187,13 +187,14 @@ class ViewerCountExtractionService {
                     'viewer-extraction'
                 );
                 
+                const metadata = toMetadataRecord(extractionResult.metadata);
                 return {
                     success: true,
                     count: extractionResult.count,
-                    strategy: extractionResult.strategy,
+                    ...(extractionResult.strategy === undefined ? {} : { strategy: extractionResult.strategy }),
                     videoId,
                     responseTime,
-                    metadata: toMetadataRecord(extractionResult.metadata)
+                    ...(metadata === undefined ? {} : { metadata })
                 };
             } else {
                 this.logger?.debug?.(
@@ -201,13 +202,14 @@ class ViewerCountExtractionService {
                     'viewer-extraction'
                 );
                 
+                const metadata = toMetadataRecord(extractionResult.metadata);
                 return {
                     success: false,
                     count: 0,
                     videoId,
                     responseTime,
                     error: 'Extraction failed',
-                    metadata: toMetadataRecord(extractionResult.metadata)
+                    ...(metadata === undefined ? {} : { metadata })
                 };
             }
             
@@ -302,8 +304,8 @@ streams: Array<{ videoId: string; count: number; success: boolean; strategy?: st
                 videoId: result.videoId,
                 count: result.count,
                 success: result.success,
-                strategy: result.strategy,
-                error: result.error
+                ...(result.strategy === undefined ? {} : { strategy: result.strategy }),
+                ...(result.error === undefined ? {} : { error: result.error })
             };
         });
 

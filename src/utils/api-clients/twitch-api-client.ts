@@ -1,11 +1,69 @@
 import { getUnifiedLogger } from '../../core/logging';
 import { secrets } from '../../core/secrets';
 import { createEnhancedHttpClient } from '../enhanced-http-client';
-import { createRetrySystem } from '../retry-system';
+import { createRetrySystem, type RetrySystem } from '../retry-system';
 import { createPlatformErrorHandler } from '../platform-error-handler';
 
+type LoggerLike = {
+    debug: (message: string, scope?: string, payload?: unknown) => void;
+    info: (message: string, scope?: string, payload?: unknown) => void;
+    warn: (message: string, scope?: string, payload?: unknown) => void;
+};
+
+type TwitchAuthLike = {
+    refreshTokens: () => Promise<boolean>;
+};
+
+type TwitchApiClientConfig = {
+    clientId?: string;
+    channel?: unknown;
+    [key: string]: unknown;
+};
+
+type RequestOptions = {
+    headers?: Record<string, string | undefined>;
+    [key: string]: unknown;
+};
+
+type HttpClientLike = {
+    get: (url: string, options?: RequestOptions) => Promise<{ data: unknown }>;
+};
+
+type TwitchApiClientDependencies = {
+    enhancedHttpClient?: HttpClientLike;
+    retrySystem?: RetrySystem;
+};
+
+const getRecord = (value: unknown): Record<string, unknown> | null =>
+    value && typeof value === 'object' ? value as Record<string, unknown> : null;
+
+const getErrorMessage = (error: unknown): string => error instanceof Error ? error.message : String(error);
+
+const getResponseStatus = (error: unknown): number | null => {
+    const response = getRecord(error)?.response;
+    const status = getRecord(response)?.status;
+    return typeof status === 'number' ? status : null;
+};
+
+const getDataArray = (data: unknown): unknown[] => {
+    const payload = getRecord(data);
+    return Array.isArray(payload?.data) ? payload.data : [];
+};
+
 class TwitchApiClient {
-    constructor(twitchAuth, config = {}, logger = null, dependencies = {}) {
+    private readonly twitchAuth: TwitchAuthLike | null;
+    private readonly config: TwitchApiClientConfig;
+    private readonly logger: LoggerLike;
+    private readonly errorHandler: ReturnType<typeof createPlatformErrorHandler>;
+    private readonly httpClient: HttpClientLike;
+    private readonly baseUrl: string;
+
+    constructor(
+        twitchAuth: TwitchAuthLike | null,
+        config: TwitchApiClientConfig = {},
+        logger: LoggerLike | null = null,
+        dependencies: TwitchApiClientDependencies = {}
+    ) {
         this.twitchAuth = twitchAuth;
         this.config = config;
         this.logger = logger || getUnifiedLogger();
@@ -13,11 +71,11 @@ class TwitchApiClient {
         this.httpClient = dependencies.enhancedHttpClient || createEnhancedHttpClient({
             logger: this.logger,
             retrySystem: dependencies.retrySystem || createRetrySystem({ logger: this.logger })
-        });
+        }) as unknown as HttpClientLike;
         this.baseUrl = 'https://api.twitch.tv/helix';
     }
 
-    async makeRequest(endpoint, options = {}) {
+    async makeRequest(endpoint: string, options: RequestOptions = {}): Promise<unknown> {
         const url = `${this.baseUrl}${endpoint}`;
 
         const executeRequest = async () => {
@@ -50,7 +108,7 @@ class TwitchApiClient {
             this.logger.debug(`Twitch API response received`, 'twitch-api');
             return response.data;
         } catch (error) {
-            const isAuthError = error?.response?.status === 401;
+            const isAuthError = getResponseStatus(error) === 401;
             if (!isAuthError || !this.twitchAuth) {
                 throw error;
             }
@@ -66,22 +124,24 @@ class TwitchApiClient {
                 return retryResponse.data;
             } catch (retryError) {
                 this.logger.warn('Twitch API retry after refresh failed', 'twitch-api', {
-                    error: retryError.message
+                    error: getErrorMessage(retryError)
                 });
                 throw retryError;
             }
         }
     }
 
-    async getStreamInfo(channelName) {
+    async getStreamInfo(channelName: string) {
         try {
             const data = await this.makeRequest(`/streams?user_login=${channelName}`);
-            
-            if (data.data && data.data.length > 0) {
+            const streams = getDataArray(data);
+
+            if (streams.length > 0) {
+                const stream = getRecord(streams[0]);
                 return {
                     isLive: true,
-                    stream: data.data[0],
-                    viewerCount: data.data[0].viewer_count || 0
+                    stream: streams[0],
+                    viewerCount: typeof stream?.viewer_count === 'number' ? stream.viewer_count : 0
                 };
             }
 
@@ -92,7 +152,7 @@ class TwitchApiClient {
             };
             
         } catch (error) {
-            this._handleApiError(`Failed to get stream info: ${error.message}`, error, 'getStreamInfo');
+            this._handleApiError(`Failed to get stream info: ${getErrorMessage(error)}`, error, 'getStreamInfo');
             return {
                 isLive: false,
                 stream: null,
@@ -101,55 +161,59 @@ class TwitchApiClient {
         }
     }
 
-    async getUserInfo(username) {
+    async getUserInfo(username: string): Promise<unknown | null> {
         try {
             const data = await this.makeRequest(`/users?login=${username}`);
-            return data.data && data.data.length > 0 ? data.data[0] : null;
+            const users = getDataArray(data);
+            return users.length > 0 ? users[0] : null;
         } catch (error) {
-            this._handleApiError(`Failed to get user info: ${error.message}`, error, 'getUserInfo');
+            this._handleApiError(`Failed to get user info: ${getErrorMessage(error)}`, error, 'getUserInfo');
             return null;
         }
     }
 
-    async getUserById(userId) {
+    async getUserById(userId: string): Promise<unknown | null> {
         try {
             const data = await this.makeRequest(`/users?id=${encodeURIComponent(userId)}`);
-            return data.data && data.data.length > 0 ? data.data[0] : null;
+            const users = getDataArray(data);
+            return users.length > 0 ? users[0] : null;
         } catch (error) {
-            this._handleApiError(`Failed to get user id: ${error.message}`, error, 'getUserById');
+            this._handleApiError(`Failed to get user id: ${getErrorMessage(error)}`, error, 'getUserById');
             return null;
         }
     }
 
-    async getBroadcasterId(channel) {
+    async getBroadcasterId(channel: string): Promise<string> {
         const userInfo = await this.getUserInfo(channel);
-        if (!userInfo?.id) {
+        const userId = getRecord(userInfo)?.id;
+        if (typeof userId !== 'string' || !userId) {
             throw new Error(`Could not resolve broadcaster ID for channel: ${channel}`);
         }
-        return userInfo.id;
+        return userId;
     }
 
-    async getChannelInfo(channelId) {
+    async getChannelInfo(channelId: string): Promise<unknown | null> {
         try {
             const data = await this.makeRequest(`/channels?broadcaster_id=${channelId}`);
-            return data.data && data.data.length > 0 ? data.data[0] : null;
+            const channels = getDataArray(data);
+            return channels.length > 0 ? channels[0] : null;
         } catch (error) {
-            this._handleApiError(`Failed to get channel info: ${error.message}`, error, 'getChannelInfo');
+            this._handleApiError(`Failed to get channel info: ${getErrorMessage(error)}`, error, 'getChannelInfo');
             return null;
         }
     }
 
-    async getGlobalChatBadges() {
+    async getGlobalChatBadges(): Promise<unknown[]> {
         try {
             const data = await this.makeRequest('/chat/badges/global');
-            return Array.isArray(data?.data) ? data.data : [];
+            return getDataArray(data);
         } catch (error) {
-            this._handleApiError(`Failed to get global chat badges: ${error.message}`, error, 'getGlobalChatBadges');
+            this._handleApiError(`Failed to get global chat badges: ${getErrorMessage(error)}`, error, 'getGlobalChatBadges');
             return [];
         }
     }
 
-    async getChannelChatBadges(broadcasterId) {
+    async getChannelChatBadges(broadcasterId: unknown): Promise<unknown[]> {
         const normalizedBroadcasterId = typeof broadcasterId === 'string' ? broadcasterId.trim() : '';
         if (!normalizedBroadcasterId) {
             return [];
@@ -157,14 +221,14 @@ class TwitchApiClient {
 
         try {
             const data = await this.makeRequest(`/chat/badges?broadcaster_id=${encodeURIComponent(normalizedBroadcasterId)}`);
-            return Array.isArray(data?.data) ? data.data : [];
+            return getDataArray(data);
         } catch (error) {
-            this._handleApiError(`Failed to get channel chat badges: ${error.message}`, error, 'getChannelChatBadges');
+            this._handleApiError(`Failed to get channel chat badges: ${getErrorMessage(error)}`, error, 'getChannelChatBadges');
             return [];
         }
     }
 
-    async getCheermotes(broadcasterId) {
+    async getCheermotes(broadcasterId: unknown): Promise<unknown[]> {
         const normalizedBroadcasterId = typeof broadcasterId === 'string' ? broadcasterId.trim() : '';
         const endpoint = normalizedBroadcasterId
             ? `/bits/cheermotes?broadcaster_id=${encodeURIComponent(normalizedBroadcasterId)}`
@@ -172,14 +236,14 @@ class TwitchApiClient {
 
         try {
             const data = await this.makeRequest(endpoint);
-            return Array.isArray(data?.data) ? data.data : [];
+            return getDataArray(data);
         } catch (error) {
-            this._handleApiError(`Failed to get cheermotes: ${error.message}`, error, 'getCheermotes');
+            this._handleApiError(`Failed to get cheermotes: ${getErrorMessage(error)}`, error, 'getCheermotes');
             return [];
         }
     }
 
-    _handleApiError(message, error, context) {
+    _handleApiError(message: string, error: unknown, context: string): void {
         if (this.errorHandler && error instanceof Error) {
             this.errorHandler.handleConnectionError(error, context, message);
         } else {

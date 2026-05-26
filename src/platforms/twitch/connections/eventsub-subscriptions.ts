@@ -34,10 +34,10 @@ function createSubscriptionCondition(
     const baseCondition = { broadcaster_user_id: broadcasterId };
 
     if (config.requiresUserScope) {
-        return { ...baseCondition, user_id: userId };
+        return userId ? { ...baseCondition, user_id: userId } : baseCondition;
     }
     if (config.requiresModeratorScope) {
-        return { ...baseCondition, moderator_user_id: userId };
+        return userId ? { ...baseCondition, moderator_user_id: userId } : baseCondition;
     }
     if (config.usesToBroadcaster) {
         return { to_broadcaster_user_id: broadcasterId };
@@ -47,7 +47,7 @@ function createSubscriptionCondition(
 }
 
 function getHandlerName(subscriptionType: string): string {
-    const handlerMap = {
+    const handlerMap: Record<string, string> = {
         'channel.chat.message': 'handleChatMessage',
         'channel.follow': 'handleFollow',
         'channel.subscribe': 'handlePaypiggy',
@@ -75,14 +75,20 @@ function createTwitchEventSubSubscriptions(): EventSubSubscriptionDefinition[] {
         { name: 'Stream Offline', type: 'stream.offline', version: '1' }
     ];
 
-  return subscriptionConfigs.map((config): EventSubSubscriptionDefinition => ({
+  return subscriptionConfigs.map((config): EventSubSubscriptionDefinition => {
+        const getCondition = ({ userId, broadcasterId }: SubscriptionConditionInput) => {
+            const conditionInput = userId === undefined ? { broadcasterId } : { userId, broadcasterId };
+            return createSubscriptionCondition(conditionInput, config);
+        };
+
+        return {
         name: config.name,
         type: config.type,
         version: config.version,
-    getCondition: ({ userId, broadcasterId }: SubscriptionConditionInput) =>
-      createSubscriptionCondition({ userId, broadcasterId }, config),
+            getCondition,
         handler: getHandlerName(config.type)
-    }));
+        };
+    });
 }
 
 export { createTwitchEventSubSubscriptions };

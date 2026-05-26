@@ -15,6 +15,24 @@ type LoggerLike = {
 
 type SecretsConfig = Record<string, Record<string, unknown>>;
 
+type EnabledSectionsConfig = {
+    tiktok?: Record<string, unknown>;
+    twitch?: Record<string, unknown>;
+    obs?: Record<string, unknown>;
+    streamelements?: Record<string, unknown>;
+    youtube?: Record<string, unknown>;
+};
+
+type SecretDefinition = {
+    id: string;
+    envKey: string;
+    configPath: string[];
+    requiredWhen?: (config: EnabledSectionsConfig) => boolean;
+    promptText: string;
+    mask?: (value: string) => string;
+    optional?: boolean;
+};
+
 type EnsureSecretsOptions = {
     config?: SecretsConfig;
     logger?: unknown;
@@ -32,13 +50,15 @@ type EnsureSecretsOptions = {
     ) => string[];
 };
 
-const normalize = (value) => {
+const getErrorMessage = (error: unknown): string => error instanceof Error ? error.message : String(error);
+
+const normalize = (value: unknown): string | null => {
     if (value === null || value === undefined) return null;
     const trimmed = String(value).trim();
     return trimmed.length ? trimmed : null;
 };
 
-const maskValue = (value, prefix = 4, suffix = 4) => {
+const maskValue = (value: string, prefix = 4, suffix = 4): string => {
     if (!value) return '';
     if (value.length <= prefix + suffix) {
         return `${value.slice(0, 2)}...`;
@@ -46,7 +66,7 @@ const maskValue = (value, prefix = 4, suffix = 4) => {
     return `${value.slice(0, prefix)}...${value.slice(-suffix)}`;
 };
 
-const applySecureFilePermissions = (filePath, mode, logger, errorHandler) => {
+const applySecureFilePermissions = (filePath: string, mode: number, logger: LoggerLike, errorHandler: ReturnType<typeof createPlatformErrorHandler>) => {
     if (process.platform === 'win32') {
         return;
     }
@@ -57,14 +77,14 @@ const applySecureFilePermissions = (filePath, mode, logger, errorHandler) => {
         if (errorHandler && typeof errorHandler.handleDataLoggingError === 'function') {
             errorHandler.handleDataLoggingError(error, 'secret-manager', 'Failed to set env file permissions');
         } else if (errorHandler && typeof errorHandler.logOperationalError === 'function') {
-            errorHandler.logOperationalError(`Failed to set env file permissions: ${error.message}`, 'secret-manager');
+            errorHandler.logOperationalError(`Failed to set env file permissions: ${getErrorMessage(error)}`, 'secret-manager');
         } else {
-            logger?.warn?.(`Failed to set env file permissions: ${error.message}`, 'secret-manager');
+            logger?.warn?.(`Failed to set env file permissions: ${getErrorMessage(error)}`, 'secret-manager');
         }
     }
 };
 
-const parseEnvFile = (envFilePath) => {
+const parseEnvFile = (envFilePath: string | null): Record<string, string> => {
     if (!envFilePath) return {};
     try {
         if (!fs.existsSync(envFilePath)) return {};
@@ -72,12 +92,12 @@ const parseEnvFile = (envFilePath) => {
         return parseEnvContent(content, { ignoreEmptyKeys: false });
     } catch (error) {
         // eslint-disable-next-line no-console -- bootstrap-time; structured logger not available
-        console.error(`Failed to parse env file ${envFilePath}: ${error.message}`);
+        console.error(`Failed to parse env file ${envFilePath}: ${getErrorMessage(error)}`);
         return {};
     }
 };
 
-const isInteractiveTTY = (interactiveFlag) => {
+const isInteractiveTTY = (interactiveFlag: unknown): boolean => {
     if (typeof interactiveFlag === 'boolean') {
         return interactiveFlag;
     }
@@ -85,13 +105,13 @@ const isInteractiveTTY = (interactiveFlag) => {
     return !!(process.stdin && process.stdin.isTTY && !isCi);
 };
 
-const defaultPromptFor = async (secretId, promptText) => {
+const defaultPromptFor = async (secretId: string, promptText?: string): Promise<string> => {
     const rl = readline.createInterface({
         input: process.stdin,
         output: process.stdout
     });
 
-    const answer = await new Promise((resolve) => {
+    const answer = await new Promise<string>((resolve) => {
         rl.question(promptText || `Enter value for ${secretId}: `, (value) => {
             resolve(value);
         });
@@ -101,7 +121,7 @@ const defaultPromptFor = async (secretId, promptText) => {
     return answer;
 };
 
-const persistToEnv = (envFilePath, updates, logger, errorHandler) => {
+const persistToEnv = (envFilePath: string | null, updates: Record<string, string>, logger: LoggerLike, errorHandler: ReturnType<typeof createPlatformErrorHandler>): string[] => {
     if (!envFilePath || !updates || Object.keys(updates).length === 0) {
         return [];
     }
@@ -111,7 +131,7 @@ const persistToEnv = (envFilePath, updates, logger, errorHandler) => {
             ? fs.readFileSync(envFilePath, 'utf8').split(/\r?\n/)
             : [];
 
-        const indexByKey = {};
+        const indexByKey: Record<string, number> = {};
         existingLines.forEach((line, idx) => {
             const eq = line.indexOf('=');
             if (eq > 0) {
@@ -142,21 +162,21 @@ const persistToEnv = (envFilePath, updates, logger, errorHandler) => {
         if (errorHandler && typeof errorHandler.handleDataLoggingError === 'function') {
             errorHandler.handleDataLoggingError(error, 'secret-manager', 'Failed to persist secrets to environment file');
         } else if (errorHandler && typeof errorHandler.logOperationalError === 'function') {
-            errorHandler.logOperationalError(`Failed to persist secrets: ${error.message}`, 'secret-manager');
+            errorHandler.logOperationalError(`Failed to persist secrets: ${getErrorMessage(error)}`, 'secret-manager');
         } else {
-            logger?.warn?.(`Failed to persist secrets: ${error.message}`, 'secret-manager');
+            logger?.warn?.(`Failed to persist secrets: ${getErrorMessage(error)}`, 'secret-manager');
         }
         return [];
     }
 };
 
-const boolFromConfig = (value) => {
+const boolFromConfig = (value: unknown): boolean => {
     if (typeof value === 'boolean') return value;
     const normalized = String(value || '').trim().toLowerCase();
     return normalized === 'true' || normalized === '1';
 };
 
-const SECRET_DEFINITIONS = [
+const SECRET_DEFINITIONS: SecretDefinition[] = [
     {
         id: 'TIKTOK_API_KEY',
         envKey: 'TIKTOK_API_KEY',
@@ -249,7 +269,7 @@ async function ensureSecrets(options: EnsureSecretsOptions = {}) {
     const missingRequired: string[] = [];
     const persistUpdates: Record<string, string> = {};
 
-    const getConfigSection = (section) => {
+    const getConfigSection = (section: string): Record<string, unknown> => {
         return config?.[section] ?? {};
     };
 

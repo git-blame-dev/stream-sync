@@ -62,6 +62,117 @@ const PlatformEvents = {
 
 const VALID_PLATFORMS = ['twitch', 'youtube', 'tiktok'];
 
+type PlatformName = (typeof VALID_PLATFORMS)[number];
+
+interface EventFieldSchema {
+    type?: string | string[];
+    enum?: readonly unknown[];
+    required?: readonly string[];
+    properties?: Record<string, EventFieldSchema>;
+}
+
+interface EventSchema {
+    required?: readonly string[];
+    optional?: readonly string[];
+    properties?: Record<string, EventFieldSchema>;
+}
+
+type EventSchemas = Record<string, EventSchema>;
+
+interface ValidationResult {
+    valid: boolean;
+    errors: string[];
+}
+
+interface ChatMessageEventRecord extends Record<string, unknown> {
+    type: string;
+    platform: unknown;
+    username: unknown;
+    userId: unknown;
+    avatarUrl: string;
+    message: { text: string };
+    timestamp: unknown;
+    metadata?: unknown;
+}
+
+interface GiftEventRecord extends Record<string, unknown> {
+    type: string;
+    platform: unknown;
+    username: unknown;
+    userId: unknown;
+    avatarUrl: string;
+    id: unknown;
+    giftType: unknown;
+    giftCount: unknown;
+    amount: unknown;
+    currency: unknown;
+    timestamp: unknown;
+    repeatCount?: unknown;
+    giftImageUrl?: string;
+}
+
+interface FollowEventRecord extends Record<string, unknown> {
+    type: string;
+    platform: unknown;
+    username: unknown;
+    userId: unknown;
+    avatarUrl: string;
+    timestamp: unknown;
+    metadata?: unknown;
+}
+
+interface NormalizedMessageRecord extends Record<string, unknown> {
+    type: string;
+    platform: string;
+    username: string;
+    userId: string;
+    avatarUrl: string;
+    message: { text: string };
+    timestamp: string;
+    metadata?: unknown;
+}
+
+interface EnhancedNormalizedMessage extends Record<string, unknown> {
+    text: string;
+    platform: string;
+    timestamp: string;
+    username: string;
+    userId: string;
+    avatarUrl: string;
+    emotes?: unknown;
+    metadata?: unknown;
+}
+
+interface EnhancedNormalizedGift extends Record<string, unknown> {
+    platform: string;
+    original: Record<string, unknown>;
+    id: string;
+    giftType: string;
+    giftCount: number;
+    amount: number;
+    currency: string;
+    username: string;
+    userId: string;
+    avatarUrl: string;
+    message?: unknown;
+}
+
+interface EventBuilderRecord extends Record<string, unknown> {
+    id: string;
+    correlationId: string;
+    timestamp: string;
+    platform?: string;
+    type?: string;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isPlatformName(value: unknown): value is PlatformName {
+    return typeof value === 'string' && VALID_PLATFORMS.includes(value);
+}
+
 function resolveAvatarUrl(avatarUrl: unknown): string {
     const normalizedAvatarUrl = typeof avatarUrl === 'string' ? avatarUrl.trim() : '';
     return normalizedAvatarUrl || DEFAULT_AVATAR_URL;
@@ -396,14 +507,16 @@ const EVENT_SCHEMAS = {
             context: { type: 'object' }
         }
     }
-};
+} satisfies EventSchemas;
 
 class PlatformEventValidator {
+    private readonly schemas: EventSchemas;
+
     constructor() {
         this.schemas = EVENT_SCHEMAS;
     }
     
-    validate(event: Record<string, unknown> | null | undefined) {
+    validate(event: Record<string, unknown> | null | undefined): ValidationResult {
         if (!event) {
             return {
                 valid: false,
@@ -411,24 +524,25 @@ class PlatformEventValidator {
             };
         }
         
-        const errors = [];
+        const errors: string[] = [];
+        const eventType = typeof event.type === 'string' ? event.type : '';
         
         // Check if event type is supported
-        if (!event.type || !this.schemas[event.type]) {
+        if (!eventType || !this.schemas[eventType]) {
             errors.push(`Invalid event type: ${event.type}`);
         }
         
         // Validate platform field specifically - check even for invalid event types
-        if (event.platform && !VALID_PLATFORMS.includes(event.platform)) {
+        if (event.platform && !isPlatformName(event.platform)) {
             errors.push(`Invalid platform: ${event.platform}. Must be one of: ${VALID_PLATFORMS.join(', ')}`);
         }
         
         // If event type is invalid, return early but include platform validation error
-        if (!event.type || !this.schemas[event.type]) {
+        if (!eventType || !this.schemas[eventType]) {
             return { valid: false, errors };
         }
         
-        const schema = this.schemas[event.type];
+        const schema = this.schemas[eventType];
         
         // Check required fields
         if (schema.required) {
@@ -474,29 +588,19 @@ class PlatformEventValidator {
         };
     }
     
-    getSupportedEventTypes() {
+    getSupportedEventTypes(): string[] {
         return Object.keys(this.schemas);
     }
     
-    getEventSchema(eventType) {
+    getEventSchema(eventType: string): EventSchema | null {
         return this.schemas[eventType] || null;
     }
     
-    _validateFieldType(
+    private _validateFieldType(
         value: unknown,
-        schema: {
-            type?: string | string[];
-            enum?: unknown[];
-            required?: string[];
-            properties?: Record<string, {
-                type?: string | string[];
-                enum?: unknown[];
-                required?: string[];
-                properties?: Record<string, unknown>;
-            }>;
-        },
+        schema: EventFieldSchema,
         fieldName: string
-    ) {
+    ): boolean {
         // Handle enum validation
         if (schema.enum && !schema.enum.includes(value)) {
             return false;
@@ -543,7 +647,7 @@ class PlatformEventValidator {
         }
 
         // Handle object validation with required fields
-        if (schema.type === 'object' && value && typeof value === 'object' && !Array.isArray(value)) {
+        if (schema.type === 'object' && isRecord(value)) {
             if (schema.required) {
                 for (const requiredField of schema.required) {
                     if (value[requiredField] === undefined || value[requiredField] === null) {
@@ -568,6 +672,8 @@ class PlatformEventValidator {
 }
 
 class PlatformEventBuilder {
+    private readonly validator: PlatformEventValidator;
+
     constructor() {
         this.validator = new PlatformEventValidator();
     }
@@ -578,7 +684,7 @@ class PlatformEventBuilder {
             throw new Error('Chat message text must be a string');
         }
         
-        const result = {
+        const result: ChatMessageEventRecord = {
             type: 'platform:chat-message',
             platform: params.platform,
             username: params.username,
@@ -601,10 +707,10 @@ class PlatformEventBuilder {
         return result;
     }
     
-    createGift(params) {
+    createGift(params: Record<string, unknown>) {
         this._validateRequiredParams(params, ['platform', 'username', 'userId', 'id', 'giftType', 'giftCount', 'amount', 'currency', 'timestamp']);
         
-        const result = {
+        const result: GiftEventRecord = {
             type: 'platform:gift',
             platform: params.platform,
             username: params.username,
@@ -632,10 +738,10 @@ class PlatformEventBuilder {
         return result;
     }
     
-    createFollow(params) {
+    createFollow(params: Record<string, unknown>) {
         this._validateRequiredParams(params, ['platform', 'username', 'userId', 'timestamp']);
         
-        const result = {
+        const result: FollowEventRecord = {
             type: 'platform:follow',
             platform: params.platform,
             username: params.username,
@@ -656,7 +762,7 @@ class PlatformEventBuilder {
     }
     
     normalizeMessage(platform: string, data: Record<string, unknown>) {
-        if (!data || typeof data !== 'object') {
+        if (!isRecord(data)) {
             throw new Error('Message payload must be an object');
         }
 
@@ -668,7 +774,7 @@ class PlatformEventBuilder {
             throw new Error('Missing required userId for message');
         }
 
-        if (!data.message || typeof data.message !== 'object') {
+        if (!isRecord(data.message)) {
             throw new Error('Missing required message payload');
         }
 
@@ -694,7 +800,7 @@ class PlatformEventBuilder {
             throw new Error('Invalid timestamp for message');
         }
 
-        const normalizedMessage = {
+        const normalizedMessage: NormalizedMessageRecord = {
             type: 'platform:chat-message',
             platform,
             username: data.username,
@@ -713,8 +819,8 @@ class PlatformEventBuilder {
         return normalizedMessage;
     }
     
-    normalizeGift(platform, data) {
-        if (!data || typeof data !== 'object') {
+    normalizeGift(platform: string, data: Record<string, unknown>) {
+        if (!isRecord(data)) {
             throw new Error('Gift payload must be an object');
         }
 
@@ -765,8 +871,8 @@ class PlatformEventBuilder {
         };
     }
     
-    normalizeFollow(platform, data) {
-        if (!data || typeof data !== 'object') {
+    normalizeFollow(platform: string, data: Record<string, unknown>) {
+        if (!isRecord(data)) {
             throw new Error('Follow payload must be an object');
         }
 
@@ -780,6 +886,10 @@ class PlatformEventBuilder {
 
         if (data.timestamp === undefined || data.timestamp === null) {
             throw new Error('Missing required follow timestamp');
+        }
+
+        if (!(typeof data.timestamp === 'string' || typeof data.timestamp === 'number' || data.timestamp instanceof Date)) {
+            throw new Error('Invalid follow timestamp');
         }
 
         const timestamp = new Date(data.timestamp);
@@ -798,7 +908,7 @@ class PlatformEventBuilder {
         };
     }
     
-    _validateRequiredParams(params, requiredFields) {
+    _validateRequiredParams(params: Record<string, unknown>, requiredFields: readonly string[]): void {
         if (!params || typeof params !== 'object') {
             throw new Error('Parameters must be an object');
         }
@@ -822,15 +932,15 @@ class EnhancedPlatformEvents {
         RAID: 'platform:raid'
     };
 
-    static _generateId() {
+    static _generateId(): string {
         return crypto.randomUUID();
     }
 
-    static _generateCorrelationId() {
+    static _generateCorrelationId(): string {
         return crypto.randomUUID();
     }
 
-    static _sanitizeText(text) {
+    static _sanitizeText(text: unknown): string {
         if (typeof text !== 'string') return '';
         
         return text
@@ -842,8 +952,8 @@ class EnhancedPlatformEvents {
             .trim();
     }
 
-    static _validatePlatform(platform) {
-        if (!VALID_PLATFORMS.includes(platform)) {
+    static _validatePlatform(platform: unknown): PlatformName {
+        if (!isPlatformName(platform)) {
             throw new Error(`Invalid platform: ${platform}. Valid platforms: ${VALID_PLATFORMS.join(', ')}`);
         }
         return platform;
@@ -873,7 +983,7 @@ class EnhancedPlatformEvents {
         };
     }
 
-    static createNotificationEvent(platform, notificationType, data) {
+    static createNotificationEvent(platform: string, notificationType: string, data: Record<string, unknown>) {
         const username = typeof data?.username === 'string' && data.username.trim()
             ? data.username
             : undefined;
@@ -894,7 +1004,7 @@ class EnhancedPlatformEvents {
         };
     }
 
-    static createConnectionEvent(platform, status, error = null) {
+    static createConnectionEvent(platform: string, status: string, error: unknown = null) {
         return {
             id: this._generateId(),
             type: 'platform:connection',
@@ -907,7 +1017,7 @@ class EnhancedPlatformEvents {
         };
     }
 
-    static createErrorEvent(platform, error, context = {}) {
+    static createErrorEvent(platform: string, error: Error & { code?: string }, context: Record<string, unknown> = {}) {
         return {
             id: this._generateId(),
             type: 'platform:error',
@@ -925,8 +1035,8 @@ class EnhancedPlatformEvents {
         };
     }
 
-    static normalizeIdentity(platform, rawIdentity) {
-        if (!rawIdentity || typeof rawIdentity !== 'object') {
+    static normalizeIdentity(platform: string, rawIdentity: Record<string, unknown>) {
+        if (!isRecord(rawIdentity)) {
             throw new Error('Identity payload must be an object');
         }
 
@@ -951,12 +1061,12 @@ class EnhancedPlatformEvents {
         };
     }
 
-    static normalizeMessage(platform, rawMessage) {
-        if (!rawMessage || typeof rawMessage !== 'object') {
+    static normalizeMessage(platform: string, rawMessage: Record<string, unknown>) {
+        if (!isRecord(rawMessage)) {
             throw new Error('Message payload must be an object');
         }
 
-        if (!rawMessage.message || typeof rawMessage.message !== 'object') {
+        if (!isRecord(rawMessage.message)) {
             throw new Error('Missing required message payload');
         }
 
@@ -985,7 +1095,7 @@ class EnhancedPlatformEvents {
             throw new Error('Invalid message timestamp');
         }
 
-        const normalizedMessage = {
+        const normalizedMessage: EnhancedNormalizedMessage = {
             text: String(text).trim(),
             platform: this._validatePlatform(platform),
             timestamp: timestamp.toISOString(),
@@ -1005,8 +1115,8 @@ class EnhancedPlatformEvents {
         return normalizedMessage;
     }
 
-    static normalizeGift(platform, rawGift) {
-        if (!rawGift || typeof rawGift !== 'object') {
+    static normalizeGift(platform: string, rawGift: Record<string, unknown>) {
+        if (!isRecord(rawGift)) {
             throw new Error('Gift payload must be an object');
         }
 
@@ -1036,7 +1146,7 @@ class EnhancedPlatformEvents {
             throw new Error('Missing required gift currency');
         }
 
-        const normalizedGift = {
+        const normalizedGift: EnhancedNormalizedGift = {
             platform: this._validatePlatform(platform),
             original: rawGift,
             id: rawGift.id,
@@ -1056,8 +1166,8 @@ class EnhancedPlatformEvents {
         return normalizedGift;
     }
 
-    static validateChatMessageEvent(event) {
-        if (!event || event.type !== 'platform:chat-message') {
+    static validateChatMessageEvent(event: unknown): boolean {
+        if (!isRecord(event) || event.type !== 'platform:chat-message') {
             return false;
         }
 
@@ -1066,7 +1176,7 @@ class EnhancedPlatformEvents {
             return false;
         }
 
-        const metadata = event.metadata;
+        const metadata = isRecord(event.metadata) ? event.metadata : null;
         const missingFields = Array.isArray(metadata?.missingFields)
             ? metadata.missingFields
             : [];
@@ -1085,8 +1195,8 @@ class EnhancedPlatformEvents {
         return true;
     }
 
-    static validateRuntimeMonetizationEvent(event) {
-        if (!event || typeof event !== 'object') {
+    static validateRuntimeMonetizationEvent(event: unknown): boolean {
+        if (!isRecord(event)) {
             return false;
         }
 
@@ -1128,20 +1238,20 @@ class EnhancedPlatformEvents {
         return hasValidUsername && (hasValidUserId || allowsMissingUserId);
     }
 
-    static validateNotificationEvent(event) {
-        if (!event || event.type !== 'platform:notification') {
+    static validateNotificationEvent(event: unknown): boolean {
+        if (!isRecord(event) || event.type !== 'platform:notification') {
             return false;
         }
 
-        if (!VALID_PLATFORMS.includes(event.platform)) {
+        if (!isPlatformName(event.platform)) {
             return false;
         }
 
-        if (!Object.values(this.NOTIFICATION_TYPES).includes(event.notificationType)) {
+        if (typeof event.notificationType !== 'string' || !Object.values(this.NOTIFICATION_TYPES).includes(event.notificationType)) {
             return false;
         }
 
-        if (!event.data || typeof event.data !== 'object') {
+        if (!isRecord(event.data)) {
             return false;
         }
 
@@ -1172,32 +1282,31 @@ class EnhancedPlatformEvents {
         return true;
     }
 
-    static validateConnectionEvent(event) {
-        return !!(event &&
+    static validateConnectionEvent(event: unknown): boolean {
+        return !!(isRecord(event) &&
                event.type === 'platform:connection' &&
-               VALID_PLATFORMS.includes(event.platform) &&
+               isPlatformName(event.platform) &&
                typeof event.status === 'string');
     }
 
-    static validateErrorEvent(event) {
-        return !!(event &&
+    static validateErrorEvent(event: unknown): boolean {
+        return !!(isRecord(event) &&
                event.type === 'platform:error' &&
-               VALID_PLATFORMS.includes(event.platform) &&
-               event.error &&
-               typeof event.error === 'object' &&
+               isPlatformName(event.platform) &&
+               isRecord(event.error) &&
                typeof event.error.message === 'string');
     }
 
-    static validateStreamDetectedEvent(event) {
-        if (!event || event.type !== PlatformEvents.STREAM_DETECTED) {
+    static validateStreamDetectedEvent(event: unknown): boolean {
+        if (!isRecord(event) || event.type !== PlatformEvents.STREAM_DETECTED) {
             return false;
         }
 
-        if (!VALID_PLATFORMS.includes(event.platform)) {
+        if (!isPlatformName(event.platform)) {
             return false;
         }
 
-        if (!event.eventType || !['stream-detected', 'stream-ended'].includes(event.eventType)) {
+        if (typeof event.eventType !== 'string' || !['stream-detected', 'stream-ended'].includes(event.eventType)) {
             return false;
         }
 
@@ -1224,8 +1333,8 @@ class EnhancedPlatformEvents {
         return true;
     }
 
-    static validateEvent(event) {
-        if (!event || typeof event !== 'object') return false;
+    static validateEvent(event: unknown): boolean {
+        if (!isRecord(event)) return false;
 
         const validator = new PlatformEventValidator();
 
@@ -1259,8 +1368,8 @@ class EnhancedPlatformEvents {
         return new EventBuilder();
     }
 
-    static _calculatePriority(notificationType) {
-        const priorities = {
+    static _calculatePriority(notificationType: string): number {
+        const priorities: Record<string, number> = {
             [this.NOTIFICATION_TYPES.GIFT]: 8,
             [this.NOTIFICATION_TYPES.RAID]: 6,
             [this.NOTIFICATION_TYPES.PAYPIGGY]: 5,
@@ -1269,7 +1378,7 @@ class EnhancedPlatformEvents {
         return priorities[notificationType] || 1;
     }
 
-    static _isRecoverableError(error, context) {
+    static _isRecoverableError(error: Error, context: Record<string, unknown>): boolean {
         const recoverablePatterns = [
             /network/i,
             /connection/i,
@@ -1284,6 +1393,8 @@ class EnhancedPlatformEvents {
 }
 
 class EventBuilder {
+    private readonly _event: EventBuilderRecord;
+
     constructor() {
         this._event = {
             id: EnhancedPlatformEvents._generateId(),
@@ -1297,7 +1408,7 @@ class EventBuilder {
         return this;
     }
 
-    type(eventType) {
+    type(eventType: string) {
         if (eventType && !eventType.includes(':')) {
             eventType = `platform:${eventType}`;
         }
@@ -1305,22 +1416,22 @@ class EventBuilder {
         return this;
     }
 
-    username(username) {
+    username(username: string) {
         this._event.username = username;
         return this;
     }
 
-    userId(userId) {
+    userId(userId: string) {
         this._event.userId = userId;
         return this;
     }
 
-    avatarUrl(avatarUrl) {
+    avatarUrl(avatarUrl: string) {
         this._event.avatarUrl = avatarUrl;
         return this;
     }
 
-    message(text) {
+    message(text: string) {
         this._event.message = {
             text: EnhancedPlatformEvents._sanitizeText(text),
             original: text
@@ -1328,23 +1439,23 @@ class EventBuilder {
         return this;
     }
 
-    metadata(metadata) {
+    metadata(metadata: Record<string, unknown>) {
         this._event.metadata = metadata;
         return this;
     }
 
-    priority(priority) {
+    priority(priority: number) {
         this._event.priority = priority;
         return this;
     }
 
-    data(data) {
+    data(data: Record<string, unknown>) {
         this._event.data = data;
         return this;
     }
 
-    build() {
-        if (!this._event.platform || !VALID_PLATFORMS.includes(this._event.platform)) {
+    build(): EventBuilderRecord {
+        if (!this._event.platform || !isPlatformName(this._event.platform)) {
             throw new Error(`Invalid platform: ${this._event.platform}`);
         }
         

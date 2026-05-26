@@ -27,6 +27,47 @@ type NormalizedIdentity = {
     username: string;
 };
 
+type NormalizedMessagePayload = {
+    text: string;
+    parts?: Array<Record<string, unknown>>;
+};
+
+type ChatEventPayload = Record<string, unknown> & {
+    message: NormalizedMessagePayload;
+};
+
+type GiftEventPayload = Record<string, unknown> & {
+    type: string;
+    platform: string;
+    username: string;
+    userId: string;
+    avatarUrl: string;
+    giftType: string;
+    giftImageUrl?: string;
+    giftCount: number;
+    amount: number;
+    currency: string;
+    repeatCount?: number;
+    id: string | number;
+    timestamp: unknown;
+    isAggregated: boolean;
+    aggregatedCount?: number;
+    enhancedGiftData?: Record<string, unknown>;
+    sourceType?: string;
+};
+
+type PaypiggyEventPayload = Record<string, unknown> & {
+    type: string;
+    platform: string;
+    userId: string;
+    username: string;
+    avatarUrl: string;
+    timestamp: unknown;
+    tier?: string;
+    months?: number;
+    message?: string;
+};
+
 type EventFactoryOptions = {
 platformName?: string;
 timestampService?: unknown;
@@ -71,7 +112,7 @@ const getTimestamp = options.getTimestamp || ((data: Record<string, unknown>) =>
 
 const normalizeRecoverable = (recoverable: unknown): boolean => (typeof recoverable === 'boolean' ? recoverable : true);
     const normalizeChatEvent = options.normalizeChatEvent
-        || ((data: Record<string, unknown>) => normalizeTikTokMessage(data, platformName, options.timestampService) as Record<string, unknown>);
+        || ((data: Record<string, unknown>) => normalizeTikTokMessage(data, platformName) as Record<string, unknown>);
 
     const normalizeIdentityFromPayload = (data: Record<string, unknown>) => normalizeUserData(extractTikTokUserData(data));
     const normalizeIdentityFromCanonical = (data: Record<string, unknown>) => normalizeUserData({
@@ -117,15 +158,17 @@ const normalizeRecoverable = (recoverable: unknown): boolean => (typeof recovera
         return getValidMessageParts({ message: { parts: sourceParts } })
             .map((part) => {
                 if (part.type === 'emote') {
-                    const normalizedPart = {
+                    const normalizedPart: Record<string, unknown> = {
                         type: 'emote',
                         platform: typeof part.platform === 'string' ? part.platform : 'tiktok',
                         emoteId: typeof part.emoteId === 'string' ? part.emoteId : '',
                         imageUrl: part.imageUrl.trim()
                     };
 
-                    if (Number.isInteger(part.placeInComment) && part.placeInComment >= 0) {
-                        normalizedPart.placeInComment = part.placeInComment;
+                    const partRecord = asRecord(part);
+                    const placeInComment = partRecord?.placeInComment;
+                    if (Number.isInteger(placeInComment) && typeof placeInComment === 'number' && placeInComment >= 0) {
+                        normalizedPart.placeInComment = placeInComment;
                     }
 
                     return normalizedPart;
@@ -155,7 +198,7 @@ const normalizeRecoverable = (recoverable: unknown): boolean => (typeof recovera
     return {
         createChatMessage: (data: EventFactoryPayload = {}, eventOptions: EventFactoryChatOptions = {}) => {
             const normalized = eventOptions.normalizedData || normalizeChatEvent(data);
-            const normalizedMetadata = normalized?.metadata && typeof normalized.metadata === 'object'
+            const normalizedMetadata: EventFactoryMetadata = normalized?.metadata && typeof normalized.metadata === 'object'
                 ? { ...normalized.metadata }
                 : {};
             delete normalizedMetadata.messageParts;
@@ -207,7 +250,7 @@ const isMissingField = (fieldName: string): boolean => missingFields.includes(fi
                 ...(missingFields.length > 0 && timestamp ? { sourceTimestamp: timestamp } : {})
             });
 
-            const messagePayload = {
+            const messagePayload: NormalizedMessagePayload = {
                 text: messageText || (isMissingField('message') ? UNKNOWN_CHAT_MESSAGE : '')
             };
 
@@ -215,7 +258,7 @@ const isMissingField = (fieldName: string): boolean => missingFields.includes(fi
                 messagePayload.parts = messageParts;
             }
 
-            const eventData = {
+            const eventData: ChatEventPayload = {
                 type: PlatformEvents.CHAT_MESSAGE,
                 platform: platformName,
                 username: identity.username || UNKNOWN_CHAT_USERNAME,
@@ -238,7 +281,8 @@ const isMissingField = (fieldName: string): boolean => missingFields.includes(fi
         createGift: (data: EventFactoryPayload = {}) => {
             const identity = normalizeIdentityFromCanonical(data);
             const avatarUrl = resolveAvatarUrl(data);
-            const hasEnhancedGiftData = data.enhancedGiftData && typeof data.enhancedGiftData === 'object';
+            const enhancedGiftData = asRecord(data.enhancedGiftData);
+            const hasEnhancedGiftData = enhancedGiftData !== null;
 
             if (typeof data.giftType !== 'string' || !data.giftType.trim()) {
                 throw new Error('TikTok gift requires giftType');
@@ -267,7 +311,10 @@ const isMissingField = (fieldName: string): boolean => missingFields.includes(fi
             }
             const resolvedAmount = data.amount;
             const currency = data.currency.trim();
-            const platformMessageId = data.id || getPlatformMessageId(data);
+            const rawPlatformMessageId = data.id ?? getPlatformMessageId(data);
+            const platformMessageId = typeof rawPlatformMessageId === 'string' || typeof rawPlatformMessageId === 'number'
+                ? rawPlatformMessageId
+                : null;
             if (!platformMessageId) {
                 throw new Error('TikTok gift requires msgId');
             }
@@ -276,11 +323,11 @@ const isMissingField = (fieldName: string): boolean => missingFields.includes(fi
                 || (Number.isFinite(Number(data.aggregatedCount)) && Number(data.aggregatedCount) > 0);
             const aggregatedCountValue = Number.isFinite(Number(data.aggregatedCount))
                 ? Number(data.aggregatedCount)
-                : (hasEnhancedGiftData && Number.isFinite(Number(data.enhancedGiftData.giftCount))
-                    ? Number(data.enhancedGiftData.giftCount)
+                : (hasEnhancedGiftData && Number.isFinite(Number(enhancedGiftData.giftCount))
+                    ? Number(enhancedGiftData.giftCount)
                     : (isAggregated ? giftCount : undefined));
 
-            const result = {
+            const result: GiftEventPayload = {
                 type: PlatformEvents.GIFT,
                 platform: platformName,
                 username: identity.username,
@@ -300,7 +347,7 @@ const isMissingField = (fieldName: string): boolean => missingFields.includes(fi
                 result.aggregatedCount = Number(aggregatedCountValue);
             }
             if (hasEnhancedGiftData) {
-                result.enhancedGiftData = data.enhancedGiftData;
+                result.enhancedGiftData = enhancedGiftData;
             }
             if (typeof data.sourceType === 'string') {
                 result.sourceType = data.sourceType;
@@ -309,8 +356,8 @@ const isMissingField = (fieldName: string): boolean => missingFields.includes(fi
         },
         createFollow: (params: EventFactoryPayload = {}) => {
             const identity = normalizeUserData({
-                userId: params.userId,
-                username: params.username
+                userId: String(params.userId ?? ''),
+                username: String(params.username ?? '')
             });
             const avatarUrl = resolveAvatarUrl(params);
 
@@ -321,13 +368,13 @@ const isMissingField = (fieldName: string): boolean => missingFields.includes(fi
                 userId: identity.userId,
                 avatarUrl,
                 timestamp: params.timestamp,
-                metadata: buildEventMetadata(params.metadata)
+                metadata: buildEventMetadata(asRecord(params.metadata) || undefined)
             };
         },
         createShare: (params: EventFactoryPayload = {}) => {
             const identity = normalizeUserData({
-                userId: params.userId,
-                username: params.username
+                userId: String(params.userId ?? ''),
+                username: String(params.username ?? '')
             });
             const avatarUrl = resolveAvatarUrl(params);
 
@@ -340,7 +387,7 @@ const isMissingField = (fieldName: string): boolean => missingFields.includes(fi
                 timestamp: params.timestamp,
                 metadata: buildEventMetadata({
                     interactionType: 'share',
-                    ...(params.metadata || {})
+                    ...(asRecord(params.metadata) || {})
                 })
             };
         },
@@ -383,7 +430,7 @@ const isMissingField = (fieldName: string): boolean => missingFields.includes(fi
             const message = typeof data?.message === 'string' ? data.message.trim() : '';
             const months = Number(data?.months);
 
-            const payload = {
+            const payload: PaypiggyEventPayload = {
                 type: PlatformEvents.PAYPIGGY,
                 platform: platformName,
                 ...identity,
@@ -407,7 +454,7 @@ const isMissingField = (fieldName: string): boolean => missingFields.includes(fi
             const message = typeof data?.message === 'string' ? data.message.trim() : '';
             const months = Number(data?.months);
 
-            const payload = {
+            const payload: PaypiggyEventPayload = {
                 type: PlatformEvents.PAYPIGGY,
                 platform: platformName,
                 ...identity,

@@ -29,11 +29,12 @@ type TikTokWebSocketClientOptions = {
     WebSocketCtor?: WebSocketClientConstructor;
 };
 
+const WebSocketModuleRecord = asJsonObject(WebSocketModule);
 const defaultWebSocketCtor = (
-    'WebSocket' in WebSocketModule
-        ? WebSocketModule.WebSocket
+    WebSocketModuleRecord && 'WebSocket' in WebSocketModuleRecord
+        ? WebSocketModuleRecord.WebSocket
         : WebSocketModule
-) as unknown as WebSocketClientConstructor;
+) as WebSocketClientConstructor;
 
 function getErrorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error);

@@ -8,6 +8,127 @@ import { normalizeGreetingIdentityKey } from '../utils/greeting-identity-key-nor
 
 const LOG_TRUNCATION_LENGTH = 200;
 
+type RouterRecord = Record<string, unknown>;
+
+type LoggerLike = {
+    debug: (message: unknown, source?: string, data?: unknown) => void;
+    warn: (message: unknown, source?: string, data?: unknown) => void;
+    error?: (message: unknown, source?: string, data?: unknown) => void;
+    console?: (message: unknown, source?: string, data?: unknown) => void;
+};
+
+type RouterConfig = {
+    general: {
+        maxMessageLength: number;
+        logChatMessages?: boolean;
+        filterOldMessages?: boolean;
+    };
+    cooldowns: {
+        cmdCooldownMs: number;
+        heavyCommandCooldownMs: number;
+        globalCmdCooldownMs: number;
+    };
+    farewell: {
+        timeout: number;
+    };
+    greetings?: {
+        customVfxProfiles?: Record<string, GreetingProfile>;
+    };
+} & Record<string, RouterRecord>;
+
+type NormalizedChatData = {
+    type?: unknown;
+    platform?: string;
+    username?: string;
+    userId?: unknown;
+    avatarUrl?: unknown;
+    timestamp?: unknown;
+    message?: unknown;
+    isPaypiggy?: boolean;
+    badgeImages?: unknown;
+} & RouterRecord;
+
+type CommandConfig = {
+    command: string;
+    filename?: unknown;
+    mediaSource?: unknown;
+    vfxFilePath?: unknown;
+    commandKey?: unknown;
+};
+
+type GreetingProfile = {
+    profileId?: string;
+    command?: string;
+} & RouterRecord;
+
+type FirstMessageState = {
+    isFirstMessage: boolean;
+    consume: () => void;
+};
+
+type ProcessCommandOptions = {
+    firstMessageState?: FirstMessageState;
+    greetingsEnabled?: boolean;
+    greetingProfile?: GreetingProfile | null | undefined;
+};
+
+type VfxResult = {
+    commandKey?: unknown;
+    filename?: unknown;
+    mediaSource?: unknown;
+    vfxFilePath?: unknown;
+    duration?: unknown;
+    command?: unknown;
+};
+
+type RuntimeLike = {
+    config: RouterConfig;
+    displayQueue?: { addItem: (item: RouterRecord) => void };
+    platformLifecycleService?: { getPlatformConnectionTime: (platform: string) => number | undefined | null };
+    gracefulExitService?: {
+        isEnabled: () => boolean;
+        incrementMessageCount: () => boolean;
+        triggerExit: () => Promise<unknown> | unknown;
+    };
+    vfxCommandService?: {
+        selectVFXCommand?: (trigger: string, message: string) => Promise<CommandConfig | VfxResult | null> | CommandConfig | VfxResult | null;
+        matchFarewell?: (message: string, trigger: string) => unknown;
+        getVFXConfig?: (commandKey: string, message: string | null) => Promise<VfxResult | null> | VfxResult | null;
+    };
+    commandCooldownService?: {
+        checkUserCooldown: (userId: unknown, perUserCooldown: number, heavyCooldown: number) => boolean;
+        updateUserCooldown: (userId: unknown) => void;
+        checkGlobalCooldown?: (commandName: string, globalCooldownMs: number) => boolean;
+        updateGlobalCooldown?: (commandName: string) => void;
+    };
+    userTrackingService?: {
+        hasSeenUser?: (userId: unknown, context: RouterRecord) => boolean;
+        markMessageSeen?: (userId: unknown, context: RouterRecord) => void;
+        isFirstMessage?: (userId: unknown, context: RouterRecord) => boolean;
+    };
+    isFirstMessage?: (userId: unknown, context: RouterRecord) => boolean;
+    handleFarewellNotification?: (platform: string, username: string | undefined, data: RouterRecord) => Promise<unknown> | unknown;
+};
+
+type RouterDependencies = {
+    runtime: RuntimeLike;
+    logger: LoggerLike;
+    config: RouterConfig;
+};
+
+type PlatformErrorHandlerLike = {
+    handleEventProcessingError: (error: Error, eventType: string, eventData: unknown, message: string) => void;
+    logOperationalError: (message: string, context: string, payload: unknown) => void;
+};
+
+function isRecord(value: unknown): value is RouterRecord {
+    return !!value && typeof value === 'object';
+}
+
+function isCommandConfig(value: unknown): value is CommandConfig {
+    return isRecord(value) && typeof value.command === 'string';
+}
+
 function getErrorMessage(error: unknown) {
     if (error instanceof Error) {
         return error.message;
@@ -16,12 +137,12 @@ function getErrorMessage(error: unknown) {
 }
 
 class ChatNotificationRouter {
-    runtime;
-    logger;
-    maxMessageLength;
-    errorHandler;
+    runtime: RuntimeLike;
+    logger: LoggerLike;
+    maxMessageLength: number;
+    errorHandler: PlatformErrorHandlerLike;
 
-    constructor({ runtime, logger, config }) {
+    constructor({ runtime, logger, config }: RouterDependencies) {
         this.runtime = runtime;
         this.logger = logger;
         if (!config) {
@@ -31,8 +152,8 @@ class ChatNotificationRouter {
         this.errorHandler = createPlatformErrorHandler(this.logger, 'chat-router');
     }
 
-    async handleChatMessage(platform, normalizedData) {
-        const safeNormalizedData = normalizedData || {};
+    async handleChatMessage(platform: string, normalizedData: NormalizedChatData) {
+        const safeNormalizedData: NormalizedChatData = normalizedData || {};
         try {
             const messageText = this.getMessageText(safeNormalizedData);
             this.logger.debug('Chat message via router', 'chat-router', {
@@ -82,7 +203,7 @@ class ChatNotificationRouter {
             }
 
             const level = this.runtime.config.general.logChatMessages ? 'console' : 'debug';
-            if (level === 'console') {
+            if (level === 'console' && typeof this.logger.console === 'function') {
                 const logSafeData = { ...safeNormalizedData, message: sanitizedMessage.message };
                 this.logger.console(this._formatChatMessage(platform, logSafeData), 'chat-router');
             } else {
@@ -140,7 +261,7 @@ class ChatNotificationRouter {
         }
     }
 
-    hasMessageContent(normalizedData) {
+    hasMessageContent(normalizedData: NormalizedChatData) {
         const messageText = this.getMessageText(normalizedData);
         if (typeof messageText === 'string' && messageText.trim().length > 0) {
             return true;
@@ -148,22 +269,25 @@ class ChatNotificationRouter {
         return this.getCanonicalMessageParts(normalizedData).length > 0;
     }
 
-    getMessageText(normalizedData) {
+    getMessageText(normalizedData: NormalizedChatData) {
         const safeNormalizedData = normalizedData || {};
         if (typeof safeNormalizedData?.message === 'string') {
             return safeNormalizedData.message;
         }
 
-        if (safeNormalizedData?.message && typeof safeNormalizedData.message === 'object' && typeof safeNormalizedData.message.text === 'string') {
+        if (isRecord(safeNormalizedData.message) && typeof safeNormalizedData.message.text === 'string') {
             return safeNormalizedData.message.text;
         }
 
         return '';
     }
 
-    getCanonicalMessageParts(normalizedData) {
+    getCanonicalMessageParts(normalizedData: NormalizedChatData): Array<Record<string, unknown>> {
         const safeNormalizedData = normalizedData || {};
-        return getValidMessageParts({ message: safeNormalizedData?.message })
+        const messagePayload = isRecord(safeNormalizedData.message)
+            ? { message: safeNormalizedData.message }
+            : {};
+        return getValidMessageParts(messagePayload)
             .map((part) => {
                 if (part.type === 'emote') {
                     return {
@@ -181,7 +305,7 @@ class ChatNotificationRouter {
             });
     }
 
-    shouldSkipForConnection(platform, timestamp) {
+    shouldSkipForConnection(platform: string, timestamp: unknown) {
         if (!this.runtime.platformLifecycleService) {
             return false;
         }
@@ -192,6 +316,9 @@ class ChatNotificationRouter {
 
         const connectionTime = this.runtime.platformLifecycleService.getPlatformConnectionTime(platform);
         if (!connectionTime) {
+            return false;
+        }
+        if (typeof timestamp !== 'string' && typeof timestamp !== 'number' && !(timestamp instanceof Date)) {
             return false;
         }
         const messageTime = new Date(timestamp).getTime();
@@ -209,7 +336,7 @@ class ChatNotificationRouter {
         return false;
     }
 
-    async detectCommand(messageText) {
+    async detectCommand(messageText: unknown): Promise<CommandConfig | null> {
         const message = typeof messageText === 'string' ? messageText : '';
         const commandTrigger = this.extractCommandTrigger(message);
         if (!commandTrigger) {
@@ -217,12 +344,13 @@ class ChatNotificationRouter {
         }
 
         if (this.runtime.vfxCommandService?.selectVFXCommand) {
-            return this.runtime.vfxCommandService.selectVFXCommand(commandTrigger, message);
+            const selected = await this.runtime.vfxCommandService.selectVFXCommand(commandTrigger, message);
+            return isCommandConfig(selected) ? selected : null;
         }
         return null;
     }
 
-    detectFarewell(messageText) {
+    detectFarewell(messageText: unknown) {
         if (typeof this.runtime.vfxCommandService?.matchFarewell !== 'function') {
             return null;
         }
@@ -241,7 +369,7 @@ class ChatNotificationRouter {
         return farewellMatch;
     }
 
-    extractCommandTrigger(messageText) {
+    extractCommandTrigger(messageText: unknown) {
         if (typeof messageText !== 'string') {
             return '';
         }
@@ -255,7 +383,7 @@ class ChatNotificationRouter {
         return this.normalizeTriggerToken(firstToken);
     }
 
-    normalizeTriggerToken(token) {
+    normalizeTriggerToken(token: unknown) {
         if (typeof token !== 'string') {
             return '';
         }
@@ -269,7 +397,7 @@ class ChatNotificationRouter {
         return trimmedToken.replace(/[!?.,;:]+$/g, '');
     }
 
-    isFirstMessage(normalizedData, platform, trackingUserId = normalizedData.userId) {
+    isFirstMessage(normalizedData: NormalizedChatData, platform: string, trackingUserId: unknown = normalizedData.userId) {
         const context = {
             username: normalizedData.username,
             platform
@@ -286,31 +414,39 @@ class ChatNotificationRouter {
         return false;
     }
 
-    isGreetingEnabled(platform) {
-        const value = this.runtime.config[platform].greetingsEnabled;
+    isGreetingEnabled(platform: string) {
+        const value = this.getPlatformConfig(platform).greetingsEnabled;
         if (value === undefined) {
             throw new Error(`Config missing ${platform}.greetingsEnabled`);
         }
         return !!value;
     }
 
-    isChatEnabled(platform) {
-        const value = this.runtime.config[platform].messagesEnabled;
+    isChatEnabled(platform: string) {
+        const value = this.getPlatformConfig(platform).messagesEnabled;
         if (value === undefined) {
             throw new Error(`Config missing ${platform}.messagesEnabled`);
         }
         return !!value;
     }
 
-    isFarewellEnabled(platform) {
-        const value = this.runtime.config[platform].farewellsEnabled;
+    isFarewellEnabled(platform: string) {
+        const value = this.getPlatformConfig(platform).farewellsEnabled;
         if (value === undefined) {
             throw new Error(`Config missing ${platform}.farewellsEnabled`);
         }
         return !!value;
     }
 
-    enqueueChatMessage(platform, normalizedData, sanitizedMessage, messageParts: Array<Record<string, unknown>> = []) {
+    getPlatformConfig(platform: string): RouterRecord {
+        const platformConfig = this.runtime.config[platform];
+        if (!platformConfig) {
+            throw new Error(`Config missing ${platform}`);
+        }
+        return platformConfig;
+    }
+
+    enqueueChatMessage(platform: string, normalizedData: NormalizedChatData, sanitizedMessage: string, messageParts: Array<Record<string, unknown>> = []) {
         if (!this.runtime.displayQueue) {
             return;
         }
@@ -354,7 +490,7 @@ class ChatNotificationRouter {
         });
     }
 
-    async processCommand(platform, normalizedData, commandConfig, options) {
+    async processCommand(platform: string, normalizedData: NormalizedChatData, commandConfig: CommandConfig, options: ProcessCommandOptions) {
         const safeOptions = options || {};
         if (!this.runtime.commandCooldownService) {
             this.logger.warn('CommandCooldownService not available; cannot process command', 'chat-router');
@@ -403,7 +539,7 @@ class ChatNotificationRouter {
         this.updateGlobalCooldown(commandConfig.command);
     }
 
-    getFirstMessageState(normalizedData, platform, trackingUserId = normalizedData.userId) {
+    getFirstMessageState(normalizedData: NormalizedChatData, platform: string, trackingUserId: unknown = normalizedData.userId): FirstMessageState {
         const context = {
             username: normalizedData.username,
             platform
@@ -413,12 +549,14 @@ class ChatNotificationRouter {
         if (userTrackingService &&
             typeof userTrackingService.hasSeenUser === 'function' &&
             typeof userTrackingService.markMessageSeen === 'function') {
-            const isFirstMessage = !userTrackingService.hasSeenUser(trackingUserId, context);
+            const hasSeenUser = userTrackingService.hasSeenUser.bind(userTrackingService);
+            const markMessageSeen = userTrackingService.markMessageSeen.bind(userTrackingService);
+            const isFirstMessage = !hasSeenUser(trackingUserId, context);
             return {
                 isFirstMessage,
                 consume: () => {
                     if (isFirstMessage) {
-                        userTrackingService.markMessageSeen(trackingUserId, context);
+                        markMessageSeen(trackingUserId, context);
                     }
                 }
             };
@@ -431,7 +569,7 @@ class ChatNotificationRouter {
         };
     }
 
-    async processFarewell(platform, normalizedData, farewellTrigger) {
+    async processFarewell(platform: string, normalizedData: NormalizedChatData, farewellTrigger: string) {
         if (!this.isFarewellEnabled(platform)) {
             this._logSkipped(platform, normalizedData.username, 'farewells disabled');
             return false;
@@ -458,7 +596,7 @@ class ChatNotificationRouter {
                 timestamp: normalizedData.timestamp
             });
 
-            if (result && typeof result === 'object' && result.success === true) {
+            if (isRecord(result) && result.success === true) {
                 this.updateGlobalCooldown(farewellCooldownKey);
                 return true;
             }
@@ -484,7 +622,7 @@ class ChatNotificationRouter {
         return this.runtime.config.farewell.timeout * 1000;
     }
 
-    checkGlobalCooldown(commandName, globalCooldownMs) {
+    checkGlobalCooldown(commandName: string, globalCooldownMs: number) {
         if (typeof this.runtime.commandCooldownService?.checkGlobalCooldown === 'function') {
             return this.runtime.commandCooldownService.checkGlobalCooldown(commandName, globalCooldownMs);
         }
@@ -492,7 +630,7 @@ class ChatNotificationRouter {
         return !checkGlobalCommandCooldown(commandName, globalCooldownMs);
     }
 
-    updateGlobalCooldown(commandName) {
+    updateGlobalCooldown(commandName: string) {
         if (typeof this.runtime.commandCooldownService?.updateGlobalCooldown === 'function') {
             this.runtime.commandCooldownService.updateGlobalCooldown(commandName);
             return;
@@ -501,7 +639,7 @@ class ChatNotificationRouter {
         updateGlobalCommandCooldown(commandName);
     }
 
-    async queueCommand(platform, normalizedData, commandConfig) {
+    async queueCommand(platform: string, normalizedData: NormalizedChatData, commandConfig: CommandConfig) {
         if (!this.runtime.displayQueue) {
             return;
         }
@@ -524,7 +662,7 @@ class ChatNotificationRouter {
         });
     }
 
-    buildVFXConfig(commandConfig) {
+    buildVFXConfig(commandConfig: CommandConfig) {
         const safeCommandConfig = commandConfig || {};
         return {
             filename: safeCommandConfig.filename,
@@ -536,8 +674,8 @@ class ChatNotificationRouter {
         };
     }
 
-    shapeVfxConfig(vfxResult, errorPrefix) {
-        if (!vfxResult || typeof vfxResult !== 'object') {
+    shapeVfxConfig(vfxResult: unknown, errorPrefix: string) {
+        if (!isRecord(vfxResult)) {
             return null;
         }
 
@@ -556,7 +694,7 @@ class ChatNotificationRouter {
         };
     }
 
-    resolveGreetingProfile(platform, identityValue) {
+    resolveGreetingProfile(platform: string, identityValue: unknown) {
         const profiles = this.runtime?.config?.greetings?.customVfxProfiles;
         if (!profiles || typeof profiles !== 'object') {
             return null;
@@ -571,7 +709,7 @@ class ChatNotificationRouter {
         return profiles[identityKey] || null;
     }
 
-    async queueGreeting(platform, username, options) {
+    async queueGreeting(platform: string, username: string | undefined, options: { userId?: unknown; avatarUrl?: unknown; priority?: number; greetingProfile?: GreetingProfile | null | undefined }) {
         const safeOptions = options || {};
         if (!this.runtime.displayQueue) {
             return;
@@ -621,8 +759,8 @@ class ChatNotificationRouter {
         return null;
     }
 
-    async resolveSecondaryGreetingVFX(greetingProfile) {
-        if (!greetingProfile || typeof greetingProfile !== 'object') {
+    async resolveSecondaryGreetingVFX(greetingProfile: GreetingProfile | null | undefined) {
+        if (!isRecord(greetingProfile)) {
             return null;
         }
         if (typeof greetingProfile.command !== 'string' || greetingProfile.command.trim().length === 0) {
@@ -645,7 +783,7 @@ class ChatNotificationRouter {
         }
     }
 
-    sanitizeChatContent(rawMessage) {
+    sanitizeChatContent(rawMessage: unknown) {
         const safeMessage = typeof rawMessage === 'string' ? rawMessage : '';
         const withoutZeroWidth = safeMessage.replace(/[\u200B-\u200D\uFEFF]/g, ' ');
         const messageWithSpacing = withoutZeroWidth.replace(/<[^>]+>/g, ' ');
@@ -657,17 +795,17 @@ class ChatNotificationRouter {
         };
     }
 
-    _formatChatMessage(platform, logSafeData) {
+    _formatChatMessage(platform: string, logSafeData: NormalizedChatData) {
         const message = this.getMessageText(logSafeData);
         const truncated = message.length > LOG_TRUNCATION_LENGTH ? message.substring(0, LOG_TRUNCATION_LENGTH - 3) + '...' : message;
         return `[${platform}] ${logSafeData.username}: ${truncated}`;
     }
 
-    _logSkipped(platform, username, reason) {
+    _logSkipped(platform: string, username: unknown, reason: string) {
         this.logger.debug(`[${platform}] Skipping ${username}: ${reason}`, 'chat-router');
     }
 
-    _handleRouterError(message, error, eventType) {
+    _handleRouterError(message: string, error: unknown, eventType: string) {
         if (this.errorHandler && error instanceof Error) {
             this.errorHandler.handleEventProcessingError(error, eventType, null, message);
         } else {

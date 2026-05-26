@@ -23,8 +23,8 @@ type ExtractedHttpErrorDetails = {
 const sanitizeUrl = (url: unknown): string | null => {
     if (typeof url !== 'string') return null;
 
-    const withoutHash = url.split('#', 1)[0];
-    const withoutQuery = withoutHash.split('?', 1)[0];
+    const withoutHash = url.split('#', 1)[0] ?? '';
+    const withoutQuery = withoutHash.split('?', 1)[0] ?? '';
 
     try {
         const parsed = new URL(withoutQuery);
@@ -78,7 +78,7 @@ const safeStringify = (value: unknown): string | null => {
 };
 
 const truncate = (value: unknown, maxLength: number): string | null => {
-    if (typeof value !== 'string') return value;
+    if (typeof value !== 'string') return null;
     if (!Number.isFinite(maxLength) || maxLength <= 0) return null;
     if (value.length <= maxLength) return value;
     return value.slice(0, maxLength);
@@ -133,10 +133,10 @@ function extractHttpErrorDetails(error: unknown, options: HttpErrorExtractionOpt
     const method = configObject ? toLowerMethod(configObject.method) : null;
     const url = configObject ? sanitizeUrl(configObject.url) : null;
 
-    let responseSnippet = null;
+    let responseSnippet: string | null = null;
     if (responseData !== undefined && responseData !== null) {
         const redacted = responseDataObject ? redactSensitiveData(responseData) : responseData;
-        responseSnippet = truncate(safeStringify(redacted), maxResponseSnippetLength);
+        responseSnippet = truncate(safeStringify(redacted), maxResponseSnippetLength ?? DEFAULT_MAX_RESPONSE_SNIPPET_LENGTH);
     }
 
     return {

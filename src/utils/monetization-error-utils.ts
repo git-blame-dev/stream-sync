@@ -1,7 +1,7 @@
 import { isIsoTimestamp } from './timestamp';
 import { normalizeMissingFields, mergeMissingFieldsMetadata } from './missing-fields';
 
-function resolveNonEmptyString(value) {
+function resolveNonEmptyString(value: unknown): string | null {
     if (typeof value !== 'string') {
         return null;
     }
@@ -9,7 +9,7 @@ function resolveNonEmptyString(value) {
     return trimmed ? trimmed : null;
 }
 
-function resolveIdValue(value) {
+function resolveIdValue(value: unknown): string | null {
     if (value === undefined || value === null) {
         return null;
     }
@@ -20,7 +20,7 @@ function resolveIdValue(value) {
     return trimmed ? trimmed : null;
 }
 
-function resolvePositiveNumber(value) {
+function resolvePositiveNumber(value: unknown): number | null {
     if (value === undefined || value === null || typeof value === 'boolean') {
         return null;
     }
@@ -28,7 +28,7 @@ function resolvePositiveNumber(value) {
     return Number.isFinite(num) && num > 0 ? num : null;
 }
 
-function resolveTimestampValue(value) {
+function resolveTimestampValue(value: unknown): string | null {
     if (typeof value !== 'string') {
         return null;
     }
@@ -39,7 +39,13 @@ function resolveTimestampValue(value) {
     return isIsoTimestamp(trimmed) ? trimmed : null;
 }
 
-function createMonetizationErrorPayload(options) {
+type MonetizationErrorPayloadOptions = Record<string, unknown> & {
+    notificationType?: unknown;
+    platform?: unknown;
+    timestamp?: unknown;
+};
+
+function createMonetizationErrorPayload(options: MonetizationErrorPayloadOptions) {
     const safeOptions = options || {};
     const {
         notificationType,

@@ -197,7 +197,9 @@ const ERROR_MESSAGES = {
         severity: 'info',
         category: 'system'
     }
-};
+} as const;
+
+type ErrorMessageKey = keyof typeof ERROR_MESSAGES;
 
 const TECHNICAL_ERROR_PATTERNS = [
     {
@@ -450,27 +452,35 @@ function translateError(technicalError: unknown, context: ErrorContext = {}): Fr
     // Find matching pattern
     for (const { patterns, errorKey } of TECHNICAL_ERROR_PATTERNS) {
         if (patterns.some(pattern => pattern.test(errorMessage))) {
-            const friendlyError = ERROR_MESSAGES[errorKey];
+            const friendlyError = ERROR_MESSAGES[errorKey as ErrorMessageKey];
             if (friendlyError) {
-                return {
+                const translated: FriendlyError = {
                     ...friendlyError,
-                    technicalDetails: context.includeTechnical ? errorMessage : undefined,
                     context: context
+                };
+                if (context.includeTechnical) {
+                    translated.technicalDetails = errorMessage;
+                }
+                return {
+                    ...translated
                 };
             }
         }
     }
     
     // Fallback for unrecognized errors
-    return {
+    const fallback: FriendlyError = {
         title: 'Unexpected Problem',
         message: 'Something unexpected happened. This might be a temporary issue.',
         action: 'Please try again. If the problem continues, check the logs for more details.',
         severity: 'error',
         category: 'unknown',
-        technicalDetails: context.includeTechnical ? errorMessage : undefined,
         context: context
     };
+    if (context.includeTechnical) {
+        fallback.technicalDetails = errorMessage;
+    }
+    return fallback;
 }
 
 function formatErrorForConsole(friendlyError: FriendlyError, options: ConsoleFormatOptions = {}) {

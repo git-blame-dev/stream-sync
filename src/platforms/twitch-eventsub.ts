@@ -1,6 +1,7 @@
 import * as axiosModule from 'axios';
+import type { AxiosResponse } from 'axios';
 import { EventEmitter } from 'node:events';
-import * as wsModule from 'ws';
+import * as WebSocketModule from 'ws';
 import { secrets } from '../core/secrets';
 import { ChatFileLoggingService } from '../services/ChatFileLoggingService';
 import { validateLoggerInterface } from '../utils/dependency-validator';
@@ -12,18 +13,149 @@ import { createTwitchEventSubSubscriptions } from './twitch/connections/eventsub
 import { createTwitchEventSubWsLifecycle } from './twitch/connections/ws-lifecycle';
 import { createTwitchEventSubEventRouter } from './twitch/events/event-router';
 
+type LoggerLike = {
+    info: (message: string, scope?: string, payload?: unknown) => void;
+    warn: (message: string, scope?: string, payload?: unknown) => void;
+    debug: (message: string, scope?: string, payload?: unknown) => void;
+};
+
+type ErrorHandlerLike = {
+    handleEventProcessingError?: (error: Error, eventType: string, payload?: unknown, message?: string) => void;
+    logOperationalError?: (message: string, source: string, context?: unknown) => void;
+};
+
+type TwitchAuthLike = {
+    isReady?: () => boolean;
+    getUserId: () => { toString: () => string } | string | number | null | undefined;
+    refreshTokens: () => Promise<boolean>;
+};
+
+type AxiosLike = {
+    post: <T = unknown>(url: string, data?: unknown, config?: unknown) => Promise<AxiosResponse<T>>;
+    get: <T = unknown>(url: string, config?: unknown) => Promise<AxiosResponse<T>>;
+    delete: <T = unknown>(url: string, config?: unknown) => Promise<AxiosResponse<T>>;
+};
+
+type WebSocketLike = {
+    readyState: number;
+    on: (eventName: string, handler: (...args: unknown[]) => void) => void;
+    close: (code?: number, reason?: string) => void;
+    removeAllListeners: () => void;
+};
+
+type WebSocketCtorLike = new (url: string) => WebSocketLike;
+
+type ChatFileLoggingServiceLike = {
+    logRawPlatformData: (platform: string, eventType: string, data: unknown, platformConfig?: unknown) => Promise<void>;
+};
+
+type ChatFileLoggingServiceCtor = new (dependencies: { logger: unknown; config: Record<string, unknown> }) => ChatFileLoggingServiceLike;
+
+type SubscriptionDefinition = {
+    name: string;
+    type: string;
+    version: string;
+    getCondition: (input: { userId: string; broadcasterId: string }) => Record<string, unknown>;
+};
+
+type SubscriptionState = {
+    failures?: unknown[];
+};
+
+type ValidationComponent = {
+    valid: boolean;
+    issues: string[];
+    warnings?: string[];
+    details: Record<string, unknown>;
+};
+
+type ValidationResult = {
+    valid: boolean;
+    issues: string[];
+    warnings: string[];
+    components: {
+        twitchAuth: ValidationComponent;
+        configuration: ValidationComponent;
+    };
+    validatedAt: string;
+};
+
+type ValidationFieldDetails = Record<string, Record<string, unknown>>;
+
+type SubscriptionRevocation = {
+    type?: string;
+    id?: string;
+    status?: string;
+};
+
+const getRecord = (value: unknown): Record<string, unknown> | null =>
+    value && typeof value === 'object' ? value as Record<string, unknown> : null;
+
+const getString = (value: unknown): string | null => typeof value === 'string' ? value : null;
+
+const hasAxiosResponseStatus = (error: unknown, status: number): boolean => {
+    const response = getRecord(error)?.response;
+    return getRecord(response)?.status === status;
+};
+
+const getWebSocketCtor = (moduleValue: unknown): WebSocketCtorLike => {
+    const moduleRecord = getRecord(moduleValue);
+    const candidates = [moduleRecord?.WebSocket, moduleRecord?.default, moduleValue];
+    const ctor = candidates.find((candidate): candidate is WebSocketCtorLike => typeof candidate === 'function');
+    if (!ctor) {
+        throw new Error('WebSocket constructor is unavailable');
+    }
+    return ctor;
+};
+
 class TwitchEventSub extends EventEmitter {
+    config: Record<string, unknown>;
+    logger: LoggerLike;
+    errorHandler: ErrorHandlerLike;
+    twitchAuth: TwitchAuthLike;
+    axios: AxiosLike;
+    WebSocketCtor: WebSocketCtorLike;
+    broadcasterId: string;
+    userId = '';
+    ws: WebSocketLike | null;
+    sessionId: string | null;
+    subscriptions: Map<string, Record<string, unknown>>;
+    isInitialized: boolean;
+    _isConnected: boolean;
+    subscriptionsReady: boolean;
+    retryAttempts: number;
+    reconnectTimeout: ReturnType<typeof setTimeout> | null;
+    welcomeTimer: ReturnType<typeof setTimeout> | null = null;
+    cleanupInterval: ReturnType<typeof setInterval> | null = null;
+    connectionStartTime: number | null;
+    maxRetryAttempts: number;
+    retryDelay: number;
+    subscriptionDelay: number;
+    requiredSubscriptions: SubscriptionDefinition[];
+    memoryUsage: { lastCleanup: number; maxSubscriptions: number; cleanupInterval: number };
+    reconnectUrl: string | null;
+    recentMessageIds: Map<string, number>;
+    messageIdTtlMs: number;
+    maxMessageIds: number;
+    chatFileLoggingService: ChatFileLoggingServiceLike;
+    eventRouter: ReturnType<typeof createTwitchEventSubEventRouter>;
+    subscriptionManager: ReturnType<typeof createTwitchEventSubSubscriptionManager>;
+    wsLifecycle: ReturnType<typeof createTwitchEventSubWsLifecycle>;
+    subscriptionState?: SubscriptionState;
+
     constructor(config: Record<string, unknown>, dependencies: Record<string, unknown> = {}) {
         super();
 
         this.config = config;
         validateLoggerInterface(dependencies.logger);
-        this.logger = dependencies.logger;
+        this.logger = dependencies.logger as LoggerLike;
         this.errorHandler = createPlatformErrorHandler(this.logger, 'twitch-eventsub');
-        this.twitchAuth = dependencies.twitchAuth;
-        this.axios = dependencies.axios || axiosModule.default || axiosModule;
-        this.WebSocketCtor = dependencies.WebSocketCtor || wsModule.WebSocket || wsModule.default || wsModule;
-        this.broadcasterId = this.config.broadcasterId;
+        this.twitchAuth = dependencies.twitchAuth as TwitchAuthLike;
+        this.axios = (dependencies.axios || axiosModule.default || axiosModule) as AxiosLike;
+        this.WebSocketCtor = typeof dependencies.WebSocketCtor === 'function'
+            ? dependencies.WebSocketCtor as WebSocketCtorLike
+            : getWebSocketCtor(WebSocketModule);
+        this.broadcasterId = getString(this.config.broadcasterId) || '';
 
         // WebSocket connection
         this.ws = null;
@@ -65,7 +197,9 @@ class TwitchEventSub extends EventEmitter {
             // Logger initialization error - continue with fallback
         }
         // Initialize shared logging service
-        const ChatFileLoggingServiceClass = dependencies.ChatFileLoggingService || ChatFileLoggingService;
+        const ChatFileLoggingServiceClass: ChatFileLoggingServiceCtor = typeof dependencies.ChatFileLoggingService === 'function'
+            ? dependencies.ChatFileLoggingService as ChatFileLoggingServiceCtor
+            : ChatFileLoggingService as unknown as ChatFileLoggingServiceCtor;
         this.chatFileLoggingService = new ChatFileLoggingServiceClass({ logger: this.logger, config: this.config });
 
         this.eventRouter = createTwitchEventSubEventRouter({
@@ -158,8 +292,8 @@ class TwitchEventSub extends EventEmitter {
         return false;
     }
 
-    async _validateConfig() {
-        const validation = {
+    async _validateConfig(): Promise<ValidationResult> {
+        const validation: ValidationResult = {
             valid: true,
             issues: [],
             warnings: [],
@@ -185,8 +319,8 @@ class TwitchEventSub extends EventEmitter {
     }
 
   _validateTwitchAuth(): { valid: boolean; issues: string[]; details: Record<string, unknown> } {
-        const issues = [];
-        const details = {};
+        const issues: string[] = [];
+        const details: Record<string, unknown> = {};
 
         if (!this.twitchAuth) {
             throw new Error('TwitchAuth is required but not provided');
@@ -207,11 +341,11 @@ class TwitchEventSub extends EventEmitter {
     }
 
   _validateConfigurationFields(): { valid: boolean; issues: string[]; warnings: string[]; details: Record<string, unknown> } {
-        const issues = [];
-        const warnings = [];
-        const details = {};
+        const issues: string[] = [];
+        const warnings: string[] = [];
+        const details: ValidationFieldDetails = {};
         const clientIdSource = this._getAvailableClientId();
-        this.broadcasterId = this.config.broadcasterId;
+        this.broadcasterId = getString(this.config.broadcasterId) || '';
         details.broadcasterId = { value: this.broadcasterId, required: true };
 
         if (!this.broadcasterId) {
@@ -280,7 +414,7 @@ class TwitchEventSub extends EventEmitter {
     return typeof this.config.clientId === 'string' ? this.config.clientId : null;
   }
 
-    async initialize() {
+    async initialize(): Promise<void> {
         try {
             const validation = await this._validateConfig();
             if (!validation.valid) {
@@ -315,29 +449,33 @@ class TwitchEventSub extends EventEmitter {
         } catch (error) {
             this._logEventSubError('Manual EventSub initialization failed', error, 'manual-init', {
                 stage: 'initialization',
-                stack: error.stack
+                stack: error instanceof Error ? error.stack : undefined
             });
             this._handleInitializationError(error);
             throw error;
         }
     }
 
-    async _connectWebSocket() {
+    async _connectWebSocket(): Promise<void> {
         return this.wsLifecycle.connectWebSocket(this);
     }
 
-    async handleWebSocketMessage(message: { metadata?: Record<string, unknown>; payload?: Record<string, unknown> }) {
-        const { metadata, payload } = message;
+    async handleWebSocketMessage(message: Record<string, unknown>): Promise<void> {
+        const metadata = getRecord(message.metadata);
+        const payload = getRecord(message.payload);
+        if (!metadata || !payload) {
+            throw new Error('EventSub message requires metadata and payload objects');
+        }
 
         this.logger.info(`EventSub message received: ${metadata.message_type}`, 'twitch');
 
         switch (metadata.message_type) {
             case 'session_welcome':
                 this.logger.info('EventSub welcome message received!', 'twitch', {
-                    hasSessionId: typeof payload.session.id === 'string' && payload.session.id.length > 0,
-                    keepaliveTimeout: payload.session.keepalive_timeout_seconds,
-                    status: payload.session.status,
-                    connectedAt: payload.session.connected_at
+                    hasSessionId: typeof getRecord(payload.session)?.id === 'string' && String(getRecord(payload.session)?.id).length > 0,
+                    keepaliveTimeout: getRecord(payload.session)?.keepalive_timeout_seconds,
+                    status: getRecord(payload.session)?.status,
+                    connectedAt: getRecord(payload.session)?.connected_at
                 });
                 break;
 
@@ -350,23 +488,23 @@ class TwitchEventSub extends EventEmitter {
                     this.logger.debug(`Duplicate EventSub notification ignored: ${metadata.message_id}`, 'twitch');
                     break;
                 }
-                this.handleNotificationEvent(payload.subscription.type, payload.event, metadata);
+                this.handleNotificationEvent(String(getRecord(payload.subscription)?.type || ''), getRecord(payload.event), metadata);
                 break;
 
             case 'session_reconnect':
                 this.logger.warn('EventSub reconnect requested', 'twitch', {
-                    hasReconnectUrl: typeof payload?.session?.reconnect_url === 'string' && payload.session.reconnect_url.length > 0
+                    hasReconnectUrl: typeof getRecord(payload.session)?.reconnect_url === 'string' && String(getRecord(payload.session)?.reconnect_url).length > 0
                 });
                 this._handleReconnectRequest(payload);
                 break;
 
             case 'revocation':
                 this.logger.warn('EventSub subscription revoked', 'twitch', {
-                    subscriptionId: payload.subscription.id,
-                    type: payload.subscription.type,
-                    status: payload.subscription.status
+                    subscriptionId: getRecord(payload.subscription)?.id,
+                    type: getRecord(payload.subscription)?.type,
+                    status: getRecord(payload.subscription)?.status
                 });
-                await this._handleSubscriptionRevocation(payload?.subscription);
+                await this._handleSubscriptionRevocation(getRecord(payload.subscription));
                 break;
 
             default:
@@ -378,7 +516,7 @@ class TwitchEventSub extends EventEmitter {
         }
     }
 
-    async _setupEventSubscriptions(validationAlreadyDone = false) {
+    async _setupEventSubscriptions(validationAlreadyDone = false): Promise<SubscriptionState | null> {
         const subscriptionState = await this.subscriptionManager.setupEventSubscriptions({
             requiredSubscriptions: this.requiredSubscriptions,
             userId: this.userId,
@@ -395,11 +533,11 @@ class TwitchEventSub extends EventEmitter {
         return subscriptionState;
     }
 
-    _parseSubscriptionError(error, subscription) {
+    _parseSubscriptionError(error: unknown, subscription: SubscriptionDefinition) {
         return this.subscriptionManager.parseSubscriptionError(error, subscription);
     }
 
-    async _handleSubscriptionRevocation(subscription) {
+    async _handleSubscriptionRevocation(subscription: SubscriptionRevocation | Record<string, unknown> | null | undefined): Promise<void> {
         if (!subscription?.type || !this.isInitialized) {
             return;
         }
@@ -436,7 +574,7 @@ class TwitchEventSub extends EventEmitter {
     }
 
   isConnected(): boolean {
-        return this._isConnected && this.ws && this.ws.readyState === 1;
+        return !!(this._isConnected && this.ws?.readyState === 1);
     }
 
   _validateConnectionForSubscriptions(): boolean {
@@ -499,35 +637,35 @@ class TwitchEventSub extends EventEmitter {
         this.eventRouter.handleNotificationEvent(subscriptionType, event, metadata);
     }
 
-    _handleChatMessageEvent(event) {
+    _handleChatMessageEvent(event: Record<string, unknown> | null | undefined): void {
         this.eventRouter.handleChatMessageEvent(event);
     }
 
-    _handleFollowEvent(event) {
+    _handleFollowEvent(event: Record<string, unknown> | null | undefined): void {
         this.eventRouter.handleFollowEvent(event);
     }
 
-    _handlePaypiggyEvent(event) {
+    _handlePaypiggyEvent(event: Record<string, unknown> | null | undefined): void {
         this.eventRouter.handlePaypiggyEvent(event);
     }
 
-    _handleRaidEvent(event) {
+    _handleRaidEvent(event: Record<string, unknown> | null | undefined): void {
         this.eventRouter.handleRaidEvent(event);
     }
 
-    _handleBitsUseEvent(event) {
+    _handleBitsUseEvent(event: Record<string, unknown> | null | undefined): void {
         this.eventRouter.handleBitsUseEvent(event);
     }
 
-    _handlePaypiggyGiftEvent(event) {
+    _handlePaypiggyGiftEvent(event: Record<string, unknown> | null | undefined): void {
         this.eventRouter.handlePaypiggyGiftEvent(event);
     }
 
-    _handlePaypiggyMessageEvent(event) {
+    _handlePaypiggyMessageEvent(event: Record<string, unknown> | null | undefined): void {
         this.eventRouter.handlePaypiggyMessageEvent(event);
     }
 
-    async sendMessage(message: string) {
+    async sendMessage(message: string): Promise<{ success: true; platform: 'twitch'; broadcasterId: string; senderId: string }> {
         const trimmedMessage = typeof message === 'string' ? message.trim() : '';
         if (!trimmedMessage) {
             throw new Error('EventSub chat send requires a non-empty message');
@@ -542,7 +680,10 @@ class TwitchEventSub extends EventEmitter {
             throw new Error('EventSub chat send requires a valid user ID');
         }
 
-        const broadcasterId = this.config.broadcasterId.toString();
+        const broadcasterId = this.config.broadcasterId?.toString();
+        if (!broadcasterId) {
+            throw new Error('EventSub chat send requires a broadcasterId from config');
+        }
         const senderId = userIdRaw.toString();
         const payload = {
             broadcaster_id: broadcasterId,
@@ -583,7 +724,7 @@ class TwitchEventSub extends EventEmitter {
                 senderId
             };
         } catch (error) {
-            if (error?.response?.status === 401) {
+            if (hasAxiosResponseStatus(error, 401)) {
                 const refreshed = await this.twitchAuth.refreshTokens();
                 if (refreshed) {
                     try {
@@ -615,11 +756,11 @@ class TwitchEventSub extends EventEmitter {
         }
     }
 
-    _handleStreamOnlineEvent(event) {
+    _handleStreamOnlineEvent(event: Record<string, unknown> | null | undefined): void {
         this.eventRouter.handleStreamOnlineEvent(event);
     }
 
-    _handleStreamOfflineEvent(event) {
+    _handleStreamOfflineEvent(event: Record<string, unknown> | null | undefined): void {
         this.eventRouter.handleStreamOfflineEvent(event);
     }
 
@@ -631,7 +772,7 @@ class TwitchEventSub extends EventEmitter {
         this.wsLifecycle.scheduleReconnect(this);
     }
 
-    async _reconnect() {
+    async _reconnect(): Promise<void> {
         await this.wsLifecycle.reconnect(this);
     }
 
@@ -647,7 +788,7 @@ class TwitchEventSub extends EventEmitter {
         }
     }
 
-    async cleanup() {
+    async cleanup(): Promise<void> {
         this.logger.info('Starting EventSub cleanup...', 'twitch');
 
         // Clear any pending timers first
@@ -696,15 +837,15 @@ class TwitchEventSub extends EventEmitter {
         this.logger.info('EventSub cleanup completed', 'twitch');
     }
 
-    async _cleanupAllWebSocketSubscriptions() {
+    async _cleanupAllWebSocketSubscriptions(): Promise<void> {
         await this.subscriptionManager.cleanupAllWebSocketSubscriptions({ sessionId: this.sessionId });
     }
 
-    async _deleteAllSubscriptions() {
-        await this.subscriptionManager.deleteAllSubscriptions({ sessionId: this.sessionId });
+    async _deleteAllSubscriptions(options?: { sessionId?: string | null }): Promise<void> {
+        await this.subscriptionManager.deleteAllSubscriptions({ sessionId: options?.sessionId ?? this.sessionId });
     }
 
-  async logRawPlatformData(eventType: string, data: unknown): Promise<unknown> {
+  async logRawPlatformData(eventType: string, data: unknown): Promise<void> {
         return this.chatFileLoggingService.logRawPlatformData('twitch', eventType, data, this.config);
     }
 
@@ -713,11 +854,11 @@ class TwitchEventSub extends EventEmitter {
         error: unknown = null,
         eventType = 'twitch-eventsub',
         payload: Record<string, unknown> | null = null
-    ) {
+    ): void {
         if (this.errorHandler && error instanceof Error) {
-            this.errorHandler.handleEventProcessingError(error, eventType, payload, message);
+            this.errorHandler.handleEventProcessingError?.(error, eventType, payload, message);
         } else if (this.errorHandler) {
-            this.errorHandler.logOperationalError(message, 'twitch', payload || error);
+            this.errorHandler.logOperationalError?.(message, 'twitch', payload || error);
         }
     }
 }

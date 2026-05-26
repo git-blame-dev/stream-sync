@@ -57,6 +57,10 @@ class YouTubeUserAgentManager {
         }
 
         const agent = this.userAgents[this.currentIndex];
+        if (agent === undefined) {
+            return '';
+        }
+
         const previousIndex = this.currentIndex;
 
         this.currentIndex = (this.currentIndex + 1) % this.userAgents.length;
@@ -96,7 +100,7 @@ class YouTubeUserAgentManager {
         }
 
         const index = crypto.randomInt(this.userAgents.length);
-        return this.userAgents[index];
+        return this.userAgents[index] ?? '';
     }
 
     isValidUserAgent(agent: unknown): agent is string {

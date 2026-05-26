@@ -144,12 +144,14 @@ return record ? { ...record } : {};
 }
 
 function hasCanonicalMessageParts(normalizedData: Record<string, unknown>): boolean {
-return getValidMessageParts({ message: normalizedData?.message }).length > 0;
+const message = asRecord(normalizedData.message);
+return getValidMessageParts({ message }).length > 0;
 }
 
 function isRecoverableTikTokChatNormalizationError(error: unknown): boolean {
 const message = error instanceof Error ? error.message : '';
 return message === 'Missing TikTok message data'
+|| message === 'Missing TikTok userId (user data)'
 || message === 'Missing TikTok userId (uniqueId)'
 || message === 'Missing TikTok username (nickname)'
 || message === 'Missing TikTok message text'
@@ -204,14 +206,17 @@ function buildDegradedTikTokChatEvent(platform: TikTokPlatformRouterContract, da
 
 function getChatReplayConfig(platform: TikTokPlatformRouterContract): { ttlMs: number; maxCacheSize: number; maxAgeMs: number } {
     const provided = platform?.chatReplayProtectionConfig;
-    const ttlMs = Number.isFinite(provided?.ttlMs) && provided.ttlMs > 0
-        ? provided.ttlMs
+    const providedTtlMs = provided?.ttlMs;
+    const providedMaxCacheSize = provided?.maxCacheSize;
+    const providedMaxAgeMs = provided?.maxAgeMs;
+    const ttlMs = Number.isFinite(providedTtlMs) && typeof providedTtlMs === 'number' && providedTtlMs > 0
+        ? providedTtlMs
         : DEFAULT_CHAT_DEDUP_TTL_MS;
-    const maxCacheSize = Number.isFinite(provided?.maxCacheSize) && provided.maxCacheSize > 0
-        ? provided.maxCacheSize
+    const maxCacheSize = Number.isFinite(providedMaxCacheSize) && typeof providedMaxCacheSize === 'number' && providedMaxCacheSize > 0
+        ? providedMaxCacheSize
         : DEFAULT_CHAT_MAX_CACHE_SIZE;
-    const maxAgeMs = Number.isFinite(provided?.maxAgeMs) && provided.maxAgeMs > 0
-        ? provided.maxAgeMs
+    const maxAgeMs = Number.isFinite(providedMaxAgeMs) && typeof providedMaxAgeMs === 'number' && providedMaxAgeMs > 0
+        ? providedMaxAgeMs
         : DEFAULT_CHAT_MAX_AGE_MS;
 
     return {
@@ -232,7 +237,7 @@ function getChatReplayState(platform: TikTokPlatformRouterContract): { recentMes
         platform._chatReplayIngressState.recentMessageIds = new Map();
     }
 
-    return platform._chatReplayIngressState;
+    return { recentMessageIds: platform._chatReplayIngressState.recentMessageIds };
 }
 
 function getPlatformMessageId(platform: TikTokPlatformRouterContract, data: TikTokRawEvent): string | null {
@@ -442,8 +447,8 @@ function setupTikTokEventListeners(platform: TikTokPlatformRouterContract) {
             let normalizedData: Record<string, unknown>;
             try {
                 normalizedData = normalizeTikTokChatEvent(data, {
-                    platformName: platform.platformName,
-                    timestampService: platform.timestampService
+                    ...(typeof platform.platformName === 'string' ? { platformName: platform.platformName } : {}),
+                    ...(platform.timestampService !== undefined ? { timestampService: platform.timestampService } : {})
                 }) as Record<string, unknown>;
             } catch (error) {
                 if (!isRecoverableTikTokChatNormalizationError(error)) {
@@ -465,8 +470,8 @@ function setupTikTokEventListeners(platform: TikTokPlatformRouterContract) {
                 const normalizedUsername = typeof normalizedData.username === 'string' ? normalizedData.username : undefined;
                 const normalizedUserId = typeof normalizedData.userId === 'string' ? normalizedData.userId : undefined;
                 const messageData = {
-                    username: normalizedUsername,
-                    userId: normalizedUserId,
+                    ...(normalizedUsername !== undefined ? { username: normalizedUsername } : {}),
+                    ...(normalizedUserId !== undefined ? { userId: normalizedUserId } : {}),
                     isBroadcaster: normalizedData.isBroadcaster === true
                 };
 
