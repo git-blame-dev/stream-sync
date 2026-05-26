@@ -1,10 +1,225 @@
 import { expect } from 'bun:test';
 
 import { initializeLoggingConfig } from '../../src/core/logging';
+import { createRetrySystem, type RetrySystem } from '../../src/utils/retry-system';
 
 import testClock from './test-clock';
-import { createMockFn, isMockFunction, clearAllMocks } from './bun-mock-utils';
+import { createMockFn, isMockFunction, clearAllMocks, type TestMockFn } from './bun-mock-utils';
 import { loadPlatformFixture as loadSyntheticFixture } from './platform-test-data';
+
+type TestRecord = Record<string, unknown>;
+type PlatformName = 'tiktok' | 'twitch' | 'youtube';
+type LoggingPlatformOverrides = Partial<Record<PlatformName, TestRecord>>;
+
+type TestUser = TestRecord & {
+    username: string;
+    displayName: string;
+    userId: string;
+    isMod: boolean;
+    isSubscriber: boolean;
+    isBroadcaster: boolean;
+};
+
+type TestGiftInput = TestRecord & {
+    giftType?: unknown;
+    giftCount?: unknown;
+    amount?: unknown;
+    currency?: unknown;
+};
+
+type TestGift = TestRecord & {
+    giftType: string;
+    giftCount: unknown;
+    amount: unknown;
+    currency: string;
+    displayMessage: string;
+    ttsMessage: string;
+};
+
+type TestNotification = TestRecord & {
+    id: string;
+    type: string;
+    username: string;
+    platform: string;
+    displayMessage: string;
+    ttsMessage: string;
+    logMessage: string;
+    processedAt: number;
+    timestamp: string;
+};
+
+type NotificationLike = TestRecord & {
+    id?: unknown;
+    type?: unknown;
+    username?: unknown;
+    platform?: unknown;
+    displayMessage?: unknown;
+    ttsMessage?: unknown;
+    processedAt?: unknown;
+    timestamp?: unknown;
+};
+
+type UserLike = TestRecord & {
+    username?: unknown;
+    userId?: unknown;
+};
+
+type LoggerMock = {
+    debug: TestMockFn;
+    info: TestMockFn;
+    warn: TestMockFn;
+    error: TestMockFn;
+};
+
+type NotificationManagerMock = {
+    emit: TestMockFn<[event: string, data: unknown], boolean>;
+    on: TestMockFn<[event: string, handler: unknown], boolean>;
+    removeListener: TestMockFn<[event: string, handler: unknown], boolean>;
+};
+
+type RetrySystemMock = {
+    resetRetryCount: TestMockFn;
+    handleConnectionError: TestMockFn;
+    handleConnectionSuccess: TestMockFn;
+    incrementRetryCount: TestMockFn;
+    executeWithRetry: TestMockFn;
+};
+
+type MockPlatformBaseDependencies = TestRecord & {
+    logger: LoggerMock;
+    notificationManager: NotificationManagerMock;
+    retrySystem: RetrySystemMock;
+    constants: {
+        GRACE_PERIODS: Record<'TIKTOK' | 'TWITCH' | 'YOUTUBE', number>;
+    };
+    USER_AGENTS: string[];
+    notificationBridge: unknown;
+};
+
+type TikTokClientMock = {
+    connect: TestMockFn<[], Promise<boolean>>;
+    disconnect: TestMockFn<[], Promise<boolean>>;
+    on: TestMockFn;
+    removeAllListeners: TestMockFn;
+};
+
+type TikTokMockPlatformDependencies = MockPlatformBaseDependencies & {
+    TikTokWebSocketClient: TestMockFn<[], TikTokClientMock>;
+    WebcastEvent: TestRecord;
+    ControlEvent: TestRecord;
+    WebcastPushConnection: TestMockFn;
+};
+
+type TwitchMockPlatformDependencies = MockPlatformBaseDependencies & {
+    tmi: TestMockFn;
+    TwitchEventSub: TestMockFn;
+    ApiClient: TestMockFn;
+    RefreshingAuthProvider: TestMockFn;
+    EventSubWsListener: TestMockFn;
+};
+
+type YouTubeLiveChatMock = {
+    start: TestMockFn;
+    stop: TestMockFn;
+    on: TestMockFn;
+    sendMessage: TestMockFn;
+};
+
+type YouTubeVideoInfoMock = {
+    getLiveChat: TestMockFn<[], Promise<YouTubeLiveChatMock>>;
+};
+
+type YouTubeInnertubeApi = {
+    getInfo: TestMockFn<[], Promise<YouTubeVideoInfoMock>>;
+};
+
+type YouTubeMockPlatformDependencies = MockPlatformBaseDependencies & {
+    google: { youtube: TestMockFn };
+    Innertube: {
+        create: TestMockFn<[], Promise<YouTubeInnertubeApi>>;
+    };
+    streamDetectionService: {
+        detectLiveStreams: TestMockFn<[], Promise<{ success: boolean; videoIds: string[] }>>;
+    };
+    axios: TestMockFn;
+};
+
+type MockPlatformDependencies = MockPlatformBaseDependencies
+    | TikTokMockPlatformDependencies
+    | TwitchMockPlatformDependencies
+    | YouTubeMockPlatformDependencies;
+
+type RetryExecuteMock = TestMockFn<[platform: string, executeFunction: () => Promise<unknown>, maxRetries?: number], Promise<unknown>> & {
+    <T>(platform: string, executeFunction: () => Promise<T>, maxRetries?: number): Promise<T>;
+};
+
+type TestRetrySystem = Omit<RetrySystem, 'executeWithRetry' | 'resetRetryCount' | 'handleConnectionError' | 'handleConnectionSuccess' | 'incrementRetryCount' | 'getRetryCount'> & {
+    executeWithRetry: RetryExecuteMock;
+    resetRetryCount: TestMockFn<[platform: string], void>;
+    handleConnectionError: TestMockFn<[platform: string, error: unknown, reconnectFunction: () => Promise<unknown>, cleanupFunction?: (() => Promise<unknown> | unknown) | null], void>;
+    handleConnectionSuccess: TestMockFn<[platform: string, connection?: unknown, context?: string], void>;
+    incrementRetryCount: TestMockFn<[], number>;
+    getRetryCount: TestMockFn<[platform?: string], number>;
+};
+
+type CleanupOptions = {
+    clearMocksAfterEach: boolean;
+    validateMocksBeforeEach: boolean;
+    logUnusedMocks: boolean;
+    trackMockUsage: boolean;
+    handleCleanupErrors: boolean;
+};
+
+type MockUsageMetric = {
+    timestamp: number;
+    totalMocksActive: number;
+    memoryUsage: NodeJS.MemoryUsage;
+};
+
+type CleanupStats = {
+    mocksCleared: number;
+    unusedMocks: string[];
+    performanceMetrics: MockUsageMetric[];
+    cleanupErrors: unknown[];
+};
+
+type AutomatedCleanup = {
+    config: CleanupOptions;
+    beforeEach: () => void;
+    afterEach: () => void;
+    cleanupMock: (mockObject: unknown) => void;
+    getCleanupStats: () => CleanupStats;
+    isCompatible: boolean;
+    preservesExistingSetup: boolean;
+};
+
+type MockUsageOptions = {
+    requireAllMethodsCalled: boolean;
+    detectUnusedMocks: boolean;
+    validateMockTypes: boolean;
+    behaviorFocusedMode: boolean;
+    maxMethodsRecommended: number;
+    expectedMockType: string | null;
+};
+
+type MockUsageValidation = {
+    isValid: boolean;
+    unusedMethods: string[];
+    mockTypeValid: boolean;
+    isFactoryMock: boolean;
+    behaviorConfigured: boolean;
+    complexityScore: number;
+    recommendations: string[];
+};
+
+const isRecord = (value: unknown): value is TestRecord => {
+    return !!value && typeof value === 'object';
+};
+
+const hasMockReset = (value: unknown): value is { mockReset: () => unknown } => {
+    return isRecord(value) && typeof value.mockReset === 'function';
+};
+
 const BASE_TIMESTAMP_MS = Date.parse('2024-01-01T00:00:00.000Z');
 let sequence = 0;
 const nextSequence = () => {
@@ -12,9 +227,9 @@ const nextSequence = () => {
     return sequence;
 };
 const nextTimestampMs = () => BASE_TIMESTAMP_MS + (nextSequence() * 1000);
-const nextTestId = (prefix) => `${prefix}-${nextSequence().toString(36).padStart(6, '0')}`;
+const nextTestId = (prefix: string) => `${prefix}-${nextSequence().toString(36).padStart(6, '0')}`;
 
-const createMockLoggingConfig = (platformOverrides = {}) => ({
+const createMockLoggingConfig = (platformOverrides: LoggingPlatformOverrides = {}) => ({
     console: { enabled: false },
     file: { enabled: false },
     platforms: { 
@@ -26,7 +241,7 @@ const createMockLoggingConfig = (platformOverrides = {}) => ({
     chat: { enabled: false }
 });
 
-const initializeTestLogging = (platformOverrides = {}) => {
+const initializeTestLogging = (platformOverrides: LoggingPlatformOverrides = {}) => {
     try {
         initializeLoggingConfig({ logging: createMockLoggingConfig(platformOverrides) });
     } catch {
@@ -34,7 +249,7 @@ const initializeTestLogging = (platformOverrides = {}) => {
     }
 };
 
-const createTestUser = (overrides = {}) => ({
+const createTestUser = <Overrides extends TestRecord = Record<string, never>>(overrides?: Overrides): TestUser & Overrides => ({
     username: 'TestUser',
     displayName: 'TestUser',
     userId: 'test-user-id',
@@ -42,9 +257,9 @@ const createTestUser = (overrides = {}) => ({
     isSubscriber: false,
     isBroadcaster: false,
     ...overrides
-});
+} as TestUser & Overrides);
 
-const createTestGift = (overrides = {}) => {
+const createTestGift = (overrides: TestGiftInput = {}): TestGift => {
     const { giftType, giftCount, amount, currency } = overrides;
 
     if (!giftType || typeof giftType !== 'string' || !giftType.trim()) {
@@ -74,31 +289,38 @@ const createTestGift = (overrides = {}) => {
         displayMessage,
         ttsMessage,
         ...overrides
-    };
+    } as TestGift;
 };
 
-const createTestNotification = (type = 'platform:gift', overrides = {}) => {
+const createTestNotification = <Overrides extends TestRecord = Record<string, never>>(
+    type = 'platform:gift',
+    overrides?: Overrides
+): TestNotification & Overrides => {
     const timestampMs = nextTimestampMs();
     const timestampIso = new Date(timestampMs).toISOString();
 
     return {
         id: nextTestId(`test-${type}`),
-    type: type,
-    username: 'TestUser',
-    platform: 'tiktok',
-    displayMessage: `TestUser ${type}`,
-    ttsMessage: `TestUser ${type}`,
-    logMessage: `${type} from TestUser`,
+        type,
+        username: 'TestUser',
+        platform: 'tiktok',
+        displayMessage: `TestUser ${type}`,
+        ttsMessage: `TestUser ${type}`,
+        logMessage: `${type} from TestUser`,
         processedAt: timestampMs,
         timestamp: timestampIso,
         ...overrides
-    };
+    } as TestNotification & Overrides;
 };
 
-const createMockPlatformDependencies = (platformType = 'tiktok', overrides = {}) => {
+function createMockPlatformDependencies<Overrides extends TestRecord = Record<string, never>>(platformType?: 'tiktok', overrides?: Overrides): TikTokMockPlatformDependencies & Overrides;
+function createMockPlatformDependencies<Overrides extends TestRecord = Record<string, never>>(platformType: 'twitch', overrides?: Overrides): TwitchMockPlatformDependencies & Overrides;
+function createMockPlatformDependencies<Overrides extends TestRecord = Record<string, never>>(platformType: 'youtube', overrides?: Overrides): YouTubeMockPlatformDependencies & Overrides;
+function createMockPlatformDependencies<Overrides extends TestRecord>(platformType: string, overrides: Overrides): MockPlatformBaseDependencies & Overrides;
+function createMockPlatformDependencies(platformType = 'tiktok', overrides: TestRecord = {}): MockPlatformDependencies {
     const { notificationBridge: overrideBridge, ...restOverrides } = overrides;
 
-    const baseMocks = {
+    const baseMocks: MockPlatformBaseDependencies = {
         logger: { 
             debug: createMockFn(), 
             info: createMockFn(), 
@@ -106,9 +328,9 @@ const createMockPlatformDependencies = (platformType = 'tiktok', overrides = {})
             error: createMockFn() 
         },
         notificationManager: {
-            emit: createMockFn().mockImplementation((event, data) => true),
-            on: createMockFn().mockImplementation((event, handler) => true),
-            removeListener: createMockFn().mockImplementation((event, handler) => true)
+            emit: createMockFn<[event: string, data: unknown], boolean>().mockImplementation((_event, _data) => true),
+            on: createMockFn<[event: string, handler: unknown], boolean>().mockImplementation((_event, _handler) => true),
+            removeListener: createMockFn<[event: string, handler: unknown], boolean>().mockImplementation((_event, _handler) => true)
         },
         retrySystem: { 
             resetRetryCount: createMockFn(),
@@ -129,9 +351,9 @@ const createMockPlatformDependencies = (platformType = 'tiktok', overrides = {})
         case 'tiktok':
             return {
                 ...baseMocks,
-                TikTokWebSocketClient: createMockFn().mockImplementation(() => ({
-                    connect: createMockFn().mockResolvedValue(true),
-                    disconnect: createMockFn().mockResolvedValue(true),
+                TikTokWebSocketClient: createMockFn<[], TikTokClientMock>().mockImplementation(() => ({
+                    connect: createMockFn<[], Promise<boolean>>().mockResolvedValue(true),
+                    disconnect: createMockFn<[], Promise<boolean>>().mockResolvedValue(true),
                     on: createMockFn(),
                     removeAllListeners: createMockFn()
                 })),
@@ -157,9 +379,9 @@ const createMockPlatformDependencies = (platformType = 'tiktok', overrides = {})
                 ...baseMocks,
                 google: { youtube: createMockFn() },
                 Innertube: {
-                    create: createMockFn(() => Promise.resolve({
-                        getInfo: createMockFn(() => Promise.resolve({
-                            getLiveChat: createMockFn(() => Promise.resolve({
+                    create: createMockFn<[], Promise<YouTubeInnertubeApi>>(() => Promise.resolve({
+                        getInfo: createMockFn<[], Promise<YouTubeVideoInfoMock>>(() => Promise.resolve({
+                            getLiveChat: createMockFn<[], Promise<YouTubeLiveChatMock>>(() => Promise.resolve({
                                 start: createMockFn(),
                                 stop: createMockFn(),
                                 on: createMockFn(),
@@ -169,7 +391,7 @@ const createMockPlatformDependencies = (platformType = 'tiktok', overrides = {})
                     }))
                 },
                 streamDetectionService: {
-                    detectLiveStreams: createMockFn().mockResolvedValue({
+                    detectLiveStreams: createMockFn<[], Promise<{ success: boolean; videoIds: string[] }>>().mockResolvedValue({
                         success: true,
                         videoIds: []
                     })
@@ -177,13 +399,13 @@ const createMockPlatformDependencies = (platformType = 'tiktok', overrides = {})
                 axios: createMockFn(),
                 ...restOverrides
             };
-        
+
         default:
             return { ...baseMocks, ...restOverrides };
     }
-};
+}
 
-const createTestApp = (overrides = {}) => ({
+const createTestApp = <Overrides extends TestRecord = Record<string, never>>(overrides?: Overrides) => ({
     handleChatMessage: createMockFn(),
     handleGiftNotification: createMockFn(),
     handleFollowNotification: createMockFn(),
@@ -196,20 +418,23 @@ const createTestApp = (overrides = {}) => ({
     ...overrides
 });
 
-const createTestRetrySystem = (overrides = {}) => ({
-    executeWithRetry: createMockFn().mockImplementation(async (platform, fn) => {
-        // Default behavior: just execute the function
-        return await fn();
-    }),
-    resetRetryCount: createMockFn(),
-    handleConnectionError: createMockFn(),
-    handleConnectionSuccess: createMockFn(),
-    incrementRetryCount: createMockFn().mockReturnValue(5000),
-    getRetryCount: createMockFn().mockReturnValue(0),
-    ...overrides
-});
+const createTestRetrySystem = <Overrides extends TestRecord = Record<string, never>>(overrides?: Overrides): TestRetrySystem & Overrides => {
+    const retrySystem = createRetrySystem() as TestRetrySystem & Overrides;
 
-const expectValidNotificationData = (data) => {
+    retrySystem.executeWithRetry = createMockFn<[platform: string, executeFunction: () => Promise<unknown>, maxRetries?: number], Promise<unknown>>().mockImplementation(async (_platform, executeFunction) => {
+        // Default behavior: just execute the function
+        return await executeFunction();
+    }) as RetryExecuteMock;
+    retrySystem.resetRetryCount = createMockFn<[platform: string], void>();
+    retrySystem.handleConnectionError = createMockFn<[platform: string, error: unknown, reconnectFunction: () => Promise<unknown>, cleanupFunction?: (() => Promise<unknown> | unknown) | null], void>();
+    retrySystem.handleConnectionSuccess = createMockFn<[platform: string, connection?: unknown, context?: string], void>();
+    retrySystem.incrementRetryCount = createMockFn<[], number>().mockReturnValue(5000);
+    retrySystem.getRetryCount = createMockFn<[platform?: string], number>().mockReturnValue(0);
+
+    return Object.assign(retrySystem, overrides);
+};
+
+const expectValidNotificationData = (data: NotificationLike) => {
     expect(data).toHaveProperty('id');
     expect(data).toHaveProperty('type');
     expect(data).toHaveProperty('username');
@@ -222,7 +447,7 @@ const expectValidNotificationData = (data) => {
     expect(data.ttsMessage).toBeTruthy();
 };
 
-const expectValidUserData = (user) => {
+const expectValidUserData = (user: UserLike) => {
     expect(user).toHaveProperty('username');
     expect(user.username).toBeTruthy();
     if (user.userId !== undefined && user.userId !== null) {
@@ -231,7 +456,7 @@ const expectValidUserData = (user) => {
 };
 
 
-const expectValidNotification = (notification, expectedType, expectedPlatform) => {
+const expectValidNotification = (notification: NotificationLike, expectedType: string, expectedPlatform: string) => {
     // Basic structure validation
     expect(notification).toHaveProperty('id');
     expect(notification).toHaveProperty('type');
@@ -257,7 +482,7 @@ const expectValidNotification = (notification, expectedType, expectedPlatform) =
     expect(notification.username).toBeTruthy();
 };
 
-const expectNoTechnicalArtifacts = (content) => {
+const expectNoTechnicalArtifacts = (content: string) => {
     expect(content).toBeTruthy();
     expect(typeof content).toBe('string');
     
@@ -315,7 +540,7 @@ const TEST_COMMANDS = {
     LONG: '!verylongcommandname'
 };
 
-const loadPlatformFixture = (platform, eventType) => {
+const loadPlatformFixture = (platform: string, eventType: string) => {
     return loadSyntheticFixture(platform, eventType);
 };
 
@@ -323,7 +548,7 @@ const loadPlatformFixture = (platform, eventType) => {
 // PHASE 4A: ENHANCED LIFECYCLE MANAGEMENT
 // ================================================================================================
 
-const setupAutomatedCleanup = (options = {}) => {
+const setupAutomatedCleanup = (options: Partial<CleanupOptions> = {}): AutomatedCleanup => {
     const defaultOptions = {
         clearMocksAfterEach: true,
         validateMocksBeforeEach: false,
@@ -333,16 +558,16 @@ const setupAutomatedCleanup = (options = {}) => {
         ...options
     };
 
-    const cleanupStats = {
+    const cleanupStats: CleanupStats = {
         mocksCleared: 0,
         unusedMocks: [],
         performanceMetrics: [],
         cleanupErrors: []
     };
 
-    const mockUsageTracker = new Map();
+    const mockUsageTracker = new Map<string, unknown>();
 
-    const cleanup = {
+    const cleanup: AutomatedCleanup = {
         config: defaultOptions,
         
         beforeEach: () => {
@@ -382,13 +607,13 @@ const setupAutomatedCleanup = (options = {}) => {
             }
         },
 
-        cleanupMock: (mockObject) => {
+        cleanupMock: (mockObject: unknown) => {
             try {
-                if (mockObject && typeof mockObject === 'object') {
+                if (isRecord(mockObject)) {
                     Object.keys(mockObject).forEach(key => {
                         if (isMockFunction(mockObject[key])) {
                             mockObject[key].mockReset();
-                        } else if (mockObject[key] && typeof mockObject[key] === 'object' && typeof mockObject[key].mockReset === 'function') {
+                        } else if (hasMockReset(mockObject[key])) {
                             // Handle objects that have mockReset methods (like our test case)
                             mockObject[key].mockReset();
                         }
@@ -412,7 +637,7 @@ const setupAutomatedCleanup = (options = {}) => {
     return cleanup;
 };
 
-const validateMockUsage = (mockObject, options = {}) => {
+const validateMockUsage = (mockObject: unknown, options: Partial<MockUsageOptions> = {}): MockUsageValidation => {
     const defaultOptions = {
         requireAllMethodsCalled: false,
         detectUnusedMocks: true,
@@ -423,7 +648,7 @@ const validateMockUsage = (mockObject, options = {}) => {
         ...options
     };
 
-    const validation = {
+    const validation: MockUsageValidation = {
         isValid: true,
         unusedMethods: [],
         mockTypeValid: false,
@@ -433,7 +658,7 @@ const validateMockUsage = (mockObject, options = {}) => {
         recommendations: []
     };
 
-    if (!mockObject || typeof mockObject !== 'object') {
+    if (!isRecord(mockObject)) {
         validation.isValid = false;
         validation.recommendations.push('Mock object is not valid');
         return validation;
@@ -458,7 +683,7 @@ const validateMockUsage = (mockObject, options = {}) => {
 
         validation.unusedMethods = methods.filter(method => {
             const mockFn = mockObject[method];
-            return mockFn.mock.calls.length === 0;
+            return isMockFunction(mockFn) && mockFn.mock.calls.length === 0;
         });
 
         if (validation.unusedMethods.length > 0) {
