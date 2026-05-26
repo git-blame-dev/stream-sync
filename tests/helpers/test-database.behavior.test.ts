@@ -15,12 +15,12 @@ describe('test-database behavior', () => {
     beforeEach(() => {
         testClock.reset();
         resetTestIds();
-        delete global.testEnv;
+        Reflect.deleteProperty(globalThis, 'testEnv');
     });
 
     afterEach(() => {
         testClock.useRealTime();
-        delete global.testEnv;
+        Reflect.deleteProperty(globalThis, 'testEnv');
     });
 
     it('manages datastore entries, metadata, and aggregate stats', () => {
@@ -34,9 +34,9 @@ describe('test-database behavior', () => {
         expect(store.has('first')).toBe(true);
         expect(store.keys()).toEqual(['first', 'second']);
 
-        expect(store.get('first').value).toBe(1);
-        expect(store.get('first').value).toBe(1);
-        expect(store.get('second').value).toBe(2);
+        expect(store.get<{ value: number }>('first')?.value).toBe(1);
+        expect(store.get<{ value: number }>('first')?.value).toBe(1);
+        expect(store.get<{ value: number }>('second')?.value).toBe(2);
 
         const stats = store.getStats();
         expect(stats.totalEntries).toBe(2);
@@ -71,16 +71,16 @@ describe('test-database behavior', () => {
         manager.saveSnapshot('snapshot-a', sourceState);
         sourceState.nested.value = 2;
 
-        expect(manager.getSnapshot('snapshot-a').nested.value).toBe(1);
+        expect(manager.getSnapshot<{ nested: { value: number } }>('snapshot-a')?.nested.value).toBe(1);
 
         const executionTime = manager.endTest();
         expect(executionTime).toBeGreaterThanOrEqual(0);
 
         const cleanupResults = await manager.executeCleanup();
         expect(cleanupResults.length).toBe(2);
-        expect(cleanupResults[0].success).toBe(true);
-        expect(cleanupResults[1].success).toBe(false);
-        expect(cleanupResults[1].error).toContain('cleanup failure');
+        expect(cleanupResults[0]?.success).toBe(true);
+        expect(cleanupResults[1]?.success).toBe(false);
+        expect(cleanupResults[1]?.error).toContain('cleanup failure');
 
         manager.clearSnapshots();
         expect(manager.getSnapshot('snapshot-a')).toBeNull();
@@ -90,20 +90,20 @@ describe('test-database behavior', () => {
         const environment = new TestEnvironment();
         environment.initialize({ cleanupMode: 'manual', isolationLevel: 'suite', retryAttempts: 5 });
 
-        expect(global.testEnv).toBeDefined();
-        expect(global.testEnv.config.isolationLevel).toBe('suite');
-        expect(global.testEnv.config.retryAttempts).toBe(5);
+        expect(globalThis.testEnv).toBeDefined();
+        expect(globalThis.testEnv?.config.isolationLevel).toBe('suite');
+        expect(globalThis.testEnv?.config.retryAttempts).toBe(5);
 
         const context = environment.createTestContext('test-context');
         context.startTest('context-test');
         context.setData('key', 'value');
-        expect(context.getData('key')).toBe('value');
+        expect(context.getData<string>('key')).toBe('value');
         expect(context.hasData('key')).toBe(true);
 
         context.addCleanup(async () => {}, 'context cleanup');
         const cleanupResults = await context.cleanup();
         expect(cleanupResults.length).toBe(1);
-        expect(cleanupResults[0].success).toBe(true);
+        expect(cleanupResults[0]?.success).toBe(true);
 
         environment.dataStore.set('shared', { value: true });
         environment.stateManager.saveSnapshot('global-snapshot', { ok: true });
@@ -118,7 +118,7 @@ describe('test-database behavior', () => {
         const environment = new TestEnvironment();
 
         expect(() => environment.initialize({ cleanupMode: 'automatic' })).not.toThrow();
-        expect(global.testEnv.config.cleanupMode).toBe('automatic');
+        expect(globalThis.testEnv?.config.cleanupMode).toBe('automatic');
     });
 
     it('creates deterministic data factories for supported entity types', () => {

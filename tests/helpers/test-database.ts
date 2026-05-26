@@ -4,18 +4,132 @@ import testClock from './test-clock';
 import { nextTestId } from './test-id';
 import { resolveDelay, scheduleTimeout } from './time-utils';
 
+type TestDataKey = string;
+type TestDataMetadata = {
+    createdAt: number;
+    accessCount: number;
+    lastAccessed?: number;
+    [key: string]: unknown;
+};
+
+type TestDataStats = {
+    totalEntries: number;
+    totalAccesses: number;
+    averageAccessCount: number;
+    oldestEntry: string | null;
+    newestEntry: string | null;
+};
+
+type CleanupTask = {
+    fn: () => Promise<unknown> | unknown;
+    description: string;
+    addedAt: number;
+};
+
+type CleanupResult = {
+    success: boolean;
+    description: string;
+    executionTime: number;
+    error?: string;
+};
+
+type StateSnapshot = {
+    state: unknown;
+    timestamp: number;
+    testName: string | null;
+};
+
+type TestEnvironmentConfig = {
+    isolationLevel: string;
+    cleanupMode: 'automatic' | 'manual' | string;
+    snapshotMode: string;
+    timeoutMs: number;
+    retryAttempts: number;
+};
+
+type TestContext = {
+    name: string;
+    data: TestDataStore;
+    state: TestStateManager;
+    setData: (key: string, value: unknown, metadata?: Record<string, unknown>) => void;
+    getData: <T = unknown>(key: string) => T | undefined;
+    hasData: (key: string) => boolean;
+    clearData: () => void;
+    startTest: (testName: string) => void;
+    endTest: () => number;
+    addCleanup: (fn: () => Promise<unknown> | unknown, description?: string) => void;
+    cleanup: () => Promise<CleanupResult[]>;
+};
+
+type UserFixture = {
+    id: string;
+    username: string;
+    displayName: string;
+    email: string;
+    createdAt: string;
+} & Record<string, unknown>;
+
+type NotificationFixture = {
+    id: string;
+    type: string;
+    username: string;
+    platform: string;
+    message: string;
+    timestamp: string;
+} & Record<string, unknown>;
+
+type ConfigFixture = {
+    enabled: boolean;
+    debug: boolean;
+    timeout: number;
+    retries: number;
+} & Record<string, unknown>;
+
+type EventFixture = {
+    id: string;
+    type: string;
+    platform: string;
+    timestamp: string;
+    data: Record<string, unknown>;
+} & Record<string, unknown>;
+
+type TestDataFactories = {
+    user: (overrides?: Partial<UserFixture>) => UserFixture;
+    notification: (overrides?: Partial<NotificationFixture>) => NotificationFixture;
+    config: (overrides?: Partial<ConfigFixture>) => ConfigFixture;
+    event: (overrides?: Partial<EventFixture>) => EventFixture;
+};
+
+type GlobalTestEnvironment = {
+    data: TestDataStore;
+    state: TestStateManager;
+    config: TestEnvironmentConfig;
+};
+
+declare global {
+    var testEnv: GlobalTestEnvironment | undefined;
+}
+
+const getErrorMessage = (error: unknown): string => {
+    return error instanceof Error ? error.message : String(error);
+};
+
 // ================================================================================================
 // TEST DATA STORAGE
 // ================================================================================================
 
 class TestDataStore {
+    private data: Map<TestDataKey, unknown>;
+    private metadata: Map<TestDataKey, TestDataMetadata>;
+    private cleanupHooks: Array<() => Promise<unknown> | unknown>;
+
     constructor() {
         this.data = new Map();
         this.metadata = new Map();
         this.cleanupHooks = [];
     }
 
-    set(key, value, metadata = {}) {
+    set(key: string, value: unknown, metadata: Record<string, unknown> = {}): void {
         this.data.set(key, value);
         this.metadata.set(key, {
             createdAt: testClock.now(),
@@ -24,36 +138,36 @@ class TestDataStore {
         });
     }
 
-    get(key) {
+    get<T = unknown>(key: string): T | undefined {
         const metadata = this.metadata.get(key);
         if (metadata) {
             metadata.accessCount++;
             metadata.lastAccessed = testClock.now();
         }
-        return this.data.get(key);
+        return this.data.get(key) as T | undefined;
     }
 
-    has(key) {
+    has(key: string): boolean {
         return this.data.has(key);
     }
 
-    delete(key) {
+    delete(key: string): boolean {
         const deleted = this.data.delete(key);
         this.metadata.delete(key);
         return deleted;
     }
 
-    clear() {
+    clear(): void {
         this.data.clear();
         this.metadata.clear();
     }
 
-    keys() {
+    keys(): string[] {
         return Array.from(this.data.keys());
     }
 
-    getStats() {
-        const stats = {
+    getStats(): TestDataStats {
+        const stats: TestDataStats = {
             totalEntries: this.data.size,
             totalAccesses: 0,
             averageAccessCount: 0,
@@ -89,6 +203,12 @@ class TestDataStore {
 // ================================================================================================
 
 class TestStateManager {
+    currentTest: string | null;
+    testSuite: string | null;
+    executionStart: number | null;
+    cleanupQueue: CleanupTask[];
+    stateSnapshots: Map<string, StateSnapshot>;
+
     constructor() {
         this.currentTest = null;
         this.testSuite = null;
@@ -97,7 +217,7 @@ class TestStateManager {
         this.stateSnapshots = new Map();
     }
 
-    startTest(testName, suiteName = 'unknown') {
+    startTest(testName: string, suiteName = 'unknown'): void {
         // Defensive programming: If a test is already running, end it first
         if (this.currentTest !== null && this.executionStart !== null) {
             // Silently end the previous test to prevent state corruption
@@ -110,7 +230,7 @@ class TestStateManager {
         this.cleanupQueue = [];
     }
 
-    endTest() {
+    endTest(): number {
         // Defensive programming: Handle invalid state gracefully
         if (this.executionStart === null || this.executionStart === undefined) {
             // If no test was started, return 0 instead of negative time
@@ -134,7 +254,7 @@ class TestStateManager {
         return safeExecutionTime;
     }
 
-    addCleanupTask(cleanupFn, description = 'unknown') {
+    addCleanupTask(cleanupFn: () => Promise<unknown> | unknown, description = 'unknown'): void {
         this.cleanupQueue.push({
             fn: cleanupFn,
             description,
@@ -142,8 +262,8 @@ class TestStateManager {
         });
     }
 
-    async executeCleanup() {
-        const results = [];
+    async executeCleanup(): Promise<CleanupResult[]> {
+        const results: CleanupResult[] = [];
         for (const task of this.cleanupQueue) {
             try {
                 await task.fn();
@@ -156,7 +276,7 @@ class TestStateManager {
                 results.push({
                     success: false,
                     description: task.description,
-                    error: error.message,
+                    error: getErrorMessage(error),
                     executionTime: testClock.now() - task.addedAt
                 });
             }
@@ -165,7 +285,7 @@ class TestStateManager {
         return results;
     }
 
-    saveSnapshot(name, state) {
+    saveSnapshot(name: string, state: unknown): void {
         this.stateSnapshots.set(name, {
             state: JSON.parse(JSON.stringify(state)), // Deep clone
             timestamp: testClock.now(),
@@ -173,12 +293,12 @@ class TestStateManager {
         });
     }
 
-    getSnapshot(name) {
+    getSnapshot<T = unknown>(name: string): T | null {
         const snapshot = this.stateSnapshots.get(name);
-        return snapshot ? snapshot.state : null;
+        return snapshot ? snapshot.state as T : null;
     }
 
-    clearSnapshots() {
+    clearSnapshots(): void {
         this.stateSnapshots.clear();
     }
 }
@@ -188,6 +308,10 @@ class TestStateManager {
 // ================================================================================================
 
 class TestEnvironment {
+    dataStore: TestDataStore;
+    stateManager: TestStateManager;
+    config: TestEnvironmentConfig;
+
     constructor() {
         this.dataStore = new TestDataStore();
         this.stateManager = new TestStateManager();
@@ -200,11 +324,11 @@ class TestEnvironment {
         };
     }
 
-    initialize(config = {}) {
+    initialize(config: Partial<TestEnvironmentConfig> = {}): void {
         this.config = { ...this.config, ...config };
         
         // Set up global test utilities
-        global.testEnv = {
+        globalThis.testEnv = {
             data: this.dataStore,
             state: this.stateManager,
             config: this.config
@@ -214,7 +338,7 @@ class TestEnvironment {
         this.setupCleanupHooks();
     }
 
-    setupCleanupHooks() {
+    setupCleanupHooks(): void {
         if (this.config.cleanupMode === 'automatic') {
             afterEach(async () => {
                 await this.stateManager.executeCleanup();
@@ -227,7 +351,7 @@ class TestEnvironment {
         }
     }
 
-    createTestContext(contextName) {
+    createTestContext(contextName: string): TestContext {
         const contextData = new TestDataStore();
         const contextState = new TestStateManager();
 
@@ -237,14 +361,14 @@ class TestEnvironment {
             state: contextState,
             
             // Convenience methods
-            setData: (key, value, metadata) => contextData.set(key, value, metadata),
-            getData: (key) => contextData.get(key),
-            hasData: (key) => contextData.has(key),
+            setData: (key: string, value: unknown, metadata?: Record<string, unknown>) => contextData.set(key, value, metadata),
+            getData: <T = unknown>(key: string) => contextData.get<T>(key),
+            hasData: (key: string) => contextData.has(key),
             clearData: () => contextData.clear(),
             
-            startTest: (testName) => contextState.startTest(testName, contextName),
+            startTest: (testName: string) => contextState.startTest(testName, contextName),
             endTest: () => contextState.endTest(),
-            addCleanup: (fn, description) => contextState.addCleanupTask(fn, description),
+            addCleanup: (fn: () => Promise<unknown> | unknown, description?: string) => contextState.addCleanupTask(fn, description),
             
             // Cleanup method
             cleanup: async () => {
@@ -255,7 +379,7 @@ class TestEnvironment {
         };
     }
 
-    reset() {
+    reset(): void {
         this.dataStore.clear();
         this.stateManager.clearSnapshots();
         this.stateManager.cleanupQueue = [];
@@ -279,8 +403,10 @@ class TestEnvironment {
 // UTILITY FUNCTIONS
 // ================================================================================================
 
-const createTestDataFactory = (type, options = {}) => {
-    const factories = {
+function createTestDataFactory<Type extends keyof TestDataFactories>(type: Type, options?: Record<string, unknown>): TestDataFactories[Type];
+function createTestDataFactory(type: string, options?: Record<string, unknown>): (overrides?: Record<string, unknown>) => Record<string, unknown>;
+function createTestDataFactory(type: string, _options: Record<string, unknown> = {}) {
+    const factories: TestDataFactories = {
         user: (overrides = {}) => ({
             id: nextTestId('user'),
             username: `testuser_${testClock.now()}`,
@@ -318,11 +444,11 @@ const createTestDataFactory = (type, options = {}) => {
         })
     };
 
-    return factories[type] || (() => ({}));
-};
+    return factories[type as keyof TestDataFactories] || (() => ({}));
+}
 
-const waitForCondition = (condition, timeout = 5000, interval = 100) => {
-    return new Promise((resolve, reject) => {
+const waitForCondition = (condition: () => boolean, timeout = 5000, interval = 100): Promise<void> => {
+    return new Promise<void>((resolve, reject) => {
         const startTime = testClock.now();
         const effectiveInterval = resolveDelay(interval);
         
@@ -354,8 +480,8 @@ const createMockTimer = (startTime = testClock.now()) => {
     
     return {
         now: () => currentTime,
-        advance: (ms) => { currentTime += ms; },
-        set: (time) => { currentTime = time; },
+        advance: (ms: number) => { currentTime += ms; },
+        set: (time: number) => { currentTime = time; },
         reset: () => { currentTime = startTime; }
     };
 };
