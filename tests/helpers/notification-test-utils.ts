@@ -7,7 +7,63 @@ import { initializeTestLogging } from './test-setup';
 
 initializeTestLogging();
 
-function createNotificationData(type, platform, userData, eventData = {}, vfxConfig = null) {
+type NotificationRecord = Record<string, unknown>;
+type NotificationUserData = NotificationRecord & {
+    username?: unknown;
+    userId?: unknown;
+};
+type NotificationInputData = NotificationRecord & {
+    type?: unknown;
+    platform?: unknown;
+    username?: unknown;
+    userId?: unknown;
+};
+type NotificationPayload = NotificationRecord & {
+    id: string;
+    type: string;
+    platform: string;
+    username?: string;
+    userId?: string;
+    message?: string;
+    displayMessage: string;
+    ttsMessage: string;
+    logMessage: string;
+    processedAt: number;
+    timestamp: string;
+};
+type NotificationPatterns = {
+    display?: RegExp;
+    tts?: RegExp;
+    log?: RegExp;
+};
+type NotificationTestCase = {
+    description: string;
+    userData?: NotificationUserData;
+    eventData?: NotificationRecord;
+    expectedPatterns?: NotificationPatterns;
+    additionalAssertions?: (result: NotificationPayload) => void;
+};
+type NotificationStringVariant = 'display' | 'tts' | 'log' | string;
+type SubscriptionExpectation = 'new' | 'resub' | 'gift';
+
+function requireBuiltNotification(type: string, result: ReturnType<typeof NotificationBuilder.build>): NotificationPayload {
+    if (!result) {
+        throw new Error(`NotificationBuilder returned null for type ${type} (payload rejected)`);
+    }
+
+    return result as NotificationPayload;
+}
+
+function createNotificationData<
+    EventData extends NotificationRecord = Record<string, never>,
+    VfxConfig = null
+>(
+    type: string,
+    platform: string,
+    userData: NotificationUserData,
+    eventData: EventData = {} as EventData,
+    vfxConfig: VfxConfig = null as VfxConfig
+): NotificationPayload & EventData & { vfxConfig: VfxConfig } {
     if (!type || typeof type !== 'string' || !type.trim()) {
         throw new Error('type is required for notification test data');
     }
@@ -24,24 +80,20 @@ function createNotificationData(type, platform, userData, eventData = {}, vfxCon
     const userId = userData.userId;
     const normalizedEventData = { ...eventData };
 
-    const result = NotificationBuilder.build({
+    const result = requireBuiltNotification(type, NotificationBuilder.build({
         type,
         platform,
         username,
         userId,
         ...normalizedEventData
-    });
-
-    if (!result) {
-        throw new Error(`NotificationBuilder returned null for type ${type} (payload rejected)`);
-    }
+    }));
 
     result.vfxConfig = vfxConfig;
 
-    return result;
+    return result as NotificationPayload & EventData & { vfxConfig: VfxConfig };
 }
 
-function generateLogMessage(type, data) {
+function generateLogMessage(type: string, data: NotificationInputData): string {
     if (!type || typeof type !== 'string' || !type.trim()) {
         throw new Error('type is required for notification log message');
     }
@@ -54,18 +106,18 @@ function generateLogMessage(type, data) {
         throw new Error('username is required for notification log message');
     }
 
-    const result = NotificationBuilder.build({
+    const result = requireBuiltNotification(type, NotificationBuilder.build({
         type,
         platform: data.platform,
         username: data.username,
         userId: data.userId,
         ...data
-    });
+    }));
 
     return result.logMessage;
 }
 
-function generateNotificationString(data, variant) {
+function generateNotificationString(data: NotificationInputData, variant: NotificationStringVariant): string {
     if (!data || typeof data.type !== 'string' || !data.type.trim()) {
         throw new Error('type is required for notification string');
     }
@@ -78,13 +130,14 @@ function generateNotificationString(data, variant) {
         throw new Error('username is required for notification string');
     }
 
-    const result = NotificationBuilder.build({
+    const type = data.type;
+    const result = requireBuiltNotification(type, NotificationBuilder.build({
         type: data.type,
         platform: data.platform,
         username: data.username,
         userId: data.userId,
         ...data
-    });
+    }));
 
     switch (variant) {
         case 'display':
@@ -98,7 +151,12 @@ function generateNotificationString(data, variant) {
     }
 }
 
-const testNotificationGeneration = (type, userData, eventData, expectedPatterns) => {
+const testNotificationGeneration = (
+    type: string,
+    userData: NotificationUserData,
+    eventData: NotificationRecord,
+    expectedPatterns: NotificationPatterns
+): NotificationPayload => {
     const notification = createNotificationData(type, 'tiktok', userData, eventData);
     
     expect(notification).toHaveProperty('displayMessage');
@@ -120,7 +178,7 @@ const testNotificationGeneration = (type, userData, eventData, expectedPatterns)
     return notification;
 };
 
-const testGiftNotification = (giftData, expectations) => {
+const testGiftNotification = (giftData: NotificationRecord, expectations: NotificationPatterns): NotificationPayload => {
     return testNotificationGeneration('platform:gift', 
         { username: 'TestUser' }, 
         giftData, 
@@ -128,7 +186,7 @@ const testGiftNotification = (giftData, expectations) => {
     );
 };
 
-const testCommandNotification = (command, expectedCommandName, username = 'TestUser') => {
+const testCommandNotification = (command: string, expectedCommandName: string, username = 'TestUser'): NotificationPayload => {
     const commandData = createNotificationData('command', 'tiktok', 
         { username }, 
         { command, commandName: expectedCommandName }
@@ -141,7 +199,7 @@ const testCommandNotification = (command, expectedCommandName, username = 'TestU
     return commandData;
 };
 
-const testFollowNotification = (username = 'TestUser') => {
+const testFollowNotification = (username = 'TestUser'): NotificationPayload => {
     return testNotificationGeneration('platform:follow',
         { username },
         {},
@@ -153,7 +211,11 @@ const testFollowNotification = (username = 'TestUser') => {
     );
 };
 
-const testSubscriptionNotification = (userData, subData, expectedType = 'new') => {
+const testSubscriptionNotification = (
+    userData: NotificationUserData,
+    subData: NotificationRecord,
+    expectedType: SubscriptionExpectation = 'new'
+): NotificationPayload => {
     const notification = testNotificationGeneration('platform:paypiggy', userData, subData, {});
     
     switch (expectedType) {
@@ -171,13 +233,13 @@ const testSubscriptionNotification = (userData, subData, expectedType = 'new') =
     return notification;
 };
 
-const testTemplateInterpolation = (template, data, expected) => {
+const testTemplateInterpolation = (template: string, data: unknown, expected: string): string => {
     const result = interpolateTemplate(template, data);
     expect(result).toBe(expected);
     return result;
 };
 
-const createNotificationTestSuite = (notificationType, testCases) => {
+const createNotificationTestSuite = (notificationType: string, testCases: NotificationTestCase[]) => {
     describe(`${notificationType.charAt(0).toUpperCase() + notificationType.slice(1)} Notifications`, () => {
         testCases.forEach(testCase => {
             test(testCase.description, () => {
@@ -196,7 +258,7 @@ const createNotificationTestSuite = (notificationType, testCases) => {
     });
 };
 
-const testUsernameSanitization = (rawUsername, expectedDisplay, expectedTTS) => {
+const testUsernameSanitization = (rawUsername: string, expectedDisplay: string, expectedTTS: string): NotificationPayload => {
     const notification = createNotificationData('platform:follow', 'tiktok', 
         { username: rawUsername },
         {}
