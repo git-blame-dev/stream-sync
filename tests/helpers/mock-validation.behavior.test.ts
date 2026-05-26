@@ -14,7 +14,7 @@ import {
 } from './mock-validation';
 import testClock from './test-clock';
 
-const createNotificationDispatcherMock = (overrides = {}) => ({
+const createNotificationDispatcherMock = (overrides: Record<string, unknown> = {}) => ({
     _mockType: 'NotificationDispatcher',
     dispatchSuperChat: createMockFn(async () => true),
     dispatchMembership: createMockFn(async () => true),
@@ -26,23 +26,25 @@ const createNotificationDispatcherMock = (overrides = {}) => ({
     ...overrides
 });
 
+type NotificationDispatcherMock = ReturnType<typeof createNotificationDispatcherMock>;
+
 describe('mock-validation behavior', () => {
-    let originalValidateMock;
-    let originalValidateNotification;
-    let originalValidatePlatformEvent;
+    let originalValidateMock: typeof globalThis.validateMock;
+    let originalValidateNotification: typeof globalThis.validateNotification;
+    let originalValidatePlatformEvent: typeof globalThis.validatePlatformEvent;
 
     beforeEach(() => {
         testClock.reset();
-        originalValidateMock = global.validateMock;
-        originalValidateNotification = global.validateNotification;
-        originalValidatePlatformEvent = global.validatePlatformEvent;
+        originalValidateMock = globalThis.validateMock;
+        originalValidateNotification = globalThis.validateNotification;
+        originalValidatePlatformEvent = globalThis.validatePlatformEvent;
     });
 
     afterEach(() => {
         testClock.useRealTime();
-        global.validateMock = originalValidateMock;
-        global.validateNotification = originalValidateNotification;
-        global.validatePlatformEvent = originalValidatePlatformEvent;
+        globalThis.validateMock = originalValidateMock;
+        globalThis.validateNotification = originalValidateNotification;
+        globalThis.validatePlatformEvent = originalValidatePlatformEvent;
     });
 
     it('exposes API contracts for expected helper categories', () => {
@@ -142,9 +144,9 @@ describe('mock-validation behavior', () => {
     it('integrates custom matcher setup and direct matcher helper outcomes', () => {
         setupMockValidation();
 
-        expect(typeof global.validateMock).toBe('function');
-        expect(typeof global.validateNotification).toBe('function');
-        expect(typeof global.validatePlatformEvent).toBe('function');
+        expect(typeof globalThis.validateMock).toBe('function');
+        expect(typeof globalThis.validateNotification).toBe('function');
+        expect(typeof globalThis.validatePlatformEvent).toBe('function');
 
         const goodMatch = toMatchContract(createNotificationDispatcherMock(), 'NotificationDispatcher');
         expect(goodMatch.pass).toBe(true);
@@ -157,7 +159,7 @@ describe('mock-validation behavior', () => {
 
     it('tracks registered mocks and validation history in the contract monitor', () => {
         const monitor = new MockContractMonitor();
-        const dispatcher = createNotificationDispatcherMock();
+        const dispatcher: NotificationDispatcherMock = createNotificationDispatcherMock();
 
         monitor.registerMock('dispatcher', dispatcher, 'NotificationDispatcher');
         const firstReport = monitor.validateAll();
@@ -171,7 +173,7 @@ describe('mock-validation behavior', () => {
 
         const history = monitor.getValidationHistory();
         expect(history).toHaveLength(2);
-        expect(history[0].timestamp).toBeLessThanOrEqual(history[1].timestamp);
+        expect(history[0]?.timestamp).toBeLessThanOrEqual(history[1]?.timestamp ?? 0);
 
         monitor.reset();
         expect(monitor.getValidationHistory()).toHaveLength(0);

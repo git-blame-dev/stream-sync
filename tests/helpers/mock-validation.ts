@@ -1,4 +1,3 @@
-
 // ================================================================================================
 // API CONTRACT DEFINITIONS
 // ================================================================================================
@@ -7,6 +6,74 @@ import { expect } from 'bun:test';
 
 import testClock from './test-clock';
 import { isMockFunction } from './bun-mock-utils';
+
+type UnknownRecord = Record<string, unknown>;
+
+type MethodSignature = {
+    params: readonly string[];
+    returns: string;
+};
+
+type ApiContract = {
+    requiredMethods: readonly string[];
+    methodSignatures: Record<string, MethodSignature>;
+    requiredReturnFields?: readonly string[];
+};
+
+type MockContractValidation = {
+    success: boolean;
+    errors: string[];
+    warnings: string[];
+    mockType: string;
+    contractName: string;
+};
+
+type NotificationValidation = {
+    success: boolean;
+    errors: string[];
+    warnings: string[];
+    dataType: 'NotificationData';
+};
+
+type PlatformEventValidation = {
+    success: boolean;
+    errors: string[];
+    warnings: string[];
+    platform: string;
+    eventType: string;
+};
+
+type MockSpec = {
+    contractName: string;
+    mock: unknown;
+};
+
+type MockSuiteResult = MockContractValidation;
+
+type MockSuiteValidation = {
+    overallSuccess: boolean;
+    totalMocksValidated: number;
+    totalErrors: number;
+    totalWarnings: number;
+    results: MockSuiteResult[];
+    summary: string;
+};
+
+type ValidationHistoryEntry = {
+    timestamp: number;
+    report: MockSuiteValidation;
+};
+
+type MatcherResult = {
+    pass: boolean;
+    message: () => string;
+};
+
+declare global {
+    var validateMock: ((mockObject: unknown, contractName: string) => MockContractValidation) | undefined;
+    var validateNotification: ((notificationData: unknown) => NotificationValidation) | undefined;
+    var validatePlatformEvent: ((eventData: unknown, platform: string, eventType: string) => PlatformEventValidation) | undefined;
+}
 
 const API_CONTRACTS = {
     NotificationDispatcher: {
@@ -36,7 +103,7 @@ const API_CONTRACTS = {
             build: { params: ['notificationData'], returns: 'Object' }
         },
         requiredReturnFields: [
-            'id', 'type', 'platform', 'user', 'displayMessage', 
+            'id', 'type', 'platform', 'user', 'displayMessage',
             'ttsMessage', 'logMessage', 'processedAt', 'timestamp'
         ]
     },
@@ -123,79 +190,103 @@ const API_CONTRACTS = {
             updateViewerCount: { params: ['platform', 'count'], returns: 'Promise<boolean>' }
         }
     }
+} as const satisfies Record<string, ApiContract>;
+
+type ApiContractName = keyof typeof API_CONTRACTS;
+
+const hasOwn = (value: UnknownRecord, key: string) => Object.prototype.hasOwnProperty.call(value, key);
+
+const isRecord = (value: unknown): value is UnknownRecord => {
+    return typeof value === 'object' && value !== null;
+};
+
+const getMockType = (mockObject: unknown): string => {
+    if (!isRecord(mockObject)) {
+        return 'Unknown';
+    }
+
+    const mockType = mockObject._mockType;
+    return typeof mockType === 'string' ? mockType : 'Unknown';
+};
+
+const isApiContractName = (contractName: string): contractName is ApiContractName => {
+    return contractName in API_CONTRACTS;
 };
 
 // ================================================================================================
 // VALIDATION FUNCTIONS
 // ================================================================================================
 
-const validateMockContract = (mockObject, contractName) => {
-    const contract = API_CONTRACTS[contractName];
-    if (!contract) {
+const validateMockContract = (mockObject: unknown, contractName: string): MockContractValidation => {
+    if (!isApiContractName(contractName)) {
         return {
             success: false,
             errors: [`Unknown API contract: ${contractName}`],
             warnings: [],
-            mockType: mockObject._mockType || 'Unknown'
+            mockType: getMockType(mockObject),
+            contractName
         };
     }
 
-    const errors = [];
-    const warnings = [];
+    const contract = API_CONTRACTS[contractName];
+    const errors: string[] = [];
+    const warnings: string[] = [];
+    const mockRecord = isRecord(mockObject) ? mockObject : {};
 
-    // Validate required methods exist
-    contract.requiredMethods.forEach(methodName => {
-        if (!mockObject.hasOwnProperty(methodName)) {
+    contract.requiredMethods.forEach((methodName) => {
+        if (!hasOwn(mockRecord, methodName)) {
             errors.push(`Missing required method: ${methodName}`);
-        } else if (!isMockFunction(mockObject[methodName])) {
+            return;
+        }
+
+        if (!isMockFunction(mockRecord[methodName])) {
             warnings.push(`Method ${methodName} is not a mock function`);
         }
     });
 
-    // Validate mock type annotation
-    if (mockObject._mockType !== contractName) {
-        warnings.push(`Mock type annotation mismatch. Expected: ${contractName}, Got: ${mockObject._mockType}`);
+    const mockType = getMockType(mockObject);
+    if (mockType !== contractName) {
+        warnings.push(`Mock type annotation mismatch. Expected: ${contractName}, Got: ${mockType}`);
     }
 
     return {
         success: errors.length === 0,
         errors,
         warnings,
-        mockType: mockObject._mockType || 'Unknown',
+        mockType,
         contractName
     };
 };
 
-const validateNotificationData = (notificationData) => {
+const validateNotificationData = (notificationData: unknown): NotificationValidation => {
     const contract = API_CONTRACTS.NotificationBuilder;
-    const errors = [];
-    const warnings = [];
+    const errors: string[] = [];
+    const warnings: string[] = [];
+    const notificationRecord = isRecord(notificationData) ? notificationData : {};
 
-    // Check required fields
-    contract.requiredReturnFields.forEach(field => {
-        if (!notificationData.hasOwnProperty(field)) {
+    contract.requiredReturnFields.forEach((field) => {
+        if (!hasOwn(notificationRecord, field)) {
             errors.push(`Missing required notification field: ${field}`);
         }
     });
 
-    // Validate field types and formats
-    if (notificationData.id && typeof notificationData.id !== 'string') {
+    if (notificationRecord.id && typeof notificationRecord.id !== 'string') {
         errors.push('Notification ID must be a string');
     }
 
-    if (notificationData.type && typeof notificationData.type !== 'string') {
+    if (notificationRecord.type && typeof notificationRecord.type !== 'string') {
         errors.push('Notification type must be a string');
     }
 
-    if (notificationData.platform && !['youtube', 'twitch', 'tiktok'].includes(notificationData.platform)) {
-        warnings.push(`Unknown platform: ${notificationData.platform}`);
+    if (notificationRecord.platform && !['youtube', 'twitch', 'tiktok'].includes(String(notificationRecord.platform))) {
+        warnings.push(`Unknown platform: ${notificationRecord.platform}`);
     }
 
-    if (notificationData.processedAt && !Number.isInteger(notificationData.processedAt)) {
+    if (notificationRecord.processedAt && !Number.isInteger(notificationRecord.processedAt)) {
         errors.push('processedAt must be a timestamp integer');
     }
 
-    if (notificationData.timestamp && isNaN(Date.parse(notificationData.timestamp))) {
+    if (notificationRecord.timestamp && isNaN(Date.parse(String(notificationRecord.timestamp)))) {
         errors.push('timestamp must be a valid ISO date string');
     }
 
@@ -207,12 +298,11 @@ const validateNotificationData = (notificationData) => {
     };
 };
 
-const validatePlatformEventData = (eventData, platform, eventType) => {
-    const errors = [];
-    const warnings = [];
+const validatePlatformEventData = (eventData: unknown, platform: string, eventType: string): PlatformEventValidation => {
+    const errors: string[] = [];
+    const warnings: string[] = [];
 
-    // Platform-specific validation rules
-    const platformRules = {
+    const platformRules: Record<string, Record<string, readonly string[]>> = {
         youtube: {
             chat: ['item.type', 'item.message', 'item.authorDetails'],
             gift: ['item.type', 'item.purchase_amount', 'item.message'],
@@ -236,8 +326,7 @@ const validatePlatformEventData = (eventData, platform, eventType) => {
         return { success: true, errors, warnings, platform, eventType };
     }
 
-    // Check required fields using dot notation
-    rules.forEach(fieldPath => {
+    rules.forEach((fieldPath) => {
         if (!hasNestedProperty(eventData, fieldPath)) {
             errors.push(`Missing required field: ${fieldPath}`);
         }
@@ -252,20 +341,28 @@ const validatePlatformEventData = (eventData, platform, eventType) => {
     };
 };
 
-const hasNestedProperty = (obj, path) => {
-    return path.split('.').reduce((current, key) => {
-        return current && current.hasOwnProperty(key) ? current[key] : null;
-    }, obj) !== null;
+const hasNestedProperty = (obj: unknown, path: string): boolean => {
+    let current = obj;
+
+    for (const key of path.split('.')) {
+        if (!isRecord(current) || !hasOwn(current, key)) {
+            return false;
+        }
+
+        current = current[key];
+    }
+
+    return current !== null;
 };
 
 // ================================================================================================
 // BATCH VALIDATION FUNCTIONS
 // ================================================================================================
 
-const validateMockSuite = (mockSpecs) => {
-    const results = mockSpecs.map(spec => ({
-        contractName: spec.contractName,
-        ...validateMockContract(spec.mock, spec.contractName)
+const validateMockSuite = (mockSpecs: MockSpec[]): MockSuiteValidation => {
+    const results: MockSuiteResult[] = mockSpecs.map((spec) => ({
+        ...validateMockContract(spec.mock, spec.contractName),
+        contractName: spec.contractName
     }));
 
     const totalErrors = results.reduce((sum, result) => sum + result.errors.length, 0);
@@ -281,10 +378,10 @@ const validateMockSuite = (mockSpecs) => {
     };
 };
 
-const generateValidationSummary = (validationResults) => {
-    const successful = validationResults.filter(r => r.success).length;
-    const failed = validationResults.filter(r => !r.success).length;
-    
+const generateValidationSummary = (validationResults: MockSuiteResult[]): string => {
+    const successful = validationResults.filter((result) => result.success).length;
+    const failed = validationResults.filter((result) => !result.success).length;
+
     let summary = `Mock Validation Summary:\n`;
     summary += `Successful: ${successful}\n`;
     summary += `Failed: ${failed}\n\n`;
@@ -292,16 +389,16 @@ const generateValidationSummary = (validationResults) => {
     if (failed > 0) {
         summary += `Failed Validations:\n`;
         validationResults
-            .filter(r => !r.success)
-            .forEach(result => {
+            .filter((result) => !result.success)
+            .forEach((result) => {
                 summary += `  ${result.contractName}: ${result.errors.join(', ')}\n`;
             });
     }
 
-    const allWarnings = validationResults.flatMap(r => r.warnings);
+    const allWarnings = validationResults.flatMap((result) => result.warnings);
     if (allWarnings.length > 0) {
         summary += `\nWarnings:\n`;
-        allWarnings.forEach(warning => {
+        allWarnings.forEach((warning) => {
             summary += `  Warning: ${warning}\n`;
         });
     }
@@ -313,31 +410,29 @@ const generateValidationSummary = (validationResults) => {
 // AUTOMATED VALIDATION HELPERS
 // ================================================================================================
 
-const toMatchContract = function(mockObject, contractName) {
+const toMatchContract = function (mockObject: unknown, contractName: string): MatcherResult {
     const result = validateMockContract(mockObject, contractName);
-    
+
     return {
         pass: result.success,
         message: () => {
             if (result.success) {
                 return `Expected mock not to match ${contractName} contract`;
-            } else {
-                return `Mock failed ${contractName} contract validation:\n${result.errors.join('\n')}`;
             }
+
+            return `Mock failed ${contractName} contract validation:\n${result.errors.join('\n')}`;
         }
     };
 };
 
 const setupMockValidation = () => {
-    // Extend test matchers
     expect.extend({
         toMatchContract
     });
 
-    // Add global validation helper
-    global.validateMock = validateMockContract;
-    global.validateNotification = validateNotificationData;
-    global.validatePlatformEvent = validatePlatformEventData;
+    globalThis.validateMock = validateMockContract;
+    globalThis.validateNotification = validateNotificationData;
+    globalThis.validatePlatformEvent = validatePlatformEventData;
 };
 
 // ================================================================================================
@@ -345,19 +440,22 @@ const setupMockValidation = () => {
 // ================================================================================================
 
 class MockContractMonitor {
+    private registeredMocks: Map<string, MockSpec>;
+    private validationHistory: ValidationHistoryEntry[];
+
     constructor() {
         this.registeredMocks = new Map();
         this.validationHistory = [];
     }
 
-    registerMock(name, mock, contractName) {
-        this.registeredMocks.set(name, { mock, contractName, registeredAt: testClock.now() });
+    registerMock(name: string, mock: unknown, contractName: string): void {
+        this.registeredMocks.set(name, { mock, contractName });
     }
 
-    validateAll() {
+    validateAll(): MockSuiteValidation {
         const mockSpecs = Array.from(this.registeredMocks.values());
         const report = validateMockSuite(mockSpecs);
-        
+
         this.validationHistory.push({
             timestamp: testClock.now(),
             report
@@ -366,11 +464,11 @@ class MockContractMonitor {
         return report;
     }
 
-    getValidationHistory() {
+    getValidationHistory(): ValidationHistoryEntry[] {
         return this.validationHistory;
     }
 
-    reset() {
+    reset(): void {
         this.registeredMocks.clear();
         this.validationHistory = [];
     }
@@ -381,22 +479,28 @@ class MockContractMonitor {
 // ================================================================================================
 
 export {
+    type MockContractValidation,
+    type NotificationValidation,
+    type PlatformEventValidation,
+    type MockSuiteResult,
+    type MockSuiteValidation,
+
     // Core validation functions
     validateMockContract,
     validateNotificationData,
     validatePlatformEventData,
-    
+
     // Batch validation
     validateMockSuite,
     generateValidationSummary,
-    
+
     // Test runner integration
     setupMockValidation,
     toMatchContract,
-    
+
     // Continuous monitoring
     MockContractMonitor,
-    
+
     // API contracts (for reference)
     API_CONTRACTS
 };

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { createMockFn } from './bun-mock-utils';
+import { createMockFn, type TestMockFn } from './bun-mock-utils';
 import {
     MockLifecycleManager,
     globalLifecycleManager,
@@ -10,20 +10,28 @@ import {
     checkMockIsolation,
     withMockIsolation,
     MockReuseCache,
+    createMockReuseKey,
     globalMockCache
 } from './mock-lifecycle';
 import testClock from './test-clock';
 
 const createDispatcherMock = () => ({
     _mockType: 'NotificationDispatcher',
-    dispatchSuperChat: createMockFn(async () => true),
-    dispatchMembership: createMockFn(async () => true),
-    dispatchGiftMembership: createMockFn(async () => true),
-    dispatchSuperSticker: createMockFn(async () => true),
-    dispatchFollow: createMockFn(async () => true),
-    dispatchRaid: createMockFn(async () => true),
-    dispatchMessage: createMockFn(async () => true)
+    dispatchSuperChat: createMockFn<unknown[], Promise<boolean>>(async () => true),
+    dispatchMembership: createMockFn<unknown[], Promise<boolean>>(async () => true),
+    dispatchGiftMembership: createMockFn<unknown[], Promise<boolean>>(async () => true),
+    dispatchSuperSticker: createMockFn<unknown[], Promise<boolean>>(async () => true),
+    dispatchFollow: createMockFn<unknown[], Promise<boolean>>(async () => true),
+    dispatchRaid: createMockFn<unknown[], Promise<boolean>>(async () => true),
+    dispatchMessage: createMockFn<unknown[], Promise<boolean>>(async () => true)
 });
+
+type IsolatedMock = {
+    _mockType: string;
+    action: TestMockFn<[string], unknown>;
+};
+
+type DispatcherMock = ReturnType<typeof createDispatcherMock>;
 
 describe('mock-lifecycle behavior', () => {
     beforeEach(() => {
@@ -122,7 +130,7 @@ describe('mock-lifecycle behavior', () => {
     });
 
     it('reports isolation issues and supports isolation wrappers for test execution', async () => {
-        const leakyMock = { action: createMockFn(() => 'ok') };
+        const leakyMock = { action: createMockFn<[string], string>(() => 'ok') };
         leakyMock.action('call');
 
         const leakyResult = checkMockIsolation([leakyMock]);
@@ -133,39 +141,42 @@ describe('mock-lifecycle behavior', () => {
         const cleanResult = checkMockIsolation([{ action: createMockFn() }]);
         expect(cleanResult.isolated).toBe(true);
 
-        const createdMocks = [];
+        const createdMocks: IsolatedMock[] = [];
         const wrapped = withMockIsolation(
-            async (mock, value) => {
+            async (mock: IsolatedMock, value: string) => {
                 mock.action(value);
                 mock.action.mockClear();
                 return `${mock._mockType}:${value}`;
             },
             [() => {
-                const mock = {
+                const mock: IsolatedMock = {
                     _mockType: 'isolated',
-                    action: createMockFn()
+                    action: createMockFn<[string], unknown>()
                 };
                 createdMocks.push(mock);
                 return mock;
-            }]
+            }] as const
         );
 
         const outcome = await wrapped('payload');
         expect(outcome).toBe('isolated:payload');
-        expect(createdMocks[0].action.mock.calls).toHaveLength(0);
+        expect(createdMocks[0]?.action.mock.calls).toHaveLength(0);
     });
 
     it('caches and reuses mocks with configurable cache reset semantics', () => {
         const cache = new MockReuseCache();
-        const first = cache.getOrCreate('dispatcher', () => createDispatcherMock());
+        const dispatcherKey = createMockReuseKey<DispatcherMock>('dispatcher');
+        const oneUseKey = createMockReuseKey<DispatcherMock>('one-use');
+
+        const first = cache.getOrCreate(dispatcherKey, () => createDispatcherMock());
         first.dispatchFollow('one');
-        const second = cache.getOrCreate('dispatcher', () => createDispatcherMock());
+        const second = cache.getOrCreate(dispatcherKey, () => createDispatcherMock());
 
         expect(second).toBe(first);
         expect(second.dispatchFollow.mock.calls).toHaveLength(0);
 
-        const oneUseFirst = cache.getOrCreate('one-use', () => createDispatcherMock(), { maxUses: 1 });
-        const oneUseSecond = cache.getOrCreate('one-use', () => createDispatcherMock(), { maxUses: 1 });
+        const oneUseFirst = cache.getOrCreate(oneUseKey, () => createDispatcherMock(), { maxUses: 1 });
+        const oneUseSecond = cache.getOrCreate(oneUseKey, () => createDispatcherMock(), { maxUses: 1 });
         expect(oneUseSecond).not.toBe(oneUseFirst);
 
         const statsBeforeClear = cache.getStats();
@@ -179,7 +190,7 @@ describe('mock-lifecycle behavior', () => {
     });
 
     it('shares reusable global cache and lifecycle manager instances', () => {
-        const cached = globalMockCache.getOrCreate('global-dispatcher', () => createDispatcherMock());
+        const cached = globalMockCache.getOrCreate(createMockReuseKey<DispatcherMock>('global-dispatcher'), () => createDispatcherMock());
         expect(cached._mockType).toBe('NotificationDispatcher');
 
         globalLifecycleManager.registerMock('global-managed', createDispatcherMock(), { autoValidate: false });

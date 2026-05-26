@@ -1,35 +1,181 @@
-
 import { validateMockContract } from './mock-validation';
 import testClock from './test-clock';
 import { nextTestId } from './test-id';
-import { isMockFunction } from './bun-mock-utils';
+import { isMockFunction, type TestMockFn } from './bun-mock-utils';
+
+type MockObject = object & {
+    _mockType?: string;
+};
+
+type LifecycleOptions = {
+    autoValidate?: boolean;
+    contractName?: string | undefined;
+    autoCleanup?: boolean;
+    reuseStrategy?: string;
+};
+
+type ResolvedLifecycleOptions = {
+    autoValidate: boolean;
+    contractName: string | undefined;
+    autoCleanup: boolean;
+    reuseStrategy: string;
+};
+
+type CleanupOptions = {
+    clearCalls?: boolean;
+    resetImplementations?: boolean;
+    removeFromRegistry?: boolean;
+    validateAfterCleanup?: boolean;
+};
+
+type ResolvedCleanupOptions = {
+    clearCalls: boolean;
+    resetImplementations: boolean;
+    removeFromRegistry: boolean;
+    validateAfterCleanup: boolean;
+};
+
+type AutomatedCleanupOptions = {
+    clearCallsBeforeEach?: boolean;
+    resetImplementationsAfterEach?: boolean;
+    validateAfterCleanup?: boolean;
+    logPerformanceMetrics?: boolean;
+};
+
+type ResolvedAutomatedCleanupOptions = Required<AutomatedCleanupOptions>;
+
+type CleanupHooks = {
+    beforeEach: () => void;
+    afterEach: () => void;
+    afterAll: () => void;
+};
+
+type MockLifecycleEntry = {
+    mock: MockObject;
+    options: ResolvedLifecycleOptions;
+    createdAt: number;
+    lastUsed: number;
+    useCount: number;
+};
+
+type MockStats = {
+    created: number;
+    cleaned: number;
+    used: number;
+};
+
+type PerformanceMetrics = {
+    totalMocksCreated: number;
+    totalCleanupOperations: number;
+    averageCleanupTime: number;
+};
+
+type MemoryEstimate = {
+    totalMocks: number;
+    totalFunctions: number;
+    estimatedBytes: number;
+};
+
+type LifecycleMetrics = PerformanceMetrics & {
+    activeMocks: number;
+    mockStats: Record<string, MockStats>;
+    memoryUsage: MemoryEstimate;
+};
+
+type IsolationResult = {
+    isolated: boolean;
+    issues: string[];
+    warnings: string[];
+    checkedMocks: number;
+};
+
+type MockWithImplementationReader = TestMockFn & {
+    getMockImplementation?: () => unknown;
+};
+
+type MockReuseOptions = {
+    maxUses?: number;
+    clearCallsBetweenUses?: boolean;
+    resetAfterMaxUses?: boolean;
+};
+
+type ResolvedMockReuseOptions = Required<MockReuseOptions>;
+
+type MockReuseStats = {
+    totalCachedMocks: number;
+    totalAccesses: number;
+    averageUsesPerMock: number;
+};
+
+type MockReuseKey<TMock extends object> = string & {
+    readonly __mockReuseValue?: TMock;
+};
+
+type FactoryResults<TFactories extends readonly (() => object)[]> = {
+    -readonly [Index in keyof TFactories]: TFactories[Index] extends () => infer TMock
+        ? TMock extends object
+            ? TMock
+            : never
+        : never;
+};
+
+type ArgsAfterMocks<AllArgs extends unknown[], TMocks extends unknown[]> = AllArgs extends [...TMocks, ...infer Args]
+    ? Args
+    : never;
+
+const isRecord = (value: unknown): value is Record<string, unknown> => {
+    return typeof value === 'object' && value !== null;
+};
+
+const getMockType = (mockObject: object): string | undefined => {
+    if (!isRecord(mockObject)) {
+        return undefined;
+    }
+
+    const mockType = mockObject._mockType;
+    return typeof mockType === 'string' ? mockType : undefined;
+};
+
+const hasImplementationReader = (mockFn: TestMockFn): mockFn is MockWithImplementationReader => {
+    return 'getMockImplementation' in mockFn && typeof mockFn.getMockImplementation === 'function';
+};
+
+const defaultPerformanceMetrics = (): PerformanceMetrics => ({
+    totalMocksCreated: 0,
+    totalCleanupOperations: 0,
+    averageCleanupTime: 0
+});
+
+const createMockReuseKey = <TMock extends object>(cacheKey: string): MockReuseKey<TMock> => {
+    return cacheKey as MockReuseKey<TMock>;
+};
 
 // ================================================================================================
 // MOCK LIFECYCLE MANAGER
 // ================================================================================================
 
 class MockLifecycleManager {
+    private activeMocks: Map<string, MockLifecycleEntry>;
+    private mockStats: Map<string, MockStats>;
+    private cleanupCallbacks: Array<() => void>;
+    private performanceMetrics: PerformanceMetrics;
+
     constructor() {
         this.activeMocks = new Map();
         this.mockStats = new Map();
         this.cleanupCallbacks = [];
-        this.performanceMetrics = {
-            totalMocksCreated: 0,
-            totalCleanupOperations: 0,
-            averageCleanupTime: 0
-        };
+        this.performanceMetrics = defaultPerformanceMetrics();
     }
 
-    registerMock(mockId, mockObject, options = {}) {
-        const defaultOptions = {
+    registerMock<TMock extends object>(mockId: string, mockObject: TMock, options: LifecycleOptions = {}): TMock {
+        const defaultOptions: ResolvedLifecycleOptions = {
             autoValidate: true,
-            contractName: mockObject._mockType,
+            contractName: getMockType(mockObject),
             autoCleanup: true,
-            reuseStrategy: 'none', // 'none', 'test', 'suite'
+            reuseStrategy: 'none',
             ...options
         };
 
-        // Validate mock if requested
         if (defaultOptions.autoValidate && defaultOptions.contractName) {
             const validation = validateMockContract(mockObject, defaultOptions.contractName);
             if (!validation.success) {
@@ -37,7 +183,6 @@ class MockLifecycleManager {
             }
         }
 
-        // Register mock with metadata
         this.activeMocks.set(mockId, {
             mock: mockObject,
             options: defaultOptions,
@@ -46,26 +191,27 @@ class MockLifecycleManager {
             useCount: 0
         });
 
-        // Update stats
         this.performanceMetrics.totalMocksCreated++;
         this._updateMockStats(mockId, 'created');
 
         return mockObject;
     }
 
-    getMock(mockId) {
+    getMock<TMock extends object = MockObject>(mockId: string): TMock | null {
         const mockData = this.activeMocks.get(mockId);
-        if (mockData) {
-            mockData.lastUsed = testClock.now();
-            mockData.useCount++;
-            return mockData.mock;
+        if (!mockData) {
+            return null;
         }
-        return null;
+
+        mockData.lastUsed = testClock.now();
+        mockData.useCount++;
+        this._updateMockStats(mockId, 'used');
+        return mockData.mock as TMock;
     }
 
-    cleanup(mockId = null, cleanupOptions = {}) {
+    cleanup(mockId: string | null = null, cleanupOptions: CleanupOptions = {}): void {
         const startTime = testClock.now();
-        const defaultCleanupOptions = {
+        const defaultCleanupOptions: ResolvedCleanupOptions = {
             clearCalls: true,
             resetImplementations: false,
             removeFromRegistry: false,
@@ -79,29 +225,27 @@ class MockLifecycleManager {
             this._cleanupAllMocks(defaultCleanupOptions);
         }
 
-        // Update performance metrics
         const cleanupTime = testClock.now() - startTime;
         this.performanceMetrics.totalCleanupOperations++;
         this._updateAverageCleanupTime(cleanupTime);
     }
 
-    _cleanupSingleMock(mockId, options) {
+    _cleanupSingleMock(mockId: string, options: ResolvedCleanupOptions): void {
         const mockData = this.activeMocks.get(mockId);
-        if (!mockData) return;
+        if (!mockData) {
+            return;
+        }
 
         const { mock } = mockData;
 
-        // Clear mock call history
         if (options.clearCalls) {
             this._clearMockCalls(mock);
         }
 
-        // Reset mock implementations
         if (options.resetImplementations) {
             this._resetMockImplementations(mock);
         }
 
-        // Validate mock after cleanup
         if (options.validateAfterCleanup && mockData.options.contractName) {
             const validation = validateMockContract(mock, mockData.options.contractName);
             if (!validation.success) {
@@ -109,7 +253,6 @@ class MockLifecycleManager {
             }
         }
 
-        // Remove from registry if requested
         if (options.removeFromRegistry) {
             this.activeMocks.delete(mockId);
         }
@@ -117,7 +260,7 @@ class MockLifecycleManager {
         this._updateMockStats(mockId, 'cleaned');
     }
 
-    _cleanupAllMocks(options) {
+    _cleanupAllMocks(options: ResolvedCleanupOptions): void {
         for (const mockId of this.activeMocks.keys()) {
             this._cleanupSingleMock(mockId, { ...options, removeFromRegistry: false });
         }
@@ -127,46 +270,55 @@ class MockLifecycleManager {
         }
     }
 
-    _clearMockCalls(mockObject) {
-        Object.keys(mockObject).forEach(key => {
-            if (isMockFunction(mockObject[key])) {
-                mockObject[key].mockClear();
-            }
-        });
-    }
-
-    _resetMockImplementations(mockObject) {
-        Object.keys(mockObject).forEach(key => {
-            if (isMockFunction(mockObject[key])) {
-                mockObject[key].mockReset();
-            }
-        });
-    }
-
-    _updateMockStats(mockId, operation) {
-        if (!this.mockStats.has(mockId)) {
-            this.mockStats.set(mockId, {
-                created: 0,
-                cleaned: 0,
-                used: 0
-            });
+    _clearMockCalls(mockObject: object): void {
+        if (!isRecord(mockObject)) {
+            return;
         }
-        
-        this.mockStats.get(mockId)[operation]++;
+
+        Object.keys(mockObject).forEach((key) => {
+            const value = mockObject[key];
+            if (isMockFunction(value)) {
+                value.mockClear();
+            }
+        });
     }
 
-    _updateAverageCleanupTime(cleanupTime) {
+    _resetMockImplementations(mockObject: object): void {
+        if (!isRecord(mockObject)) {
+            return;
+        }
+
+        Object.keys(mockObject).forEach((key) => {
+            const value = mockObject[key];
+            if (isMockFunction(value)) {
+                value.mockReset();
+            }
+        });
+    }
+
+    _updateMockStats(mockId: string, operation: keyof MockStats): void {
+        const stats = this.mockStats.get(mockId) ?? {
+            created: 0,
+            cleaned: 0,
+            used: 0
+        };
+
+        stats[operation]++;
+        this.mockStats.set(mockId, stats);
+    }
+
+    _updateAverageCleanupTime(cleanupTime: number): void {
         const { totalCleanupOperations, averageCleanupTime } = this.performanceMetrics;
-        this.performanceMetrics.averageCleanupTime = 
+        this.performanceMetrics.averageCleanupTime =
             ((averageCleanupTime * (totalCleanupOperations - 1)) + cleanupTime) / totalCleanupOperations;
     }
 
-    addCleanupCallback(callback) {
+    addCleanupCallback(callback: () => void): void {
         this.cleanupCallbacks.push(callback);
     }
 
-    executeCleanupCallbacks() {
-        this.cleanupCallbacks.forEach(callback => {
+    executeCleanupCallbacks(): void {
+        this.cleanupCallbacks.forEach((callback) => {
             try {
                 callback();
             } catch (error) {
@@ -175,7 +327,7 @@ class MockLifecycleManager {
         });
     }
 
-    getPerformanceMetrics() {
+    getPerformanceMetrics(): LifecycleMetrics {
         return {
             ...this.performanceMetrics,
             activeMocks: this.activeMocks.size,
@@ -184,14 +336,19 @@ class MockLifecycleManager {
         };
     }
 
-    _estimateMemoryUsage() {
+    _estimateMemoryUsage(): MemoryEstimate {
         let totalMocks = 0;
         let totalFunctions = 0;
 
-        this.activeMocks.forEach(mockData => {
+        this.activeMocks.forEach((mockData) => {
             totalMocks++;
-            Object.keys(mockData.mock).forEach(key => {
-                if (isMockFunction(mockData.mock[key])) {
+            if (!isRecord(mockData.mock)) {
+                return;
+            }
+
+            const mockRecord: Record<string, unknown> = mockData.mock;
+            Object.keys(mockRecord).forEach((key) => {
+                if (isMockFunction(mockRecord[key])) {
                     totalFunctions++;
                 }
             });
@@ -200,19 +357,15 @@ class MockLifecycleManager {
         return {
             totalMocks,
             totalFunctions,
-            estimatedBytes: (totalMocks * 1024) + (totalFunctions * 256) // Rough estimation
+            estimatedBytes: (totalMocks * 1024) + (totalFunctions * 256)
         };
     }
 
-    reset() {
+    reset(): void {
         this.cleanup(null, { removeFromRegistry: true });
         this.mockStats.clear();
         this.cleanupCallbacks = [];
-        this.performanceMetrics = {
-            totalMocksCreated: 0,
-            totalCleanupOperations: 0,
-            averageCleanupTime: 0
-        };
+        this.performanceMetrics = defaultPerformanceMetrics();
     }
 }
 
@@ -226,8 +379,8 @@ const globalLifecycleManager = new MockLifecycleManager();
 // AUTOMATED CLEANUP HOOKS
 // ================================================================================================
 
-const setupAutomatedCleanup = (options = {}) => {
-    const defaultOptions = {
+const setupAutomatedCleanup = (options: AutomatedCleanupOptions = {}): CleanupHooks => {
+    const defaultOptions: ResolvedAutomatedCleanupOptions = {
         clearCallsBeforeEach: true,
         resetImplementationsAfterEach: false,
         validateAfterCleanup: false,
@@ -235,30 +388,28 @@ const setupAutomatedCleanup = (options = {}) => {
         ...options
     };
 
-    // Return cleanup functions that can be called manually in proper test lifecycle
-    const cleanup = {
+    return {
         beforeEach: () => {
             if (defaultOptions.clearCallsBeforeEach) {
-                globalLifecycleManager.cleanup(null, { 
-                    clearCalls: true, 
+                globalLifecycleManager.cleanup(null, {
+                    clearCalls: true,
                     resetImplementations: false,
                     validateAfterCleanup: defaultOptions.validateAfterCleanup
                 });
             }
         },
-        
+
         afterEach: () => {
             if (defaultOptions.resetImplementationsAfterEach) {
-                globalLifecycleManager.cleanup(null, { 
-                    clearCalls: false, 
+                globalLifecycleManager.cleanup(null, {
+                    clearCalls: false,
                     resetImplementations: true,
                     validateAfterCleanup: defaultOptions.validateAfterCleanup
                 });
             }
-            // Execute custom cleanup callbacks
             globalLifecycleManager.executeCleanupCallbacks();
         },
-        
+
         afterAll: () => {
             if (defaultOptions.logPerformanceMetrics) {
                 const metrics = globalLifecycleManager.getPerformanceMetrics();
@@ -266,19 +417,21 @@ const setupAutomatedCleanup = (options = {}) => {
             }
         }
     };
-
-    return cleanup;
 };
 
 // ================================================================================================
 // CONVENIENT FACTORY INTEGRATION
 // ================================================================================================
 
-const withLifecycleManagement = (factoryFunction, mockType, lifecycleOptions = {}) => {
-    return (...args) => {
+const withLifecycleManagement = <Args extends unknown[], TMock extends object>(
+    factoryFunction: (...args: Args) => TMock,
+    mockType: string,
+    lifecycleOptions: LifecycleOptions = {}
+) => {
+    return (...args: Args): TMock => {
         const mockObject = factoryFunction(...args);
         const mockId = nextTestId(mockType);
-        
+
         return globalLifecycleManager.registerMock(mockId, mockObject, {
             contractName: mockType,
             ...lifecycleOptions
@@ -286,7 +439,7 @@ const withLifecycleManagement = (factoryFunction, mockType, lifecycleOptions = {
     };
 };
 
-const createManagedMock = (mockObject, options = {}) => {
+const createManagedMock = <TMock extends object>(mockObject: TMock, options: LifecycleOptions = {}): TMock => {
     const mockId = nextTestId('managed');
     return globalLifecycleManager.registerMock(mockId, mockObject, options);
 };
@@ -295,24 +448,27 @@ const createManagedMock = (mockObject, options = {}) => {
 // MOCK ISOLATION UTILITIES
 // ================================================================================================
 
-const checkMockIsolation = (mocksToCheck) => {
-    const issues = [];
-    const warnings = [];
+const checkMockIsolation = (mocksToCheck: object[]): IsolationResult => {
+    const issues: string[] = [];
+    const warnings: string[] = [];
 
     mocksToCheck.forEach((mock, index) => {
-        Object.keys(mock).forEach(key => {
-            if (isMockFunction(mock[key])) {
-                const mockFn = mock[key];
-                
-                // Check for unexpected call history
-                if (mockFn.mock.calls.length > 0) {
-                    issues.push(`Mock ${index}.${key} has ${mockFn.mock.calls.length} residual calls`);
-                }
+        if (!isRecord(mock)) {
+            return;
+        }
 
-                // Check for custom implementations that might leak state
-                if (mockFn.getMockImplementation && mockFn.getMockImplementation()) {
-                    warnings.push(`Mock ${index}.${key} has custom implementation that may retain state`);
-                }
+        Object.keys(mock).forEach((key) => {
+            const mockFn = mock[key];
+            if (!isMockFunction(mockFn)) {
+                return;
+            }
+
+            if (mockFn.mock.calls.length > 0) {
+                issues.push(`Mock ${index}.${key} has ${mockFn.mock.calls.length} residual calls`);
+            }
+
+            if (hasImplementationReader(mockFn) && mockFn.getMockImplementation?.()) {
+                warnings.push(`Mock ${index}.${key} has custom implementation that may retain state`);
             }
         });
     });
@@ -325,45 +481,73 @@ const checkMockIsolation = (mocksToCheck) => {
     };
 };
 
-const withMockIsolation = (testFunction, mockFactories = []) => {
-    return async (...args) => {
-        // Create fresh mocks for this test
-        const freshMocks = mockFactories.map(factory => factory());
-        
-        // Execute test with fresh mocks
+function withMockIsolation<
+    const TFactories extends readonly (() => object)[],
+    AllArgs extends [...FactoryResults<TFactories>, ...unknown[]],
+    Result
+>(
+    testFunction: (...args: AllArgs) => Result | Promise<Result>,
+    mockFactories: TFactories
+): (...args: ArgsAfterMocks<AllArgs, FactoryResults<TFactories>>) => Promise<Awaited<Result>>;
+function withMockIsolation<Args extends unknown[], Result>(
+    testFunction: (...args: Args) => Result | Promise<Result>,
+    mockFactories?: Array<() => object>
+): (...args: Args) => Promise<Awaited<Result>>;
+function withMockIsolation(
+    testFunction: (...args: unknown[]) => unknown,
+    mockFactories: Array<() => object> = []
+) {
+    return async (...args: unknown[]) => {
+        const freshMocks = mockFactories.map((factory) => factory());
+
         try {
             const result = await testFunction(...freshMocks, ...args);
-            
-            // Verify isolation after test
+
             const isolationCheck = checkMockIsolation(freshMocks);
             if (!isolationCheck.isolated) {
                 console.warn('Mock isolation issues detected:', isolationCheck.issues);
             }
-            
+
             return result;
         } finally {
-            // Clean up fresh mocks
-            freshMocks.forEach(mock => {
-                if (mock._mockType) {
+            freshMocks.forEach((mock) => {
+                if (getMockType(mock)) {
                     globalLifecycleManager._clearMockCalls(mock);
                 }
             });
         }
     };
-};
+}
 
 // ================================================================================================
 // PERFORMANCE OPTIMIZATION
 // ================================================================================================
 
 class MockReuseCache {
+    private cache: Map<string, object>;
+    private accessCount: Map<string, number>;
+
     constructor() {
         this.cache = new Map();
         this.accessCount = new Map();
     }
 
-    getOrCreate(cacheKey, factoryFunction, reuseOptions = {}) {
-        const defaultReuseOptions = {
+    getOrCreate<TMock extends object>(
+        cacheKey: MockReuseKey<TMock>,
+        factoryFunction: () => TMock,
+        reuseOptions?: MockReuseOptions
+    ): TMock;
+    getOrCreate(
+        cacheKey: string,
+        factoryFunction: () => object,
+        reuseOptions?: MockReuseOptions
+    ): object;
+    getOrCreate(
+        cacheKey: string,
+        factoryFunction: () => object,
+        reuseOptions: MockReuseOptions = {}
+    ): object {
+        const defaultReuseOptions: ResolvedMockReuseOptions = {
             maxUses: 100,
             clearCallsBetweenUses: true,
             resetAfterMaxUses: true,
@@ -372,16 +556,19 @@ class MockReuseCache {
 
         if (this.cache.has(cacheKey)) {
             const cachedMock = this.cache.get(cacheKey);
-            const accessCount = this.accessCount.get(cacheKey) || 0;
+            const accessCount = this.accessCount.get(cacheKey) ?? 0;
 
-            // Check if we've exceeded max uses
+            if (!cachedMock) {
+                this.accessCount.delete(cacheKey);
+                return this.getOrCreate(cacheKey, factoryFunction, reuseOptions);
+            }
+
             if (accessCount >= defaultReuseOptions.maxUses && defaultReuseOptions.resetAfterMaxUses) {
                 this.cache.delete(cacheKey);
                 this.accessCount.delete(cacheKey);
                 return this.getOrCreate(cacheKey, factoryFunction, reuseOptions);
             }
 
-            // Clear calls if requested
             if (defaultReuseOptions.clearCallsBetweenUses) {
                 globalLifecycleManager._clearMockCalls(cachedMock);
             }
@@ -390,24 +577,24 @@ class MockReuseCache {
             return cachedMock;
         }
 
-        // Create new mock and cache it
         const newMock = factoryFunction();
         this.cache.set(cacheKey, newMock);
         this.accessCount.set(cacheKey, 1);
         return newMock;
     }
 
-    clear() {
+    clear(): void {
         this.cache.clear();
         this.accessCount.clear();
     }
 
-    getStats() {
+    getStats(): MockReuseStats {
+        const totalAccesses = Array.from(this.accessCount.values()).reduce((sum, count) => sum + count, 0);
+
         return {
             totalCachedMocks: this.cache.size,
-            totalAccesses: Array.from(this.accessCount.values()).reduce((sum, count) => sum + count, 0),
-            averageUsesPerMock: this.cache.size > 0 ? 
-                Array.from(this.accessCount.values()).reduce((sum, count) => sum + count, 0) / this.cache.size : 0
+            totalAccesses,
+            averageUsesPerMock: this.cache.size > 0 ? totalAccesses / this.cache.size : 0
         };
     }
 }
@@ -419,22 +606,30 @@ const globalMockCache = new MockReuseCache();
 // ================================================================================================
 
 export {
+    type LifecycleOptions,
+    type CleanupOptions,
+    type LifecycleMetrics,
+    type IsolationResult,
+    type MockReuseOptions,
+    type MockReuseKey,
+
     // Core lifecycle management
     MockLifecycleManager,
     globalLifecycleManager,
-    
+
     // Automated setup
     setupAutomatedCleanup,
-    
+
     // Factory integration
     withLifecycleManagement,
     createManagedMock,
-    
+
     // Test isolation
     checkMockIsolation,
     withMockIsolation,
-    
+
     // Performance optimization
     MockReuseCache,
+    createMockReuseKey,
     globalMockCache
 };
