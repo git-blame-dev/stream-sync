@@ -7,6 +7,26 @@ import * as VFXCommandServiceModule from '../../src/services/VFXCommandService.t
 
 type UnknownRecord = Record<string, unknown>;
 
+function isPreviewRecord(value: unknown): value is UnknownRecord {
+    return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function toPreviewRecord(value: unknown): UnknownRecord {
+    return isPreviewRecord(value) ? value : {};
+}
+
+function getPreviewRecord(record: UnknownRecord, key: string): UnknownRecord {
+    return toPreviewRecord(record[key]);
+}
+
+function getPreviewString(value: unknown): string {
+    return typeof value === 'string' ? value : '';
+}
+
+function getPreviewEventName(value: unknown): string | symbol {
+    return typeof value === 'string' || typeof value === 'symbol' ? value : '';
+}
+
 type PreviewLogFn = (...args: unknown[]) => void;
 
 interface PreviewLogger {
@@ -83,14 +103,21 @@ const { safeSetInterval, safeSetTimeout, safeDelay } = load('../../src/utils/tim
 const { createGuiTransportService } = load('../../src/services/gui/gui-transport-service');
 const { PlatformEventRouter } = load('../../src/services/PlatformEventRouter.ts');
 const { ChatNotificationRouter } = load('../../src/services/ChatNotificationRouter.ts');
+type PreviewNotificationManager = {
+    handleNotification: (type: string, platform: string, payload: UnknownRecord) => Promise<unknown>;
+};
+
+type NotificationManagerCtor = new (...args: unknown[]) => PreviewNotificationManager;
+
 const NotificationManagerModule = load('../../src/notifications/NotificationManager') as {
-    default?: new (...args: unknown[]) => unknown;
-    NotificationManager?: new (...args: unknown[]) => unknown;
+    default?: NotificationManagerCtor;
+    NotificationManager?: NotificationManagerCtor;
 };
 const NotificationManager = NotificationManagerModule.default || NotificationManagerModule.NotificationManager;
 if (typeof NotificationManager !== 'function') {
     throw new Error('gui-preview requires NotificationManager constructor export');
 }
+const NotificationManagerClass: NotificationManagerCtor = NotificationManager;
 const { DisplayQueue } = load('../../src/obs/display-queue');
 const { createTikTokGiftAnimationResolver } = load('../../src/services/tiktok-gift-animation/resolver');
 const { createYouTubeEventRouter } = load('../../src/platforms/youtube/events/event-router');
@@ -102,6 +129,42 @@ type PreviewAdapter = 'twitch' | 'youtube' | 'tiktok';
 interface PreviewScenarioStep {
     type: string;
     adapter: PreviewAdapter;
+}
+
+interface PreviewPlatformAccount {
+    platform: PreviewAdapter;
+    username: string;
+    userId: string;
+}
+
+interface PreviewMediaBadge {
+    imageUrl: string;
+    source: PreviewAdapter;
+    label: string;
+}
+
+interface PreviewMediaEmote {
+    id: string;
+    imageUrl: string;
+}
+
+interface PreviewMediaGift {
+    name: string;
+    giftId: string;
+    primaryEffectId: string;
+    imageUrl: string;
+    unitAmount: number;
+    animation: {
+        resourceModelUrl: string;
+        videoResources: readonly UnknownRecord[];
+    };
+}
+
+interface PreviewMedia {
+    avatarUrl: string;
+    badges: readonly PreviewMediaBadge[];
+    emote: PreviewMediaEmote;
+    gift?: PreviewMediaGift;
 }
 
 interface PreviewScenarioEvent {
@@ -157,9 +220,7 @@ interface CreatePreviewPipelineOptions {
         isFirstMessage?: (userId: unknown, context: unknown) => unknown;
     };
     vfxCommandService?: unknown;
-    notificationManager?: {
-        handleNotification?: (type: string, platform: string, payload: UnknownRecord) => Promise<UnknownRecord>;
-    };
+    notificationManager?: PreviewNotificationManager;
     platformLifecycleService?: {
         getPlatformConnectionTime?: (platform?: string) => unknown;
     };
@@ -173,9 +234,7 @@ interface CreatePreviewRuntimeOptions {
     config: UnknownRecord;
     logger: PreviewLogger;
     displayQueue: unknown;
-    notificationManager: {
-        handleNotification: (type: string, platform: string, payload: UnknownRecord) => Promise<unknown>;
-    };
+    notificationManager: PreviewNotificationManager;
     commandCooldownService: {
         dispose?: () => void;
     };
@@ -192,9 +251,7 @@ interface PreviewRuntime {
     config: UnknownRecord;
     logger: PreviewLogger;
     displayQueue: unknown;
-    notificationManager: {
-        handleNotification: (type: string, platform: string, payload: UnknownRecord) => Promise<unknown>;
-    };
+    notificationManager: PreviewNotificationManager;
     commandCooldownService: {
         dispose?: () => void;
     };
@@ -264,7 +321,7 @@ const PREVIEW_INTERVAL_MS = 2000;
 
 const PREVIEW_AVATAR_URL = DEFAULT_AVATAR_URL;
 const PREVIEW_MESSAGE_TEXT = 'test message hello world this is a message to everyone how are we today?';
-const PREVIEW_MEDIA_CATALOG: Record<PreviewAdapter, UnknownRecord> = {
+const PREVIEW_MEDIA_CATALOG: Record<PreviewAdapter, PreviewMedia> = {
     twitch: {
         avatarUrl: PREVIEW_AVATAR_URL,
         badges: [
@@ -360,7 +417,7 @@ const PREVIEW_MEDIA_CATALOG: Record<PreviewAdapter, UnknownRecord> = {
     }
 };
 
-const PREVIEW_SCENARIO_TEMPLATE = [
+const PREVIEW_SCENARIO_TEMPLATE: readonly PreviewScenarioStep[] = [
     { type: 'chat-hi', adapter: 'twitch' },
     { type: 'gift', adapter: 'tiktok' },
     { type: 'chat-hello', adapter: 'youtube' },
@@ -379,7 +436,7 @@ const PREVIEW_SCENARIO_TEMPLATE = [
     { type: 'envelope', adapter: 'tiktok' }
 ];
 
-const PREVIEW_PLATFORM_ACCOUNTS = [
+const PREVIEW_PLATFORM_ACCOUNTS: readonly [PreviewPlatformAccount, ...PreviewPlatformAccount[]] = [
     {
         platform: 'twitch',
         username: 'test-twitch-account',
@@ -438,8 +495,8 @@ function mergeSection(
 }
 
 function buildPreviewConfig(baseConfig: UnknownRecord = {}): UnknownRecord {
-    const sourceConfig = configModule.config || {};
-    const overrideConfig = baseConfig || {};
+    const sourceConfig = toPreviewRecord(configModule.config);
+    const overrideConfig = toPreviewRecord(baseConfig);
 
     const merged = {
         ...sourceConfig,
@@ -456,7 +513,16 @@ function buildPreviewConfig(baseConfig: UnknownRecord = {}): UnknownRecord {
         return '';
     };
 
-    merged.general = mergeSection(sourceConfig.general, overrideConfig.general, {
+    const sourceGeneral = getPreviewRecord(sourceConfig, 'general');
+    const overrideGeneral = getPreviewRecord(overrideConfig, 'general');
+    const sourceCooldowns = getPreviewRecord(sourceConfig, 'cooldowns');
+    const overrideCooldowns = getPreviewRecord(overrideConfig, 'cooldowns');
+    const sourceFarewell = getPreviewRecord(sourceConfig, 'farewell');
+    const overrideFarewell = getPreviewRecord(overrideConfig, 'farewell');
+    const sourceCommands = getPreviewRecord(sourceConfig, 'commands');
+    const overrideCommands = getPreviewRecord(overrideConfig, 'commands');
+
+    merged.general = mergeSection(sourceGeneral, overrideGeneral, {
         messagesEnabled: true,
         commandsEnabled: true,
         greetingsEnabled: true,
@@ -483,14 +549,14 @@ function buildPreviewConfig(baseConfig: UnknownRecord = {}): UnknownRecord {
         paypiggiesEnabled: true
     };
 
-    merged.twitch = mergeSection(sourceConfig.twitch, overrideConfig.twitch, platformFlags);
-    merged.youtube = mergeSection(sourceConfig.youtube, overrideConfig.youtube, platformFlags);
-    merged.tiktok = mergeSection(sourceConfig.tiktok, overrideConfig.tiktok, {
+    merged.twitch = mergeSection(getPreviewRecord(sourceConfig, 'twitch'), getPreviewRecord(overrideConfig, 'twitch'), platformFlags);
+    merged.youtube = mergeSection(getPreviewRecord(sourceConfig, 'youtube'), getPreviewRecord(overrideConfig, 'youtube'), platformFlags);
+    merged.tiktok = mergeSection(getPreviewRecord(sourceConfig, 'tiktok'), getPreviewRecord(overrideConfig, 'tiktok'), {
         ...platformFlags,
         sharesEnabled: true
     });
 
-    merged.gui = mergeSection(sourceConfig.gui, overrideConfig.gui, {
+    merged.gui = mergeSection(getPreviewRecord(sourceConfig, 'gui'), getPreviewRecord(overrideConfig, 'gui'), {
         enableDock: true,
         enableOverlay: true,
         uiCompareMode: true,
@@ -507,27 +573,25 @@ function buildPreviewConfig(baseConfig: UnknownRecord = {}): UnknownRecord {
         showEnvelopes: true
     });
 
-    merged.chat = mergeSection(sourceConfig.chat, overrideConfig.chat, {
+    merged.chat = mergeSection(getPreviewRecord(sourceConfig, 'chat'), getPreviewRecord(overrideConfig, 'chat'), {
         sourceName: 'preview-chat-source',
         sceneName: 'preview-chat-scene',
         groupName: null,
         platformLogos: {}
     });
 
-    merged.notification = mergeSection(sourceConfig.notification, overrideConfig.notification, {
+    merged.notification = mergeSection(getPreviewRecord(sourceConfig, 'notification'), getPreviewRecord(overrideConfig, 'notification'), {
         sourceName: 'preview-notification-source',
         sceneName: 'preview-notification-scene',
         groupName: null,
         platformLogos: {}
     });
 
-    merged.gifts = mergeSection(sourceConfig.gifts, overrideConfig.gifts, {
+    merged.gifts = mergeSection(getPreviewRecord(sourceConfig, 'gifts'), getPreviewRecord(overrideConfig, 'gifts'), {
         giftVideoSource: 'preview-gift-video',
         giftAudioSource: 'preview-gift-audio'
     });
 
-    const sourceCooldowns = sourceConfig.cooldowns || {};
-    const overrideCooldowns = overrideConfig.cooldowns || {};
     merged.cooldowns = {
         ...sourceCooldowns,
         ...overrideCooldowns,
@@ -543,25 +607,25 @@ function buildPreviewConfig(baseConfig: UnknownRecord = {}): UnknownRecord {
         maxEntries: overrideCooldowns.maxEntries ?? sourceCooldowns.maxEntries ?? 1000
     };
 
-    merged.farewell = mergeSection(sourceConfig.farewell, overrideConfig.farewell, {
-        timeout: overrideConfig?.farewell?.timeout ?? sourceConfig?.farewell?.timeout ?? 1,
-        command: resolveNonEmptyString(overrideConfig?.farewell?.command, sourceConfig?.farewell?.command) || '!bye'
+    merged.farewell = mergeSection(sourceFarewell, overrideFarewell, {
+        timeout: overrideFarewell.timeout ?? sourceFarewell.timeout ?? 1,
+        command: resolveNonEmptyString(overrideFarewell.command, sourceFarewell.command) || '!bye'
     });
 
-    merged.displayQueue = mergeSection(sourceConfig.displayQueue, overrideConfig.displayQueue, {
+    merged.displayQueue = mergeSection(getPreviewRecord(sourceConfig, 'displayQueue'), getPreviewRecord(overrideConfig, 'displayQueue'), {
         autoProcess: true
     });
 
-    merged.timing = mergeSection(sourceConfig.timing, overrideConfig.timing, {
+    merged.timing = mergeSection(getPreviewRecord(sourceConfig, 'timing'), getPreviewRecord(overrideConfig, 'timing'), {
         transitionDelay: 120,
         notificationClearDelay: 0,
         commentDuration: 1500
     });
 
     merged.commands = {
-        ...(sourceConfig.commands || {}),
-        ...(overrideConfig.commands || {}),
-        preview: resolveNonEmptyString(overrideConfig?.commands?.preview, sourceConfig?.commands?.preview)
+        ...sourceCommands,
+        ...overrideCommands,
+        preview: resolveNonEmptyString(overrideCommands.preview, sourceCommands.preview)
             || '!preview,Preview Media,1000'
     };
 
@@ -575,15 +639,19 @@ function buildPreviewScenarioEvents(
     const eventCount = Math.floor(durationMs / intervalMs);
     const events: PreviewScenarioEvent[] = [];
 
-    const getAccount = (platform: PreviewAdapter): UnknownRecord => PREVIEW_PLATFORM_ACCOUNTS.find((entry) => entry.platform === platform) || PREVIEW_PLATFORM_ACCOUNTS[0];
+    const getAccount = (platform: PreviewAdapter): PreviewPlatformAccount => PREVIEW_PLATFORM_ACCOUNTS.find((entry) => entry.platform === platform) || PREVIEW_PLATFORM_ACCOUNTS[0];
     const firstPrimaryChatByPlatform = new Set();
 
     for (let index = 0; index < eventCount; index += 1) {
-        const scenarioStep = PREVIEW_SCENARIO_TEMPLATE[index % PREVIEW_SCENARIO_TEMPLATE.length] as PreviewScenarioStep;
+        const scenarioStep = PREVIEW_SCENARIO_TEMPLATE[index % PREVIEW_SCENARIO_TEMPLATE.length];
+        if (!scenarioStep) {
+            throw new Error(`Missing preview scenario step for index ${index}`);
+        }
         const scenarioType = scenarioStep.type;
         const adapter = scenarioStep.adapter;
         const account = getAccount(adapter);
-        const media = PREVIEW_MEDIA_CATALOG[adapter] || { avatarUrl: PREVIEW_AVATAR_URL, emote: null };
+        const media = PREVIEW_MEDIA_CATALOG[adapter];
+        const gift = media.gift;
         const timestamp = new Date(Date.UTC(2024, 0, 1, 0, 0, index)).toISOString();
         const username = `${account.username}-${index}`;
         const userId = `${account.userId}-${index}`;
@@ -633,7 +701,7 @@ function buildPreviewScenarioEvents(
                                             type: 'emote',
                                             text: ':preview1:',
                                             emote: {
-                                                id: media.emote?.id || 'emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7',
+                                                id: media.emote.id || 'emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7',
                                                 emote_set_id: 'preview'
                                             }
                                         },
@@ -642,7 +710,7 @@ function buildPreviewScenarioEvents(
                                             type: 'emote',
                                             text: ':preview2:',
                                             emote: {
-                                                id: media.emote?.id || 'emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7',
+                                                id: media.emote.id || 'emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7',
                                                 emote_set_id: 'preview'
                                             }
                                         },
@@ -651,7 +719,7 @@ function buildPreviewScenarioEvents(
                                             type: 'emote',
                                             text: ':preview3:',
                                             emote: {
-                                                id: media.emote?.id || 'emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7',
+                                                id: media.emote.id || 'emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7',
                                                 emote_set_id: 'preview'
                                             }
                                         },
@@ -736,8 +804,8 @@ function buildPreviewScenarioEvents(
                                 ? [
                                     {
                                         type: 'emote',
-                                        imageUrl: media.emote?.imageUrl,
-                                        emoteId: `${media.emote?.id || 'yt-preview-emote'}-1`
+                                        imageUrl: media.emote.imageUrl,
+                                        emoteId: `${media.emote.id || 'yt-preview-emote'}-1`
                                     },
                                     {
                                         type: 'text',
@@ -745,8 +813,8 @@ function buildPreviewScenarioEvents(
                                     },
                                     {
                                         type: 'emote',
-                                        imageUrl: media.emote?.imageUrl,
-                                        emoteId: `${media.emote?.id || 'yt-preview-emote'}-2`
+                                        imageUrl: media.emote.imageUrl,
+                                        emoteId: `${media.emote.id || 'yt-preview-emote'}-2`
                                     },
                                     {
                                         type: 'text',
@@ -754,8 +822,8 @@ function buildPreviewScenarioEvents(
                                     },
                                     {
                                         type: 'emote',
-                                        imageUrl: media.emote?.imageUrl,
-                                        emoteId: `${media.emote?.id || 'yt-preview-emote'}-3`
+                                        imageUrl: media.emote.imageUrl,
+                                        emoteId: `${media.emote.id || 'yt-preview-emote'}-3`
                                     },
                                     {
                                         type: 'text',
@@ -793,27 +861,27 @@ function buildPreviewScenarioEvents(
                 {
                     placeInComment: 5,
                     emote: {
-                        emoteId: media.emote?.id || '0123456789012345678',
+                        emoteId: media.emote.id || '0123456789012345678',
                         image: {
-                            imageUrl: media.emote?.imageUrl
+                            imageUrl: media.emote.imageUrl
                         }
                     }
                 },
                 {
                     placeInComment: 17,
                     emote: {
-                        emoteId: media.emote?.id || '0123456789012345678',
+                        emoteId: media.emote.id || '0123456789012345678',
                         image: {
-                            imageUrl: media.emote?.imageUrl
+                            imageUrl: media.emote.imageUrl
                         }
                     }
                 },
                 {
                     placeInComment: 33,
                     emote: {
-                        emoteId: media.emote?.id || '0123456789012345678',
+                        emoteId: media.emote.id || '0123456789012345678',
                         image: {
-                            imageUrl: media.emote?.imageUrl
+                            imageUrl: media.emote.imageUrl
                         }
                     }
                 }
@@ -843,30 +911,30 @@ function buildPreviewScenarioEvents(
                     },
                     emotes: tiktokEmotes,
                     displayType: scenarioType === 'share' ? 'share' : undefined,
-                    giftName: media?.gift?.name || 'Rose',
+                    giftName: gift?.name || 'Rose',
                     repeatCount: scenarioType === 'gift' ? 1 : 5,
                     diamondCount: scenarioType === 'gift'
-                        ? Number(media?.gift?.unitAmount || 10)
+                        ? Number(gift?.unitAmount || 10)
                         : 10,
-                    ...(scenarioType === 'gift' && media?.gift?.imageUrl
+                    ...(scenarioType === 'gift' && gift?.imageUrl
                         ? {
                             gift: {
-                                giftPictureUrl: media.gift.imageUrl
+                                giftPictureUrl: gift.imageUrl
                             },
                             giftDetails: {
-                                id: media.gift.giftId,
-                                giftName: media.gift.name,
-                                diamondCount: Number(media.gift.unitAmount || 10),
-                                primaryEffectId: media.gift.primaryEffectId,
+                                id: gift.giftId,
+                                giftName: gift.name,
+                                diamondCount: Number(gift.unitAmount || 10),
+                                primaryEffectId: gift.primaryEffectId,
                                 giftImage: {
-                                    url: [media.gift.imageUrl]
+                                    url: [gift.imageUrl]
                                 }
                             },
                             asset: {
                                 resourceModel: {
-                                    urlList: [media.gift.animation.resourceModelUrl]
+                                    urlList: [gift.animation.resourceModelUrl]
                                 },
-                                videoResourceList: media.gift.animation.videoResources
+                                videoResourceList: gift.animation.videoResources
                             }
                         }
                         : {}),
@@ -910,25 +978,31 @@ function createPreviewIngestAdapters(
         logger: resolvedLogger,
         emit(eventName: string, payload: UnknownRecord) {
             if (eventName === 'chatMessage') {
-                const messageText = payload?.message?.text || payload?.message || '';
-                const messageParts = Array.isArray(payload?.message?.fragments)
-                    ? payload.message.fragments
-                        .map((fragment: UnknownRecord | null) => {
-                            if (!fragment || typeof fragment !== 'object') {
+                const message = payload.message;
+                const messageRecord = toPreviewRecord(message);
+                const metadataRecord = getPreviewRecord(payload, 'metadata');
+                const messageText = getPreviewString(messageRecord.text) || getPreviewString(message);
+                const messageParts = Array.isArray(messageRecord.fragments)
+                    ? messageRecord.fragments
+                        .map((fragment: unknown) => {
+                            if (!isPreviewRecord(fragment)) {
                                 return null;
                             }
-                            if (fragment.type === 'emote' && fragment?.emote?.id) {
+                            const fragmentRecord = fragment;
+                            const emoteRecord = getPreviewRecord(fragmentRecord, 'emote');
+                            const emoteId = getPreviewString(emoteRecord.id);
+                            if (fragmentRecord.type === 'emote' && emoteId) {
                                 return {
                                     type: 'emote',
                                     platform: 'twitch',
-                                    emoteId: fragment.emote.id,
-                                    imageUrl: `https://static-cdn.jtvnw.net/emoticons/v2/${fragment.emote.id}/animated/dark/3.0`
+                                    emoteId,
+                                    imageUrl: `https://static-cdn.jtvnw.net/emoticons/v2/${emoteId}/animated/dark/3.0`
                                 };
                             }
-                            if (fragment.type === 'text' && typeof fragment.text === 'string') {
+                            if (fragmentRecord.type === 'text' && typeof fragmentRecord.text === 'string') {
                                 return {
                                     type: 'text',
-                                    text: fragment.text
+                                    text: fragmentRecord.text
                                 };
                             }
                             return null;
@@ -939,10 +1013,10 @@ function createPreviewIngestAdapters(
                     username: payload?.username || payload?.user_name,
                     userId: payload?.userId || payload?.user_id,
                     timestamp: payload?.timestamp,
-                    isPaypiggy: payload?.isPaypiggy === true || payload?.metadata?.previewPaypiggy === true,
+                    isPaypiggy: payload?.isPaypiggy === true || metadataRecord.previewPaypiggy === true,
                     isMod: payload?.isMod === true || payload?.is_mod === true,
                     isBroadcaster: payload?.isBroadcaster === true || payload?.is_broadcaster === true,
-                    metadata: payload?.metadata || {},
+                    metadata: metadataRecord,
                     badgeImages: Array.isArray(payload?.badgeImages) ? payload.badgeImages : [],
                     message: messageParts.length > 0
                         ? {
@@ -973,7 +1047,7 @@ function createPreviewIngestAdapters(
         logger: resolvedLogger,
         handleLowPriorityEvent() {},
         handleChatTextMessage(chatItem: UnknownRecord) {
-            const source = chatItem?.testData || {};
+            const source = getPreviewRecord(chatItem, 'testData');
             const messageParts = Array.isArray(source.messageParts)
                 ? source.messageParts.filter((part: unknown) => part && typeof part === 'object')
                 : [];
@@ -992,11 +1066,11 @@ function createPreviewIngestAdapters(
             });
         },
         handleSuperChat(chatItem: UnknownRecord) {
-            const source = chatItem?.testData || {};
+            const source = getPreviewRecord(chatItem, 'testData');
             emitPlatformEvent({ type: PlatformEvents.PAYPIGGY, platform: 'youtube', data: source });
         },
         handleSuperSticker(chatItem: UnknownRecord) {
-            const source = chatItem?.testData || {};
+            const source = getPreviewRecord(chatItem, 'testData');
             emitPlatformEvent({
                 type: PlatformEvents.GIFT,
                 platform: 'youtube',
@@ -1011,11 +1085,11 @@ function createPreviewIngestAdapters(
             });
         },
         handleMembership(chatItem: UnknownRecord) {
-            const source = chatItem?.testData || {};
+            const source = getPreviewRecord(chatItem, 'testData');
             emitPlatformEvent({ type: PlatformEvents.PAYPIGGY, platform: 'youtube', data: source });
         },
         handleGiftMembershipPurchase(chatItem: UnknownRecord) {
-            const source = chatItem?.testData || {};
+            const source = getPreviewRecord(chatItem, 'testData');
             emitPlatformEvent({
                 type: PlatformEvents.GIFTPAYPIGGY,
                 platform: 'youtube',
@@ -1072,11 +1146,13 @@ function createPreviewIngestAdapters(
             emitChatEvent('tiktok', payload);
         },
         handleTikTokGift(data: UnknownRecord) {
-            const sourceUser = data?.user || {};
-            const giftImageUrl = typeof data?.gift?.giftPictureUrl === 'string'
-                ? data.gift.giftPictureUrl
+            const sourceUser = getPreviewRecord(data, 'user');
+            const giftRecord = getPreviewRecord(data, 'gift');
+            const giftDetails = getPreviewRecord(data, 'giftDetails');
+            const giftImageUrl = typeof giftRecord.giftPictureUrl === 'string'
+                ? giftRecord.giftPictureUrl
                 : '';
-            const giftName = data?.giftName || data?.giftDetails?.giftName || 'Rose';
+            const giftName = data.giftName || giftDetails.giftName || 'Rose';
             const repeatCount = Number(data?.repeatCount) || 1;
             const unitAmount = Number(data?.diamondCount) || 10;
             emitPlatformEvent({
@@ -1113,7 +1189,7 @@ function createPreviewIngestAdapters(
             });
         },
         handleTikTokFollow(data: UnknownRecord) {
-            const sourceUser = data?.user || {};
+            const sourceUser = getPreviewRecord(data, 'user');
             emitPlatformEvent({
                 type: PlatformEvents.FOLLOW,
                 platform: 'tiktok',
@@ -1128,7 +1204,7 @@ function createPreviewIngestAdapters(
             if (String(data.displayType || '').toLowerCase() !== 'share') {
                 return;
             }
-            const sourceUser = data?.user || {};
+            const sourceUser = getPreviewRecord(data, 'user');
             emitPlatformEvent({
                 type: PlatformEvents.SHARE,
                 platform: 'tiktok',
@@ -1140,7 +1216,7 @@ function createPreviewIngestAdapters(
             });
         },
         _handleStandardEvent(_eventType: string, data: UnknownRecord, options: UnknownRecord) {
-            const sourceUser = data?.user || {};
+            const sourceUser = getPreviewRecord(data, 'user');
             emitPlatformEvent({
                 type: options.emitType,
                 platform: 'tiktok',
@@ -1162,17 +1238,17 @@ function createPreviewIngestAdapters(
     return {
         twitch: {
             async ingest(rawEvent: UnknownRecord) {
-                twitchRouter.handleNotificationEvent(rawEvent.subscriptionType, rawEvent.event || {}, rawEvent.metadata || {});
+                twitchRouter.handleNotificationEvent(getPreviewString(rawEvent.subscriptionType), toPreviewRecord(rawEvent.event), toPreviewRecord(rawEvent.metadata));
             }
         },
         youtube: {
             async ingest(rawEvent: UnknownRecord) {
-                await youtubeRouter.routeEvent(rawEvent.chatItem, rawEvent.eventType);
+                await youtubeRouter.routeEvent(rawEvent.chatItem, getPreviewString(rawEvent.eventType));
             }
         },
         tiktok: {
             async ingest(rawEvent: UnknownRecord) {
-                tiktokConnection.emit(rawEvent.eventType, rawEvent.data);
+                tiktokConnection.emit(getPreviewEventName(rawEvent.eventType), rawEvent.data);
             }
         }
     };
@@ -1243,7 +1319,7 @@ function createPreviewRuntime(options: CreatePreviewRuntimeOptions) {
 }
 
 function createPreviewPipeline(options: CreatePreviewPipelineOptions = {}): PreviewPipeline {
-    const config = options.config || {};
+    const config = toPreviewRecord(options.config);
     const logger = resolveLogger(options.logger);
     const errorHandler = createGuiPreviewErrorHandler(logger);
     const eventBus = options.eventBus || createEventBus();
@@ -1271,17 +1347,17 @@ function createPreviewPipeline(options: CreatePreviewPipelineOptions = {}): Prev
     const displayQueue = options.displayQueue || new DisplayQueue(
         obsManager,
         {
-            ...(config.displayQueue || {}),
+            ...getPreviewRecord(config, 'displayQueue'),
             autoProcess: true,
             timing: config.timing,
             obs: config.obs,
-            chat: config.chat || {},
-            notification: config.notification || {},
-            gui: config.gui || {},
-            gifts: config.gifts || {},
-            twitch: config.twitch || {},
-            youtube: config.youtube || {},
-            tiktok: config.tiktok || {}
+            chat: getPreviewRecord(config, 'chat'),
+            notification: getPreviewRecord(config, 'notification'),
+            gui: getPreviewRecord(config, 'gui'),
+            gifts: getPreviewRecord(config, 'gifts'),
+            twitch: getPreviewRecord(config, 'twitch'),
+            youtube: getPreviewRecord(config, 'youtube'),
+            tiktok: getPreviewRecord(config, 'tiktok')
         },
         {
             PRIORITY_LEVELS,
@@ -1309,7 +1385,7 @@ function createPreviewPipeline(options: CreatePreviewPipelineOptions = {}): Prev
     };
     const vfxCommandService = options.vfxCommandService || createVFXCommandService(config, eventBus);
 
-    const notificationManager = options.notificationManager || new NotificationManager({
+    const notificationManager = options.notificationManager || new NotificationManagerClass({
         logger,
         constants: {
             PRIORITY_LEVELS,
@@ -1401,6 +1477,9 @@ async function runPreviewScenario(options: RunPreviewScenarioOptions): Promise<R
         }
 
         const event = scenarioEvents[eventIndex];
+        if (!event) {
+            return;
+        }
         const adapter = adapters[event.adapter];
         if (adapter && typeof adapter.ingest === 'function') {
             Promise.resolve(adapter.ingest(event.rawEvent)).catch((error: unknown) => {
@@ -1482,13 +1561,17 @@ async function runGuiPreview(options: RunGuiPreviewOptions = {}): Promise<void> 
     const giftAnimationResolver = options.giftAnimationResolver || createTikTokGiftAnimationResolver({ logger });
 
     try {
-        pipeline = createPreviewPipelineImpl({
+        const previewPipelineOptions: CreatePreviewPipelineOptions = {
             config,
             logger,
-            eventBus: options.eventBus,
             giftAnimationResolver,
             delay
-        });
+        };
+        if (options.eventBus) {
+            previewPipelineOptions.eventBus = options.eventBus;
+        }
+
+        pipeline = createPreviewPipelineImpl(previewPipelineOptions);
 
         if (!pipeline || typeof pipeline.emitIngestEvent !== 'function' || !pipeline.eventBus) {
             throw new Error('Preview pipeline requires eventBus and emitIngestEvent');
@@ -1504,8 +1587,9 @@ async function runGuiPreview(options: RunGuiPreviewOptions = {}): Promise<void> 
 
         await activeService.start();
 
-        const host = config.gui.host;
-        const port = config.gui.port;
+        const guiConfig = getPreviewRecord(config, 'gui');
+        const host = typeof guiConfig.host === 'string' ? guiConfig.host : '127.0.0.1';
+        const port = typeof guiConfig.port === 'number' || typeof guiConfig.port === 'string' ? guiConfig.port : 3000;
         stdout.write(`GUI preview running for ${Math.floor(durationMs / 1000)}s\n`);
         stdout.write(`Dock URL: http://${host}:${port}/dock\n`);
         stdout.write(`TikTok Animation URL: http://${host}:${port}/tiktok-animations\n`);
