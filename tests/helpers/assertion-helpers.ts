@@ -3,10 +3,154 @@
 // NOTIFICATION ASSERTION HELPERS
 // ================================================================================================
 
-import { isMockFunction } from './bun-mock-utils';
+import { isMockFunction, type TestMockFn } from './bun-mock-utils';
 import testClock from './test-clock';
 
-const expectValidNotification = (notification, expectedType, expectedPlatform) => {
+type UnknownRecord = Record<string, unknown>;
+type NotificationType = string;
+type PlatformName = 'youtube' | 'twitch' | 'tiktok';
+type NotificationOrder = 'priority_desc' | 'timestamp_asc' | 'timestamp_desc';
+type Audience = 'user' | 'admin' | 'developer';
+
+type NotificationTimingExpectations = {
+    maxProcessingDelay?: number;
+    timestampTolerance?: number;
+    maxAge?: number;
+};
+
+type YouTubeExpectedOutcome = {
+    notificationType?: string;
+};
+
+type GiftAggregationExpectations = {
+    totalGifts: number;
+    giftType?: string;
+    shouldAggregate?: boolean;
+};
+
+type ObsCommandCounts = {
+    textUpdates: number;
+    effectTriggers: number;
+    sceneChanges: number;
+    filterChanges: number;
+};
+
+type MockFactoryObject = UnknownRecord & {
+    _mockType?: unknown;
+    _validMethods?: unknown;
+};
+
+type MockCallPattern = Record<string, number | { min?: number; max?: number }>;
+type PlatformEventType = 'gift' | 'follow' | 'subscribe' | 'raid' | undefined;
+
+type InternationalTestData = UnknownRecord & {
+    originalUsername?: string;
+    containsEmoji?: boolean;
+    currency?: { symbol?: string };
+    language?: string;
+};
+
+type UserFriendlyErrorOptions = {
+    minLength?: number;
+    allowErrorCodes?: boolean;
+    allowTechnicalTerms?: boolean;
+    requireGuidance?: boolean;
+};
+
+type UserFacingStringRequirements = {
+    minLength?: number;
+    pattern?: RegExp;
+    mustContain?: string | string[];
+    mustNotContain?: string | string[];
+    originalContent?: string;
+    allowDebugPrefixes?: boolean;
+};
+
+type CrossPlatformContentOptions = {
+    allowPlatformSpecificContent?: boolean;
+    allowDebugPrefixes?: boolean;
+};
+
+type GiftNotificationExpectations = {
+    platform?: string;
+    minAmount?: number;
+    allowedCurrencies?: string[];
+    requiredCurrency?: string;
+};
+
+type PlatformBehaviorExpectations = {
+    requiredMethods?: string[];
+    shouldProcessAsync?: boolean;
+    shouldReturnBoolean?: boolean;
+    shouldHandleErrors?: boolean;
+    expectedErrorTypes?: string[];
+    expectedMockType?: string;
+};
+
+type ValidationResult = UnknownRecord & {
+    isValid?: unknown;
+    validationSource?: unknown;
+};
+
+type UnifiedBehaviorOptions = {
+    scenario: string;
+    results: unknown[];
+    expectedOutcome: unknown;
+};
+
+type HttpBehavior = UnknownRecord & {
+    standardHeaders?: Record<string, unknown>;
+    requestTimeout?: unknown;
+    maxRetries?: unknown;
+    category?: unknown;
+    userMessage?: unknown;
+};
+
+type RequestPattern = UnknownRecord & {
+    requestTimeout?: unknown;
+    retryTimeout?: unknown;
+    maxRetries?: unknown;
+    backoffMultiplier?: unknown;
+    actions?: string[];
+    priority?: unknown;
+    queuePosition?: unknown;
+    parsedFields?: string[];
+    builderSource?: unknown;
+    operationSource?: unknown;
+};
+
+type OrderedMockCall = {
+    method: string;
+    callIndex: number;
+    order: number;
+};
+
+const isRecord = (value: unknown): value is UnknownRecord => {
+    return typeof value === 'object' && value !== null;
+};
+
+const hasOwn = (value: UnknownRecord, key: string): boolean => {
+    return Object.prototype.hasOwnProperty.call(value, key);
+};
+
+const getErrorMessage = (error: unknown): string => {
+    return error instanceof Error ? error.message : String(error);
+};
+
+const getStringArray = (value: unknown): string[] => {
+    return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : [];
+};
+
+const requireRecord = (value: unknown, name: string): UnknownRecord => {
+    if (!isRecord(value)) {
+        throw new Error(`${name} must be an object`);
+    }
+
+    return value;
+};
+
+const expectValidNotification = (notification: unknown, expectedType: string, expectedPlatform: string): void => {
+    const notificationRecord = requireRecord(notification, 'Notification');
     // Required fields for all notifications
     const requiredFields = [
         'id', 'type', 'platform', 'username', 'displayMessage',
@@ -15,67 +159,67 @@ const expectValidNotification = (notification, expectedType, expectedPlatform) =
     
     // Check for missing required fields
     requiredFields.forEach(field => {
-        if (!notification.hasOwnProperty(field)) {
+        if (!hasOwn(notificationRecord, field)) {
             throw new Error(`Missing required notification field: ${field}`);
         }
         
-        if (notification[field] === null || notification[field] === undefined) {
+        if (notificationRecord[field] === null || notificationRecord[field] === undefined) {
             throw new Error(`Notification field '${field}' cannot be null or undefined`);
         }
     });
     
     // Validate notification type
-    if (notification.type !== expectedType) {
+    if (notificationRecord.type !== expectedType) {
         throw new Error(
-            `Notification type mismatch. Expected: ${expectedType}, Got: ${notification.type}`
+            `Notification type mismatch. Expected: ${expectedType}, Got: ${notificationRecord.type}`
         );
     }
     
     // Validate platform
-    if (notification.platform !== expectedPlatform) {
+    if (notificationRecord.platform !== expectedPlatform) {
         throw new Error(
-            `Notification platform mismatch. Expected: ${expectedPlatform}, Got: ${notification.platform}`
+            `Notification platform mismatch. Expected: ${expectedPlatform}, Got: ${notificationRecord.platform}`
         );
     }
     
-    if (typeof notification.username !== 'string' || !notification.username.trim()) {
+    if (typeof notificationRecord.username !== 'string' || !notificationRecord.username.trim()) {
         throw new Error('Notification must have a valid username');
     }
     
     // Validate timestamp formats
-    if (typeof notification.processedAt !== 'number') {
+    if (typeof notificationRecord.processedAt !== 'number') {
         throw new Error('processedAt must be a numeric timestamp');
     }
     
-    if (isNaN(Date.parse(notification.timestamp))) {
+    if (typeof notificationRecord.timestamp !== 'string' || isNaN(Date.parse(notificationRecord.timestamp))) {
         throw new Error('timestamp must be a valid ISO date string');
     }
     
     // Platform-specific validations
-    validatePlatformSpecificNotification(notification, expectedType, expectedPlatform);
+    validatePlatformSpecificNotification(notificationRecord, expectedType, expectedPlatform);
     
     // Validate message content is non-empty
-    if (!notification.displayMessage.trim()) {
+    if (typeof notificationRecord.displayMessage !== 'string' || !notificationRecord.displayMessage.trim()) {
         throw new Error('displayMessage cannot be empty');
     }
     
-    if (!notification.ttsMessage.trim()) {
+    if (typeof notificationRecord.ttsMessage !== 'string' || !notificationRecord.ttsMessage.trim()) {
         throw new Error('ttsMessage cannot be empty');
     }
 };
 
-const validatePlatformSpecificNotification = (notification, type, platform) => {
+const validatePlatformSpecificNotification = (notification: UnknownRecord, type: NotificationType, platform: string): void => {
     if (type === 'platform:gift') {
-        if (!notification.hasOwnProperty('giftType')) {
+        if (!hasOwn(notification, 'giftType')) {
             throw new Error('Gift notifications must have giftType field');
         }
-        if (!notification.hasOwnProperty('giftCount')) {
+        if (!hasOwn(notification, 'giftCount')) {
             throw new Error('Gift notifications must have giftCount field');
         }
-        if (!notification.hasOwnProperty('amount')) {
+        if (!hasOwn(notification, 'amount')) {
             throw new Error('Gift notifications must have amount field');
         }
-        if (!notification.hasOwnProperty('currency')) {
+        if (!hasOwn(notification, 'currency')) {
             throw new Error('Gift notifications must have currency field');
         }
         if (typeof notification.giftType !== 'string' || !notification.giftType.trim()) {
@@ -97,13 +241,13 @@ const validatePlatformSpecificNotification = (notification, type, platform) => {
     switch (platform) {
         case 'youtube':
             if (type === 'platform:gift') {
-                if (!notification.hasOwnProperty('giftType')) {
+                if (!hasOwn(notification, 'giftType')) {
                     throw new Error('YouTube gifts must have giftType field');
                 }
-                if (!notification.hasOwnProperty('amount')) {
+                if (!hasOwn(notification, 'amount')) {
                     throw new Error('YouTube gifts must have amount field');
                 }
-                if (!notification.hasOwnProperty('currency')) {
+                if (!hasOwn(notification, 'currency')) {
                     throw new Error('YouTube gifts must have currency field');
                 }
             }
@@ -111,12 +255,12 @@ const validatePlatformSpecificNotification = (notification, type, platform) => {
             
         case 'twitch':
             if (type === 'platform:paypiggy' || type === 'platform:giftpaypiggy') {
-                if (notification.hasOwnProperty('tier') && !['1000', '2000', '3000'].includes(notification.tier)) {
+                if (hasOwn(notification, 'tier') && !['1000', '2000', '3000'].includes(String(notification.tier))) {
                     throw new Error('Twitch paypiggy tier must be 1000, 2000, or 3000');
                 }
             }
             if (type === 'platform:raid') {
-                if (!notification.hasOwnProperty('viewerCount')) {
+                if (!hasOwn(notification, 'viewerCount')) {
                     throw new Error('Twitch raid must have viewerCount field');
                 }
                 if (typeof notification.viewerCount !== 'number' || notification.viewerCount <= 0) {
@@ -127,10 +271,10 @@ const validatePlatformSpecificNotification = (notification, type, platform) => {
             
         case 'tiktok':
             if (type === 'platform:gift') {
-                if (!notification.hasOwnProperty('giftType')) {
+                if (!hasOwn(notification, 'giftType')) {
                     throw new Error('TikTok gift must have giftType field');
                 }
-                if (!notification.hasOwnProperty('giftCount')) {
+                if (!hasOwn(notification, 'giftCount')) {
                     throw new Error('TikTok gift must have giftCount field');
                 }
                 if (typeof notification.giftCount !== 'number' || notification.giftCount < 0) {
@@ -141,16 +285,20 @@ const validatePlatformSpecificNotification = (notification, type, platform) => {
     }
 };
 
-const expectNotificationContent = (notification, patterns) => {
+const expectNotificationContent = (notification: unknown, patterns: Record<string, RegExp>): void => {
+    const notificationRecord = requireRecord(notification, 'Notification');
     Object.keys(patterns).forEach(field => {
-        if (!notification.hasOwnProperty(field)) {
+        if (!hasOwn(notificationRecord, field)) {
             throw new Error(`Notification missing expected content field: ${field}`);
         }
         
         const pattern = patterns[field];
-        const content = notification[field];
+        const content = notificationRecord[field];
+        if (!pattern) {
+            throw new Error(`Notification missing expected content pattern for ${field}`);
+        }
         
-        if (!pattern.test(content)) {
+        if (!pattern.test(String(content))) {
             throw new Error(
                 `Notification content pattern mismatch for ${field}. ` +
                 `Expected pattern: ${pattern}, Got: "${content}"`
@@ -159,10 +307,14 @@ const expectNotificationContent = (notification, patterns) => {
     });
 };
 
-const expectNotificationTiming = (notification, expectedTiming) => {
+const expectNotificationTiming = (notification: unknown, expectedTiming: NotificationTimingExpectations): void => {
+    const notificationRecord = requireRecord(notification, 'Notification');
     const now = testClock.now();
-    const processedAt = notification.processedAt;
-    const createdAt = notification.createdAt || processedAt;
+    const processedAt = notificationRecord.processedAt;
+    const createdAt = typeof notificationRecord.createdAt === 'number' ? notificationRecord.createdAt : processedAt;
+    if (typeof processedAt !== 'number' || typeof createdAt !== 'number') {
+        throw new Error('Notification timing requires numeric processedAt and createdAt values');
+    }
     
     // Check processing delay
     if (expectedTiming.maxProcessingDelay) {
@@ -177,7 +329,7 @@ const expectNotificationTiming = (notification, expectedTiming) => {
     
     // Check timestamp accuracy
     if (expectedTiming.timestampTolerance) {
-        const timestampMs = new Date(notification.timestamp).getTime();
+        const timestampMs = new Date(String(notificationRecord.timestamp)).getTime();
         const timeDiff = Math.abs(timestampMs - processedAt);
         if (timeDiff > expectedTiming.timestampTolerance) {
             throw new Error(
@@ -199,16 +351,19 @@ const expectNotificationTiming = (notification, expectedTiming) => {
     }
 };
 
-const expectNotificationSequence = (notifications, expectedOrder) => {
+const expectNotificationSequence = (notifications: unknown[], expectedOrder: NotificationOrder | string): void => {
     if (!Array.isArray(notifications) || notifications.length < 2) {
         return; // Cannot validate sequence with less than 2 items
     }
+    const notificationRecords = notifications.map((notification, index) => requireRecord(notification, `Notification ${index}`));
     
     switch (expectedOrder) {
         case 'priority_desc':
-            for (let i = 1; i < notifications.length; i++) {
-                const prev = notifications[i - 1].priority || 0;
-                const curr = notifications[i].priority || 0;
+            for (let i = 1; i < notificationRecords.length; i++) {
+                const previousNotification = notificationRecords[i - 1];
+                const currentNotification = notificationRecords[i];
+                const prev = typeof previousNotification?.priority === 'number' ? previousNotification.priority : 0;
+                const curr = typeof currentNotification?.priority === 'number' ? currentNotification.priority : 0;
                 if (prev < curr) {
                     throw new Error(
                         `Notification sequence not in priority descending order at index ${i}. ` +
@@ -219,9 +374,12 @@ const expectNotificationSequence = (notifications, expectedOrder) => {
             break;
             
         case 'timestamp_asc':
-            for (let i = 1; i < notifications.length; i++) {
-                const prev = notifications[i - 1].processedAt;
-                const curr = notifications[i].processedAt;
+            for (let i = 1; i < notificationRecords.length; i++) {
+                const prev = notificationRecords[i - 1]?.processedAt;
+                const curr = notificationRecords[i]?.processedAt;
+                if (typeof prev !== 'number' || typeof curr !== 'number') {
+                    throw new Error('Notification sequence requires numeric processedAt values');
+                }
                 if (prev > curr) {
                     throw new Error(
                         `Notification sequence not in timestamp ascending order at index ${i}. ` +
@@ -232,9 +390,12 @@ const expectNotificationSequence = (notifications, expectedOrder) => {
             break;
             
         case 'timestamp_desc':
-            for (let i = 1; i < notifications.length; i++) {
-                const prev = notifications[i - 1].processedAt;
-                const curr = notifications[i].processedAt;
+            for (let i = 1; i < notificationRecords.length; i++) {
+                const prev = notificationRecords[i - 1]?.processedAt;
+                const curr = notificationRecords[i]?.processedAt;
+                if (typeof prev !== 'number' || typeof curr !== 'number') {
+                    throw new Error('Notification sequence requires numeric processedAt values');
+                }
                 if (prev < curr) {
                     throw new Error(
                         `Notification sequence not in timestamp descending order at index ${i}. ` +
@@ -253,15 +414,17 @@ const expectNotificationSequence = (notifications, expectedOrder) => {
 // PLATFORM-SPECIFIC ASSERTION HELPERS
 // ================================================================================================
 
-const expectYouTubeEventProcessing = (eventData, expectedOutcome) => {
+const expectYouTubeEventProcessing = (eventData: unknown, expectedOutcome: YouTubeExpectedOutcome): void => {
+    const eventRecord = requireRecord(eventData, 'YouTube event');
     // Validate event structure
-    if (!eventData.item) {
+    const item = isRecord(eventRecord.item) ? eventRecord.item : null;
+    if (!item) {
         throw new Error('YouTube event must have item property');
     }
     
     // Check event type matches expected notification type
-    const eventType = eventData.item.type;
-    const expectedTypes = {
+    const eventType = String(item.type);
+    const expectedTypes: Record<string, string> = {
         'membership': 'LiveChatMembershipItem',
         'chat': 'LiveChatTextMessage'
     };
@@ -286,48 +449,54 @@ const expectYouTubeEventProcessing = (eventData, expectedOutcome) => {
     
     // Validate monetary events have proper amount formatting
     if (eventType === 'LiveChatPaidMessage' || eventType === 'LiveChatPaidSticker') {
-        if (!eventData.item.purchase_amount) {
+        if (!item.purchase_amount) {
             throw new Error('YouTube paid event must have purchase_amount field');
         }
         
-        if (!/^[\$€£¥]?\d+\.\d{2}$/.test(eventData.item.purchase_amount)) {
+        if (!/^[\$€£¥]?\d+\.\d{2}$/.test(String(item.purchase_amount))) {
             throw new Error(
-                `YouTube purchase amount has invalid format: ${eventData.item.purchase_amount}`
+                `YouTube purchase amount has invalid format: ${item.purchase_amount}`
             );
         }
     }
     
     // Validate author details
-    if (!eventData.item.authorDetails) {
+    const authorDetails = isRecord(item.authorDetails) ? item.authorDetails : null;
+    if (!authorDetails) {
         throw new Error('YouTube event must have authorDetails');
     }
     
     const requiredAuthorFields = ['channelId', 'displayName'];
     requiredAuthorFields.forEach(field => {
-        if (!eventData.item.authorDetails.hasOwnProperty(field)) {
+        if (!hasOwn(authorDetails, field)) {
             throw new Error(`YouTube event authorDetails missing field: ${field}`);
         }
     });
 };
 
-const expectTwitchEventSubHandling = (eventData, expectedCallbacks) => {
+const expectTwitchEventSubHandling = (eventData: unknown, expectedCallbacks?: unknown): void => {
+    const eventRecord = requireRecord(eventData, 'Twitch EventSub event');
     // Validate EventSub structure
-    if (!eventData.subscription) {
+    const subscription = isRecord(eventRecord.subscription) ? eventRecord.subscription : null;
+    const event = isRecord(eventRecord.event) ? eventRecord.event : null;
+    const metadata = isRecord(eventRecord.metadata) ? eventRecord.metadata : null;
+
+    if (!subscription) {
         throw new Error('Twitch EventSub event must have subscription property');
     }
     
-    if (!eventData.event) {
+    if (!event) {
         throw new Error('Twitch EventSub event must have event property');
     }
     
-    if (!eventData.metadata) {
+    if (!metadata) {
         throw new Error('Twitch EventSub event must have metadata property');
     }
     
     // Validate subscription structure
     const requiredSubFields = ['id', 'type', 'version', 'status', 'condition'];
     requiredSubFields.forEach(field => {
-        if (!eventData.subscription.hasOwnProperty(field)) {
+        if (!hasOwn(subscription, field)) {
             throw new Error(`Twitch EventSub subscription missing field: ${field}`);
         }
     });
@@ -335,21 +504,21 @@ const expectTwitchEventSubHandling = (eventData, expectedCallbacks) => {
     // Validate metadata structure
     const requiredMetaFields = ['message_id', 'message_type', 'message_timestamp'];
     requiredMetaFields.forEach(field => {
-        if (!eventData.metadata.hasOwnProperty(field)) {
+        if (!hasOwn(metadata, field)) {
             throw new Error(`Twitch EventSub metadata missing field: ${field}`);
         }
     });
     
     // Validate message type
-    if (eventData.metadata.message_type !== 'notification') {
+    if (metadata.message_type !== 'notification') {
         throw new Error(
-            `Twitch EventSub message_type should be 'notification', got: ${eventData.metadata.message_type}`
+            `Twitch EventSub message_type should be 'notification', got: ${metadata.message_type}`
         );
     }
     
     // Validate event data based on subscription type
-    const subType = eventData.subscription.type;
-    validateTwitchEventSubEventData(eventData.event, subType);
+    const subType = String(subscription.type);
+    validateTwitchEventSubEventData(event, subType);
     
     // Note: expectedCallbacks validation would typically be done against actual callback execution
     // This is a placeholder for that validation logic
@@ -358,14 +527,14 @@ const expectTwitchEventSubHandling = (eventData, expectedCallbacks) => {
     }
 };
 
-const validateTwitchEventSubEventData = (eventData, subscriptionType) => {
+const validateTwitchEventSubEventData = (eventData: UnknownRecord, subscriptionType: string): void => {
     const commonFields = ['user_id', 'user_login', 'user_name', 'broadcaster_user_id', 'broadcaster_user_login', 'broadcaster_user_name'];
     
     switch (subscriptionType) {
         case 'channel.follow':
             const followFields = [...commonFields, 'followed_at'];
             followFields.forEach(field => {
-                if (!eventData.hasOwnProperty(field)) {
+                if (!hasOwn(eventData, field)) {
                     throw new Error(`Twitch follow event missing field: ${field}`);
                 }
             });
@@ -374,7 +543,7 @@ const validateTwitchEventSubEventData = (eventData, subscriptionType) => {
         case 'channel.subscribe':
             const subFields = [...commonFields, 'tier', 'is_gift'];
             subFields.forEach(field => {
-                if (!eventData.hasOwnProperty(field)) {
+                if (!hasOwn(eventData, field)) {
                     throw new Error(`Twitch subscription event missing field: ${field}`);
                 }
             });
@@ -384,7 +553,7 @@ const validateTwitchEventSubEventData = (eventData, subscriptionType) => {
             const raidFields = ['from_broadcaster_user_id', 'from_broadcaster_user_login', 'from_broadcaster_user_name', 
                                'to_broadcaster_user_id', 'to_broadcaster_user_login', 'to_broadcaster_user_name', 'viewers'];
             raidFields.forEach(field => {
-                if (!eventData.hasOwnProperty(field)) {
+                if (!hasOwn(eventData, field)) {
                     throw new Error(`Twitch raid event missing field: ${field}`);
                 }
             });
@@ -392,12 +561,13 @@ const validateTwitchEventSubEventData = (eventData, subscriptionType) => {
     }
 };
 
-const expectTikTokGiftAggregation = (giftEvents, expectedAggregation) => {
+const expectTikTokGiftAggregation = (giftEvents: unknown[], expectedAggregation: GiftAggregationExpectations): void => {
     if (!Array.isArray(giftEvents)) {
         throw new Error('giftEvents must be an array');
     }
+    const giftEventRecords = giftEvents.map((event, index) => requireRecord(event, `Gift event ${index}`));
     
-    if (giftEvents.length === 0) {
+    if (giftEventRecords.length === 0) {
         if (expectedAggregation.totalGifts > 0) {
             throw new Error('Expected gifts but received empty array');
         }
@@ -405,7 +575,7 @@ const expectTikTokGiftAggregation = (giftEvents, expectedAggregation) => {
     }
     
     // Calculate actual aggregation
-    const actualTotal = giftEvents.reduce((sum, event) => {
+    const actualTotal = giftEventRecords.reduce((sum, event) => {
         if (!event.giftCount || typeof event.giftCount !== 'number') {
             throw new Error('Each gift event must have a numeric giftCount');
         }
@@ -422,11 +592,11 @@ const expectTikTokGiftAggregation = (giftEvents, expectedAggregation) => {
     
     // Validate gift type consistency
     if (expectedAggregation.giftType) {
-        const giftTypes = [...new Set(giftEvents.map((event) => {
+        const giftTypes = [...new Set(giftEventRecords.map((event) => {
             if (!event.giftType) {
                 throw new Error('Gift aggregation events require giftType');
             }
-            return event.giftType;
+            return String(event.giftType);
         }))];
         if (giftTypes.length > 1) {
             if (expectedAggregation.shouldAggregate) {
@@ -444,23 +614,24 @@ const expectTikTokGiftAggregation = (giftEvents, expectedAggregation) => {
     // Validate aggregation decision
     if (expectedAggregation.hasOwnProperty('shouldAggregate')) {
         const timeWindow = 5000; // 5 seconds
-        const timestamps = giftEvents.map(e => e.timestamp || testClock.now());
+        const timestamps = giftEventRecords.map(e => typeof e.timestamp === 'number' ? e.timestamp : testClock.now());
         const timeSpan = Math.max(...timestamps) - Math.min(...timestamps);
-        const actualShouldAggregate = timeSpan <= timeWindow && giftEvents.length > 1;
+        const actualShouldAggregate = timeSpan <= timeWindow && giftEventRecords.length > 1;
         
         if (expectedAggregation.shouldAggregate !== actualShouldAggregate) {
             throw new Error(
                 `Gift aggregation decision mismatch. Expected shouldAggregate: ${expectedAggregation.shouldAggregate}, ` +
-                `Got: ${actualShouldAggregate} (timeSpan: ${timeSpan}ms, count: ${giftEvents.length})`
+                `Got: ${actualShouldAggregate} (timeSpan: ${timeSpan}ms, count: ${giftEventRecords.length})`
             );
         }
     }
 };
 
-const expectOBSIntegration = (obsCommands, expectedSceneChanges) => {
+const expectOBSIntegration = (obsCommands: unknown[], expectedSceneChanges: Partial<ObsCommandCounts>): void => {
     if (!Array.isArray(obsCommands)) {
         throw new Error('obsCommands must be an array');
     }
+    const commandRecords = obsCommands.map((command, index) => requireRecord(command, `OBS command ${index}`));
     
     // Count command types
     const commandCounts = {
@@ -470,7 +641,7 @@ const expectOBSIntegration = (obsCommands, expectedSceneChanges) => {
         filterChanges: 0
     };
     
-    obsCommands.forEach((command, index) => {
+    commandRecords.forEach((command, index) => {
         if (!command.type) {
             throw new Error(`OBS command at index ${index} missing type field`);
         }
@@ -511,9 +682,10 @@ const expectOBSIntegration = (obsCommands, expectedSceneChanges) => {
     
     // Validate counts against expectations
     Object.keys(expectedSceneChanges).forEach(countType => {
-        if (commandCounts.hasOwnProperty(countType)) {
-            const expected = expectedSceneChanges[countType];
-            const actual = commandCounts[countType];
+        if (hasOwn(commandCounts, countType)) {
+            const key = countType as keyof ObsCommandCounts;
+            const expected = expectedSceneChanges[key];
+            const actual = commandCounts[key];
             if (expected !== actual) {
                 throw new Error(
                     `OBS ${countType} count mismatch. Expected: ${expected}, Got: ${actual}`
@@ -527,12 +699,13 @@ const expectOBSIntegration = (obsCommands, expectedSceneChanges) => {
 // MOCK INTERACTION ASSERTION HELPERS
 // ================================================================================================
 
-const expectOnlyMethodCalled = (mockObject, methodName, expectedArgs) => {
-    if (!mockObject._mockType) {
+const expectOnlyMethodCalled = (mockObject: unknown, methodName: string, expectedArgs?: unknown[]): void => {
+    const mockRecord = requireRecord(mockObject, 'Mock object') as MockFactoryObject;
+    if (!mockRecord._mockType) {
         throw new Error('Object is not a factory-created mock');
     }
     
-    const mockMethod = mockObject[methodName];
+    const mockMethod = mockRecord[methodName];
     if (!isMockFunction(mockMethod)) {
         throw new Error(`${methodName} is not a mock function`);
     }
@@ -554,9 +727,10 @@ const expectOnlyMethodCalled = (mockObject, methodName, expectedArgs) => {
     }
     
     // Check that no other methods were called
-    const validMethods = mockObject._validMethods || [];
+    const validMethods = getStringArray(mockRecord._validMethods);
     const calledMethods = validMethods.filter(method => {
-        return isMockFunction(mockObject[method]) && mockObject[method].mock.calls.length > 0;
+        const candidate = mockRecord[method];
+        return isMockFunction(candidate) && candidate.mock.calls.length > 0;
     });
     
     if (calledMethods.length > 1 || (calledMethods.length === 1 && calledMethods[0] !== methodName)) {
@@ -567,24 +741,25 @@ const expectOnlyMethodCalled = (mockObject, methodName, expectedArgs) => {
     }
 };
 
-const expectMethodCallSequence = (mockObject, expectedSequence) => {
-    if (!mockObject._mockType) {
+const expectMethodCallSequence = (mockObject: unknown, expectedSequence: string[]): void => {
+    const mockRecord = requireRecord(mockObject, 'Mock object') as MockFactoryObject;
+    if (!mockRecord._mockType) {
         throw new Error('Object is not a factory-created mock');
     }
     
     // Collect all method calls with timestamps
-    const allCalls = [];
-    const validMethods = mockObject._validMethods || [];
+    const allCalls: OrderedMockCall[] = [];
+    const validMethods = getStringArray(mockRecord._validMethods);
     
     validMethods.forEach(methodName => {
-        const mockMethod = mockObject[methodName];
+        const mockMethod = mockRecord[methodName];
         if (isMockFunction(mockMethod)) {
-            mockMethod.mock.calls.forEach((args, callIndex) => {
+            mockMethod.mock.calls.forEach((_args, callIndex) => {
                 allCalls.push({
                     method: methodName,
                     callIndex: callIndex,
                     // Use invocationCallOrder for timing
-                    order: mockMethod.mock.invocationCallOrder[callIndex] || allCalls.length
+                    order: mockMethod.mock.invocationCallOrder?.[callIndex] ?? allCalls.length
                 });
             });
         }
@@ -614,14 +789,16 @@ const expectMethodCallSequence = (mockObject, expectedSequence) => {
     }
 };
 
-const expectNoUnexpectedCalls = (mockObject, allowedMethods) => {
-    if (!mockObject._mockType) {
+const expectNoUnexpectedCalls = (mockObject: unknown, allowedMethods: string[]): void => {
+    const mockRecord = requireRecord(mockObject, 'Mock object') as MockFactoryObject;
+    if (!mockRecord._mockType) {
         throw new Error('Object is not a factory-created mock');
     }
     
-    const validMethods = mockObject._validMethods || [];
+    const validMethods = getStringArray(mockRecord._validMethods);
     const calledMethods = validMethods.filter(method => {
-        return isMockFunction(mockObject[method]) && mockObject[method].mock.calls.length > 0;
+        const candidate = mockRecord[method];
+        return isMockFunction(candidate) && candidate.mock.calls.length > 0;
     });
     
     const unexpectedMethods = calledMethods.filter(method => !allowedMethods.includes(method));
@@ -634,18 +811,22 @@ const expectNoUnexpectedCalls = (mockObject, allowedMethods) => {
     }
 };
 
-const expectMockCallPattern = (mockObject, pattern) => {
-    if (!mockObject._mockType) {
+const expectMockCallPattern = (mockObject: unknown, pattern: MockCallPattern): void => {
+    const mockRecord = requireRecord(mockObject, 'Mock object') as MockFactoryObject;
+    if (!mockRecord._mockType) {
         throw new Error('Object is not a factory-created mock');
     }
     
     Object.keys(pattern).forEach(methodName => {
-        const mockMethod = mockObject[methodName];
+        const mockMethod = mockRecord[methodName];
         if (!isMockFunction(mockMethod)) {
             throw new Error(`${methodName} is not a mock function`);
         }
         
         const expectedPattern = pattern[methodName];
+        if (expectedPattern === undefined) {
+            throw new Error(`${methodName} missing expected call pattern`);
+        }
         const actualCalls = mockMethod.mock.calls.length;
         
         if (typeof expectedPattern === 'number') {
@@ -673,29 +854,32 @@ const expectMockCallPattern = (mockObject, pattern) => {
 // DATA STRUCTURE VALIDATION HELPERS
 // ================================================================================================
 
-const expectPlatformEventStructure = (event, platform, eventType) => {
+const expectPlatformEventStructure = (event: unknown, platform: PlatformName | string, eventType: PlatformEventType): void => {
+    const eventRecord = requireRecord(event, 'Platform event');
     switch (platform) {
         case 'youtube':
-            if (!event.item) {
+            const youtubeItem = isRecord(eventRecord.item) ? eventRecord.item : null;
+            if (!youtubeItem) {
                 throw new Error('YouTube event must have item property');
             }
-            if (!event.item.type) {
+            if (!youtubeItem.type) {
                 throw new Error('YouTube event item must have type property');
             }
-            if (!event.item.authorDetails) {
+            if (!youtubeItem.authorDetails) {
                 throw new Error('YouTube event item must have authorDetails property');
             }
             break;
             
         case 'tiktok':
             if (eventType === 'gift') {
-                if (!event.gift) {
+                if (!eventRecord.gift) {
                     throw new Error('TikTok gift event must have gift property');
                 }
-                if (!event.user || !event.user.userId || !event.user.uniqueId) {
+                const user = isRecord(eventRecord.user) ? eventRecord.user : null;
+                if (!user || !user.userId || !user.uniqueId) {
                     throw new Error('TikTok gift event must have nested userId and uniqueId properties');
                 }
-                if (typeof event.giftCount !== 'number') {
+                if (typeof eventRecord.giftCount !== 'number') {
                     throw new Error('TikTok gift event must have numeric giftCount property');
                 }
             }
@@ -703,13 +887,13 @@ const expectPlatformEventStructure = (event, platform, eventType) => {
             
         case 'twitch':
             if (eventType === 'follow' || eventType === 'subscribe' || eventType === 'raid') {
-                if (!event.subscription) {
+                if (!eventRecord.subscription) {
                     throw new Error('Twitch EventSub event must have subscription property');
                 }
-                if (!event.event) {
+                if (!eventRecord.event) {
                     throw new Error('Twitch EventSub event must have event property');
                 }
-                if (!event.metadata) {
+                if (!eventRecord.metadata) {
                     throw new Error('Twitch EventSub event must have metadata property');
                 }
             }
@@ -720,7 +904,7 @@ const expectPlatformEventStructure = (event, platform, eventType) => {
     }
 };
 
-const expectInternationalContentPreservation = (originalContent, processedContent) => {
+const expectInternationalContentPreservation = (originalContent: string, processedContent: string): void => {
     if (originalContent !== processedContent) {
         // Check if it's just whitespace normalization
         if (originalContent.trim() === processedContent.trim()) {
@@ -749,95 +933,98 @@ const expectInternationalContentPreservation = (originalContent, processedConten
     }
 };
 
-const expectValidUserData = (userData) => {
+const expectValidUserData = (userData: unknown): void => {
     if (!userData || typeof userData !== 'object') {
         throw new Error('Invalid user data: must be an object');
     }
+    const userRecord = userData as UnknownRecord;
     
     const requiredFields = ['username'];
     requiredFields.forEach(field => {
-        if (!userData.hasOwnProperty(field)) {
+        if (!hasOwn(userRecord, field)) {
             throw new Error(`Invalid user data: missing required field '${field}'`);
         }
         
-        if (!userData[field] || typeof userData[field] !== 'string') {
+        if (!userRecord[field] || typeof userRecord[field] !== 'string') {
             throw new Error(`Invalid user data: field '${field}' must be a non-empty string`);
         }
     });
     
     // Optional but commonly expected fields
-    if (userData.userId && typeof userData.userId !== 'string') {
+    if (userRecord.userId && typeof userRecord.userId !== 'string') {
         throw new Error('Invalid user data: userId must be a string if provided');
     }
     
-    if (userData.platform && !['youtube', 'twitch', 'tiktok'].includes(userData.platform)) {
-        throw new Error(`Invalid user data: unknown platform '${userData.platform}'`);
+    if (userRecord.platform && !['youtube', 'twitch', 'tiktok'].includes(String(userRecord.platform))) {
+        throw new Error(`Invalid user data: unknown platform '${userRecord.platform}'`);
     }
 };
 
-const expectValidGiftData = (giftData) => {
+const expectValidGiftData = (giftData: unknown): void => {
     if (!giftData || typeof giftData !== 'object') {
         throw new Error('Invalid gift data: must be an object');
     }
+    const giftRecord = giftData as UnknownRecord;
     
     const requiredFields = ['giftType', 'giftCount', 'username', 'amount', 'currency'];
     requiredFields.forEach(field => {
-        if (!giftData.hasOwnProperty(field)) {
+        if (!hasOwn(giftRecord, field)) {
             throw new Error(`Invalid gift data: missing required field '${field}'`);
         }
     });
     
-    if (typeof giftData.giftType !== 'string' || !giftData.giftType.trim()) {
+    if (typeof giftRecord.giftType !== 'string' || !giftRecord.giftType.trim()) {
         throw new Error('Invalid gift data: giftType must be a non-empty string');
     }
     
-    if (typeof giftData.giftCount !== 'number' || giftData.giftCount < 0) {
+    if (typeof giftRecord.giftCount !== 'number' || giftRecord.giftCount < 0) {
         throw new Error('Invalid gift data: giftCount must be a non-negative number');
     }
     
-    if (typeof giftData.username !== 'string' || !giftData.username.trim()) {
+    if (typeof giftRecord.username !== 'string' || !giftRecord.username.trim()) {
         throw new Error('Invalid gift data: username must be a non-empty string');
     }
 
-    if (typeof giftData.amount !== 'number' || giftData.amount < 0) {
+    if (typeof giftRecord.amount !== 'number' || giftRecord.amount < 0) {
         throw new Error('Invalid gift data: amount must be a non-negative number');
     }
 
-    if (typeof giftData.currency !== 'string' || !giftData.currency.trim()) {
+    if (typeof giftRecord.currency !== 'string' || !giftRecord.currency.trim()) {
         throw new Error('Invalid gift data: currency must be a non-empty string');
     }
 };
 
-const expectValidStreamData = (streamData) => {
+const expectValidStreamData = (streamData: unknown): void => {
     if (!streamData || typeof streamData !== 'object') {
         throw new Error('Invalid stream data: must be an object');
     }
+    const streamRecord = streamData as UnknownRecord;
     
     const requiredFields = ['streamId', 'title', 'viewerCount', 'isLive', 'platform'];
     requiredFields.forEach(field => {
-        if (!streamData.hasOwnProperty(field)) {
+        if (!hasOwn(streamRecord, field)) {
             throw new Error(`Invalid stream data: missing required field '${field}'`);
         }
     });
     
-    if (typeof streamData.streamId !== 'string' || !streamData.streamId.trim()) {
+    if (typeof streamRecord.streamId !== 'string' || !streamRecord.streamId.trim()) {
         throw new Error('Invalid stream data: streamId must be a non-empty string');
     }
     
-    if (typeof streamData.title !== 'string') {
+    if (typeof streamRecord.title !== 'string') {
         throw new Error('Invalid stream data: title must be a string');
     }
     
-    if (typeof streamData.viewerCount !== 'number' || streamData.viewerCount < 0) {
+    if (typeof streamRecord.viewerCount !== 'number' || streamRecord.viewerCount < 0) {
         throw new Error('Invalid stream data: viewerCount must be a non-negative number');
     }
     
-    if (typeof streamData.isLive !== 'boolean') {
+    if (typeof streamRecord.isLive !== 'boolean') {
         throw new Error('Invalid stream data: isLive must be a boolean');
     }
     
-    if (!['youtube', 'twitch', 'tiktok'].includes(streamData.platform)) {
-        throw new Error(`Invalid stream data: unknown platform '${streamData.platform}'`);
+    if (!['youtube', 'twitch', 'tiktok'].includes(String(streamRecord.platform))) {
+        throw new Error(`Invalid stream data: unknown platform '${streamRecord.platform}'`);
     }
 };
 
@@ -849,7 +1036,7 @@ const expectValidStreamData = (streamData) => {
 // PHASE 5B: INTERNATIONAL CONTENT VALIDATION HELPERS
 // ================================================================================================
 
-const expectInternationalContentSupport = (content, testData) => {
+const expectInternationalContentSupport = (content: unknown, testData: unknown): void => {
     if (typeof content !== 'string') {
         throw new Error('Content must be a string');
     }
@@ -857,18 +1044,19 @@ const expectInternationalContentSupport = (content, testData) => {
     if (!testData || typeof testData !== 'object') {
         throw new Error('Test data must be provided for international content validation');
     }
+    const data = testData as InternationalTestData;
     
     // Unicode preservation validation
-    if (testData.originalUsername) {
-        if (!content.includes(testData.originalUsername)) {
+    if (data.originalUsername) {
+        if (!content.includes(data.originalUsername)) {
             throw new Error(
-                `International username not preserved. Expected "${testData.originalUsername}" in "${content}"`
+                `International username not preserved. Expected "${data.originalUsername}" in "${content}"`
             );
         }
     }
     
     // Emoji preservation validation
-    if (testData.containsEmoji || testData.originalUsername && /[\u{1F600}-\u{1F64F}]|\u{1F300}-\u{1F5FF}|\u{1F680}-\u{1F6FF}|\u{1F700}-\u{1F77F}|\u{1F780}-\u{1F7FF}|\u{1F800}-\u{1F8FF}|\u{2600}-\u{26FF}|\u{2700}-\u{27BF}/u.test(testData.originalUsername)) {
+    if (data.containsEmoji || data.originalUsername && /[\u{1F600}-\u{1F64F}]|\u{1F300}-\u{1F5FF}|\u{1F680}-\u{1F6FF}|\u{1F700}-\u{1F77F}|\u{1F780}-\u{1F7FF}|\u{1F800}-\u{1F8FF}|\u{2600}-\u{26FF}|\u{2700}-\u{27BF}/u.test(data.originalUsername)) {
         const emojiPattern = /[\u{1F600}-\u{1F64F}]|\u{1F300}-\u{1F5FF}|\u{1F680}-\u{1F6FF}|\u{1F700}-\u{1F77F}|\u{1F780}-\u{1F7FF}|\u{1F800}-\u{1F8FF}|\u{2600}-\u{26FF}|\u{2700}-\u{27BF}/u;
         if (!emojiPattern.test(content)) {
             throw new Error(
@@ -878,8 +1066,8 @@ const expectInternationalContentSupport = (content, testData) => {
     }
     
     // Currency symbol handling validation
-    if (testData.currency && testData.currency.symbol) {
-        const currencySymbol = testData.currency.symbol;
+    if (data.currency && data.currency.symbol) {
+        const currencySymbol = data.currency.symbol;
         if (!content.includes(currencySymbol)) {
             throw new Error(
                 `Currency symbol "${currencySymbol}" not found in content: "${content}"`
@@ -888,25 +1076,25 @@ const expectInternationalContentSupport = (content, testData) => {
     }
     
     // RTL (right-to-left) character preservation
-    if (testData.language === 'arabic' || testData.language === 'hebrew') {
+    if (data.language === 'arabic' || data.language === 'hebrew') {
         // Check for RTL characters (Arabic, Hebrew ranges)
         const rtlPattern = /[\u0590-\u05FF\u0600-\u06FF\u0750-\u077F]/;
-        if (testData.originalUsername && rtlPattern.test(testData.originalUsername)) {
+        if (data.originalUsername && rtlPattern.test(data.originalUsername)) {
             if (!rtlPattern.test(content)) {
                 throw new Error(
-                    `RTL characters not preserved for ${testData.language} content: "${content}"`
+                    `RTL characters not preserved for ${data.language} content: "${content}"`
                 );
             }
         }
     }
     
     // Chinese/Japanese/Korean character preservation
-    if (testData.language === 'chinese' || testData.language === 'japanese' || testData.language === 'korean') {
+    if (data.language === 'chinese' || data.language === 'japanese' || data.language === 'korean') {
         const cjkPattern = /[\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF\uAC00-\uD7AF]/;
-        if (testData.originalUsername && cjkPattern.test(testData.originalUsername)) {
+        if (data.originalUsername && cjkPattern.test(data.originalUsername)) {
             if (!cjkPattern.test(content)) {
                 throw new Error(
-                    `CJK characters not preserved for ${testData.language} content: "${content}"`
+                    `CJK characters not preserved for ${data.language} content: "${content}"`
                 );
             }
         }
@@ -916,7 +1104,7 @@ const expectInternationalContentSupport = (content, testData) => {
     expectNoTechnicalArtifacts(content);
 };
 
-const expectUserFriendlyErrorMessage = (errorMessage, options = {}) => {
+const expectUserFriendlyErrorMessage = (errorMessage: unknown, options: UserFriendlyErrorOptions = {}): void => {
     if (typeof errorMessage !== 'string') {
         throw new Error('Error message must be a string');
     }
@@ -1032,7 +1220,7 @@ const createInternationalTestData = () => {
     };
 };
 
-const validateUserFacingString = (userVisibleString, requirements = {}) => {
+const validateUserFacingString = (userVisibleString: unknown, requirements: UserFacingStringRequirements = {}): void => {
     if (typeof userVisibleString !== 'string') {
         throw new Error('User-visible content must be a string');
     }
@@ -1114,7 +1302,7 @@ const validateUserFacingString = (userVisibleString, requirements = {}) => {
     }
 };
 
-const expectSuccessfulTemplateInterpolation = (templateString, interpolatedString, templateData) => {
+const expectSuccessfulTemplateInterpolation = (templateString: unknown, interpolatedString: unknown, templateData: unknown): void => {
     if (typeof templateString !== 'string' || typeof interpolatedString !== 'string') {
         throw new Error('Template and interpolated strings must be strings');
     }
@@ -1132,8 +1320,9 @@ const expectSuccessfulTemplateInterpolation = (templateString, interpolatedStrin
     
     // Verify expected data was used
     if (templateData && typeof templateData === 'object') {
-        Object.keys(templateData).forEach(key => {
-            const value = templateData[key];
+        const templateRecord = templateData as UnknownRecord;
+        Object.keys(templateRecord).forEach(key => {
+            const value = templateRecord[key];
             if (value !== null && value !== undefined && typeof value !== 'object') {
                 const stringValue = String(value);
                 // Only check for inclusion if the value is meaningful
@@ -1149,7 +1338,7 @@ const expectSuccessfulTemplateInterpolation = (templateString, interpolatedStrin
     }
 };
 
-const expectContentReadabilityForAudience = (content, audience) => {
+const expectContentReadabilityForAudience = (content: unknown, audience: Audience | string): void => {
     if (typeof content !== 'string') {
         throw new Error('Content must be a string');
     }
@@ -1206,7 +1395,7 @@ const expectContentReadabilityForAudience = (content, audience) => {
     }
 };
 
-const expectCrossPlatformContentConsistency = (platformContents, options = {}) => {
+const expectCrossPlatformContentConsistency = (platformContents: Record<string, string>, options: CrossPlatformContentOptions = {}): void => {
     const platforms = Object.keys(platformContents);
     if (platforms.length < 2) {
         throw new Error('Need at least 2 platforms to check consistency');
@@ -1227,16 +1416,19 @@ const expectCrossPlatformContentConsistency = (platformContents, options = {}) =
                 platform,
                 content,
                 // Extract numbers (amounts, counts)
-                numbers: (content.match(/\d+(?:\.\d+)?/g) || []).map(Number),
+                numbers: ((content ?? '').match(/\d+(?:\.\d+)?/g) || []).map(Number),
                 // Extract quoted strings (usernames, messages)
-                quotedStrings: content.match(/"([^"]*)"/g) || [],
+                quotedStrings: (content ?? '').match(/"([^"]*)"/g) || [],
                 // Extract currencies
-                currencies: content.match(/[$€£¥₹]/g) || []
+                currencies: (content ?? '').match(/[$€£¥₹]/g) || []
             };
         });
         
         // Compare key information
         const firstInfo = contentInfo[0];
+        if (!firstInfo) {
+            throw new Error('Need at least 2 platforms to check consistency');
+        }
         contentInfo.slice(1).forEach(info => {
             // Check numbers are consistent
             if (JSON.stringify(firstInfo.numbers.sort()) !== JSON.stringify(info.numbers.sort())) {
@@ -1263,70 +1455,72 @@ const expectCrossPlatformContentConsistency = (platformContents, options = {}) =
 // PHASE 4A: ENHANCED DOMAIN-SPECIFIC ASSERTIONS
 // ================================================================================================
 
-const expectValidGiftNotification = (notification, expectedData = {}) => {
+const expectValidGiftNotification = (notification: unknown, expectedData: GiftNotificationExpectations = {}): void => {
     if (!notification || typeof notification !== 'object') {
         throw new Error('Gift notification must be an object');
     }
+    const giftNotification = notification as UnknownRecord;
     
     // First validate as general notification
-    expectValidNotification(notification, 'platform:gift', expectedData.platform || notification.platform);
+    expectValidNotification(giftNotification, 'platform:gift', expectedData.platform || String(giftNotification.platform));
     
     // Gift-specific validations
     const requiredGiftFields = ['amount', 'currency'];
     requiredGiftFields.forEach(field => {
-        if (!notification.hasOwnProperty(field)) {
+        if (!hasOwn(giftNotification, field)) {
             throw new Error(`Missing required field: ${field}`);
         }
     });
     
     // Validate amount
-    if (typeof notification.amount !== 'number' || notification.amount <= 0) {
+    if (typeof giftNotification.amount !== 'number' || giftNotification.amount <= 0) {
         throw new Error('Gift amount must be positive');
     }
     
-    if (expectedData.minAmount && notification.amount < expectedData.minAmount) {
-        throw new Error(`Gift amount ${notification.amount} is below minimum ${expectedData.minAmount}`);
+    if (expectedData.minAmount && giftNotification.amount < expectedData.minAmount) {
+        throw new Error(`Gift amount ${giftNotification.amount} is below minimum ${expectedData.minAmount}`);
     }
     
     // Validate currency
-    if (typeof notification.currency !== 'string' || !notification.currency.trim()) {
+    if (typeof giftNotification.currency !== 'string' || !giftNotification.currency.trim()) {
         throw new Error('Gift currency must be a non-empty string');
     }
     
-    if (expectedData.allowedCurrencies && !expectedData.allowedCurrencies.includes(notification.currency)) {
-        throw new Error(`Invalid currency: ${notification.currency}`);
+    if (expectedData.allowedCurrencies && !expectedData.allowedCurrencies.includes(giftNotification.currency)) {
+        throw new Error(`Invalid currency: ${giftNotification.currency}`);
     }
     
-    if (expectedData.requiredCurrency && notification.currency !== expectedData.requiredCurrency) {
-        throw new Error(`Expected currency ${expectedData.requiredCurrency}, got ${notification.currency}`);
+    if (expectedData.requiredCurrency && giftNotification.currency !== expectedData.requiredCurrency) {
+        throw new Error(`Expected currency ${expectedData.requiredCurrency}, got ${giftNotification.currency}`);
     }
     
     // Validate gift-specific content
-    if (!notification.displayMessage.includes(notification.amount.toString())) {
+    if (typeof giftNotification.displayMessage !== 'string' || !giftNotification.displayMessage.includes(giftNotification.amount.toString())) {
         throw new Error('Gift notification display message must include amount');
     }
     
-    if (!notification.displayMessage.includes(notification.currency)) {
+    if (!giftNotification.displayMessage.includes(giftNotification.currency)) {
         throw new Error('Gift notification display message must include currency');
     }
     
     // Validate no technical artifacts in gift content
-    expectNoTechnicalArtifacts(notification.displayMessage);
-    expectNoTechnicalArtifacts(notification.ttsMessage);
+    expectNoTechnicalArtifacts(giftNotification.displayMessage);
+    expectNoTechnicalArtifacts(giftNotification.ttsMessage);
 };
 
-const expectValidPlatformBehavior = (platform, behaviorType, expectations = {}) => {
+const expectValidPlatformBehavior = (platform: unknown, behaviorType: string, expectations: PlatformBehaviorExpectations = {}): void => {
     if (!platform || typeof platform !== 'object') {
         throw new Error('Platform must be an object');
     }
+    const platformRecord = platform as UnknownRecord;
     
     // Check required methods
     if (expectations.requiredMethods) {
         expectations.requiredMethods.forEach(method => {
-            if (!platform.hasOwnProperty(method)) {
+            if (!hasOwn(platformRecord, method)) {
                 throw new Error(`Platform missing required method: ${method}`);
             }
-            if (typeof platform[method] !== 'function') {
+            if (typeof platformRecord[method] !== 'function') {
                 throw new Error(`Platform method ${method} must be a function`);
             }
         });
@@ -1335,37 +1529,47 @@ const expectValidPlatformBehavior = (platform, behaviorType, expectations = {}) 
     // Validate behavior-specific expectations
     switch (behaviorType) {
         case 'message_processing':
-            if (expectations.shouldProcessAsync && !platform.processMessage.mock) {
+            const processMessage = platformRecord.processMessage;
+            if (typeof processMessage !== 'function') {
+                throw new Error('Platform missing required method: processMessage');
+            }
+            if (expectations.shouldProcessAsync && !isMockFunction(processMessage)) {
                 // For real implementations, we can't easily test async nature
                 break;
             }
-            if (expectations.shouldReturnBoolean && platform.processMessage.mock) {
+            if (expectations.shouldReturnBoolean && isMockFunction(processMessage)) {
                 // Check if mock is configured to return boolean
-                const mockReturn = platform.processMessage.getMockImplementation();
-                if (mockReturn && typeof mockReturn() !== 'boolean' && !mockReturn().then) {
+                const mockReturn = (processMessage as TestMockFn & { getMockImplementation?: () => (() => unknown) | undefined }).getMockImplementation?.();
+                const returned = mockReturn?.();
+                if (mockReturn && typeof returned !== 'boolean' && !(isRecord(returned) && typeof returned.then === 'function')) {
                     throw new Error('Platform processMessage should return boolean or Promise<boolean>');
                 }
             }
             break;
             
         case 'notification_handling':
-            if (!platform.handleNotification) {
+            if (!platformRecord.handleNotification) {
                 throw new Error('Platform missing required method: handleNotification');
             }
             break;
             
         case 'error_handling':
             if (expectations.shouldHandleErrors) {
+                const processMessage = platformRecord.processMessage;
+                if (typeof processMessage !== 'function') {
+                    throw new Error('Platform missing required method: processMessage');
+                }
                 // Test error handling by trying to trigger an error
                 try {
-                    const result = platform.processMessage();
+                    const result = processMessage();
                     // If processMessage is supposed to throw and doesn't, that's a problem
                     if (expectations.expectedErrorTypes && !result) {
                         throw new Error('Platform should handle errors gracefully');
                     }
                 } catch (error) {
                     // If we expect error handling but get an unhandled error, that's a problem
-                    if (expectations.expectedErrorTypes && !expectations.expectedErrorTypes.some(type => error.message.includes(type))) {
+                    const errorMessage = getErrorMessage(error);
+                    if (expectations.expectedErrorTypes && !expectations.expectedErrorTypes.some(type => errorMessage.includes(type))) {
                         throw new Error('Platform should handle errors gracefully');
                     }
                 }
@@ -1374,14 +1578,14 @@ const expectValidPlatformBehavior = (platform, behaviorType, expectations = {}) 
     }
     
     // Validate platform metadata if present
-    if (platform._mockType && expectations.expectedMockType) {
-        if (platform._mockType !== expectations.expectedMockType) {
-            throw new Error(`Expected mock type ${expectations.expectedMockType}, got ${platform._mockType}`);
+    if (platformRecord._mockType && expectations.expectedMockType) {
+        if (platformRecord._mockType !== expectations.expectedMockType) {
+            throw new Error(`Expected mock type ${expectations.expectedMockType}, got ${platformRecord._mockType}`);
         }
     }
 };
 
-const expectNoTechnicalArtifacts = (userVisibleString, options = {}) => {
+const expectNoTechnicalArtifacts = (userVisibleString: unknown, options: { allowDebugPrefixes?: boolean } = {}): void => {
     if (typeof userVisibleString !== 'string') {
         throw new Error('User-visible content must be a string');
     }
@@ -1462,7 +1666,7 @@ const expectNoTechnicalArtifacts = (userVisibleString, options = {}) => {
     }
 };
 
-const expectProperCurrencyFormatting = (amount, currency, platform) => {
+const expectProperCurrencyFormatting = (amount: unknown, currency: unknown, platform: unknown): void => {
     if (typeof amount !== 'number' || amount < 0) {
         throw new Error('Currency amount must be a non-negative number');
     }
@@ -1500,8 +1704,8 @@ const expectProperCurrencyFormatting = (amount, currency, platform) => {
     }
 };
 
-const validateYouTubeCurrencyFormat = (amount, currency) => {
-    const currencyRules = {
+const validateYouTubeCurrencyFormat = (amount: number, currency: string): void => {
+    const currencyRules: Record<string, { decimals: number; symbol: string }> = {
         'USD': { decimals: 2, symbol: '$' },
         'EUR': { decimals: 2, symbol: '€' },
         'GBP': { decimals: 2, symbol: '£' },
@@ -1529,12 +1733,12 @@ const validateYouTubeCurrencyFormat = (amount, currency) => {
     }
 };
 
-const validateTwitchCurrencyFormat = (amount, currency) => {
+const validateTwitchCurrencyFormat = (amount: number, currency: string): void => {
     // Twitch follows similar rules to YouTube for most currencies
     validateYouTubeCurrencyFormat(amount, currency);
 };
 
-const validateGeneralCurrencyFormat = (amount, currency) => {
+const validateGeneralCurrencyFormat = (amount: number, currency: string): void => {
     if (amount < 0) {
         throw new Error('Currency amount cannot be negative');
     }
@@ -1559,26 +1763,33 @@ const validateGeneralCurrencyFormat = (amount, currency) => {
 // Authentication consistency assertions
 // ================================================================================================
 
-const expectConsistentValidation = (validationResults) => {
+const expectConsistentValidation = (validationResults: unknown[]): void => {
     if (!Array.isArray(validationResults) || validationResults.length < 2) {
         throw new Error('expectConsistentValidation requires at least 2 validation results to compare');
     }
+    const validationRecords = validationResults.map((result, index) => requireRecord(result, `Validation result ${index}`)) as ValidationResult[];
     
-    const firstResult = validationResults[0];
+    const firstResult = validationRecords[0];
+    if (!firstResult) {
+        throw new Error('expectConsistentValidation requires at least 2 validation results to compare');
+    }
     const requiredFields = ['isValid', 'validationSource'];
     
     // Check that all results have required fields
-    validationResults.forEach((result, index) => {
+    validationRecords.forEach((result, index) => {
         requiredFields.forEach(field => {
-            if (!result.hasOwnProperty(field)) {
+            if (!hasOwn(result, field)) {
                 throw new Error(`Validation result ${index} missing required field: ${field}`);
             }
         });
     });
     
     // Check that all results have consistent validation outcomes
-    for (let i = 1; i < validationResults.length; i++) {
-        const currentResult = validationResults[i];
+    for (let i = 1; i < validationRecords.length; i++) {
+        const currentResult = validationRecords[i];
+        if (!currentResult) {
+            throw new Error(`Validation result ${i} is missing`);
+        }
         
         if (firstResult.isValid !== currentResult.isValid) {
             throw new Error(
@@ -1596,7 +1807,7 @@ const expectConsistentValidation = (validationResults) => {
     }
     
     // Validate that centralized validation is being used
-    validationResults.forEach((result, index) => {
+    validationRecords.forEach((result, index) => {
         if (result.validationSource !== 'centralized_validator') {
             throw new Error(
                 `Result ${index} does not use centralized validation. ` +
@@ -1606,7 +1817,7 @@ const expectConsistentValidation = (validationResults) => {
     });
 };
 
-const expectUnifiedBehavior = (options) => {
+const expectUnifiedBehavior = (options: UnifiedBehaviorOptions): void => {
     const { scenario, results, expectedOutcome } = options;
     
     if (!scenario || !results || !expectedOutcome) {
@@ -1616,10 +1827,11 @@ const expectUnifiedBehavior = (options) => {
     if (!Array.isArray(results) || results.length < 2) {
         throw new Error('expectUnifiedBehavior requires at least 2 results to compare');
     }
+    const resultRecords = results.map((result, index) => requireRecord(result, `Result ${index}`));
     
     // Validate that all results indicate unified behavior
-    results.forEach((result, index) => {
-        if (!result.hasOwnProperty('validationSource')) {
+    resultRecords.forEach((result, index) => {
+        if (!hasOwn(result, 'validationSource')) {
             throw new Error(`Result ${index} missing validationSource field`);
         }
         
@@ -1632,14 +1844,20 @@ const expectUnifiedBehavior = (options) => {
     });
     
     // Check that all results have consistent structure for the scenario
-    const firstResult = results[0];
+    const firstResult = resultRecords[0];
+    if (!firstResult) {
+        throw new Error('expectUnifiedBehavior requires at least 2 results to compare');
+    }
     const expectedFields = Object.keys(firstResult);
     
-    for (let i = 1; i < results.length; i++) {
-        const currentResult = results[i];
+    for (let i = 1; i < resultRecords.length; i++) {
+        const currentResult = resultRecords[i];
+        if (!currentResult) {
+            throw new Error(`Result ${i} is missing`);
+        }
         
         expectedFields.forEach(field => {
-            if (!currentResult.hasOwnProperty(field)) {
+            if (!hasOwn(currentResult, field)) {
                 throw new Error(
                     `Inconsistent behavior in scenario '${scenario}': ` +
                     `result ${i} missing field '${field}' that exists in result 0`
@@ -1652,24 +1870,24 @@ const expectUnifiedBehavior = (options) => {
     switch (scenario) {
         case 'token_validation':
         case 'standard-validation':
-            results.forEach((result, index) => {
-                if (!result.hasOwnProperty('isValid')) {
+            resultRecords.forEach((result, index) => {
+                if (!hasOwn(result, 'isValid')) {
                     throw new Error(`Result ${index} missing isValid field for token validation scenario`);
                 }
             });
             break;
             
         case 'token_expiration_detection':
-            results.forEach((result, index) => {
-                if (!result.hasOwnProperty('isExpired')) {
+            resultRecords.forEach((result, index) => {
+                if (!hasOwn(result, 'isExpired')) {
                     throw new Error(`Result ${index} missing isExpired field for expiration detection scenario`);
                 }
             });
             break;
             
         case 'token_format_validation':
-            results.forEach((result, index) => {
-                if (!result.hasOwnProperty('format')) {
+            resultRecords.forEach((result, index) => {
+                if (!hasOwn(result, 'format')) {
                     throw new Error(`Result ${index} missing format field for format validation scenario`);
                 }
             });
@@ -1677,8 +1895,8 @@ const expectUnifiedBehavior = (options) => {
             
         case 'single_source_of_truth':
         case 'centralized_validation':
-            results.forEach((result, index) => {
-                if (!result.hasOwnProperty('validationSteps')) {
+            resultRecords.forEach((result, index) => {
+                if (!hasOwn(result, 'validationSteps')) {
                     throw new Error(`Result ${index} missing validationSteps field for centralized validation scenario`);
                 }
                 
@@ -1690,23 +1908,24 @@ const expectUnifiedBehavior = (options) => {
     }
 };
 
-const expectConsistentConfigBehavior = (configResults) => {
+const expectConsistentConfigBehavior = (configResults: unknown[]): void => {
     if (!Array.isArray(configResults) || configResults.length < 2) {
         throw new Error('expectConsistentConfigBehavior requires at least 2 config results to compare');
     }
+    const configRecords = configResults.map((result, index) => requireRecord(result, `Config result ${index}`));
     
-    configResults.forEach((result, index) => {
+    configRecords.forEach((result, index) => {
         // Check if result has validation field (wrapped) or implementationType directly
-        let targetValidation;
-        if (result.hasOwnProperty('validation')) {
+        let targetValidation: UnknownRecord;
+        if (hasOwn(result, 'validation') && isRecord(result.validation)) {
             targetValidation = result.validation;
-        } else if (result.hasOwnProperty('implementationType')) {
+        } else if (hasOwn(result, 'implementationType')) {
             targetValidation = result;
         } else {
             throw new Error(`Config result ${index} missing validation or implementationType field`);
         }
         
-        if (!targetValidation.hasOwnProperty('implementationType')) {
+        if (!hasOwn(targetValidation, 'implementationType')) {
             throw new Error(`Validation result ${index} missing implementationType field`);
         }
         
@@ -1719,24 +1938,25 @@ const expectConsistentConfigBehavior = (configResults) => {
     });
 };
 
-const expectUnifiedErrorHandling = (errorResults) => {
+const expectUnifiedErrorHandling = (errorResults: unknown[]): void => {
     if (!Array.isArray(errorResults) || errorResults.length < 2) {
         throw new Error('expectUnifiedErrorHandling requires at least 2 error results to compare');
     }
+    const errorRecords = errorResults.map((result, index) => requireRecord(result, `Error result ${index}`));
     
     const requiredFields = ['implementationType'];
     
     // Check that all results have required fields
-    errorResults.forEach((result, index) => {
+    errorRecords.forEach((result, index) => {
         requiredFields.forEach(field => {
-            if (!result.hasOwnProperty(field)) {
+            if (!hasOwn(result, field)) {
                 throw new Error(`Error result ${index} missing required field: ${field}`);
             }
         });
     });
     
     // Check that all results indicate unified error handling
-    errorResults.forEach((result, index) => {
+    errorRecords.forEach((result, index) => {
         if (result.implementationType !== 'delegated_to_central') {
             throw new Error(
                 `Result ${index} does not use centralized error handling. ` +
@@ -1750,15 +1970,19 @@ const expectUnifiedErrorHandling = (errorResults) => {
 // HTTP REQUEST PATTERNS CONSISTENCY ASSERTIONS
 // ================================================================================================
 
-const expectConsistentHttpBehavior = (httpBehaviors) => {
+const expectConsistentHttpBehavior = (httpBehaviors: unknown[]): void => {
     if (!Array.isArray(httpBehaviors) || httpBehaviors.length < 2) {
         throw new Error('expectConsistentHttpBehavior requires at least 2 HTTP behavior objects to compare');
     }
+    const behaviorRecords = httpBehaviors.map((behavior, index) => requireRecord(behavior, `HTTP behavior ${index}`)) as HttpBehavior[];
     
-    const firstBehavior = httpBehaviors[0];
+    const firstBehavior = behaviorRecords[0];
+    if (!firstBehavior) {
+        throw new Error('expectConsistentHttpBehavior requires at least 2 HTTP behavior objects to compare');
+    }
     
     // Validate all behaviors are objects
-    httpBehaviors.forEach((behavior, index) => {
+    behaviorRecords.forEach((behavior, index) => {
         if (!behavior || typeof behavior !== 'object') {
             throw new Error(`HTTP behavior at index ${index} must be a valid object`);
         }
@@ -1766,13 +1990,14 @@ const expectConsistentHttpBehavior = (httpBehaviors) => {
     
     // Check for consistent header structure
     if (firstBehavior.standardHeaders) {
-        httpBehaviors.forEach((behavior, index) => {
+        const firstHeadersSource = firstBehavior.standardHeaders;
+        behaviorRecords.forEach((behavior, index) => {
             if (!behavior.standardHeaders) {
                 throw new Error(`HTTP behavior at index ${index} missing standardHeaders`);
             }
             
             // Validate header consistency
-            const firstHeaders = Object.keys(firstBehavior.standardHeaders).sort();
+            const firstHeaders = Object.keys(firstHeadersSource).sort();
             const currentHeaders = Object.keys(behavior.standardHeaders).sort();
             
             if (JSON.stringify(firstHeaders) !== JSON.stringify(currentHeaders)) {
@@ -1783,7 +2008,7 @@ const expectConsistentHttpBehavior = (httpBehaviors) => {
     
     // Check for consistent timeout patterns
     if (firstBehavior.requestTimeout !== undefined) {
-        httpBehaviors.forEach((behavior, index) => {
+        behaviorRecords.forEach((behavior, index) => {
             if (behavior.requestTimeout !== firstBehavior.requestTimeout) {
                 throw new Error(`HTTP timeout inconsistent at index ${index}. Expected: ${firstBehavior.requestTimeout}, Got: ${behavior.requestTimeout}`);
             }
@@ -1792,7 +2017,7 @@ const expectConsistentHttpBehavior = (httpBehaviors) => {
     
     // Check for consistent retry patterns
     if (firstBehavior.maxRetries !== undefined) {
-        httpBehaviors.forEach((behavior, index) => {
+        behaviorRecords.forEach((behavior, index) => {
             if (behavior.maxRetries !== firstBehavior.maxRetries) {
                 throw new Error(`HTTP retry count inconsistent at index ${index}. Expected: ${firstBehavior.maxRetries}, Got: ${behavior.maxRetries}`);
             }
@@ -1801,7 +2026,7 @@ const expectConsistentHttpBehavior = (httpBehaviors) => {
     
     // Check for consistent response handling
     if (firstBehavior.category !== undefined) {
-        httpBehaviors.forEach((behavior, index) => {
+        behaviorRecords.forEach((behavior, index) => {
             if (behavior.category !== firstBehavior.category) {
                 throw new Error(`HTTP response category inconsistent at index ${index}. Expected: ${firstBehavior.category}, Got: ${behavior.category}`);
             }
@@ -1810,7 +2035,7 @@ const expectConsistentHttpBehavior = (httpBehaviors) => {
     
     // Check for consistent error handling
     if (firstBehavior.userMessage !== undefined) {
-        httpBehaviors.forEach((behavior, index) => {
+        behaviorRecords.forEach((behavior, index) => {
             if (behavior.userMessage !== firstBehavior.userMessage) {
                 throw new Error(`HTTP error message inconsistent at index ${index}. Expected: "${firstBehavior.userMessage}", Got: "${behavior.userMessage}"`);
             }
@@ -1818,15 +2043,19 @@ const expectConsistentHttpBehavior = (httpBehaviors) => {
     }
 };
 
-const expectUnifiedRequestPatterns = (requestPatterns) => {
+const expectUnifiedRequestPatterns = (requestPatterns: unknown[]): void => {
     if (!Array.isArray(requestPatterns) || requestPatterns.length < 2) {
         throw new Error('expectUnifiedRequestPatterns requires at least 2 request pattern objects to compare');
     }
+    const requestRecords = requestPatterns.map((pattern, index) => requireRecord(pattern, `Request pattern ${index}`)) as RequestPattern[];
     
-    const firstPattern = requestPatterns[0];
+    const firstPattern = requestRecords[0];
+    if (!firstPattern) {
+        throw new Error('expectUnifiedRequestPatterns requires at least 2 request pattern objects to compare');
+    }
     
     // Validate all patterns are objects
-    requestPatterns.forEach((pattern, index) => {
+    requestRecords.forEach((pattern, index) => {
         if (!pattern || typeof pattern !== 'object') {
             throw new Error(`Request pattern at index ${index} must be a valid object`);
         }
@@ -1834,7 +2063,7 @@ const expectUnifiedRequestPatterns = (requestPatterns) => {
     
     // Check for unified timeout configuration
     if (firstPattern.requestTimeout !== undefined || firstPattern.retryTimeout !== undefined) {
-        requestPatterns.forEach((pattern, index) => {
+        requestRecords.forEach((pattern, index) => {
             if (pattern.requestTimeout !== firstPattern.requestTimeout) {
                 throw new Error(`Request timeout pattern inconsistent at index ${index}. Expected: ${firstPattern.requestTimeout}, Got: ${pattern.requestTimeout}`);
             }
@@ -1847,7 +2076,7 @@ const expectUnifiedRequestPatterns = (requestPatterns) => {
     
     // Check for unified retry configuration
     if (firstPattern.maxRetries !== undefined || firstPattern.backoffMultiplier !== undefined) {
-        requestPatterns.forEach((pattern, index) => {
+        requestRecords.forEach((pattern, index) => {
             if (pattern.maxRetries !== firstPattern.maxRetries) {
                 throw new Error(`Retry pattern inconsistent at index ${index}. Expected maxRetries: ${firstPattern.maxRetries}, Got: ${pattern.maxRetries}`);
             }
@@ -1860,20 +2089,21 @@ const expectUnifiedRequestPatterns = (requestPatterns) => {
     
     // Check for unified lifecycle actions
     if (firstPattern.actions && Array.isArray(firstPattern.actions)) {
-        requestPatterns.forEach((pattern, index) => {
+        const firstActions = firstPattern.actions;
+        requestRecords.forEach((pattern, index) => {
             if (!pattern.actions || !Array.isArray(pattern.actions)) {
                 throw new Error(`Lifecycle actions missing at index ${index}`);
             }
             
-            if (JSON.stringify(pattern.actions.sort()) !== JSON.stringify(firstPattern.actions.sort())) {
-                throw new Error(`Lifecycle actions inconsistent at index ${index}. Expected: [${firstPattern.actions.join(', ')}], Got: [${pattern.actions.join(', ')}]`);
+            if (JSON.stringify([...pattern.actions].sort()) !== JSON.stringify([...firstActions].sort())) {
+                throw new Error(`Lifecycle actions inconsistent at index ${index}. Expected: [${firstActions.join(', ')}], Got: [${pattern.actions.join(', ')}]`);
             }
         });
     }
     
     // Check for unified priority/queuing patterns
     if (firstPattern.priority !== undefined || firstPattern.queuePosition !== undefined) {
-        requestPatterns.forEach((pattern, index) => {
+        requestRecords.forEach((pattern, index) => {
             if (pattern.priority !== firstPattern.priority) {
                 throw new Error(`Priority pattern inconsistent at index ${index}. Expected: ${firstPattern.priority}, Got: ${pattern.priority}`);
             }
@@ -1886,20 +2116,21 @@ const expectUnifiedRequestPatterns = (requestPatterns) => {
     
     // Check for unified parsing patterns
     if (firstPattern.parsedFields && Array.isArray(firstPattern.parsedFields)) {
-        requestPatterns.forEach((pattern, index) => {
+        const firstParsedFields = firstPattern.parsedFields;
+        requestRecords.forEach((pattern, index) => {
             if (!pattern.parsedFields || !Array.isArray(pattern.parsedFields)) {
                 throw new Error(`Parsed fields missing at index ${index}`);
             }
             
-            if (JSON.stringify(pattern.parsedFields.sort()) !== JSON.stringify(firstPattern.parsedFields.sort())) {
-                throw new Error(`Parsed fields inconsistent at index ${index}. Expected: [${firstPattern.parsedFields.join(', ')}], Got: [${pattern.parsedFields.join(', ')}]`);
+            if (JSON.stringify([...pattern.parsedFields].sort()) !== JSON.stringify([...firstParsedFields].sort())) {
+                throw new Error(`Parsed fields inconsistent at index ${index}. Expected: [${firstParsedFields.join(', ')}], Got: [${pattern.parsedFields.join(', ')}]`);
             }
         });
     }
     
     // Check for unified request building patterns
     if (firstPattern.builderSource !== undefined) {
-        requestPatterns.forEach((pattern, index) => {
+        requestRecords.forEach((pattern, index) => {
             if (pattern.builderSource !== firstPattern.builderSource) {
                 throw new Error(`Request builder source inconsistent at index ${index}. Expected: ${firstPattern.builderSource}, Got: ${pattern.builderSource}`);
             }
@@ -1908,7 +2139,7 @@ const expectUnifiedRequestPatterns = (requestPatterns) => {
     
     // Check for unified centralization patterns
     if (firstPattern.operationSource !== undefined) {
-        requestPatterns.forEach((pattern, index) => {
+        requestRecords.forEach((pattern, index) => {
             if (pattern.operationSource !== firstPattern.operationSource) {
                 throw new Error(`Operation source inconsistent at index ${index}. Expected: ${firstPattern.operationSource}, Got: ${pattern.operationSource}`);
             }

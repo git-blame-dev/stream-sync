@@ -166,10 +166,14 @@ describe('assertion-helpers behavior', () => {
             createGiftNotification({ priority: 2, processedAt: 2 }),
             createGiftNotification({ priority: 1, processedAt: 3 })
         ];
+        const [highestPriority, middlePriority, lowestPriority] = ordered;
+        if (!highestPriority || !middlePriority || !lowestPriority) {
+            throw new Error('ordered notification fixtures were not created');
+        }
         expect(() => expectNotificationSequence(ordered, 'priority_desc')).not.toThrow();
-        expect(() => expectNotificationSequence([ordered[1], ordered[0]], 'priority_desc')).toThrow('priority descending');
+        expect(() => expectNotificationSequence([middlePriority, highestPriority], 'priority_desc')).toThrow('priority descending');
         expect(() => expectNotificationSequence(ordered, 'timestamp_asc')).not.toThrow();
-        expect(() => expectNotificationSequence([ordered[2], ordered[1]], 'timestamp_asc')).toThrow('timestamp ascending');
+        expect(() => expectNotificationSequence([lowestPriority, middlePriority], 'timestamp_asc')).toThrow('timestamp ascending');
         expect(() => expectNotificationSequence(ordered, 'timestamp_desc')).toThrow('timestamp descending');
         expect(() => expectNotificationSequence(ordered, 'unknown')).toThrow('Unknown expected order');
     });
@@ -387,10 +391,14 @@ describe('assertion-helpers behavior', () => {
                 userMessage: 'Request completed'
             }
         ];
+        const [firstHttpBehavior, secondHttpBehavior] = httpBehaviors;
+        if (!firstHttpBehavior || !secondHttpBehavior) {
+            throw new Error('HTTP behavior fixtures were not created');
+        }
         expect(() => expectConsistentHttpBehavior(httpBehaviors)).not.toThrow();
         expect(() => expectConsistentHttpBehavior([
-            httpBehaviors[0],
-            { ...httpBehaviors[1], requestTimeout: 1000 }
+            firstHttpBehavior,
+            { ...secondHttpBehavior, requestTimeout: 1000 }
         ])).toThrow('timeout inconsistent');
 
         const requestPatterns = [
@@ -419,20 +427,28 @@ describe('assertion-helpers behavior', () => {
                 operationSource: 'centralized_operation'
             }
         ];
+        const [firstRequestPattern, secondRequestPattern] = requestPatterns;
+        if (!firstRequestPattern || !secondRequestPattern) {
+            throw new Error('request pattern fixtures were not created');
+        }
         expect(() => expectUnifiedRequestPatterns(requestPatterns)).not.toThrow();
         expect(() => expectUnifiedRequestPatterns([
-            requestPatterns[0],
-            { ...requestPatterns[1], maxRetries: 5 }
+            firstRequestPattern,
+            { ...secondRequestPattern, maxRetries: 5 }
         ])).toThrow('Retry pattern inconsistent');
     });
 
     it('covers additional assertion-helper branch paths for migration parity', () => {
         const oldNotification = createGiftNotification({ processedAt: testClock.now() - 1000 });
         expect(() => expectNotificationTiming(oldNotification, { maxAge: 100 })).toThrow('too old');
+        expect(() => expectNotificationTiming({ processedAt: 'bad' }, {})).toThrow('numeric processedAt');
         expect(() => expectNotificationSequence([createGiftNotification()], 'priority_desc')).not.toThrow();
+        expect(() => expectNotificationSequence([{ processedAt: 'bad' }, { processedAt: 1 }], 'timestamp_asc')).toThrow('numeric processedAt');
 
         expect(() => expectPlatformEventStructure({}, 'youtube', undefined)).toThrow('item property');
         expect(() => expectPlatformEventStructure({ gift: {} }, 'tiktok', 'gift')).toThrow('nested userId');
+        expect(() => expectYouTubeEventProcessing({ item: { type: 'LiveChatPaidMessage', purchase_amount: '$10.00' } }, { notificationType: 'platform:gift' }))
+            .toThrow('authorDetails');
 
         expect(() => expectInternationalContentPreservation('你好', 'plain-text')).toThrow('Unicode chars');
         expect(() => expectInternationalContentSupport('missing test data', null)).toThrow('Test data must be provided');
