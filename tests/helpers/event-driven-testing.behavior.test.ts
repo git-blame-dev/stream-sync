@@ -15,15 +15,17 @@ import {
     NetworkEventSimulator
 } from './event-driven-testing';
 
+const hasGlobalObserver = () => Object.prototype.hasOwnProperty.call(globalThis, 'testUserExperienceObserver');
+
 describe('event-driven-testing behavior', () => {
     beforeEach(() => {
         testClock.reset();
-        delete global.testUserExperienceObserver;
+        Reflect.deleteProperty(globalThis, 'testUserExperienceObserver');
     });
 
     afterEach(() => {
         testClock.useRealTime();
-        delete global.testUserExperienceObserver;
+        Reflect.deleteProperty(globalThis, 'testUserExperienceObserver');
     });
 
     it('waits for single and multiple emitted events', async () => {
@@ -94,8 +96,9 @@ describe('event-driven-testing behavior', () => {
 
     it('observes user experience with success and failure cleanup', async () => {
         const success = await observeUserExperience(async () => {
-            expect(global.testUserExperienceObserver).toBeDefined();
-            global.testUserExperienceObserver.recordNotification({
+            const observer = globalThis.testUserExperienceObserver;
+            expect(observer).toBeDefined();
+            observer?.recordNotification({
                 content: 'observer event',
                 type: 'platform:follow',
                 platform: 'tiktok'
@@ -105,12 +108,14 @@ describe('event-driven-testing behavior', () => {
 
         expect(success.result).toBe('done');
         expect(success.userExperience.summary.notificationsSeen).toBe(1);
-        expect(global.testUserExperienceObserver).toBeUndefined();
+        expect(globalThis.testUserExperienceObserver).toBeUndefined();
+        expect(hasGlobalObserver()).toBe(false);
 
         await expect(observeUserExperience(async () => {
             throw new Error('observer failure');
         })).rejects.toThrow('observer failure');
-        expect(global.testUserExperienceObserver).toBeUndefined();
+        expect(globalThis.testUserExperienceObserver).toBeUndefined();
+        expect(hasGlobalObserver()).toBe(false);
     });
 
     it('validates high-level user experience and system state contracts', () => {
@@ -185,7 +190,7 @@ describe('event-driven-testing behavior', () => {
         expect(intervalCount).toBe(2);
 
         const network = new NetworkEventSimulator();
-        const events = [];
+        const events: string[] = [];
         network.on('disconnected', () => events.push('disconnected'));
         network.on('connected', () => events.push('connected'));
         network.on('degraded', () => events.push('degraded'));

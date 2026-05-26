@@ -5,14 +5,152 @@ import { expect } from 'bun:test';
 import testClock from './test-clock';
 import { resolveDelay, scheduleTimeout, waitForDelay } from './time-utils';
 
-const waitForEvent = (emitter, eventName, timeout = 5000) => {
+type EventName = string | symbol;
+type WaitForOptions = {
+    timeout?: number;
+    interval?: number;
+};
+type EventSpec = {
+    emitter: EventEmitter;
+    eventName: EventName;
+};
+type UserExperienceRecord = Record<string, unknown>;
+type NotificationObservation = {
+    timestamp: number;
+    content: string;
+    type: unknown;
+    visible: boolean;
+    platform: unknown;
+};
+type DisplayChangeObservation = {
+    timestamp: number;
+    source: unknown;
+    newValue: unknown;
+    previousValue: unknown;
+    userVisible: unknown;
+};
+type AudioEventObservation = {
+    timestamp: number;
+    type: unknown;
+    content: string;
+    audible: boolean;
+};
+type ErrorObservation = {
+    timestamp: number;
+    message: unknown;
+    severity: unknown;
+    userImpact: unknown;
+    recovered: unknown;
+};
+type StatusChangeObservation = {
+    timestamp: number;
+    component: unknown;
+    newStatus: unknown;
+    previousStatus: unknown;
+    userVisible: unknown;
+};
+type UserExperienceObservations = {
+    notifications: NotificationObservation[];
+    displayChanges: DisplayChangeObservation[];
+    audioEvents: AudioEventObservation[];
+    errors: ErrorObservation[];
+    statusChanges: StatusChangeObservation[];
+    userInteractions: UserExperienceRecord[];
+};
+type UserExperienceSummary = {
+    notificationsSeen: number;
+    displayChanges: number;
+    audioEventsHeard: number;
+    errorsEncountered: number;
+    statusChangesObserved: number;
+    overallExperience: 'positive' | 'degraded';
+};
+type UserExperienceSnapshot = UserExperienceObservations & {
+    totalDuration: number;
+    summary: UserExperienceSummary;
+};
+type NotificationInput = UserExperienceRecord & {
+    content?: unknown;
+    type?: unknown;
+    platform?: unknown;
+};
+type DisplayChangeInput = UserExperienceRecord & {
+    source?: unknown;
+    newValue?: unknown;
+    previousValue?: unknown;
+    userVisible?: unknown;
+};
+type AudioEventInput = UserExperienceRecord & {
+    type?: unknown;
+    content?: unknown;
+};
+type UserFacingErrorInput = UserExperienceRecord & {
+    message?: unknown;
+    severity?: unknown;
+    userImpact?: unknown;
+    recovered?: unknown;
+};
+type StatusChangeInput = UserExperienceRecord & {
+    component?: unknown;
+    newStatus?: unknown;
+    previousStatus?: unknown;
+    userVisible?: unknown;
+};
+type UserExperienceExpectations = {
+    shouldSeeNotification?: boolean;
+    notificationContent?: string;
+    shouldHearAudio?: boolean;
+    audioContent?: string;
+    shouldBeErrorFree?: boolean;
+    shouldShowStatus?: boolean;
+    statusComponent?: unknown;
+    statusValue?: unknown;
+};
+type UserExperienceAssertionInput = {
+    notifications?: Array<{ content: string }>;
+    audioEvents?: Array<{ content: string }>;
+    statusChanges?: Array<{ component?: unknown; newStatus?: unknown }>;
+    summary: Pick<UserExperienceSummary, 'notificationsSeen' | 'audioEventsHeard' | 'errorsEncountered' | 'statusChangesObserved'> & {
+        overallExperience: string;
+    };
+};
+type FinalSystemState = {
+    operationalState?: unknown;
+    userVisibleState?: unknown;
+    dataIntegrity?: unknown;
+    userExperienceQuality?: unknown;
+};
+type ExpectedSystemState = {
+    operational?: unknown;
+    userVisible?: unknown;
+    dataIntact?: boolean;
+    userExperienceQuality?: unknown;
+};
+type TimerCallback = () => void;
+type TimerEntry = {
+    callback: TimerCallback;
+    fireTime: number;
+};
+type IntervalEntry = {
+    callback: TimerCallback;
+    delay: number;
+    nextFire: number;
+};
+
+declare global {
+    var testUserExperienceObserver: UserExperienceObserver | undefined;
+}
+
+const getStringContent = (value: unknown): string => typeof value === 'string' ? value : String(value ?? '');
+
+const waitForEvent = (emitter: EventEmitter, eventName: EventName, timeout = 5000): Promise<unknown> => {
     return new Promise((resolve, reject) => {
         const timer = scheduleTimeout(() => {
             emitter.removeListener(eventName, eventHandler);
-            reject(new Error(`Event '${eventName}' not emitted within ${timeout}ms`));
+            reject(new Error(`Event '${String(eventName)}' not emitted within ${timeout}ms`));
         }, timeout);
         
-        const eventHandler = (data) => {
+        const eventHandler = (data: unknown) => {
             clearTimeout(timer);
             resolve(data);
         };
@@ -21,7 +159,7 @@ const waitForEvent = (emitter, eventName, timeout = 5000) => {
     });
 };
 
-const waitFor = async (condition, options = {}) => {
+const waitFor = async (condition: () => boolean | Promise<boolean>, options: WaitForOptions = {}) => {
     const { timeout = 5000, interval = 50 } = options;
     const start = testClock.now();
     const effectiveInterval = resolveDelay(interval);
@@ -37,7 +175,7 @@ const waitFor = async (condition, options = {}) => {
     throw new Error(`Condition not met within ${timeout}ms`);
 };
 
-const waitForMultipleEvents = async (eventSpecs, timeout = 5000) => {
+const waitForMultipleEvents = async (eventSpecs: EventSpec[], timeout = 5000): Promise<unknown[]> => {
     const promises = eventSpecs.map(spec => 
         waitForEvent(spec.emitter, spec.eventName, timeout)
     );
@@ -46,6 +184,9 @@ const waitForMultipleEvents = async (eventSpecs, timeout = 5000) => {
 };
 
 class UserExperienceObserver {
+    observations: UserExperienceObservations;
+    startTime: number;
+
     constructor() {
         this.observations = {
             notifications: [],
@@ -58,17 +199,17 @@ class UserExperienceObserver {
         this.startTime = testClock.now();
     }
 
-    recordNotification(notification) {
+    recordNotification(notification: NotificationInput): void {
         this.observations.notifications.push({
             timestamp: testClock.now() - this.startTime,
-            content: notification.content,
+            content: getStringContent(notification.content),
             type: notification.type,
             visible: true,
             platform: notification.platform
         });
     }
 
-    recordDisplayChange(change) {
+    recordDisplayChange(change: DisplayChangeInput): void {
         this.observations.displayChanges.push({
             timestamp: testClock.now() - this.startTime,
             source: change.source,
@@ -78,16 +219,16 @@ class UserExperienceObserver {
         });
     }
 
-    recordAudioEvent(audioEvent) {
+    recordAudioEvent(audioEvent: AudioEventInput): void {
         this.observations.audioEvents.push({
             timestamp: testClock.now() - this.startTime,
             type: audioEvent.type,
-            content: audioEvent.content,
+            content: getStringContent(audioEvent.content),
             audible: true
         });
     }
 
-    recordUserFacingError(error) {
+    recordUserFacingError(error: UserFacingErrorInput): void {
         this.observations.errors.push({
             timestamp: testClock.now() - this.startTime,
             message: error.message,
@@ -97,7 +238,7 @@ class UserExperienceObserver {
         });
     }
 
-    recordStatusChange(status) {
+    recordStatusChange(status: StatusChangeInput): void {
         this.observations.statusChanges.push({
             timestamp: testClock.now() - this.startTime,
             component: status.component,
@@ -107,7 +248,7 @@ class UserExperienceObserver {
         });
     }
 
-    getObservations() {
+    getObservations(): UserExperienceSnapshot {
         return {
             ...this.observations,
             totalDuration: testClock.now() - this.startTime,
@@ -115,7 +256,7 @@ class UserExperienceObserver {
         };
     }
 
-    generateSummary() {
+    generateSummary(): UserExperienceSummary {
         return {
             notificationsSeen: this.observations.notifications.length,
             displayChanges: this.observations.displayChanges.length,
@@ -126,30 +267,30 @@ class UserExperienceObserver {
         };
     }
 
-    userSawNotification(content) {
+    userSawNotification(content: string): boolean {
         return this.observations.notifications.some(n => 
             n.content.includes(content) && n.visible
         );
     }
 
-    userHeardAudio(content) {
+    userHeardAudio(content: string): boolean {
         return this.observations.audioEvents.some(a => 
             a.content.includes(content) && a.audible
         );
     }
 
-    userSawStatusChange(component, status) {
+    userSawStatusChange(component: unknown, status: unknown): boolean {
         return this.observations.statusChanges.some(s => 
             s.component === component && s.newStatus === status && s.userVisible
         );
     }
 }
 
-const observeUserExperience = async (operation) => {
+const observeUserExperience = async <Result>(operation: () => Result | Promise<Result>) => {
     const observer = new UserExperienceObserver();
     
     // Make observer available globally during test execution
-    global.testUserExperienceObserver = observer;
+    globalThis.testUserExperienceObserver = observer;
     
     try {
         const result = await operation();
@@ -159,18 +300,19 @@ const observeUserExperience = async (operation) => {
         };
     } finally {
         // Clean up global observer
-        delete global.testUserExperienceObserver;
+        Reflect.deleteProperty(globalThis, 'testUserExperienceObserver');
     }
 };
 
 
-const expectUserExperience = (experience, expectations) => {
+const expectUserExperience = (experience: UserExperienceAssertionInput, expectations: UserExperienceExpectations) => {
     // Validate visibility expectations
     if (expectations.shouldSeeNotification) {
         expect(experience.summary.notificationsSeen).toBeGreaterThan(0);
-        if (expectations.notificationContent) {
-            expect(experience.notifications.some(n => 
-                n.content.includes(expectations.notificationContent)
+        const notificationContent = expectations.notificationContent;
+        if (notificationContent) {
+            expect((experience.notifications ?? []).some(n =>
+                n.content.includes(notificationContent)
             )).toBe(true);
         }
     }
@@ -178,9 +320,10 @@ const expectUserExperience = (experience, expectations) => {
     // Validate audio expectations
     if (expectations.shouldHearAudio) {
         expect(experience.summary.audioEventsHeard).toBeGreaterThan(0);
-        if (expectations.audioContent) {
-            expect(experience.audioEvents.some(a => 
-                a.content.includes(expectations.audioContent)
+        const audioContent = expectations.audioContent;
+        if (audioContent) {
+            expect((experience.audioEvents ?? []).some(a =>
+                a.content.includes(audioContent)
             )).toBe(true);
         }
     }
@@ -195,7 +338,7 @@ const expectUserExperience = (experience, expectations) => {
     if (expectations.shouldShowStatus) {
         expect(experience.summary.statusChangesObserved).toBeGreaterThan(0);
         if (expectations.statusComponent && expectations.statusValue) {
-            expect(experience.statusChanges.some(s => 
+            expect((experience.statusChanges ?? []).some(s =>
                 s.component === expectations.statusComponent && 
                 s.newStatus === expectations.statusValue
             )).toBe(true);
@@ -203,7 +346,7 @@ const expectUserExperience = (experience, expectations) => {
     }
 };
 
-const expectFinalSystemState = (state, expectedState) => {
+const expectFinalSystemState = (state: FinalSystemState, expectedState: ExpectedSystemState) => {
     // Operational state (affects user experience)
     if (expectedState.operational !== undefined) {
         expect(state.operationalState).toBe(expectedState.operational);
@@ -225,7 +368,7 @@ const expectFinalSystemState = (state, expectedState) => {
     }
 };
 
-const expectNoTechnicalArtifacts = (content) => {
+const expectNoTechnicalArtifacts = (content: string) => {
     // Check for technical artifacts that users shouldn't see
     const technicalPatterns = [
         /undefined/,
@@ -251,6 +394,11 @@ const expectNoTechnicalArtifacts = (content) => {
 
 
 class TimeSimulator {
+    currentTime: number;
+    timers: Map<number, TimerEntry>;
+    intervals: Map<number, IntervalEntry>;
+    nextTimerId: number;
+
     constructor() {
         this.currentTime = testClock.now();
         this.timers = new Map();
@@ -258,7 +406,7 @@ class TimeSimulator {
         this.nextTimerId = 1;
     }
 
-    advanceTime(milliseconds) {
+    advanceTime(milliseconds: number): void {
         this.currentTime += milliseconds;
         
         // Check and fire timers
@@ -278,7 +426,7 @@ class TimeSimulator {
         }
     }
 
-    ['setTimeout'](callback, delay) {
+    ['setTimeout'](callback: TimerCallback, delay: number): number {
         const id = this.nextTimerId++;
         this.timers.set(id, {
             callback,
@@ -287,7 +435,7 @@ class TimeSimulator {
         return id;
     }
 
-    ['setInterval'](callback, delay) {
+    ['setInterval'](callback: TimerCallback, delay: number): number {
         const id = this.nextTimerId++;
         this.intervals.set(id, {
             callback,
@@ -297,20 +445,24 @@ class TimeSimulator {
         return id;
     }
 
-    clearTimeout(id) {
+    clearTimeout(id: number): void {
         this.timers.delete(id);
     }
 
-    clearInterval(id) {
+    clearInterval(id: number): void {
         this.intervals.delete(id);
     }
 
-    now() {
+    now(): number {
         return this.currentTime;
     }
 }
 
 class NetworkEventSimulator extends EventEmitter {
+    connected: boolean;
+    latency: number;
+    bandwidth: number;
+
     constructor() {
         super();
         this.connected = true;
@@ -318,30 +470,30 @@ class NetworkEventSimulator extends EventEmitter {
         this.bandwidth = Infinity;
     }
 
-    disconnect() {
+    disconnect(): void {
         this.connected = false;
         this.emit('disconnected');
     }
 
-    reconnect() {
+    reconnect(): void {
         this.connected = true;
         this.emit('connected');
     }
 
-    simulateRecovery() {
+    simulateRecovery(): void {
         this.latency = 0;
         this.bandwidth = Infinity;
         this.connected = true;
         this.emit('recovered');
     }
 
-    simulateDegradation(latency, bandwidth) {
+    simulateDegradation(latency: number, bandwidth: number): void {
         this.latency = latency;
         this.bandwidth = bandwidth;
         this.emit('degraded', { latency, bandwidth });
     }
 
-    isOperational() {
+    isOperational(): boolean {
         return this.connected && this.latency < 5000;
     }
 }

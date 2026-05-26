@@ -20,7 +20,7 @@ describe('event-driven-testing', () => {
         });
 
         const observations = observer.getObservations();
-        expect(observations.notifications[0].timestamp).toBe(250);
+        expect(observations.notifications[0]?.timestamp).toBe(250);
         expect(observations.totalDuration).toBe(250);
     });
 });
