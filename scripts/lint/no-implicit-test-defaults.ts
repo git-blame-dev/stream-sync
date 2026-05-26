@@ -3,14 +3,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const REQUIRED_DEPS = ['twitchAuth', 'authManager'];
+const REQUIRED_DEPS: readonly string[] = ['twitchAuth', 'authManager'];
 
 const PATTERN = new RegExp(
     `(${REQUIRED_DEPS.join('|')})\\s*\\|\\|\\s*\\{`,
     'g'
 );
 
-const TEST_DIRS = ['tests/helpers', 'tests/unit', 'tests/integration', 'tests/e2e-smoke'];
+const TEST_DIRS: readonly string[] = ['tests/helpers', 'tests/unit', 'tests/integration', 'tests/e2e-smoke'];
 
 type ImplicitDefaultViolation = {
     line: number;
@@ -18,7 +18,7 @@ type ImplicitDefaultViolation = {
     matches: RegExpMatchArray;
 };
 
-function findTestFiles(dir) {
+function findTestFiles(dir: string): string[] {
     const files: string[] = [];
     if (!fs.existsSync(dir)) return files;
     
@@ -34,7 +34,7 @@ function findTestFiles(dir) {
     return files;
 }
 
-function checkFile(filePath) {
+function checkFile(filePath: string): ImplicitDefaultViolation[] {
     const content = fs.readFileSync(filePath, 'utf-8');
     const lines = content.split('\n');
     const violations: ImplicitDefaultViolation[] = [];

@@ -21,7 +21,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const PROJECT_ROOT = path.resolve(__dirname, '../..');
-const TARGET_DIRECTORIES = ['tests'];
+const TARGET_DIRECTORIES: readonly string[] = ['tests'];
 const FILE_EXTENSIONS = new Set(['.js', '.mjs', '.cjs', '.ts', '.tsx']);
 const IGNORE_DIRECTORIES = new Set([
     'node_modules',
@@ -34,7 +34,13 @@ const IGNORE_DIRECTORIES = new Set([
 // New test files should use fake timers, not mock injection
 const ALLOWLIST = new Set<string>([]);
 
-const MOCK_TIMER_PATTERNS = [
+type MockTimerPattern = {
+    pattern: RegExp;
+    message: string;
+    hint: string;
+};
+
+const MOCK_TIMER_PATTERNS: readonly MockTimerPattern[] = [
     {
         pattern: /safeSetTimeout\s*:\s*(?:createMockFn\s*\(|function\s*\(|\([^)]*\)\s*=>)/g,
         message: 'Injecting mock safeSetTimeout',
@@ -75,11 +81,11 @@ type MockTimerViolation = {
     hint: string;
 };
 
-function normalizePath(filePath) {
+function normalizePath(filePath: string): string {
     return filePath.replace(/\\/g, '/');
 }
 
-function collectFiles(dir) {
+function collectFiles(dir: string): string[] {
     const entries = fs.readdirSync(dir, { withFileTypes: true });
     const files: string[] = [];
 
@@ -102,7 +108,7 @@ function collectFiles(dir) {
     return files;
 }
 
-function scanFile(relativePath) {
+function scanFile(relativePath: string): MockTimerViolation[] {
     const normalizedPath = normalizePath(relativePath);
     if (ALLOWLIST.has(normalizedPath)) {
         return [];

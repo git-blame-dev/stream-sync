@@ -21,7 +21,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const PROJECT_ROOT = path.resolve(__dirname, '../..');
-const TARGET_DIRECTORIES = ['tests'];
+const TARGET_DIRECTORIES: readonly string[] = ['tests'];
 const FILE_EXTENSIONS = new Set(['.js', '.mjs', '.cjs', '.ts', '.tsx']);
 const IGNORE_DIRECTORIES = new Set([
     'node_modules',
@@ -30,7 +30,13 @@ const IGNORE_DIRECTORIES = new Set([
     'setup'
 ]);
 
-const IMPLEMENTATION_PATTERNS = [
+type ImplementationPattern = {
+    pattern: RegExp;
+    message: string;
+    hint: string;
+};
+
+const IMPLEMENTATION_PATTERNS: readonly ImplementationPattern[] = [
     {
         pattern: /(?:warnings|logs|debugLogs|infoLogs|errorLogs)\.some\s*\(\s*(?:\([^)]*\)|[a-zA-Z_]\w*)\s*=>\s*[^)]*\.(?:msg|message)\.includes\s*\(/g,
         message: 'Asserting on log message content',
@@ -71,7 +77,7 @@ type ImplementationViolation = {
     hint: string;
 };
 
-function collectFiles(dir) {
+function collectFiles(dir: string): string[] {
     const entries = fs.readdirSync(dir, { withFileTypes: true });
     const files: string[] = [];
 
@@ -94,7 +100,7 @@ function collectFiles(dir) {
     return files;
 }
 
-function scanFile(relativePath) {
+function scanFile(relativePath: string): ImplementationViolation[] {
     const absolutePath = path.join(PROJECT_ROOT, relativePath);
     const fileText = fs.readFileSync(absolutePath, 'utf8');
     const lines = fileText.split('\n');

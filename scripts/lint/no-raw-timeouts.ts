@@ -12,7 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const PROJECT_ROOT = path.resolve(__dirname, '../..');
-const TARGET_DIRECTORIES = ['src', 'tests', 'scripts'];
+const TARGET_DIRECTORIES: readonly string[] = ['src', 'tests', 'scripts'];
 const FILE_EXTENSIONS = new Set(['.js', '.mjs', '.cjs', '.ts', '.tsx']);
 const IGNORE_DIRECTORIES = new Set([
   'node_modules',
@@ -25,7 +25,7 @@ const IGNORE_DIRECTORIES = new Set([
 
 const VIOLATION_PATTERN = /\bset(?:Timeout|Interval)\s*\(/g;
 const SAFE_PREFIX = 'safe';
-const ALLOWED_PREFIXES = [];
+const ALLOWED_PREFIXES: readonly string[] = [];
 const PROMISE_TIMEOUT_PATTERN = /new\s+Promise\s*\([^)]*=>\s*(?:safeSetTimeout|setTimeout)\s*\(/;
 const PROMISE_TIMEOUT_ALLOWLIST = new Set([
   'src/utils/timeout-validator.ts'
@@ -46,14 +46,14 @@ type TimeoutViolation = {
   hint?: string;
 };
 
-function normalizePath(filePath) {
+function normalizePath(filePath: string): string {
   return filePath.replace(/\\/g, '/');
 }
 
 /**
  * Recursively collect files to scan.
  */
-function collectFiles(dir) {
+function collectFiles(dir: string): string[] {
   const entries = fs.readdirSync(dir, { withFileTypes: true });
   const files: string[] = [];
 
@@ -77,7 +77,7 @@ function collectFiles(dir) {
 /**
  * Determine whether a match is already using the safe wrapper.
  */
-function isSafeUsage(line, matchIndex) {
+function isSafeUsage(line: string, matchIndex: number): boolean {
   const charBefore = matchIndex > 0 ? line[matchIndex - 1] : '';
   if (charBefore === '\'' || charBefore === '"' || charBefore === '`') {
     return true;
@@ -98,7 +98,7 @@ function isSafeUsage(line, matchIndex) {
 /**
  * Scan a single file and return violations.
  */
-function scanFile(relativePath) {
+function scanFile(relativePath: string): TimeoutViolation[] {
   const absolutePath = path.join(PROJECT_ROOT, relativePath);
   const fileText = fs.readFileSync(absolutePath, 'utf8');
   const contents = fileText.split('\n');
@@ -129,7 +129,7 @@ function scanFile(relativePath) {
     }
 
     if (enforceRawTimerRule) {
-      let match;
+      let match: RegExpExecArray | null;
       while ((match = VIOLATION_PATTERN.exec(line)) !== null) {
         if (isSafeUsage(line, match.index)) {
           continue;
@@ -146,7 +146,7 @@ function scanFile(relativePath) {
 
   if (enforcePromiseRaceRule) {
     const racePattern = new RegExp(PROMISE_RACE_TIMEOUT_PATTERN.source, 'g');
-    let match;
+    let match: RegExpExecArray | null;
     while ((match = racePattern.exec(fileText)) !== null) {
       const precedingText = fileText.slice(0, match.index);
       const lineNumber = precedingText.split('\n').length;

@@ -5,7 +5,7 @@ import path from 'node:path';
 
 const BOOLEAN_PATTERN = /(?<![a-zA-Z_.])Boolean\(([^)]+)\)/g;
 
-const SOURCE_DIRS = ['src', 'tests', 'scripts'];
+const SOURCE_DIRS: readonly string[] = ['src', 'tests', 'scripts'];
 
 type BooleanViolation = {
     line: number;
@@ -13,7 +13,7 @@ type BooleanViolation = {
     suggestion: string;
 };
 
-function findSourceFiles(dir) {
+function findSourceFiles(dir: string): string[] {
     const files: string[] = [];
     if (!fs.existsSync(dir)) return files;
     
@@ -29,21 +29,29 @@ function findSourceFiles(dir) {
     return files;
 }
 
-function checkFile(filePath) {
+function checkFile(filePath: string): BooleanViolation[] {
     const content = fs.readFileSync(filePath, 'utf-8');
     const lines = content.split('\n');
     const violations: BooleanViolation[] = [];
     
-    let match;
+    let match: RegExpExecArray | null;
     while ((match = BOOLEAN_PATTERN.exec(content)) !== null) {
         const lineNumber = content.slice(0, match.index).split('\n').length;
         const line = lines[lineNumber - 1];
-        const innerExpr = match[1].trim();
+        const innerExpr = match[1];
+
+        if (line === undefined) {
+            throw new Error(`Unable to resolve line ${lineNumber} in ${filePath}`);
+        }
+
+        if (innerExpr === undefined) {
+            throw new Error(`Boolean() match did not include expected capture group in ${filePath}:${lineNumber}`);
+        }
         
         violations.push({
             line: lineNumber,
             content: line.trim(),
-            suggestion: `!!(${innerExpr})`
+            suggestion: `!!(${innerExpr.trim()})`
         });
     }
     
