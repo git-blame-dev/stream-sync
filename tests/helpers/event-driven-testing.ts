@@ -1,5 +1,6 @@
-
 import { EventEmitter } from 'node:events';
+
+import { expect } from 'bun:test';
 
 import testClock from './test-clock';
 import { resolveDelay, scheduleTimeout, waitForDelay } from './time-utils';

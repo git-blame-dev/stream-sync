@@ -1,3 +1,5 @@
+import { describe, expect, it } from 'bun:test';
+
 import { createTestUser } from '../../helpers/test-setup';
 import { PlatformEvents, PlatformEventValidator } from '../../../src/interfaces/PlatformEvents.ts';
 import { DEFAULT_AVATAR_URL } from '../../../src/constants/avatar';

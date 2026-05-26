@@ -1,3 +1,5 @@
+import { describe, expect, it } from "bun:test";
+
 describe("monetization error payload no-fallback behavior", () => {
   it("omits username when not provided", () => {
     const {

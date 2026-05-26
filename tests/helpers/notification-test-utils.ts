@@ -1,3 +1,5 @@
+import { describe, expect, test } from 'bun:test';
+
 import { NotificationBuilder } from '../../src/utils/notification-builder';
 import { interpolateTemplate } from '../../src/utils/notification-template-interpolator';
 

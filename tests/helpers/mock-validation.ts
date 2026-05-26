@@ -3,6 +3,8 @@
 // API CONTRACT DEFINITIONS
 // ================================================================================================
 
+import { expect } from 'bun:test';
+
 import testClock from './test-clock';
 import { isMockFunction } from './bun-mock-utils';
 

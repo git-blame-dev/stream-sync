@@ -3,6 +3,8 @@
 // LOG LEVEL DEFINITIONS
 // ================================================================================================
 
+import { expect } from 'bun:test';
+
 import testClock from './test-clock';
 import { nextTestId } from './test-id';
 

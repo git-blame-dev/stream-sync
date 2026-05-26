@@ -1,3 +1,5 @@
+import { describe, expect, it } from "bun:test";
+
 import { PlatformEvents } from "../../../../../src/interfaces/PlatformEvents";
 import { DEFAULT_AVATAR_URL } from "../../../../../src/constants/avatar";
 import { createYouTubeEventFactory as createStaticYouTubeEventFactory } from "../../../../../src/platforms/youtube/events/event-factory";

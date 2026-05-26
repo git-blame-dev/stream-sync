@@ -1,5 +1,8 @@
+import { describe, expect, it } from "bun:test";
+
 import { CheermoteProcessor } from "../../../src/utils/cheermote-processor.ts";
 import { extractTwitchMessageData } from "../../../src/utils/message-normalization.ts";
+
 describe("Cheermote counting", () => {
   it("counts cheermotes and totals bits from EventSub fragments", () => {
     const fragments = [
