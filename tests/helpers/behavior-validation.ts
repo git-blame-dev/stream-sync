@@ -8,15 +8,199 @@ import {
 import testClock from './test-clock';
 import { waitForDelay } from './time-utils';
 
+type UnknownRecord = Record<string, unknown>;
+type NotificationType = 'platform:gift' | 'platform:follow' | 'platform:paypiggy' | 'platform:raid' | 'platform:envelope';
+
+type GiftProcessingResult = UnknownRecord & {
+    notification?: { displayMessage?: unknown };
+    displayed?: unknown;
+    vfxTriggered?: unknown;
+    obsUpdated?: unknown;
+};
+
+type GiftPlatform = {
+    processGift: (giftData: unknown) => Promise<GiftProcessingResult> | GiftProcessingResult;
+};
+
+type UserGiftImpact = {
+    wasNotified: boolean;
+    receivedVisualFeedback?: boolean;
+    visibleInStream?: boolean;
+    missedNotification?: boolean;
+    errorExperienced?: boolean;
+    impactLevel?: string;
+};
+
+type UserGiftFlowResult = {
+    success: boolean;
+    userVisibleOutcome: unknown;
+    userImpact: UserGiftImpact;
+    steps: Record<'giftReceived' | 'notificationCreated' | 'displayedToUser' | 'vfxTriggered' | 'obsIntegration', boolean>;
+    failureReason: string | null;
+    performanceMetrics: {
+        startTime: number;
+        endTime: number | null;
+        duration: number | null;
+    };
+};
+
+type NotificationProcessingResult = UnknownRecord & {
+    processed?: unknown;
+    displayed?: unknown;
+    userNotified?: unknown;
+    tier?: unknown;
+    viewerCount?: unknown;
+    notification?: { displayMessage?: unknown };
+};
+
+type NotificationPlatform = {
+    processNotification: (data: UnknownRecord) => Promise<NotificationProcessingResult> | NotificationProcessingResult;
+};
+
+type NotificationFlowResult = {
+    success: boolean;
+    notificationType: NotificationType;
+    userExperience: {
+        wasNotified: boolean;
+        displayWasVisible: boolean;
+        contentWasValid: boolean;
+    };
+    platformSpecific: UnknownRecord;
+    failureReason: string | null;
+    userImpact: { missedNotification?: boolean; impactLevel?: string };
+};
+
+type EventPlatform = {
+    processEvent: (event: unknown) => Promise<UnknownRecord> | UnknownRecord;
+};
+
+type CrossPlatformBehaviorResult = {
+    success: boolean;
+    consistency: {
+        userMessages: boolean;
+        displayTiming: boolean;
+        priorityHandling: boolean;
+    };
+    inconsistencies: string[];
+    platformFailures: string[];
+    workingPlatforms: string[];
+    platformResults: Record<string, UnknownRecord>;
+};
+
+type WorkflowValidationResult = {
+    success: boolean;
+    steps?: Partial<UserGiftFlowResult['steps']>;
+    failureReason?: unknown;
+    performanceMetrics?: { duration?: number | null };
+};
+
+type WorkflowQualityAssessment = {
+    qualityGrade: 'A' | 'B' | 'C' | 'D' | 'F';
+    userExperienceScore: number;
+    performanceScore: number;
+    reliabilityScore: number;
+    recommendations: string[];
+};
+
+type DisplayedNotification = UnknownRecord & {
+    content?: unknown;
+    visible?: unknown;
+    priority?: unknown;
+};
+
+type DisplayedNotificationExpectations = {
+    minimumCount?: number;
+    mustBeVisible?: boolean;
+    priority?: unknown;
+    mustContainUsername?: boolean;
+    username?: string;
+    mustContainAmount?: boolean;
+    amount?: number;
+};
+
+type StateChangeExpectation = string | number | boolean | null | undefined | UnknownRecord | unknown[] | ((initialValue: unknown, finalValue: unknown) => boolean);
+type GracefulDegradationExpectations = {
+    getSystemState?: () => { operational?: boolean };
+    checkUserExperience?: () => { isStable?: boolean };
+    attemptRecovery?: () => Promise<unknown> | unknown;
+    requireUserStability?: boolean;
+};
+
+type GracefulDegradationResult = {
+    systemStabilityMaintained: boolean;
+    errorHandledGracefully: boolean;
+    userExperienceImpacted: boolean;
+    recoverabilityAssessed: boolean;
+    systemStable: boolean;
+    errorsHandled: boolean;
+};
+
+type BehaviorOutcomeExpectations<Result> = {
+    maxExecutionTime?: number;
+    expectUserVisibleResults?: boolean;
+    extractUserResults?: (result: Result) => unknown[];
+    validateUserResults?: (results: unknown[]) => void;
+    validateOutcome?: (result: Result) => boolean;
+    expectError?: boolean;
+    validateError?: (error: Error) => boolean;
+};
+
+type BehaviorOutcomeResult = {
+    behaviorExecuted: boolean;
+    outcomesMatched: boolean;
+    userVisibleResults: unknown[];
+    performanceWithinLimits: boolean;
+    sideEffectsAcceptable: boolean;
+};
+
+type ConfigSystem<Value = unknown> = {
+    set?: (key: string, value: Value) => void;
+    update?: (key: string, value: Value) => void;
+};
+
+type RecoveryExpectations = {
+    getSystemState?: () => UnknownRecord & { status?: unknown };
+    waitForRecovery?: number;
+    requireRecovery?: boolean;
+};
+
+type ErrorRecoveryResult = {
+    operationAttempted: boolean;
+    errorOccurred: boolean;
+    recoveryAttempted: boolean;
+    recoverySuccessful: boolean;
+    finalSystemState: (UnknownRecord & { status?: unknown }) | null;
+};
+
+const isRecord = (value: unknown): value is UnknownRecord => {
+    return typeof value === 'object' && value !== null;
+};
+
+const requireRecord = (value: unknown, name: string): UnknownRecord => {
+    if (!isRecord(value)) {
+        throw new Error(`${name} must be an object`);
+    }
+
+    return value;
+};
+
+const getErrorMessage = (error: unknown): string => {
+    return error instanceof Error ? error.message : String(error);
+};
+
+const isNotificationType = (type: string): type is NotificationType => {
+    return ['platform:gift', 'platform:follow', 'platform:paypiggy', 'platform:raid', 'platform:envelope'].includes(type);
+};
+
 // ================================================================================================
 // USER WORKFLOW VALIDATION
 // ================================================================================================
 
-const validateUserGiftFlow = async (platform, giftData) => {
-    const result = {
+const validateUserGiftFlow = async (platform: GiftPlatform, giftData: unknown): Promise<UserGiftFlowResult> => {
+    const result: UserGiftFlowResult = {
         success: false,
         userVisibleOutcome: null,
-        userImpact: null,
+        userImpact: { wasNotified: false },
         steps: {
             giftReceived: false,
             notificationCreated: false,
@@ -64,7 +248,7 @@ const validateUserGiftFlow = async (platform, giftData) => {
         }
 
         // Assess overall success
-        const criticalSteps = ['giftReceived', 'notificationCreated', 'displayedToUser'];
+        const criticalSteps = ['giftReceived', 'notificationCreated', 'displayedToUser'] as const;
         const criticalStepsPassed = criticalSteps.every(step => result.steps[step]);
         
         if (criticalStepsPassed) {
@@ -83,7 +267,7 @@ const validateUserGiftFlow = async (platform, giftData) => {
         }
 
     } catch (error) {
-        result.failureReason = error.message;
+        result.failureReason = getErrorMessage(error);
         result.userImpact = {
             wasNotified: false,
             missedNotification: true,
@@ -98,13 +282,12 @@ const validateUserGiftFlow = async (platform, giftData) => {
     return result;
 };
 
-const validateNotificationFlow = async (type, platform, data) => {
-    const allowedTypes = ['platform:gift', 'platform:follow', 'platform:paypiggy', 'platform:raid', 'platform:envelope'];
-    if (!allowedTypes.includes(type)) {
+const validateNotificationFlow = async (type: string, platform: Partial<NotificationPlatform>, data: UnknownRecord): Promise<NotificationFlowResult> => {
+    if (!isNotificationType(type)) {
         throw new Error(`Invalid notification type: ${type}`);
     }
 
-    const result = {
+    const result: NotificationFlowResult = {
         success: false,
         notificationType: type,
         userExperience: {
@@ -119,6 +302,9 @@ const validateNotificationFlow = async (type, platform, data) => {
 
     try {
         // Process the notification
+        if (typeof platform.processNotification !== 'function') {
+            throw new Error('Notification platform must provide processNotification');
+        }
         const notificationResult = await platform.processNotification({ type, ...data });
 
         // Validate basic processing
@@ -152,12 +338,12 @@ const validateNotificationFlow = async (type, platform, data) => {
                 result.userExperience.contentWasValid = true;
             } catch (contentError) {
                 result.userExperience.contentWasValid = false;
-                result.failureReason = `Content validation failed: ${contentError.message}`;
+                result.failureReason = `Content validation failed: ${getErrorMessage(contentError)}`;
             }
         }
 
     } catch (error) {
-        result.failureReason = error.message;
+        result.failureReason = getErrorMessage(error);
         result.userImpact = {
             missedNotification: true,
             impactLevel: 'critical'
@@ -167,8 +353,8 @@ const validateNotificationFlow = async (type, platform, data) => {
     return result;
 };
 
-const validateCrossPlatformBehavior = async (platforms, event) => {
-    const result = {
+const validateCrossPlatformBehavior = async (platforms: Record<string, EventPlatform>, event: unknown): Promise<CrossPlatformBehaviorResult> => {
+    const result: CrossPlatformBehaviorResult = {
         success: false,
         consistency: {
             userMessages: false,
@@ -182,18 +368,21 @@ const validateCrossPlatformBehavior = async (platforms, event) => {
     };
 
     const platformNames = Object.keys(platforms);
-    const platformResults = {};
+    const platformResults: Record<string, UnknownRecord> = {};
 
     // Process event on each platform
     for (const platformName of platformNames) {
         try {
             const platform = platforms[platformName];
+            if (!platform) {
+                throw new Error(`Missing platform: ${platformName}`);
+            }
             const eventResult = await platform.processEvent(event);
             platformResults[platformName] = eventResult;
             result.workingPlatforms.push(platformName);
         } catch (error) {
             result.platformFailures.push(platformName);
-            platformResults[platformName] = { error: error.message };
+            platformResults[platformName] = { error: getErrorMessage(error) };
         }
     }
 
@@ -210,7 +399,7 @@ const validateCrossPlatformBehavior = async (platforms, event) => {
     }
 
     // Analyze consistency across working platforms
-    const workingResults = result.workingPlatforms.map(name => platformResults[name]);
+    const workingResults = result.workingPlatforms.map(name => platformResults[name]).filter(isRecord);
 
     // Check user message consistency
     const userMessages = workingResults.map(r => r.userMessage).filter(Boolean);
@@ -246,7 +435,7 @@ const validateCrossPlatformBehavior = async (platforms, event) => {
 // CONTENT VALIDATION UTILITIES
 // ================================================================================================
 
-const validateUserVisibleContent = (content) => {
+const validateUserVisibleContent = (content: unknown): void => {
     if (typeof content !== 'string') {
         throw new Error('User-visible content must be a string');
     }
@@ -275,49 +464,44 @@ const validateUserVisibleContent = (content) => {
     }
 };
 
-const validateGiftData = (giftData) => {
-    if (!giftData || typeof giftData !== 'object') {
-        throw new Error('Gift data must be an object');
-    }
+const validateGiftData = (giftData: unknown): void => {
+    const giftRecord = requireRecord(giftData, 'Gift data');
 
     const requiredFields = ['username', 'amount', 'currency'];
     requiredFields.forEach(field => {
-        if (!giftData.hasOwnProperty(field)) {
+        if (!Object.prototype.hasOwnProperty.call(giftRecord, field)) {
             throw new Error(`Gift data missing required field: ${field}`);
         }
     });
 
-    if (!giftData.username || typeof giftData.username !== 'string' || !giftData.username.trim()) {
+    if (!giftRecord.username || typeof giftRecord.username !== 'string' || !giftRecord.username.trim()) {
         throw new Error('Gift data must include a valid username');
     }
 
-    if (typeof giftData.amount !== 'number' || giftData.amount <= 0) {
+    if (typeof giftRecord.amount !== 'number' || giftRecord.amount <= 0) {
         throw new Error('Gift amount must be a positive number');
     }
 
-    if (typeof giftData.currency !== 'string' || !giftData.currency.trim()) {
+    if (typeof giftRecord.currency !== 'string' || !giftRecord.currency.trim()) {
         throw new Error('Gift currency must be a non-empty string');
     }
 };
 
-const validateNotificationData = (notificationData) => {
-    if (!notificationData || typeof notificationData !== 'object') {
-        throw new Error('Notification data must be an object');
-    }
+const validateNotificationData = (notificationData: unknown): void => {
+    const notificationRecord = requireRecord(notificationData, 'Notification data');
 
     const requiredFields = ['type', 'username'];
     requiredFields.forEach(field => {
-        if (!notificationData.hasOwnProperty(field)) {
+        if (!Object.prototype.hasOwnProperty.call(notificationRecord, field)) {
             throw new Error(`Notification data missing required field: ${field}`);
         }
     });
 
-    const validTypes = ['platform:gift', 'platform:follow', 'platform:paypiggy', 'platform:raid', 'platform:envelope'];
-    if (!validTypes.includes(notificationData.type)) {
-        throw new Error(`Invalid notification type: ${notificationData.type}`);
+    if (typeof notificationRecord.type !== 'string' || !isNotificationType(notificationRecord.type)) {
+        throw new Error(`Invalid notification type: ${notificationRecord.type}`);
     }
 
-    if (!notificationData.username || typeof notificationData.username !== 'string' || !notificationData.username.trim()) {
+    if (!notificationRecord.username || typeof notificationRecord.username !== 'string' || !notificationRecord.username.trim()) {
         throw new Error('Notification data must include a valid username');
     }
 };
@@ -326,8 +510,8 @@ const validateNotificationData = (notificationData) => {
 // PERFORMANCE AND QUALITY ASSESSMENT
 // ================================================================================================
 
-const assessWorkflowQuality = (validationResult) => {
-    const assessment = {
+const assessWorkflowQuality = (validationResult: WorkflowValidationResult): WorkflowQualityAssessment => {
+    const assessment: WorkflowQualityAssessment = {
         qualityGrade: 'F',
         userExperienceScore: 0,
         performanceScore: 0,
@@ -374,7 +558,8 @@ const assessWorkflowQuality = (validationResult) => {
     if (!validationResult.success) {
         assessment.recommendations.push('Fix critical workflow failure');
     }
-    if (validationResult.performanceMetrics?.duration > 500) {
+    const duration = validationResult.performanceMetrics?.duration;
+    if (typeof duration === 'number' && duration > 500) {
         assessment.recommendations.push('Optimize performance - workflow taking too long');
     }
     if (!validationResult.steps?.vfxTriggered) {
@@ -391,58 +576,61 @@ const assessWorkflowQuality = (validationResult) => {
 // Behavior-focused validation patterns
 // ================================================================================================
 
-const expectValidDisplayedNotifications = (displayedNotifications, expectedBehavior = {}) => {
+const expectValidDisplayedNotifications = (displayedNotifications: unknown, expectedBehavior: DisplayedNotificationExpectations = {}): void => {
     if (!Array.isArray(displayedNotifications)) {
         throw new Error('displayedNotifications must be an array');
     }
     
-    if (displayedNotifications.length === 0 && expectedBehavior.minimumCount > 0) {
+    if (displayedNotifications.length === 0 && (expectedBehavior.minimumCount ?? 0) > 0) {
         throw new Error(`Expected at least ${expectedBehavior.minimumCount} displayed notifications, got 0`);
     }
     
-    displayedNotifications.forEach((notification, index) => {
+    displayedNotifications.forEach((notification: unknown, index) => {
+        const notificationRecord = notification as DisplayedNotification;
         // Validate user-visible content quality
-        if (!notification.content || typeof notification.content !== 'string') {
+        if (!notificationRecord.content || typeof notificationRecord.content !== 'string') {
             throw new Error(`Notification ${index} missing user-visible content`);
         }
-        
+
         // Validate no technical artifacts in user-facing content
-        validateUserVisibleContent(notification.content);
-        
+        validateUserVisibleContent(notificationRecord.content);
+
         // Validate notification visibility state
-        if (expectedBehavior.mustBeVisible && !notification.visible) {
+        if (expectedBehavior.mustBeVisible && !notificationRecord.visible) {
             throw new Error(`Notification ${index} should be visible to user but is not`);
         }
-        
+
         // Validate notification priority behavior
-        if (expectedBehavior.priority && notification.priority !== expectedBehavior.priority) {
-            throw new Error(`Notification ${index} priority mismatch. Expected: ${expectedBehavior.priority}, Got: ${notification.priority}`);
+        if (expectedBehavior.priority && notificationRecord.priority !== expectedBehavior.priority) {
+            throw new Error(`Notification ${index} priority mismatch. Expected: ${expectedBehavior.priority}, Got: ${notificationRecord.priority}`);
         }
-        
+
         // Validate content includes expected user data
         if (expectedBehavior.mustContainUsername && expectedBehavior.username) {
-            if (!notification.content.includes(expectedBehavior.username)) {
+            if (!notificationRecord.content.includes(expectedBehavior.username)) {
                 throw new Error(`Notification ${index} content should contain username "${expectedBehavior.username}"`);
             }
         }
-        
+
         if (expectedBehavior.mustContainAmount && expectedBehavior.amount) {
-            if (!notification.content.includes(expectedBehavior.amount.toString())) {
+            if (!notificationRecord.content.includes(expectedBehavior.amount.toString())) {
                 throw new Error(`Notification ${index} content should contain amount "${expectedBehavior.amount}"`);
             }
         }
     });
 };
 
-const expectSystemStateChanges = (initialState, finalState, expectedChanges) => {
+const expectSystemStateChanges = (initialState: unknown, finalState: unknown, expectedChanges: Record<string, StateChangeExpectation>): void => {
     if (!initialState || !finalState) {
         throw new Error('Both initialState and finalState are required');
     }
+    const initialRecord = initialState as UnknownRecord;
+    const finalRecord = finalState as UnknownRecord;
     
     Object.keys(expectedChanges).forEach(stateKey => {
         const expectedValue = expectedChanges[stateKey];
-        const initialValue = initialState[stateKey];
-        const finalValue = finalState[stateKey];
+        const initialValue = initialRecord[stateKey];
+        const finalValue = finalRecord[stateKey];
         
         if (typeof expectedValue === 'function') {
             // Custom validation function
@@ -455,8 +643,11 @@ const expectSystemStateChanges = (initialState, finalState, expectedChanges) => 
     });
 };
 
-const expectGracefulDegradation = async (systemUnderTest, degradationExpectations = {}) => {
-    const result = {
+const expectGracefulDegradation = async (
+    systemUnderTest: () => Promise<unknown> | unknown,
+    degradationExpectations: GracefulDegradationExpectations = {}
+): Promise<GracefulDegradationResult> => {
+    const result: Omit<GracefulDegradationResult, 'systemStable' | 'errorsHandled'> = {
         systemStabilityMaintained: false,
         errorHandledGracefully: false,
         userExperienceImpacted: false,
@@ -523,8 +714,11 @@ const expectGracefulDegradation = async (systemUnderTest, degradationExpectation
     };
 };
 
-const expectBehaviorOutcome = async (behaviorUnderTest, outcomeExpectations) => {
-    const result = {
+const expectBehaviorOutcome = async <Result>(
+    behaviorUnderTest: () => Promise<Result> | Result,
+    outcomeExpectations: BehaviorOutcomeExpectations<Result>
+) => {
+    const result: BehaviorOutcomeResult = {
         behaviorExecuted: false,
         outcomesMatched: false,
         userVisibleResults: [],
@@ -548,6 +742,9 @@ const expectBehaviorOutcome = async (behaviorUnderTest, outcomeExpectations) => 
         
         // Validate user-visible outcomes
         if (outcomeExpectations.expectUserVisibleResults) {
+            if (!outcomeExpectations.extractUserResults) {
+                throw new Error('extractUserResults is required when expectUserVisibleResults is true');
+            }
             result.userVisibleResults = outcomeExpectations.extractUserResults(behaviorResult);
             
             // Validate user results meet expectations
@@ -568,7 +765,7 @@ const expectBehaviorOutcome = async (behaviorUnderTest, outcomeExpectations) => 
         if (outcomeExpectations.expectError) {
             result.behaviorExecuted = true;
             result.outcomesMatched = outcomeExpectations.validateError ? 
-                outcomeExpectations.validateError(error) : true;
+                outcomeExpectations.validateError(error instanceof Error ? error : new Error(String(error))) : true;
         } else {
             throw error; // Re-throw unexpected errors
         }
@@ -590,7 +787,12 @@ const expectBehaviorOutcome = async (behaviorUnderTest, outcomeExpectations) => 
     return result;
 };
 
-const expectConfigurationBehaviorChange = async (configSystem, configKey, newValue, behaviorTest) => {
+const expectConfigurationBehaviorChange = async <State extends UnknownRecord, Value>(
+    configSystem: ConfigSystem<Value>,
+    configKey: string,
+    newValue: Value,
+    behaviorTest: () => Promise<State> | State
+) => {
     // Capture initial behavior state
     const initialBehaviorState = await behaviorTest();
     
@@ -619,8 +821,11 @@ const expectConfigurationBehaviorChange = async (configSystem, configKey, newVal
     };
 };
 
-const expectErrorRecoveryBehavior = async (operationThatMayFail, recoveryExpectations = {}) => {
-    const result = {
+const expectErrorRecoveryBehavior = async (
+    operationThatMayFail: () => Promise<unknown> | unknown,
+    recoveryExpectations: RecoveryExpectations = {}
+): Promise<ErrorRecoveryResult> => {
+    const result: ErrorRecoveryResult = {
         operationAttempted: false,
         errorOccurred: false,
         recoveryAttempted: false,
@@ -667,14 +872,17 @@ const expectErrorRecoveryBehavior = async (operationThatMayFail, recoveryExpecta
 // HELPER FUNCTIONS FOR TESTS
 // ================================================================================================
 
-const expectValidNotification = (notification) => {
+const expectValidNotification = <Notification>(notification: Notification): Notification => {
     expect(notification).toBeDefined();
-    expect(notification.displayMessage).toBeDefined();
+    expect((notification as UnknownRecord).displayMessage).toBeDefined();
     return notification;
 };
 
-const expectNoTechnicalArtifacts = (str) => {
+const expectNoTechnicalArtifacts = (str: unknown): string | undefined => {
     if (!str) return;
+    if (typeof str !== 'string') {
+        throw new Error('Content must be a string');
+    }
     
     const technicalPatterns = [
         /undefined/i,
@@ -694,7 +902,7 @@ const expectNoTechnicalArtifacts = (str) => {
     return str;
 };
 
-const expectValidUserFeedback = (feedback) => {
+const expectValidUserFeedback = (feedback?: unknown): string => {
     if (!feedback) {
         throw new Error('User feedback is required');
     }

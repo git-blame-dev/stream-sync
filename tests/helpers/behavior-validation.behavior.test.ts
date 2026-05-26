@@ -300,7 +300,7 @@ describe('behavior-validation helper behavior', () => {
             { count: 1, status: 'old' },
             { count: 2, status: 'new' },
             {
-                count: (previous, next) => previous === 1 && next === 2,
+                count: (previous: unknown, next: unknown) => previous === 1 && next === 2,
                 status: 'new'
             }
         )).not.toThrow();
@@ -398,9 +398,9 @@ describe('behavior-validation helper behavior', () => {
     });
 
     it('validates configuration-change and recovery helper behavior', async () => {
-        const setConfig = {
+        const setConfig: Record<string, unknown> & { value: string; set: (key: string, nextValue: string) => void } = {
             value: 'old',
-            set(key, nextValue) {
+            set(key: string, nextValue: string) {
                 this[key] = nextValue;
             }
         };
@@ -413,9 +413,9 @@ describe('behavior-validation helper behavior', () => {
         expect(setChange.initialState.currentValue).toBe('old');
         expect(setChange.finalState.currentValue).toBe('new');
 
-        const updateConfig = {
+        const updateConfig: Record<string, unknown> & { value: string; update: (key: string, nextValue: string) => void } = {
             value: 'old',
-            update(key, nextValue) {
+            update(key: string, nextValue: string) {
                 this[key] = nextValue;
             }
         };
@@ -451,7 +451,8 @@ describe('behavior-validation helper behavior', () => {
         );
         expect(noRecoveryNeeded.operationAttempted).toBe(true);
         expect(noRecoveryNeeded.errorOccurred).toBe(false);
-        expect(noRecoveryNeeded.finalSystemState.status).toBe('operational');
+        expect(noRecoveryNeeded.finalSystemState).not.toBeNull();
+        expect(noRecoveryNeeded.finalSystemState?.status).toBe('operational');
 
         const recovered = await expectErrorRecoveryBehavior(
             async () => {
