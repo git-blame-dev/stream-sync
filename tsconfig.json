@@ -7,6 +7,8 @@
     "allowJs": true,
     "checkJs": false,
     "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
     "types": ["node", "bun"],
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "jsx": "react-jsx"
@@ -14,6 +16,7 @@
   "include": [
     "src/services/gui/**/*.js",
     "src/services/gui/**/*.ts",
+    "src/types/external-package-shims.d.ts",
     "scripts/local/gui-preview.ts",
     "tests/unit/gui/**/*.js",
     "tests/unit/gui/**/*.ts",
@@ -23,6 +26,7 @@
     "tests/integration/gui-*.ts",
     "tests/e2e-smoke/gui-*.js",
     "tests/e2e-smoke/gui-*.ts",
+    "tests/types/react-test-renderer.d.ts",
     "tests/helpers/gui-transport-test-utils.js",
     "tests/helpers/gui-transport-test-utils.ts"
   ],

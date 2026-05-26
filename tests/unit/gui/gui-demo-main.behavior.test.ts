@@ -203,7 +203,9 @@ describe("Chat demo main behavior", () => {
   });
 
   it("mounts and unmounts the looping demo without leaking render state", async () => {
-    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    const rendererRef: { current: TestRenderer.ReactTestRenderer | null } = {
+      current: null,
+    };
     let nextIntervalId = 0;
     const activeIntervalIds = new Set<number>();
     const scheduler = {
@@ -220,10 +222,15 @@ describe("Chat demo main behavior", () => {
     };
 
     await TestRenderer.act(async () => {
-      renderer = TestRenderer.create(
+      rendererRef.current = TestRenderer.create(
         React.createElement(ChatDemo, { scheduler }),
       );
     });
+
+    const renderer = rendererRef.current;
+    if (!renderer) {
+      throw new Error("Expected ChatDemo renderer to be created");
+    }
 
     expect(JSON.stringify(renderer?.toJSON())).toContain("Goku");
     expect(activeIntervalIds.size).toBe(1);

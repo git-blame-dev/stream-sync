@@ -19,7 +19,9 @@
   "ignore": [
     "src/interfaces/PlatformEvents.ts",
     "src/core/types/config-types.ts",
+    "src/types/external-package-shims.d.ts",
     "src/types/external-modules.d.ts",
+    "tests/types/react-test-renderer.d.ts",
     "src/utils/logger-resolver.d.ts",
     "src/auth/twitch-oauth-scopes.ts",
     "tests/helpers/farewell-routing-harness.ts"

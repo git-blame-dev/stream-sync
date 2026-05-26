@@ -7,10 +7,16 @@
     "allowJs": false,
     "checkJs": false,
     "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
     "types": ["node", "bun"],
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "jsx": "react-jsx"
   },
-  "include": ["tests/**/*.ts", "tests/types/**/*.d.ts"],
+  "include": [
+    "tests/**/*.ts",
+    "tests/types/**/*.d.ts",
+    "src/types/external-package-shims.d.ts"
+  ],
   "exclude": ["node_modules", "gui/dist"]
 }
