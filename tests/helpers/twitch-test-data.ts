@@ -113,7 +113,7 @@ const createTwitchFollowEvent = (overrides = {}) => {
     return mergeDeep(followEvent, overrides);
 };
 
-const createTwitchSubscriptionEvent = (tier = '1000', isGift = false, overrides = {}) => {
+const createTwitchSubscriptionEvent = (tier = '1000', isGift = false, overrides: UnknownRecord = {}) => {
     const baseUserId = nextNumericId();
     const broadcasterId = nextNumericId();
     const gifterId = isGift ? nextNumericId() : undefined;
@@ -139,7 +139,7 @@ const createTwitchSubscriptionEvent = (tier = '1000', isGift = false, overrides 
     return mergeDeep(subscriptionEvent, overrides);
 };
 
-const createTwitchRaidEvent = (viewers = 100, overrides = {}) => {
+const createTwitchRaidEvent = (viewers = 100, overrides: UnknownRecord = {}) => {
     const fromBroadcasterId = nextNumericId();
     const toBroadcasterId = nextNumericId();
     

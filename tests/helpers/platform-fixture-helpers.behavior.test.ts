@@ -5,6 +5,10 @@ import * as tiktokData from './tiktok-test-data';
 import * as twitchData from './twitch-test-data';
 import * as youtubeData from './youtube-test-data';
 
+type TikTokConnectionFixture = { roomInfo?: { roomId: string } };
+type TwitchSubscriptionFixture = { event: { is_gift: boolean; gifter_user_name: string } };
+type TwitchRaidFixture = { event: { viewers: number } };
+
 describe('platform fixture helper behavior', () => {
     it('builds TikTok gift events with configured gift metadata and deep override merging', () => {
         const event = tiktokData.createTikTokGiftEvent('TikTok Universe', 2, {
@@ -31,7 +35,8 @@ describe('platform fixture helper behavior', () => {
         expect(chat.comment).toBe('hello tiktok');
         expect(share.label).toContain('shared');
         expect(viewers.viewerCount).toBe(321);
-        expect(connected.roomInfo.roomId.length).toBeGreaterThan(0);
+        const connectedFixture = connected as unknown as TikTokConnectionFixture;
+        expect(connectedFixture.roomInfo?.roomId.length).toBeGreaterThan(0);
         expect(disconnected.roomInfo).toBeUndefined();
     });
 
@@ -46,7 +51,7 @@ describe('platform fixture helper behavior', () => {
         expect(spam.metadata.giftCount).toBe(6);
         expect(spam.metadata.averageInterval).toBe(400);
         expect(conversation).toHaveLength(3);
-        expect(conversation[1].user.uniqueId).toBe('u2');
+        expect(conversation[1]?.user.uniqueId).toBe('u2');
     });
 
     it('builds Twitch event envelopes and message fixtures for follow, subscription, and raids', () => {
@@ -59,9 +64,11 @@ describe('platform fixture helper behavior', () => {
         expect(chat.message).toBe('Hello Twitch!');
         expect(chat.userInfo.displayName).toBe('Viewer');
         expect(follow.subscription.type).toBe('channel.follow');
-        expect(giftedSub.event.is_gift).toBe(true);
-        expect(giftedSub.event.gifter_user_name.length).toBeGreaterThan(0);
-        expect(raid.event.viewers).toBe(77);
+        const giftedSubEvent = giftedSub as unknown as TwitchSubscriptionFixture;
+        const raidEvent = raid as unknown as TwitchRaidFixture;
+        expect(giftedSubEvent.event.is_gift).toBe(true);
+        expect(giftedSubEvent.event.gifter_user_name.length).toBeGreaterThan(0);
+        expect(raidEvent.event.viewers).toBe(77);
         expect(chatMessage.color).toBe('#FFFFFF');
         expect(chatMessage.message.fragments.length).toBeGreaterThan(1);
     });
@@ -104,7 +111,7 @@ describe('platform fixture helper behavior', () => {
                 }
             }
         });
-        expect(runsMessage.item.message.runs[0].text).toBe('custom run');
+        expect(runsMessage.item.message.runs[0]?.text).toBe('custom run');
 
         const merged = youtubeData.mergeDeep({ a: { b: 1 }, c: 3 }, { a: { d: 2 }, e: 4 });
         expect(merged).toEqual({ a: { b: 1, d: 2 }, c: 3, e: 4 });

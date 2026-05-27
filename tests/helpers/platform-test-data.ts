@@ -11,13 +11,34 @@ const BASE_TIMESTAMP_MS = 1700000000000;
 const BASE_USER_ID = 7000000000000000;
 let sequence = 0;
 
+type TestRecord = Record<string, unknown>;
+type DeepTestRecord = TestRecord & { nested?: DeepTestRecord };
+type PlatformName = 'youtube' | 'twitch' | 'tiktok';
+type ScenarioEvent = TestRecord & {
+    platform?: PlatformName;
+    subscription?: { type?: string };
+    item?: { type?: string };
+};
+type InternationalUser = {
+    username: string;
+    platform: PlatformName;
+    language: string;
+    script: string;
+    isRTL: boolean;
+    hasEmoji: boolean;
+};
+type TikTokGiftFixtureOverrides = TestRecord & {
+    user?: TestRecord;
+    giftDetails?: TestRecord;
+};
+
 const nextSequence = () => {
     sequence += 1;
     return sequence;
 };
 
-const timestampFromSeed = (seed, offsetMs = 0) => BASE_TIMESTAMP_MS + (seed * 1000) + offsetMs;
-const pickByIndex = (values, index) => values[index % values.length];
+const timestampFromSeed = (seed: number, offsetMs = 0) => BASE_TIMESTAMP_MS + (seed * 1000) + offsetMs;
+const pickByIndex = <T>(values: readonly T[], index: number): T => values[index % values.length] as T;
 
 // ================================================================================================
 // INTERNATIONAL TEST DATA
@@ -234,7 +255,7 @@ const BOUNDARY_CONDITIONS = {
     deepNesting: createDeepObject(100)
 };
 
-function createDeepObject(depth) {
+function createDeepObject(depth: number): DeepTestRecord {
     if (depth <= 0) return { value: 'bottom' };
     return { level: depth, nested: createDeepObject(depth - 1) };
 }
@@ -315,20 +336,20 @@ const EMOJI_SETS = {
 // SCENARIO BUILDERS
 // ================================================================================================
 
-const createMultiPlatformEventScenario = (platforms = ['youtube', 'twitch', 'tiktok'], eventCount = 10) => {
-    const events = [];
+const createMultiPlatformEventScenario = (platforms: string[] = ['youtube', 'twitch', 'tiktok'], eventCount = 10) => {
+    const events: ScenarioEvent[] = [];
     const timeline = [];
     const baseTime = timestampFromSeed(nextSequence());
     
     for (let i = 0; i < eventCount; i++) {
-        const platform = platforms[i % platforms.length];
+        const platform = platforms[i % platforms.length] as string;
         const eventTime = baseTime + (i * 2000); // 2 seconds apart
-        let event;
+        let event: ScenarioEvent | undefined;
         
         switch (platform) {
             case 'youtube':
                 event = createYouTubeSuperChatEvent(
-                    EDGE_CASE_AMOUNTS.commonAmounts[i % EDGE_CASE_AMOUNTS.commonAmounts.length],
+                    EDGE_CASE_AMOUNTS.commonAmounts[i % EDGE_CASE_AMOUNTS.commonAmounts.length] as number,
                     'USD',
                     {
                         item: {
@@ -345,7 +366,7 @@ const createMultiPlatformEventScenario = (platforms = ['youtube', 'twitch', 'tik
             case 'tiktok':
                 const giftTypes = ['Rose', 'Perfume', 'Swan', 'TikTok Universe'];
                 event = createTikTokGiftEvent(
-                    giftTypes[i % giftTypes.length],
+                    giftTypes[i % giftTypes.length] as string,
                     (i % 5) + 1,
                     {
                         timestamp: eventTime,
@@ -380,6 +401,10 @@ const createMultiPlatformEventScenario = (platforms = ['youtube', 'twitch', 'tik
                 break;
         }
         
+        if (!event) {
+            throw new Error(`Unsupported platform: ${platform}`);
+        }
+
         events.push(event);
         timeline.push({
             timestamp: eventTime,
@@ -395,11 +420,11 @@ const createMultiPlatformEventScenario = (platforms = ['youtube', 'twitch', 'tik
         timeline: timeline,
         metadata: {
             totalEvents: eventCount,
-            platformDistribution: platforms.reduce((acc, platform) => {
+            platformDistribution: platforms.reduce<Record<string, number>>((acc, platform) => {
                 acc[platform] = events.filter(e => e.platform === platform).length;
                 return acc;
             }, {}),
-            timeSpan: timeline[timeline.length - 1].timestamp - timeline[0].timestamp,
+            timeSpan: (timeline[timeline.length - 1]?.timestamp ?? baseTime) - (timeline[0]?.timestamp ?? baseTime),
             startTime: baseTime,
             endTime: baseTime + ((eventCount - 1) * 2000)
         }
@@ -407,7 +432,7 @@ const createMultiPlatformEventScenario = (platforms = ['youtube', 'twitch', 'tik
 };
 
 const createGiftSpamScenario = (giftCount = 10, giftType = 'Rose', timeWindow = 2000) => {
-    const events = [];
+    const events: ReturnType<typeof createTikTokGiftEvent>[] = [];
     const seed = nextSequence();
     const baseUserId = BASE_USER_ID + seed;
     const startTime = timestampFromSeed(seed);
@@ -447,7 +472,7 @@ const createGiftSpamScenario = (giftCount = 10, giftType = 'Rose', timeWindow = 
 };
 
 const createRaidScenario = (maxViewers = 500, targetChannel = 'testchannel') => {
-    const events = [];
+    const events: ReturnType<typeof createTwitchRaidEvent>[] = [];
     const viewerProgression = [
         Math.floor(maxViewers * 0.1),  // Initial announcement
         Math.floor(maxViewers * 0.3),  // Early joiners
@@ -488,10 +513,21 @@ const createRaidScenario = (maxViewers = 500, targetChannel = 'testchannel') => 
     };
 };
 
-const createErrorScenario = (errorType = 'network', platform = 'youtube') => {
+const createErrorScenario = (errorType = 'network', platform: PlatformName = 'youtube') => {
     const seed = nextSequence();
     const baseTime = timestampFromSeed(seed);
-    const errorConfigs = {
+    const malformedData: Record<PlatformName, string> = {
+        youtube: '{"item":{"type":"LiveChat", "invalid": true}}',
+        twitch: '{"subscription":{"type":"channel.", "status":"}}',
+        tiktok: '{"user":null,"gift":{"giftName":""}}'
+    };
+
+    const errorConfigs: Record<string, {
+        trigger: string;
+        expectedBehavior: string;
+        testData: unknown;
+        simulatedDelay: number;
+    }> = {
         network: {
             trigger: 'Connection timeout after 30 seconds',
             expectedBehavior: 'Retry with exponential backoff',
@@ -507,11 +543,7 @@ const createErrorScenario = (errorType = 'network', platform = 'youtube') => {
         malformed_data: {
             trigger: 'Invalid JSON or missing required fields',
             expectedBehavior: 'Log error and skip malformed event',
-            testData: { 
-                youtube: '{"item":{"type":"LiveChat", "invalid": true}}',
-                twitch: '{"subscription":{"type":"channel.", "status":"}}',
-                tiktok: '{"user":null,"gift":{"giftName":""}}'
-            }[platform],
+            testData: malformedData[platform],
             simulatedDelay: 0
         },
         authentication: {
@@ -534,7 +566,10 @@ const createErrorScenario = (errorType = 'network', platform = 'youtube') => {
         }
     };
     
-    const config = errorConfigs[errorType] || errorConfigs.network;
+    const config = errorConfigs[errorType] ?? errorConfigs.network;
+    if (!config) {
+        throw new Error(`No error scenario config found for ${errorType}`);
+    }
     
     return {
         errorType: errorType,
@@ -551,16 +586,17 @@ const createErrorScenario = (errorType = 'network', platform = 'youtube') => {
 };
 
 const createInternationalUserScenario = (userCount = 10) => {
-    const users = [];
-    const events = [];
+    const users: InternationalUser[] = [];
+    const events: unknown[] = [];
     const usernames = Object.values(INTERNATIONAL_USERNAMES);
+    const platforms: PlatformName[] = ['youtube', 'twitch', 'tiktok'];
     
     // Create diverse user profiles
     for (let i = 0; i < userCount; i++) {
-        const username = usernames[i % usernames.length];
-        const user = {
+        const username = usernames[i % usernames.length] as string;
+        const user: InternationalUser = {
             username: username,
-            platform: ['youtube', 'twitch', 'tiktok'][i % 3],
+            platform: platforms[i % platforms.length] as PlatformName,
             language: detectLanguage(username),
             script: detectScript(username),
             isRTL: isRightToLeft(username),
@@ -617,11 +653,11 @@ const createInternationalUserScenario = (userCount = 10) => {
         events: events,
         metadata: {
             totalUsers: userCount,
-            languageDistribution: users.reduce((acc, user) => {
+            languageDistribution: users.reduce<Record<string, number>>((acc, user) => {
                 acc[user.language] = (acc[user.language] || 0) + 1;
                 return acc;
             }, {}),
-            scriptDistribution: users.reduce((acc, user) => {
+            scriptDistribution: users.reduce<Record<string, number>>((acc, user) => {
                 acc[user.script] = (acc[user.script] || 0) + 1;
                 return acc;
             }, {}),
@@ -733,7 +769,7 @@ const createBoundaryTestSuite = (platform = 'youtube') => {
 // UTILITY FUNCTIONS
 // ================================================================================================
 
-const detectLanguage = (username) => {
+const detectLanguage = (username: string) => {
     if (/[\u4e00-\u9fff]/.test(username)) return 'zh';
     if (/[\u3040-\u309f\u30a0-\u30ff]/.test(username)) return 'ja';
     if (/[\uac00-\ud7af]/.test(username)) return 'ko';
@@ -746,7 +782,7 @@ const detectLanguage = (username) => {
     return 'en'; // Default to English
 };
 
-const detectScript = (username) => {
+const detectScript = (username: string) => {
     if (/[\u4e00-\u9fff]/.test(username)) return 'Han';
     if (/[\u3040-\u309f\u30a0-\u30ff]/.test(username)) return 'Hiragana/Katakana';
     if (/[\uac00-\ud7af]/.test(username)) return 'Hangul';
@@ -757,7 +793,7 @@ const detectScript = (username) => {
     return 'Latin';
 };
 
-const isRightToLeft = (text) => {
+const isRightToLeft = (text: string) => {
     return /[\u0590-\u05ff\u0600-\u06ff\u0750-\u077f\u08a0-\u08ff\ufb50-\ufdff\ufe70-\ufeff]/.test(text);
 };
 
@@ -801,7 +837,7 @@ const TIKTOK_GIFT_BASE = {
     logId: 'gift-log-0001'
 };
 
-const createTikTokGiftFixture = ({ user = {}, giftDetails = {}, ...overrides } = {}) => ({
+const createTikTokGiftFixture = ({ user = {}, giftDetails = {}, ...overrides }: TikTokGiftFixtureOverrides = {}) => ({
     ...TIKTOK_GIFT_BASE,
     ...overrides,
     user: {
@@ -1547,20 +1583,30 @@ const SYNTHETIC_FIXTURES = Object.freeze({
     }
 });
 
-const cloneFixture = (fixture) => JSON.parse(JSON.stringify(fixture));
+type SyntheticFixtureSet = typeof SYNTHETIC_FIXTURES;
+type SyntheticPlatformName = keyof SyntheticFixtureSet;
+type SyntheticEventType<P extends SyntheticPlatformName> = keyof SyntheticFixtureSet[P];
 
-const getSyntheticFixture = (platform, eventType) => {
+const cloneFixture = <T>(fixture: T): T => JSON.parse(JSON.stringify(fixture)) as T;
+
+function getSyntheticFixture<P extends SyntheticPlatformName, E extends SyntheticEventType<P>>(
+    platform: P,
+    eventType: E
+): SyntheticFixtureSet[P][E];
+function getSyntheticFixture(platform?: string, eventType?: string): unknown;
+function getSyntheticFixture(platform?: string, eventType?: string) {
     if (!platform || !eventType) {
         throw new Error('Platform and eventType are required to load a synthetic fixture');
     }
 
-    const fixture = SYNTHETIC_FIXTURES[platform]?.[eventType];
+    const fixtureSet = SYNTHETIC_FIXTURES as Record<string, Record<string, unknown>>;
+    const fixture = fixtureSet[platform]?.[eventType];
     if (!fixture) {
         throw new Error(`No synthetic fixture found for platform: ${platform}, eventType: ${eventType}`);
     }
 
     return cloneFixture(fixture);
-};
+}
 
 const getSyntheticFixtureSet = () => ({
     tiktok: {
@@ -1588,9 +1634,14 @@ const getSyntheticFixtureSet = () => ({
     }
 });
 
-const loadPlatformFixture = (platform, eventType) => {
+function loadPlatformFixture<P extends SyntheticPlatformName, E extends SyntheticEventType<P>>(
+    platform: P,
+    eventType: E
+): SyntheticFixtureSet[P][E];
+function loadPlatformFixture(platform: string, eventType: string): unknown;
+function loadPlatformFixture(platform: string, eventType: string) {
     return getSyntheticFixture(platform, eventType);
-};
+}
 
 // ================================================================================================
 // EXPORTS

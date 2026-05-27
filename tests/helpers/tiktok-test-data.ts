@@ -181,7 +181,7 @@ const createTikTokShareEvent = (overrides = {}) => {
     return mergeDeep(defaultEvent, overrides);
 };
 
-const createTikTokViewerCountEvent = (viewerCount = null, overrides = {}) => {
+const createTikTokViewerCountEvent = (viewerCount: number | null = null, overrides: TestRecord = {}) => {
     const seed = nextSequence();
     const baseTimestamp = timestampFromSeed(seed);
     const actualViewerCount = viewerCount !== null ? viewerCount : 100 + (seed % 450);
