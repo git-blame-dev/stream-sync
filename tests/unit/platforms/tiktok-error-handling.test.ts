@@ -61,6 +61,32 @@ describe("TikTokPlatform Error Handling", () => {
     restoreAllMocks();
   });
 
+  describe("logger contract", () => {
+    test("constructs with default app logger without losing warn method", () => {
+      const dependenciesWithoutLogger = { ...baseDependencies };
+      delete dependenciesWithoutLogger.logger;
+
+      expect(() => {
+        new TikTokPlatform(baseConfig, dependenciesWithoutLogger);
+      }).not.toThrow();
+    });
+
+    test("rejects injected logger missing error method", () => {
+      const incompleteLogger = {
+        debug: () => {},
+        info: () => {},
+        warn: () => {},
+      };
+
+      expect(() => {
+        new TikTokPlatform(baseConfig, {
+          ...baseDependencies,
+          logger: incompleteLogger,
+        });
+      }).toThrow(/TikTok logger is missing required methods: error\(\)/);
+    });
+  });
+
   describe("handleConnectionError", () => {
     test("handles error object without message property without crashing", () => {
       const platform = new TikTokPlatform(baseConfig, baseDependencies);

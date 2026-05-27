@@ -1,12 +1,13 @@
 import { EventEmitter } from 'node:events';
 import crypto from 'node:crypto';
-import { getLazyLogger, getLazyUnifiedLogger } from '../utils/logger-utils';
+import type { AppLogger } from '../core/logger/types';
 import { PlatformInitializationManager } from '../utils/platform-initialization-manager';
 import { IntervalManager } from '../utils/interval-manager';
 import { InitializationStatistics } from '../utils/initialization-statistics';
 import { ConnectionStateManager } from '../utils/connection-state-manager';
 import { PlatformConnectionFactory } from '../utils/platform-connection-factory';
 import { safeSetTimeout } from '../utils/timeout-validator';
+import { resolveLogger as resolveAppLogger } from '../utils/logger-resolver';
 import { resolveTikTokTimestampMs, resolveTikTokTimestampISO } from '../utils/platform-timestamp';
 import { getSystemTimestampISO } from '../utils/timestamp';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
@@ -68,12 +69,7 @@ type TikTokConfig = Record<string, unknown> & {
 
 type TikTokEventType = typeof PlatformEvents[keyof Omit<typeof PlatformEvents, '_generateCorrelationId'>];
 
-type TikTokLogger = {
-    debug: (message: string, source?: string, details?: unknown) => void;
-    info: (message: string, source?: string, details?: unknown) => void;
-    warn: (message: string, source?: string, details?: unknown) => void;
-    error?: (message: string, source?: string, details?: unknown) => void;
-};
+type TikTokLogger = AppLogger;
 
 type TikTokErrorHandler = {
     handleConnectionError: (error: unknown, context?: string, message?: string) => void;
@@ -144,7 +140,7 @@ type ConnectionFactoryLike = {
 };
 
 type TikTokDependencies = {
-    logger?: TikTokLogger;
+    logger?: unknown;
     eventBus?: TikTokEventBus;
     notificationManager?: TikTokNotificationManager;
     initializationManager?: PlatformInitializationManager;
@@ -283,13 +279,6 @@ const isRecord = (value: unknown): value is TikTokPayload => (
 
 const asRecord = (value: unknown): TikTokPayload => (isRecord(value) ? value : {});
 
-const isTikTokLogger = (value: unknown): value is TikTokLogger => {
-    const candidate = asRecord(value);
-    return typeof candidate.debug === 'function'
-        && typeof candidate.info === 'function'
-        && typeof candidate.warn === 'function';
-};
-
 const isChatFileLogger = (value: unknown): value is ChatFileLogger => {
     const candidate = asRecord(value);
     return typeof candidate.debug === 'function'
@@ -308,13 +297,6 @@ const isTikTokConnection = (value: unknown): value is TikTokConnection => {
 const isSelfMessageDetectionService = (value: unknown): value is SelfMessageDetectionService => (
     typeof asRecord(value).shouldFilterMessage === 'function'
 );
-
-const resolveLogger = (candidate: unknown): TikTokLogger => {
-    if (isTikTokLogger(candidate)) {
-        return candidate;
-    }
-    throw new Error('TikTok logger dependency does not implement debug/info/warn');
-};
 
 const getOptionalString = (value: unknown): string | undefined => (
     typeof value === 'string' && value.trim() ? value.trim() : undefined
@@ -395,18 +377,8 @@ class TikTokPlatform extends EventEmitter {
     constructor(config: TikTokConfig = {}, dependencies: TikTokDependencies = {}) {
         super(); // Call EventEmitter constructor first to ensure proper prototype chain
 
-        // Initialize logger with dependency injection support
-        if (dependencies.logger) {
-            this.logger = dependencies.logger;
-        } else {
-            const unifiedLogger = getLazyUnifiedLogger();
-            this.logger = unifiedLogger ? resolveLogger(unifiedLogger) : resolveLogger(getLazyLogger());
-        }
-        const errorHandlerLogger = {
-            ...this.logger,
-            error: this.logger.error ?? this.logger.warn
-        };
-        const platformErrorHandler = createPlatformErrorHandler(errorHandlerLogger, 'tiktok');
+        this.logger = resolveAppLogger(dependencies.logger, 'TikTok');
+        const platformErrorHandler = createPlatformErrorHandler(this.logger, 'tiktok');
         this.errorHandler = {
             handleConnectionError: platformErrorHandler.handleConnectionError.bind(platformErrorHandler),
             handleEventProcessingError: platformErrorHandler.handleEventProcessingError.bind(platformErrorHandler),
