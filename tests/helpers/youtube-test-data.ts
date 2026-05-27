@@ -13,16 +13,38 @@ const nextTimestampMs = () => BASE_TIMESTAMP_MS + (nextSequence() * 1000);
 const nextMessageId = () => `LCC.TEST.${nextSequence().toString(36).padStart(8, '0')}`;
 const generateYouTubeChannelId = () => `UC_TEST_CHANNEL_${nextSequence().toString(36).padStart(8, '0')}`;
 
+type DeepMergeValue = string | number | boolean | null | undefined | DeepMergeObject | DeepMergeValue[];
+
+type DeepMergeObject = {
+    [key: string]: DeepMergeValue;
+};
+
+type YouTubeChatEventOverrides = DeepMergeObject & {
+    messageType?: string;
+    message?: string;
+    username?: string;
+    userId?: string;
+    timestamp?: string | number;
+};
+
+type YouTubeSuperChatEventOverrides = DeepMergeObject & {
+    amount?: string | number;
+    currency?: string;
+};
+
 // ================================================================================================
 // CORE YOUTUBE EVENT BUILDERS
 // ================================================================================================
 
-const createYouTubeChatEvent = (messageTypeOrOverrides = 'text', overrides = {}) => {
+const createYouTubeChatEvent = (
+    messageTypeOrOverrides: string | YouTubeChatEventOverrides = 'text',
+    overrides: YouTubeChatEventOverrides = {}
+) => {
     // Support both calling patterns:
     // createYouTubeChatEvent('text', {overrides}) - original pattern
     // createYouTubeChatEvent({overrides}) - new pattern used by tests
     let messageType = 'text';
-    let actualOverrides = {};
+    let actualOverrides: YouTubeChatEventOverrides;
     
     if (typeof messageTypeOrOverrides === 'object' && messageTypeOrOverrides !== null) {
         // First parameter is overrides object
@@ -86,13 +108,17 @@ const createYouTubeChatEvent = (messageTypeOrOverrides = 'text', overrides = {})
     return mergedEvent;
 };
 
-const createYouTubeSuperChatEvent = (amountOrOverrides = 5.00, currency = 'USD', overrides = {}) => {
+const createYouTubeSuperChatEvent = (
+    amountOrOverrides: number | YouTubeSuperChatEventOverrides = 5.00,
+    currency = 'USD',
+    overrides: YouTubeSuperChatEventOverrides = {}
+) => {
     // Support both calling patterns:
     // createYouTubeSuperChatEvent(5.00, 'USD', {overrides}) - original pattern
     // createYouTubeSuperChatEvent({amount: 5.00, currency: 'USD', ...}) - new pattern
     let amount = 5.00;
     let actualCurrency = 'USD';
-    let actualOverrides = {};
+    let actualOverrides: YouTubeSuperChatEventOverrides;
     
     if (typeof amountOrOverrides === 'object' && amountOrOverrides !== null) {
         // First parameter is overrides object - handle zero amounts properly
@@ -179,7 +205,7 @@ const createYouTubeSuperChatEvent = (amountOrOverrides = 5.00, currency = 'USD',
     return mergeDeep(defaultEvent, actualOverrides);
 };
 
-const createYouTubeRunsMessageChatItem = (overrides = {}) => {
+const createYouTubeRunsMessageChatItem = (overrides: DeepMergeObject = {}) => {
     const baseTimestamp = nextTimestampMs();
     const baseUserId = generateYouTubeChannelId();
     const defaultEvent = {
@@ -234,25 +260,28 @@ const createYouTubeRunsMessageChatItem = (overrides = {}) => {
 // UTILITY FUNCTIONS
 // ================================================================================================
 
-const mergeDeep = (target, source) => {
-    const output = Object.assign({}, target);
+const mergeDeep = <Target extends DeepMergeObject, Source extends DeepMergeObject>(target: Target, source: Source): Target & Source => {
+    const output: DeepMergeObject = Object.assign({}, target);
     if (isObject(target) && isObject(source)) {
         Object.keys(source).forEach(key => {
-            if (isObject(source[key])) {
-                if (!(key in target))
-                    Object.assign(output, { [key]: source[key] });
+            const sourceValue = source[key];
+            const targetValue = target[key];
+
+            if (isObject(sourceValue)) {
+                if (!isObject(targetValue))
+                    Object.assign(output, { [key]: sourceValue });
                 else
-                    output[key] = mergeDeep(target[key], source[key]);
+                    output[key] = mergeDeep(targetValue, sourceValue);
             } else {
-                Object.assign(output, { [key]: source[key] });
+                Object.assign(output, { [key]: sourceValue });
             }
         });
     }
-    return output;
+    return output as Target & Source;
 };
 
-const isObject = (item) => {
-    return item && typeof item === 'object' && !Array.isArray(item);
+const isObject = (item: unknown): item is DeepMergeObject => {
+    return !!item && typeof item === 'object' && !Array.isArray(item);
 };
 
 // ================================================================================================

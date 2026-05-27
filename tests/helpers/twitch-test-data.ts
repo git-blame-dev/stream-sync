@@ -14,9 +14,11 @@ const nextSequence = () => {
 const nextTimestampMs = () => BASE_TIMESTAMP_MS + (nextSequence() * 1000);
 const nextTimestampIso = () => new Date(nextTimestampMs()).toISOString();
 const nextNumericId = () => 100000000 + nextSequence();
-const isFlagSet = (seed, divisor) => seed % divisor === 0;
-const formatUserId = (id) => `test-user-${id}`;
-const formatBroadcasterId = (id) => `test-broadcaster-${id}`;
+type UnknownRecord = Record<string, unknown>;
+
+const isFlagSet = (seed: number, divisor: number) => seed % divisor === 0;
+const formatUserId = (id: number) => `test-user-${id}`;
+const formatBroadcasterId = (id: number) => `test-broadcaster-${id}`;
 
 const createTwitchChatEvent = (messageText = 'Hello Twitch!', username = 'testuser', overrides = {}) => {
     const baseTimestamp = nextTimestampMs();
@@ -114,7 +116,7 @@ const createTwitchFollowEvent = (overrides = {}) => {
 const createTwitchSubscriptionEvent = (tier = '1000', isGift = false, overrides = {}) => {
     const baseUserId = nextNumericId();
     const broadcasterId = nextNumericId();
-    const gifterId = isGift ? nextNumericId() : null;
+    const gifterId = isGift ? nextNumericId() : undefined;
     
     const subscriptionEvent = createTwitchEventSubEvent('channel.subscribe', {
         event: {
@@ -126,7 +128,7 @@ const createTwitchSubscriptionEvent = (tier = '1000', isGift = false, overrides 
             broadcaster_user_name: 'TestChannel',
             tier: tier,
             is_gift: isGift,
-            ...(isGift && {
+            ...(gifterId !== undefined && {
                 gifter_user_id: formatUserId(gifterId),
                 gifter_user_login: `gifter${gifterId}`,
                 gifter_user_name: `Gifter${gifterId}`
@@ -225,37 +227,42 @@ const createTwitchEventSubChatMessageEvent = (overrides = {}) => {
 // UTILITY FUNCTIONS
 // ================================================================================================
 
-const generateRandomHexColor = (seed) => {
+const generateRandomHexColor = (seed?: number) => {
     const value = typeof seed === 'number' ? seed : nextSequence();
     const hex = ((value * 2654435761) >>> 0).toString(16).padStart(6, '0').slice(-6).toUpperCase();
     return `#${hex}`;
 };
 
-const generateUUID = (seed) => {
+const generateUUID = (seed?: number) => {
     const value = typeof seed === 'number' ? seed : nextSequence();
     const hex = value.toString(16).padStart(12, '0');
     return `00000000-0000-4000-8000-${hex}`;
 };
 
-const mergeDeep = (target, source) => {
-    const output = Object.assign({}, target);
+const mergeDeep = <Target, Source>(target: Target, source: Source): Target & Source => {
+    const output: UnknownRecord = Object.assign({}, target);
     if (isObject(target) && isObject(source)) {
         Object.keys(source).forEach(key => {
-            if (isObject(source[key])) {
+            const sourceValue = source[key];
+            const targetValue = target[key];
+
+            if (isObject(sourceValue)) {
                 if (!(key in target))
-                    Object.assign(output, { [key]: source[key] });
+                    Object.assign(output, { [key]: sourceValue });
                 else
-                    output[key] = mergeDeep(target[key], source[key]);
+                    Object.assign(output, {
+                        [key]: isObject(targetValue) ? mergeDeep(targetValue, sourceValue) : sourceValue
+                    });
             } else {
-                Object.assign(output, { [key]: source[key] });
+                Object.assign(output, { [key]: sourceValue });
             }
         });
     }
-    return output;
+    return output as Target & Source;
 };
 
-const isObject = (item) => {
-    return item && typeof item === 'object' && !Array.isArray(item);
+const isObject = (item: unknown): item is UnknownRecord => {
+    return !!item && typeof item === 'object' && !Array.isArray(item);
 };
 
 // ================================================================================================

@@ -8,17 +8,48 @@ const BASE_USER_ID = 7000000000000000;
 const BASE_ROOM_ID = 7500000000000000;
 let sequence = 0;
 
+type TestRecord = Record<string, unknown>;
+
+type GiftConfig = {
+    id: number;
+    type: number;
+    diamonds: number;
+    picture: string;
+};
+
+type TikTokUser = TestRecord & {
+    userId: string;
+    uniqueId: string;
+    nickname: string;
+    profilePictureUrl: string;
+    isFollowing: boolean;
+    isModerator: boolean;
+    isNewGifter: boolean;
+    isSubscriber: boolean;
+    topGifterRank: null;
+    gifterLevel: number;
+    teamMemberLevel: number;
+    badges: unknown[];
+};
+
+type TikTokConnectionEvent = TestRecord & {
+    state: string;
+    timestamp: number;
+    msgId: string;
+    roomInfo?: TestRecord;
+};
+
 const nextSequence = () => {
     sequence += 1;
     return sequence;
 };
 
-const timestampFromSeed = (seed) => BASE_TIMESTAMP_MS + (seed * 1000);
-const userIdFromSeed = (seed) => BASE_USER_ID + seed;
-const roomIdFromSeed = (seed) => BASE_ROOM_ID + seed;
-const userSeedFromId = (baseUserId) => Number(String(baseUserId).slice(-4));
+const timestampFromSeed = (seed: number) => BASE_TIMESTAMP_MS + (seed * 1000);
+const userIdFromSeed = (seed: number) => BASE_USER_ID + seed;
+const roomIdFromSeed = (seed: number) => BASE_ROOM_ID + seed;
+const userSeedFromId = (baseUserId: number | string) => Number(String(baseUserId).slice(-4));
 
-const buildTikTokUser = (baseUserId, overrides = {}) => {
+const buildTikTokUser = (baseUserId: number | string, overrides: TestRecord = {}): TikTokUser => {
     const userSeed = userSeedFromId(baseUserId);
 
     return {
@@ -44,7 +75,7 @@ const createTikTokGiftEvent = (giftName = 'Rose', giftCount = 1, overrides = {})
     const baseUserId = userIdFromSeed(seed);
     
     // Gift type configurations
-    const giftConfigs = {
+    const giftConfigs: Record<string, GiftConfig> = {
         'Rose': { id: 5655, type: 1, diamonds: 1, picture: 'rose.webp' },
         'Perfume': { id: 5658, type: 1, diamonds: 20, picture: 'perfume.webp' },
         'Swan': { id: 5659, type: 1, diamonds: 25, picture: 'swan.webp' },
@@ -55,7 +86,7 @@ const createTikTokGiftEvent = (giftName = 'Rose', giftCount = 1, overrides = {})
         'Falcon': { id: 5663, type: 1, diamonds: 10999, picture: 'falcon.webp' }
     };
     
-    const giftConfig = giftConfigs[giftName] || giftConfigs['Rose'];
+    const giftConfig = giftConfigs[giftName] ?? { id: 5655, type: 1, diamonds: 1, picture: 'rose.webp' };
     
     const defaultEvent = {
         gift: {
@@ -178,7 +209,7 @@ const createTikTokConnectionEvent = (connectionState = 'connected', overrides = 
     const baseTimestamp = timestampFromSeed(seed);
     const roomId = roomIdFromSeed(seed);
     
-    const baseEvent = {
+    const baseEvent: TikTokConnectionEvent = {
         state: connectionState,
         timestamp: baseTimestamp,
         msgId: baseTimestamp.toString()
@@ -205,16 +236,17 @@ const createTikTokConnectionEvent = (connectionState = 'connected', overrides = 
 // BATCH EVENT BUILDERS
 // ================================================================================================
 
-const createTikTokGiftEventBatch = (count = 5, baseConfig = {}) => {
-    const events = [];
+const createTikTokGiftEventBatch = (count = 5, baseConfig: TestRecord & { userId?: string | number } = {}) => {
+    const events: Array<ReturnType<typeof createTikTokGiftEvent>> = [];
     const giftTypes = ['Rose', 'Perfume', 'Swan', 'Heart Me', 'Sunglasses'];
     const usernames = ['GiftUser1', 'GiftUser2', 'GiftUser3', 'GenerousViewer', 'TikTokFan'];
 
     for (let i = 0; i < count; i++) {
         const giftType = giftTypes[i % giftTypes.length];
-        const eventUser = {
-            uniqueId: usernames[i % usernames.length],
-            nickname: usernames[i % usernames.length]
+        const username = usernames[i % usernames.length] ?? `GiftUser${i + 1}`;
+        const eventUser: TestRecord & { uniqueId: string; nickname: string; userId?: string | number } = {
+            uniqueId: username,
+            nickname: username
         };
         if (baseConfig.userId !== undefined && baseConfig.userId !== null) {
             eventUser.userId = baseConfig.userId;
@@ -236,7 +268,7 @@ const createTikTokSpamGiftScenario = (giftCount = 5, giftType = 'Rose', timeWind
     const startTime = timestampFromSeed(seed);
     const username = `SpamUser${seed}`;
     
-    const events = [];
+    const events: Array<ReturnType<typeof createTikTokGiftEvent>> = [];
     const timeInterval = timeWindow / giftCount;
 
     for (let i = 0; i < giftCount; i++) {
@@ -269,12 +301,12 @@ const createTikTokSpamGiftScenario = (giftCount = 5, giftType = 'Rose', timeWind
     };
 };
 
-const createTikTokChatConversation = (messages, usernames = ['User1', 'User2']) => {
-    const events = [];
+const createTikTokChatConversation = (messages: string[], usernames = ['User1', 'User2']) => {
+    const events: Array<ReturnType<typeof createTikTokChatEvent>> = [];
     const baseTime = timestampFromSeed(nextSequence());
 
     messages.forEach((message, index) => {
-        const username = usernames[index % usernames.length];
+        const username = usernames[index % usernames.length] ?? `User${index + 1}`;
         const eventTime = baseTime + (index * 1000); // 1 second apart
         
         const event = createTikTokChatEvent(message, {
@@ -297,25 +329,27 @@ const createTikTokChatConversation = (messages, usernames = ['User1', 'User2']) 
 // UTILITY FUNCTIONS
 // ================================================================================================
 
-const mergeDeep = (target, source) => {
-    const output = Object.assign({}, target);
+const mergeDeep = <Target extends TestRecord, Source extends TestRecord>(target: Target, source: Source) => {
+    const output: TestRecord = Object.assign({}, target);
     if (isObject(target) && isObject(source)) {
         Object.keys(source).forEach(key => {
             if (isObject(source[key])) {
                 if (!(key in target))
                     Object.assign(output, { [key]: source[key] });
-                else
-                    output[key] = mergeDeep(target[key], source[key]);
+                else {
+                    const targetValue = target[key];
+                    output[key] = isObject(targetValue) ? mergeDeep(targetValue, source[key]) : source[key];
+                }
             } else {
                 Object.assign(output, { [key]: source[key] });
             }
         });
     }
-    return output;
+    return output as Target & Source;
 };
 
-const isObject = (item) => {
-    return item && typeof item === 'object' && !Array.isArray(item);
+const isObject = (item: unknown): item is TestRecord => {
+    return !!item && typeof item === 'object' && !Array.isArray(item);
 };
 
 // ================================================================================================
