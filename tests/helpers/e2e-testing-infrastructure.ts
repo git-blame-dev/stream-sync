@@ -2,15 +2,198 @@
 import crypto from 'node:crypto';
 import { EventEmitter } from 'node:events';
 
+import type { AppLogger } from '../../src/core/logger/types';
 import { logger } from '../../src/core/logging';
-import { createPlatformErrorHandler } from '../../src/utils/platform-error-handler';
+import { createPlatformErrorHandler, type PlatformErrorHandler } from '../../src/utils/platform-error-handler';
 import { safeDelay } from '../../src/utils/timeout-validator';
 
 import testClock from './test-clock';
 import { resolveDelay } from './time-utils';
 
+type TestLogger = AppLogger;
+
+type TestRecord = Record<string, unknown>;
+
+type WebSocketPlatform<Result = unknown> = {
+    handleWebSocketMessage?: (message: unknown) => Promise<Result> | Result;
+    isConnected?: () => boolean;
+    isActive?: () => boolean;
+    notificationDispatcher?: unknown;
+};
+
+type WebSocketSimulatorOptions = {
+    logger?: TestLogger;
+    platform?: string;
+    processingDelay?: number;
+};
+
+type MessageProcessingResult = {
+    success: boolean;
+    result?: unknown;
+    error?: unknown;
+    message: unknown;
+};
+
+type HighFrequencyOptions = {
+    concurrent?: boolean;
+    maxConcurrency?: number;
+};
+
+type PlatformMap = Record<string, WebSocketPlatform>;
+
+type SimultaneousEventResult = {
+    platformName: string;
+    success: boolean;
+    result?: unknown;
+    error?: unknown;
+    event: unknown;
+};
+
+type SystemState = {
+    timestamp: number;
+    platformStates: Record<string, {
+        connected: boolean;
+        active: boolean;
+        hasDispatcher: boolean;
+        lastActivity: number;
+    }>;
+    notificationCount: number;
+    memoryUsage: NodeJS.MemoryUsage;
+};
+
+type SimultaneousProcessingOutcome<K extends string = string> = {
+    results: Record<K, SimultaneousEventResult>;
+    processing: {
+        duration: number;
+        platformCount: number;
+        successCount: number;
+        errorCount: number;
+    };
+    systemState: {
+        initial: SystemState;
+        final: SystemState;
+        history: Array<{ type: string; state: SystemState; timestamp: number }>;
+    };
+    notifications: CapturedNotification[];
+};
+
+type CapturedNotification = TestRecord & { capturedAt: number };
+
+const PRIORITY_WEIGHT = {
+    ultra_high: 100,
+    high: 50,
+    medium: 25,
+    low: 10
+} as const;
+
+type PriorityNotification = TestRecord & {
+    priority?: keyof typeof PRIORITY_WEIGHT;
+    amount?: number;
+    diamonds?: number;
+    viewerCount?: number;
+};
+
+type PriorityOptions = {
+    algorithm?: string;
+    timeWindow?: number;
+};
+
+type PlatformConnectionState = {
+    connected: boolean;
+    stable: boolean;
+    lastMessage: number;
+};
+
+type ConnectionFallbackBehavior = 'queue' | 'drop';
+
+type ConnectionStateOptions = {
+    fallbackBehavior?: ConnectionFallbackBehavior;
+    maxStaleTime?: number;
+};
+
+type ConnectionProcessingResult = {
+    platform: string;
+    event: TestRecord;
+    connectionState: PlatformConnectionState;
+    timeSinceLastMessage: number;
+    isStale: boolean;
+    fallbackBehavior: ConnectionFallbackBehavior;
+    processed: boolean;
+    queued: boolean;
+    dropped: boolean;
+    result?: TestRecord;
+};
+
+type JourneyInput = TestRecord & {
+    platform?: string;
+    rawWebSocketData?: TestRecord;
+};
+
+type ExpectedJourneyOutput = TestRecord & {
+    obsDisplay?: unknown;
+    ttsOutput?: unknown;
+    logOutput?: unknown;
+};
+
+type JourneyStage = {
+    stage: string;
+    success: boolean;
+    timestamp: number;
+    details: TestRecord;
+};
+
+type JourneyResult = {
+    id: string;
+    input: JourneyInput;
+    expectedOutput: ExpectedJourneyOutput;
+    startTime: number;
+    endTime?: number;
+    duration?: number;
+    stages: JourneyStage[];
+    results: TestRecord;
+    success: boolean;
+    error?: unknown;
+};
+
+type ContentQualityOptions = {
+    sanitizeHTML?: boolean;
+    blockMaliciousLinks?: boolean;
+    validateUserContent?: boolean;
+};
+
+type ContentQualityCheck = {
+    name: string;
+    passed: boolean;
+    message: string;
+    details?: TestRecord;
+    sanitizedContent?: string;
+    blockedLinks?: string[];
+};
+
+type ContentQualityResult = {
+    passed: boolean;
+    checks: ContentQualityCheck[];
+    sanitizedContent: string | null;
+    blockedElements: string[];
+    securityIssues: Array<{ type: string; message: string; timestamp: number }>;
+};
+
+type UserJourneyValidatorOptions = {
+    logger?: TestLogger;
+    contentQualityGates?: TestRecord;
+};
+
+const getErrorMessage = (error: unknown) => error instanceof Error ? error.message : String(error);
+const asString = (value: unknown) => typeof value === 'string' ? value : '';
+
 class WebSocketMessageSimulator extends EventEmitter {
-    constructor(options = {}) {
+    logger: TestLogger;
+    platform: string;
+    messageQueue: unknown[];
+    processingDelay: number;
+    errorHandler: PlatformErrorHandler;
+
+    constructor(options: WebSocketSimulatorOptions = {}) {
         super();
         this.logger = options.logger || logger;
         this.platform = options.platform || 'generic';
@@ -19,7 +202,7 @@ class WebSocketMessageSimulator extends EventEmitter {
         this.errorHandler = createPlatformErrorHandler(this.logger, 'e2e-testing');
     }
 
-    async injectRawWebSocketMessage(rawMessage, platform) {
+    async injectRawWebSocketMessage<Result = unknown>(rawMessage: unknown, platform?: WebSocketPlatform<Result>): Promise<Result> {
         this.logger.debug(`[E2E] Injecting WebSocket message for ${this.platform}`, 'e2e-testing');
         
         if (!platform) {
@@ -32,14 +215,14 @@ class WebSocketMessageSimulator extends EventEmitter {
             await safeDelay(effectiveDelay, this.processingDelay || 50, 'E2E message processing delay');
             testClock.advance(effectiveDelay);
             
-            let result = null;
+            let result: Result;
             
             // Route to appropriate platform handler
             if (typeof platform.handleWebSocketMessage !== 'function') {
                 throw new Error(`Platform ${this.platform} does not support WebSocket message injection`);
             }
 
-            const message = typeof rawMessage === 'string' ? JSON.parse(rawMessage) : rawMessage;
+            const message = typeof rawMessage === 'string' ? JSON.parse(rawMessage) as unknown : rawMessage;
             result = await platform.handleWebSocketMessage(message);
 
             this.emit('messageProcessed', {
@@ -65,8 +248,8 @@ class WebSocketMessageSimulator extends EventEmitter {
         }
     }
 
-    async processMessageSequence(messages, platform) {
-        const results = [];
+    async processMessageSequence(messages: unknown[], platform: WebSocketPlatform): Promise<MessageProcessingResult[]> {
+        const results: MessageProcessingResult[] = [];
         
         for (const message of messages) {
             try {
@@ -80,15 +263,15 @@ class WebSocketMessageSimulator extends EventEmitter {
         return results;
     }
 
-    async simulateHighFrequencyProcessing(messages, platform, options = {}) {
+    async simulateHighFrequencyProcessing(messages: unknown[], platform: WebSocketPlatform, options: HighFrequencyOptions = {}) {
         const { concurrent = false, maxConcurrency = 10 } = options;
         const startTime = testClock.now();
         
-        let results = [];
+        let results: MessageProcessingResult[] = [];
         
         if (concurrent) {
             // Process messages concurrently with concurrency limit
-            const batches = [];
+            const batches: unknown[][] = [];
             for (let i = 0; i < messages.length; i += maxConcurrency) {
                 batches.push(messages.slice(i, i + maxConcurrency));
             }
@@ -125,25 +308,25 @@ class WebSocketMessageSimulator extends EventEmitter {
             maxConcurrency
         };
     }
-}
 
-WebSocketMessageSimulator.prototype._handleSimulatorError = function(message, error, eventData) {
-    if (!this.errorHandler && this.logger) {
-        this.errorHandler = createPlatformErrorHandler(this.logger, 'e2e-testing');
-    }
+    _handleSimulatorError(message: string, error: unknown, eventData?: unknown): void {
+        if (error instanceof Error) {
+            this.errorHandler.handleEventProcessingError(error, 'simulator', eventData, message, 'e2e-testing');
+            return;
+        }
 
-    if (this.errorHandler && error instanceof Error) {
-        this.errorHandler.handleEventProcessingError(error, 'simulator', eventData, message, 'e2e-testing');
-        return;
-    }
-
-    if (this.errorHandler) {
         this.errorHandler.logOperationalError(message, 'e2e-testing', eventData);
     }
-};
+}
 
 class CrossPlatformIntegrationTester {
-    constructor(platforms = {}, options = {}) {
+    platforms: PlatformMap;
+    logger: TestLogger;
+    notificationCapture: CapturedNotification[];
+    systemStateHistory: Array<{ type: string; state: SystemState; timestamp: number }>;
+    errorHandler: PlatformErrorHandler;
+
+    constructor(platforms: PlatformMap = {}, options: { logger?: TestLogger } = {}) {
         this.platforms = platforms; // { twitch: platformInstance, youtube: platformInstance, etc. }
         this.logger = options.logger || logger;
         this.notificationCapture = [];
@@ -151,11 +334,14 @@ class CrossPlatformIntegrationTester {
         this.errorHandler = createPlatformErrorHandler(this.logger, 'e2e-testing');
     }
 
-    async processSimultaneousEvents(simultaneousEvents, options = {}) {
+    async processSimultaneousEvents<TEvents extends Record<string, unknown>>(
+        simultaneousEvents: TEvents,
+        options: TestRecord = {}
+    ): Promise<SimultaneousProcessingOutcome<Extract<keyof TEvents, string>>> {
         this.logger.debug('[E2E] Processing simultaneous multi-platform events', 'e2e-testing');
         
         const startTime = testClock.now();
-        const results = {};
+        const results = {} as Record<Extract<keyof TEvents, string>, SimultaneousEventResult>;
         
         // Capture initial system state
         const initialState = this._captureSystemState();
@@ -186,7 +372,7 @@ class CrossPlatformIntegrationTester {
             
             // Organize results by platform
             allResults.forEach(result => {
-                results[result.platformName] = result;
+                results[result.platformName as Extract<keyof TEvents, string>] = result;
             });
 
             // Capture final system state
@@ -216,27 +402,20 @@ class CrossPlatformIntegrationTester {
         }
     }
 
-    async resolvePriorityConflicts(competingNotifications, options = {}) {
+    async resolvePriorityConflicts(competingNotifications: PriorityNotification[], options: PriorityOptions = {}) {
         const { algorithm = 'weighted_value', timeWindow = 5000 } = options;
         
         this.logger.debug('[E2E] Testing cross-platform priority resolution', 'e2e-testing');
         
         // Simulate notification processing with priority logic
-        const processedNotifications = [];
+        const processedNotifications: Array<PriorityNotification & { processedAt: number; processingOrder: number }> = [];
         const startTime = testClock.now();
         
         // Sort by priority and value for resolution
         const sortedNotifications = [...competingNotifications].sort((a, b) => {
             // Priority-based sorting
-            const priorityWeight = {
-                'ultra_high': 100,
-                'high': 50,
-                'medium': 25,
-                'low': 10
-            };
-            
-            const aPriority = priorityWeight[a.priority] || 0;
-            const bPriority = priorityWeight[b.priority] || 0;
+            const aPriority = a.priority ? PRIORITY_WEIGHT[a.priority] : 0;
+            const bPriority = b.priority ? PRIORITY_WEIGHT[b.priority] : 0;
             
             if (aPriority !== bPriority) {
                 return bPriority - aPriority; // Higher priority first
@@ -277,7 +456,11 @@ class CrossPlatformIntegrationTester {
         };
     }
 
-    async processEventWithConnectionStates(incomingEvent, platformStates, options = {}) {
+    async processEventWithConnectionStates(
+        incomingEvent: TestRecord & { platform: string },
+        platformStates: Record<string, PlatformConnectionState>,
+        options: ConnectionStateOptions = {}
+    ): Promise<ConnectionProcessingResult> {
         const { fallbackBehavior = 'queue', maxStaleTime = 10000 } = options;
         
         this.logger.debug('[E2E] Testing platform connection state impact', 'e2e-testing');
@@ -293,7 +476,7 @@ class CrossPlatformIntegrationTester {
         const timeSinceLastMessage = currentTime - platformState.lastMessage;
         const isStale = timeSinceLastMessage > maxStaleTime;
         
-        let processingResult = {
+        const processingResult: ConnectionProcessingResult = {
             platform: eventPlatform,
             event: incomingEvent,
             connectionState: platformState,
@@ -337,11 +520,14 @@ class CrossPlatformIntegrationTester {
         return processingResult;
     }
 
-    _captureSystemState() {
+    _captureSystemState(): SystemState {
         return {
             timestamp: testClock.now(),
-            platformStates: Object.keys(this.platforms).reduce((states, name) => {
+            platformStates: Object.keys(this.platforms).reduce<Record<string, SystemState['platformStates'][string]>>((states, name) => {
                 const platform = this.platforms[name];
+                if (!platform) {
+                    return states;
+                }
                 states[name] = {
                     connected: platform.isConnected ? platform.isConnected() : false,
                     active: platform.isActive ? platform.isActive() : false,
@@ -355,52 +541,50 @@ class CrossPlatformIntegrationTester {
         };
     }
 
-    captureNotification(notification) {
+    captureNotification(notification: TestRecord): void {
         this.notificationCapture.push({
             ...notification,
             capturedAt: testClock.now()
         });
     }
 
-    getCapturedNotifications() {
+    getCapturedNotifications(): CapturedNotification[] {
         return [...this.notificationCapture];
     }
 
-    clearCapture() {
+    clearCapture(): void {
         this.notificationCapture = [];
         this.systemStateHistory = [];
     }
-}
 
-CrossPlatformIntegrationTester.prototype._handleTesterError = function(message, error, eventData) {
-    if (!this.errorHandler && this.logger) {
-        this.errorHandler = createPlatformErrorHandler(this.logger, 'e2e-testing');
-    }
+    _handleTesterError(message: string, error: unknown, eventData?: unknown): void {
+        if (error instanceof Error) {
+            this.errorHandler.handleEventProcessingError(error, 'integration', eventData, message, 'e2e-testing');
+            return;
+        }
 
-    if (this.errorHandler && error instanceof Error) {
-        this.errorHandler.handleEventProcessingError(error, 'integration', eventData, message, 'e2e-testing');
-        return;
-    }
-
-    if (this.errorHandler) {
         this.errorHandler.logOperationalError(message, 'e2e-testing', eventData);
     }
-};
+}
 
 class UserJourneyValidator {
-    constructor(options = {}) {
+    logger: TestLogger;
+    contentQualityGates: TestRecord;
+    journeyHistory: JourneyResult[];
+
+    constructor(options: UserJourneyValidatorOptions = {}) {
         this.logger = options.logger || logger;
         this.contentQualityGates = options.contentQualityGates || {};
         this.journeyHistory = [];
     }
 
-    async validateCompleteUserJourney(journeyInput, expectedOutput) {
+    async validateCompleteUserJourney(journeyInput: JourneyInput, expectedOutput: ExpectedJourneyOutput): Promise<JourneyResult> {
         this.logger.debug('[E2E] Validating complete user journey', 'e2e-testing');
         
         const journeyId = `journey_${crypto.randomUUID()}`;
         const startTime = testClock.now();
         
-        const journey = {
+        const journey: JourneyResult = {
             id: journeyId,
             input: journeyInput,
             expectedOutput,
@@ -448,7 +632,7 @@ class UserJourneyValidator {
         }
     }
 
-    async validateContentQualityInFlow(eventData, options = {}) {
+    async validateContentQualityInFlow(eventData: TestRecord, options: ContentQualityOptions = {}): Promise<ContentQualityResult> {
         const {
             sanitizeHTML = true,
             blockMaliciousLinks = true,
@@ -457,7 +641,7 @@ class UserJourneyValidator {
 
         this.logger.debug('[E2E] Validating content quality in integration flow', 'e2e-testing');
 
-        const validationResults = {
+        const validationResults: ContentQualityResult = {
             passed: true,
             checks: [],
             sanitizedContent: null,
@@ -467,7 +651,7 @@ class UserJourneyValidator {
 
         try {
             // Extract content from event
-            const content = eventData.message || eventData.text || eventData.content || '';
+            const content = asString(eventData.message || eventData.text || eventData.content);
             
             if (!content) {
                 validationResults.checks.push({
@@ -495,7 +679,7 @@ class UserJourneyValidator {
                 validationResults.checks.push(linkCheck);
                 if (!linkCheck.passed) {
                     validationResults.passed = false;
-                    validationResults.blockedElements.push(...linkCheck.blockedLinks);
+                    validationResults.blockedElements.push(...(linkCheck.blockedLinks ?? []));
                 }
             }
 
@@ -514,7 +698,7 @@ class UserJourneyValidator {
             validationResults.passed = false;
             validationResults.securityIssues.push({
                 type: 'validation_error',
-                message: error.message,
+                message: getErrorMessage(error),
                 timestamp: testClock.now()
             });
 
@@ -523,7 +707,7 @@ class UserJourneyValidator {
     }
 
     // Private validation methods
-    async _validateInputProcessing(input) {
+    async _validateInputProcessing(input: JourneyInput): Promise<JourneyStage> {
         return {
             stage: 'input_processing',
             success: !!input.rawWebSocketData,
@@ -536,11 +720,11 @@ class UserJourneyValidator {
         };
     }
 
-    async _validateMessageParsing(input) {
+    async _validateMessageParsing(input: JourneyInput): Promise<JourneyStage> {
         // Simulate message parsing validation
-        const hasRequiredFields = input.rawWebSocketData && 
+        const hasRequiredFields = !!(input.rawWebSocketData &&
                                 input.rawWebSocketData.subscription_type &&
-                                input.rawWebSocketData.event;
+                                input.rawWebSocketData.event);
         
         return {
             stage: 'message_parsing',
@@ -554,7 +738,7 @@ class UserJourneyValidator {
         };
     }
 
-    async _validateEventProcessing(input) {
+    async _validateEventProcessing(input: JourneyInput): Promise<JourneyStage> {
         // Simulate event processing validation
         return {
             stage: 'event_processing',
@@ -568,7 +752,7 @@ class UserJourneyValidator {
         };
     }
 
-    async _validateNotificationGeneration(input) {
+    async _validateNotificationGeneration(input: JourneyInput): Promise<JourneyStage> {
         // Simulate notification generation validation
         return {
             stage: 'notification_generation',
@@ -582,7 +766,7 @@ class UserJourneyValidator {
         };
     }
 
-    async _validateFinalOutput(expectedOutput) {
+    async _validateFinalOutput(expectedOutput: ExpectedJourneyOutput): Promise<JourneyStage> {
         // Simulate final output validation
         return {
             stage: 'final_output',
@@ -597,7 +781,7 @@ class UserJourneyValidator {
         };
     }
 
-    _validateHTMLContent(content) {
+    _validateHTMLContent(content: string): ContentQualityCheck {
         const hasHTML = /<[^>]*>/g.test(content);
         const hasScript = /<script[^>]*>/gi.test(content);
         
@@ -614,7 +798,7 @@ class UserJourneyValidator {
         };
     }
 
-    _validateLinks(content) {
+    _validateLinks(content: string): ContentQualityCheck {
         const urlRegex = /https?:\/\/[^\s]+/gi;
         const urls = content.match(urlRegex) || [];
         const maliciousPatterns = ['malicious-site.example.invalid', 'phishing.example'];
@@ -635,7 +819,7 @@ class UserJourneyValidator {
         };
     }
 
-    _validateUserContent(content) {
+    _validateUserContent(content: string): ContentQualityCheck {
         const hasUserContent = content.length > 0;
         const isTechnicalArtifact = /undefined|null|\[object Object\]/.test(content);
         
@@ -651,11 +835,21 @@ class UserJourneyValidator {
         };
     }
 
-    getJourneyHistory() {
+    _handleTesterError(message: string, error: unknown, eventData?: unknown): void {
+        const errorHandler = createPlatformErrorHandler(this.logger, 'e2e-testing');
+        if (error instanceof Error) {
+            errorHandler.handleEventProcessingError(error, 'user-journey', eventData, message, 'e2e-testing');
+            return;
+        }
+
+        errorHandler.logOperationalError(message, 'e2e-testing', eventData);
+    }
+
+    getJourneyHistory(): JourneyResult[] {
         return [...this.journeyHistory];
     }
 
-    clearHistory() {
+    clearHistory(): void {
         this.journeyHistory = [];
     }
 }

@@ -7,6 +7,25 @@ import {
     UserJourneyValidator
 } from './e2e-testing-infrastructure';
 
+type TestRecord = Record<string, unknown>;
+type TestPlatformOptions = {
+    connected?: boolean;
+    active?: boolean;
+    shouldThrow?: boolean;
+    resultFactory?: (message: unknown) => TestRecord;
+};
+type ProcessedEvent = {
+    platform: string;
+    result: TestRecord;
+};
+type ErrorEvent = {
+    platform: string;
+    error: unknown;
+};
+type SequencePlatform = {
+    handleWebSocketMessage: (message: unknown) => Promise<TestRecord>;
+};
+
 const createNoOpLogger = () => ({
     debug: () => {},
     info: () => {},
@@ -14,19 +33,19 @@ const createNoOpLogger = () => ({
     error: () => {}
 });
 
-const createPlatform = (options = {}) => {
+const createPlatform = (options: TestPlatformOptions = {}) => {
     const {
         connected = true,
         active = true,
         shouldThrow = false,
-        resultFactory = (message) => ({ handled: true, message })
+        resultFactory = (message: unknown) => ({ handled: true, message })
     } = options;
 
     return {
         notificationDispatcher: {},
         isConnected: () => connected,
         isActive: () => active,
-        handleWebSocketMessage: async (message) => {
+        handleWebSocketMessage: async (message: unknown) => {
             if (shouldThrow) {
                 throw new Error('platform handler failed');
             }
@@ -51,7 +70,7 @@ describe('e2e-testing-infrastructure behavior', () => {
             processingDelay: 1
         });
         const platform = createPlatform();
-        const events = [];
+        const events: ProcessedEvent[] = [];
 
         simulator.on('messageProcessed', (payload) => events.push(payload));
 
@@ -61,8 +80,13 @@ describe('e2e-testing-infrastructure behavior', () => {
         expect(objectResult.handled).toBe(true);
         expect(stringResult.message).toEqual({ type: 'string' });
         expect(events.length).toBe(2);
-        expect(events[0].platform).toBe('twitch');
-        expect(events[1].result.handled).toBe(true);
+        const firstEvent = events[0];
+        const secondEvent = events[1];
+        if (!firstEvent || !secondEvent) {
+            throw new Error('Expected two processed events');
+        }
+        expect(firstEvent.platform).toBe('twitch');
+        expect(secondEvent.result.handled).toBe(true);
     });
 
     it('rejects injection when platform is missing or unsupported and emits processing errors', async () => {
@@ -71,7 +95,7 @@ describe('e2e-testing-infrastructure behavior', () => {
             logger: createNoOpLogger(),
             processingDelay: 1
         });
-        const errorEvents = [];
+        const errorEvents: ErrorEvent[] = [];
 
         simulator.on('messageProcessingError', (payload) => errorEvents.push(payload));
 
@@ -79,18 +103,23 @@ describe('e2e-testing-infrastructure behavior', () => {
         await expect(simulator.injectRawWebSocketMessage({ type: 'unsupported' }, {})).rejects.toThrow('does not support WebSocket message injection');
 
         expect(errorEvents.length).toBe(1);
-        expect(errorEvents[0].platform).toBe('youtube');
-        expect(errorEvents[0].error).toBeInstanceOf(Error);
+        const firstError = errorEvents[0];
+        if (!firstError) {
+            throw new Error('Expected one error event');
+        }
+        expect(firstError.platform).toBe('youtube');
+        expect(firstError.error).toBeInstanceOf(Error);
     });
 
     it('collects success and failure entries when processing message sequences', async () => {
         const simulator = new WebSocketMessageSimulator({ platform: 'tiktok', logger: createNoOpLogger(), processingDelay: 1 });
-        const platform = {
-            handleWebSocketMessage: async (message) => {
-                if (message.fail) {
+        const platform: SequencePlatform = {
+            handleWebSocketMessage: async (message: unknown) => {
+                const record = message as TestRecord;
+                if (record.fail) {
                     throw new Error('sequence failure');
                 }
-                return { ok: true, message };
+                return { ok: true, message: record };
             }
         };
 
@@ -144,7 +173,11 @@ describe('e2e-testing-infrastructure behavior', () => {
         expect(result.systemState.history).toHaveLength(2);
         expect(result.notifications).toHaveLength(1);
 
-        expect(result.systemState.initial.platformStates.twitch.connected).toBe(true);
+        const twitchState = result.systemState.initial.platformStates.twitch;
+        if (!twitchState) {
+            throw new Error('Expected captured Twitch platform state');
+        }
+        expect(twitchState.connected).toBe(true);
         expect(typeof result.systemState.initial.memoryUsage.rss).toBe('number');
 
         expect(tester.getCapturedNotifications()).toHaveLength(1);
@@ -172,7 +205,11 @@ describe('e2e-testing-infrastructure behavior', () => {
         });
 
         expect(outcome.totalNotifications).toBe(4);
-        expect(outcome.processedNotifications[0].id).toBe('ultra');
+        const firstProcessed = outcome.processedNotifications[0];
+        if (!firstProcessed) {
+            throw new Error('Expected a processed notification');
+        }
+        expect(firstProcessed.id).toBe('ultra');
         expect(outcome.processedNotifications).toHaveLength(2);
         expect(outcome.droppedCount).toBe(2);
     });
@@ -208,6 +245,9 @@ describe('e2e-testing-infrastructure behavior', () => {
         expect(processed.processed).toBe(true);
         expect(queued.queued).toBe(true);
         expect(dropped.dropped).toBe(true);
+        if (!dropped.result) {
+            throw new Error('Expected dropped result details');
+        }
         expect(dropped.result.reason).toBe('unstable');
     });
 
@@ -238,7 +278,11 @@ describe('e2e-testing-infrastructure behavior', () => {
 
         const empty = await validator.validateContentQualityInFlow({});
         expect(empty.passed).toBe(false);
-        expect(empty.checks[0].name).toBe('content_exists');
+        const firstCheck = empty.checks[0];
+        if (!firstCheck) {
+            throw new Error('Expected content existence check');
+        }
+        expect(firstCheck.name).toBe('content_exists');
 
         const unsafe = await validator.validateContentQualityInFlow({
             message: '<script>alert(1)</script> test visit https://malicious-site.example.invalid'
