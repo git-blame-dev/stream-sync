@@ -113,6 +113,9 @@ describe("farewell chat routing integration", () => {
     expect(farewellRows.length).toBe(1);
 
     const farewellRow = farewellRows[0];
+    if (!farewellRow) {
+      throw new Error("Expected a queued farewell row");
+    }
     expect(farewellRow.vfxConfig).toBeDefined();
     const selectedCommand = farewellRow.vfxConfig?.command;
     expect(typeof selectedCommand).toBe("string");

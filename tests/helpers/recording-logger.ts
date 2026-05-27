@@ -16,7 +16,13 @@ function createRecordingLogger(): RecordingLogger {
   const record =
     (level: string): LogMethod =>
     (message: unknown, source?: string, data?: unknown): void => {
-      entries.push({ level, message: String(message), source, data });
+      const entry: RecordedLogEntry = { level, message: String(message), data };
+
+      if (source !== undefined) {
+        entry.source = source;
+      }
+
+      entries.push(entry);
     };
 
   return {
