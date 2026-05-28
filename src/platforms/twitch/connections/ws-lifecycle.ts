@@ -123,6 +123,7 @@ function createTwitchEventSubWsLifecycle(options: WsLifecycleOptions = {}) {
 
             let connectionResolved = false;
             let connectionTimeout: ReturnType<typeof setTimeout> | null = null;
+            let receivedWelcome = false;
 
             try {
                 state.connectionStartTime = now();
@@ -173,10 +174,14 @@ function createTwitchEventSubWsLifecycle(options: WsLifecycleOptions = {}) {
           if (!message) {
               throw new Error('WebSocket message payload must be an object');
           }
-                        await handleWebSocketMessage(message);
-
                         const metadata = getRecord(message.metadata);
                         const session = getSession(message);
+                        if (metadata?.message_type === 'session_welcome') {
+                            receivedWelcome = true;
+                        }
+
+                        await handleWebSocketMessage(message);
+
                         if (metadata?.message_type === 'session_welcome' && !state.sessionId && !connectionResolved) {
                             if (connectionTimeout) {
                                 clearTimeout(connectionTimeout);
@@ -320,9 +325,14 @@ function createTwitchEventSubWsLifecycle(options: WsLifecycleOptions = {}) {
                         }
 
                         const closeCode = typeof code === 'number' ? code : 0;
+                        const startupPhase = state.sessionId || receivedWelcome
+                            ? 'EventSub subscription setup'
+                            : 'initial handshake';
                         const startupError = closeCode === 1006
-                            ? new Error('Connection closed abnormally during initial handshake')
-                            : new Error('Connection closed before EventSub startup completed');
+                            ? new Error(`Connection closed abnormally during ${startupPhase}`)
+                            : new Error(state.sessionId || receivedWelcome
+                                ? 'Connection closed before EventSub subscription setup completed'
+                                : 'Connection closed before EventSub startup completed');
                         reject(startupError);
                     }
 

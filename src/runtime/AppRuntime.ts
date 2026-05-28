@@ -831,6 +831,7 @@ class AppRuntime {
                     null,
                     { eventType: 'startup', logContext: 'AppRuntime' }
                 );
+                throw error;
             }
 
             this.logger.debug('Initializing platforms...', 'AppRuntime');

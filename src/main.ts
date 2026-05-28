@@ -15,6 +15,8 @@ import { AppRuntime } from './runtime/AppRuntime';
 import { CommandCooldownService } from './services/CommandCooldownService';
 import { createGracefulExitService } from './services/GracefulExitService';
 import { PlatformLifecycleService } from './services/PlatformLifecycleService';
+import { acquireSingleInstanceGuard } from './services/SingleInstanceGuard';
+import type { SingleInstanceGuard } from './services/SingleInstanceGuard';
 import { createUserTrackingService } from './services/UserTrackingService';
 import { createVFXCommandService } from './services/VFXCommandService';
 import { getGiftAnimationDependencyStatus } from './services/tiktok-gift-animation/resolver';
@@ -119,6 +121,7 @@ type MainOverrides = Record<string, unknown> & {
     createDonationSpamDetection?: typeof createDonationSpamDetection;
     createGracefulExitService?: typeof createGracefulExitService;
     createProductionDependencies?: typeof createProductionDependencies;
+    createSingleInstanceGuard?: typeof acquireSingleInstanceGuard;
 };
 
 type CooldownsConfig = {
@@ -458,8 +461,25 @@ const MAIN_FUNCTION_OVERRIDE_KEYS = [
     'createSpamDetectionConfig',
     'createDonationSpamDetection',
     'createGracefulExitService',
-    'createProductionDependencies'
+    'createProductionDependencies',
+    'createSingleInstanceGuard'
 ];
+
+async function releaseSingleInstanceGuard(singleInstanceGuard: SingleInstanceGuard | null) {
+    if (!singleInstanceGuard) {
+        return;
+    }
+    try {
+        await singleInstanceGuard.release();
+    } catch (error) {
+        logMainError('Failed to release single-instance lock', error, {
+            lockPath: singleInstanceGuard.lockPath
+        }, {
+            eventType: 'shutdown',
+            logContext: 'single-instance'
+        });
+    }
+}
 
 function validateMainOverrideContracts(overrides: MainOverrides) {
     if (!overrides || typeof overrides !== 'object') {
@@ -583,11 +603,15 @@ async function main(overrides: MainOverrides = {}) {
     const createDonationSpamDetectionFn = runtimeOverrides.createDonationSpamDetection || createDonationSpamDetection;
     const createGracefulExitServiceFn = runtimeOverrides.createGracefulExitService || createGracefulExitService;
     const createProductionDependenciesFn = runtimeOverrides.createProductionDependencies || createProductionDependencies;
+    const createSingleInstanceGuardFn = runtimeOverrides.createSingleInstanceGuard || acquireSingleInstanceGuard;
+    let singleInstanceGuard: SingleInstanceGuard | null = null;
     try {
         logger.info('Starting main application...', 'main');
         logger.info('Main application started, beginning initialization...', 'Main');
         logger.debug('About to set up display queue configuration...', 'Main');
         logger.info('Setting up display queue configuration...', 'Main');
+
+        singleInstanceGuard = await createSingleInstanceGuardFn({ logger });
 
         try {
             await ensureSecretsFn({
@@ -858,6 +882,8 @@ async function main(overrides: MainOverrides = {}) {
         if (process.env.CHAT_BOT_STARTUP_ONLY === 'true') {
             logger.info('Startup-only mode enabled; shutting down after initialization', 'Main');
             await app.shutdown();
+            await releaseSingleInstanceGuard(singleInstanceGuard);
+            singleInstanceGuard = null;
             return {
                 success: true,
                 appStarted: true,
@@ -911,6 +937,8 @@ async function main(overrides: MainOverrides = {}) {
                 );
             }
         }
+        await releaseSingleInstanceGuard(singleInstanceGuard);
+        singleInstanceGuard = null;
         const message = getErrorMessage(error);
         logMainError(`Critical error occurred: ${message}`, error, null, { eventType: 'startup', logContext: 'main' });
         throw error;

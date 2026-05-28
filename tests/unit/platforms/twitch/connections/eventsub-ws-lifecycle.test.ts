@@ -617,6 +617,41 @@ describe("Twitch EventSub WS lifecycle", () => {
     );
   });
 
+  test("connectWebSocket classifies close after welcome frame as subscription setup even before handler completes", async () => {
+    const lifecycle = buildLifecycle();
+
+    let resolveMessage;
+    const messageHandlingPromise = new Promise((resolve) => {
+      resolveMessage = resolve;
+    });
+    const state = createState({
+      handleWebSocketMessage: createMockFn(async () => messageHandlingPromise),
+    });
+    const connectPromise = lifecycle.connectWebSocket(state);
+
+    state.ws.readyState = 1;
+    state.ws.emit("open");
+    state.ws.emit(
+      "message",
+      Buffer.from(
+        JSON.stringify({
+          metadata: { message_type: "session_welcome" },
+          payload: { session: { id: "welcome-before-handler-complete" } },
+        }),
+      ),
+    );
+    await Promise.resolve();
+
+    state.ws.emit("close", 1006, "abnormal");
+
+    await expect(connectPromise).rejects.toThrow(
+      "Connection closed abnormally during EventSub subscription setup",
+    );
+
+    resolveMessage();
+    await Promise.resolve();
+  });
+
   test("connectWebSocket stops deferred subscription failure handling after startup already failed", async () => {
     const lifecycle = buildLifecycle();
 
@@ -642,11 +677,13 @@ describe("Twitch EventSub WS lifecycle", () => {
         }),
       ),
     );
+    await Promise.resolve();
+    await Promise.resolve();
 
     state.ws.emit("close", 1006, "abnormal");
 
     await expect(connectPromise).rejects.toThrow(
-      "Connection closed abnormally during initial handshake",
+      "Connection closed abnormally during EventSub subscription setup",
     );
 
     resolveSubscriptions({ failures: [{ subscription: "Chat" }] });
@@ -686,11 +723,13 @@ describe("Twitch EventSub WS lifecycle", () => {
         }),
       ),
     );
+    await Promise.resolve();
+    await Promise.resolve();
 
     state.ws.emit("close", 1006, "abnormal");
 
     await expect(connectPromise).rejects.toThrow(
-      "Connection closed abnormally during initial handshake",
+      "Connection closed abnormally during EventSub subscription setup",
     );
 
     resolveSubscriptions({ failures: [] });

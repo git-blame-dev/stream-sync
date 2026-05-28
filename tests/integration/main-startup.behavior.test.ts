@@ -1,6 +1,7 @@
 import { describe, it, beforeEach, afterEach, expect } from "bun:test";
 
 import { main } from "../../src/main.ts";
+import type { SingleInstanceMetadata } from "../../src/services/SingleInstanceGuard.ts";
 import { createDonationSpamDetection } from "../../src/utils/spam-detection";
 import { createConfigFixture } from "../helpers/config-fixture";
 import {
@@ -63,8 +64,29 @@ const buildMainConfig = (overrides = {}) =>
     ...overrides,
   });
 
-const buildOverrides = (options = {}) => {
+type BuildOverridesOptions = {
+  ensureSecretsError?: Error;
+  singleInstanceAcquireError?: Error;
+  twitchAuthInitError?: Error;
+  twitchAuthReady?: boolean;
+  cliArgs?: Record<string, unknown>;
+};
+
+const TEST_SINGLE_INSTANCE_METADATA: SingleInstanceMetadata = {
+  instanceId: "test-instance",
+  pid: 1,
+  ppid: 0,
+  hostname: "test-host",
+  platform: process.platform,
+  cwd: "/tmp/test-stream-sync",
+  command: "test stream-sync",
+  startedAt: "2025-01-15T12:00:00.000Z",
+};
+
+const buildOverrides = (options: BuildOverridesOptions = {}) => {
   const displayQueue = createMockDisplayQueue();
+  const ensureSecretsCalls: boolean[] = [];
+  const singleInstanceReleaseCalls: boolean[] = [];
   const obsManager = {
     isConnected: () => false,
     isReady: () => false,
@@ -75,12 +97,26 @@ const buildOverrides = (options = {}) => {
     addEventListener: () => undefined,
     removeEventListener: () => undefined,
   };
-  let capturedDisplayQueueConfig = null;
+  let capturedDisplayQueueConfig: unknown = null;
 
   const ensureSecrets = async () => {
+    ensureSecretsCalls.push(true);
     if (options.ensureSecretsError) {
       throw options.ensureSecretsError;
     }
+  };
+
+  const createSingleInstanceGuard = async () => {
+    if (options.singleInstanceAcquireError) {
+      throw options.singleInstanceAcquireError;
+    }
+    return {
+      lockPath: "/tmp/test-stream-sync.lock",
+      metadata: TEST_SINGLE_INSTANCE_METADATA,
+      release: async () => {
+        singleInstanceReleaseCalls.push(true);
+      },
+    };
   };
 
   class TwitchAuthStub {
@@ -102,6 +138,7 @@ const buildOverrides = (options = {}) => {
     overrides: {
       cliArgs: options.cliArgs || {},
       ensureSecrets,
+      createSingleInstanceGuard,
       TwitchAuth: TwitchAuthStub,
       initializeDisplayQueue: (_obsManager, displayQueueConfig) => {
         capturedDisplayQueueConfig = displayQueueConfig;
@@ -112,6 +149,8 @@ const buildOverrides = (options = {}) => {
       createDonationSpamDetection: createDonationSpamDetectionNoCleanup,
     },
     getCapturedDisplayQueueConfig: () => capturedDisplayQueueConfig,
+    getEnsureSecretsCalls: () => ensureSecretsCalls,
+    getSingleInstanceReleaseCalls: () => singleInstanceReleaseCalls,
   };
 };
 
@@ -158,7 +197,9 @@ describe("main startup behavior", () => {
 
   it("shuts down in startup-only mode", async () => {
     process.env.CHAT_BOT_STARTUP_ONLY = "true";
-    const { overrides } = buildOverrides({ cliArgs: { chat: 1 } });
+    const { overrides, getSingleInstanceReleaseCalls } = buildOverrides({
+      cliArgs: { chat: 1 },
+    });
 
     const result = await main({
       ...overrides,
@@ -166,6 +207,7 @@ describe("main startup behavior", () => {
     });
 
     expect(result.success).toBe(true);
+    expect(getSingleInstanceReleaseCalls()).toHaveLength(1);
   });
 
   it("stores keep-alive interval when chat limit is not set", async () => {
@@ -183,7 +225,7 @@ describe("main startup behavior", () => {
 
   it("surfaces secret setup failures", async () => {
     const error = new Error("test-secret-failure");
-    const { overrides } = buildOverrides({
+    const { overrides, getSingleInstanceReleaseCalls } = buildOverrides({
       ensureSecretsError: error,
       cliArgs: { chat: 1 },
     });
@@ -194,6 +236,23 @@ describe("main startup behavior", () => {
         config: buildMainConfig(),
       }),
     ).rejects.toThrow("test-secret-failure");
+    expect(getSingleInstanceReleaseCalls()).toHaveLength(1);
+  });
+
+  it("aborts before secrets when another instance is already running", async () => {
+    const error = new Error("another instance is running");
+    const { overrides, getEnsureSecretsCalls } = buildOverrides({
+      singleInstanceAcquireError: error,
+      cliArgs: { chat: 1 },
+    });
+
+    await expect(
+      main({
+        ...overrides,
+        config: buildMainConfig(),
+      }),
+    ).rejects.toThrow("another instance is running");
+    expect(getEnsureSecretsCalls()).toHaveLength(0);
   });
 
   it("continues when Twitch auth initialization fails", async () => {

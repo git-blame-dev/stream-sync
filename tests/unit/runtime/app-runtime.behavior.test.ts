@@ -1238,14 +1238,57 @@ describe("AppRuntime behavior", () => {
     expect(guiTransportService.start.mock.calls.length).toBe(1);
   });
 
+  it("fails startup with the original error when active gui transport start rejects", async () => {
+    const guiStartError = new Error("gui transport failed to bind");
+    const initializeAllPlatforms = createMockFn().mockResolvedValue();
+    const guiTransportService = {
+      start: createMockFn().mockRejectedValue(guiStartError),
+      stop: createMockFn().mockResolvedValue(),
+      isActive: createMockFn().mockReturnValue(true),
+    };
+    const runtime = createRuntime(
+      {
+        guiTransportService,
+        platformLifecycleService: {
+          getAllPlatforms: createMockFn().mockReturnValue({}),
+          getStatus: createMockFn().mockReturnValue({ platformHealth: {} }),
+          recordPlatformConnection: createMockFn(),
+          initializeAllPlatforms,
+          disconnectAll: createMockFn().mockResolvedValue(),
+        },
+      },
+      { gui: { enableDock: true, enableOverlay: false } },
+    );
+
+    try {
+      await runtime.start();
+      throw new Error("runtime.start() should reject");
+    } catch (error) {
+      expect(error).toBe(guiStartError);
+      expect((error as Error).message).toBe("gui transport failed to bind");
+    }
+
+    expect(initializeAllPlatforms.mock.calls.length).toBe(0);
+  });
+
   it("does not start gui transport when gui is inactive", async () => {
+    const initializeAllPlatforms = createMockFn().mockResolvedValue();
     const guiTransportService = {
       start: createMockFn().mockResolvedValue(),
       stop: createMockFn().mockResolvedValue(),
       isActive: createMockFn().mockReturnValue(false),
     };
     const runtime = createRuntime(
-      { guiTransportService },
+      {
+        guiTransportService,
+        platformLifecycleService: {
+          getAllPlatforms: createMockFn().mockReturnValue({}),
+          getStatus: createMockFn().mockReturnValue({ platformHealth: {} }),
+          recordPlatformConnection: createMockFn(),
+          initializeAllPlatforms,
+          disconnectAll: createMockFn().mockResolvedValue(),
+        },
+      },
       { gui: { enableDock: false, enableOverlay: false } },
     );
 
@@ -1262,6 +1305,7 @@ describe("AppRuntime behavior", () => {
     await runtime.start();
 
     expect(guiTransportService.start.mock.calls.length).toBe(0);
+    expect(initializeAllPlatforms.mock.calls.length).toBe(1);
   });
 
   it("stops gui transport on runtime shutdown", async () => {

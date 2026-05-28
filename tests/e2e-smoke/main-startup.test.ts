@@ -8,7 +8,19 @@ import {
   useRealTimers,
 } from "../helpers/bun-timers";
 import { main } from "../../src/main.ts";
+import type { SingleInstanceMetadata } from "../../src/services/SingleInstanceGuard.ts";
 import { createDonationSpamDetection } from "../../src/utils/spam-detection";
+
+const TEST_SINGLE_INSTANCE_METADATA: SingleInstanceMetadata = {
+  instanceId: "test-smoke-instance",
+  pid: 1,
+  ppid: 0,
+  hostname: "test-host",
+  platform: process.platform,
+  cwd: "/tmp/test-stream-sync-smoke",
+  command: "test stream-sync smoke",
+  startedAt: "2025-01-15T12:00:00.000Z",
+};
 
 const buildSmokeConfig = () =>
   createConfigFixture({
@@ -77,6 +89,11 @@ describe("main startup smoke", () => {
     const overrides = {
       cliArgs: { chat: 1 },
       ensureSecrets: async () => {},
+      createSingleInstanceGuard: async () => ({
+        lockPath: "/tmp/test-stream-sync-smoke.lock",
+        metadata: TEST_SINGLE_INSTANCE_METADATA,
+        release: async () => {},
+      }),
       initializeDisplayQueue: () => createMockDisplayQueue(),
       getOBSConnectionManager: () => ({
         isConnected: () => false,
