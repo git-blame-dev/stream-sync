@@ -109,7 +109,7 @@ describe("AppRuntime shutdown lifecycle", () => {
   it("emits shutdown lifecycle event with restart mode when restart is requested", () => {
     const runtime = createAppRuntimeDouble();
     const emitCalls: unknown[][] = [];
-    runtime.eventBus.emit = (...args) => emitCalls.push(args);
+    runtime.eventBus.emit = (...args: unknown[]) => emitCalls.push(args);
     useFakeTimers();
     const originalExit = process.exit;
     process.exit = (() => undefined as never) as typeof process.exit;

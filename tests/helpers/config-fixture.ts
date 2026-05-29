@@ -30,6 +30,7 @@ type TestConfigKnownSections = {
         chatMsgTxt: string;
         chatMsgScene: string;
         chatMsgGroup: string;
+        ttsTxt: string;
         ttsEnabled: boolean;
         notificationMsgGroup: string;
         notificationTxt: string;
@@ -125,6 +126,7 @@ const RAW_TEST_CONFIG = {
         address: 'ws://localhost:4455',
         connectionTimeoutMs: '5000',
         chatMsgGroup: 'test-chat-grp',
+        ttsTxt: 'test-tts-source',
         notificationMsgGroup: 'test-notification-grp',
         chatPlatformLogoTwitch: 'test-twitch-img',
         chatPlatformLogoYouTube: 'test-youtube-img',

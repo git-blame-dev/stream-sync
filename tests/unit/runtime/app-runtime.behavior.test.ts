@@ -16,63 +16,125 @@ import { DEFAULT_AVATAR_URL } from "../../../src/constants/avatar";
 import { PlatformEvents } from "../../../src/interfaces/PlatformEvents";
 import { AppRuntime } from "../../../src/runtime/AppRuntime";
 
-const createDeps = (overrides = {}) => ({
-  logging: overrides.logging || noOpLogger,
-  displayQueue: overrides.displayQueue || createMockDisplayQueue(),
-  notificationManager:
-    overrides.notificationManager !== undefined
-      ? overrides.notificationManager
-      : createMockNotificationManager(),
-  eventBus:
-    overrides.eventBus !== undefined
-      ? overrides.eventBus
-      : {
-          subscribe: createMockFn(),
-          emit: createMockFn(),
-          unsubscribe: createMockFn(),
-        },
-  vfxCommandService: overrides.vfxCommandService || {
-    executeCommand: createMockFn(),
-    executeCommandForKey: createMockFn(),
-    getVFXConfig: createMockFn(),
-  },
-  userTrackingService: overrides.userTrackingService || {
-    isFirstMessage: createMockFn(),
-  },
-  obsEventService: overrides.obsEventService || {
-    disconnect: createMockFn().mockResolvedValue(),
-  },
-  guiTransportService: overrides.guiTransportService,
-  commandCooldownService: overrides.commandCooldownService || {
-    checkUserCooldown: createMockFn().mockReturnValue({ allowed: true }),
-    updateUserCooldown: createMockFn(),
-    getStatus: createMockFn().mockReturnValue({ commands: {} }),
-  },
-  platformLifecycleService: overrides.platformLifecycleService || {
-    getAllPlatforms: createMockFn().mockReturnValue({}),
-    getStatus: createMockFn().mockReturnValue({ platformHealth: {} }),
-    recordPlatformConnection: createMockFn(),
-    initializeAllPlatforms: createMockFn().mockResolvedValue(),
-    disconnectAll: createMockFn().mockResolvedValue(),
-  },
-  gracefulExitService: overrides.gracefulExitService || {
-    isEnabled: createMockFn().mockReturnValue(false),
-    getTargetMessageCount: createMockFn().mockReturnValue(0),
-  },
-  commandParser:
-    overrides.commandParser !== undefined
-      ? overrides.commandParser
-      : { getVFXConfig: createMockFn() },
-});
+type RuntimeConfig = ConstructorParameters<typeof AppRuntime>[0];
+type RuntimeDependencies = ConstructorParameters<typeof AppRuntime>[1];
+type RuntimeUnderTest = AppRuntime;
+type DependencyOverrides = Partial<Record<keyof RuntimeDependencies, unknown>> &
+  Record<string, unknown>;
+type ConfigOverrides = Parameters<typeof createConfigFixture>[0];
+type NotificationCall = [type: string, platform: string, payload: Record<string, unknown>];
+type NotificationCallLog = NotificationCall[];
+type ChatCall = [platform: string, payload: Record<string, unknown>];
+type VfxEventHandler = (event: Record<string, unknown>) => Promise<void> | void;
 
-const createRuntime = (depsOverrides = {}, configOverrides = {}) => {
-  const config = createConfigFixture(configOverrides);
+const createNotificationCalls = (): NotificationCallLog => [];
+
+const getNotificationCall = (
+  calls: NotificationCallLog,
+  index = 0,
+): NotificationCall => {
+  const call = calls[index];
+  expect(call).toBeDefined();
+  if (call === undefined) {
+    throw new Error(`Expected notification call at index ${index}`);
+  }
+  return call;
+};
+
+const getMockCall = <Args extends unknown[]>(
+  calls: Args[],
+  index = 0,
+): Args => {
+  const call = calls[index];
+  expect(call).toBeDefined();
+  if (call === undefined) {
+    throw new Error(`Expected mock call at index ${index}`);
+  }
+  return call;
+};
+
+const getLastValue = <T>(values: T[]): T => {
+  const value = values.at(-1);
+  expect(value).toBeDefined();
+  if (value === undefined) {
+    throw new Error("Expected recorded value");
+  }
+  return value;
+};
+
+const createRuntimeConfig = (configOverrides: ConfigOverrides = {}): RuntimeConfig =>
+  createConfigFixture(configOverrides);
+
+const setRuntimeProperty = <K extends PropertyKey, V>(
+  runtime: RuntimeUnderTest,
+  key: K,
+  value: V,
+) => {
+  Reflect.set(runtime, key, value);
+};
+
+const setDependencyProperty = <K extends PropertyKey, V>(
+  runtime: RuntimeUnderTest,
+  key: K,
+  value: V,
+) => {
+  Reflect.set(runtime.dependencies, key, value);
+};
+
+const createDeps = (overrides: DependencyOverrides = {}) => {
+  const deps: RuntimeDependencies = {
+    logging: noOpLogger,
+    displayQueue: createMockDisplayQueue(),
+    notificationManager: createMockNotificationManager(),
+    eventBus: {
+      subscribe: createMockFn(),
+      emit: createMockFn(),
+    },
+    vfxCommandService: {
+      executeCommand: createMockFn(),
+      executeCommandForKey: createMockFn(),
+      getVFXConfig: createMockFn(),
+    },
+    userTrackingService: {
+      isFirstMessage: createMockFn(),
+    },
+    obsEventService: {
+      disconnect: createMockFn().mockResolvedValue(),
+    },
+    commandCooldownService: {
+      checkUserCooldown: createMockFn().mockReturnValue(true),
+      updateUserCooldown: createMockFn(),
+      getStatus: createMockFn().mockReturnValue({ commands: {} }),
+    },
+    platformLifecycleService: {
+      getAllPlatforms: createMockFn().mockReturnValue({}),
+      getStatus: createMockFn().mockReturnValue({ platformHealth: {} }),
+      getPlatformConnectionTime: createMockFn().mockReturnValue(null),
+      initializeAllPlatforms: createMockFn().mockResolvedValue(),
+      disconnectAll: createMockFn().mockResolvedValue(),
+    },
+    gracefulExitService: {
+      isEnabled: createMockFn().mockReturnValue(false),
+      getTargetMessageCount: createMockFn().mockReturnValue(0),
+      incrementMessageCount: createMockFn().mockReturnValue(false),
+      triggerExit: createMockFn().mockResolvedValue(),
+    },
+    commandParser: { getVFXConfig: createMockFn() },
+  };
+  return Object.assign(deps, overrides);
+};
+
+const createRuntime = (
+  depsOverrides: DependencyOverrides = {},
+  configOverrides: ConfigOverrides = {},
+) => {
+  const config = createRuntimeConfig(configOverrides);
   const deps = createDeps(depsOverrides);
   return new AppRuntime(config, deps);
 };
 
-const createRecordingNotificationManager = (calls) => ({
-  handleNotification: async (...args) => {
+const createRecordingNotificationManager = (calls: NotificationCallLog) => ({
+  handleNotification: async (...args: NotificationCall) => {
     calls.push(args);
     return { success: true };
   },
@@ -141,16 +203,16 @@ describe("AppRuntime behavior", () => {
   it("throws when unified notification options are missing", async () => {
     const runtime = createRuntime();
     await expect(
-      runtime.handleUnifiedNotification(
+      Reflect.apply(runtime.handleUnifiedNotification, runtime, [
         "platform:follow",
         "twitch",
         "test-user",
-      ),
+      ]),
     ).rejects.toThrow("handleUnifiedNotification requires options");
   });
 
   it("delegates unified notifications to the manager", async () => {
-    const calls = [];
+    const calls = createNotificationCalls();
     const notificationManager = createRecordingNotificationManager(calls);
     const runtime = createRuntime({ notificationManager });
 
@@ -165,13 +227,14 @@ describe("AppRuntime behavior", () => {
     );
 
     expect(calls.length).toBe(1);
-    expect(calls[0][0]).toBe("platform:follow");
-    expect(calls[0][1]).toBe("twitch");
-    expect(calls[0][2].username).toBe("test-user");
+    const call = getNotificationCall(calls);
+    expect(call[0]).toBe("platform:follow");
+    expect(call[1]).toBe("twitch");
+    expect(call[2].username).toBe("test-user");
   });
 
   it("accepts anonymous gift notifications without username", async () => {
-    const calls = [];
+    const calls = createNotificationCalls();
     const notificationManager = createRecordingNotificationManager(calls);
     const runtime = createRuntime({ notificationManager });
 
@@ -181,17 +244,17 @@ describe("AppRuntime behavior", () => {
     });
 
     expect(calls.length).toBe(1);
-    expect(calls[0][2].platform).toBe("tiktok");
+    expect(getNotificationCall(calls)[2].platform).toBe("tiktok");
   });
 
   it("routes unified notification errors through runtime error handler", async () => {
     const runtime = createRuntime();
-    runtime.notificationManager = null;
-    const handled = [];
-    runtime.errorHandler = {
-      handleEventProcessingError: (...args) => handled.push(args),
+    setRuntimeProperty(runtime, "notificationManager", null);
+    const handled: unknown[][] = [];
+    setRuntimeProperty(runtime, "errorHandler", {
+      handleEventProcessingError: (...args: unknown[]) => handled.push(args),
       logOperationalError: createMockFn(),
-    };
+    });
 
     await runtime.handleUnifiedNotification(
       "platform:follow",
@@ -368,7 +431,7 @@ describe("AppRuntime behavior", () => {
   });
 
   it("forwards gift notifications with VFX config", async () => {
-    const calls = [];
+    const calls = createNotificationCalls();
     const notificationManager = createRecordingNotificationManager(calls);
     const runtime = createRuntime({
       notificationManager,
@@ -389,15 +452,16 @@ describe("AppRuntime behavior", () => {
     });
 
     expect(calls.length).toBe(1);
-    expect(calls[0][0]).toBe("platform:gift");
-    expect(calls[0][2].vfxConfig).toEqual({ key: "gifts" });
+    const call = getNotificationCall(calls);
+    expect(call[0]).toBe("platform:gift");
+    expect(call[2].vfxConfig).toEqual({ key: "gifts" });
     expect(
-      Object.prototype.hasOwnProperty.call(calls[0][2], "repeatCount"),
+      Object.prototype.hasOwnProperty.call(call[2], "repeatCount"),
     ).toBe(false);
   });
 
   it("forwards YouTube jewels gift notifications without userId when metadata marks missing userId", async () => {
-    const calls = [];
+    const calls = createNotificationCalls();
     const notificationManager = createRecordingNotificationManager(calls);
     const runtime = createRuntime({
       notificationManager,
@@ -420,19 +484,20 @@ describe("AppRuntime behavior", () => {
     });
 
     expect(calls.length).toBe(1);
-    expect(calls[0][0]).toBe("platform:gift");
-    expect(calls[0][2]).toMatchObject({
+    const call = getNotificationCall(calls);
+    expect(call[0]).toBe("platform:gift");
+    expect(call[2]).toMatchObject({
       username: "test-jewels-user",
       giftType: "Girl power",
       amount: 300,
       currency: "jewels",
       metadata: { missingFields: ["userId"] },
     });
-    expect(calls[0][2].userId).toBeUndefined();
+    expect(call[2].userId).toBeUndefined();
   });
 
   it("defaults gift notification type to platform:gift when omitted", async () => {
-    const calls = [];
+    const calls = createNotificationCalls();
     const notificationManager = createRecordingNotificationManager(calls);
     const runtime = createRuntime({
       notificationManager,
@@ -452,11 +517,11 @@ describe("AppRuntime behavior", () => {
     });
 
     expect(calls.length).toBe(1);
-    expect(calls[0][0]).toBe("platform:gift");
+    expect(getNotificationCall(calls)[0]).toBe("platform:gift");
   });
 
   it("normalizes gift notification error payloads", async () => {
-    const calls = [];
+    const calls = createNotificationCalls();
     const notificationManager = createRecordingNotificationManager(calls);
     const runtime = createRuntime({
       notificationManager,
@@ -477,7 +542,7 @@ describe("AppRuntime behavior", () => {
     });
 
     expect(calls.length).toBe(1);
-    expect(calls[0][2].giftType).toBeUndefined();
+    expect(getNotificationCall(calls)[2].giftType).toBeUndefined();
   });
 
   it("validates giftpaypiggy event requirements", async () => {
@@ -493,7 +558,7 @@ describe("AppRuntime behavior", () => {
   });
 
   it("routes giftpaypiggy events through unified handler", async () => {
-    const calls = [];
+    const calls = createNotificationCalls();
     const notificationManager = createRecordingNotificationManager(calls);
     const runtime = createRuntime({ notificationManager });
 
@@ -504,11 +569,11 @@ describe("AppRuntime behavior", () => {
     });
 
     expect(calls.length).toBe(1);
-    expect(calls[0][0]).toBe("platform:giftpaypiggy");
+    expect(getNotificationCall(calls)[0]).toBe("platform:giftpaypiggy");
   });
 
   it("preserves explicit avatarUrl for giftpaypiggy notifications", async () => {
-    const calls = [];
+    const calls = createNotificationCalls();
     const notificationManager = createRecordingNotificationManager(calls);
     const runtime = createRuntime({ notificationManager });
 
@@ -520,14 +585,15 @@ describe("AppRuntime behavior", () => {
     });
 
     expect(calls.length).toBe(1);
-    expect(calls[0][0]).toBe("platform:giftpaypiggy");
-    expect(calls[0][2].avatarUrl).toBe(
+    const call = getNotificationCall(calls);
+    expect(call[0]).toBe("platform:giftpaypiggy");
+    expect(call[2].avatarUrl).toBe(
       "https://example.invalid/runtime-giftpaypiggy-avatar.png",
     );
   });
 
   it("preserves explicit avatarUrl for paypiggy notifications", async () => {
-    const calls = [];
+    const calls = createNotificationCalls();
     const notificationManager = createRecordingNotificationManager(calls);
     const runtime = createRuntime({ notificationManager });
 
@@ -540,8 +606,9 @@ describe("AppRuntime behavior", () => {
     });
 
     expect(calls.length).toBe(1);
-    expect(calls[0][0]).toBe("platform:paypiggy");
-    expect(calls[0][2].avatarUrl).toBe(
+    const call = getNotificationCall(calls);
+    expect(call[0]).toBe("platform:paypiggy");
+    expect(call[2].avatarUrl).toBe(
       "https://example.invalid/runtime-paypiggy-avatar.png",
     );
   });
@@ -559,11 +626,11 @@ describe("AppRuntime behavior", () => {
 
   it("routes resub notifications through error handler on failure", async () => {
     const runtime = createRuntime();
-    const handled = [];
-    runtime.errorHandler = {
-      handleEventProcessingError: (...args) => handled.push(args),
+    const handled: unknown[][] = [];
+    setRuntimeProperty(runtime, "errorHandler", {
+      handleEventProcessingError: (...args: unknown[]) => handled.push(args),
       logOperationalError: createMockFn(),
-    };
+    });
 
     const result = await runtime.handleResubNotification(
       "twitch",
@@ -590,7 +657,7 @@ describe("AppRuntime behavior", () => {
   });
 
   it("routes envelope notifications with required payload", async () => {
-    const calls = [];
+    const calls = createNotificationCalls();
     const notificationManager = createRecordingNotificationManager(calls);
     const runtime = createRuntime({ notificationManager });
 
@@ -606,15 +673,16 @@ describe("AppRuntime behavior", () => {
     });
 
     expect(calls.length).toBe(1);
-    expect(calls[0][0]).toBe("platform:envelope");
-    expect(calls[0][2].avatarUrl).toBe(DEFAULT_AVATAR_URL);
+    const call = getNotificationCall(calls);
+    expect(call[0]).toBe("platform:envelope");
+    expect(call[2].avatarUrl).toBe(DEFAULT_AVATAR_URL);
     expect(
-      Object.prototype.hasOwnProperty.call(calls[0][2], "repeatCount"),
+      Object.prototype.hasOwnProperty.call(call[2], "repeatCount"),
     ).toBe(false);
   });
 
   it("preserves explicit avatarUrl for envelope notifications", async () => {
-    const calls = [];
+    const calls = createNotificationCalls();
     const notificationManager = createRecordingNotificationManager(calls);
     const runtime = createRuntime({ notificationManager });
 
@@ -631,29 +699,34 @@ describe("AppRuntime behavior", () => {
     });
 
     expect(calls.length).toBe(1);
-    expect(calls[0][0]).toBe("platform:envelope");
-    expect(calls[0][2].avatarUrl).toBe(
+    const call = getNotificationCall(calls);
+    expect(call[0]).toBe("platform:envelope");
+    expect(call[2].avatarUrl).toBe(
       "https://example.invalid/runtime-envelope-avatar.png",
     );
   });
 
   it("routes envelope errors through runtime handler", async () => {
     const runtime = createRuntime();
-    const handled = [];
-    runtime.errorHandler = {
-      handleEventProcessingError: (...args) => handled.push(args),
+    const handled: unknown[][] = [];
+    setRuntimeProperty(runtime, "errorHandler", {
+      handleEventProcessingError: (...args: unknown[]) => handled.push(args),
       logOperationalError: createMockFn(),
-    };
+    });
 
-    await runtime.handleEnvelopeNotification("tiktok", null);
+    await Reflect.apply(runtime.handleEnvelopeNotification, runtime, ["tiktok", null]);
 
     expect(handled.length).toBe(1);
   });
 
   it("triggers youtube reconnect on stream detection", async () => {
     const runtime = createRuntime();
-    const called = [];
-    runtime.youtube = { initialize: async (...args) => called.push(args) };
+    const called: unknown[][] = [];
+    runtime.youtube = {
+      initialize: async (...args: unknown[]) => {
+        called.push(args);
+      },
+    };
 
     await runtime.handleStreamDetected("youtube", {
       eventType: "stream-detected",
@@ -665,8 +738,12 @@ describe("AppRuntime behavior", () => {
 
   it("ignores non-stream-detected events", async () => {
     const runtime = createRuntime();
-    const called = [];
-    runtime.youtube = { initialize: async (...args) => called.push(args) };
+    const called: unknown[][] = [];
+    runtime.youtube = {
+      initialize: async (...args: unknown[]) => {
+        called.push(args);
+      },
+    };
 
     await runtime.handleStreamDetected("youtube", {
       eventType: "ignored-event",
@@ -678,7 +755,7 @@ describe("AppRuntime behavior", () => {
 
   it("throws when user tracking service is unavailable", () => {
     const runtime = createRuntime();
-    runtime.userTrackingService = null;
+    setRuntimeProperty(runtime, "userTrackingService", null);
 
     expect(() => runtime.isFirstMessage("test-user-1")).toThrow(
       "UserTrackingService not available for first message check",
@@ -687,10 +764,10 @@ describe("AppRuntime behavior", () => {
 
   it("updates viewer count and swallows observer errors", async () => {
     const runtime = createRuntime();
-    runtime.viewerCountSystem = {
+    setRuntimeProperty(runtime, "viewerCountSystem", {
       counts: { twitch: 1 },
       notifyObservers: () => Promise.reject(new Error("observer failed")),
-    };
+    });
 
     runtime.updateViewerCount("twitch", 5);
     await Promise.resolve();
@@ -700,10 +777,12 @@ describe("AppRuntime behavior", () => {
 
   it("routes chat messages through the chat router", async () => {
     const runtime = createRuntime();
-    const calls = [];
-    runtime.chatNotificationRouter = {
-      handleChatMessage: async (...args) => calls.push(args),
-    };
+    const calls: ChatCall[] = [];
+    setRuntimeProperty(runtime, "chatNotificationRouter", {
+      handleChatMessage: async (...args: ChatCall) => {
+        calls.push(args);
+      },
+    });
 
     await runtime.handleChatMessage("twitch", {
       username: "test-user",
@@ -711,27 +790,39 @@ describe("AppRuntime behavior", () => {
     });
 
     expect(calls.length).toBe(1);
-    expect(calls[0][0]).toBe("twitch");
+    const call = getMockCall(calls);
+    expect(call[0]).toBe("twitch");
   });
 
   it("handles VFX command events from the event bus", async () => {
-    let handler;
+    let handler: ((event: Record<string, unknown>) => Promise<void> | void) | undefined;
     const eventBus = {
-      subscribe: createMockFn((eventName, callback) => {
+      subscribe: createMockFn(
+        (eventName: string, callback: VfxEventHandler) => {
         if (eventName === PlatformEvents.VFX_COMMAND_RECEIVED) {
           handler = callback;
         }
         return createMockFn();
-      }),
+        },
+      ),
     };
-    const vfxCalls = [];
+    const vfxCalls: unknown[][] = [];
     createRuntime({
       eventBus,
       vfxCommandService: {
-        executeCommand: async (...args) => vfxCalls.push(args),
-        executeCommandForKey: async (...args) => vfxCalls.push(args),
+        executeCommand: async (...args: unknown[]) => {
+          vfxCalls.push(args);
+        },
+        executeCommandForKey: async (...args: unknown[]) => {
+          vfxCalls.push(args);
+        },
       },
     });
+
+    expect(typeof handler).toBe("function");
+    if (typeof handler !== "function") {
+      throw new Error("VFX command handler was not subscribed");
+    }
 
     await handler({
       command: "!spark",
@@ -753,21 +844,28 @@ describe("AppRuntime behavior", () => {
   });
 
   it("captures handler errors for invalid VFX events", async () => {
-    let handler;
+    let handler: ((event: Record<string, unknown>) => Promise<void> | void) | undefined;
     const eventBus = {
-      subscribe: createMockFn((eventName, callback) => {
+      subscribe: createMockFn(
+        (eventName: string, callback: VfxEventHandler) => {
         if (eventName === PlatformEvents.VFX_COMMAND_RECEIVED) {
           handler = callback;
         }
         return createMockFn();
-      }),
+        },
+      ),
     };
     const runtime = createRuntime({ eventBus });
-    const handled = [];
-    runtime.errorHandler = {
-      handleEventProcessingError: (...args) => handled.push(args),
+    const handled: unknown[][] = [];
+    setRuntimeProperty(runtime, "errorHandler", {
+      handleEventProcessingError: (...args: unknown[]) => handled.push(args),
       logOperationalError: createMockFn(),
-    };
+    });
+
+    expect(typeof handler).toBe("function");
+    if (typeof handler !== "function") {
+      throw new Error("VFX command handler was not subscribed");
+    }
 
     await handler({
       command: "!spark",
@@ -788,20 +886,20 @@ describe("AppRuntime behavior", () => {
       },
     });
 
-    expect(runtime.recordPlatformConnection).toBeUndefined();
+    expect(Reflect.get(runtime, "recordPlatformConnection")).toBeUndefined();
   });
 
   it("handles early viewer count initialization failures", async () => {
     const runtime = createRuntime();
-    runtime.viewerCountSystem = {
+    setRuntimeProperty(runtime, "viewerCountSystem", {
       initialize: createMockFn().mockRejectedValue(new Error("init failed")),
       startPolling: createMockFn(),
-    };
-    const handled = [];
-    runtime.errorHandler = {
-      handleEventProcessingError: (...args) => handled.push(args),
+    });
+    const handled: unknown[][] = [];
+    setRuntimeProperty(runtime, "errorHandler", {
+      handleEventProcessingError: (...args: unknown[]) => handled.push(args),
       logOperationalError: createMockFn(),
-    };
+    });
 
     await runtime.startViewerCountSystemEarly();
 
@@ -814,26 +912,27 @@ describe("AppRuntime behavior", () => {
     };
     const runtime = createRuntime({ notificationManager });
     let disconnectCalls = 0;
-    runtime.obsEventService = null;
-    runtime.dependencies.obs = {
+    setRuntimeProperty(runtime, "obsEventService", null);
+    setDependencyProperty(runtime, "obs", {
       connectionManager: {
         isConnected: () => true,
+        call: async () => ({}),
         disconnect: async () => {
           disconnectCalls += 1;
         },
       },
-    };
-    runtime.viewerCountSystem = { stopPolling: createMockFn() };
-    runtime.viewerCountStatusCleanup = createMockFn();
+    });
+    setRuntimeProperty(runtime, "viewerCountSystem", { stopPolling: createMockFn() });
+    setRuntimeProperty(runtime, "viewerCountStatusCleanup", createMockFn());
     const originalExit = process.exit;
-    process.exit = createMockFn();
+    Reflect.set(process, "exit", createMockFn());
 
     try {
       await runtime.shutdown();
 
       expect(disconnectCalls).toBe(1);
     } finally {
-      process.exit = originalExit;
+      Reflect.set(process, "exit", originalExit);
     }
   });
 
@@ -850,12 +949,12 @@ describe("AppRuntime behavior", () => {
         },
       },
     });
-    runtime.viewerCountSystem = { stopPolling: createMockFn() };
+    setRuntimeProperty(runtime, "viewerCountSystem", { stopPolling: createMockFn() });
     runtime.viewerCountStatusCleanup = () => {
       calls.cleanup += 1;
     };
     const originalExit = process.exit;
-    process.exit = createMockFn();
+    Reflect.set(process, "exit", createMockFn());
 
     try {
       await runtime.shutdown();
@@ -863,7 +962,7 @@ describe("AppRuntime behavior", () => {
       expect(calls.disconnectAll).toBe(1);
       expect(calls.cleanup).toBe(1);
     } finally {
-      process.exit = originalExit;
+      Reflect.set(process, "exit", originalExit);
     }
   });
 
@@ -873,20 +972,20 @@ describe("AppRuntime behavior", () => {
       destroy: createMockFn(),
     };
     const runtime = createRuntime({ obsEventService });
-    runtime.viewerCountSystem = {
+    setRuntimeProperty(runtime, "viewerCountSystem", {
       stopPolling: createMockFn(),
       cleanup: createMockFn().mockResolvedValue(),
-    };
-    runtime.viewerCountStatusCleanup = createMockFn();
+    });
+    setRuntimeProperty(runtime, "viewerCountStatusCleanup", createMockFn());
     const originalExit = process.exit;
-    process.exit = createMockFn();
+    Reflect.set(process, "exit", createMockFn());
 
     try {
       await runtime.shutdown();
       expect(obsEventService.disconnect.mock.calls.length).toBe(1);
       expect(obsEventService.destroy.mock.calls.length).toBe(1);
     } finally {
-      process.exit = originalExit;
+      Reflect.set(process, "exit", originalExit);
     }
   });
 
@@ -900,13 +999,13 @@ describe("AppRuntime behavior", () => {
       }),
     };
     const runtime = createRuntime({ eventBus });
-    runtime.viewerCountSystem = {
+    setRuntimeProperty(runtime, "viewerCountSystem", {
       stopPolling: createMockFn(),
       cleanup: createMockFn().mockResolvedValue(),
-    };
-    runtime.viewerCountStatusCleanup = createMockFn();
+    });
+    setRuntimeProperty(runtime, "viewerCountStatusCleanup", createMockFn());
     const originalExit = process.exit;
-    process.exit = createMockFn();
+    Reflect.set(process, "exit", createMockFn());
 
     try {
       await runtime.shutdown();
@@ -917,25 +1016,26 @@ describe("AppRuntime behavior", () => {
       expect(typeof vfxUnsubscribe).toBe("function");
       expect(vfxUnsubscribe.mock.calls.length).toBe(1);
     } finally {
-      process.exit = originalExit;
+      Reflect.set(process, "exit", originalExit);
     }
   });
 
   it("cleans up viewer count observers on shutdown when cleanup is available", async () => {
     const runtime = createRuntime();
-    runtime.viewerCountSystem = {
+    const viewerCountCleanup = createMockFn().mockResolvedValue();
+    setRuntimeProperty(runtime, "viewerCountSystem", {
       stopPolling: createMockFn(),
-      cleanup: createMockFn().mockResolvedValue(),
-    };
-    runtime.viewerCountStatusCleanup = createMockFn();
+      cleanup: viewerCountCleanup,
+    });
+    setRuntimeProperty(runtime, "viewerCountStatusCleanup", createMockFn());
     const originalExit = process.exit;
-    process.exit = createMockFn();
+    Reflect.set(process, "exit", createMockFn());
 
     try {
       await runtime.shutdown();
-      expect(runtime.viewerCountSystem.cleanup.mock.calls.length).toBe(1);
+      expect(viewerCountCleanup.mock.calls.length).toBe(1);
     } finally {
-      process.exit = originalExit;
+      Reflect.set(process, "exit", originalExit);
     }
   });
 
@@ -956,34 +1056,36 @@ describe("AppRuntime behavior", () => {
         ),
       },
     });
-    runtime.viewerCountSystem = {
+    setRuntimeProperty(runtime, "viewerCountSystem", {
       stopPolling: createMockFn(),
       cleanup: createMockFn().mockResolvedValue(),
-    };
-    runtime.viewerCountStatusCleanup = createMockFn();
+    });
+    setRuntimeProperty(runtime, "viewerCountStatusCleanup", createMockFn());
     const originalExit = process.exit;
-    process.exit = createMockFn();
+    Reflect.set(process, "exit", createMockFn());
 
     try {
       await runtime.shutdown();
       expect(obsEventService.disconnect.mock.calls.length).toBe(1);
     } finally {
-      process.exit = originalExit;
+      Reflect.set(process, "exit", originalExit);
     }
   });
 
   it("emits system shutdown, sets exit code, and only forces exit on timeout fallback", () => {
     const runtime = createRuntime();
-    const exitCalls = [];
-    const logged = [];
+    const exitCalls: Array<number | string | null | undefined> = [];
+    const logged: unknown[][] = [];
     const originalExit = process.exit;
     const originalExitCode = process.exitCode;
-    process.exitCode = undefined;
-    process.exit = (code) => exitCalls.push(code);
-    runtime.errorHandler = {
+    Reflect.set(process, "exitCode", undefined);
+    Reflect.set(process, "exit", (code?: number | string | null) => {
+      exitCalls.push(code);
+    });
+    setRuntimeProperty(runtime, "errorHandler", {
       handleEventProcessingError: createMockFn(),
-      logOperationalError: (...args) => logged.push(args),
-    };
+      logOperationalError: (...args: unknown[]) => logged.push(args),
+    });
     useFakeTimers();
 
     try {
@@ -996,22 +1098,22 @@ describe("AppRuntime behavior", () => {
       expect(exitCalls.length).toBe(1);
       expect(logged.length).toBe(1);
     } finally {
-      process.exit = originalExit;
-      process.exitCode = originalExitCode;
+      Reflect.set(process, "exit", originalExit);
+      Reflect.set(process, "exitCode", originalExitCode);
     }
   });
 
   it("starts runtime with viewer count wiring and readiness", async () => {
     const runtime = createRuntime();
-    const goalsCalls = [];
-    runtime.dependencies.obs = {
+    const goalsCalls: string[] = [];
+    setDependencyProperty(runtime, "obs", {
       goalsManager: {
         initializeGoalDisplay: async () => goalsCalls.push("init"),
       },
-      connectionManager: { isConnected: () => false },
-    };
+      connectionManager: { isConnected: () => false, call: async () => ({}) },
+    });
     const viewerCountCalls = { add: 0, init: 0, start: 0 };
-    runtime.viewerCountSystem = {
+    setRuntimeProperty(runtime, "viewerCountSystem", {
       addObserver: () => {
         viewerCountCalls.add += 1;
       },
@@ -1021,7 +1123,7 @@ describe("AppRuntime behavior", () => {
       startPolling: async () => {
         viewerCountCalls.start += 1;
       },
-    };
+    });
 
     await runtime.start();
 
@@ -1056,26 +1158,34 @@ describe("AppRuntime behavior", () => {
         },
       },
     );
-    runtime.dependencies.obs = {
+    setDependencyProperty(runtime, "obs", {
       connectionManager,
       sourcesManager: {
         hideAllDisplays,
         updateTextSource: createMockFn().mockResolvedValue(),
       },
       goalsManager,
-    };
-    runtime.viewerCountSystem = {
-      addObserver: createMockFn(),
+    });
+    const addObserver = createMockFn();
+    setRuntimeProperty(runtime, "viewerCountSystem", {
+      addObserver,
       initialize: createMockFn().mockResolvedValue(),
       startPolling: createMockFn().mockResolvedValue(),
-    };
+    });
 
     await runtime.start();
 
     expect(hideAllDisplays.mock.calls.length).toBe(1);
     expect(goalsManager.initializeGoalDisplay.mock.calls.length).toBe(1);
-    const [obsViewerObserver] =
-      runtime.viewerCountSystem.addObserver.mock.calls[0];
+    const [obsViewerObserver] = getMockCall(addObserver.mock.calls);
+    expect(obsViewerObserver).toMatchObject({ obsManager: connectionManager });
+    if (
+      !obsViewerObserver ||
+      typeof obsViewerObserver !== "object" ||
+      !("obsManager" in obsViewerObserver)
+    ) {
+      throw new Error("Expected OBS viewer observer with obsManager");
+    }
     expect(obsViewerObserver.obsManager).toBe(connectionManager);
   });
 
@@ -1090,17 +1200,17 @@ describe("AppRuntime behavior", () => {
         disconnectAll,
       },
     });
-    runtime.dependencies.obs = {
+    setDependencyProperty(runtime, "obs", {
       goalsManager: { initializeGoalDisplay: async () => {} },
-      connectionManager: { isConnected: () => false },
-    };
-    runtime.viewerCountSystem = {
+      connectionManager: { isConnected: () => false, call: async () => ({}) },
+    });
+    setRuntimeProperty(runtime, "viewerCountSystem", {
       addObserver: createMockFn(),
       initialize: createMockFn().mockRejectedValue(
         new Error("viewer count init failed"),
       ),
       startPolling: createMockFn().mockResolvedValue(),
-    };
+    });
 
     await expect(runtime.start()).rejects.toThrow("viewer count init failed");
     expect(disconnectAll.mock.calls.length).toBe(1);
@@ -1119,11 +1229,11 @@ describe("AppRuntime behavior", () => {
       { eventBus, guiTransportService },
       { gui: { enableDock: true, enableOverlay: false } },
     );
-    runtime.dependencies.obs = {
+    setDependencyProperty(runtime, "obs", {
       goalsManager: { initializeGoalDisplay: async () => {} },
-      connectionManager: { isConnected: () => false },
-    };
-    runtime.viewerCountSystem = {
+      connectionManager: { isConnected: () => false, call: async () => ({}) },
+    });
+    setRuntimeProperty(runtime, "viewerCountSystem", {
       addObserver: createMockFn(),
       initialize: createMockFn().mockRejectedValue(
         new Error("viewer count init failed"),
@@ -1131,7 +1241,7 @@ describe("AppRuntime behavior", () => {
       startPolling: createMockFn().mockResolvedValue(),
       stopPolling: createMockFn(),
       cleanup: createMockFn().mockResolvedValue(),
-    };
+    });
 
     await expect(runtime.start()).rejects.toThrow("viewer count init failed");
     expect(guiTransportService.stop.mock.calls.length).toBe(1);
@@ -1139,15 +1249,15 @@ describe("AppRuntime behavior", () => {
 
   it("rejects repeated start calls once runtime has already started", async () => {
     const runtime = createRuntime();
-    runtime.dependencies.obs = {
+    setDependencyProperty(runtime, "obs", {
       goalsManager: { initializeGoalDisplay: async () => {} },
-      connectionManager: { isConnected: () => false },
-    };
-    runtime.viewerCountSystem = {
+      connectionManager: { isConnected: () => false, call: async () => ({}) },
+    });
+    setRuntimeProperty(runtime, "viewerCountSystem", {
       addObserver: createMockFn(),
       initialize: createMockFn().mockResolvedValue(),
       startPolling: createMockFn().mockResolvedValue(),
-    };
+    });
 
     await runtime.start();
     await expect(runtime.start()).rejects.toThrow(
@@ -1157,16 +1267,16 @@ describe("AppRuntime behavior", () => {
 
   it("fails startup when VFX command service is unavailable at startup time", async () => {
     const runtime = createRuntime();
-    runtime.dependencies.obs = {
+    setDependencyProperty(runtime, "obs", {
       goalsManager: { initializeGoalDisplay: async () => {} },
-      connectionManager: { isConnected: () => false },
-    };
-    runtime.viewerCountSystem = {
+      connectionManager: { isConnected: () => false, call: async () => ({}) },
+    });
+    setRuntimeProperty(runtime, "viewerCountSystem", {
       addObserver: createMockFn(),
       initialize: createMockFn().mockResolvedValue(),
       startPolling: createMockFn().mockResolvedValue(),
-    };
-    runtime.vfxCommandService = null;
+    });
+    setRuntimeProperty(runtime, "vfxCommandService", null);
 
     await expect(runtime.start()).rejects.toThrow(
       "VFXCommandService unavailable for runtime startup",
@@ -1188,26 +1298,27 @@ describe("AppRuntime behavior", () => {
         disconnectAll: createMockFn().mockResolvedValue(),
       },
     });
-    runtime.dependencies.obs = {
+    setDependencyProperty(runtime, "obs", {
       goalsManager: { initializeGoalDisplay: async () => {} },
-      connectionManager: { isConnected: () => false },
-    };
-    runtime.viewerCountSystem = {
+      connectionManager: { isConnected: () => false, call: async () => ({}) },
+    });
+    setRuntimeProperty(runtime, "viewerCountSystem", {
       addObserver: createMockFn(),
       initialize: createMockFn().mockResolvedValue(),
       startPolling: createMockFn().mockResolvedValue(),
-    };
-    let readyPayload = null;
+    });
+    const readyPayloads: Array<ReturnType<RuntimeUnderTest["emitSystemReady"]>> = [];
     const emitSystemReady = runtime.emitSystemReady.bind(runtime);
     runtime.emitSystemReady = createMockFn((options) => {
       const payload = emitSystemReady(options);
-      readyPayload = payload;
+      readyPayloads.push(payload);
       return payload;
     });
 
     await runtime.start();
-    expect(readyPayload?.degraded).toBe(true);
-    expect(readyPayload?.degradationReasons).toEqual(
+    const readyPayload = getLastValue(readyPayloads);
+    expect(readyPayload.degraded).toBe(true);
+    expect(readyPayload.degradationReasons).toEqual(
       expect.arrayContaining(["platform-initialization-failed"]),
     );
   });
@@ -1223,15 +1334,15 @@ describe("AppRuntime behavior", () => {
       { gui: { enableDock: true, enableOverlay: false } },
     );
 
-    runtime.dependencies.obs = {
+    setDependencyProperty(runtime, "obs", {
       goalsManager: { initializeGoalDisplay: async () => {} },
-      connectionManager: { isConnected: () => false },
-    };
-    runtime.viewerCountSystem = {
+      connectionManager: { isConnected: () => false, call: async () => ({}) },
+    });
+    setRuntimeProperty(runtime, "viewerCountSystem", {
       addObserver: async () => {},
       initialize: async () => {},
       startPolling: async () => {},
-    };
+    });
 
     await runtime.start();
 
@@ -1292,15 +1403,15 @@ describe("AppRuntime behavior", () => {
       { gui: { enableDock: false, enableOverlay: false } },
     );
 
-    runtime.dependencies.obs = {
+    setDependencyProperty(runtime, "obs", {
       goalsManager: { initializeGoalDisplay: async () => {} },
-      connectionManager: { isConnected: () => false },
-    };
-    runtime.viewerCountSystem = {
+      connectionManager: { isConnected: () => false, call: async () => ({}) },
+    });
+    setRuntimeProperty(runtime, "viewerCountSystem", {
       addObserver: async () => {},
       initialize: async () => {},
       startPolling: async () => {},
-    };
+    });
 
     await runtime.start();
 
@@ -1315,23 +1426,23 @@ describe("AppRuntime behavior", () => {
       isActive: createMockFn().mockReturnValue(true),
     };
     const runtime = createRuntime({ guiTransportService });
-    runtime.viewerCountSystem = { stopPolling: createMockFn() };
-    runtime.viewerCountStatusCleanup = createMockFn();
+    setRuntimeProperty(runtime, "viewerCountSystem", { stopPolling: createMockFn() });
+    setRuntimeProperty(runtime, "viewerCountStatusCleanup", createMockFn());
     const originalExit = process.exit;
-    process.exit = createMockFn();
+    Reflect.set(process, "exit", createMockFn());
 
     try {
       await runtime.shutdown();
       expect(guiTransportService.stop.mock.calls.length).toBe(1);
     } finally {
-      process.exit = originalExit;
+      Reflect.set(process, "exit", originalExit);
     }
   });
 
   it("requires options when emitting system ready", () => {
     const runtime = createRuntime();
 
-    expect(() => runtime.emitSystemReady()).toThrow(
+    expect(() => Reflect.apply(runtime.emitSystemReady, runtime, [])).toThrow(
       "emitSystemReady requires options",
     );
   });
@@ -1339,10 +1450,10 @@ describe("AppRuntime behavior", () => {
   it("rejects invalid stream detection payloads", async () => {
     const runtime = createRuntime();
 
-    await expect(runtime.handleStreamDetected(null, {})).rejects.toThrow(
+    await expect(Reflect.apply(runtime.handleStreamDetected, runtime, [null, {}])).rejects.toThrow(
       "Stream detection event requires platform",
     );
-    await expect(runtime.handleStreamDetected("youtube", null)).rejects.toThrow(
+    await expect(Reflect.apply(runtime.handleStreamDetected, runtime, ["youtube", null])).rejects.toThrow(
       "Stream detection event requires data",
     );
     await expect(
@@ -1355,8 +1466,12 @@ describe("AppRuntime behavior", () => {
 
   it("ignores empty stream detection updates", async () => {
     const runtime = createRuntime();
-    const called = [];
-    runtime.youtube = { initialize: async () => called.push(true) };
+    const called: boolean[] = [];
+    runtime.youtube = {
+      initialize: async () => {
+        called.push(true);
+      },
+    };
 
     await runtime.handleStreamDetected("youtube", {
       eventType: "stream-detected",
@@ -1381,7 +1496,7 @@ describe("AppRuntime behavior", () => {
   });
 
   it("routes follow/share/paypiggy notifications through unified handler", async () => {
-    const calls = [];
+    const calls = createNotificationCalls();
     const notificationManager = createRecordingNotificationManager(calls);
     const runtime = createRuntime({ notificationManager });
 
@@ -1399,9 +1514,9 @@ describe("AppRuntime behavior", () => {
     });
 
     expect(calls.length).toBe(3);
-    expect(calls[0][0]).toBe("platform:follow");
-    expect(calls[1][0]).toBe("platform:share");
-    expect(calls[2][0]).toBe("platform:paypiggy");
+    expect(getNotificationCall(calls, 0)[0]).toBe("platform:follow");
+    expect(getNotificationCall(calls, 1)[0]).toBe("platform:share");
+    expect(getNotificationCall(calls, 2)[0]).toBe("platform:paypiggy");
   });
 
   it("requires a command for farewell notifications", async () => {
@@ -1414,7 +1529,7 @@ describe("AppRuntime behavior", () => {
 
   it("fails gift notifications when VFX service is missing", async () => {
     const runtime = createRuntime();
-    runtime.vfxCommandService = null;
+    setRuntimeProperty(runtime, "vfxCommandService", null);
 
     await expect(
       runtime.handleGiftNotification("twitch", "test-user", {
@@ -1427,7 +1542,7 @@ describe("AppRuntime behavior", () => {
   });
 
   it("continues gift notifications when VFX lookup fails", async () => {
-    const calls = [];
+    const calls = createNotificationCalls();
     const notificationManager = createRecordingNotificationManager(calls);
     const runtime = createRuntime({
       notificationManager,
@@ -1437,11 +1552,11 @@ describe("AppRuntime behavior", () => {
         ),
       },
     });
-    const handled = [];
-    runtime.errorHandler = {
-      handleEventProcessingError: (...args) => handled.push(args),
+    const handled: unknown[][] = [];
+    setRuntimeProperty(runtime, "errorHandler", {
+      handleEventProcessingError: (...args: unknown[]) => handled.push(args),
       logOperationalError: createMockFn(),
-    };
+    });
 
     await runtime.handleGiftNotification("twitch", "test-user", {
       type: "platform:gift",
@@ -1460,11 +1575,11 @@ describe("AppRuntime behavior", () => {
 
   it("routes giftpaypiggy notifications through error handler on failure", async () => {
     const runtime = createRuntime();
-    const handled = [];
-    runtime.errorHandler = {
-      handleEventProcessingError: (...args) => handled.push(args),
+    const handled: unknown[][] = [];
+    setRuntimeProperty(runtime, "errorHandler", {
+      handleEventProcessingError: (...args: unknown[]) => handled.push(args),
       logOperationalError: createMockFn(),
-    };
+    });
 
     const result = await runtime.handleGiftPaypiggyNotification(
       "twitch",
@@ -1508,12 +1623,12 @@ describe("AppRuntime behavior", () => {
 
   it("routes chat errors through runtime handler when router is missing", async () => {
     const runtime = createRuntime();
-    runtime.chatNotificationRouter = null;
-    const handled = [];
-    runtime.errorHandler = {
-      handleEventProcessingError: (...args) => handled.push(args),
+    setRuntimeProperty(runtime, "chatNotificationRouter", null);
+    const handled: unknown[][] = [];
+    setRuntimeProperty(runtime, "errorHandler", {
+      handleEventProcessingError: (...args: unknown[]) => handled.push(args),
       logOperationalError: createMockFn(),
-    };
+    });
 
     await runtime.handleChatMessage("twitch", {
       username: "test-user",

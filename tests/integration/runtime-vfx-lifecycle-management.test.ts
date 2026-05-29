@@ -10,20 +10,83 @@ import { createAppRuntimeTestDependencies } from "../helpers/runtime-test-harnes
 import { TEST_TIMEOUTS } from "../helpers/test-setup";
 import { PlatformEvents } from "../../src/interfaces/PlatformEvents";
 import { AppRuntime } from "../../src/main";
-import { safeDelay } from "../../src/utils/timeout-validator";
-
-type RuntimeConfig = {
-  general: {
-    greetingsEnabled: boolean;
-    commandsEnabled?: boolean;
-  };
-  vfx: {
-    filePath: string;
-  };
-  commands: Record<string, string>;
-};
 
 type RuntimeUnderTest = InstanceType<typeof AppRuntime>;
+type AppRuntimeConfig = ConstructorParameters<typeof AppRuntime>[0];
+type RuntimeConfig = AppRuntimeConfig;
+type VfxCommandService = NonNullable<RuntimeUnderTest["vfxCommandService"]>;
+type VfxExecuteCommand = (
+  command: unknown,
+  context: Record<string, unknown>,
+) => unknown;
+
+const integrationTimeout = TEST_TIMEOUTS.SLOW;
+const flushAsyncEvents = () => new Promise<void>((resolve) => setImmediate(resolve));
+
+const createRuntimeConfig = (overrides: Partial<RuntimeConfig> = {}): RuntimeConfig =>
+  ({
+    general: {
+      maxMessageLength: 500,
+      greetingsEnabled: true,
+      ...overrides.general,
+    },
+    obs: {
+      enabled: false,
+      chatMsgScene: "test-chat-scene",
+      notificationScene: "test-notification-scene",
+      chatPlatformLogos: { twitch: "test-chat-logo" },
+      notificationPlatformLogos: { twitch: "test-notification-logo" },
+      ttsTxt: "test-tts-source",
+      notificationTxt: "test-notification-source",
+    },
+    handcam: {
+      enabled: false,
+      maxSize: 50,
+      rampUpDuration: 0.5,
+      holdDuration: 8,
+      rampDownDuration: 0.5,
+      totalSteps: 30,
+      easingEnabled: true,
+      sourceName: "test-handcam",
+      glowFilterName: "test-glow",
+    },
+    cooldowns: {
+      cmdCooldownMs: 60_000,
+      heavyCommandCooldownMs: 300_000,
+      globalCmdCooldownMs: 60_000,
+    },
+    farewell: { timeout: 1_000 },
+    vfx: {
+      filePath: path.join(__dirname, "../../test-assets/vfx"),
+      ...overrides.vfx,
+    },
+    commands: {
+      hello: "!hello, vfx bottom green",
+      ...overrides.commands,
+    },
+  }) satisfies RuntimeConfig;
+
+const requireExecuteCommand = (
+  service: VfxCommandService,
+): { executeCommand: VfxExecuteCommand } => {
+  expect(typeof service.executeCommand).toBe("function");
+  if (typeof service.executeCommand !== "function") {
+    throw new Error("VFX service executeCommand was not available");
+  }
+  return { executeCommand: service.executeCommand };
+};
+
+const emitVfxCommand = (
+  runtime: RuntimeUnderTest,
+  payload: Record<string, unknown>,
+) => {
+  const emit = runtime.eventBus.emit;
+  expect(typeof emit).toBe("function");
+  if (typeof emit !== "function") {
+    throw new Error("runtime event bus emit was not available");
+  }
+  emit(PlatformEvents.VFX_COMMAND_RECEIVED, payload);
+};
 
 setupAutomatedCleanup({
   clearCallsBeforeEach: true,
@@ -38,22 +101,13 @@ describe("AppRuntime VFXCommandService Lifecycle Management", () => {
   beforeEach(() => {
     clearAllMocks();
 
-    config = {
-      general: {
-        greetingsEnabled: true,
-      },
-      vfx: {
-        filePath: path.join(__dirname, "../../test-assets/vfx"),
-      },
-      commands: {
-        hello: "!hello, vfx bottom green",
-      },
-    };
+    config = createRuntimeConfig();
   });
 
   afterEach(async () => {
-    if (runtime && typeof runtime.stop === "function") {
-      await runtime.stop();
+    const stopRuntime = runtime ? Reflect.get(runtime, "stop") : undefined;
+    if (typeof stopRuntime === "function") {
+      await stopRuntime.call(runtime);
     }
     restoreAllMocks();
   });
@@ -73,7 +127,7 @@ describe("AppRuntime VFXCommandService Lifecycle Management", () => {
           "function",
         );
       },
-      { timeout: TEST_TIMEOUTS.INTEGRATION },
+      { timeout: integrationTimeout },
     );
   });
 
@@ -86,18 +140,16 @@ describe("AppRuntime VFXCommandService Lifecycle Management", () => {
         await runtime.start();
 
         let vfxExecuted = false;
-        const originalExecuteCommand = runtime.vfxCommandService.executeCommand;
+        const service = requireExecuteCommand(runtime.vfxCommandService);
+        const originalExecuteCommand = service.executeCommand;
         runtime.vfxCommandService.executeCommand = createMockFn(
-          async (...args) => {
+          async (...args: Parameters<VfxExecuteCommand>) => {
             vfxExecuted = true;
-            return originalExecuteCommand.apply(
-              runtime.vfxCommandService,
-              args,
-            );
+            return originalExecuteCommand.apply(runtime.vfxCommandService, args);
           },
         );
 
-        runtime.eventBus.emit(PlatformEvents.VFX_COMMAND_RECEIVED, {
+        emitVfxCommand(runtime, {
           command: "!hello",
           username: "TestUser",
           platform: "twitch",
@@ -105,11 +157,11 @@ describe("AppRuntime VFXCommandService Lifecycle Management", () => {
           context: { skipCooldown: true, correlationId: "corr-1" },
         });
 
-        await new Promise((resolve) => setImmediate(resolve));
+        await flushAsyncEvents();
 
         expect(vfxExecuted).toBe(true);
       },
-      { timeout: TEST_TIMEOUTS.INTEGRATION },
+      { timeout: integrationTimeout },
     );
 
     test(
@@ -122,7 +174,7 @@ describe("AppRuntime VFXCommandService Lifecycle Management", () => {
         runtime.vfxCommandService.executeCommand =
           createMockFn().mockRejectedValue(new Error("VFX execution failed"));
 
-        runtime.eventBus.emit(PlatformEvents.VFX_COMMAND_RECEIVED, {
+        emitVfxCommand(runtime, {
           command: "!invalid",
           username: "TestUser",
           platform: "twitch",
@@ -130,13 +182,13 @@ describe("AppRuntime VFXCommandService Lifecycle Management", () => {
           context: { skipCooldown: true, correlationId: "corr-2" },
         });
 
-        await new Promise((resolve) => setImmediate(resolve));
+        await flushAsyncEvents();
 
         expect(runtime.vfxCommandService.executeCommand).toHaveBeenCalledTimes(
           1,
         );
       },
-      { timeout: TEST_TIMEOUTS.INTEGRATION },
+      { timeout: integrationTimeout },
     );
 
     test(
@@ -148,7 +200,7 @@ describe("AppRuntime VFXCommandService Lifecycle Management", () => {
 
         runtime.vfxCommandService.executeCommand = createMockFn();
 
-        runtime.eventBus.emit(PlatformEvents.VFX_COMMAND_RECEIVED, {
+        emitVfxCommand(runtime, {
           command: "!hello",
           username: "LoopTester",
           platform: "tiktok",
@@ -157,11 +209,11 @@ describe("AppRuntime VFXCommandService Lifecycle Management", () => {
           context: { skipCooldown: true, correlationId: "corr-3" },
         });
 
-        await new Promise((resolve) => setImmediate(resolve));
+        await flushAsyncEvents();
 
         expect(runtime.vfxCommandService.executeCommand).not.toHaveBeenCalled();
       },
-      { timeout: TEST_TIMEOUTS.INTEGRATION },
+      { timeout: integrationTimeout },
     );
 
     test(
@@ -180,7 +232,7 @@ describe("AppRuntime VFXCommandService Lifecycle Management", () => {
 
         runtime.vfxCommandService.executeCommand = createMockFn();
 
-        runtime.eventBus.emit(PlatformEvents.VFX_COMMAND_RECEIVED, {
+        emitVfxCommand(runtime, {
           command: "!hello",
           username: "NoCmd",
           platform: "twitch",
@@ -188,13 +240,13 @@ describe("AppRuntime VFXCommandService Lifecycle Management", () => {
           context: { skipCooldown: true, correlationId: "corr-4" },
         });
 
-        await new Promise((resolve) => setImmediate(resolve));
+        await flushAsyncEvents();
 
         expect(runtime.vfxCommandService.executeCommand).toHaveBeenCalledTimes(
           1,
         );
       },
-      { timeout: TEST_TIMEOUTS.INTEGRATION },
+      { timeout: integrationTimeout },
     );
 
     test(
@@ -207,7 +259,7 @@ describe("AppRuntime VFXCommandService Lifecycle Management", () => {
         runtime.vfxCommandService.executeCommand =
           createMockFn().mockResolvedValue({ success: true });
 
-        runtime.eventBus.emit(PlatformEvents.VFX_COMMAND_RECEIVED, {
+        emitVfxCommand(runtime, {
           command: "!hello",
           username: "CmdUser",
           platform: "twitch",
@@ -215,13 +267,13 @@ describe("AppRuntime VFXCommandService Lifecycle Management", () => {
           context: { skipCooldown: true, correlationId: "corr-5" },
         });
 
-        await new Promise((resolve) => setImmediate(resolve));
+        await flushAsyncEvents();
 
         expect(runtime.vfxCommandService.executeCommand).toHaveBeenCalledTimes(
           1,
         );
       },
-      { timeout: TEST_TIMEOUTS.INTEGRATION },
+      { timeout: integrationTimeout },
     );
 
     test(
@@ -233,7 +285,7 @@ describe("AppRuntime VFXCommandService Lifecycle Management", () => {
 
         runtime.vfxCommandService.executeCommand = createMockFn();
 
-        runtime.eventBus.emit(PlatformEvents.VFX_COMMAND_RECEIVED, {
+        emitVfxCommand(runtime, {
           command: "!hello",
           username: "LoopUser",
           platform: "twitch",
@@ -242,11 +294,11 @@ describe("AppRuntime VFXCommandService Lifecycle Management", () => {
           context: { skipCooldown: true, correlationId: "corr-6" },
         });
 
-        await new Promise((resolve) => setImmediate(resolve));
+        await flushAsyncEvents();
 
         expect(runtime.vfxCommandService.executeCommand).not.toHaveBeenCalled();
       },
-      { timeout: TEST_TIMEOUTS.INTEGRATION },
+      { timeout: integrationTimeout },
     );
 
     test(
@@ -258,7 +310,7 @@ describe("AppRuntime VFXCommandService Lifecycle Management", () => {
 
         runtime.vfxCommandService.executeCommand = createMockFn();
 
-        runtime.eventBus.emit(PlatformEvents.VFX_COMMAND_RECEIVED, {
+        emitVfxCommand(runtime, {
           command: "!hello",
           username: "LoopUser",
           platform: "twitch",
@@ -267,11 +319,11 @@ describe("AppRuntime VFXCommandService Lifecycle Management", () => {
           context: { skipCooldown: true, correlationId: "corr-7" },
         });
 
-        await new Promise((resolve) => setImmediate(resolve));
+        await flushAsyncEvents();
 
         expect(runtime.vfxCommandService.executeCommand).not.toHaveBeenCalled();
       },
-      { timeout: TEST_TIMEOUTS.INTEGRATION },
+      { timeout: integrationTimeout },
     );
 
     test(
@@ -281,9 +333,9 @@ describe("AppRuntime VFXCommandService Lifecycle Management", () => {
         runtime = new AppRuntime(config, dependencies);
         await runtime.start();
 
-        runtime.vfxCommandService = null;
+        Reflect.set(runtime, "vfxCommandService", null);
 
-        runtime.eventBus.emit(PlatformEvents.VFX_COMMAND_RECEIVED, {
+        emitVfxCommand(runtime, {
           command: "!hello",
           username: "NoService",
           platform: "tiktok",
@@ -291,11 +343,11 @@ describe("AppRuntime VFXCommandService Lifecycle Management", () => {
           context: { skipCooldown: true, correlationId: "corr-8" },
         });
 
-        await new Promise((resolve) => setImmediate(resolve));
+        await flushAsyncEvents();
 
         expect(runtime.vfxCommandService).toBeNull();
       },
-      { timeout: TEST_TIMEOUTS.INTEGRATION },
+      { timeout: integrationTimeout },
     );
 
     test(
@@ -308,21 +360,21 @@ describe("AppRuntime VFXCommandService Lifecycle Management", () => {
         runtime.vfxCommandService.executeCommand = createMockFn();
         runtime.vfxCommandService.executeCommandForKey = createMockFn();
 
-        runtime.eventBus.emit(PlatformEvents.VFX_COMMAND_RECEIVED, {
+        emitVfxCommand(runtime, {
           username: "NoCommand",
           platform: "youtube",
           userId: "user-8",
           context: { skipCooldown: true, correlationId: "corr-9" },
         });
 
-        await new Promise((resolve) => setImmediate(resolve));
+        await flushAsyncEvents();
 
         expect(runtime.vfxCommandService.executeCommand).not.toHaveBeenCalled();
         expect(
           runtime.vfxCommandService.executeCommandForKey,
         ).not.toHaveBeenCalled();
       },
-      { timeout: TEST_TIMEOUTS.INTEGRATION },
+      { timeout: integrationTimeout },
     );
 
     test(
@@ -338,13 +390,16 @@ describe("AppRuntime VFXCommandService Lifecycle Management", () => {
           context: Record<string, unknown>;
         }> = [];
         runtime.vfxCommandService.executeCommandForKey = createMockFn(
-          async (commandKey: string, context: Record<string, unknown>) => {
+          async (commandKey: unknown, context: Record<string, unknown>) => {
+            if (typeof commandKey !== "string") {
+              throw new Error("Expected string command key");
+            }
             commandKeyExecutions.push({ commandKey, context });
             return { success: true };
           },
         );
 
-        runtime.eventBus.emit(PlatformEvents.VFX_COMMAND_RECEIVED, {
+        emitVfxCommand(runtime, {
           commandKey: "gifts",
           username: "KeyUser",
           platform: "youtube",
@@ -352,7 +407,7 @@ describe("AppRuntime VFXCommandService Lifecycle Management", () => {
           context: { skipCooldown: true, correlationId: "corr-10" },
         });
 
-        await new Promise((resolve) => setImmediate(resolve));
+        await flushAsyncEvents();
 
         expect(runtime.vfxCommandService.executeCommand).not.toHaveBeenCalled();
         expect(commandKeyExecutions).toHaveLength(1);
@@ -368,7 +423,7 @@ describe("AppRuntime VFXCommandService Lifecycle Management", () => {
           },
         });
       },
-      { timeout: TEST_TIMEOUTS.INTEGRATION },
+      { timeout: integrationTimeout },
     );
 
     test(
@@ -387,13 +442,16 @@ describe("AppRuntime VFXCommandService Lifecycle Management", () => {
           context: Record<string, unknown>;
         }> = [];
         runtime.vfxCommandService.executeCommandForKey = createMockFn(
-          async (commandKey: string, context: Record<string, unknown>) => {
+          async (commandKey: unknown, context: Record<string, unknown>) => {
+            if (typeof commandKey !== "string") {
+              throw new Error("Expected string command key");
+            }
             commandKeyExecutions.push({ commandKey, context });
             return { success: true };
           },
         );
 
-        runtime.eventBus.emit(PlatformEvents.VFX_COMMAND_RECEIVED, {
+        emitVfxCommand(runtime, {
           commandKey: "gifts",
           username: "DisabledKeyUser",
           platform: "tiktok",
@@ -401,7 +459,7 @@ describe("AppRuntime VFXCommandService Lifecycle Management", () => {
           context: { skipCooldown: true, correlationId: "corr-11" },
         });
 
-        await new Promise((resolve) => setImmediate(resolve));
+        await flushAsyncEvents();
 
         expect(commandKeyExecutions).toHaveLength(1);
         expect(commandKeyExecutions[0]).toMatchObject({
@@ -416,7 +474,7 @@ describe("AppRuntime VFXCommandService Lifecycle Management", () => {
           },
         });
       },
-      { timeout: TEST_TIMEOUTS.INTEGRATION },
+      { timeout: integrationTimeout },
     );
   });
 
@@ -430,12 +488,12 @@ describe("AppRuntime VFXCommandService Lifecycle Management", () => {
 
         const vfxServiceBeforeStop = runtime.vfxCommandService;
 
-        await safeDelay(100);
+        await flushAsyncEvents();
 
         expect(runtime.vfxCommandService).toBe(vfxServiceBeforeStop);
         expect(runtime.vfxCommandService).toBeDefined();
       },
-      { timeout: TEST_TIMEOUTS.INTEGRATION },
+      { timeout: integrationTimeout },
     );
   });
 });
