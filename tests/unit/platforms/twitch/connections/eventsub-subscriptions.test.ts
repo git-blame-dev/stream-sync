@@ -4,7 +4,14 @@ import { createTwitchEventSubSubscriptions } from "../../../../../src/platforms/
 describe("Twitch EventSub subscriptions", () => {
   test("builds subscription definitions with correct conditions and handlers", () => {
     const subscriptions = createTwitchEventSubSubscriptions();
-    const byType = (type) => subscriptions.find((sub) => sub.type === type);
+    type SubscriptionDefinition = (typeof subscriptions)[number];
+    const byType = (type: string): SubscriptionDefinition => {
+      const subscription = subscriptions.find((sub) => sub.type === type);
+      if (!subscription) {
+        throw new Error(`Missing EventSub subscription fixture for ${type}`);
+      }
+      return subscription;
+    };
 
     expect(byType("channel.chat.message").handler).toBe("handleChatMessage");
     expect(byType("channel.follow").handler).toBe("handleFollow");

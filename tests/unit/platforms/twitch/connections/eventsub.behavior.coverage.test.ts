@@ -10,14 +10,32 @@ import {
 import { TwitchEventSub } from "../../../../../src/platforms/twitch-eventsub.ts";
 
 class MockChatFileLoggingService {
-  logRawPlatformData() {}
+  async logRawPlatformData() {}
 }
 
-const createTwitchAuth = (overrides = {}) => ({
-  isReady: () => ("ready" in overrides ? overrides.ready : true),
+type TwitchAuthFixtureOverrides = {
+  ready?: boolean;
+  userId?: string;
+};
+
+type ValidationFieldDetail = {
+  valid?: unknown;
+};
+
+const isValidationFieldDetail = (value: unknown): value is ValidationFieldDetail =>
+  typeof value === "object" && value !== null;
+
+type SubscriptionDefinitionFixture = {
+  name: string;
+  type: string;
+  version: string;
+  getCondition: (input: { userId: string; broadcasterId: string }) => Record<string, unknown>;
+};
+
+const createTwitchAuth = (overrides: TwitchAuthFixtureOverrides = {}) => ({
+  isReady: () => overrides.ready ?? true,
   refreshTokens: createMockFn().mockResolvedValue(true),
-  getUserId: () => overrides.userId || "test-user-123",
-  ...overrides,
+  getUserId: () => overrides.userId ?? "test-user-123",
 });
 
 const createEventSub = (configOverrides = {}, depsOverrides = {}) => {
@@ -36,7 +54,10 @@ const createEventSub = (configOverrides = {}, depsOverrides = {}) => {
         delete: createMockFn(),
       },
       WebSocketCtor: class {
+        readyState = 1;
+        on() {}
         close() {}
+        removeAllListeners() {}
       },
       ChatFileLoggingService: MockChatFileLoggingService,
       ...depsOverrides,
@@ -45,7 +66,7 @@ const createEventSub = (configOverrides = {}, depsOverrides = {}) => {
 };
 
 describe("TwitchEventSub behavior guardrails", () => {
-  let eventSub;
+  let eventSub: InstanceType<typeof TwitchEventSub> | undefined;
 
   beforeEach(() => {
     _resetForTesting();
@@ -70,7 +91,9 @@ describe("TwitchEventSub behavior guardrails", () => {
     const result = eventSub._validateConfigurationFields();
 
     expect(result.valid).toBe(true);
-    expect(result.details.broadcasterId.valid).toBe(true);
+    const broadcasterIdDetails = result.details.broadcasterId;
+    expect(isValidationFieldDetail(broadcasterIdDetails)).toBe(true);
+    expect(broadcasterIdDetails).toEqual(expect.objectContaining({ valid: true }));
   });
 
   it("throws when Twitch auth is missing or not ready", () => {
@@ -94,7 +117,12 @@ describe("TwitchEventSub behavior guardrails", () => {
     eventSub = createEventSub({ broadcasterId: "test-broadcaster-id" });
     eventSub.sessionId = "";
     eventSub._isConnected = false;
-    eventSub.ws = { readyState: 0 };
+    eventSub.ws = {
+      readyState: 0,
+      on() {},
+      close() {},
+      removeAllListeners() {},
+    };
     eventSub.isInitialized = false;
 
     const valid = eventSub._validateConnectionForSubscriptions();
@@ -107,15 +135,16 @@ describe("TwitchEventSub behavior guardrails", () => {
 
     const critical = eventSub._parseSubscriptionError(
       { response: { data: { error: "Unauthorized", message: "bad" } } },
-      { type: "test.sub" },
+      createSubscriptionFixture("test.sub"),
     );
     const retryable = eventSub._parseSubscriptionError(
       { response: { data: { error: "Too Many Requests", message: "slow" } } },
-      { type: "test.sub" },
+      createSubscriptionFixture("test.sub"),
     );
-    const fallback = eventSub._parseSubscriptionError(new Error("boom"), {
-      type: "test.sub",
-    });
+    const fallback = eventSub._parseSubscriptionError(
+      new Error("boom"),
+      createSubscriptionFixture("test.sub"),
+    );
 
     expect(critical.isCritical).toBe(true);
     expect(retryable.isRetryable).toBe(true);
@@ -134,4 +163,11 @@ describe("TwitchEventSub behavior guardrails", () => {
     expect(result.valid).toBe(true);
     expect(result.details.ready).toBe(true);
   });
+});
+
+const createSubscriptionFixture = (type: string): SubscriptionDefinitionFixture => ({
+  name: "Test Subscription",
+  type,
+  version: "1",
+  getCondition: ({ broadcasterId }) => ({ broadcaster_user_id: broadcasterId }),
 });

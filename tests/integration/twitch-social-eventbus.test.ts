@@ -7,22 +7,51 @@ import { createTwitchConfigFixture } from "../helpers/config-fixture";
 import { noOpLogger } from "../helpers/mock-factories";
 import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
 
-const createEventBus = () => {
+type PlatformEventPayload = {
+  type: string;
+  platform: string;
+  data: Record<string, unknown>;
+};
+
+type TestEventBus = {
+  emit: (event: string, payload: unknown) => boolean;
+  subscribe: (event: string, handler: (payload: unknown) => void) => () => void;
+};
+
+const isPlatformEventPayload = (value: unknown): value is PlatformEventPayload =>
+  typeof value === "object" &&
+  value !== null &&
+  "type" in value &&
+  "platform" in value &&
+  "data" in value &&
+  typeof value.type === "string" &&
+  typeof value.platform === "string" &&
+  typeof value.data === "object" &&
+  value.data !== null;
+
+const expectPlatformEventPayload = (value: unknown): PlatformEventPayload => {
+  if (!isPlatformEventPayload(value)) {
+    throw new Error("Expected a platform event payload");
+  }
+  return value;
+};
+
+const createEventBus = (): TestEventBus => {
   const emitter = new EventEmitter();
   return {
     emit: emitter.emit.bind(emitter),
-    subscribe: (event, handler) => {
+    subscribe: (event: string, handler: (payload: unknown) => void) => {
       emitter.on(event, handler);
       return () => emitter.off(event, handler);
     },
   };
 };
 
-const waitForPlatformEvent = (eventBus) =>
-  new Promise((resolve) => {
-    const unsubscribe = eventBus.subscribe("platform:event", (event) => {
+const waitForPlatformEvent = (eventBus: TestEventBus) =>
+  new Promise<PlatformEventPayload>((resolve) => {
+    const unsubscribe = eventBus.subscribe("platform:event", (event: unknown) => {
       unsubscribe();
-      resolve(event);
+      resolve(expectPlatformEventPayload(event));
     });
   });
 
@@ -31,7 +60,7 @@ const createPlatform = () =>
     logger: noOpLogger,
     twitchAuth: {
       isReady: () => true,
-      getUserId: createMockFn(() => "test-user-id"),
+      refreshTokens: createMockFn<[], Promise<boolean>>().mockResolvedValue(true),
     },
   });
 

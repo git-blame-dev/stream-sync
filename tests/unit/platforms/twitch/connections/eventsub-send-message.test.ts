@@ -15,8 +15,31 @@ const createTwitchAuth = () => ({
   refreshTokens: async () => true,
 });
 
+type AxiosPostPayload = {
+  message: string;
+};
+
+const isAxiosPostPayload = (value: unknown): value is AxiosPostPayload =>
+  typeof value === "object" &&
+  value !== null &&
+  "message" in value &&
+  typeof value.message === "string";
+
+const expectFirstPostCall = (mockAxios: { post: { mock: { calls: unknown[][] } } }) => {
+  const call = mockAxios.post.mock.calls[0];
+  if (!call) {
+    throw new Error("Expected an axios post call");
+  }
+  const [url, payload] = call;
+  expect(typeof url).toBe("string");
+  if (!isAxiosPostPayload(payload)) {
+    throw new Error("Expected axios post payload with a message");
+  }
+  return { url, payload };
+};
+
 describe("TwitchEventSub chat sending", () => {
-  let eventSub;
+  let eventSub: InstanceType<typeof TwitchEventSub> | undefined;
 
   afterEach(() => {
     if (eventSub?.cleanup) {
@@ -49,10 +72,13 @@ describe("TwitchEventSub chat sending", () => {
         logger: noOpLogger,
         axios: mockAxios,
         WebSocketCtor: class {
+          readyState = 1;
+          on() {}
           close() {}
+          removeAllListeners() {}
         },
         ChatFileLoggingService: class {
-          logRawPlatformData() {}
+          async logRawPlatformData() {}
         },
       },
     );
@@ -61,10 +87,9 @@ describe("TwitchEventSub chat sending", () => {
 
     expect(result).toMatchObject({ success: true, platform: "twitch" });
     expect(mockAxios.post.mock.calls).toHaveLength(1);
-    expect(mockAxios.post.mock.calls[0][0]).toBe(
-      "https://api.twitch.tv/helix/chat/messages",
-    );
-    expect(mockAxios.post.mock.calls[0][1].message).toBe("hello world");
+    const postCall = expectFirstPostCall(mockAxios);
+    expect(postCall.url).toBe("https://api.twitch.tv/helix/chat/messages");
+    expect(postCall.payload.message).toBe("hello world");
   });
 
   it("rejects when message is empty", async () => {
@@ -90,10 +115,13 @@ describe("TwitchEventSub chat sending", () => {
         logger: noOpLogger,
         axios: mockAxios,
         WebSocketCtor: class {
+          readyState = 1;
+          on() {}
           close() {}
+          removeAllListeners() {}
         },
         ChatFileLoggingService: class {
-          logRawPlatformData() {}
+          async logRawPlatformData() {}
         },
       },
     );
@@ -129,10 +157,13 @@ describe("TwitchEventSub chat sending", () => {
         logger: noOpLogger,
         axios: mockAxios,
         WebSocketCtor: class {
+          readyState = 1;
+          on() {}
           close() {}
+          removeAllListeners() {}
         },
         ChatFileLoggingService: class {
-          logRawPlatformData() {}
+          async logRawPlatformData() {}
         },
       },
     );

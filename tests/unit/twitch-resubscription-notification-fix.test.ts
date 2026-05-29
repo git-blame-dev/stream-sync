@@ -22,6 +22,8 @@ describe("TwitchEventSub Resubscription Notification Fix", () => {
     };
 
     class MockWebSocket extends EventEmitter {
+      readyState: number;
+
       constructor() {
         super();
         this.readyState = 1;

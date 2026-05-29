@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
+import type { TestMockFn } from "../helpers/bun-mock-utils";
 import { noOpLogger } from "../helpers/mock-factories";
 import { TwitchViewerCountProvider } from "../../src/utils/viewer-count-providers";
 
@@ -8,17 +9,28 @@ describe("Twitch Viewer Count with Invalid Authentication", () => {
     restoreAllMocks();
   });
 
-  let mockApiClient: { getStreamInfo: ReturnType<typeof createMockFn> };
+  type StreamInfo = { isLive: boolean; viewerCount: number };
+  type TwitchConfigFixture = {
+    channel?: string;
+    username?: string;
+    accessToken?: string;
+    refreshToken?: string;
+  };
+  type TwitchApiClientFixture = {
+    getStreamInfo: TestMockFn<[channel: string], Promise<StreamInfo>>;
+  };
+
+  let mockApiClient: TwitchApiClientFixture;
   let mockConnectionStateFactory: {
     createTwitchState: ReturnType<typeof createMockFn>;
   };
-  let configFixture: { channel: string; username: string; accessToken: string };
+  let configFixture: TwitchConfigFixture;
   let viewerCountProvider: InstanceType<typeof TwitchViewerCountProvider>;
   let mockLogger: typeof noOpLogger;
 
   beforeEach(() => {
     mockApiClient = {
-      getStreamInfo: createMockFn(),
+      getStreamInfo: createMockFn<[channel: string], Promise<StreamInfo>>(),
     };
 
     mockConnectionStateFactory = {
@@ -36,7 +48,7 @@ describe("Twitch Viewer Count with Invalid Authentication", () => {
 
   describe("when authentication is invalid but channel is configured", () => {
     beforeEach(() => {
-      mockApiClient.getStreamInfo = createMockFn(async (channel: string) => ({
+      mockApiClient.getStreamInfo = createMockFn<[channel: string], Promise<StreamInfo>>(async (channel: string) => ({
         isLive: true,
         viewerCount: channel === "hero_stream" ? 15 : 0,
       }));
@@ -60,10 +72,14 @@ describe("Twitch Viewer Count with Invalid Authentication", () => {
     });
 
     it("uses the configured channel even when EventSub auth fails", async () => {
+      const configWithDifferentUsername: TwitchConfigFixture = {
+        ...configFixture,
+        username: "backup_name",
+      };
       const providerWithDifferentUsername = new TwitchViewerCountProvider(
         mockApiClient,
         mockConnectionStateFactory,
-        { ...configFixture, username: "backup_name" },
+        configWithDifferentUsername,
         null,
         mockLogger,
       );

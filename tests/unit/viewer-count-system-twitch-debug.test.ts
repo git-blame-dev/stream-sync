@@ -5,10 +5,16 @@ import {
   createMockFn,
   restoreAllMocks,
 } from "../helpers/bun-mock-utils";
+import type { TestMockFn } from "../helpers/bun-mock-utils";
 import { createConfigFixture } from "../helpers/config-fixture";
 import { noOpLogger } from "../helpers/mock-factories";
 
 const load = createRequire(import.meta.url);
+
+const flushImmediatePoll = async () => {
+  await Promise.resolve();
+  await Promise.resolve();
+};
 
 type ViewerCountSystemInstance = {
   streamStatus: Record<string, boolean>;
@@ -24,6 +30,15 @@ type ViewerCountSystemInstance = {
   isPolling: boolean;
 };
 
+type ViewerCountPlatformFixture = {
+  getViewerCount: TestMockFn<[], Promise<number>>;
+};
+
+type ViewerCountObserverFixture = {
+  getObserverId: TestMockFn<[], string>;
+  onViewerCountUpdate: TestMockFn<[payload: unknown], Promise<void>>;
+};
+
 type ViewerCountSystemConstructor = new (args: {
   platforms: unknown;
   logger: unknown;
@@ -32,11 +47,11 @@ type ViewerCountSystemConstructor = new (args: {
 
 describe("Twitch Viewer Count System Debug", () => {
   let ViewerCountSystem: ViewerCountSystemConstructor;
-  let mockTwitchPlatform: { getViewerCount: ReturnType<typeof createMockFn> };
+  let mockTwitchPlatform: ViewerCountPlatformFixture;
   let mockPlatforms: {
-    twitch: { getViewerCount: ReturnType<typeof createMockFn> };
-    youtube: { getViewerCount: ReturnType<typeof createMockFn> };
-    tiktok: { getViewerCount: ReturnType<typeof createMockFn> };
+    twitch: ViewerCountPlatformFixture;
+    youtube: ViewerCountPlatformFixture;
+    tiktok: ViewerCountPlatformFixture;
   };
   let testConfig: ReturnType<typeof createConfigFixture>;
 
@@ -48,13 +63,13 @@ describe("Twitch Viewer Count System Debug", () => {
     });
 
     mockTwitchPlatform = {
-      getViewerCount: createMockFn().mockResolvedValue(42),
+      getViewerCount: createMockFn<[], Promise<number>>().mockResolvedValue(42),
     };
 
     mockPlatforms = {
       twitch: mockTwitchPlatform,
-      youtube: { getViewerCount: createMockFn().mockResolvedValue(100) },
-      tiktok: { getViewerCount: createMockFn().mockResolvedValue(25) },
+      youtube: { getViewerCount: createMockFn<[], Promise<number>>().mockResolvedValue(100) },
+      tiktok: { getViewerCount: createMockFn<[], Promise<number>>().mockResolvedValue(25) },
     };
   });
 
@@ -83,9 +98,10 @@ describe("Twitch Viewer Count System Debug", () => {
     const viewerSystem = createViewerSystem();
 
     viewerSystem.startPolling();
-    await new Promise((resolve) => setImmediate(resolve));
+    await flushImmediatePoll();
 
     expect(viewerSystem.isPolling).toBe(true);
+    expect(mockTwitchPlatform.getViewerCount).toHaveBeenCalledTimes(1);
     expect(viewerSystem.counts.twitch).toBe(42);
     expect(viewerSystem.counts.youtube).toBe(0);
     expect(viewerSystem.counts.tiktok).toBe(0);
@@ -96,9 +112,9 @@ describe("Twitch Viewer Count System Debug", () => {
   test("fetches Twitch viewer count when polling", async () => {
     const viewerSystem = createViewerSystem();
 
-    const mockObserver = {
-      getObserverId: createMockFn().mockReturnValue("testObserver"),
-      onViewerCountUpdate: createMockFn().mockResolvedValue(),
+    const mockObserver: ViewerCountObserverFixture = {
+      getObserverId: createMockFn<[], string>().mockReturnValue("testObserver"),
+      onViewerCountUpdate: createMockFn<[payload: unknown], Promise<void>>().mockResolvedValue(),
     };
     viewerSystem.addObserver(mockObserver);
 
@@ -107,7 +123,11 @@ describe("Twitch Viewer Count System Debug", () => {
     expect(mockTwitchPlatform.getViewerCount).toHaveBeenCalled();
     expect(viewerSystem.counts.twitch).toBe(42);
     expect(mockObserver.onViewerCountUpdate).toHaveBeenCalledTimes(1);
-    expect(mockObserver.onViewerCountUpdate.mock.calls[0][0]).toEqual(
+    const observerCall = mockObserver.onViewerCountUpdate.mock.calls[0];
+    if (!observerCall) {
+      throw new Error("Expected one viewer count observer update");
+    }
+    expect(observerCall[0]).toEqual(
       expect.objectContaining({
         platform: "twitch",
         count: 42,

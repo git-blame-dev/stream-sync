@@ -8,7 +8,6 @@ import { setupAutomatedCleanup } from "../helpers/mock-lifecycle";
 import * as constants from "../../src/core/constants";
 import NotificationManager from "../../src/notifications/NotificationManager";
 import { getDefaultGoalsManager } from "../../src/obs/goals";
-import { createTextProcessingManager } from "../../src/utils/text-processing";
 
 type LoggerLike = {
   debug: (...args: unknown[]) => void;
@@ -30,9 +29,34 @@ type QueueItem = {
   };
 };
 
-const NotificationManagerClass = NotificationManager as unknown as new (
-  deps: Record<string, unknown>,
-) => NotificationManagerInstance;
+const isQueueItem = (value: unknown): value is QueueItem =>
+  typeof value === "object" &&
+  value !== null &&
+  "type" in value &&
+  "data" in value &&
+  typeof value.type === "string" &&
+  typeof value.data === "object" &&
+  value.data !== null &&
+  "platform" in value.data &&
+  "displayMessage" in value.data &&
+  "ttsMessage" in value.data &&
+  typeof value.data.platform === "string" &&
+  typeof value.data.displayMessage === "string" &&
+  typeof value.data.ttsMessage === "string";
+
+const getQueuedItem = (
+  displayQueue: ReturnType<typeof createMockDisplayQueue>,
+): QueueItem => {
+  const call = displayQueue.addItem.mock.calls[0];
+  if (!call) {
+    throw new Error("Expected one display queue item");
+  }
+  const [queueItem] = call;
+  if (!isQueueItem(queueItem)) {
+    throw new Error("Expected a notification queue item");
+  }
+  return queueItem;
+};
 
 type NotificationManagerInstance = {
   handleNotification: (
@@ -69,20 +93,25 @@ describe("Twitch gift subscriptions", () => {
         debugEnabled: true,
       },
     });
-    const constantsConfig = constants as Record<string, unknown>;
-    const textProcessing = createTextProcessingManager({ logger: mockLogger });
+    const constantsConfig = {
+      PRIORITY_LEVELS: constants.PRIORITY_LEVELS,
+      NOTIFICATION_CONFIGS: constants.NOTIFICATION_CONFIGS,
+    };
     const obsGoals = getDefaultGoalsManager();
+    const obsGoalsDependency = {
+      processDonationGoal: (...args: unknown[]) =>
+        obsGoals.processDonationGoal(String(args[0] ?? ""), typeof args[1] === "number" ? args[1] : 0),
+    };
     const vfxCommandService = {
       getVFXConfig: (createMockFn() as FlexibleMock).mockResolvedValue(null),
     };
-    return new NotificationManagerClass({
+    return new NotificationManager({
       displayQueue: mockDisplayQueue,
       logger: mockLogger,
       eventBus: mockEventBus,
       config,
       constants: constantsConfig,
-      textProcessing,
-      obsGoals,
+      obsGoals: obsGoalsDependency,
       vfxCommandService,
     });
   };
@@ -113,7 +142,7 @@ describe("Twitch gift subscriptions", () => {
     expect(result).toEqual(expect.objectContaining({ success: true }));
     expect(mockDisplayQueue.addItem).toHaveBeenCalledTimes(1);
 
-    const queueItem = mockDisplayQueue.addItem.mock.calls[0][0] as QueueItem;
+    const queueItem = getQueuedItem(mockDisplayQueue);
     const notificationData = queueItem.data;
 
     expect(queueItem.type).toBe("platform:giftpaypiggy");
@@ -148,7 +177,7 @@ describe("Twitch gift subscriptions", () => {
     expect(result).toEqual(expect.objectContaining({ success: true }));
     expect(mockDisplayQueue.addItem).toHaveBeenCalledTimes(1);
 
-    const queueItem = mockDisplayQueue.addItem.mock.calls[0][0] as QueueItem;
+    const queueItem = getQueuedItem(mockDisplayQueue);
     const notificationData = queueItem.data;
 
     expect(notificationData.displayMessage).toContain("GiftUser");
