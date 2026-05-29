@@ -3,6 +3,7 @@ import {
   clearAllMocks,
   createMockFn,
   restoreAllMocks,
+  type TestMockFn,
 } from "../helpers/bun-mock-utils";
 
 import { ViewerCountSystem } from "../../src/utils/viewer-count";
@@ -12,17 +13,73 @@ import * as InnertubeInstanceManager from "../../src/services/innertube-instance
 import { OBSViewerCountObserver } from "../../src/observers/obs-viewer-count-observer";
 import { createMockOBSManager } from "../helpers/mock-factories";
 import { expectNoTechnicalArtifacts } from "../helpers/behavior-validation";
-import { createSilentLogger } from "../helpers/test-logger";
 import { createConfigFixture } from "../helpers/config-fixture";
+import { waitForDelay } from "../helpers/time-utils";
+
+type ViewerCountUpdate = {
+  platform: string;
+  count: number;
+  previousCount: number;
+  isStreamLive: boolean;
+  timestamp: Date;
+};
+
+type StreamStatusUpdate = {
+  platform: string;
+  isLive: boolean;
+  wasLive: boolean;
+  timestamp: Date;
+};
+
+type TestViewerCountPlatform = {
+  getViewerCount: TestMockFn<[], Promise<unknown>>;
+};
+
+type TestPlatforms = {
+  youtube: TestViewerCountPlatform;
+};
+
+type TestObserver = {
+  getObserverId: () => string;
+  onViewerCountUpdate: TestMockFn<[ViewerCountUpdate], unknown>;
+  onStreamStatusChange: TestMockFn<[StreamStatusUpdate], unknown>;
+  cleanup?: TestMockFn<[], unknown>;
+};
+
+const createViewerCountLogger = () => ({
+  debug: (_message: string, _context?: string, _payload?: unknown) => undefined,
+  info: (_message: string, _context?: string, _payload?: unknown) => undefined,
+  warn: (_message: string, _context?: string, _payload?: unknown) => undefined,
+  error: (_message: string, _context?: string, _payload?: unknown) => undefined,
+});
+
+const expectExtractorInput = (
+  value: unknown,
+): Parameters<typeof YouTubeViewerExtractor.extractConcurrentViewers>[0] => {
+  return value as Parameters<typeof YouTubeViewerExtractor.extractConcurrentViewers>[0];
+};
+
+const createRejectedUpdateMock = <Args extends unknown[]>(error: Error) =>
+  createMockFn<Args, unknown>(() => Promise.reject(error));
+
+const expectFirstArg = <Args extends unknown[]>(mockFn: TestMockFn<Args, unknown>): Args[0] => {
+  const firstCall = mockFn.mock.calls[0];
+  expect(firstCall).toBeDefined();
+  if (!firstCall) {
+    throw new Error("Expected mock to have at least one call");
+  }
+  return firstCall[0];
+};
 
 describe("System Resilience and Error Recovery Integration", () => {
-  let platforms, obsManager, viewerCountSystem;
+  let platforms: TestPlatforms;
+  let obsManager: ReturnType<typeof createMockOBSManager>;
+  let viewerCountSystem: InstanceType<typeof ViewerCountSystem>;
 
   beforeEach(async () => {
     platforms = {
       youtube: {
-        getViewerCount: createMockFn().mockResolvedValue(1000),
-        isEnabled: () => true,
+        getViewerCount: createMockFn<[], Promise<unknown>>(async () => 1000),
       },
     };
 
@@ -31,12 +88,12 @@ describe("System Resilience and Error Recovery Integration", () => {
     viewerCountSystem = new ViewerCountSystem({
       platforms,
       config: testConfig,
-      logger: createSilentLogger(),
+      logger: createViewerCountLogger(),
     });
 
     const obsObserver = new OBSViewerCountObserver(
       obsManager,
-      createSilentLogger(),
+      createViewerCountLogger(),
       { config: testConfig },
     );
     viewerCountSystem.addObserver(obsObserver);
@@ -108,12 +165,12 @@ describe("System Resilience and Error Recovery Integration", () => {
 
   describe("Observer Error Isolation", () => {
     test("should isolate observer errors from system operation", async () => {
-      const faultyObserver = {
+      const faultyObserver: TestObserver = {
         getObserverId: () => "faulty-observer",
-        onViewerCountUpdate: createMockFn().mockRejectedValue(
+        onViewerCountUpdate: createRejectedUpdateMock<[ViewerCountUpdate]>(
           new Error("Observer crashed"),
         ),
-        onStreamStatusChange: createMockFn().mockRejectedValue(
+        onStreamStatusChange: createRejectedUpdateMock<[StreamStatusUpdate]>(
           new Error("Observer failed"),
         ),
       };
@@ -198,7 +255,9 @@ describe("System Resilience and Error Recovery Integration", () => {
 
       malformedStructures.forEach((structure) => {
         const result =
-          YouTubeViewerExtractor.extractConcurrentViewers(structure);
+          YouTubeViewerExtractor.extractConcurrentViewers(
+            expectExtractorInput(structure),
+          );
 
         expect(typeof result.success).toBe("boolean");
         expect(typeof result.count).toBe("number");
@@ -234,7 +293,7 @@ describe("System Resilience and Error Recovery Integration", () => {
 
   describe("Concurrent Operation Resilience", () => {
     test("should handle concurrent status updates safely", async () => {
-      const promises = [];
+      const promises: Array<Promise<void>> = [];
       for (let i = 0; i < 5; i++) {
         promises.push(
           viewerCountSystem.updateStreamStatus("youtube", i % 2 === 0),
@@ -277,11 +336,11 @@ describe("System Resilience and Error Recovery Integration", () => {
     });
 
     test("should handle observer lifecycle during errors", async () => {
-      const problematicObserver = {
+      const problematicObserver: TestObserver = {
         getObserverId: () => "problematic-observer",
-        onViewerCountUpdate: createMockFn(),
-        onStreamStatusChange: createMockFn(),
-        cleanup: createMockFn().mockRejectedValue(new Error("Cleanup failed")),
+        onViewerCountUpdate: createMockFn<[ViewerCountUpdate], unknown>(),
+        onStreamStatusChange: createMockFn<[StreamStatusUpdate], unknown>(),
+        cleanup: createRejectedUpdateMock<[]>(new Error("Cleanup failed")),
       };
       viewerCountSystem.addObserver(problematicObserver);
 
@@ -294,13 +353,10 @@ describe("System Resilience and Error Recovery Integration", () => {
 
   describe("Content Quality During Errors", () => {
     test("should maintain user-friendly content during failures", async () => {
-      let lastSuccessfulUpdate = null;
-      const qualityObserver = {
+      const qualityObserver: TestObserver = {
         getObserverId: () => "quality-observer",
-        onViewerCountUpdate: createMockFn((update) => {
-          lastSuccessfulUpdate = update;
-        }),
-        onStreamStatusChange: createMockFn(),
+        onViewerCountUpdate: createMockFn<[ViewerCountUpdate], unknown>(),
+        onStreamStatusChange: createMockFn<[StreamStatusUpdate], unknown>(),
       };
       viewerCountSystem.addObserver(qualityObserver);
 
@@ -308,13 +364,12 @@ describe("System Resilience and Error Recovery Integration", () => {
       viewerCountSystem.startPolling();
       await waitForDelay(50);
 
-      if (lastSuccessfulUpdate) {
-        expect(lastSuccessfulUpdate.platform).toMatch(
-          /^(youtube|twitch|tiktok)$/,
-        );
-        expect(lastSuccessfulUpdate.count).toBeGreaterThanOrEqual(0);
-        expectNoTechnicalArtifacts(lastSuccessfulUpdate.platform);
-      }
+      const lastSuccessfulUpdate = expectFirstArg(
+        qualityObserver.onViewerCountUpdate,
+      );
+      expect(lastSuccessfulUpdate.platform).toMatch(/^(youtube|twitch|tiktok)$/);
+      expect(lastSuccessfulUpdate.count).toBeGreaterThanOrEqual(0);
+      expectNoTechnicalArtifacts(lastSuccessfulUpdate.platform);
     });
 
     test("should provide meaningful error states", async () => {
@@ -334,11 +389,11 @@ describe("System Resilience and Error Recovery Integration", () => {
 
   describe("Resource Management", () => {
     test("should clean up resources properly during failures", async () => {
-      const resourceObserver = {
+      const resourceObserver: TestObserver = {
         getObserverId: () => "resource-observer",
-        onViewerCountUpdate: createMockFn(),
-        onStreamStatusChange: createMockFn(),
-        cleanup: createMockFn(),
+        onViewerCountUpdate: createMockFn<[ViewerCountUpdate], unknown>(),
+        onStreamStatusChange: createMockFn<[StreamStatusUpdate], unknown>(),
+        cleanup: createMockFn<[], unknown>(),
       };
       viewerCountSystem.addObserver(resourceObserver);
 
@@ -358,10 +413,10 @@ describe("System Resilience and Error Recovery Integration", () => {
       const initialObserverCount = viewerCountSystem.observers.size;
 
       for (let i = 0; i < 10; i++) {
-        const observer = {
+        const observer: TestObserver = {
           getObserverId: () => `stress-observer-${i}`,
-          onViewerCountUpdate: createMockFn(),
-          onStreamStatusChange: createMockFn(),
+          onViewerCountUpdate: createMockFn<[ViewerCountUpdate], unknown>(),
+          onStreamStatusChange: createMockFn<[StreamStatusUpdate], unknown>(),
         };
 
         viewerCountSystem.addObserver(observer);

@@ -3,47 +3,111 @@ import {
   clearAllMocks,
   createMockFn,
   restoreAllMocks,
+  type TestMockFn,
 } from "../helpers/bun-mock-utils";
 import { expectNoTechnicalArtifacts } from "../helpers/behavior-validation";
 import { createConfigFixture } from "../helpers/config-fixture";
 import { createMockOBSManager } from "../helpers/mock-factories";
-import { createSilentLogger } from "../helpers/test-logger";
+import { waitForDelay } from "../helpers/time-utils";
 import testClock from "../helpers/test-clock";
 import { OBSViewerCountObserver } from "../../src/observers/obs-viewer-count-observer";
 import { ViewerCountSystem } from "../../src/utils/viewer-count";
 
+type ViewerCountUpdate = {
+  platform: string;
+  count: number;
+  previousCount: number;
+  isStreamLive: boolean;
+  timestamp: Date;
+};
+
+type StreamStatusUpdate = {
+  platform: string;
+  isLive: boolean;
+  wasLive: boolean;
+  timestamp: Date;
+};
+
+type TestObserver = {
+  getObserverId: () => string;
+  onViewerCountUpdate: TestMockFn<[ViewerCountUpdate], unknown>;
+  onStreamStatusChange: TestMockFn<[StreamStatusUpdate], unknown>;
+  initialize: TestMockFn<[], unknown>;
+  cleanup: TestMockFn<[], unknown>;
+};
+
+const createViewerCountLogger = () => ({
+  debug: (_message: string, _context?: string, _payload?: unknown) => undefined,
+  info: (_message: string, _context?: string, _payload?: unknown) => undefined,
+  warn: (_message: string, _context?: string, _payload?: unknown) => undefined,
+  error: (_message: string, _context?: string, _payload?: unknown) => undefined,
+});
+
+const expectFirstArg = <Args extends unknown[]>(
+  mockFn: TestMockFn<Args, unknown>,
+): Args[0] => {
+  const firstCall = mockFn.mock.calls[0];
+  expect(firstCall).toBeDefined();
+  if (!firstCall) {
+    throw new Error("Expected mock to have at least one call");
+  }
+  return firstCall[0];
+};
+
+const expectCallArg = <Args extends unknown[]>(
+  mockFn: TestMockFn<Args, unknown>,
+  callIndex: number,
+): Args[0] => {
+  const call = mockFn.mock.calls[callIndex];
+  expect(call).toBeDefined();
+  if (!call) {
+    throw new Error(`Expected mock call ${callIndex} to exist`);
+  }
+  return call[0];
+};
+
+const isObsInputSettingsRequest = (
+  value: unknown,
+): value is { inputSettings: { text: string } } => {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "inputSettings" in value &&
+    typeof value.inputSettings === "object" &&
+    value.inputSettings !== null &&
+    "text" in value.inputSettings &&
+    typeof value.inputSettings.text === "string"
+  );
+};
+
 const createTimeProvider = () => ({
   now: () => testClock.now(),
-  createDate: (timestamp) => new Date(timestamp),
+  createDate: (timestamp: number) => new Date(timestamp),
 });
 
 describe("Observer Pattern Integration", () => {
   let viewerCountSystem: InstanceType<typeof ViewerCountSystem>;
   let platforms: {
     youtube: {
-      getViewerCount: ReturnType<typeof createMockFn>;
-      isEnabled: () => boolean;
+      getViewerCount: TestMockFn<[], Promise<unknown>>;
     };
     twitch: {
-      getViewerCount: ReturnType<typeof createMockFn>;
-      isEnabled: () => boolean;
+      getViewerCount: TestMockFn<[], Promise<unknown>>;
     };
   };
-  let logger: ReturnType<typeof createSilentLogger>;
+  let logger: ReturnType<typeof createViewerCountLogger>;
   let testConfig: ReturnType<typeof createConfigFixture>;
 
   beforeEach(async () => {
     testClock.reset();
     testConfig = createConfigFixture();
-    logger = createSilentLogger();
+    logger = createViewerCountLogger();
     platforms = {
       youtube: {
-        getViewerCount: createMockFn().mockResolvedValue(1000),
-        isEnabled: () => true,
+        getViewerCount: createMockFn<[], Promise<unknown>>(async () => 1000),
       },
       twitch: {
-        getViewerCount: createMockFn().mockResolvedValue(2000),
-        isEnabled: () => true,
+        getViewerCount: createMockFn<[], Promise<unknown>>(async () => 2000),
       },
     };
 
@@ -84,7 +148,10 @@ describe("Observer Pattern Integration", () => {
       };
 
       expect(() => {
-        viewerCountSystem.addObserver(invalidObserver);
+        const addInvalidObserver = viewerCountSystem.addObserver.bind(
+          viewerCountSystem,
+        ) as (observer: Record<string, unknown>) => void;
+        addInvalidObserver(invalidObserver);
       }).toThrow("Observer must implement getObserverId() method");
     });
 
@@ -127,7 +194,7 @@ describe("Observer Pattern Integration", () => {
 
       observers.forEach((observer) => {
         expect(observer.onViewerCountUpdate).toHaveBeenCalled();
-        const updateCall = observer.onViewerCountUpdate.mock.calls[0][0];
+        const updateCall = expectFirstArg(observer.onViewerCountUpdate);
         expect(updateCall).toMatchObject({
           platform: "youtube",
           count: 1000,
@@ -149,8 +216,8 @@ describe("Observer Pattern Integration", () => {
       await viewerCountSystem.updateStreamStatus("youtube", false);
 
       expect(observer.onStreamStatusChange).toHaveBeenCalledTimes(2);
-      const firstCall = observer.onStreamStatusChange.mock.calls[0][0];
-      const secondCall = observer.onStreamStatusChange.mock.calls[1][0];
+      const firstCall = expectCallArg(observer.onStreamStatusChange, 0);
+      const secondCall = expectCallArg(observer.onStreamStatusChange, 1);
       expect(firstCall).toMatchObject({
         platform: "youtube",
         isLive: true,
@@ -176,7 +243,7 @@ describe("Observer Pattern Integration", () => {
       viewerCountSystem.startPolling();
       await waitForDelay(50);
 
-      const updateCall = observer.onViewerCountUpdate.mock.calls[0][0];
+      const updateCall = expectFirstArg(observer.onViewerCountUpdate);
       expect(updateCall).toMatchObject({
         platform: "youtube",
         count: 1000,
@@ -209,7 +276,7 @@ describe("Observer Pattern Integration", () => {
       const obsManager = createMockOBSManager();
       const obsObserver = new OBSViewerCountObserver(
         obsManager,
-        createSilentLogger(),
+        createViewerCountLogger(),
         {
           config: createConfigFixture(),
         },
@@ -226,7 +293,16 @@ describe("Observer Pattern Integration", () => {
       expect(obsUpdateCalls.length).toBeGreaterThan(0);
       expect(viewerCountSystem.counts.youtube).toBe(1000);
 
-      const latestObsUpdate = obsUpdateCalls[obsUpdateCalls.length - 1][1];
+      const latestObsCall = obsUpdateCalls[obsUpdateCalls.length - 1];
+      expect(latestObsCall).toBeDefined();
+      if (!latestObsCall) {
+        throw new Error("Expected OBS update call to exist");
+      }
+      const latestObsUpdate = latestObsCall[1];
+      expect(isObsInputSettingsRequest(latestObsUpdate)).toBe(true);
+      if (!isObsInputSettingsRequest(latestObsUpdate)) {
+        throw new Error("Expected OBS update call to include inputSettings.text");
+      }
       expect(latestObsUpdate.inputSettings.text).toMatch(
         /^\d{1,3}(,\d{3})*(\.\d+)?[KMB]?$/,
       );
@@ -237,7 +313,7 @@ describe("Observer Pattern Integration", () => {
       const obsManager = createMockOBSManager();
       const obsObserver = new OBSViewerCountObserver(
         obsManager,
-        createSilentLogger(),
+        createViewerCountLogger(),
         {
           config: createConfigFixture(),
         },
@@ -249,7 +325,7 @@ describe("Observer Pattern Integration", () => {
       const initializedToZero = obsManager.call.mock.calls.some(
         (call) =>
           call[0] === "SetInputSettings" &&
-          call[1]?.inputSettings?.text === "0",
+          isObsInputSettingsRequest(call[1]) && call[1].inputSettings.text === "0",
       );
       expect(initializedToZero).toBe(true);
 
@@ -333,7 +409,7 @@ describe("Observer Pattern Integration", () => {
     test("should handle platform-specific observer filtering", async () => {
       const youtubeObserver = {
         getObserverId: () => "youtube-only-observer",
-        onViewerCountUpdate: createMockFn((update) => {
+        onViewerCountUpdate: createMockFn<[ViewerCountUpdate], void>((update) => {
           if (update.platform !== "youtube") return;
         }),
         onStreamStatusChange: createMockFn(),
@@ -479,7 +555,7 @@ describe("Observer Pattern Integration", () => {
       viewerCountSystem.startPolling();
       await waitForDelay(50);
 
-      const updateData = qualityObserver.onViewerCountUpdate.mock.calls[0][0];
+      const updateData = expectFirstArg(qualityObserver.onViewerCountUpdate);
 
       expect(updateData.platform).toMatch(/^(youtube|twitch|tiktok)$/);
       expect(updateData.count).toBeGreaterThanOrEqual(0);
@@ -491,12 +567,12 @@ describe("Observer Pattern Integration", () => {
 });
 
 // Helper function to create test observers
-function createTestObserver(id) {
+function createTestObserver(id: string): TestObserver {
   return {
     getObserverId: () => id,
-    onViewerCountUpdate: createMockFn(),
-    onStreamStatusChange: createMockFn(),
-    initialize: createMockFn(),
-    cleanup: createMockFn(),
+    onViewerCountUpdate: createMockFn<[ViewerCountUpdate], unknown>(),
+    onStreamStatusChange: createMockFn<[StreamStatusUpdate], unknown>(),
+    initialize: createMockFn<[], unknown>(),
+    cleanup: createMockFn<[], unknown>(),
   };
 }

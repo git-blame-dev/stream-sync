@@ -19,8 +19,16 @@ function loadFreshConfig() {
   return { config };
 }
 
+function requireTempDir(tempDir: string | undefined): string {
+  expect(tempDir).toBeDefined();
+  if (tempDir === undefined) {
+    throw new Error("Expected tempDir to be initialized");
+  }
+  return tempDir;
+}
+
 describe("Critical Startup Flow", () => {
-  let tempDir: string;
+  let tempDir: string | undefined;
   let originalEnv: NodeJS.ProcessEnv;
 
   beforeEach(() => {
@@ -43,17 +51,21 @@ describe("Critical Startup Flow", () => {
     const originalNodeEnv = process.env.NODE_ENV;
     process.env.NODE_ENV = "production";
     try {
-      const nonExistentPath = path.join(tempDir, "does-not-exist.ini");
+      const nonExistentPath = path.join(requireTempDir(tempDir), "does-not-exist.ini");
       process.env.CHAT_BOT_CONFIG_PATH = nonExistentPath;
 
       expect(() => loadFreshConfig()).toThrow("Configuration file not found");
     } finally {
-      process.env.NODE_ENV = originalNodeEnv;
+      if (originalNodeEnv === undefined) {
+        delete process.env.NODE_ENV;
+      } else {
+        process.env.NODE_ENV = originalNodeEnv;
+      }
     }
   });
 
   test("startup fails fast when required sections are missing", () => {
-    const configPath = path.join(tempDir, "incomplete.ini");
+    const configPath = path.join(requireTempDir(tempDir), "incomplete.ini");
     fs.writeFileSync(configPath, "[minimal]\nkey=value\n");
     process.env.CHAT_BOT_CONFIG_PATH = configPath;
 
@@ -66,12 +78,16 @@ describe("Critical Startup Flow", () => {
     const originalNodeEnv = process.env.NODE_ENV;
     process.env.NODE_ENV = "production";
     try {
-      const overridePath = path.join(tempDir, "override.ini");
+      const overridePath = path.join(requireTempDir(tempDir), "override.ini");
       process.env.CHAT_BOT_CONFIG_PATH = overridePath;
 
       expect(() => loadFreshConfig()).toThrow(overridePath);
     } finally {
-      process.env.NODE_ENV = originalNodeEnv;
+      if (originalNodeEnv === undefined) {
+        delete process.env.NODE_ENV;
+      } else {
+        process.env.NODE_ENV = originalNodeEnv;
+      }
     }
   });
 

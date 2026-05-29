@@ -12,7 +12,20 @@ import {
 import { createMockDisplayQueue } from "../helpers/mock-factories";
 import { captureStdout, captureStderr } from "../helpers/output-capture";
 
-const buildMainConfig = (overrides = {}) =>
+type OutputCapture = ReturnType<typeof captureStdout>;
+type StartupOnlyEnv = NodeJS.ProcessEnv["CHAT_BOT_STARTUP_ONLY"];
+type ConfigFixtureOverrides = Parameters<typeof createConfigFixture>[0];
+type MainOverridesArg = NonNullable<Parameters<typeof main>[0]>;
+type DonationSpamFactory = NonNullable<MainOverridesArg["createDonationSpamDetection"]>;
+type CreateDisplayQueue = NonNullable<MainOverridesArg["createDisplayQueue"]>;
+
+const createSuccessfulSecretSetupResult = () => ({
+  applied: {},
+  persisted: [],
+  missingRequired: [],
+});
+
+const buildMainConfig = (overrides: ConfigFixtureOverrides = {}) =>
   createConfigFixture({
     general: {
       debugEnabled: false,
@@ -69,7 +82,7 @@ type BuildOverridesOptions = {
   singleInstanceAcquireError?: Error;
   twitchAuthInitError?: Error;
   twitchAuthReady?: boolean;
-  cliArgs?: Record<string, unknown>;
+  cliArgs?: MainOverridesArg["cliArgs"];
 };
 
 const TEST_SINGLE_INSTANCE_METADATA: SingleInstanceMetadata = {
@@ -84,7 +97,6 @@ const TEST_SINGLE_INSTANCE_METADATA: SingleInstanceMetadata = {
 };
 
 const buildOverrides = (options: BuildOverridesOptions = {}) => {
-  const displayQueue = createMockDisplayQueue();
   const ensureSecretsCalls: boolean[] = [];
   const singleInstanceReleaseCalls: boolean[] = [];
   const obsManager = {
@@ -99,11 +111,12 @@ const buildOverrides = (options: BuildOverridesOptions = {}) => {
   };
   let capturedDisplayQueueConfig: unknown = null;
 
-  const ensureSecrets = async () => {
+  const ensureSecrets: NonNullable<MainOverridesArg["ensureSecrets"]> = async () => {
     ensureSecretsCalls.push(true);
     if (options.ensureSecretsError) {
       throw options.ensureSecretsError;
     }
+    return createSuccessfulSecretSetupResult();
   };
 
   const createSingleInstanceGuard = async () => {
@@ -131,23 +144,30 @@ const buildOverrides = (options: BuildOverridesOptions = {}) => {
     }
   }
 
-  const createDonationSpamDetectionNoCleanup = (spamConfig, deps) =>
+  const createDonationSpamDetectionNoCleanup: DonationSpamFactory = (spamConfig, deps) =>
     createDonationSpamDetection(spamConfig, { ...deps, autoCleanup: false });
 
+  const initializeDisplayQueueForTest = (
+    _obsManager: unknown,
+    displayQueueConfig: unknown,
+  ) => {
+    capturedDisplayQueueConfig = displayQueueConfig;
+    return createMockDisplayQueue();
+  };
+
+  const overrides: Record<string, unknown> = {
+    cliArgs: options.cliArgs || {},
+    ensureSecrets,
+    createSingleInstanceGuard,
+    TwitchAuth: TwitchAuthStub,
+    initializeDisplayQueue: initializeDisplayQueueForTest,
+    getOBSConnectionManager: () => obsManager,
+    createOBSEventService: () => ({ disconnect: async () => {} }),
+    createDonationSpamDetection: createDonationSpamDetectionNoCleanup,
+  };
+
   return {
-    overrides: {
-      cliArgs: options.cliArgs || {},
-      ensureSecrets,
-      createSingleInstanceGuard,
-      TwitchAuth: TwitchAuthStub,
-      initializeDisplayQueue: (_obsManager, displayQueueConfig) => {
-        capturedDisplayQueueConfig = displayQueueConfig;
-        return displayQueue;
-      },
-      getOBSConnectionManager: () => obsManager,
-      createOBSEventService: () => ({ disconnect: async () => {} }),
-      createDonationSpamDetection: createDonationSpamDetectionNoCleanup,
-    },
+    overrides,
     getCapturedDisplayQueueConfig: () => capturedDisplayQueueConfig,
     getEnsureSecretsCalls: () => ensureSecretsCalls,
     getSingleInstanceReleaseCalls: () => singleInstanceReleaseCalls,
@@ -155,9 +175,9 @@ const buildOverrides = (options: BuildOverridesOptions = {}) => {
 };
 
 describe("main startup behavior", () => {
-  let stdoutCapture;
-  let stderrCapture;
-  let originalStartupOnly;
+  let stdoutCapture: OutputCapture;
+  let stderrCapture: OutputCapture;
+  let originalStartupOnly: StartupOnlyEnv;
 
   beforeEach(() => {
     stdoutCapture = captureStdout();
@@ -290,20 +310,20 @@ describe("main startup behavior", () => {
     });
 
     expect(result.success).toBe(true);
-    expect(getCapturedDisplayQueueConfig()).toBeDefined();
-    expect(getCapturedDisplayQueueConfig().gui).toEqual(config.gui);
+    const capturedDisplayQueueConfig = getCapturedDisplayQueueConfig();
+    expect(capturedDisplayQueueConfig).toMatchObject({ gui: config.gui });
   });
 
   it("rejects non-function startup override dependencies", async () => {
     const { overrides } = buildOverrides({ cliArgs: { chat: 1 } });
 
-    await expect(
-      main({
+    const invalidOverrides: Record<string, unknown> = {
         ...overrides,
         createEventBus: "not-a-function",
         config: buildMainConfig(),
-      }),
-    ).rejects.toThrow(
+      };
+
+    await expect(main(invalidOverrides)).rejects.toThrow(
       "main override createEventBus must be a function when provided",
     );
   });
@@ -311,13 +331,13 @@ describe("main startup behavior", () => {
   it("rejects invalid cliArgs chat override values", async () => {
     const { overrides } = buildOverrides({});
 
-    await expect(
-      main({
-        ...overrides,
-        cliArgs: { chat: "invalid-chat-count" },
-        config: buildMainConfig(),
-      }),
-    ).rejects.toThrow(
+    const invalidOverrides: Record<string, unknown> = {
+      ...overrides,
+      cliArgs: { chat: "invalid-chat-count" },
+      config: buildMainConfig(),
+    };
+
+    await expect(main(invalidOverrides)).rejects.toThrow(
       "main override cliArgs.chat must be null or a positive integer",
     );
   });
@@ -325,10 +345,10 @@ describe("main startup behavior", () => {
   it("uses one OBS subsystem instance for display queue, event services, and VFX wiring", async () => {
     process.env.CHAT_BOT_STARTUP_ONLY = "true";
     const { overrides } = buildOverrides({ cliArgs: { chat: 1 } });
-    const displayQueueManagers = [];
-    const eventServiceManagers = [];
-    const createVfxCallArgs = [];
-    const createProductionDependenciesArgs = [];
+    const displayQueueManagers: unknown[] = [];
+    const eventServiceManagers: unknown[] = [];
+    const createVfxCallArgs: Parameters<NonNullable<MainOverridesArg["createVFXCommandService"]>>[] = [];
+    const createProductionDependenciesArgs: Parameters<NonNullable<MainOverridesArg["createProductionDependencies"]>>[] = [];
     let managerSeq = 0;
 
     const makeObsManager = () => {
@@ -346,14 +366,14 @@ describe("main startup behavior", () => {
       };
     };
 
-    const result = await main({
+    const subsystemOverrides: Record<string, unknown> = {
       ...overrides,
       getOBSConnectionManager: () => makeObsManager(),
-      initializeDisplayQueue: (obsManager) => {
+      initializeDisplayQueue: (obsManager: unknown) => {
         displayQueueManagers.push(obsManager);
         return createMockDisplayQueue();
       },
-      createOBSEventService: ({ obsConnection }) => {
+      createOBSEventService: ({ obsConnection }: { obsConnection: unknown }) => {
         eventServiceManagers.push(obsConnection);
         return {
           connect: async () => true,
@@ -361,7 +381,7 @@ describe("main startup behavior", () => {
           destroy: () => undefined,
         };
       },
-      createVFXCommandService: (...args) => {
+      createVFXCommandService: (...args: Parameters<NonNullable<MainOverridesArg["createVFXCommandService"]>>) => {
         createVfxCallArgs.push(args);
         return {
           executeCommand: async () => ({ success: true }),
@@ -369,7 +389,7 @@ describe("main startup behavior", () => {
           getVFXConfig: async () => null,
         };
       },
-      createProductionDependencies: (...args) => {
+      createProductionDependencies: (...args: Parameters<NonNullable<MainOverridesArg["createProductionDependencies"]>>) => {
         createProductionDependenciesArgs.push(args);
         const loggerDouble = {
           debug: () => undefined,
@@ -380,6 +400,8 @@ describe("main startup behavior", () => {
         };
         return {
           obs: {},
+          sourcesFactory: {},
+          effectsFactory: {},
           logger: loggerDouble,
           logging: loggerDouble,
           platforms: {},
@@ -387,38 +409,55 @@ describe("main startup behavior", () => {
           notificationManager: null,
           dependencyFactory: {},
           lazyInnertube: {},
+          axios: undefined,
+          WebSocketCtor: undefined,
+          tiktokConnector: undefined,
           eventBus: null,
           vfxCommandService: null,
           userTrackingService: null,
         };
       },
       config: buildMainConfig(),
-    });
+    };
+
+    const result = await main(subsystemOverrides);
 
     expect(result.success).toBe(true);
     expect(displayQueueManagers.length).toBe(1);
     expect(eventServiceManagers.length).toBe(1);
     expect(displayQueueManagers[0]).toBe(eventServiceManagers[0]);
-    expect(createVfxCallArgs[0][2]?.effectsManager).toBeDefined();
-    expect(createProductionDependenciesArgs[0][1]?.effectsManager).toBe(
-      createVfxCallArgs[0][2]?.effectsManager,
+    const firstVfxCall = createVfxCallArgs[0];
+    const firstProductionDependenciesCall = createProductionDependenciesArgs[0];
+    expect(firstVfxCall).toBeDefined();
+    expect(firstProductionDependenciesCall).toBeDefined();
+    if (!firstVfxCall || !firstProductionDependenciesCall) {
+      throw new Error("Expected VFX and production dependency calls");
+    }
+    expect(firstVfxCall[2]?.effectsManager).toBeDefined();
+    expect(firstProductionDependenciesCall[1]?.effectsManager).toBe(
+      firstVfxCall[2]?.effectsManager,
     );
   });
 
   it("uses non-singleton createDisplayQueue runtime path when provided", async () => {
     process.env.CHAT_BOT_STARTUP_ONLY = "true";
     const { overrides } = buildOverrides({ cliArgs: { chat: 1 } });
-    const createdQueues = [];
+    const createdQueues: Array<{
+      obsManager: Parameters<CreateDisplayQueue>[0];
+      displayQueueConfig: Parameters<CreateDisplayQueue>[1];
+      displayQueueConstants: Parameters<CreateDisplayQueue>[2];
+      eventBus: Parameters<CreateDisplayQueue>[3];
+      dependencies: Parameters<CreateDisplayQueue>[4];
+    }> = [];
 
-    const result = await main({
+    const createDisplayQueueOverrides: Record<string, unknown> = {
       ...overrides,
-      initializeDisplayQueue: undefined,
       createDisplayQueue: (
-        obsManager,
-        displayQueueConfig,
-        displayQueueConstants,
-        eventBus,
-        dependencies,
+        obsManager: Parameters<CreateDisplayQueue>[0],
+        displayQueueConfig: Parameters<CreateDisplayQueue>[1],
+        displayQueueConstants: Parameters<CreateDisplayQueue>[2],
+        eventBus: Parameters<CreateDisplayQueue>[3],
+        dependencies: Parameters<CreateDisplayQueue>[4],
       ) => {
         createdQueues.push({
           obsManager,
@@ -430,7 +469,10 @@ describe("main startup behavior", () => {
         return createMockDisplayQueue();
       },
       config: buildMainConfig(),
-    });
+    };
+    delete createDisplayQueueOverrides.initializeDisplayQueue;
+
+    const result = await main(createDisplayQueueOverrides);
 
     expect(result.success).toBe(true);
     expect(createdQueues.length).toBe(1);

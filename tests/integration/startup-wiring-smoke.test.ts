@@ -6,6 +6,8 @@ import { initializeLoggingConfig } from "../../src/core/logging";
 import { buildLoggingConfig } from "../../src/core/config-builders";
 import { ConfigValidator } from "../../src/utils/config-validator";
 
+type LoggingConfig = NonNullable<Parameters<typeof initializeLoggingConfig>[0]["logging"]>;
+
 const buildSmokeConfigIni = () => `[general]
 debugEnabled=true
 viewerCountPollingInterval=60
@@ -79,8 +81,8 @@ enabled=false
 `;
 
 describe("Startup wiring smoke", () => {
-  let tempDir;
-  let tempConfigPath;
+  let tempDir: string | undefined;
+  let tempConfigPath: string;
 
   beforeEach(() => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "startup-smoke-"));
@@ -99,7 +101,12 @@ describe("Startup wiring smoke", () => {
     expect(typeof initializeLoggingConfig).toBe("function");
 
     const normalized = ConfigValidator.normalize({ general: {} });
-    const loggingConfig = buildLoggingConfig(normalized);
+    const builtLoggingConfig = buildLoggingConfig(normalized);
+    const loggingConfig: LoggingConfig = {
+      ...builtLoggingConfig,
+      console: { ...builtLoggingConfig.console, level: "debug" },
+      file: { ...builtLoggingConfig.file, level: "debug" },
+    };
     initializeLoggingConfig({ logging: loggingConfig });
   });
 

@@ -11,6 +11,17 @@ import { main } from "../../src/main.ts";
 import type { SingleInstanceMetadata } from "../../src/services/SingleInstanceGuard.ts";
 import { createDonationSpamDetection } from "../../src/utils/spam-detection";
 
+type OutputCapture = ReturnType<typeof captureStdout>;
+type StartupOnlyEnv = NodeJS.ProcessEnv["CHAT_BOT_STARTUP_ONLY"];
+type MainOverridesArg = NonNullable<Parameters<typeof main>[0]>;
+type DonationSpamFactory = NonNullable<MainOverridesArg["createDonationSpamDetection"]>;
+
+const createSuccessfulSecretSetupResult = () => ({
+  applied: {},
+  persisted: [],
+  missingRequired: [],
+});
+
 const TEST_SINGLE_INSTANCE_METADATA: SingleInstanceMetadata = {
   instanceId: "test-smoke-instance",
   pid: 1,
@@ -58,9 +69,9 @@ const buildSmokeConfig = () =>
   });
 
 describe("main startup smoke", () => {
-  let stdoutCapture;
-  let stderrCapture;
-  let originalStartupOnly;
+  let stdoutCapture: OutputCapture;
+  let stderrCapture: OutputCapture;
+  let originalStartupOnly: StartupOnlyEnv;
 
   beforeEach(() => {
     stdoutCapture = captureStdout();
@@ -83,12 +94,12 @@ describe("main startup smoke", () => {
   });
 
   it("starts with fixture-only dependencies", async () => {
-    const createDonationSpamDetectionNoCleanup = (spamConfig, deps) =>
+    const createDonationSpamDetectionNoCleanup: DonationSpamFactory = (spamConfig, deps) =>
       createDonationSpamDetection(spamConfig, { ...deps, autoCleanup: false });
 
-    const overrides = {
+    const overrides: Record<string, unknown> = {
       cliArgs: { chat: 1 },
-      ensureSecrets: async () => {},
+      ensureSecrets: async () => createSuccessfulSecretSetupResult(),
       createSingleInstanceGuard: async () => ({
         lockPath: "/tmp/test-stream-sync-smoke.lock",
         metadata: TEST_SINGLE_INSTANCE_METADATA,
