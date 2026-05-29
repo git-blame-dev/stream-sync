@@ -9,19 +9,109 @@ import { PlatformLifecycleService } from "../../src/services/PlatformLifecycleSe
 import NotificationManager from "../../src/notifications/NotificationManager";
 import { createMonetizationErrorPayload } from "../../src/utils/monetization-error-utils";
 import { createMockDisplayQueue, noOpLogger } from "../helpers/mock-factories";
-import { createTextProcessingManager } from "../../src/utils/text-processing";
 import { PlatformEvents } from "../../src/interfaces/PlatformEvents";
 import { createConfigFixture } from "../helpers/config-fixture";
+import { waitFor } from "../helpers/event-driven-testing";
+
+type PlatformKey = "twitch" | "youtube" | "tiktok";
+type NotificationType =
+  | "platform:gift"
+  | "platform:giftpaypiggy"
+  | "platform:paypiggy"
+  | "platform:envelope";
+type PlatformConfigOverride = { enabled: boolean; username?: string };
+type EventBusHandler = (payload: unknown) => void | Promise<void>;
+type EventBus = {
+  emit: (eventName: string, payload: unknown) => boolean;
+  on: (eventName: string, handler: EventBusHandler) => EventEmitter;
+  subscribe: (eventName: string, handler: EventBusHandler) => () => void;
+};
+type PlatformEvent = {
+  platform: PlatformKey;
+  type: NotificationType;
+  data: Record<string, unknown>;
+};
+type PlatformHandlers = {
+  onGift: (payload: Record<string, unknown>) => void;
+  onGiftPaypiggy: (payload: Record<string, unknown>) => void;
+  onPaypiggy: (payload: Record<string, unknown>) => void;
+  onEnvelope: (payload: Record<string, unknown>) => void;
+};
+type QueueItem = {
+  type: NotificationType;
+  platform: PlatformKey;
+  data: Record<string, unknown>;
+};
+type ErrorNotificationExpectations = {
+  platform: PlatformKey;
+  type: NotificationType;
+  expectMissingUsername?: boolean;
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
+
+const requireQueueItem = (value: unknown): QueueItem => {
+  expect(isRecord(value)).toBe(true);
+  if (!isRecord(value)) {
+    throw new Error("Expected queued display item");
+  }
+  expect(typeof value.type).toBe("string");
+  expect(typeof value.platform).toBe("string");
+  expect(isRecord(value.data)).toBe(true);
+  if (
+    typeof value.type !== "string" ||
+    typeof value.platform !== "string" ||
+    !isRecord(value.data)
+  ) {
+    throw new Error("Queued display item has invalid shape");
+  }
+  return {
+    type: value.type as NotificationType,
+    platform: value.platform as PlatformKey,
+    data: value.data,
+  };
+};
+
+const requirePlatformEvent = (value: unknown): PlatformEvent => {
+  expect(isRecord(value)).toBe(true);
+  if (!isRecord(value) || !isRecord(value.data)) {
+    throw new Error("Expected platform event payload");
+  }
+  expect(typeof value.platform).toBe("string");
+  expect(typeof value.type).toBe("string");
+  if (typeof value.platform !== "string" || typeof value.type !== "string") {
+    throw new Error("Platform event has invalid shape");
+  }
+  return {
+    platform: value.platform as PlatformKey,
+    type: value.type as NotificationType,
+    data: value.data,
+  };
+};
+
+const requireFoundItem = (
+  item: QueueItem | undefined,
+  type: NotificationType,
+): QueueItem => {
+  expect(item).toBeDefined();
+  if (!item) {
+    throw new Error(`Expected queued ${type} item`);
+  }
+  return item;
+};
 
 describe("Monetization error-path platform flows (smoke)", () => {
-  const createEventBus = () => {
+  const createEventBus = (): EventBus => {
     const emitter = new EventEmitter();
     return {
       emit: emitter.emit.bind(emitter),
       on: emitter.on.bind(emitter),
-      subscribe: (event, handler) => {
+      subscribe: (event: string, handler: EventBusHandler) => {
         emitter.on(event, handler);
-        return () => emitter.off(event, handler);
+        return () => {
+          emitter.off(event, handler);
+        };
       },
     };
   };
@@ -31,12 +121,11 @@ describe("Monetization error-path platform flows (smoke)", () => {
     restoreAllMocks();
   });
 
-  const createHarness = (platformKey) => {
+  const createHarness = (platformKey: PlatformKey) => {
     const eventBus = createEventBus();
     const logger = noOpLogger;
     const displayQueue = createMockDisplayQueue();
-    const textProcessing = createTextProcessingManager({ logger });
-    const platformConfigOverride = { enabled: true };
+    const platformConfigOverride: PlatformConfigOverride = { enabled: true };
     if (platformKey === "youtube") {
       platformConfigOverride.username = "test-channel";
     }
@@ -55,7 +144,6 @@ describe("Monetization error-path platform flows (smoke)", () => {
       eventBus,
       config,
       constants: require("../../src/core/constants"),
-      textProcessing,
       obsGoals: { processDonationGoal: createMockFn() },
       vfxCommandService: {
         getVFXConfig: createMockFn().mockResolvedValue(null),
@@ -65,7 +153,7 @@ describe("Monetization error-path platform flows (smoke)", () => {
       },
     });
 
-    const platformConfig = { enabled: true };
+    const platformConfig: PlatformConfigOverride = { enabled: true };
     if (platformKey === "youtube") {
       platformConfig.username = "test-channel";
     }
@@ -82,12 +170,13 @@ describe("Monetization error-path platform flows (smoke)", () => {
       PlatformEvents.GIFTPAYPIGGY,
       PlatformEvents.ENVELOPE,
     ]);
-    eventBus.on("platform:event", (payload) => {
-      if (monetizationEvents.has(payload.type)) {
+    eventBus.on("platform:event", (payload: unknown) => {
+      const platformEvent = requirePlatformEvent(payload);
+      if (monetizationEvents.has(platformEvent.type)) {
         notificationManager.handleNotificationInternal(
-          payload.type,
-          payload.platform,
-          payload.data,
+          platformEvent.type,
+          platformEvent.platform,
+          platformEvent.data,
           true,
         );
       }
@@ -103,14 +192,17 @@ describe("Monetization error-path platform flows (smoke)", () => {
     };
   };
 
-  const expectNonEmptyString = (value) => {
+  const expectNonEmptyString = (value: unknown) => {
     expect(typeof value).toBe("string");
+    if (typeof value !== "string") {
+      throw new Error("Expected non-empty string");
+    }
     expect(value.trim()).not.toBe("");
   };
 
   const assertErrorNotification = (
-    item,
-    { platform, type, expectMissingUsername = false },
+    item: QueueItem,
+    { platform, type, expectMissingUsername = false }: ErrorNotificationExpectations,
   ) => {
     expect(item.type).toBe(type);
     expect(item.platform).toBe(platform);
@@ -120,6 +212,10 @@ describe("Monetization error-path platform flows (smoke)", () => {
     expectNonEmptyString(item.data.logMessage);
     if (expectMissingUsername) {
       expect(item.data.username).toBeUndefined();
+      expect(typeof item.data.displayMessage).toBe("string");
+      if (typeof item.data.displayMessage !== "string") {
+        throw new Error("Expected display message copy");
+      }
       expect(item.data.displayMessage.toLowerCase()).not.toContain("from ");
     }
   };
@@ -128,7 +224,7 @@ describe("Monetization error-path platform flows (smoke)", () => {
     const harness = createHarness("twitch");
 
     class MockTwitchPlatform {
-      async initialize(handlers) {
+      async initialize(handlers: PlatformHandlers) {
         const giftError = createMonetizationErrorPayload({
           notificationType: "platform:gift",
           platform: "twitch",
@@ -162,10 +258,13 @@ describe("Monetization error-path platform flows (smoke)", () => {
         twitch: MockTwitchPlatform,
       });
       await harness.platformLifecycleService.waitForBackgroundInits();
-      await new Promise(setImmediate);
+      await waitFor(
+        () => harness.displayQueue.addItem.mock.calls.length === 3,
+        { timeout: 100, interval: 1 },
+      );
 
       const items = harness.displayQueue.addItem.mock.calls.map(
-        (call) => call[0],
+        (call) => requireQueueItem(call[0]),
       );
       expect(items).toHaveLength(3);
 
@@ -181,17 +280,17 @@ describe("Monetization error-path platform flows (smoke)", () => {
       expect(giftpaypiggyItem).toBeTruthy();
       expect(paypiggyItem).toBeTruthy();
 
-      assertErrorNotification(giftItem, {
+      assertErrorNotification(requireFoundItem(giftItem, "platform:gift"), {
         platform: "twitch",
         type: "platform:gift",
         expectMissingUsername: true,
       });
-      assertErrorNotification(giftpaypiggyItem, {
+      assertErrorNotification(requireFoundItem(giftpaypiggyItem, "platform:giftpaypiggy"), {
         platform: "twitch",
         type: "platform:giftpaypiggy",
         expectMissingUsername: true,
       });
-      assertErrorNotification(paypiggyItem, {
+      assertErrorNotification(requireFoundItem(paypiggyItem, "platform:paypiggy"), {
         platform: "twitch",
         type: "platform:paypiggy",
         expectMissingUsername: true,
@@ -205,11 +304,7 @@ describe("Monetization error-path platform flows (smoke)", () => {
     const harness = createHarness("youtube");
 
     class MockYouTubePlatform {
-      constructor() {
-        this.logger = harness.logger;
-      }
-
-      async initialize(handlers) {
+      async initialize(handlers: PlatformHandlers) {
         const superChatItem = {
           item: {
             author: { id: "yt-error-user", name: "TestViewer" },
@@ -238,10 +333,11 @@ describe("Monetization error-path platform flows (smoke)", () => {
         this.dispatchWithHandler(handlers, "platform:paypiggy", membershipItem);
       }
 
-      dispatchWithHandler(handlers, type, chatItem) {
-        const {
-          createMonetizationErrorPayload,
-        } = require("../../src/utils/monetization-error-utils");
+      dispatchWithHandler(
+        handlers: PlatformHandlers,
+        type: NotificationType,
+        _chatItem: Record<string, unknown>,
+      ) {
         const errorPayload = createMonetizationErrorPayload({
           notificationType: type,
           platform: "youtube",
@@ -274,10 +370,13 @@ describe("Monetization error-path platform flows (smoke)", () => {
         youtube: MockYouTubePlatform,
       });
       await harness.platformLifecycleService.waitForBackgroundInits();
-      await new Promise(setImmediate);
+      await waitFor(
+        () => harness.displayQueue.addItem.mock.calls.length === 3,
+        { timeout: 100, interval: 1 },
+      );
 
       const items = harness.displayQueue.addItem.mock.calls.map(
-        (call) => call[0],
+        (call) => requireQueueItem(call[0]),
       );
       expect(items).toHaveLength(3);
 
@@ -293,17 +392,17 @@ describe("Monetization error-path platform flows (smoke)", () => {
       expect(giftpaypiggyItem).toBeTruthy();
       expect(paypiggyItem).toBeTruthy();
 
-      assertErrorNotification(giftItem, {
+      assertErrorNotification(requireFoundItem(giftItem, "platform:gift"), {
         platform: "youtube",
         type: "platform:gift",
         expectMissingUsername: true,
       });
-      assertErrorNotification(giftpaypiggyItem, {
+      assertErrorNotification(requireFoundItem(giftpaypiggyItem, "platform:giftpaypiggy"), {
         platform: "youtube",
         type: "platform:giftpaypiggy",
         expectMissingUsername: true,
       });
-      assertErrorNotification(paypiggyItem, {
+      assertErrorNotification(requireFoundItem(paypiggyItem, "platform:paypiggy"), {
         platform: "youtube",
         type: "platform:paypiggy",
         expectMissingUsername: true,
@@ -317,7 +416,7 @@ describe("Monetization error-path platform flows (smoke)", () => {
     const harness = createHarness("tiktok");
 
     class MockTikTokPlatform {
-      async initialize(handlers) {
+      async initialize(handlers: PlatformHandlers) {
         const giftError = createMonetizationErrorPayload({
           notificationType: "platform:gift",
           platform: "tiktok",
@@ -351,10 +450,13 @@ describe("Monetization error-path platform flows (smoke)", () => {
         tiktok: MockTikTokPlatform,
       });
       await harness.platformLifecycleService.waitForBackgroundInits();
-      await new Promise(setImmediate);
+      await waitFor(
+        () => harness.displayQueue.addItem.mock.calls.length === 3,
+        { timeout: 100, interval: 1 },
+      );
 
       const items = harness.displayQueue.addItem.mock.calls.map(
-        (call) => call[0],
+        (call) => requireQueueItem(call[0]),
       );
       expect(items).toHaveLength(3);
 
@@ -370,17 +472,17 @@ describe("Monetization error-path platform flows (smoke)", () => {
       expect(paypiggyItem).toBeTruthy();
       expect(envelopeItem).toBeTruthy();
 
-      assertErrorNotification(giftItem, {
+      assertErrorNotification(requireFoundItem(giftItem, "platform:gift"), {
         platform: "tiktok",
         type: "platform:gift",
         expectMissingUsername: true,
       });
-      assertErrorNotification(paypiggyItem, {
+      assertErrorNotification(requireFoundItem(paypiggyItem, "platform:paypiggy"), {
         platform: "tiktok",
         type: "platform:paypiggy",
         expectMissingUsername: true,
       });
-      assertErrorNotification(envelopeItem, {
+      assertErrorNotification(requireFoundItem(envelopeItem, "platform:envelope"), {
         platform: "tiktok",
         type: "platform:envelope",
         expectMissingUsername: true,

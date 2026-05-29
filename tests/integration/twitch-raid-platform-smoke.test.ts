@@ -5,29 +5,93 @@ import NotificationManager from "../../src/notifications/NotificationManager";
 import { TwitchPlatform } from "../../src/platforms/twitch";
 import { createTestAppRuntime } from "../helpers/runtime-test-harness";
 import { createMockDisplayQueue, noOpLogger } from "../helpers/mock-factories";
-import { createTextProcessingManager } from "../../src/utils/text-processing";
 import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
 import {
   createConfigFixture,
   createTwitchConfigFixture,
 } from "../helpers/config-fixture";
 import { expectNoTechnicalArtifacts } from "../helpers/assertion-helpers";
+import { waitFor } from "../helpers/event-driven-testing";
 
-const createEventBus = () => {
+type EventBusHandler = (payload: unknown) => void | Promise<void>;
+type EventBus = {
+  emit: (eventName: string, payload: unknown) => boolean;
+  on: (eventName: string, handler: EventBusHandler) => EventEmitter;
+  subscribe: (eventName: string, handler: EventBusHandler) => () => void;
+};
+type RuntimeOptions = NonNullable<Parameters<typeof createTestAppRuntime>[1]>;
+type RuntimeEventBus = NonNullable<RuntimeOptions["eventBus"]>;
+type QueueItem = {
+  type: string;
+  platform: string;
+  data: Record<string, unknown>;
+};
+type RaidCopyExpectations = {
+  username?: string;
+  viewerCount?: number;
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
+
+const requireQueueItem = (value: unknown): QueueItem => {
+  expect(isRecord(value)).toBe(true);
+  if (!isRecord(value)) {
+    throw new Error("Expected queued display item");
+  }
+  expect(typeof value.type).toBe("string");
+  expect(typeof value.platform).toBe("string");
+  expect(isRecord(value.data)).toBe(true);
+  if (
+    typeof value.type !== "string" ||
+    typeof value.platform !== "string" ||
+    !isRecord(value.data)
+  ) {
+    throw new Error("Queued display item has invalid shape");
+  }
+  return { type: value.type, platform: value.platform, data: value.data };
+};
+
+const createRuntimeEventBus = (eventBus: EventBus): RuntimeEventBus => ({
+  emit: (eventName: string, payload: unknown) => {
+    eventBus.emit(eventName, payload);
+  },
+  subscribe: (
+    eventName: string,
+    handler: (event: Record<string, unknown>) => void | Promise<void>,
+  ) =>
+    eventBus.subscribe(eventName, (payload) => {
+      if (isRecord(payload)) {
+        return handler(payload);
+      }
+      return handler({});
+    }),
+});
+
+const createEventBus = (): EventBus => {
   const emitter = new EventEmitter();
   return {
     emit: emitter.emit.bind(emitter),
     on: emitter.on.bind(emitter),
-    subscribe: (event, handler) => {
+    subscribe: (event: string, handler: EventBusHandler) => {
       emitter.on(event, handler);
-      return () => emitter.off(event, handler);
+      return () => {
+        emitter.off(event, handler);
+      };
     },
   };
 };
 
-const assertUserFacingOutput = (data, { username, viewerCount }) => {
+const assertUserFacingOutput = (
+  data: Record<string, unknown>,
+  { username, viewerCount }: RaidCopyExpectations,
+) => {
   const fields = ["displayMessage", "ttsMessage", "logMessage"];
   fields.forEach((field) => {
+    expect(typeof data[field]).toBe("string");
+    if (typeof data[field] !== "string") {
+      throw new Error(`Expected ${field} to be notification copy`);
+    }
     expect(typeof data[field]).toBe("string");
     expect(data[field].trim()).not.toBe("");
     expectNoTechnicalArtifacts(data[field]);
@@ -54,7 +118,6 @@ describe("Twitch raid platform flow (smoke)", () => {
     const eventBus = createEventBus();
     const logger = noOpLogger;
     const displayQueue = createMockDisplayQueue();
-    const textProcessing = createTextProcessingManager({ logger });
     const configOverrides = {
       general: {
         raidsEnabled: true,
@@ -72,7 +135,6 @@ describe("Twitch raid platform flow (smoke)", () => {
       eventBus,
       config,
       constants: require("../../src/core/constants"),
-      textProcessing,
       obsGoals: { processDonationGoal: createMockFn() },
       vfxCommandService: {
         getVFXConfig: createMockFn().mockResolvedValue(null),
@@ -89,11 +151,12 @@ describe("Twitch raid platform flow (smoke)", () => {
     });
 
     const { runtime } = createTestAppRuntime(configOverrides, {
-      eventBus,
-      notificationManager,
-      displayQueue,
-      logger,
-      platformLifecycleService,
+      overrides: {
+        eventBus: createRuntimeEventBus(eventBus),
+        notificationManager,
+        displayQueue,
+        logger,
+      },
     });
 
     const platform = new TwitchPlatform(
@@ -102,7 +165,6 @@ describe("Twitch raid platform flow (smoke)", () => {
         logger,
         twitchAuth: {
           isReady: () => true,
-          getUserId: () => "test-user-id",
         },
       },
     );
@@ -117,10 +179,13 @@ describe("Twitch raid platform flow (smoke)", () => {
         timestamp: "2024-01-01T00:00:00.000Z",
       });
 
-      await new Promise(setImmediate);
+      await waitFor(() => displayQueue.addItem.mock.calls.length === 1, {
+        timeout: 100,
+        interval: 1,
+      });
 
       expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
-      const queued = displayQueue.addItem.mock.calls[0][0];
+      const queued = requireQueueItem(displayQueue.addItem.mock.calls[0]?.[0]);
       expect(queued.type).toBe("platform:raid");
       expect(queued.platform).toBe("twitch");
       expect(queued.data.username).toBe("test-user-raider");

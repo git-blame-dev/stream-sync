@@ -5,37 +5,129 @@ import { PlatformLifecycleService } from "../../src/services/PlatformLifecycleSe
 import NotificationManager from "../../src/notifications/NotificationManager";
 import { createTestAppRuntime } from "../helpers/runtime-test-harness";
 import { createMockDisplayQueue, noOpLogger } from "../helpers/mock-factories";
-import { createTextProcessingManager } from "../../src/utils/text-processing";
 import { expectNoTechnicalArtifacts } from "../helpers/assertion-helpers";
 import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
 import { createConfigFixture } from "../helpers/config-fixture";
+import { waitFor } from "../helpers/event-driven-testing";
+
+type PlatformKey = "twitch" | "youtube" | "tiktok";
+type HandlerName = "onPaypiggy";
+type PlatformHandlers = Record<HandlerName, (payload: PaypiggyPayload) => void>;
+type PlatformConfigOverride = { enabled: boolean; username?: string };
+type EventBusHandler = (payload: unknown) => void | Promise<void>;
+type EventBus = {
+  emit: (eventName: string, payload: unknown) => boolean;
+  on: (eventName: string, handler: EventBusHandler) => EventEmitter;
+  subscribe: (eventName: string, handler: EventBusHandler) => () => void;
+};
+type RuntimeOptions = NonNullable<Parameters<typeof createTestAppRuntime>[1]>;
+type RuntimeEventBus = NonNullable<RuntimeOptions["eventBus"]>;
+type PaypiggyPayload = {
+  username: string;
+  userId: string;
+  tier?: string;
+  membershipLevel?: string;
+  months?: number;
+  message?: string;
+  timestamp: string;
+};
+type QueueItem = {
+  type: string;
+  platform: PlatformKey;
+  data: Record<string, unknown>;
+};
+type CopyExpectations = {
+  username?: string;
+  keyword?: string;
+  logKeyword?: string;
+  count?: number;
+};
+type PaypiggySmokeCase = {
+  platformKey: PlatformKey;
+  handlerName: HandlerName;
+  payload: PaypiggyPayload;
+  assertFn: (queued: QueueItem) => void;
+  copyExpectations: CopyExpectations;
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
+
+const requireQueueItem = (value: unknown): QueueItem => {
+  expect(isRecord(value)).toBe(true);
+  if (!isRecord(value)) {
+    throw new Error("Expected queued display item");
+  }
+  expect(typeof value.type).toBe("string");
+  expect(typeof value.platform).toBe("string");
+  expect(isRecord(value.data)).toBe(true);
+  if (
+    typeof value.type !== "string" ||
+    typeof value.platform !== "string" ||
+    !isRecord(value.data)
+  ) {
+    throw new Error("Queued display item has invalid shape");
+  }
+  return { type: value.type, platform: value.platform as PlatformKey, data: value.data };
+};
+
+const createRuntimeEventBus = (eventBus: EventBus): RuntimeEventBus => ({
+  emit: (eventName: string, payload: unknown) => {
+    eventBus.emit(eventName, payload);
+  },
+  subscribe: (
+    eventName: string,
+    handler: (event: Record<string, unknown>) => void | Promise<void>,
+  ) =>
+    eventBus.subscribe(eventName, (payload) => {
+      if (isRecord(payload)) {
+        return handler(payload);
+      }
+      return handler({});
+    }),
+});
 
 describe("Paypiggy platform flows (smoke)", () => {
   afterEach(() => {
     restoreAllMocks();
   });
 
-  const createEventBus = () => {
+  const createEventBus = (): EventBus => {
     const emitter = new EventEmitter();
     return {
       emit: emitter.emit.bind(emitter),
       on: emitter.on.bind(emitter),
-      subscribe: (event, handler) => {
+      subscribe: (event: string, handler: EventBusHandler) => {
         emitter.on(event, handler);
-        return () => emitter.off(event, handler);
+        return () => {
+          emitter.off(event, handler);
+        };
       },
     };
   };
 
-  const assertNonEmptyString = (value) => {
+  const assertNonEmptyString = (value: unknown) => {
     expect(typeof value).toBe("string");
+    if (typeof value !== "string") {
+      throw new Error("Expected non-empty string");
+    }
     expect(value.trim()).not.toBe("");
   };
 
   const assertUserFacingOutput = (
-    data,
-    { username, keyword, logKeyword, count },
+    data: Record<string, unknown>,
+    { username, keyword, logKeyword, count }: CopyExpectations,
   ) => {
+    expect(typeof data.displayMessage).toBe("string");
+    expect(typeof data.ttsMessage).toBe("string");
+    expect(typeof data.logMessage).toBe("string");
+    if (
+      typeof data.displayMessage !== "string" ||
+      typeof data.ttsMessage !== "string" ||
+      typeof data.logMessage !== "string"
+    ) {
+      throw new Error("Expected user-facing notification copy");
+    }
     assertNonEmptyString(data.displayMessage);
     assertNonEmptyString(data.ttsMessage);
     assertNonEmptyString(data.logMessage);
@@ -64,12 +156,11 @@ describe("Paypiggy platform flows (smoke)", () => {
     }
   };
 
-  const createHarness = (platformKey) => {
+  const createHarness = (platformKey: PlatformKey) => {
     const eventBus = createEventBus();
     const logger = noOpLogger;
     const displayQueue = createMockDisplayQueue();
-    const textProcessing = createTextProcessingManager({ logger });
-    const platformConfigOverride = { enabled: true };
+    const platformConfigOverride: PlatformConfigOverride = { enabled: true };
     if (platformKey === "youtube") {
       platformConfigOverride.username = "test-channel";
     }
@@ -89,7 +180,6 @@ describe("Paypiggy platform flows (smoke)", () => {
       eventBus,
       config,
       constants: require("../../src/core/constants"),
-      textProcessing,
       obsGoals: { processDonationGoal: createMockFn() },
       vfxCommandService: {
         getVFXConfig: createMockFn().mockResolvedValue(null),
@@ -99,7 +189,7 @@ describe("Paypiggy platform flows (smoke)", () => {
       },
     });
 
-    const lifecyclePlatformConfig = { enabled: true };
+    const lifecyclePlatformConfig: PlatformConfigOverride = { enabled: true };
     if (platformKey === "youtube") {
       lifecyclePlatformConfig.username = "test-channel";
     }
@@ -111,11 +201,12 @@ describe("Paypiggy platform flows (smoke)", () => {
     });
 
     const { runtime } = createTestAppRuntime(configOverrides, {
-      eventBus,
-      notificationManager,
-      displayQueue,
-      logger,
-      platformLifecycleService,
+      overrides: {
+        eventBus: createRuntimeEventBus(eventBus),
+        notificationManager,
+        displayQueue,
+        logger,
+      },
     });
 
     return {
@@ -135,11 +226,11 @@ describe("Paypiggy platform flows (smoke)", () => {
     payload,
     assertFn,
     copyExpectations,
-  }) => {
+  }: PaypiggySmokeCase) => {
     const harness = createHarness(platformKey);
 
     class MockPlatform {
-      async initialize(handlers) {
+      async initialize(handlers: PlatformHandlers) {
         handlers[handlerName](payload);
       }
 
@@ -155,10 +246,13 @@ describe("Paypiggy platform flows (smoke)", () => {
         [platformKey]: MockPlatform,
       });
       await harness.platformLifecycleService.waitForBackgroundInits();
-      await new Promise(setImmediate);
+      await waitFor(
+        () => harness.displayQueue.addItem.mock.calls.length === 1,
+        { timeout: 100, interval: 1 },
+      );
 
       expect(harness.displayQueue.addItem).toHaveBeenCalledTimes(1);
-      const queued = harness.displayQueue.addItem.mock.calls[0][0];
+      const queued = requireQueueItem(harness.displayQueue.addItem.mock.calls[0]?.[0]);
       expect(queued.type).toBe("platform:paypiggy");
       expect(queued.platform).toBe(platformKey);
       assertUserFacingOutput(queued.data, copyExpectations);

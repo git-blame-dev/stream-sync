@@ -24,9 +24,21 @@ const createDisplayQueueStub = () => {
   const items: PaypiggyQueueItem[] = [];
   return {
     items,
-    addItem: (item: PaypiggyQueueItem) => items.push(item),
+    addItem: (item: PaypiggyQueueItem) => {
+      items.push(item);
+    },
     getQueueLength: () => items.length,
   };
+};
+
+const requirePaypiggyQueueItem = (
+  item: PaypiggyQueueItem | undefined,
+): PaypiggyQueueItem => {
+  expect(item).toBeDefined();
+  if (!item) {
+    throw new Error("Expected queued paypiggy notification item");
+  }
+  return item;
 };
 
 describe("NotificationManager paypiggy normalization", () => {
@@ -57,7 +69,7 @@ describe("NotificationManager paypiggy normalization", () => {
     });
 
     expect(displayQueue.items).toHaveLength(1);
-    const queued = displayQueue.items[0];
+    const queued = requirePaypiggyQueueItem(displayQueue.items[0]);
     expect(queued.priority).toBe(constants.PRIORITY_LEVELS.PAYPIGGY);
     expect(queued.vfxConfig?.commandKey).toBe("paypiggies");
     expect(queued.type).toBe("platform:paypiggy");
@@ -87,7 +99,7 @@ describe("NotificationManager paypiggy normalization", () => {
     });
 
     expect(displayQueue.items).toHaveLength(1);
-    const queued = displayQueue.items[0];
+    const queued = requirePaypiggyQueueItem(displayQueue.items[0]);
     expect(queued.type).toBe("platform:paypiggy");
     expect(queued.data?.type).toBe("platform:paypiggy");
     expect(queued.data?.username).toBe("AliasFreeSub");
@@ -245,7 +257,11 @@ describe("NotificationManager paypiggy normalization", () => {
           obsGoals: { processDonationGoal: createMockFn() },
         }),
     ).toThrow("config");
-    process.env.NODE_ENV = originalEnv;
+    if (originalEnv === undefined) {
+      delete process.env.NODE_ENV;
+    } else {
+      process.env.NODE_ENV = originalEnv;
+    }
   });
 
   it("rejects monetization alias types instead of remapping", async () => {

@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
+import {
+  createMockFn,
+  restoreAllMocks,
+  type TestMockFn,
+} from "../../helpers/bun-mock-utils";
 import { createConfigFixture } from "../../helpers/config-fixture";
 
 import NotificationManager from "../../../src/notifications/NotificationManager";
@@ -15,37 +19,28 @@ type QueuedItem = {
 };
 
 type DisplayQueueMock = {
-  addItem: ReturnType<typeof createMockFn>;
-  getQueueLength: ReturnType<typeof createMockFn>;
+  addItem: TestMockFn<[QueuedItem], void>;
+  getQueueLength: TestMockFn<[], number>;
 };
 
 type EventBusMock = {
-  emit: ReturnType<typeof createMockFn>;
-  on: ReturnType<typeof createMockFn>;
-  off: ReturnType<typeof createMockFn>;
+  emit: TestMockFn<unknown[], unknown>;
+  on: TestMockFn<unknown[], unknown>;
+  off: TestMockFn<unknown[], unknown>;
 };
 
 type VfxCommandServiceMock = {
-  getVFXConfig: ReturnType<typeof createMockFn>;
-  executeCommand: ReturnType<typeof createMockFn>;
-  executeCommandForKey: ReturnType<typeof createMockFn>;
+  getVFXConfig: TestMockFn<[string], Promise<{ commandKey: string; filename: string }>>;
+  executeCommand: TestMockFn<unknown[], Promise<{ success: boolean }>>;
+  executeCommandForKey: TestMockFn<unknown[], Promise<{ success: boolean }>>;
 };
 
-type NotificationResult = {
-  success?: boolean;
-  disabled?: boolean;
-  notificationType?: string;
-  platform?: string;
-  priority?: number;
-  error?: string;
-};
-
-type NotificationManagerLike = {
-  handleNotification: (
-    type: string,
-    platform: string,
-    data: Record<string, unknown>,
-  ) => Promise<NotificationResult>;
+const requireQueuedItem = (item: QueuedItem | undefined): QueuedItem => {
+  expect(item).toBeDefined();
+  if (!item) {
+    throw new Error("Expected queued notification item");
+  }
+  return item;
 };
 
 describe("NotificationManager follow/raid/share behavior", () => {
@@ -58,12 +53,14 @@ describe("NotificationManager follow/raid/share behavior", () => {
   let config: ReturnType<typeof createConfigFixture>;
   let eventBus: EventBusMock;
   let vfxCommandService: VfxCommandServiceMock;
-  let manager: NotificationManagerLike;
+  let manager: NotificationManager;
 
   beforeEach(() => {
     queuedItems = [];
     displayQueue = {
-      addItem: createMockFn((item: QueuedItem) => queuedItems.push(item)),
+      addItem: createMockFn<[QueuedItem], void>((item) => {
+        queuedItems.push(item);
+      }),
       getQueueLength: createMockFn(() => queuedItems.length),
     };
 
@@ -77,12 +74,15 @@ describe("NotificationManager follow/raid/share behavior", () => {
     });
 
     vfxCommandService = {
-      getVFXConfig: createMockFn().mockImplementation(async (commandKey) => ({
+      getVFXConfig: createMockFn<
+        [string],
+        Promise<{ commandKey: string; filename: string }>
+      >(async (commandKey) => ({
         commandKey,
         filename: `${commandKey}.mp4`,
       })),
-      executeCommand: createMockFn().mockResolvedValue({ success: true }),
-      executeCommandForKey: createMockFn().mockResolvedValue({ success: true }),
+      executeCommand: createMockFn<unknown[], Promise<{ success: boolean }>>().mockResolvedValue({ success: true }),
+      executeCommandForKey: createMockFn<unknown[], Promise<{ success: boolean }>>().mockResolvedValue({ success: true }),
     };
 
     eventBus = {
@@ -97,7 +97,6 @@ describe("NotificationManager follow/raid/share behavior", () => {
       config,
       eventBus,
       constants,
-      textProcessing: { formatChatMessage: createMockFn() },
       obsGoals: { processDonationGoal: createMockFn() },
       vfxCommandService,
     });
@@ -116,7 +115,7 @@ describe("NotificationManager follow/raid/share behavior", () => {
     expect(result.success).toBe(true);
     expect(queuedItems).toHaveLength(1);
 
-    const queued = queuedItems[0];
+    const queued = requireQueuedItem(queuedItems[0]);
     expect(queued.priority).toBe(constants.PRIORITY_LEVELS.SHARE);
     expect(result.priority).toBe(constants.PRIORITY_LEVELS.SHARE);
     expect(queued.vfxConfig).toEqual(
@@ -139,7 +138,6 @@ describe("NotificationManager follow/raid/share behavior", () => {
       config: disabledConfig,
       eventBus,
       constants,
-      textProcessing: { formatChatMessage: createMockFn() },
       obsGoals: { processDonationGoal: createMockFn() },
       vfxCommandService,
     });
@@ -174,7 +172,6 @@ describe("NotificationManager follow/raid/share behavior", () => {
       config: disabledConfig,
       eventBus,
       constants,
-      textProcessing: { formatChatMessage: createMockFn() },
       obsGoals: { processDonationGoal: createMockFn() },
       vfxCommandService,
     });
@@ -223,7 +220,7 @@ describe("NotificationManager follow/raid/share behavior", () => {
       userId: "follow-2",
     });
 
-    expect(queuedItems[0].vfxConfig).toEqual(
+    expect(requireQueuedItem(queuedItems[0]).vfxConfig).toEqual(
       expect.objectContaining({
         commandKey: "follows",
       }),
@@ -271,7 +268,7 @@ describe("NotificationManager follow/raid/share behavior", () => {
     });
 
     expect(result.success).toBe(true);
-    const raidItem = queuedItems[0];
+    const raidItem = requireQueuedItem(queuedItems[0]);
     expect(raidItem.data?.displayMessage).toBe(
       "Incoming raid from ZeroRaider with 0 viewers!",
     );
@@ -287,7 +284,7 @@ describe("NotificationManager follow/raid/share behavior", () => {
       userId: "raid-vfx",
     });
 
-    expect(queuedItems[0].vfxConfig).toEqual(
+    expect(requireQueuedItem(queuedItems[0]).vfxConfig).toEqual(
       expect.objectContaining({
         commandKey: "raids",
       }),
@@ -304,7 +301,6 @@ describe("NotificationManager follow/raid/share behavior", () => {
       config: disabledConfig,
       eventBus,
       constants,
-      textProcessing: { formatChatMessage: createMockFn() },
       obsGoals: { processDonationGoal: createMockFn() },
       vfxCommandService,
     });
