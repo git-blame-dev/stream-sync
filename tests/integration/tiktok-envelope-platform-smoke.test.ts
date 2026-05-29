@@ -5,34 +5,70 @@ import { PlatformLifecycleService } from "../../src/services/PlatformLifecycleSe
 import NotificationManager from "../../src/notifications/NotificationManager";
 import { createTestAppRuntime } from "../helpers/runtime-test-harness";
 import { createMockDisplayQueue, noOpLogger } from "../helpers/mock-factories";
-import { createTextProcessingManager } from "../../src/utils/text-processing";
 import { expectNoTechnicalArtifacts } from "../helpers/assertion-helpers";
 import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
 import { createConfigFixture } from "../helpers/config-fixture";
+
+type TestEventHandler = (event: Record<string, unknown>) => Promise<void> | void;
+type TestEventBus = {
+  emit: (event: string, payload: unknown) => void;
+  on: (event: string, handler: (...args: unknown[]) => void) => EventEmitter;
+  subscribe: (event: string, handler: TestEventHandler) => () => void;
+};
+type UserFacingData = {
+  displayMessage: string;
+  ttsMessage: string;
+  logMessage: string;
+  username?: string;
+  currency?: string;
+};
+type QueueItem = { type: string; platform: string; data: UserFacingData };
+type LifecycleHandlers = { onEnvelope: (payload: Record<string, unknown>) => void };
+
+const requireQueueItem = (value: unknown): QueueItem => {
+  if (!value || typeof value !== "object") {
+    throw new Error("Expected display queue item");
+  }
+  const record = value as Record<string, unknown>;
+  if (!record.data || typeof record.data !== "object") {
+    throw new Error("Expected queued item data");
+  }
+  return record as QueueItem;
+};
 
 describe("TikTok envelope platform flow (smoke)", () => {
   afterEach(() => {
     restoreAllMocks();
   });
 
-  const createEventBus = () => {
+  const createEventBus = (): TestEventBus => {
     const emitter = new EventEmitter();
     return {
-      emit: emitter.emit.bind(emitter),
+      emit: (event: string, payload: unknown) => {
+        emitter.emit(event, payload);
+      },
       on: emitter.on.bind(emitter),
-      subscribe: (event, handler) => {
-        emitter.on(event, handler);
-        return () => emitter.off(event, handler);
+      subscribe: (event: string, handler: TestEventHandler) => {
+        const listener = (payload: unknown) => {
+          if (payload && typeof payload === "object") {
+            void handler(payload as Record<string, unknown>);
+          }
+        };
+        emitter.on(event, listener);
+        return () => emitter.off(event, listener);
       },
     };
   };
 
-  const assertNonEmptyString = (value) => {
+  const assertNonEmptyString = (value: string) => {
     expect(typeof value).toBe("string");
     expect(value.trim()).not.toBe("");
   };
 
-  const assertUserFacingOutput = (data, { username, keyword }) => {
+  const assertUserFacingOutput = (
+    data: UserFacingData,
+    { username, keyword }: { username: string; keyword: string },
+  ) => {
     assertNonEmptyString(data.displayMessage);
     assertNonEmptyString(data.ttsMessage);
     assertNonEmptyString(data.logMessage);
@@ -58,7 +94,6 @@ describe("TikTok envelope platform flow (smoke)", () => {
     const eventBus = createEventBus();
     const logger = noOpLogger;
     const displayQueue = createMockDisplayQueue();
-    const textProcessing = createTextProcessingManager({ logger });
     const configOverrides = {
       general: {
         debugEnabled: false,
@@ -75,7 +110,6 @@ describe("TikTok envelope platform flow (smoke)", () => {
       eventBus,
       config,
       constants: require("../../src/core/constants"),
-      textProcessing,
       obsGoals: { processDonationGoal: createMockFn() },
       vfxCommandService: {
         getVFXConfig: createMockFn().mockResolvedValue(null),
@@ -96,11 +130,10 @@ describe("TikTok envelope platform flow (smoke)", () => {
       notificationManager,
       displayQueue,
       logger,
-      platformLifecycleService,
     });
 
     class MockTikTokPlatform {
-      async initialize(handlers) {
+      async initialize(handlers: LifecycleHandlers) {
         handlers.onEnvelope({
           type: "platform:envelope",
           username: "ChestSender",
@@ -122,14 +155,15 @@ describe("TikTok envelope platform flow (smoke)", () => {
     }
 
     try {
-      await platformLifecycleService.initializeAllPlatforms({
+      const platformModules: Parameters<PlatformLifecycleService["initializeAllPlatforms"]>[0] = {
         tiktok: MockTikTokPlatform,
-      });
+      };
+      await platformLifecycleService.initializeAllPlatforms(platformModules);
       await platformLifecycleService.waitForBackgroundInits();
       await new Promise(setImmediate);
 
       expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
-      const queued = displayQueue.addItem.mock.calls[0][0];
+      const queued = requireQueueItem(displayQueue.addItem.mock.calls[0]?.[0]);
       expect(queued.type).toBe("platform:envelope");
       expect(queued.platform).toBe("tiktok");
       expect(queued.data.username).toBe("ChestSender");

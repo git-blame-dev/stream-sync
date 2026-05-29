@@ -2,14 +2,30 @@ import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { restoreAllMocks } from "../../../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../../../helpers/mock-factories";
 
-import { EventEmitter } from "events";
 import { TikTokPlatform } from "../../../../../src/platforms/tiktok.ts";
 import { PlatformEvents } from "../../../../../src/interfaces/PlatformEvents";
 import { createTikTokEventFactory } from "../../../../../src/platforms/tiktok/events/event-factory.ts";
 
 describe("TikTokPlatform monetisation mapping", () => {
-  let platform;
-  let emitted;
+  type UnknownRecord = Record<string, unknown>;
+  type EmittedEvent = { evt: string; payload: UnknownRecord };
+  type TestPlatform = TikTokPlatform & {
+    eventFactory: ReturnType<typeof createTikTokEventFactory>;
+    _normalizeUserData: (data: UnknownRecord) => UnknownRecord;
+    _getPlatformMessageId: (data: UnknownRecord) => string | undefined;
+    _buildEventMetadata: (metadata: UnknownRecord) => UnknownRecord;
+  };
+
+  let platform: TestPlatform;
+  let emitted: EmittedEvent[];
+
+  const requirePlatformEvent = (): UnknownRecord => {
+    const event = emitted.find((item) => item.evt === "platform:event");
+    if (!event) {
+      throw new Error("Expected platform:event to be emitted");
+    }
+    return event.payload;
+  };
 
   afterEach(() => {
     restoreAllMocks();
@@ -18,7 +34,11 @@ describe("TikTokPlatform monetisation mapping", () => {
   beforeEach(() => {
     emitted = [];
     const eventBus = {
-      emit: (evt, payload) => emitted.push({ evt, payload }),
+      emit: (evt: string, payload: unknown) => {
+        if (payload && typeof payload === "object") {
+          emitted.push({ evt, payload: payload as UnknownRecord });
+        }
+      },
     };
 
     platform = new TikTokPlatform(
@@ -26,22 +46,36 @@ describe("TikTokPlatform monetisation mapping", () => {
       {
         logger: noOpLogger,
         eventBus,
-        observerFactory: () => new EventEmitter(),
         TikTokWebSocketClient: function () {},
-        WebcastEvent: function () {},
-        ControlEvent: function () {},
+        WebcastEvent: {
+          CHAT: "chat",
+          GIFT: "gift",
+          FOLLOW: "follow",
+          SOCIAL: "social",
+          ROOM_USER: "roomUser",
+          ERROR: "error",
+          DISCONNECT: "disconnect",
+        },
+        ControlEvent: {},
       },
-    );
+    ) as TestPlatform;
 
     platform.eventFactory = createTikTokEventFactory({
       platformName: "tiktok",
-      getTimestamp: (data) => data.timestamp || "2024-01-01T00:00:00Z",
+      getTimestamp: (data: UnknownRecord) =>
+        typeof data.timestamp === "string" ? data.timestamp : "2024-01-01T00:00:00Z",
       normalizeUserData: (data) => platform._normalizeUserData(data),
       getPlatformMessageId: (data) => platform._getPlatformMessageId(data),
       buildEventMetadata: (metadata) => platform._buildEventMetadata(metadata),
     });
 
-    platform.emit = (evt, payload) => emitted.push({ evt, payload });
+    platform.emit = (eventName: string | symbol, ...args: unknown[]) => {
+      const payload = args[0];
+      if (typeof eventName === "string" && payload && typeof payload === "object") {
+        emitted.push({ evt: eventName, payload: payload as UnknownRecord });
+      }
+      return true;
+    };
   });
 
   it("emits paypiggy with normalized user and provided metadata", () => {
@@ -55,9 +89,7 @@ describe("TikTokPlatform monetisation mapping", () => {
 
     platform.emit("platform:event", handler);
 
-    const paypiggyEvent = emitted.find(
-      (e) => e.evt === "platform:event",
-    )?.payload;
+    const paypiggyEvent = requirePlatformEvent();
     expect(paypiggyEvent.type).toBe(PlatformEvents.PAYPIGGY);
     expect(paypiggyEvent.userId).toBe("memberuser");
     expect(paypiggyEvent.username).toBe("MemberUser");
@@ -78,9 +110,7 @@ describe("TikTokPlatform monetisation mapping", () => {
 
     platform.emit("platform:event", handler);
 
-    const paypiggyEvent = emitted.find(
-      (e) => e.evt === "platform:event",
-    )?.payload;
+    const paypiggyEvent = requirePlatformEvent();
     expect(paypiggyEvent.type).toBe(PlatformEvents.PAYPIGGY);
     expect(paypiggyEvent.tier).toBe("superfan");
   });
@@ -93,9 +123,7 @@ describe("TikTokPlatform monetisation mapping", () => {
 
     platform.emit("platform:event", handler);
 
-    const paypiggyEvent = emitted.find(
-      (e) => e.evt === "platform:event",
-    )?.payload;
+    const paypiggyEvent = requirePlatformEvent();
     expect(paypiggyEvent.type).toBe(PlatformEvents.PAYPIGGY);
     expect(paypiggyEvent.userId).toBe("plainmember");
     expect(paypiggyEvent.username).toBe("PlainMember");
@@ -121,7 +149,7 @@ describe("TikTokPlatform monetisation mapping", () => {
 
     platform.emit("platform:event", handler);
 
-    const giftEvent = emitted.find((e) => e.evt === "platform:event")?.payload;
+    const giftEvent = requirePlatformEvent();
     expect(giftEvent.type).toBe(PlatformEvents.GIFT);
     expect(giftEvent.giftType).toBe("Rose");
     expect(giftEvent.giftCount).toBe(2);

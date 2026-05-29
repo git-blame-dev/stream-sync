@@ -7,7 +7,38 @@ import { noOpLogger } from "../../../../helpers/mock-factories";
 import { TikTokPlatform } from "../../../../../src/platforms/tiktok.ts";
 import { PlatformEvents } from "../../../../../src/interfaces/PlatformEvents";
 
-const createPlatform = (configOverrides = {}, dependencyOverrides = {}) => {
+type UnknownRecord = Record<string, unknown>;
+type EmittedPlatformEvent = { data: UnknownRecord };
+type WebcastEventMap = {
+  CHAT: string;
+  GIFT: string;
+  FOLLOW: string;
+  SOCIAL: string;
+  ROOM_USER: string;
+  ERROR: string;
+  DISCONNECT: string;
+};
+type DependencyOverrides = {
+  logger?: unknown;
+  notificationManager?: unknown;
+  connectionFactory?: { createConnection: (...args: unknown[]) => unknown };
+  TikTokWebSocketClient?: unknown;
+  WebcastEvent?: Partial<WebcastEventMap>;
+  ControlEvent?: Record<string, string>;
+};
+
+const requireFirst = <T>(items: T[]): T => {
+  const first = items[0];
+  if (first === undefined) {
+    throw new Error("Expected at least one emitted event");
+  }
+  return first;
+};
+
+const createPlatform = (
+  configOverrides: UnknownRecord = {},
+  dependencyOverrides: DependencyOverrides = {},
+) => {
   const logger = dependencyOverrides.logger || noOpLogger;
   const notificationManager = dependencyOverrides.notificationManager || {
     emit: createMockFn(),
@@ -20,8 +51,8 @@ const createPlatform = (configOverrides = {}, dependencyOverrides = {}) => {
       on: createMockFn(),
       emit: createMockFn(),
       removeAllListeners: createMockFn(),
-      connect: createMockFn().mockResolvedValue(),
-      disconnect: createMockFn(),
+      connect: createMockFn().mockResolvedValue(true),
+      disconnect: createMockFn().mockResolvedValue(true),
     }),
   };
 
@@ -30,18 +61,29 @@ const createPlatform = (configOverrides = {}, dependencyOverrides = {}) => {
     createMockFn().mockImplementation(() => ({
       on: createMockFn(),
       off: createMockFn(),
-      connect: createMockFn(),
-      disconnect: createMockFn(),
+      connect: createMockFn().mockResolvedValue(true),
+      disconnect: createMockFn().mockResolvedValue(true),
       getState: createMockFn().mockReturnValue("DISCONNECTED"),
       isConnecting: false,
       isConnected: false,
     }));
 
-  const WebcastEvent = dependencyOverrides.WebcastEvent || {
+  const WebcastEvent: WebcastEventMap = {
+    CHAT: "chat",
+    GIFT: "gift",
+    FOLLOW: "follow",
+    SOCIAL: "social",
+    ROOM_USER: "roomUser",
     ERROR: "error",
     DISCONNECT: "disconnect",
+    ...dependencyOverrides.WebcastEvent,
   };
   const ControlEvent = dependencyOverrides.ControlEvent || {};
+  const {
+    WebcastEvent: _webcastEventOverride,
+    ControlEvent: _controlEventOverride,
+    ...remainingDependencyOverrides
+  } = dependencyOverrides;
 
   const config = {
     enabled: true,
@@ -56,7 +98,7 @@ const createPlatform = (configOverrides = {}, dependencyOverrides = {}) => {
     WebcastEvent,
     ControlEvent,
     connectionFactory,
-    ...dependencyOverrides,
+    ...remainingDependencyOverrides,
   });
 };
 
@@ -96,8 +138,8 @@ describe("TikTokPlatform _handleEventProcessingError", () => {
   describe("monetization events with valid data", () => {
     it("returns payloadEmitted=true for gift errors with valid identity", () => {
       const platform = createPlatform();
-      const emittedEvents = [];
-      platform.on("platform:event", (e) => emittedEvents.push(e));
+      const emittedEvents: EmittedPlatformEvent[] = [];
+      platform.on("platform:event", (event: EmittedPlatformEvent) => emittedEvents.push(event));
 
       const result = platform._handleEventProcessingError(
         PlatformEvents.GIFT,
@@ -112,13 +154,13 @@ describe("TikTokPlatform _handleEventProcessingError", () => {
 
       expect(result.payloadEmitted).toBe(true);
       expect(emittedEvents).toHaveLength(1);
-      expect(emittedEvents[0].data.username).toBe("testGifter");
+      expect(requireFirst(emittedEvents).data.username).toBe("testGifter");
     });
 
     it("returns payloadEmitted=true for envelope errors with valid identity", () => {
       const platform = createPlatform();
-      const emittedEvents = [];
-      platform.on("platform:event", (e) => emittedEvents.push(e));
+      const emittedEvents: EmittedPlatformEvent[] = [];
+      platform.on("platform:event", (event: EmittedPlatformEvent) => emittedEvents.push(event));
 
       const result = platform._handleEventProcessingError(
         PlatformEvents.ENVELOPE,
@@ -134,8 +176,8 @@ describe("TikTokPlatform _handleEventProcessingError", () => {
   describe("monetization events with incomplete data", () => {
     it("emits error payload even without identity data", () => {
       const platform = createPlatform();
-      const emittedEvents = [];
-      platform.on("platform:event", (e) => emittedEvents.push(e));
+      const emittedEvents: EmittedPlatformEvent[] = [];
+      platform.on("platform:event", (event: EmittedPlatformEvent) => emittedEvents.push(event));
 
       const result = platform._handleEventProcessingError(
         PlatformEvents.GIFT,
@@ -145,13 +187,13 @@ describe("TikTokPlatform _handleEventProcessingError", () => {
 
       expect(result.payloadEmitted).toBe(true);
       expect(emittedEvents).toHaveLength(1);
-      expect(emittedEvents[0].data.isError).toBe(true);
+      expect(requireFirst(emittedEvents).data.isError).toBe(true);
     });
 
     it("emits error payload with partial identity", () => {
       const platform = createPlatform();
-      const emittedEvents = [];
-      platform.on("platform:event", (e) => emittedEvents.push(e));
+      const emittedEvents: EmittedPlatformEvent[] = [];
+      platform.on("platform:event", (event: EmittedPlatformEvent) => emittedEvents.push(event));
 
       const result = platform._handleEventProcessingError(
         PlatformEvents.GIFT,
@@ -160,15 +202,15 @@ describe("TikTokPlatform _handleEventProcessingError", () => {
       );
 
       expect(result.payloadEmitted).toBe(true);
-      expect(emittedEvents[0].data.isError).toBe(true);
+      expect(requireFirst(emittedEvents).data.isError).toBe(true);
     });
   });
 
   describe("error payload structure", () => {
     it("includes isError flag in emitted payload", () => {
       const platform = createPlatform();
-      const emittedEvents = [];
-      platform.on("platform:event", (e) => emittedEvents.push(e));
+      const emittedEvents: EmittedPlatformEvent[] = [];
+      platform.on("platform:event", (event: EmittedPlatformEvent) => emittedEvents.push(event));
 
       platform._handleEventProcessingError(
         PlatformEvents.GIFT,
@@ -176,14 +218,15 @@ describe("TikTokPlatform _handleEventProcessingError", () => {
         new Error("processing failed"),
       );
 
-      expect(emittedEvents[0].data.isError).toBe(true);
-      expect(emittedEvents[0].data.platform).toBe("tiktok");
+      const emittedEvent = requireFirst(emittedEvents);
+      expect(emittedEvent.data.isError).toBe(true);
+      expect(emittedEvent.data.platform).toBe("tiktok");
     });
 
     it("includes identity fields when available", () => {
       const platform = createPlatform();
-      const emittedEvents = [];
-      platform.on("platform:event", (e) => emittedEvents.push(e));
+      const emittedEvents: EmittedPlatformEvent[] = [];
+      platform.on("platform:event", (event: EmittedPlatformEvent) => emittedEvents.push(event));
 
       platform._handleEventProcessingError(
         PlatformEvents.ENVELOPE,
@@ -191,8 +234,9 @@ describe("TikTokPlatform _handleEventProcessingError", () => {
         new Error("processing failed"),
       );
 
-      expect(emittedEvents[0].data.username).toBe("testEnvelope");
-      expect(emittedEvents[0].data.userId).toBe("456");
+      const emittedEvent = requireFirst(emittedEvents);
+      expect(emittedEvent.data.username).toBe("testEnvelope");
+      expect(emittedEvent.data.userId).toBe("456");
     });
   });
 });

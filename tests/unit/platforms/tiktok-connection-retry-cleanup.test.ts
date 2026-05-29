@@ -7,13 +7,27 @@ import { createMockTikTokPlatformDependencies } from "../../helpers/mock-factori
 
 describe("TikTokPlatform connection recovery", () => {
   const baseConfig = { enabled: true, username: "retry_tester" };
+  type TestConnection = EventEmitter & {
+    id: string;
+    isConnecting: boolean;
+    isConnected: boolean;
+    connect: () => Promise<boolean>;
+    disconnect: () => Promise<boolean>;
+  };
+  type ViewerCountEvent = { platform: string; count: number };
 
   afterEach(() => {
     restoreAllMocks();
   });
 
-  const createConnection = ({ shouldReject, id }) => {
-    const connection = new EventEmitter();
+  const createConnection = ({
+    shouldReject,
+    id,
+  }: {
+    shouldReject: boolean;
+    id: string;
+  }): TestConnection => {
+    const connection = new EventEmitter() as TestConnection;
     connection.id = id;
     connection.isConnecting = false;
     connection.isConnected = false;
@@ -36,13 +50,15 @@ describe("TikTokPlatform connection recovery", () => {
     const connection1 = createConnection({ shouldReject: true, id: "conn-1" });
     const connection2 = createConnection({ shouldReject: false, id: "conn-2" });
 
-    const dependencies = createMockTikTokPlatformDependencies({
-      controlEvent: {
+    const dependencyBase = createMockTikTokPlatformDependencies();
+    const dependencies = {
+      ...dependencyBase,
+      ControlEvent: {
         CONNECTED: "connected",
         DISCONNECTED: "disconnected",
         ERROR: "error",
       },
-      webcastEvent: {
+      WebcastEvent: {
         CHAT: "chat",
         GIFT: "gift",
         FOLLOW: "follow",
@@ -60,7 +76,7 @@ describe("TikTokPlatform connection recovery", () => {
         DISCONNECT: "disconnect",
         STREAM_END: "stream_end",
       },
-    });
+    };
 
     const connectionFactory = {
       createConnection: createMockFn()
@@ -68,13 +84,18 @@ describe("TikTokPlatform connection recovery", () => {
         .mockReturnValueOnce(connection2),
     };
 
-    dependencies.connectionFactory = connectionFactory;
+    const platformDependencies = {
+      ...dependencies,
+      connectionFactory,
+    };
 
-    const viewerCounts = [];
-    const platform = new TikTokPlatform(baseConfig, dependencies);
+    const viewerCounts: ViewerCountEvent[] = [];
+    const platform = new TikTokPlatform(baseConfig, platformDependencies);
     platform.handlers = {
       ...platform.handlers,
-      onViewerCount: (payload) => viewerCounts.push(payload),
+      onViewerCount: (payload: unknown) => {
+        viewerCounts.push(payload as ViewerCountEvent);
+      },
     };
 
     await expect(platform.initialize(platform.handlers)).rejects.toThrow(
@@ -82,9 +103,9 @@ describe("TikTokPlatform connection recovery", () => {
     );
 
     await platform.initialize(platform.handlers);
-    connection2.emit(dependencies.ControlEvent.CONNECTED);
+    connection2.emit(platformDependencies.ControlEvent.CONNECTED);
     const viewerTimestamp = Date.parse("2024-01-01T00:00:00Z");
-    connection2.emit(dependencies.WebcastEvent.ROOM_USER, {
+    connection2.emit(platformDependencies.WebcastEvent.ROOM_USER, {
       viewerCount: 99,
       common: { createTime: viewerTimestamp },
     });

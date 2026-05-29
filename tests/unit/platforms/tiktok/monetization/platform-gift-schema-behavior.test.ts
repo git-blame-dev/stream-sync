@@ -14,6 +14,24 @@ import { createMockTikTokPlatformDependencies } from "../../../../helpers/mock-f
 import * as testClock from "../../../../helpers/test-clock";
 
 describe("TikTokPlatform gift aggregation and schema behavior", () => {
+  type GiftEvent = {
+    userId: string;
+    username: string;
+    amount: number;
+    giftType: string;
+    giftCount: number;
+    repeatCount: number;
+    currency: string;
+    giftImageUrl?: string;
+    aggregatedCount?: number;
+    isAggregated: boolean;
+  };
+  type ChatEvent = {
+    userId: string;
+    username: string;
+    message: { text: string };
+  };
+
   const baseConfig = {
     enabled: true,
     username: "gift_tester",
@@ -22,6 +40,15 @@ describe("TikTokPlatform gift aggregation and schema behavior", () => {
 
   const createDependencies = () => ({
     ...createMockTikTokPlatformDependencies(),
+    WebcastEvent: {
+      CHAT: "chat",
+      GIFT: "gift",
+      FOLLOW: "follow",
+      SOCIAL: "social",
+      ROOM_USER: "roomUser",
+      ERROR: "error",
+      DISCONNECT: "disconnect",
+    },
     timestampService: {
       extractTimestamp: createMockFn(() =>
         new Date(testClock.now()).toISOString(),
@@ -31,6 +58,7 @@ describe("TikTokPlatform gift aggregation and schema behavior", () => {
       createConnection: createMockFn(() => ({
         on: createMockFn(),
         removeAllListeners: createMockFn(),
+        connect: createMockFn().mockResolvedValue(true),
         disconnect: createMockFn(),
         isConnected: false,
       })),
@@ -58,6 +86,14 @@ describe("TikTokPlatform gift aggregation and schema behavior", () => {
     await Promise.resolve();
   };
 
+  const requireFirst = <T>(items: T[]): T => {
+    const first = items[0];
+    if (first === undefined) {
+      throw new Error("Expected at least one emitted event");
+    }
+    return first;
+  };
+
   beforeEach(() => {
     useFakeTimers();
   });
@@ -69,10 +105,12 @@ describe("TikTokPlatform gift aggregation and schema behavior", () => {
 
   it("emits aggregated gifts with normalized user schema and correct amount", async () => {
     const platform = new TikTokPlatform(baseConfig, createDependencies());
-    const emittedGifts = [];
+    const emittedGifts: GiftEvent[] = [];
     platform.handlers = {
       ...platform.handlers,
-      onGift: (data) => emittedGifts.push(data),
+      onGift: (data: unknown) => {
+        emittedGifts.push(data as GiftEvent);
+      },
     };
 
     await platform.handleTikTokGift(createGiftEvent(1));
@@ -81,7 +119,7 @@ describe("TikTokPlatform gift aggregation and schema behavior", () => {
     await runAllGiftTimers();
 
     expect(emittedGifts).toHaveLength(1);
-    const [giftEvent] = emittedGifts;
+    const giftEvent = requireFirst(emittedGifts);
     expect(giftEvent.userId).toBe("gifter123");
     expect(giftEvent.username).toBe("Gifter One");
     expect(giftEvent.amount).toBe(3);
@@ -91,10 +129,12 @@ describe("TikTokPlatform gift aggregation and schema behavior", () => {
 
   it("emits chat messages with normalized user schema", async () => {
     const platform = new TikTokPlatform(baseConfig, createDependencies());
-    const chatEvents = [];
+    const chatEvents: ChatEvent[] = [];
     platform.handlers = {
       ...platform.handlers,
-      onChat: (data) => chatEvents.push(data),
+      onChat: (data: unknown) => {
+        chatEvents.push(data as ChatEvent);
+      },
     };
 
     await platform._handleChatMessage({
@@ -108,7 +148,7 @@ describe("TikTokPlatform gift aggregation and schema behavior", () => {
     });
 
     expect(chatEvents).toHaveLength(1);
-    const [chatEvent] = chatEvents;
+    const chatEvent = requireFirst(chatEvents);
     expect(chatEvent.userId).toBe("chatter");
     expect(chatEvent.username).toBe("Chatter Box");
     expect(chatEvent.message).toEqual({ text: "Hello TikTok!" });
@@ -119,10 +159,12 @@ describe("TikTokPlatform gift aggregation and schema behavior", () => {
       { ...baseConfig, giftAggregationEnabled: false },
       createDependencies(),
     );
-    const emittedGifts = [];
+    const emittedGifts: GiftEvent[] = [];
     platform.handlers = {
       ...platform.handlers,
-      onGift: (data) => emittedGifts.push(data),
+      onGift: (data: unknown) => {
+        emittedGifts.push(data as GiftEvent);
+      },
     };
 
     await platform.handleTikTokGift({
@@ -142,7 +184,7 @@ describe("TikTokPlatform gift aggregation and schema behavior", () => {
     });
 
     expect(emittedGifts).toHaveLength(1);
-    const [giftEvent] = emittedGifts;
+    const giftEvent = requireFirst(emittedGifts);
     expect(giftEvent.giftType).toBe("Heart Me");
     expect(giftEvent.giftCount).toBe(3);
     expect(giftEvent.repeatCount).toBe(3);
@@ -159,10 +201,12 @@ describe("TikTokPlatform gift aggregation and schema behavior", () => {
       { ...baseConfig, giftAggregationEnabled: true, giftAggregationDelay: 25 },
       createDependencies(),
     );
-    const emittedGifts = [];
+    const emittedGifts: GiftEvent[] = [];
     platform.handlers = {
       ...platform.handlers,
-      onGift: (data) => emittedGifts.push(data),
+      onGift: (data: unknown) => {
+        emittedGifts.push(data as GiftEvent);
+      },
     };
 
     await platform.handleTikTokGift({
@@ -181,7 +225,7 @@ describe("TikTokPlatform gift aggregation and schema behavior", () => {
     await runAllGiftTimers();
 
     expect(emittedGifts).toHaveLength(1);
-    const [giftEvent] = emittedGifts;
+    const giftEvent = requireFirst(emittedGifts);
     expect(giftEvent.giftType).toBe("User");
     expect(giftEvent.giftCount).toBe(2);
     expect(giftEvent.repeatCount).toBe(2);

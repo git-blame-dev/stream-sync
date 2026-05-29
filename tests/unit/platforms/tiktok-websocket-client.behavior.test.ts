@@ -12,6 +12,8 @@ class MockWebSocket extends EventEmitter {
   static CLOSING = 2;
   static CLOSED = 3;
 
+  readyState: number;
+
   constructor() {
     super();
     this.readyState = MockWebSocket.OPEN;
@@ -26,9 +28,36 @@ class MockWebSocket extends EventEmitter {
 }
 
 describe("TikTokWebSocketClient (behavior)", () => {
-  let TikTokWebSocketClient: any;
+  type TikTokWebSocketClientConstructor = new (
+    username: string,
+    options: { WebSocketCtor: typeof MockWebSocket },
+  ) => EventEmitter & { connect: () => Promise<{ roomId: string }>; disconnect: () => void };
+  type ChatEvent = { comment: string };
+  type GiftEvent = {
+    giftDetails: { giftName: string };
+    repeatCount: number;
+    groupId: string;
+    repeatEnd: number;
+  };
+  type StreamEndEvent = { reason: string };
+
+  let TikTokWebSocketClient: TikTokWebSocketClientConstructor;
   let mockWs: MockWebSocket | null;
-  let client: any;
+  let client: InstanceType<TikTokWebSocketClientConstructor>;
+
+  const requireMockWebSocket = () => {
+    if (!mockWs) {
+      throw new Error("Expected test WebSocket to be constructed");
+    }
+    return mockWs;
+  };
+  const requireFirst = <T>(items: T[]): T => {
+    const first = items[0];
+    if (first === undefined) {
+      throw new Error("Expected at least one captured event");
+    }
+    return first;
+  };
 
   beforeEach(() => {
     useFakeTimers();
@@ -37,8 +66,8 @@ describe("TikTokWebSocketClient (behavior)", () => {
     } = require("../../../src/platforms/tiktok-websocket-client.ts"));
     mockWs = null;
     const CapturingWebSocket = class extends MockWebSocket {
-      constructor(...args) {
-        super(...args);
+      constructor() {
+        super();
         mockWs = this;
       }
     };
@@ -55,11 +84,12 @@ describe("TikTokWebSocketClient (behavior)", () => {
   });
 
   test("resolves connect and emits room info and chat from batched messages", async () => {
-    const chatEvents = [];
-    client.on("chat", (data) => chatEvents.push(data));
+    const chatEvents: ChatEvent[] = [];
+    client.on("chat", (data: ChatEvent) => chatEvents.push(data));
 
     const connectPromise = client.connect();
-    mockWs.emit("open");
+    const ws = requireMockWebSocket();
+    ws.emit("open");
 
     const payload = {
       messages: [
@@ -76,20 +106,21 @@ describe("TikTokWebSocketClient (behavior)", () => {
         },
       ],
     };
-    mockWs.emit("message", Buffer.from(JSON.stringify(payload)));
+    ws.emit("message", Buffer.from(JSON.stringify(payload)));
 
     const roomInfo = await connectPromise;
     expect(roomInfo.roomId).toBe("room123");
     expect(chatEvents).toHaveLength(1);
-    expect(chatEvents[0].comment).toBe("hello world");
+    expect(requireFirst(chatEvents).comment).toBe("hello world");
   });
 
   test("emits gift events with repeat and group data", async () => {
-    const gifts = [];
-    client.on("gift", (data) => gifts.push(data));
+    const gifts: GiftEvent[] = [];
+    client.on("gift", (data: GiftEvent) => gifts.push(data));
 
     const connectPromise = client.connect();
-    mockWs.emit("open");
+    const ws = requireMockWebSocket();
+    ws.emit("open");
 
     const payload = {
       messages: [
@@ -108,32 +139,34 @@ describe("TikTokWebSocketClient (behavior)", () => {
         },
       ],
     };
-    mockWs.emit("message", Buffer.from(JSON.stringify(payload)));
+    ws.emit("message", Buffer.from(JSON.stringify(payload)));
     await connectPromise;
 
     expect(gifts).toHaveLength(1);
-    expect(gifts[0].giftDetails.giftName).toBe("Rose");
-    expect(gifts[0].repeatCount).toBe(3);
-    expect(gifts[0].groupId).toBe("g123");
-    expect(gifts[0].repeatEnd).toBe(0);
+    const gift = requireFirst(gifts);
+    expect(gift.giftDetails.giftName).toBe("Rose");
+    expect(gift.repeatCount).toBe(3);
+    expect(gift.groupId).toBe("g123");
+    expect(gift.repeatEnd).toBe(0);
   });
 
   test("emits streamEnd on close code 4404 and rejects connect", async () => {
-    const streamEndEvents = [];
-    client.on("streamEnd", (data) => streamEndEvents.push(data));
+    const streamEndEvents: StreamEndEvent[] = [];
+    client.on("streamEnd", (data: StreamEndEvent) => streamEndEvents.push(data));
 
     const connectPromise = client.connect();
-    mockWs.emit("open");
-    mockWs.emit("close", 4404, "offline");
+    const ws = requireMockWebSocket();
+    ws.emit("open");
+    ws.emit("close", 4404, "offline");
 
     await expect(connectPromise).rejects.toBeInstanceOf(Error);
     expect(streamEndEvents).toHaveLength(1);
-    expect(streamEndEvents[0].reason).toBe("User is not live");
+    expect(requireFirst(streamEndEvents).reason).toBe("User is not live");
   });
 
   test("rejects connect when no room info arrives before timeout", async () => {
     const connectPromise = client.connect();
-    mockWs.emit("open");
+    requireMockWebSocket().emit("open");
 
     advanceTimersByTime(16000);
 

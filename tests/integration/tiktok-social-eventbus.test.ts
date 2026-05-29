@@ -14,20 +14,37 @@ import {
 } from "../helpers/tiktok-test-data";
 import { restoreAllMocks } from "../helpers/bun-mock-utils";
 
-const createEventBus = () => {
+type PlatformEventPayload = {
+  type: string;
+  platform: string;
+  data: {
+    userId: string;
+    username: string;
+    timestamp: string;
+  };
+};
+
+type TestEventBus = {
+  emit: (event: string, payload: unknown) => void;
+  subscribe: (event: string, handler: (payload: PlatformEventPayload) => void) => () => void;
+};
+
+const createEventBus = (): TestEventBus => {
   const emitter = new EventEmitter();
   return {
-    emit: emitter.emit.bind(emitter),
-    subscribe: (event, handler) => {
+    emit: (event: string, payload: unknown) => {
+      emitter.emit(event, payload);
+    },
+    subscribe: (event: string, handler: (payload: PlatformEventPayload) => void) => {
       emitter.on(event, handler);
       return () => emitter.off(event, handler);
     },
   };
 };
 
-const waitForPlatformEvent = (eventBus) =>
-  new Promise((resolve) => {
-    const unsubscribe = eventBus.subscribe("platform:event", (event) => {
+const waitForPlatformEvent = (eventBus: TestEventBus) =>
+  new Promise<PlatformEventPayload>((resolve) => {
+    const unsubscribe = eventBus.subscribe("platform:event", (event: PlatformEventPayload) => {
       unsubscribe();
       resolve(event);
     });
@@ -36,7 +53,18 @@ const waitForPlatformEvent = (eventBus) =>
 const createPlatform = () =>
   new TikTokPlatform(
     createTikTokConfigFixture({ enabled: true }),
-    createMockTikTokPlatformDependencies(),
+    {
+      ...createMockTikTokPlatformDependencies(),
+      WebcastEvent: {
+        CHAT: "chat",
+        GIFT: "gift",
+        FOLLOW: "follow",
+        SOCIAL: "social",
+        ROOM_USER: "roomUser",
+        ERROR: "error",
+        DISCONNECT: "disconnect",
+      },
+    },
   );
 
 describe("TikTok social event bus routing (integration)", () => {

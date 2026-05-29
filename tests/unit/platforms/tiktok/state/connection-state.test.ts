@@ -6,7 +6,58 @@ import {
 import { noOpLogger } from "../../../../helpers/mock-factories";
 import { TikTokPlatform } from "../../../../../src/platforms/tiktok.ts";
 
-const createPlatform = (configOverrides = {}, dependencyOverrides = {}) => {
+type UnknownRecord = Record<string, unknown>;
+type TestConnection = {
+  isConnecting?: boolean;
+  isConnected?: boolean;
+  connectionId?: string;
+  connect: () => Promise<unknown>;
+  disconnect: () => Promise<unknown>;
+  on: (eventName: string, handler: (payload: unknown) => void) => void;
+};
+type StatsConfig = {
+  username?: string;
+  viewerCountEnabled?: boolean;
+  greetingsEnabled?: boolean;
+};
+type WebcastEventMap = {
+  CHAT: string;
+  GIFT: string;
+  FOLLOW: string;
+  SOCIAL: string;
+  ROOM_USER: string;
+  ERROR: string;
+  DISCONNECT: string;
+};
+type DependencyOverrides = {
+  logger?: unknown;
+  notificationManager?: unknown;
+  connectionFactory?: { createConnection: (...args: unknown[]) => unknown };
+  TikTokWebSocketClient?: unknown;
+  WebcastEvent?: Partial<WebcastEventMap>;
+  ControlEvent?: Record<string, string>;
+};
+
+const createTestConnection = (
+  overrides: Partial<TestConnection> = {},
+): TestConnection => ({
+  connect: createMockFn().mockResolvedValue(true),
+  disconnect: createMockFn().mockResolvedValue(true),
+  on: createMockFn(),
+  ...overrides,
+});
+
+const requireStatsConfig = (value: unknown): StatsConfig => {
+  if (!value || typeof value !== "object") {
+    throw new Error("Expected stats.config to be an object");
+  }
+  return value;
+};
+
+const createPlatform = (
+  configOverrides: UnknownRecord = {},
+  dependencyOverrides: DependencyOverrides = {},
+) => {
   const logger = dependencyOverrides.logger || noOpLogger;
   const notificationManager = dependencyOverrides.notificationManager || {
     emit: createMockFn(),
@@ -19,8 +70,8 @@ const createPlatform = (configOverrides = {}, dependencyOverrides = {}) => {
       on: createMockFn(),
       emit: createMockFn(),
       removeAllListeners: createMockFn(),
-      connect: createMockFn(),
-      disconnect: createMockFn(),
+      connect: createMockFn().mockResolvedValue(true),
+      disconnect: createMockFn().mockResolvedValue(true),
     }),
   };
 
@@ -29,18 +80,29 @@ const createPlatform = (configOverrides = {}, dependencyOverrides = {}) => {
     createMockFn().mockImplementation(() => ({
       on: createMockFn(),
       off: createMockFn(),
-      connect: createMockFn(),
-      disconnect: createMockFn(),
+      connect: createMockFn().mockResolvedValue(true),
+      disconnect: createMockFn().mockResolvedValue(true),
       getState: createMockFn().mockReturnValue("DISCONNECTED"),
       isConnecting: false,
       isConnected: false,
     }));
 
-  const WebcastEvent = dependencyOverrides.WebcastEvent || {
+  const WebcastEvent: WebcastEventMap = {
+    CHAT: "chat",
+    GIFT: "gift",
+    FOLLOW: "follow",
+    SOCIAL: "social",
+    ROOM_USER: "roomUser",
     ERROR: "error",
     DISCONNECT: "disconnect",
+    ...dependencyOverrides.WebcastEvent,
   };
   const ControlEvent = dependencyOverrides.ControlEvent || {};
+  const {
+    WebcastEvent: _webcastEventOverride,
+    ControlEvent: _controlEventOverride,
+    ...remainingDependencyOverrides
+  } = dependencyOverrides;
 
   const config = {
     enabled: true,
@@ -52,10 +114,10 @@ const createPlatform = (configOverrides = {}, dependencyOverrides = {}) => {
     logger,
     notificationManager,
     TikTokWebSocketClient,
-    WebcastEvent,
+      WebcastEvent,
     ControlEvent,
     connectionFactory,
-    ...dependencyOverrides,
+    ...remainingDependencyOverrides,
   });
 };
 
@@ -77,7 +139,7 @@ describe("TikTokPlatform connection state", () => {
 
     it("returns canConnect=false when connection.isConnecting is true", () => {
       const platform = createPlatform();
-      platform.connection = { isConnecting: true, isConnected: false };
+      platform.connection = createTestConnection({ isConnecting: true, isConnected: false });
 
       const result = platform.checkConnectionPrerequisites();
 
@@ -87,7 +149,7 @@ describe("TikTokPlatform connection state", () => {
 
     it("returns canConnect=false when connection.isConnected is true", () => {
       const platform = createPlatform();
-      platform.connection = { isConnecting: false, isConnected: true };
+      platform.connection = createTestConnection({ isConnecting: false, isConnected: true });
 
       const result = platform.checkConnectionPrerequisites();
 
@@ -117,14 +179,14 @@ describe("TikTokPlatform connection state", () => {
 
     it("returns true when connection.isConnected is true", () => {
       const platform = createPlatform();
-      platform.connection = { isConnected: true };
+      platform.connection = createTestConnection({ isConnected: true });
 
       expect(platform.connectionStatus).toBe(true);
     });
 
     it("returns false when connection.isConnected is false", () => {
       const platform = createPlatform();
-      platform.connection = { isConnected: false };
+      platform.connection = createTestConnection({ isConnected: false });
 
       expect(platform.connectionStatus).toBe(false);
     });
@@ -140,14 +202,14 @@ describe("TikTokPlatform connection state", () => {
 
     it("returns true when connection.isConnecting is true", () => {
       const platform = createPlatform();
-      platform.connection = { isConnecting: true };
+      platform.connection = createTestConnection({ isConnecting: true });
 
       expect(platform.isConnecting).toBe(true);
     });
 
     it("returns false when connection.isConnecting is false", () => {
       const platform = createPlatform();
-      platform.connection = { isConnecting: false };
+      platform.connection = createTestConnection({ isConnecting: false });
 
       expect(platform.isConnecting).toBe(false);
     });
@@ -156,11 +218,11 @@ describe("TikTokPlatform connection state", () => {
   describe("getConnectionState", () => {
     it("returns isConnected/isConnecting from connection when present", () => {
       const platform = createPlatform();
-      platform.connection = {
+      platform.connection = createTestConnection({
         isConnected: true,
         isConnecting: false,
         connectionId: "test-conn-123",
-      };
+      });
       platform.connectionTime = 1704067200000;
 
       const state = platform.getConnectionState();
@@ -188,7 +250,7 @@ describe("TikTokPlatform connection state", () => {
   describe("getStats", () => {
     it("returns platform, enabled, connected state", () => {
       const platform = createPlatform({ enabled: true, username: "testUser" });
-      platform.connection = { isConnected: true, isConnecting: false };
+      platform.connection = createTestConnection({ isConnected: true, isConnecting: false });
 
       const stats = platform.getStats();
 
@@ -208,9 +270,10 @@ describe("TikTokPlatform connection state", () => {
 
       const stats = platform.getStats();
 
-      expect(stats.config.username).toBe("testStreamer");
-      expect(stats.config.viewerCountEnabled).toBe(true);
-      expect(stats.config.greetingsEnabled).toBe(false);
+      const statsConfig = requireStatsConfig(stats.config);
+      expect(statsConfig.username).toBe("testStreamer");
+      expect(statsConfig.viewerCountEnabled).toBe(true);
+      expect(statsConfig.greetingsEnabled).toBe(false);
     });
   });
 
@@ -220,11 +283,11 @@ describe("TikTokPlatform connection state", () => {
         enabled: true,
         username: "testStreamer",
       });
-      platform.connection = {
+      platform.connection = createTestConnection({
         isConnected: true,
         isConnecting: false,
         connectionId: "conn-456",
-      };
+      });
 
       const status = platform.getStatus();
 
@@ -266,7 +329,7 @@ describe("TikTokPlatform connection state", () => {
   describe("validateConfig", () => {
     it("delegates to getStatus for standardized interface", () => {
       const platform = createPlatform({ enabled: true, username: "testUser" });
-      platform.connection = { isConnected: true };
+      platform.connection = createTestConnection({ isConnected: true });
 
       const result = platform.validateConfig();
 

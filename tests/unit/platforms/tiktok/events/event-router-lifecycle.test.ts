@@ -9,19 +9,48 @@ const {
   setupTikTokEventListeners,
 } = require("../../../../../src/platforms/tiktok/events/event-router.ts");
 
+type Listener = (payload?: unknown) => unknown;
+type ListenerMap = Record<string, Listener>;
+type EmittedEvent = { type: string; payload: unknown };
+type RetryCall = { source: string };
+type DisconnectionEvent = { handler: string };
+type HandledError = {
+  error: unknown;
+  context: string;
+  payload: unknown;
+  message: string;
+};
+type PlatformHarnessOverrides = Record<string, unknown>;
+
+const requireListener = (listeners: ListenerMap, eventName: string): Listener => {
+  const listener = listeners[eventName];
+  if (!listener) {
+    throw new Error(`Expected listener for ${eventName}`);
+  }
+  return listener;
+};
+
+const requireFirst = <T>(items: T[]): T => {
+  const first = items[0];
+  if (first === undefined) {
+    throw new Error("Expected at least one item");
+  }
+  return first;
+};
+
 describe("TikTok event router connection lifecycle", () => {
   afterEach(() => {
     restoreAllMocks();
   });
 
-  const createPlatformHarness = (overrides = {}) => {
-    const listeners = {};
-    const emitted = [];
-    const retryCalls = [];
-    const disconnectionEvents = [];
+  const createPlatformHarness = (overrides: PlatformHarnessOverrides = {}) => {
+    const listeners: ListenerMap = {};
+    const emitted: EmittedEvent[] = [];
+    const retryCalls: RetryCall[] = [];
+    const disconnectionEvents: DisconnectionEvent[] = [];
 
     const connection = {
-      on: createMockFn((eventName, handler) => {
+      on: createMockFn((eventName: string, handler: Listener) => {
         listeners[eventName] = handler;
       }),
       removeAllListeners: createMockFn(),
@@ -62,7 +91,7 @@ describe("TikTok event router connection lifecycle", () => {
         resolveEventTimestampMs: createMockFn(() => null),
       },
       _logIncomingEvent: createMockFn().mockResolvedValue(),
-      _emitPlatformEvent: (type, payload) => emitted.push({ type, payload }),
+      _emitPlatformEvent: (type: string, payload: unknown) => emitted.push({ type, payload }),
       _handleStandardEvent: createMockFn().mockResolvedValue(),
       _handleStreamEnd: createMockFn().mockImplementation(async () => {
         disconnectionEvents.push({ handler: "streamEnd" });
@@ -111,8 +140,8 @@ describe("TikTok event router connection lifecycle", () => {
       const error = new Error("connection-lost");
 
       // Both events fire (as can happen in real scenarios)
-      listeners[platform.ControlEvent.ERROR](error);
-      listeners[platform.WebcastEvent.ERROR](error);
+      requireListener(listeners, platform.ControlEvent.ERROR)(error);
+      requireListener(listeners, platform.WebcastEvent.ERROR)(error);
 
       // Should only queue retry once, not twice
       expect(retryCalls.length).toBe(1);
@@ -121,8 +150,8 @@ describe("TikTok event router connection lifecycle", () => {
 
   describe("rawData listener cleanup", () => {
     test("rawData listener should be removed during cleanup", () => {
-      const cleanedEvents = [];
-      const removeAllListeners = (eventName) => {
+      const cleanedEvents: string[] = [];
+      const removeAllListeners = (eventName: string) => {
         cleanedEvents.push(eventName);
       };
       const platform = {
@@ -169,7 +198,7 @@ describe("TikTok event router connection lifecycle", () => {
       expect(platform.listenersConfigured).toBe(true);
 
       // Trigger DISCONNECT
-      listeners[platform.WebcastEvent.DISCONNECT]();
+      requireListener(listeners, platform.WebcastEvent.DISCONNECT)();
 
       // listenersConfigured should be false so reconnect can reattach listeners
       expect(platform.listenersConfigured).toBe(false);
@@ -187,7 +216,7 @@ describe("TikTok event router connection lifecycle", () => {
       setupTikTokEventListeners(platform);
 
       // Trigger DISCONNECT
-      await listeners[platform.WebcastEvent.DISCONNECT]();
+      await requireListener(listeners, platform.WebcastEvent.DISCONNECT)();
 
       expect(disconnectionEvents).toEqual([]);
       expect(platform.connectionActive).toBe(false);
@@ -204,11 +233,11 @@ describe("TikTok event router connection lifecycle", () => {
       setupTikTokEventListeners(platform);
 
       // Simulate 4404: websocket emits both disconnected and streamEnd
-      await listeners[platform.ControlEvent.DISCONNECTED]({
+      await requireListener(listeners, platform.ControlEvent.DISCONNECTED)({
         code: 4404,
         reason: "stream not live",
       });
-      await listeners[platform.WebcastEvent.STREAM_END]({ code: 4404 });
+      await requireListener(listeners, platform.WebcastEvent.STREAM_END)({ code: 4404 });
 
       // Event-router routes both events to handlers
       // Deduplication is the platform's responsibility (tested in tiktok-connection-lifecycle.test.js)
@@ -221,13 +250,18 @@ describe("TikTok event router connection lifecycle", () => {
     test("records disconnected event-processing failures without throwing", async () => {
       const disconnectionError = new Error("disconnect handling failed");
       const disconnectedPayload = { code: 4001, reason: "disconnect" };
-      const handledErrors = [];
+      const handledErrors: HandledError[] = [];
       const { platform, listeners } = createPlatformHarness({
         connectionActive: true,
         handleConnectionIssue: createMockFn().mockRejectedValue(disconnectionError),
         errorHandler: {
           handleConnectionError: createMockFn(),
-          handleEventProcessingError: (error, context, payload, message) => {
+          handleEventProcessingError: (
+            error: unknown,
+            context: string,
+            payload: unknown,
+            message: string,
+          ) => {
             handledErrors.push({ error, context, payload, message });
           },
           handleCleanupError: createMockFn(),
@@ -237,14 +271,15 @@ describe("TikTok event router connection lifecycle", () => {
       setupTikTokEventListeners(platform);
 
       await expect(
-        listeners[platform.ControlEvent.DISCONNECTED](disconnectedPayload),
+        requireListener(listeners, platform.ControlEvent.DISCONNECTED)(disconnectedPayload),
       ).resolves.toBeUndefined();
 
       expect(handledErrors).toHaveLength(1);
-      expect(handledErrors[0].error).toBe(disconnectionError);
-      expect(handledErrors[0].context).toBe("disconnected");
-      expect(handledErrors[0].payload).toEqual(disconnectedPayload);
-      expect(handledErrors[0].message).toBe(
+      const handledError = requireFirst(handledErrors);
+      expect(handledError.error).toBe(disconnectionError);
+      expect(handledError.context).toBe("disconnected");
+      expect(handledError.payload).toEqual(disconnectedPayload);
+      expect(handledError.message).toBe(
         "Error handling disconnected control event",
       );
     });
