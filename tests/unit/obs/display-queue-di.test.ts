@@ -8,8 +8,51 @@ import {
   resetDisplayQueue,
 } from "../../../src/obs/display-queue.ts";
 import { PRIORITY_LEVELS } from "../../../src/core/constants";
+import { getDefaultSourcesManager } from "../../../src/obs/sources.ts";
+import { getDefaultGoalsManager } from "../../../src/obs/goals.ts";
 
 initializeTestLogging();
+
+type DisplayQueueDependencies = ConstructorParameters<typeof DisplayQueue>[4];
+type SourcesManagerApi = ReturnType<typeof getDefaultSourcesManager>;
+type GoalsManager = ReturnType<typeof getDefaultGoalsManager>;
+
+const resolvedVoid = () => Promise.resolve();
+
+function createSourcesManagerFixture(): SourcesManagerApi {
+  return {
+    updateTextSource: createMockFn<[string, string?], Promise<void>>(resolvedVoid),
+    clearTextSource: createMockFn<[string], Promise<void>>(resolvedVoid),
+    updateChatMsgText: createMockFn<[string, string, string], Promise<void>>(resolvedVoid),
+    getSceneItemId: createMockFn<[string, string], Promise<{ sceneItemId: number }>>(async () => ({ sceneItemId: 1 })),
+    setSourceVisibility: createMockFn<[string, string, boolean], Promise<void>>(resolvedVoid),
+    getGroupSceneItemId: createMockFn<[string, string], Promise<{ sceneItemId: number }>>(async () => ({ sceneItemId: 1 })),
+    setGroupSourceVisibility: createMockFn<[string, string | null | undefined, boolean], Promise<void>>(resolvedVoid),
+    setPlatformLogoVisibility: createMockFn<[string, Record<string, unknown>], Promise<void>>(resolvedVoid),
+    setNotificationPlatformLogoVisibility: createMockFn<[string, Record<string, unknown>], Promise<void>>(resolvedVoid),
+    hideAllPlatformLogos: createMockFn<[Record<string, unknown>], Promise<void>>(resolvedVoid),
+    hideAllNotificationPlatformLogos: createMockFn<[Record<string, unknown>], Promise<void>>(resolvedVoid),
+    setChatDisplayVisibility: createMockFn<[boolean], Promise<void>>(resolvedVoid),
+    setNotificationDisplayVisibility: createMockFn<[boolean], Promise<void>>(resolvedVoid),
+    hideAllDisplays: createMockFn<[], Promise<void>>(resolvedVoid),
+    setSourceFilterEnabled: createMockFn<[string, string, boolean], Promise<void>>(resolvedVoid),
+    getSourceFilterSettings: createMockFn<[string, string], Promise<Record<string, unknown>>>(async () => ({})),
+    setSourceFilterSettings: createMockFn<[string, string, Record<string, unknown>], Promise<void>>(resolvedVoid),
+    clearSceneItemCache: createMockFn<[], void>(() => {}),
+  };
+}
+
+function createGoalsManagerFixture(): GoalsManager {
+  return {
+    initializeGoalDisplay: createMockFn<[], Promise<void>>(resolvedVoid),
+    updateAllGoalDisplays: createMockFn<[], Promise<void>>(resolvedVoid),
+    updateGoalDisplay: createMockFn<[string, string?], Promise<void>>(resolvedVoid),
+    processDonationGoal: createMockFn<[unknown, number], Promise<{ success: boolean }>>(async () => ({ success: true })),
+    processPaypiggyGoal: createMockFn<[string], Promise<{ success: boolean }>>(async () => ({ success: true })),
+    getCurrentGoalStatus: createMockFn<[string], Record<string, unknown> | null>(() => null),
+    getAllCurrentGoalStatuses: createMockFn<[], Record<string, unknown>>(() => ({})),
+  };
+}
 
 describe("DisplayQueue DI requirements", () => {
   afterEach(() => {
@@ -22,7 +65,7 @@ describe("DisplayQueue DI requirements", () => {
   });
 
   it("requires an OBS manager in the constructor", () => {
-    expect(() => new DisplayQueue(null, {}, {}, null, {})).toThrow(
+    expect(() => Reflect.construct(DisplayQueue, [null, {}, {}, null, {}])).toThrow(
       /OBSConnectionManager/,
     );
   });
@@ -88,24 +131,8 @@ describe("DisplayQueue DI requirements", () => {
 
   it("passes initializeDisplayQueue dependencies through to DisplayQueue construction", () => {
     const mockObsManager = createMockOBSManager("connected");
-    const injectedSourcesManager = {
-      updateTextSource: createMockFn().mockResolvedValue(),
-      clearTextSource: createMockFn().mockResolvedValue(),
-      setSourceVisibility: createMockFn().mockResolvedValue(),
-      setChatDisplayVisibility: createMockFn().mockResolvedValue(),
-      setNotificationDisplayVisibility: createMockFn().mockResolvedValue(),
-      setPlatformLogoVisibility: createMockFn().mockResolvedValue(),
-      setNotificationPlatformLogoVisibility: createMockFn().mockResolvedValue(),
-    };
-    const injectedGoalsManager = {
-      initializeGoalDisplay: createMockFn().mockResolvedValue(),
-      updateAllGoalDisplays: createMockFn().mockResolvedValue(),
-      updateGoalDisplay: createMockFn().mockResolvedValue(),
-      processDonationGoal: createMockFn().mockResolvedValue({ success: true }),
-      processPaypiggyGoal: createMockFn().mockResolvedValue({ success: true }),
-      getCurrentGoalStatus: createMockFn().mockReturnValue(null),
-      getAllCurrentGoalStatuses: createMockFn().mockReturnValue({}),
-    };
+    const injectedSourcesManager = createSourcesManagerFixture();
+    const injectedGoalsManager = createGoalsManagerFixture();
 
     const queue = initializeDisplayQueue(
       mockObsManager,
@@ -129,7 +156,7 @@ describe("DisplayQueue DI requirements", () => {
       {
         sourcesManager: injectedSourcesManager,
         goalsManager: injectedGoalsManager,
-      },
+      } satisfies DisplayQueueDependencies,
     );
 
     expect(queue.sourcesManager).toBe(injectedSourcesManager);

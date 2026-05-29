@@ -5,24 +5,25 @@ import { EventEmitter } from "events";
 import { PRIORITY_LEVELS } from "../../../src/core/constants";
 
 describe("DisplayQueue notification TTS disabled", () => {
-  let mockOBSManager;
-  let mockSourcesManager;
-  let updateCalls;
-  let queue;
-  let testRuntimeConstants;
+  let mockOBSManager: ConstructorParameters<typeof DisplayQueue>[0];
+  let mockSourcesManager: NonNullable<ConstructorParameters<typeof DisplayQueue>[4]>["sourcesManager"];
+  let updateCalls: string[];
+  let queue: DisplayQueue;
+  let testRuntimeConstants: ConstructorParameters<typeof DisplayQueue>[2];
 
   beforeEach(() => {
     updateCalls = [];
 
     mockOBSManager = {
       isReady: createMockFn().mockResolvedValue(true),
-      isConnected: createMockFn(() => true),
       call: createMockFn().mockResolvedValue({}),
     };
 
     mockSourcesManager = {
-      updateTextSource: createMockFn((_, text) => {
+      updateTextSource: createMockFn<[string, string?], Promise<void>>((_, text) => {
+        if (text !== undefined) {
         updateCalls.push(text);
+        }
         return Promise.resolve();
       }),
       clearTextSource: createMockFn().mockResolvedValue(),
@@ -32,11 +33,16 @@ describe("DisplayQueue notification TTS disabled", () => {
       updateChatMsgText: createMockFn().mockResolvedValue(),
       setNotificationPlatformLogoVisibility: createMockFn().mockResolvedValue(),
       setGroupSourceVisibility: createMockFn().mockResolvedValue(),
-      setSourceFilterVisibility: createMockFn().mockResolvedValue(),
-      getGroupSceneItemId: createMockFn().mockResolvedValue(1),
+      getGroupSceneItemId: createMockFn<[string, string], Promise<{ sceneItemId: number }>>(async () => ({ sceneItemId: 1 })),
       setChatDisplayVisibility: createMockFn().mockResolvedValue(),
       setNotificationDisplayVisibility: createMockFn().mockResolvedValue(),
-      getSceneItemId: createMockFn().mockResolvedValue(1),
+      getSceneItemId: createMockFn<[string, string], Promise<{ sceneItemId: number }>>(async () => ({ sceneItemId: 1 })),
+      hideAllPlatformLogos: createMockFn().mockResolvedValue(),
+      hideAllNotificationPlatformLogos: createMockFn().mockResolvedValue(),
+      setSourceFilterEnabled: createMockFn().mockResolvedValue(),
+      getSourceFilterSettings: createMockFn().mockResolvedValue({}),
+      setSourceFilterSettings: createMockFn().mockResolvedValue(),
+      clearSceneItemCache: createMockFn(),
     };
 
     testRuntimeConstants = {
@@ -67,8 +73,7 @@ describe("DisplayQueue notification TTS disabled", () => {
       },
       testRuntimeConstants,
       new EventEmitter(),
-      testRuntimeConstants,
-      { sourcesManager: mockSourcesManager },
+      mockSourcesManager === undefined ? {} : { sourcesManager: mockSourcesManager },
     );
   });
 

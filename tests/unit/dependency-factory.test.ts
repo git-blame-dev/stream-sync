@@ -8,6 +8,51 @@ import {
   initializeStaticSecrets,
 } from "../../src/core/secrets";
 
+type TikTokConnectionCtor = new (
+  username: string,
+  config: Record<string, unknown>,
+) => Record<string, unknown>;
+
+class MockTikTokWebSocketClient {
+  connect = createMockFn<[], Promise<boolean>>(() => Promise.resolve(true));
+  disconnect = createMockFn<[], Promise<boolean>>(() => Promise.resolve(true));
+  on = createMockFn<[string, (...args: unknown[]) => void], void>(() => {});
+  emit = createMockFn<[string, ...unknown[]], boolean>(() => true);
+  removeAllListeners = createMockFn<[], void>(() => {});
+
+  constructor(
+    readonly username: string,
+    readonly config: Record<string, unknown>,
+  ) {}
+}
+
+function expectRecordProperty<K extends string>(
+  value: unknown,
+  key: K,
+): asserts value is Record<K, unknown> {
+  expect(value).toHaveProperty(key);
+  if (!value || typeof value !== "object" || !(key in value)) {
+    throw new Error(`Expected object to contain ${key}`);
+  }
+}
+
+function expectErrorWithMessage(error: unknown, expectedMessage: string) {
+  expect(error).toBeInstanceOf(Error);
+  if (!(error instanceof Error)) {
+    throw new Error("Expected an Error instance");
+  }
+  expect(error.message).toContain(expectedMessage);
+}
+
+function expectTikTokClientConstructor(
+  value: unknown,
+): asserts value is TikTokConnectionCtor {
+  expect(typeof value).toBe("function");
+  if (typeof value !== "function") {
+    throw new Error("Expected TikTokWebSocketClient constructor");
+  }
+}
+
 describe("DependencyFactory", () => {
   afterEach(() => {
     restoreAllMocks();
@@ -118,9 +163,10 @@ describe("DependencyFactory", () => {
         customOptions,
       );
 
-      expect(result.notificationManager).toBe(
-        customOptions.notificationManager,
-      );
+      expectRecordProperty(result, "notificationManager");
+      expectRecordProperty(result, "retryAttempts");
+      expectRecordProperty(result, "timeout");
+      expect(result.notificationManager).toBe(customOptions.notificationManager);
       expect(result.retryAttempts).toBe(5);
       expect(result.timeout).toBe(30000);
     });
@@ -155,12 +201,7 @@ describe("DependencyFactory", () => {
       const options = {
         notificationManager: { emit: createMockFn() },
         WebcastPushConnection: createMockFn(),
-        TikTokWebSocketClient: createMockFn().mockImplementation(() => ({
-          connect: createMockFn().mockResolvedValue(true),
-          disconnect: createMockFn().mockResolvedValue(true),
-          on: createMockFn(),
-          removeAllListeners: createMockFn(),
-        })),
+        TikTokWebSocketClient: MockTikTokWebSocketClient,
         config: configFixture,
       };
 
@@ -202,12 +243,7 @@ describe("DependencyFactory", () => {
       const MockWebcastPushConnection = createMockFn();
       const options = {
         WebcastPushConnection: MockWebcastPushConnection,
-        TikTokWebSocketClient: createMockFn().mockImplementation(() => ({
-          connect: createMockFn(),
-          disconnect: createMockFn(),
-          on: createMockFn(),
-          removeAllListeners: createMockFn(),
-        })),
+        TikTokWebSocketClient: MockTikTokWebSocketClient,
         config: configFixture,
       };
 
@@ -220,12 +256,7 @@ describe("DependencyFactory", () => {
     });
 
     it("should expose TikTokWebSocketClient so PlatformConnectionFactory can create connections", () => {
-      const TikTokWebSocketClient = createMockFn().mockImplementation(() => ({
-        connect: createMockFn().mockResolvedValue(true),
-        disconnect: createMockFn().mockResolvedValue(true),
-        on: createMockFn(),
-        removeAllListeners: createMockFn(),
-      }));
+      const TikTokWebSocketClient = MockTikTokWebSocketClient;
 
       const result = factory.createTiktokDependencies(configFixture.tiktok, {
         TikTokWebSocketClient,
@@ -233,6 +264,7 @@ describe("DependencyFactory", () => {
       });
 
       expect(typeof result.TikTokWebSocketClient).toBe("function");
+      expectTikTokClientConstructor(result.TikTokWebSocketClient);
       const manualConnection = new result.TikTokWebSocketClient(
         configFixture.tiktok.username,
         {},
@@ -244,12 +276,16 @@ describe("DependencyFactory", () => {
       );
 
       const platformFactory = new PlatformConnectionFactory(result.logger);
+      const platformDependencies = {
+        ...result,
+        TikTokWebSocketClient: result.TikTokWebSocketClient,
+      };
 
       expect(() => {
         platformFactory.createConnection(
           "tiktok",
           configFixture.tiktok,
-          result,
+          platformDependencies,
         );
       }).not.toThrow();
     });
@@ -501,11 +537,17 @@ describe("DependencyFactory", () => {
   describe("Error Handling", () => {
     it("should provide clear error messages for missing configuration", () => {
       expect(() => {
-        factory.createYoutubeDependencies(null, { config: configFixture });
+        Reflect.apply(factory.createYoutubeDependencies, factory, [
+          null,
+          { config: configFixture },
+        ]);
       }).toThrow("Configuration is required");
 
       expect(() => {
-        factory.createTiktokDependencies(undefined, { config: configFixture });
+        Reflect.apply(factory.createTiktokDependencies, factory, [
+          undefined,
+          { config: configFixture },
+        ]);
       }).toThrow("Configuration is required");
 
       expect(() => {
@@ -521,11 +563,17 @@ describe("DependencyFactory", () => {
 
     it("should provide clear error messages for invalid options", () => {
       expect(() => {
-        factory.createYoutubeDependencies(configFixture.youtube, null);
+        Reflect.apply(factory.createYoutubeDependencies, factory, [
+          configFixture.youtube,
+          null,
+        ]);
       }).toThrow("Options must be an object");
 
       expect(() => {
-        factory.createTiktokDependencies(configFixture.tiktok, "invalid");
+        Reflect.apply(factory.createTiktokDependencies, factory, [
+          configFixture.tiktok,
+          "invalid",
+        ]);
       }).toThrow("Options must be an object");
     });
 
@@ -537,7 +585,7 @@ describe("DependencyFactory", () => {
           config: configFixture,
         });
       } catch (error) {
-        expect(error.message).toContain("YouTube username is required");
+        expectErrorWithMessage(error, "YouTube username is required");
       }
 
       try {
@@ -545,7 +593,7 @@ describe("DependencyFactory", () => {
           config: configFixture,
         });
       } catch (error) {
-        expect(error.message).toContain("TikTok username is required");
+        expectErrorWithMessage(error, "TikTok username is required");
       }
     });
   });

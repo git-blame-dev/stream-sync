@@ -6,7 +6,7 @@ import { EventEmitter } from "events";
 import { PRIORITY_LEVELS } from "../../../src/core/constants";
 
 describe("DisplayQueue platform notification gating", () => {
-  let originalNodeEnv;
+  let originalNodeEnv: string | undefined;
 
   beforeEach(() => {
     originalNodeEnv = process.env.NODE_ENV;
@@ -14,23 +14,34 @@ describe("DisplayQueue platform notification gating", () => {
   });
 
   afterEach(() => {
-    process.env.NODE_ENV = originalNodeEnv;
+    if (originalNodeEnv === undefined) {
+      delete process.env.NODE_ENV;
+    } else {
+      process.env.NODE_ENV = originalNodeEnv;
+    }
     restoreAllMocks();
   });
 
   function createQueue(platformConfig = {}) {
     const mockSourcesManager = {
-      updateTextSource: createMockFn().mockResolvedValue(),
-      clearTextSource: createMockFn().mockResolvedValue(),
-      updateChatMsgText: createMockFn().mockResolvedValue(),
-      setSourceVisibility: createMockFn().mockResolvedValue(),
-      setNotificationDisplayVisibility: createMockFn().mockResolvedValue(),
-      setChatDisplayVisibility: createMockFn().mockResolvedValue(),
-      hideAllDisplays: createMockFn().mockResolvedValue(),
-      setPlatformLogoVisibility: createMockFn().mockResolvedValue(),
-      setNotificationPlatformLogoVisibility: createMockFn().mockResolvedValue(),
-      setGroupSourceVisibility: createMockFn().mockResolvedValue(),
-      setSourceFilterVisibility: createMockFn().mockResolvedValue(),
+      updateTextSource: createMockFn<[string, string?], Promise<void>>(() => Promise.resolve()),
+      clearTextSource: createMockFn<[string], Promise<void>>(() => Promise.resolve()),
+      updateChatMsgText: createMockFn<[string, string, string], Promise<void>>(() => Promise.resolve()),
+      setSourceVisibility: createMockFn<[string, string, boolean], Promise<void>>(() => Promise.resolve()),
+      setNotificationDisplayVisibility: createMockFn<[boolean], Promise<void>>(() => Promise.resolve()),
+      setChatDisplayVisibility: createMockFn<[boolean], Promise<void>>(() => Promise.resolve()),
+      hideAllDisplays: createMockFn<[], Promise<void>>(() => Promise.resolve()),
+      setPlatformLogoVisibility: createMockFn<[string, Record<string, unknown>], Promise<void>>(() => Promise.resolve()),
+      setNotificationPlatformLogoVisibility: createMockFn<[string, Record<string, unknown>], Promise<void>>(() => Promise.resolve()),
+      hideAllPlatformLogos: createMockFn<[Record<string, unknown>], Promise<void>>(() => Promise.resolve()),
+      hideAllNotificationPlatformLogos: createMockFn<[Record<string, unknown>], Promise<void>>(() => Promise.resolve()),
+      setGroupSourceVisibility: createMockFn<[string, string | null | undefined, boolean], Promise<void>>(() => Promise.resolve()),
+      getSceneItemId: createMockFn<[string, string], Promise<{ sceneItemId: number }>>(async () => ({ sceneItemId: 1 })),
+      getGroupSceneItemId: createMockFn<[string, string], Promise<{ sceneItemId: number }>>(async () => ({ sceneItemId: 1 })),
+      setSourceFilterEnabled: createMockFn<[string, string, boolean], Promise<void>>(() => Promise.resolve()),
+      getSourceFilterSettings: createMockFn<[string, string], Promise<Record<string, unknown>>>(async () => ({})),
+      setSourceFilterSettings: createMockFn<[string, string, Record<string, unknown>], Promise<void>>(() => Promise.resolve()),
+      clearSceneItemCache: createMockFn<[], void>(() => {}),
     };
 
     const obsManager = {
@@ -70,9 +81,13 @@ describe("DisplayQueue platform notification gating", () => {
     };
 
     const mockGoalsManager = {
-      processDonationGoal: createMockFn().mockResolvedValue({ success: true }),
-      processPaypiggyGoal: createMockFn().mockResolvedValue({ success: true }),
-      initializeGoalDisplay: createMockFn().mockResolvedValue(),
+      processDonationGoal: createMockFn<[unknown, number], Promise<{ success: boolean }>>(async () => ({ success: true })),
+      processPaypiggyGoal: createMockFn<[string], Promise<{ success: boolean }>>(async () => ({ success: true })),
+      initializeGoalDisplay: createMockFn<[], Promise<void>>(() => Promise.resolve()),
+      updateAllGoalDisplays: createMockFn<[], Promise<void>>(() => Promise.resolve()),
+      updateGoalDisplay: createMockFn<[string, string?], Promise<void>>(() => Promise.resolve()),
+      getCurrentGoalStatus: createMockFn<[string], Record<string, unknown> | null>(() => null),
+      getAllCurrentGoalStatuses: createMockFn<[], Record<string, unknown>>(() => ({})),
     };
 
     const queue = new DisplayQueue(

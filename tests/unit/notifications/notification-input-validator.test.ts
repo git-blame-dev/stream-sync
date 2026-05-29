@@ -2,6 +2,31 @@ import { describe, expect, it } from "bun:test";
 
 import { NotificationInputValidator } from "../../../src/notifications/notification-input-validator";
 
+type PlatformValidationResult = ReturnType<
+  NotificationInputValidator["validatePlatform"]
+>;
+type DataValidationResult = ReturnType<NotificationInputValidator["validateData"]>;
+type TypeValidationResult = ReturnType<NotificationInputValidator["validateType"]>;
+
+function expectValidationFailure(
+  result: PlatformValidationResult | DataValidationResult | TypeValidationResult,
+  expectedError: string,
+) {
+  expect(result.success).toBe(false);
+  if (result.success) {
+    throw new Error("Expected validation to fail");
+  }
+  expect(result.error).toBe(expectedError);
+}
+
+function expectTypeValidationSuccess(result: TypeValidationResult) {
+  expect(result.success).toBe(true);
+  if (!result.success) {
+    throw new Error(`Expected type validation to succeed: ${result.error}`);
+  }
+  return result;
+}
+
 describe("NotificationInputValidator", () => {
   const notificationConfigs = {
     "platform:follow": { settingKey: "followsEnabled", commandKey: "follows" },
@@ -13,8 +38,7 @@ describe("NotificationInputValidator", () => {
 
     const result = validator.validatePlatform(123);
 
-    expect(result.success).toBe(false);
-    expect(result.error).toBe("Invalid platform type");
+    expectValidationFailure(result, "Invalid platform type");
   });
 
   it("rejects unsupported platform values", () => {
@@ -22,8 +46,7 @@ describe("NotificationInputValidator", () => {
 
     const result = validator.validatePlatform("discord");
 
-    expect(result.success).toBe(false);
-    expect(result.error).toBe("Unsupported platform");
+    expectValidationFailure(result, "Unsupported platform");
   });
 
   it("rejects non-object data payloads", () => {
@@ -31,8 +54,7 @@ describe("NotificationInputValidator", () => {
 
     const result = validator.validateData(null);
 
-    expect(result.success).toBe(false);
-    expect(result.error).toBe("Invalid notification data");
+    expectValidationFailure(result, "Invalid notification data");
   });
 
   it("rejects unsupported paid alias types as unknown", () => {
@@ -42,8 +64,7 @@ describe("NotificationInputValidator", () => {
       username: "test-user",
     });
 
-    expect(result.success).toBe(false);
-    expect(result.error).toBe("Unknown notification type");
+    expectValidationFailure(result, "Unknown notification type");
   });
 
   it("rejects unknown notification types", () => {
@@ -53,8 +74,7 @@ describe("NotificationInputValidator", () => {
       username: "test-user",
     });
 
-    expect(result.success).toBe(false);
-    expect(result.error).toBe("Unknown notification type");
+    expectValidationFailure(result, "Unknown notification type");
   });
 
   it("rejects incoming type mismatch", () => {
@@ -65,8 +85,7 @@ describe("NotificationInputValidator", () => {
       username: "test-user",
     });
 
-    expect(result.success).toBe(false);
-    expect(result.error).toBe("Unknown notification type");
+    expectValidationFailure(result, "Unknown notification type");
   });
 
   it("returns canonical type metadata for valid input", () => {
@@ -77,9 +96,9 @@ describe("NotificationInputValidator", () => {
       username: "test-user",
     });
 
-    expect(result.success).toBe(true);
-    expect(result.canonicalType).toBe("platform:gift");
-    expect(result.config).toEqual(notificationConfigs["platform:gift"]);
-    expect(result.isMonetizationType).toBe(true);
+    const success = expectTypeValidationSuccess(result);
+    expect(success.canonicalType).toBe("platform:gift");
+    expect(success.config).toEqual(notificationConfigs["platform:gift"]);
+    expect(success.isMonetizationType).toBe(true);
   });
 });

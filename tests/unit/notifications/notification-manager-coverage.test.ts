@@ -7,9 +7,12 @@ import { PRIORITY_LEVELS } from "../../../src/core/constants";
 import NotificationManager from "../../../src/notifications/NotificationManager";
 
 type VfxExecution = {
-  cmd: unknown;
-  ctx: unknown;
+  cmd: string;
+  ctx: Record<string, unknown>;
 };
+
+type NotificationManagerDeps = NonNullable<ConstructorParameters<typeof NotificationManager>[0]>;
+type VfxCommandService = NonNullable<NotificationManagerDeps["vfxCommandService"]>;
 
 describe("NotificationManager coverage", () => {
   let originalNodeEnv: string | undefined;
@@ -20,14 +23,19 @@ describe("NotificationManager coverage", () => {
   });
 
   afterEach(() => {
-    process.env.NODE_ENV = originalNodeEnv;
+    if (originalNodeEnv === undefined) {
+      delete process.env.NODE_ENV;
+    } else {
+      process.env.NODE_ENV = originalNodeEnv;
+    }
     restoreAllMocks();
   });
 
-  const createDeps = (overrides = {}) => ({
+  const createDeps = (
+    overrides: Partial<NotificationManagerDeps> = {},
+  ): NotificationManagerDeps => ({
     logger: noOpLogger,
     displayQueue: {
-      enqueue: createMockFn(),
       addItem: createMockFn(),
       getQueueLength: createMockFn(() => 0),
     },
@@ -53,7 +61,6 @@ describe("NotificationManager coverage", () => {
         greeting: { settingKey: "greetingsEnabled", commandKey: "greetings" },
       },
     },
-    textProcessing: { formatChatMessage: createMockFn() },
     obsGoals: { processDonationGoal: createMockFn() },
     vfxCommandService: {
       getVFXConfig: createMockFn(() => Promise.resolve(null)),
@@ -61,7 +68,6 @@ describe("NotificationManager coverage", () => {
     },
     userTrackingService: {
       isFirstMessage: createMockFn(() => Promise.resolve(false)),
-      markMessageSeen: createMockFn(),
     },
     ...overrides,
   });
@@ -92,8 +98,10 @@ describe("NotificationManager coverage", () => {
       const executedCommands: VfxExecution[] = [];
       const deps = createDeps({
         vfxCommandService: {
-          executeCommand: (cmd, ctx) => executedCommands.push({ cmd, ctx }),
-        },
+          executeCommand: (cmd: string, ctx: Record<string, unknown>) => {
+            executedCommands.push({ cmd, ctx });
+          },
+        } satisfies VfxCommandService,
       });
       const manager = new NotificationManager(deps);
 
@@ -106,8 +114,13 @@ describe("NotificationManager coverage", () => {
       });
 
       expect(executedCommands.length).toBe(1);
-      expect(executedCommands[0].cmd).toBe("confetti");
-      expect(executedCommands[0].ctx).toEqual(
+      const [execution] = executedCommands;
+      expect(execution).toBeDefined();
+      if (!execution) {
+        throw new Error("Expected VFX execution to be recorded");
+      }
+      expect(execution.cmd).toBe("confetti");
+      expect(execution.ctx).toEqual(
         expect.objectContaining({
           username: "testUser",
           platform: "tiktok",
@@ -122,8 +135,10 @@ describe("NotificationManager coverage", () => {
       const executedCommands: VfxExecution[] = [];
       const deps = createDeps({
         vfxCommandService: {
-          executeCommand: (cmd, ctx) => executedCommands.push({ cmd, ctx }),
-        },
+          executeCommand: (cmd: string, ctx: Record<string, unknown>) => {
+            executedCommands.push({ cmd, ctx });
+          },
+        } satisfies VfxCommandService,
       });
       const manager = new NotificationManager(deps);
 
@@ -255,7 +270,7 @@ describe("NotificationManager coverage", () => {
 
       const priority = manager.getPriorityForType("platform:gift", {});
 
-      expect(priority).toBe(deps.constants.PRIORITY_LEVELS.GIFT);
+      expect(priority).toBe(PRIORITY_LEVELS.GIFT);
     });
 
     it("throws for unknown notification type", () => {
@@ -280,6 +295,9 @@ describe("NotificationManager coverage", () => {
       });
 
       expect(result).toBeDefined();
+      if (result === null) {
+        throw new Error("Expected NotificationBuilder.build to return a result");
+      }
       expect(result.type).toBe("platform:follow");
     });
   });
@@ -349,7 +367,6 @@ describe("NotificationManager coverage", () => {
       const deps = createDeps({
         userTrackingService: {
           isFirstMessage: createMockFn(() => Promise.resolve(true)),
-          markMessageSeen: createMockFn(),
         },
       });
       const manager = new NotificationManager(deps);
@@ -363,7 +380,6 @@ describe("NotificationManager coverage", () => {
       const deps = createDeps({
         userTrackingService: {
           isFirstMessage: createMockFn(() => Promise.resolve(false)),
-          markMessageSeen: createMockFn(),
         },
       });
       const manager = new NotificationManager(deps);
@@ -374,7 +390,8 @@ describe("NotificationManager coverage", () => {
     });
 
     it("throws when service unavailable", async () => {
-      const deps = createDeps({ userTrackingService: null });
+      const deps = createDeps();
+      delete deps.userTrackingService;
       const manager = new NotificationManager(deps);
 
       await expect(manager._isFirstMessage("user123")).rejects.toThrow(
