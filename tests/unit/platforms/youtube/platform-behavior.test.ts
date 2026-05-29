@@ -5,19 +5,131 @@ import { createYouTubeRunsMessageChatItem } from "../../../helpers/youtube-test-
 
 import { YouTubePlatform } from "../../../../src/platforms/youtube";
 
+type UnknownRecord = Record<string, unknown>;
+type PlatformEvent = UnknownRecord & { type?: string; data?: UnknownRecord };
+type TestLogger = {
+  debug: ReturnType<typeof createMockFn>;
+  info: ReturnType<typeof createMockFn>;
+  warn: ReturnType<typeof createMockFn>;
+  error: ReturnType<typeof createMockFn>;
+};
+type TestOverrides = {
+  logger?: TestLogger | typeof noOpLogger;
+  streamDetectionService?: ReturnType<typeof createStreamDetectionService>;
+  timestampService?: ReturnType<typeof createTimestampService>;
+  viewerService?: unknown;
+  ChatFileLoggingService?: unknown;
+  notificationManager?: unknown;
+};
+type TestConnectionManager = Partial<
+  Omit<YouTubePlatform["connectionManager"], "getConnectionStatus">
+> & {
+  getConnectionStatus?: (videoId: string) => { ready?: boolean } | null;
+};
+type TestPlatformOverrideKey =
+  | "connectionManager"
+  | "viewerService"
+  | "viewerCountProvider"
+  | "streamDetectionService"
+  | "monitoringInterval"
+  | "userAgentManager"
+  | "handlers"
+  | "streamViewerCounts"
+  | "eventRouter"
+  | "errorHandler";
+type TestYouTubePlatform = Omit<YouTubePlatform, TestPlatformOverrideKey> & {
+  connectionManager: TestConnectionManager;
+  connectionStateManager?: UnknownRecord;
+  viewerService: UnknownRecord | null;
+  viewerCountProvider: UnknownRecord | null;
+  streamDetectionService: unknown;
+  monitoringInterval: unknown | null;
+  userAgentManager: unknown;
+  eventRouter?: unknown;
+  errorHandler?: unknown;
+  handlers: Record<string, (payload: UnknownRecord) => unknown>;
+  streamViewerCounts: Map<string, number> | null | undefined;
+  startMultiStreamMonitoring: () => Promise<void>;
+};
+
+const asTestPlatform = (platform: YouTubePlatform): TestYouTubePlatform => {
+  const base: Omit<YouTubePlatform, TestPlatformOverrideKey> = platform;
+  return Object.assign(base, {
+    connectionManager: platform.connectionManager,
+    viewerService: platform.viewerService,
+    viewerCountProvider: platform.viewerCountProvider,
+    streamDetectionService: platform.streamDetectionService,
+    monitoringInterval: platform.monitoringInterval,
+    userAgentManager: platform.userAgentManager,
+    handlers: platform.handlers,
+    streamViewerCounts: platform.streamViewerCounts,
+    eventRouter: platform.eventRouter,
+    errorHandler: platform.errorHandler,
+  });
+};
+
+const first = <T,>(values: T[]): T => {
+  const value = values[0];
+  expect(value).toBeDefined();
+  if (value === undefined) {
+    throw new Error("Expected at least one value");
+  }
+  return value;
+};
+
+const isRecord = (value: unknown): value is UnknownRecord =>
+  typeof value === "object" && value !== null;
+
+const getEventData = (event: PlatformEvent): UnknownRecord => {
+  expect(event.data).toBeDefined();
+  if (!isRecord(event.data)) {
+    throw new Error("Expected event data object");
+  }
+  return event.data;
+};
+
+const getRecordProperty = (record: UnknownRecord, property: string): UnknownRecord => {
+  const value = record[property];
+  expect(value).toBeDefined();
+  if (!isRecord(value)) {
+    throw new Error(`Expected ${property} to be an object`);
+  }
+  return value;
+};
+
+const setNullableConnectionManager = (
+  platform: TestYouTubePlatform,
+  connectionManager: TestConnectionManager | null,
+): void => {
+  Object.defineProperty(platform, "connectionManager", {
+    configurable: true,
+    writable: true,
+    value: connectionManager,
+  });
+};
+
 const createTimestampService = () => ({
   extractTimestamp: createMockFn().mockReturnValue("2024-01-01T00:00:00.000Z"),
 });
 
-const createStreamDetectionService = () => ({
-  detectLiveStreams: createMockFn().mockResolvedValue({
+type StreamDetectionResult = {
+  success: boolean;
+  videoIds: string[];
+  detectionMethod?: string;
+  message?: string;
+};
+
+const createStreamDetectionService = (): {
+  detectLiveStreams: ReturnType<typeof createMockFn<[unknown], Promise<StreamDetectionResult>>>;
+} => ({
+  detectLiveStreams: createMockFn<[unknown], Promise<StreamDetectionResult>>().mockResolvedValue({
     success: true,
     videoIds: [],
     detectionMethod: "mock",
   }),
 });
 
-const createPlatform = (overrides = {}) => {
+const createPlatform = (overrides: TestOverrides = {}) => {
   const logger = overrides.logger || noOpLogger;
   const streamDetectionService =
     overrides.streamDetectionService || createStreamDetectionService();
@@ -39,9 +151,8 @@ const createPlatform = (overrides = {}) => {
     },
   };
 
-  const platform = new YouTubePlatform(
-    { enabled: true, username: "test-channel" },
-    dependencies,
+  const platform = asTestPlatform(
+    new YouTubePlatform({ enabled: true, username: "test-channel" }, dependencies),
   );
   platform.startMultiStreamMonitoring = createMockFn().mockResolvedValue();
 
@@ -87,36 +198,24 @@ const createPlatform = (overrides = {}) => {
     platform.connectionStateManager.markError = createMockFn();
   }
 
-  if (
-    typeof platform.on !== "function" ||
-    typeof platform.emit !== "function"
-  ) {
-    const listeners = new Map();
-    platform.on = (event, handler) => {
-      const existing = listeners.get(event) || [];
-      existing.push(handler);
-      listeners.set(event, existing);
-    };
-    platform.removeListener = (event, handler) => {
-      const existing = listeners.get(event) || [];
-      listeners.set(
-        event,
-        existing.filter((fn) => fn !== handler),
-      );
-    };
-    platform.emit = (event, payload) => {
-      const existing = listeners.get(event) || [];
-      existing.forEach((fn) => fn(payload));
-    };
-  }
-
   return { platform, logger, streamDetectionService, timestampService };
 };
 
-const getDebugCalls = (logger) =>
-  logger.debug.mock.calls.map(([message, _scope, metadata]) => ({
-    message,
-    metadata: metadata || null,
+const createStandalonePlatform = (): TestYouTubePlatform =>
+  asTestPlatform(
+    new YouTubePlatform(
+      { enableAPI: false, username: "creator", viewerCountEnabled: true },
+      {
+        logger: noOpLogger,
+        streamDetectionService: createStreamDetectionService(),
+      },
+    ),
+  );
+
+const getDebugCalls = (logger: TestLogger) =>
+  logger.debug.mock.calls.map(([message, _scope, metadata]: unknown[]) => ({
+    message: typeof message === "string" ? message : String(message),
+    metadata: isRecord(metadata) ? metadata : null,
   }));
 const createLogger = () => ({
   debug: createMockFn(),
@@ -133,10 +232,10 @@ describe("YouTubePlatform modern architecture", () => {
 
   it("emits aggregated viewer counts as platform events after stream updates", () => {
     const { platform } = createPlatform();
-    const received = [];
-    platform.on("platform:event", (payload) => {
+    const received: UnknownRecord[] = [];
+    platform.on("platform:event", (payload: PlatformEvent) => {
       if (payload.type === "platform:viewer-count") {
-        received.push(payload.data);
+        received.push(getEventData(payload));
       }
     });
 
@@ -144,7 +243,7 @@ describe("YouTubePlatform modern architecture", () => {
     platform.updateViewerCountForStream("stream-2", 7);
 
     expect(received).not.toHaveLength(0);
-    const latest = received[received.length - 1];
+    const latest = first(received.slice(-1));
     expect(latest.count).toBe(12);
     expect(latest.streamId).toBe("stream-2");
     expect(latest.platform).toBe("youtube");
@@ -153,8 +252,8 @@ describe("YouTubePlatform modern architecture", () => {
 
   it("emits platform:event error with context and metadata", () => {
     const { platform } = createPlatform();
-    const received = [];
-    platform.on("platform:event", (payload) => {
+    const received: PlatformEvent[] = [];
+    platform.on("platform:event", (payload: PlatformEvent) => {
       if (payload.type === "platform:error") {
         received.push(payload);
       }
@@ -167,7 +266,7 @@ describe("YouTubePlatform modern architecture", () => {
     });
 
     expect(received).toHaveLength(1);
-    expect(received[0]).toMatchObject({
+    expect(first(received)).toMatchObject({
       type: "platform:error",
       platform: "youtube",
       data: {
@@ -193,13 +292,13 @@ describe("YouTubePlatform modern architecture", () => {
 
   it("emits platform chat events for normalized chat items", async () => {
     const { platform } = createPlatform();
-    const received = new Promise((resolve) => {
-      const handler = (payload) => {
+    const received = new Promise<UnknownRecord>((resolve) => {
+      const handler = (payload: PlatformEvent) => {
         if (payload.type !== "platform:chat-message") {
           return;
         }
         platform.removeListener("platform:event", handler);
-        resolve(payload.data);
+        resolve(getEventData(payload));
       };
       platform.on("platform:event", handler);
     });
@@ -217,17 +316,19 @@ describe("YouTubePlatform modern architecture", () => {
     platform._processRegularChatMessage(chatItem);
 
     const payload = await received;
+    const message = getRecordProperty(payload, "message");
+    const metadata = getRecordProperty(payload, "metadata");
     expect(payload.platform).toBe("youtube");
-    expect(payload.message.text).toBe("Hello world");
-    expect(payload.metadata.videoId).toBe("vid-1");
+    expect(message.text).toBe("Hello world");
+    expect(metadata.videoId).toBe("vid-1");
   });
 
   it("emits emote-only chat when message text is empty but canonical parts exist", () => {
     const { platform } = createPlatform();
-    const emitted = [];
-    platform.on("platform:event", (payload) => {
+    const emitted: UnknownRecord[] = [];
+    platform.on("platform:event", (payload: PlatformEvent) => {
       if (payload.type === "platform:chat-message") {
-        emitted.push(payload.data);
+        emitted.push(getEventData(payload));
       }
     });
 
@@ -256,7 +357,7 @@ describe("YouTubePlatform modern architecture", () => {
     );
 
     expect(emitted).toHaveLength(1);
-    expect(emitted[0].message).toEqual({
+    expect(first(emitted).message).toEqual({
       text: "",
       parts: [
         {
@@ -271,10 +372,10 @@ describe("YouTubePlatform modern architecture", () => {
 
   it("emits degraded chat when text and canonical message parts are both missing", () => {
     const { platform } = createPlatform();
-    const emitted = [];
-    platform.on("platform:event", (payload) => {
+    const emitted: UnknownRecord[] = [];
+    platform.on("platform:event", (payload: PlatformEvent) => {
       if (payload.type === "platform:chat-message") {
-        emitted.push(payload.data);
+        emitted.push(getEventData(payload));
       }
     });
 
@@ -296,16 +397,18 @@ describe("YouTubePlatform modern architecture", () => {
     );
 
     expect(emitted).toHaveLength(1);
-    expect(emitted[0].message).toEqual({ text: "Unknown Message" });
-    expect(emitted[0].metadata.missingFields).toContain("message");
+    const emittedChat = first(emitted);
+    expect(emittedChat.message).toEqual({ text: "Unknown Message" });
+    const metadata = emittedChat.metadata;
+    expect(isRecord(metadata) ? metadata.missingFields : undefined).toContain("message");
   });
 
   it("emits chat with non-empty text even when message parts are missing", () => {
     const { platform } = createPlatform();
-    const emitted = [];
-    platform.on("platform:event", (payload) => {
+    const emitted: UnknownRecord[] = [];
+    platform.on("platform:event", (payload: PlatformEvent) => {
       if (payload.type === "platform:chat-message") {
-        emitted.push(payload.data);
+        emitted.push(getEventData(payload));
       }
     });
 
@@ -321,7 +424,7 @@ describe("YouTubePlatform modern architecture", () => {
     );
 
     expect(emitted).toHaveLength(1);
-    expect(emitted[0].message).toEqual({ text: "plain text only" });
+    expect(first(emitted).message).toEqual({ text: "plain text only" });
   });
 
   it("emits chat connected event when connectToYouTubeStream succeeds", async () => {
@@ -334,17 +437,11 @@ describe("YouTubePlatform modern architecture", () => {
       getConnectionId: createMockFn().mockReturnValue("youtube-abc123"),
     };
 
-    const youtubePlatform = new YouTubePlatform(
-      { enableAPI: false, username: "creator", viewerCountEnabled: true },
-      {
-        logger: noOpLogger,
-        streamDetectionService: createStreamDetectionService(),
-      },
-    );
+    const youtubePlatform = createStandalonePlatform();
 
     youtubePlatform.connectionManager = mockConnectionManager;
-    const events = [];
-    youtubePlatform.on("platform:event", (payload) => events.push(payload));
+    const events: PlatformEvent[] = [];
+    youtubePlatform.on("platform:event", (payload: PlatformEvent) => events.push(payload));
 
     await youtubePlatform.connectToYouTubeStream("abc123");
 
@@ -386,6 +483,9 @@ describe("YouTubePlatform modern architecture", () => {
       ),
     );
     expect(giftLog).toBeTruthy();
+    if (!giftLog) {
+      throw new Error("Expected ignored gifted membership debug log");
+    }
     expect(giftLog.metadata).toMatchObject({
       action: "ignored_gifted_membership_announcement",
       recipient: "Unknown User",
@@ -415,6 +515,9 @@ describe("YouTubePlatform modern architecture", () => {
       message.includes("ignored duplicate LiveChatPaidMessageRenderer"),
     );
     expect(duplicateLog).toBeTruthy();
+    if (!duplicateLog) {
+      throw new Error("Expected duplicate renderer debug log");
+    }
     expect(duplicateLog.metadata).toMatchObject({
       action: "ignored_duplicate",
       eventType: "LiveChatPaidMessageRenderer",
@@ -430,15 +533,15 @@ describe("YouTubePlatform modern architecture", () => {
       routeEvent: createMockFn().mockRejectedValue(handlerError),
     };
 
-    const errorHandlerCalls = [];
+    const errorHandlerCalls: UnknownRecord[] = [];
     platform.errorHandler = {
-      handleEventProcessingError: (error, eventType, eventData, message) => {
+      handleEventProcessingError: (error: Error, eventType: string, eventData?: unknown, message?: string) => {
         errorHandlerCalls.push({ error, eventType, eventData, message });
       },
     };
 
-    const unhandled = [];
-    const listener = (error) => unhandled.push(error);
+    const unhandled: unknown[] = [];
+    const listener = (error: unknown) => unhandled.push(error);
     process.on("unhandledRejection", listener);
 
     try {
@@ -460,19 +563,20 @@ describe("YouTubePlatform modern architecture", () => {
 
     expect(unhandled).toHaveLength(0);
     expect(errorHandlerCalls).toHaveLength(1);
-    expect(errorHandlerCalls[0].error).toBe(handlerError);
-    expect(errorHandlerCalls[0].eventType).toBe("LiveChatPaidMessage");
-    expect(errorHandlerCalls[0].message).toContain(
+    const errorHandlerCall = first(errorHandlerCalls);
+    expect(errorHandlerCall.error).toBe(handlerError);
+    expect(errorHandlerCall.eventType).toBe("LiveChatPaidMessage");
+    expect(errorHandlerCall.message).toContain(
       "Error handling event type LiveChatPaidMessage",
     );
   });
 
   it("emits error notification when gift purchase header author is missing", async () => {
     const { platform } = createPlatform();
-    const giftErrors = [];
+    const giftErrors: UnknownRecord[] = [];
     platform.handlers = {
       ...platform.handlers,
-      onGiftPaypiggy: (payload) => giftErrors.push(payload),
+      onGiftPaypiggy: (payload: UnknownRecord) => giftErrors.push(payload),
     };
 
     const chatItem = {
@@ -490,23 +594,24 @@ describe("YouTubePlatform modern architecture", () => {
     await platform.handleChatMessage(chatItem);
 
     expect(giftErrors).toHaveLength(1);
-    expect(giftErrors[0]).toMatchObject({
+    const giftError = first(giftErrors);
+    expect(giftError).toMatchObject({
       type: "platform:giftpaypiggy",
       platform: "youtube",
       giftCount: 3,
       id: "LCC.test-gift-purchase-missing-author",
       isError: true,
     });
-    expect(giftErrors[0].timestamp).toBe(new Date(1700000000000).toISOString());
-    expect(giftErrors[0].username).toBeUndefined();
+    expect(giftError.timestamp).toBe(new Date(1700000000000).toISOString());
+    expect(giftError.username).toBeUndefined();
   });
 
   it("emits unresolved GiftMessageView error payload when author data is missing", async () => {
     const { platform } = createPlatform();
-    const giftErrors = [];
+    const giftErrors: UnknownRecord[] = [];
     platform.handlers = {
       ...platform.handlers,
-      onGift: (payload) => giftErrors.push(payload),
+      onGift: (payload: UnknownRecord) => giftErrors.push(payload),
     };
 
     const chatItem = {
@@ -523,7 +628,8 @@ describe("YouTubePlatform modern architecture", () => {
     await platform.handleChatMessage(chatItem);
 
     expect(giftErrors).toHaveLength(1);
-    expect(giftErrors[0]).toMatchObject({
+    const giftError = first(giftErrors);
+    expect(giftError).toMatchObject({
       type: "platform:gift",
       platform: "youtube",
       giftType: "YouTube Gift",
@@ -531,16 +637,16 @@ describe("YouTubePlatform modern architecture", () => {
       id: "LCC.test-giftmessageview-missing-author",
       isError: true,
     });
-    expect(giftErrors[0].username).toBeUndefined();
-    expect(giftErrors[0].userId).toBeUndefined();
+    expect(giftError.username).toBeUndefined();
+    expect(giftError.userId).toBeUndefined();
   });
 
   it("emits gift error payloads when monetization timestamps are missing", async () => {
     const { platform } = createPlatform();
-    const giftErrors = [];
+    const giftErrors: UnknownRecord[] = [];
     platform.handlers = {
       ...platform.handlers,
-      onGift: (payload) => giftErrors.push(payload),
+      onGift: (payload: UnknownRecord) => giftErrors.push(payload),
     };
 
     const chatItem = {
@@ -560,7 +666,8 @@ describe("YouTubePlatform modern architecture", () => {
     await platform.handleChatMessage(chatItem);
 
     expect(giftErrors).toHaveLength(1);
-    expect(giftErrors[0]).toMatchObject({
+    const giftError = first(giftErrors);
+    expect(giftError).toMatchObject({
       type: "platform:gift",
       platform: "youtube",
       giftType: "Super Chat",
@@ -568,7 +675,7 @@ describe("YouTubePlatform modern architecture", () => {
       id: "LCC.test-superchat-missing-timestamp",
       isError: true,
     });
-    expect(giftErrors[0].timestamp).toMatch(
+    expect(giftError.timestamp).toMatch(
       /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
     );
   });
@@ -583,17 +690,11 @@ describe("YouTubePlatform modern architecture", () => {
       getConnectionId: createMockFn().mockReturnValue("youtube-abc123"),
     };
 
-    const youtubePlatform = new YouTubePlatform(
-      { enableAPI: false, username: "creator", viewerCountEnabled: true },
-      {
-        logger: noOpLogger,
-        streamDetectionService: createStreamDetectionService(),
-      },
-    );
+    const youtubePlatform = createStandalonePlatform();
 
     youtubePlatform.connectionManager = mockConnectionManager;
-    const events = [];
-    youtubePlatform.on("platform:event", (payload) => events.push(payload));
+    const events: PlatformEvent[] = [];
+    youtubePlatform.on("platform:event", (payload: PlatformEvent) => events.push(payload));
 
     await youtubePlatform.connectToYouTubeStream("abc123");
 
@@ -620,17 +721,11 @@ describe("YouTubePlatform modern architecture", () => {
         .mockReturnValueOnce(0),
     };
 
-    const youtubePlatform = new YouTubePlatform(
-      { enableAPI: false, username: "creator", viewerCountEnabled: true },
-      {
-        logger: noOpLogger,
-        streamDetectionService: createStreamDetectionService(),
-      },
-    );
+    const youtubePlatform = createStandalonePlatform();
 
     youtubePlatform.connectionManager = mockConnectionManager;
-    const events = [];
-    youtubePlatform.on("platform:event", (payload) => events.push(payload));
+    const events: PlatformEvent[] = [];
+    youtubePlatform.on("platform:event", (payload: PlatformEvent) => events.push(payload));
 
     await youtubePlatform.disconnectFromYouTubeStream("abc123", "stream ended");
 
@@ -650,7 +745,7 @@ describe("YouTubePlatform modern architecture", () => {
 
   it("removeYouTubeConnection clears active stream in viewer service when matching", () => {
     const { platform } = createPlatform();
-    const clearCalled = [];
+    const clearCalled: string[] = [];
     platform.viewerService = {
       _activeStream: { videoId: "vid-123" },
       clearActiveStream: () => clearCalled.push("cleared"),
@@ -664,7 +759,7 @@ describe("YouTubePlatform modern architecture", () => {
 
   it("removeYouTubeConnection does not clear viewer service when videoId does not match", () => {
     const { platform } = createPlatform();
-    const clearCalled = [];
+    const clearCalled: string[] = [];
     platform.viewerService = {
       _activeStream: { videoId: "other-vid" },
       clearActiveStream: () => clearCalled.push("cleared"),
@@ -685,7 +780,7 @@ describe("YouTubePlatform modern architecture", () => {
         throw new Error("service error");
       },
     };
-    platform.connectionManager.removeConnection = () => {
+    platform.connectionManager.removeConnection = async () => {
       removeConnectionCalled = true;
     };
 
@@ -696,7 +791,7 @@ describe("YouTubePlatform modern architecture", () => {
 
   it("disconnectFromYouTubeStream returns false when connectionManager is null", async () => {
     const { platform } = createPlatform();
-    platform.connectionManager = null;
+    setNullableConnectionManager(platform, null);
 
     const result = await platform.disconnectFromYouTubeStream("vid-123");
 
@@ -705,7 +800,7 @@ describe("YouTubePlatform modern architecture", () => {
 
   it("getActiveYouTubeVideoIds returns empty array when connectionManager is null", () => {
     const { platform } = createPlatform();
-    platform.connectionManager = null;
+    setNullableConnectionManager(platform, null);
 
     const result = platform.getActiveYouTubeVideoIds();
 
@@ -714,7 +809,7 @@ describe("YouTubePlatform modern architecture", () => {
 
   it("getDetectedStreamIds returns empty array when connectionManager is null", () => {
     const { platform } = createPlatform();
-    platform.connectionManager = null;
+    setNullableConnectionManager(platform, null);
 
     const result = platform.getDetectedStreamIds();
 
@@ -800,7 +895,7 @@ describe("YouTubePlatform modern architecture", () => {
     const { platform } = createPlatform();
     platform.connectionManager.getConnectionCount =
       createMockFn().mockReturnValue(0);
-    platform.monitoringInterval = 123;
+    platform.monitoringInterval = { testInterval: "health-status" };
 
     const status = platform.getHealthStatus();
 
@@ -833,22 +928,22 @@ describe("YouTubePlatform modern architecture", () => {
   it("reconnect calls initialize with existing handlers", async () => {
     const { platform } = createPlatform();
     platform.handlers = { onChat: createMockFn() };
-    const initCalls = [];
-    platform.initialize = createMockFn(async (handlers) => {
+    const initCalls: unknown[] = [];
+    platform.initialize = createMockFn(async (handlers: unknown) => {
       initCalls.push(handlers);
     });
 
     await platform.reconnect();
 
     expect(initCalls).toHaveLength(1);
-    expect(initCalls[0]).toEqual(platform.handlers);
+    expect(first(initCalls)).toEqual(platform.handlers);
   });
 
   it("_emitStreamStatusIfNeeded does nothing when connectionManager is null", () => {
     const { platform } = createPlatform();
-    platform.connectionManager = null;
-    const events = [];
-    platform.on("platform:event", (e) => events.push(e));
+    setNullableConnectionManager(platform, null);
+    const events: PlatformEvent[] = [];
+    platform.on("platform:event", (e: PlatformEvent) => events.push(e));
 
     platform._emitStreamStatusIfNeeded(0, {});
 
@@ -859,8 +954,8 @@ describe("YouTubePlatform modern architecture", () => {
     const { platform } = createPlatform();
     platform.connectionManager.getConnectionCount =
       createMockFn().mockReturnValue(1);
-    const events = [];
-    platform.on("platform:event", (e) => events.push(e));
+    const events: PlatformEvent[] = [];
+    platform.on("platform:event", (e: PlatformEvent) => events.push(e));
 
     platform._emitStreamStatusIfNeeded(1, {});
 
@@ -950,14 +1045,14 @@ describe("YouTubePlatform modern architecture", () => {
 
   it("setYouTubeConnectionReady updates connection ready state", () => {
     const { platform } = createPlatform();
-    let readyVideoId = null;
-    platform.connectionManager.setConnectionReady = (videoId) => {
-      readyVideoId = videoId;
+    const readyVideoId: { value: string | null } = { value: null };
+    platform.connectionManager.setConnectionReady = (videoId: string) => {
+      readyVideoId.value = videoId;
     };
 
     platform.setYouTubeConnectionReady("vid-123");
 
-    expect(readyVideoId).toBe("vid-123");
+    expect(readyVideoId.value).toBe("vid-123");
   });
 
   it("isAnyYouTubeStreamReady delegates to connectionManager", () => {
@@ -981,7 +1076,10 @@ describe("YouTubePlatform modern architecture", () => {
 
   it("getLiveVideoIdsByYoutubei returns empty array when no streams found", async () => {
     const { platform, streamDetectionService } = createPlatform();
-    streamDetectionService.detectLiveStreams = createMockFn().mockResolvedValue(
+    streamDetectionService.detectLiveStreams = createMockFn<
+      [unknown],
+      Promise<StreamDetectionResult>
+    >().mockResolvedValue(
       {
         success: false,
         videoIds: [],
@@ -1002,7 +1100,7 @@ describe("YouTubePlatform modern architecture", () => {
       createMockFn().mockReturnValue(["v1"]);
     platform.connectionManager.isConnectionReady =
       createMockFn().mockReturnValue(true);
-    platform.monitoringInterval = 123;
+    platform.monitoringInterval = { testInterval: "connection-state" };
 
     const state = platform.getConnectionState();
 
@@ -1091,22 +1189,25 @@ describe("YouTubePlatform modern architecture", () => {
 
   it("_clearMonitoringInterval clears and nullifies interval", () => {
     const { platform } = createPlatform();
-    platform.monitoringInterval = 123;
-    const cleared = [];
+    const monitoringInterval = { testInterval: "clear-monitoring" };
+    platform.monitoringInterval = monitoringInterval;
+    const cleared: unknown[] = [];
     const originalClearInterval = global.clearInterval;
-    global.clearInterval = (id) => cleared.push(id);
+    global.clearInterval = (id: unknown) => {
+      cleared.push(id);
+    };
 
     platform._clearMonitoringInterval();
 
     global.clearInterval = originalClearInterval;
-    expect(cleared).toContain(123);
+    expect(cleared).toContain(monitoringInterval);
     expect(platform.monitoringInterval).toBeNull();
   });
 
   it("handleChatTextMessage returns early when chatItem is invalid", () => {
     const { platform } = createPlatform();
-    const events = [];
-    platform.on("platform:event", (e) => events.push(e));
+    const events: PlatformEvent[] = [];
+    platform.on("platform:event", (e: PlatformEvent) => events.push(e));
 
     platform.handleChatTextMessage(null);
     platform.handleChatTextMessage({ item: null });
@@ -1117,18 +1218,20 @@ describe("YouTubePlatform modern architecture", () => {
 
   it("handleChatTextMessage emits degraded chat payload when author identity is missing", () => {
     const { platform } = createPlatform();
-    const events = [];
-    platform.on("platform:event", (e) => events.push(e));
+    const events: PlatformEvent[] = [];
+    platform.on("platform:event", (e: PlatformEvent) => events.push(e));
 
     platform.handleChatTextMessage({ item: { type: "test" } });
 
     const chatEvents = events.filter((e) => e.type === "platform:chat-message");
     expect(chatEvents).toHaveLength(1);
-    expect(chatEvents[0].data.username).toBe("Unknown Username");
-    expect(chatEvents[0].data.userId).toBeUndefined();
-    expect(chatEvents[0].data.timestamp).toBeUndefined();
-    expect(chatEvents[0].data.message).toEqual({ text: "Unknown Message" });
-    expect(chatEvents[0].data.metadata.missingFields).toEqual([
+    const chatData = getEventData(first(chatEvents));
+    expect(chatData.username).toBe("Unknown Username");
+    expect(chatData.userId).toBeUndefined();
+    expect(chatData.timestamp).toBeUndefined();
+    expect(chatData.message).toEqual({ text: "Unknown Message" });
+    const chatMetadata = chatData.metadata;
+    expect(isRecord(chatMetadata) ? chatMetadata.missingFields : undefined).toEqual([
       "userId",
       "username",
       "message",
@@ -1138,8 +1241,8 @@ describe("YouTubePlatform modern architecture", () => {
 
   it("_handleError emits error event and triggers cleanup when shouldDisconnect", async () => {
     const { platform } = createPlatform();
-    const events = [];
-    platform.on("platform:event", (e) => events.push(e));
+    const events: PlatformEvent[] = [];
+    platform.on("platform:event", (e: PlatformEvent) => events.push(e));
     platform.isInitialized = true;
 
     platform._handleError(new Error("fatal"), "liveChatListener", {

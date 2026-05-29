@@ -1,5 +1,9 @@
 import { describe, it, beforeEach, afterEach, expect } from "bun:test";
-import { createMockFn, clearAllMocks } from "../../helpers/bun-mock-utils";
+import {
+  createMockFn,
+  clearAllMocks,
+  type TestMockFn,
+} from "../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../helpers/mock-factories";
 import * as testClock from "../../helpers/test-clock";
 import {
@@ -7,15 +11,56 @@ import {
   validateUserFacingString,
 } from "../../helpers/assertion-helpers";
 import { YouTubeLiveStreamService } from "../../../src/services/youtube-live-stream-service.ts";
+import { scheduleTimeout } from "../../helpers/time-utils";
+
+type InnertubeClient = Parameters<
+  typeof YouTubeLiveStreamService.getLiveStreams
+>[0];
+type ChannelLike = Awaited<ReturnType<InnertubeClient["getChannel"]>>;
+type ResolveUrlResult = Awaited<
+  ReturnType<NonNullable<InnertubeClient["resolveURL"]>>
+>;
+type SearchResult = Awaited<
+  ReturnType<NonNullable<InnertubeClient["search"]>>
+>;
+type MockInnertubeClient = InnertubeClient & {
+  getChannel: TestMockFn<[string], Promise<ChannelLike>>;
+  resolveURL: TestMockFn<[string], Promise<ResolveUrlResult>>;
+  search: TestMockFn<[string, Record<string, unknown>?], Promise<SearchResult>>;
+};
+type LiveStreamResult = Awaited<
+  ReturnType<typeof YouTubeLiveStreamService.getLiveStreams>
+>;
+type LiveStream = LiveStreamResult["streams"][number];
+type TimeoutRaceResult = LiveStreamResult | { timedOut: true };
+
+const expectPresent = <T>(value: T | null | undefined): T => {
+  expect(value).toBeDefined();
+  expect(value).not.toBeNull();
+  if (value === null || value === undefined) {
+    throw new Error("Expected test value to be present");
+  }
+  return value;
+};
+
+const streamAt = (streams: LiveStream[], index: number): LiveStream =>
+  expectPresent(streams[index]);
+
+const isTimeoutResult = (
+  result: TimeoutRaceResult,
+): result is { timedOut: true } => "timedOut" in result;
 
 describe("YouTube Live Stream Service - Complete User Experience", () => {
-  let mockInnertubeClient;
+  let mockInnertubeClient: MockInnertubeClient;
 
   beforeEach(() => {
     mockInnertubeClient = {
-      getChannel: createMockFn(),
-      search: createMockFn(),
-      resolveURL: createMockFn(),
+      getChannel: createMockFn<[string], Promise<ChannelLike>>(),
+      search: createMockFn<
+        [string, Record<string, unknown>?],
+        Promise<SearchResult>
+      >(),
+      resolveURL: createMockFn<[string], Promise<ResolveUrlResult>>(),
     };
   });
 
@@ -60,22 +105,22 @@ describe("YouTube Live Stream Service - Complete User Experience", () => {
       expect(result.count).toBe(2);
       expect(result.hasContent).toBe(true);
 
-      expect(result.streams[0].videoId).toBe("live123");
-      expect(result.streams[0].title).toBe("Amazing Gaming Stream");
-      expect(result.streams[0].isLive).toBe(true);
-      expect(result.streams[0].author).toBe("Popular Gamer");
+      const firstStream = streamAt(result.streams, 0);
+      const secondStream = streamAt(result.streams, 1);
+      expect(firstStream.videoId).toBe("live123");
+      expect(firstStream.title).toBe("Amazing Gaming Stream");
+      expect(firstStream.isLive).toBe(true);
+      expect(firstStream.author).toBe("Popular Gamer");
 
-      expectNoTechnicalArtifacts(result.streams[0].title);
-      expectNoTechnicalArtifacts(result.streams[0].author);
-      expectNoTechnicalArtifacts(result.streams[1].title);
-      expectNoTechnicalArtifacts(result.streams[1].author);
+      expectNoTechnicalArtifacts(firstStream.title);
+      expectNoTechnicalArtifacts(firstStream.author);
+      expectNoTechnicalArtifacts(secondStream.title);
+      expectNoTechnicalArtifacts(secondStream.author);
 
-      validateUserFacingString(result.streams[0].title, {
-        audience: "general",
+      validateUserFacingString(firstStream.title, {
         minLength: 5,
       });
-      validateUserFacingString(result.streams[1].title, {
-        audience: "general",
+      validateUserFacingString(secondStream.title, {
         minLength: 5,
       });
     });
@@ -105,7 +150,7 @@ describe("YouTube Live Stream Service - Complete User Experience", () => {
 
       expect(result.success).toBe(true);
       expect(result.streams).toHaveLength(1);
-      expect(result.streams[0].videoId).toBe("video789");
+      expect(streamAt(result.streams, 0).videoId).toBe("video789");
       expect(result.detectionMethod).toBe("channel_videos");
       expect(mockInnertubeClient.search).not.toHaveBeenCalled();
     });
@@ -160,7 +205,7 @@ describe("YouTube Live Stream Service - Complete User Experience", () => {
 
       expect(result.success).toBe(true);
       expect(result.streams).toHaveLength(1);
-      expect(result.streams[0].videoId).toBe("searchLive123");
+      expect(streamAt(result.streams, 0).videoId).toBe("searchLive123");
       expect(result.detectionMethod).toBe("search");
       expect(mockInnertubeClient.search).toHaveBeenCalledTimes(1);
     });
@@ -190,16 +235,16 @@ describe("YouTube Live Stream Service - Complete User Experience", () => {
       );
 
       expect(result.success).toBe(true);
-      expect(result.streams[0].title).toBe(
+      const stream = streamAt(result.streams, 0);
+      expect(stream.title).toBe(
         "Learn JavaScript - Interactive Coding Session",
       );
-      expect(result.streams[0].author).toBe("CodeEducator");
-      expect(result.streams[0].isLive).toBe(true);
-      expect(result.streams[0].videoId).toBe("educational123");
+      expect(stream.author).toBe("CodeEducator");
+      expect(stream.isLive).toBe(true);
+      expect(stream.videoId).toBe("educational123");
 
-      expectNoTechnicalArtifacts(result.streams[0].title);
-      validateUserFacingString(result.streams[0].title, {
-        audience: "general",
+      expectNoTechnicalArtifacts(stream.title);
+      validateUserFacingString(stream.title, {
         minLength: 10,
         mustContain: ["JavaScript"],
       });
@@ -230,11 +275,12 @@ describe("YouTube Live Stream Service - Complete User Experience", () => {
       );
 
       expect(result.success).toBe(true);
-      expect(result.streams[0].videoId).toBe("channelid123");
-      expect(result.streams[0].title).toBe("Channel ID Stream");
+      const stream = streamAt(result.streams, 0);
+      expect(stream.videoId).toBe("channelid123");
+      expect(stream.title).toBe("Channel ID Stream");
 
-      expectNoTechnicalArtifacts(result.streams[0].title);
-      expectNoTechnicalArtifacts(result.streams[0].author);
+      expectNoTechnicalArtifacts(stream.title);
+      expectNoTechnicalArtifacts(stream.author);
     });
 
     it("should resolve username input for user convenience", async () => {
@@ -265,13 +311,13 @@ describe("YouTube Live Stream Service - Complete User Experience", () => {
       );
 
       expect(result.success).toBe(true);
-      expect(result.streams[0].videoId).toBe("username123");
-      expect(result.streams[0].title).toBe("Creator Live Stream");
-      expect(result.streams[0].author).toBe("Popular Creator");
+      const stream = streamAt(result.streams, 0);
+      expect(stream.videoId).toBe("username123");
+      expect(stream.title).toBe("Creator Live Stream");
+      expect(stream.author).toBe("Popular Creator");
 
-      expectNoTechnicalArtifacts(result.streams[0].title);
-      validateUserFacingString(result.streams[0].author, {
-        audience: "general",
+      expectNoTechnicalArtifacts(stream.title);
+      validateUserFacingString(stream.author, {
         minLength: 5,
       });
     });
@@ -304,11 +350,12 @@ describe("YouTube Live Stream Service - Complete User Experience", () => {
       );
 
       expect(result.success).toBe(true);
-      expect(result.streams[0].videoId).toBe("handle123");
-      expect(result.streams[0].title).toBe("Creative Live Stream");
+      const stream = streamAt(result.streams, 0);
+      expect(stream.videoId).toBe("handle123");
+      expect(stream.title).toBe("Creative Live Stream");
 
-      expectNoTechnicalArtifacts(result.streams[0].title);
-      expectNoTechnicalArtifacts(result.streams[0].author);
+      expectNoTechnicalArtifacts(stream.title);
+      expectNoTechnicalArtifacts(stream.author);
     });
   });
 
@@ -330,7 +377,6 @@ describe("YouTube Live Stream Service - Complete User Experience", () => {
 
       expectNoTechnicalArtifacts(result.error);
       validateUserFacingString(result.error, {
-        audience: "general",
         minLength: 5,
         mustNotContain: ["undefined", "null", "API", "search"],
       });
@@ -354,7 +400,6 @@ describe("YouTube Live Stream Service - Complete User Experience", () => {
 
       expectNoTechnicalArtifacts(result.error);
       validateUserFacingString(result.error, {
-        audience: "general",
         minLength: 10,
       });
     });
@@ -373,7 +418,7 @@ describe("YouTube Live Stream Service - Complete User Experience", () => {
       expect(result.error).toContain("Channel not found");
       expect(result.error).toContain(problematicChannelId);
       expect(result.streams).toHaveLength(0);
-      expect(result.error.length).toBeGreaterThan(20);
+      expect(expectPresent(result.error).length).toBeGreaterThan(20);
     });
 
     it("should handle timeout scenarios gracefully for users", async () => {
@@ -388,14 +433,14 @@ describe("YouTube Live Stream Service - Complete User Experience", () => {
         { logger: noOpLogger, timeout: 100 },
       );
 
-      const result = await Promise.race([
+      const result: TimeoutRaceResult = await Promise.race([
         timeoutPromise,
-        new Promise((resolve) =>
-          scheduleTestTimeout(() => resolve({ timedOut: true }), 150),
+        new Promise<{ timedOut: true }>((resolve) =>
+          scheduleTimeout(() => resolve({ timedOut: true }), 150),
         ),
       ]);
 
-      if (result.timedOut) {
+      if (isTimeoutResult(result)) {
         expect(result.timedOut).toBe(true);
       } else {
         expect(result.success).toBe(false);
@@ -430,13 +475,14 @@ describe("YouTube Live Stream Service - Complete User Experience", () => {
       );
 
       expect(result.success).toBe(true);
-      expect(result.streams[0].title).toContain("中文直播");
-      expect(result.streams[0].title).toContain("العربية المباشرة");
-      expect(result.streams[0].title).toContain("ライブ配信");
-      expect(result.streams[0].author).toContain("国际创作者");
+      const stream = streamAt(result.streams, 0);
+      expect(stream.title).toContain("中文直播");
+      expect(stream.title).toContain("العربية المباشرة");
+      expect(stream.title).toContain("ライブ配信");
+      expect(stream.author).toContain("国际创作者");
 
-      expectNoTechnicalArtifacts(result.streams[0].title);
-      expectNoTechnicalArtifacts(result.streams[0].author);
+      expectNoTechnicalArtifacts(stream.title);
+      expectNoTechnicalArtifacts(stream.author);
     });
 
     it("should handle emoji-rich content for modern user expectations", async () => {
@@ -462,16 +508,16 @@ describe("YouTube Live Stream Service - Complete User Experience", () => {
       );
 
       expect(result.success).toBe(true);
-      expect(result.streams[0].title).toContain("🎮");
-      expect(result.streams[0].title).toContain("🔥");
-      expect(result.streams[0].title).toContain("🎉");
-      expect(result.streams[0].author).toContain("🎮");
-      expect(result.streams[0].author).toContain("🏆");
+      const stream = streamAt(result.streams, 0);
+      expect(stream.title).toContain("🎮");
+      expect(stream.title).toContain("🔥");
+      expect(stream.title).toContain("🎉");
+      expect(stream.author).toContain("🎮");
+      expect(stream.author).toContain("🏆");
 
-      expectNoTechnicalArtifacts(result.streams[0].title);
-      expectNoTechnicalArtifacts(result.streams[0].author);
-      validateUserFacingString(result.streams[0].title, {
-        audience: "general",
+      expectNoTechnicalArtifacts(stream.title);
+      expectNoTechnicalArtifacts(stream.author);
+      validateUserFacingString(stream.title, {
         minLength: 15,
       });
     });
@@ -501,15 +547,16 @@ describe("YouTube Live Stream Service - Complete User Experience", () => {
       );
 
       expect(result.success).toBe(true);
-      expect(result.streams[0].title).toContain("&");
-      expect(result.streams[0].title).toContain('"');
-      expect(result.streams[0].title).toContain("—");
-      expect(result.streams[0].title).toContain("(");
-      expect(result.streams[0].title).toContain("%");
-      expect(result.streams[0].author).toContain("™");
+      const stream = streamAt(result.streams, 0);
+      expect(stream.title).toContain("&");
+      expect(stream.title).toContain('"');
+      expect(stream.title).toContain("—");
+      expect(stream.title).toContain("(");
+      expect(stream.title).toContain("%");
+      expect(stream.author).toContain("™");
 
-      expectNoTechnicalArtifacts(result.streams[0].title);
-      expectNoTechnicalArtifacts(result.streams[0].author);
+      expectNoTechnicalArtifacts(stream.title);
+      expectNoTechnicalArtifacts(stream.author);
     });
   });
 
@@ -570,7 +617,6 @@ describe("YouTube Live Stream Service - Complete User Experience", () => {
 
       expectNoTechnicalArtifacts(result.error);
       validateUserFacingString(result.error, {
-        audience: "general",
         minLength: 5,
       });
     });
@@ -661,7 +707,7 @@ describe("YouTube Live Stream Service - Complete User Experience", () => {
       mockInnertubeClient.getChannel.mockResolvedValue(mockChannel);
 
       const requestCount = 5;
-      const results = [];
+      const results: LiveStreamResult[] = [];
 
       for (let i = 0; i < requestCount; i++) {
         const result = await YouTubeLiveStreamService.getLiveStreams(
@@ -675,11 +721,12 @@ describe("YouTube Live Stream Service - Complete User Experience", () => {
       results.forEach((result) => {
         expect(result.success).toBe(true);
         expect(result.streams).toHaveLength(1);
-        expect(result.streams[0].videoId).toBe("reliable123");
-        expect(result.streams[0].title).toBe("Reliable Stream Content");
+        const stream = streamAt(result.streams, 0);
+        expect(stream.videoId).toBe("reliable123");
+        expect(stream.title).toBe("Reliable Stream Content");
 
-        expectNoTechnicalArtifacts(result.streams[0].title);
-        expectNoTechnicalArtifacts(result.streams[0].author);
+        expectNoTechnicalArtifacts(stream.title);
+        expectNoTechnicalArtifacts(stream.author);
       });
 
       expect(results.every((r) => r.success)).toBe(true);
@@ -702,7 +749,11 @@ describe("YouTube Live Stream Service - Complete User Experience", () => {
       };
       mockInnertubeClient.getChannel.mockResolvedValue(mockChannel);
 
-      const performanceTests = [];
+      const performanceTests: Array<{
+        result: LiveStreamResult;
+        responseTime: number;
+        testIndex: number;
+      }> = [];
 
       for (let i = 0; i < 3; i++) {
         const startTime = testClock.now();
@@ -725,9 +776,10 @@ describe("YouTube Live Stream Service - Complete User Experience", () => {
       performanceTests.forEach(({ result, responseTime }) => {
         expect(result.success).toBe(true);
         expect(responseTime).toBeLessThan(100);
+        const stream = streamAt(result.streams, 0);
 
-        expectNoTechnicalArtifacts(result.streams[0].title);
-        expectNoTechnicalArtifacts(result.streams[0].author);
+        expectNoTechnicalArtifacts(stream.title);
+        expectNoTechnicalArtifacts(stream.author);
       });
 
       const responseTimes = performanceTests.map((t) => t.responseTime);

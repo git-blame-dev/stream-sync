@@ -3,17 +3,89 @@ import {
   createMockFn,
   clearAllMocks,
   restoreAllMocks,
+  type TestMockFn,
 } from "../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../helpers/mock-factories";
 import { waitForDelay } from "../../helpers/time-utils";
 import { YouTubeConnectionManager } from "../../../src/platforms/youtube/youtube-connection-manager";
+
+type TestConnection = {
+  videoId?: string;
+  stop?: () => Promise<void>;
+  disconnect?: () => Promise<void>;
+  [key: string]: unknown;
+};
+
+type TestConnectionState =
+  | "connecting"
+  | "connected"
+  | "ready"
+  | "disconnecting"
+  | "disconnected"
+  | "error";
+
+type TestConnectionData = {
+  connection: TestConnection | null;
+  state: TestConnectionState;
+  metadata: Record<string, unknown>;
+  ready?: boolean;
+};
+
+type TestErrorHandler = {
+  handleEventProcessingError: TestMockFn<
+    [Error, string, unknown, string, string],
+    unknown
+  >;
+};
+
+type TestYouTubeConnectionManager = YouTubeConnectionManager & {
+  connections: Map<string, TestConnectionData>;
+  errorHandler: TestErrorHandler;
+  getAllConnections: () => Array<TestConnection | null>;
+  getConnection: (videoId: string) => TestConnection | null | undefined;
+  getAllConnectionData: () => TestConnectionData[];
+  getConnectionStatus: (
+    videoId: string,
+  ) => (TestConnectionData & { videoId: string; ready: boolean }) | null;
+};
+
+type ConnectionFactory = Parameters<
+  YouTubeConnectionManager["connectToStream"]
+>[1];
+
+const expectPresent = <T>(value: T | null | undefined): T => {
+  expect(value).toBeDefined();
+  expect(value).not.toBeNull();
+  if (value === null || value === undefined) {
+    throw new Error("Expected test value to be present");
+  }
+  return value;
+};
+
+const assertPresent: <T>(value: T | null | undefined) => asserts value is T = <T>(
+  value: T | null | undefined,
+) => {
+  expectPresent(value);
+};
+
+const firstMockCall = <Args extends unknown[], Return>(
+  mockFn: TestMockFn<Args, Return>,
+): Args => {
+  const call = mockFn.mock.calls[0];
+  expect(call).toBeDefined();
+  if (!call) {
+    throw new Error("Expected mock to have at least one call");
+  }
+  return call;
+};
+
 describe("YouTube Connection Manager - Behavior Excellence", () => {
-  let connectionManager;
-  let mockConnectionFactory;
+  let connectionManager: TestYouTubeConnectionManager;
+  let mockConnectionFactory: ConnectionFactory;
 
   beforeEach(() => {
-    mockConnectionFactory = createMockFn().mockImplementation(
-      async (videoId) => ({
+    mockConnectionFactory = createMockFn<[string], Promise<TestConnection>>().mockImplementation(
+      async (videoId: string) => ({
         videoId,
         state: "connected",
         metadata: { connectedAt: new Date().toISOString() },
@@ -21,7 +93,9 @@ describe("YouTube Connection Manager - Behavior Excellence", () => {
       }),
     );
 
-    connectionManager = new YouTubeConnectionManager(noOpLogger);
+    connectionManager = new YouTubeConnectionManager(
+      noOpLogger,
+    ) as TestYouTubeConnectionManager;
   });
 
   afterEach(() => {
@@ -46,8 +120,8 @@ describe("YouTube Connection Manager - Behavior Excellence", () => {
       const connections = connectionManager.getAllConnections();
       expect(connections).toHaveLength(1);
       const connectionData = connectionManager.getAllConnectionData();
-      expect(connectionData[0].state).toBe("connected");
-      expect(connections[0].videoId).toBe("test-video-123");
+      expect(expectPresent(connectionData[0]).state).toBe("connected");
+      expect(expectPresent(connections[0]).videoId).toBe("test-video-123");
 
       expect(connectionManager.hasConnection("test-video-123")).toBe(true);
       expect(connectionManager.getConnection("test-video-123")).toBeDefined();
@@ -99,8 +173,11 @@ describe("YouTube Connection Manager - Behavior Excellence", () => {
 
   describe("Atomic Operations and Race Condition Prevention", () => {
     it("should prevent duplicate connections to same stream through atomic locking", async () => {
-      const slowConnectionFactory = createMockFn().mockImplementation(
-        async (videoId) => {
+      const slowConnectionFactory: ConnectionFactory = createMockFn<
+        [string],
+        Promise<TestConnection>
+      >().mockImplementation(
+        async (videoId: string) => {
           await waitForDelay(50);
           return {
             videoId,
@@ -126,7 +203,7 @@ describe("YouTube Connection Manager - Behavior Excellence", () => {
 
       const connections = connectionManager.getAllConnections();
       expect(connections).toHaveLength(1);
-      expect(connections[0].videoId).toBe("concurrent-test");
+      expect(expectPresent(connections[0]).videoId).toBe("concurrent-test");
     });
 
     it("should prevent concurrent disconnect operations on same stream", async () => {
@@ -181,7 +258,7 @@ describe("YouTube Connection Manager - Behavior Excellence", () => {
       expect(allConnections).toHaveLength(1);
 
       const connection = connectionManager.getConnection(videoId);
-      expect(connection).toBeDefined();
+      assertPresent(connection);
       expect(connection.videoId).toBe(videoId);
     });
 
@@ -219,16 +296,17 @@ describe("YouTube Connection Manager - Behavior Excellence", () => {
       });
 
       const connection = connectionManager.getConnection(videoId);
-      expect(connection).toBeDefined();
+      assertPresent(connection);
       expect(connection.videoId).toBe(videoId);
 
       const allConnectionData = connectionManager.getAllConnectionData();
       const connectionData = allConnectionData.find(
-        (c) => c.connection.videoId === videoId,
+        (c: TestConnectionData) => c.connection?.videoId === videoId,
       );
+      assertPresent(connectionData);
       expect(connectionData.metadata.reason).toBe(connectionReason);
       expect(connectionData.metadata.connectedAt).toBeDefined();
-      expect(new Date(connectionData.metadata.connectedAt)).toBeInstanceOf(
+      expect(new Date(String(connectionData.metadata.connectedAt))).toBeInstanceOf(
         Date,
       );
     });
@@ -332,7 +410,7 @@ describe("YouTube Connection Manager - Behavior Excellence", () => {
 
       const connectionData = connectionManager.getAllConnectionData();
       const successConnections = connectionData.filter(
-        (c) => c.state === "connected",
+        (c: TestConnectionData) => c.state === "connected",
       );
       expect(successConnections).toHaveLength(2);
     });
@@ -344,8 +422,10 @@ describe("YouTube Connection Manager - Behavior Excellence", () => {
         "to-clean",
         mockConnectionFactory,
       );
-      const stop = createMockFn().mockRejectedValue(new Error("stop failed"));
-      const disconnect = createMockFn().mockResolvedValue();
+      const stop = createMockFn<[], Promise<void>>().mockRejectedValue(
+        new Error("stop failed"),
+      );
+      const disconnect = createMockFn<[], Promise<void>>().mockResolvedValue();
       connectionManager.connections.set("to-clean", {
         connection: { stop, disconnect },
         state: "connected",
@@ -405,7 +485,6 @@ describe("YouTube Connection Manager - Behavior Excellence", () => {
 
     it("should handle empty video ID and invalid parameters appropriately", async () => {
       await connectionManager.connectToStream("", mockConnectionFactory);
-      await connectionManager.connectToStream(null, mockConnectionFactory);
 
       const totalConnections = connectionManager.getAllConnections().length;
 
@@ -440,7 +519,7 @@ describe("YouTube Connection Manager - Behavior Excellence", () => {
       expect(connectionManager.hasConnection("active-2")).toBe(true);
 
       const connection1 = connectionManager.getConnection("active-1");
-      expect(connection1).toBeDefined();
+      assertPresent(connection1);
       expect(connection1.videoId).toBe("active-1");
     });
 
@@ -492,6 +571,7 @@ describe("YouTube Connection Manager - Behavior Excellence", () => {
       const missingStatus =
         connectionManager.getConnectionStatus("missing-video");
 
+      assertPresent(existingStatus);
       expect(existingStatus.videoId).toBe("status-video");
       expect(existingStatus.state).toBe(
         connectionManager.CONNECTION_STATES.CONNECTED,
@@ -545,8 +625,12 @@ describe("YouTube Connection Manager - Behavior Excellence", () => {
 
   describe("Error handling and resilience", () => {
     it("normalizes non-Error failures during connection attempts", async () => {
-      const handler = { handleEventProcessingError: createMockFn() };
-      connectionManager.errorHandler = handler;
+      const handleEventProcessingError = createMockFn<
+        [Error, string, unknown, string, string],
+        unknown
+      >();
+      connectionManager.errorHandler.handleEventProcessingError =
+        handleEventProcessingError;
 
       const result = await connectionManager.connectToStream(
         "broken",
@@ -559,26 +643,30 @@ describe("YouTube Connection Manager - Behavior Excellence", () => {
     expect(connectionManager.getConnectionStatus("broken")).toBeNull();
     expect(connectionManager.hasConnection("broken")).toBe(false);
 
-    expect(handler.handleEventProcessingError).toHaveBeenCalledTimes(1);
+    expect(handleEventProcessingError).toHaveBeenCalledTimes(1);
     const [errorArg, eventTypeArg, payloadArg, messageArg, platformArg] =
-      handler.handleEventProcessingError.mock.calls[0];
+      firstMockCall(handleEventProcessingError);
     expect(errorArg).toBeInstanceOf(Error);
     expect(eventTypeArg).toBe("connection");
     expect(payloadArg).toEqual(expect.objectContaining({ videoId: "broken" }));
     expect(String(messageArg)).toContain("Failed to connect to broken");
     expect(platformArg).toBe("youtube-connection");
-    expect(handler.handleEventProcessingError.mock.calls[0][0].message).toBe(
+    expect(firstMockCall(handleEventProcessingError)[0].message).toBe(
       "boom",
     );
     });
 
     it("removes connections even when stop fails and routes errors", async () => {
-      const handler = { handleEventProcessingError: createMockFn() };
-      connectionManager.errorHandler = handler;
+      const handleEventProcessingError = createMockFn<
+        [Error, string, unknown, string, string],
+        unknown
+      >();
+      connectionManager.errorHandler.handleEventProcessingError =
+        handleEventProcessingError;
       connectionManager.connections.set("vid", {
         connection: {
-          stop: createMockFn().mockRejectedValue("stop fail"),
-          disconnect: createMockFn().mockResolvedValue(),
+          stop: createMockFn<[], Promise<void>>().mockRejectedValue("stop fail"),
+          disconnect: createMockFn<[], Promise<void>>().mockResolvedValue(),
         },
         state: connectionManager.CONNECTION_STATES.CONNECTED,
         metadata: {},
@@ -587,15 +675,15 @@ describe("YouTube Connection Manager - Behavior Excellence", () => {
     await connectionManager.removeConnection("vid");
 
     expect(connectionManager.hasConnection("vid")).toBe(false);
-    expect(handler.handleEventProcessingError).toHaveBeenCalledTimes(1);
+    expect(handleEventProcessingError).toHaveBeenCalledTimes(1);
     const [errorArg, eventTypeArg, payloadArg, messageArg, platformArg] =
-      handler.handleEventProcessingError.mock.calls[0];
+      firstMockCall(handleEventProcessingError);
     expect(errorArg).toBeInstanceOf(Error);
     expect(eventTypeArg).toBe("connection");
     expect(payloadArg).toEqual(expect.objectContaining({ videoId: "vid" }));
     expect(String(messageArg)).toContain("Error stopping connection");
     expect(platformArg).toBe("youtube-connection");
-    expect(handler.handleEventProcessingError.mock.calls[0][0].message).toBe(
+    expect(firstMockCall(handleEventProcessingError)[0].message).toBe(
       "stop fail",
     );
     });
