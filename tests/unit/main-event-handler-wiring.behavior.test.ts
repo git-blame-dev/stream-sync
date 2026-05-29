@@ -1,24 +1,17 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import {
-  createMockFn,
-  restoreAllMocks,
-  spyOn,
-} from "../helpers/bun-mock-utils";
+import { afterEach, describe, expect, it } from "bun:test";
+import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
 import { AppRuntime } from "../../src/main";
+import { createConfigFixture } from "../helpers/config-fixture";
+
+type RuntimeConfig = ConstructorParameters<typeof AppRuntime>[0];
+type RuntimeDependencies = ConstructorParameters<typeof AppRuntime>[1];
 
 describe("main.js event handler wiring", () => {
-  let processOnSpy;
-
-  beforeEach(() => {
-    processOnSpy = spyOn(process, "on").mockImplementation(() => process);
-  });
-
   afterEach(() => {
-    processOnSpy.mockRestore();
     restoreAllMocks();
   });
 
-  const createDeps = (overrides = {}) => ({
+  const createDeps = (): RuntimeDependencies => ({
     logging: {
       debug: createMockFn(),
       info: createMockFn(),
@@ -26,48 +19,45 @@ describe("main.js event handler wiring", () => {
       error: createMockFn(),
       console: createMockFn(),
     },
-    notificationManager: overrides.notificationManager || {
+    notificationManager: {
       handleNotification: createMockFn(),
     },
-    displayQueue: overrides.displayQueue || { addItem: createMockFn() },
-    eventBus:
-      overrides.eventBus !== undefined
-        ? overrides.eventBus
-        : {
+    displayQueue: { addItem: createMockFn() },
+    eventBus: {
             subscribe: createMockFn(),
             emit: createMockFn(),
-            unsubscribe: createMockFn(),
           },
-    config: overrides.config || {},
-    vfxCommandService: overrides.vfxCommandService || {
+    config: createConfigFixture(),
+    vfxCommandService: {
       executeCommandForKey: createMockFn().mockResolvedValue({ success: true }),
     },
-    userTrackingService: overrides.userTrackingService || {
-      isFirstMessage: createMockFn().mockResolvedValue(false),
+    userTrackingService: {
+      isFirstMessage: createMockFn<[unknown, Record<string, unknown>?], boolean>().mockReturnValue(false),
     },
-    commandParser:
-      overrides.commandParser !== undefined
-        ? overrides.commandParser
-        : { getVFXConfig: createMockFn() },
-    commandCooldownService: overrides.commandCooldownService || {
-      updateCooldown: createMockFn(),
+    commandParser: { getVFXConfig: createMockFn() },
+    commandCooldownService: {
+      checkUserCooldown: createMockFn<[unknown, number, number], boolean>().mockReturnValue(true),
+      updateUserCooldown: createMockFn<[unknown], void>(),
     },
-    platformLifecycleService: overrides.platformLifecycleService || {
+    platformLifecycleService: {
       getAllPlatforms: createMockFn(() => ({})),
+      initializeAllPlatforms: createMockFn<[Record<string, unknown>], Promise<unknown>>().mockResolvedValue(undefined),
+      disconnectAll: createMockFn<[], Promise<unknown>>().mockResolvedValue(undefined),
+      getPlatformConnectionTime: createMockFn<[string], number | undefined | null>().mockReturnValue(null),
     },
-    dependencyFactory: overrides.dependencyFactory || {
+    dependencyFactory: {
       createYoutubeDependencies: createMockFn(() => ({})),
     },
-    twitchAuth: overrides.twitchAuth || null,
-    obsEventService: overrides.obsEventService || {},
-    sceneManagementService: overrides.sceneManagementService || {},
+    twitchAuth: null,
+    obsEventService: {},
+    sceneManagementService: {},
   });
 
-  const baseConfig = { general: {} };
+  const baseConfig: RuntimeConfig = createConfigFixture();
 
   it("rejects construction when EventBus is unavailable", () => {
     expect(
-      () => new AppRuntime(baseConfig, createDeps({ eventBus: null })),
+      () => new AppRuntime(baseConfig, Object.assign(createDeps(), { eventBus: null })),
     ).toThrow("AppRuntime missing required dependencies");
   });
 });

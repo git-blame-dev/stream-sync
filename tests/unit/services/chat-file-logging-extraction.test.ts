@@ -1,38 +1,53 @@
 import { describe, it, beforeEach, afterEach, expect } from "bun:test";
-import {
-  clearAllMocks,
-  restoreAllMocks,
-  spyOn,
-} from "../../helpers/bun-mock-utils";
-import { noOpLogger } from "../../helpers/mock-factories";
-import { promises as fs } from "fs";
+import { clearAllMocks, restoreAllMocks, createMockFn } from "../../helpers/bun-mock-utils";
+import * as fs from "node:fs/promises";
+import * as os from "node:os";
 import * as path from "path";
 import { ChatFileLoggingService } from "../../../src/services/ChatFileLoggingService.ts";
 
-describe("ChatFileLoggingService - Behavior-Focused Regression Tests", () => {
-  let service;
-  let appendSpy;
-  let accessSpy;
-  let mkdirSpy;
-  let statSpy;
-  const logDir = "./logs";
+type ServiceDependencies = ConstructorParameters<typeof ChatFileLoggingService>[0];
+type RawEventLogWriterLike = NonNullable<NonNullable<ServiceDependencies>["rawEventLogWriter"]>;
+type WriteRawEvent = RawEventLogWriterLike["writeRawEvent"];
+type ResolveLogFileName = RawEventLogWriterLike["resolveLogFileName"];
 
-  beforeEach(() => {
-    appendSpy = spyOn(fs, "appendFile").mockResolvedValue();
-    accessSpy = spyOn(fs, "access").mockResolvedValue();
-    mkdirSpy = spyOn(fs, "mkdir").mockResolvedValue();
-    statSpy = spyOn(fs, "stat").mockResolvedValue({
-      size: 123,
-      mtime: new Date("2024-01-01T00:00:00.000Z"),
-    });
+const resolveLogFileName: ResolveLogFileName = (platform: string, eventType: string) =>
+  platform === "youtube" && eventType === "unknown-renderer"
+    ? "youtube-unknown-renderer-log.ndjson"
+    : `${platform}-data-log.ndjson`;
+
+const requireRecord = (value: unknown, label: string): Record<string, unknown> => {
+  expect(value).toBeDefined();
+  if (value === null || typeof value !== "object") {
+    throw new Error(`Expected ${label} to be an object`);
+  }
+  return Object.fromEntries(Object.entries(value));
+};
+
+describe("ChatFileLoggingService - Behavior-Focused Regression Tests", () => {
+  let service: ChatFileLoggingService;
+  let writeRawEventSpy: ReturnType<typeof createMockFn<Parameters<WriteRawEvent>, ReturnType<WriteRawEvent>>>;
+  let logDir: string;
+
+  beforeEach(async () => {
+    logDir = await fs.mkdtemp(path.join(os.tmpdir(), "chat-file-logging-test-"));
+    writeRawEventSpy = createMockFn<Parameters<WriteRawEvent>, ReturnType<WriteRawEvent>>(
+      async ({ platform, eventType }) => ({
+        fileName: resolveLogFileName(platform, eventType),
+        filePath: path.join(logDir, resolveLogFileName(platform, eventType)),
+      }),
+    );
 
     service = new ChatFileLoggingService({
-      logger: noOpLogger,
-      config: { dataLoggingEnabled: true, dataLoggingPath: logDir },
+      config: { dataLoggingPath: logDir },
+      rawEventLogWriter: {
+        writeRawEvent: writeRawEventSpy,
+        resolveLogFileName,
+      },
     });
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    await fs.rm(logDir, { recursive: true, force: true });
     restoreAllMocks();
     clearAllMocks();
   });
@@ -51,21 +66,19 @@ describe("ChatFileLoggingService - Behavior-Focused Regression Tests", () => {
         dataLoggingEnabled: true,
       });
 
-      expect(appendSpy.mock.calls).toHaveLength(3);
+      expect(writeRawEventSpy.mock.calls).toHaveLength(3);
 
-      const [twitchCall, youtubeCall, tiktokCall] = appendSpy.mock.calls;
-      expect(twitchCall[0]).toBe(path.join(logDir, "twitch-data-log.ndjson"));
-      expect(youtubeCall[0]).toBe(path.join(logDir, "youtube-data-log.ndjson"));
-      expect(tiktokCall[0]).toBe(path.join(logDir, "tiktok-data-log.ndjson"));
+      const [twitchCall, youtubeCall, tiktokCall] = writeRawEventSpy.mock.calls;
+      if (!twitchCall || !youtubeCall || !tiktokCall) throw new Error("Expected three raw event writes");
+      expect(twitchCall[0].dataLoggingPath).toBe(logDir);
+      expect(youtubeCall[0].dataLoggingPath).toBe(logDir);
+      expect(tiktokCall[0].dataLoggingPath).toBe(logDir);
 
-      const twitchEntry = JSON.parse(twitchCall[1]);
-      expect(twitchEntry).toMatchObject({
+      expect(twitchCall[0]).toMatchObject({
         platform: "twitch",
         eventType: "chat",
         payload: chatData,
       });
-      expect(typeof twitchEntry.ingestTimestamp).toBe("string");
-      expect(twitchEntry.ingestTimestamp).toMatch(/\d{4}-\d{2}-\d{2}T/);
     });
 
     it("routes YouTube unknown renderer diagnostics to a separate log file", async () => {
@@ -81,13 +94,10 @@ describe("ChatFileLoggingService - Behavior-Focused Regression Tests", () => {
         { dataLoggingEnabled: true },
       );
 
-      expect(appendSpy.mock.calls).toHaveLength(1);
-      expect(appendSpy.mock.calls[0][0]).toBe(
-        path.join(logDir, "youtube-unknown-renderer-log.ndjson"),
-      );
-
-      const logEntry = JSON.parse(appendSpy.mock.calls[0][1]);
-      expect(logEntry).toMatchObject({
+      expect(writeRawEventSpy.mock.calls).toHaveLength(1);
+      const [writeCall] = writeRawEventSpy.mock.calls;
+      if (!writeCall) throw new Error("Expected unknown renderer write");
+      expect(writeCall[0]).toMatchObject({
         platform: "youtube",
         eventType: "unknown-renderer",
         payload: diagnosticPayload,
@@ -104,11 +114,11 @@ describe("ChatFileLoggingService - Behavior-Focused Regression Tests", () => {
         dataLoggingEnabled: false,
       });
 
-      expect(appendSpy.mock.calls).toHaveLength(0);
+      expect(writeRawEventSpy.mock.calls).toHaveLength(0);
     });
 
     it("handles filesystem errors gracefully without breaking chat", async () => {
-      appendSpy.mockRejectedValueOnce(new Error("Disk full"));
+      writeRawEventSpy.mockRejectedValueOnce(new Error("Disk full"));
 
       await expect(
         service.logRawPlatformData(
@@ -131,17 +141,24 @@ describe("ChatFileLoggingService - Behavior-Focused Regression Tests", () => {
         username: "Supporter123",
       };
 
-      await service.logRawPlatformData("tiktok", "gift", giftData, {
+      const defaultWriterService = new ChatFileLoggingService({
+        config: { dataLoggingPath: logDir },
+      });
+
+      await defaultWriterService.logRawPlatformData("tiktok", "gift", giftData, {
         dataLoggingEnabled: true,
       });
 
-      const [[, logLine]] = appendSpy.mock.calls;
-      const logEntry = JSON.parse(logLine);
+      const logFilePath = path.join(logDir, "tiktok-data-log.ndjson");
+      const logContents = await fs.readFile(logFilePath, "utf8");
+      const parsedEntry = requireRecord(JSON.parse(logContents.trim()), "NDJSON log entry");
 
-      expect(logEntry).toHaveProperty("ingestTimestamp");
-      expect(logEntry).toHaveProperty("platform", "tiktok");
-      expect(logEntry).toHaveProperty("eventType", "gift");
-      expect(logEntry.payload).toEqual(giftData);
+      expect(parsedEntry).toMatchObject({
+        platform: "tiktok",
+        eventType: "gift",
+        payload: giftData,
+      });
+      expect(typeof parsedEntry.ingestTimestamp).toBe("string");
     });
 
     it("preserves the StreamElements raw event log filename and wrapper", async () => {
@@ -153,52 +170,48 @@ describe("ChatFileLoggingService - Behavior-Focused Regression Tests", () => {
         },
       };
 
-      await service.logRawPlatformData("streamelements", "follow", followPayload, {
+      const defaultWriterService = new ChatFileLoggingService({
+        config: { dataLoggingPath: logDir },
+      });
+
+      await defaultWriterService.logRawPlatformData("streamelements", "follow", followPayload, {
         dataLoggingEnabled: true,
       });
 
-      const [[filePath, logLine]] = appendSpy.mock.calls;
-      const logEntry = JSON.parse(logLine);
+      const logFilePath = path.join(logDir, "streamelements-data-log.ndjson");
+      const logContents = await fs.readFile(logFilePath, "utf8");
+      const parsedEntry = requireRecord(JSON.parse(logContents.trim()), "StreamElements log entry");
 
-      expect(filePath).toBe(path.join(logDir, "streamelements-data-log.ndjson"));
-      expect(logEntry).toMatchObject({
+      expect(parsedEntry).toMatchObject({
         platform: "streamelements",
         eventType: "follow",
         payload: followPayload,
       });
-      expect(typeof logEntry.ingestTimestamp).toBe("string");
+      expect(typeof parsedEntry.ingestTimestamp).toBe("string");
     });
 
     it("provides statistics for monitoring system health", async () => {
+      const expectedLogPath = path.join(logDir, "youtube-data-log.ndjson");
+      await fs.writeFile(expectedLogPath, "x".repeat(123));
+
       const stats = await service.getLogStatistics("youtube", {
         dataLoggingEnabled: true,
       });
 
-      expect(statSpy.mock.calls).toHaveLength(1);
-      expect(statSpy.mock.calls[0][0]).toBe(
-        path.join(logDir, "youtube-data-log.ndjson"),
-      );
       expect(stats).toMatchObject({
         size: 123,
-        path: path.join(logDir, "youtube-data-log.ndjson"),
+        path: expectedLogPath,
       });
     });
   });
 
   describe("Error Recovery User Experience", () => {
-    it("creates the log directory when missing", async () => {
-      accessSpy.mockRejectedValueOnce(new Error("missing"));
+    it("passes the configured log directory to the raw event writer", async () => {
+      await service.logRawPlatformData("twitch", "chat", { msg: "test" }, { dataLoggingEnabled: true });
 
-      await service.logRawPlatformData(
-        "twitch",
-        "chat",
-        { msg: "test" },
-        { dataLoggingEnabled: true },
-      );
-
-      expect(mkdirSpy.mock.calls).toHaveLength(1);
-      expect(mkdirSpy.mock.calls[0][0]).toBe(logDir);
-      expect(mkdirSpy.mock.calls[0][1]).toEqual({ recursive: true });
+      const [writeCall] = writeRawEventSpy.mock.calls;
+      if (!writeCall) throw new Error("Expected raw event write");
+      expect(writeCall[0].dataLoggingPath).toBe(logDir);
     });
   });
 });

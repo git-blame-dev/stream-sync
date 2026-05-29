@@ -2,6 +2,17 @@ import { describe, test, expect } from "bun:test";
 import { createNotificationData } from "../helpers/notification-test-utils";
 import MessageTTSHandler from "../../src/utils/message-tts-handler";
 
+type TTSStage = ReturnType<typeof MessageTTSHandler.createTTSStages>[number];
+
+function expectOnlyTTSStage(stages: TTSStage[]): TTSStage {
+  expect(stages).toHaveLength(1);
+  const stage = stages[0];
+  if (!stage) {
+    throw new Error("Expected a single TTS stage");
+  }
+  return stage;
+}
+
 describe("MessageTTS Integration", () => {
   describe("YouTube SuperChat Integration", () => {
     test("should create SuperChat notification with proper message content", () => {
@@ -40,13 +51,13 @@ describe("MessageTTS Integration", () => {
 
       const ttsStages = MessageTTSHandler.createTTSStages(notificationData);
 
-      expect(ttsStages).toHaveLength(1);
-      expect(ttsStages[0]).toEqual({
+      const stage = expectOnlyTTSStage(ttsStages);
+      expect(stage).toEqual({
         text: expect.stringContaining("SuperChatUser sent"),
         delay: 0,
         type: "primary",
       });
-      expect(ttsStages[0].text).toContain("Thanks for the stream");
+      expect(stage.text).toContain("Thanks for the stream");
     });
 
     test("should generate single-stage TTS for SuperChat without message", () => {
@@ -65,8 +76,8 @@ describe("MessageTTS Integration", () => {
 
       const ttsStages = MessageTTSHandler.createTTSStages(notificationData);
 
-      expect(ttsStages).toHaveLength(1);
-      expect(ttsStages[0].type).toBe("primary");
+      const stage = expectOnlyTTSStage(ttsStages);
+      expect(stage.type).toBe("primary");
     });
   });
 
@@ -192,10 +203,10 @@ describe("MessageTTS Integration", () => {
 
       const ttsStages = MessageTTSHandler.createTTSStages(notificationData);
 
-      expect(ttsStages).toHaveLength(1);
-      expect(ttsStages[0].text).toContain("BitUser");
-      expect(ttsStages[0].text).toContain("Great stream");
-      expect(ttsStages[0].type).toBe("primary");
+      const stage = expectOnlyTTSStage(ttsStages);
+      expect(stage.text).toContain("BitUser");
+      expect(stage.text).toContain("Great stream");
+      expect(stage.type).toBe("primary");
     });
   });
 
@@ -226,9 +237,9 @@ describe("MessageTTS Integration", () => {
 
       const ttsStages = MessageTTSHandler.createTTSStages(notificationData);
 
-      expect(ttsStages).toHaveLength(1);
-      expect(ttsStages[0].text).toBe("Cool stream!");
-      expect(ttsStages[0].type).toBe("primary");
+      const stage = expectOnlyTTSStage(ttsStages);
+      expect(stage.text).toBe("Cool stream!");
+      expect(stage.type).toBe("primary");
     });
   });
 
@@ -254,8 +265,8 @@ describe("MessageTTS Integration", () => {
 
       const ttsStages = MessageTTSHandler.createTTSStages(notificationData);
 
-      expect(ttsStages).toHaveLength(1);
-      expect(ttsStages[0].type).toBe("primary");
+      const stage = expectOnlyTTSStage(ttsStages);
+      expect(stage.type).toBe("primary");
     });
 
     test("should use gift type for TikTok gift notifications", () => {
@@ -293,8 +304,8 @@ describe("MessageTTS Integration", () => {
 
       const ttsStages = MessageTTSHandler.createTTSStages(notificationData);
 
-      expect(ttsStages).toHaveLength(1);
-      expect(ttsStages[0].type).toBe("primary");
+      const stage = expectOnlyTTSStage(ttsStages);
+      expect(stage.type).toBe("primary");
     });
 
     test("should ignore whitespace-only messages", () => {
@@ -313,8 +324,8 @@ describe("MessageTTS Integration", () => {
 
       const ttsStages = MessageTTSHandler.createTTSStages(notificationData);
 
-      expect(ttsStages).toHaveLength(1);
-      expect(ttsStages[0].type).toBe("primary");
+      const stage = expectOnlyTTSStage(ttsStages);
+      expect(stage.type).toBe("primary");
     });
 
     test("should trim message content for TTS", () => {
@@ -333,8 +344,8 @@ describe("MessageTTS Integration", () => {
 
       const ttsStages = MessageTTSHandler.createTTSStages(notificationData);
 
-      expect(ttsStages).toHaveLength(1);
-      expect(ttsStages[0].text).toContain("Thanks for the stream");
+      const stage = expectOnlyTTSStage(ttsStages);
+      expect(stage.text).toContain("Thanks for the stream");
     });
   });
 
@@ -355,9 +366,9 @@ describe("MessageTTS Integration", () => {
 
       const ttsStages = MessageTTSHandler.createTTSStages(notificationData);
 
-      expect(ttsStages).toHaveLength(1);
-      expect(ttsStages[0].text).toContain("10 euros");
-      expect(ttsStages[0].text).toContain("Greetings from Europe");
+      const stage = expectOnlyTTSStage(ttsStages);
+      expect(stage.text).toContain("10 euros");
+      expect(stage.text).toContain("Greetings from Europe");
     });
 
     test("should handle GBP SuperChat with message", () => {
@@ -376,9 +387,9 @@ describe("MessageTTS Integration", () => {
 
       const ttsStages = MessageTTSHandler.createTTSStages(notificationData);
 
-      expect(ttsStages).toHaveLength(1);
-      expect(ttsStages[0].text).toContain("7 British pounds");
-      expect(ttsStages[0].text).toContain("Cheers from the UK");
+      const stage = expectOnlyTTSStage(ttsStages);
+      expect(stage.text).toContain("7 British pounds");
+      expect(stage.text).toContain("Cheers from the UK");
     });
   });
 
@@ -399,9 +410,9 @@ describe("MessageTTS Integration", () => {
 
       const ttsStages = MessageTTSHandler.createTTSStages(notificationData);
 
-      expect(ttsStages).toHaveLength(1);
-      expect(ttsStages[0].text).toContain("SuperLongUsernameWithEmojis");
-      expect(ttsStages[0].text).toContain("Hello world");
+      const stage = expectOnlyTTSStage(ttsStages);
+      expect(stage.text).toContain("SuperLongUsernameWithEmojis");
+      expect(stage.text).toContain("Hello world");
     });
   });
 });

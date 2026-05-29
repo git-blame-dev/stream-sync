@@ -3,16 +3,39 @@ import { createMockFn } from "../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../helpers/mock-factories";
 import { ViewerCountExtractionService } from "../../../src/services/viewer-count-extraction-service.ts";
 
+type VideoInfo = Record<string, unknown>;
+type ExtractorOptions = { debug?: boolean; strategies?: string[] };
+type ExtractorResult = {
+  success: boolean;
+  count: number;
+  strategy?: string;
+  metadata?: Record<string, unknown>;
+};
+type MockInnertube = {
+  getVideoInfo: ReturnType<
+    typeof createMockFn<[string, { timeout?: number; instanceKey?: unknown }?], Promise<VideoInfo>>
+  >;
+};
+type MockExtractor = {
+  extractConcurrentViewers: ReturnType<
+    typeof createMockFn<[VideoInfo, ExtractorOptions?], ExtractorResult>
+  >;
+};
+type ExtractionResponse = Awaited<ReturnType<ViewerCountExtractionService["extractViewerCount"]>>;
+
 describe("ViewerCountExtractionService", () => {
-  let mockInnertube;
-  let mockExtractor;
+  let mockInnertube: MockInnertube;
+  let mockExtractor: MockExtractor;
 
   beforeEach(() => {
     mockInnertube = {
-      getVideoInfo: createMockFn(),
+      getVideoInfo: createMockFn<
+        [string, { timeout?: number; instanceKey?: unknown }?],
+        Promise<VideoInfo>
+      >(),
     };
     mockExtractor = {
-      extractConcurrentViewers: createMockFn(),
+      extractConcurrentViewers: createMockFn<[VideoInfo, ExtractorOptions?], ExtractorResult>(),
     };
   });
 
@@ -81,7 +104,7 @@ describe("ViewerCountExtractionService", () => {
     });
 
     let call = 0;
-    service.extractViewerCount = createMockFn((videoId) => {
+    service.extractViewerCount = createMockFn<[string], Promise<ExtractionResponse>>((videoId) => {
       call++;
       if (call === 1) {
         return Promise.resolve({ success: true, count: 1, videoId });
@@ -94,9 +117,13 @@ describe("ViewerCountExtractionService", () => {
     });
 
     expect(results).toHaveLength(2);
-    expect(results[0].success).toBe(true);
-    expect(results[1].success).toBe(false);
-    expect(results[1].errorType).toBe("Promise");
+    const [firstResult, secondResult] = results;
+    expect(firstResult).toBeDefined();
+    expect(secondResult).toBeDefined();
+    if (!firstResult || !secondResult) throw new Error("Expected two batch results");
+    expect(firstResult.success).toBe(true);
+    expect(secondResult.success).toBe(false);
+    expect(secondResult.errorType).toBe("Promise");
   });
 
   it("aggregates zero when no video ids provided", async () => {
@@ -117,9 +144,10 @@ describe("ViewerCountExtractionService", () => {
       logger: noOpLogger,
       YouTubeViewerExtractor: mockExtractor,
     });
-    const internal = service as any;
-
-    internal.extractViewerCountsBatch = createMockFn().mockResolvedValue([
+    service.extractViewerCountsBatch = createMockFn<
+      [string[], { maxConcurrency?: unknown }?],
+      Promise<ExtractionResponse[]>
+    >().mockResolvedValue([
       { success: true, count: 14, videoId: "vid-a", strategy: "view_text" },
       {
         success: false,
@@ -136,7 +164,10 @@ describe("ViewerCountExtractionService", () => {
     expect(result.successfulStreams).toBe(1);
     expect(result.failedStreams).toBe(1);
     expect(result.streams).toHaveLength(2);
-    expect((result.streams[1] as any).error).toBe("Extraction failed");
+    const failedStream = result.streams[1];
+    expect(failedStream).toBeDefined();
+    if (!failedStream) throw new Error("Expected failed stream details");
+    expect(failedStream.error).toBe("Extraction failed");
   });
 
   it("surfaces unavailable aggregation when all stream extractions fail", async () => {
@@ -144,9 +175,10 @@ describe("ViewerCountExtractionService", () => {
       logger: noOpLogger,
       YouTubeViewerExtractor: mockExtractor,
     });
-    const internal = service as any;
-
-    internal.extractViewerCountsBatch = createMockFn().mockResolvedValue([
+    service.extractViewerCountsBatch = createMockFn<
+      [string[], { maxConcurrency?: unknown }?],
+      Promise<ExtractionResponse[]>
+    >().mockResolvedValue([
       {
         success: false,
         count: 0,
@@ -175,15 +207,14 @@ describe("ViewerCountExtractionService", () => {
       YouTubeViewerExtractor: mockExtractor,
       timeout: 2000,
     });
-    const internal = service as any;
 
     service.updateConfig({ timeout: 4500, retries: 2 });
-    internal._updateStats(true, 40);
+    service._updateStats(true, 40);
 
     const stats = service.getStats();
 
-    expect(internal.config.timeout).toBe(4500);
-    expect(internal.config.retries).toBe(2);
+    expect(service.config.timeout).toBe(4500);
+    expect(service.config.retries).toBe(2);
     expect(stats.totalRequests).toBe(0);
     expect(stats.successRate).toBe("0%");
     expect(typeof stats.uptime).toBe("number");
@@ -192,7 +223,7 @@ describe("ViewerCountExtractionService", () => {
   it("normalizes non-boolean debug config to false before extraction", async () => {
     mockInnertube.getVideoInfo.mockResolvedValue({ info: true });
     mockExtractor.extractConcurrentViewers.mockImplementation(
-      (_info, options) => ({
+      (_info, options = {}) => ({
         success: true,
         count: options.debug === false ? 1 : 2,
         strategy: "view_text",

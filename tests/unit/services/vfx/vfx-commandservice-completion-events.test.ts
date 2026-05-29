@@ -2,33 +2,83 @@ import { describe, test, expect, beforeEach } from "bun:test";
 import { createMockFn } from "../../../helpers/bun-mock-utils";
 
 import { PlatformEvents } from "../../../../src/interfaces/PlatformEvents";
+import { OBSEffectsManager } from "../../../../src/obs/effects";
 import {
   VFXCommandService,
   createVFXCommandService,
 } from "../../../../src/services/VFXCommandService.ts";
 
+type EventRecord = { name: string; payload: Record<string, unknown> };
+type EventBus = ConstructorParameters<typeof VFXCommandService>[1];
+type VFXServiceConfig = ConstructorParameters<typeof VFXCommandService>[0];
+type PlayMediaInOBS = OBSEffectsManager["playMediaInOBS"];
+
+function createConfig(): VFXServiceConfig {
+  return {
+    commands: { greetings: "!hello" },
+    farewell: {},
+    vfx: { filePath: "/tmp" },
+    cooldowns: { cmdCooldown: 60, globalCmdCooldownMs: 60000 },
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function createMockEffectsManager(): OBSEffectsManager {
+  const obsLogger = {
+    debug: () => {},
+    warn: () => {},
+    error: () => {},
+  };
+  const effectsManager = new OBSEffectsManager(
+    {
+      ensureConnected: createMockFn<[], Promise<void>>().mockResolvedValue(undefined),
+      call: createMockFn<[string, Record<string, unknown>?], Promise<unknown>>().mockResolvedValue({}),
+    },
+    {
+      logger: obsLogger,
+      retrySystem: { delay: () => Promise.resolve() },
+    },
+  );
+  effectsManager.playMediaInOBS = createMockFn<Parameters<PlayMediaInOBS>, ReturnType<PlayMediaInOBS>>()
+    .mockResolvedValue(undefined);
+  return effectsManager;
+}
+
+function expectRecordedEvent(
+  events: EventRecord[],
+  name: string,
+): EventRecord {
+  const event = events.find((recordedEvent) => recordedEvent.name === name);
+  expect(event).toBeDefined();
+  if (!event) {
+    throw new Error(`Expected ${name} event`);
+  }
+  return event;
+}
+
 describe("VFXCommandService completion events", () => {
-  let eventBus;
-  let recordedEvents;
-  let mockEffectsManager;
+  let eventBus: EventBus;
+  let recordedEvents: EventRecord[];
+  let mockEffectsManager: OBSEffectsManager;
 
   beforeEach(() => {
     recordedEvents = [];
     eventBus = {
-      emit: (name, payload) => recordedEvents.push({ name, payload }),
+      emit: (name: string, payload: unknown) => {
+        if (!isRecord(payload)) {
+          throw new Error("Expected VFX event payload object");
+        }
+        recordedEvents.push({ name, payload });
+      },
     };
-    mockEffectsManager = {
-      playMediaInOBS: createMockFn().mockResolvedValue(undefined),
-    };
+    mockEffectsManager = createMockEffectsManager();
   });
 
   test("emits both executed and effect-completed with enriched payload", async () => {
-    const config = {
-      commands: { greetings: "!hello" },
-      farewell: {},
-      vfx: { filePath: "/tmp" },
-      cooldowns: { cmdCooldown: 60, globalCmdCooldownMs: 60000 },
-    };
+    const config = createConfig();
     const service = new VFXCommandService(config, eventBus, {
       effectsManager: mockEffectsManager,
     });
@@ -53,15 +103,8 @@ describe("VFXCommandService completion events", () => {
       correlationId: "test-corr-1",
     });
 
-    const executedEvent = recordedEvents.find(
-      (e) => e.name === PlatformEvents.VFX_COMMAND_EXECUTED,
-    );
-    const completedEvent = recordedEvents.find(
-      (e) => e.name === PlatformEvents.VFX_EFFECT_COMPLETED,
-    );
-
-    expect(executedEvent).toBeDefined();
-    expect(completedEvent).toBeDefined();
+    const executedEvent = expectRecordedEvent(recordedEvents, PlatformEvents.VFX_COMMAND_EXECUTED);
+    const completedEvent = expectRecordedEvent(recordedEvents, PlatformEvents.VFX_EFFECT_COMPLETED);
 
     const payload = completedEvent.payload;
     expect(executedEvent.payload.type).toBe(
@@ -80,15 +123,8 @@ describe("VFXCommandService completion events", () => {
   });
 
   test("factory passes injected effects manager through to service construction", () => {
-    const config = {
-      commands: { greetings: "!hello" },
-      farewell: {},
-      vfx: { filePath: "/tmp" },
-      cooldowns: { cmdCooldown: 60, globalCmdCooldownMs: 60000 },
-    };
-    const customEffectsManager = {
-      playMediaInOBS: createMockFn().mockResolvedValue(undefined),
-    };
+    const config = createConfig();
+    const customEffectsManager = createMockEffectsManager();
 
     const service = createVFXCommandService(config, null, {
       effectsManager: customEffectsManager,
@@ -98,14 +134,9 @@ describe("VFXCommandService completion events", () => {
   });
 
   test("does not update cooldown state when completion event emission fails", async () => {
-    const config = {
-      commands: { greetings: "!hello" },
-      farewell: {},
-      vfx: { filePath: "/tmp" },
-      cooldowns: { cmdCooldown: 60, globalCmdCooldownMs: 60000 },
-    };
+    const config = createConfig();
     const failingEventBus = {
-      emit: (name) => {
+      emit: (name: string) => {
         if (name === PlatformEvents.VFX_EFFECT_COMPLETED) {
           throw new Error("emit failed");
         }
@@ -140,12 +171,7 @@ describe("VFXCommandService completion events", () => {
   });
 
   test("returns safe error text when non-Error values are thrown during execution", async () => {
-    const config = {
-      commands: { greetings: "!hello" },
-      farewell: {},
-      vfx: { filePath: "/tmp" },
-      cooldowns: { cmdCooldown: 60, globalCmdCooldownMs: 60000 },
-    };
+    const config = createConfig();
     const service = new VFXCommandService(config, eventBus, {
       effectsManager: mockEffectsManager,
     });

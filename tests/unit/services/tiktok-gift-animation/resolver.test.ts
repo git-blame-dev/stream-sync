@@ -4,17 +4,43 @@ import * as fsp from "fs/promises";
 import * as os from "os";
 import * as path from "path";
 
-const {
+import {
   createTikTokGiftAnimationResolver,
   getGiftAnimationDependencyStatus,
-} = require("../../../../src/services/tiktok-gift-animation/resolver");
+} from "../../../../src/services/tiktok-gift-animation/resolver";
 
-function createNotificationData(urls) {
+type AnimationUrl = { label: string; url: string };
+type ExecuteFile = (command: string, args: string[]) => Promise<{ stdout?: string; stderr?: string }>;
+type FetchBinary = (url: string) => Promise<{ data: Buffer }>;
+type ResolverLogger = { debug: () => void; info: () => void; warn: () => void; error: () => void };
+type UnzipContext = {
+  marker: string;
+  extractDirectory: string;
+  cacheDirectory: string;
+};
+type HarnessOptions = {
+  executeFile?: ExecuteFile;
+  onUnzip?: (context: UnzipContext) => Promise<void>;
+  logger?: ResolverLogger;
+  maxEntries?: number;
+};
+type CodedError = Error & { code: string };
+
+function createResolverLogger(): ResolverLogger {
+  return {
+    debug: () => {},
+    info: () => {},
+    warn: () => {},
+    error: () => {},
+  };
+}
+
+function createNotificationData(urls: AnimationUrl[]) {
   return {
     enhancedGiftData: {
       originalData: {
         asset: {
-          videoResourceList: urls.map((entry) => ({
+          videoResourceList: urls.map((entry: AnimationUrl) => ({
             videoTypeName: entry.label,
             videoUrl: {
               urlList: [entry.url],
@@ -26,20 +52,20 @@ function createNotificationData(urls) {
   };
 }
 
-function createResolverTestHarness(options = {}) {
+function createResolverTestHarness(options: HarnessOptions = {}) {
   const cacheDirectory = fs.mkdtempSync(
     path.join(os.tmpdir(), "gift-animation-resolver-test-"),
   );
-  const fetchCalls = [];
+  const fetchCalls: string[] = [];
 
-  const fetchBinary = async (url) => {
+  const fetchBinary: FetchBinary = async (url: string) => {
     fetchCalls.push(url);
     return { data: Buffer.from(url) };
   };
 
   const executeFile =
     options.executeFile ||
-    (async (command, args) => {
+    (async (command: string, args: string[]) => {
       if (command === "ffprobe") {
         return { stdout: "2.5\n" };
       }
@@ -50,6 +76,9 @@ function createResolverTestHarness(options = {}) {
 
       const zipPath = args[1];
       const extractDirectory = args[3];
+      if (!zipPath || !extractDirectory) {
+        throw new Error("Expected unzip zip path and extract directory arguments");
+      }
       const marker = String(await fsp.readFile(zipPath));
 
       if (typeof options.onUnzip === "function") {
@@ -60,12 +89,7 @@ function createResolverTestHarness(options = {}) {
       throw new Error("onUnzip handler is required");
     });
 
-  const logger = options.logger || {
-    debug: () => {},
-    info: () => {},
-    warn: () => {},
-    error: () => {},
-  };
+  const logger: ResolverLogger = options.logger || createResolverLogger();
 
   const resolver = createTikTokGiftAnimationResolver({
     cacheDirectory,
@@ -177,6 +201,9 @@ describe("TikTok gift animation resolver behavior", () => {
       );
 
       expect(resolved).toBeDefined();
+      if (!resolved) {
+        throw new Error("Expected resolved gift animation");
+      }
       expect(resolved.animationConfig.profileName).toBe("landscape");
     } finally {
       await harness.cleanup();
@@ -234,7 +261,7 @@ describe("TikTok gift animation resolver behavior", () => {
     await fsp.mkdir(oldD, { recursive: true });
 
     const baseTimestampMs = 1700000000000;
-    const setAge = async (directoryPath, ageMs) => {
+    const setAge = async (directoryPath: string, ageMs: number) => {
       const at = new Date(baseTimestampMs - ageMs);
       await fsp.utimes(directoryPath, at, at);
     };
@@ -249,12 +276,7 @@ describe("TikTok gift animation resolver behavior", () => {
       maxEntries: 2,
       fetchBinary: async () => ({ data: Buffer.from("") }),
       executeFile: async () => ({ stdout: "" }),
-      logger: {
-        debug: () => {},
-        info: () => {},
-        warn: () => {},
-        error: () => {},
-      },
+      logger: createResolverLogger(),
     });
 
     try {
@@ -277,40 +299,35 @@ describe("TikTok gift animation resolver behavior", () => {
     const cacheDirectory = fs.mkdtempSync(
       path.join(os.tmpdir(), "gift-animation-unzip-missing-"),
     );
-    const commands = [];
+    const commands: string[] = [];
 
     const resolver = createTikTokGiftAnimationResolver({
       cacheDirectory,
       unzipBinaries: ["unzip"],
-      fetchBinary: async (url) => ({ data: Buffer.from(url) }),
-      executeFile: async (command, args) => {
+      fetchBinary: async (url: string) => ({ data: Buffer.from(url) }),
+      executeFile: async (command: string, args: string[]) => {
         commands.push(command);
         if (command === "ffprobe") {
           return { stdout: "2.5\n" };
         }
 
         if (command === "unzip") {
-          const missingError = new Error(
+          const missingError: CodedError = Object.assign(new Error(
             'Executable not found in $PATH: "unzip"',
-          );
-          missingError.code = "ENOENT";
+          ), { code: "ENOENT" });
           throw missingError;
         }
 
         if (command === "/usr/bin/unzip" || command === "/bin/unzip") {
-          const missingError = new Error(`spawn ${command} ENOENT`);
-          missingError.code = "ENOENT";
+          const missingError: CodedError = Object.assign(new Error(`spawn ${command} ENOENT`), {
+            code: "ENOENT",
+          });
           throw missingError;
         }
 
         throw new Error(`Unexpected command: ${command}`);
       },
-      logger: {
-        debug: () => {},
-        info: () => {},
-        warn: () => {},
-        error: () => {},
-      },
+      logger: createResolverLogger(),
     });
 
     try {
@@ -335,15 +352,16 @@ describe("TikTok gift animation resolver behavior", () => {
 
     const resolver = createTikTokGiftAnimationResolver({
       cacheDirectory,
-      fetchBinary: async (url) => ({ data: Buffer.from(url) }),
-      executeFile: async (command, args) => {
+      fetchBinary: async (url: string) => ({ data: Buffer.from(url) }),
+      executeFile: async (command: string, args: string[]) => {
         if (command === "ffprobe") {
           return { stdout: "2.5\n" };
         }
 
         if (command === "unzip") {
-          const missingError = new Error("spawn unzip ENOENT");
-          missingError.code = "ENOENT";
+          const missingError: CodedError = Object.assign(new Error("spawn unzip ENOENT"), {
+            code: "ENOENT",
+          });
           throw missingError;
         }
 
@@ -351,6 +369,9 @@ describe("TikTok gift animation resolver behavior", () => {
           usedAbsoluteUnzip = true;
           const zipPath = args[1];
           const extractDirectory = args[3];
+          if (!zipPath || !extractDirectory) {
+            throw new Error("Expected unzip zip path and extract directory arguments");
+          }
           const marker = String(await fsp.readFile(zipPath));
           expect(
             marker.includes("https://example.invalid/unzip-absolute.zip"),
@@ -381,12 +402,7 @@ describe("TikTok gift animation resolver behavior", () => {
 
         throw new Error(`Unexpected command: ${command}`);
       },
-      logger: {
-        debug: () => {},
-        info: () => {},
-        warn: () => {},
-        error: () => {},
-      },
+      logger: createResolverLogger(),
     });
 
     try {
@@ -398,6 +414,9 @@ describe("TikTok gift animation resolver behavior", () => {
 
       expect(usedAbsoluteUnzip).toBe(true);
       expect(resolved).toBeDefined();
+      if (!resolved) {
+        throw new Error("Expected resolved gift animation");
+      }
       expect(resolved.mediaContentType).toBe("video/mp4");
     } finally {
       await fsp.rm(cacheDirectory, { recursive: true, force: true });
@@ -410,7 +429,7 @@ describe("TikTok gift animation dependency diagnostics", () => {
     const status = getGiftAnimationDependencyStatus({
       platform: "linux",
       pathEnv: "/usr/local/bin:/usr/bin",
-      fileExists: (candidatePath) => candidatePath === "/usr/bin/unzip",
+      fileExists: (candidatePath: string) => candidatePath === "/usr/bin/unzip",
     });
 
     expect(status.unzip.available).toBe(true);

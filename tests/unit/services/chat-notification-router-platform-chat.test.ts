@@ -1,13 +1,48 @@
 import { describe, it, beforeEach, expect } from "bun:test";
-import { createMockFn } from "../../helpers/bun-mock-utils";
+import { createMockFn, type TestMockFn } from "../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../helpers/mock-factories";
 import { createConfigFixture } from "../../helpers/config-fixture";
 import { ChatNotificationRouter } from "../../../src/services/ChatNotificationRouter.ts";
 import * as testClock from "../../helpers/test-clock";
 
+type TestConfig = ReturnType<typeof createConfigFixture>;
+type RouterDependencies = ConstructorParameters<typeof ChatNotificationRouter>[0];
+type Runtime = RouterDependencies["runtime"];
+type Logger = RouterDependencies["logger"];
+type DisplayQueueItem = Parameters<NonNullable<Runtime["displayQueue"]>["addItem"]>[0];
+type TestRuntime = Runtime & {
+  displayQueue: { addItem: TestMockFn<[DisplayQueueItem], void> };
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function getRecordProperty(value: unknown, property: string): Record<string, unknown> {
+  if (!isRecord(value) || !isRecord(value[property])) {
+    throw new Error(`Expected ${property} to be an object`);
+  }
+  return value[property];
+}
+
+function findQueuedChat(runtime: TestRuntime): DisplayQueueItem | undefined {
+  return runtime.displayQueue.addItem.mock.calls
+    .map((call) => call[0])
+    .find((item: DisplayQueueItem) => item.type === "chat");
+}
+
+function expectQueuedChat(runtime: TestRuntime): DisplayQueueItem {
+  const queued = findQueuedChat(runtime);
+  expect(queued).toBeDefined();
+  if (!queued) {
+    throw new Error("Expected queued chat item");
+  }
+  return queued;
+}
+
 describe("ChatNotificationRouter platform chat behavior", () => {
-  let mockLogger;
-  let testConfig;
+  let mockLogger: Logger;
+  let testConfig: TestConfig;
 
   beforeEach(() => {
     mockLogger = noOpLogger;
@@ -25,19 +60,22 @@ describe("ChatNotificationRouter platform chat behavior", () => {
   const createRouter = ({
     runtime: runtimeOverrides,
     config = testConfig,
+  }: {
+    runtime?: Pick<Partial<Runtime>, "config" | "platformLifecycleService">;
+    config?: TestConfig;
   } = {}) => {
-    const baseRuntime = {
-      config: {
+    const baseRuntime: TestRuntime = {
+      config: createConfigFixture({
         general: { greetingsEnabled: true, messagesEnabled: true },
         tiktok: { greetingsEnabled: true, messagesEnabled: true },
         twitch: { greetingsEnabled: true, messagesEnabled: true },
         youtube: { greetingsEnabled: true, messagesEnabled: true },
-      },
+      }),
       platformLifecycleService: {
         getPlatformConnectionTime: createMockFn().mockReturnValue(null),
       },
       displayQueue: {
-        addItem: createMockFn(),
+        addItem: createMockFn<[DisplayQueueItem], void>(),
       },
       commandCooldownService: {
         checkUserCooldown: createMockFn().mockReturnValue(true),
@@ -48,13 +86,10 @@ describe("ChatNotificationRouter platform chat behavior", () => {
       userTrackingService: {
         isFirstMessage: createMockFn().mockReturnValue(false),
       },
-      commandParser: {
-        getVFXConfig: createMockFn().mockReturnValue(null),
-      },
       isFirstMessage: createMockFn().mockReturnValue(false),
     };
 
-    const runtime = { ...baseRuntime, ...runtimeOverrides };
+    const runtime: TestRuntime = { ...baseRuntime, ...runtimeOverrides };
 
     const router = new ChatNotificationRouter({
       runtime,
@@ -72,20 +107,17 @@ describe("ChatNotificationRouter platform chat behavior", () => {
       message: "test ni hao",
     });
 
-    const queued = runtime.displayQueue.addItem.mock.calls
-      .map((c) => c[0])
-      .find((i) => i.type === "chat");
-    expect(queued).toBeDefined();
+    const queued = expectQueuedChat(runtime);
     expect(queued.platform).toBe("tiktok");
   });
 
   it("skips chat on Twitch when messages disabled for platform", async () => {
     const { router, runtime } = createRouter({
       runtime: {
-        config: {
+        config: createConfigFixture({
           general: { greetingsEnabled: true, messagesEnabled: true },
           twitch: { greetingsEnabled: true, messagesEnabled: false },
-        },
+        }),
       },
     });
 
@@ -94,9 +126,7 @@ describe("ChatNotificationRouter platform chat behavior", () => {
       message: "test hi",
     });
 
-    const queued = runtime.displayQueue.addItem.mock.calls
-      .map((c) => c[0])
-      .find((i) => i.type === "chat");
+    const queued = findQueuedChat(runtime);
     expect(queued).toBeUndefined();
   });
 
@@ -107,10 +137,8 @@ describe("ChatNotificationRouter platform chat behavior", () => {
       message: "<b>Test Hi</b>",
     });
 
-    const queued = runtime.displayQueue.addItem.mock.calls
-      .map((c) => c[0])
-      .find((i) => i.type === "chat");
-    expect(queued.data.message).toEqual({ text: "Test Hi" });
+    const queued = expectQueuedChat(runtime);
+    expect(getRecordProperty(queued, "data").message).toEqual({ text: "Test Hi" });
   });
 
   it("queues chat on YouTube when enabled", async () => {
@@ -122,12 +150,9 @@ describe("ChatNotificationRouter platform chat behavior", () => {
       message: "test hello youtube",
     });
 
-    const queued = runtime.displayQueue.addItem.mock.calls
-      .map((c) => c[0])
-      .find((i) => i.type === "chat");
-    expect(queued).toBeDefined();
+    const queued = expectQueuedChat(runtime);
     expect(queued.platform).toBe("youtube");
-    expect(queued.data.message).toEqual({ text: "test hello youtube" });
+    expect(getRecordProperty(queued, "data").message).toEqual({ text: "test hello youtube" });
   });
 
   it("preserves canonical badgeImages on queued chat rows", async () => {
@@ -151,10 +176,8 @@ describe("ChatNotificationRouter platform chat behavior", () => {
       ],
     });
 
-    const queued = runtime.displayQueue.addItem.mock.calls
-      .map((c) => c[0])
-      .find((i) => i.type === "chat");
-    expect(queued.data.badgeImages).toEqual([
+    const queued = expectQueuedChat(runtime);
+    expect(getRecordProperty(queued, "data").badgeImages).toEqual([
       {
         imageUrl: "https://example.invalid/badge-1.png",
         source: "youtube",
@@ -166,10 +189,10 @@ describe("ChatNotificationRouter platform chat behavior", () => {
   it("skips chat on YouTube when messages disabled for platform", async () => {
     const { router, runtime } = createRouter({
       runtime: {
-        config: {
+        config: createConfigFixture({
           general: { greetingsEnabled: true, messagesEnabled: true },
           youtube: { greetingsEnabled: true, messagesEnabled: false },
-        },
+        }),
       },
     });
 
@@ -178,21 +201,19 @@ describe("ChatNotificationRouter platform chat behavior", () => {
       message: "test hello youtube",
     });
 
-    const queued = runtime.displayQueue.addItem.mock.calls
-      .map((c) => c[0])
-      .find((i) => i.type === "chat");
+    const queued = findQueuedChat(runtime);
     expect(queued).toBeUndefined();
   });
 
   it("skips all platform chat when global messagesEnabled is false", async () => {
     const { router, runtime } = createRouter({
       runtime: {
-        config: {
+        config: createConfigFixture({
           general: { greetingsEnabled: true, messagesEnabled: false },
           tiktok: { greetingsEnabled: true, messagesEnabled: false },
           twitch: { greetingsEnabled: true, messagesEnabled: false },
           youtube: { greetingsEnabled: true, messagesEnabled: false },
-        },
+        }),
       },
     });
 
@@ -219,14 +240,14 @@ describe("ChatNotificationRouter platform chat behavior", () => {
     const connectionTime = testClock.now();
     const { router, runtime } = createRouter({
       runtime: {
-        config: {
+        config: createConfigFixture({
           general: {
             greetingsEnabled: true,
             messagesEnabled: true,
             filterOldMessages: true,
           },
           tiktok: { greetingsEnabled: true, messagesEnabled: true },
-        },
+        }),
         platformLifecycleService: {
           getPlatformConnectionTime:
             createMockFn().mockReturnValue(connectionTime),

@@ -3,6 +3,61 @@ import { CommandParser } from "../../src/chat/commands";
 import { ConfigValidator } from "../../src/utils/config-validator";
 import { VFXCommandService } from "../../src/services/VFXCommandService.ts";
 
+type NormalizedConfig = ReturnType<typeof ConfigValidator.normalize>;
+type ParserVFXConfig = NonNullable<ReturnType<CommandParser["getVFXConfig"]>>;
+
+function requireString(value: unknown, label: string): string {
+  if (typeof value !== "string") {
+    throw new Error(`Expected ${label} to be a string`);
+  }
+  return value;
+}
+
+function extractStringRecord(
+  value: unknown,
+  label: string,
+): Record<string, string> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`Expected ${label} to be a string record`);
+  }
+
+  const entries = Object.entries(value).filter(
+    (entry): entry is [string, string] => typeof entry[1] === "string",
+  );
+
+  return Object.fromEntries(entries) as Record<string, string>;
+}
+
+function createCommandParser(normalized: NormalizedConfig): CommandParser {
+  return new CommandParser({
+    commands: extractStringRecord(normalized.commands, "commands"),
+    farewell: extractStringRecord(normalized.farewell, "farewell"),
+    vfx: { filePath: requireString(normalized.vfx.filePath, "vfx.filePath") },
+    general: normalized.general,
+  });
+}
+
+function createVFXService(normalized: NormalizedConfig): VFXCommandService {
+  return new VFXCommandService(
+    {
+      ...normalized,
+      commands: extractStringRecord(normalized.commands, "commands"),
+      farewell: extractStringRecord(normalized.farewell, "farewell"),
+      vfx: { filePath: requireString(normalized.vfx.filePath, "vfx.filePath") },
+      cooldowns: { cmdCooldown: 60, globalCmdCooldownMs: 60000 },
+    },
+    null,
+  );
+}
+
+function expectParserVFXConfig(config: ParserVFXConfig | null): ParserVFXConfig {
+  expect(config).not.toBeNull();
+  if (!config) {
+    throw new Error("Expected VFX config");
+  }
+  return config;
+}
+
 describe("VFX chat command resolution smoke E2E", () => {
   const createRawConfig = () => ({
     general: {
@@ -48,12 +103,7 @@ describe("VFX chat command resolution smoke E2E", () => {
     const rawConfig = createRawConfig();
     const normalized = ConfigValidator.normalize(rawConfig);
 
-    const commandParser = new CommandParser({
-      commands: normalized.commands,
-      farewell: normalized.farewell,
-      vfx: { filePath: normalized.vfx.filePath },
-      general: normalized.general,
-    });
+    const commandParser = createCommandParser(normalized);
 
     expect(commandParser.parsedCommands.triggers.size).toBeGreaterThan(0);
     expect(commandParser.parsedCommands.triggers.has("!testsingle")).toBe(true);
@@ -71,12 +121,7 @@ describe("VFX chat command resolution smoke E2E", () => {
     const rawConfig = createRawConfig();
     const normalized = ConfigValidator.normalize(rawConfig);
 
-    const commandParser = new CommandParser({
-      commands: normalized.commands,
-      farewell: normalized.farewell,
-      vfx: { filePath: normalized.vfx.filePath },
-      general: normalized.general,
-    });
+    const commandParser = createCommandParser(normalized);
 
     expect(commandParser.parsedCommands.keywords.size).toBeGreaterThan(0);
     expect(commandParser.parsedCommands.keywords.has("test phrase")).toBe(true);
@@ -91,16 +136,12 @@ describe("VFX chat command resolution smoke E2E", () => {
     const rawConfig = createRawConfig();
     const normalized = ConfigValidator.normalize(rawConfig);
 
-    const commandParser = new CommandParser({
-      commands: normalized.commands,
-      farewell: normalized.farewell,
-      vfx: { filePath: normalized.vfx.filePath },
-      general: normalized.general,
-    });
+    const commandParser = createCommandParser(normalized);
 
-    const vfxConfig = commandParser.getVFXConfig("!testsingle", "!testsingle");
+    const vfxConfig = expectParserVFXConfig(
+      commandParser.getVFXConfig("!testsingle", "!testsingle"),
+    );
 
-    expect(vfxConfig).not.toBeNull();
     expect(vfxConfig.filename).toBe("test-single");
     expect(vfxConfig.mediaSource).toBe("vfx top");
     expect(vfxConfig.vfxFilePath).toBe("/test/vfx/path");
@@ -111,12 +152,7 @@ describe("VFX chat command resolution smoke E2E", () => {
     const rawConfig = createRawConfig();
     const normalized = ConfigValidator.normalize(rawConfig);
 
-    const commandParser = new CommandParser({
-      commands: normalized.commands,
-      farewell: normalized.farewell,
-      vfx: { filePath: normalized.vfx.filePath },
-      general: normalized.general,
-    });
+    const commandParser = createCommandParser(normalized);
 
     const vfxConfigOne = commandParser.getVFXConfig("!testone", "!testone");
     const vfxConfigTwo = commandParser.getVFXConfig("!testtwo", "!testtwo");
@@ -125,32 +161,25 @@ describe("VFX chat command resolution smoke E2E", () => {
       "!testthree",
     );
 
-    expect(vfxConfigOne).not.toBeNull();
-    expect(vfxConfigTwo).not.toBeNull();
-    expect(vfxConfigThree).not.toBeNull();
+    const configOne = expectParserVFXConfig(vfxConfigOne);
+    const configTwo = expectParserVFXConfig(vfxConfigTwo);
+    const configThree = expectParserVFXConfig(vfxConfigThree);
 
-    expect(vfxConfigOne.filename).toBe("test-triple");
-    expect(vfxConfigTwo.filename).toBe("test-triple");
-    expect(vfxConfigThree.filename).toBe("test-triple");
+    expect(configOne.filename).toBe("test-triple");
+    expect(configTwo.filename).toBe("test-triple");
+    expect(configThree.filename).toBe("test-triple");
   });
 
   it("getVFXConfig returns correct config for keyword match", () => {
     const rawConfig = createRawConfig();
     const normalized = ConfigValidator.normalize(rawConfig);
 
-    const commandParser = new CommandParser({
-      commands: normalized.commands,
-      farewell: normalized.farewell,
-      vfx: { filePath: normalized.vfx.filePath },
-      general: normalized.general,
-    });
+    const commandParser = createCommandParser(normalized);
 
-    const vfxConfig = commandParser.getVFXConfig(
-      "!nomatch",
-      "that was a test phrase moment",
+    const vfxConfig = expectParserVFXConfig(
+      commandParser.getVFXConfig("!nomatch", "that was a test phrase moment"),
     );
 
-    expect(vfxConfig).not.toBeNull();
     expect(vfxConfig.filename).toBe("test-keyword");
     expect(vfxConfig.keyword).toBe("test phrase");
     expect(vfxConfig.matchType).toBe("keyword");
@@ -231,11 +260,12 @@ describe("VFX notification resolution smoke E2E", () => {
   it("VFXCommandService.getVFXConfig returns valid config for gifts", async () => {
     const rawConfig = createRawConfig();
     const normalized = ConfigValidator.normalize(rawConfig);
-    const vfxService = new VFXCommandService(normalized, null);
+    const vfxService = createVFXService(normalized);
 
     const vfxConfig = await vfxService.getVFXConfig("gifts", null);
 
     expect(vfxConfig).not.toBeNull();
+    if (!vfxConfig) throw new Error("Expected gift VFX config");
     expect(vfxConfig.filename).toBe("test-gift-vfx");
     expect(vfxConfig.mediaSource).toBe("vfx top");
   });
@@ -243,11 +273,12 @@ describe("VFX notification resolution smoke E2E", () => {
   it("VFXCommandService.getVFXConfig returns valid config for envelopes", async () => {
     const rawConfig = createRawConfig();
     const normalized = ConfigValidator.normalize(rawConfig);
-    const vfxService = new VFXCommandService(normalized, null);
+    const vfxService = createVFXService(normalized);
 
     const vfxConfig = await vfxService.getVFXConfig("envelopes", null);
 
     expect(vfxConfig).not.toBeNull();
+    if (!vfxConfig) throw new Error("Expected envelope VFX config");
     expect(vfxConfig.filename).toBe("test-envelope-vfx");
     expect(vfxConfig.mediaSource).toBe("vfx center green");
   });
@@ -255,11 +286,12 @@ describe("VFX notification resolution smoke E2E", () => {
   it("VFXCommandService.getVFXConfig returns valid config for follows", async () => {
     const rawConfig = createRawConfig();
     const normalized = ConfigValidator.normalize(rawConfig);
-    const vfxService = new VFXCommandService(normalized, null);
+    const vfxService = createVFXService(normalized);
 
     const vfxConfig = await vfxService.getVFXConfig("follows", null);
 
     expect(vfxConfig).not.toBeNull();
+    if (!vfxConfig) throw new Error("Expected follow VFX config");
     expect(vfxConfig.filename).toBe("test-follow-vfx");
     expect(vfxConfig.mediaSource).toBe("vfx bottom green");
   });
@@ -267,11 +299,12 @@ describe("VFX notification resolution smoke E2E", () => {
   it("VFXCommandService.getVFXConfig returns valid config for raids", async () => {
     const rawConfig = createRawConfig();
     const normalized = ConfigValidator.normalize(rawConfig);
-    const vfxService = new VFXCommandService(normalized, null);
+    const vfxService = createVFXService(normalized);
 
     const vfxConfig = await vfxService.getVFXConfig("raids", null);
 
     expect(vfxConfig).not.toBeNull();
+    if (!vfxConfig) throw new Error("Expected raid VFX config");
     expect(vfxConfig.filename).toBe("test-raid-vfx");
     expect(vfxConfig.mediaSource).toBe("vfx center green");
   });
@@ -279,7 +312,7 @@ describe("VFX notification resolution smoke E2E", () => {
   it("VFXCommandService.getVFXConfig returns null when no command configured", async () => {
     const rawConfig = createRawConfig();
     const normalized = ConfigValidator.normalize(rawConfig);
-    const vfxService = new VFXCommandService(normalized, null);
+    const vfxService = createVFXService(normalized);
 
     const vfxConfig = await vfxService.getVFXConfig("paypiggies", null);
 
