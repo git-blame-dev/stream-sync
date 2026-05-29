@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
+import { createMockFn, restoreAllMocks, type TestMockFn } from "../helpers/bun-mock-utils";
 import { noOpLogger } from "../helpers/mock-factories";
 import {
   initializeStaticSecrets,
@@ -8,20 +8,40 @@ import {
 } from "../../src/core/secrets";
 import { TwitchApiClient } from "../../src/utils/api-clients/twitch-api-client.ts";
 
-describe("TwitchApiClient authentication", () => {
-  let mockLogger;
-  let mockHttpClient;
-  let mockTwitchAuth;
-  let apiClient;
+type TestHttpResponse = {
+  status: number;
+  data: unknown;
+};
 
-  const createMockHttpClient = () => ({
-    get: createMockFn(),
+type TestRequestOptions = Record<string, unknown> & {
+  authToken?: string;
+  clientId?: string;
+};
+
+type TestHttpClient = {
+  get: TestMockFn<[string, TestRequestOptions?], Promise<TestHttpResponse>>;
+  post: TestMockFn;
+};
+
+type TestTwitchAuth = {
+  refreshTokens: TestMockFn<[], Promise<boolean>>;
+  isReady: TestMockFn<[], boolean>;
+};
+
+describe("TwitchApiClient authentication", () => {
+  let mockLogger: typeof noOpLogger;
+  let mockHttpClient: TestHttpClient;
+  let mockTwitchAuth: TestTwitchAuth;
+  let apiClient: TwitchApiClient;
+
+  const createMockHttpClient = (): TestHttpClient => ({
+    get: createMockFn<[string, TestRequestOptions?], Promise<TestHttpResponse>>(),
     post: createMockFn(),
   });
 
-  const createMockTwitchAuth = (overrides = {}) => ({
-    refreshTokens: createMockFn().mockResolvedValue(true),
-    isReady: createMockFn().mockReturnValue(true),
+  const createMockTwitchAuth = (overrides: Partial<TestTwitchAuth> = {}): TestTwitchAuth => ({
+    refreshTokens: createMockFn<[], Promise<boolean>>().mockResolvedValue(true),
+    isReady: createMockFn<[], boolean>().mockReturnValue(true),
     ...overrides,
   });
 
@@ -56,9 +76,9 @@ describe("TwitchApiClient authentication", () => {
 
       await apiClient.makeRequest("/test-endpoint");
 
-      const requestOptions = mockHttpClient.get.mock.calls[0][1];
-      expect(requestOptions.authToken).toBe("test-access-token");
-      expect(requestOptions.clientId).toBe("test-client-id");
+      const requestOptions = mockHttpClient.get.mock.calls[0]?.[1];
+      expect(requestOptions?.authToken).toBe("test-access-token");
+      expect(requestOptions?.clientId).toBe("test-client-id");
     });
 
     it("returns stream info when channel is live", async () => {
@@ -174,7 +194,7 @@ describe("TwitchApiClient authentication", () => {
         });
 
       secrets.twitch.accessToken = "expired-token";
-      mockTwitchAuth.refreshTokens = createMockFn().mockImplementation(
+      mockTwitchAuth.refreshTokens = createMockFn<[], Promise<boolean>>().mockImplementation(
         async () => {
           secrets.twitch.accessToken = "refreshed-token";
           return true;
@@ -195,7 +215,7 @@ describe("TwitchApiClient authentication", () => {
         });
 
       secrets.twitch.accessToken = "old-token";
-      mockTwitchAuth.refreshTokens = createMockFn().mockImplementation(
+      mockTwitchAuth.refreshTokens = createMockFn<[], Promise<boolean>>().mockImplementation(
         async () => {
           secrets.twitch.accessToken = "new-refreshed-token";
           return true;
@@ -204,8 +224,8 @@ describe("TwitchApiClient authentication", () => {
 
       await apiClient.getUserInfo("testuser");
 
-      const retryRequestOptions = mockHttpClient.get.mock.calls[1][1];
-      expect(retryRequestOptions.authToken).toBe("new-refreshed-token");
+      const retryRequestOptions = mockHttpClient.get.mock.calls[1]?.[1];
+      expect(retryRequestOptions?.authToken).toBe("new-refreshed-token");
     });
 
     it("throws when retry after 401 also fails", async () => {
@@ -250,7 +270,7 @@ describe("TwitchApiClient authentication", () => {
 
   describe("getCheermotes", () => {
     it("requests broadcaster-aware cheermotes and returns catalog rows", async () => {
-      mockHttpClient.get.mockImplementation(async (url) => {
+      mockHttpClient.get.mockImplementation(async (url: string) => {
         if (
           typeof url === "string" &&
           url.includes("/bits/cheermotes?broadcaster_id=test-broadcaster-id")

@@ -8,6 +8,7 @@ type LoggerLike = {
     debug: (message: string, scope?: string, payload?: unknown) => void;
     info: (message: string, scope?: string, payload?: unknown) => void;
     warn: (message: string, scope?: string, payload?: unknown) => void;
+    error: (message: string, scope?: string, payload?: unknown) => void;
 };
 
 type TwitchAuthLike = {
@@ -21,12 +22,12 @@ type TwitchApiClientConfig = {
 };
 
 type RequestOptions = {
-    headers?: Record<string, string | undefined>;
+    headers?: Record<string, string>;
     [key: string]: unknown;
 };
 
 type HttpClientLike = {
-    get: (url: string, options?: RequestOptions) => Promise<{ data: unknown }>;
+    get: (url: string, options?: RequestOptions) => Promise<Record<string, unknown>>;
 };
 
 type TwitchApiClientDependencies = {
@@ -71,7 +72,7 @@ class TwitchApiClient {
         this.httpClient = dependencies.enhancedHttpClient || createEnhancedHttpClient({
             logger: this.logger,
             retrySystem: dependencies.retrySystem || createRetrySystem({ logger: this.logger })
-        }) as unknown as HttpClientLike;
+        });
         this.baseUrl = 'https://api.twitch.tv/helix';
     }
 
@@ -88,7 +89,7 @@ class TwitchApiClient {
                 ...options,
                 headers: {
                     'Authorization': `Bearer ${accessToken}`,
-                    'Client-Id': this.config.clientId,
+                    ...(typeof this.config.clientId === 'string' ? { 'Client-Id': this.config.clientId } : {}),
                     ...options.headers
                 }
             };
@@ -96,7 +97,7 @@ class TwitchApiClient {
             return this.httpClient.get(url, {
                 authToken: accessToken,
                 authType: 'app',
-                clientId: this.config.clientId,
+                ...(typeof this.config.clientId === 'string' ? { clientId: this.config.clientId } : {}),
                 ...requestOptions
             });
         };

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
+import { createMockFn, restoreAllMocks, type TestMockFn } from "../helpers/bun-mock-utils";
 import {
   initializeStaticSecrets,
   secrets,
@@ -7,10 +7,22 @@ import {
 } from "../../src/core/secrets";
 import { TwitchApiClient } from "../../src/utils/api-clients/twitch-api-client.ts";
 
+type TestLogger = {
+  debug: TestMockFn;
+  info: TestMockFn;
+  warn: TestMockFn;
+  error: TestMockFn;
+};
+
+type TestHttpClient = {
+  get: TestMockFn<[string, Record<string, unknown>?], Promise<{ data: unknown }>>;
+  post: TestMockFn;
+};
+
 describe("TwitchApiClient error handler integration", () => {
-  let mockLogger;
-  let mockHttpClient;
-  let apiClient;
+  let mockLogger: TestLogger;
+  let mockHttpClient: TestHttpClient;
+  let apiClient: TwitchApiClient;
 
   beforeEach(() => {
     _resetForTesting();
