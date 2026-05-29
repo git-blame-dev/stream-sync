@@ -1,12 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
+import {
+  createMockFn,
+  restoreAllMocks,
+  type TestMockFn,
+} from "../../helpers/bun-mock-utils";
 import { createConfigFixture } from "../../helpers/config-fixture";
 import { PRIORITY_LEVELS } from "../../../src/core/constants";
 import { setupAutomatedCleanup } from "../../helpers/mock-lifecycle";
 import NotificationManager from "../../../src/notifications/NotificationManager";
 
 type NotificationManagerLike = {
-  handleNotificationInternal: (...args: unknown[]) => Promise<unknown>;
+  handleNotificationInternal: (
+    notificationType: string,
+    platform: string,
+    data: Record<string, unknown>,
+    skipSpamDetection: boolean,
+  ) => Promise<unknown>;
 };
 
 type LoggerSpy = {
@@ -33,6 +42,7 @@ type NotificationConstants = {
 type DisplayQueueMock = {
   addItem: ReturnType<typeof createMockFn>;
   processQueue: ReturnType<typeof createMockFn>;
+  getQueueLength: TestMockFn<[], number>;
 };
 
 setupAutomatedCleanup({
@@ -74,6 +84,7 @@ describe("NotificationManager logger argument order", () => {
     mockDisplayQueue = {
       addItem: createMockFn(),
       processQueue: createMockFn(),
+      getQueueLength: createMockFn<[], number>(() => 0),
     };
 
     config = createConfigFixture({
@@ -99,7 +110,6 @@ describe("NotificationManager logger argument order", () => {
       eventBus: mockEventBus,
       config,
       constants: mockConstants,
-      textProcessing: { formatChatMessage: createMockFn() },
       obsGoals: { processDonationGoal: createMockFn() },
       vfxCommandService: {
         getVFXConfig: createMockFn().mockResolvedValue(null),
@@ -136,6 +146,9 @@ describe("NotificationManager logger argument order", () => {
           typeof msg === "string" && msg.includes("Spam gift suppressed"),
       );
       expect(spamCall).toBeDefined();
+      if (spamCall === undefined) {
+        throw new Error("Expected spam suppression debug log");
+      }
       const [message, source] = spamCall;
       expect(message).toContain("TestUser");
       expect(source).toBe("tiktok");
@@ -168,6 +181,9 @@ describe("NotificationManager logger argument order", () => {
           typeof msg === "string" && msg.includes("Error in spam detection"),
       );
       expect(warnCall).toBeDefined();
+      if (warnCall === undefined) {
+        throw new Error("Expected spam detection warning log");
+      }
       const [message, source] = warnCall;
       expect(message).toContain("spam detector failure");
       expect(source).toBe("youtube");
@@ -196,6 +212,9 @@ describe("NotificationManager logger argument order", () => {
         ([, src]) => src === "twitch",
       );
       expect(platformLogCall).toBeDefined();
+      if (platformLogCall === undefined) {
+        throw new Error("Expected platform info log");
+      }
       const [message, source] = platformLogCall;
       expect(message).toContain("TestUser");
       expect(source).toBe("twitch");

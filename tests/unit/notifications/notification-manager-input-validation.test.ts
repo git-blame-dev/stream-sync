@@ -15,11 +15,15 @@ describe("NotificationManager input validation", () => {
   });
 
   afterEach(() => {
-    process.env.NODE_ENV = originalNodeEnv;
+    if (originalNodeEnv === undefined) {
+      delete process.env.NODE_ENV;
+    } else {
+      process.env.NODE_ENV = originalNodeEnv;
+    }
     restoreAllMocks();
   });
 
-  const createDeps = (overrides = {}) => ({
+  const createDeps = (overrides: Record<string, unknown> = {}) => ({
     logger: noOpLogger,
     displayQueue: {
       enqueue: createMockFn(),
@@ -42,7 +46,6 @@ describe("NotificationManager input validation", () => {
         "platform:gift": { settingKey: "giftsEnabled", commandKey: "gifts" },
       },
     },
-    textProcessing: { formatChatMessage: createMockFn() },
     obsGoals: { processDonationGoal: createMockFn() },
     vfxCommandService: {
       getVFXConfig: createMockFn(() => Promise.resolve(null)),
@@ -156,10 +159,10 @@ describe("NotificationManager input validation", () => {
         username: "testUser",
         platform: "tiktok",
         message: "test message",
-        amount: 100,
-        currency: "USD",
-        giftType: "Rose",
-        giftCount: 1,
+        userId: "user123",
+        giftTypes: ["Rose"],
+        totalGifts: 1,
+        totalCoins: 100,
       });
 
       expect(result).toBeInstanceOf(Promise);
@@ -169,15 +172,13 @@ describe("NotificationManager input validation", () => {
 
   describe("config loading safety", () => {
     it("throws meaningful error when config is null", () => {
-      const deps = createDeps();
-      deps.config = null;
+      const deps = createDeps({ config: null });
 
       expect(() => new NotificationManager(deps)).toThrow("config");
     });
 
     it("throws meaningful error when config is undefined", () => {
-      const deps = createDeps();
-      deps.config = undefined;
+      const deps = createDeps({ config: undefined });
 
       expect(() => new NotificationManager(deps)).toThrow("config");
     });
@@ -186,9 +187,11 @@ describe("NotificationManager input validation", () => {
   describe("try/catch robustness", () => {
     it("continues when VFX config throws", async () => {
       const deps = createDeps();
-      deps.vfxCommandService.getVFXConfig = createMockFn(() => {
-        throw new Error("VFX service unavailable");
-      });
+      deps.vfxCommandService.getVFXConfig = createMockFn<[], Promise<null>>(
+        async () => {
+          throw new Error("VFX service unavailable");
+        },
+      );
       const manager = new NotificationManager(deps);
 
       const result = await manager.handleNotification(

@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
+import {
+  createMockFn,
+  restoreAllMocks,
+  type TestMockFn,
+} from "../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../helpers/mock-factories";
 import { createConfigFixture } from "../../helpers/config-fixture";
 
@@ -18,7 +22,8 @@ type DisplayQueueMock = {
   addItem: ReturnType<typeof createMockFn>;
   addToQueue: ReturnType<typeof createMockFn>;
   processQueue: ReturnType<typeof createMockFn>;
-  isQueueEmpty: ReturnType<typeof createMockFn>;
+  isQueueEmpty: TestMockFn<[], boolean>;
+  getQueueLength: TestMockFn<[], number>;
   clearQueue: ReturnType<typeof createMockFn>;
 };
 
@@ -38,7 +43,8 @@ describe("NotificationManager error handling", () => {
       addItem: createMockFn(),
       addToQueue: createMockFn(),
       processQueue: createMockFn(),
-      isQueueEmpty: createMockFn().mockReturnValue(true),
+      isQueueEmpty: createMockFn<[], boolean>().mockReturnValue(true),
+      getQueueLength: createMockFn<[], number>().mockReturnValue(0),
       clearQueue: createMockFn(),
     };
 
@@ -53,7 +59,6 @@ describe("NotificationManager error handling", () => {
       displayQueue: mockDisplayQueue,
       eventBus: mockEventBus,
       constants,
-      textProcessing: { formatChatMessage: createMockFn() },
       obsGoals: { processDonationGoal: createMockFn() },
       config: createConfigFixture(),
       vfxCommandService: {

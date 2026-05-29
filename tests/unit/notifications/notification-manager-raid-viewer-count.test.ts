@@ -13,10 +13,12 @@ describe("NotificationManager raid viewer count fallback", () => {
 
   const createManager = () => {
     const displayQueue = {
+      addItem: createMockFn(),
       addToQueue: createMockFn(),
       processQueue: createMockFn(),
       isQueueEmpty: createMockFn().mockReturnValue(true),
       clearQueue: createMockFn(),
+      getQueueLength: createMockFn(() => 0),
     };
 
     const config = createConfigFixture({
@@ -31,7 +33,6 @@ describe("NotificationManager raid viewer count fallback", () => {
       eventBus: new EventEmitter(),
       config,
       constants: require("../../../src/core/constants"),
-      textProcessing: { formatChatMessage: createMockFn() },
       obsGoals: { processDonationGoal: createMockFn() },
       vfxCommandService: {
         executeCommand: createMockFn().mockResolvedValue({ success: true }),

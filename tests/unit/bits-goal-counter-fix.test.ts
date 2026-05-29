@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
-import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
+import {
+  createMockFn,
+  restoreAllMocks,
+  type TestMockFn,
+} from "../helpers/bun-mock-utils";
 import { createConfigFixture } from "../helpers/config-fixture";
 import {
   createMockNotificationManager,
@@ -16,8 +20,6 @@ type LoggerLike = {
   warn: (...args: unknown[]) => void;
   error: (...args: unknown[]) => void;
 };
-
-type MockFn = ReturnType<typeof createMockFn>;
 
 type EventPayload = {
   platform: string;
@@ -49,6 +51,13 @@ type RouterInstance = {
   dispose?: () => void;
 };
 
+type GiftNotificationHandler = TestMockFn<unknown[], unknown>;
+
+type EventBusSubscribe = TestMockFn<
+  [string, (payload: unknown) => Promise<void> | void],
+  () => void
+>;
+
 setupAutomatedCleanup({
   clearCallsBeforeEach: true,
   validateAfterCleanup: true,
@@ -58,9 +67,9 @@ setupAutomatedCleanup({
 describe("Bits Goal Counter Fix", () => {
   let mockLogger: LoggerLike;
   let mockNotificationManager: ReturnType<typeof createMockNotificationManager>;
-  let mockAppRuntime: { handleGiftNotification: MockFn };
+  let mockAppRuntime: { handleGiftNotification: GiftNotificationHandler };
   let mockEventBus: {
-    subscribe: MockFn;
+    subscribe: EventBusSubscribe;
     emit: (event: string, payload: EventPayload) => Promise<void>;
   };
   let router: RouterInstance | null;
@@ -75,7 +84,7 @@ describe("Bits Goal Counter Fix", () => {
     });
 
     mockAppRuntime = {
-      handleGiftNotification: createMockFn((...args: unknown[]) => {
+      handleGiftNotification: createMockFn<unknown[], unknown>((...args) => {
         const options =
           (args[2] as
             | {
@@ -108,15 +117,14 @@ describe("Bits Goal Counter Fix", () => {
 
     const handlers: EventHandlers = {};
     mockEventBus = {
-      subscribe: createMockFn((...args: unknown[]) => {
-        const event = args[0] as string;
-        const handler = args[1] as (payload: unknown) => Promise<void> | void;
-        if (!handlers[event]) {
-          handlers[event] = [];
-        }
-        handlers[event].push(handler);
+      subscribe: createMockFn<
+        [string, (payload: unknown) => Promise<void> | void],
+        () => void
+      >((event, handler) => {
+        const eventHandlers = handlers[event] ?? (handlers[event] = []);
+        eventHandlers.push(handler);
         return () => {
-          handlers[event] = handlers[event].filter((h) => h !== handler);
+          handlers[event] = eventHandlers.filter((h) => h !== handler);
         };
       }),
       emit: async (event: string, payload: EventPayload) => {
@@ -150,8 +158,19 @@ describe("Bits Goal Counter Fix", () => {
   });
 
   const getGiftNotificationPayload = (): GiftNotificationPayload =>
-    mockAppRuntime.handleGiftNotification.mock
-      .calls[0][2] as GiftNotificationPayload;
+    {
+      const firstCall = mockAppRuntime.handleGiftNotification.mock.calls[0];
+      expect(firstCall).toBeDefined();
+      const payload = firstCall?.[2];
+      expect(payload).toEqual(
+        expect.objectContaining({
+          giftCount: expect.any(Number),
+          amount: expect.any(Number),
+          currency: expect.any(String),
+        }),
+      );
+      return payload as GiftNotificationPayload;
+    };
 
   const emitGift = async ({
     bits,
@@ -168,8 +187,6 @@ describe("Bits Goal Counter Fix", () => {
       };
       bits?: number;
     } = {
-      username,
-      userId,
       message,
       id,
       repeatCount: 1,
@@ -180,6 +197,14 @@ describe("Bits Goal Counter Fix", () => {
       currency: "bits",
       cheermoteInfo: { prefix: "Cheer", isMixed: false },
     };
+
+    if (username !== undefined) {
+      data.username = username;
+    }
+
+    if (userId !== undefined) {
+      data.userId = userId;
+    }
 
     if (bits !== undefined) {
       data.bits = bits;

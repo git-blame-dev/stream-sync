@@ -266,7 +266,11 @@ describe("NotificationManager Service Dependency Injection - Modernized", () => 
 
       expect(mockDisplayQueue.addItem).toHaveBeenCalled();
 
-      const addedItem = requireRecord(mockDisplayQueue.addItem.mock.calls[0][0]);
+      const addItemCall = mockDisplayQueue.addItem.mock.calls[0];
+      if (addItemCall === undefined) {
+        throw new Error("Expected display queue addItem to be called");
+      }
+      const addedItem = requireRecord(addItemCall[0]);
       expect(addedItem).toBeDefined();
       expect(addedItem.data).toBeDefined();
     });

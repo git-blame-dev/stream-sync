@@ -2,9 +2,12 @@ import { describe, expect, it } from "bun:test";
 
 import { NotificationGate } from "../../../src/notifications/notification-gate";
 
+const constructGateWithUnknownConfig = (config: unknown): NotificationGate =>
+  Reflect.construct(NotificationGate, [config]);
+
 describe("NotificationGate", () => {
   it("reports missing configuration access", () => {
-    const gate = new NotificationGate(null);
+    const gate = constructGateWithUnknownConfig(null);
 
     expect(gate.hasConfigAccess()).toBe(false);
   });

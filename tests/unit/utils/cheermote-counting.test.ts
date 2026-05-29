@@ -20,6 +20,9 @@ describe("Cheermote counting", () => {
 
     const result = CheermoteProcessor.processEventSubFragments(fragments);
 
+    if (!("fragments" in result)) {
+      throw new Error("Expected cheermote fragments in result");
+    }
     expect(result.fragments).toHaveLength(2);
     expect(result.totalBits).toBe(200);
     expect(result.primaryType).toBe("uni");

@@ -10,28 +10,13 @@ type QueueItem = {
   [key: string]: unknown;
 };
 
-type NotificationResult = {
-  success?: boolean;
-  error?: string;
-  notificationType?: string;
-  platform?: string;
-};
-
-type NotificationManagerLike = {
-  handleNotification: (
-    type: string,
-    platform: string,
-    data: Record<string, unknown>,
-  ) => Promise<NotificationResult>;
-};
-
 describe("Notification type normalization", () => {
   afterEach(() => {
     restoreAllMocks();
   });
 
   let items: QueueItem[];
-  let notificationManager: NotificationManagerLike;
+  let notificationManager: NotificationManager;
 
   beforeEach(() => {
     items = [];
@@ -41,6 +26,7 @@ describe("Notification type normalization", () => {
         items.push(item);
         return true;
       },
+      getQueueLength: () => items.length,
     };
 
     const eventBus = {
@@ -60,7 +46,6 @@ describe("Notification type normalization", () => {
       displayQueue,
       eventBus,
       constants: require("../../../src/core/constants"),
-      textProcessing: { formatChatMessage: createMockFn() },
       obsGoals: { processDonationGoal: createMockFn() },
       config,
       vfxCommandService: {
@@ -88,7 +73,11 @@ describe("Notification type normalization", () => {
       }),
     );
     expect(items).toHaveLength(1);
-    expect(items[0].type).toBe("platform:follow");
+    const item = items[0];
+    if (item === undefined) {
+      throw new Error("Expected follow notification to be queued");
+    }
+    expect(item.type).toBe("platform:follow");
   });
 
   it("rejects short notification types without normalization", async () => {

@@ -1,49 +1,20 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { restoreAllMocks } from "../../helpers/bun-mock-utils";
 import { TEST_TIMEOUTS } from "../../helpers/test-setup";
-import { noOpLogger, createMockFileSystem } from "../../helpers/mock-factories";
 import testClock from "../../helpers/test-clock";
 import { GoalTracker } from "../../../src/utils/goal-tracker";
-type GoalResult = {
-  success: boolean;
-  newTotal?: number;
-  target?: number;
-  percentage?: number;
-  goalCompleted?: boolean;
-  formatted?: string;
-  paypiggyValue?: number;
-  error?: string;
-};
 
-type GoalStateEntry = {
-  current: number;
-  target: number;
-  currency: string;
-};
+type GoalState = NonNullable<ReturnType<GoalTracker["getGoalState"]>>;
+type DonationResult = ReturnType<GoalTracker["addDonationToGoal"]>;
 
-type GoalTrackerLike = {
-  initializeGoalTracker: () => Promise<void>;
-  getAllGoalStates: () => {
-    tiktok: GoalStateEntry;
-    youtube: GoalStateEntry;
-    twitch: GoalStateEntry;
-  };
-  addDonationToGoal: (
-    platform: unknown,
-    amount: unknown,
-  ) => Promise<GoalResult>;
-  addPaypiggyToGoal: (platform: unknown) => Promise<GoalResult>;
-  formatGoalDisplay: (
-    platform: unknown,
-    current: unknown,
-    target: unknown,
-  ) => string;
-  getGoalState: (platform: string) => GoalStateEntry;
-  goalState: {
-    tiktok: {
-      target: number;
-    };
-  };
+const requireGoalState = (
+  state: ReturnType<GoalTracker["getGoalState"]>,
+  platform: string,
+): GoalState => {
+  if (state === null) {
+    throw new Error(`Expected ${platform} goal state`);
+  }
+  return state;
 };
 
 describe("Goal Tracker - Core Functionality", () => {
@@ -51,12 +22,10 @@ describe("Goal Tracker - Core Functionality", () => {
     restoreAllMocks();
   });
 
-  let goalTracker: GoalTrackerLike;
+  let goalTracker: GoalTracker;
   let configFixture: Record<string, unknown>;
-  let mockFileSystem: ReturnType<typeof createMockFileSystem>;
 
   beforeEach(() => {
-    mockFileSystem = createMockFileSystem();
     configFixture = {
       enabled: true,
       tiktokGoalEnabled: true,
@@ -77,9 +46,7 @@ describe("Goal Tracker - Core Functionality", () => {
     };
 
     goalTracker = new GoalTracker({
-      logger: noOpLogger,
       config: { goals: configFixture },
-      fileSystem: mockFileSystem,
     });
   });
 
@@ -90,18 +57,21 @@ describe("Goal Tracker - Core Functionality", () => {
         await goalTracker.initializeGoalTracker();
 
         const state = goalTracker.getAllGoalStates();
+        const tiktokState = requireGoalState(state.tiktok, "tiktok");
+        const youtubeState = requireGoalState(state.youtube, "youtube");
+        const twitchState = requireGoalState(state.twitch, "twitch");
 
-        expect(state.tiktok.current).toBe(0);
-        expect(state.tiktok.target).toBe(1000);
-        expect(state.tiktok.currency).toBe("coins");
+        expect(tiktokState.current).toBe(0);
+        expect(tiktokState.target).toBe(1000);
+        expect(tiktokState.currency).toBe("coins");
 
-        expect(state.youtube.current).toBe(0);
-        expect(state.youtube.target).toBe(1.0);
-        expect(state.youtube.currency).toBe("dollars");
+        expect(youtubeState.current).toBe(0);
+        expect(youtubeState.target).toBe(1.0);
+        expect(youtubeState.currency).toBe("dollars");
 
-        expect(state.twitch.current).toBe(0);
-        expect(state.twitch.target).toBe(100);
-        expect(state.twitch.currency).toBe("bits");
+        expect(twitchState.current).toBe(0);
+        expect(twitchState.target).toBe(100);
+        expect(twitchState.currency).toBe("bits");
       },
       TEST_TIMEOUTS.FAST,
     );
@@ -229,6 +199,9 @@ describe("Goal Tracker - Core Functionality", () => {
 
         expect(result.success).toBe(true);
         expect(result.newTotal).toBe(50);
+        if (!("paypiggyValue" in result)) {
+          throw new Error("Expected TikTok paypiggy result value");
+        }
         expect(result.paypiggyValue).toBe(50);
         expect(result.formatted).toBe("0050/1000 coins");
       },
@@ -242,6 +215,9 @@ describe("Goal Tracker - Core Functionality", () => {
 
         expect(result.success).toBe(true);
         expect(result.newTotal).toBe(4.99);
+        if (!("paypiggyValue" in result)) {
+          throw new Error("Expected YouTube paypiggy result value");
+        }
         expect(result.paypiggyValue).toBe(4.99);
         expect(result.goalCompleted).toBe(true);
       },
@@ -255,6 +231,9 @@ describe("Goal Tracker - Core Functionality", () => {
 
         expect(result.success).toBe(true);
         expect(result.newTotal).toBe(350);
+        if (!("paypiggyValue" in result)) {
+          throw new Error("Expected Twitch paypiggy result value");
+        }
         expect(result.paypiggyValue).toBe(350);
         expect(result.goalCompleted).toBe(true);
       },
@@ -343,9 +322,9 @@ describe("Goal Tracker - Core Functionality", () => {
         expect(tiktokResult.percentage).toBe(50);
 
         const finalState = goalTracker.getAllGoalStates();
-        expect(finalState.tiktok.current).toBe(500);
-        expect(finalState.youtube.current).toBe(0.5);
-        expect(finalState.twitch.current).toBe(50);
+        expect(requireGoalState(finalState.tiktok, "tiktok").current).toBe(500);
+        expect(requireGoalState(finalState.youtube, "youtube").current).toBe(0.5);
+        expect(requireGoalState(finalState.twitch, "twitch").current).toBe(50);
       },
       TEST_TIMEOUTS.MEDIUM,
     );
@@ -450,7 +429,7 @@ describe("Goal Tracker - Core Functionality", () => {
     test(
       "should handle multiple rapid donations",
       async () => {
-        const promises: Array<Promise<GoalResult>> = [];
+        const promises: DonationResult[] = [];
         for (let i = 1; i <= 10; i++) {
           promises.push(goalTracker.addDonationToGoal("tiktok", 10));
         }
@@ -462,7 +441,7 @@ describe("Goal Tracker - Core Functionality", () => {
         });
 
         const finalState = goalTracker.getGoalState("tiktok");
-        expect(finalState.current).toBe(100); // 10 donations of 10 each
+        expect(requireGoalState(finalState, "tiktok").current).toBe(100); // 10 donations of 10 each
       },
       TEST_TIMEOUTS.MEDIUM,
     );

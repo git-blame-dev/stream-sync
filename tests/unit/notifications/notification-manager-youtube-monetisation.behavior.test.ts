@@ -60,6 +60,14 @@ describe("NotificationManager YouTube monetisation behavior", () => {
     notificationManager = new NotificationManager(baseDependencies());
   });
 
+  const getQueuedItem = () => {
+    const call = displayQueue.addItem.mock.calls[0];
+    if (call === undefined) {
+      throw new Error("Expected display queue addItem to be called");
+    }
+    return call[0];
+  };
+
   it("enqueues paypiggy with paypiggy priority and renewal copy fields", async () => {
     await notificationManager.handleNotification(
       "platform:paypiggy",
@@ -75,7 +83,7 @@ describe("NotificationManager YouTube monetisation behavior", () => {
     );
 
     expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
-    const item = displayQueue.addItem.mock.calls[0][0];
+    const item = getQueuedItem();
     expect(item.type).toBe("platform:paypiggy");
     expect(item.platform).toBe("youtube");
     expect(item.priority).toBe(notificationManager.PRIORITY_LEVELS.PAYPIGGY);
@@ -97,7 +105,7 @@ describe("NotificationManager YouTube monetisation behavior", () => {
     });
 
     expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
-    const item = displayQueue.addItem.mock.calls[0][0];
+    const item = getQueuedItem();
     expect(item.type).toBe("platform:gift");
     expect(item.platform).toBe("youtube");
     expect(item.priority).toBe(notificationManager.PRIORITY_LEVELS.GIFT);
@@ -117,7 +125,7 @@ describe("NotificationManager YouTube monetisation behavior", () => {
     });
 
     expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
-    const item = displayQueue.addItem.mock.calls[0][0];
+    const item = getQueuedItem();
     expect(item.type).toBe("platform:gift");
     expect(item.platform).toBe("youtube");
     expect(item.priority).toBe(notificationManager.PRIORITY_LEVELS.GIFT);
@@ -137,7 +145,7 @@ describe("NotificationManager YouTube monetisation behavior", () => {
     );
 
     expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
-    const item = displayQueue.addItem.mock.calls[0][0];
+    const item = getQueuedItem();
     expect(item.type).toBe("platform:giftpaypiggy");
     expect(item.platform).toBe("youtube");
     expect(item.priority).toBe(

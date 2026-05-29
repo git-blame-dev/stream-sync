@@ -26,7 +26,19 @@ type ChatNotificationRouterLike = {
     author: Record<string, unknown>,
     message: string,
   ) => void;
-  queueGreeting: (platform: string, username: string) => Promise<void>;
+  queueGreeting: (
+    platform: string,
+    username: string | undefined,
+    options: {
+      userId?: unknown;
+      avatarUrl?: unknown;
+      priority?: number;
+      greetingProfile?:
+        | ({ profileId?: string; command?: string } & Record<string, unknown>)
+        | null
+        | undefined;
+    },
+  ) => Promise<unknown>;
 };
 
 describe("Display items avoid hardcoded durations", () => {
@@ -44,14 +56,10 @@ describe("Display items avoid hardcoded durations", () => {
         logger: noOpLogger,
         displayQueue: {
           addItem: (item: QueueItem) => queuedItems.push(item),
-          addToQueue: createMockFn(),
-          processQueue: createMockFn(),
-          isQueueEmpty: createMockFn().mockReturnValue(true),
-          clearQueue: createMockFn(),
+          getQueueLength: () => queuedItems.length,
         },
         eventBus: new EventEmitter(),
         constants: require("../../../src/core/constants"),
-        textProcessing: { formatChatMessage: createMockFn() },
         obsGoals: { processDonationGoal: createMockFn() },
         config: createConfigFixture(),
         vfxCommandService: {
@@ -86,7 +94,7 @@ describe("Display items avoid hardcoded durations", () => {
         displayQueue: {
           addItem: (item: QueueItem) => queuedItems.push(item),
         },
-        config: { general: {} },
+        config: createConfigFixture(),
         commandCooldownService: {
           checkUserCooldown: createMockFn().mockReturnValue(true),
           updateUserCooldown: createMockFn(),
@@ -121,7 +129,7 @@ describe("Display items avoid hardcoded durations", () => {
     });
 
     it("queues greetings without a duration property", async () => {
-      await router.queueGreeting("youtube", "Greeter");
+      await router.queueGreeting("youtube", "Greeter", {});
 
       expect(queuedItems[0]).toBeDefined();
       expect(queuedItems[0]).not.toHaveProperty("duration");

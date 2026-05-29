@@ -5,7 +5,7 @@ import { DisplayQueue } from '../../../src/obs/display-queue';
 import { createMockOBSManager } from '../../helpers/mock-factories';
 
 describe('DisplayQueue share priority mapping', () => {
-    let displayQueue;
+    let displayQueue: DisplayQueue;
 
     beforeEach(() => {
         const obsManager = createMockOBSManager();
@@ -13,7 +13,7 @@ describe('DisplayQueue share priority mapping', () => {
             PRIORITY_LEVELS
         };
 
-        displayQueue = new DisplayQueue(obsManager, { autoProcess: false }, constants, null, constants);
+        displayQueue = new DisplayQueue(obsManager, { autoProcess: false }, constants, null, {});
     });
 
     test('share notifications use SHARE priority level', () => {

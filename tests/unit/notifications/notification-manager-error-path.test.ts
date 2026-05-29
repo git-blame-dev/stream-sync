@@ -58,6 +58,9 @@ describe("NotificationManager monetization error path", () => {
     expect(result).toEqual(expect.objectContaining({ success: true }));
     expect(displayQueue.items).toHaveLength(1);
     const queued = displayQueue.items[0];
+    if (queued === undefined) {
+      throw new Error("Expected gift error notification to be queued");
+    }
     expect(queued.data?.isError).toBe(true);
     expect(queued.data?.displayMessage).toMatch(/error/i);
     expect(queued.data?.ttsMessage).toMatch(/error/i);

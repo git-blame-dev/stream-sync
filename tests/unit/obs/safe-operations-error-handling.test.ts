@@ -4,7 +4,7 @@ import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
 import { safeOBSOperation } from "../../../src/obs/safe-operations.ts";
 
 describe("safeOBSOperation error handling", () => {
-  let originalNodeEnv;
+  let originalNodeEnv: string | undefined;
 
   beforeEach(() => {
     originalNodeEnv = process.env.NODE_ENV;
@@ -12,7 +12,11 @@ describe("safeOBSOperation error handling", () => {
   });
 
   afterEach(() => {
-    process.env.NODE_ENV = originalNodeEnv;
+    if (originalNodeEnv === undefined) {
+      delete process.env.NODE_ENV;
+    } else {
+      process.env.NODE_ENV = originalNodeEnv;
+    }
     restoreAllMocks();
   });
 
@@ -37,7 +41,7 @@ describe("safeOBSOperation error handling", () => {
       isReady: createMockFn().mockResolvedValue(false),
     };
 
-    const operation = createMockFn();
+    const operation = createMockFn<[], Promise<unknown>>(async () => undefined);
     const result = await safeOBSOperation(
       obsManager,
       operation,
