@@ -9,6 +9,30 @@ import {
 import { TikTokPlatform } from "../../src/platforms/tiktok";
 import { TwitchPlatform } from "../../src/platforms/twitch";
 import { YouTubePlatform } from "../../src/platforms/youtube";
+import { YouTubeConnectionManager } from "../../src/platforms/youtube/youtube-connection-manager";
+
+const createTikTokConnectionFixture = (isConnected: boolean) => ({
+  isConnected,
+  connect: async () => undefined,
+  disconnect: async () => undefined,
+  on: () => undefined,
+});
+
+const createTwitchEventSubFixture = (state: {
+  isConnected: boolean;
+  isActive: boolean;
+}) => ({
+  initialize: async () => undefined,
+  sendMessage: async () => undefined,
+  isConnected: () => state.isConnected,
+  isActive: () => state.isActive,
+});
+
+const createYouTubeConnectionManagerFixture = (connectionCount: number) => {
+  const manager = new YouTubeConnectionManager(noOpLogger, { config: {} });
+  manager.getConnectionCount = () => connectionCount;
+  return manager;
+};
 
 const createTikTokPlatform = (configOverrides = {}) => {
   const config = createTikTokConfigFixture(configOverrides);
@@ -29,7 +53,15 @@ const createTikTokPlatform = (configOverrides = {}) => {
       isConnecting: false,
       isConnected: false,
     })),
-    WebcastEvent: { ERROR: "error", DISCONNECT: "disconnect" },
+    WebcastEvent: {
+      CHAT: "chat",
+      GIFT: "gift",
+      FOLLOW: "follow",
+      SOCIAL: "social",
+      ROOM_USER: "roomUser",
+      ERROR: "error",
+      DISCONNECT: "disconnect",
+    },
     ControlEvent: {},
   });
 };
@@ -41,7 +73,6 @@ const createTwitchPlatform = (configOverrides = {}) => {
     logger: noOpLogger,
     twitchAuth: {
       isReady: () => true,
-      getUserId: () => "test-user-id",
     },
   });
 };
@@ -80,7 +111,7 @@ describe("Platform getStatus() interface standardization", () => {
 
     test("isReady is true when enabled and connected", () => {
       const platform = createTikTokPlatform({ enabled: true });
-      platform.connection = { isConnected: true };
+      platform.connection = createTikTokConnectionFixture(true);
 
       const status = platform.getStatus();
 
@@ -122,10 +153,10 @@ describe("Platform getStatus() interface standardization", () => {
 
     test("isReady is true when enabled and EventSub is connected + active", () => {
       const platform = createTwitchPlatform({ enabled: true });
-      platform.eventSub = {
-        isConnected: () => true,
-        isActive: () => true,
-      };
+      platform.eventSub = createTwitchEventSubFixture({
+        isConnected: true,
+        isActive: true,
+      });
 
       const status = platform.getStatus();
 
@@ -135,10 +166,10 @@ describe("Platform getStatus() interface standardization", () => {
 
     test("isReady is false with issue when EventSub is connected but inactive", () => {
       const platform = createTwitchPlatform({ enabled: true });
-      platform.eventSub = {
-        isConnected: () => true,
-        isActive: () => false,
-      };
+      platform.eventSub = createTwitchEventSubFixture({
+        isConnected: true,
+        isActive: false,
+      });
 
       const status = platform.getStatus();
 
@@ -180,9 +211,7 @@ describe("Platform getStatus() interface standardization", () => {
 
     test("isReady is true when enabled and has connections", () => {
       const platform = createYouTubePlatform({ enabled: true });
-      platform.connectionManager = {
-        getConnectionCount: () => 1,
-      };
+      platform.connectionManager = createYouTubeConnectionManagerFixture(1);
 
       const status = platform.getStatus();
 
@@ -201,7 +230,7 @@ describe("Platform getStatus() interface standardization", () => {
 
     test("isReady is false with issue when enabled but no connections", () => {
       const platform = createYouTubePlatform({ enabled: true });
-      platform.connectionManager = { getConnectionCount: () => 0 };
+      platform.connectionManager = createYouTubeConnectionManagerFixture(0);
 
       const status = platform.getStatus();
 

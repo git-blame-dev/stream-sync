@@ -3,7 +3,6 @@ import { safeDelay } from '../utils/timeout-validator';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 import { assertPlatformInterface } from '../utils/platform-interface-validator';
 import { getSystemTimestampISO } from '../utils/timestamp';
-import type { DependencyFactory } from '../utils/dependency-factory';
 
 const PlatformEvents = {
     CHAT_MESSAGE: 'platform:chat-message',
@@ -26,10 +25,6 @@ function getErrorMessage(error: unknown): string {
         return error.message;
     }
     return String(error);
-}
-
-function isDependencyFactoryMethod(value: unknown): value is DependencyFactoryMethod {
-    return typeof value === 'function';
 }
 
 type LifecycleRecord = Record<string, unknown>;
@@ -68,18 +63,18 @@ type PlatformConfig = LifecycleRecord & {
     username?: unknown;
 };
 
-type DependencyFactoryMethod = (config: PlatformConfig, sharedDependencies: LifecycleRecord) => unknown;
+type DependencyFactoryMethod = (config: PlatformConfig, sharedDependencies?: LifecycleRecord) => unknown;
 
-type PlatformDependencyFactory = Pick<DependencyFactory,
-    'createYoutubeDependencies' |
-    'createTiktokDependencies' |
-    'createTwitchDependencies'
-> & Record<string, unknown>;
+type PlatformDependencyFactory = {
+    createYoutubeDependencies?: DependencyFactoryMethod;
+    createTiktokDependencies?: DependencyFactoryMethod;
+    createTwitchDependencies?: DependencyFactoryMethod;
+};
 
 type PlatformLifecycleOptions = {
     config?: Record<string, PlatformConfig>;
     eventBus?: PlatformEventBus | null;
-    dependencyFactory?: PlatformDependencyFactory;
+    dependencyFactory?: PlatformDependencyFactory | null;
     logger?: PlatformLifecycleLogger;
     sharedDependencies?: LifecycleRecord;
     handlerFactory?: ((platformName: string) => PlatformEventHandlers | null | undefined) | null;
@@ -87,8 +82,12 @@ type PlatformLifecycleOptions = {
 
 type PlatformInstance = {
     initialize: (handlers: PlatformEventHandlers) => Promise<unknown> | unknown;
-    cleanup?: () => Promise<void> | void;
-    [key: string]: unknown;
+    on: (eventName: string, handler: (...args: unknown[]) => unknown) => unknown;
+    cleanup: () => Promise<void> | void;
+    getViewerCount?: () => Promise<unknown> | unknown;
+    getStatus?: () => unknown;
+    isConnected?: () => boolean;
+    isActive?: () => boolean;
 };
 
 type PlatformConstructor = new (config: PlatformConfig, dependencies?: unknown) => PlatformInstance;
@@ -105,7 +104,7 @@ type PlatformHealthEntry = {
 class PlatformLifecycleService {
     config: Record<string, PlatformConfig> | undefined;
     eventBus: PlatformEventBus | null;
-    dependencyFactory: PlatformDependencyFactory | undefined;
+    dependencyFactory: PlatformDependencyFactory | null;
     logger: PlatformLifecycleLogger;
     errorHandler: ReturnType<typeof createPlatformErrorHandler>;
     sharedDependencies: LifecycleRecord;
@@ -120,7 +119,7 @@ class PlatformLifecycleService {
     constructor(options: PlatformLifecycleOptions = {}) {
         this.config = options.config;
         this.eventBus = options.eventBus || null;
-        this.dependencyFactory = options.dependencyFactory;
+        this.dependencyFactory = options.dependencyFactory ?? null;
         this.logger = options.logger || logger;
         this.errorHandler = createPlatformErrorHandler(this.logger, 'PlatformLifecycleService');
         this.sharedDependencies = options.sharedDependencies || {};
@@ -414,14 +413,13 @@ class PlatformLifecycleService {
             this.logger.warn(`No dependency factory available, creating ${platformName} without DI`, 'PlatformLifecycleService');
             instance = new PlatformClass(config);
         } else {
-            // Check if factory has method for this platform
-            const factoryMethodName = `create${platformName.charAt(0).toUpperCase() + platformName.slice(1)}Dependencies`;
-            const factoryCandidate = this.dependencyFactory[factoryMethodName];
-            if (!isDependencyFactoryMethod(factoryCandidate)) {
+            const factoryMethod = this.getDependencyFactoryMethod(platformName);
+            if (!factoryMethod) {
+                const factoryMethodName = this.getDependencyFactoryMethodName(platformName);
                 this.logger.debug(`No factory method ${factoryMethodName}, creating ${platformName} without DI`, 'PlatformLifecycleService');
                 instance = new PlatformClass(config);
             } else {
-                const dependencies = factoryCandidate.call(this.dependencyFactory, config, this.sharedDependencies);
+                const dependencies = factoryMethod.call(this.dependencyFactory, config, this.sharedDependencies);
 
                 this.logger.debug(`${platformName} platform instance created via factory`, 'PlatformLifecycleService');
                 instance = new PlatformClass(config, dependencies);
@@ -430,6 +428,33 @@ class PlatformLifecycleService {
 
         assertPlatformInterface(platformName, instance);
         return instance;
+    }
+
+    getDependencyFactoryMethodName(platformName: string) {
+        return `create${platformName.charAt(0).toUpperCase() + platformName.slice(1)}Dependencies`;
+    }
+
+    getDependencyFactoryMethod(platformName: string): DependencyFactoryMethod | null {
+        if (!this.dependencyFactory) {
+            return null;
+        }
+
+        let factoryMethod: unknown;
+        switch (platformName) {
+            case 'youtube':
+                factoryMethod = this.dependencyFactory.createYoutubeDependencies;
+                break;
+            case 'tiktok':
+                factoryMethod = this.dependencyFactory.createTiktokDependencies;
+                break;
+            case 'twitch':
+                factoryMethod = this.dependencyFactory.createTwitchDependencies;
+                break;
+            default:
+                return null;
+        }
+
+        return typeof factoryMethod === 'function' ? factoryMethod as DependencyFactoryMethod : null;
     }
 
     async initializePlatformConnection(platformName: string, platformInstance: PlatformInstance, handlers: PlatformEventHandlers, platformConfig: PlatformConfig) {
@@ -728,3 +753,12 @@ class PlatformLifecycleService {
 }
 
 export { PlatformLifecycleService };
+export type {
+    PlatformConfig,
+    PlatformConstructor,
+    PlatformDependencyFactory,
+    PlatformEventHandlerMap,
+    PlatformEventHandlers,
+    PlatformInstance,
+    PlatformLifecycleOptions
+};

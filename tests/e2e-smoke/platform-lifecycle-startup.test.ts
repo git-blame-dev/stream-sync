@@ -14,11 +14,17 @@ describe("Platform lifecycle startup smoke E2E", () => {
 
     const initialize = createMockFn().mockResolvedValue(true);
     const cleanup = createMockFn().mockResolvedValue();
-    const MockPlatform = createMockFn().mockImplementation(() => ({
-      initialize,
-      cleanup,
-      on: createMockFn(),
-    }));
+    class MockPlatform {
+      on = createMockFn();
+
+      initialize() {
+        return initialize();
+      }
+
+      async cleanup() {
+        await cleanup();
+      }
+    }
 
     await service.initializeAllPlatforms({ twitch: MockPlatform });
 
@@ -52,15 +58,24 @@ describe("Platform lifecycle startup smoke E2E", () => {
 
     const initialize = createMockFn().mockResolvedValue(true);
     const cleanup = createMockFn().mockResolvedValue();
-    const MockPlatform = createMockFn().mockImplementation(
-      (platformConfig, dependencies) => ({
-        platformConfig,
-        dependencies,
-        initialize,
-        cleanup,
-        on: createMockFn(),
-      }),
-    );
+    class MockPlatform {
+      platformConfig: Record<string, unknown>;
+      dependencies: unknown;
+      on = createMockFn();
+
+      constructor(platformConfig: Record<string, unknown>, dependencies?: unknown) {
+        this.platformConfig = platformConfig;
+        this.dependencies = dependencies;
+      }
+
+      initialize() {
+        return initialize();
+      }
+
+      async cleanup() {
+        await cleanup();
+      }
+    }
 
     await service.initializeAllPlatforms({ twitch: MockPlatform });
 

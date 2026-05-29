@@ -18,7 +18,12 @@ describe("PlatformLifecycleService platform contract validation (smoke)", () => 
     });
 
     try {
-      const InvalidPlatform = createMockFn().mockImplementation(() => ({}));
+      class InvalidPlatform {
+        initialize!: () => Promise<unknown> | unknown;
+        cleanup!: () => Promise<void> | void;
+        on!: (eventName: string, handler: (...args: unknown[]) => unknown) => unknown;
+      }
+
       await lifecycle.initializeAllPlatforms({ twitch: InvalidPlatform });
 
       expect(lifecycle.isPlatformAvailable("twitch")).toBe(false);
@@ -33,9 +38,11 @@ describe("PlatformLifecycleService platform contract validation (smoke)", () => 
           }),
         ]),
       );
-      expect(status.failedPlatforms[0].lastError).toContain("initialize");
-      expect(status.failedPlatforms[0].lastError).toContain("cleanup");
-      expect(status.failedPlatforms[0].lastError).toContain("on");
+      const failedPlatform = status.failedPlatforms[0];
+      expect(failedPlatform).toBeDefined();
+      expect(failedPlatform?.lastError).toContain("initialize");
+      expect(failedPlatform?.lastError).toContain("cleanup");
+      expect(failedPlatform?.lastError).toContain("on");
     } finally {
       lifecycle.dispose();
     }

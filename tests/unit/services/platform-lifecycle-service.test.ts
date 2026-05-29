@@ -1,7 +1,15 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { createMockFn, clearAllMocks } from "../../helpers/bun-mock-utils";
+import type { TestMockFn } from "../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../helpers/mock-factories";
 import { PlatformLifecycleService } from "../../../src/services/PlatformLifecycleService.ts";
+import type {
+  PlatformConfig,
+  PlatformConstructor,
+  PlatformEventHandlerMap,
+  PlatformEventHandlers,
+  PlatformInstance,
+} from "../../../src/services/PlatformLifecycleService.ts";
 import { PlatformEvents } from "../../../src/interfaces/PlatformEvents";
 import { DependencyFactory } from "../../../src/utils/dependency-factory";
 import * as testClock from "../../helpers/test-clock";
@@ -11,23 +19,140 @@ import {
   initializeStaticSecrets,
 } from "../../../src/core/secrets";
 
-const createDeferred = () => {
-  let resolve;
-  const promise = new Promise((res) => {
+type MockEventBus = {
+  emit: TestMockFn<[string, unknown], void>;
+  subscribe: TestMockFn<[string, (...args: unknown[]) => unknown], () => void>;
+};
+
+type TestConfigFixture = Record<string, PlatformConfig>;
+
+type EmittedPlatformEvent = {
+  platform?: string;
+  type?: string;
+  data?: Record<string, unknown>;
+};
+
+type PlatformWithDependencies = PlatformInstance & {
+  dependencies: Record<string, unknown>;
+};
+
+type MatrixHandlerName = Exclude<keyof PlatformEventHandlers, "onConnection">;
+
+type HandlerMatrixEntry = {
+  eventType: string;
+  requiresTimestamp: boolean;
+  dataKey: string;
+};
+
+const createDeferred = <T = void>() => {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((res) => {
     resolve = res;
   });
   return { promise, resolve };
 };
 
+const createNoopHandlers = (): PlatformEventHandlers => ({
+  onChat: () => {},
+  onViewerCount: () => {},
+  onGift: () => {},
+  onPaypiggy: () => {},
+  onGiftPaypiggy: () => {},
+  onFollow: () => {},
+  onShare: () => {},
+  onRaid: () => {},
+  onEnvelope: () => {},
+  onStreamStatus: () => {},
+  onStreamDetected: () => {},
+  onConnection: () => {},
+});
+
+const createDefaultPlatformInstance = (): PlatformInstance => ({
+  initialize: createMockFn<
+    [PlatformEventHandlers],
+    Promise<boolean>
+  >().mockResolvedValue(true),
+  cleanup: createMockFn<[], Promise<void>>().mockResolvedValue(),
+  on: createMockFn<[string, (...args: unknown[]) => unknown], unknown>(),
+});
+
+const createPlatformConstructor = (
+  createInstance: (
+    config: PlatformConfig,
+    dependencies?: unknown,
+  ) => PlatformInstance = () => createDefaultPlatformInstance(),
+): PlatformConstructor => {
+  return class TestPlatform implements PlatformInstance {
+    private readonly instance: PlatformInstance;
+
+    constructor(config: PlatformConfig, dependencies?: unknown) {
+      this.instance = createInstance(config, dependencies);
+    }
+
+    initialize(handlers: PlatformEventHandlers) {
+      return this.instance.initialize(handlers);
+    }
+
+    cleanup() {
+      return this.instance.cleanup();
+    }
+
+    on(eventName: string, handler: (...args: unknown[]) => unknown) {
+      return this.instance.on(eventName, handler);
+    }
+  };
+};
+
+const getEmittedPlatformEvents = (eventBus: MockEventBus) =>
+  eventBus.emit.mock.calls
+    .filter(([name]) => name === "platform:event")
+    .map(([, payload]) => payload)
+    .filter(isEmittedPlatformEvent);
+
+const isEmittedPlatformEvent = (
+  payload: unknown,
+): payload is EmittedPlatformEvent => {
+  return !!payload && typeof payload === "object";
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> => {
+  return !!value && typeof value === "object";
+};
+
+const hasDependencies = (
+  platform: PlatformInstance,
+): platform is PlatformWithDependencies => {
+  return "dependencies" in platform && isRecord(platform.dependencies);
+};
+
+const isLoggerLike = (value: unknown): value is { info: unknown } => {
+  return isRecord(value) && typeof value.info === "function";
+};
+
+const findEmittedEvent = (
+  eventBus: MockEventBus,
+  eventType: string,
+): EmittedPlatformEvent | undefined => {
+  for (const [, payload] of eventBus.emit.mock.calls) {
+    if (isEmittedPlatformEvent(payload) && payload.type === eventType) {
+      return payload;
+    }
+  }
+  return undefined;
+};
+
 describe("PlatformLifecycleService", () => {
-  let service;
-  let mockEventBus;
-  let configFixture;
+  let service: PlatformLifecycleService;
+  let mockEventBus: MockEventBus;
+  let configFixture: TestConfigFixture;
 
   beforeEach(() => {
     mockEventBus = {
-      emit: createMockFn(),
-      subscribe: createMockFn().mockReturnValue(() => {}),
+      emit: createMockFn<[string, unknown], void>(),
+      subscribe: createMockFn<
+        [string, (...args: unknown[]) => unknown],
+        () => void
+      >().mockReturnValue(() => {}),
     };
 
     _resetForTesting();
@@ -54,14 +179,15 @@ describe("PlatformLifecycleService", () => {
         clientId: "test-client-id",
       };
 
-      const mockPlatformClass = createMockFn().mockImplementation(() => ({
-        initialize: createMockFn().mockImplementation(async (handlers) => {
-          if (handlers.onChat) {
-            await handlers.onChat({ message: { text: "ready" } });
-          }
+      const mockPlatformClass = createPlatformConstructor(() => ({
+        initialize: createMockFn<
+          [PlatformEventHandlers],
+          Promise<void>
+        >().mockImplementation(async (handlers) => {
+          await handlers.onChat({ message: { text: "ready" } });
         }),
-        cleanup: createMockFn().mockResolvedValue(),
-        on: createMockFn(),
+        cleanup: createMockFn<[], Promise<void>>().mockResolvedValue(),
+        on: createMockFn<[string, (...args: unknown[]) => unknown], unknown>(),
       }));
 
       await service.initializeAllPlatforms({ twitch: mockPlatformClass });
@@ -69,18 +195,21 @@ describe("PlatformLifecycleService", () => {
       const status = service.getStatus();
       expect(status.initializedPlatforms).toContain("twitch");
       expect(status.connectionTimes.twitch).toEqual(expect.any(Number));
-      expect(status.streamStatuses).toBeUndefined();
+      expect("streamStatuses" in status).toBe(false);
     });
 
     it("reports failed platforms with error context", async () => {
       configFixture.youtube = { enabled: true, username: "channel" };
 
-      const mockPlatformClass = createMockFn().mockImplementation(() => ({
-        initialize: createMockFn().mockRejectedValue(
+      const mockPlatformClass = createPlatformConstructor(() => ({
+        initialize: createMockFn<
+          [PlatformEventHandlers],
+          Promise<never>
+        >().mockRejectedValue(
           new Error("connect failed"),
         ),
-        cleanup: createMockFn().mockResolvedValue(),
-        on: createMockFn(),
+        cleanup: createMockFn<[], Promise<void>>().mockResolvedValue(),
+        on: createMockFn<[string, (...args: unknown[]) => unknown], unknown>(),
       }));
 
       await service.initializeAllPlatforms({ youtube: mockPlatformClass });
@@ -100,8 +229,8 @@ describe("PlatformLifecycleService", () => {
 
     it("reports registered platforms consistently with accessors", () => {
       service.platforms = {
-        twitch: { initialize: createMockFn(), cleanup: createMockFn() },
-        youtube: { initialize: createMockFn(), cleanup: createMockFn() },
+        twitch: createDefaultPlatformInstance(),
+        youtube: createDefaultPlatformInstance(),
       };
       service.updatePlatformHealth("twitch", { state: "ready" });
       service.updatePlatformHealth("youtube", {
@@ -147,14 +276,12 @@ describe("PlatformLifecycleService", () => {
         clientId: "test-client-id",
       };
 
-      const mockPlatformClass = createMockFn().mockImplementation(() => ({
-        initialize: createMockFn().mockResolvedValue(true),
-        cleanup: createMockFn().mockResolvedValue(),
-        on: createMockFn(),
-      }));
+      const mockPlatformClass = createPlatformConstructor();
 
       const platformModules = { twitch: mockPlatformClass };
-      const eventHandlers = { default: {} };
+      const eventHandlers: PlatformEventHandlerMap = {
+        default: createNoopHandlers(),
+      };
 
       const result = await service.initializeAllPlatforms(
         platformModules,
@@ -162,11 +289,13 @@ describe("PlatformLifecycleService", () => {
       );
 
       expect(result.twitch).toBeDefined();
-      expect(result.twitch.initialize).toBeDefined();
+      if (result.twitch) {
+        expect(result.twitch.initialize).toBeDefined();
+      }
     });
 
     it("should skip disabled platforms", async () => {
-      const mockPlatformClass = createMockFn();
+      const mockPlatformClass = createPlatformConstructor();
       const platformModules = {
         twitch: mockPlatformClass,
         youtube: mockPlatformClass,
@@ -186,7 +315,7 @@ describe("PlatformLifecycleService", () => {
       });
 
       const platformModules = {
-        twitch: createMockFn(),
+        twitch: createPlatformConstructor(),
       };
 
       const result = await localService.initializeAllPlatforms(
@@ -201,15 +330,13 @@ describe("PlatformLifecycleService", () => {
     it("should emit platform:initialized event when platform is ready", async () => {
       configFixture.youtube = { enabled: true, username: "test-channel" };
 
-      const mockPlatformClass = createMockFn().mockImplementation(() => ({
-        initialize: createMockFn().mockResolvedValue(true),
-        cleanup: createMockFn().mockResolvedValue(),
-        on: createMockFn(),
-      }));
+      const mockPlatformClass = createPlatformConstructor();
 
       const platformModules = { youtube: mockPlatformClass };
 
-      await service.initializeAllPlatforms(platformModules, { default: {} });
+      await service.initializeAllPlatforms(platformModules, {
+        default: createNoopHandlers(),
+      });
 
       expect(service.isPlatformAvailable("youtube")).toBe(true);
       expect(service.getPlatform("youtube")).toBeDefined();
@@ -220,8 +347,11 @@ describe("PlatformLifecycleService", () => {
       configFixture.twitch = { enabled: true };
       const timestamp = new Date().toISOString();
 
-      const mockPlatformClass = createMockFn().mockImplementation(() => ({
-        initialize: createMockFn().mockImplementation((handlers) => {
+      const mockPlatformClass = createPlatformConstructor(() => ({
+        initialize: createMockFn<
+          [PlatformEventHandlers],
+          Promise<boolean>
+        >().mockImplementation((handlers) => {
           handlers.onChat({
             message: { text: "hello" },
             username: "user",
@@ -242,17 +372,15 @@ describe("PlatformLifecycleService", () => {
           });
           return Promise.resolve(true);
         }),
-        cleanup: createMockFn().mockResolvedValue(),
-        on: createMockFn(),
+        cleanup: createMockFn<[], Promise<void>>().mockResolvedValue(),
+        on: createMockFn<[string, (...args: unknown[]) => unknown], unknown>(),
       }));
 
       const platformModules = { twitch: mockPlatformClass };
 
       await service.initializeAllPlatforms(platformModules);
 
-      const platformEvents = mockEventBus.emit.mock.calls
-        .filter(([name]) => name === "platform:event")
-        .map(([, payload]) => payload);
+      const platformEvents = getEmittedPlatformEvents(mockEventBus);
 
       expect(platformEvents).toEqual(
         expect.arrayContaining([
@@ -286,7 +414,7 @@ describe("PlatformLifecycleService", () => {
 
     it("validates PlatformClass is a constructor", async () => {
       configFixture.twitch = { enabled: true };
-      const platformModules = { twitch: null };
+      const platformModules = JSON.parse('{"twitch":null}');
 
       await service.initializeAllPlatforms(platformModules, {});
 
@@ -301,10 +429,13 @@ describe("PlatformLifecycleService", () => {
         clientId: "test-client-id",
       };
 
-      service.createPlatformInstance = createMockFn().mockRejectedValue(null);
+      service.createPlatformInstance = createMockFn<
+        [string, PlatformConstructor, PlatformConfig],
+        Promise<PlatformInstance>
+      >().mockRejectedValue(null);
 
       await service.initializeAllPlatforms({
-        twitch: createMockFn(),
+        twitch: createPlatformConstructor(),
       });
 
       const status = service.getStatus();
@@ -319,15 +450,20 @@ describe("PlatformLifecycleService", () => {
     });
 
     it("rethrows original non-Error values from initializePlatformConnection without secondary crashes", async () => {
-      const platformInstance = {
-        initialize: createMockFn().mockRejectedValue(null),
+      const platformInstance: PlatformInstance = {
+        initialize: createMockFn<
+          [PlatformEventHandlers],
+          Promise<never>
+        >().mockRejectedValue(null),
+        cleanup: createMockFn<[], Promise<void>>().mockResolvedValue(),
+        on: createMockFn<[string, (...args: unknown[]) => unknown], unknown>(),
       };
 
       await expect(
         service.initializePlatformConnection(
           "twitch",
           platformInstance,
-          {},
+          createNoopHandlers(),
           {
             enabled: true,
           },
@@ -338,11 +474,7 @@ describe("PlatformLifecycleService", () => {
 
   describe("Platform Instance Creation", () => {
     it("should create platform instance without DI when no factory", async () => {
-      const mockPlatformClass = createMockFn().mockImplementation(() => ({
-        initialize: createMockFn().mockResolvedValue(true),
-        cleanup: createMockFn().mockResolvedValue(),
-        on: createMockFn(),
-      }));
+      const mockPlatformClass = createPlatformConstructor();
       const config = { test: "config" };
 
       const instance = await service.createPlatformInstance(
@@ -359,7 +491,10 @@ describe("PlatformLifecycleService", () => {
       const mockDependencies = { auth: "mock" };
       const mockFactory = {
         createTwitchDependencies:
-          createMockFn().mockReturnValue(mockDependencies),
+          createMockFn<
+            [PlatformConfig, Record<string, unknown> | undefined],
+            Record<string, unknown>
+          >().mockReturnValue(mockDependencies),
       };
 
       service.dispose();
@@ -371,24 +506,36 @@ describe("PlatformLifecycleService", () => {
         sharedDependencies: { test: "value" },
       });
 
-      const mockPlatformClass = createMockFn().mockImplementation(
-        (platformConfig, dependencies) => ({
-          platformConfig,
-          dependencies,
-          initialize: createMockFn().mockResolvedValue(true),
-          cleanup: createMockFn().mockResolvedValue(),
-          on: createMockFn(),
-        }),
-      );
+      class TestPlatform implements PlatformInstance {
+        readonly platformConfig: PlatformConfig;
+        readonly dependencies: Record<string, unknown>;
+        initialize = createMockFn<
+          [PlatformEventHandlers],
+          Promise<boolean>
+        >().mockResolvedValue(true);
+        cleanup = createMockFn<[], Promise<void>>().mockResolvedValue();
+        on = createMockFn<
+          [string, (...args: unknown[]) => unknown],
+          unknown
+        >();
+
+        constructor(platformConfig: PlatformConfig, dependencies?: unknown) {
+          this.platformConfig = platformConfig;
+          this.dependencies = isRecord(dependencies) ? dependencies : {};
+        }
+      }
       const config = { test: "config" };
 
       const instance = await service.createPlatformInstance(
         "twitch",
-        mockPlatformClass,
+        TestPlatform,
         config,
       );
 
-      expect(instance.dependencies).toBe(mockDependencies);
+      expect(hasDependencies(instance)).toBe(true);
+      if (hasDependencies(instance)) {
+        expect(instance.dependencies).toBe(mockDependencies);
+      }
       expect(instance).toBeDefined();
       expect(typeof instance).toBe("object");
     });
@@ -415,15 +562,24 @@ describe("PlatformLifecycleService", () => {
         },
       });
 
-      const TestPlatform = createMockFn().mockImplementation(
-        (platformConfig, dependencies) => ({
-          platformConfig,
-          dependencies,
-          initialize: createMockFn().mockResolvedValue(true),
-          cleanup: createMockFn().mockResolvedValue(),
-          on: createMockFn(),
-        }),
-      );
+      class TestPlatform implements PlatformInstance {
+        readonly platformConfig: PlatformConfig;
+        readonly dependencies: Record<string, unknown>;
+        initialize = createMockFn<
+          [PlatformEventHandlers],
+          Promise<boolean>
+        >().mockResolvedValue(true);
+        cleanup = createMockFn<[], Promise<void>>().mockResolvedValue();
+        on = createMockFn<
+          [string, (...args: unknown[]) => unknown],
+          unknown
+        >();
+
+        constructor(platformConfig: PlatformConfig, dependencies?: unknown) {
+          this.platformConfig = platformConfig;
+          this.dependencies = isRecord(dependencies) ? dependencies : {};
+        }
+      }
 
       const instance = await service.createPlatformInstance(
         "twitch",
@@ -431,19 +587,19 @@ describe("PlatformLifecycleService", () => {
         configFixture.twitch,
       );
 
-      expect(instance.dependencies.twitchAuth).toBe(testTwitchAuth);
-      expect(instance.dependencies.selfMessageDetectionService).toBeDefined();
-      expect(typeof instance.dependencies.logger?.info).toBe("function");
+      expect(hasDependencies(instance)).toBe(true);
+      if (hasDependencies(instance)) {
+        expect(instance.dependencies.twitchAuth).toBe(testTwitchAuth);
+        expect(instance.dependencies.selfMessageDetectionService).toBeDefined();
+        const dependencyLogger = instance.dependencies.logger;
+        expect(isLoggerLike(dependencyLogger)).toBe(true);
+      }
     });
 
     it("should fallback gracefully if factory method missing", async () => {
       service.dependencyFactory = {};
 
-      const mockPlatformClass = createMockFn().mockImplementation(() => ({
-        initialize: createMockFn().mockResolvedValue(true),
-        cleanup: createMockFn().mockResolvedValue(),
-        on: createMockFn(),
-      }));
+      const mockPlatformClass = createPlatformConstructor();
       const config = { test: "config" };
 
       const instance = await service.createPlatformInstance(
@@ -467,7 +623,7 @@ describe("PlatformLifecycleService", () => {
     });
 
     it("should check if platform is available", () => {
-      service.platforms = { twitch: { connected: true } };
+      service.platforms = { twitch: createDefaultPlatformInstance() };
 
       expect(service.isPlatformAvailable("twitch")).toBe(true);
     });
@@ -477,7 +633,7 @@ describe("PlatformLifecycleService", () => {
     });
 
     it("should get platform instance", () => {
-      const mockPlatform = { name: "twitch" };
+      const mockPlatform = createDefaultPlatformInstance();
       service.platforms = { twitch: mockPlatform };
 
       expect(service.getPlatform("twitch")).toBe(mockPlatform);
@@ -490,9 +646,14 @@ describe("PlatformLifecycleService", () => {
 
   describe("Resource Cleanup", () => {
     it("should dispose resources when service stops", () => {
-      service.platforms = { twitch: {}, youtube: {} };
+      service.platforms = {
+        twitch: createDefaultPlatformInstance(),
+        youtube: createDefaultPlatformInstance(),
+      };
       service.platformConnectionTimes = { twitch: testClock.now() };
-      service.backgroundPlatformInits = [{ promise: Promise.resolve() }];
+      service.backgroundPlatformInits = [
+        { platform: "tiktok", promise: Promise.resolve() },
+      ];
 
       service.dispose();
 
@@ -506,18 +667,21 @@ describe("PlatformLifecycleService", () => {
     it("should connect YouTube directly (platform-managed detection)", async () => {
       configFixture.youtube = { enabled: true, username: "test-channel" };
 
-      const platformInitSpy = createMockFn().mockResolvedValue(true);
-      const mockPlatformClass = createMockFn().mockImplementation(() => ({
+      const platformInitSpy = createMockFn<
+        [PlatformEventHandlers],
+        Promise<boolean>
+      >().mockResolvedValue(true);
+      const mockPlatformClass = createPlatformConstructor(() => ({
         initialize: platformInitSpy,
-        cleanup: createMockFn().mockResolvedValue(),
-        on: createMockFn(),
+        cleanup: createMockFn<[], Promise<void>>().mockResolvedValue(),
+        on: createMockFn<[string, (...args: unknown[]) => unknown], unknown>(),
       }));
 
       await service.initializeAllPlatforms({ youtube: mockPlatformClass });
 
       const status = service.getStatus();
       expect(status.initializedPlatforms).toContain("youtube");
-      expect(status.platformHealth.youtube.state).toBe("ready");
+      expect(status.platformHealth.youtube?.state).toBe("ready");
     });
 
     it("should connect Twitch directly (chat always available)", async () => {
@@ -527,18 +691,21 @@ describe("PlatformLifecycleService", () => {
         clientId: "test-client-id",
       };
 
-      const platformInitSpy = createMockFn().mockResolvedValue(true);
-      const mockPlatformClass = createMockFn().mockImplementation(() => ({
+      const platformInitSpy = createMockFn<
+        [PlatformEventHandlers],
+        Promise<boolean>
+      >().mockResolvedValue(true);
+      const mockPlatformClass = createPlatformConstructor(() => ({
         initialize: platformInitSpy,
-        cleanup: createMockFn().mockResolvedValue(),
-        on: createMockFn(),
+        cleanup: createMockFn<[], Promise<void>>().mockResolvedValue(),
+        on: createMockFn<[string, (...args: unknown[]) => unknown], unknown>(),
       }));
 
       await service.initializeAllPlatforms({ twitch: mockPlatformClass });
 
       const status = service.getStatus();
       expect(status.initializedPlatforms).toContain("twitch");
-      expect(status.platformHealth.twitch.state).toBe("ready");
+      expect(status.platformHealth.twitch?.state).toBe("ready");
     });
   });
 
@@ -546,14 +713,17 @@ describe("PlatformLifecycleService", () => {
     it("should run TikTok initialization in background without blocking", async () => {
       configFixture.tiktok = { enabled: true, username: "streamer" };
 
-      const deferred = createDeferred();
-      const platformInitSpy = createMockFn().mockImplementation(
+      const deferred = createDeferred<boolean>();
+      const platformInitSpy = createMockFn<
+        [PlatformEventHandlers],
+        Promise<boolean>
+      >().mockImplementation(
         () => deferred.promise,
       );
-      const mockPlatformClass = createMockFn().mockImplementation(() => ({
+      const mockPlatformClass = createPlatformConstructor(() => ({
         initialize: platformInitSpy,
-        cleanup: createMockFn().mockResolvedValue(),
-        on: createMockFn(),
+        cleanup: createMockFn<[], Promise<void>>().mockResolvedValue(),
+        on: createMockFn<[string, (...args: unknown[]) => unknown], unknown>(),
       }));
 
       await service.initializeAllPlatforms({ tiktok: mockPlatformClass });
@@ -562,7 +732,7 @@ describe("PlatformLifecycleService", () => {
       expect(platformInitSpy).toHaveBeenCalled();
 
       const waitPromise = service.waitForBackgroundInits(100);
-      deferred.resolve();
+      deferred.resolve(true);
       await waitPromise;
       expect(service.backgroundPlatformInits).toHaveLength(0);
     });
@@ -575,26 +745,32 @@ describe("PlatformLifecycleService", () => {
       };
       configFixture.youtube = { enabled: true, username: "test-channel" };
 
-      const twitchInitDeferred = createDeferred();
-      const youtubeInitDeferred = createDeferred();
+      const twitchInitDeferred = createDeferred<boolean>();
+      const youtubeInitDeferred = createDeferred<boolean>();
 
-      const twitchInit = createMockFn().mockImplementation(
+      const twitchInit = createMockFn<
+        [PlatformEventHandlers],
+        Promise<boolean>
+      >().mockImplementation(
         () => twitchInitDeferred.promise,
       );
-      const youtubeInit = createMockFn().mockImplementation(
+      const youtubeInit = createMockFn<
+        [PlatformEventHandlers],
+        Promise<boolean>
+      >().mockImplementation(
         () => youtubeInitDeferred.promise,
       );
 
       const platformModules = {
-        twitch: createMockFn().mockImplementation(() => ({
+        twitch: createPlatformConstructor(() => ({
           initialize: twitchInit,
-          cleanup: createMockFn().mockResolvedValue(),
-          on: createMockFn(),
+          cleanup: createMockFn<[], Promise<void>>().mockResolvedValue(),
+          on: createMockFn<[string, (...args: unknown[]) => unknown], unknown>(),
         })),
-        youtube: createMockFn().mockImplementation(() => ({
+        youtube: createPlatformConstructor(() => ({
           initialize: youtubeInit,
-          cleanup: createMockFn().mockResolvedValue(),
-          on: createMockFn(),
+          cleanup: createMockFn<[], Promise<void>>().mockResolvedValue(),
+          on: createMockFn<[string, (...args: unknown[]) => unknown], unknown>(),
         })),
       };
 
@@ -620,24 +796,30 @@ describe("PlatformLifecycleService", () => {
       };
       configFixture.youtube = { enabled: true, username: "test-channel" };
 
-      const twitchInitDeferred = createDeferred();
+      const twitchInitDeferred = createDeferred<void>();
       const twitchError = new Error("twitch connect failed");
-      const twitchInit = createMockFn().mockImplementation(async () => {
+      const twitchInit = createMockFn<
+        [PlatformEventHandlers],
+        Promise<never>
+      >().mockImplementation(async () => {
         await twitchInitDeferred.promise;
         throw twitchError;
       });
-      const youtubeInit = createMockFn().mockResolvedValue(true);
+      const youtubeInit = createMockFn<
+        [PlatformEventHandlers],
+        Promise<boolean>
+      >().mockResolvedValue(true);
 
       const platformModules = {
-        twitch: createMockFn().mockImplementation(() => ({
+        twitch: createPlatformConstructor(() => ({
           initialize: twitchInit,
-          cleanup: createMockFn().mockResolvedValue(),
-          on: createMockFn(),
+          cleanup: createMockFn<[], Promise<void>>().mockResolvedValue(),
+          on: createMockFn<[string, (...args: unknown[]) => unknown], unknown>(),
         })),
-        youtube: createMockFn().mockImplementation(() => ({
+        youtube: createPlatformConstructor(() => ({
           initialize: youtubeInit,
-          cleanup: createMockFn().mockResolvedValue(),
-          on: createMockFn(),
+          cleanup: createMockFn<[], Promise<void>>().mockResolvedValue(),
+          on: createMockFn<[string, (...args: unknown[]) => unknown], unknown>(),
         })),
       };
 
@@ -651,7 +833,7 @@ describe("PlatformLifecycleService", () => {
         "youtube",
       );
 
-      twitchInitDeferred.resolve();
+      twitchInitDeferred.resolve(undefined);
       await initPromise;
 
       const status = service.getStatus();
@@ -674,25 +856,31 @@ describe("PlatformLifecycleService", () => {
       };
       configFixture.tiktok = { enabled: true, username: "streamer" };
 
-      const twitchInitDeferred = createDeferred();
-      const tiktokInitDeferred = createDeferred();
-      const twitchInit = createMockFn().mockImplementation(
+      const twitchInitDeferred = createDeferred<boolean>();
+      const tiktokInitDeferred = createDeferred<boolean>();
+      const twitchInit = createMockFn<
+        [PlatformEventHandlers],
+        Promise<boolean>
+      >().mockImplementation(
         () => twitchInitDeferred.promise,
       );
-      const tiktokInit = createMockFn().mockImplementation(
+      const tiktokInit = createMockFn<
+        [PlatformEventHandlers],
+        Promise<boolean>
+      >().mockImplementation(
         () => tiktokInitDeferred.promise,
       );
 
       const platformModules = {
-        twitch: createMockFn().mockImplementation(() => ({
+        twitch: createPlatformConstructor(() => ({
           initialize: twitchInit,
-          cleanup: createMockFn().mockResolvedValue(),
-          on: createMockFn(),
+          cleanup: createMockFn<[], Promise<void>>().mockResolvedValue(),
+          on: createMockFn<[string, (...args: unknown[]) => unknown], unknown>(),
         })),
-        tiktok: createMockFn().mockImplementation(() => ({
+        tiktok: createPlatformConstructor(() => ({
           initialize: tiktokInit,
-          cleanup: createMockFn().mockResolvedValue(),
-          on: createMockFn(),
+          cleanup: createMockFn<[], Promise<void>>().mockResolvedValue(),
+          on: createMockFn<[string, (...args: unknown[]) => unknown], unknown>(),
         })),
       };
 
@@ -732,11 +920,14 @@ describe("PlatformLifecycleService", () => {
     it("should cleanup all platforms gracefully on service shutdown", async () => {
       configFixture.twitch = { enabled: true };
 
-      const cleanupSpy = createMockFn().mockResolvedValue();
-      const mockPlatformClass = createMockFn().mockImplementation(() => ({
-        initialize: createMockFn().mockResolvedValue(true),
+      const cleanupSpy = createMockFn<[], Promise<void>>().mockResolvedValue();
+      const mockPlatformClass = createPlatformConstructor(() => ({
+        initialize: createMockFn<
+          [PlatformEventHandlers],
+          Promise<boolean>
+        >().mockResolvedValue(true),
         cleanup: cleanupSpy,
-        on: createMockFn(),
+        on: createMockFn<[string, (...args: unknown[]) => unknown], unknown>(),
       }));
 
       await service.initializeAllPlatforms({ twitch: mockPlatformClass });
@@ -745,7 +936,7 @@ describe("PlatformLifecycleService", () => {
 
       expect(cleanupSpy).toHaveBeenCalled();
       expect(service.isPlatformAvailable("twitch")).toBe(false);
-      expect(service.getStatus().platformHealth.twitch.state).toBe(
+      expect(service.getStatus().platformHealth.twitch?.state).toBe(
         "disconnected",
       );
     });
@@ -757,13 +948,16 @@ describe("PlatformLifecycleService", () => {
         clientId: "test-client-id",
       };
 
-      const cleanupSpy = createMockFn().mockRejectedValue(
+      const cleanupSpy = createMockFn<[], Promise<void>>().mockRejectedValue(
         new Error("cleanup failed"),
       );
-      const mockPlatformClass = createMockFn().mockImplementation(() => ({
-        initialize: createMockFn().mockResolvedValue(true),
+      const mockPlatformClass = createPlatformConstructor(() => ({
+        initialize: createMockFn<
+          [PlatformEventHandlers],
+          Promise<boolean>
+        >().mockResolvedValue(true),
         cleanup: cleanupSpy,
-        on: createMockFn(),
+        on: createMockFn<[string, (...args: unknown[]) => unknown], unknown>(),
       }));
 
       await service.initializeAllPlatforms({ twitch: mockPlatformClass });
@@ -777,13 +971,16 @@ describe("PlatformLifecycleService", () => {
     it("prefers cleanup even when a disconnect method exists", async () => {
       configFixture.twitch = { enabled: true };
 
-      const cleanupSpy = createMockFn().mockResolvedValue();
-      const disconnectSpy = createMockFn().mockResolvedValue();
-      const mockPlatformClass = createMockFn().mockImplementation(() => ({
-        initialize: createMockFn().mockResolvedValue(true),
+      const cleanupSpy = createMockFn<[], Promise<void>>().mockResolvedValue();
+      const disconnectSpy = createMockFn<[], Promise<void>>().mockResolvedValue();
+      const mockPlatformClass = createPlatformConstructor(() => ({
+        initialize: createMockFn<
+          [PlatformEventHandlers],
+          Promise<boolean>
+        >().mockResolvedValue(true),
         cleanup: cleanupSpy,
         disconnect: disconnectSpy,
-        on: createMockFn(),
+        on: createMockFn<[string, (...args: unknown[]) => unknown], unknown>(),
       }));
 
       await service.initializeAllPlatforms({ twitch: mockPlatformClass });
@@ -797,12 +994,15 @@ describe("PlatformLifecycleService", () => {
     it("prevents background init from transitioning health to ready after shutdown begins", async () => {
       configFixture.tiktok = { enabled: true, username: "test-streamer" };
 
-      const deferred = createDeferred();
-      const cleanupSpy = createMockFn().mockResolvedValue();
-      const tiktokClass = createMockFn().mockImplementation(() => ({
-        initialize: createMockFn().mockImplementation(() => deferred.promise),
+      const deferred = createDeferred<boolean>();
+      const cleanupSpy = createMockFn<[], Promise<void>>().mockResolvedValue();
+      const tiktokClass = createPlatformConstructor(() => ({
+        initialize: createMockFn<
+          [PlatformEventHandlers],
+          Promise<boolean>
+        >().mockImplementation(() => deferred.promise),
         cleanup: cleanupSpy,
-        on: createMockFn(),
+        on: createMockFn<[string, (...args: unknown[]) => unknown], unknown>(),
       }));
 
       await service.initializeAllPlatforms({ tiktok: tiktokClass });
@@ -818,7 +1018,24 @@ describe("PlatformLifecycleService", () => {
   });
 
   describe("Default Handler Contract Matrix", () => {
-    const CANONICAL_HANDLER_MATRIX = {
+    const CANONICAL_HANDLER_NAMES_WITH_EVENTS: MatrixHandlerName[] = [
+      "onChat",
+      "onViewerCount",
+      "onGift",
+      "onPaypiggy",
+      "onGiftPaypiggy",
+      "onFollow",
+      "onShare",
+      "onRaid",
+      "onEnvelope",
+      "onStreamStatus",
+      "onStreamDetected",
+    ];
+
+    const CANONICAL_HANDLER_MATRIX: Record<
+      MatrixHandlerName,
+      HandlerMatrixEntry
+    > = {
       onChat: {
         eventType: PlatformEvents.CHAT_MESSAGE,
         requiresTimestamp: true,
@@ -876,12 +1093,15 @@ describe("PlatformLifecycleService", () => {
       },
     };
 
-    const CANONICAL_HANDLER_NAMES = [
-      ...Object.keys(CANONICAL_HANDLER_MATRIX),
+    const CANONICAL_HANDLER_NAMES: (keyof PlatformEventHandlers)[] = [
+      ...CANONICAL_HANDLER_NAMES_WITH_EVENTS,
       "onConnection",
     ];
 
-    const createPayloadForHandler = (handlerName, timestamp) => {
+    const createPayloadForHandler = (
+      handlerName: MatrixHandlerName,
+      timestamp: string,
+    ): Record<string, unknown> => {
       const base = { username: "test-user", userId: "test-user-id", timestamp };
       switch (handlerName) {
         case "onChat":
@@ -931,9 +1151,8 @@ describe("PlatformLifecycleService", () => {
       }
     };
 
-    for (const [handlerName, { eventType, dataKey }] of Object.entries(
-      CANONICAL_HANDLER_MATRIX,
-    )) {
+    for (const handlerName of CANONICAL_HANDLER_NAMES_WITH_EVENTS) {
+      const { eventType, dataKey } = CANONICAL_HANDLER_MATRIX[handlerName];
       it(`${handlerName} emits ${eventType} with payload data on the event bus`, () => {
         const handlers = service.createDefaultEventHandlers("twitch");
         const timestamp = "2024-06-15T12:00:00.000Z";
@@ -941,12 +1160,12 @@ describe("PlatformLifecycleService", () => {
 
         handlers[handlerName](payload);
 
-        const emitted = mockEventBus.emit.mock.calls.find(
-          ([, p]) => p?.type === eventType,
-        );
+        const emitted = findEmittedEvent(mockEventBus, eventType);
         expect(emitted).toBeTruthy();
-        expect(emitted[1].platform).toBe("twitch");
-        expect(emitted[1].data[dataKey]).toBeDefined();
+        if (emitted) {
+          expect(emitted.platform).toBe("twitch");
+          expect(emitted.data?.[dataKey]).toBeDefined();
+        }
       });
     }
 
@@ -955,7 +1174,7 @@ describe("PlatformLifecycleService", () => {
       const handlerKeys = Object.keys(handlers).sort();
 
       expect(handlerKeys).toEqual([...CANONICAL_HANDLER_NAMES].sort());
-      expect(handlers.onMembership).toBeUndefined();
+      expect("onMembership" in handlers).toBe(false);
     });
 
     it("onFollow emits using payload platform when provided", () => {
@@ -969,18 +1188,16 @@ describe("PlatformLifecycleService", () => {
         timestamp,
       });
 
-      const emitted = mockEventBus.emit.mock.calls.find(
-        ([, p]) => p?.type === PlatformEvents.FOLLOW,
-      );
+      const emitted = findEmittedEvent(mockEventBus, PlatformEvents.FOLLOW);
       expect(emitted).toBeTruthy();
-      expect(emitted[1].platform).toBe("youtube");
-      expect(emitted[1].data.platform).toBeUndefined();
+      if (emitted) {
+        expect(emitted.platform).toBe("youtube");
+        expect(emitted.data?.platform).toBeUndefined();
+      }
     });
 
-    for (const [
-      handlerName,
-      { requiresTimestamp, eventType },
-    ] of Object.entries(CANONICAL_HANDLER_MATRIX)) {
+    for (const handlerName of CANONICAL_HANDLER_NAMES_WITH_EVENTS) {
+      const { requiresTimestamp, eventType } = CANONICAL_HANDLER_MATRIX[handlerName];
       if (!requiresTimestamp) continue;
 
       it(`${handlerName} suppresses emit when payload lacks timestamp`, () => {
@@ -994,9 +1211,7 @@ describe("PlatformLifecycleService", () => {
         mockEventBus.emit.mockClear();
         handlers[handlerName](payload);
 
-        const emitted = mockEventBus.emit.mock.calls.find(
-          ([, p]) => p?.type === eventType,
-        );
+        const emitted = findEmittedEvent(mockEventBus, eventType);
         expect(emitted).toBeUndefined();
       });
     }
@@ -1011,11 +1226,14 @@ describe("PlatformLifecycleService", () => {
         connectionCount: 1,
       });
 
-      const emitted = mockEventBus.emit.mock.calls.find(
-        ([, p]) => p?.type === PlatformEvents.STREAM_DETECTED,
+      const emitted = findEmittedEvent(
+        mockEventBus,
+        PlatformEvents.STREAM_DETECTED,
       );
       expect(emitted).toBeTruthy();
-      expect(emitted[1].platform).toBe("twitch");
+      if (emitted) {
+        expect(emitted.platform).toBe("twitch");
+      }
     });
 
     it("onViewerCount suppresses emit when data is a raw number", () => {
@@ -1024,9 +1242,7 @@ describe("PlatformLifecycleService", () => {
       mockEventBus.emit.mockClear();
       handlers.onViewerCount(42);
 
-      const emitted = mockEventBus.emit.mock.calls.find(
-        ([, p]) => p?.type === PlatformEvents.VIEWER_COUNT,
-      );
+      const emitted = findEmittedEvent(mockEventBus, PlatformEvents.VIEWER_COUNT);
       expect(emitted).toBeUndefined();
     });
 
@@ -1043,18 +1259,14 @@ describe("PlatformLifecycleService", () => {
         willReconnect: false,
       });
 
-      expect(service.getStatus().platformHealth.twitch.state).toBe("ready");
+      expect(service.getStatus().platformHealth.twitch?.state).toBe("ready");
       expect(service.getPlatformConnectionTime("twitch")).toBe(testClock.now());
       expect(mockEventBus.emit).not.toHaveBeenCalled();
     });
 
     it("onConnection keeps platform instance registered while reconnect is expected", () => {
       const handlers = service.createDefaultEventHandlers("twitch");
-      const livePlatform = {
-        initialize: createMockFn(),
-        cleanup: createMockFn(),
-        on: createMockFn(),
-      };
+      const livePlatform = createDefaultPlatformInstance();
 
       service.platforms.twitch = livePlatform;
       service.updatePlatformHealth("twitch", { state: "ready" });
@@ -1070,7 +1282,7 @@ describe("PlatformLifecycleService", () => {
         error: { message: "socket dropped" },
       });
 
-      expect(service.getStatus().platformHealth.twitch.state).toBe(
+      expect(service.getStatus().platformHealth.twitch?.state).toBe(
         "disconnected",
       );
       expect(service.getPlatform("twitch")).toBe(livePlatform);
@@ -1093,7 +1305,7 @@ describe("PlatformLifecycleService", () => {
         willReconnect: false,
       });
 
-      expect(service.getStatus().platformHealth.twitch.state).toBe(
+      expect(service.getStatus().platformHealth.twitch?.state).toBe(
         "disconnected",
       );
       expect(service.getPlatformConnectionTime("twitch")).toBeNull();
