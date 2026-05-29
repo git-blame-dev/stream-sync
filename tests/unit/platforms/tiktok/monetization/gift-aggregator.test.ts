@@ -12,6 +12,34 @@ const {
   createTikTokGiftAggregator,
 } = require("../../../../../src/platforms/tiktok/monetization/gift-aggregator.ts");
 
+type GiftPayload = Record<string, unknown> & {
+  giftCount?: number;
+  aggregatedCount?: number;
+  isAggregated?: boolean;
+  avatarUrl?: string;
+  giftImageUrl?: string;
+  sourceType?: string;
+};
+
+type TestPlatform = {
+  giftAggregation: Record<string, unknown>;
+  giftAggregationDelay: number;
+  logger: {
+    debug: (message: string, category?: string, details?: unknown) => void;
+    info: (message: string, category?: string, details?: unknown) => void;
+    warn: (message: string, category?: string, details?: unknown) => void;
+  };
+  errorHandler: {
+    handleEventProcessingError: (
+      error: unknown,
+      context: string,
+      payload: unknown,
+      message: string,
+    ) => void;
+  };
+  _handleGift: (payload: GiftPayload) => Promise<unknown>;
+};
+
 describe("TikTok gift aggregator", () => {
   beforeEach(() => {
     useFakeTimers();
@@ -22,7 +50,7 @@ describe("TikTok gift aggregator", () => {
     useRealTimers();
   });
 
-  const buildGift = (overrides = {}) => ({
+  const buildGift = (overrides: Record<string, unknown> = {}): GiftPayload => ({
     platform: "tiktok",
     userId: "tt-user1",
     username: "testUserOne",
@@ -38,7 +66,9 @@ describe("TikTok gift aggregator", () => {
     ...overrides,
   });
 
-  const createTestPlatform = (overrides = {}) => ({
+  const createTestPlatform = (
+    overrides: Partial<TestPlatform> = {},
+  ): TestPlatform => ({
     giftAggregation: {},
     giftAggregationDelay: 2000,
     logger: noOpLogger,
@@ -46,6 +76,14 @@ describe("TikTok gift aggregator", () => {
     _handleGift: async () => undefined,
     ...overrides,
   });
+
+  const firstHandledGift = (handledGifts: GiftPayload[]): GiftPayload => {
+    const gift = handledGifts[0];
+    if (!gift) {
+      throw new Error("Expected at least one handled gift");
+    }
+    return gift;
+  };
 
   describe("factory validation", () => {
     test("throws when platform is missing", () => {
@@ -115,7 +153,7 @@ describe("TikTok gift aggregator", () => {
 
   describe("gift aggregation behavior", () => {
     test("aggregates gifts and delivers after delay", async () => {
-      const handledGifts = [];
+      const handledGifts: GiftPayload[] = [];
       const platform = createTestPlatform({
         _handleGift: async (payload) => handledGifts.push(payload),
       });
@@ -129,12 +167,12 @@ describe("TikTok gift aggregator", () => {
       await advanceTimersByTime(platform.giftAggregationDelay);
 
       expect(handledGifts).toHaveLength(1);
-      expect(handledGifts[0].giftCount).toBe(3);
-      expect(handledGifts[0].isAggregated).toBe(true);
+      expect(firstHandledGift(handledGifts).giftCount).toBe(3);
+      expect(firstHandledGift(handledGifts).isAggregated).toBe(true);
     });
 
     test("updates aggregation using high-water delta for same message id", async () => {
-      const handledGifts = [];
+      const handledGifts: GiftPayload[] = [];
       const platform = createTestPlatform({
         _handleGift: async (payload) => handledGifts.push(payload),
       });
@@ -153,11 +191,11 @@ describe("TikTok gift aggregator", () => {
       await advanceTimersByTime(platform.giftAggregationDelay);
 
       expect(handledGifts).toHaveLength(1);
-      expect(handledGifts[0].giftCount).toBe(5);
+      expect(firstHandledGift(handledGifts).giftCount).toBe(5);
     });
 
     test("accumulates distinct non-combo message ids with same counts", async () => {
-      const handledGifts = [];
+      const handledGifts: GiftPayload[] = [];
       const platform = createTestPlatform({
         _handleGift: async (payload) => handledGifts.push(payload),
       });
@@ -184,12 +222,12 @@ describe("TikTok gift aggregator", () => {
       await advanceTimersByTime(platform.giftAggregationDelay);
 
       expect(handledGifts).toHaveLength(1);
-      expect(handledGifts[0].giftCount).toBe(4);
-      expect(handledGifts[0].aggregatedCount).toBe(4);
+      expect(firstHandledGift(handledGifts).giftCount).toBe(4);
+      expect(firstHandledGift(handledGifts).aggregatedCount).toBe(4);
     });
 
     test("ignores retransmitted duplicate gift with same message id", async () => {
-      const handledGifts = [];
+      const handledGifts: GiftPayload[] = [];
       const platform = createTestPlatform({
         _handleGift: async (payload) => handledGifts.push(payload),
       });
@@ -206,11 +244,11 @@ describe("TikTok gift aggregator", () => {
       await advanceTimersByTime(platform.giftAggregationDelay);
 
       expect(handledGifts).toHaveLength(1);
-      expect(handledGifts[0].giftCount).toBe(2);
+      expect(firstHandledGift(handledGifts).giftCount).toBe(2);
     });
 
     test("accumulates only delta for progressive updates on same message id", async () => {
-      const handledGifts = [];
+      const handledGifts: GiftPayload[] = [];
       const platform = createTestPlatform({
         _handleGift: async (payload) => handledGifts.push(payload),
       });
@@ -230,11 +268,11 @@ describe("TikTok gift aggregator", () => {
       await advanceTimersByTime(platform.giftAggregationDelay);
 
       expect(handledGifts).toHaveLength(1);
-      expect(handledGifts[0].giftCount).toBe(3);
+      expect(firstHandledGift(handledGifts).giftCount).toBe(3);
     });
 
     test("deduplicates combo completion packets with same group id", async () => {
-      const handledGifts = [];
+      const handledGifts: GiftPayload[] = [];
       const platform = createTestPlatform({
         _handleGift: async (payload) => handledGifts.push(payload),
       });
@@ -259,7 +297,7 @@ describe("TikTok gift aggregator", () => {
       await advanceTimersByTime(platform.giftAggregationDelay);
 
       expect(handledGifts).toHaveLength(1);
-      expect(handledGifts[0].giftCount).toBe(1);
+      expect(firstHandledGift(handledGifts).giftCount).toBe(1);
     });
 
     test("rejects combo completion payload when group id is missing", async () => {
@@ -281,7 +319,7 @@ describe("TikTok gift aggregator", () => {
     });
 
     test("counts separate combo completion groups even when rapid and same count", async () => {
-      const handledGifts = [];
+      const handledGifts: GiftPayload[] = [];
       const platform = createTestPlatform({
         _handleGift: async (payload) => handledGifts.push(payload),
       });
@@ -316,11 +354,11 @@ describe("TikTok gift aggregator", () => {
       await advanceTimersByTime(platform.giftAggregationDelay);
 
       expect(handledGifts).toHaveLength(1);
-      expect(handledGifts[0].giftCount).toBe(2);
+      expect(firstHandledGift(handledGifts).giftCount).toBe(2);
     });
 
     test("includes sourceType in delivered payload when present", async () => {
-      const handledGifts = [];
+      const handledGifts: GiftPayload[] = [];
       const platform = createTestPlatform({
         _handleGift: async (payload) => handledGifts.push(payload),
       });
@@ -333,11 +371,11 @@ describe("TikTok gift aggregator", () => {
       await advanceTimersByTime(platform.giftAggregationDelay);
 
       expect(handledGifts).toHaveLength(1);
-      expect(handledGifts[0].sourceType).toBe("streak");
+      expect(firstHandledGift(handledGifts).sourceType).toBe("streak");
     });
 
     test("includes avatarUrl in delivered aggregated payload", async () => {
-      const handledGifts = [];
+      const handledGifts: GiftPayload[] = [];
       const platform = createTestPlatform({
         _handleGift: async (payload) => handledGifts.push(payload),
       });
@@ -352,13 +390,13 @@ describe("TikTok gift aggregator", () => {
       await advanceTimersByTime(platform.giftAggregationDelay);
 
       expect(handledGifts).toHaveLength(1);
-      expect(handledGifts[0].avatarUrl).toBe(
+      expect(firstHandledGift(handledGifts).avatarUrl).toBe(
         "https://example.invalid/tiktok-aggregated-avatar.jpg",
       );
     });
 
     test("includes giftImageUrl in delivered aggregated payload", async () => {
-      const handledGifts = [];
+      const handledGifts: GiftPayload[] = [];
       const platform = createTestPlatform({
         _handleGift: async (payload) => handledGifts.push(payload),
       });
@@ -373,13 +411,13 @@ describe("TikTok gift aggregator", () => {
       await advanceTimersByTime(platform.giftAggregationDelay);
 
       expect(handledGifts).toHaveLength(1);
-      expect(handledGifts[0].giftImageUrl).toBe(
+      expect(firstHandledGift(handledGifts).giftImageUrl).toBe(
         "https://example.invalid/tiktok-gifts/corgi.png",
       );
     });
 
     test("preserves last non-empty avatarUrl when later packets are empty", async () => {
-      const handledGifts = [];
+      const handledGifts: GiftPayload[] = [];
       const platform = createTestPlatform({
         _handleGift: async (payload) => handledGifts.push(payload),
       });
@@ -405,8 +443,8 @@ describe("TikTok gift aggregator", () => {
       await advanceTimersByTime(platform.giftAggregationDelay);
 
       expect(handledGifts).toHaveLength(1);
-      expect(handledGifts[0].giftCount).toBe(2);
-      expect(handledGifts[0].avatarUrl).toBe(
+      expect(firstHandledGift(handledGifts).giftCount).toBe(2);
+      expect(firstHandledGift(handledGifts).avatarUrl).toBe(
         "https://example.invalid/tiktok-aggregated-avatar-initial.jpg",
       );
     });
@@ -428,8 +466,8 @@ describe("TikTok gift aggregator", () => {
     });
 
     test("cleans up aggregation state when delivery fails", async () => {
-        const platform = createTestPlatform({
-            _handleGift: async () => {
+      const platform = createTestPlatform({
+        _handleGift: async () => {
           throw new Error("Handler failed");
         },
       });
@@ -453,16 +491,20 @@ describe("TikTok gift aggregator", () => {
 
       const giftAggregator = createTikTokGiftAggregator({ platform });
 
-      await giftAggregator.handleStandardGift(buildGift({
-        rawData: {
-          message: "test-private-chat-text",
-          access_token: "test-access-token",
-        },
-      }));
+      await giftAggregator.handleStandardGift(
+        buildGift({
+          rawData: {
+            message: "test-private-chat-text",
+            access_token: "test-access-token",
+          },
+        }),
+      );
       await advanceTimersByTime(platform.giftAggregationDelay);
 
       const serializedLogs = JSON.stringify(logger.entries);
-      expect(serializedLogs).toContain("Gift data unavailable after notification handling error");
+      expect(serializedLogs).toContain(
+        "Gift data unavailable after notification handling error",
+      );
       expect(serializedLogs).toContain("hasOriginalData");
       expect(serializedLogs).not.toContain("test-private-chat-text");
       expect(serializedLogs).not.toContain("test-access-token");
@@ -471,7 +513,7 @@ describe("TikTok gift aggregator", () => {
 
   describe("cleanupGiftAggregation", () => {
     test("cancels pending timers and prevents delivery", async () => {
-      const handledGifts = [];
+      const handledGifts: GiftPayload[] = [];
       const platform = createTestPlatform({
         _handleGift: async (payload) => handledGifts.push(payload),
       });

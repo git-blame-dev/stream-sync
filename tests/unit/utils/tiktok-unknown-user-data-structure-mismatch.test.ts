@@ -1,5 +1,5 @@
-import { describe, expect, beforeEach, it, afterEach } from "bun:test";
-import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
+import { describe, expect, it, afterEach } from "bun:test";
+import { restoreAllMocks } from "../../helpers/bun-mock-utils";
 import { TEST_TIMEOUTS } from "../../helpers/test-setup";
 import { setupAutomatedCleanup } from "../../helpers/mock-lifecycle";
 import { expectNoTechnicalArtifacts } from "../../helpers/assertion-helpers";
@@ -11,27 +11,9 @@ setupAutomatedCleanup({
   logPerformanceMetrics: true,
 });
 
-const buildTimestampService = () => ({
-  extractTimestamp: createMockFn((platform, data) => {
-    if (platform !== "tiktok") {
-      throw new Error("Unsupported platform");
-    }
-    if (!data?.common?.createTime) {
-      throw new Error("Missing tiktok timestamp");
-    }
-    return new Date(Number(data.common.createTime)).toISOString();
-  }),
-});
-
 describe("TikTok Unknown User Data Structure Mismatch", () => {
   afterEach(() => {
     restoreAllMocks();
-  });
-
-  let timestampService;
-
-  beforeEach(() => {
-    timestampService = buildTimestampService();
   });
   describe("Message Normalization with Actual TikTok Data Structure", () => {
     describe("when TikTok data has nested structure (current production format)", () => {
@@ -49,11 +31,7 @@ describe("TikTok Unknown User Data Structure Mismatch", () => {
             common: { createTime: testClock.now() },
           };
 
-          const result = normalizeTikTokMessage(
-            nestedTikTokData,
-            "tiktok",
-            timestampService,
-          );
+          const result = normalizeTikTokMessage(nestedTikTokData, "tiktok");
 
           expect(result.username).toBe("TestNestedUser");
           expect(result.userId).toBe("testUserNested");
@@ -69,9 +47,9 @@ describe("TikTok Unknown User Data Structure Mismatch", () => {
       it(
         "should reject null data",
         () => {
-          expect(() =>
-            normalizeTikTokMessage(null, "tiktok", timestampService),
-          ).toThrow("message data");
+          expect(() => normalizeTikTokMessage(null, "tiktok")).toThrow(
+            "message data",
+          );
         },
         TEST_TIMEOUTS.FAST,
       );
@@ -79,9 +57,7 @@ describe("TikTok Unknown User Data Structure Mismatch", () => {
       it(
         "should reject empty object",
         () => {
-          expect(() =>
-            normalizeTikTokMessage({}, "tiktok", timestampService),
-          ).toThrow("userId");
+          expect(() => normalizeTikTokMessage({}, "tiktok")).toThrow("userId");
         },
         TEST_TIMEOUTS.FAST,
       );
@@ -150,11 +126,7 @@ describe("TikTok Unknown User Data Structure Mismatch", () => {
           common: { createTime: testClock.now() },
         };
 
-        const result = normalizeTikTokMessage(
-          tikTokData,
-          "tiktok",
-          timestampService,
-        );
+        const result = normalizeTikTokMessage(tikTokData, "tiktok");
 
         expect(result).toHaveProperty("platform", "tiktok");
         expect(result).toHaveProperty("userId");
@@ -187,10 +159,8 @@ describe("TikTok Unknown User Data Structure Mismatch", () => {
           common: { createTime: testClock.now() },
         };
 
-        const timestampService = buildTimestampService();
-
         expect(() =>
-          normalizeTikTokMessage(corruptedData, "tiktok", timestampService),
+          normalizeTikTokMessage(corruptedData, "tiktok"),
         ).toThrow("userId");
         expect(() => extractTikTokUserData(corruptedData)).toThrow(
           "user.uniqueId and user.nickname",
@@ -216,13 +186,8 @@ describe("TikTok Unknown User Data Structure Mismatch", () => {
 
         const startTime = testClock.now();
 
-        const timestampService = buildTimestampService();
         const results = multipleEvents.map((event) => {
-          const normalized = normalizeTikTokMessage(
-            event,
-            "tiktok",
-            timestampService,
-          );
+          const normalized = normalizeTikTokMessage(event, "tiktok");
           const userData = extractTikTokUserData(event);
           return { normalized, userData };
         });
@@ -233,8 +198,8 @@ describe("TikTok Unknown User Data Structure Mismatch", () => {
 
         expect(processingTime).toBeLessThan(1000);
         expect(results).toHaveLength(100);
-        expect(results[0].normalized.username).toBe("TestRapidUser0");
-        expect(results[99].normalized.username).toBe("TestRapidUser99");
+        expect(results[0]?.normalized.username).toBe("TestRapidUser0");
+        expect(results[99]?.normalized.username).toBe("TestRapidUser99");
 
         const unknownUserEvents = results.filter(
           (r) =>
