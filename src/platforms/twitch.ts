@@ -110,7 +110,7 @@ type ViewerCountProviderLike = {
 };
 
 type ChatFileLoggingServiceLike = {
-    logRawPlatformData: (platform: string, eventType: string, data: unknown, config: TwitchConfig) => Promise<unknown>;
+    logRawPlatformData: (platform: string, eventType: string, data: unknown, config: TwitchConfig) => Promise<void>;
 };
 
 type ChatFileLoggingServiceConstructor = new (options: {
@@ -1500,7 +1500,7 @@ class TwitchPlatform extends EventEmitter {
         }
     }
 
-    async logRawPlatformData(eventType: string, data: unknown): Promise<unknown> {
+    async logRawPlatformData(eventType: string, data: unknown): Promise<void> {
         // Delegate to centralized service
         return this.chatFileLoggingService.logRawPlatformData('twitch', eventType, data, this.config);
     }

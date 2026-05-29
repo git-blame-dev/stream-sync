@@ -35,7 +35,7 @@ interface EventBusLike {
     subscribe?: (eventName: string, handler: (payload?: ConfigChangePayload) => void) => (() => void) | void;
 }
 
-type LoggerLike = typeof defaultLogger;
+type LoggerLike = Pick<typeof defaultLogger, 'debug' | 'warn' | 'error'>;
 type ErrorHandlerLike = ReturnType<typeof createPlatformErrorHandler>;
 
 interface CommandCooldownServiceOptions {

@@ -35,6 +35,7 @@ type RouterRecord = Record<string, unknown>;
 type RouterLogger = {
     debug: (message: string, scope: string, data?: unknown) => void;
     warn: (message: string, scope: string, data?: unknown) => void;
+    error: (message: string, scope: string, data?: unknown) => void;
 };
 
 type RouterEventBus = {

@@ -77,7 +77,7 @@ type ErrorHandlerLike = {
 };
 
 type ChatFileLoggingServiceLike = {
-  logRawPlatformData: (platform: string, eventType: string, data: unknown, config: UnknownMap) => Promise<unknown>;
+  logRawPlatformData: (platform: string, eventType: string, data: unknown, config: UnknownMap) => Promise<void>;
 };
 
 type ChatFileLoggingServiceConstructor = new (options: { logger: unknown; config: UnknownMap }) => ChatFileLoggingServiceLike;
@@ -1406,7 +1406,7 @@ class YouTubePlatform extends EventEmitter {
 
 
 
-    async logRawPlatformData(eventType: string, data: unknown): Promise<unknown> {
+    async logRawPlatformData(eventType: string, data: unknown): Promise<void> {
         // Delegate to centralized service
         return this.chatFileLoggingService.logRawPlatformData('youtube', eventType, data, this.config);
     }
