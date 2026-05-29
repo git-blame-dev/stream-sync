@@ -1,5 +1,9 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
+import {
+  createMockFn,
+  restoreAllMocks,
+  type TestMockFn,
+} from "../../helpers/bun-mock-utils";
 
 import { TEST_TIMEOUTS } from "../../helpers/test-setup";
 import { noOpLogger } from "../../helpers/mock-factories";
@@ -8,6 +12,11 @@ import * as testClock from "../../helpers/test-clock";
 import { createSourcesConfigFixture } from "../../helpers/config-fixture";
 import { createOBSSourcesManager } from "../../../src/obs/sources.ts";
 
+type SourcesModule = ReturnType<typeof createOBSSourcesManager>;
+type MockObsManager = Parameters<typeof createOBSSourcesManager>[0];
+type ObsCallArgs = [requestType: string, payload?: Record<string, unknown>];
+type ObsRequest = { requestType: string; payload?: Record<string, unknown> };
+
 setupAutomatedCleanup({
   clearCallsBeforeEach: true,
   validateAfterCleanup: true,
@@ -15,20 +24,33 @@ setupAutomatedCleanup({
 });
 
 describe("OBS Sources Module Characterization Tests", () => {
-  let mockObsManager;
-  let mockEnsureConnected;
-  let mockObsCall;
-  let mockSanitizeDisplayName;
-  let mockDelay;
-  let sourcesModule;
+  let mockObsManager: MockObsManager;
+  let mockEnsureConnected: TestMockFn<[], Promise<void>>;
+  let mockObsCall: TestMockFn<ObsCallArgs, Promise<unknown>>;
+  let mockSanitizeDisplayName: TestMockFn<[name: string, limit: number], string>;
+  let mockDelay: TestMockFn<[ms?: number], Promise<void>>;
+  let sourcesModule: SourcesModule;
+
+  const obsRequests = (): ObsRequest[] =>
+    mockObsCall.mock.calls.map(([requestType, payload]) =>
+      payload === undefined ? { requestType } : { requestType, payload },
+    );
+
+  const firstObsCall = (): ObsCallArgs => {
+    const call = mockObsCall.mock.calls[0];
+    if (!call) {
+      throw new Error("Expected OBS call to have been recorded");
+    }
+    return call;
+  };
 
   beforeEach(() => {
-    mockEnsureConnected = createMockFn().mockResolvedValue();
-    mockObsCall = createMockFn();
-    mockSanitizeDisplayName = createMockFn((name, limit) =>
+    mockEnsureConnected = createMockFn<[], Promise<void>>().mockResolvedValue();
+    mockObsCall = createMockFn<ObsCallArgs, Promise<unknown>>();
+    mockSanitizeDisplayName = createMockFn<[string, number], string>((name, limit) =>
       name.substring(0, limit),
     );
-    mockDelay = createMockFn().mockResolvedValue();
+    mockDelay = createMockFn<[number?], Promise<void>>().mockResolvedValue();
 
     mockObsManager = {
       ensureConnected: mockEnsureConnected,
@@ -65,10 +87,7 @@ test(
         await sourcesModule.updateTextSource("test-source", "new message");
 
       expect(mockEnsureConnected).toHaveBeenCalled();
-      const requests = mockObsCall.mock.calls.map(([requestType, payload]) => ({
-        requestType,
-        payload,
-      }));
+      const requests = obsRequests();
       expect(requests).toEqual([
         {
           requestType: "GetInputSettings",
@@ -104,10 +123,7 @@ test(
         await sourcesModule.clearTextSource("test-source");
 
       expect(mockEnsureConnected).toHaveBeenCalledTimes(1);
-      const requests = mockObsCall.mock.calls.map(([requestType, payload]) => ({
-        requestType,
-        payload,
-      }));
+      const requests = obsRequests();
       expect(requests).toEqual([
         {
           requestType: "GetInputSettings",
@@ -142,10 +158,7 @@ test(
           "Hello world",
         );
 
-      const requests = mockObsCall.mock.calls.map(([requestType, payload]) => ({
-        requestType,
-        payload,
-      }));
+      const requests = obsRequests();
       expect(requests[1]).toEqual({
         requestType: "SetInputSettings",
         payload: {
@@ -184,7 +197,7 @@ test(
         );
 
       expect(mockEnsureConnected).toHaveBeenCalledTimes(1);
-      const [requestType, payload] = mockObsCall.mock.calls[0] || [];
+      const [requestType, payload] = firstObsCall();
       expect(requestType).toBe("GetSceneItemId");
       expect(payload).toEqual({
         sceneName: "test-scene",
@@ -214,10 +227,7 @@ test(
         );
 
       expect(mockEnsureConnected).toHaveBeenCalled();
-      const requests = mockObsCall.mock.calls.map(([requestType, payload]) => ({
-        requestType,
-        payload,
-      }));
+      const requests = obsRequests();
       expect(requests).toEqual([
         {
           requestType: "GetSceneItemId",
@@ -270,7 +280,7 @@ test(
         );
 
       expect(mockEnsureConnected).toHaveBeenCalledTimes(1);
-      const [requestType, payload] = mockObsCall.mock.calls[0] || [];
+      const [requestType, payload] = firstObsCall();
       expect(requestType).toBe("GetGroupSceneItemList");
       expect(payload).toEqual({ sceneName: "test-group" });
       expect(result).toEqual({ sceneItemId: 20 });
@@ -293,10 +303,7 @@ test(
         );
 
       expect(mockEnsureConnected).toHaveBeenCalled();
-      const requests = mockObsCall.mock.calls.map(([requestType, payload]) => ({
-        requestType,
-        payload,
-      }));
+      const requests = obsRequests();
       expect(requests).toEqual([
         {
           requestType: "GetGroupSceneItemList",
@@ -448,7 +455,7 @@ test(
         );
 
       expect(mockEnsureConnected).toHaveBeenCalled();
-      const [requestType, payload] = mockObsCall.mock.calls[0] || [];
+      const [requestType, payload] = firstObsCall();
       expect(requestType).toBe("SetSourceFilterEnabled");
       expect(payload).toEqual({
         sourceName: "test-source",
@@ -472,7 +479,7 @@ test(
         );
 
       expect(mockEnsureConnected).toHaveBeenCalledTimes(1);
-      const [requestType, payload] = mockObsCall.mock.calls[0] || [];
+      const [requestType, payload] = firstObsCall();
       expect(requestType).toBe("GetSourceFilter");
       expect(payload).toEqual({
         sourceName: "test-source",
@@ -495,7 +502,7 @@ test(
         );
 
       expect(mockEnsureConnected).toHaveBeenCalled();
-      const [requestType, payload] = mockObsCall.mock.calls[0] || [];
+      const [requestType, payload] = firstObsCall();
       expect(requestType).toBe("SetSourceFilterSettings");
       expect(payload).toEqual({
         sourceName: "test-source",

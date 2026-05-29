@@ -1,45 +1,92 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
+import {
+  createMockFn,
+  restoreAllMocks,
+  type TestMockFn,
+} from "../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../helpers/mock-factories";
 import { createEventBus } from "../../../src/core/EventBus";
 import * as testClock from "../../helpers/test-clock";
+import { createOBSEventService } from "../../../src/obs/obs-event-service.ts";
+import { safeDelay } from "../../../src/utils/timeout-validator.ts";
+
+type EventBus = ReturnType<typeof createEventBus>;
+type OBSEventService = ReturnType<typeof createOBSEventService>;
+type ServiceEventBus = Parameters<typeof createOBSEventService>[0]["eventBus"];
+type ConnectionEventHandler = (data?: { reason?: unknown; code?: unknown }) => void;
+type ObsCallArgs = [requestType: string, payload: Record<string, unknown>];
+type MockOBSConnection = {
+  connect: TestMockFn<[], Promise<void>>;
+  disconnect: TestMockFn<[], Promise<void>>;
+  isConnected: TestMockFn<[], boolean>;
+  isReady: TestMockFn<[], Promise<boolean>>;
+  call: TestMockFn<ObsCallArgs, Promise<unknown>>;
+  addEventListener: TestMockFn<[event: string, handler: ConnectionEventHandler], ConnectionEventHandler>;
+  removeEventListener: TestMockFn<[event: string, handler: ConnectionEventHandler], void>;
+  getConnectionState: TestMockFn<[], { isConnected: boolean; isConnecting: boolean }>;
+};
+type MockObsSources = {
+  updateTextSource: TestMockFn<[sourceName: string, text: string], Promise<void>>;
+  setSourceVisibility: TestMockFn<[sceneName: string, sourceName: string, visible: boolean], Promise<void>>;
+  clearTextSource: TestMockFn<[sourceName: string], Promise<void>>;
+};
+
+const waitForDelay = (ms: number) => safeDelay(ms, ms, "obs-event-service-test-delay");
+
+const firstRecordedCall = <Args extends unknown[]>(calls: Args[], description: string): Args => {
+  const call = calls[0];
+  if (!call) {
+    throw new Error(`Expected ${description} to have been called`);
+  }
+  return call;
+};
+
+const toEventRecord = (payload: unknown): Record<string, unknown> => {
+  if (payload && typeof payload === "object" && !Array.isArray(payload)) {
+    return Object.fromEntries(Object.entries(payload));
+  }
+  return {};
+};
 
 describe("OBSEventService", () => {
-  let obsEventService;
-  let eventBus;
-  let mockOBSConnection;
-  let mockObsSources;
+  let obsEventService: OBSEventService;
+  let eventBus: EventBus;
+  let serviceEventBus: ServiceEventBus;
+  let mockOBSConnection: MockOBSConnection;
+  let mockObsSources: MockObsSources;
 
   beforeEach(() => {
     eventBus = createEventBus({ debugEnabled: false });
+    serviceEventBus = {
+      subscribe: (eventName, handler) =>
+        eventBus.subscribe(eventName, (payload) => handler(toEventRecord(payload))),
+      emit: (eventName, payload) => eventBus.emit(eventName, payload),
+    };
 
     mockOBSConnection = {
-      connect: createMockFn().mockResolvedValue(true),
-      disconnect: createMockFn().mockResolvedValue(undefined),
-      isConnected: createMockFn().mockReturnValue(true),
-      isReady: createMockFn().mockResolvedValue(true),
-      call: createMockFn().mockResolvedValue({}),
-      addEventListener: createMockFn((event, handler) => {
+      connect: createMockFn<[], Promise<void>>().mockResolvedValue(),
+      disconnect: createMockFn<[], Promise<void>>().mockResolvedValue(),
+      isConnected: createMockFn<[], boolean>().mockReturnValue(true),
+      isReady: createMockFn<[], Promise<boolean>>().mockResolvedValue(true),
+      call: createMockFn<ObsCallArgs, Promise<unknown>>().mockResolvedValue({}),
+      addEventListener: createMockFn<[string, ConnectionEventHandler], ConnectionEventHandler>((event, handler) => {
         return handler;
       }),
-      removeEventListener: createMockFn(),
-      getConnectionState: createMockFn().mockReturnValue({
+      removeEventListener: createMockFn<[string, ConnectionEventHandler], void>(),
+      getConnectionState: createMockFn<[], { isConnected: boolean; isConnecting: boolean }>().mockReturnValue({
         isConnected: true,
         isConnecting: false,
       }),
     };
 
     mockObsSources = {
-      updateTextSource: createMockFn().mockResolvedValue(undefined),
-      setSourceVisibility: createMockFn().mockResolvedValue(undefined),
-      clearTextSource: createMockFn().mockResolvedValue(undefined),
+      updateTextSource: createMockFn<[string, string], Promise<void>>().mockResolvedValue(),
+      setSourceVisibility: createMockFn<[string, string, boolean], Promise<void>>().mockResolvedValue(),
+      clearTextSource: createMockFn<[string], Promise<void>>().mockResolvedValue(),
     };
 
-    const {
-      createOBSEventService,
-    } = require("../../../src/obs/obs-event-service.ts");
     obsEventService = createOBSEventService({
-      eventBus,
+      eventBus: serviceEventBus,
       obsConnection: mockOBSConnection,
       obsSources: mockObsSources,
       logger: noOpLogger,
@@ -50,7 +97,6 @@ describe("OBSEventService", () => {
     restoreAllMocks();
     if (obsEventService) {
       obsEventService.destroy();
-      obsEventService = null;
     }
     eventBus.reset();
   });
@@ -90,10 +136,9 @@ describe("OBSEventService", () => {
 
     test("removes OBS connection listeners on destroy", () => {
       obsEventService.destroy();
-      obsEventService = null;
       expect(mockOBSConnection.removeEventListener).toHaveBeenCalled();
       const [eventName, handler] =
-        mockOBSConnection.removeEventListener.mock.calls[0];
+        firstRecordedCall(mockOBSConnection.removeEventListener.mock.calls, "removeEventListener");
       expect(eventName).toBe("ConnectionClosed");
       expect(typeof handler).toBe("function");
     });
@@ -101,14 +146,11 @@ describe("OBSEventService", () => {
     test("marks service disconnected when OBS emits ConnectionClosed", async () => {
       const reconnectDisabledConnection = {
         ...mockOBSConnection,
-        addEventListener: createMockFn(),
-        removeEventListener: createMockFn(),
+        addEventListener: createMockFn<[string, ConnectionEventHandler], ConnectionEventHandler>((_event, handler) => handler),
+        removeEventListener: createMockFn<[string, ConnectionEventHandler], void>(),
       };
-      const {
-        createOBSEventService,
-      } = require("../../../src/obs/obs-event-service.ts");
       const service = createOBSEventService({
-        eventBus,
+        eventBus: serviceEventBus,
         obsConnection: reconnectDisabledConnection,
         obsSources: mockObsSources,
         logger: noOpLogger,
@@ -119,7 +161,7 @@ describe("OBSEventService", () => {
         expect(service.getConnectionState().connected).toBe(true);
 
         const [, connectionClosedHandler] =
-          reconnectDisabledConnection.addEventListener.mock.calls[0];
+          firstRecordedCall(reconnectDisabledConnection.addEventListener.mock.calls, "addEventListener");
         connectionClosedHandler({ code: 1006, reason: "socket closed" });
         await waitForDelay(10);
 
@@ -132,9 +174,9 @@ describe("OBSEventService", () => {
     });
 
     test("dedupes concurrent connect requests into one OBS connect attempt", async () => {
-      let releaseConnect;
-      const pendingConnect = new Promise((resolve) => {
-        releaseConnect = resolve;
+      const releaseConnect: { current: (() => void) | null } = { current: null };
+      const pendingConnect = new Promise<void>((resolve) => {
+        releaseConnect.current = resolve;
       });
       mockOBSConnection.connect.mockImplementation(() => pendingConnect);
 
@@ -143,7 +185,10 @@ describe("OBSEventService", () => {
 
       expect(mockOBSConnection.connect).toHaveBeenCalledTimes(1);
 
-      releaseConnect(true);
+      if (!releaseConnect.current) {
+        throw new Error("Expected pending connect release callback to be set");
+      }
+      releaseConnect.current();
       await Promise.all([first, second]);
     });
   });
@@ -158,7 +203,7 @@ describe("OBSEventService", () => {
       await waitForDelay(10);
 
       expect(mockObsSources.updateTextSource).toHaveBeenCalled();
-      const [sourceName, text] = mockObsSources.updateTextSource.mock.calls[0];
+      const [sourceName, text] = firstRecordedCall(mockObsSources.updateTextSource.mock.calls, "updateTextSource");
       expect(sourceName).toBe("ChatMessage");
       expect(text).toBe("Hello World");
     });
@@ -182,7 +227,7 @@ describe("OBSEventService", () => {
       await waitForDelay(10);
 
       expect(mockObsSources.clearTextSource).toHaveBeenCalled();
-      const [sourceName] = mockObsSources.clearTextSource.mock.calls[0];
+      const [sourceName] = firstRecordedCall(mockObsSources.clearTextSource.mock.calls, "clearTextSource");
       expect(sourceName).toBe("ChatMessage");
     });
 
@@ -224,7 +269,7 @@ describe("OBSEventService", () => {
 
       expect(mockObsSources.setSourceVisibility).toHaveBeenCalled();
       const [sceneName, sourceName, visible] =
-        mockObsSources.setSourceVisibility.mock.calls[0];
+        firstRecordedCall(mockObsSources.setSourceVisibility.mock.calls, "setSourceVisibility");
       expect(sceneName).toBe("MainScene");
       expect(sourceName).toBe("Statusbar");
       expect(visible).toBe(true);
@@ -253,7 +298,7 @@ describe("OBSEventService", () => {
       await waitForDelay(10);
 
       expect(mockOBSConnection.call).toHaveBeenCalled();
-      const [method, payload] = mockOBSConnection.call.mock.calls[0];
+      const [method, payload] = firstRecordedCall(mockOBSConnection.call.mock.calls, "OBS call");
       expect(method).toBe("SetCurrentProgramScene");
       expect(payload).toEqual({ sceneName: "GameplayScene" });
     });

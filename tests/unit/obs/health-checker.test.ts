@@ -3,6 +3,7 @@ import {
   createMockFn,
   clearAllMocks,
   restoreAllMocks,
+  type TestMockFn,
 } from "../../helpers/bun-mock-utils";
 import { useRealTimers } from "../../helpers/bun-timers";
 
@@ -10,20 +11,35 @@ import * as testClock from "../../helpers/test-clock";
 import { OBSHealthChecker } from "../../../src/obs/health-checker.ts";
 import * as OBSHealthCheckerCompat from "../../../src/obs/health-checker.ts";
 
-describe("OBSHealthChecker", () => {
-  let mockOBSManager;
-  let healthChecker;
+type OBSManager = ConstructorParameters<typeof OBSHealthChecker>[0];
+type HealthCheckerConfig = NonNullable<ConstructorParameters<typeof OBSHealthChecker>[1]>;
+type MockOBSManager = {
+  isConnected: TestMockFn<[], boolean>;
+  call: TestMockFn<[requestType: string, payload: Record<string, unknown>], Promise<unknown>>;
+};
 
-  const createHealthChecker = (config = {}) =>
-    new OBSHealthChecker(mockOBSManager, {
+const firstObsCall = (mockOBSManager: MockOBSManager): [string, Record<string, unknown>] => {
+  const call = mockOBSManager.call.mock.calls[0];
+  if (!call) {
+    throw new Error("Expected OBS manager call to have been recorded");
+  }
+  return call;
+};
+
+describe("OBSHealthChecker", () => {
+  let mockOBSManager: MockOBSManager;
+  let healthChecker: OBSHealthChecker;
+
+  const createHealthChecker = (config: Partial<HealthCheckerConfig> = {}) =>
+    new OBSHealthChecker(mockOBSManager satisfies OBSManager, {
       timeProvider: () => testClock.now(),
       ...config,
     });
 
   beforeEach(() => {
     mockOBSManager = {
-      isConnected: createMockFn(),
-      call: createMockFn(),
+      isConnected: createMockFn<[], boolean>(),
+      call: createMockFn<[string, Record<string, unknown>], Promise<unknown>>(),
     };
   });
 
@@ -62,7 +78,7 @@ describe("OBSHealthChecker", () => {
     });
 
     it("should require OBS connection manager", () => {
-      expect(() => new OBSHealthChecker(null)).toThrow(
+      expect(() => Reflect.construct(OBSHealthChecker, [null])).toThrow(
         "OBS connection manager is required",
       );
     });
@@ -89,7 +105,7 @@ describe("OBSHealthChecker", () => {
       const result = await healthChecker.isReady();
 
       expect(result).toBe(true);
-      const [method, payload] = mockOBSManager.call.mock.calls[0];
+      const [method, payload] = firstObsCall(mockOBSManager);
       expect(method).toBe("GetVersion");
       expect(payload).toEqual({});
     });
@@ -103,7 +119,7 @@ describe("OBSHealthChecker", () => {
       const result = await healthChecker.isReady();
 
       expect(result).toBe(false);
-      const [method, payload] = mockOBSManager.call.mock.calls[0];
+      const [method, payload] = firstObsCall(mockOBSManager);
       expect(method).toBe("GetVersion");
       expect(payload).toEqual({});
     });
@@ -209,7 +225,7 @@ describe("OBSHealthChecker", () => {
 
       await healthChecker.isReady();
 
-      const [method, payload] = mockOBSManager.call.mock.calls[0];
+      const [method, payload] = firstObsCall(mockOBSManager);
       expect(method).toBe("GetVersion");
       expect(payload).toEqual({});
     });

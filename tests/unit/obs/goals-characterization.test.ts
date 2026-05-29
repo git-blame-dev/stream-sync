@@ -1,14 +1,32 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
+import {
+  createMockFn,
+  restoreAllMocks,
+  type TestMockFn,
+} from "../../helpers/bun-mock-utils";
 
 import { TEST_TIMEOUTS } from "../../helpers/test-setup";
-import {
-  noOpLogger,
-  createMockSourcesManager,
-} from "../../helpers/mock-factories";
 import { setupAutomatedCleanup } from "../../helpers/mock-lifecycle";
 import * as testClock from "../../helpers/test-clock";
 import { createOBSGoalsManager } from "../../../src/obs/goals.ts";
+
+type GoalsModule = ReturnType<typeof createOBSGoalsManager>;
+type GoalsDependencies = NonNullable<Parameters<typeof createOBSGoalsManager>[1]>;
+type GoalsConfig = NonNullable<GoalsDependencies["config"]>;
+type GoalResult = { success: boolean; formatted?: string; [key: string]: unknown };
+type GoalState = { formatted?: string; [key: string]: unknown };
+type MockObsManager = { isConnected: TestMockFn<[], boolean> };
+type UpdateTextSource = NonNullable<GoalsDependencies["updateTextSource"]>;
+type MockSourcesManager = {
+  updateTextSource: TestMockFn<Parameters<UpdateTextSource>, ReturnType<UpdateTextSource>>;
+};
+type MockGoalTracker = {
+  initializeGoalTracker: TestMockFn<[], Promise<void>>;
+  addDonationToGoal: TestMockFn<[platform: string, amount: number], Promise<GoalResult>>;
+  addPaypiggyToGoal: TestMockFn<[platform: string], Promise<GoalResult>>;
+  getGoalState: TestMockFn<[platform: string], GoalState | null>;
+  getAllGoalStates: TestMockFn<[], Record<string, GoalState | null>>;
+};
 
 setupAutomatedCleanup({
   clearCallsBeforeEach: true,
@@ -21,17 +39,27 @@ describe("OBS Goals Module Characterization Tests", () => {
     restoreAllMocks();
   });
 
-  let goalsModule;
-  let mockObsManager;
-  let configFixture;
-  let mockSourcesManager;
-  let mockGoalTracker;
+  let goalsModule: GoalsModule;
+  let mockObsManager: MockObsManager;
+  let configFixture: GoalsConfig;
+  let mockSourcesManager: MockSourcesManager;
+  let mockGoalTracker: MockGoalTracker;
+
+  const firstTextUpdate = (): Parameters<UpdateTextSource> => {
+    const call = mockSourcesManager.updateTextSource.mock.calls[0];
+    if (!call) {
+      throw new Error("Expected updateTextSource to have been called");
+    }
+    return call;
+  };
 
   beforeEach(() => {
-    mockSourcesManager = createMockSourcesManager();
+    mockSourcesManager = {
+      updateTextSource: createMockFn<Parameters<UpdateTextSource>, ReturnType<UpdateTextSource>>().mockResolvedValue(),
+    };
 
     mockObsManager = {
-      isConnected: createMockFn().mockReturnValue(true),
+      isConnected: createMockFn<[], boolean>().mockReturnValue(true),
     };
 
     configFixture = {
@@ -50,37 +78,35 @@ describe("OBS Goals Module Characterization Tests", () => {
     };
 
     mockGoalTracker = {
-      initializeGoalTracker: createMockFn().mockResolvedValue(),
-      addDonationToGoal: createMockFn().mockResolvedValue({
+      initializeGoalTracker: createMockFn<[], Promise<void>>().mockResolvedValue(),
+      addDonationToGoal: createMockFn<[string, number], Promise<GoalResult>>().mockResolvedValue({
         success: true,
         formatted: "500/1000 coins",
         current: 500,
         target: 1000,
         percentage: 50,
       }),
-      addPaypiggyToGoal: createMockFn().mockResolvedValue({
+      addPaypiggyToGoal: createMockFn<[string], Promise<GoalResult>>().mockResolvedValue({
         success: true,
         formatted: "550/1000 coins",
         current: 550,
         target: 1000,
         percentage: 55,
       }),
-      getGoalState: createMockFn().mockReturnValue({
+      getGoalState: createMockFn<[string], GoalState | null>().mockReturnValue({
         current: 500,
         target: 1000,
         formatted: "500/1000 coins",
         percentage: 50,
       }),
-      getAllGoalStates: createMockFn().mockReturnValue({
+      getAllGoalStates: createMockFn<[], Record<string, GoalState | null>>().mockReturnValue({
         tiktok: { current: 500, target: 1000, formatted: "500/1000 coins" },
         youtube: { current: 0.5, target: 1.0, formatted: "$0.50/$1.00" },
         twitch: { current: 50, target: 100, formatted: "050/100 bits" },
       }),
-      formatGoalDisplay: createMockFn().mockReturnValue("500/1000 coins"),
     };
 
     goalsModule = createOBSGoalsManager(mockObsManager, {
-      logger: noOpLogger,
       config: configFixture,
       updateTextSource: mockSourcesManager.updateTextSource,
       goalTracker: mockGoalTracker,
@@ -170,7 +196,6 @@ test(
         const { updateTextSource } = mockSourcesManager;
 
         const disabledGoalsModule = createOBSGoalsManager(mockObsManager, {
-          logger: noOpLogger,
           config: { goals: { enabled: false } },
           updateTextSource: mockSourcesManager.updateTextSource,
           goalTracker: mockGoalTracker,
@@ -250,11 +275,9 @@ test(
 test(
   "updateGoalDisplay writes the requested platform goal text",
   async () => {
-        const { updateTextSource } = mockSourcesManager;
-
         await goalsModule.updateGoalDisplay("tiktok");
 
-      const [sourceName, goalText] = updateTextSource.mock.calls[0] || [];
+      const [sourceName, goalText] = firstTextUpdate();
       expect(sourceName).toBe("tiktok goal txt");
       expect(goalText).toBe("500/1000 coins");
       },
@@ -267,7 +290,6 @@ test(
         const { updateTextSource } = mockSourcesManager;
 
         const youtubeDisabledModule = createOBSGoalsManager(mockObsManager, {
-          logger: noOpLogger,
           config: {
             goals: {
               enabled: true,
@@ -307,7 +329,7 @@ test(
 
         const result = await goalsModule.processDonationGoal("tiktok", 100);
 
-      const [sourceName, goalText] = updateTextSource.mock.calls[0] || [];
+      const [sourceName, goalText] = firstTextUpdate();
       expect(sourceName).toBe("tiktok goal txt");
       expect(goalText).toBe("500/1000 coins");
       expect(result.success).toBe(true);
@@ -334,7 +356,7 @@ test(
 
         const result = await goalsModule.processPaypiggyGoal("tiktok");
 
-      const [sourceName, goalText] = updateTextSource.mock.calls[0] || [];
+      const [sourceName, goalText] = firstTextUpdate();
       expect(sourceName).toBe("tiktok goal txt");
       expect(goalText).toBe("500/1000 coins");
       expect(result.success).toBe(true);
@@ -369,7 +391,6 @@ test(
       "processDonationGoal should return error when goals disabled",
       async () => {
         const disabledModule = createOBSGoalsManager(mockObsManager, {
-          logger: noOpLogger,
           config: { goals: { enabled: false } },
           updateTextSource: mockSourcesManager.updateTextSource,
           goalTracker: mockGoalTracker,
@@ -386,7 +407,6 @@ test(
       "processDonationGoal should return error when platform goal disabled",
       async () => {
         const tiktokDisabledModule = createOBSGoalsManager(mockObsManager, {
-          logger: noOpLogger,
           config: {
             goals: {
               enabled: true,
@@ -412,7 +432,6 @@ test(
       "processPaypiggyGoal should return error when goals disabled",
       async () => {
         const disabledModule = createOBSGoalsManager(mockObsManager, {
-          logger: noOpLogger,
           config: { goals: { enabled: false } },
           updateTextSource: mockSourcesManager.updateTextSource,
           goalTracker: mockGoalTracker,
@@ -429,7 +448,6 @@ test(
       "processPaypiggyGoal should return error when platform goal disabled",
       async () => {
         const tiktokDisabledModule = createOBSGoalsManager(mockObsManager, {
-          logger: noOpLogger,
           config: {
             goals: {
               enabled: true,
@@ -488,7 +506,6 @@ test(
         const { updateTextSource } = mockSourcesManager;
 
         const youtubeDisabledModule = createOBSGoalsManager(mockObsManager, {
-          logger: noOpLogger,
           config: {
             goals: {
               enabled: true,
@@ -521,7 +538,6 @@ test(
         const { updateTextSource } = mockSourcesManager;
 
         const missingSourceModule = createOBSGoalsManager(mockObsManager, {
-          logger: noOpLogger,
           config: {
             goals: {
               enabled: true,
