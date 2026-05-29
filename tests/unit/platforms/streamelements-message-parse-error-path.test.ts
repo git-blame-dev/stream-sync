@@ -5,6 +5,11 @@ import { createStreamElementsConfigFixture } from "../../helpers/config-fixture"
 import { StreamElementsPlatform } from "../../../src/platforms/streamelements";
 
 type EventProcessingCall = [Error, string];
+type StreamElementsPlatformHarness = Omit<StreamElementsPlatform, "errorHandler"> & {
+  errorHandler: {
+    handleEventProcessingError: (...args: EventProcessingCall) => void;
+  };
+};
 
 afterEach(() => {
   restoreAllMocks();
@@ -19,15 +24,16 @@ describe("StreamElementsPlatform message parsing", () => {
 
     const errorHandlerCalls: EventProcessingCall[] = [];
     const errorHandler = {
-      handleEventProcessingError: (...args: EventProcessingCall) =>
-        errorHandlerCalls.push(args),
+      handleEventProcessingError: (...args: EventProcessingCall) => {
+        errorHandlerCalls.push(args);
+      },
     };
-    platform.errorHandler = errorHandler;
+    (platform as unknown as StreamElementsPlatformHarness).errorHandler = errorHandler;
 
     expect(() => platform.handleMessage(Buffer.from("not-json"))).not.toThrow();
     expect(errorHandlerCalls).toHaveLength(1);
 
-    const [errorArg, eventType] = errorHandlerCalls[0];
+    const [errorArg, eventType] = errorHandlerCalls[0]!;
     expect(errorArg).toBeInstanceOf(Error);
     expect(eventType).toBe("message");
   });

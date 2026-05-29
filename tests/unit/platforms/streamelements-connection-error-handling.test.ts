@@ -5,7 +5,13 @@ import { createStreamElementsConfigFixture } from "../../helpers/config-fixture"
 import { StreamElementsPlatform } from "../../../src/platforms/streamelements";
 
 type ConnectionErrorHandlerCall = [Error, string, string?];
-type RetryConnectionCall = [string, Error, () => void, () => void];
+type RetryConnectionCall = [string, Error, () => Promise<boolean>, () => void];
+type StreamElementsPlatformHarness = Omit<StreamElementsPlatform, "errorHandler" | "retryHandleConnectionError"> & {
+  errorHandler: {
+    handleConnectionError: (...args: ConnectionErrorHandlerCall) => void;
+  };
+  retryHandleConnectionError: (...args: RetryConnectionCall) => void;
+};
 
 afterEach(() => {
   restoreAllMocks();
@@ -19,25 +25,28 @@ describe("StreamElementsPlatform connection error handling", () => {
     );
     const errorHandlerCalls: ConnectionErrorHandlerCall[] = [];
     const errorHandler = {
-      handleConnectionError: (...args: ConnectionErrorHandlerCall) =>
-        errorHandlerCalls.push(args),
+      handleConnectionError: (...args: ConnectionErrorHandlerCall) => {
+        errorHandlerCalls.push(args);
+      },
     };
-    platform.errorHandler = errorHandler;
+    const harness = platform as unknown as StreamElementsPlatformHarness;
+    harness.errorHandler = errorHandler;
     const retryCalls: RetryConnectionCall[] = [];
-    platform.retryHandleConnectionError = (...args: RetryConnectionCall) =>
+    harness.retryHandleConnectionError = (...args: RetryConnectionCall) => {
       retryCalls.push(args);
+    };
 
     const error = new Error("connection lost");
     platform.handleConnectionError(error);
 
     expect(errorHandlerCalls).toHaveLength(1);
-    const [errorArg, category, message] = errorHandlerCalls[0];
+    const [errorArg, category, message] = errorHandlerCalls[0]!;
     expect(errorArg).toBe(error);
     expect(category).toBe("connection");
     expect(message).toMatch(/connection lost/i);
 
     expect(retryCalls).toHaveLength(1);
-    const [platformName, retryError, reconnectFn, cleanupFn] = retryCalls[0];
+    const [platformName, retryError, reconnectFn, cleanupFn] = retryCalls[0]!;
     expect(platformName).toBe("StreamElements");
     expect(retryError).toBe(error);
     expect(typeof reconnectFn).toBe("function");
