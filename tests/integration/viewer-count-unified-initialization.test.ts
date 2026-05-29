@@ -1,10 +1,30 @@
 import { describe, test, afterEach, expect } from "bun:test";
 import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
+import type { TestMockFn } from "../helpers/bun-mock-utils";
 import { createMockPlatform, noOpLogger } from "../helpers/mock-factories";
 import { ViewerCountSystem } from "../../src/utils/viewer-count.ts";
 import { createConfigFixture } from "../helpers/config-fixture";
+import { safeDelay } from "../../src/utils/timeout-validator";
 
-const createViewerCountSystemWithBehaviors = (platformBehaviors = {}) => {
+type PlatformName = "tiktok" | "twitch" | "youtube";
+type PlatformBehavior = { viewerCount: number };
+type PlatformBehaviors = Partial<Record<PlatformName, PlatformBehavior>>;
+type ViewerCountSystemUnderTest = InstanceType<typeof ViewerCountSystem>;
+type MockPlatformWithViewerCount = ReturnType<typeof createMockPlatform> & {
+  getViewerCount: TestMockFn<[], Promise<number>>;
+  initialize: TestMockFn<[], Promise<boolean>>;
+};
+
+const hasLegacyEarlyStartMethod = (system: ViewerCountSystemUnderTest) => {
+  const candidate = system as unknown as {
+    startViewerCountSystemEarly?: unknown;
+  };
+  return typeof candidate.startViewerCountSystemEarly === "function";
+};
+
+const createViewerCountSystemWithBehaviors = (
+  platformBehaviors: PlatformBehaviors = {},
+) => {
   const defaultPlatformBehaviors = {
     tiktok: { viewerCount: 150 },
     twitch: { viewerCount: 50 },
@@ -12,14 +32,21 @@ const createViewerCountSystemWithBehaviors = (platformBehaviors = {}) => {
     ...platformBehaviors,
   };
 
-  const platforms = {};
+  const platforms: Record<PlatformName, MockPlatformWithViewerCount> = {} as Record<
+    PlatformName,
+    MockPlatformWithViewerCount
+  >;
   Object.entries(defaultPlatformBehaviors).forEach(([name, behavior]) => {
-    platforms[name] = createMockPlatform(name, {
-      getViewerCount: createMockFn().mockReturnValue(behavior.viewerCount),
-      initialize: createMockFn().mockResolvedValue(true),
+    const platformName = name as PlatformName;
+    const platform = createMockPlatform(platformName, {
+      getViewerCount: createMockFn<[], Promise<number>>().mockResolvedValue(
+        behavior.viewerCount,
+      ),
+      initialize: createMockFn<[], Promise<boolean>>().mockResolvedValue(true),
       destroy: createMockFn().mockResolvedValue(true),
       isConnected: createMockFn().mockReturnValue(true),
-    });
+    }) as MockPlatformWithViewerCount;
+    platforms[platformName] = platform;
   });
 
   const system = new ViewerCountSystem({
@@ -31,11 +58,15 @@ const createViewerCountSystemWithBehaviors = (platformBehaviors = {}) => {
   return { system, platforms };
 };
 
-const simulatePlatformReadiness = async (system, platform, isReady) => {
+const simulatePlatformReadiness = async (
+  system: ViewerCountSystemUnderTest,
+  platform: PlatformName,
+  isReady: boolean,
+) => {
   await system.updateStreamStatus(platform, isReady);
 };
 
-const validateSystemStability = (system) => {
+const validateSystemStability = (system: ViewerCountSystemUnderTest) => {
   const status = system.getSystemStatus();
   return {
     isStable:
@@ -49,7 +80,10 @@ const validateSystemStability = (system) => {
   };
 };
 
-const simulateNetworkFailure = (platform, errorType = "connection_timeout") => {
+const simulateNetworkFailure = (
+  platform: MockPlatformWithViewerCount,
+  errorType = "connection_timeout",
+) => {
   if (platform.getViewerCount) {
     platform.getViewerCount.mockRejectedValue(
       new Error(`Network ${errorType}`),
@@ -60,7 +94,11 @@ const simulateNetworkFailure = (platform, errorType = "connection_timeout") => {
   }
 };
 
-const expectUserSeesViewerCount = (system, platform, expectedCount) => {
+const expectUserSeesViewerCount = (
+  system: ViewerCountSystemUnderTest,
+  platform: PlatformName,
+  expectedCount: number,
+) => {
   const status = system.getSystemStatus();
   const actualCount = status.viewerCounts[platform.toLowerCase()];
   return actualCount === expectedCount;
@@ -75,8 +113,7 @@ describe("ViewerCount Unified Initialization Behavior", () => {
     test("should not have dual initialization artifacts", async () => {
       const { system } = createViewerCountSystemWithBehaviors();
 
-      const hasEarlyInitMethod =
-        typeof system.startViewerCountSystemEarly === "function";
+      const hasEarlyInitMethod = hasLegacyEarlyStartMethod(system);
       expect(hasEarlyInitMethod).toBe(false);
       expect(typeof system.initialize === "function").toBe(true);
     });
@@ -121,8 +158,7 @@ describe("ViewerCount Unified Initialization Behavior", () => {
       await system.initialize();
 
       const hasStartPolling = typeof system.startPolling === "function";
-      const hasSeparateEarlyPolling =
-        typeof system.startViewerCountSystemEarly === "function";
+      const hasSeparateEarlyPolling = hasLegacyEarlyStartMethod(system);
 
       expect(hasStartPolling).toBe(true);
       expect(hasSeparateEarlyPolling).toBe(false);
@@ -203,7 +239,7 @@ describe("ViewerCount Unified Initialization Behavior", () => {
       simulateNetworkFailure(platforms.youtube, "initialization_failed");
       await system.initialize();
 
-      platforms.youtube.getViewerCount.mockReturnValue(250);
+      platforms.youtube.getViewerCount.mockResolvedValue(250);
       platforms.youtube.initialize.mockResolvedValue(true);
       await simulatePlatformReadiness(system, "youtube", true);
 
@@ -243,7 +279,7 @@ describe("ViewerCount Unified Initialization Behavior", () => {
       const { system } = createViewerCountSystemWithBehaviors();
       await system.initialize();
 
-      const platformOrder = ["youtube", "twitch", "tiktok"];
+      const platformOrder: PlatformName[] = ["youtube", "twitch", "tiktok"];
       for (const platform of platformOrder) {
         await simulatePlatformReadiness(system, platform, true);
       }
@@ -276,7 +312,7 @@ describe("ViewerCount Unified Initialization Behavior", () => {
       await system.initialize();
       system.startPolling();
 
-      await waitForDelay(50);
+      await safeDelay(50);
       await simulatePlatformReadiness(system, "tiktok", true);
 
       const status = system.getSystemStatus();

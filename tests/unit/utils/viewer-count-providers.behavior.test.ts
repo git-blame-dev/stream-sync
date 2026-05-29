@@ -7,6 +7,34 @@ import {
   YouTubeViewerCountProvider,
   TikTokViewerCountProvider,
 } from "../../../src/utils/viewer-count-providers";
+
+type AggregatedViewerCount = {
+  success: boolean;
+  totalCount: number;
+  successfulStreams: number;
+  failedStreams?: number;
+};
+
+const createViewerExtractionService = (
+  getAggregatedViewerCount = createMockFn<
+    [string[]],
+    Promise<AggregatedViewerCount>
+  >(),
+) => ({
+  getAggregatedViewerCount,
+  extractViewerCount: createMockFn<
+    [string],
+    Promise<{ success: boolean; count: number }>
+  >(),
+});
+
+const createTwitchApiClient = (
+  getStreamInfo = createMockFn<
+    [string],
+    Promise<{ isLive: boolean; viewerCount: number }>
+  >(),
+) => ({ getStreamInfo });
+
 describe("ViewerCountProvider error handling", () => {
   it("categorizes unknown errors when message is missing", () => {
     const provider = new ViewerCountProvider("testPlatform", noOpLogger);
@@ -23,9 +51,7 @@ describe("ViewerCountProvider error handling", () => {
 
 describe("YouTubeViewerCountProvider readiness and error routes", () => {
   it("returns 0 when active video ids missing", async () => {
-    const viewerExtractionService = {
-      getAggregatedViewerCount: createMockFn(),
-    };
+    const viewerExtractionService = createViewerExtractionService();
     const provider = new YouTubeViewerCountProvider({}, {}, () => [], null, {
       viewerExtractionService,
       logger: noOpLogger,
@@ -37,11 +63,11 @@ describe("YouTubeViewerCountProvider readiness and error routes", () => {
   });
 
   it("returns unavailable and categorizes errors from extraction service", async () => {
-    const viewerExtractionService = {
-      getAggregatedViewerCount: createMockFn().mockRejectedValue(
+    const viewerExtractionService = createViewerExtractionService(
+      createMockFn<[string[]], Promise<AggregatedViewerCount>>().mockRejectedValue(
         new Error("network down"),
       ),
-    };
+    );
     const provider = new YouTubeViewerCountProvider(
       {},
       {},
@@ -75,7 +101,7 @@ describe("TikTokViewerCountProvider error recovery", () => {
 
 describe("TwitchViewerCountProvider readiness", () => {
   it("returns 0 when provider not ready (missing channel)", async () => {
-    const apiClient = { getStreamInfo: createMockFn() };
+    const apiClient = createTwitchApiClient();
     const provider = new TwitchViewerCountProvider(
       apiClient,
       {},
@@ -90,11 +116,14 @@ describe("TwitchViewerCountProvider readiness", () => {
   });
 
   it("resets consecutive errors after successful fetch", async () => {
-    const apiClient = {
-      getStreamInfo: createMockFn()
+    const apiClient = createTwitchApiClient(
+      createMockFn<
+        [string],
+        Promise<{ isLive: boolean; viewerCount: number }>
+      >()
         .mockRejectedValueOnce(new Error("network fail"))
         .mockResolvedValueOnce({ isLive: true, viewerCount: 15 }),
-    };
+    );
     const provider = new TwitchViewerCountProvider(
       apiClient,
       {},

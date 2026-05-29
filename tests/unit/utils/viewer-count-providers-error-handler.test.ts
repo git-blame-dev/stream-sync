@@ -32,6 +32,10 @@ describe("ViewerCountProvider error handler integration", () => {
     expect(result).toBe(0);
     expect(mockLogger.error).toHaveBeenCalled();
     const errorCall = mockLogger.error.mock.calls[0];
+    expect(errorCall).toBeDefined();
+    if (!errorCall) {
+      throw new Error("Expected provider error to be logged");
+    }
     expect(errorCall[0]).toContain("test network timeout");
   });
 

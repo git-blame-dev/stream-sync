@@ -7,6 +7,34 @@ import {
   YouTubeViewerCountProvider,
   TikTokViewerCountProvider,
 } from "../../../src/utils/viewer-count-providers";
+
+type AggregatedViewerCount = {
+  success: boolean;
+  totalCount: number;
+  successfulStreams: number;
+  failedStreams?: number;
+};
+
+const createViewerExtractionService = (
+  getAggregatedViewerCount = createMockFn<
+    [string[]],
+    Promise<AggregatedViewerCount>
+  >(),
+) => ({
+  getAggregatedViewerCount,
+  extractViewerCount: createMockFn<
+    [string],
+    Promise<{ success: boolean; count: number }>
+  >(),
+});
+
+const createTwitchApiClient = (
+  getStreamInfo = createMockFn<
+    [string],
+    Promise<{ isLive: boolean; viewerCount: number }>
+  >(),
+) => ({ getStreamInfo });
+
 describe("ViewerCountProvider base behavior", () => {
   it("tracks error stats and categorizes network errors", () => {
     const provider = new ViewerCountProvider("testPlatform", noOpLogger);
@@ -70,7 +98,7 @@ describe("TwitchViewerCountProvider", () => {
 
   it("returns 0 when not ready", async () => {
     const provider = new TwitchViewerCountProvider(
-      { getStreamInfo: createMockFn() },
+      createTwitchApiClient(),
       {},
       {},
       null,
@@ -82,12 +110,15 @@ describe("TwitchViewerCountProvider", () => {
 
   it("returns live viewer count and resets error counters", async () => {
     const provider = new TwitchViewerCountProvider(
-      {
-        getStreamInfo: createMockFn().mockResolvedValue({
+      createTwitchApiClient(
+        createMockFn<
+          [string],
+          Promise<{ isLive: boolean; viewerCount: number }>
+        >().mockResolvedValue({
           isLive: true,
           viewerCount: 42,
         }),
-      },
+      ),
       {},
       { channel: "testStreamer" },
       null,
@@ -115,13 +146,13 @@ describe("YouTubeViewerCountProvider", () => {
   });
 
   it("aggregates counts across active streams via service layer", async () => {
-    const viewerExtractionService = {
-      getAggregatedViewerCount: createMockFn().mockResolvedValue({
+    const viewerExtractionService = createViewerExtractionService(
+      createMockFn<[string[]], Promise<AggregatedViewerCount>>().mockResolvedValue({
         success: true,
         totalCount: 75,
         successfulStreams: 1,
       }),
-    };
+    );
     const provider = new YouTubeViewerCountProvider(
       {},
       {},
@@ -138,11 +169,13 @@ describe("YouTubeViewerCountProvider", () => {
   });
 
   it("returns unavailable and tracks an error when aggregation fails", async () => {
-    const viewerExtractionService = {
-      getAggregatedViewerCount: createMockFn().mockResolvedValue({
+    const viewerExtractionService = createViewerExtractionService(
+      createMockFn<[string[]], Promise<AggregatedViewerCount>>().mockResolvedValue({
         success: false,
+        totalCount: 0,
+        successfulStreams: 0,
       }),
-    };
+    );
     const provider = new YouTubeViewerCountProvider(
       {},
       {},
@@ -157,14 +190,14 @@ describe("YouTubeViewerCountProvider", () => {
   });
 
   it("returns unavailable when all active stream extractions fail", async () => {
-    const viewerExtractionService = {
-      getAggregatedViewerCount: createMockFn().mockResolvedValue({
+    const viewerExtractionService = createViewerExtractionService(
+      createMockFn<[string[]], Promise<AggregatedViewerCount>>().mockResolvedValue({
         success: false,
         totalCount: 0,
         successfulStreams: 0,
         failedStreams: 2,
       }),
-    };
+    );
     const provider = new YouTubeViewerCountProvider(
       {},
       {},
@@ -181,7 +214,7 @@ describe("YouTubeViewerCountProvider", () => {
 
   it("returns 0 without incrementing errors when no active streams", async () => {
     const provider = new YouTubeViewerCountProvider({}, {}, () => [], null, {
-      viewerExtractionService: { getAggregatedViewerCount: createMockFn() },
+      viewerExtractionService: createViewerExtractionService(),
       logger: noOpLogger,
     });
 
@@ -192,15 +225,15 @@ describe("YouTubeViewerCountProvider", () => {
   });
 
   it("resets consecutive errors after successful aggregation following a failure", async () => {
-    const viewerExtractionService = {
-      getAggregatedViewerCount: createMockFn()
+    const viewerExtractionService = createViewerExtractionService(
+      createMockFn<[string[]], Promise<AggregatedViewerCount>>()
         .mockRejectedValueOnce(new Error("network down"))
         .mockResolvedValueOnce({
           success: true,
           totalCount: 5,
           successfulStreams: 1,
         }),
-    };
+    );
     const provider = new YouTubeViewerCountProvider(
       {},
       {},
@@ -249,11 +282,16 @@ describe("TikTokViewerCountProvider", () => {
   });
 
   it("resets error count on success after previous failure", async () => {
+    let callCount = 0;
     const platform = {
       connection: { isConnected: true },
-      getViewerCount: createMockFn()
-        .mockRejectedValueOnce(new Error("network"))
-        .mockResolvedValueOnce(10),
+      getViewerCount: createMockFn<[], Promise<number>>(async () => {
+        callCount++;
+        if (callCount === 1) {
+          throw new Error("network");
+        }
+        return 10;
+      }),
     };
     const provider = new TikTokViewerCountProvider(platform, {
       logger: noOpLogger,
@@ -269,7 +307,7 @@ describe("TikTokViewerCountProvider", () => {
 
   it("is not ready when connection missing or disconnected", () => {
     const provider = new TikTokViewerCountProvider(
-      { connection: { connected: false } },
+      { connection: { isConnected: false } },
       { logger: noOpLogger },
     );
 

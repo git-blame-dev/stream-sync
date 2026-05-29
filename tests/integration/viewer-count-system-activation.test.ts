@@ -1,5 +1,9 @@
 import { describe, test, beforeEach, afterEach, expect } from "bun:test";
-import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
+import {
+  createMockFn,
+  restoreAllMocks,
+  type TestMockFn,
+} from "../helpers/bun-mock-utils";
 import { TEST_TIMEOUTS } from "../helpers/test-setup";
 import { createConfigFixture } from "../helpers/config-fixture";
 import {
@@ -17,13 +21,25 @@ import { safeDelay } from "../../src/utils/timeout-validator";
 import { AppRuntime } from "../../src/main";
 import { ViewerCountSystem } from "../../src/utils/viewer-count";
 
+type PlatformName = "youtube" | "twitch" | "tiktok";
+type AppRuntimeConfig = ConstructorParameters<typeof AppRuntime>[0];
+type AppRuntimeDependencies = ConstructorParameters<typeof AppRuntime>[1];
+type ViewerCountPlatform = {
+  getViewerCount: TestMockFn<[], Promise<number>>;
+};
+type PlatformRegistry = Record<PlatformName, ViewerCountPlatform>;
+type MockPlatformLifecycleService = ReturnType<
+  typeof createMockPlatformLifecycleService
+>;
+type ConfigOverrides = Parameters<typeof createConfigFixture>[0];
+
 const createMockPlatformLifecycleService = () => ({
-  platforms: {},
+  platforms: {} as Partial<PlatformRegistry>,
   initializeAllPlatforms: createMockFn().mockResolvedValue({}),
-  getAllPlatforms: createMockFn(() => ({})),
-  getPlatforms: createMockFn(() => ({})),
-  getPlatform: createMockFn(() => null),
-  isPlatformAvailable: createMockFn(() => false),
+  getAllPlatforms: createMockFn<[], Partial<PlatformRegistry>>(() => ({})),
+  getPlatforms: createMockFn<[], Partial<PlatformRegistry>>(() => ({})),
+  getPlatform: createMockFn<[PlatformName], ViewerCountPlatform | null>(() => null),
+  isPlatformAvailable: createMockFn<[PlatformName], boolean>(() => false),
   getPlatformConnectionTime: createMockFn(() => testClock.now()),
   recordPlatformConnection: createMockFn(),
   disconnectAll: createMockFn().mockResolvedValue(),
@@ -45,19 +61,24 @@ describe("ViewerCount System Activation Integration", () => {
     restoreAllMocks();
   });
 
-  let configOverrides;
-  let configFixture;
-  let mockOBSManager;
-  let mockYouTubePlatform;
-  let mockTwitchPlatform;
-  let mockTikTokPlatform;
-  let mockDisplayQueue;
-  let mockPlatformLifecycleService;
-  let mockGoalsManager;
-  let buildAppRuntimeDependencies;
+  let configOverrides: ConfigOverrides;
+  let configFixture: AppRuntimeConfig;
+  let mockOBSManager: ReturnType<typeof createMockOBSConnection>;
+  let mockYouTubePlatform: ReturnType<typeof createMockYouTubePlatform> &
+    ViewerCountPlatform;
+  let mockTwitchPlatform: ReturnType<typeof createMockTwitchPlatform> &
+    ViewerCountPlatform;
+  let mockTikTokPlatform: ReturnType<typeof createMockTikTokPlatform> &
+    ViewerCountPlatform;
+  let mockDisplayQueue: ReturnType<typeof createMockDisplayQueue>;
+  let mockPlatformLifecycleService: MockPlatformLifecycleService;
+  let mockGoalsManager: ReturnType<typeof createMockGoalsManager>;
+  let buildAppRuntimeDependencies: (
+    overrides?: Record<string, unknown>,
+  ) => AppRuntimeDependencies;
 
   const registerMockPlatforms = () => {
-    const platforms = {
+    const platforms: PlatformRegistry = {
       youtube: mockYouTubePlatform,
       twitch: mockTwitchPlatform,
       tiktok: mockTikTokPlatform,
@@ -71,10 +92,10 @@ describe("ViewerCount System Activation Integration", () => {
       ...platforms,
     }));
     mockPlatformLifecycleService.getPlatform.mockImplementation(
-      (platform) => platforms[platform] || null,
+      (platform: PlatformName) => platforms[platform] || null,
     );
     mockPlatformLifecycleService.isPlatformAvailable.mockImplementation(
-      (platform) => !!platforms[platform],
+      (platform: PlatformName) => !!platforms[platform],
     );
 
     return platforms;
@@ -105,21 +126,27 @@ describe("ViewerCount System Activation Integration", () => {
       },
       obs: { enabled: true },
     };
-    configFixture = createConfigFixture(configOverrides);
+    configFixture = createConfigFixture(configOverrides) as unknown as AppRuntimeConfig;
 
     mockOBSManager = createMockOBSConnection();
     mockOBSManager.isConnected.mockReturnValue(true);
 
     mockGoalsManager = createMockGoalsManager();
 
-    mockYouTubePlatform = createMockYouTubePlatform();
-    mockYouTubePlatform.getViewerCount = createMockFn().mockResolvedValue(150);
+    mockYouTubePlatform = createMockYouTubePlatform() as ReturnType<
+      typeof createMockYouTubePlatform
+    > & ViewerCountPlatform;
+    mockYouTubePlatform.getViewerCount = createMockFn<[], Promise<number>>().mockResolvedValue(150);
 
-    mockTwitchPlatform = createMockTwitchPlatform();
-    mockTwitchPlatform.getViewerCount = createMockFn().mockResolvedValue(75);
+    mockTwitchPlatform = createMockTwitchPlatform() as ReturnType<
+      typeof createMockTwitchPlatform
+    > & ViewerCountPlatform;
+    mockTwitchPlatform.getViewerCount = createMockFn<[], Promise<number>>().mockResolvedValue(75);
 
-    mockTikTokPlatform = createMockTikTokPlatform();
-    mockTikTokPlatform.getViewerCount = createMockFn().mockResolvedValue(200);
+    mockTikTokPlatform = createMockTikTokPlatform() as ReturnType<
+      typeof createMockTikTokPlatform
+    > & ViewerCountPlatform;
+    mockTikTokPlatform.getViewerCount = createMockFn<[], Promise<number>>().mockResolvedValue(200);
 
     mockDisplayQueue = createMockDisplayQueue();
 
@@ -140,8 +167,8 @@ describe("ViewerCount System Activation Integration", () => {
           platformLifecycleService: mockPlatformLifecycleService,
           logging: logger,
           ...overrides,
-        },
-      }).dependencies;
+        } as Record<string, unknown>,
+      }).dependencies as AppRuntimeDependencies;
     };
 
   });

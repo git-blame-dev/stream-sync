@@ -1,11 +1,9 @@
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { createRequire } from "node:module";
+import { describe, test, expect, afterEach } from "bun:test";
 
 import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../helpers/mock-factories";
 import { createConfigFixture } from "../../helpers/config-fixture";
-
-const load = createRequire(import.meta.url);
+import { ViewerCountSystem } from "../../../src/utils/viewer-count";
 
 type ViewerCountUpdatePayload = {
   platform: string;
@@ -16,17 +14,11 @@ type ViewerCountUpdatePayload = {
 };
 
 describe("ViewerCountSystem polling with malformed payloads", () => {
-  let ViewerCountSystem;
-
-  beforeEach(() => {
-    ({ ViewerCountSystem } = load("../../../src/utils/viewer-count.ts"));
-  });
-
   afterEach(() => {
     restoreAllMocks();
   });
 
-  function createSystemWithPlatformReturning(value) {
+  function createSystemWithPlatformReturning(value: unknown) {
     const platform = {
       getViewerCount: createMockFn().mockResolvedValue(value),
     };

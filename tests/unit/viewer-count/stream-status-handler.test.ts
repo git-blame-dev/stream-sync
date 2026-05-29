@@ -6,17 +6,23 @@ type StreamStatusUpdate = {
   isLive: boolean;
 };
 
+type EventHandler = (payload?: unknown) => Promise<void> | void;
+type ViewerCountSystemLike = {
+  updates?: StreamStatusUpdate[];
+  updateStreamStatus?: (platform: string, isLive: boolean) => Promise<unknown>;
+};
+
 function createEventBus() {
   const handlers: Record<string, (payload?: unknown) => Promise<void> | void> =
     {};
   return {
-    subscribe(eventType, handler) {
+    subscribe(eventType: string, handler: EventHandler) {
       handlers[eventType] = handler;
       return () => {
         delete handlers[eventType];
       };
     },
-    async emit(eventType, payload?: unknown) {
+    async emit(eventType: string, payload?: unknown) {
       const handler = handlers[eventType];
       if (handler) {
         await handler(payload);
@@ -25,11 +31,11 @@ function createEventBus() {
   };
 }
 
-function createViewerCountSystem() {
+function createViewerCountSystem(): ViewerCountSystemLike {
   const updates: StreamStatusUpdate[] = [];
   return {
     updates,
-    async updateStreamStatus(platform, isLive) {
+    async updateStreamStatus(platform: string, isLive: boolean) {
       updates.push({ platform, isLive });
     },
   };
@@ -90,7 +96,7 @@ describe("stream-status-handler", () => {
     wireStreamStatusHandlers({
       eventBus,
       viewerCountSystem,
-      logger: { warn: (message) => warnings.push(message) },
+      logger: { warn: (message: string) => warnings.push(message) },
     });
 
     await eventBus.emit("platform:event", {
@@ -186,7 +192,7 @@ describe("stream-status-handler", () => {
 
   it("skips updates when viewer count system lacks updateStreamStatus", async () => {
     const eventBus = createEventBus();
-    const viewerCountSystem: { updates?: StreamStatusUpdate[] } = {};
+    const viewerCountSystem: ViewerCountSystemLike = {};
 
     wireStreamStatusHandlers({ eventBus, viewerCountSystem });
 
@@ -210,7 +216,7 @@ describe("stream-status-handler", () => {
       isViewerCountEnabled: () => {
         throw new Error("predicate error");
       },
-      logger: { warn: (msg) => warnings.push(msg) },
+      logger: { warn: (msg: string) => warnings.push(msg) },
     });
 
     await eventBus.emit("platform:event", {

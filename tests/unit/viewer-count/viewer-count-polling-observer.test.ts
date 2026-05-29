@@ -1,11 +1,9 @@
 import { describe, expect, afterEach, it } from "bun:test";
-import { createRequire } from "node:module";
 
 import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../helpers/mock-factories";
 import { createConfigFixture } from "../../helpers/config-fixture";
-
-const load = createRequire(import.meta.url);
+import { ViewerCountSystem } from "../../../src/utils/viewer-count";
 
 type ViewerCountUpdatePayload = {
   platform: string;
@@ -20,19 +18,24 @@ describe("ViewerCountSystem polling observer notifications", () => {
 
   afterEach(() => {
     restoreAllMocks();
-    process.env.NODE_ENV = originalEnv;
+    if (originalEnv === undefined) {
+      delete process.env.NODE_ENV;
+    } else {
+      process.env.NODE_ENV = originalEnv;
+    }
   });
 
-  function createSystemWithPlatform(counts = [5, 7]) {
+  function createSystemWithPlatform(counts: number[] = [5, 7]) {
     process.env.NODE_ENV = "test";
+    const firstCount = counts[0] ?? 0;
+    const secondCount = counts[1] ?? firstCount;
 
     const platform = {
       getViewerCount: createMockFn()
-        .mockResolvedValueOnce(counts[0])
-        .mockResolvedValueOnce(counts[1]),
+        .mockResolvedValueOnce(firstCount)
+        .mockResolvedValueOnce(secondCount),
     };
 
-    const { ViewerCountSystem } = load("../../../src/utils/viewer-count.ts");
     const system = new ViewerCountSystem({
       platforms: { youtube: platform },
       logger: noOpLogger,
@@ -103,9 +106,8 @@ describe("ViewerCountSystem polling observer notifications", () => {
 
   it("preserves count when platform lacks getViewerCount", async () => {
     process.env.NODE_ENV = "test";
-    const { ViewerCountSystem } = load("../../../src/utils/viewer-count.ts");
     const system = new ViewerCountSystem({
-      platforms: { twitch: { notAGetter: true } },
+      platforms: { twitch: { notAGetter: true } as unknown as {} },
       logger: noOpLogger,
       config: createConfigFixture(),
     });
@@ -119,7 +121,6 @@ describe("ViewerCountSystem polling observer notifications", () => {
   it("preserves count when platform returns null viewer count", async () => {
     process.env.NODE_ENV = "test";
     const platform = { getViewerCount: createMockFn().mockResolvedValue(null) };
-    const { ViewerCountSystem } = load("../../../src/utils/viewer-count.ts");
     const system = new ViewerCountSystem({
       platforms: { youtube: platform },
       logger: noOpLogger,
@@ -137,7 +138,6 @@ describe("ViewerCountSystem polling observer notifications", () => {
     const platform = {
       getViewerCount: createMockFn().mockRejectedValue(new Error("boom")),
     };
-    const { ViewerCountSystem } = load("../../../src/utils/viewer-count.ts");
     const system = new ViewerCountSystem({
       platforms: { youtube: platform },
       logger: noOpLogger,

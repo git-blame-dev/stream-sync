@@ -19,10 +19,70 @@ import {
 } from "../../helpers/mock-factories";
 import { createConfigFixture } from "../../helpers/config-fixture";
 import testClock from "../../helpers/test-clock";
+
+type ViewerCountUpdate = {
+  platform: string;
+  count: number;
+  previousCount: number;
+  isStreamLive: boolean;
+  timestamp: Date;
+};
+
+type StreamStatusUpdate = {
+  platform: string;
+  isLive: boolean;
+  wasLive: boolean;
+  timestamp: Date;
+};
+
+type MockViewerCountObserver = {
+  observerId: string;
+  receivedUpdates: ViewerCountUpdate[];
+  statusChanges: StreamStatusUpdate[];
+  initializationCompleted: boolean;
+  cleanupCompleted: boolean;
+  getObserverId: () => string;
+  onViewerCountUpdate: (update: ViewerCountUpdate) => Promise<unknown>;
+  onStreamStatusChange: (statusUpdate: StreamStatusUpdate) => Promise<unknown>;
+  initialize: () => Promise<unknown>;
+  cleanup: () => Promise<unknown>;
+};
+
+type MockObserverBehaviorOverrides = Partial<{
+  onUpdate: (update: ViewerCountUpdate) => Promise<unknown> | unknown;
+  onStatusChange: (statusUpdate: StreamStatusUpdate) => Promise<unknown> | unknown;
+  onInitialize: () => Promise<unknown> | unknown;
+  onCleanup: () => Promise<unknown> | unknown;
+}>;
+
+type MockPlatformConfig = Partial<{
+  initialViewerCount: number;
+  viewerCountSequence: number[];
+  failAfterCalls: number | null;
+  failureMessage: string;
+}>;
+
+type ViewerCountPlatformName = "tiktok" | "twitch" | "youtube";
+
+type MockViewerCountPlatform = {
+  platformName: string;
+  isConnected: boolean;
+  connectionState: string;
+  getViewerCount: () => Promise<number>;
+  setViewerCount: (count: number) => void;
+  getCallCount: () => number;
+};
+
+type ViewerCountEnvironmentConfig = {
+  pollingInterval?: number;
+  platforms?: ViewerCountPlatformName[];
+  initialStreamStatus?: Partial<Record<ViewerCountPlatformName, boolean>>;
+} & Partial<Record<ViewerCountPlatformName, MockPlatformConfig>>;
+
 const createMockViewerCountObserver = (
   observerId = "testObserver",
-  behaviorOverrides = {},
-) => {
+  behaviorOverrides: MockObserverBehaviorOverrides = {},
+): MockViewerCountObserver => {
   return {
     observerId,
     receivedUpdates: [],
@@ -34,18 +94,20 @@ const createMockViewerCountObserver = (
       return this.observerId;
     },
 
-    async onViewerCountUpdate(update) {
+    async onViewerCountUpdate(update: ViewerCountUpdate) {
       this.receivedUpdates.push(update);
       if (behaviorOverrides.onUpdate) {
         return await behaviorOverrides.onUpdate(update);
       }
+      return undefined;
     },
 
-    async onStreamStatusChange(statusUpdate) {
+    async onStreamStatusChange(statusUpdate: StreamStatusUpdate) {
       this.statusChanges.push(statusUpdate);
       if (behaviorOverrides.onStatusChange) {
         return await behaviorOverrides.onStatusChange(statusUpdate);
       }
+      return undefined;
     },
 
     async initialize() {
@@ -53,6 +115,7 @@ const createMockViewerCountObserver = (
       if (behaviorOverrides.onInitialize) {
         return await behaviorOverrides.onInitialize();
       }
+      return undefined;
     },
 
     async cleanup() {
@@ -60,14 +123,15 @@ const createMockViewerCountObserver = (
       if (behaviorOverrides.onCleanup) {
         return await behaviorOverrides.onCleanup();
       }
+      return undefined;
     },
   };
 };
 
 const createMockPlatformWithViewerCount = (
   platformName = "tiktok",
-  config = {},
-) => {
+  config: MockPlatformConfig = {},
+): MockViewerCountPlatform => {
   const {
     initialViewerCount = 100,
     viewerCountSequence = [],
@@ -90,7 +154,7 @@ const createMockPlatformWithViewerCount = (
       }
       if (viewerCountSequence.length > 0) {
         const index = Math.min(callCount - 1, viewerCountSequence.length - 1);
-        return viewerCountSequence[index];
+        return viewerCountSequence[index] ?? currentViewerCount;
       }
       return currentViewerCount;
     },
@@ -110,14 +174,16 @@ const buildConfig = (pollingIntervalMs = 60000) =>
     general: { viewerCountPollingIntervalMs: pollingIntervalMs },
   });
 
-const createViewerCountTestEnvironment = (envConfig = {}) => {
+const createViewerCountTestEnvironment = (
+  envConfig: ViewerCountEnvironmentConfig = {},
+) => {
   const {
     pollingInterval = 1,
     platforms = ["tiktok", "twitch", "youtube"],
     initialStreamStatus = { tiktok: true, twitch: true, youtube: false },
   } = envConfig;
 
-  const mockPlatforms = {};
+  const mockPlatforms: Record<string, MockViewerCountPlatform> = {};
   platforms.forEach((platformName) => {
     mockPlatforms[platformName] = createMockPlatformWithViewerCount(
       platformName,
@@ -143,7 +209,11 @@ const createViewerCountTestEnvironment = (envConfig = {}) => {
   };
 };
 
-const expectValidViewerCountUpdate = (update) => {
+const expectValidViewerCountUpdate = (update: ViewerCountUpdate | undefined) => {
+  expect(update).toBeDefined();
+  if (!update) {
+    throw new Error("Expected viewer count update");
+  }
   expect(update).toHaveProperty("platform");
   expect(update).toHaveProperty("count");
   expect(update).toHaveProperty("previousCount");
@@ -159,7 +229,13 @@ const expectValidViewerCountUpdate = (update) => {
   expect(update.platform).not.toMatch(/\bmock\b|\btest\b|\bfake\b/i);
 };
 
-const expectValidStreamStatusChange = (statusUpdate) => {
+const expectValidStreamStatusChange = (
+  statusUpdate: StreamStatusUpdate | undefined,
+) => {
+  expect(statusUpdate).toBeDefined();
+  if (!statusUpdate) {
+    throw new Error("Expected stream status update");
+  }
   expect(statusUpdate).toHaveProperty("platform");
   expect(statusUpdate).toHaveProperty("isLive");
   expect(statusUpdate).toHaveProperty("wasLive");
@@ -281,8 +357,8 @@ describe("ViewerCountSystem - Comprehensive Behavior Tests", () => {
 
       expectValidViewerCountUpdate(update1);
       expectValidViewerCountUpdate(update2);
-      expect(update1.count).toBe(100);
-      expect(update2.count).toBe(100);
+      expect(update1!.count).toBe(100);
+      expect(update2!.count).toBe(100);
     });
 
     test("should handle observer registration and removal during operation", () => {
@@ -335,7 +411,13 @@ describe("ViewerCountSystem - Comprehensive Behavior Tests", () => {
         /* missing getObserverId */
       };
 
-      expect(() => system.addObserver(invalidObserver)).toThrow(
+      expect(() =>
+        system.addObserver(
+          invalidObserver as unknown as Parameters<
+            ViewerCountSystem["addObserver"]
+          >[0],
+        ),
+      ).toThrow(
         "Observer must implement getObserverId() method",
       );
     });
@@ -349,8 +431,8 @@ describe("ViewerCountSystem - Comprehensive Behavior Tests", () => {
 
       system.startPolling();
       advanceTimersByTime(2);
-      expect(mockPlatforms.tiktok.getCallCount()).toBeGreaterThan(0);
-      expect(mockPlatforms.twitch.getCallCount()).toBeGreaterThan(0);
+      expect(mockPlatforms.tiktok!.getCallCount()).toBeGreaterThan(0);
+      expect(mockPlatforms.twitch!.getCallCount()).toBeGreaterThan(0);
     });
 
     test("should skip polling for offline platforms", async () => {
@@ -360,9 +442,9 @@ describe("ViewerCountSystem - Comprehensive Behavior Tests", () => {
       });
       system.startPolling();
       advanceTimersByTime(2);
-      expect(mockPlatforms.youtube.getCallCount()).toBe(0);
-      expect(mockPlatforms.tiktok.getCallCount()).toBeGreaterThan(0);
-      expect(mockPlatforms.twitch.getCallCount()).toBeGreaterThan(0);
+      expect(mockPlatforms.youtube!.getCallCount()).toBe(0);
+      expect(mockPlatforms.tiktok!.getCallCount()).toBeGreaterThan(0);
+      expect(mockPlatforms.twitch!.getCallCount()).toBeGreaterThan(0);
     });
 
     test("should detect viewer count changes and notify observers", async () => {
@@ -440,9 +522,9 @@ describe("ViewerCountSystem - Comprehensive Behavior Tests", () => {
       expect(observer.statusChanges).toHaveLength(1);
       const statusChange = observer.statusChanges[0];
       expectValidStreamStatusChange(statusChange);
-      expect(statusChange.platform).toBe("youtube");
-      expect(statusChange.isLive).toBe(true);
-      expect(statusChange.wasLive).toBe(false);
+      expect(statusChange!.platform).toBe("youtube");
+      expect(statusChange!.isLive).toBe(true);
+      expect(statusChange!.wasLive).toBe(false);
     });
 
     test("should handle rapid status change scenarios", async () => {
@@ -463,8 +545,8 @@ describe("ViewerCountSystem - Comprehensive Behavior Tests", () => {
       await system.updateStreamStatus("tiktok", false);
       expect(system.counts.tiktok).toBe(0);
       expect(observer.receivedUpdates).toHaveLength(1);
-      expect(observer.receivedUpdates[0].count).toBe(0);
-      expect(observer.receivedUpdates[0].previousCount).toBe(500);
+      expect(observer.receivedUpdates[0]!.count).toBe(0);
+      expect(observer.receivedUpdates[0]!.previousCount).toBe(500);
     });
   });
 
@@ -474,11 +556,15 @@ describe("ViewerCountSystem - Comprehensive Behavior Tests", () => {
       const observer = createMockViewerCountObserver("change-detector");
       system.addObserver(observer);
       const previousCount = system.counts.tiktok;
+      expect(previousCount).toBeDefined();
+      if (previousCount === undefined) {
+        throw new Error("Expected previous tiktok count");
+      }
       await system.notifyObservers("tiktok", 250, previousCount);
       const update = observer.receivedUpdates[0];
-      expect(update.count).toBe(250);
-      expect(update.previousCount).toBe(0);
-      expect(update.count - update.previousCount).toBe(250);
+      expect(update!.count).toBe(250);
+      expect(update!.previousCount).toBe(0);
+      expect(update!.count - update!.previousCount).toBe(250);
     });
 
     test("should provide previous count context in notifications", async () => {
@@ -488,8 +574,8 @@ describe("ViewerCountSystem - Comprehensive Behavior Tests", () => {
       system.counts.twitch = 100;
       await system.notifyObservers("twitch", 150, 100);
       const update = observer.receivedUpdates[0];
-      expect(update.previousCount).toBe(100);
-      expect(update.count).toBe(150);
+      expect(update!.previousCount).toBe(100);
+      expect(update!.count).toBe(150);
     });
 
     test("should track viewer count history accurately", async () => {
@@ -503,14 +589,14 @@ describe("ViewerCountSystem - Comprehensive Behavior Tests", () => {
       await system.notifyObservers("tiktok", 90, 120);
       await system.notifyObservers("tiktok", 110, 90);
       expect(observer.receivedUpdates.length).toBe(4);
-      expect(observer.receivedUpdates[0].count).toBe(100);
-      expect(observer.receivedUpdates[0].previousCount).toBe(0);
-      expect(observer.receivedUpdates[1].count).toBe(120);
-      expect(observer.receivedUpdates[1].previousCount).toBe(100);
-      expect(observer.receivedUpdates[2].count).toBe(90);
-      expect(observer.receivedUpdates[2].previousCount).toBe(120);
-      expect(observer.receivedUpdates[3].count).toBe(110);
-      expect(observer.receivedUpdates[3].previousCount).toBe(90);
+      expect(observer.receivedUpdates[0]!.count).toBe(100);
+      expect(observer.receivedUpdates[0]!.previousCount).toBe(0);
+      expect(observer.receivedUpdates[1]!.count).toBe(120);
+      expect(observer.receivedUpdates[1]!.previousCount).toBe(100);
+      expect(observer.receivedUpdates[2]!.count).toBe(90);
+      expect(observer.receivedUpdates[2]!.previousCount).toBe(120);
+      expect(observer.receivedUpdates[3]!.count).toBe(110);
+      expect(observer.receivedUpdates[3]!.previousCount).toBe(90);
     }, 10000);
 
     test("should handle viewer count edge cases (zero, very large numbers)", async () => {
@@ -520,8 +606,8 @@ describe("ViewerCountSystem - Comprehensive Behavior Tests", () => {
       await system.notifyObservers("tiktok", 0, 100);
       await system.notifyObservers("tiktok", 999999, 0);
       expect(observer.receivedUpdates).toHaveLength(2);
-      expect(observer.receivedUpdates[0].count).toBe(0);
-      expect(observer.receivedUpdates[1].count).toBe(999999);
+      expect(observer.receivedUpdates[0]!.count).toBe(0);
+      expect(observer.receivedUpdates[1]!.count).toBe(999999);
     });
 
     test("should handle negative viewer counts gracefully", async () => {
@@ -530,7 +616,7 @@ describe("ViewerCountSystem - Comprehensive Behavior Tests", () => {
       system.addObserver(observer);
       await system.notifyObservers("tiktok", -1, 100);
       expect(observer.receivedUpdates).toHaveLength(1);
-      expect(observer.receivedUpdates[0].count).toBe(-1);
+      expect(observer.receivedUpdates[0]!.count).toBe(-1);
     });
   });
 
@@ -546,7 +632,7 @@ describe("ViewerCountSystem - Comprehensive Behavior Tests", () => {
       advanceTimersByTime(10);
       await Promise.resolve();
       expect(system.isPolling).toBe(true);
-      expect(mockPlatforms.twitch.getCallCount()).toBeGreaterThan(0);
+      expect(mockPlatforms.twitch!.getCallCount()).toBeGreaterThan(0);
     }, 10000);
 
     test("should handle platform API timeouts gracefully", async () => {
@@ -567,8 +653,8 @@ describe("ViewerCountSystem - Comprehensive Behavior Tests", () => {
         pollingInterval: 1,
       });
       let failureCount = 0;
-      const originalGetViewerCount = mockPlatforms.tiktok.getViewerCount;
-      mockPlatforms.tiktok.getViewerCount = async function () {
+      const originalGetViewerCount = mockPlatforms.tiktok!.getViewerCount;
+      mockPlatforms.tiktok!.getViewerCount = async function () {
         failureCount++;
         if (failureCount <= 2) {
           throw new Error("Network error");
@@ -746,7 +832,7 @@ describe("ViewerCountSystem - Comprehensive Behavior Tests", () => {
 
     test("should maintain performance with many registered observers", async () => {
       const { system } = createViewerCountTestEnvironment();
-      const observers = [];
+      const observers: MockViewerCountObserver[] = [];
       for (let i = 0; i < 50; i++) {
         const observer = createMockViewerCountObserver(`perf-observer-${i}`);
         observers.push(observer);
@@ -783,7 +869,7 @@ describe("ViewerCountSystem - Comprehensive Behavior Tests", () => {
     test("should scale observer notifications efficiently", async () => {
       const { system } = createViewerCountTestEnvironment();
       const testSizes = [1, 10, 25, 50];
-      const results = [];
+      const results: Array<{ size: number; duration: number }> = [];
       for (const size of testSizes) {
         system.observers.clear();
         for (let i = 0; i < size; i++) {
@@ -799,6 +885,11 @@ describe("ViewerCountSystem - Comprehensive Behavior Tests", () => {
       }
       const firstResult = results[0];
       const lastResult = results[results.length - 1];
+      expect(firstResult).toBeDefined();
+      expect(lastResult).toBeDefined();
+      if (!firstResult || !lastResult) {
+        throw new Error("Expected scalability results");
+      }
       const scaleFactor =
         firstResult.duration > 0
           ? lastResult.duration / firstResult.duration
@@ -812,7 +903,10 @@ describe("ViewerCountSystem - Comprehensive Behavior Tests", () => {
       const { system, mockPlatforms } = createViewerCountTestEnvironment();
       const validation = system.validatePlatformForPolling("tiktok");
       expect(validation.valid).toBe(true);
-      expect(validation.platform).toBe(mockPlatforms.tiktok);
+      if (!validation.valid) {
+        throw new Error("Expected tiktok platform to be valid for polling");
+      }
+      expect(validation.platform).toBe(mockPlatforms.tiktok!);
     });
 
     test("should handle empty platform registry properly", () => {
@@ -830,8 +924,8 @@ describe("ViewerCountSystem - Comprehensive Behavior Tests", () => {
       system.addObserver(observer);
       await system.updateStreamStatus("youtube", true);
       expect(observer.statusChanges).toHaveLength(1);
-      expect(observer.statusChanges[0].platform).toBe("youtube");
-      expect(observer.statusChanges[0].isLive).toBe(true);
+      expect(observer.statusChanges[0]!.platform).toBe("youtube");
+      expect(observer.statusChanges[0]!.isLive).toBe(true);
     });
 
     test("should maintain proper state during app lifecycle events", async () => {

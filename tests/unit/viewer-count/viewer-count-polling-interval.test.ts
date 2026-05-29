@@ -1,19 +1,11 @@
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { createRequire } from "node:module";
+import { describe, test, expect, afterEach } from "bun:test";
 
 import { restoreAllMocks } from "../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../helpers/mock-factories";
 import { createConfigFixture } from "../../helpers/config-fixture";
-
-const load = createRequire(import.meta.url);
+import { ViewerCountSystem } from "../../../src/utils/viewer-count";
 
 describe("ViewerCountSystem polling interval validation", () => {
-  let ViewerCountSystem;
-
-  beforeEach(() => {
-    ({ ViewerCountSystem } = load("../../../src/utils/viewer-count.ts"));
-  });
-
   afterEach(() => {
     restoreAllMocks();
   });

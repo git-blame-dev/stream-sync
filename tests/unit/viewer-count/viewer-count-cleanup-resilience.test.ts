@@ -1,18 +1,10 @@
-import { describe, expect, afterEach, it, beforeEach } from "bun:test";
-import { createRequire } from "node:module";
+import { describe, expect, afterEach, it } from "bun:test";
 
 import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../helpers/mock-factories";
-
-const load = createRequire(import.meta.url);
+import { ViewerCountSystem } from "../../../src/utils/viewer-count";
 
 describe("ViewerCountSystem cleanup resilience", () => {
-  let ViewerCountSystem;
-
-  beforeEach(() => {
-    ({ ViewerCountSystem } = load("../../../src/utils/viewer-count.ts"));
-  });
-
   afterEach(() => {
     restoreAllMocks();
   });
