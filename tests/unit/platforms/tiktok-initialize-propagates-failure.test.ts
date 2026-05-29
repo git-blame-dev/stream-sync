@@ -6,54 +6,58 @@ import { EventEmitter } from "events";
 import { TikTokPlatform } from "../../../src/platforms/tiktok";
 import { createMockTikTokPlatformDependencies } from "../../helpers/mock-factories";
 
+type TikTokDependencies = NonNullable<ConstructorParameters<typeof TikTokPlatform>[1]>;
+type TikTokWebcastEvent = NonNullable<TikTokDependencies["WebcastEvent"]>;
+
+class FailingTikTokConnection extends EventEmitter {
+  isConnecting = false;
+  isConnected = false;
+  connect = createMockFn<[], Promise<unknown>>().mockRejectedValue(
+    new Error("room id failure"),
+  );
+  disconnect = createMockFn<[], Promise<unknown>>().mockResolvedValue(undefined);
+}
+
+const WEBCAST_EVENT = {
+  CHAT: "chat",
+  GIFT: "gift",
+  FOLLOW: "follow",
+  ROOM_USER: "roomUser",
+  ENVELOPE: "envelope",
+  SUBSCRIBE: "subscribe",
+  SUPER_FAN: "superfan",
+  SOCIAL: "social",
+  ERROR: "error",
+  DISCONNECT: "disconnect",
+  STREAM_END: "stream_end",
+} satisfies TikTokWebcastEvent;
+
 describe("TikTokPlatform initialize failure propagation", () => {
   afterEach(() => {
     restoreAllMocks();
   });
 
   it("rejects initialize when the initial connection attempt fails", async () => {
-    const failingConnection = new EventEmitter();
-    failingConnection.isConnecting = false;
-    failingConnection.isConnected = false;
-    failingConnection.connect = createMockFn().mockRejectedValue(
-      new Error("room id failure"),
-    );
-    failingConnection.disconnect = createMockFn().mockResolvedValue();
+    const failingConnection = new FailingTikTokConnection();
 
-    const dependencies = createMockTikTokPlatformDependencies({
-      controlEvent: {
-        CONNECTED: "connected",
-        DISCONNECTED: "disconnected",
-        ERROR: "error",
+    const dependencies = {
+      ...createMockTikTokPlatformDependencies({
+        controlEvent: {
+          CONNECTED: "connected",
+          DISCONNECTED: "disconnected",
+          ERROR: "error",
+        },
+      }),
+      WebcastEvent: WEBCAST_EVENT,
+      connectionFactory: {
+        createConnection: createMockFn().mockReturnValue(failingConnection),
       },
-      webcastEvent: {
-        CHAT: "chat",
-        GIFT: "gift",
-        FOLLOW: "follow",
-        ROOM_USER: "roomUser",
-        ENVELOPE: "envelope",
-        SUBSCRIBE: "subscribe",
-        SUPER_FAN: "superfan",
-        LIKE: "like",
-        SOCIAL: "social",
-        SHARE: "share",
-        MEMBER: "member",
-        EMOTE: "emote",
-        QUESTION_NEW: "question",
-        ERROR: "error",
-        DISCONNECT: "disconnect",
-        STREAM_END: "stream_end",
+      retrySystem: {
+        handleConnectionError: createMockFn(),
+        resetRetryCount: createMockFn(),
+        isConnected: createMockFn(),
       },
-    });
-
-    dependencies.connectionFactory = {
-      createConnection: createMockFn().mockReturnValue(failingConnection),
-    };
-    dependencies.retrySystem = {
-      handleConnectionError: createMockFn().mockResolvedValue(),
-      resetRetryCount: createMockFn(),
-      isConnected: createMockFn(),
-    };
+    } satisfies ConstructorParameters<typeof TikTokPlatform>[1];
 
     const platform = new TikTokPlatform(
       { enabled: true, username: "retry_tester" },

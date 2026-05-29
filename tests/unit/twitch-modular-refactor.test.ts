@@ -224,7 +224,11 @@ describe("TwitchPlatform Modular Refactor", () => {
         await apiClient.makeRequest("/test");
 
         expect(mockHttpClient.get).toHaveBeenCalledTimes(1);
-        const [requestUrl, requestConfig] = mockHttpClient.get.mock.calls[0];
+        const getCall = mockHttpClient.get.mock.calls[0];
+        if (!getCall) {
+          throw new Error("Expected Twitch API request to be recorded");
+        }
+        const [requestUrl, requestConfig] = getCall;
         expect(requestUrl).toBe("https://api.twitch.tv/helix/test");
         expect(requestConfig).toEqual(
           expect.objectContaining({

@@ -6,28 +6,50 @@ import {
 } from "../../helpers/mock-factories";
 import { TikTokPlatform } from "../../../src/platforms/tiktok";
 
+type EmittedPlatformEvent = {
+  event: string;
+  data: { type?: string; data?: { isLive?: boolean; willReconnect?: boolean } };
+};
+type TikTokPlatformConfig = ConstructorParameters<typeof TikTokPlatform>[0];
+type TikTokPlatformDependencies = NonNullable<ConstructorParameters<typeof TikTokPlatform>[1]>;
+type TikTokWebcastEvent = NonNullable<TikTokPlatformDependencies["WebcastEvent"]>;
+
+const WEBCAST_EVENT = {
+  CHAT: "chat",
+  GIFT: "gift",
+  FOLLOW: "follow",
+  SOCIAL: "social",
+  ROOM_USER: "roomUser",
+  ERROR: "error",
+  DISCONNECT: "disconnect",
+} satisfies TikTokWebcastEvent;
+
 describe("TikTokPlatform connection lifecycle", () => {
   afterEach(() => {
     restoreAllMocks();
   });
 
-  const createPlatform = (configOverrides = {}, dependencyOverrides = {}) => {
+  const createPlatform = (
+    configOverrides: Partial<TikTokPlatformConfig> = {},
+    dependencyOverrides: Partial<TikTokPlatformDependencies> = {},
+  ) => {
     const config = { enabled: true, username: "testuser", ...configOverrides };
     const dependencies = createMockTikTokPlatformDependencies();
     dependencies.logger = noOpLogger;
 
     // Track emitted platform events
-    const emittedEvents = [];
+    const emittedEvents: EmittedPlatformEvent[] = [];
     const originalEmit = TikTokPlatform.prototype.emit;
 
     return {
       platform: new TikTokPlatform(config, {
         ...dependencies,
         ...dependencyOverrides,
+        WebcastEvent: WEBCAST_EVENT,
       }),
       emittedEvents,
-      captureEvents: (platform) => {
-        platform.emit = function (event, data) {
+      captureEvents: (platform: TikTokPlatform) => {
+        platform.emit = function (event: string, data: EmittedPlatformEvent["data"]) {
           emittedEvents.push({ event, data });
           return originalEmit.call(this, event, data);
         };

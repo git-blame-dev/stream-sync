@@ -18,6 +18,19 @@ import {
 } from "../../../../helpers/mock-factories";
 import * as testClock from "../../../../helpers/test-clock";
 
+type TikTokDependencies = NonNullable<ConstructorParameters<typeof TikTokPlatform>[1]>;
+type TikTokWebcastEvent = NonNullable<TikTokDependencies["WebcastEvent"]>;
+
+const WEBCAST_EVENT = {
+  CHAT: "chat",
+  GIFT: "gift",
+  FOLLOW: "follow",
+  SOCIAL: "social",
+  ROOM_USER: "roomUser",
+  ERROR: "error",
+  DISCONNECT: "disconnect",
+} satisfies TikTokWebcastEvent;
+
 describe("TikTok social filtering", () => {
   afterEach(() => {
     restoreAllMocks();
@@ -25,26 +38,25 @@ describe("TikTok social filtering", () => {
 
   const baseConfig = { enabled: true, username: "social_tester" };
 
-  const createPlatform = () =>
-    new TikTokPlatform(baseConfig, {
+  const createPlatform = () => {
+    const dependencies = {
       ...createMockTikTokPlatformDependencies(),
       logger: noOpLogger,
       connectionFactory: { createConnection: createMockFn() },
-      timestampService: {
-        extractTimestamp: createMockFn(() =>
-          new Date(testClock.now()).toISOString(),
-        ),
-      },
-    });
+      WebcastEvent: WEBCAST_EVENT,
+    } satisfies ConstructorParameters<typeof TikTokPlatform>[1];
+
+    return new TikTokPlatform(baseConfig, dependencies);
+  };
 
   test.skipIf(isPreloadMocked)(
     "ignores social actions that are not follow/share",
     async () => {
       const platform = createPlatform();
-      const interactions = [];
+      const interactions: unknown[] = [];
       platform.handlers = {
         ...platform.handlers,
-        onInteraction: (data) => interactions.push(data),
+        onInteraction: (data: unknown) => interactions.push(data),
       };
 
       await platform.handleTikTokSocial({

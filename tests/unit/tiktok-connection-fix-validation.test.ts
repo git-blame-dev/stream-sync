@@ -3,6 +3,32 @@ import { EventEmitter } from "events";
 import { noOpLogger } from "../helpers/mock-factories";
 import { TikTokPlatform } from "../../src/platforms/tiktok";
 
+type TikTokDependencies = NonNullable<ConstructorParameters<typeof TikTokPlatform>[1]>;
+type TikTokWebcastEvent = NonNullable<TikTokDependencies["WebcastEvent"]>;
+
+const WEBCAST_EVENT = {
+  CHAT: "chat",
+  GIFT: "gift",
+  FOLLOW: "follow",
+  SOCIAL: "social",
+  ROOM_USER: "roomUser",
+  ERROR: "error",
+  DISCONNECT: "disconnect",
+} satisfies TikTokWebcastEvent;
+
+function hasRequiredConnectionMethods(
+  connection: unknown,
+): connection is { connect: () => Promise<unknown>; disconnect: () => Promise<unknown> } {
+  return (
+    typeof connection === "object" &&
+    connection !== null &&
+    "connect" in connection &&
+    typeof connection.connect === "function" &&
+    "disconnect" in connection &&
+    typeof connection.disconnect === "function"
+  );
+}
+
 describe("TikTok Connection State Management", () => {
   let platform: InstanceType<typeof TikTokPlatform>;
 
@@ -39,49 +65,16 @@ describe("TikTok Connection State Management", () => {
 
     const deps = {
       logger: noOpLogger,
-      connectionStateManager: {
-        initialize: () => {},
-        markDisconnected: () => {},
-        markConnecting: () => {},
-        markConnected: () => {},
-        markError: () => {},
-        ensureConnection: () => mockConnection,
-        getState: () => "disconnected",
-        isConnected: () => false,
-        getConnectionInfo: () => ({
-          platform: "tiktok",
-          state: "disconnected",
-          hasConnection: false,
-        }),
-      },
       connectionFactory: {
         createConnection: () => mockConnection,
-      },
-      intervalManager: {
-        createInterval: () => {},
-        hasInterval: () => false,
-        clearInterval: () => {},
-        clearAllIntervals: () => {},
       },
       retrySystem: {
         resetRetryCount: () => {},
         handleConnectionError: () => {},
       },
       TikTokWebSocketClient: class {},
-      WebcastEvent: {},
+      WebcastEvent: WEBCAST_EVENT,
       ControlEvent: { CONNECTED: "connected" },
-      initializationManager: {
-        beginInitialization: () => true,
-        markInitializationSuccess: () => {},
-        markInitializationFailure: () => {},
-        reset: () => {},
-      },
-      initializationStats: {
-        startInitializationAttempt: () => "test-attempt",
-        recordSuccess: () => {},
-        recordFailure: () => {},
-        reset: () => {},
-      },
     };
 
     return new TikTokPlatform(config, deps);
@@ -119,9 +112,17 @@ describe("TikTok Connection State Management", () => {
   test("connectionFactory creates connection with required methods", () => {
     platform = buildPlatform();
 
-    const connection = platform.connectionFactory.createConnection();
+    const connection = platform.connectionFactory.createConnection(
+      "tiktok",
+      { username: "testTikTokUser" },
+      {},
+    );
 
     expect(connection).not.toBeNull();
+    expect(hasRequiredConnectionMethods(connection)).toBe(true);
+    if (!hasRequiredConnectionMethods(connection)) {
+      throw new Error("Expected TikTok connection with required methods");
+    }
     expect(typeof connection.connect).toBe("function");
     expect(typeof connection.disconnect).toBe("function");
   });

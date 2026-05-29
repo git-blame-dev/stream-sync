@@ -3,6 +3,19 @@ import { createMockFn } from "../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../helpers/mock-factories";
 import { TikTokPlatform } from "../../../src/platforms/tiktok";
 
+type TikTokDependencies = NonNullable<ConstructorParameters<typeof TikTokPlatform>[1]>;
+type TikTokWebcastEvent = NonNullable<TikTokDependencies["WebcastEvent"]>;
+
+const WEBCAST_EVENT = {
+  CHAT: "chat",
+  GIFT: "gift",
+  FOLLOW: "follow",
+  SOCIAL: "social",
+  ROOM_USER: "roomUser",
+  ERROR: "error",
+  DISCONNECT: "disconnect",
+} satisfies TikTokWebcastEvent;
+
 type MessageError = {
   message?: string;
 };
@@ -14,7 +27,7 @@ describe("TikTok Error Message Handling", () => {
 
     expect(() => {
       if (errorMessage && errorMessage.includes("TLS")) {
-        return true;
+        !!errorMessage;
       }
     }).not.toThrow();
   });
@@ -30,23 +43,14 @@ describe("TikTok Error Message Handling", () => {
     const platform = new TikTokPlatform(
       { enabled: true, username: "testUser" },
       {
-        WebcastPushConnection: createMockFn(() => mockConnection),
-        WebcastEvent: {
-          GIFT: "gift",
-          ERROR: "error",
-          DISCONNECT: "disconnect",
-        },
+        WebcastEvent: WEBCAST_EVENT,
         ControlEvent: {},
         TikTokWebSocketClient: createMockFn(() => mockConnection),
         logger: noOpLogger,
         retrySystem: {
           resetRetryCount: createMockFn(),
           handleConnectionError: createMockFn(),
-          handleConnectionSuccess: createMockFn(),
-          incrementRetryCount: createMockFn(),
-          executeWithRetry: createMockFn(),
         },
-        constants: { GRACE_PERIODS: { TIKTOK: 5000 } },
       },
     );
 

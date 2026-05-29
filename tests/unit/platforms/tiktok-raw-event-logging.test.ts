@@ -16,7 +16,18 @@ describe("TikTokPlatform raw event logging", () => {
       dataLoggingEnabled: false,
       ...configOverrides,
     };
-    const dependencies = createMockTikTokPlatformDependencies();
+    const dependencies = {
+      ...createMockTikTokPlatformDependencies(),
+      WebcastEvent: {
+        CHAT: "chat",
+        GIFT: "gift",
+        FOLLOW: "follow",
+        SOCIAL: "social",
+        ROOM_USER: "roomUser",
+        ERROR: "error",
+        DISCONNECT: "disconnect",
+      },
+    } satisfies ConstructorParameters<typeof TikTokPlatform>[1];
     return new TikTokPlatform(config, dependencies);
   };
 

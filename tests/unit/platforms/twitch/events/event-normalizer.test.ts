@@ -16,7 +16,7 @@ describe("twitch event timestamp normalization", () => {
     );
 
     expect(result.timestamp).toBe("2024-01-01T00:00:00.987Z");
-    expect(event.timestamp).toBeUndefined();
+    expect("timestamp" in event).toBe(false);
   });
 
   test("keeps chat body message id when envelope metadata id is also present", () => {

@@ -12,7 +12,23 @@ const {
 } = require("../../../../helpers/bun-timers");
 import { TikTokPlatform } from "../../../../../src/platforms/tiktok.ts";
 
-const createPlatform = (configOverrides = {}, dependencyOverrides = {}) => {
+type TikTokPlatformConfig = ConstructorParameters<typeof TikTokPlatform>[0];
+type TikTokPlatformDependencies = ConstructorParameters<typeof TikTokPlatform>[1];
+
+const defaultWebcastEvent = {
+  CHAT: "chat",
+  GIFT: "gift",
+  FOLLOW: "follow",
+  SOCIAL: "social",
+  ROOM_USER: "roomUser",
+  ERROR: "error",
+  DISCONNECT: "disconnect",
+};
+
+const createPlatform = (
+  configOverrides: Partial<TikTokPlatformConfig> = {},
+  dependencyOverrides: TikTokPlatformDependencies = {},
+) => {
   const logger = dependencyOverrides.logger || noOpLogger;
   const notificationManager = dependencyOverrides.notificationManager || {
     emit: createMockFn(),
@@ -42,10 +58,7 @@ const createPlatform = (configOverrides = {}, dependencyOverrides = {}) => {
       isConnected: false,
     }));
 
-  const WebcastEvent = dependencyOverrides.WebcastEvent || {
-    ERROR: "error",
-    DISCONNECT: "disconnect",
-  };
+  const WebcastEvent = dependencyOverrides.WebcastEvent || defaultWebcastEvent;
   const ControlEvent = dependencyOverrides.ControlEvent || {};
 
   const config = {

@@ -15,6 +15,7 @@ setupAutomatedCleanup({
 });
 
 const TEST_TIMESTAMP = 1234567890000;
+const INTEGRATION_TIMEOUT_MS = TEST_TIMEOUTS.SLOW;
 
 describe("TikTok End-to-End Unknown User Fix Integration", () => {
   beforeEach(() => {
@@ -78,7 +79,7 @@ describe("TikTok End-to-End Unknown User Fix Integration", () => {
           expect(giftNotification.displayMessage).not.toContain("Unknown User");
           expect(giftNotification.displayMessage).not.toContain("unknown");
         },
-        { timeout: TEST_TIMEOUTS.INTEGRATION },
+        { timeout: INTEGRATION_TIMEOUT_MS },
       );
 
       test(
@@ -129,7 +130,7 @@ describe("TikTok End-to-End Unknown User Fix Integration", () => {
             "Unknown User",
           );
         },
-        { timeout: TEST_TIMEOUTS.INTEGRATION },
+        { timeout: INTEGRATION_TIMEOUT_MS },
       );
     });
   });
@@ -153,7 +154,7 @@ describe("TikTok End-to-End Unknown User Fix Integration", () => {
             "user.uniqueId and user.nickname",
           );
         },
-        { timeout: TEST_TIMEOUTS.INTEGRATION },
+        { timeout: INTEGRATION_TIMEOUT_MS },
       );
     });
   });

@@ -8,7 +8,7 @@ import { noOpLogger } from "../../../../helpers/mock-factories";
 import { TikTokPlatform } from "../../../../../src/platforms/tiktok.ts";
 
 describe("TikTok gift processing", () => {
-  let originalNodeEnv;
+  let originalNodeEnv: string | undefined;
 
   beforeEach(() => {
     originalNodeEnv = process.env.NODE_ENV;
@@ -16,11 +16,15 @@ describe("TikTok gift processing", () => {
   });
 
   afterEach(() => {
-    process.env.NODE_ENV = originalNodeEnv;
+    if (originalNodeEnv === undefined) {
+      delete process.env.NODE_ENV;
+    } else {
+      process.env.NODE_ENV = originalNodeEnv;
+    }
     restoreAllMocks();
   });
 
-  const buildGift = (overrides = {}) => ({
+  const buildGift = (overrides: Record<string, unknown> = {}) => ({
     platform: "tiktok",
     userId: "testTikTokUser1",
     username: "testUser1",
@@ -35,7 +39,7 @@ describe("TikTok gift processing", () => {
     ...overrides,
   });
 
-  const createPlatform = (options = {}) => {
+  const createPlatform = (options: { aggregationEnabled?: boolean } = {}) => {
     const platform = new TikTokPlatform(
       {
         enabled: true,
@@ -44,7 +48,15 @@ describe("TikTok gift processing", () => {
       },
       {
         TikTokWebSocketClient: createMockFn(() => ({})),
-        WebcastEvent: {},
+        WebcastEvent: {
+          CHAT: "chat",
+          GIFT: "gift",
+          FOLLOW: "follow",
+          SOCIAL: "social",
+          ROOM_USER: "roomUser",
+          ERROR: "error",
+          DISCONNECT: "disconnect",
+        },
         ControlEvent: {},
         logger: noOpLogger,
       },
@@ -60,7 +72,11 @@ describe("TikTok gift processing", () => {
 
   it("handles gift processing via aggregator without throwing", async () => {
     const { platform } = createPlatform({ aggregationEnabled: false });
-    const errorHandler = { handleEventProcessingError: createMockFn() };
+    const errorHandler = {
+      handleEventProcessingError: createMockFn(),
+      handleConnectionError: createMockFn(),
+      handleCleanupError: createMockFn(),
+    };
     platform.errorHandler = errorHandler;
 
     await expect(
@@ -82,7 +98,11 @@ describe("TikTok gift processing", () => {
 
   it("handles gift aggregation mode without throwing", async () => {
     const { platform } = createPlatform({ aggregationEnabled: true });
-    const errorHandler = { handleEventProcessingError: createMockFn() };
+    const errorHandler = {
+      handleEventProcessingError: createMockFn(),
+      handleConnectionError: createMockFn(),
+      handleCleanupError: createMockFn(),
+    };
     platform.errorHandler = errorHandler;
 
     await expect(
@@ -104,7 +124,11 @@ describe("TikTok gift processing", () => {
 
   it("processes gifts through platform handleStandardGift method", async () => {
     const { platform } = createPlatform({ aggregationEnabled: false });
-    const errorHandler = { handleEventProcessingError: createMockFn() };
+    const errorHandler = {
+      handleEventProcessingError: createMockFn(),
+      handleConnectionError: createMockFn(),
+      handleCleanupError: createMockFn(),
+    };
     platform.errorHandler = errorHandler;
 
     await expect(

@@ -23,9 +23,34 @@ const baseGiftPayload = {
   },
 };
 
-const normalizerOptions = {
-  getTimestamp: (payload) => new Date(payload.common.createTime).toISOString(),
-  getPlatformMessageId: (payload) => payload.common.msgId,
+type GiftPayloadCommon = {
+  createTime?: string | number | Date;
+  msgId?: string | number | null;
+};
+
+function hasGiftPayloadCommon(payload: unknown): payload is { common: GiftPayloadCommon } {
+  return (
+    typeof payload === "object" &&
+    payload !== null &&
+    "common" in payload &&
+    typeof payload.common === "object" &&
+    payload.common !== null
+  );
+}
+
+const normalizerOptions: Parameters<typeof normalizeTikTokGiftEvent>[1] = {
+  getTimestamp: (payload) => {
+    if (!hasGiftPayloadCommon(payload) || payload.common.createTime === undefined) {
+      return null;
+    }
+    return new Date(payload.common.createTime).toISOString();
+  },
+  getPlatformMessageId: (payload) => {
+    if (!hasGiftPayloadCommon(payload) || payload.common.msgId === undefined) {
+      return null;
+    }
+    return payload.common.msgId === null ? null : String(payload.common.msgId);
+  },
 };
 
 describe("normalizeTikTokGiftEvent", () => {

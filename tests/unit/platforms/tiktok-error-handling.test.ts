@@ -3,8 +3,27 @@ import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../helpers/mock-factories";
 import { TikTokPlatform } from "../../../src/platforms/tiktok";
 
+type TikTokConnection = NonNullable<InstanceType<typeof TikTokPlatform>["connection"]>;
+type TikTokDependencies = NonNullable<ConstructorParameters<typeof TikTokPlatform>[1]>;
+type TikTokWebcastEvent = NonNullable<TikTokDependencies["WebcastEvent"]>;
+type MockConnection = TikTokConnection & {
+  fetchIsLive: ReturnType<typeof createMockFn<[], Promise<boolean>>>;
+  waitUntilLive: ReturnType<typeof createMockFn<[], Promise<void>>>;
+  getState: ReturnType<typeof createMockFn<[], { isConnected: boolean }>>;
+};
+
+const WEBCAST_EVENT = {
+  CHAT: "chat",
+  GIFT: "gift",
+  FOLLOW: "follow",
+  SOCIAL: "social",
+  ROOM_USER: "roomUser",
+  ERROR: "error",
+  DISCONNECT: "disconnect",
+} satisfies TikTokWebcastEvent;
+
 describe("TikTokPlatform Error Handling", () => {
-  let mockConnection: Record<string, unknown>;
+  let mockConnection: MockConnection;
   let mockRetrySystem: {
     handleConnectionError: (err: unknown) => void;
     handleConnectionSuccess: ReturnType<typeof createMockFn>;
@@ -23,11 +42,14 @@ describe("TikTokPlatform Error Handling", () => {
   beforeEach(() => {
 
     mockConnection = {
-      connect: createMockFn(),
-      fetchIsLive: createMockFn(),
-      waitUntilLive: createMockFn(),
-      on: createMockFn(),
-      getState: createMockFn().mockReturnValue({ isConnected: false }),
+      connect: createMockFn<[], Promise<unknown>>().mockResolvedValue(undefined),
+      disconnect: createMockFn<[], Promise<unknown>>().mockResolvedValue(undefined),
+      fetchIsLive: createMockFn<[], Promise<boolean>>().mockResolvedValue(false),
+      waitUntilLive: createMockFn<[], Promise<void>>().mockResolvedValue(undefined),
+      on: createMockFn<[string, (payload: unknown) => void | Promise<void>], void>(),
+      getState: createMockFn<[], { isConnected: boolean }>().mockReturnValue({
+        isConnected: false,
+      }),
     };
 
     const retrySystemCalls: { handleConnectionError: unknown[] } = { handleConnectionError: [] };
@@ -50,8 +72,7 @@ describe("TikTokPlatform Error Handling", () => {
     baseDependencies = {
       logger: noOpLogger,
       retrySystem: mockRetrySystem,
-      WebcastPushConnection: createMockFn(() => mockConnection),
-      WebcastEvent: { GIFT: "gift", FOLLOW: "follow", CHAT: "chat" },
+      WebcastEvent: WEBCAST_EVENT,
       ControlEvent: {},
       TikTokWebSocketClient: createMockFn(() => mockConnection),
     };

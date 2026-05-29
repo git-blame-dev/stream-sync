@@ -4,8 +4,41 @@ const {
   createTikTokConnectionOrchestrator,
 } = require("../../../../../src/platforms/tiktok/connections/tiktok-connection-orchestrator.ts");
 
+type TestConnection = {
+  connect?: () => Promise<void>;
+  disconnect?: () => Promise<void>;
+  isConnecting: boolean;
+  isConnected: boolean;
+};
+
+type TestPlatform = {
+  logger: typeof noOpLogger;
+  config: { username: string };
+  connectingPromise: Promise<unknown> | null;
+  connectionActive: boolean;
+  retryLock: boolean;
+  connection: TestConnection | null;
+  listenersConfigured: boolean;
+  checkConnectionPrerequisites: () => { canConnect: boolean; reason?: string };
+  cleanupEventListeners: () => void;
+  setupEventListeners: () => void;
+  handleConnectionSuccess: () => Promise<void>;
+  handleConnectionError?: () => void;
+  cleanup: () => void;
+  connectionStateManager: {
+    markDisconnected: () => void;
+    markConnecting: () => void;
+    markError?: () => void;
+    ensureConnection: () => TestConnection;
+  };
+  errorHandler: {
+    handleConnectionError: () => void;
+    handleCleanupError: () => void;
+  };
+};
+
 describe("TikTok connection orchestrator", () => {
-  const buildPlatform = (overrides = {}) => ({
+  const buildPlatform = (overrides: Partial<TestPlatform> = {}): TestPlatform => ({
     logger: noOpLogger,
     config: { username: "testuser" },
     connectingPromise: null,
@@ -182,7 +215,6 @@ describe("TikTok connection orchestrator", () => {
 
   test("connect sets connection to null on error when handleConnectionError is missing", async () => {
     const platform = buildPlatform({
-      handleConnectionError: null,
       connectionStateManager: {
         markDisconnected: () => {},
         markConnecting: () => {},
@@ -196,6 +228,7 @@ describe("TikTok connection orchestrator", () => {
         }),
       },
     });
+    delete platform.handleConnectionError;
     const orchestrator = createTikTokConnectionOrchestrator({ platform });
 
     try {
@@ -211,7 +244,11 @@ describe("TikTok connection orchestrator", () => {
   test("disconnect sets connectionActive to false", async () => {
     const platform = buildPlatform({
       connectionActive: true,
-      connection: { disconnect: async () => {} },
+      connection: {
+        disconnect: async () => {},
+        isConnecting: false,
+        isConnected: true,
+      },
     });
     const orchestrator = createTikTokConnectionOrchestrator({ platform });
 
@@ -226,6 +263,8 @@ describe("TikTok connection orchestrator", () => {
         disconnect: async () => {
           throw new Error("disconnect error");
         },
+        isConnecting: false,
+        isConnected: true,
       },
     });
     const orchestrator = createTikTokConnectionOrchestrator({ platform });
