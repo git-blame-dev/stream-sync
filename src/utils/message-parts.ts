@@ -1,6 +1,7 @@
 type MessagePartsPayload = {
     message?: {
         parts?: unknown;
+        [key: string]: unknown;
     } | null;
 };
 

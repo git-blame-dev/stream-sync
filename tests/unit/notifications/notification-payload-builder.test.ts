@@ -3,9 +3,20 @@ import { NotificationBuilder } from "../../../src/utils/notification-builder.ts"
 
 import { NotificationPayloadBuilder } from "../../../src/notifications/notification-payload-builder";
 
+const createPayloadBuilder = () =>
+  new NotificationPayloadBuilder({
+    build(input) {
+      const notification = NotificationBuilder.build(input);
+      if (notification === null) {
+        throw new Error("NotificationBuilder.build returned null");
+      }
+      return notification;
+    },
+  });
+
 describe("NotificationPayloadBuilder", () => {
   it("strips internal fields and merges sourceType into metadata for non-monetization", () => {
-    const payloadBuilder = new NotificationPayloadBuilder(NotificationBuilder);
+    const payloadBuilder = createPayloadBuilder();
     const data = {
       type: "platform:follow",
       platform: "tiktok",
@@ -37,7 +48,7 @@ describe("NotificationPayloadBuilder", () => {
   });
 
   it("removes metadata and writes sourceType at top-level for monetization", () => {
-    const payloadBuilder = new NotificationPayloadBuilder(NotificationBuilder);
+    const payloadBuilder = createPayloadBuilder();
     const data = {
       type: "platform:gift",
       platform: "tiktok",
@@ -63,7 +74,7 @@ describe("NotificationPayloadBuilder", () => {
   });
 
   it("overwrites notification type with the canonical type", () => {
-    const payloadBuilder = new NotificationPayloadBuilder(NotificationBuilder);
+    const payloadBuilder = createPayloadBuilder();
     const data = {
       type: "platform:follow",
       platform: "tiktok",

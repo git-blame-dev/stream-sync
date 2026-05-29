@@ -845,9 +845,15 @@ describe("Message Normalization", () => {
         followRole: null,
         userBadges: null,
       });
-      expect(normalized.rawData.data.giftDetails.giftName).toBe("Rose");
-      expect(normalized.rawData.data.repeatCount).toBe(5);
-      expect(normalized.rawData.data.giftDetails.diamondCount).toBe(1);
+      const rawData = normalized.rawData as {
+        data: {
+          giftDetails: { diamondCount: number; giftName: string };
+          repeatCount: number;
+        };
+      };
+      expect(rawData.data.giftDetails.giftName).toBe("Rose");
+      expect(rawData.data.repeatCount).toBe(5);
+      expect(rawData.data.giftDetails.diamondCount).toBe(1);
     });
 
     test("throws on missing TikTok user data", () => {

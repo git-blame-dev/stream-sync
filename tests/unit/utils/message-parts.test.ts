@@ -27,9 +27,7 @@ describe('message parts utility', () => {
 
     it('returns empty array when canonical message.parts is missing', () => {
         const payload = {
-            message: {
-                text: 'hello'
-            }
+            message: { text: 'hello' }
         };
 
         const parts = getMessagePartsFromPayload(payload);

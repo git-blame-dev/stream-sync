@@ -1,5 +1,28 @@
 import { describe, test, expect } from "bun:test";
 import { NotificationBuilder } from "../../../src/utils/notification-builder.ts";
+
+type NotificationUnderTest = Record<string, unknown> & {
+  amount?: number;
+  displayMessage: string;
+  giftCount?: number;
+  isError?: boolean;
+  logMessage: string;
+  message?: string;
+  ttsMessage: string;
+  userId?: string;
+  username?: string;
+};
+
+const expectNotification = (
+  notification: ReturnType<typeof NotificationBuilder.build>,
+): NotificationUnderTest => {
+  expect(notification).not.toBeNull();
+  if (notification === null) {
+    throw new Error("Expected notification to be built");
+  }
+  return notification as NotificationUnderTest;
+};
+
 describe("Notification Builder Edge Cases", () => {
   describe("Input Validation Edge Cases", () => {
     test("returns null for null or undefined input", () => {
@@ -91,7 +114,7 @@ describe("Notification Builder Edge Cases", () => {
         message: "Hello",
       };
 
-      const notification = NotificationBuilder.build(data);
+      const notification = expectNotification(NotificationBuilder.build(data));
       expect(notification.username).toBe("TrimMe");
     });
 
@@ -103,7 +126,7 @@ describe("Notification Builder Edge Cases", () => {
         message: "Hello",
       };
 
-      const notification = NotificationBuilder.build(data);
+      const notification = expectNotification(NotificationBuilder.build(data));
       expect(notification.username).toBe("User_123");
     });
   });
@@ -133,7 +156,7 @@ describe("Notification Builder Edge Cases", () => {
         currency: "USD",
       };
 
-      const notification = NotificationBuilder.build(data);
+      const notification = expectNotification(NotificationBuilder.build(data));
       expect(notification.amount).toBe(5.5);
     });
   });
@@ -148,7 +171,7 @@ describe("Notification Builder Edge Cases", () => {
         message: "Hello",
       };
 
-      const notification = NotificationBuilder.build(data);
+      const notification = expectNotification(NotificationBuilder.build(data));
       expect(notification.userId).toBe("12345");
     });
   });
@@ -165,8 +188,7 @@ describe("Notification Builder Edge Cases", () => {
         currency: "coins",
       };
 
-      const notification = NotificationBuilder.build(data);
-      expect(notification).not.toBeNull();
+      const notification = expectNotification(NotificationBuilder.build(data));
       expect(notification.giftCount).toBe(5);
     });
 
@@ -181,8 +203,7 @@ describe("Notification Builder Edge Cases", () => {
         currency: "USD",
       };
 
-      const notification = NotificationBuilder.build(data);
-      expect(notification).not.toBeNull();
+      const notification = expectNotification(NotificationBuilder.build(data));
       expect(notification.amount).toBe(10.5);
     });
   });
@@ -196,7 +217,7 @@ describe("Notification Builder Edge Cases", () => {
         message: { text: "Hello" },
       };
 
-      const notification = NotificationBuilder.build(data);
+      const notification = expectNotification(NotificationBuilder.build(data));
       expect(typeof notification.message).toBe("string");
     });
 
@@ -208,7 +229,7 @@ describe("Notification Builder Edge Cases", () => {
         message: 12345,
       };
 
-      const notification = NotificationBuilder.build(data);
+      const notification = expectNotification(NotificationBuilder.build(data));
       expect(notification.message).toBe("12345");
     });
   });
@@ -221,8 +242,7 @@ describe("Notification Builder Edge Cases", () => {
         isError: true,
       };
 
-      const notification = NotificationBuilder.build(data);
-      expect(notification).not.toBeNull();
+      const notification = expectNotification(NotificationBuilder.build(data));
       expect(notification.isError).toBe(true);
       expect(notification).not.toHaveProperty("username");
       expect(notification.displayMessage).toContain("Error");
@@ -235,7 +255,7 @@ describe("Notification Builder Edge Cases", () => {
         isError: true,
       };
 
-      const notification = NotificationBuilder.build(data);
+      const notification = expectNotification(NotificationBuilder.build(data));
       expect(notification.displayMessage).toBe("Error processing gift");
       expect(notification.ttsMessage).toBe("Error processing gift");
       expect(notification.logMessage).toBe("Error processing gift");

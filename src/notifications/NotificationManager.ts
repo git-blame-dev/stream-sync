@@ -175,7 +175,10 @@ class NotificationManager extends EventEmitter {
         this.payloadBuilder = new NotificationPayloadBuilder({
             build: (input: NotificationRecord) => {
                 const built = NotificationBuilder.build(input);
-                return isRecord(built) ? built : {};
+                if (!isRecord(built)) {
+                    throw new Error('NotificationBuilder.build returned null');
+                }
+                return built;
             }
         });
 

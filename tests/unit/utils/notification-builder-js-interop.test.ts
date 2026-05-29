@@ -10,7 +10,17 @@ expect(typeof NotificationBuilder?.sanitizeUsernameForTts).toBe('function');
 });
 
 it('constructs NotificationPayloadBuilder from the named NotificationBuilder export', () => {
-expect(() => new NotificationPayloadBuilder(NotificationBuilder)).not.toThrow();
+    const notificationBuilderAdapter = {
+        build(input: Record<string, unknown>): Record<string, unknown> {
+            const notification = NotificationBuilder.build(input);
+            if (notification === null) {
+                throw new Error('NotificationBuilder.build returned null');
+            }
+            return notification;
+        },
+    };
+
+    expect(() => new NotificationPayloadBuilder(notificationBuilderAdapter)).not.toThrow();
 });
 
     it('supports message TTS generation through the wrapper-backed NotificationBuilder', () => {

@@ -1,8 +1,24 @@
 import { describe, test, expect } from "bun:test";
 import { NotificationBuilder } from "../../../src/utils/notification-builder.ts";
+
+type NotificationUnderTest = Record<string, unknown> & {
+  displayMessage: string;
+  ttsMessage: string;
+};
+
+const expectNotification = (
+  notification: ReturnType<typeof NotificationBuilder.build>,
+): NotificationUnderTest => {
+  expect(notification).not.toBeNull();
+  if (notification === null) {
+    throw new Error("Expected notification to be built");
+  }
+  return notification as NotificationUnderTest;
+};
+
 describe("SuperChat Notification Format", () => {
   test("formats Super Chat display and TTS output", () => {
-    const result = NotificationBuilder.build({
+    const result = expectNotification(NotificationBuilder.build({
       platform: "youtube",
       type: "platform:gift",
       username: "SuperChatUser",
@@ -11,7 +27,7 @@ describe("SuperChat Notification Format", () => {
       amount: 5.0,
       currency: "USD",
       message: "Thanks for the stream!",
-    });
+    }));
 
     expect(result.displayMessage).toBe(
       "SuperChatUser sent a $5.00 Super Chat: Thanks for the stream!",
@@ -23,7 +39,7 @@ describe("SuperChat Notification Format", () => {
   });
 
   test("formats Super Sticker display and TTS output", () => {
-    const result = NotificationBuilder.build({
+    const result = expectNotification(NotificationBuilder.build({
       platform: "youtube",
       type: "platform:gift",
       username: "StickerUser",
@@ -31,7 +47,7 @@ describe("SuperChat Notification Format", () => {
       giftCount: 1,
       amount: 10.5,
       currency: "USD",
-    });
+    }));
 
     expect(result.displayMessage).toBe(
       "StickerUser sent a $10.50 Super Sticker",

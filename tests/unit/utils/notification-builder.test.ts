@@ -1,6 +1,35 @@
 import { describe, test, expect } from "bun:test";
 import { NotificationBuilder } from "../../../src/utils/notification-builder.ts";
 import { getAnonymousUsername } from "../../../src/utils/validation.ts";
+
+type NotificationUnderTest = Record<string, unknown> & {
+  amount?: number;
+  currency?: string;
+  displayMessage: string;
+  giftCount?: number;
+  isError?: boolean;
+  logMessage: string;
+  message?: string;
+  parts?: unknown[];
+  platform: string;
+  rendered?: unknown;
+  ttsMessage: string;
+  type: string;
+  userId?: string;
+  username?: string;
+  vfxConfig?: { command?: string };
+};
+
+const expectNotification = (
+  notification: ReturnType<typeof NotificationBuilder.build>,
+): NotificationUnderTest => {
+  expect(notification).not.toBeNull();
+  if (notification === null) {
+    throw new Error("Expected notification to be built");
+  }
+  return notification as NotificationUnderTest;
+};
+
 describe("NotificationBuilder", () => {
   test("builds a basic notification object from minimal input", () => {
     const input = {
@@ -14,7 +43,7 @@ describe("NotificationBuilder", () => {
       amount: 5,
       currency: "USD",
     };
-    const notification = NotificationBuilder.build(input);
+    const notification = expectNotification(NotificationBuilder.build(input));
     expect(notification.platform).toBe("youtube");
     expect(notification.type).toBe("platform:gift");
     expect(notification.userId).toBe("U123");
@@ -35,10 +64,10 @@ describe("NotificationBuilder", () => {
       currency: "bits",
       vfxConfig: { command: "!money" },
     };
-    const notification = NotificationBuilder.build(input);
+    const notification = expectNotification(NotificationBuilder.build(input));
     expect(notification.amount).toBe(5);
     expect(notification.currency).toBe("bits");
-    expect(notification.vfxConfig.command).toBe("!money");
+    expect(notification.vfxConfig?.command).toBe("!money");
   });
 
   test("handles missing/invalid input gracefully", () => {
@@ -70,7 +99,7 @@ describe("NotificationBuilder", () => {
         userId: "id",
         message: "msg",
       };
-      const notification = NotificationBuilder.build(input);
+      const notification = expectNotification(NotificationBuilder.build(input));
       expect(notification.platform).toBe(platform);
     }
   });
@@ -86,9 +115,10 @@ describe("NotificationBuilder", () => {
       giftCount: 1,
       amount: 5,
       currency: "USD",
-      template: (data) => `Custom: ${data.username} - ${data.message}`,
+      template: (data: Record<string, unknown>) =>
+        `Custom: ${data.username} - ${data.message}`,
     };
-    const notification = NotificationBuilder.build(input);
+    const notification = expectNotification(NotificationBuilder.build(input));
     expect(notification.rendered).toBe("Custom: TestUser - Hello world!");
   });
 
@@ -102,7 +132,7 @@ describe("NotificationBuilder", () => {
       membershipLevel: "Test Member Plus",
     };
 
-    const notification = NotificationBuilder.build(input);
+    const notification = expectNotification(NotificationBuilder.build(input));
     expect(notification.type).toBe("platform:paypiggy");
     expect(notification.displayMessage).toContain("membership");
     expect(notification.displayMessage).toContain("3");
@@ -112,14 +142,14 @@ describe("NotificationBuilder", () => {
   });
 
   test("formats gifted Twitch subscriptions with tier suffix in user-facing copy", () => {
-    const notification = NotificationBuilder.build({
+    const notification = expectNotification(NotificationBuilder.build({
       platform: "twitch",
       type: "platform:giftpaypiggy",
       username: "test-tier-user",
       userId: "test-tier-user-id",
       giftCount: 3,
       tier: "2000",
-    });
+    }));
 
     expect(notification.displayMessage).toContain("gifted 3 subscriptions");
     expect(notification.displayMessage).toContain("(Tier 2)");
@@ -127,13 +157,13 @@ describe("NotificationBuilder", () => {
   });
 
   test("uses singular viewer wording for raid tts output", () => {
-    const notification = NotificationBuilder.build({
+    const notification = expectNotification(NotificationBuilder.build({
       platform: "youtube",
       type: "platform:raid",
       username: "test-raid-lead",
       userId: "test-raid-lead-id",
       viewerCount: 1,
-    });
+    }));
 
     expect(notification.ttsMessage).toContain("1 viewer");
   });
@@ -182,7 +212,7 @@ describe("NotificationBuilder", () => {
     ];
 
     errorInputs.forEach((input) => {
-      const notification = NotificationBuilder.build(input);
+      const notification = expectNotification(NotificationBuilder.build(input));
       expect(notification.displayMessage).toMatch(/error/i);
       expect(notification.ttsMessage).toMatch(/error/i);
       expect(notification.logMessage).toMatch(/error/i);
@@ -191,7 +221,7 @@ describe("NotificationBuilder", () => {
   });
 
   test("uses Anonymous User when isAnonymous is true and username is missing", () => {
-    const notification = NotificationBuilder.build({
+    const notification = expectNotification(NotificationBuilder.build({
       platform: "twitch",
       type: "platform:gift",
       giftType: "bits",
@@ -199,7 +229,7 @@ describe("NotificationBuilder", () => {
       amount: 25,
       currency: "bits",
       isAnonymous: true,
-    });
+    }));
 
     const anonymousUsername = getAnonymousUsername();
     expect(notification.displayMessage).toContain(anonymousUsername);
@@ -208,11 +238,11 @@ describe("NotificationBuilder", () => {
   });
 
   test("uses generic error copy when username is missing", () => {
-    const notification = NotificationBuilder.build({
+    const notification = expectNotification(NotificationBuilder.build({
       platform: "twitch",
       type: "platform:gift",
       isError: true,
-    });
+    }));
 
     expect(notification.displayMessage).toMatch(/error/i);
     expect(notification.displayMessage.toLowerCase()).not.toContain("from ");
@@ -223,7 +253,7 @@ describe("NotificationBuilder", () => {
   });
 
   test("builds Twitch bits inline parts when giftImageUrl is available", () => {
-    const notification = NotificationBuilder.build({
+    const notification = expectNotification(NotificationBuilder.build({
       platform: "twitch",
       type: "platform:gift",
       username: "test-twitch-user",
@@ -240,7 +270,7 @@ describe("NotificationBuilder", () => {
         tier: 100,
         isMixed: false,
       },
-    });
+    }));
 
     expect(notification.parts).toEqual([
       { type: "text", text: "sent 234 " },
@@ -259,7 +289,7 @@ describe("NotificationBuilder", () => {
   });
 
   test("skips Twitch bits inline parts when cheermotes are mixed", () => {
-    const notification = NotificationBuilder.build({
+    const notification = expectNotification(NotificationBuilder.build({
       platform: "twitch",
       type: "platform:gift",
       username: "test-twitch-user",
@@ -277,13 +307,13 @@ describe("NotificationBuilder", () => {
           { prefix: "Uni", count: 1 },
         ],
       },
-    });
+    }));
 
     expect(notification.parts).toBeUndefined();
   });
 
   test("builds YouTube Super Sticker inline parts with image first", () => {
-    const notification = NotificationBuilder.build({
+    const notification = expectNotification(NotificationBuilder.build({
       platform: "youtube",
       type: "platform:gift",
       username: "test-youtube-user",
@@ -295,7 +325,7 @@ describe("NotificationBuilder", () => {
       message: "Pear character lifting some weights saying 'Keep it up'",
       giftImageUrl:
         "https://lh3.googleusercontent.com/hxUGRWjxbKaI8Gk6earRTJW5Vub52yvfvorXXkfi-4fqpB7VJzu4K6pbBO4UIsDstah8zLKeUz6FQ9W0qnY=s176-rwa",
-    });
+    }));
 
     expect(notification.parts).toEqual([
       {
@@ -313,7 +343,7 @@ describe("NotificationBuilder", () => {
   });
 
   test("keeps YouTube Super Sticker notifications text-only when giftImageUrl is missing", () => {
-    const notification = NotificationBuilder.build({
+    const notification = expectNotification(NotificationBuilder.build({
       platform: "youtube",
       type: "platform:gift",
       username: "test-youtube-user",
@@ -323,14 +353,14 @@ describe("NotificationBuilder", () => {
       amount: 7.99,
       currency: "AUD",
       message: "Pear character lifting some weights saying 'Keep it up'",
-    });
+    }));
 
     expect(notification.parts).toBeUndefined();
     expect(notification.displayMessage).toContain("Super Sticker");
   });
 
   test("preserves jewels virtual-currency wording and allows missing userId for scoped YouTube gift payloads", () => {
-    const notification = NotificationBuilder.build({
+    const notification = expectNotification(NotificationBuilder.build({
       platform: "youtube",
       type: "platform:gift",
       username: "test-jewels-user",
@@ -342,9 +372,8 @@ describe("NotificationBuilder", () => {
       metadata: {
         missingFields: ["userId"],
       },
-    });
+    }));
 
-    expect(notification).toBeTruthy();
     expect(notification.userId).toBeUndefined();
     expect(notification.currency).toBe("jewels");
     expect(notification.displayMessage.toLowerCase()).toContain("jewels");

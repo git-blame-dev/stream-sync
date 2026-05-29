@@ -12,6 +12,17 @@ const notificationConfigs = NOTIFICATION_CONFIGS as Record<
   NotificationConfigContract
 >;
 
+const getNotificationConfig = (
+  notificationType: string,
+): NotificationConfigContract => {
+  const config = notificationConfigs[notificationType];
+  expect(config).toBeDefined();
+  if (config === undefined) {
+    throw new Error(`Missing notification config: ${notificationType}`);
+  }
+  return config;
+};
+
 describe("notification command routing integration", () => {
   const EXPECTED_COMMAND_KEYS = {
     "platform:follow": "follows",
@@ -61,8 +72,7 @@ describe("notification command routing integration", () => {
     for (const [notificationType, expectedCommandKey] of Object.entries(
       EXPECTED_COMMAND_KEYS,
     )) {
-      const config = notificationConfigs[notificationType];
-      expect(config).toBeDefined();
+      const config = getNotificationConfig(notificationType);
       expect(config.commandKey).toBe(expectedCommandKey);
     }
   });
@@ -71,8 +81,7 @@ describe("notification command routing integration", () => {
     for (const [notificationType, expectedSettingKey] of Object.entries(
       EXPECTED_SETTING_KEYS,
     )) {
-      const config = notificationConfigs[notificationType];
-      expect(config).toBeDefined();
+      const config = getNotificationConfig(notificationType);
       expect(config.settingKey).toBe(expectedSettingKey);
     }
   });
@@ -95,8 +104,9 @@ describe("notification command routing integration", () => {
     });
 
     for (const notificationType of vfxNotificationTypes) {
-      const settingKey = notificationConfigs[notificationType].settingKey;
-      expect(normalized.general[settingKey]).toBeDefined();
+      const settingKey = getNotificationConfig(notificationType).settingKey;
+      const general = normalized.general as Record<string, unknown>;
+      expect(general[settingKey]).toBeDefined();
     }
   });
 
@@ -125,9 +135,12 @@ describe("notification command routing integration", () => {
     });
 
     for (const [typeName, sectionName] of Object.entries(commandBasedTypes)) {
-      expect(normalized[sectionName]).toBeDefined();
+      const section = (normalized as Record<string, Record<string, unknown>>)[
+        sectionName
+      ];
+      expect(section).toBeDefined();
       if (typeName !== "platform:gift") {
-        expect(normalized[sectionName].command).toBeDefined();
+        expect(section?.command).toBeDefined();
       }
     }
   });
