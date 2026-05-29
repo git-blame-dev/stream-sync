@@ -42,13 +42,39 @@ describe("DisplayQueue lingering chat visibility", () => {
     },
   });
 
+  type DisplayContent = NonNullable<ReturnType<DisplayQueue["getCurrentDisplayContent"]>>;
+  type NotificationContent = DisplayContent & {
+    notificationDetails: Record<string, unknown>;
+  };
+
+  const expectDisplayContent = (
+    content: ReturnType<DisplayQueue["getCurrentDisplayContent"]>,
+  ): DisplayContent => {
+    expect(content).not.toBeNull();
+    if (content === null) {
+      throw new Error("Expected display content");
+    }
+    return content;
+  };
+
+  const expectNotificationContent = (
+    content: ReturnType<DisplayQueue["getCurrentDisplayContent"]>,
+  ): NotificationContent => {
+    const displayContent = expectDisplayContent(content);
+    expect("notificationDetails" in displayContent).toBe(true);
+    if (!("notificationDetails" in displayContent)) {
+      throw new Error("Expected notification details");
+    }
+    return displayContent as NotificationContent;
+  };
+
   it("treats lingering chat as displayed when queue is empty and no active display", () => {
     const displayQueue = new DisplayQueue(
       createMockOBSManager("connected"),
       config,
       constants,
       null,
-      constants,
+      {},
     );
     displayQueue.currentDisplay = null;
     displayQueue.queue = [];
@@ -56,7 +82,7 @@ describe("DisplayQueue lingering chat visibility", () => {
 
     expect(displayQueue.isItemDisplayedToUser("chat")).toBe(true);
 
-    const content = displayQueue.getCurrentDisplayContent();
+    const content = expectDisplayContent(displayQueue.getCurrentDisplayContent());
     expect(content).toEqual(
       expect.objectContaining({
         type: "chat",
@@ -74,7 +100,7 @@ describe("DisplayQueue lingering chat visibility", () => {
       config,
       constants,
       null,
-      constants,
+      {},
     );
     displayQueue.queue = [];
     displayQueue.lastChatItem = buildChatItem();
@@ -89,10 +115,10 @@ describe("DisplayQueue lingering chat visibility", () => {
 
     expect(displayQueue.isItemDisplayedToUser("chat")).toBe(false);
 
-    const content = displayQueue.getCurrentDisplayContent();
+    const content = expectDisplayContent(displayQueue.getCurrentDisplayContent());
     expect(content.type).toBe("platform:follow");
     expect(content.content).toContain("test-follower just followed!");
-    expect(content.isLingering).toBeUndefined();
+    expect("isLingering" in content).toBe(false);
   });
 
   it("does not surface lingering chat while queued items remain", () => {
@@ -101,7 +127,7 @@ describe("DisplayQueue lingering chat visibility", () => {
       config,
       constants,
       null,
-      constants,
+      {},
     );
     displayQueue.lastChatItem = buildChatItem();
     displayQueue.queue = [
@@ -126,7 +152,7 @@ describe("DisplayQueue lingering chat visibility", () => {
       config,
       constants,
       null,
-      constants,
+      {},
     );
     displayQueue.currentDisplay = {
       type: "platform:gift",
@@ -146,7 +172,7 @@ describe("DisplayQueue lingering chat visibility", () => {
 
     expect(displayQueue.isItemDisplayedToUser("platform:gift")).toBe(true);
     expect(displayQueue.isItemDisplayedToUser("platform:follow")).toBe(false);
-    const content = displayQueue.getCurrentDisplayContent();
+    const content = expectNotificationContent(displayQueue.getCurrentDisplayContent());
     expect(content).toEqual(
       expect.objectContaining({
         type: "platform:gift",
@@ -173,7 +199,7 @@ describe("DisplayQueue lingering chat visibility", () => {
       config,
       constants,
       null,
-      constants,
+      {},
     );
     displayQueue.currentDisplay = {
       type: "custom",
@@ -182,7 +208,7 @@ describe("DisplayQueue lingering chat visibility", () => {
     };
 
     expect(displayQueue.isItemDisplayedToUser("custom")).toBe(true);
-    const content = displayQueue.getCurrentDisplayContent();
+    const content = expectDisplayContent(displayQueue.getCurrentDisplayContent());
     expect(content).toEqual(
       expect.objectContaining({
         type: "custom",
@@ -198,7 +224,7 @@ describe("DisplayQueue lingering chat visibility", () => {
       config,
       constants,
       null,
-      constants,
+      {},
     );
     displayQueue.currentDisplay = {
       type: "chat",
@@ -210,7 +236,7 @@ describe("DisplayQueue lingering chat visibility", () => {
       },
     };
 
-    const content = displayQueue.getCurrentDisplayContent();
+    const content = expectDisplayContent(displayQueue.getCurrentDisplayContent());
     expect(content).toEqual(
       expect.objectContaining({
         type: "chat",
@@ -227,7 +253,7 @@ describe("DisplayQueue lingering chat visibility", () => {
       config,
       constants,
       null,
-      constants,
+      {},
     );
     displayQueue.currentDisplay = null;
     displayQueue.queue = [];
@@ -243,7 +269,7 @@ describe("DisplayQueue lingering chat visibility", () => {
       config,
       constants,
       null,
-      constants,
+      {},
     );
     displayQueue.currentDisplay = {
       type: "platform:follow",
@@ -251,7 +277,7 @@ describe("DisplayQueue lingering chat visibility", () => {
       data: { username: "test-user", displayMessage: "undefined in message" },
     };
 
-    const content = displayQueue.getCurrentDisplayContent();
+    const content = expectDisplayContent(displayQueue.getCurrentDisplayContent());
     expect(content.isTechnicalArtifactFree).toBe(false);
   });
 });

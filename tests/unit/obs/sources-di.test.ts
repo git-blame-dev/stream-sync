@@ -12,6 +12,26 @@ import { resetOBSConnectionManager } from "../../../src/obs/connection.ts";
 import * as sourcesModule from "../../../src/obs/sources";
 
 describe("OBSSourcesManager DI requirements", () => {
+  type SourcesObsManager = Parameters<typeof createOBSSourcesManager>[0];
+  type ObsCall = SourcesObsManager["call"];
+  type ObsCallRecord = { requestType: string; payload?: Record<string, unknown> };
+
+  const createReadyObsManager = (overrides: Partial<SourcesObsManager> = {}): SourcesObsManager => ({
+    ensureConnected: createMockFn<[], Promise<void>>().mockResolvedValue(),
+    call: createMockFn<Parameters<ObsCall>, ReturnType<ObsCall>>().mockResolvedValue({}),
+    addEventListener: createMockFn<
+      [eventName: string, handler: (data?: { reason?: unknown; code?: unknown }) => void],
+      void
+    >(),
+    removeEventListener: createMockFn<
+      [eventName: string, handler: (data?: { reason?: unknown; code?: unknown }) => void],
+      void
+    >(),
+    isConnected: createMockFn<[], boolean>().mockReturnValue(true),
+    isReady: createMockFn<[], Promise<boolean>>().mockResolvedValue(true),
+    ...overrides,
+  });
+
   afterEach(() => {
     restoreAllMocks();
     resetDefaultSourcesManager();
@@ -31,7 +51,7 @@ describe("OBSSourcesManager DI requirements", () => {
   });
 
   it("requires an OBS manager in the constructor", () => {
-    expect(() => new OBSSourcesManager()).toThrow(
+    expect(() => Reflect.construct(OBSSourcesManager, [])).toThrow(
       /OBSSourcesManager requires OBSConnectionManager/,
     );
   });
@@ -44,10 +64,10 @@ describe("OBSSourcesManager DI requirements", () => {
     };
 
     expect(() =>
-      createOBSSourcesManager(incompleteObsManager, {
+      Reflect.apply(createOBSSourcesManager, null, [incompleteObsManager, {
         logger: noOpLogger,
         ...createSourcesConfigFixture(),
-      }),
+      }]),
     ).toThrow(/ensureOBSConnected function/);
   });
 
@@ -59,17 +79,15 @@ describe("OBSSourcesManager DI requirements", () => {
     };
 
     expect(() =>
-      createOBSSourcesManager(incompleteObsManager, {
+      Reflect.apply(createOBSSourcesManager, null, [incompleteObsManager, {
         logger: noOpLogger,
         ...createSourcesConfigFixture(),
-      }),
+      }]),
     ).toThrow(/obsCall function/);
   });
 
   it("uses injected obsManager for operations", async () => {
-    const mockObsManager = {
-      ensureConnected: createMockFn().mockResolvedValue(),
-      call: createMockFn().mockImplementation(async (requestType, payload) => {
+    const call = createMockFn<Parameters<ObsCall>, ReturnType<ObsCall>>().mockImplementation(async (requestType, payload) => {
         if (
           requestType === "GetSceneItemId" &&
           payload?.sceneName === "test-scene" &&
@@ -79,12 +97,8 @@ describe("OBSSourcesManager DI requirements", () => {
         }
 
         return { sceneItemId: 0 };
-      }),
-      addEventListener: createMockFn(),
-      removeEventListener: createMockFn(),
-      isConnected: createMockFn().mockReturnValue(true),
-      isReady: createMockFn().mockResolvedValue(true),
-    };
+      });
+    const mockObsManager = createReadyObsManager({ call });
 
     const sourcesManager = createOBSSourcesManager(mockObsManager, {
       logger: noOpLogger,
@@ -102,20 +116,18 @@ describe("OBSSourcesManager DI requirements", () => {
   });
 
   it("registers cache invalidation callback with active connection manager", async () => {
-    const registeredInvalidators = [];
-    const mockObsManager = {
-      ensureConnected: createMockFn().mockResolvedValue(),
-      call: createMockFn()
+    const registeredInvalidators: (() => void)[] = [];
+    const call = createMockFn<Parameters<ObsCall>, ReturnType<ObsCall>>()
         .mockResolvedValueOnce({ sceneItemId: 42 })
-        .mockResolvedValueOnce({ sceneItemId: 99 }),
-      addEventListener: createMockFn(),
-      removeEventListener: createMockFn(),
-      isConnected: createMockFn().mockReturnValue(true),
-      isReady: createMockFn().mockResolvedValue(true),
+        .mockResolvedValueOnce({ sceneItemId: 99 });
+    const mockObsManager = createReadyObsManager({
+      call,
       setSourcesCacheInvalidator: createMockFn((invalidator) => {
-        registeredInvalidators.push(invalidator);
+        if (invalidator) {
+          registeredInvalidators.push(invalidator);
+        }
       }),
-    };
+    });
 
     const sourcesManager = createOBSSourcesManager(mockObsManager, {
       logger: noOpLogger,
@@ -131,18 +143,23 @@ describe("OBSSourcesManager DI requirements", () => {
     await sourcesManager.getSceneItemId("test-scene", "test-source");
     expect(mockObsManager.call).toHaveBeenCalledTimes(1);
 
-    registeredInvalidators[0]();
+    const [invalidateSourcesCache] = registeredInvalidators;
+    expect(invalidateSourcesCache).toBeDefined();
+    if (!invalidateSourcesCache) {
+      throw new Error("Expected sources cache invalidator registration");
+    }
+    invalidateSourcesCache();
 
     await sourcesManager.getSceneItemId("test-scene", "test-source");
     expect(mockObsManager.call).toHaveBeenCalledTimes(2);
   });
 
   it("skips empty platform logo names during hide-all cleanup", async () => {
-    const obsCalls = [];
-    const mockObsManager = {
-      ensureConnected: createMockFn().mockResolvedValue(),
-      call: createMockFn().mockImplementation(async (requestType, payload) => {
-        obsCalls.push({ requestType, payload });
+    const obsCalls: ObsCallRecord[] = [];
+    const call = createMockFn<Parameters<ObsCall>, ReturnType<ObsCall>>().mockImplementation(async (requestType, payload) => {
+        obsCalls.push(
+          payload === undefined ? { requestType } : { requestType, payload },
+        );
         if (
           requestType === "GetSceneItemId" ||
           requestType === "GetGroupSceneItemList"
@@ -156,12 +173,8 @@ describe("OBSSourcesManager DI requirements", () => {
           return { inputSettings: {} };
         }
         return {};
-      }),
-      addEventListener: createMockFn(),
-      removeEventListener: createMockFn(),
-      isConnected: createMockFn().mockReturnValue(true),
-      isReady: createMockFn().mockResolvedValue(true),
-    };
+      });
+    const mockObsManager = createReadyObsManager({ call });
 
     const sourcesManager = createOBSSourcesManager(mockObsManager, {
       logger: noOpLogger,

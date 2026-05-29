@@ -4,8 +4,21 @@ import { noOpLogger } from "../../helpers/mock-factories";
 import { createOBSSourcesManager } from "../../../src/obs/sources.ts";
 
 describe("obs/sources behavior", () => {
-  let mockLogger;
-  let sourcesConfig;
+  type SourcesObsManager = Parameters<typeof createOBSSourcesManager>[0];
+  type SourcesConfig = Omit<Parameters<typeof createOBSSourcesManager>[1], "logger" | "ensureOBSConnected" | "obsCall">;
+
+  let mockLogger: typeof noOpLogger;
+  let sourcesConfig: SourcesConfig;
+
+  const createReadyObsManager = (): SourcesObsManager => ({
+    ensureConnected: createMockFn<[], Promise<void>>().mockResolvedValue(),
+    call: createMockFn<
+      [requestType: string, payload?: Record<string, unknown>],
+      Promise<unknown>
+    >().mockResolvedValue({}),
+    isConnected: createMockFn<[], boolean>().mockReturnValue(true),
+    isReady: createMockFn<[], Promise<boolean>>().mockResolvedValue(true),
+  });
 
   beforeEach(() => {
     mockLogger = noOpLogger;
@@ -17,13 +30,16 @@ describe("obs/sources behavior", () => {
   });
 
 it("sanitizes text before sending OBS text-source updates", async () => {
-    const mockCall = createMockFn()
+    const mockCall = createMockFn<
+      [requestType: string, payload?: Record<string, unknown>],
+      Promise<unknown>
+    >()
       .mockResolvedValueOnce({ inputSettings: {} })
       .mockResolvedValueOnce();
-    const mockEnsureConnected = createMockFn().mockResolvedValue();
+    const mockEnsureConnected = createMockFn<[], Promise<void>>().mockResolvedValue();
 
     const sources = createOBSSourcesManager(
-      { isReady: createMockFn().mockResolvedValue(true) },
+      createReadyObsManager(),
       {
         logger: mockLogger,
         ...sourcesConfig,
@@ -55,16 +71,19 @@ it("sanitizes text before sending OBS text-source updates", async () => {
 });
 
   it("caches group scene item lookups to avoid repeated OBS calls", async () => {
-    const obsCall = createMockFn().mockResolvedValue({
+    const obsCall = createMockFn<
+      [requestType: string, payload?: Record<string, unknown>],
+      Promise<unknown>
+    >().mockResolvedValue({
       sceneItems: [{ sourceName: "TestLogo", sceneItemId: 42 }],
     });
 
     const sources = createOBSSourcesManager(
-      { isReady: createMockFn().mockResolvedValue(true) },
+      createReadyObsManager(),
       {
         logger: mockLogger,
         ...sourcesConfig,
-        ensureOBSConnected: createMockFn(),
+        ensureOBSConnected: createMockFn<[], Promise<void>>().mockResolvedValue(),
         obsCall,
       },
     );
@@ -80,13 +99,16 @@ it("sanitizes text before sending OBS text-source updates", async () => {
   });
 
   it("retries lookup on subsequent calls when source is not found", async () => {
-    const obsCall = createMockFn().mockResolvedValue({ sceneItems: [] });
+    const obsCall = createMockFn<
+      [requestType: string, payload?: Record<string, unknown>],
+      Promise<unknown>
+    >().mockResolvedValue({ sceneItems: [] });
     const sources = createOBSSourcesManager(
-      { isReady: createMockFn().mockResolvedValue(true) },
+      createReadyObsManager(),
       {
         logger: mockLogger,
         ...sourcesConfig,
-        ensureOBSConnected: createMockFn(),
+        ensureOBSConnected: createMockFn<[], Promise<void>>().mockResolvedValue(),
         obsCall,
       },
     );

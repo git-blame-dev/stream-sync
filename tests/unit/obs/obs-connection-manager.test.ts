@@ -9,7 +9,25 @@ import {
 import { OBSConnectionManager } from "../../../src/obs/connection.ts";
 
 describe("OBSConnectionManager", () => {
-  let originalNodeEnv;
+  let originalNodeEnv: string | undefined;
+
+  type ObsEventHandler = (data?: { reason?: unknown; code?: unknown }) => void;
+  type ObsEventHandlers = Partial<Record<string, ObsEventHandler>>;
+  type MockOBS = {
+    connect: (address?: string, password?: string) => Promise<{ obsWebSocketVersion?: unknown; negotiatedRpcVersion?: unknown }>;
+    disconnect: () => Promise<void>;
+    call: (requestType: string, requestData?: Record<string, unknown>) => Promise<unknown>;
+    on: (eventName: string, handler: ObsEventHandler) => void;
+    off: (eventName: string, handler: ObsEventHandler) => void;
+  };
+  type ManagerDependencies = NonNullable<ConstructorParameters<typeof OBSConnectionManager>[0]>;
+  type ManagerConfig = ManagerDependencies["config"];
+  type ManagerOverrides = {
+    obs?: MockOBS;
+    mockOBS?: MockOBS;
+    OBSWebSocket?: NonNullable<ConstructorParameters<typeof OBSConnectionManager>[0]>["OBSWebSocket"];
+    config?: ManagerConfig;
+  };
 
   beforeEach(() => {
     originalNodeEnv = process.env.NODE_ENV;
@@ -18,48 +36,62 @@ describe("OBSConnectionManager", () => {
   });
 
   afterEach(() => {
-    process.env.NODE_ENV = originalNodeEnv;
+    if (originalNodeEnv === undefined) {
+      delete process.env.NODE_ENV;
+    } else {
+      process.env.NODE_ENV = originalNodeEnv;
+    }
     restoreAllMocks();
     useRealTimers();
   });
 
-  const createDefaultMockOBS = () => ({
-    connect: createMockFn().mockResolvedValue({
+  const createDefaultMockOBS = (): MockOBS => ({
+    connect: createMockFn<
+      [address?: string, password?: string],
+      Promise<{ obsWebSocketVersion?: unknown; negotiatedRpcVersion?: unknown }>
+    >().mockResolvedValue({
       obsWebSocketVersion: "5",
       negotiatedRpcVersion: 1,
     }),
-    disconnect: createMockFn().mockResolvedValue(),
-    call: createMockFn().mockResolvedValue({}),
-    on: createMockFn(),
-    off: createMockFn(),
-    once: createMockFn(),
+    disconnect: createMockFn<[], Promise<void>>().mockResolvedValue(),
+    call: createMockFn<
+      [requestType: string, requestData?: Record<string, unknown>],
+      Promise<unknown>
+    >().mockResolvedValue({}),
+    on: createMockFn<[eventName: string, handler: ObsEventHandler], void>(),
+    off: createMockFn<[eventName: string, handler: ObsEventHandler], void>(),
   });
 
-  const createManager = (overrides = {}) => {
-    return new OBSConnectionManager({
+  const createManager = (overrides: ManagerOverrides = {}) => {
+    const dependencies: ManagerDependencies = {
       obs: overrides.obs || overrides.mockOBS || createDefaultMockOBS(),
-      OBSWebSocket: overrides.OBSWebSocket,
       config: overrides.config || {
         address: "ws://localhost:4455",
         password: "testPassword",
         enabled: true,
         connectionTimeoutMs: 50,
       },
-    });
+    };
+    if (overrides.OBSWebSocket !== undefined) {
+      dependencies.OBSWebSocket = overrides.OBSWebSocket;
+    }
+    return new OBSConnectionManager(dependencies);
   };
 
   it("skips connect when already connected", async () => {
-    const connectSpy = createMockFn().mockResolvedValue({
+    const connectSpy = createMockFn<
+      [address?: string, password?: string],
+      Promise<{ obsWebSocketVersion?: unknown; negotiatedRpcVersion?: unknown }>
+    >().mockResolvedValue({
       obsWebSocketVersion: "5",
       negotiatedRpcVersion: 1,
     });
-    const mockOBS = {
+    const mockOBS: MockOBS = {
       connect: connectSpy,
-      disconnect: createMockFn(),
-      call: createMockFn(),
-      on: createMockFn(),
-      off: createMockFn(),
-      once: createMockFn(),
+      disconnect: createMockFn<[], Promise<void>>().mockResolvedValue(),
+      call: createMockFn<[requestType: string, requestData?: Record<string, unknown>], Promise<unknown>>().mockResolvedValue({}),
+      on: createMockFn<[eventName: string, handler: ObsEventHandler], void>(),
+      off: createMockFn<[eventName: string, handler: ObsEventHandler], void>(),
     };
 
     const manager = createManager({ mockOBS });
@@ -70,14 +102,7 @@ describe("OBSConnectionManager", () => {
   });
 
   it("returns existing promise when already connecting", async () => {
-    const mockOBS = {
-      connect: createMockFn(),
-      disconnect: createMockFn(),
-      call: createMockFn(),
-      on: createMockFn(),
-      off: createMockFn(),
-      once: createMockFn(),
-    };
+    const mockOBS = createDefaultMockOBS();
 
     const manager = createManager({ mockOBS });
     manager._isConnected = false;
@@ -100,14 +125,7 @@ describe("OBSConnectionManager", () => {
   });
 
   it("does not double-schedule reconnect when already pending", () => {
-    const mockOBS = {
-      connect: createMockFn(),
-      disconnect: createMockFn(),
-      call: createMockFn(),
-      on: createMockFn(),
-      off: createMockFn(),
-      once: createMockFn(),
-    };
+    const mockOBS = createDefaultMockOBS();
 
     const manager = createManager({ mockOBS });
     manager.reconnectTimer = { id: "existingTimer" };
@@ -141,16 +159,15 @@ describe("OBSConnectionManager", () => {
   });
 
   it("successfully completes connection when Identified event fires", async () => {
-    const handlers = {};
-    const mockOBS = {
-      connect: createMockFn().mockResolvedValue({}),
-      disconnect: createMockFn(),
-      call: createMockFn(),
-      on: createMockFn((event, cb) => {
+    const handlers: ObsEventHandlers = {};
+    const mockOBS: MockOBS = {
+      connect: createMockFn<[address?: string, password?: string], Promise<{}>>().mockResolvedValue({}),
+      disconnect: createMockFn<[], Promise<void>>().mockResolvedValue(),
+      call: createMockFn<[requestType: string, requestData?: Record<string, unknown>], Promise<unknown>>().mockResolvedValue({}),
+      on: createMockFn<[eventName: string, handler: ObsEventHandler], void>((event, cb) => {
         handlers[event] = cb;
       }),
-      off: createMockFn(),
-      once: createMockFn(),
+      off: createMockFn<[eventName: string, handler: ObsEventHandler], void>(),
     };
 
     const manager = createManager({ mockOBS });
@@ -164,20 +181,19 @@ describe("OBSConnectionManager", () => {
   });
 
   it("dedupes concurrent connect callers into one underlying connect attempt", async () => {
-    const handlers = {};
+    const handlers: ObsEventHandlers = {};
     const connectPromise = Promise.resolve({
       obsWebSocketVersion: "5",
       negotiatedRpcVersion: 1,
     });
-    const mockOBS = {
+    const mockOBS: MockOBS = {
       connect: createMockFn(() => connectPromise),
       disconnect: createMockFn().mockResolvedValue(undefined),
       call: createMockFn().mockResolvedValue({}),
-      on: createMockFn((event, cb) => {
+      on: createMockFn<[eventName: string, handler: ObsEventHandler], void>((event, cb) => {
         handlers[event] = cb;
       }),
-      off: createMockFn(),
-      once: createMockFn(),
+      off: createMockFn<[eventName: string, handler: ObsEventHandler], void>(),
     };
 
     const manager = createManager({ mockOBS });
@@ -192,19 +208,18 @@ describe("OBSConnectionManager", () => {
   });
 
   it("ensureConnected reuses active connect attempt", async () => {
-    const handlers = {};
-    const mockOBS = {
+    const handlers: ObsEventHandlers = {};
+    const mockOBS: MockOBS = {
       connect: createMockFn().mockResolvedValue({
         obsWebSocketVersion: "5",
         negotiatedRpcVersion: 1,
       }),
       disconnect: createMockFn().mockResolvedValue(undefined),
       call: createMockFn().mockResolvedValue({}),
-      on: createMockFn((event, cb) => {
+      on: createMockFn<[eventName: string, handler: ObsEventHandler], void>((event, cb) => {
         handlers[event] = cb;
       }),
-      off: createMockFn(),
-      once: createMockFn(),
+      off: createMockFn<[eventName: string, handler: ObsEventHandler], void>(),
     };
 
     const manager = createManager({ mockOBS });
@@ -220,19 +235,18 @@ describe("OBSConnectionManager", () => {
   });
 
   it("ignores late Identified event after connect timeout", async () => {
-    const handlers = {};
-    const mockOBS = {
+    const handlers: ObsEventHandlers = {};
+    const mockOBS: MockOBS = {
       connect: createMockFn().mockResolvedValue({
         obsWebSocketVersion: "5",
         negotiatedRpcVersion: 1,
       }),
       disconnect: createMockFn().mockResolvedValue(undefined),
       call: createMockFn().mockResolvedValue({}),
-      on: createMockFn((event, cb) => {
+      on: createMockFn<[eventName: string, handler: ObsEventHandler], void>((event, cb) => {
         handlers[event] = cb;
       }),
-      off: createMockFn(),
-      once: createMockFn(),
+      off: createMockFn<[eventName: string, handler: ObsEventHandler], void>(),
     };
 
     const manager = createManager({
@@ -274,19 +288,18 @@ describe("OBSConnectionManager", () => {
   });
 
   it("does not accept late Identified when config is disabled during connect attempt", async () => {
-    const handlers = {};
-    const mockOBS = {
+    const handlers: ObsEventHandlers = {};
+    const mockOBS: MockOBS = {
       connect: createMockFn().mockResolvedValue({
         obsWebSocketVersion: "5",
         negotiatedRpcVersion: 1,
       }),
       disconnect: createMockFn().mockResolvedValue(undefined),
       call: createMockFn().mockResolvedValue({}),
-      on: createMockFn((event, cb) => {
+      on: createMockFn<[eventName: string, handler: ObsEventHandler], void>((event, cb) => {
         handlers[event] = cb;
       }),
-      off: createMockFn(),
-      once: createMockFn(),
+      off: createMockFn<[eventName: string, handler: ObsEventHandler], void>(),
     };
 
     const manager = createManager({

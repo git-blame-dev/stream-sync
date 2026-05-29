@@ -3,13 +3,32 @@ import { describe, expect, it } from "bun:test";
 import { DisplayQueueState } from "../../../src/obs/display-queue-state.ts";
 
 describe("DisplayQueueState", () => {
-  const getPriority = (type) =>
-    ({
+  type DisplayItem = DisplayQueueState["queue"][number];
+  type DisplayData = Record<string, unknown>;
+  type PriorityType = "high" | "medium" | "low" | "chat";
+
+  const priorities: Record<PriorityType, number> = {
       high: 10,
       medium: 5,
       low: 1,
       chat: 2,
-    })[type] ?? 0;
+    };
+
+  const getPriority = (type: string) =>
+    isPriorityType(type) ? priorities[type] : 0;
+
+  const isPriorityType = (type: string): type is PriorityType =>
+    type === "high" || type === "medium" || type === "low" || type === "chat";
+
+  const expectRecordData = (item: DisplayItem | null | undefined): DisplayData => {
+    expect(item).toBeDefined();
+    const data = item?.data;
+    expect(data).toBeObject();
+    if (data === null || typeof data !== "object") {
+      throw new Error("Expected display item data object");
+    }
+    return data as DisplayData;
+  };
 
   it("orders items by priority with higher values first", () => {
     const state = new DisplayQueueState({ maxQueueSize: 10, getPriority });
@@ -42,7 +61,7 @@ describe("DisplayQueueState", () => {
       data: { username: "test-user-2" },
     });
 
-    expect(state.queue.map((item) => item.data.username)).toEqual([
+    expect(state.queue.map((item) => expectRecordData(item).username)).toEqual([
       "test-user-1",
       "test-user-2",
     ]);
@@ -62,11 +81,11 @@ describe("DisplayQueueState", () => {
       data: { username: "test-user-2", message: "second" },
     });
 
-    expect(state.queue.map((item) => item.data.message)).toEqual([
+    expect(state.queue.map((item) => expectRecordData(item).message)).toEqual([
       "first",
       "second",
     ]);
-    expect(state.lastChatItem.data.message).toBe("second");
+    expect(expectRecordData(state.lastChatItem).message).toBe("second");
   });
 
   it("enforces maxQueueSize limits", () => {
@@ -104,7 +123,7 @@ describe("DisplayQueueState", () => {
     }).toThrow("Queue at capacity (1)");
 
     expect(state.queue).toHaveLength(1);
-    expect(state.queue[0].data.message).toBe("first");
-    expect(state.lastChatItem.data.message).toBe("first");
+    expect(expectRecordData(state.queue[0]).message).toBe("first");
+    expect(expectRecordData(state.lastChatItem).message).toBe("first");
   });
 });

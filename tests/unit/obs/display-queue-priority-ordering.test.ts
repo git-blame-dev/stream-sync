@@ -2,7 +2,7 @@ import { describe, expect, it, afterEach } from "bun:test";
 import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
 import { initializeTestLogging } from "../../helpers/test-setup";
 import { DisplayQueue } from "../../../src/obs/display-queue.ts";
-import { createMockOBSManager, noOpLogger } from "../../helpers/mock-factories";
+import { noOpLogger } from "../../helpers/mock-factories";
 import { createSourcesConfigFixture } from "../../helpers/config-fixture";
 import { createOBSSourcesManager } from "../../../src/obs/sources.ts";
 import { PRIORITY_LEVELS } from "../../../src/core/constants";
@@ -37,8 +37,14 @@ describe("DisplayQueue priority ordering", () => {
   };
 
   const createQueue = () => {
-    const mockOBS = createMockOBSManager("connected");
-    mockOBS.call.mockImplementation((method) => {
+    type SourcesObsManager = Parameters<typeof createOBSSourcesManager>[0];
+    type DisplayQueueObsManager = ConstructorParameters<typeof DisplayQueue>[0];
+    type QueueItem = Parameters<DisplayQueue["displayItem"]>[0];
+
+    const mockCall = createMockFn<
+      [requestType: string, payload?: Record<string, unknown>],
+      Promise<unknown>
+    >((method) => {
       if (method === "GetGroupSceneItemList") {
         return Promise.resolve({
           sceneItems: [
@@ -56,33 +62,44 @@ describe("DisplayQueue priority ordering", () => {
       return Promise.resolve({});
     });
 
+    const mockOBS: SourcesObsManager & DisplayQueueObsManager = {
+      ensureConnected: createMockFn<[], Promise<void>>().mockResolvedValue(),
+      call: mockCall,
+      addEventListener: createMockFn<
+        [eventName: string, handler: (data?: { reason?: unknown; code?: unknown }) => void],
+        void
+      >(),
+      removeEventListener: createMockFn<
+        [eventName: string, handler: (data?: { reason?: unknown; code?: unknown }) => void],
+        void
+      >(),
+      isConnected: createMockFn<[], boolean>().mockReturnValue(true),
+      isReady: createMockFn<[], Promise<boolean>>().mockResolvedValue(true),
+    };
+
     const realSourcesManager = createOBSSourcesManager(mockOBS, {
       ...createSourcesConfigFixture(),
       logger: noOpLogger,
-      ensureOBSConnected: createMockFn().mockResolvedValue(),
-      obsCall: mockOBS.call,
+      ensureOBSConnected: createMockFn<[], Promise<void>>().mockResolvedValue(),
+      obsCall: mockCall,
     });
-
-    const mockGoalsManager = {
-      processDonationGoal: createMockFn().mockResolvedValue({ success: true }),
-      processPaypiggyGoal: createMockFn().mockResolvedValue({ success: true }),
-      initializeGoalDisplay: createMockFn().mockResolvedValue(),
-    };
 
     const queue = new DisplayQueue(mockOBS, config, constants, null, {
       sourcesManager: realSourcesManager,
-      goalsManager: mockGoalsManager,
       delay: () => Promise.resolve(),
     });
     queue.getDuration = createMockFn().mockReturnValue(0);
+    const displayItem = createMockFn<[QueueItem], Promise<boolean>>().mockResolvedValue(true);
+    queue.displayItem = displayItem;
     return queue;
   };
 
   it("front-loads higher priority items even when added later", () => {
     const queue = createQueue();
-    const processed = [];
-    queue.displayItem = createMockFn(async (item) => {
+    const processed: string[] = [];
+    queue.displayItem = createMockFn<[Parameters<DisplayQueue["displayItem"]>[0]], Promise<boolean>>(async (item) => {
       processed.push(item.type);
+      return true;
     });
 
     queue.addItem({
@@ -104,9 +121,14 @@ describe("DisplayQueue priority ordering", () => {
 
   it("preserves FIFO ordering for same-priority items", () => {
     const queue = createQueue();
-    const processedUsers = [];
-    queue.displayItem = createMockFn(async (item) => {
+    const processedUsers: string[] = [];
+    queue.displayItem = createMockFn<[Parameters<DisplayQueue["displayItem"]>[0]], Promise<boolean>>(async (item) => {
+      expect(item.data.username).toBeString();
+      if (typeof item.data.username !== "string") {
+        throw new Error("Expected processed item username");
+      }
       processedUsers.push(item.data.username);
+      return true;
     });
 
     queue.addItem({
@@ -148,6 +170,7 @@ describe("DisplayQueue priority ordering", () => {
       data: { username: "testUser", message: "low priority" },
     });
 
-    expect(queue.queue[0].priority).toBe(0);
+    expect(queue.queue[0]).toBeDefined();
+    expect(queue.queue[0]?.priority).toBe(0);
   });
 });

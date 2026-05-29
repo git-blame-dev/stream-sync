@@ -15,7 +15,7 @@ const {
 } = require("../../../src/obs/connection.ts");
 
 describe("OBSConnectionManager behavior", () => {
-  let originalNodeEnv;
+  let originalNodeEnv: string | undefined;
 
   beforeEach(() => {
     originalNodeEnv = process.env.NODE_ENV;
@@ -23,7 +23,11 @@ describe("OBSConnectionManager behavior", () => {
   });
 
   afterEach(() => {
-    process.env.NODE_ENV = originalNodeEnv;
+    if (originalNodeEnv === undefined) {
+      delete process.env.NODE_ENV;
+    } else {
+      process.env.NODE_ENV = originalNodeEnv;
+    }
     restoreAllMocks();
     _resetForTesting();
     initializeStaticSecrets();
@@ -31,14 +35,26 @@ describe("OBSConnectionManager behavior", () => {
   });
 
   const createMockOBS = () => ({
-    connect: createMockFn().mockResolvedValue({
+    connect: createMockFn<
+      [address?: string, password?: string],
+      Promise<{ obsWebSocketVersion?: unknown; negotiatedRpcVersion?: unknown }>
+    >().mockResolvedValue({
       obsWebSocketVersion: "5",
       negotiatedRpcVersion: 1,
     }),
-    disconnect: createMockFn().mockResolvedValue(),
-    call: createMockFn().mockResolvedValue({}),
-    on: createMockFn(),
-    off: createMockFn(),
+    disconnect: createMockFn<[], Promise<void>>().mockResolvedValue(),
+    call: createMockFn<
+      [requestType: string, requestData?: Record<string, unknown>],
+      Promise<unknown>
+    >().mockResolvedValue({}),
+    on: createMockFn<
+      [eventName: string, handler: (data?: { reason?: unknown; code?: unknown }) => void],
+      void
+    >(),
+    off: createMockFn<
+      [eventName: string, handler: (data?: { reason?: unknown; code?: unknown }) => void],
+      void
+    >(),
     once: createMockFn(),
   });
 
@@ -211,7 +227,7 @@ describe("OBSConnectionManager behavior", () => {
 
     manager._isConnected = true;
     let observedMaxWait: number | null = null;
-    manager.ensureConnected = createMockFn().mockImplementation(
+    manager.ensureConnected = createMockFn<[number], Promise<void>>().mockImplementation(
       async (maxWait: number) => {
         observedMaxWait = maxWait;
       },
@@ -221,19 +237,20 @@ describe("OBSConnectionManager behavior", () => {
     await ensureOBSConnected(1234);
 
     expect(response).toEqual({ ok: true });
-    expect(observedMaxWait).toBe(1234);
+    expect(observedMaxWait ?? -1).toBe(1234);
   });
 
   it("forwards event listener registration helpers to obs client methods", () => {
     const mockOBS = createMockOBS();
-    const registeredHandlers = new Map<string, (...args: unknown[]) => void>();
+    type ObsEventHandler = (data?: { reason?: unknown; code?: unknown }) => void;
+    const registeredHandlers = new Map<string, ObsEventHandler>();
     mockOBS.on.mockImplementation(
-      (eventName: string, handler: (...args: unknown[]) => void) => {
+      (eventName: string, handler: ObsEventHandler) => {
         registeredHandlers.set(eventName, handler);
       },
     );
     mockOBS.off.mockImplementation(
-      (eventName: string, handler: (...args: unknown[]) => void) => {
+      (eventName: string, handler: ObsEventHandler) => {
         if (registeredHandlers.get(eventName) === handler) {
           registeredHandlers.delete(eventName);
         }
