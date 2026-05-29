@@ -4,8 +4,8 @@ import { TikTokWebSocketClient } from "../../../src/platforms/tiktok-websocket-c
 describe("TikTokWebSocketClient social routing", () => {
   it("emits social without follow for share actionType", () => {
     const client = new TikTokWebSocketClient("share_tester");
-    const socialCalls = [];
-    const followCalls = [];
+    const socialCalls: unknown[] = [];
+    const followCalls: unknown[] = [];
 
     client.on("social", (data) => socialCalls.push(data));
     client.on("follow", (data) => followCalls.push(data));
@@ -25,8 +25,8 @@ describe("TikTokWebSocketClient social routing", () => {
 
   it("emits follow for social payloads with follow wording but no actionType", () => {
     const client = new TikTokWebSocketClient("follow_tester");
-    const socialCalls = [];
-    const followCalls = [];
+    const socialCalls: unknown[] = [];
+    const followCalls: unknown[] = [];
 
     client.on("social", (data) => socialCalls.push(data));
     client.on("follow", (data) => followCalls.push(data));

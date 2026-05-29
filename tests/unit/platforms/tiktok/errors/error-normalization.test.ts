@@ -12,21 +12,103 @@ import {
 import * as testClock from "../../../../helpers/test-clock";
 import { TikTokPlatform } from "../../../../../src/platforms/tiktok.ts";
 
-const createPlatform = (configOverrides = {}, dependencyOverrides = {}) => {
+type TikTokTestConfig = {
+  enabled: boolean;
+  username: string;
+} & Record<string, unknown>;
+
+type TikTokTestConnection = {
+  on: (eventName: string, handler: (payload: unknown) => void | Promise<void>) => void;
+  emit: (eventName: string, payload?: unknown) => boolean;
+  removeAllListeners: (eventName?: string) => void;
+  connect: () => Promise<unknown>;
+  disconnect: () => Promise<unknown>;
+};
+
+type TikTokTestDependencies = {
+  logger: typeof noOpLogger;
+  notificationManager: {
+    emit: (eventName: string, payload?: unknown) => boolean;
+    on: (eventName: string, handler: (payload: unknown) => void) => void;
+    removeListener: (eventName: string, handler: (payload: unknown) => void) => void;
+    handleNotification: () => Promise<unknown>;
+  };
+  connectionFactory: {
+    createConnection: (
+      platform: string,
+      config: unknown,
+      dependencies: unknown,
+    ) => TikTokTestConnection;
+  };
+  TikTokWebSocketClient: unknown;
+  WebcastEvent: {
+    CHAT: string;
+    GIFT: string;
+    FOLLOW: string;
+    SOCIAL: string;
+    ROOM_USER: string;
+    ERROR: string;
+    DISCONNECT: string;
+  };
+  ControlEvent: Record<string, string>;
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  !!value && typeof value === "object";
+
+const expectString = (value: unknown, label: string): string => {
+  expect(typeof value).toBe("string");
+  if (typeof value !== "string") {
+    throw new Error(`Expected ${label} to be a string`);
+  }
+  return value;
+};
+
+const expectCauses = (
+  value: unknown,
+): readonly { message: string }[] => {
+  expect(Array.isArray(value)).toBe(true);
+  if (!Array.isArray(value)) {
+    throw new Error("Expected normalized causes array");
+  }
+  return value.map((cause) => {
+    expect(cause).toHaveProperty("message");
+    expect(isRecord(cause)).toBe(true);
+    if (!isRecord(cause)) {
+      throw new Error("Expected normalized cause object");
+    }
+    expect(typeof cause.message).toBe("string");
+    if (typeof cause.message !== "string") {
+      throw new Error("Expected normalized cause message");
+    }
+    return { message: cause.message };
+  });
+};
+
+const createPlatform = (
+  configOverrides: Partial<TikTokTestConfig> = {},
+  dependencyOverrides: Partial<TikTokTestDependencies> = {},
+) => {
   const logger = dependencyOverrides.logger || noOpLogger;
   const notificationManager = dependencyOverrides.notificationManager || {
-    emit: createMockFn(),
-    on: createMockFn(),
-    removeListener: createMockFn(),
-    handleNotification: createMockFn().mockResolvedValue(),
+    emit: createMockFn<[string, unknown?], boolean>().mockReturnValue(true),
+    on: createMockFn<[string, (payload: unknown) => void], void>(),
+    removeListener: createMockFn<[string, (payload: unknown) => void], void>(),
+    handleNotification: createMockFn<[], Promise<unknown>>().mockResolvedValue(undefined),
   };
   const connectionFactory = dependencyOverrides.connectionFactory || {
-    createConnection: createMockFn().mockReturnValue({
-      on: createMockFn(),
-      emit: createMockFn(),
-      removeAllListeners: createMockFn(),
-      connect: createMockFn().mockResolvedValue(),
-      disconnect: createMockFn(),
+    createConnection: createMockFn<
+      [string, unknown, unknown],
+      TikTokTestConnection
+    >().mockReturnValue({
+      on: createMockFn<[
+        string,
+        (payload: unknown) => void | Promise<void>,
+      ], void>(),
+      emit: createMockFn<[string, unknown?], boolean>().mockReturnValue(true),
+      removeAllListeners: createMockFn<[string?], void>(),
+      connect: createMockFn<[], Promise<unknown>>().mockResolvedValue(undefined),
+      disconnect: createMockFn<[], Promise<unknown>>().mockResolvedValue(undefined),
     }),
   };
 
@@ -43,6 +125,11 @@ const createPlatform = (configOverrides = {}, dependencyOverrides = {}) => {
     }));
 
   const WebcastEvent = dependencyOverrides.WebcastEvent || {
+    CHAT: "chat",
+    GIFT: "gift",
+    FOLLOW: "follow",
+    SOCIAL: "social",
+    ROOM_USER: "roomUser",
     ERROR: "error",
     DISCONNECT: "disconnect",
   };
@@ -123,7 +210,9 @@ describe("TikTokPlatform error normalization", () => {
         response: { body: longBody },
       });
 
-      expect(result.responseBody.length).toBe(512);
+      expect(expectString(result.responseBody, "responseBody").length).toBe(
+        512,
+      );
     });
 
     it("slices responseBody for response.data string", () => {
@@ -135,7 +224,9 @@ describe("TikTokPlatform error normalization", () => {
         response: { data: longData },
       });
 
-      expect(result.responseBody.length).toBe(512);
+      expect(expectString(result.responseBody, "responseBody").length).toBe(
+        512,
+      );
     });
 
     it("captures nested errors array as causes (max 3)", () => {
@@ -151,9 +242,10 @@ describe("TikTokPlatform error normalization", () => {
         ],
       });
 
-      expect(result.causes).toHaveLength(3);
-      expect(result.causes[0].message).toBe("cause 1");
-      expect(result.causes[2].message).toBe("cause 3");
+      const causes = expectCauses(result.causes);
+      expect(causes).toHaveLength(3);
+      expect(causes[0]).toMatchObject({ message: "cause 1" });
+      expect(causes[2]).toMatchObject({ message: "cause 3" });
     });
 
     it("records remainingCauses count when more than 3 errors", () => {

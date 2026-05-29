@@ -1,13 +1,38 @@
 import { describe, test, expect, afterEach } from "bun:test";
-import {
-  createMockFn,
-  restoreAllMocks,
-} from "../../../../helpers/bun-mock-utils";
+import { restoreAllMocks } from "../../../../helpers/bun-mock-utils";
 
 import { PlatformEvents } from "../../../../../src/interfaces/PlatformEvents";
 import { TikTokPlatform } from "../../../../../src/platforms/tiktok.ts";
 import { createMockTikTokPlatformDependencies } from "../../../../helpers/mock-factories";
 import * as testClock from "../../../../helpers/test-clock";
+
+type PaypiggyEvent = {
+  userId: string;
+  username: string;
+  tier?: string;
+};
+
+const requiredWebcastEvents = {
+  CHAT: "chat",
+  GIFT: "gift",
+  FOLLOW: "follow",
+  SOCIAL: "social",
+  ROOM_USER: "roomUser",
+  ERROR: "error",
+  DISCONNECT: "disconnect",
+};
+
+const getOnlyPaypiggyEvent = (
+  events: readonly PaypiggyEvent[],
+): PaypiggyEvent => {
+  expect(events).toHaveLength(1);
+  const event = events[0];
+  expect(event).toBeDefined();
+  if (!event) {
+    throw new Error("Expected one paypiggy event");
+  }
+  return event;
+};
 
 describe("TikTok paypiggy routing", () => {
   afterEach(() => {
@@ -19,19 +44,21 @@ describe("TikTok paypiggy routing", () => {
   const createPlatform = () =>
     new TikTokPlatform(baseConfig, {
       ...createMockTikTokPlatformDependencies(),
-      timestampService: {
-        extractTimestamp: createMockFn(() =>
-          new Date(testClock.now()).toISOString(),
-        ),
-      },
+      WebcastEvent: requiredWebcastEvents,
     });
 
   test("emits paypiggy for subscription events with nested identity", async () => {
     const platform = createPlatform();
-    const paypiggyEvents = [];
+    const paypiggyEvents: PaypiggyEvent[] = [];
     platform.handlers = {
       ...platform.handlers,
-      onPaypiggy: (data) => paypiggyEvents.push(data),
+      onPaypiggy: (data: unknown) => {
+        expect(isPaypiggyEvent(data)).toBe(true);
+        if (!isPaypiggyEvent(data)) {
+          throw new Error("Expected paypiggy event payload");
+        }
+        paypiggyEvents.push(data);
+      },
     };
 
     await platform._handleStandardEvent(
@@ -51,18 +78,25 @@ describe("TikTok paypiggy routing", () => {
       },
     );
 
-    expect(paypiggyEvents).toHaveLength(1);
-    expect(paypiggyEvents[0].userId).toBe("subscriber_one");
-    expect(paypiggyEvents[0].username).toBe("SubscriberOne");
-    expect(paypiggyEvents[0].tier).toBeUndefined();
+    expect(getOnlyPaypiggyEvent(paypiggyEvents)).toMatchObject({
+      userId: "subscriber_one",
+      username: "SubscriberOne",
+    });
+    expect(getOnlyPaypiggyEvent(paypiggyEvents).tier).toBeUndefined();
   });
 
   test("emits paypiggy for superfan events with nested identity", async () => {
     const platform = createPlatform();
-    const paypiggyEvents = [];
+    const paypiggyEvents: PaypiggyEvent[] = [];
     platform.handlers = {
       ...platform.handlers,
-      onPaypiggy: (data) => paypiggyEvents.push(data),
+      onPaypiggy: (data: unknown) => {
+        expect(isPaypiggyEvent(data)).toBe(true);
+        if (!isPaypiggyEvent(data)) {
+          throw new Error("Expected paypiggy event payload");
+        }
+        paypiggyEvents.push(data);
+      },
     };
 
     await platform._handleStandardEvent(
@@ -82,9 +116,22 @@ describe("TikTok paypiggy routing", () => {
       },
     );
 
-    expect(paypiggyEvents).toHaveLength(1);
-    expect(paypiggyEvents[0].userId).toBe("superfan_one");
-    expect(paypiggyEvents[0].username).toBe("SuperfanOne");
-    expect(paypiggyEvents[0].tier).toBe("superfan");
+    expect(getOnlyPaypiggyEvent(paypiggyEvents)).toMatchObject({
+      userId: "superfan_one",
+      username: "SuperfanOne",
+      tier: "superfan",
+    });
   });
 });
+
+function isPaypiggyEvent(value: unknown): value is PaypiggyEvent {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const event = value as Record<string, unknown>;
+  return (
+    typeof event.userId === "string" &&
+    typeof event.username === "string" &&
+    (event.tier === undefined || typeof event.tier === "string")
+  );
+}

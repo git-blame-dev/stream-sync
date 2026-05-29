@@ -23,6 +23,26 @@ type PlatformEventPayload = {
   };
 };
 
+type RouterEventBus = {
+  subscribe: (
+    eventName: string,
+    handler: (event: unknown) => Promise<void>,
+  ) => () => void;
+  emit: (eventName: string, payload: unknown) => boolean;
+};
+
+const getOnlyHandledNotification = (
+  handled: readonly RoutedNotification[],
+): RoutedNotification => {
+  expect(handled).toHaveLength(1);
+  const notification = handled[0];
+  expect(notification).toBeDefined();
+  if (!notification) {
+    throw new Error("Expected one routed notification");
+  }
+  return notification;
+};
+
 function createAppRuntimeMocks() {
   const handled: RoutedNotification[] = [];
   return {
@@ -30,29 +50,39 @@ function createAppRuntimeMocks() {
     runtime: {
       handleFollowNotification: (
         platform: string,
-        username: string,
-        payload: unknown,
+        username: unknown,
+        payload: Record<string, unknown>,
       ) => {
+        expect(typeof username).toBe("string");
+        if (typeof username !== "string") {
+          throw new Error("Expected follow username to be a string");
+        }
         handled.push({ type: "platform:follow", platform, username, payload });
       },
       handleShareNotification: (
         platform: string,
-        username: string,
-        payload: unknown,
+        username: unknown,
+        payload: Record<string, unknown>,
       ) => {
+        expect(typeof username).toBe("string");
+        if (typeof username !== "string") {
+          throw new Error("Expected share username to be a string");
+        }
         handled.push({ type: "platform:share", platform, username, payload });
       },
     },
   };
 }
 
-function createMockEventBus() {
+function createMockEventBus(): RouterEventBus {
   const bus = new EventEmitter();
-  bus.subscribe = (eventName, handler) => {
-    bus.on(eventName, handler);
-    return () => bus.off(eventName, handler);
+  return {
+    subscribe: (eventName: string, handler: (event: unknown) => Promise<void>) => {
+      bus.on(eventName, handler);
+      return () => bus.off(eventName, handler);
+    },
+    emit: (eventName: string, payload: unknown) => bus.emit(eventName, payload),
   };
-  return bus;
 }
 
 describe("TikTok follow/share routing", () => {
@@ -62,7 +92,7 @@ describe("TikTok follow/share routing", () => {
     new PlatformEventRouter({
       eventBus,
       runtime,
-      notificationManager: { handleNotification: createMockFn() },
+      notificationManager: { handleNotification: createMockFn<[], Promise<unknown>>().mockResolvedValue(undefined) },
       config: createConfigFixture({
         general: {
           followsEnabled: true,
@@ -85,9 +115,11 @@ describe("TikTok follow/share routing", () => {
       },
     });
 
-    expect(handled).toHaveLength(1);
-    expect(handled[0].type).toBe("platform:follow");
-    expect(handled[0].username).toBeDefined();
+    const notification = getOnlyHandledNotification(handled);
+    expect(notification).toMatchObject({
+      type: "platform:follow",
+      username: "Follower",
+    });
   });
 
   it("routes share events through platform:event to PlatformEventRouter", () => {
@@ -96,7 +128,7 @@ describe("TikTok follow/share routing", () => {
     new PlatformEventRouter({
       eventBus,
       runtime,
-      notificationManager: { handleNotification: createMockFn() },
+      notificationManager: { handleNotification: createMockFn<[], Promise<unknown>>().mockResolvedValue(undefined) },
       config: createConfigFixture({
         general: {
           followsEnabled: true,
@@ -108,9 +140,13 @@ describe("TikTok follow/share routing", () => {
       logger: noOpLogger,
     });
     const emitted: PlatformEventPayload[] = [];
-    eventBus.subscribe("platform:event", (payload: PlatformEventPayload) =>
-      emitted.push(payload),
-    );
+    eventBus.subscribe("platform:event", async (payload: unknown) => {
+      expect(isPlatformEventPayload(payload)).toBe(true);
+      if (!isPlatformEventPayload(payload)) {
+        throw new Error("Expected platform event payload");
+      }
+      emitted.push(payload);
+    });
 
     eventBus.emit("platform:event", {
       type: "platform:share",
@@ -124,7 +160,24 @@ describe("TikTok follow/share routing", () => {
     });
 
     expect(emitted.find((p) => p.type === "platform:share")).toBeDefined();
-    expect(handled).toHaveLength(1);
-    expect(handled[0].type).toBe("platform:share");
+    const notification = getOnlyHandledNotification(handled);
+    expect(notification).toMatchObject({
+      type: "platform:share",
+      username: "Sharer",
+    });
   });
 });
+
+function isPlatformEventPayload(value: unknown): value is PlatformEventPayload {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const event = value as Record<string, unknown>;
+  const data = event.data;
+  return (
+    typeof event.type === "string" &&
+    typeof event.platform === "string" &&
+    !!data &&
+    typeof data === "object"
+  );
+}

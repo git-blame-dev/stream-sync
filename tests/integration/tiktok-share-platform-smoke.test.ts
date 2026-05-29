@@ -9,7 +9,6 @@ import {
   createMockTikTokPlatformDependencies,
   noOpLogger,
 } from "../helpers/mock-factories";
-import { createTextProcessingManager } from "../../src/utils/text-processing";
 import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
 import {
   createConfigFixture,
@@ -18,30 +17,78 @@ import {
 import { createTikTokShareEvent } from "../helpers/tiktok-test-data";
 import { expectNoTechnicalArtifacts } from "../helpers/assertion-helpers";
 
+type EventHandler = (payload: unknown) => void;
+type RuntimeEventHandler = (payload: Record<string, unknown>) => void | Promise<void>;
+
+type UserFacingNotificationData = {
+  displayMessage: string;
+  ttsMessage: string;
+  logMessage: string;
+  username: string;
+};
+
+type DisplayQueueItem = {
+  type: string;
+  platform: string;
+  data: UserFacingNotificationData;
+};
+
 const createEventBus = () => {
   const emitter = new EventEmitter();
   return {
-    emit: emitter.emit.bind(emitter),
-    on: emitter.on.bind(emitter),
-    subscribe: (event, handler) => {
+    emit: (event: string, payload: unknown) => {
+      emitter.emit(event, payload);
+    },
+    on: (event: string, handler: EventHandler) => {
+      emitter.on(event, handler);
+    },
+    subscribe: (event: string, handler: RuntimeEventHandler) => {
       emitter.on(event, handler);
       return () => emitter.off(event, handler);
     },
   };
 };
 
-const assertUserFacingOutput = (data, { username }) => {
-  const fields = ["displayMessage", "ttsMessage", "logMessage"];
+const isDisplayQueueItem = (value: unknown): value is DisplayQueueItem => {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const item = value as Record<string, unknown>;
+  const data = item.data;
+  if (!data || typeof data !== "object") {
+    return false;
+  }
+  const notificationData = data as Record<string, unknown>;
+  return (
+    typeof item.type === "string" &&
+    typeof item.platform === "string" &&
+    typeof notificationData.username === "string" &&
+    typeof notificationData.displayMessage === "string" &&
+    typeof notificationData.ttsMessage === "string" &&
+    typeof notificationData.logMessage === "string"
+  );
+};
+
+const assertDisplayQueueItem = (value: unknown): DisplayQueueItem => {
+  expect(isDisplayQueueItem(value)).toBe(true);
+  if (!isDisplayQueueItem(value)) {
+    throw new Error("Expected a typed display queue item");
+  }
+  return value;
+};
+
+const assertUserFacingOutput = (
+  data: UserFacingNotificationData,
+  { username }: { username: string },
+) => {
+  const fields = ["displayMessage", "ttsMessage", "logMessage"] as const;
   fields.forEach((field) => {
-    expect(typeof data[field]).toBe("string");
     expect(data[field].trim()).not.toBe("");
     expectNoTechnicalArtifacts(data[field]);
   });
-  if (username) {
-    fields.forEach((field) => {
-      expect(data[field]).toContain(username);
-    });
-  }
+  fields.forEach((field) => {
+    expect(data[field]).toContain(username);
+  });
 };
 
 describe("TikTok share platform flow (smoke)", () => {
@@ -53,7 +100,6 @@ describe("TikTok share platform flow (smoke)", () => {
     const eventBus = createEventBus();
     const logger = noOpLogger;
     const displayQueue = createMockDisplayQueue();
-    const textProcessing = createTextProcessingManager({ logger });
     const configOverrides = {
       general: {
         sharesEnabled: true,
@@ -71,7 +117,6 @@ describe("TikTok share platform flow (smoke)", () => {
       eventBus,
       config,
       constants: require("../../src/core/constants"),
-      textProcessing,
       obsGoals: { processDonationGoal: createMockFn() },
       vfxCommandService: {
         getVFXConfig: createMockFn().mockResolvedValue(null),
@@ -92,12 +137,22 @@ describe("TikTok share platform flow (smoke)", () => {
       notificationManager,
       displayQueue,
       logger,
-      platformLifecycleService,
     });
 
     const platform = new TikTokPlatform(
       createTikTokConfigFixture({ enabled: true }),
-      createMockTikTokPlatformDependencies(),
+      {
+        ...createMockTikTokPlatformDependencies(),
+        WebcastEvent: {
+          CHAT: "chat",
+          GIFT: "gift",
+          FOLLOW: "follow",
+          SOCIAL: "social",
+          ROOM_USER: "roomUser",
+          ERROR: "error",
+          DISCONNECT: "disconnect",
+        },
+      },
     );
     platform.handlers =
       platformLifecycleService.createDefaultEventHandlers("tiktok");
@@ -111,10 +166,15 @@ describe("TikTok share platform flow (smoke)", () => {
     try {
       await platform.handleTikTokSocial(shareEvent);
 
-      await new Promise(setImmediate);
+      await Promise.resolve();
 
       expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
-      const queued = displayQueue.addItem.mock.calls[0][0];
+      const firstCall = displayQueue.addItem.mock.calls[0];
+      expect(firstCall).toBeDefined();
+      if (!firstCall) {
+        throw new Error("Expected display queue addItem to be called");
+      }
+      const queued = assertDisplayQueueItem(firstCall[0]);
       expect(queued.type).toBe("platform:share");
       expect(queued.platform).toBe("tiktok");
       expect(queued.data.username).toBe("test-user-share");

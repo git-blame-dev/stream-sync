@@ -7,21 +7,88 @@ import { noOpLogger } from "../helpers/mock-factories";
 import { TikTokPlatform } from "../../src/platforms/tiktok.ts";
 import { PlatformEvents } from "../../src/interfaces/PlatformEvents";
 
-const createPlatform = (configOverrides = {}, dependencyOverrides = {}) => {
+type TikTokTestConfig = {
+  enabled: boolean;
+  username: string;
+} & Record<string, unknown>;
+
+type TikTokTestConnection = {
+  on: (eventName: string, handler: (payload: unknown) => void | Promise<void>) => void;
+  emit: (eventName: string, payload?: unknown) => boolean;
+  removeAllListeners: (eventName?: string) => void;
+  connect: () => Promise<unknown>;
+  disconnect: () => Promise<unknown>;
+};
+
+type TikTokTestDependencies = {
+  logger: typeof noOpLogger;
+  notificationManager: {
+    emit: (eventName: string, payload?: unknown) => boolean;
+    on: (eventName: string, handler: (payload: unknown) => void) => void;
+    removeListener: (eventName: string, handler: (payload: unknown) => void) => void;
+    handleNotification: () => Promise<unknown>;
+  };
+  connectionFactory: {
+    createConnection: (
+      platform: string,
+      config: unknown,
+      dependencies: unknown,
+    ) => TikTokTestConnection;
+  };
+  TikTokWebSocketClient: unknown;
+  WebcastEvent: {
+    CHAT: string;
+    GIFT: string;
+    FOLLOW: string;
+    SOCIAL: string;
+    ROOM_USER: string;
+    ERROR: string;
+    DISCONNECT: string;
+  };
+  ControlEvent: Record<string, string>;
+  retrySystem?: {
+    isConnected?: (platform: string) => boolean | undefined;
+    resetRetryCount: (platform: string) => void;
+    handleConnectionError: (
+      platform: string,
+      error: unknown,
+      reconnect: () => Promise<void>,
+      cleanup: () => Promise<void>,
+    ) => void;
+  };
+};
+
+type PlatformEvent = {
+  type: string;
+  data: {
+    willReconnect?: boolean;
+  };
+};
+
+const createPlatform = (
+  configOverrides: Partial<TikTokTestConfig> = {},
+  dependencyOverrides: Partial<TikTokTestDependencies> = {},
+) => {
   const logger = dependencyOverrides.logger || noOpLogger;
   const notificationManager = dependencyOverrides.notificationManager || {
-    emit: createMockFn(),
-    on: createMockFn(),
-    removeListener: createMockFn(),
-    handleNotification: createMockFn().mockResolvedValue(),
+    emit: createMockFn<[string, unknown?], boolean>().mockReturnValue(true),
+    on: createMockFn<[string, (payload: unknown) => void], void>(),
+    removeListener: createMockFn<[string, (payload: unknown) => void], void>(),
+    handleNotification: createMockFn<[], Promise<unknown>>().mockResolvedValue(undefined),
   };
   const connectionFactory = dependencyOverrides.connectionFactory || {
-    createConnection: createMockFn().mockReturnValue({
-      on: createMockFn(),
-      emit: createMockFn(),
-      removeAllListeners: createMockFn(),
-      connect: createMockFn().mockResolvedValue(),
-      disconnect: createMockFn(),
+    createConnection: createMockFn<
+      [string, unknown, unknown],
+      TikTokTestConnection
+    >().mockReturnValue({
+      on: createMockFn<[
+        string,
+        (payload: unknown) => void | Promise<void>,
+      ], void>(),
+      emit: createMockFn<[string, unknown?], boolean>().mockReturnValue(true),
+      removeAllListeners: createMockFn<[string?], void>(),
+      connect: createMockFn<[], Promise<unknown>>().mockResolvedValue(undefined),
+      disconnect: createMockFn<[], Promise<unknown>>().mockResolvedValue(undefined),
     }),
   };
 
@@ -38,6 +105,11 @@ const createPlatform = (configOverrides = {}, dependencyOverrides = {}) => {
     }));
 
   const WebcastEvent = dependencyOverrides.WebcastEvent || {
+    CHAT: "chat",
+    GIFT: "gift",
+    FOLLOW: "follow",
+    SOCIAL: "social",
+    ROOM_USER: "roomUser",
     ERROR: "error",
     DISCONNECT: "disconnect",
   };
@@ -66,10 +138,13 @@ describe("TikTok reconnect lifecycle integration", () => {
   });
 
   it("does not reconnect for terminal disconnect reasons", async () => {
-    const retrySystem = {
-      resetRetryCount: createMockFn(),
-      handleConnectionError: createMockFn(),
-      isConnected: createMockFn(),
+    const retrySystem: TikTokTestDependencies["retrySystem"] = {
+      resetRetryCount: createMockFn<[string], void>(),
+      handleConnectionError: createMockFn<
+        [string, unknown, () => Promise<void>, () => Promise<void>],
+        void
+      >(),
+      isConnected: createMockFn<[string], boolean | undefined>(),
     };
     const platform = createPlatform({}, { retrySystem });
     platform.queueRetry = createMockFn().mockReturnValue({ queued: true });
@@ -89,7 +164,7 @@ describe("TikTok reconnect lifecycle integration", () => {
     platform.intervalManager.hasInterval =
       createMockFn().mockReturnValue(false);
     platform.intervalManager.createInterval = createMockFn();
-    const emittedEvents = [];
+    const emittedEvents: PlatformEvent[] = [];
     platform.on("platform:event", (event) => emittedEvents.push(event));
 
     await platform._handleStreamEnd({
@@ -101,6 +176,9 @@ describe("TikTok reconnect lifecycle integration", () => {
       (event) => event.type === PlatformEvents.CHAT_DISCONNECTED,
     );
     expect(disconnectEvent).toBeDefined();
+    if (!disconnectEvent) {
+      throw new Error("Expected chat disconnect event");
+    }
     expect(disconnectEvent.data.willReconnect).toBe(true);
     expect(platform.intervalManager.createInterval).toHaveBeenCalledTimes(1);
   });
