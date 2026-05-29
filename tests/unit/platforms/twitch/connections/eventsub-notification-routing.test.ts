@@ -9,13 +9,29 @@ import {
   initializeStaticSecrets,
 } from "../../../../../src/core/secrets";
 
+type ReadyTwitchAuth = ReturnType<typeof createReadyTwitchAuth>;
+type EventSubDepsOverrides = Record<string, unknown> & { twitchAuth: ReadyTwitchAuth };
+type RoutedPayload = Record<string, unknown> & {
+  chatter_user_name?: string;
+  message?: { text?: string; fragments?: unknown[] };
+  timestamp?: string;
+  username?: string;
+  months?: number;
+  viewerCount?: number;
+  id?: string;
+  amount?: number;
+};
+
 const createReadyTwitchAuth = () => ({
   isReady: () => true,
   refreshTokens: createMockFn().mockResolvedValue(true),
   getUserId: () => "test-user-123",
 });
 
-const createEventSub = (configOverrides = {}, depsOverrides = {}) => {
+const createEventSub = (
+  configOverrides: Record<string, unknown> = {},
+  depsOverrides: EventSubDepsOverrides,
+): TwitchEventSub => {
   const config = {
     clientId: "test-client-id",
     channel: "teststreamer",
@@ -25,10 +41,10 @@ const createEventSub = (configOverrides = {}, depsOverrides = {}) => {
     ...configOverrides,
   };
   secrets.twitch.accessToken = "test-token";
-  if (!depsOverrides.twitchAuth) {
+  const { twitchAuth, ...extraDeps } = depsOverrides;
+  if (!twitchAuth) {
     throw new Error("twitchAuth is required - provide explicit mock");
   }
-  const twitchAuth = depsOverrides.twitchAuth;
   return new TwitchEventSub(config, {
     logger: noOpLogger,
     twitchAuth,
@@ -43,12 +59,12 @@ const createEventSub = (configOverrides = {}, depsOverrides = {}) => {
     ChatFileLoggingService: class {
       logRawPlatformData() {}
     },
-    ...depsOverrides,
+    ...extraDeps,
   });
 };
 
 describe("TwitchEventSub notification routing", () => {
-  let eventSub;
+  let eventSub: TwitchEventSub | null;
 
   afterEach(() => {
     if (eventSub?.cleanup) {
@@ -60,7 +76,7 @@ describe("TwitchEventSub notification routing", () => {
 
   it("routes chat notifications and emits chat message event", async () => {
     eventSub = createEventSub({}, { twitchAuth: createReadyTwitchAuth() });
-    const messageEvents = [];
+    const messageEvents: RoutedPayload[] = [];
     eventSub.on("chatMessage", (data) => messageEvents.push(data));
 
     const payload = {
@@ -83,14 +99,14 @@ describe("TwitchEventSub notification routing", () => {
     await eventSub.handleWebSocketMessage(payload);
 
     expect(messageEvents).toHaveLength(1);
-    expect(messageEvents[0].chatter_user_name).toBe("TestChatter");
-    expect(messageEvents[0].message.text).toBe("hello from chat");
-    expect(messageEvents[0].timestamp).toBe("2024-01-01T00:00:00.123Z");
+    expect(messageEvents[0]?.chatter_user_name).toBe("TestChatter");
+    expect(messageEvents[0]?.message?.text).toBe("hello from chat");
+    expect(messageEvents[0]?.timestamp).toBe("2024-01-01T00:00:00.123Z");
   });
 
   it("preserves EventSub message fragments on routed chat notifications", async () => {
     eventSub = createEventSub({}, { twitchAuth: createReadyTwitchAuth() });
-    const messageEvents = [];
+    const messageEvents: RoutedPayload[] = [];
     eventSub.on("chatMessage", (data) => messageEvents.push(data));
 
     const payload = {
@@ -129,8 +145,8 @@ describe("TwitchEventSub notification routing", () => {
     await eventSub.handleWebSocketMessage(payload);
 
     expect(messageEvents).toHaveLength(1);
-    expect(messageEvents[0].timestamp).toBe("2024-01-01T00:00:00.555Z");
-    expect(messageEvents[0].message.fragments).toEqual([
+    expect(messageEvents[0]?.timestamp).toBe("2024-01-01T00:00:00.555Z");
+    expect(messageEvents[0]?.message?.fragments).toEqual([
       {
         type: "emote",
         text: "testEmote",
@@ -148,7 +164,7 @@ describe("TwitchEventSub notification routing", () => {
 
   it("routes follow notifications and emits follow event", async () => {
     eventSub = createEventSub({}, { twitchAuth: createReadyTwitchAuth() });
-    const followEvents = [];
+    const followEvents: RoutedPayload[] = [];
     eventSub.on("follow", (data) => followEvents.push(data));
 
     const payload = {
@@ -167,13 +183,13 @@ describe("TwitchEventSub notification routing", () => {
     await eventSub.handleWebSocketMessage(payload);
 
     expect(followEvents).toHaveLength(1);
-    expect(followEvents[0].username).toBe("NewFollower");
-    expect(followEvents[0].timestamp).toBe("2024-01-01T00:00:00.000Z");
+    expect(followEvents[0]?.username).toBe("NewFollower");
+    expect(followEvents[0]?.timestamp).toBe("2024-01-01T00:00:00.000Z");
   });
 
   it("emits subscription events with canonical months for renewal handling", () => {
     eventSub = createEventSub({}, { twitchAuth: createReadyTwitchAuth() });
-    const paypiggyEvents = [];
+    const paypiggyEvents: RoutedPayload[] = [];
     eventSub.on("paypiggy", (data) => paypiggyEvents.push(data));
 
     const subscriptionEvent = {
@@ -198,7 +214,7 @@ describe("TwitchEventSub notification routing", () => {
 
   it("emits resubscription messages with canonical months for renewal handling", () => {
     eventSub = createEventSub({}, { twitchAuth: createReadyTwitchAuth() });
-    const paypiggyMessageEvents = [];
+    const paypiggyMessageEvents: RoutedPayload[] = [];
     eventSub.on("paypiggyMessage", (data) => paypiggyMessageEvents.push(data));
 
     const resubEvent = {
@@ -224,7 +240,7 @@ describe("TwitchEventSub notification routing", () => {
 
   it("routes raid events and emits raid event", async () => {
     eventSub = createEventSub({}, { twitchAuth: createReadyTwitchAuth() });
-    const raidEvents = [];
+    const raidEvents: RoutedPayload[] = [];
     eventSub.on("raid", (data) => raidEvents.push(data));
 
     const payload = {
@@ -247,14 +263,14 @@ describe("TwitchEventSub notification routing", () => {
     await eventSub.handleWebSocketMessage(payload);
 
     expect(raidEvents).toHaveLength(1);
-    expect(raidEvents[0].username).toBe("RaiderStreamer");
-    expect(raidEvents[0].viewerCount).toBe(50);
-    expect(raidEvents[0].timestamp).toBe("2024-01-01T00:00:00.456Z");
+    expect(raidEvents[0]?.username).toBe("RaiderStreamer");
+    expect(raidEvents[0]?.viewerCount).toBe(50);
+    expect(raidEvents[0]?.timestamp).toBe("2024-01-01T00:00:00.456Z");
   });
 
   it("routes bits notifications when canonical id comes from metadata message_id", async () => {
     eventSub = createEventSub({}, { twitchAuth: createReadyTwitchAuth() });
-    const giftEvents = [];
+    const giftEvents: RoutedPayload[] = [];
     eventSub.on("gift", (data) => giftEvents.push(data));
 
     const payload = {
@@ -280,8 +296,8 @@ describe("TwitchEventSub notification routing", () => {
     await eventSub.handleWebSocketMessage(payload);
 
     expect(giftEvents).toHaveLength(1);
-    expect(giftEvents[0].id).toBe("test-eventsub-bits-id-1");
-    expect(giftEvents[0].amount).toBe(88);
-    expect(giftEvents[0].timestamp).toBe("2024-01-01T00:00:00.654Z");
+    expect(giftEvents[0]?.id).toBe("test-eventsub-bits-id-1");
+    expect(giftEvents[0]?.amount).toBe(88);
+    expect(giftEvents[0]?.timestamp).toBe("2024-01-01T00:00:00.654Z");
   });
 });

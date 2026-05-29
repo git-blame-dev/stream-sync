@@ -2,13 +2,50 @@ import { describe, test, expect } from "bun:test";
 import { noOpLogger } from "../../../../helpers/mock-factories";
 import { createTwitchEventSubEventRouter } from "../../../../../src/platforms/twitch/events/event-router.ts";
 
+type RouterPayload = Record<string, unknown> & {
+  message?: unknown;
+  payload?: Record<string, unknown>;
+  cheermoteInfo?: unknown;
+};
+
+type EmittedEvent = { type: string; payload: RouterPayload };
+
+const isRouterPayload = (payload: unknown): payload is RouterPayload =>
+  payload !== null && typeof payload === "object";
+
+const emitInto = (emitted: EmittedEvent[]) =>
+  (type: string, payload: unknown): void => {
+    if (!isRouterPayload(payload)) {
+      throw new Error(`Expected routed ${type} payload to be an object`);
+    }
+    emitted.push({ type, payload });
+  };
+
+const requireEmitted = (emitted: EmittedEvent[], type: string): EmittedEvent => {
+  const event = emitted.find((evt) => evt.type === type);
+  if (!event) {
+    throw new Error(`Expected ${type} event to be emitted`);
+  }
+  return event;
+};
+
+const requireMessageRecord = (payload: RouterPayload): Record<string, unknown> => {
+  if (payload.message === null || typeof payload.message !== "object") {
+    throw new Error("Expected message payload object");
+  }
+  if (!("text" in payload.message) && !("fragments" in payload.message)) {
+    throw new Error("Expected Twitch message payload shape");
+  }
+  return payload.message;
+};
+
 describe("Twitch EventSub event router", () => {
   test("emits chat message payloads with metadata timestamp", () => {
-    const emitted = [];
+    const emitted: EmittedEvent[] = [];
     const router = createTwitchEventSubEventRouter({
       config: { channel: "streamer", dataLoggingEnabled: false },
       logger: noOpLogger,
-      emit: (type, payload) => emitted.push({ type, payload }),
+      emit: emitInto(emitted),
       logRawPlatformData: async () => {},
       logError: () => {},
     });
@@ -26,19 +63,18 @@ describe("Twitch EventSub event router", () => {
       },
     );
 
-    const messageEvent = emitted.find((evt) => evt.type === "chatMessage");
-    expect(messageEvent).toBeDefined();
-    expect(messageEvent.payload.message.text).toBe("hi");
+    const messageEvent = requireEmitted(emitted, "chatMessage");
+    expect(requireMessageRecord(messageEvent.payload).text).toBe("hi");
     expect(messageEvent.payload.chatter_user_name).toBe("viewer");
     expect(messageEvent.payload.timestamp).toBe("2024-01-01T00:00:00.123Z");
   });
 
   test("keeps chat message fragments when applying metadata timestamp fallback", () => {
-    const emitted = [];
+    const emitted: EmittedEvent[] = [];
     const router = createTwitchEventSubEventRouter({
       config: { channel: "streamer", dataLoggingEnabled: false },
       logger: noOpLogger,
-      emit: (type, payload) => emitted.push({ type, payload }),
+      emit: emitInto(emitted),
       logRawPlatformData: async () => {},
       logError: () => {},
     });
@@ -72,10 +108,9 @@ describe("Twitch EventSub event router", () => {
       },
     );
 
-    const messageEvent = emitted.find((evt) => evt.type === "chatMessage");
-    expect(messageEvent).toBeDefined();
+    const messageEvent = requireEmitted(emitted, "chatMessage");
     expect(messageEvent.payload.timestamp).toBe("2024-01-01T00:00:00.123Z");
-    expect(messageEvent.payload.message.fragments).toEqual([
+    expect(requireMessageRecord(messageEvent.payload).fragments).toEqual([
       {
         type: "emote",
         text: "testEmote",
@@ -92,11 +127,11 @@ describe("Twitch EventSub event router", () => {
   });
 
   test("does not emit chat events when timestamp is missing", () => {
-    const emitted = [];
+    const emitted: EmittedEvent[] = [];
     const router = createTwitchEventSubEventRouter({
       config: { channel: "streamer", dataLoggingEnabled: false },
       logger: noOpLogger,
-      emit: (type, payload) => emitted.push({ type, payload }),
+      emit: emitInto(emitted),
       logRawPlatformData: async () => {},
       logError: () => {},
     });
@@ -106,17 +141,17 @@ describe("Twitch EventSub event router", () => {
       chatter_user_name: "viewer",
       broadcaster_user_id: "2",
       message: { text: "hi" },
-    });
+    }, null);
 
     expect(emitted.find((evt) => evt.type === "chatMessage")).toBeUndefined();
   });
 
   test("does not emit follow events when followed_at is missing", () => {
-    const emitted = [];
+    const emitted: EmittedEvent[] = [];
     const router = createTwitchEventSubEventRouter({
       config: { dataLoggingEnabled: false },
       logger: noOpLogger,
-      emit: (type, payload) => emitted.push({ type, payload }),
+      emit: emitInto(emitted),
       logRawPlatformData: async () => {},
       logError: () => {},
     });
@@ -125,17 +160,17 @@ describe("Twitch EventSub event router", () => {
       user_name: "Follower",
       user_id: "follower-1",
       user_login: "follower",
-    });
+    }, null);
 
     expect(emitted.find((evt) => evt.type === "follow")).toBeUndefined();
   });
 
   test("emits follow events when followed_at is present", () => {
-    const emitted = [];
+    const emitted: EmittedEvent[] = [];
     const router = createTwitchEventSubEventRouter({
       config: { dataLoggingEnabled: false },
       logger: noOpLogger,
-      emit: (type, payload) => emitted.push({ type, payload }),
+      emit: emitInto(emitted),
       logRawPlatformData: async () => {},
       logError: () => {},
     });
@@ -145,10 +180,9 @@ describe("Twitch EventSub event router", () => {
       user_id: "follower-2",
       user_login: "follower",
       followed_at: "2024-02-01T00:00:00Z",
-    });
+    }, null);
 
-    const followEvent = emitted.find((evt) => evt.type === "follow");
-    expect(followEvent).toBeDefined();
+    const followEvent = requireEmitted(emitted, "follow");
     expect(followEvent.payload).toMatchObject({
       username: "Follower",
       userId: "follower-2",
@@ -157,11 +191,11 @@ describe("Twitch EventSub event router", () => {
   });
 
   test("emits bits gifts when cheermote data is missing", () => {
-    const emitted = [];
+    const emitted: EmittedEvent[] = [];
     const router = createTwitchEventSubEventRouter({
       config: { dataLoggingEnabled: false },
       logger: noOpLogger,
-      emit: (type, payload) => emitted.push({ type, payload }),
+      emit: emitInto(emitted),
       logRawPlatformData: async () => {},
       logError: () => {},
     });
@@ -176,8 +210,7 @@ describe("Twitch EventSub event router", () => {
       timestamp: "2024-01-01T00:00:00Z",
     });
 
-    const giftEvent = emitted.find((evt) => evt.type === "gift");
-    expect(giftEvent).toBeDefined();
+    const giftEvent = requireEmitted(emitted, "gift");
     expect(giftEvent.payload.giftType).toBe("bits");
     expect(giftEvent.payload.message).toBe("hello");
     expect(giftEvent.payload.id).toBe("bits-msg-1");
@@ -185,28 +218,28 @@ describe("Twitch EventSub event router", () => {
   });
 
   test("does not emit stream status events without required timestamps", () => {
-    const emitted = [];
+    const emitted: EmittedEvent[] = [];
     const router = createTwitchEventSubEventRouter({
       config: { dataLoggingEnabled: false },
       logger: noOpLogger,
-      emit: (type, payload) => emitted.push({ type, payload }),
+      emit: emitInto(emitted),
       logRawPlatformData: async () => {},
       logError: () => {},
     });
 
-    router.handleNotificationEvent("stream.online", { id: "stream-1" });
-    router.handleNotificationEvent("stream.offline", { id: "stream-1" });
+    router.handleNotificationEvent("stream.online", { id: "stream-1" }, null);
+    router.handleNotificationEvent("stream.offline", { id: "stream-1" }, null);
 
     expect(emitted.find((evt) => evt.type === "streamOnline")).toBeUndefined();
     expect(emitted.find((evt) => evt.type === "streamOffline")).toBeUndefined();
   });
 
   test("suppresses gift subscription notifications for gift events", () => {
-    const emitted = [];
+    const emitted: EmittedEvent[] = [];
     const router = createTwitchEventSubEventRouter({
       config: { dataLoggingEnabled: false },
       logger: noOpLogger,
-      emit: (type, payload) => emitted.push({ type, payload }),
+      emit: emitInto(emitted),
       logRawPlatformData: async () => {},
       logError: () => {},
     });
@@ -222,11 +255,11 @@ describe("Twitch EventSub event router", () => {
   });
 
   test("emits subscription payloads with normalized months and metadata timestamp", () => {
-    const emitted = [];
+    const emitted: EmittedEvent[] = [];
     const router = createTwitchEventSubEventRouter({
       config: { dataLoggingEnabled: false },
       logger: noOpLogger,
-      emit: (type, payload) => emitted.push({ type, payload }),
+      emit: emitInto(emitted),
       logRawPlatformData: async () => {},
       logError: () => {},
     });
@@ -246,8 +279,7 @@ describe("Twitch EventSub event router", () => {
       },
     );
 
-    const paypiggyEvent = emitted.find((evt) => evt.type === "paypiggy");
-    expect(paypiggyEvent).toBeDefined();
+    const paypiggyEvent = requireEmitted(emitted, "paypiggy");
     expect(paypiggyEvent.payload).toMatchObject({
       username: "Subscriber",
       userId: "sub-1",
@@ -258,11 +290,11 @@ describe("Twitch EventSub event router", () => {
   });
 
   test("emits subscription message payloads with message text and metadata timestamp", () => {
-    const emitted = [];
+    const emitted: EmittedEvent[] = [];
     const router = createTwitchEventSubEventRouter({
       config: { dataLoggingEnabled: false },
       logger: noOpLogger,
-      emit: (type, payload) => emitted.push({ type, payload }),
+      emit: emitInto(emitted),
       logRawPlatformData: async () => {},
       logError: () => {},
     });
@@ -282,8 +314,7 @@ describe("Twitch EventSub event router", () => {
       },
     );
 
-    const messageEvent = emitted.find((evt) => evt.type === "paypiggyMessage");
-    expect(messageEvent).toBeDefined();
+    const messageEvent = requireEmitted(emitted, "paypiggyMessage");
     expect(messageEvent.payload).toMatchObject({
       username: "Resubber",
       userId: "resub-1",
@@ -295,11 +326,11 @@ describe("Twitch EventSub event router", () => {
   });
 
   test("extracts text content from bits.use fragments and emits a gift payload", () => {
-    const emitted = [];
+    const emitted: EmittedEvent[] = [];
     const router = createTwitchEventSubEventRouter({
       config: { dataLoggingEnabled: false },
       logger: noOpLogger,
-      emit: (type, payload) => emitted.push({ type, payload }),
+      emit: emitInto(emitted),
       logRawPlatformData: async () => {},
       logError: () => {},
     });
@@ -324,8 +355,7 @@ describe("Twitch EventSub event router", () => {
       timestamp: "2024-01-01T00:00:00Z",
     });
 
-    const giftEvent = emitted.find((evt) => evt.type === "gift");
-    expect(giftEvent).toBeDefined();
+    const giftEvent = requireEmitted(emitted, "gift");
     expect(giftEvent.payload.username).toBe("Cheerer");
     expect(giftEvent.payload.userId).toBe("777");
     expect(giftEvent.payload.amount).toBe(50);
@@ -338,11 +368,11 @@ describe("Twitch EventSub event router", () => {
   });
 
   test("emits anonymous bits gifts without identity fields", () => {
-    const emitted = [];
+    const emitted: EmittedEvent[] = [];
     const router = createTwitchEventSubEventRouter({
       config: { dataLoggingEnabled: false },
       logger: noOpLogger,
-      emit: (type, payload) => emitted.push({ type, payload }),
+      emit: emitInto(emitted),
       logRawPlatformData: async () => {},
       logError: () => {},
     });
@@ -355,8 +385,7 @@ describe("Twitch EventSub event router", () => {
       timestamp: "2024-01-02T00:00:00Z",
     });
 
-    const giftEvent = emitted.find((evt) => evt.type === "gift");
-    expect(giftEvent).toBeDefined();
+    const giftEvent = requireEmitted(emitted, "gift");
     expect(giftEvent.payload.isAnonymous).toBe(true);
     expect(
       Object.prototype.hasOwnProperty.call(giftEvent.payload, "username"),
@@ -367,11 +396,11 @@ describe("Twitch EventSub event router", () => {
   });
 
   test("does not emit bits gifts when metadata timestamp is missing", () => {
-    const emitted = [];
+    const emitted: EmittedEvent[] = [];
     const router = createTwitchEventSubEventRouter({
       config: { dataLoggingEnabled: false },
       logger: noOpLogger,
-      emit: (type, payload) => emitted.push({ type, payload }),
+      emit: emitInto(emitted),
       logRawPlatformData: async () => {},
       logError: () => {},
     });
@@ -393,18 +422,18 @@ describe("Twitch EventSub event router", () => {
           { type: "text", text: "world" },
         ],
       },
-    });
+    }, null);
 
     const giftEvent = emitted.find((evt) => evt.type === "gift");
     expect(giftEvent).toBeUndefined();
   });
 
   test("emits bits gifts when metadata provides canonical id and payload has no message_id", () => {
-    const emitted = [];
+    const emitted: EmittedEvent[] = [];
     const router = createTwitchEventSubEventRouter({
       config: { dataLoggingEnabled: false },
       logger: noOpLogger,
-      emit: (type, payload) => emitted.push({ type, payload }),
+      emit: emitInto(emitted),
       logRawPlatformData: async () => {},
       logError: () => {},
     });
@@ -434,19 +463,18 @@ describe("Twitch EventSub event router", () => {
       },
     );
 
-    const giftEvent = emitted.find((evt) => evt.type === "gift");
-    expect(giftEvent).toBeDefined();
+    const giftEvent = requireEmitted(emitted, "gift");
     expect(giftEvent.payload.id).toBe("eventsub-bits-id-1");
     expect(giftEvent.payload.userId).toBe("777");
     expect(giftEvent.payload.timestamp).toBe("2024-01-01T00:00:00.123Z");
   });
 
   test("preserves routed bits event ids when metadata message_id is unavailable", () => {
-    const emitted = [];
+    const emitted: EmittedEvent[] = [];
     const router = createTwitchEventSubEventRouter({
       config: { dataLoggingEnabled: false },
       logger: noOpLogger,
-      emit: (type, payload) => emitted.push({ type, payload }),
+      emit: emitInto(emitted),
       logRawPlatformData: async () => {},
       logError: () => {},
     });
@@ -475,17 +503,16 @@ describe("Twitch EventSub event router", () => {
       },
     );
 
-    const giftEvent = emitted.find((evt) => evt.type === "gift");
-    expect(giftEvent).toBeDefined();
+    const giftEvent = requireEmitted(emitted, "gift");
     expect(giftEvent.payload.id).toBe("bits-evt-from-event");
   });
 
   test("does not emit bits gifts when only event body message_id is provided", () => {
-    const emitted = [];
+    const emitted: EmittedEvent[] = [];
     const router = createTwitchEventSubEventRouter({
       config: { dataLoggingEnabled: false },
       logger: noOpLogger,
-      emit: (type, payload) => emitted.push({ type, payload }),
+      emit: emitInto(emitted),
       logRawPlatformData: async () => {},
       logError: () => {},
     });
@@ -519,11 +546,11 @@ describe("Twitch EventSub event router", () => {
   });
 
   test("emits paypiggyGift payloads with gift count and cumulative total", () => {
-    const emitted = [];
+    const emitted: EmittedEvent[] = [];
     const router = createTwitchEventSubEventRouter({
       config: { dataLoggingEnabled: false },
       logger: noOpLogger,
-      emit: (type, payload) => emitted.push({ type, payload }),
+      emit: emitInto(emitted),
       logRawPlatformData: async () => {},
       logError: () => {},
     });
@@ -543,8 +570,7 @@ describe("Twitch EventSub event router", () => {
       },
     );
 
-    const giftEvent = emitted.find((evt) => evt.type === "paypiggyGift");
-    expect(giftEvent).toBeDefined();
+    const giftEvent = requireEmitted(emitted, "paypiggyGift");
     expect(giftEvent.payload).toMatchObject({
       username: "GiftPilot",
       userId: "giftpilot-1",
@@ -556,11 +582,11 @@ describe("Twitch EventSub event router", () => {
   });
 
   test("emits anonymous paypiggyGift payloads without identity fields", () => {
-    const emitted = [];
+    const emitted: EmittedEvent[] = [];
     const router = createTwitchEventSubEventRouter({
       config: { dataLoggingEnabled: false },
       logger: noOpLogger,
-      emit: (type, payload) => emitted.push({ type, payload }),
+      emit: emitInto(emitted),
       logRawPlatformData: async () => {},
       logError: () => {},
     });
@@ -577,8 +603,7 @@ describe("Twitch EventSub event router", () => {
       },
     );
 
-    const giftEvent = emitted.find((evt) => evt.type === "paypiggyGift");
-    expect(giftEvent).toBeDefined();
+    const giftEvent = requireEmitted(emitted, "paypiggyGift");
     expect(giftEvent.payload.isAnonymous).toBe(true);
     expect(
       Object.prototype.hasOwnProperty.call(giftEvent.payload, "username"),
@@ -589,11 +614,11 @@ describe("Twitch EventSub event router", () => {
   });
 
   test("uses metadata timestamp for stream offline notifications", () => {
-    const emitted = [];
+    const emitted: EmittedEvent[] = [];
     const router = createTwitchEventSubEventRouter({
       config: { dataLoggingEnabled: false },
       logger: noOpLogger,
-      emit: (type, payload) => emitted.push({ type, payload }),
+      emit: emitInto(emitted),
       logRawPlatformData: async () => {},
       logError: () => {},
     });
@@ -601,7 +626,7 @@ describe("Twitch EventSub event router", () => {
     router.handleNotificationEvent("stream.online", {
       id: "stream-1",
       started_at: "2024-02-01T00:00:00Z",
-    });
+    }, null);
 
     router.handleNotificationEvent(
       "stream.offline",
@@ -613,8 +638,8 @@ describe("Twitch EventSub event router", () => {
       },
     );
 
-    const onlineEvent = emitted.find((evt) => evt.type === "streamOnline");
-    const offlineEvent = emitted.find((evt) => evt.type === "streamOffline");
+    const onlineEvent = requireEmitted(emitted, "streamOnline");
+    const offlineEvent = requireEmitted(emitted, "streamOffline");
     expect(onlineEvent.payload).toMatchObject({
       streamId: "stream-1",
       timestamp: "2024-02-01T00:00:00.000Z",
@@ -626,11 +651,11 @@ describe("Twitch EventSub event router", () => {
   });
 
   test("uses metadata timestamp for raid and gift notifications", () => {
-    const emitted = [];
+    const emitted: EmittedEvent[] = [];
     const router = createTwitchEventSubEventRouter({
       config: { dataLoggingEnabled: false },
       logger: noOpLogger,
-      emit: (type, payload) => emitted.push({ type, payload }),
+      emit: emitInto(emitted),
       logRawPlatformData: async () => {},
       logError: () => {},
     });
@@ -662,19 +687,27 @@ describe("Twitch EventSub event router", () => {
       },
     );
 
-    const raidEvent = emitted.find((evt) => evt.type === "raid");
-    const giftEvent = emitted.find((evt) => evt.type === "paypiggyGift");
+    const raidEvent = requireEmitted(emitted, "raid");
+    const giftEvent = requireEmitted(emitted, "paypiggyGift");
     expect(raidEvent.payload.timestamp).toBe("2024-03-01T00:00:00.100Z");
     expect(giftEvent.payload.timestamp).toBe("2024-03-01T00:01:00.400Z");
   });
 
   test("logs raw events before timestamp fallback", () => {
-    const logged = [];
+    const logged: Array<[eventType: string, event: Record<string, unknown>]> = [];
     const router = createTwitchEventSubEventRouter({
       config: { dataLoggingEnabled: true },
       logger: noOpLogger,
       emit: () => {},
-      logRawPlatformData: async (...args) => logged.push(args),
+      logRawPlatformData: async (eventType, event): Promise<void> => {
+        if (event === null || typeof event !== "object") {
+          throw new Error("Expected raw event to be an object");
+        }
+        if (!("started_at" in event)) {
+          throw new Error("Expected stream event shape");
+        }
+        logged.push([eventType, event]);
+      },
       logError: () => {},
     });
 
@@ -683,10 +716,14 @@ describe("Twitch EventSub event router", () => {
       started_at: "2024-02-01T00:00:00Z",
     };
 
-    router.handleNotificationEvent("stream.online", rawEvent);
+    router.handleNotificationEvent("stream.online", rawEvent, null);
 
     expect(logged).toHaveLength(1);
-    const loggedEvent = logged[0][1];
+    const loggedEvent = logged[0]?.[1];
+    expect(loggedEvent).toBeDefined();
+    if (!loggedEvent) {
+      throw new Error("Expected logged raw event");
+    }
     expect(Object.prototype.hasOwnProperty.call(loggedEvent, "timestamp")).toBe(
       false,
     );

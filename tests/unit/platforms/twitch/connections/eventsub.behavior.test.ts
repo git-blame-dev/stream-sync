@@ -9,18 +9,68 @@ import {
 
 import { TwitchEventSub } from "../../../../../src/platforms/twitch-eventsub.ts";
 
+type WebSocketEventHandler = (...args: unknown[]) => void;
+type TestWebSocket = {
+  readyState: number;
+  on: (eventName: string, handler: WebSocketEventHandler) => void;
+  close: (code?: number, reason?: string) => void;
+  removeAllListeners: () => void;
+};
+
+type MockDependencies = ConstructorParameters<typeof TwitchEventSub>[1];
+type RoutedPayload = Record<string, unknown> & {
+  message?: { text?: string };
+  userId?: string;
+  username?: string;
+  timestamp?: string;
+};
+type SubscriptionSetupPayload = {
+  sessionId: string | null;
+  broadcasterId: string;
+};
+type LoggedEventSubError = {
+  message: string;
+  error: unknown;
+  eventType: string | undefined;
+  payload: unknown;
+};
+
+const hasSource = (value: unknown): value is { source: unknown } =>
+  value !== null && typeof value === "object" && "source" in value;
+
+const createWebSocket = (overrides: Partial<TestWebSocket> = {}): TestWebSocket => ({
+  readyState: 1,
+  on: () => {},
+  close: () => {},
+  removeAllListeners: () => {},
+  ...overrides,
+});
+
+const createSubscriptionDefinition = (type = "channel.follow") => ({
+  name: "Test subscription",
+  type,
+  version: "1",
+  getCondition: ({ broadcasterId }: { userId: string; broadcasterId: string }) => ({
+    broadcaster_user_id: broadcasterId,
+  }),
+});
+
 class MockWebSocket {
+  readyState: number;
+
   constructor() {
     this.readyState = 1;
   }
+  on(): void {}
   close() {}
+  removeAllListeners(): void {}
   send() {}
 }
 
 describe("TwitchEventSub behavior", () => {
-  let mockTwitchAuth;
-  let MockChatFileLoggingService;
-  let mockDependencies;
+  let mockTwitchAuth: { isReady: () => boolean; refreshTokens: () => Promise<boolean>; getUserId: () => string };
+  let MockChatFileLoggingService: new () => { logRawPlatformData: () => Promise<void> };
+  let mockDependencies: MockDependencies;
 
   beforeEach(() => {
     _resetForTesting();
@@ -32,7 +82,7 @@ describe("TwitchEventSub behavior", () => {
       getUserId: () => "testUser123",
     };
     MockChatFileLoggingService = class {
-      constructor() {}
+      async logRawPlatformData(): Promise<void> {}
     };
     mockDependencies = {
       logger: noOpLogger,
@@ -52,7 +102,7 @@ describe("TwitchEventSub behavior", () => {
       mockDependencies,
     );
 
-    const followEvents = [];
+    const followEvents: RoutedPayload[] = [];
     instance.on("follow", (payload) => followEvents.push(payload));
 
     instance.handleNotificationEvent("channel.follow", {
@@ -60,12 +110,12 @@ describe("TwitchEventSub behavior", () => {
       user_id: "test-follower-id",
       user_login: "testfollower",
       followed_at: "2024-01-01T00:00:00Z",
-    });
+    }, null);
 
     expect(followEvents.length).toBe(1);
-    expect(followEvents[0].userId).toBe("test-follower-id");
-    expect(followEvents[0].username).toBe("testFollower");
-    expect(followEvents[0].timestamp).toBe("2024-01-01T00:00:00.000Z");
+    expect(followEvents[0]?.userId).toBe("test-follower-id");
+    expect(followEvents[0]?.username).toBe("testFollower");
+    expect(followEvents[0]?.timestamp).toBe("2024-01-01T00:00:00.000Z");
   });
 
   it("routes chat message events and includes timestamp", () => {
@@ -78,7 +128,7 @@ describe("TwitchEventSub behavior", () => {
       mockDependencies,
     );
 
-    const messageEvents = [];
+    const messageEvents: RoutedPayload[] = [];
     instance.on("chatMessage", (payload) => messageEvents.push(payload));
 
     instance.handleNotificationEvent(
@@ -94,8 +144,8 @@ describe("TwitchEventSub behavior", () => {
     );
 
     expect(messageEvents.length).toBe(1);
-    expect(messageEvents[0].message.text).toBe("Hello stream!");
-    expect(messageEvents[0].timestamp).toBe("2024-01-01T12:00:00.321Z");
+    expect(messageEvents[0]?.message?.text).toBe("Hello stream!");
+    expect(messageEvents[0]?.timestamp).toBe("2024-01-01T12:00:00.321Z");
   });
 
   it("ignores duplicate notification message ids", () => {
@@ -108,7 +158,7 @@ describe("TwitchEventSub behavior", () => {
       mockDependencies,
     );
 
-    const followEvents = [];
+    const followEvents: RoutedPayload[] = [];
     instance.on("follow", (payload) => followEvents.push(payload));
 
     const message = {
@@ -142,10 +192,10 @@ describe("TwitchEventSub behavior", () => {
       },
       mockDependencies,
     );
-    const resubscribeCalls = [];
+    const resubscribeCalls: SubscriptionSetupPayload[] = [];
     instance.subscriptionManager.setupEventSubscriptions = async (payload) => {
       resubscribeCalls.push(payload);
-      return { failures: [] };
+      return { failures: [], successful: 1, total: 1, timestamp: 1 };
     };
     instance.requiredSubscriptions = [
       {
@@ -174,8 +224,8 @@ describe("TwitchEventSub behavior", () => {
     });
 
     expect(resubscribeCalls.length).toBe(1);
-    expect(resubscribeCalls[0].sessionId).toBe("testSession123");
-    expect(resubscribeCalls[0].broadcasterId).toBe("testUser123");
+    expect(resubscribeCalls[0]?.sessionId).toBe("testSession123");
+    expect(resubscribeCalls[0]?.broadcasterId).toBe("testUser123");
   });
 
   it("validates configuration using centralized auth fallback", () => {
@@ -191,6 +241,10 @@ describe("TwitchEventSub behavior", () => {
     const result = instance._validateConfigurationFields();
 
     expect(result.valid).toBe(true);
+    expect(hasSource(result.details.accessToken)).toBe(true);
+    if (!hasSource(result.details.accessToken)) {
+      throw new Error("Expected access token validation details");
+    }
     expect(result.details.accessToken.source).toBe("secrets");
   });
 
@@ -211,7 +265,7 @@ describe("TwitchEventSub behavior", () => {
           status: 401,
         },
       },
-      { type: "channel.follow" },
+      createSubscriptionDefinition("channel.follow"),
     );
 
     expect(parsed.isCritical).toBe(true);
@@ -234,7 +288,7 @@ describe("TwitchEventSub behavior", () => {
           status: 429,
         },
       },
-      { type: "channel.follow" },
+      createSubscriptionDefinition("channel.follow"),
     );
 
     expect(parsed.isRetryable).toBe(true);
@@ -249,7 +303,7 @@ describe("TwitchEventSub behavior", () => {
       },
       mockDependencies,
     );
-    instance.ws = { readyState: 1 };
+    instance.ws = createWebSocket({ readyState: 1 });
     instance._isConnected = true;
     instance.isInitialized = true;
     instance.sessionId = "testSession123";
@@ -270,12 +324,12 @@ describe("TwitchEventSub behavior", () => {
     );
     instance.isInitialized = true;
     instance.maxRetryAttempts = 1;
-    instance.ws = {
+    instance.ws = createWebSocket({
       readyState: 1,
       close: () => {
         throw new Error("close failed");
       },
-    };
+    });
 
     let reconnected = false;
     instance._connectWebSocket = async () => {
@@ -288,7 +342,7 @@ describe("TwitchEventSub behavior", () => {
   });
 
   it("continues deleting WebSocket subscriptions after a deletion error", async () => {
-    const logErrors = [];
+    const logErrors: LoggedEventSubError[] = [];
     const mockAxios = {
       get: createMockFn().mockResolvedValue({
         data: {
@@ -310,7 +364,7 @@ describe("TwitchEventSub behavior", () => {
       }),
       delete: createMockFn()
         .mockRejectedValueOnce(new Error("delete failed"))
-        .mockResolvedValueOnce({}),
+        .mockResolvedValueOnce(undefined),
     };
 
     const instance = new TwitchEventSub(
@@ -335,7 +389,7 @@ describe("TwitchEventSub behavior", () => {
   });
 
   it("continues deleting session subscriptions after a deletion error", async () => {
-    const logErrors = [];
+    const logErrors: LoggedEventSubError[] = [];
     const mockAxios = {
       get: createMockFn().mockResolvedValue({
         data: {
@@ -360,7 +414,7 @@ describe("TwitchEventSub behavior", () => {
       }),
       delete: createMockFn()
         .mockRejectedValueOnce(new Error("delete failed"))
-        .mockResolvedValueOnce({}),
+        .mockResolvedValueOnce(undefined),
     };
 
     const instance = new TwitchEventSub(

@@ -2,30 +2,34 @@ import { describe, test, expect } from "bun:test";
 import { noOpLogger } from "../../../../helpers/mock-factories";
 import { createTwitchEventSubWiring } from "../../../../../src/platforms/twitch/connections/wiring.ts";
 
+type Listener = (...args: unknown[]) => void;
+type ListenerStore = Record<string, Listener[]>;
+type BoundListener = { eventName: string; handler: Listener };
+
 describe("Twitch EventSub wiring", () => {
   const createEventSub = ({ useOff = true } = {}) => {
-    const listeners = {};
-    const add = (event, handler) => {
+    const listeners: ListenerStore = {};
+    const add = (event: string, handler: Listener): void => {
       listeners[event] = listeners[event] || [];
       listeners[event].push(handler);
     };
-    const remove = (event, handler) => {
+    const remove = (event: string, handler: Listener): void => {
       listeners[event] = (listeners[event] || []).filter((h) => h !== handler);
     };
 
-    return {
+    const eventSub = {
       listeners,
-      on: (event, handler) => add(event, handler),
-      off: useOff ? (event, handler) => remove(event, handler) : undefined,
-      removeListener: useOff
-        ? undefined
-        : (event, handler) => remove(event, handler),
+      on: (event: string, handler: Listener) => add(event, handler),
     };
+
+    return useOff
+      ? { ...eventSub, off: (event: string, handler: Listener) => remove(event, handler) }
+      : { ...eventSub, removeListener: (event: string, handler: Listener) => remove(event, handler) };
   };
 
   test("binds handlers and unbinds them using off when available", () => {
     const eventSub = createEventSub({ useOff: true });
-    const eventSubListeners = [];
+    const eventSubListeners: BoundListener[] = [];
     const wiring = createTwitchEventSubWiring({
       eventSub,
       eventSubListeners,
@@ -50,7 +54,7 @@ describe("Twitch EventSub wiring", () => {
 
   test("unbinds handlers using removeListener when off is unavailable", () => {
     const eventSub = createEventSub({ useOff: false });
-    const eventSubListeners = [];
+    const eventSubListeners: BoundListener[] = [];
     const wiring = createTwitchEventSubWiring({
       eventSub,
       eventSubListeners,

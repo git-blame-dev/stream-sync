@@ -20,21 +20,46 @@ import {
 import { TwitchApiClient } from "../../src/utils/api-clients/twitch-api-client.ts";
 import { TwitchViewerCountProvider } from "../../src/utils/viewer-count-providers";
 
+type TwitchConfig = { clientId?: string; channel?: string; username?: string; enabled?: boolean; eventSub?: { isActive: () => boolean } };
+type TwitchAuth = { refreshTokens: () => Promise<boolean> };
+type HttpGetMock = ReturnType<typeof createMockFn> &
+  ((url: string, options?: Record<string, unknown>) => Promise<Record<string, unknown>>);
+type HttpClient = { get: HttpGetMock };
+type EventSubLike = { isActive: () => boolean; initialize: () => Promise<void> };
+type LocalTwitchPlatformDependencies = {
+  twitchAuth: TwitchAuth;
+  TwitchEventSub: new () => EventSubLike;
+  enhancedHttpClient: HttpClient;
+};
+type StreamInfo = { isLive: boolean; viewerCount: number; stream: unknown };
+type MockedTwitchApiClient = TwitchApiClient & { getStreamInfo: ReturnType<typeof createMockFn> };
+
+const createHttpClient = (): HttpClient => ({
+  get: createMockFn() as HttpGetMock,
+});
+
 class TwitchPlatform {
-  constructor(config, dependencies) {
+  config: TwitchConfig;
+  twitchAuth: TwitchAuth;
+  eventSub: EventSubLike;
+  enhancedHttpClient: HttpClient;
+  apiClient: TwitchApiClient | null;
+  viewerCountProvider: TwitchViewerCountProvider | null;
+  logger = noOpLogger;
+
+  constructor(config: TwitchConfig, dependencies: LocalTwitchPlatformDependencies) {
     this.config = config;
     this.twitchAuth = dependencies.twitchAuth;
     this.eventSub = new dependencies.TwitchEventSub();
     this.enhancedHttpClient = dependencies.enhancedHttpClient;
     this.apiClient = null;
     this.viewerCountProvider = null;
-    this.logger = noOpLogger;
   }
 
-  async initialize(handlers) {
+  async initialize(_handlers: Record<string, unknown>) {
     this.apiClient = new TwitchApiClient(
       this.twitchAuth,
-      { clientId: this.config.clientId },
+      this.config.clientId ? { clientId: this.config.clientId } : {},
       this.logger,
       {
         enhancedHttpClient: this.enhancedHttpClient,
@@ -94,7 +119,7 @@ describe("TwitchPlatform Modular Refactor", () => {
         const params = {
           isConnected: false,
           platform: "twitch",
-          channel: null,
+          channel: "",
           username: "test_user",
         };
 
@@ -163,10 +188,10 @@ describe("TwitchPlatform Modular Refactor", () => {
   });
 
   describe("TwitchApiClient Module", () => {
-    let mockTwitchAuth;
-    let mockHttpClient;
-    let mockLogger;
-    let apiClient;
+    let mockTwitchAuth: TwitchAuth;
+    let mockHttpClient: HttpClient;
+    let mockLogger: typeof noOpLogger;
+    let apiClient: TwitchApiClient;
 
     beforeEach(() => {
       _resetForTesting();
@@ -174,10 +199,9 @@ describe("TwitchPlatform Modular Refactor", () => {
       secrets.twitch.accessToken = "test_token";
       mockLogger = noOpLogger;
       mockTwitchAuth = {
-        isReady: () => true,
         refreshTokens: createMockFn().mockResolvedValue(true),
       };
-      mockHttpClient = { get: createMockFn() };
+      mockHttpClient = createHttpClient();
       apiClient = new TwitchApiClient(
         mockTwitchAuth,
         { clientId: "test_client_id" },
@@ -212,7 +236,9 @@ describe("TwitchPlatform Modular Refactor", () => {
       });
 
       it("should handle API errors gracefully", async () => {
-        const error = new Error("Request failed with status code 401");
+        const error = new Error("Request failed with status code 401") as Error & {
+          response?: { status: number; statusText: string };
+        };
         error.response = {
           status: 401,
           statusText: "Unauthorized",
@@ -275,16 +301,21 @@ describe("TwitchPlatform Modular Refactor", () => {
   });
 
   describe("TwitchViewerCountProvider Module", () => {
-    let mockApiClient;
-    let configFixture;
-    let mockLogger;
-    let provider;
+    let mockApiClient: MockedTwitchApiClient;
+    let configFixture: TwitchConfig;
+    let mockLogger: typeof noOpLogger;
+    let provider: TwitchViewerCountProvider;
 
     beforeEach(() => {
       mockLogger = noOpLogger;
-      mockApiClient = {
-        getStreamInfo: createMockFn(),
-      };
+      const apiClientFixture = new TwitchApiClient(
+        { refreshTokens: createMockFn().mockResolvedValue(true) },
+        { clientId: "test_client_id" },
+        noOpLogger,
+        { enhancedHttpClient: createHttpClient() },
+      );
+      const getStreamInfo = createMockFn();
+      mockApiClient = Object.assign(apiClientFixture, { getStreamInfo });
       configFixture = {
         channel: "test_channel",
         eventSub: { isActive: () => true },
@@ -300,9 +331,10 @@ describe("TwitchPlatform Modular Refactor", () => {
 
     describe("when provider is ready", () => {
       it("returns the configured channel viewer count when ready", async () => {
-        mockApiClient.getStreamInfo = createMockFn(async (channel: string) => ({
+        mockApiClient.getStreamInfo.mockImplementation(async (channel: unknown): Promise<StreamInfo> => ({
           isLive: true,
           viewerCount: channel === "test_channel" ? 123 : 0,
+          stream: null,
         }));
 
         const count = await provider.getViewerCount();
@@ -324,7 +356,7 @@ describe("TwitchPlatform Modular Refactor", () => {
 
     describe("when provider is not ready", () => {
       beforeEach(() => {
-        const notReadyConfig = { ...configFixture, channel: null };
+        const notReadyConfig = { ...configFixture, channel: "" };
         provider = new TwitchViewerCountProvider(
           mockApiClient,
           ConnectionStateFactory,
@@ -354,17 +386,16 @@ describe("TwitchPlatform Modular Refactor", () => {
   });
 
   describe("TwitchPlatform Integration", () => {
-    let mockTwitchAuth;
-    let mockEventSub;
-    let mockHttpClient;
-    let twitchPlatform;
+    let mockTwitchAuth: TwitchAuth;
+    let mockEventSub: EventSubLike;
+    let mockHttpClient: HttpClient;
+    let twitchPlatform: TwitchPlatform;
 
     beforeEach(() => {
       _resetForTesting();
       initializeStaticSecrets();
       secrets.twitch.accessToken = "test_token";
       mockTwitchAuth = {
-        isReady: () => true,
         refreshTokens: createMockFn().mockResolvedValue(true),
       };
 
@@ -372,7 +403,7 @@ describe("TwitchPlatform Modular Refactor", () => {
         isActive: () => true,
         initialize: createMockFn().mockResolvedValue(),
       };
-      mockHttpClient = { get: createMockFn() };
+      mockHttpClient = createHttpClient();
 
       const config = {
         enabled: true,
@@ -380,14 +411,15 @@ describe("TwitchPlatform Modular Refactor", () => {
         username: "test_user",
       };
 
+      class MockTwitchEventSub implements EventSubLike {
+        isActive = mockEventSub.isActive;
+        initialize = async (): Promise<void> => { await mockEventSub.initialize?.(); };
+      }
+
       twitchPlatform = new TwitchPlatform(config, {
         twitchAuth: mockTwitchAuth,
         enhancedHttpClient: mockHttpClient,
-        TwitchEventSub: class MockTwitchEventSub {
-          constructor() {
-            return mockEventSub;
-          }
-        },
+        TwitchEventSub: MockTwitchEventSub,
       });
     });
 
@@ -467,7 +499,12 @@ describe("connection state interface consistency", () => {
     });
 
     it("should provide consistent viewer count interface", () => {
-      const mockApiClient = { getStreamInfo: createMockFn() };
+      const mockApiClient = new TwitchApiClient(
+        { refreshTokens: createMockFn().mockResolvedValue(true) },
+        { clientId: "test_client_id" },
+        noOpLogger,
+        { enhancedHttpClient: createHttpClient() },
+      );
       const config = { channel: "test", eventSub: { isActive: () => true } };
 
       const provider = new TwitchViewerCountProvider(

@@ -11,10 +11,50 @@ import {
 
 import { TwitchEventSub } from "../../../../../src/platforms/twitch-eventsub.ts";
 
+type CloseCall = { code: number | undefined; reason: string | undefined };
+type WebSocketEventHandler = (...args: unknown[]) => void;
+type TestWebSocket = {
+  readyState: number;
+  on: (eventName: string, handler: WebSocketEventHandler) => void;
+  close: (code?: number, reason?: string) => void;
+  removeAllListeners: () => void;
+};
+
+type TwitchAuthOverrides = Partial<{
+  ready: boolean;
+  userId: string | null;
+  refreshTokens: () => Promise<boolean>;
+}>;
+
+const createWebSocket = (overrides: Partial<TestWebSocket> = {}): TestWebSocket => ({
+  readyState: 1,
+  on: () => {},
+  close: () => {},
+  removeAllListeners: () => {},
+  ...overrides,
+});
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === "object";
+
+const requireRecord = (value: unknown): Record<string, unknown> => {
+  if (!isRecord(value)) {
+    throw new Error("Expected object record");
+  }
+  return value;
+};
+
 class MockWebSocket {
+  readyState: number;
+  listeners: Record<string, WebSocketEventHandler[]>;
+
   constructor() {
     this.readyState = 1;
     this.listeners = {};
+  }
+  on(eventName: string, handler: WebSocketEventHandler): void {
+    this.listeners[eventName] = this.listeners[eventName] || [];
+    this.listeners[eventName].push(handler);
   }
   close() {}
   removeAllListeners() {
@@ -26,14 +66,17 @@ class MockChatFileLoggingService {
   async logRawPlatformData(): Promise<void> {}
 }
 
-const createTwitchAuth = (overrides = {}) => ({
+const createTwitchAuth = (overrides: TwitchAuthOverrides = {}) => ({
   isReady: () => ("ready" in overrides ? overrides.ready : true),
   refreshTokens: createMockFn().mockResolvedValue(true),
   getUserId: () => overrides.userId || "test-user-123",
   ...overrides,
 });
 
-const createEventSub = (configOverrides = {}, depsOverrides = {}) => {
+const createEventSub = (
+  configOverrides: Record<string, unknown> = {},
+  depsOverrides: Record<string, unknown> = {},
+): TwitchEventSub => {
   return new TwitchEventSub(
     {
       dataLoggingEnabled: false,
@@ -57,7 +100,7 @@ const createEventSub = (configOverrides = {}, depsOverrides = {}) => {
 };
 
 describe("TwitchEventSub lifecycle", () => {
-  let eventSub;
+  let eventSub: TwitchEventSub | null;
 
   afterEach(async () => {
     if (eventSub) {
@@ -134,12 +177,13 @@ describe("TwitchEventSub lifecycle", () => {
       secrets.twitch.accessToken = "test-access-token";
       eventSub = createEventSub({ broadcasterId: "" });
       eventSub.maxRetryAttempts = 0;
-      eventSub._connectWebSocket = createMockFn(async () => {});
+      const connectWebSocketMock = createMockFn(async () => {});
+      eventSub._connectWebSocket = connectWebSocketMock;
 
       await expect(eventSub.initialize()).rejects.toThrow(
         "EventSub validation failed",
       );
-      expect(eventSub._connectWebSocket.mock.calls).toHaveLength(0);
+      expect(connectWebSocketMock.mock.calls).toHaveLength(0);
       expect(eventSub.isInitialized).toBe(false);
     });
 
@@ -165,21 +209,23 @@ describe("TwitchEventSub lifecycle", () => {
       eventSub.initialStartupRetryDelay = 1;
       eventSub._cleanupAllWebSocketSubscriptions = createMockFn(async () => {});
       eventSub._deleteAllSubscriptions = createMockFn(async () => {});
-      eventSub._connectWebSocket = createMockFn(async () => {
-        if (eventSub._connectWebSocket.mock.calls.length === 1) {
+      const currentEventSub = eventSub;
+      const connectWebSocketMock = createMockFn(async () => {
+        if (connectWebSocketMock.mock.calls.length === 1) {
           const error = new Error("socket hang up") as Error & { code?: string };
           error.code = "ECONNRESET";
           throw error;
         }
-        eventSub.ws = { readyState: 1, close: () => {}, removeAllListeners: () => {} };
-        eventSub.sessionId = "connected-session";
-        eventSub._isConnected = true;
-        eventSub.subscriptionsReady = true;
+        currentEventSub.ws = createWebSocket();
+        currentEventSub.sessionId = "connected-session";
+        currentEventSub._isConnected = true;
+        currentEventSub.subscriptionsReady = true;
       });
+      eventSub._connectWebSocket = connectWebSocketMock;
 
       await eventSub.initialize();
 
-      expect(eventSub._connectWebSocket.mock.calls).toHaveLength(2);
+      expect(connectWebSocketMock.mock.calls).toHaveLength(2);
       expect(eventSub.isInitialized).toBe(true);
       expect(eventSub._isConnected).toBe(true);
       expect(eventSub.subscriptionsReady).toBe(true);
@@ -194,21 +240,23 @@ describe("TwitchEventSub lifecycle", () => {
       eventSub.initialStartupRetryDelay = 1;
       eventSub._cleanupAllWebSocketSubscriptions = createMockFn(async () => {});
       eventSub._deleteAllSubscriptions = createMockFn(async () => {});
-      eventSub._connectWebSocket = createMockFn(async () => {
-        if (eventSub._connectWebSocket.mock.calls.length === 1) {
+      const currentEventSub = eventSub;
+      const connectWebSocketMock = createMockFn(async () => {
+        if (connectWebSocketMock.mock.calls.length === 1) {
           const error = new Error("Connection closed before EventSub startup completed") as Error & { closeCode?: number };
           error.closeCode = 4006;
           throw error;
         }
-        eventSub.ws = { readyState: 1, close: () => {}, removeAllListeners: () => {} };
-        eventSub.sessionId = "connected-session";
-        eventSub._isConnected = true;
-        eventSub.subscriptionsReady = true;
+        currentEventSub.ws = createWebSocket();
+        currentEventSub.sessionId = "connected-session";
+        currentEventSub._isConnected = true;
+        currentEventSub.subscriptionsReady = true;
       });
+      eventSub._connectWebSocket = connectWebSocketMock;
 
       await eventSub.initialize();
 
-      expect(eventSub._connectWebSocket.mock.calls).toHaveLength(2);
+      expect(connectWebSocketMock.mock.calls).toHaveLength(2);
       expect(eventSub.isInitialized).toBe(true);
     });
 
@@ -216,29 +264,31 @@ describe("TwitchEventSub lifecycle", () => {
       secrets.twitch.accessToken = "test-access-token";
       eventSub = createEventSub();
       eventSub.initialStartupMaxAttempts = 1;
-      const closeCalls = [];
-      const removeListenersCalls = [];
-      eventSub._deleteAllSubscriptions = createMockFn(async () => {});
+      const closeCalls: CloseCall[] = [];
+      const removeListenersCalls: boolean[] = [];
+      const deleteAllSubscriptionsMock = createMockFn(async () => {});
+      eventSub._deleteAllSubscriptions = deleteAllSubscriptionsMock;
+      const currentEventSub = eventSub;
       eventSub._connectWebSocket = createMockFn(async () => {
-        eventSub.ws = {
+        currentEventSub.ws = createWebSocket({
           readyState: 1,
-          close: (code, reason) => closeCalls.push({ code, reason }),
+          close: (code?: number, reason?: string) => { closeCalls.push({ code, reason }); },
           removeAllListeners: () => removeListenersCalls.push(true),
-        };
-        eventSub.welcomeTimer = safeSetTimeout(() => {}, 10000);
-        eventSub.reconnectTimeout = safeSetTimeout(() => {}, 10000);
-        eventSub.sessionId = "partial-session";
-        eventSub._isConnected = true;
-        eventSub.subscriptionsReady = true;
-        eventSub.subscriptions.set("sub-1", { id: "sub-1" });
+        });
+        currentEventSub.welcomeTimer = safeSetTimeout(() => {}, 10000);
+        currentEventSub.reconnectTimeout = safeSetTimeout(() => {}, 10000);
+        currentEventSub.sessionId = "partial-session";
+        currentEventSub._isConnected = true;
+        currentEventSub.subscriptionsReady = true;
+        currentEventSub.subscriptions.set("sub-1", { id: "sub-1" });
         throw new Error("fatal startup failure");
       });
 
       await expect(eventSub.initialize()).rejects.toThrow("fatal startup failure");
 
-      expect(eventSub._deleteAllSubscriptions.mock.calls).toHaveLength(1);
+      expect(deleteAllSubscriptionsMock.mock.calls).toHaveLength(1);
       expect(closeCalls).toHaveLength(1);
-      expect(closeCalls[0].code).toBe(1000);
+      expect(closeCalls[0]?.code).toBe(1000);
       expect(removeListenersCalls).toHaveLength(1);
       expect(eventSub.ws).toBeNull();
       expect(eventSub.welcomeTimer).toBeNull();
@@ -308,18 +358,18 @@ describe("TwitchEventSub lifecycle", () => {
         delete: createMockFn(),
       };
       eventSub = createEventSub({}, { axios: mockAxios });
-      const closeCalled = [];
-      const removeListenersCalled = [];
-      eventSub.ws = {
+      const closeCalled: CloseCall[] = [];
+      const removeListenersCalled: boolean[] = [];
+      eventSub.ws = createWebSocket({
         readyState: 1,
-        close: (code, reason) => closeCalled.push({ code, reason }),
+        close: (code?: number, reason?: string) => { closeCalled.push({ code, reason }); },
         removeAllListeners: () => removeListenersCalled.push(true),
-      };
+      });
 
       await eventSub.cleanup();
 
       expect(closeCalled.length).toBe(1);
-      expect(closeCalled[0].code).toBe(1000);
+      expect(closeCalled[0]?.code).toBe(1000);
       expect(removeListenersCalled.length).toBe(1);
       expect(eventSub.ws).toBeNull();
     });
@@ -330,13 +380,13 @@ describe("TwitchEventSub lifecycle", () => {
         delete: createMockFn(),
       };
       eventSub = createEventSub({}, { axios: mockAxios });
-      eventSub.ws = {
+      eventSub.ws = createWebSocket({
         readyState: 1,
         close: () => {
           throw new Error("close failed");
         },
         removeAllListeners: () => {},
-      };
+      });
 
       await eventSub.cleanup();
 
@@ -426,11 +476,11 @@ describe("TwitchEventSub lifecycle", () => {
     it("isConnected checks WebSocket readyState", () => {
       eventSub = createEventSub();
       eventSub._isConnected = true;
-      eventSub.ws = { readyState: 1 };
+      eventSub.ws = createWebSocket({ readyState: 1 });
 
       expect(eventSub.isConnected()).toBe(true);
 
-      eventSub.ws = { readyState: 3 };
+      eventSub.ws = createWebSocket({ readyState: 3 });
       expect(eventSub.isConnected()).toBe(false);
     });
   });
@@ -438,7 +488,7 @@ describe("TwitchEventSub lifecycle", () => {
   describe("event routing delegation", () => {
     it("delegates chat message events to event router", () => {
       eventSub = createEventSub();
-      const routedEvents = [];
+      const routedEvents: unknown[] = [];
       eventSub.eventRouter = {
         ...eventSub.eventRouter,
         handleChatMessageEvent: (event) => routedEvents.push(event),
@@ -447,12 +497,12 @@ describe("TwitchEventSub lifecycle", () => {
       eventSub._handleChatMessageEvent({ text: "test" });
 
       expect(routedEvents.length).toBe(1);
-      expect(routedEvents[0].text).toBe("test");
+      expect(requireRecord(routedEvents[0]).text).toBe("test");
     });
 
     it("delegates follow events to event router", () => {
       eventSub = createEventSub();
-      const routedEvents = [];
+      const routedEvents: unknown[] = [];
       eventSub.eventRouter = {
         ...eventSub.eventRouter,
         handleFollowEvent: (event) => routedEvents.push(event),
@@ -465,7 +515,7 @@ describe("TwitchEventSub lifecycle", () => {
 
     it("delegates paypiggy events to event router", () => {
       eventSub = createEventSub();
-      const routedEvents = [];
+      const routedEvents: unknown[] = [];
       eventSub.eventRouter = {
         ...eventSub.eventRouter,
         handlePaypiggyEvent: (event) => routedEvents.push(event),
@@ -478,7 +528,7 @@ describe("TwitchEventSub lifecycle", () => {
 
     it("delegates raid events to event router", () => {
       eventSub = createEventSub();
-      const routedEvents = [];
+      const routedEvents: unknown[] = [];
       eventSub.eventRouter = {
         ...eventSub.eventRouter,
         handleRaidEvent: (event) => routedEvents.push(event),
@@ -491,7 +541,7 @@ describe("TwitchEventSub lifecycle", () => {
 
     it("delegates bits events to event router", () => {
       eventSub = createEventSub();
-      const routedEvents = [];
+      const routedEvents: unknown[] = [];
       eventSub.eventRouter = {
         ...eventSub.eventRouter,
         handleBitsUseEvent: (event) => routedEvents.push(event),
@@ -504,7 +554,7 @@ describe("TwitchEventSub lifecycle", () => {
 
     it("delegates gift paypiggy events to event router", () => {
       eventSub = createEventSub();
-      const routedEvents = [];
+      const routedEvents: unknown[] = [];
       eventSub.eventRouter = {
         ...eventSub.eventRouter,
         handlePaypiggyGiftEvent: (event) => routedEvents.push(event),
@@ -517,7 +567,7 @@ describe("TwitchEventSub lifecycle", () => {
 
     it("delegates paypiggy message events to event router", () => {
       eventSub = createEventSub();
-      const routedEvents = [];
+      const routedEvents: unknown[] = [];
       eventSub.eventRouter = {
         ...eventSub.eventRouter,
         handlePaypiggyMessageEvent: (event) => routedEvents.push(event),
@@ -530,7 +580,7 @@ describe("TwitchEventSub lifecycle", () => {
 
     it("delegates stream online events to event router", () => {
       eventSub = createEventSub();
-      const routedEvents = [];
+      const routedEvents: unknown[] = [];
       eventSub.eventRouter = {
         ...eventSub.eventRouter,
         handleStreamOnlineEvent: (event) => routedEvents.push(event),
@@ -543,7 +593,7 @@ describe("TwitchEventSub lifecycle", () => {
 
     it("delegates stream offline events to event router", () => {
       eventSub = createEventSub();
-      const routedEvents = [];
+      const routedEvents: unknown[] = [];
       eventSub.eventRouter = {
         ...eventSub.eventRouter,
         handleStreamOfflineEvent: (event) => routedEvents.push(event),
@@ -569,7 +619,7 @@ describe("TwitchEventSub lifecycle", () => {
 
     it("throws when Twitch auth is missing", async () => {
       eventSub = createEventSub();
-      eventSub.twitchAuth = null;
+      Object.defineProperty(eventSub, "twitchAuth", { value: null, writable: true });
 
       await expect(eventSub.sendMessage("test")).rejects.toThrow("Twitch auth");
     });
@@ -597,9 +647,12 @@ describe("TwitchEventSub lifecycle", () => {
     });
 
     it("sends message via API and returns success", async () => {
-      const postCalls = [];
+      const postCalls: Array<{ url: string; payload: Record<string, unknown>; config: unknown }> = [];
       const mockAxios = {
-        post: createMockFn().mockImplementation((url, payload, config) => {
+        post: createMockFn().mockImplementation((url: unknown, payload: unknown, config: unknown) => {
+          if (typeof url !== "string" || !isRecord(payload)) {
+            throw new Error("Expected Twitch sendMessage request payload");
+          }
           postCalls.push({ url, payload, config });
           return Promise.resolve({});
         }),
@@ -614,7 +667,7 @@ describe("TwitchEventSub lifecycle", () => {
       expect(result.success).toBe(true);
       expect(result.platform).toBe("twitch");
       expect(postCalls.length).toBe(1);
-      expect(postCalls[0].payload.message).toBe("Hello stream!");
+      expect(postCalls[0]?.payload.message).toBe("Hello stream!");
     });
 
     it("retries once after refresh on 401", async () => {
@@ -623,7 +676,7 @@ describe("TwitchEventSub lifecycle", () => {
         post: createMockFn().mockImplementation(() => {
           callCount += 1;
           if (callCount === 1) {
-            const error = new Error("Unauthorized");
+            const error = new Error("Unauthorized") as Error & { response?: { status: number } };
             error.response = { status: 401 };
             return Promise.reject(error);
           }
@@ -634,10 +687,10 @@ describe("TwitchEventSub lifecycle", () => {
       };
       const refreshedToken = "refreshed-token";
       const twitchAuth = createTwitchAuth({
-        refreshTokens: createMockFn().mockImplementation(async () => {
+        refreshTokens: async () => {
           secrets.twitch.accessToken = refreshedToken;
           return true;
-        }),
+        },
       });
       secrets.twitch.accessToken = "expired-token";
       eventSub = createEventSub({}, { axios: mockAxios, twitchAuth });
@@ -665,7 +718,7 @@ describe("TwitchEventSub lifecycle", () => {
       eventSub = createEventSub();
       eventSub.sessionId = "   ";
       eventSub._isConnected = true;
-      eventSub.ws = { readyState: 1 };
+      eventSub.ws = createWebSocket({ readyState: 1 });
       eventSub.isInitialized = true;
 
       expect(eventSub._validateConnectionForSubscriptions()).toBe(false);
@@ -675,7 +728,7 @@ describe("TwitchEventSub lifecycle", () => {
       eventSub = createEventSub();
       eventSub.sessionId = "test-session";
       eventSub._isConnected = false;
-      eventSub.ws = { readyState: 1 };
+      eventSub.ws = createWebSocket({ readyState: 1 });
       eventSub.isInitialized = true;
 
       expect(eventSub._validateConnectionForSubscriptions()).toBe(false);
@@ -701,7 +754,7 @@ describe("TwitchEventSub lifecycle", () => {
       );
       eventSub.sessionId = "test-session";
       eventSub._isConnected = true;
-      eventSub.ws = { readyState: 1 };
+      eventSub.ws = createWebSocket({ readyState: 1 });
       eventSub.isInitialized = true;
 
       expect(eventSub._validateConnectionForSubscriptions()).toBe(false);
@@ -717,7 +770,7 @@ describe("TwitchEventSub lifecycle", () => {
       );
       eventSub.sessionId = "test-session";
       eventSub._isConnected = true;
-      eventSub.ws = { readyState: 1 };
+      eventSub.ws = createWebSocket({ readyState: 1 });
       eventSub.isInitialized = false; // Note: isInitialized is NOT checked during validation
 
       expect(eventSub._validateConnectionForSubscriptions()).toBe(true);
@@ -733,7 +786,7 @@ describe("TwitchEventSub lifecycle", () => {
       );
       eventSub.sessionId = "test-session";
       eventSub._isConnected = true;
-      eventSub.ws = { readyState: 1 };
+      eventSub.ws = createWebSocket({ readyState: 1 });
       eventSub.isInitialized = true;
 
       expect(eventSub._validateConnectionForSubscriptions()).toBe(false);
@@ -764,18 +817,24 @@ describe("TwitchEventSub lifecycle", () => {
       await eventSub.logRawPlatformData("chat", { message: "test" });
 
       expect(logCalls.length).toBe(1);
-      expect(logCalls[0].platform).toBe("twitch");
-      expect(logCalls[0].type).toBe("chat");
+      const logCall = logCalls[0];
+      expect(logCall).toBeDefined();
+      expect(logCall?.platform).toBe("twitch");
+      expect(logCall?.type).toBe("chat");
     });
   });
 
   describe("error logging", () => {
     it("handles Error instances via error handler", () => {
-      const handledErrors = [];
+      const handledErrors: Array<{ err: Error; type: string; payload: unknown; msg?: string }> = [];
       eventSub = createEventSub();
       eventSub.errorHandler = {
         handleEventProcessingError: (err, type, payload, msg) => {
-          handledErrors.push({ err, type, payload, msg });
+          const entry: { err: Error; type: string; payload: unknown; msg?: string } = { err, type, payload };
+          if (msg !== undefined) {
+            entry.msg = msg;
+          }
+          handledErrors.push(entry);
         },
         logOperationalError: () => {},
       };
@@ -788,11 +847,11 @@ describe("TwitchEventSub lifecycle", () => {
       );
 
       expect(handledErrors.length).toBe(1);
-      expect(handledErrors[0].type).toBe("test-type");
+      expect(handledErrors[0]?.type).toBe("test-type");
     });
 
     it("logs operational errors for non-Error objects", () => {
-      const loggedErrors = [];
+      const loggedErrors: Array<{ msg: string; ctx: string; payload: unknown }> = [];
       eventSub = createEventSub();
       eventSub.errorHandler = {
         handleEventProcessingError: () => {},
@@ -808,7 +867,7 @@ describe("TwitchEventSub lifecycle", () => {
       );
 
       expect(loggedErrors.length).toBe(1);
-      expect(loggedErrors[0].msg).toBe("test message");
+      expect(loggedErrors[0]?.msg).toBe("test message");
     });
   });
 
@@ -819,6 +878,7 @@ describe("TwitchEventSub lifecycle", () => {
       let resubCalled = false;
       eventSub._setupEventSubscriptions = async () => {
         resubCalled = true;
+        return null;
       };
 
       await eventSub._handleSubscriptionRevocation({
@@ -836,6 +896,7 @@ describe("TwitchEventSub lifecycle", () => {
       let resubCalled = false;
       eventSub._setupEventSubscriptions = async () => {
         resubCalled = true;
+        return null;
       };
 
       await eventSub._handleSubscriptionRevocation({

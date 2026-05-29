@@ -1,19 +1,34 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
+import { EventEmitter } from "events";
 import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../helpers/mock-factories";
-import { EventEmitter } from "events";
 import { TwitchPlatform } from "../../../src/platforms/twitch";
 import { PlatformEvents } from "../../../src/interfaces/PlatformEvents";
 
-const createMockEventSub = () => {
-  const emitter = new EventEmitter();
-  return {
-    connect: createMockFn(),
-    disconnect: createMockFn(),
-    on: emitter.on.bind(emitter),
-    emit: emitter.emit.bind(emitter),
-    removeListener: emitter.removeListener.bind(emitter),
-  };
+type PlatformEventPayload = Record<string, unknown> & {
+  type: string;
+  months?: number;
+  tier?: string;
+  username?: string;
+  giftCount?: number;
+  amount?: number;
+  currency?: string;
+  giftType?: string;
+  message?: string;
+};
+
+type EmittedPlatformEvent = { evt: string; payload: unknown };
+
+const requirePlatformPayload = (payload: unknown): PlatformEventPayload => {
+  if (
+    payload === null ||
+    typeof payload !== "object" ||
+    !("type" in payload) ||
+    typeof payload.type !== "string"
+  ) {
+    throw new Error("Expected platform event payload");
+  }
+  return { ...payload, type: payload.type };
 };
 
 describe("TwitchPlatform monetisation mapping", () => {
@@ -21,16 +36,29 @@ describe("TwitchPlatform monetisation mapping", () => {
     restoreAllMocks();
   });
 
-  let twitch: TwitchPlatform & { eventFactory?: Record<string, unknown>; emit: (evt: string, payload: unknown) => void };
-  let emitted: Array<{ evt: string; payload: unknown }>;
+  let twitch: TwitchPlatform & { emit: (evt: string, payload: unknown) => boolean };
+  let emitted: EmittedPlatformEvent[];
 
   beforeEach(() => {
     emitted = [];
     const eventBus = {
-      emit: (evt, payload) => emitted.push({ evt, payload }),
+      emit: (evt: string, payload: unknown): void => { emitted.push({ evt, payload }); },
     };
-    const mockEventSub = createMockEventSub();
-    const TwitchEventSub = createMockFn(() => mockEventSub);
+    class MockTwitchEventSub {
+      private readonly emitter = new EventEmitter();
+      async initialize(): Promise<void> {}
+      async sendMessage(): Promise<void> {}
+      async disconnect(): Promise<void> {}
+      on(eventName: string, handler: (...args: unknown[]) => void): void {
+        this.emitter.on(eventName, handler);
+      }
+      removeListener(eventName: string, handler: (...args: unknown[]) => void): void {
+        this.emitter.removeListener(eventName, handler);
+      }
+    }
+    class MockChatFileLoggingService {
+      async logRawPlatformData(): Promise<void> {}
+    }
 
     twitch = new TwitchPlatform(
       { username: "tester" },
@@ -38,55 +66,16 @@ describe("TwitchPlatform monetisation mapping", () => {
         logger: noOpLogger,
         twitchAuth: {
           isReady: createMockFn().mockReturnValue(true),
-          getUserId: () => "test-user-id",
         },
-        ChatFileLoggingService: createMockFn(() => ({
-          start: createMockFn(),
-          stop: createMockFn(),
-        })),
-        TwitchEventSub,
+        ChatFileLoggingService: MockChatFileLoggingService,
+        TwitchEventSub: MockTwitchEventSub,
         eventBus,
       },
     );
 
-    if (!twitch.eventFactory) {
-      twitch.eventFactory = {
-        createPaypiggyEvent: (data = {}) => ({
-          type: PlatformEvents.PAYPIGGY,
-          platform: "twitch",
-          username: data.username,
-          userId: data.userId,
-          tier: data.tier,
-          months: data.months,
-          timestamp: data.timestamp,
-        }),
-        createGiftPaypiggyEvent: (data = {}) => ({
-          type: PlatformEvents.GIFTPAYPIGGY,
-          platform: "twitch",
-          username: data.username,
-          userId: data.userId,
-          giftCount: data.giftCount ?? data.total ?? 0,
-          tier: data.tier,
-          timestamp: data.timestamp,
-        }),
-        createGiftEvent: (data = {}) => ({
-          type: PlatformEvents.GIFT,
-          platform: "twitch",
-          username: data.username,
-          userId: data.userId,
-          giftType: data.giftType,
-          giftCount: data.giftCount,
-          amount: data.amount,
-          currency: data.currency,
-          message: data.message,
-          id: data.id,
-          timestamp: data.timestamp,
-        }),
-      };
-    }
-
-    twitch.emit = (evt, payload) => {
+    twitch.emit = (evt: string, payload: unknown): boolean => {
       emitted.push({ evt, payload });
+      return true;
     };
 
     expect(twitch.eventFactory).toBeDefined();
@@ -103,9 +92,9 @@ describe("TwitchPlatform monetisation mapping", () => {
 
     twitch.emit("platform:event", handler);
 
-    const paypiggyEvent = emitted.find(
+    const paypiggyEvent = requirePlatformPayload(emitted.find(
       (e) => e.evt === "platform:event",
-    )?.payload;
+    )?.payload);
     expect(paypiggyEvent.type).toBe(PlatformEvents.PAYPIGGY);
     expect(paypiggyEvent.months).toBe(5);
     expect(paypiggyEvent.tier).toBe("2000");
@@ -123,7 +112,7 @@ describe("TwitchPlatform monetisation mapping", () => {
 
     twitch.emit("platform:event", handler);
 
-    const giftEvent = emitted.find((e) => e.evt === "platform:event")?.payload;
+    const giftEvent = requirePlatformPayload(emitted.find((e) => e.evt === "platform:event")?.payload);
     expect(giftEvent.type).toBe(PlatformEvents.GIFTPAYPIGGY);
     expect(giftEvent.giftCount).toBe(10);
     expect(giftEvent.tier).toBe("1000");
@@ -145,7 +134,7 @@ describe("TwitchPlatform monetisation mapping", () => {
 
     twitch.emit("platform:event", handler);
 
-    const giftEvent = emitted.find((e) => e.evt === "platform:event")?.payload;
+    const giftEvent = requirePlatformPayload(emitted.find((e) => e.evt === "platform:event")?.payload);
     expect(giftEvent.type).toBe(PlatformEvents.GIFT);
     expect(giftEvent.amount).toBe(250);
     expect(giftEvent.currency).toBe("bits");
