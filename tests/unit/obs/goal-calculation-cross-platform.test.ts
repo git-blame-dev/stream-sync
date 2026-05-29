@@ -2,19 +2,82 @@ import { describe, expect, beforeEach, afterEach, it } from "bun:test";
 import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
 
 import { DisplayQueue } from "../../../src/obs/display-queue.ts";
-import { EventEmitter } from "events";
+
+type DisplayQueueConfig = ConstructorParameters<typeof DisplayQueue>[1];
+type DisplayQueueConstants = ConstructorParameters<typeof DisplayQueue>[2];
+type DisplayQueueDependencies = NonNullable<
+  ConstructorParameters<typeof DisplayQueue>[4]
+>;
+type DisplayQueueObsManager = ConstructorParameters<typeof DisplayQueue>[0];
+type TestDisplayQueueConfig = NonNullable<DisplayQueueConfig> & {
+  goals: { enabled: boolean; targetAmount: number };
+  timing: { transitionDelay: number; notificationClearDelay: number; chatMessageDuration: number };
+};
+
+function createObsManager(): DisplayQueueObsManager {
+  return {
+    call: createMockFn<
+      [requestType: string, payload: Record<string, unknown>],
+      Promise<unknown>
+    >(async () => ({})),
+    isReady: createMockFn<[], Promise<boolean>>(async () => true),
+  };
+}
+
+function createSourcesManager(): NonNullable<
+  DisplayQueueDependencies["sourcesManager"]
+> {
+  return {
+    updateTextSource: createMockFn<[string, string?], Promise<void>>(
+      async () => {},
+    ),
+    clearTextSource: createMockFn<[string], Promise<void>>(async () => {}),
+    updateChatMsgText: createMockFn<[string, string, string], Promise<void>>(
+      async () => {},
+    ),
+    getSceneItemId: async () => ({ sceneItemId: 1 }),
+    setSourceVisibility: createMockFn<
+      [string, string, boolean],
+      Promise<void>
+    >(async () => {}),
+    getGroupSceneItemId: async () => ({ sceneItemId: 1 }),
+    setGroupSourceVisibility: async () => {},
+    setPlatformLogoVisibility: async () => {},
+    setNotificationPlatformLogoVisibility: async () => {},
+    hideAllPlatformLogos: async () => {},
+    hideAllNotificationPlatformLogos: async () => {},
+    setChatDisplayVisibility: createMockFn<[boolean], Promise<void>>(
+      async () => {},
+    ),
+    setNotificationDisplayVisibility: createMockFn<[boolean], Promise<void>>(
+      async () => {},
+    ),
+    hideAllDisplays: createMockFn<[], Promise<void>>(async () => {}),
+    setSourceFilterEnabled: createMockFn<
+      [string, string, boolean],
+      Promise<void>
+    >(async () => {}),
+    getSourceFilterSettings: createMockFn<
+      [string, string],
+      Promise<Record<string, unknown>>
+    >(async () => ({})),
+    setSourceFilterSettings: createMockFn<
+      [string, string, Record<string, unknown>],
+      Promise<void>
+    >(async () => {}),
+    clearSceneItemCache: createMockFn<[], void>(() => {}),
+  };
+}
 
 describe("Cross-Platform Goal Calculation", () => {
-  let displayQueue;
-  let mockOBSManager;
-  let configFixture;
-  let mockConstants;
+  let displayQueue: DisplayQueue;
+  let mockOBSManager: DisplayQueueObsManager;
+  let configFixture: TestDisplayQueueConfig;
+  let mockConstants: DisplayQueueConstants;
+  let goalTotals: Record<string, number>;
 
   beforeEach(() => {
-    mockOBSManager = new EventEmitter();
-    mockOBSManager.call = createMockFn().mockResolvedValue({});
-    mockOBSManager.isConnected = createMockFn().mockReturnValue(true);
-    mockOBSManager.isReady = createMockFn().mockResolvedValue(true);
+    mockOBSManager = createObsManager();
 
     configFixture = {
       autoProcess: false,
@@ -62,30 +125,32 @@ describe("Cross-Platform Goal Calculation", () => {
       NOTIFICATION_FADE_DURATION: 1000,
     };
 
-    const goalTotals = {};
-    const mockDependencies = {
-      sourcesManager: {
-        updateTextSource: createMockFn().mockResolvedValue(),
-        clearTextSource: createMockFn().mockResolvedValue(),
-        setSourceVisibility: createMockFn().mockResolvedValue(),
-        setNotificationDisplayVisibility: createMockFn().mockResolvedValue(),
-        setChatDisplayVisibility: createMockFn().mockResolvedValue(),
-        hideAllDisplays: createMockFn().mockResolvedValue(),
-        setPlatformLogoVisibility: createMockFn().mockResolvedValue(),
-        setNotificationPlatformLogoVisibility:
-          createMockFn().mockResolvedValue(),
-        setGroupSourceVisibility: createMockFn().mockResolvedValue(),
-      },
+    goalTotals = {};
+    const mockDependencies: DisplayQueueDependencies = {
+      sourcesManager: createSourcesManager(),
       goalsManager: {
-        processDonationGoal: createMockFn(async (platform, amount) => {
-          goalTotals[platform] = (goalTotals[platform] || 0) + amount;
+        processDonationGoal: createMockFn<
+          [platform: unknown, amount: number],
+          Promise<{ success: boolean }>
+        >(async (platform, amount) => {
+          if (typeof platform === "string") {
+            goalTotals[platform] = (goalTotals[platform] || 0) + amount;
+          }
+          return { success: true };
         }),
-        processPaypiggyGoal: createMockFn().mockResolvedValue({
+        processPaypiggyGoal: createMockFn<
+          [platform: string],
+          Promise<{ success: boolean }>
+        >(async () => ({
           success: true,
-        }),
-        initializeGoalDisplay: createMockFn().mockResolvedValue(),
+        })),
+        initializeGoalDisplay: createMockFn<[], Promise<void>>(async () => {}),
+        updateAllGoalDisplays: createMockFn<[], Promise<void>>(async () => {}),
+        updateGoalDisplay: createMockFn<[string], Promise<void>>(async () => {}),
+        getCurrentGoalStatus: () => null,
+        getAllCurrentGoalStatuses: () => ({}),
       },
-      delay: () => Promise.resolve(),
+      delay: async () => {},
     };
 
     displayQueue = new DisplayQueue(
@@ -95,7 +160,6 @@ describe("Cross-Platform Goal Calculation", () => {
       null,
       mockDependencies,
     );
-    displayQueue.__goalTotals = goalTotals;
   });
 
   afterEach(() => {
@@ -128,7 +192,7 @@ describe("Cross-Platform Goal Calculation", () => {
       displayQueue.addItem(tiktokGift);
       await displayQueue.processQueue();
 
-      expect(displayQueue.__goalTotals.tiktok).toBe(50);
+      expect(goalTotals.tiktok).toBe(50);
     });
 
     it("should use TikTok total amount derived from repeat count", async () => {
@@ -153,7 +217,7 @@ describe("Cross-Platform Goal Calculation", () => {
       displayQueue.addItem(tiktokDiamonds);
       await displayQueue.processQueue();
 
-      expect(displayQueue.__goalTotals.tiktok).toBe(300);
+      expect(goalTotals.tiktok).toBe(300);
     });
   });
 
@@ -180,7 +244,7 @@ describe("Cross-Platform Goal Calculation", () => {
       displayQueue.addItem(youtubeDonation);
       await displayQueue.processQueue();
 
-      expect(displayQueue.__goalTotals.youtube).toBe(10);
+      expect(goalTotals.youtube).toBe(10);
     });
   });
 
@@ -209,7 +273,7 @@ describe("Cross-Platform Goal Calculation", () => {
       displayQueue.addItem(twitchBits);
       await displayQueue.processQueue();
 
-      expect(displayQueue.__goalTotals.twitch).toBe(100);
+      expect(goalTotals.twitch).toBe(100);
     });
   });
 
@@ -260,7 +324,7 @@ describe("Cross-Platform Goal Calculation", () => {
         await displayQueue.processQueue();
       }
 
-      expect(Object.keys(displayQueue.__goalTotals)).toHaveLength(0);
+      expect(Object.keys(goalTotals)).toHaveLength(0);
     });
 
     it("should skip goal tracking for error gifts", async () => {
@@ -285,7 +349,7 @@ describe("Cross-Platform Goal Calculation", () => {
       displayQueue.addItem(errorGift);
       await displayQueue.processQueue();
 
-      expect(Object.keys(displayQueue.__goalTotals)).toHaveLength(0);
+      expect(Object.keys(goalTotals)).toHaveLength(0);
     });
   });
 });

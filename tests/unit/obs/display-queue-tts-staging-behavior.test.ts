@@ -7,8 +7,100 @@ import { PRIORITY_LEVELS } from "../../../src/core/constants";
 import { DisplayQueue } from "../../../src/obs/display-queue.ts";
 import { EventEmitter } from "events";
 
+type DisplayQueueDependencies = NonNullable<
+  ConstructorParameters<typeof DisplayQueue>[4]
+>;
+type DisplayQueueObsManager = ConstructorParameters<typeof DisplayQueue>[0];
+type VfxPayload = Record<string, unknown> & {
+  correlationId: string;
+  command?: string;
+};
+type TestEventBus = EventEmitter & {
+  subscribe: (
+    event: string,
+    handler: (payload: Record<string, unknown>) => void,
+  ) => () => void;
+};
+
+function createObsManager(): DisplayQueueObsManager {
+  return {
+    call: createMockFn<
+      [requestType: string, payload: Record<string, unknown>],
+      Promise<unknown>
+    >(async () => ({})),
+    isReady: createMockFn<[], Promise<boolean>>(async () => true),
+  };
+}
+
+function createSourcesManager(
+  recordedTexts: string[],
+): NonNullable<DisplayQueueDependencies["sourcesManager"]> {
+  return {
+    updateTextSource: createMockFn<[string, string?], Promise<void>>(
+      async (_source, text = "") => {
+        recordedTexts.push(text);
+      },
+    ),
+    clearTextSource: createMockFn<[string], Promise<void>>(async () => {}),
+    updateChatMsgText: createMockFn<[string, string, string], Promise<void>>(
+      async () => {},
+    ),
+    getSceneItemId: async () => ({ sceneItemId: 1 }),
+    setSourceVisibility: createMockFn<
+      [string, string, boolean],
+      Promise<void>
+    >(async () => {}),
+    getGroupSceneItemId: async () => ({ sceneItemId: 1 }),
+    setGroupSourceVisibility: async () => {},
+    setPlatformLogoVisibility: async () => {},
+    setNotificationPlatformLogoVisibility: async () => {},
+    hideAllPlatformLogos: async () => {},
+    hideAllNotificationPlatformLogos: async () => {},
+    setChatDisplayVisibility: createMockFn<[boolean], Promise<void>>(
+      async () => {},
+    ),
+    setNotificationDisplayVisibility: createMockFn<[boolean], Promise<void>>(
+      async () => {},
+    ),
+    hideAllDisplays: createMockFn<[], Promise<void>>(async () => {}),
+    setSourceFilterEnabled: createMockFn<
+      [string, string, boolean],
+      Promise<void>
+    >(async () => {}),
+    getSourceFilterSettings: createMockFn<
+      [string, string],
+      Promise<Record<string, unknown>>
+    >(async () => ({})),
+    setSourceFilterSettings: createMockFn<
+      [string, string, Record<string, unknown>],
+      Promise<void>
+    >(async () => {}),
+    clearSceneItemCache: createMockFn<[], void>(() => {}),
+  };
+}
+
+function createGoalsManager(): NonNullable<
+  DisplayQueueDependencies["goalsManager"]
+> {
+  return {
+    processDonationGoal: createMockFn<
+      [platform: unknown, amount: number],
+      Promise<{ success: boolean }>
+    >(async () => ({ success: true })),
+    processPaypiggyGoal: createMockFn<
+      [platform: string],
+      Promise<{ success: boolean }>
+    >(async () => ({ success: true })),
+    initializeGoalDisplay: createMockFn<[], Promise<void>>(async () => {}),
+    updateAllGoalDisplays: createMockFn<[], Promise<void>>(async () => {}),
+    updateGoalDisplay: createMockFn<[string], Promise<void>>(async () => {}),
+    getCurrentGoalStatus: () => null,
+    getAllCurrentGoalStatuses: () => ({}),
+  };
+}
+
 describe("DisplayQueue notification TTS staging", () => {
-  let originalNodeEnv;
+  let originalNodeEnv: string | undefined;
 
   beforeEach(() => {
     originalNodeEnv = process.env.NODE_ENV;
@@ -16,46 +108,30 @@ describe("DisplayQueue notification TTS staging", () => {
   });
 
   afterEach(() => {
-    process.env.NODE_ENV = originalNodeEnv;
+    if (originalNodeEnv === undefined) {
+      delete process.env.NODE_ENV;
+    } else {
+      process.env.NODE_ENV = originalNodeEnv;
+    }
     restoreAllMocks();
   });
 
   function createQueue() {
-    const recordedTexts = [];
+    const recordedTexts: string[] = [];
+    const mockSourcesManager = createSourcesManager(recordedTexts);
+    const obsManager = createObsManager();
 
-    const mockSourcesManager = {
-      updateTextSource: createMockFn((source, text) => {
-        recordedTexts.push(text);
-        return Promise.resolve();
-      }),
-      clearTextSource: createMockFn().mockResolvedValue(),
-      setSourceVisibility: createMockFn().mockResolvedValue(),
-      setNotificationDisplayVisibility: createMockFn().mockResolvedValue(),
-      setChatDisplayVisibility: createMockFn().mockResolvedValue(),
-      hideAllDisplays: createMockFn().mockResolvedValue(),
-      setPlatformLogoVisibility: createMockFn().mockResolvedValue(),
-      setNotificationPlatformLogoVisibility: createMockFn().mockResolvedValue(),
-      setGroupSourceVisibility: createMockFn().mockResolvedValue(),
-      setSourceFilterVisibility: createMockFn().mockResolvedValue(),
-    };
-
-    const obsManager = {
-      call: createMockFn().mockResolvedValue({}),
-      isConnected: () => true,
-      isReady: createMockFn().mockResolvedValue(true),
-    };
-
-    const eventBus = new EventEmitter();
-    eventBus.subscribe = (event, handler) => {
+    const eventBus: TestEventBus = Object.assign(new EventEmitter(), {
+      subscribe(
+        event: string,
+        handler: (payload: Record<string, unknown>) => void,
+      ) {
       eventBus.on(event, handler);
       return () => eventBus.off(event, handler);
-    };
+      },
+    });
 
-    const mockGoalsManager = {
-      processDonationGoal: createMockFn().mockResolvedValue({ success: true }),
-      processPaypiggyGoal: createMockFn().mockResolvedValue({ success: true }),
-      initializeGoalDisplay: createMockFn().mockResolvedValue(),
-    };
+    const mockGoalsManager = createGoalsManager();
 
     const queue = new DisplayQueue(
       obsManager,
@@ -86,9 +162,9 @@ describe("DisplayQueue notification TTS staging", () => {
 
   it("emits VFX and updates TTS for gift notifications", async () => {
     const { queue, eventBus } = createQueue();
-    const capturedVfx = [];
+    const capturedVfx: VfxPayload[] = [];
 
-    eventBus.on(PlatformEvents.VFX_COMMAND_RECEIVED, (payload) => {
+    eventBus.on(PlatformEvents.VFX_COMMAND_RECEIVED, (payload: VfxPayload) => {
       capturedVfx.push(payload);
       safeSetTimeout(
         () => {
@@ -97,7 +173,6 @@ describe("DisplayQueue notification TTS staging", () => {
           });
         },
         1,
-        "test gift VFX completion emit",
       );
     });
 
@@ -139,9 +214,9 @@ describe("DisplayQueue notification TTS staging", () => {
 
   it("waits for VFX completion before playing TTS for sequential notifications", async () => {
     const { queue, eventBus, recordedTexts } = createQueue();
-    const capturedVfx = [];
+    const capturedVfx: VfxPayload[] = [];
 
-    eventBus.on(PlatformEvents.VFX_COMMAND_RECEIVED, (payload) => {
+    eventBus.on(PlatformEvents.VFX_COMMAND_RECEIVED, (payload: VfxPayload) => {
       capturedVfx.push(payload);
       safeSetTimeout(
         () => {
@@ -150,7 +225,6 @@ describe("DisplayQueue notification TTS staging", () => {
           });
         },
         1,
-        "test VFX completion emit",
       );
     });
 
@@ -182,9 +256,9 @@ describe("DisplayQueue notification TTS staging", () => {
 
   it("skips VFX when no vfxConfig provided", async () => {
     const { queue, eventBus, recordedTexts } = createQueue();
-    const capturedVfx = [];
+    const capturedVfx: VfxPayload[] = [];
 
-    eventBus.on(PlatformEvents.VFX_COMMAND_RECEIVED, (payload) =>
+    eventBus.on(PlatformEvents.VFX_COMMAND_RECEIVED, (payload: VfxPayload) =>
       capturedVfx.push(payload),
     );
 
@@ -208,7 +282,7 @@ describe("DisplayQueue notification TTS staging", () => {
   it("processes multiple TTS stages sequentially", async () => {
     const { queue, eventBus, recordedTexts } = createQueue();
 
-    eventBus.on(PlatformEvents.VFX_COMMAND_RECEIVED, (payload) => {
+    eventBus.on(PlatformEvents.VFX_COMMAND_RECEIVED, (payload: VfxPayload) => {
       safeSetTimeout(
         () => {
           eventBus.emit(PlatformEvents.VFX_EFFECT_COMPLETED, {
@@ -216,7 +290,6 @@ describe("DisplayQueue notification TTS staging", () => {
           });
         },
         1,
-        "test VFX completion emit",
       );
     });
 
@@ -272,9 +345,9 @@ describe("DisplayQueue notification TTS staging", () => {
 
   it("runs greeting secondary VFX after greeting primary VFX and before TTS", async () => {
     const { queue, eventBus, recordedTexts } = createQueue();
-    const emittedCommands = [];
+    const emittedCommands: unknown[] = [];
 
-    eventBus.on(PlatformEvents.VFX_COMMAND_RECEIVED, (payload) => {
+    eventBus.on(PlatformEvents.VFX_COMMAND_RECEIVED, (payload: VfxPayload) => {
       emittedCommands.push(payload.command);
       safeSetTimeout(
         () => {
@@ -283,7 +356,6 @@ describe("DisplayQueue notification TTS staging", () => {
           });
         },
         1,
-        "test greeting VFX completion emit",
       );
     });
 

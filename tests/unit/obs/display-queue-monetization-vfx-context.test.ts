@@ -6,8 +6,93 @@ import { DisplayQueue } from "../../../src/obs/display-queue.ts";
 import * as constants from "../../../src/core/constants";
 import { PlatformEvents } from "../../../src/interfaces/PlatformEvents";
 
+type DisplayQueueDependencies = NonNullable<
+  ConstructorParameters<typeof DisplayQueue>[4]
+>;
+type DisplayQueueObsManager = ConstructorParameters<typeof DisplayQueue>[0];
+type DisplayQueueEventBus = ConstructorParameters<typeof DisplayQueue>[3];
+type VfxPayload = Record<string, unknown> & {
+  correlationId: string;
+  context?: Record<string, unknown>;
+};
+
+function createObsManager(): DisplayQueueObsManager {
+  return {
+    isReady: createMockFn<[], Promise<boolean>>(async () => true),
+    call: createMockFn<
+      [requestType: string, payload: Record<string, unknown>],
+      Promise<unknown>
+    >(async () => ({ success: true })),
+  };
+}
+
+function createSourcesManager(): NonNullable<
+  DisplayQueueDependencies["sourcesManager"]
+> {
+  return {
+    updateTextSource: createMockFn<[string, string?], Promise<void>>(
+      async () => {},
+    ),
+    clearTextSource: createMockFn<[string], Promise<void>>(async () => {}),
+    updateChatMsgText: createMockFn<[string, string, string], Promise<void>>(
+      async () => {},
+    ),
+    getSceneItemId: async () => ({ sceneItemId: 1 }),
+    setSourceVisibility: createMockFn<
+      [string, string, boolean],
+      Promise<void>
+    >(async () => {}),
+    getGroupSceneItemId: async () => ({ sceneItemId: 1 }),
+    setGroupSourceVisibility: async () => {},
+    setPlatformLogoVisibility: async () => {},
+    setNotificationPlatformLogoVisibility: async () => {},
+    hideAllPlatformLogos: async () => {},
+    hideAllNotificationPlatformLogos: async () => {},
+    setChatDisplayVisibility: createMockFn<[boolean], Promise<void>>(
+      async () => {},
+    ),
+    setNotificationDisplayVisibility: createMockFn<[boolean], Promise<void>>(
+      async () => {},
+    ),
+    hideAllDisplays: createMockFn<[], Promise<void>>(async () => {}),
+    setSourceFilterEnabled: createMockFn<
+      [string, string, boolean],
+      Promise<void>
+    >(async () => {}),
+    getSourceFilterSettings: createMockFn<
+      [string, string],
+      Promise<Record<string, unknown>>
+    >(async () => ({})),
+    setSourceFilterSettings: createMockFn<
+      [string, string, Record<string, unknown>],
+      Promise<void>
+    >(async () => {}),
+    clearSceneItemCache: createMockFn<[], void>(() => {}),
+  };
+}
+
+function createGoalsManager(): NonNullable<
+  DisplayQueueDependencies["goalsManager"]
+> {
+  return {
+    processDonationGoal: createMockFn<
+      [platform: unknown, amount: number],
+      Promise<{ success: boolean }>
+    >(async () => ({ success: true })),
+    processPaypiggyGoal: createMockFn<
+      [platform: string],
+      Promise<{ success: boolean }>
+    >(async () => ({ success: true })),
+    initializeGoalDisplay: createMockFn<[], Promise<void>>(async () => {}),
+    updateAllGoalDisplays: createMockFn<[], Promise<void>>(async () => {}),
+    updateGoalDisplay: createMockFn<[string], Promise<void>>(async () => {}),
+    getCurrentGoalStatus: () => null,
+    getAllCurrentGoalStatuses: () => ({}),
+  };
+}
+
 describe("DisplayQueue monetization VFX context", () => {
-  let originalNodeEnv;
+  let originalNodeEnv: string | undefined;
 
   beforeEach(() => {
     originalNodeEnv = process.env.NODE_ENV;
@@ -15,16 +100,16 @@ describe("DisplayQueue monetization VFX context", () => {
   });
 
   afterEach(() => {
-    process.env.NODE_ENV = originalNodeEnv;
+    if (originalNodeEnv === undefined) {
+      delete process.env.NODE_ENV;
+    } else {
+      process.env.NODE_ENV = originalNodeEnv;
+    }
     restoreAllMocks();
   });
 
-  function createQueue(eventBus) {
-    const obsManager = {
-      isReady: createMockFn().mockResolvedValue(true),
-      call: createMockFn().mockResolvedValue({ success: true }),
-      isConnected: () => true,
-    };
+  function createQueue(eventBus: DisplayQueueEventBus): DisplayQueue {
+    const obsManager = createObsManager();
 
     const baseConfig = {
       autoProcess: false,
@@ -55,27 +140,9 @@ describe("DisplayQueue monetization VFX context", () => {
       ttsEnabled: false,
     };
 
-    const mockDependencies = {
-      sourcesManager: {
-        updateTextSource: createMockFn().mockResolvedValue(),
-        clearTextSource: createMockFn().mockResolvedValue(),
-        setSourceVisibility: createMockFn().mockResolvedValue(),
-        setNotificationDisplayVisibility: createMockFn().mockResolvedValue(),
-        setChatDisplayVisibility: createMockFn().mockResolvedValue(),
-        hideAllDisplays: createMockFn().mockResolvedValue(),
-        setPlatformLogoVisibility: createMockFn().mockResolvedValue(),
-        setNotificationPlatformLogoVisibility:
-          createMockFn().mockResolvedValue(),
-      },
-      goalsManager: {
-        processDonationGoal: createMockFn().mockResolvedValue({
-          success: true,
-        }),
-        processPaypiggyGoal: createMockFn().mockResolvedValue({
-          success: true,
-        }),
-        initializeGoalDisplay: createMockFn().mockResolvedValue(),
-      },
+    const mockDependencies: DisplayQueueDependencies = {
+      sourcesManager: createSourcesManager(),
+      goalsManager: createGoalsManager(),
       delay: async () => {},
     };
 
@@ -93,7 +160,7 @@ describe("DisplayQueue monetization VFX context", () => {
 
   it("emits VFX_COMMAND_RECEIVED for gift notifications", async () => {
     const eventBus = new EventEmitter();
-    const capturedVfx = [];
+    const capturedVfx: VfxPayload[] = [];
     const queue = createQueue(eventBus);
 
     const item = {
@@ -114,7 +181,7 @@ describe("DisplayQueue monetization VFX context", () => {
       },
     };
 
-    eventBus.on(PlatformEvents.VFX_COMMAND_RECEIVED, (payload) => {
+    eventBus.on(PlatformEvents.VFX_COMMAND_RECEIVED, (payload: VfxPayload) => {
       capturedVfx.push(payload);
       safeSetTimeout(
         () => {
@@ -123,7 +190,6 @@ describe("DisplayQueue monetization VFX context", () => {
           });
         },
         1,
-        "test gift VFX completion emit",
       );
     });
 
@@ -142,9 +208,9 @@ describe("DisplayQueue monetization VFX context", () => {
 
   it("emits VFX_COMMAND_RECEIVED for sequential notifications", async () => {
     const eventBus = new EventEmitter();
-    const capturedVfx = [];
+    const capturedVfx: VfxPayload[] = [];
 
-    eventBus.on(PlatformEvents.VFX_COMMAND_RECEIVED, (payload) => {
+    eventBus.on(PlatformEvents.VFX_COMMAND_RECEIVED, (payload: VfxPayload) => {
       capturedVfx.push(payload);
       safeSetTimeout(
         () => {
@@ -153,7 +219,6 @@ describe("DisplayQueue monetization VFX context", () => {
           });
         },
         1,
-        "test VFX completion emit",
       );
     });
 
@@ -192,9 +257,9 @@ describe("DisplayQueue monetization VFX context", () => {
 
   it("includes context with source and notificationType in VFX payload", async () => {
     const eventBus = new EventEmitter();
-    const capturedVfx = [];
+    const capturedVfx: VfxPayload[] = [];
 
-    eventBus.on(PlatformEvents.VFX_COMMAND_RECEIVED, (payload) => {
+    eventBus.on(PlatformEvents.VFX_COMMAND_RECEIVED, (payload: VfxPayload) => {
       capturedVfx.push(payload);
       safeSetTimeout(
         () => {
@@ -203,7 +268,6 @@ describe("DisplayQueue monetization VFX context", () => {
           });
         },
         1,
-        "test VFX completion emit",
       );
     });
 
@@ -230,7 +294,12 @@ describe("DisplayQueue monetization VFX context", () => {
     await queue.effects.handleSequentialEffects(item, []);
 
     expect(capturedVfx).toHaveLength(1);
-    expect(capturedVfx[0].context).toEqual(
+    const emittedVfx = capturedVfx[0];
+    expect(emittedVfx).toBeDefined();
+    if (!emittedVfx) {
+      throw new Error("Expected one VFX payload to be emitted");
+    }
+    expect(emittedVfx.context).toEqual(
       expect.objectContaining({
         source: "display-queue",
         notificationType: "platform:paypiggy",
@@ -240,8 +309,8 @@ describe("DisplayQueue monetization VFX context", () => {
 
   it("skips VFX emit when no vfxConfig provided", async () => {
     const eventBus = new EventEmitter();
-    const capturedVfx = [];
-    eventBus.on(PlatformEvents.VFX_COMMAND_RECEIVED, (payload) =>
+    const capturedVfx: VfxPayload[] = [];
+    eventBus.on(PlatformEvents.VFX_COMMAND_RECEIVED, (payload: VfxPayload) =>
       capturedVfx.push(payload),
     );
     const queue = createQueue(eventBus);

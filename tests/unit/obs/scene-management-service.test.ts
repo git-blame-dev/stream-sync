@@ -4,16 +4,48 @@ import { noOpLogger } from "../../helpers/mock-factories";
 import { createEventBus } from "../../../src/core/EventBus";
 import { createSceneManagementService } from "../../../src/obs/scene-management-service";
 
+type SceneService = ReturnType<typeof createSceneManagementService>;
+type SceneServiceDependencies = Parameters<typeof createSceneManagementService>[0];
+type SceneEventBus = SceneServiceDependencies["eventBus"];
+type SceneObsConnection = SceneServiceDependencies["obsConnection"];
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object";
+}
+
+function createSceneEventBusAdapter(): SceneEventBus & {
+  getListenerSummary: ReturnType<typeof createEventBus>["getListenerSummary"];
+  reset: ReturnType<typeof createEventBus>["reset"];
+} {
+  const eventBus = createEventBus({ debugEnabled: false });
+
+  return {
+    subscribe(eventName, handler) {
+      return eventBus.subscribe(eventName, async (payload: unknown) => {
+        if (isRecord(payload)) {
+          await handler(payload);
+        }
+      });
+    },
+    getListenerSummary: eventBus.getListenerSummary.bind(eventBus),
+    reset: eventBus.reset.bind(eventBus),
+  };
+}
+
 describe("SceneManagementService", () => {
-  let sceneService;
-  let eventBus;
-  let mockOBSConnection;
+  let sceneService: SceneService;
+  let eventBus: ReturnType<typeof createSceneEventBusAdapter>;
+  let mockOBSConnection: SceneObsConnection & {
+    call: ReturnType<typeof createMockFn<[string, Record<string, unknown>], Promise<unknown>>>;
+  };
 
   beforeEach(() => {
-    eventBus = createEventBus({ debugEnabled: false });
+    eventBus = createSceneEventBusAdapter();
 
     mockOBSConnection = {
-      call: createMockFn().mockResolvedValue({}),
+      call: createMockFn<[string, Record<string, unknown>], Promise<unknown>>(
+        async () => ({}),
+      ),
     };
 
     sceneService = createSceneManagementService({

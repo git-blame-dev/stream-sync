@@ -1,26 +1,102 @@
 import { describe, expect, beforeEach, afterEach, it } from "bun:test";
 import { createMockFn } from "../../helpers/bun-mock-utils";
 import { DisplayQueue } from "../../../src/obs/display-queue.ts";
-import { EventEmitter } from "events";
+
+type DisplayQueueConfig = ConstructorParameters<typeof DisplayQueue>[1];
+type DisplayQueueDependencies = NonNullable<
+  ConstructorParameters<typeof DisplayQueue>[4]
+>;
+type DisplayQueueObsManager = ConstructorParameters<typeof DisplayQueue>[0];
+type RecordedGoal = { platform: string; amount: number };
+type TestDisplayQueueConfig = NonNullable<DisplayQueueConfig> & {
+  timing: { transitionDelay: number; notificationClearDelay: number; chatMessageDuration: number };
+};
+
+function createObsManager(): DisplayQueueObsManager {
+  return {
+    call: createMockFn<
+      [requestType: string, payload: Record<string, unknown>],
+      Promise<unknown>
+    >(async () => ({})),
+    isReady: createMockFn<[], Promise<boolean>>(async () => true),
+  };
+}
+
+function createSourcesManager(): NonNullable<
+  DisplayQueueDependencies["sourcesManager"]
+> {
+  return {
+    updateTextSource: createMockFn<[string, string?], Promise<void>>(
+      async () => {},
+    ),
+    clearTextSource: createMockFn<[string], Promise<void>>(async () => {}),
+    updateChatMsgText: createMockFn<[string, string, string], Promise<void>>(
+      async () => {},
+    ),
+    getSceneItemId: async () => ({ sceneItemId: 1 }),
+    setSourceVisibility: createMockFn<
+      [string, string, boolean],
+      Promise<void>
+    >(async () => {}),
+    getGroupSceneItemId: async () => ({ sceneItemId: 1 }),
+    setGroupSourceVisibility: async () => {},
+    setPlatformLogoVisibility: async () => {},
+    setNotificationPlatformLogoVisibility: async () => {},
+    hideAllPlatformLogos: async () => {},
+    hideAllNotificationPlatformLogos: async () => {},
+    setChatDisplayVisibility: createMockFn<[boolean], Promise<void>>(
+      async () => {},
+    ),
+    setNotificationDisplayVisibility: createMockFn<[boolean], Promise<void>>(
+      async () => {},
+    ),
+    hideAllDisplays: createMockFn<[], Promise<void>>(async () => {}),
+    setSourceFilterEnabled: createMockFn<
+      [string, string, boolean],
+      Promise<void>
+    >(async () => {}),
+    getSourceFilterSettings: createMockFn<
+      [string, string],
+      Promise<Record<string, unknown>>
+    >(async () => ({})),
+    setSourceFilterSettings: createMockFn<
+      [string, string, Record<string, unknown>],
+      Promise<void>
+    >(async () => {}),
+    clearSceneItemCache: createMockFn<[], void>(() => {}),
+  };
+}
 
 describe("DisplayQueue - Twitch Bits Goal Calculation", () => {
-  let displayQueue;
-  let mockOBSManager;
-  let configFixture;
-  let mockGoalsManager;
-  let recordedGoals;
+  let displayQueue: DisplayQueue;
+  let mockOBSManager: DisplayQueueObsManager;
+  let configFixture: TestDisplayQueueConfig;
+  let mockGoalsManager: NonNullable<DisplayQueueDependencies["goalsManager"]>;
+  let recordedGoals: RecordedGoal[];
 
   beforeEach(() => {
-    mockOBSManager = new EventEmitter();
-    mockOBSManager.call = createMockFn().mockResolvedValue({});
-    mockOBSManager.isConnected = createMockFn().mockReturnValue(true);
-    mockOBSManager.isReady = createMockFn().mockResolvedValue(true);
+    mockOBSManager = createObsManager();
 
     recordedGoals = [];
     mockGoalsManager = {
-      processDonationGoal: createMockFn(async (platform, amount) => {
-        recordedGoals.push({ platform, amount });
+      processDonationGoal: createMockFn<
+        [platform: unknown, amount: number],
+        Promise<{ success: boolean }>
+      >(async (platform, amount) => {
+        if (typeof platform === "string") {
+          recordedGoals.push({ platform, amount });
+        }
+        return { success: true };
       }),
+      processPaypiggyGoal: createMockFn<
+        [platform: string],
+        Promise<{ success: boolean }>
+      >(async () => ({ success: true })),
+      initializeGoalDisplay: createMockFn<[], Promise<void>>(async () => {}),
+      updateAllGoalDisplays: createMockFn<[], Promise<void>>(async () => {}),
+      updateGoalDisplay: createMockFn<[string], Promise<void>>(async () => {}),
+      getCurrentGoalStatus: () => null,
+      getAllCurrentGoalStatuses: () => ({}),
     };
 
     configFixture = {
@@ -53,22 +129,10 @@ describe("DisplayQueue - Twitch Bits Goal Calculation", () => {
       ttsEnabled: false,
     };
 
-    const mockSourcesManager = {
-      updateTextSource: createMockFn().mockResolvedValue(),
-      clearTextSource: createMockFn().mockResolvedValue(),
-      setSourceVisibility: createMockFn().mockResolvedValue(),
-      setNotificationDisplayVisibility: createMockFn().mockResolvedValue(),
-      setChatDisplayVisibility: createMockFn().mockResolvedValue(),
-      hideAllDisplays: createMockFn().mockResolvedValue(),
-      setPlatformLogoVisibility: createMockFn().mockResolvedValue(),
-      setNotificationPlatformLogoVisibility: createMockFn().mockResolvedValue(),
-      setGroupSourceVisibility: createMockFn().mockResolvedValue(),
-    };
-
     displayQueue = new DisplayQueue(mockOBSManager, configFixture, {}, null, {
       goalsManager: mockGoalsManager,
-      sourcesManager: mockSourcesManager,
-      delay: () => Promise.resolve(),
+      sourcesManager: createSourcesManager(),
+      delay: async () => {},
     });
   });
 
