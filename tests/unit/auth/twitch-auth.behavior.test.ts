@@ -19,7 +19,15 @@ const requiredScopes = [
   "moderator:read:followers",
 ];
 
-const buildValidationResponse = (overrides = {}) => ({
+type TokenStorePayload = Record<string, unknown>;
+type CreateAuthOptions = {
+  clientId?: unknown;
+  expectedUsername?: unknown;
+  httpClient?: unknown;
+  oauthFlow?: unknown;
+};
+
+const buildValidationResponse = (overrides: Record<string, unknown> = {}) => ({
   data: {
     user_id: "test-user-id",
     login: "test-user",
@@ -30,8 +38,8 @@ const buildValidationResponse = (overrides = {}) => ({
 });
 
 describe("TwitchAuth behavior", () => {
-  let tempDir;
-  let tokenStorePath;
+  let tempDir: string;
+  let tokenStorePath: string;
   const originalEnv = { ...process.env };
 
   beforeEach(async () => {
@@ -52,7 +60,7 @@ describe("TwitchAuth behavior", () => {
     }
   });
 
-  const writeTokenStore = async (payload) => {
+  const writeTokenStore = async (payload: TokenStorePayload) => {
     const content = JSON.stringify(payload, null, 2);
     await fs.promises.writeFile(tokenStorePath, content, "utf8");
   };
@@ -62,15 +70,24 @@ describe("TwitchAuth behavior", () => {
     expectedUsername = "test-user",
     httpClient,
     oauthFlow,
-  } = {}) => {
-    return new TwitchAuth({
+  }: CreateAuthOptions = {}) => {
+    const authOptions: ConstructorParameters<typeof TwitchAuth>[0] = {
       tokenStorePath,
       clientId,
       expectedUsername,
       logger: noOpLogger,
-      httpClient,
-      oauthFlow,
-    });
+    };
+    if (httpClient !== undefined) {
+      authOptions.httpClient = httpClient as NonNullable<
+        ConstructorParameters<typeof TwitchAuth>[0]["httpClient"]
+      >;
+    }
+    if (oauthFlow !== undefined) {
+      authOptions.oauthFlow = oauthFlow as NonNullable<
+        ConstructorParameters<typeof TwitchAuth>[0]["oauthFlow"]
+      >;
+    }
+    return new TwitchAuth(authOptions);
   };
 
   it("throws when expectedUsername is missing", async () => {
@@ -236,8 +253,8 @@ describe("TwitchAuth behavior", () => {
   it("deduplicates concurrent refresh requests", async () => {
     secrets.twitch.refreshToken = "test-refresh-token";
 
-    let resolvePost;
-    const postPromise = new Promise((resolve) => {
+    let resolvePost: ((value: { data: Record<string, unknown> }) => void) | undefined;
+    const postPromise = new Promise<{ data: Record<string, unknown> }>((resolve) => {
       resolvePost = resolve;
     });
 
@@ -253,6 +270,9 @@ describe("TwitchAuth behavior", () => {
 
     expect(httpClient.post.mock.calls.length).toBe(1);
 
+    if (!resolvePost) {
+      throw new Error("Expected refresh resolver to be captured");
+    }
     resolvePost({
       data: {
         access_token: "test-new-access-token",

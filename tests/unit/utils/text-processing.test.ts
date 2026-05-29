@@ -220,7 +220,7 @@ describe("Text Processing", () => {
 
       const lines = wrapped.split("\n");
       expect(lines.length).toBeGreaterThan(1);
-      expect(lines[0].trim()).toBe("Line1");
+      expect(lines.at(0)?.trim()).toBe("Line1");
     });
 
     it("returns empty string when wrapping non-string input", () => {

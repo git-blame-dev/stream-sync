@@ -22,8 +22,8 @@ describe("secret-manager interactive gating integration", () => {
     process.env.NODE_ENV = "test";
     delete process.env.TIKTOK_API_KEY;
 
-    const promptCalls = [];
-    const promptFor = async (secretId) => {
+    const promptCalls: string[] = [];
+    const promptFor = async (secretId: string) => {
       promptCalls.push(secretId);
       return "test-tiktok-api-key";
     };

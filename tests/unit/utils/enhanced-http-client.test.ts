@@ -1,6 +1,7 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import {
   createMockFn,
+  type TestMockFn,
   clearAllMocks,
   restoreAllMocks,
 } from "../../helpers/bun-mock-utils";
@@ -8,12 +9,15 @@ import { noOpLogger } from "../../helpers/mock-factories";
 import { createTestRetrySystem } from "../../helpers/test-setup";
 type EnhancedHttpClientConstructor =
   typeof import("../../../src/utils/enhanced-http-client").EnhancedHttpClient;
-type MockFunction = ReturnType<typeof createMockFn>;
+type EnhancedHttpClientConfig = NonNullable<ConstructorParameters<EnhancedHttpClientConstructor>[0]>;
+type HttpClientAdapter = EnhancedHttpClientConfig["axios"];
+type RequestConfig = Record<string, unknown> & { headers: Record<string, string> };
+type MockFunction<Args extends unknown[]> = TestMockFn<Args, Promise<Record<string, unknown>>>;
 type MockAxios = {
-  get: MockFunction;
-  post: MockFunction;
-  put: MockFunction;
-  delete: MockFunction;
+  get: MockFunction<[string, Record<string, unknown>]>;
+  post: MockFunction<[string, unknown, Record<string, unknown>]>;
+  put: MockFunction<[string, unknown, Record<string, unknown>]>;
+  delete: MockFunction<[string, Record<string, unknown>]>;
 };
 
 describe("Enhanced HTTP Client", () => {
@@ -24,10 +28,10 @@ describe("Enhanced HTTP Client", () => {
 
   beforeEach(() => {
     mockAxios = {
-      get: createMockFn(),
-      post: createMockFn(),
-      put: createMockFn(),
-      delete: createMockFn(),
+      get: createMockFn<[string, Record<string, unknown>], Promise<Record<string, unknown>>>(),
+      post: createMockFn<[string, unknown, Record<string, unknown>], Promise<Record<string, unknown>>>(),
+      put: createMockFn<[string, unknown, Record<string, unknown>], Promise<Record<string, unknown>>>(),
+      delete: createMockFn<[string, Record<string, unknown>], Promise<Record<string, unknown>>>(),
     };
 
     mockRetrySystem = createTestRetrySystem();
@@ -37,7 +41,7 @@ describe("Enhanced HTTP Client", () => {
     client = new EnhancedHttpClient({
       retrySystem: mockRetrySystem,
       timeout: 10000,
-      axios: mockAxios,
+      axios: mockAxios satisfies NonNullable<HttpClientAdapter>,
       logger: noOpLogger,
     });
   });
@@ -64,7 +68,7 @@ describe("Enhanced HTTP Client", () => {
     });
 
     test("should return empty headers when no token provided", () => {
-      const headers = client.buildAuthHeaders();
+      const headers = client.buildAuthHeaders(undefined);
       expect(headers).toEqual({});
     });
   });
@@ -77,7 +81,7 @@ describe("Enhanced HTTP Client", () => {
       let observedRetryResult: unknown;
       mockRetrySystem.executeWithRetry.mockImplementation(
         async (platformName, executeRequest) => {
-          observedRetryPlatform = platformName;
+          observedRetryPlatform = platformName as string;
           observedRetryResult = await executeRequest();
           return observedRetryResult;
         },
@@ -124,7 +128,7 @@ describe("Enhanced HTTP Client", () => {
 
       mockRetrySystem.executeWithRetry.mockImplementation(
         async (platformName, executeRequest) => {
-          observedRetryPlatform = platformName;
+          observedRetryPlatform = platformName as string;
           try {
             return await executeRequest();
           } catch {
@@ -181,14 +185,14 @@ describe("Enhanced HTTP Client", () => {
       const customClient = new EnhancedHttpClient({
         retrySystem: mockRetrySystem,
         timeout: 10000,
-        axios: mockAxios,
+        axios: mockAxios satisfies NonNullable<HttpClientAdapter>,
         logger: noOpLogger,
         userAgents: ["ExampleAgent/1.0"],
       });
 
       const config = customClient.buildRequestConfig();
 
-      expect(config.headers["User-Agent"]).toBe("ExampleAgent/1.0");
+      expect((config as RequestConfig).headers["User-Agent"]).toBe("ExampleAgent/1.0");
     });
   });
 
@@ -264,7 +268,7 @@ describe("Enhanced HTTP Client", () => {
       await client.get("https://test.example.invalid/3");
 
       const calls = mockAxios.get.mock.calls;
-      const userAgents = calls.map((call) => call[1].headers["User-Agent"]);
+      const userAgents = calls.map((call) => (call[1] as RequestConfig).headers["User-Agent"]);
 
       expect(new Set(userAgents).size).toBeGreaterThan(1);
     });

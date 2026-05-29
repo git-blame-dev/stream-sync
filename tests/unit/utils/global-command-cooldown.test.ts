@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { GlobalCommandCooldownManager } from "../../../src/utils/global-command-cooldown";
 import { restoreAllMocks } from "../../helpers/bun-mock-utils";
-import { initializeTestLogging, TEST_TIMEOUTS } from "../../helpers/test-setup";
+import { initializeTestLogging } from "../../helpers/test-setup";
 import { noOpLogger } from "../../helpers/mock-factories";
 import { setupAutomatedCleanup } from "../../helpers/mock-lifecycle";
 import testClock from "../../helpers/test-clock";
@@ -222,5 +222,4 @@ describe(
       });
     });
   },
-  TEST_TIMEOUTS.FAST,
 );

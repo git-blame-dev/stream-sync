@@ -30,7 +30,7 @@ describe("Core Utility Functions", () => {
         );
         expect(ADAPTIVE_RETRY_CONFIG.BACKOFF_MULTIPLIER).toBeGreaterThan(1);
       },
-      { timeout: TEST_TIMEOUTS.UNIT },
+      { timeout: TEST_TIMEOUTS.FAST },
     );
 
     test(
@@ -39,7 +39,7 @@ describe("Core Utility Functions", () => {
         const delay = retrySystem.calculateAdaptiveRetryDelay("TestPlatform");
         expect(delay).toBe(ADAPTIVE_RETRY_CONFIG.BASE_DELAY);
       },
-      { timeout: TEST_TIMEOUTS.UNIT },
+      { timeout: TEST_TIMEOUTS.FAST },
     );
 
     test(
@@ -59,7 +59,7 @@ describe("Core Utility Functions", () => {
             Math.pow(ADAPTIVE_RETRY_CONFIG.BACKOFF_MULTIPLIER, 2),
         );
       },
-      { timeout: TEST_TIMEOUTS.UNIT },
+      { timeout: TEST_TIMEOUTS.FAST },
     );
 
     test(
@@ -72,7 +72,7 @@ describe("Core Utility Functions", () => {
         retrySystem.resetRetryCount("TestPlatform");
         expect(retrySystem.getRetryCount("TestPlatform")).toBe(0);
       },
-      { timeout: TEST_TIMEOUTS.UNIT },
+      { timeout: TEST_TIMEOUTS.FAST },
     );
 
     test(
@@ -90,7 +90,7 @@ describe("Core Utility Functions", () => {
         expect(finalCalculatedDelay).toBe(ADAPTIVE_RETRY_CONFIG.MAX_DELAY);
         expect(delay).toBe(ADAPTIVE_RETRY_CONFIG.MAX_DELAY);
       },
-      { timeout: TEST_TIMEOUTS.UNIT },
+      { timeout: TEST_TIMEOUTS.FAST },
     );
 
     test(
@@ -98,7 +98,7 @@ describe("Core Utility Functions", () => {
       () => {
         expect(retrySystem.getRetryCount("NewPlatform")).toBe(0);
       },
-      { timeout: TEST_TIMEOUTS.UNIT },
+      { timeout: TEST_TIMEOUTS.FAST },
     );
 
     test(
@@ -115,7 +115,7 @@ describe("Core Utility Functions", () => {
         expect(retrySystem.getRetryCount("PlatformA")).toBe(0);
         expect(retrySystem.getRetryCount("PlatformB")).toBe(1);
       },
-      { timeout: TEST_TIMEOUTS.UNIT },
+      { timeout: TEST_TIMEOUTS.FAST },
     );
   });
 });

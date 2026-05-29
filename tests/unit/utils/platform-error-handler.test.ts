@@ -23,7 +23,11 @@ describe("Platform Error Handler - User Experience Behavior", () => {
 
       try {
         errorHandler.handleInitializationError(initError, "startup");
-      } catch (error) {
+      } catch (error: unknown) {
+        expect(error).toBeInstanceOf(Error);
+        if (!(error instanceof Error)) {
+          throw new Error("Expected initialization error");
+        }
         expect(error).toBe(initError);
         expect(error.message).toBe("Network connection failed");
         expect(error.message).not.toContain("undefined");
@@ -164,7 +168,7 @@ test("records event errors without promoting raw event data or allowing metadata
     );
 
     expect(logger.entries).toHaveLength(1);
-    const payload = logger.entries[0].data as Record<string, unknown>;
+    const payload = logger.entries[0]?.data as Record<string, unknown>;
     const serializedPayload = JSON.stringify(payload);
     expect(payload.error).toBe("test event failure");
     expect(payload.eventType).toBe("platform:chat-message");
@@ -204,7 +208,7 @@ test("records operational errors with payload summaries instead of raw payloads"
     });
 
     expect(logger.entries).toHaveLength(1);
-    const payload = logger.entries[0].data as Record<string, unknown>;
+    const payload = logger.entries[0]?.data as Record<string, unknown>;
     const serializedPayload = JSON.stringify(payload);
     expect(serializedPayload).toContain("payloadSummary");
     expect(serializedPayload).toContain("fieldCount");

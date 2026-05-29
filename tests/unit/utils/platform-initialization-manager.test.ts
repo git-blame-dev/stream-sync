@@ -2,17 +2,20 @@ import { describe, expect, beforeEach, it } from "bun:test";
 import { createMockFn } from "../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../helpers/mock-factories";
 import { PlatformInitializationManager } from "../../../src/utils/platform-initialization-manager";
+import { PlatformErrorHandler } from "../../../src/utils/platform-error-handler";
+type MockPlatformErrorHandler = PlatformErrorHandler & {
+  handleEventProcessingError: ReturnType<typeof createMockFn>;
+  logOperationalError: ReturnType<typeof createMockFn>;
+};
+
 describe("PlatformInitializationManager", () => {
-  let mockHandler: {
-    handleEventProcessingError: ReturnType<typeof createMockFn>;
-    logOperationalError: ReturnType<typeof createMockFn>;
-  };
+  let mockHandler: MockPlatformErrorHandler;
 
   beforeEach(() => {
     mockHandler = {
       handleEventProcessingError: createMockFn(),
       logOperationalError: createMockFn(),
-    };
+    } as unknown as MockPlatformErrorHandler;
   });
 
   it("prevents reinitialization by default and tracks prevented attempts", () => {

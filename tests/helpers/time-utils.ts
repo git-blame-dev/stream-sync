@@ -1,11 +1,5 @@
-import { createRequire } from 'node:module';
+import { safeSetInterval, safeSetTimeout } from '../../src/utils/timeout-validator';
 import { now } from './test-clock';
-
-const nodeRequire = createRequire(import.meta.url);
-const { safeSetTimeout, safeSetInterval } = nodeRequire('../../src/utils/timeout-validator') as {
-  safeSetTimeout: typeof setTimeout;
-  safeSetInterval: typeof setInterval;
-};
 
 const resolveDelay = (delay: number | undefined, fallback = 1) => {
   if (typeof delay === 'number' && Number.isFinite(delay) && delay > 0) {
@@ -25,12 +19,12 @@ function waitForDelay(delay = 0): Promise<void> {
 
 function scheduleTimeout(callback: (...args: unknown[]) => void, delay: number | undefined, ...args: unknown[]) {
   const effectiveDelay = resolveDelay(delay);
-  return safeSetTimeout(callback, effectiveDelay, ...args);
+  return safeSetTimeout(() => callback(...args), effectiveDelay);
 }
 
 function scheduleInterval(callback: (...args: unknown[]) => void, delay: number | undefined, ...args: unknown[]) {
   const effectiveDelay = resolveDelay(delay);
-  return safeSetInterval(callback, effectiveDelay, ...args);
+  return safeSetInterval(() => callback(...args), effectiveDelay);
 }
 
 export {

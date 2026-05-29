@@ -6,6 +6,9 @@ import {
   _resetForTesting,
   initializeStaticSecrets,
 } from "../../../src/core/secrets";
+type YoutubeDependencyOverrides = NonNullable<Parameters<DependencyFactory["createYoutubeDependencies"]>[1]>;
+type InnertubeDependency = NonNullable<YoutubeDependencyOverrides["Innertube"]>;
+
 describe("DependencyFactory behavior", () => {
   let factory: InstanceType<typeof DependencyFactory>;
   let configFixture: {
@@ -84,11 +87,14 @@ describe("DependencyFactory behavior", () => {
   describe("Strictness migration behavior", () => {
     it("builds youtubei dependencies with deferred stream detection service", () => {
       const InnertubeClass = {
-        create: createMockFn().mockResolvedValue({
+        create: createMockFn<[], Promise<{
+          search: () => Promise<{ results: never[] }>;
+          getChannel: () => Promise<{ videos: { contents: never[] } }>;
+        }>>().mockResolvedValue({
           search: createMockFn().mockResolvedValue({ results: [] }),
-          getChannel: createMockFn().mockResolvedValue({ videos: [] }),
+          getChannel: createMockFn().mockResolvedValue({ videos: { contents: [] } }),
         }),
-      };
+      } as InnertubeDependency;
 
       const deps = factory.createYoutubeDependencies(
         {
@@ -103,10 +109,15 @@ describe("DependencyFactory behavior", () => {
         },
       );
 
-      expect(typeof deps.streamDetectionService.detectLiveStreams).toBe(
+      const streamDetectionService = deps.streamDetectionService as {
+        detectLiveStreams: unknown;
+        getUsageMetrics: () => Record<string, unknown>;
+      };
+
+      expect(typeof streamDetectionService.detectLiveStreams).toBe(
         "function",
       );
-      expect(deps.streamDetectionService.getUsageMetrics()).toEqual({
+      expect(streamDetectionService.getUsageMetrics()).toEqual({
         totalRequests: 0,
         successfulRequests: 0,
         failedRequests: 0,
@@ -130,17 +141,22 @@ describe("DependencyFactory behavior", () => {
     });
 
     it("provides fallback TikTok event maps when connector enums are omitted", () => {
+      function MockTikTokClient(this: Record<string, unknown>) {}
+
       const deps = factory.createTiktokDependencies(
         { username: "test-user" },
         {
           logger: noOpLogger,
           config: configFixture,
-          TikTokWebSocketClient: function MockTikTokClient() {},
+            TikTokWebSocketClient: MockTikTokClient,
         },
       );
 
-      expect(deps.WebcastEvent.CHAT).toBe("chat");
-      expect(deps.ControlEvent.CONNECTED).toBe("connected");
+      const webcastEvent = deps.WebcastEvent as { CHAT: string };
+      const controlEvent = deps.ControlEvent as { CONNECTED: string };
+
+      expect(webcastEvent.CHAT).toBe("chat");
+      expect(controlEvent.CONNECTED).toBe("connected");
       expect(typeof deps.WebcastPushConnection).toBe("function");
     });
   });

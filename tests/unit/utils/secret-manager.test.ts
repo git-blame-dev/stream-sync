@@ -2,15 +2,42 @@ import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
 import fs from "fs";
 import { ensureSecrets } from "../../../src/utils/secret-manager.ts";
-let originalReadFileSync;
-let originalWriteFileSync;
-let originalExistsSync;
-let originalChmodSync;
-let originalStatSync;
+
+type FileStore = Record<string, string>;
+type FilePermissions = Record<string, number>;
+type LoggerEntry = { level: string; message: string };
+type CapturingLogger = ReturnType<typeof createCapturingLogger>;
+type TestConfig = {
+  tiktok: Record<string, unknown>;
+  twitch: Record<string, unknown>;
+  obs: Record<string, unknown>;
+  streamelements: Record<string, unknown>;
+  youtube: Record<string, unknown>;
+};
+type WriteFileOptions = { mode?: number; encoding?: BufferEncoding };
+type MutableFs = {
+  readFileSync: (path: string, encoding?: BufferEncoding) => string;
+  writeFileSync: (
+    path: string,
+    content: string,
+    options?: WriteFileOptions | BufferEncoding,
+  ) => void;
+  existsSync: (path: string) => boolean;
+  chmodSync: (path: string, mode: number) => void;
+  statSync: (path: string) => { mode: number };
+};
+
+const mutableFs = fs as unknown as MutableFs;
+
+let originalReadFileSync: MutableFs["readFileSync"];
+let originalWriteFileSync: MutableFs["writeFileSync"];
+let originalExistsSync: MutableFs["existsSync"];
+let originalChmodSync: MutableFs["chmodSync"];
+let originalStatSync: MutableFs["statSync"];
 
 const createCapturingLogger = () => {
-  const entries = [];
-  const push = (level) => (message) => entries.push({ level, message });
+  const entries: LoggerEntry[] = [];
+  const push = (level: string) => (message: string) => entries.push({ level, message });
   return {
     entries,
     debug: push("debug"),
@@ -21,33 +48,37 @@ const createCapturingLogger = () => {
 };
 
 describe("secret-manager", () => {
-  let testConfig;
-  let logger;
-  const originalEnv = {};
+  let testConfig: TestConfig;
+  let logger: CapturingLogger;
+  const originalEnv: Record<string, string | undefined> = {};
   const envFilePath = "/test/.env";
 
-  let fileStore;
-  let filePermissions;
+  let fileStore: FileStore;
+  let filePermissions: FilePermissions;
 
   const setupFsMocks = () => {
     fileStore = {};
     filePermissions = {};
 
-    fs.existsSync = createMockFn((path) => path in fileStore);
-    fs.readFileSync = createMockFn((path) => {
-      if (path in fileStore) return fileStore[path];
+    mutableFs.existsSync = createMockFn((path: string) => path in fileStore);
+    mutableFs.readFileSync = createMockFn((path: string) => {
+      if (path in fileStore) return fileStore[path] ?? "";
       throw new Error(`ENOENT: no such file: ${path}`);
     });
-    fs.writeFileSync = createMockFn((path, content, options) => {
+    mutableFs.writeFileSync = createMockFn((
+      path: string,
+      content: string,
+      options?: WriteFileOptions | BufferEncoding,
+    ) => {
       fileStore[path] = content;
-      if (options && options.mode) {
+      if (options && typeof options === "object" && options.mode) {
         filePermissions[path] = options.mode;
       }
     });
-    fs.chmodSync = createMockFn((path, mode) => {
+    mutableFs.chmodSync = createMockFn((path: string, mode: number) => {
       filePermissions[path] = mode;
     });
-    fs.statSync = createMockFn((path) => {
+    mutableFs.statSync = createMockFn((path: string) => {
       if (!(path in fileStore)) {
         throw new Error(`ENOENT: no such file: ${path}`);
       }
@@ -58,11 +89,11 @@ describe("secret-manager", () => {
   };
 
   beforeEach(() => {
-    originalReadFileSync = fs.readFileSync;
-    originalWriteFileSync = fs.writeFileSync;
-    originalExistsSync = fs.existsSync;
-    originalChmodSync = fs.chmodSync;
-    originalStatSync = fs.statSync;
+    originalReadFileSync = mutableFs.readFileSync;
+    originalWriteFileSync = mutableFs.writeFileSync;
+    originalExistsSync = mutableFs.existsSync;
+    originalChmodSync = mutableFs.chmodSync;
+    originalStatSync = mutableFs.statSync;
 
     setupFsMocks();
 
@@ -105,11 +136,11 @@ describe("secret-manager", () => {
       }
     });
 
-    fs.readFileSync = originalReadFileSync;
-    fs.writeFileSync = originalWriteFileSync;
-    fs.existsSync = originalExistsSync;
-    fs.chmodSync = originalChmodSync;
-    fs.statSync = originalStatSync;
+    mutableFs.readFileSync = originalReadFileSync;
+    mutableFs.writeFileSync = originalWriteFileSync;
+    mutableFs.existsSync = originalExistsSync;
+    mutableFs.chmodSync = originalChmodSync;
+    mutableFs.statSync = originalStatSync;
     restoreAllMocks();
   });
 
@@ -144,14 +175,14 @@ describe("secret-manager", () => {
 
   it("prompts in interactive mode, persists secrets to .env, and preserves existing entries", async () => {
 
-    const promptValues = {
+    const promptValues: Record<string, string> = {
       TIKTOK_API_KEY: "prompt_tiktok",
       TWITCH_CLIENT_SECRET: "prompt_client_secret",
       OBS_PASSWORD: "prompt_obs_password",
       STREAMELEMENTS_JWT_TOKEN: "prompt_jwt",
     };
 
-    const promptFor = async (secretId) => promptValues[secretId] || "";
+    const promptFor = async (secretId: string) => promptValues[secretId] || "";
     fileStore[envFilePath] = "EXISTING=keep\n";
 
     const result = await ensureSecrets({
@@ -191,14 +222,14 @@ describe("secret-manager", () => {
 
   it("writes the env file with restricted permissions", async () => {
 
-    const promptValues = {
+    const promptValues: Record<string, string> = {
       TIKTOK_API_KEY: "prompt_tiktok",
       TWITCH_CLIENT_SECRET: "prompt_client_secret",
       OBS_PASSWORD: "prompt_obs_password",
       STREAMELEMENTS_JWT_TOKEN: "prompt_jwt",
     };
 
-    const promptFor = async (secretId) => promptValues[secretId] || "";
+    const promptFor = async (secretId: string) => promptValues[secretId] || "";
 
     await ensureSecrets({
       config: {
@@ -218,7 +249,12 @@ describe("secret-manager", () => {
     expect(envFilePath in fileStore).toBe(true);
 
     if (process.platform !== "win32") {
-      const mode = filePermissions[envFilePath] & 0o077;
+      const savedMode = filePermissions[envFilePath];
+      expect(savedMode).toBeDefined();
+      if (savedMode === undefined) {
+        throw new Error("Expected env file permissions to be recorded");
+      }
+      const mode = savedMode & 0o077;
       expect(mode).toBe(0);
     }
   });
@@ -257,15 +293,15 @@ describe("secret-manager", () => {
 
   it("shows colon-terminated prompts for interactive clarity", async () => {
 
-    const promptValues = {
+    const promptValues: Record<string, string> = {
       TIKTOK_API_KEY: "prompt_tiktok",
       TWITCH_CLIENT_SECRET: "prompt_client_secret",
       OBS_PASSWORD: "prompt_obs_password",
       STREAMELEMENTS_JWT_TOKEN: "prompt_jwt",
     };
 
-    const promptsSeen = [];
-    const promptFor = async (secretId, promptText) => {
+    const promptsSeen: Array<{ secretId: string; promptText: string }> = [];
+    const promptFor = async (secretId: string, promptText = "") => {
       promptsSeen.push({ secretId, promptText });
       return promptValues[secretId] || "";
     };
@@ -292,8 +328,8 @@ describe("secret-manager", () => {
   });
 
   it("prompts for required secrets when interactive and TTY is available", async () => {
-    const promptCalls = [];
-    const promptFor = async (secretId) => {
+    const promptCalls: string[] = [];
+    const promptFor = async (secretId: string) => {
       promptCalls.push(secretId);
       return "test-tiktok-api-key";
     };
@@ -325,7 +361,8 @@ describe("secret-manager", () => {
 
       expect(promptCalls).toEqual(["TIKTOK_API_KEY"]);
       expect(result.missingRequired).toEqual([]);
-      expect(result.applied.TIKTOK_API_KEY.source).toBe("prompt");
+      expect(result.applied.TIKTOK_API_KEY).toBeDefined();
+      expect(result.applied.TIKTOK_API_KEY?.source).toBe("prompt");
       expect(process.env.TIKTOK_API_KEY).toBe("test-tiktok-api-key");
     } finally {
       process.stdin.isTTY = originalIsTTY;

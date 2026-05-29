@@ -27,7 +27,7 @@ describe("secret-manager interactive prompt smoke E2E", () => {
     delete process.env.TIKTOK_API_KEY;
 
     const promptCalls: string[] = [];
-    const promptFor = async (secretId) => {
+    const promptFor = async (secretId: string) => {
       promptCalls.push(secretId);
       return "test-tiktok-api-key";
     };

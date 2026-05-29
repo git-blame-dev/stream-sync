@@ -11,6 +11,21 @@ import {
   toBeValidUser,
 } from "../../setup/bun.setup";
 
+type TestGlobal = typeof globalThis & {
+  originalConsole: Console;
+  restoreConsole: () => void;
+};
+
+type SetupMatcherAssertions = {
+  not: SetupMatcherAssertions;
+  toHaveLengthGreaterThan: (expected: number) => void;
+  toBeValidNotification: () => void;
+  toBeValidUser: () => void;
+};
+
+const expectWithSetupMatchers = (received: unknown): SetupMatcherAssertions =>
+  expect(received) as SetupMatcherAssertions;
+
 describe("bun setup contracts behavior", () => {
   it("allows module mock registration to run repeatedly", () => {
     expect(() => registerModuleMocks()).not.toThrow();
@@ -49,8 +64,10 @@ describe("bun setup contracts behavior", () => {
   });
 
   it("restores console through global helper", () => {
-    const originalConsole = global.originalConsole;
+    const testGlobal = globalThis as TestGlobal;
+    const originalConsole = testGlobal.originalConsole;
     global.console = {
+      ...originalConsole,
       log: () => {},
       info: () => {},
       warn: () => {},
@@ -58,48 +75,39 @@ describe("bun setup contracts behavior", () => {
       debug: () => {},
     };
 
-    global.restoreConsole();
+    testGlobal.restoreConsole();
 
     expect(global.console).toBe(originalConsole);
   });
 
   it("supports toHaveLengthGreaterThan matcher behavior", () => {
-    expect([1, 2, 3]).toHaveLengthGreaterThan(1);
-    expect([1]).not.toHaveLengthGreaterThan(3);
-
+    expectWithSetupMatchers([1, 2]).toHaveLengthGreaterThan(1);
+    expectWithSetupMatchers([1]).not.toHaveLengthGreaterThan(3);
     expect(toHaveLengthGreaterThan([1, 2], 1).pass).toBe(true);
     expect(toHaveLengthGreaterThan([1], 3).pass).toBe(false);
   });
 
   it("supports toBeValidNotification matcher behavior", () => {
-    expect({
+    const notification = {
       id: "test-id",
       type: "message",
       username: "test-user",
       platform: "test-platform",
       displayMessage: "test-display",
       ttsMessage: "test-tts",
-    }).toBeValidNotification();
+    };
 
-    expect({}).not.toBeValidNotification();
-
+    expectWithSetupMatchers(notification).toBeValidNotification();
+    expectWithSetupMatchers({}).not.toBeValidNotification();
     expect(
-      toBeValidNotification({
-        id: "test-id",
-        type: "message",
-        username: "test-user",
-        platform: "test-platform",
-        displayMessage: "test-display",
-        ttsMessage: "test-tts",
-      }).pass,
+      toBeValidNotification(notification).pass,
     ).toBe(true);
     expect(toBeValidNotification({}).pass).toBe(false);
   });
 
   it("supports toBeValidUser matcher behavior", () => {
-    expect({ username: "test-user" }).toBeValidUser();
-    expect({}).not.toBeValidUser();
-
+    expectWithSetupMatchers({ username: "test-user" }).toBeValidUser();
+    expectWithSetupMatchers({}).not.toBeValidUser();
     expect(toBeValidUser({ username: "test-user" }).pass).toBe(true);
     expect(toBeValidUser({}).pass).toBe(false);
   });

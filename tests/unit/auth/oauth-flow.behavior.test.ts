@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import fs from "fs";
+import type { IncomingMessage } from "http";
 import https from "https";
+import type { AddressInfo } from "net";
 import net from "net";
 import os from "os";
 import path from "path";
@@ -26,12 +28,12 @@ import {
 } from "../../../src/auth/oauth-flow.ts";
 
 describe("oauth-flow behavior", () => {
-  let tempDir;
-  let tokenStorePath;
+  let tempDir: string;
+  let tokenStorePath: string;
   const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 
-  const fetchLocal = (options) =>
-    new Promise((resolve, reject) => {
+  const fetchLocal = (options: https.RequestOptions) =>
+    new Promise<{ statusCode: number | undefined; body: string }>((resolve, reject) => {
       const req = https.request({ ...options, agent: httpsAgent }, (res) => {
         let data = "";
         res.on("data", (chunk) => {
@@ -52,12 +54,47 @@ describe("oauth-flow behavior", () => {
       req.end();
     });
 
-  const listenInPortRange = async (server, startPort, endPort) => {
+  const hasErrorCode = (error: unknown, code: string): boolean => {
+    return error instanceof Error && "code" in error && error.code === code;
+  };
+
+  const getServerPort = (server: net.Server | https.Server): number => {
+    const address = server.address();
+    if (!address || typeof address === "string") {
+      throw new Error("Expected server to bind to a TCP port");
+    }
+    return (address as AddressInfo).port;
+  };
+
+  const createLocalHttpsRequest = (agent: https.Agent): typeof https.request => {
+    return ((
+      options: string | URL | https.RequestOptions,
+      callback?: (res: IncomingMessage) => void,
+    ) => {
+      if (typeof options === "string" || options instanceof URL) {
+        return https.request(options, { agent }, callback);
+      }
+      return https.request({ ...options, agent }, callback);
+    }) as typeof https.request;
+  };
+
+  const createCallbackServerStub = () => ({
+    server: { close: createMockFn() } as unknown as https.Server,
+    waitForCode: Promise.resolve("test-auth-code"),
+    port: 443,
+    redirectUri: "https://example.test/callback",
+  });
+
+  const listenInPortRange = async (
+    server: net.Server,
+    startPort: number,
+    endPort: number,
+  ) => {
     let candidatePort = startPort;
     while (candidatePort <= endPort) {
       try {
-        await new Promise((resolve, reject) => {
-          const onError = (error) => {
+        await new Promise<void>((resolve, reject) => {
+          const onError = (error: Error) => {
             server.off("listening", onListening);
             reject(error);
           };
@@ -72,7 +109,7 @@ describe("oauth-flow behavior", () => {
         });
         return candidatePort;
       } catch (error) {
-        if (error.code === "EADDRINUSE") {
+        if (hasErrorCode(error, "EADDRINUSE")) {
           candidatePort += 1;
           continue;
         }
@@ -126,7 +163,7 @@ it("exposes oauth-flow helper functions", () => {
     expect(params.get("redirect_uri")).toBe("https://example.test/callback");
     expect(params.get("response_type")).toBe("code");
     expect(params.get("scope")).toBe("test-scope-one test-scope-two");
-    expect(params.get("state").startsWith("cb_")).toBe(true);
+    expect(params.get("state")?.startsWith("cb_")).toBe(true);
   });
 
   it("renderCallbackHtml returns headings for all outcomes", () => {
@@ -148,7 +185,7 @@ it("exposes oauth-flow helper functions", () => {
         autoFindPort: false,
         logger: noOpLogger,
       });
-    const boundPort = server.address().port;
+    const boundPort = getServerPort(server);
 
     try {
       await fetchLocal({
@@ -174,7 +211,7 @@ it("exposes oauth-flow helper functions", () => {
       autoFindPort: false,
       logger: noOpLogger,
     });
-    const boundPort = server.address().port;
+    const boundPort = getServerPort(server);
 
     const errorPromise = waitForCode.catch((error) => error);
     await fetchLocal({
@@ -195,7 +232,7 @@ it("exposes oauth-flow helper functions", () => {
       autoFindPort: false,
       logger: noOpLogger,
     });
-    const boundPort = server.address().port;
+    const boundPort = getServerPort(server);
 
     const errorPromise = waitForCode.catch((error) => error);
     await fetchLocal({
@@ -271,12 +308,11 @@ it("exposes oauth-flow helper functions", () => {
       },
     );
 
-    await new Promise((resolve) => server.listen(0, resolve));
-    const port = server.address().port;
+    await new Promise<void>((resolve) => server.listen(0, resolve));
+    const port = getServerPort(server);
     const originalUrl = TWITCH.OAUTH.TOKEN;
     TWITCH.OAUTH.TOKEN = `https://localhost:${port}/oauth2/token`;
-    const httpsRequest = (options, callback) =>
-      https.request({ ...options, agent: httpsAgent }, callback);
+    const httpsRequest = createLocalHttpsRequest(httpsAgent);
 
     try {
       const tokens = await exchangeCodeForTokens("test-code", {
@@ -313,12 +349,11 @@ it("exposes oauth-flow helper functions", () => {
       },
     );
 
-    await new Promise((resolve) => server.listen(0, resolve));
-    const port = server.address().port;
+    await new Promise<void>((resolve) => server.listen(0, resolve));
+    const port = getServerPort(server);
     const originalUrl = TWITCH.OAUTH.TOKEN;
     TWITCH.OAUTH.TOKEN = `https://localhost:${port}/oauth2/token`;
-    const httpsRequest = (options, callback) =>
-      https.request({ ...options, agent: httpsAgent }, callback);
+    const httpsRequest = createLocalHttpsRequest(httpsAgent);
 
     try {
       await expect(
@@ -345,11 +380,9 @@ it("exposes oauth-flow helper functions", () => {
   });
 
   it("runOAuthFlow persists tokens and returns camelCase values", async () => {
-    const startCallbackServer = createMockFn().mockResolvedValue({
-      server: { close: createMockFn() },
-      waitForCode: Promise.resolve("test-auth-code"),
-      redirectUri: "https://example.test/callback",
-    });
+    const startCallbackServer = createMockFn().mockResolvedValue(
+      createCallbackServerStub(),
+    );
     const exchangeCodeForTokens = createMockFn().mockResolvedValue({
       accessToken: "test-access-token",
       refreshToken: "test-refresh-token",
@@ -384,12 +417,10 @@ it("exposes oauth-flow helper functions", () => {
   });
 
   it("runOAuthFlow returns null when exchange returns null", async () => {
-    const startCallbackServer = createMockFn().mockResolvedValue({
-      server: { close: createMockFn() },
-      waitForCode: Promise.resolve("test-auth-code"),
-      redirectUri: "https://example.test/callback",
-    });
-    const exchangeCodeForTokens = createMockFn().mockResolvedValue(null);
+    const startCallbackServer = createMockFn().mockResolvedValue(
+      createCallbackServerStub(),
+    );
+    const exchangeCodeForTokens = async () => null as never;
     const openBrowser = createMockFn();
 
     const result = await runOAuthFlow(
@@ -409,14 +440,11 @@ it("exposes oauth-flow helper functions", () => {
   });
 
   it("runOAuthFlow returns null when accessToken is missing", async () => {
-    const startCallbackServer = createMockFn().mockResolvedValue({
-      server: { close: createMockFn() },
-      waitForCode: Promise.resolve("test-auth-code"),
-      redirectUri: "https://example.test/callback",
-    });
-    const exchangeCodeForTokens = createMockFn().mockResolvedValue({
-      refreshToken: "test-refresh-token",
-    });
+    const startCallbackServer = createMockFn().mockResolvedValue(
+      createCallbackServerStub(),
+    );
+    const exchangeCodeForTokens = async () =>
+      ({ refreshToken: "test-refresh-token" }) as never;
     const openBrowser = createMockFn();
 
     const result = await runOAuthFlow(
@@ -437,13 +465,17 @@ it("exposes oauth-flow helper functions", () => {
 
   it("runOAuthFlow throws when clientId is missing", async () => {
     await expect(
-      runOAuthFlow({ tokenStorePath, logger: noOpLogger }),
+      runOAuthFlow({ tokenStorePath, logger: noOpLogger } as Parameters<
+        typeof runOAuthFlow
+      >[0]),
     ).rejects.toThrow("clientId");
   });
 
   it("runOAuthFlow throws when tokenStorePath is missing", async () => {
     await expect(
-      runOAuthFlow({ clientId: "test-client-id", logger: noOpLogger }),
+      runOAuthFlow({ clientId: "test-client-id", logger: noOpLogger } as Parameters<
+        typeof runOAuthFlow
+      >[0]),
     ).rejects.toThrow("tokenStorePath");
   });
 
@@ -466,13 +498,12 @@ it("exposes oauth-flow helper functions", () => {
       },
     );
 
-    await new Promise((resolve) => server.listen(0, resolve));
-    const port = server.address().port;
+    await new Promise<void>((resolve) => server.listen(0, resolve));
+    const port = getServerPort(server);
     const originalUrl = TWITCH.OAUTH.TOKEN;
     TWITCH.OAUTH.TOKEN = `https://localhost:${port}/oauth2/token`;
     const localHttpsAgent = new https.Agent({ rejectUnauthorized: false });
-    const httpsRequest = (options, callback) =>
-      https.request({ ...options, agent: localHttpsAgent }, callback);
+    const httpsRequest = createLocalHttpsRequest(localHttpsAgent);
     const logger = createRecordingLogger();
 
     try {

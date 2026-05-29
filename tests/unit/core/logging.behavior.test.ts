@@ -6,6 +6,8 @@ import os from 'os';
 import path from 'path';
 import * as logging from '../../../src/core/logging.ts';
 
+type LoggingConfig = NonNullable<Parameters<typeof logging.initializeLoggingConfig>[0]['logging']>;
+
 describe('core/logging behavior', () => {
     beforeEach(() => {
         logging.initializeLoggingConfig({
@@ -35,7 +37,7 @@ describe('core/logging behavior', () => {
             file: { enabled: false, level: 'error' },
             platforms: {},
             chat: { enabled: true }
-        };
+        } satisfies LoggingConfig;
         const result = logging.initializeLoggingConfig({ logging: loggingConfig });
 
         expect(result).toEqual(loggingConfig);
@@ -66,7 +68,7 @@ describe('core/logging behavior', () => {
             file: { enabled: true, level: 'info', directory: tempDir },
             platforms: {},
             chat: { enabled: false }
-        };
+        } satisfies LoggingConfig;
 
         try {
             logging.initializeLoggingConfig({ logging: loggingConfig });

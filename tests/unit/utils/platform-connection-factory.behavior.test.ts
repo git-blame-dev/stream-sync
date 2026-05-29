@@ -10,6 +10,25 @@ type LogEntry = {
   level: string;
   message: string;
 };
+type PlatformDependencies = Parameters<PlatformConnectionFactory["createConnection"]>[2];
+type TikTokWebSocketClient = NonNullable<PlatformDependencies["TikTokWebSocketClient"]>;
+type YouTubeConnection = {
+  platform: string;
+  isConnected: () => boolean;
+  connect: () => Promise<void>;
+  disconnect: () => Promise<void>;
+  getUsername: () => unknown;
+};
+
+function createTikTokClientFactory(
+  initialize: (connection: Record<string, unknown>, username: string, config: Record<string, unknown>) => void,
+): TikTokWebSocketClient {
+  return class MockTikTokClient {
+    constructor(username: string, config: Record<string, unknown>) {
+      initialize(this as Record<string, unknown>, username, config);
+    }
+  } as unknown as TikTokWebSocketClient;
+}
 
 describe("platform-connection-factory behavior", () => {
   afterEach(() => {
@@ -43,9 +62,9 @@ describe("platform-connection-factory behavior", () => {
     const factory = new PlatformConnectionFactory(noOpLogger);
     const deps = {
       logger: noOpLogger,
-      TikTokWebSocketClient: function (this: { connect: () => void }) {
-        this.connect = () => {};
-      },
+      TikTokWebSocketClient: createTikTokClientFactory((connection) => {
+        connection.connect = () => {};
+      }),
     };
 
     const conn = factory.createConnection(
@@ -53,19 +72,20 @@ describe("platform-connection-factory behavior", () => {
       { username: "testuser" },
       deps,
     );
-    expect(typeof conn.on).toBe("function");
-    expect(typeof conn.removeAllListeners).toBe("function");
+    const connection = conn as Record<string, unknown>;
+    expect(typeof connection.on).toBe("function");
+    expect(typeof connection.removeAllListeners).toBe("function");
   });
 
   test("throws on missing inputs", () => {
     const factory = new PlatformConnectionFactory(noOpLogger);
     expect(() =>
-      factory.createConnection(null, {}, { logger: noOpLogger }),
+      factory.createConnection(null as unknown as string, {}, { logger: noOpLogger }),
     ).toThrow("Platform name is required");
     expect(() =>
-      factory.createConnection("tiktok", null, { logger: noOpLogger }),
+      factory.createConnection("tiktok", null as unknown as Record<string, unknown>, { logger: noOpLogger }),
     ).toThrow("Configuration is required");
-    expect(() => factory.createConnection("tiktok", {}, null)).toThrow(
+    expect(() => factory.createConnection("tiktok", {}, null as unknown as PlatformDependencies)).toThrow(
       "missing dependencies",
     );
     expect(() =>
@@ -77,9 +97,9 @@ describe("platform-connection-factory behavior", () => {
     const factory = new PlatformConnectionFactory(noOpLogger);
     const deps = {
       logger: noOpLogger,
-      TikTokWebSocketClient: function () {
+      TikTokWebSocketClient: createTikTokClientFactory(() => {
         throw new Error("construct fail");
-      },
+      }),
     };
 
     expect(() =>
@@ -170,7 +190,7 @@ describe("platform-connection-factory behavior", () => {
       "youtube",
       { username: "test-youtube-user" },
       { logger: noOpLogger },
-    );
+    ) as YouTubeConnection;
 
     expect(connection.platform).toBe("youtube");
     expect(connection.isConnected()).toBe(false);
@@ -199,9 +219,9 @@ describe("platform-connection-factory behavior", () => {
     const factory = new PlatformConnectionFactory(noOpLogger);
     const deps = {
       logger: {},
-      TikTokWebSocketClient: function (this: { connect: () => void }) {
-        this.connect = () => {};
-      },
+      TikTokWebSocketClient: createTikTokClientFactory((connection) => {
+        connection.connect = () => {};
+      }),
     };
 
     expect(() =>
@@ -213,21 +233,13 @@ describe("platform-connection-factory behavior", () => {
     const factory = new PlatformConnectionFactory(noOpLogger);
     let capturedUsername: string | null = null;
 
-    function TikTokWebSocketClient(
-      this: {
-        connect: () => void;
-        on: () => void;
-        emit: () => void;
-        removeAllListeners: () => void;
-      },
-      username: string,
-    ): void {
+    const TikTokWebSocketClient = createTikTokClientFactory((connection, username) => {
       capturedUsername = username;
-      this.connect = () => {};
-      this.on = () => {};
-      this.emit = () => {};
-      this.removeAllListeners = () => {};
-    }
+      connection.connect = () => {};
+      connection.on = () => {};
+      connection.emit = () => {};
+      connection.removeAllListeners = () => {};
+    });
 
     factory.createConnection(
       "tiktok",
@@ -238,7 +250,7 @@ describe("platform-connection-factory behavior", () => {
       },
     );
 
-    expect(capturedUsername).toBe("testuser");
+    expect(capturedUsername as string | null).toBe("testuser");
   });
 
   test("fails when TikTokWebSocketClient dependency is missing", () => {
@@ -256,15 +268,11 @@ describe("platform-connection-factory behavior", () => {
   test("fails when constructed TikTok connection lacks connect method", () => {
     const factory = new PlatformConnectionFactory(noOpLogger);
 
-    function TikTokWebSocketClient(this: {
-      on: () => void;
-      emit: () => void;
-      removeAllListeners: () => void;
-    }): void {
-      this.on = () => {};
-      this.emit = () => {};
-      this.removeAllListeners = () => {};
-    }
+    const TikTokWebSocketClient = createTikTokClientFactory((connection) => {
+      connection.on = () => {};
+      connection.emit = () => {};
+      connection.removeAllListeners = () => {};
+    });
 
     expect(() =>
       factory.createConnection(
@@ -285,6 +293,6 @@ describe("platform-connection-factory behavior", () => {
     expect(factory.isPlatformSupported("tiktok")).toBe(true);
     expect(factory.isPlatformSupported("youtube")).toBe(true);
     expect(factory.isPlatformSupported("twitch")).toBe(false);
-    expect(factory.isPlatformSupported(null)).toBe(false);
+    expect(factory.isPlatformSupported(null as unknown as string)).toBe(false);
   });
 });

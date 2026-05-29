@@ -14,6 +14,40 @@ type _EventBusSetDebugEnabledType = AssertTrue<
     IsExact<Parameters<EventBus['setDebugEnabled']>[0], boolean>
 >;
 
+type EventStatsSnapshot = ReturnType<EventBus['getEventStats']>;
+
+type HandlerErrorEvent = {
+    eventName: string | symbol;
+    error: unknown;
+    args: unknown[];
+};
+
+function getEventStatsFor(stats: EventStatsSnapshot, eventName: string) {
+    const eventStats = stats[eventName];
+    expect(eventStats).toBeDefined();
+    if (!eventStats) {
+        throw new Error(`Expected stats for ${eventName}`);
+    }
+    return eventStats;
+}
+
+function getFirstCallArg(fn: { mock: { calls: unknown[][] } }) {
+    const firstCall = fn.mock.calls[0];
+    expect(firstCall).toBeDefined();
+    if (!firstCall) {
+        throw new Error('Expected at least one mock call');
+    }
+    return firstCall[0];
+}
+
+function asHandlerErrorEvent(value: unknown): HandlerErrorEvent {
+    expect(value).toBeDefined();
+    if (!value || typeof value !== 'object') {
+        throw new Error('Expected handler-error event payload');
+    }
+    return value as HandlerErrorEvent;
+}
+
 describe('EventBus', () => {
     let eventBus: EventBus;
     
@@ -71,8 +105,9 @@ describe('EventBus', () => {
         });
 
         test('should throw error for non-function handler', () => {
+            const invalidHandler = 'not-a-function' as unknown as Parameters<EventBus['subscribe']>[1];
             expect(() => {
-                eventBus.subscribe('test-event', 'not-a-function');
+                eventBus.subscribe('test-event', invalidHandler);
             }).toThrow("Handler for event 'test-event' must be a function");
         });
 
@@ -88,7 +123,7 @@ describe('EventBus', () => {
 
         test('should support context binding', () => {
             const context = { name: 'TestContext', value: 42 };
-            const handler = createMockFn(function() {
+            const handler = createMockFn(function(this: typeof context) {
                 return this.value;
             });
             
@@ -152,18 +187,18 @@ describe('EventBus', () => {
             eventBus.emit('test-event');
             
             const stats = eventBus.getEventStats();
-            expect(stats['test-event']).toBeDefined();
-            expect(stats['test-event'].emitted).toBe(1);
-            expect(stats['test-event'].success).toBe(1);
-            expect(stats['test-event'].error).toBe(0);
+            const testEventStats = getEventStatsFor(stats, 'test-event');
+            expect(testEventStats.emitted).toBe(1);
+            expect(testEventStats.success).toBe(1);
+            expect(testEventStats.error).toBe(0);
         });
     });
 
     describe('Async Handler Support', () => {
         test('should handle async handlers successfully', async () => {
-            const asyncHandler = createMockFn(async (data) => {
+            const asyncHandler = createMockFn(async (data: unknown) => {
                 await waitForDelay(10);
-                return data.toUpperCase();
+                return String(data).toUpperCase();
             });
             
             eventBus.subscribe('async-event', asyncHandler);
@@ -174,7 +209,7 @@ describe('EventBus', () => {
             expect(asyncHandler).toHaveBeenCalledTimes(1);
             
             const stats = eventBus.getEventStats();
-            expect(stats['async-event'].success).toBe(1);
+            expect(getEventStatsFor(stats, 'async-event').success).toBe(1);
         });
 
         test('should handle async handler errors', async () => {
@@ -188,7 +223,7 @@ describe('EventBus', () => {
             await waitForDelay(50);
             
             const stats = eventBus.getEventStats();
-            expect(stats['error-event'].error).toBe(1);
+            expect(getEventStatsFor(stats, 'error-event').error).toBe(1);
         });
 
         test('should handle Promise-returning handlers', async () => {
@@ -204,7 +239,7 @@ describe('EventBus', () => {
             expect(promiseHandler).toHaveBeenCalled();
             
             const stats = eventBus.getEventStats();
-            expect(stats['promise-event'].success).toBe(1);
+            expect(getEventStatsFor(stats, 'promise-event').success).toBe(1);
         });
     });
 
@@ -229,8 +264,9 @@ describe('EventBus', () => {
             expect(errorHandler).toHaveBeenCalledTimes(1);
             
             const stats = eventBus.getEventStats();
-            expect(stats['test-event'].success).toBe(2); // Two successful handlers
-            expect(stats['test-event'].error).toBe(1); // One failed handler
+            const testEventStats = getEventStatsFor(stats, 'test-event');
+            expect(testEventStats.success).toBe(2); // Two successful handlers
+            expect(testEventStats.error).toBe(1); // One failed handler
         });
 
         test('should emit handler-error event when handler fails', async () => {
@@ -247,7 +283,7 @@ describe('EventBus', () => {
             await waitForDelay(50);
             
             expect(errorEventHandler).toHaveBeenCalledTimes(1);
-            const errorEventArgs = errorEventHandler.mock.calls[0][0];
+            const errorEventArgs = asHandlerErrorEvent(getFirstCallArg(errorEventHandler));
             expect(errorEventArgs.eventName).toBe('test-event');
             expect(errorEventArgs.error).toBeInstanceOf(Error);
         });
@@ -272,7 +308,7 @@ describe('EventBus', () => {
 
         test('should handle context errors gracefully', async () => {
             const context = { name: 'TestContext' };
-            const errorHandler = createMockFn(function() {
+            const errorHandler = createMockFn(function(this: typeof context) {
                 throw new Error('Context error');
             });
             
@@ -282,7 +318,7 @@ describe('EventBus', () => {
             await waitForDelay(50);
             
             const stats = eventBus.getEventStats();
-            expect(stats['test-event'].error).toBe(1);
+            expect(getEventStatsFor(stats, 'test-event').error).toBe(1);
         });
 
         test('should truncate long arguments in error reporting', async () => {
@@ -300,10 +336,10 @@ describe('EventBus', () => {
             await waitForDelay(50);
             
             expect(errorEventHandler).toHaveBeenCalledTimes(1);
-            const errorEventArgs = errorEventHandler.mock.calls[0][0];
+            const errorEventArgs = asHandlerErrorEvent(getFirstCallArg(errorEventHandler));
             expect(errorEventArgs.eventName).toBe('test-event');
             expect(errorEventArgs.error).toBeInstanceOf(Error);
-            expect(errorEventArgs.args[0].length).toBeLessThanOrEqual(100); // Should be truncated
+            expect(String(errorEventArgs.args[0]).length).toBeLessThanOrEqual(100); // Should be truncated
         });
     });
 
@@ -412,7 +448,7 @@ describe('EventBus', () => {
                 }
             };
             
-            const handler = createMockFn(function() {
+            const handler = createMockFn(function(this: typeof context) {
                 return this.getValue();
             });
             
@@ -504,12 +540,12 @@ describe('EventBus', () => {
             eventBus.emit('test-event');
             
             const stats = eventBus.getEventStats();
-            expect(stats['test-event']).toBeDefined();
-            expect(stats['test-event'].emitted).toBe(2);
-            expect(stats['test-event'].success).toBe(2);
-            expect(stats['test-event'].error).toBe(0);
-            expect(typeof stats['test-event'].totalDuration).toBe('number');
-            expect(typeof stats['test-event'].avgDuration).toBe('number');
+            const testEventStats = getEventStatsFor(stats, 'test-event');
+            expect(testEventStats.emitted).toBe(2);
+            expect(testEventStats.success).toBe(2);
+            expect(testEventStats.error).toBe(0);
+            expect(typeof testEventStats.totalDuration).toBe('number');
+            expect(typeof testEventStats.avgDuration).toBe('number');
         });
 
         test('should track handler success and error rates', async () => {
@@ -526,8 +562,9 @@ describe('EventBus', () => {
             await waitForDelay(50);
             
             const stats = eventBus.getEventStats();
-            expect(stats['test-event'].success).toBe(1);
-            expect(stats['test-event'].error).toBe(1);
+            const testEventStats = getEventStatsFor(stats, 'test-event');
+            expect(testEventStats.success).toBe(1);
+            expect(testEventStats.error).toBe(1);
         });
 
         test('should calculate average duration correctly', async () => {
@@ -544,8 +581,9 @@ describe('EventBus', () => {
             await waitForDelay(100);
             
             const stats = eventBus.getEventStats();
-            expect(stats['test-event'].avgDuration).toBeGreaterThan(0);
-            expect(stats['test-event'].totalDuration).toBeGreaterThan(stats['test-event'].avgDuration);
+            const testEventStats = getEventStatsFor(stats, 'test-event');
+            expect(testEventStats.avgDuration).toBeGreaterThan(0);
+            expect(testEventStats.totalDuration).toBeGreaterThan(testEventStats.avgDuration);
         });
 
         test('should return copy of stats to prevent mutation', () => {
@@ -554,9 +592,9 @@ describe('EventBus', () => {
             const stats1 = eventBus.getEventStats();
             const stats2 = eventBus.getEventStats();
             
-            stats1['test-event'].emitted = 999;
+            getEventStatsFor(stats1, 'test-event').emitted = 999;
             
-            expect(stats2['test-event'].emitted).not.toBe(999);
+            expect(getEventStatsFor(stats2, 'test-event').emitted).not.toBe(999);
         });
     });
 
@@ -651,7 +689,7 @@ describe('EventBus', () => {
             expect(emissionTime).toBeLessThan(100);
             
             const stats = eventBus.getEventStats();
-            expect(stats['rapid-event'].success).toBe(100);
+            expect(getEventStatsFor(stats, 'rapid-event').success).toBe(100);
         });
 
         test('should handle empty event name', () => {
@@ -703,7 +741,7 @@ describe('EventBus', () => {
             await waitForDelay(50);
             
             expect(errorEventHandler).toHaveBeenCalledTimes(1);
-            const errorEventArgs = errorEventHandler.mock.calls[0][0];
+            const errorEventArgs = asHandlerErrorEvent(getFirstCallArg(errorEventHandler));
             expect(errorEventArgs.eventName).toBe('test-event');
             expect(errorEventArgs.error).toBeInstanceOf(Error);
             expect(errorEventArgs.args[0]).toBe('[Circular Object]');
@@ -731,8 +769,9 @@ describe('EventBus', () => {
             await waitForDelay(delayMs + 50);
             
             const stats = eventBus.getEventStats();
-            expect(stats['slow-event'].avgDuration).toBeGreaterThan(delayMs - 10);
-            expect(stats['slow-event'].avgDuration).toBeLessThan(delayMs + 50);
+            const slowEventStats = getEventStatsFor(stats, 'slow-event');
+            expect(slowEventStats.avgDuration).toBeGreaterThan(delayMs - 10);
+            expect(slowEventStats.avgDuration).toBeLessThan(delayMs + 50);
         });
 
         test('should handle synchronous and asynchronous handlers mixed', async () => {
@@ -756,7 +795,7 @@ describe('EventBus', () => {
             expect(promiseHandler).toHaveBeenCalledTimes(1);
             
             const stats = eventBus.getEventStats();
-            expect(stats['mixed-event'].success).toBe(3);
+            expect(getEventStatsFor(stats, 'mixed-event').success).toBe(3);
         });
     });
 

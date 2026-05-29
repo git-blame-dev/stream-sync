@@ -7,20 +7,24 @@ import {
 import { noOpLogger } from "../../helpers/mock-factories";
 import { IntervalManager } from "../../../src/utils/interval-manager.ts";
 import testClock from "../../helpers/test-clock";
+type IntervalManagerDependencies = NonNullable<ConstructorParameters<typeof IntervalManager>[2]>;
+type SafeSetInterval = NonNullable<IntervalManagerDependencies["safeSetInterval"]>;
+type MockInterval = ReturnType<SafeSetInterval>;
+
 describe("IntervalManager behavior", () => {
   let intervalIdCounter: number;
-  let mockSafeSetInterval: ReturnType<typeof createMockFn>;
-  let clearIntervalSpy: ReturnType<typeof spyOn>;
+  let mockSafeSetInterval: SafeSetInterval;
+  let clearIntervalSpy: { mockRestore: () => void };
 
   beforeEach(() => {
-    clearIntervalSpy = spyOn(global, "clearInterval").mockImplementation(
+    clearIntervalSpy = ((spyOn as unknown as (object: typeof global, method: "clearInterval") => { mockImplementation: (implementation: (timeout?: MockInterval) => void) => { mockRestore: () => void } })(global, "clearInterval")).mockImplementation(
       () => {},
     );
     intervalIdCounter = 0;
-    mockSafeSetInterval = createMockFn((callback) => {
+    mockSafeSetInterval = createMockFn((callback: () => void) => {
       intervalIdCounter += 1;
-      return { id: `interval-${intervalIdCounter}`, callback };
-    });
+      return { id: `interval-${intervalIdCounter}`, callback } as unknown as MockInterval;
+    }) as unknown as SafeSetInterval;
   });
 
   afterEach(() => {
@@ -60,12 +64,16 @@ describe("IntervalManager behavior", () => {
     });
     manager.createInterval("old", () => {}, 1000, "monitoring");
     const info = manager.getIntervalInfo("old");
+    expect(info).not.toBeNull();
+    if (!info) {
+      throw new Error("Expected interval info");
+    }
     info.startTime = new Date(testClock.now() - 7200000).toISOString();
 
     const health = manager.getHealthCheck();
 
     expect(health.healthy).toBe(false);
     expect(health.longRunningCount).toBe(1);
-    expect(health.longRunningIntervals[0].name).toBe("old");
+    expect(health.longRunningIntervals[0]?.name).toBe("old");
   });
 });
