@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
+import {
+  createMockFn,
+  restoreAllMocks,
+  type TestMockFn,
+} from "../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../helpers/mock-factories";
 import { createConfigFixture } from "../../helpers/config-fixture";
 
@@ -7,7 +11,8 @@ import { EventEmitter } from "node:events";
 import NotificationManager from "../../../src/notifications/NotificationManager";
 
 type DisplayQueueMock = {
-  addItem: ReturnType<typeof createMockFn>;
+  addItem: TestMockFn<[Record<string, unknown>], void>;
+  getQueueLength: TestMockFn<[], number>;
 };
 
 type NotificationManagerLike = {
@@ -16,11 +21,7 @@ type NotificationManagerLike = {
     platform: string,
     data: Record<string, unknown>,
   ) => Promise<unknown>;
-  PRIORITY_LEVELS: {
-    PAYPIGGY: number;
-    GIFT: number;
-    GIFTPAYPIGGY: number;
-  };
+  PRIORITY_LEVELS: Record<string, number>;
 };
 
 describe("NotificationManager YouTube monetisation behavior", () => {
@@ -37,7 +38,6 @@ describe("NotificationManager YouTube monetisation behavior", () => {
     displayQueue,
     eventBus: new EventEmitter(),
     constants: require("../../../src/core/constants"),
-    textProcessing: { formatChatMessage: createMockFn() },
     obsGoals: { processDonationGoal: createMockFn() },
     config,
     vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) },
@@ -47,7 +47,10 @@ describe("NotificationManager YouTube monetisation behavior", () => {
   });
 
   beforeEach(() => {
-    displayQueue = { addItem: createMockFn() };
+    displayQueue = {
+      addItem: createMockFn<[Record<string, unknown>], void>(),
+      getQueueLength: createMockFn<[], number>().mockReturnValue(0),
+    };
     config = createConfigFixture({
       general: {
         giftsEnabled: true,
@@ -76,8 +79,9 @@ describe("NotificationManager YouTube monetisation behavior", () => {
     expect(item.type).toBe("platform:paypiggy");
     expect(item.platform).toBe("youtube");
     expect(item.priority).toBe(notificationManager.PRIORITY_LEVELS.PAYPIGGY);
-    expect(item.data.username).toBe("MemberHero");
-    expect(item.data.userId).toBe("yt-user-1");
+    expect(item.data).toEqual(
+      expect.objectContaining({ username: "MemberHero", userId: "yt-user-1" }),
+    );
   });
 
   it("enqueues YouTube paid messages as gift with gift priority", async () => {
@@ -150,7 +154,6 @@ describe("NotificationManager YouTube monetisation behavior", () => {
       displayQueue,
       eventBus: new EventEmitter(),
       constants: require("../../../src/core/constants"),
-      textProcessing: { formatChatMessage: createMockFn() },
       obsGoals: { processDonationGoal: createMockFn() },
       config: disabledConfig,
       vfxCommandService: {

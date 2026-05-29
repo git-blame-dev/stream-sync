@@ -47,7 +47,6 @@ describe("NotificationManager paypiggy normalization", () => {
       },
       logger: noOpLogger,
       constants,
-      textProcessing: { formatChatMessage: createMockFn() },
       obsGoals: { processDonationGoal: createMockFn() },
     });
 
@@ -79,7 +78,6 @@ describe("NotificationManager paypiggy normalization", () => {
       },
       logger: noOpLogger,
       constants,
-      textProcessing: { formatChatMessage: createMockFn() },
       obsGoals: { processDonationGoal: createMockFn() },
     });
 
@@ -108,7 +106,6 @@ describe("NotificationManager paypiggy normalization", () => {
       },
       logger: noOpLogger,
       constants,
-      textProcessing: { formatChatMessage: createMockFn() },
       obsGoals: { processDonationGoal: createMockFn() },
     });
 
@@ -134,7 +131,6 @@ describe("NotificationManager paypiggy normalization", () => {
       },
       logger: noOpLogger,
       constants,
-      textProcessing: { formatChatMessage: createMockFn() },
       obsGoals: { processDonationGoal: createMockFn() },
     });
 
@@ -160,7 +156,6 @@ describe("NotificationManager paypiggy normalization", () => {
       },
       logger: noOpLogger,
       constants,
-      textProcessing: { formatChatMessage: createMockFn() },
       obsGoals: { processDonationGoal: createMockFn() },
     });
 
@@ -186,7 +181,6 @@ describe("NotificationManager paypiggy normalization", () => {
       },
       logger: noOpLogger,
       constants,
-      textProcessing: { formatChatMessage: createMockFn() },
       obsGoals: { processDonationGoal: createMockFn() },
     });
 
@@ -212,7 +206,6 @@ describe("NotificationManager paypiggy normalization", () => {
       },
       logger: noOpLogger,
       constants,
-      textProcessing: { formatChatMessage: createMockFn() },
       obsGoals: { processDonationGoal: createMockFn() },
     });
 
@@ -249,7 +242,6 @@ describe("NotificationManager paypiggy normalization", () => {
           },
           logger: noOpLogger,
           constants,
-          textProcessing: { formatChatMessage: createMockFn() },
           obsGoals: { processDonationGoal: createMockFn() },
         }),
     ).toThrow("config");
@@ -267,7 +259,6 @@ describe("NotificationManager paypiggy normalization", () => {
       },
       logger: noOpLogger,
       constants,
-      textProcessing: { formatChatMessage: createMockFn() },
       obsGoals: { processDonationGoal: createMockFn() },
     });
 

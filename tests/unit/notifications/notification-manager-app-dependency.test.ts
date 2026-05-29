@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
+import {
+  createMockFn,
+  restoreAllMocks,
+  type TestMockFn,
+} from "../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../helpers/mock-factories";
 import { createConfigFixture } from "../../helpers/config-fixture";
 
@@ -10,18 +14,18 @@ initializeTestLogging();
 import NotificationManager from "../../../src/notifications/NotificationManager";
 
 type DisplayQueueMock = {
-  addItem: ReturnType<typeof createMockFn>;
-  getQueueLength: ReturnType<typeof createMockFn>;
+  addItem: TestMockFn<[unknown], void>;
+  getQueueLength: TestMockFn<[], number>;
 };
 
 type VfxCommandServiceMock = {
-  executeCommand: ReturnType<typeof createMockFn>;
-  getVFXConfig: ReturnType<typeof createMockFn>;
+  executeCommand: TestMockFn<unknown[], Promise<{ success: boolean }>>;
+  getVFXConfig: TestMockFn<unknown[], Promise<{ filename: string }>>;
 };
 
 type UserTrackingServiceMock = {
-  isFirstMessage: ReturnType<typeof createMockFn>;
-  trackUser: ReturnType<typeof createMockFn>;
+  isFirstMessage: TestMockFn<unknown[], Promise<boolean>>;
+  trackUser: TestMockFn<unknown[], void>;
 };
 
 type EventBusMock = {
@@ -30,13 +34,14 @@ type EventBusMock = {
   off: ReturnType<typeof createMockFn>;
 };
 
-type NotificationManagerLike = {
-  handleNotification: (...args: unknown[]) => Promise<{ success?: boolean }>;
-  donationSpamDetector?: { destroy?: () => void };
-  eventBus?: unknown;
-  config?: unknown;
-  vfxCommandService?: unknown;
-  userTrackingService?: unknown;
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  !!value && typeof value === "object" && !Array.isArray(value);
+
+const requireRecord = (value: unknown): Record<string, unknown> => {
+  if (!isRecord(value)) {
+    throw new Error("Expected queued notification item to be an object");
+  }
+  return value;
 };
 
 describe("NotificationManager Service Dependency Injection - Modernized", () => {
@@ -45,12 +50,12 @@ describe("NotificationManager Service Dependency Injection - Modernized", () => 
   let mockVFXCommandService: VfxCommandServiceMock;
   let mockUserTrackingService: UserTrackingServiceMock;
   let mockEventBus: EventBusMock;
-  let notificationManager!: NotificationManagerLike;
+  let notificationManager: NotificationManager | undefined;
 
   beforeEach(() => {
     mockDisplayQueue = {
-      addItem: createMockFn(),
-      getQueueLength: createMockFn().mockReturnValue(0),
+      addItem: createMockFn<[unknown], void>(),
+      getQueueLength: createMockFn<[], number>().mockReturnValue(0),
     };
 
     mockConfig = createConfigFixture({
@@ -64,13 +69,16 @@ describe("NotificationManager Service Dependency Injection - Modernized", () => 
     });
 
     mockVFXCommandService = {
-      executeCommand: createMockFn().mockResolvedValue({ success: true }),
-      getVFXConfig: createMockFn().mockResolvedValue({ filename: "test.mp4" }),
+      executeCommand: createMockFn<unknown[], Promise<{ success: boolean }>>()
+        .mockResolvedValue({ success: true }),
+      getVFXConfig: createMockFn<unknown[], Promise<{ filename: string }>>()
+        .mockResolvedValue({ filename: "test.mp4" }),
     };
 
     mockUserTrackingService = {
-      isFirstMessage: createMockFn().mockResolvedValue(false),
-      trackUser: createMockFn(),
+      isFirstMessage: createMockFn<unknown[], Promise<boolean>>()
+        .mockResolvedValue(false),
+      trackUser: createMockFn<unknown[], void>(),
     };
 
     mockEventBus = {
@@ -82,16 +90,7 @@ describe("NotificationManager Service Dependency Injection - Modernized", () => 
 
   afterEach(() => {
     restoreAllMocks();
-    // Clean up any notification manager instances to prevent hanging tests
-    if (notificationManager) {
-      // Clean up spam detection intervals too
-      if (
-        notificationManager.donationSpamDetector &&
-        notificationManager.donationSpamDetector.destroy
-      ) {
-        notificationManager.donationSpamDetector.destroy();
-      }
-    }
+    notificationManager = undefined;
   });
 
   describe("Constructor Service Injection", () => {
@@ -106,7 +105,6 @@ describe("NotificationManager Service Dependency Injection - Modernized", () => 
         logger: noOpLogger,
         eventBus: mockEventBus,
         constants: require("../../../src/core/constants"),
-        textProcessing: { formatChatMessage: createMockFn() },
         obsGoals: { processDonationGoal: createMockFn() },
         config: mockConfig,
       });
@@ -121,7 +119,6 @@ describe("NotificationManager Service Dependency Injection - Modernized", () => 
         logger: noOpLogger,
         eventBus: mockEventBus,
         constants: require("../../../src/core/constants"),
-        textProcessing: { formatChatMessage: createMockFn() },
         obsGoals: { processDonationGoal: createMockFn() },
         config: mockConfig,
         vfxCommandService: mockVFXCommandService,
@@ -144,7 +141,6 @@ describe("NotificationManager Service Dependency Injection - Modernized", () => 
           logger: noOpLogger,
           eventBus: mockEventBus,
           constants: require("../../../src/core/constants"),
-          textProcessing: { formatChatMessage: createMockFn() },
           obsGoals: { processDonationGoal: createMockFn() },
           config: mockConfig,
         });
@@ -157,7 +153,6 @@ describe("NotificationManager Service Dependency Injection - Modernized", () => 
         logger: noOpLogger,
         eventBus: mockEventBus,
         constants: require("../../../src/core/constants"),
-        textProcessing: { formatChatMessage: createMockFn() },
         obsGoals: { processDonationGoal: createMockFn() },
         config: mockConfig,
       });
@@ -173,7 +168,6 @@ describe("NotificationManager Service Dependency Injection - Modernized", () => 
           displayQueue: mockDisplayQueue,
           logger: noOpLogger,
           constants: require("../../../src/core/constants"),
-          textProcessing: { formatChatMessage: createMockFn() },
           obsGoals: { processDonationGoal: createMockFn() },
           config: mockConfig,
         });
@@ -192,7 +186,6 @@ describe("NotificationManager Service Dependency Injection - Modernized", () => 
           logger: noOpLogger,
           eventBus: mockEventBus,
           constants: require("../../../src/core/constants"),
-          textProcessing: { formatChatMessage: createMockFn() },
           obsGoals: { processDonationGoal: createMockFn() },
         });
       }).toThrow("NotificationManager requires config dependency");
@@ -209,7 +202,6 @@ describe("NotificationManager Service Dependency Injection - Modernized", () => 
         logger: noOpLogger,
         eventBus: mockEventBus,
         constants: require("../../../src/core/constants"),
-        textProcessing: { formatChatMessage: createMockFn() },
         obsGoals: { processDonationGoal: createMockFn() },
         config: mockConfig,
       });
@@ -228,7 +220,6 @@ describe("NotificationManager Service Dependency Injection - Modernized", () => 
         logger: noOpLogger,
         eventBus: mockEventBus,
         constants: require("../../../src/core/constants"),
-        textProcessing: { formatChatMessage: createMockFn() },
         obsGoals: { processDonationGoal: createMockFn() },
         config: mockConfig,
       });
@@ -257,7 +248,6 @@ describe("NotificationManager Service Dependency Injection - Modernized", () => 
         logger: noOpLogger,
         eventBus: mockEventBus,
         constants: require("../../../src/core/constants"),
-        textProcessing: { formatChatMessage: createMockFn() },
         obsGoals: { processDonationGoal: createMockFn() },
         config: mockConfig,
         vfxCommandService: mockVFXCommandService,
@@ -276,7 +266,7 @@ describe("NotificationManager Service Dependency Injection - Modernized", () => 
 
       expect(mockDisplayQueue.addItem).toHaveBeenCalled();
 
-      const addedItem = mockDisplayQueue.addItem.mock.calls[0][0];
+      const addedItem = requireRecord(mockDisplayQueue.addItem.mock.calls[0][0]);
       expect(addedItem).toBeDefined();
       expect(addedItem.data).toBeDefined();
     });
@@ -292,7 +282,6 @@ describe("NotificationManager Service Dependency Injection - Modernized", () => 
         logger: noOpLogger,
         eventBus: mockEventBus,
         constants: require("../../../src/core/constants"),
-        textProcessing: { formatChatMessage: createMockFn() },
         obsGoals: { processDonationGoal: createMockFn() },
         config: mockConfig,
         vfxCommandService: mockVFXCommandService,
@@ -326,7 +315,6 @@ describe("NotificationManager Service Dependency Injection - Modernized", () => 
           logger: noOpLogger,
           eventBus: mockEventBus,
           constants: require("../../../src/core/constants"),
-          textProcessing: { formatChatMessage: createMockFn() },
           obsGoals: { processDonationGoal: createMockFn() },
         });
       }).toThrow("NotificationManager requires config dependency");
@@ -351,7 +339,6 @@ describe("NotificationManager Service Dependency Injection - Modernized", () => 
         logger: noOpLogger,
         eventBus: mockEventBus,
         constants: require("../../../src/core/constants"),
-        textProcessing: { formatChatMessage: createMockFn() },
         obsGoals: { processDonationGoal: createMockFn() },
         config: mockConfig,
         vfxCommandService: mockVFXCommandService,
@@ -383,7 +370,6 @@ describe("NotificationManager Service Dependency Injection - Modernized", () => 
         logger: noOpLogger,
         eventBus: mockEventBus,
         constants: require("../../../src/core/constants"),
-        textProcessing: { formatChatMessage: createMockFn() },
         obsGoals: { processDonationGoal: createMockFn() },
         config: mockConfig,
         vfxCommandService: mockVFXCommandService,
@@ -416,7 +402,6 @@ describe("NotificationManager Service Dependency Injection - Modernized", () => 
         logger: noOpLogger,
         eventBus: mockEventBus,
         constants: require("../../../src/core/constants"),
-        textProcessing: { formatChatMessage: createMockFn() },
         obsGoals: { processDonationGoal: createMockFn() },
         config: mockConfig,
         vfxCommandService: mockVFXCommandService,
@@ -455,6 +440,7 @@ describe("NotificationManager Service Dependency Injection - Modernized", () => 
     });
 
     it("should reject null config dependency", () => {
+      const nullConfig = JSON.parse("null");
       const mockEventBus = {
         emit: createMockFn(),
         on: createMockFn(),
@@ -466,12 +452,8 @@ describe("NotificationManager Service Dependency Injection - Modernized", () => 
           logger: noOpLogger,
           eventBus: mockEventBus,
           constants: require("../../../src/core/constants"),
-          textProcessing: { formatChatMessage: createMockFn() },
           obsGoals: { processDonationGoal: createMockFn() },
-          config: null,
-          vfxCommandService: null,
-
-          userTrackingService: null,
+          config: nullConfig,
         });
       }).toThrow("NotificationManager requires config dependency");
     });

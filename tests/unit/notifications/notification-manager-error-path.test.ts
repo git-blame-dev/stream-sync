@@ -42,7 +42,6 @@ describe("NotificationManager monetization error path", () => {
       },
       logger: noOpLogger,
       constants,
-      textProcessing: { formatChatMessage: createMockFn() },
       obsGoals: { processDonationGoal: createMockFn() },
     });
 
@@ -81,7 +80,6 @@ describe("NotificationManager monetization error path", () => {
       },
       logger: noOpLogger,
       constants,
-      textProcessing: { formatChatMessage: createMockFn() },
       obsGoals: { processDonationGoal: createMockFn() },
     });
 
