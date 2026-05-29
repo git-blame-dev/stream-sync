@@ -8,6 +8,25 @@ import { noOpLogger } from "../../helpers/mock-factories";
 import { YouTubeStreamDetectionService } from "../../../src/services/youtube-stream-detection-service.ts";
 import * as testClock from "../../helpers/test-clock";
 
+type ChannelVideo = {
+  id?: string;
+  video_id?: string;
+  title?: { text?: string } | string;
+  is_live?: boolean;
+  is_live_content?: boolean;
+  badges?: Array<{ label?: string; text?: string; style?: string }>;
+  author?: { id?: string; name?: string; handle?: string };
+};
+type ChannelLike = { videos?: { contents?: ChannelVideo[] } };
+type DetectionClient = {
+  getChannel: (channelId: string) => Promise<ChannelLike | null>;
+};
+type DetectionConfig = { timeout?: number; username?: string };
+
+const createDetectionClient = (): DetectionClient => ({
+  getChannel: createMockFn<[channelId: string], Promise<ChannelLike | null>>().mockResolvedValue(null),
+});
+
 describe("YouTubeStreamDetectionService behavior", () => {
   beforeEach(() => {
     clearAllMocks();
@@ -19,7 +38,7 @@ describe("YouTubeStreamDetectionService behavior", () => {
 
   it("returns error response for invalid channel handle", async () => {
     const service = new YouTubeStreamDetectionService(
-      {},
+      createDetectionClient(),
       { logger: noOpLogger },
     );
     const result = await service.detectLiveStreams(null);
@@ -31,7 +50,7 @@ describe("YouTubeStreamDetectionService behavior", () => {
 
   it("short-circuits when circuit breaker is open", async () => {
     const service = new YouTubeStreamDetectionService(
-      {},
+      createDetectionClient(),
       { logger: noOpLogger },
     );
     service._circuitBreaker.isOpen = true;
@@ -47,7 +66,7 @@ describe("YouTubeStreamDetectionService behavior", () => {
 
   it("formats successful detection with validated video IDs", async () => {
     const service = new YouTubeStreamDetectionService(
-      {},
+      createDetectionClient(),
       { logger: noOpLogger },
     );
     service._performDetection = createMockFn().mockResolvedValue({
@@ -66,7 +85,7 @@ describe("YouTubeStreamDetectionService behavior", () => {
 
   it("opens circuit breaker after repeated failures", async () => {
     const service = new YouTubeStreamDetectionService(
-      {},
+      createDetectionClient(),
       { logger: noOpLogger },
     );
     service._performDetection = createMockFn().mockRejectedValue(
@@ -83,7 +102,7 @@ describe("YouTubeStreamDetectionService behavior", () => {
 
   it("returns debug payload for unknown errors and marks retryable by default", async () => {
     const service = new YouTubeStreamDetectionService(
-      {},
+      createDetectionClient(),
       { logger: noOpLogger },
     );
     service._performDetection = createMockFn().mockRejectedValue(
@@ -97,12 +116,15 @@ describe("YouTubeStreamDetectionService behavior", () => {
     expect(result.success).toBe(false);
     expect(result.retryable).toBe(true);
     expect(result.debug).toBeDefined();
+    if (!result.debug) {
+      throw new Error("Expected debug payload for failed detection");
+    }
     expect(result.debug.errorMessage).toContain("unexpected downstream issue");
   });
 
   it("reports zero average response time when all requests fail", async () => {
     const service = new YouTubeStreamDetectionService(
-      {},
+      createDetectionClient(),
       { logger: noOpLogger },
     );
     service._performDetection = createMockFn().mockRejectedValue(
@@ -121,7 +143,7 @@ describe("YouTubeStreamDetectionService behavior", () => {
 
   it("updates timeout configuration and stays active while configured", () => {
     const service = new YouTubeStreamDetectionService(
-      {},
+      createDetectionClient(),
       { logger: noOpLogger },
     );
 
@@ -138,11 +160,11 @@ describe("YouTubeStreamDetectionService behavior", () => {
 
   it("returns false when configuration update throws", () => {
     const service = new YouTubeStreamDetectionService(
-      {},
+      createDetectionClient(),
       { logger: noOpLogger },
     );
-    const unstableConfig = {
-      get timeout() {
+    const unstableConfig: DetectionConfig = {
+      get timeout(): number {
         throw new Error("bad config");
       },
     };
@@ -154,7 +176,7 @@ describe("YouTubeStreamDetectionService behavior", () => {
 
   it("cleans up service state and reports inactive afterward", async () => {
     const service = new YouTubeStreamDetectionService(
-      {},
+      createDetectionClient(),
       { logger: noOpLogger },
     );
 

@@ -3,26 +3,36 @@ import {
   createMockFn,
   clearAllMocks,
   restoreAllMocks,
-  spyOn,
+  type TestMockFn,
 } from "../../helpers/bun-mock-utils";
 
 import { GracefulExitService } from "../../../src/services/GracefulExitService.ts";
 
+type TestRuntime = {
+  shutdown: TestMockFn<[], Promise<void>>;
+  getPlatforms: TestMockFn<[], Record<string, unknown>>;
+};
+
 describe("GracefulExitService additional behavior", () => {
-  let runtime;
+  let runtime: TestRuntime;
+  let originalExit: typeof process.exit;
 
   beforeEach(() => {
     clearAllMocks();
+    originalExit = process.exit;
 
     runtime = {
-      shutdown: createMockFn().mockResolvedValue(undefined),
-      getPlatforms: createMockFn(),
+      shutdown: createMockFn<[], Promise<void>>().mockResolvedValue(undefined),
+      getPlatforms: createMockFn<[], Record<string, unknown>>().mockReturnValue({}),
     };
 
-    spyOn(process, "exit").mockImplementation(() => {});
+    process.exit = (_code?: string | number | null): never => {
+      throw new Error("process.exit should not be called in this test");
+    };
   });
 
   afterEach(() => {
+    process.exit = originalExit;
     restoreAllMocks();
     clearAllMocks();
   });
@@ -60,6 +70,6 @@ describe("GracefulExitService additional behavior", () => {
 
     const summary = service._buildExitSummary();
 
-    expect(summary.memoryStats).toBeUndefined();
+    expect(summary).not.toHaveProperty("memoryStats");
   });
 });

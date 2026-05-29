@@ -1,19 +1,44 @@
 import { describe, it, beforeEach, expect } from "bun:test";
-import { createMockFn } from "../../helpers/bun-mock-utils";
+import { createMockFn, type TestMockFn } from "../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../helpers/mock-factories";
 import { createConfigFixture } from "../../helpers/config-fixture";
 import { ChatNotificationRouter } from "../../../src/services/ChatNotificationRouter.ts";
 
+type TestConfig = ReturnType<typeof createConfigFixture>;
+type QueueItem = Record<string, unknown> & { type?: string; priority?: number };
+type RouterRuntime = {
+  config: TestConfig;
+  displayQueue: { addItem: TestMockFn<[QueueItem], void> };
+  platformLifecycleService: { getPlatformConnectionTime: TestMockFn<[platform: string], null> };
+  commandCooldownService: {
+    checkUserCooldown: TestMockFn<[userId: unknown, perUserCooldown: number, heavyCooldown: number], boolean>;
+    checkGlobalCooldown: TestMockFn<[commandName: string, globalCooldownMs: number], boolean>;
+    updateUserCooldown: TestMockFn<[userId: unknown], void>;
+    updateGlobalCooldown: TestMockFn<[commandName: string], void>;
+  };
+  userTrackingService: { isFirstMessage: TestMockFn<[userId: unknown, context: Record<string, unknown>], boolean> };
+  commandParser: { getVFXConfig: TestMockFn<[commandKey: string, message: string | null], null> };
+  isFirstMessage: TestMockFn<[userId: unknown, context: Record<string, unknown>], boolean>;
+};
+
+type ChatMessage = {
+  message: string;
+  displayName: string;
+  username: string;
+  userId: string;
+  timestamp: string;
+};
+
 describe("ChatNotificationRouter lingering/priority/TTS", () => {
-  let mockLogger;
-  let testConfig;
+  let mockLogger: typeof noOpLogger;
+  let testConfig: TestConfig;
 
   beforeEach(() => {
     mockLogger = noOpLogger;
     testConfig = createConfigFixture();
   });
 
-  const baseMessage = {
+  const baseMessage: ChatMessage = {
     message: "Test message",
     displayName: "testViewer",
     username: "testviewer",
@@ -24,34 +49,35 @@ describe("ChatNotificationRouter lingering/priority/TTS", () => {
   const createRouter = ({
     runtime: runtimeOverrides,
     config = testConfig,
-  } = {}) => {
-    const baseRuntime = {
+  }: { runtime?: Partial<RouterRuntime>; config?: TestConfig } = {}) => {
+    const baseRuntime: RouterRuntime = {
       config: {
-        general: { greetingsEnabled: true, messagesEnabled: true },
-        twitch: { greetingsEnabled: true, messagesEnabled: true },
+        ...testConfig,
+        general: { ...testConfig.general, greetingsEnabled: true, messagesEnabled: true },
+        twitch: { ...testConfig.twitch, greetingsEnabled: true, messagesEnabled: true },
       },
       displayQueue: {
-        addItem: createMockFn(),
+        addItem: createMockFn<[QueueItem], void>(),
       },
       platformLifecycleService: {
-        getPlatformConnectionTime: createMockFn().mockReturnValue(null),
+        getPlatformConnectionTime: createMockFn<[platform: string], null>().mockReturnValue(null),
       },
       commandCooldownService: {
-        checkUserCooldown: createMockFn().mockReturnValue(true),
-        checkGlobalCooldown: createMockFn().mockReturnValue(true),
-        updateUserCooldown: createMockFn(),
-        updateGlobalCooldown: createMockFn(),
+        checkUserCooldown: createMockFn<[unknown, number, number], boolean>().mockReturnValue(true),
+        checkGlobalCooldown: createMockFn<[string, number], boolean>().mockReturnValue(true),
+        updateUserCooldown: createMockFn<[unknown], void>(),
+        updateGlobalCooldown: createMockFn<[string], void>(),
       },
       userTrackingService: {
-        isFirstMessage: createMockFn().mockReturnValue(false),
+        isFirstMessage: createMockFn<[unknown, Record<string, unknown>], boolean>().mockReturnValue(false),
       },
       commandParser: {
-        getVFXConfig: createMockFn().mockReturnValue(null),
+        getVFXConfig: createMockFn<[string, string | null], null>().mockReturnValue(null),
       },
-      isFirstMessage: createMockFn().mockReturnValue(false),
+      isFirstMessage: createMockFn<[unknown, Record<string, unknown>], boolean>().mockReturnValue(false),
     };
 
-    const runtime = { ...baseRuntime, ...runtimeOverrides };
+    const runtime: RouterRuntime = { ...baseRuntime, ...runtimeOverrides };
 
     const router = new ChatNotificationRouter({
       runtime,
@@ -65,7 +91,7 @@ describe("ChatNotificationRouter lingering/priority/TTS", () => {
   it("queues chat with lower priority than greeting when first message", async () => {
     const { router, runtime } = createRouter({
       runtime: {
-        isFirstMessage: createMockFn().mockReturnValue(true),
+        isFirstMessage: createMockFn<[unknown, Record<string, unknown>], boolean>().mockReturnValue(true),
       },
     });
 
@@ -80,8 +106,11 @@ describe("ChatNotificationRouter lingering/priority/TTS", () => {
 
     expect(chatItem).toBeDefined();
     expect(greetingItem).toBeDefined();
-    expect(chatItem.priority || 0).toBeLessThanOrEqual(
-      greetingItem.priority || Infinity,
+    if (!chatItem || !greetingItem) {
+      throw new Error("Expected both chat and greeting queue items");
+    }
+    expect(chatItem.priority ?? 0).toBeLessThanOrEqual(
+      greetingItem.priority ?? Infinity,
     );
   });
 
@@ -89,10 +118,11 @@ describe("ChatNotificationRouter lingering/priority/TTS", () => {
     const { router, runtime } = createRouter({
       runtime: {
         config: {
-          general: { greetingsEnabled: true, messagesEnabled: true },
-          twitch: { greetingsEnabled: false, messagesEnabled: true },
+          ...testConfig,
+          general: { ...testConfig.general, greetingsEnabled: true, messagesEnabled: true },
+          twitch: { ...testConfig.twitch, greetingsEnabled: false, messagesEnabled: true },
         },
-        isFirstMessage: createMockFn().mockReturnValue(true),
+        isFirstMessage: createMockFn<[unknown, Record<string, unknown>], boolean>().mockReturnValue(true),
       },
     });
 

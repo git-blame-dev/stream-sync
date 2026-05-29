@@ -3,13 +3,38 @@ import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../helpers/mock-factories";
 import { InnertubeService } from "../../../src/services/innertube-service";
 
+type VideoInfo = { video: string };
+type InnertubeInfoClient = {
+  getInfo: (videoId: string, options?: Record<string, unknown>) => Promise<VideoInfo>;
+};
+type InnertubeFactory = {
+  createWithTimeout: ReturnType<typeof createMockFn<[timeoutMs?: number], Promise<InnertubeInfoClient>>>;
+};
+type TimeoutCall = [Promise<unknown>, number, string];
+
+const expectFirstTimeoutCall = (calls: unknown[][]): TimeoutCall => {
+  const firstCall = calls[0];
+  expect(firstCall).toBeDefined();
+  expect(firstCall).toHaveLength(3);
+
+  const [promise, timeoutMs, operationName] = firstCall;
+  expect(promise).toBeInstanceOf(Promise);
+  expect(typeof timeoutMs).toBe("number");
+  expect(typeof operationName).toBe("string");
+
+  return [promise, timeoutMs, operationName];
+};
+
 describe("InnertubeService behavior", () => {
-  let factory;
+  let factory: InnertubeFactory;
 
   beforeEach(() => {
     factory = {
-      createWithTimeout: createMockFn(async () => ({
-        getInfo: createMockFn(async () => ({ video: "info" })),
+      createWithTimeout: createMockFn<
+        [timeoutMs?: number],
+        Promise<InnertubeInfoClient>
+      >(async () => ({
+        getInfo: createMockFn(async (_videoId: string) => ({ video: "info" })),
       })),
     };
   });
@@ -30,8 +55,16 @@ describe("InnertubeService behavior", () => {
     expect(service.stats.instancesCreated).toBe(1);
   });
 
-test("passes timeout metadata when fetching video info", async () => {
-    const withTimeout = createMockFn(async (promise) => promise);
+  test("passes timeout metadata when fetching video info", async () => {
+    const timeoutCalls: TimeoutCall[] = [];
+    const withTimeout = async <T>(
+      promise: Promise<T>,
+      timeoutMs: number,
+      operationName: string,
+    ): Promise<T> => {
+      timeoutCalls.push([promise, timeoutMs, operationName]);
+      return promise;
+    };
     const service = new InnertubeService(factory, {
       logger: noOpLogger,
       withTimeout,
@@ -41,20 +74,28 @@ test("passes timeout metadata when fetching video info", async () => {
       timeout: 5000,
       instanceKey: "custom",
     });
-  const cached = service.instanceCache.get("custom");
+    const cached = service.instanceCache.get("custom");
 
-  expect(result).toEqual({ video: "info" });
-  const [getInfoPromise, timeoutMs, operationName] = withTimeout.mock.calls[0] || [];
-  expect(timeoutMs).toBe(5000);
-  expect(operationName).toBe("YouTube getInfo call");
-  await expect(getInfoPromise).resolves.toEqual({ video: "info" });
-  expect(cached.lastUsed).toBeGreaterThanOrEqual(cached.created);
-});
+    expect(result).toEqual({ video: "info" });
+    const [getInfoPromise, timeoutMs, operationName] = expectFirstTimeoutCall(timeoutCalls);
+    expect(timeoutMs).toBe(5000);
+    expect(operationName).toBe("YouTube getInfo call");
+    await expect(getInfoPromise).resolves.toEqual({ video: "info" });
+    expect(cached).toBeDefined();
+    if (!cached) {
+      throw new Error("Expected custom cached Innertube instance");
+    }
+    expect(cached.lastUsed).toBeGreaterThanOrEqual(cached.created);
+  });
 
   test("cleans up stale instances", async () => {
     const service = new InnertubeService(factory, { logger: noOpLogger });
     await service.getSharedInstance("old");
-    service.instanceCache.set("old", { instance: {}, created: 0, lastUsed: 0 });
+    service.instanceCache.set("old", {
+      instance: { getInfo: async () => ({ video: "stale" }) },
+      created: 0,
+      lastUsed: 0,
+    });
 
     service.cleanup(1);
 

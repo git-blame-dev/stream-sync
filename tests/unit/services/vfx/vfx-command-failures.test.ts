@@ -1,11 +1,12 @@
 import { describe, expect, afterEach, it, beforeEach } from "bun:test";
 import { createMockFn, restoreAllMocks } from "../../../helpers/bun-mock-utils";
 import { createConfigFixture } from "../../../helpers/config-fixture";
+import { VFXCommandService } from "../../../../src/services/VFXCommandService.ts";
+
+type CommandValue = string | undefined;
 
 describe("VFXCommandService failure paths", () => {
-  let VFXCommandService;
-
-  const createConfig = (commandValue = "!hello") =>
+  const createConfig = (commandValue: CommandValue = "!hello") =>
     createConfigFixture({
       greetings: { command: commandValue },
       farewell: {},
@@ -14,9 +15,7 @@ describe("VFXCommandService failure paths", () => {
     });
 
   beforeEach(() => {
-    ({
-      VFXCommandService,
-    } = require("../../../../src/services/VFXCommandService.ts"));
+    restoreAllMocks();
   });
 
   afterEach(() => {
@@ -106,7 +105,7 @@ describe("VFXCommandService failure paths", () => {
   });
 
   it("returns missing key error when commandKey is absent", async () => {
-    const service = new VFXCommandService(createConfig(null), null);
+    const service = new VFXCommandService(createConfig(), null);
 
     const result = await service.executeCommandForKey("", {
       username: "testUser",
@@ -120,7 +119,7 @@ describe("VFXCommandService failure paths", () => {
   });
 
   it("returns friendly error when config has no command for key", async () => {
-    const service = new VFXCommandService(createConfig(null), null);
+    const service = new VFXCommandService(createConfig(), null);
 
     const result = await service.executeCommandForKey("missing", {
       username: "testUser",
@@ -134,7 +133,7 @@ describe("VFXCommandService failure paths", () => {
   });
 
   it("throws when config is missing", () => {
-    expect(() => new VFXCommandService(null, null)).toThrow(
+    expect(() => Reflect.construct(VFXCommandService, [null, null])).toThrow(
       "VFXCommandService requires config",
     );
   });

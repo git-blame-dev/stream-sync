@@ -3,17 +3,40 @@ import {
   createMockFn,
   clearAllMocks,
   restoreAllMocks,
+  type TestMockFn,
 } from "../helpers/bun-mock-utils";
 
+type ViewerPlatform = "tiktok" | "twitch" | "youtube";
+type ViewerCounts = Record<string, number>;
+type NotifyObservers = TestMockFn<
+  [platform: string, count: number, previousCount: number],
+  Promise<boolean>
+>;
+type ViewerCountSystem = {
+  counts: ViewerCounts;
+  notifyObservers: NotifyObservers;
+};
+type AppRuntime = {
+  viewerCountSystem: ViewerCountSystem | null;
+  updateViewerCount: (platform: string, count: number) => void;
+};
+
+function updateViewerCount(this: AppRuntime, platform: string, count: number): void {
+  if (!this.viewerCountSystem) {
+    return;
+  }
+
+  const platformKey = platform.toLowerCase();
+  const previousCount = this.viewerCountSystem.counts[platformKey] ?? 0;
+  this.viewerCountSystem.counts[platformKey] = count;
+
+  this.viewerCountSystem
+    .notifyObservers(platform, count, previousCount)
+    .catch(() => undefined);
+}
+
 describe("Main App updateViewerCount OBS Integration", () => {
-  let mockViewerCountSystem: {
-    counts: {
-      tiktok: number;
-      twitch: number;
-      youtube: number;
-    };
-    notifyObservers: ReturnType<typeof createMockFn>;
-  };
+  let mockViewerCountSystem: ViewerCountSystem;
   let updateViewerCountMethod: (platform: string, count: number) => void;
 
   beforeEach(() => {
@@ -23,27 +46,15 @@ describe("Main App updateViewerCount OBS Integration", () => {
         twitch: 0,
         youtube: 0,
       },
-      notifyObservers: createMockFn().mockResolvedValue(true),
+      notifyObservers: createMockFn<
+        [platform: string, count: number, previousCount: number],
+        Promise<boolean>
+      >().mockResolvedValue(true),
     };
 
-    const testAppRuntime = {
+    const testAppRuntime: AppRuntime = {
       viewerCountSystem: mockViewerCountSystem,
-      updateViewerCount(platform, count) {
-        if (this.viewerCountSystem) {
-          const previousCount =
-            this.viewerCountSystem.counts[platform.toLowerCase()];
-          this.viewerCountSystem.counts[platform.toLowerCase()] = count;
-
-          const notificationPromise = this.viewerCountSystem.notifyObservers(
-            platform,
-            count,
-            previousCount,
-          );
-          if (notificationPromise && notificationPromise.catch) {
-            notificationPromise.catch(() => {});
-          }
-        }
-      },
+      updateViewerCount,
     };
 
     updateViewerCountMethod =
@@ -79,11 +90,16 @@ describe("Main App updateViewerCount OBS Integration", () => {
       });
 
       it("should work for all platforms", () => {
-        const platforms = ["tiktok", "twitch", "youtube"];
-        const viewerCounts = [100, 200, 300];
+        const platforms: readonly ViewerPlatform[] = ["tiktok", "twitch", "youtube"];
+        const viewerCounts: readonly number[] = [100, 200, 300];
 
         platforms.forEach((platform, index) => {
-          updateViewerCountMethod(platform, viewerCounts[index]);
+          const viewerCount = viewerCounts[index];
+          expect(viewerCount).toBeDefined();
+          if (viewerCount === undefined) {
+            throw new Error(`Missing viewer count for ${platform}`);
+          }
+          updateViewerCountMethod(platform, viewerCount);
         });
 
         expect(mockViewerCountSystem.counts.tiktok).toBe(100);
@@ -100,25 +116,9 @@ describe("Main App updateViewerCount OBS Integration", () => {
       ) => void;
 
       beforeEach(() => {
-        const testAppRuntimeWithoutSystem = {
+        const testAppRuntimeWithoutSystem: AppRuntime = {
           viewerCountSystem: null,
-          updateViewerCount(platform, count) {
-            if (this.viewerCountSystem) {
-              const previousCount =
-                this.viewerCountSystem.counts[platform.toLowerCase()];
-              this.viewerCountSystem.counts[platform.toLowerCase()] = count;
-
-              const notificationPromise =
-                this.viewerCountSystem.notifyObservers(
-                  platform,
-                  count,
-                  previousCount,
-                );
-              if (notificationPromise && notificationPromise.catch) {
-                notificationPromise.catch(() => {});
-              }
-            }
-          },
+          updateViewerCount,
         };
 
         updateViewerCountMethodWithoutSystem =
@@ -150,7 +150,7 @@ describe("Main App updateViewerCount OBS Integration", () => {
 
         updateViewerCountMethod(platform, viewerCount);
 
-        await new Promise((resolve) => setImmediate(resolve));
+        await Promise.resolve();
 
         expect(mockViewerCountSystem.counts.tiktok).toBe(viewerCount);
         expect(mockViewerCountSystem.notifyObservers.mock.calls).toEqual([
@@ -177,7 +177,7 @@ describe("Main App updateViewerCount OBS Integration", () => {
     });
 
     it("emits observer updates for real-time counts across all platforms", () => {
-      const updates = [
+      const updates: readonly { platform: ViewerPlatform; count: number }[] = [
         { platform: "tiktok", count: 4 },
         { platform: "twitch", count: 1 },
         { platform: "youtube", count: 2 },
