@@ -26,8 +26,16 @@ type CommandParserUnderTest = {
   getVFXConfig: (
     command: string | null | undefined,
     message: string | null | undefined,
-  ) => VfxConfigResult;
-  getMatchingFarewell: (input: string, token: string) => string;
+  ) => VfxConfigResult | null;
+  getMatchingFarewell: (input: string, token: string) => string | null;
+};
+
+const expectVfxConfig = (result: VfxConfigResult | null): VfxConfigResult => {
+  expect(result).not.toBeNull();
+  if (result === null) {
+    throw new Error("Expected VFX config result");
+  }
+  return result;
 };
 
 describe("Keyword Parsing Integration", () => {
@@ -69,17 +77,17 @@ describe("Keyword Parsing Integration", () => {
         "!hello",
         "!hello everyone!",
       );
-      expect(prefixResult).toBeDefined();
-      expect(prefixResult.filename).toBe("hello-there");
-      expect(prefixResult.command).toBe("!hello");
+      const prefixConfig = expectVfxConfig(prefixResult);
+      expect(prefixConfig.filename).toBe("hello-there");
+      expect(prefixConfig.command).toBe("!hello");
 
       const keywordResult = commandParser.getVFXConfig(
         "i",
         "I am a mod and I approve this message",
       );
-      expect(keywordResult).toBeDefined();
-      expect(keywordResult.filename).toBe("im-a-mod");
-      expect(keywordResult.keyword).toBe("mod");
+      const keywordConfig = expectVfxConfig(keywordResult);
+      expect(keywordConfig.filename).toBe("im-a-mod");
+      expect(keywordConfig.keyword).toBe("mod");
     });
 
     test("should detect farewell commands when enabled", () => {
@@ -102,9 +110,9 @@ describe("Keyword Parsing Integration", () => {
         "!hello",
         "!hello everyone!",
       );
-      expect(prefixResult).toBeDefined();
-      expect(prefixResult.filename).toBe("hello-there");
-      expect(prefixResult.command).toBe("!hello");
+      const prefixConfig = expectVfxConfig(prefixResult);
+      expect(prefixConfig.filename).toBe("hello-there");
+      expect(prefixConfig.command).toBe("!hello");
 
       const keywordResult = commandParser.getVFXConfig(
         "i",
@@ -178,10 +186,10 @@ describe("Keyword Parsing Integration", () => {
         "!hello hehe this is funny",
       );
 
-      expect(mixedResult).toBeDefined();
-      expect(mixedResult.filename).toBe("hello-there");
-      expect(mixedResult.command).toBe("!hello");
-      expect(mixedResult.keyword).toBeNull();
+      const mixedConfig = expectVfxConfig(mixedResult);
+      expect(mixedConfig.filename).toBe("hello-there");
+      expect(mixedConfig.command).toBe("!hello");
+      expect(mixedConfig.keyword).toBeNull();
     });
 
     test("should handle case sensitivity correctly when keyword parsing is disabled", () => {
@@ -192,15 +200,15 @@ describe("Keyword Parsing Integration", () => {
         "!HELLO",
         "!HELLO everyone!",
       );
-      expect(upperResult).toBeDefined();
-      expect(upperResult.filename).toBe("hello-there");
+      const upperConfig = expectVfxConfig(upperResult);
+      expect(upperConfig.filename).toBe("hello-there");
 
       const mixedResult = commandParser.getVFXConfig(
         "!Hello",
         "!Hello everyone!",
       );
-      expect(mixedResult).toBeDefined();
-      expect(mixedResult.filename).toBe("hello-there");
+      const mixedConfig = expectVfxConfig(mixedResult);
+      expect(mixedConfig.filename).toBe("hello-there");
     });
 
     test("should handle edge cases when keyword parsing is disabled", () => {

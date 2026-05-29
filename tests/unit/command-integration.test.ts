@@ -10,10 +10,31 @@ setupAutomatedCleanup({
 });
 
 import { CommandParser, runCommand } from "../../src/chat/commands";
+import { OBSEffectsManager } from "../../src/obs/effects";
+
+type CommandConfigFixture = {
+  commands: Record<string, unknown>;
+  farewell: Record<string, unknown>;
+  general: { keywordParsingEnabled: boolean };
+  vfx: { filePath: string };
+};
+
+type ParsedCommandResult = NonNullable<ReturnType<CommandParser["parse"]>>;
+type EffectsManagerUnderTest = NonNullable<Parameters<typeof runCommand>[2]>;
+
+const expectParsedCommand = (
+  result: ReturnType<CommandParser["parse"]>,
+): ParsedCommandResult => {
+  expect(result).toBeTruthy();
+  if (result === null) {
+    throw new Error("Expected command parser result");
+  }
+  return result;
+};
 
 describe("Command Integration System", () => {
-  let commandParser;
-  let configFixture;
+  let commandParser: CommandParser;
+  let configFixture: CommandConfigFixture;
 
   beforeEach(() => {
     configFixture = {
@@ -95,7 +116,6 @@ describe("Command Integration System", () => {
         duration: 5000,
         filename: "hello-there",
         mediaSource: "vfx bottom green",
-        filename: "hello-there",
         vfxFilePath: "/path/to/vfx",
         keyword: null,
         matchType: "trigger",
@@ -123,7 +143,6 @@ describe("Command Integration System", () => {
         keyword: "mod",
         filename: "im-a-mod",
         mediaSource: "vfx top",
-        filename: "im-a-mod",
         vfxFilePath: "/path/to/vfx",
         matchType: "keyword",
         username: "moduser",
@@ -188,7 +207,6 @@ describe("Command Integration System", () => {
         duration: 5000,
         filename: "hello-there",
         mediaSource: "vfx bottom green",
-        filename: "hello-there",
         vfxFilePath: "/path/to/vfx",
         keyword: null,
         matchType: "trigger",
@@ -208,7 +226,6 @@ describe("Command Integration System", () => {
         keyword: "mod",
         filename: "im-a-mod",
         mediaSource: "vfx top",
-        filename: "im-a-mod",
         vfxFilePath: "/path/to/vfx",
         matchType: "keyword",
       });
@@ -246,7 +263,6 @@ describe("Command Integration System", () => {
         duration: 5000,
         filename: "hackerman2",
         mediaSource: "vfx center green",
-        filename: "hackerman2",
         vfxFilePath: "/path/to/vfx",
         keyword: null,
         matchType: "trigger",
@@ -319,8 +335,7 @@ describe("Command Integration System", () => {
 
       const result = commandParser.parse(data, false);
 
-      expect(result).toBeTruthy();
-      expect(result.type).toBe("vfx");
+      expect(expectParsedCommand(result).type).toBe("vfx");
     });
 
     test("should handle unicode and emoji in messages", () => {
@@ -334,8 +349,7 @@ describe("Command Integration System", () => {
 
       const result = commandParser.parse(data, false);
 
-      expect(result).toBeTruthy();
-      expect(result.type).toBe("vfx");
+      expect(expectParsedCommand(result).type).toBe("vfx");
     });
 
     test("should handle special characters in keywords", () => {
@@ -349,8 +363,7 @@ describe("Command Integration System", () => {
 
       const result = commandParser.parse(data, false);
 
-      expect(result).toBeTruthy();
-      expect(result.type).toBe("vfx");
+      expect(expectParsedCommand(result).type).toBe("vfx");
     });
 
     test("should handle malformed command configuration", () => {
@@ -407,16 +420,15 @@ describe("Command Integration System", () => {
     });
 
     test("should handle large command configuration efficiently", () => {
-      const largeConfig = {
+      const largeConfig: CommandConfigFixture = {
         commands: {},
         farewell: {},
+        vfx: { filePath: "/path/to/vfx" },
         general: { keywordParsingEnabled: true },
       };
       for (let i = 0; i < 100; i++) {
         largeConfig.commands[`command-${i}`] = `!cmd${i}, vfx top, keyword${i}`;
       }
-      largeConfig.vfx = { filePath: "/path/to/vfx" };
-
       const largeParser = new CommandParser(largeConfig);
 
       const startTime = testClock.now();
@@ -466,9 +478,14 @@ describe("Command Integration System", () => {
     });
 
     test("runs command payloads through effects manager with defaults", async () => {
-      const calls = [];
-      const effectsManager = {
-        playMediaInOBS: async (...args) => calls.push(args),
+      const calls: unknown[][] = [];
+      const effectsManager: EffectsManagerUnderTest = Object.create(
+        OBSEffectsManager.prototype,
+      );
+      effectsManager.playMediaInOBS = async (
+        ...args: Parameters<EffectsManagerUnderTest["playMediaInOBS"]>
+      ): Promise<void> => {
+        calls.push(args);
       };
 
       await runCommand(
@@ -483,19 +500,29 @@ describe("Command Integration System", () => {
       );
 
       expect(calls).toHaveLength(1);
-      expect(calls[0][0]).toEqual({
+      const firstCall = calls.at(0);
+      expect(firstCall).toBeDefined();
+      if (firstCall === undefined) {
+        throw new Error("Expected effects manager to be called");
+      }
+      expect(firstCall[0]).toEqual({
         mediaSource: "test-source",
         filename: "test-file",
         vfxFilePath: "/fallback/vfx",
         duration: 5000,
       });
-      expect(calls[0][1]).toBe(true);
+      expect(firstCall[1]).toBe(true);
     });
 
     test("skips invalid command payloads and surfaces execution failures", async () => {
-      const calls = [];
-      const effectsManager = {
-        playMediaInOBS: async (...args) => calls.push(args),
+      const calls: unknown[][] = [];
+      const effectsManager: EffectsManagerUnderTest = Object.create(
+        OBSEffectsManager.prototype,
+      );
+      effectsManager.playMediaInOBS = async (
+        ...args: Parameters<EffectsManagerUnderTest["playMediaInOBS"]>
+      ): Promise<void> => {
+        calls.push(args);
       };
 
       await runCommand({}, "/fallback/vfx", effectsManager);
@@ -503,10 +530,11 @@ describe("Command Integration System", () => {
 
       expect(calls).toHaveLength(0);
 
-      const failingEffectsManager = {
-        playMediaInOBS: async () => {
+      const failingEffectsManager: EffectsManagerUnderTest = Object.create(
+        OBSEffectsManager.prototype,
+      );
+      failingEffectsManager.playMediaInOBS = async () => {
           throw new Error("test-run-command-failure");
-        },
       };
 
       await expect(

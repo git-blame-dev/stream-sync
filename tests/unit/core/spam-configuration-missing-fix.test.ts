@@ -9,7 +9,6 @@ import { initializeTestLogging } from "../../helpers/test-setup";
 import { config as mainConfig } from "../../../src/core/config";
 import { PRIORITY_LEVELS } from "../../../src/core/constants";
 import NotificationManager from "../../../src/notifications/NotificationManager";
-import { createTextProcessingManager } from "../../../src/utils/text-processing";
 
 type LoggerLike = {
   debug: (...args: unknown[]) => void;
@@ -30,6 +29,24 @@ const getMainConfig = () => {
 };
 
 type MockFn = ReturnType<typeof createMockFn>;
+type QueueItem = Record<string, unknown>;
+type AddItemMockFn = ReturnType<typeof createMockFn<[item: QueueItem], void>>;
+type GetQueueLengthMockFn = ReturnType<typeof createMockFn<[], number>>;
+type DonationSpamArgs = [
+  userId: unknown,
+  username: unknown,
+  perGiftAmount: number,
+  giftType: unknown,
+  giftCount: number,
+  platform: string,
+];
+type SpamDecision = { shouldShow: boolean };
+type DonationSpamMockFn = ReturnType<
+  typeof createMockFn<DonationSpamArgs, SpamDecision>
+>;
+type AsyncVfxConfigMockFn = ReturnType<
+  typeof createMockFn<[commandKey: string, message: string | null], Promise<unknown>>
+>;
 
 initializeTestLogging();
 
@@ -56,19 +73,19 @@ describe("Spam Detection Service Integration Tests", () => {
     };
   };
   let mockDisplayQueue: {
-    addItem: MockFn;
+    addItem: AddItemMockFn;
     processQueue: MockFn;
+    getQueueLength: GetQueueLengthMockFn;
   };
   let mockSpamDetector: {
-    handleDonationSpam: MockFn;
+    handleDonationSpam: DonationSpamMockFn;
   };
   let mockConfig: ReturnType<typeof createConfigFixture>;
-  let mockTextProcessing: ReturnType<typeof createTextProcessingManager>;
   let mockObsGoals: {
     processDonationGoal: MockFn;
   };
   let mockVfxCommandService: {
-    getVFXConfig: MockFn;
+    getVFXConfig: AsyncVfxConfigMockFn;
   };
   beforeEach(() => {
     mockLogger = noOpLogger;
@@ -86,19 +103,19 @@ describe("Spam Detection Service Integration Tests", () => {
     };
 
     mockDisplayQueue = {
-      addItem: createMockFn(),
+      addItem: createMockFn<[item: QueueItem], void>(() => undefined),
       processQueue: createMockFn(),
+      getQueueLength: createMockFn(() => 0),
     };
 
     mockSpamDetector = {
-      handleDonationSpam: createMockFn().mockReturnValue({ shouldShow: true }),
+      handleDonationSpam: createMockFn<DonationSpamArgs, SpamDecision>(() => ({ shouldShow: true })),
     };
 
     mockConfig = createConfigFixture();
 
-    mockTextProcessing = createTextProcessingManager({ logger: mockLogger });
     mockObsGoals = { processDonationGoal: createMockFn() };
-    mockVfxCommandService = { getVFXConfig: createMockFn(async () => null) };
+    mockVfxCommandService = { getVFXConfig: createMockFn<[commandKey: string, message: string | null], Promise<unknown>>(async () => null) };
   });
 
   describe("when spam detection configuration is available", () => {
@@ -158,7 +175,6 @@ describe("Spam Detection Service Integration Tests", () => {
         constants: mockConstants,
         donationSpamDetector: mockSpamDetector,
         config: mockConfig,
-        textProcessing: mockTextProcessing,
         obsGoals: mockObsGoals,
         vfxCommandService: mockVfxCommandService,
       });
@@ -197,7 +213,6 @@ describe("Spam Detection Service Integration Tests", () => {
         constants: mockConstants,
         donationSpamDetector: mockSpamDetector,
         config: mockConfig,
-        textProcessing: mockTextProcessing,
         obsGoals: mockObsGoals,
         vfxCommandService: mockVfxCommandService,
       });
@@ -240,7 +255,6 @@ describe("Spam Detection Service Integration Tests", () => {
         constants: mockConstants,
         donationSpamDetector: mockSpamDetector,
         config: mockConfig,
-        textProcessing: mockTextProcessing,
         obsGoals: mockObsGoals,
         vfxCommandService: mockVfxCommandService,
       });
@@ -280,7 +294,6 @@ describe("Spam Detection Service Integration Tests", () => {
         eventBus: mockEventBus,
         constants: mockConstants,
         config: mockConfig,
-        textProcessing: mockTextProcessing,
         obsGoals: mockObsGoals,
         vfxCommandService: mockVfxCommandService,
       });
@@ -317,7 +330,6 @@ describe("Spam Detection Service Integration Tests", () => {
         eventBus: mockEventBus,
         constants: mockConstants,
         config: mockConfig,
-        textProcessing: mockTextProcessing,
         obsGoals: mockObsGoals,
         vfxCommandService: mockVfxCommandService,
       });
@@ -356,7 +368,6 @@ describe("Spam Detection Service Integration Tests", () => {
         constants: mockConstants,
         donationSpamDetector: mockSpamDetector,
         config: mockConfig,
-        textProcessing: mockTextProcessing,
         obsGoals: mockObsGoals,
         vfxCommandService: mockVfxCommandService,
       });
@@ -426,7 +437,6 @@ describe("Spam Detection Service Integration Tests", () => {
         constants: mockConstants,
         donationSpamDetector: mockSpamDetector,
         config: mockConfig,
-        textProcessing: mockTextProcessing,
         obsGoals: mockObsGoals,
         vfxCommandService: mockVfxCommandService,
       });
@@ -467,7 +477,6 @@ describe("Spam Detection Service Integration Tests", () => {
         constants: mockConstants,
         donationSpamDetector: mockSpamDetector,
         config: mockConfig,
-        textProcessing: mockTextProcessing,
         obsGoals: mockObsGoals,
         vfxCommandService: mockVfxCommandService,
       });

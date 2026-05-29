@@ -431,6 +431,7 @@ describe("Spam Detection", () => {
     it("should combine notifications into one aggregated message", () => {
       const aggregationTimer = safeSetTimeout(() => {}, 1000);
       const tracker = {
+        userId: "user1",
         notifications: [
           {
             timestamp: 1700000000000,
@@ -471,6 +472,7 @@ describe("Spam Detection", () => {
 
     it("should return empty aggregation result when notifications are missing", () => {
       const tracker = {
+        userId: "user1",
         notifications: [],
         aggregatedCount: 0,
         lastReset: 1700000000000,

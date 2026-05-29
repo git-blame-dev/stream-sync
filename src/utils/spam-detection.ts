@@ -47,6 +47,7 @@ type DonationNotification = {
 };
 
 type UserSpamTracker = {
+    userId: string;
     notifications: DonationNotification[];
     aggregatedCount: number;
     lastReset: number;
@@ -188,15 +189,23 @@ class DonationSpamDetection {
     }
 
     handleDonationSpam(
-        userId: string,
-        username: string,
+        userId: string | null | undefined,
+        username: string | null | undefined,
         unitAmount: number,
         giftType: string,
         giftCount: number,
         platform = 'Unknown'
     ) {
+        const normalizedUserId = typeof userId === 'string' && userId.trim().length > 0 ? userId : 'unknown-user';
+        const normalizedUsername = typeof username === 'string' && username.trim().length > 0 ? username : 'Unknown User';
+        const normalizedPlatformKey = platform.toLowerCase();
+        const normalizedIdentityKey = normalizedUserId === 'unknown-user'
+            ? normalizedUsername.toLowerCase().replace(/\s+/g, '-')
+            : normalizedUserId;
+        const trackerKey = `${normalizedPlatformKey}:${normalizedIdentityKey}`;
+
         try {
-            this.logger.debug(`Processing ${platform} donation: ${username} -> ${giftType} x${giftCount} (${unitAmount})`, 'spam-detection');
+            this.logger.debug(`Processing ${platform} donation: ${normalizedUsername} -> ${giftType} x${giftCount} (${unitAmount})`, 'spam-detection');
 
             const platformConfig = this.config.getPlatformConfig(platform);
 
@@ -208,26 +217,27 @@ class DonationSpamDetection {
             const now = Date.now();
             const windowMs = platformConfig.detectionWindow * 1000;
 
-            if (!this.donationSpamTracker[userId]) {
-                this.donationSpamTracker[userId] = {
+            if (!this.donationSpamTracker[trackerKey]) {
+                this.donationSpamTracker[trackerKey] = {
+                    userId: normalizedUserId,
                     notifications: [],
                     aggregatedCount: 0,
                     lastReset: now,
                     aggregationTimer: null,
-                    username,
+                    username: normalizedUsername,
                     platform
                 };
-                this.logger.debug(`Initialized tracking for user: ${userId}`, 'spam-detection');
+                this.logger.debug(`Initialized tracking for user: ${trackerKey}`, 'spam-detection');
             }
 
-            const userTracker = this.donationSpamTracker[userId];
+            const userTracker = this.donationSpamTracker[trackerKey];
             const originalCount = userTracker.notifications.length;
             userTracker.notifications = userTracker.notifications.filter(
                 (notification) => (now - notification.timestamp) <= windowMs
             );
 
             if (originalCount !== userTracker.notifications.length) {
-                this.logger.debug(`Cleaned ${originalCount - userTracker.notifications.length} old notifications for ${userId}`, 'spam-detection');
+                this.logger.debug(`Cleaned ${originalCount - userTracker.notifications.length} old notifications for ${trackerKey}`, 'spam-detection');
             }
 
             userTracker.notifications.push({
@@ -239,47 +249,47 @@ class DonationSpamDetection {
             });
 
             const currentNotificationCount = userTracker.notifications.length;
-            this.logger.debug(`${username}: ${currentNotificationCount}/${platformConfig.maxIndividualNotifications} notifications in window`, 'spam-detection');
+            this.logger.debug(`${normalizedUsername}: ${currentNotificationCount}/${platformConfig.maxIndividualNotifications} notifications in window`, 'spam-detection');
 
             if (currentNotificationCount <= platformConfig.maxIndividualNotifications) {
                 this.logger.info(
-                    `${platform} - ${username}: Individual notification ${currentNotificationCount}/${platformConfig.maxIndividualNotifications} - showing normally`,
+                    `${platform} - ${normalizedUsername}: Individual notification ${currentNotificationCount}/${platformConfig.maxIndividualNotifications} - showing normally`,
                     'spam-detection'
                 );
                 return { shouldShow: true, aggregatedMessage: null };
             }
 
             userTracker.aggregatedCount += giftCount;
-            userTracker.username = username;
+            userTracker.username = normalizedUsername;
             userTracker.platform = platform;
 
-            this.logger.debug(`Spam threshold exceeded - aggregating notifications for ${userId}`, 'spam-detection');
+            this.logger.debug(`Spam threshold exceeded - aggregating notifications for ${trackerKey}`, 'spam-detection');
 
             if (!userTracker.aggregationTimer) {
-                this.logger.info(`${platform} - ${username}: Starting aggregation timer (${platformConfig.detectionWindow}s)`, 'spam-detection');
+                this.logger.info(`${platform} - ${normalizedUsername}: Starting aggregation timer (${platformConfig.detectionWindow}s)`, 'spam-detection');
                 userTracker.aggregationTimer = safeSetTimeout(() => {
-                    this.processAggregatedDonation(userId, userTracker);
+                    this.processAggregatedDonation(trackerKey, userTracker);
                 }, platformConfig.detectionWindow * 1000);
             }
 
-            this.logger.info(`${platform} - ${username}: Suppressing individual notification ${currentNotificationCount} (aggregating)`, 'spam-detection');
+            this.logger.info(`${platform} - ${normalizedUsername}: Suppressing individual notification ${currentNotificationCount} (aggregating)`, 'spam-detection');
             return { shouldShow: false, aggregatedMessage: null };
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
-            this.handleSpamDetectionError(`Error processing donation spam for ${username}: ${errorMessage}`, error, {
-                userId,
+            this.handleSpamDetectionError(`Error processing donation spam for ${normalizedUsername}: ${errorMessage}`, error, {
+                userId: trackerKey,
                 platform,
                 giftType
             });
-            this.logger.debug(`Error processing donation spam for ${username}: ${errorMessage}`, 'spam-detection');
+            this.logger.debug(`Error processing donation spam for ${normalizedUsername}: ${errorMessage}`, 'spam-detection');
             return { shouldShow: true, aggregatedMessage: null };
         }
     }
 
-    processAggregatedDonation(userId: string, userTracker: UserSpamTracker) {
+    processAggregatedDonation(trackerKey: string, userTracker: UserSpamTracker) {
         try {
             if (!userTracker.notifications || userTracker.notifications.length === 0) {
-                this.logger.debug(`No notifications to aggregate for user ${userId}`, 'spam-detection');
+                this.logger.debug(`No notifications to aggregate for user ${trackerKey}`, 'spam-detection');
                 return {
                     shouldShow: false,
                     aggregatedMessage: null,
@@ -300,7 +310,7 @@ class DonationSpamDetection {
 
             if (this.onAggregatedDonation) {
                 this.onAggregatedDonation({
-                    userId,
+                    userId: userTracker.userId,
                     username: userTracker.username,
                     platform: userTracker.platform,
                     totalCoins,
@@ -320,7 +330,7 @@ class DonationSpamDetection {
             userTracker.aggregatedCount = 0;
             userTracker.lastReset = Date.now();
 
-            this.logger.debug(`Aggregated donation processed and tracking reset for user ${userId}`, 'spam-detection');
+            this.logger.debug(`Aggregated donation processed and tracking reset for user ${trackerKey}`, 'spam-detection');
 
             return {
                 shouldShow: true,
@@ -330,7 +340,7 @@ class DonationSpamDetection {
             };
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
-            this.handleSpamDetectionError(`Error processing aggregated donation for user ${userId}: ${errorMessage}`, error, { userId });
+            this.handleSpamDetectionError(`Error processing aggregated donation for user ${trackerKey}: ${errorMessage}`, error, { userId: trackerKey });
             return {
                 shouldShow: false,
                 aggregatedMessage: null,
@@ -402,6 +412,11 @@ class DonationSpamDetection {
 
     resetTracking(): void {
         for (const userId in this.donationSpamTracker) {
+            const userTracker = this.donationSpamTracker[userId];
+            if (userTracker?.aggregationTimer) {
+                clearTimeout(userTracker.aggregationTimer);
+                userTracker.aggregationTimer = null;
+            }
             delete this.donationSpamTracker[userId];
         }
         this.logger.debug('All tracking data reset', 'spam-detection');

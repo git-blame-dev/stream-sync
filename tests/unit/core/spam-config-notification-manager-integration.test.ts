@@ -6,9 +6,31 @@ import { noOpLogger } from "../../helpers/mock-factories";
 import { config } from "../../../src/core/config";
 import { PRIORITY_LEVELS } from "../../../src/core/constants";
 import NotificationManager from "../../../src/notifications/NotificationManager";
-import { createTextProcessingManager } from "../../../src/utils/text-processing";
 
 type MockFn = ReturnType<typeof createMockFn>;
+type QueueItem = Record<string, unknown>;
+type AddItemMockFn = ReturnType<typeof createMockFn<[item: QueueItem], void>>;
+type GetQueueLengthMockFn = ReturnType<typeof createMockFn<[], number>>;
+type DonationSpamArgs = [
+  userId: unknown,
+  username: unknown,
+  perGiftAmount: number,
+  giftType: unknown,
+  giftCount: number,
+  platform: string,
+];
+type SpamDecision = { shouldShow: boolean };
+type DonationSpamMockFn = ReturnType<
+  typeof createMockFn<DonationSpamArgs, SpamDecision>
+>;
+type ConfigWithSpam = {
+  spam: {
+    enabled: boolean;
+    lowValueThreshold: number;
+    detectionWindow: number;
+    maxIndividualNotifications: number;
+  };
+};
 
 type NotificationManagerInstance = {
   handleNotification: (
@@ -43,22 +65,24 @@ describe("Spam Detection Service Integration Tests - Modernized", () => {
 
   let notificationManager: NotificationManagerInstance;
   let mockDisplayQueue: {
-    addItem: MockFn;
+    addItem: AddItemMockFn;
     processQueue: MockFn;
+    getQueueLength: GetQueueLengthMockFn;
   };
   let mockSpamDetector: {
-    handleDonationSpam: MockFn;
+    handleDonationSpam: DonationSpamMockFn;
   };
   let testConfig: ReturnType<typeof createConfigFixture>;
 
   beforeEach(() => {
     mockDisplayQueue = {
-      addItem: createMockFn(),
+      addItem: createMockFn<[item: QueueItem], void>(() => undefined),
       processQueue: createMockFn(),
+      getQueueLength: createMockFn(() => 0),
     };
 
     mockSpamDetector = {
-      handleDonationSpam: createMockFn().mockReturnValue({ shouldShow: true }),
+      handleDonationSpam: createMockFn<DonationSpamArgs, SpamDecision>(() => ({ shouldShow: true })),
     };
 
     testConfig = createConfigFixture({
@@ -76,9 +100,6 @@ describe("Spam Detection Service Integration Tests - Modernized", () => {
         on: createMockFn(),
         off: createMockFn(),
       };
-      const textProcessing = createTextProcessingManager({
-        logger: noOpLogger,
-      });
       notificationManager = new NotificationManager({
         displayQueue: mockDisplayQueue,
         logger: noOpLogger,
@@ -86,7 +107,6 @@ describe("Spam Detection Service Integration Tests - Modernized", () => {
         constants: mockConstants,
         config: testConfig,
         donationSpamDetector: mockSpamDetector,
-        textProcessing,
         obsGoals: { processDonationGoal: createMockFn() },
         vfxCommandService: { getVFXConfig: createMockFn(async () => null) },
       });
@@ -218,7 +238,6 @@ describe("Spam Detection Service Integration Tests - Modernized", () => {
         eventBus: mockEventBus,
         constants: mockConstants,
         config: testConfig,
-        textProcessing: createTextProcessingManager({ logger: noOpLogger }),
         obsGoals: { processDonationGoal: createMockFn() },
         vfxCommandService: { getVFXConfig: createMockFn(async () => null) },
       });
@@ -307,11 +326,13 @@ describe("Spam Detection Service Integration Tests - Modernized", () => {
 
   describe("when verifying spam configuration availability", () => {
     it("should have spam configuration accessible from config module", () => {
-      expect(config.spam).toBeDefined();
-      expect(config.spam.enabled).toBeDefined();
-      expect(config.spam.lowValueThreshold).toBeDefined();
-      expect(config.spam.detectionWindow).toBeDefined();
-      expect(config.spam.maxIndividualNotifications).toBeDefined();
+      const typedConfig = config as unknown as ConfigWithSpam;
+
+      expect(typedConfig.spam).toBeDefined();
+      expect(typedConfig.spam.enabled).toBeDefined();
+      expect(typedConfig.spam.lowValueThreshold).toBeDefined();
+      expect(typedConfig.spam.detectionWindow).toBeDefined();
+      expect(typedConfig.spam.maxIndividualNotifications).toBeDefined();
     });
   });
 
@@ -329,7 +350,6 @@ describe("Spam Detection Service Integration Tests - Modernized", () => {
         constants: mockConstants,
         config: testConfig,
         donationSpamDetector: mockSpamDetector,
-        textProcessing: createTextProcessingManager({ logger: noOpLogger }),
         obsGoals: { processDonationGoal: createMockFn() },
         vfxCommandService: { getVFXConfig: createMockFn(async () => null) },
       });
@@ -396,7 +416,6 @@ describe("Spam Detection Service Integration Tests - Modernized", () => {
         constants: mockConstants,
         config: testConfig,
         donationSpamDetector: mockSpamDetector,
-        textProcessing: createTextProcessingManager({ logger: noOpLogger }),
         obsGoals: { processDonationGoal: createMockFn() },
         vfxCommandService: { getVFXConfig: createMockFn(async () => null) },
       });
@@ -443,7 +462,6 @@ describe("Spam Detection Service Integration Tests - Modernized", () => {
         eventBus: mockEventBus,
         constants: mockConstants,
         config: testConfig,
-        textProcessing: createTextProcessingManager({ logger: noOpLogger }),
         obsGoals: { processDonationGoal: createMockFn() },
         vfxCommandService: { getVFXConfig: createMockFn(async () => null) },
       });

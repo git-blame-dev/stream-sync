@@ -14,8 +14,8 @@ setupAutomatedCleanup({
   logPerformanceMetrics: true,
 });
 
-const testWithTimeout = (name, fn) =>
-  test(name, fn, { timeout: TEST_TIMEOUTS.INTEGRATION });
+const testWithTimeout = (name: string, fn: () => void | Promise<void>) =>
+  test(name, fn, { timeout: TEST_TIMEOUTS.MEDIUM });
 
 type CheckGlobalCommandCooldown = (
   commandName: string | null | undefined,
