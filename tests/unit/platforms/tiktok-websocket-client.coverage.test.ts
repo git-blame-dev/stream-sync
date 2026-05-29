@@ -5,12 +5,31 @@ import {
   useRealTimers,
   advanceTimersByTime,
 } from "../../helpers/bun-timers";
+import { safeSetInterval } from "../../../src/utils/timeout-validator.ts";
+import type { TikTokWebSocketClient as TikTokWebSocketClientInstance } from "../../../src/platforms/tiktok-websocket-client.ts";
+
+type TikTokWebSocketClientConstructor = typeof import("../../../src/platforms/tiktok-websocket-client.ts").TikTokWebSocketClient;
+
+type MockWebSocketConstructor = {
+  new (url: string, options?: unknown): MockWebSocket;
+};
+
+type WebSocketClientOptions = {
+  apiKey?: string;
+  WebSocketCtor?: MockWebSocketConstructor;
+};
+
+type ConnectedEvent = { roomId?: string; isLive?: boolean };
+type ReconnectingEvent = { attempt: number };
+type RawEvent = { type: string; data?: unknown };
 
 class MockWebSocket extends EventEmitter {
   static CONNECTING = 0;
   static OPEN = 1;
   static CLOSING = 2;
   static CLOSED = 3;
+  readyState: number;
+  pingCalled: boolean;
 
   constructor() {
     super();
@@ -29,9 +48,9 @@ class MockWebSocket extends EventEmitter {
 }
 
 describe("TikTokWebSocketClient coverage", () => {
-  let TikTokWebSocketClient: any;
-  let mockWs: any;
-  let client: any;
+  let TikTokWebSocketClient: TikTokWebSocketClientConstructor;
+  let mockWs: MockWebSocket | null;
+  let client: TikTokWebSocketClientInstance;
 
   beforeEach(() => {
     useFakeTimers();
@@ -46,7 +65,13 @@ describe("TikTokWebSocketClient coverage", () => {
     if (client) {
       client.autoReconnect = false;
       if (client.ws) {
-        client.ws.removeAllListeners();
+        const activeSocket = client.ws;
+        if (
+          "removeAllListeners" in activeSocket &&
+          typeof activeSocket.removeAllListeners === "function"
+        ) {
+          activeSocket.removeAllListeners();
+        }
         client.ws = null;
       }
       client.stopPingInterval();
@@ -55,10 +80,26 @@ describe("TikTokWebSocketClient coverage", () => {
     }
   });
 
-  const createClient = (username = "testuser", options = {}) => {
+  const requireMockWebSocket = (): MockWebSocket => {
+    if (!mockWs) {
+      throw new Error("Expected test WebSocket to be created");
+    }
+    return mockWs;
+  };
+
+  const requireClient = (): TikTokWebSocketClientInstance => {
+    if (!client) {
+      throw new Error("Expected TikTokWebSocketClient test instance");
+    }
+    return client;
+  };
+
+  const createClient = (username = "testuser", options: WebSocketClientOptions = {}) => {
     const CapturingWebSocket = class extends MockWebSocket {
-      constructor(...args) {
-        super(...args);
+      constructor(url: string, websocketOptions?: unknown) {
+        super();
+        void url;
+        void websocketOptions;
         mockWs = this;
       }
     };
@@ -66,7 +107,7 @@ describe("TikTokWebSocketClient coverage", () => {
       WebSocketCtor: CapturingWebSocket,
       ...options,
     });
-    return client;
+    return requireClient();
   };
 
   describe("connect state guards", () => {
@@ -92,9 +133,9 @@ describe("TikTokWebSocketClient coverage", () => {
 
   describe("API key handling", () => {
     it("includes apiKey in URL when provided", async () => {
-      let capturedUrl = null;
+      let capturedUrl: string | null = null;
       const TrackingWebSocket = class extends MockWebSocket {
-        constructor(url) {
+        constructor(url: string) {
           super();
           capturedUrl = url;
           mockWs = this;
@@ -106,8 +147,8 @@ describe("TikTokWebSocketClient coverage", () => {
       });
 
       const connectPromise = client.connect();
-      mockWs.emit("open");
-      mockWs.emit(
+      requireMockWebSocket().emit("open");
+      requireMockWebSocket().emit(
         "message",
         Buffer.from(
           JSON.stringify({
@@ -118,19 +159,23 @@ describe("TikTokWebSocketClient coverage", () => {
       );
       await connectPromise;
 
-      expect(capturedUrl).toContain("apiKey=test-api-key");
+      if (capturedUrl === null) {
+        throw new Error("Expected WebSocket URL to be captured");
+      }
+      const capturedWebSocketUrl = String(capturedUrl);
+      expect(capturedWebSocketUrl).toContain("apiKey=test-api-key");
     });
   });
 
   describe("non-array message handling", () => {
     it("handles single message payload without messages array", async () => {
       createClient();
-      const connectedEvents = [];
+      const connectedEvents: ConnectedEvent[] = [];
       client.on("connected", (data) => connectedEvents.push(data));
 
       const connectPromise = client.connect();
-      mockWs.emit("open");
-      mockWs.emit(
+      requireMockWebSocket().emit("open");
+      requireMockWebSocket().emit(
         "message",
         Buffer.from(
           JSON.stringify({
@@ -149,12 +194,12 @@ describe("TikTokWebSocketClient coverage", () => {
   describe("close code handling", () => {
     it("emits error and disables reconnect for code 4429", async () => {
       createClient();
-      const errors = [];
+      const errors: Error[] = [];
       client.on("error", (err) => errors.push(err));
 
       const connectPromise = client.connect();
-      mockWs.emit("open");
-      mockWs.emit("close", 4429, "Rate limited");
+      requireMockWebSocket().emit("open");
+      requireMockWebSocket().emit("close", 4429, "Rate limited");
 
       await expect(connectPromise).rejects.toThrow();
       expect(
@@ -165,12 +210,12 @@ describe("TikTokWebSocketClient coverage", () => {
 
     it("emits error and disables reconnect for code 4401", async () => {
       createClient();
-      const errors = [];
+      const errors: Error[] = [];
       client.on("error", (err) => errors.push(err));
 
       const connectPromise = client.connect();
-      mockWs.emit("open");
-      mockWs.emit("close", 4401, "Invalid config");
+      requireMockWebSocket().emit("open");
+      requireMockWebSocket().emit("close", 4401, "Invalid config");
 
       await expect(connectPromise).rejects.toThrow();
       expect(
@@ -181,28 +226,32 @@ describe("TikTokWebSocketClient coverage", () => {
 
     it("schedules reconnect for recoverable close codes", async () => {
       createClient();
-      const reconnectingEvents = [];
+      const reconnectingEvents: ReconnectingEvent[] = [];
       client.on("reconnecting", (data) => reconnectingEvents.push(data));
 
       const connectPromise = client.connect();
-      mockWs.emit("open");
+      requireMockWebSocket().emit("open");
       client.autoReconnect = true;
-      mockWs.emit("close", 1006, "Abnormal closure");
+      requireMockWebSocket().emit("close", 1006, "Abnormal closure");
 
       await expect(connectPromise).rejects.toThrow();
       expect(reconnectingEvents).toHaveLength(1);
-      expect(reconnectingEvents[0].attempt).toBe(1);
+      const reconnectingEvent = reconnectingEvents[0];
+      if (!reconnectingEvent) {
+        throw new Error("Expected reconnecting event");
+      }
+      expect(reconnectingEvent.attempt).toBe(1);
     });
   });
 
   describe("WebSocket error handling", () => {
     it("emits error and rejects connect on ws error", async () => {
       createClient();
-      const errors = [];
+      const errors: Error[] = [];
       client.on("error", (err) => errors.push(err));
 
       const connectPromise = client.connect();
-      mockWs.emit("error", new Error("WebSocket error"));
+      requireMockWebSocket().emit("error", new Error("WebSocket error"));
 
       await expect(connectPromise).rejects.toThrow("WebSocket error");
       expect(errors).toHaveLength(1);
@@ -212,12 +261,12 @@ describe("TikTokWebSocketClient coverage", () => {
   describe("message parse error", () => {
     it("emits error when message cannot be parsed", async () => {
       createClient();
-      const errors = [];
+      const errors: Error[] = [];
       client.on("error", (err) => errors.push(err));
 
       const connectPromise = client.connect();
-      mockWs.emit("open");
-      mockWs.emit("message", Buffer.from("not valid json"));
+      requireMockWebSocket().emit("open");
+      requireMockWebSocket().emit("message", Buffer.from("not valid json"));
 
       advanceTimersByTime(16000);
       await expect(connectPromise).rejects.toThrow();
@@ -230,7 +279,7 @@ describe("TikTokWebSocketClient coverage", () => {
   describe("event type handling", () => {
     it("ignores workerInfo events", () => {
       createClient();
-      const events = [];
+      const events: unknown[] = [];
       client.on("workerInfo", (data) => events.push(data));
 
       client.handleEvent({ type: "workerInfo", data: {} });
@@ -240,7 +289,7 @@ describe("TikTokWebSocketClient coverage", () => {
 
     it("emits member events for member/join types", () => {
       createClient();
-      const events = [];
+      const events: unknown[] = [];
       client.on("member", (data) => events.push(data));
 
       client.handleEvent({ type: "member", data: { user: "test" } });
@@ -255,7 +304,7 @@ describe("TikTokWebSocketClient coverage", () => {
 
     it("emits like events", () => {
       createClient();
-      const events = [];
+      const events: unknown[] = [];
       client.on("like", (data) => events.push(data));
 
       client.handleEvent({ type: "like", data: { count: 5 } });
@@ -266,8 +315,8 @@ describe("TikTokWebSocketClient coverage", () => {
 
     it("emits follow/share events directly", () => {
       createClient();
-      const followEvents = [];
-      const shareEvents = [];
+      const followEvents: unknown[] = [];
+      const shareEvents: unknown[] = [];
       client.on("follow", (data) => followEvents.push(data));
       client.on("share", (data) => shareEvents.push(data));
 
@@ -280,7 +329,7 @@ describe("TikTokWebSocketClient coverage", () => {
 
     it("emits roomUser events for viewer count types", () => {
       createClient();
-      const events = [];
+      const events: unknown[] = [];
       client.on("roomUser", (data) => events.push(data));
 
       client.handleEvent({ type: "roomUser", data: { count: 100 } });
@@ -296,7 +345,7 @@ describe("TikTokWebSocketClient coverage", () => {
 
     it("emits subscribe events", () => {
       createClient();
-      const events = [];
+      const events: unknown[] = [];
       client.on("subscribe", (data) => events.push(data));
 
       client.handleEvent({ type: "subscribe", data: { months: 3 } });
@@ -306,7 +355,7 @@ describe("TikTokWebSocketClient coverage", () => {
 
     it("emits emote events", () => {
       createClient();
-      const events = [];
+      const events: unknown[] = [];
       client.on("emote", (data) => events.push(data));
 
       client.handleEvent({ type: "emote", data: { emoteId: "emote1" } });
@@ -316,7 +365,7 @@ describe("TikTokWebSocketClient coverage", () => {
 
     it("emits envelope events", () => {
       createClient();
-      const events = [];
+      const events: unknown[] = [];
       client.on("envelope", (data) => events.push(data));
 
       client.handleEvent({ type: "envelope", data: { amount: 100 } });
@@ -326,7 +375,7 @@ describe("TikTokWebSocketClient coverage", () => {
 
     it("emits questionNew events", () => {
       createClient();
-      const events = [];
+      const events: unknown[] = [];
       client.on("questionNew", (data) => events.push(data));
 
       client.handleEvent({ type: "questionNew", data: { question: "test?" } });
@@ -336,8 +385,8 @@ describe("TikTokWebSocketClient coverage", () => {
 
     it("emits linkMicBattle and linkMicArmies events", () => {
       createClient();
-      const battleEvents = [];
-      const armiesEvents = [];
+      const battleEvents: unknown[] = [];
+      const armiesEvents: unknown[] = [];
       client.on("linkMicBattle", (data) => battleEvents.push(data));
       client.on("linkMicArmies", (data) => armiesEvents.push(data));
 
@@ -350,7 +399,7 @@ describe("TikTokWebSocketClient coverage", () => {
 
     it("emits liveIntro events", () => {
       createClient();
-      const events = [];
+      const events: unknown[] = [];
       client.on("liveIntro", (data) => events.push(data));
 
       client.handleEvent({ type: "liveIntro", data: { intro: "test" } });
@@ -364,21 +413,26 @@ describe("TikTokWebSocketClient coverage", () => {
 
     it("emits error for error type events", () => {
       createClient();
-      const errors = [];
+      const errors: Error[] = [];
       client.on("error", (err) => errors.push(err));
 
       client.handleEvent({ type: "error", data: { message: "Test error" } });
       client.handleEvent({ type: "error", data: {} });
 
       expect(errors).toHaveLength(2);
-      expect(errors[0].message).toBe("Test error");
-      expect(errors[1].message).toBe("Unknown error");
+      const firstError = errors[0];
+      const secondError = errors[1];
+      if (!firstError || !secondError) {
+        throw new Error("Expected error events");
+      }
+      expect(firstError.message).toBe("Test error");
+      expect(secondError.message).toBe("Unknown error");
     });
 
     it("emits unknown types as-is and also as rawData", () => {
       createClient();
-      const unknownEvents = [];
-      const rawEvents = [];
+      const unknownEvents: unknown[] = [];
+      const rawEvents: RawEvent[] = [];
       client.on("customEvent", (data) => unknownEvents.push(data));
       client.on("rawData", (data) => rawEvents.push(data));
 
@@ -386,7 +440,11 @@ describe("TikTokWebSocketClient coverage", () => {
 
       expect(unknownEvents).toHaveLength(1);
       expect(rawEvents).toHaveLength(1);
-      expect(rawEvents[0].type).toBe("customEvent");
+      const rawEvent = rawEvents[0];
+      if (!rawEvent) {
+        throw new Error("Expected raw custom event");
+      }
+      expect(rawEvent.type).toBe("customEvent");
     });
   });
 
@@ -452,20 +510,21 @@ describe("TikTokWebSocketClient coverage", () => {
       createClient();
 
       client.connect();
-      mockWs.emit("open");
+      requireMockWebSocket().emit("open");
 
-      client.pingInterval = 999;
+      const previousPingInterval = safeSetInterval(() => undefined, 999);
+      client.pingInterval = previousPingInterval;
       client.startPingInterval();
 
-      expect(client.pingInterval).not.toBe(999);
+      expect(client.pingInterval).not.toBe(previousPingInterval);
     });
 
     it("sends ping when ws is open", async () => {
       createClient();
 
       const connectPromise = client.connect();
-      mockWs.emit("open");
-      mockWs.emit(
+      requireMockWebSocket().emit("open");
+      requireMockWebSocket().emit(
         "message",
         Buffer.from(
           JSON.stringify({
@@ -478,7 +537,7 @@ describe("TikTokWebSocketClient coverage", () => {
 
       advanceTimersByTime(31000);
 
-      expect(mockWs.pingCalled).toBe(true);
+      expect(requireMockWebSocket().pingCalled).toBe(true);
     });
   });
 
@@ -505,8 +564,9 @@ describe("TikTokWebSocketClient coverage", () => {
 
   describe("constructor error handling", () => {
     it("handles error during WebSocket creation", async () => {
-      const FailingWebSocket = class {
+      const FailingWebSocket = class extends MockWebSocket {
         constructor() {
+          super();
           throw new Error("WebSocket creation failed");
         }
       };

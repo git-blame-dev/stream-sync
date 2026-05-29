@@ -4,7 +4,7 @@ import EventEmitter from "events";
 import NotificationManager from "../../src/notifications/NotificationManager";
 import { PlatformEventRouter } from "../../src/services/PlatformEventRouter.ts";
 import { TikTokPlatform } from "../../src/platforms/tiktok";
-import { createTextProcessingManager } from "../../src/utils/text-processing";
+import * as coreConstants from "../../src/core/constants";
 import { createConfigFixture } from "../helpers/config-fixture";
 import { createMockDisplayQueue, noOpLogger } from "../helpers/mock-factories";
 import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
@@ -20,16 +20,111 @@ import {
   cleanupTikTokEventListeners,
 } from "../../src/platforms/tiktok/events/event-router.ts";
 
+type EventHandler = (payload: unknown) => void | Promise<void>;
+
 const createEventBus = () => {
   const emitter = new EventEmitter();
   return {
-    emit: (event, payload) => emitter.emit(event, payload),
-    subscribe: (event, handler) => {
+    emit: (event: string, payload: unknown) => emitter.emit(event, payload),
+    subscribe: (event: string, handler: EventHandler) => {
       emitter.on(event, handler);
       return () => emitter.off(event, handler);
     },
   };
 };
+
+type ChatRuntimeCall = {
+  platform: string;
+  message: {
+    message: {
+      text: string;
+      parts?: unknown[];
+    };
+    username: string;
+  };
+};
+
+type GiftRuntimeCall = {
+  platform: string;
+  username: unknown;
+  payload: {
+    giftType?: string;
+    giftCount?: number;
+    aggregatedCount?: number;
+    isAggregated?: boolean;
+    avatarUrl?: string;
+  };
+};
+
+type ShareRuntimeCall = {
+  platform: string;
+  username: unknown;
+  payload: {
+    username?: string;
+  };
+};
+
+const WebcastEvent = {
+  CHAT: "chat",
+  GIFT: "gift",
+  FOLLOW: "follow",
+  SOCIAL: "social",
+  ROOM_USER: "roomUser",
+  ERROR: "error",
+  DISCONNECT: "disconnect",
+} as const;
+
+const ControlEvent = {
+  DISCONNECTED: "disconnected",
+  ERROR: "error",
+} as const;
+
+class FakeTikTokConnection extends EventEmitter {
+  [key: string]: unknown;
+
+  async connect(): Promise<unknown> {
+    return undefined;
+  }
+
+  async disconnect(): Promise<unknown> {
+    return undefined;
+  }
+
+  override on(
+    eventName: string,
+    handler: (payload: unknown) => void | Promise<void>,
+  ): this {
+    return super.on(eventName, handler);
+  }
+}
+
+type TikTokRouterPlatform = Parameters<typeof setupTikTokEventListeners>[0];
+
+const asRouterPlatform = (platform: TikTokPlatform): TikTokRouterPlatform =>
+  Object.create(platform, {
+    constructor: {
+      value: {
+        resolveEventTimestampMs: TikTokPlatform.resolveEventTimestampMs,
+      },
+    },
+  });
+
+const chatRuntimeMessage = (
+  value: Record<string, unknown>,
+): ChatRuntimeCall["message"] => {
+  if (
+    typeof value.message !== "object" ||
+    value.message === null ||
+    !("text" in value.message)
+  ) {
+    throw new Error("Expected TikTok chat runtime message");
+  }
+
+  return value as ChatRuntimeCall["message"];
+};
+
+const giftRuntimePayload = (value: Record<string, unknown>): GiftRuntimeCall["payload"] => value;
+const shareRuntimePayload = (value: Record<string, unknown>): ShareRuntimeCall["payload"] => value;
 
 describe("TikTok event pipeline (integration)", () => {
   afterEach(() => {
@@ -40,20 +135,27 @@ describe("TikTok event pipeline (integration)", () => {
     const eventBus = createEventBus();
     const logger = noOpLogger;
     const runtimeCalls = {
-      chat: [],
-      gift: [],
-      share: [],
+      chat: [] as ChatRuntimeCall[],
+      gift: [] as GiftRuntimeCall[],
+      share: [] as ShareRuntimeCall[],
     };
     const runtime = {
-      handleChatMessage: (platform, message) =>
-        runtimeCalls.chat.push({ platform, message }),
-      handleGiftNotification: (platform, username, payload) =>
-        runtimeCalls.gift.push({ platform, username, payload }),
-      handleShareNotification: (platform, username, payload) =>
-        runtimeCalls.share.push({ platform, username, payload }),
+      handleChatMessage: (platform: string, message: Record<string, unknown>) =>
+        void runtimeCalls.chat.push({ platform, message: chatRuntimeMessage(message) }),
+      handleGiftNotification: (
+        platform: string,
+        username: unknown,
+        payload: Record<string, unknown>,
+      ) =>
+        void runtimeCalls.gift.push({ platform, username, payload: giftRuntimePayload(payload) }),
+      handleShareNotification: (
+        platform: string,
+        username: unknown,
+        payload: Record<string, unknown>,
+      ) =>
+        void runtimeCalls.share.push({ platform, username, payload: shareRuntimePayload(payload) }),
     };
     const displayQueue = createMockDisplayQueue();
-    const textProcessing = createTextProcessingManager({ logger });
     const config = createConfigFixture({
       general: {
         messagesEnabled: true,
@@ -70,8 +172,7 @@ describe("TikTok event pipeline (integration)", () => {
       logger,
       eventBus,
       config,
-      constants: require("../../src/core/constants"),
-      textProcessing,
+      constants: coreConstants,
       obsGoals: { processDonationGoal: createMockFn() },
       vfxCommandService: {
         getVFXConfig: createMockFn().mockResolvedValue(null),
@@ -89,16 +190,7 @@ describe("TikTok event pipeline (integration)", () => {
       logger,
     });
 
-    const connection = new EventEmitter();
-    const WebcastEvent = {
-      CHAT: "chat",
-      GIFT: "gift",
-      SOCIAL: "social",
-    };
-    const ControlEvent = {
-      DISCONNECTED: "disconnected",
-      ERROR: "error",
-    };
+    const connection = new FakeTikTokConnection();
 
     const platform = new TikTokPlatform(
       {
@@ -117,7 +209,8 @@ describe("TikTok event pipeline (integration)", () => {
     );
 
     platform.connection = connection;
-    setupTikTokEventListeners(platform);
+    const routerPlatform = asRouterPlatform(platform);
+    setupTikTokEventListeners(routerPlatform);
 
     const eventTimestamp = Date.parse("2025-01-20T12:00:00.000Z");
     const chatPayload = {
@@ -160,21 +253,33 @@ describe("TikTok event pipeline (integration)", () => {
       await new Promise(setImmediate);
 
       expect(runtimeCalls.chat).toHaveLength(1);
-      expect(runtimeCalls.chat[0].message.message.text).toBe("hello there");
-      expect(runtimeCalls.chat[0].message.username).toBe("test-user-one");
+      const chatCall = runtimeCalls.chat[0];
+      if (!chatCall) {
+        throw new Error("Expected TikTok chat runtime call");
+      }
+      expect(chatCall.message.message.text).toBe("hello there");
+      expect(chatCall.message.username).toBe("test-user-one");
 
       expect(runtimeCalls.gift).toHaveLength(1);
-      expect(runtimeCalls.gift[0].payload.giftType).toBe("Rose");
-      expect(runtimeCalls.gift[0].payload.giftCount).toBe(2);
-      expect(runtimeCalls.gift[0].payload.avatarUrl).toBe(
+      const giftCall = runtimeCalls.gift[0];
+      if (!giftCall) {
+        throw new Error("Expected TikTok gift runtime call");
+      }
+      expect(giftCall.payload.giftType).toBe("Rose");
+      expect(giftCall.payload.giftCount).toBe(2);
+      expect(giftCall.payload.avatarUrl).toBe(
         "https://example.invalid/tiktok-integration-immediate-avatar.jpg",
       );
 
       expect(runtimeCalls.share).toHaveLength(1);
-      expect(runtimeCalls.share[0].payload.username).toBe("test-user-three");
+      const shareCall = runtimeCalls.share[0];
+      if (!shareCall) {
+        throw new Error("Expected TikTok share runtime call");
+      }
+      expect(shareCall.payload.username).toBe("test-user-three");
     } finally {
       router.dispose();
-      cleanupTikTokEventListeners(platform);
+      cleanupTikTokEventListeners(routerPlatform);
     }
   });
 
@@ -182,14 +287,13 @@ describe("TikTok event pipeline (integration)", () => {
     const eventBus = createEventBus();
     const logger = noOpLogger;
     const runtimeCalls = {
-      chat: [],
+      chat: [] as ChatRuntimeCall[],
     };
     const runtime = {
-      handleChatMessage: (platform, message) =>
-        runtimeCalls.chat.push({ platform, message }),
+      handleChatMessage: (platform: string, message: Record<string, unknown>) =>
+        void runtimeCalls.chat.push({ platform, message: chatRuntimeMessage(message) }),
     };
     const displayQueue = createMockDisplayQueue();
-    const textProcessing = createTextProcessingManager({ logger });
     const config = createConfigFixture({
       general: {
         messagesEnabled: true,
@@ -204,8 +308,7 @@ describe("TikTok event pipeline (integration)", () => {
       logger,
       eventBus,
       config,
-      constants: require("../../src/core/constants"),
-      textProcessing,
+      constants: coreConstants,
       obsGoals: { processDonationGoal: createMockFn() },
       vfxCommandService: {
         getVFXConfig: createMockFn().mockResolvedValue(null),
@@ -223,14 +326,7 @@ describe("TikTok event pipeline (integration)", () => {
       logger,
     });
 
-    const connection = new EventEmitter();
-    const WebcastEvent = {
-      CHAT: "chat",
-    };
-    const ControlEvent = {
-      DISCONNECTED: "disconnected",
-      ERROR: "error",
-    };
+    const connection = new FakeTikTokConnection();
 
     const platform = new TikTokPlatform(
       {
@@ -249,7 +345,8 @@ describe("TikTok event pipeline (integration)", () => {
     );
 
     platform.connection = connection;
-    setupTikTokEventListeners(platform);
+    const routerPlatform = asRouterPlatform(platform);
+    setupTikTokEventListeners(routerPlatform);
 
     const eventTimestamp = Date.parse("2025-01-20T12:00:00.000Z");
     const chatPayload = {
@@ -279,7 +376,11 @@ describe("TikTok event pipeline (integration)", () => {
       await new Promise(setImmediate);
 
       expect(runtimeCalls.chat).toHaveLength(1);
-      expect(runtimeCalls.chat[0].message.message).toEqual({
+      const chatCall = runtimeCalls.chat[0];
+      if (!chatCall) {
+        throw new Error("Expected TikTok chat runtime call");
+      }
+      expect(chatCall.message.message).toEqual({
         text: "",
         parts: [
           {
@@ -293,7 +394,7 @@ describe("TikTok event pipeline (integration)", () => {
       });
     } finally {
       router.dispose();
-      cleanupTikTokEventListeners(platform);
+      cleanupTikTokEventListeners(routerPlatform);
     }
   });
 
@@ -304,14 +405,13 @@ describe("TikTok event pipeline (integration)", () => {
     const eventBus = createEventBus();
     const logger = noOpLogger;
     const runtimeCalls = {
-      chat: [],
+      chat: [] as ChatRuntimeCall[],
     };
     const runtime = {
-      handleChatMessage: (platform, message) =>
-        runtimeCalls.chat.push({ platform, message }),
+      handleChatMessage: (platform: string, message: Record<string, unknown>) =>
+        void runtimeCalls.chat.push({ platform, message: chatRuntimeMessage(message) }),
     };
     const displayQueue = createMockDisplayQueue();
-    const textProcessing = createTextProcessingManager({ logger });
     const config = createConfigFixture({
       general: {
         messagesEnabled: true,
@@ -326,8 +426,7 @@ describe("TikTok event pipeline (integration)", () => {
       logger,
       eventBus,
       config,
-      constants: require("../../src/core/constants"),
-      textProcessing,
+      constants: coreConstants,
       obsGoals: { processDonationGoal: createMockFn() },
       vfxCommandService: {
         getVFXConfig: createMockFn().mockResolvedValue(null),
@@ -345,14 +444,7 @@ describe("TikTok event pipeline (integration)", () => {
       logger,
     });
 
-    const connection = new EventEmitter();
-    const WebcastEvent = {
-      CHAT: "chat",
-    };
-    const ControlEvent = {
-      DISCONNECTED: "disconnected",
-      ERROR: "error",
-    };
+    const connection = new FakeTikTokConnection();
 
     const platform = new TikTokPlatform(
       {
@@ -371,10 +463,11 @@ describe("TikTok event pipeline (integration)", () => {
     );
 
     platform.connection = connection;
-    setupTikTokEventListeners(platform);
+    const routerPlatform = asRouterPlatform(platform);
+    setupTikTokEventListeners(routerPlatform);
 
     const eventTimestamp = Date.parse("2025-01-20T12:05:00.000Z");
-    const makeChatPayload = (msgId, comment) => ({
+    const makeChatPayload = (msgId: string, comment: string) => ({
       comment,
       user: {
         userId: "test-user-id-mixed",
@@ -414,7 +507,7 @@ describe("TikTok event pipeline (integration)", () => {
       ).toEqual(["first", "second", "third"]);
     } finally {
       router.dispose();
-      cleanupTikTokEventListeners(platform);
+      cleanupTikTokEventListeners(routerPlatform);
       clearAllTimers();
       useRealTimers();
     }
@@ -427,14 +520,17 @@ describe("TikTok event pipeline (integration)", () => {
     const eventBus = createEventBus();
     const logger = noOpLogger;
     const runtimeCalls = {
-      gift: [],
+      gift: [] as GiftRuntimeCall[],
     };
     const runtime = {
-      handleGiftNotification: (platform, username, payload) =>
-        runtimeCalls.gift.push({ platform, username, payload }),
+      handleGiftNotification: (
+        platform: string,
+        username: unknown,
+        payload: Record<string, unknown>,
+      ) =>
+        void runtimeCalls.gift.push({ platform, username, payload: giftRuntimePayload(payload) }),
     };
     const displayQueue = createMockDisplayQueue();
-    const textProcessing = createTextProcessingManager({ logger });
     const config = createConfigFixture({
       general: {
         giftsEnabled: true,
@@ -450,8 +546,7 @@ describe("TikTok event pipeline (integration)", () => {
       logger,
       eventBus,
       config,
-      constants: require("../../src/core/constants"),
-      textProcessing,
+      constants: coreConstants,
       obsGoals: { processDonationGoal: createMockFn() },
       vfxCommandService: {
         getVFXConfig: createMockFn().mockResolvedValue(null),
@@ -469,14 +564,7 @@ describe("TikTok event pipeline (integration)", () => {
       logger,
     });
 
-    const connection = new EventEmitter();
-    const WebcastEvent = {
-      GIFT: "gift",
-    };
-    const ControlEvent = {
-      DISCONNECTED: "disconnected",
-      ERROR: "error",
-    };
+    const connection = new FakeTikTokConnection();
 
     const platform = new TikTokPlatform(
       {
@@ -495,10 +583,11 @@ describe("TikTok event pipeline (integration)", () => {
     );
 
     platform.connection = connection;
-    setupTikTokEventListeners(platform);
+    const routerPlatform = asRouterPlatform(platform);
+    setupTikTokEventListeners(routerPlatform);
 
     const baseEventTimestamp = Date.parse("2025-01-20T12:00:00.000Z");
-    const buildGiftPayload = (msgId, offsetMs) => ({
+    const buildGiftPayload = (msgId: string, offsetMs: number) => ({
       user: {
         userId: "test-user-id-2",
         uniqueId: "test-user-2",
@@ -538,16 +627,20 @@ describe("TikTok event pipeline (integration)", () => {
       await new Promise(setImmediate);
 
       expect(runtimeCalls.gift).toHaveLength(1);
-      expect(runtimeCalls.gift[0].payload.giftType).toBe("Hand Heart");
-      expect(runtimeCalls.gift[0].payload.giftCount).toBe(4);
-      expect(runtimeCalls.gift[0].payload.aggregatedCount).toBe(4);
-      expect(runtimeCalls.gift[0].payload.isAggregated).toBe(true);
-      expect(runtimeCalls.gift[0].payload.avatarUrl).toBe(
+      const giftCall = runtimeCalls.gift[0];
+      if (!giftCall) {
+        throw new Error("Expected TikTok gift runtime call");
+      }
+      expect(giftCall.payload.giftType).toBe("Hand Heart");
+      expect(giftCall.payload.giftCount).toBe(4);
+      expect(giftCall.payload.aggregatedCount).toBe(4);
+      expect(giftCall.payload.isAggregated).toBe(true);
+      expect(giftCall.payload.avatarUrl).toBe(
         "https://example.invalid/tiktok-integration-aggregated-avatar.jpg",
       );
     } finally {
       router.dispose();
-      cleanupTikTokEventListeners(platform);
+      cleanupTikTokEventListeners(routerPlatform);
       clearAllTimers();
       useRealTimers();
     }

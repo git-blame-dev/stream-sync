@@ -19,22 +19,120 @@ import {
   setupTikTokEventListeners,
 } from "../../src/platforms/tiktok/events/event-router.ts";
 import { PlatformEventRouter } from "../../src/services/PlatformEventRouter.ts";
-import { createTextProcessingManager } from "../../src/utils/text-processing";
+
+type EventHandler = (payload: unknown) => void | Promise<void>;
 
 const createEventBus = () => {
   const emitter = new EventEmitter();
   return {
-    emit: (event, payload) => emitter.emit(event, payload),
-    subscribe: (event, handler) => {
+    emit: (event: string, payload: unknown) => emitter.emit(event, payload),
+    subscribe: (event: string, handler: EventHandler) => {
       emitter.on(event, handler);
       return () => emitter.off(event, handler);
     },
   };
 };
 
-const assertNonEmptyString = (value) => {
+const assertNonEmptyString = (value: unknown) => {
   expect(typeof value).toBe("string");
+  if (typeof value !== "string") {
+    throw new Error("Expected non-empty string");
+  }
   expect(value.trim()).not.toBe("");
+};
+
+const WebcastEvent = {
+  CHAT: "chat",
+  GIFT: "gift",
+  FOLLOW: "follow",
+  SOCIAL: "social",
+  ROOM_USER: "roomUser",
+  ERROR: "error",
+  DISCONNECT: "disconnect",
+} as const;
+
+const ControlEvent = {
+  DISCONNECTED: "disconnected",
+  ERROR: "error",
+} as const;
+
+class FakeTikTokConnection extends EventEmitter {
+  [key: string]: unknown;
+
+  async connect(): Promise<unknown> {
+    return undefined;
+  }
+
+  async disconnect(): Promise<unknown> {
+    return undefined;
+  }
+
+  override on(
+    eventName: string,
+    handler: (payload: unknown) => void | Promise<void>,
+  ): this {
+    return super.on(eventName, handler);
+  }
+}
+
+type TikTokRouterPlatform = Parameters<typeof setupTikTokEventListeners>[0];
+
+const asRouterPlatform = (platform: TikTokPlatform): TikTokRouterPlatform =>
+  Object.create(platform, {
+    constructor: {
+      value: {
+        resolveEventTimestampMs: TikTokPlatform.resolveEventTimestampMs,
+      },
+    },
+  });
+
+type GiftNotificationPayload = {
+  type: string;
+  giftType?: string;
+  giftCount?: number;
+  aggregatedCount?: number;
+  avatarUrl?: string;
+};
+
+const giftNotificationPayload = (
+  value: Record<string, unknown>,
+): GiftNotificationPayload => {
+  if (typeof value.type !== "string") {
+    throw new Error("Expected TikTok gift notification type");
+  }
+  return value as GiftNotificationPayload;
+};
+
+type QueuedNotification = {
+  type: string;
+  data: {
+    displayMessage: string;
+    ttsMessage: string;
+    logMessage: string;
+    username?: string;
+    giftType?: string;
+    giftCount?: number;
+    aggregatedCount?: number;
+    avatarUrl?: string;
+  };
+};
+
+const isQueuedNotification = (value: unknown): value is QueuedNotification =>
+  !!value &&
+  typeof value === "object" &&
+  "type" in value &&
+  "data" in value &&
+  typeof value.data === "object" &&
+  value.data !== null;
+
+const firstQueuedNotification = (
+  displayQueue: ReturnType<typeof createMockDisplayQueue>,
+): QueuedNotification => {
+  const queued = displayQueue.addItem.mock.calls[0]?.[0];
+  if (!isQueuedNotification(queued)) {
+    throw new Error("Expected a queued TikTok notification");
+  }
+  return queued;
 };
 
 type ChatRuntimeCall = {
@@ -48,6 +146,20 @@ type ChatRuntimeCall = {
   };
 };
 
+const chatRuntimeMessage = (
+  value: Record<string, unknown>,
+): ChatRuntimeCall["message"] => {
+  if (
+    typeof value.message !== "object" ||
+    value.message === null ||
+    !("text" in value.message)
+  ) {
+    throw new Error("Expected TikTok chat runtime message");
+  }
+
+  return value as ChatRuntimeCall["message"];
+};
+
 describe("TikTok event pipeline (smoke E2E)", () => {
   afterEach(() => {
     restoreAllMocks();
@@ -57,7 +169,6 @@ describe("TikTok event pipeline (smoke E2E)", () => {
     const eventBus = createEventBus();
     const logger = noOpLogger;
     const displayQueue = createMockDisplayQueue();
-    const textProcessing = createTextProcessingManager({ logger });
     const config = createConfigFixture({
       general: {
         messagesEnabled: true,
@@ -74,7 +185,6 @@ describe("TikTok event pipeline (smoke E2E)", () => {
       eventBus,
       config,
       constants: coreConstants,
-      textProcessing,
       obsGoals: { processDonationGoal: createMockFn() },
       vfxCommandService: {
         getVFXConfig: createMockFn().mockResolvedValue(null),
@@ -85,10 +195,20 @@ describe("TikTok event pipeline (smoke E2E)", () => {
     });
     const runtimeCalls: { chat: ChatRuntimeCall[] } = { chat: [] };
     const runtime = {
-      handleChatMessage: (platform, message) =>
-        runtimeCalls.chat.push({ platform, message }),
-      handleGiftNotification: async (platform, username, payload) =>
-        notificationManager.handleNotification(payload.type, platform, payload),
+      handleChatMessage: (platform: string, message: Record<string, unknown>) =>
+        void runtimeCalls.chat.push({ platform, message: chatRuntimeMessage(message) }),
+      handleGiftNotification: async (
+        platform: string,
+        _username: unknown,
+        payload: Record<string, unknown>,
+      ) => {
+        const notificationPayload = giftNotificationPayload(payload);
+        return notificationManager.handleNotification(
+          notificationPayload.type,
+          platform,
+          notificationPayload,
+        );
+      },
     };
 
     const router = new PlatformEventRouter({
@@ -99,15 +219,7 @@ describe("TikTok event pipeline (smoke E2E)", () => {
       logger,
     });
 
-    const connection = new EventEmitter();
-    const WebcastEvent = {
-      CHAT: "chat",
-      GIFT: "gift",
-    };
-    const ControlEvent = {
-      DISCONNECTED: "disconnected",
-      ERROR: "error",
-    };
+    const connection = new FakeTikTokConnection();
 
     const platform = new TikTokPlatform(
       {
@@ -126,7 +238,8 @@ describe("TikTok event pipeline (smoke E2E)", () => {
     );
 
     platform.connection = connection;
-    setupTikTokEventListeners(platform);
+    const routerPlatform = asRouterPlatform(platform);
+    setupTikTokEventListeners(routerPlatform);
 
     const eventTimestamp = Date.parse("2025-01-20T12:00:00.000Z");
     const chatPayload = {
@@ -164,7 +277,7 @@ describe("TikTok event pipeline (smoke E2E)", () => {
       expect(firstChatCall.message.username).toBe("test-user-one");
 
       expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
-      const queued = displayQueue.addItem.mock.calls[0][0];
+      const queued = firstQueuedNotification(displayQueue);
       assertNonEmptyString(queued.data.displayMessage);
       assertNonEmptyString(queued.data.ttsMessage);
       assertNonEmptyString(queued.data.logMessage);
@@ -178,7 +291,7 @@ describe("TikTok event pipeline (smoke E2E)", () => {
       );
     } finally {
       router.dispose();
-      cleanupTikTokEventListeners(platform);
+      cleanupTikTokEventListeners(routerPlatform);
     }
   });
 
@@ -186,7 +299,6 @@ describe("TikTok event pipeline (smoke E2E)", () => {
     const eventBus = createEventBus();
     const logger = noOpLogger;
     const displayQueue = createMockDisplayQueue();
-    const textProcessing = createTextProcessingManager({ logger });
     const config = createConfigFixture({
       general: {
         messagesEnabled: true,
@@ -202,7 +314,6 @@ describe("TikTok event pipeline (smoke E2E)", () => {
       eventBus,
       config,
       constants: coreConstants,
-      textProcessing,
       obsGoals: { processDonationGoal: createMockFn() },
       vfxCommandService: {
         getVFXConfig: createMockFn().mockResolvedValue(null),
@@ -213,8 +324,8 @@ describe("TikTok event pipeline (smoke E2E)", () => {
     });
     const runtimeCalls: { chat: ChatRuntimeCall[] } = { chat: [] };
     const runtime = {
-      handleChatMessage: (platform, message) =>
-        runtimeCalls.chat.push({ platform, message }),
+      handleChatMessage: (platform: string, message: Record<string, unknown>) =>
+        void runtimeCalls.chat.push({ platform, message: chatRuntimeMessage(message) }),
     };
 
     const router = new PlatformEventRouter({
@@ -225,14 +336,7 @@ describe("TikTok event pipeline (smoke E2E)", () => {
       logger,
     });
 
-    const connection = new EventEmitter();
-    const WebcastEvent = {
-      CHAT: "chat",
-    };
-    const ControlEvent = {
-      DISCONNECTED: "disconnected",
-      ERROR: "error",
-    };
+    const connection = new FakeTikTokConnection();
 
     const platform = new TikTokPlatform(
       {
@@ -251,7 +355,8 @@ describe("TikTok event pipeline (smoke E2E)", () => {
     );
 
     platform.connection = connection;
-    setupTikTokEventListeners(platform);
+    const routerPlatform = asRouterPlatform(platform);
+    setupTikTokEventListeners(routerPlatform);
 
     const eventTimestamp = Date.parse("2025-01-20T12:00:00.000Z");
     const chatPayload = {
@@ -296,7 +401,7 @@ describe("TikTok event pipeline (smoke E2E)", () => {
       });
     } finally {
       router.dispose();
-      cleanupTikTokEventListeners(platform);
+      cleanupTikTokEventListeners(routerPlatform);
     }
   });
 
@@ -307,7 +412,6 @@ describe("TikTok event pipeline (smoke E2E)", () => {
     const eventBus = createEventBus();
     const logger = noOpLogger;
     const displayQueue = createMockDisplayQueue();
-    const textProcessing = createTextProcessingManager({ logger });
     const config = createConfigFixture({
       general: {
         messagesEnabled: true,
@@ -323,7 +427,6 @@ describe("TikTok event pipeline (smoke E2E)", () => {
       eventBus,
       config,
       constants: coreConstants,
-      textProcessing,
       obsGoals: { processDonationGoal: createMockFn() },
       vfxCommandService: {
         getVFXConfig: createMockFn().mockResolvedValue(null),
@@ -334,8 +437,8 @@ describe("TikTok event pipeline (smoke E2E)", () => {
     });
     const runtimeCalls: { chat: ChatRuntimeCall[] } = { chat: [] };
     const runtime = {
-      handleChatMessage: (platform, message) =>
-        runtimeCalls.chat.push({ platform, message }),
+      handleChatMessage: (platform: string, message: Record<string, unknown>) =>
+        void runtimeCalls.chat.push({ platform, message: chatRuntimeMessage(message) }),
     };
 
     const router = new PlatformEventRouter({
@@ -346,14 +449,7 @@ describe("TikTok event pipeline (smoke E2E)", () => {
       logger,
     });
 
-    const connection = new EventEmitter();
-    const WebcastEvent = {
-      CHAT: "chat",
-    };
-    const ControlEvent = {
-      DISCONNECTED: "disconnected",
-      ERROR: "error",
-    };
+    const connection = new FakeTikTokConnection();
 
     const platform = new TikTokPlatform(
       {
@@ -372,10 +468,11 @@ describe("TikTok event pipeline (smoke E2E)", () => {
     );
 
     platform.connection = connection;
-    setupTikTokEventListeners(platform);
+    const routerPlatform = asRouterPlatform(platform);
+    setupTikTokEventListeners(routerPlatform);
 
     const eventTimestamp = Date.parse("2025-01-20T12:05:00.000Z");
-    const makeChatPayload = (msgId, comment) => ({
+    const makeChatPayload = (msgId: string, comment: string) => ({
       comment,
       user: {
         userId: "test-user-id-smoke",
@@ -407,7 +504,7 @@ describe("TikTok event pipeline (smoke E2E)", () => {
       ).toEqual(["hello once", "hello twice"]);
     } finally {
       router.dispose();
-      cleanupTikTokEventListeners(platform);
+      cleanupTikTokEventListeners(routerPlatform);
       clearAllTimers();
       useRealTimers();
     }
@@ -420,7 +517,6 @@ describe("TikTok event pipeline (smoke E2E)", () => {
     const eventBus = createEventBus();
     const logger = noOpLogger;
     const displayQueue = createMockDisplayQueue();
-    const textProcessing = createTextProcessingManager({ logger });
     const config = createConfigFixture({
       general: {
         giftsEnabled: true,
@@ -437,7 +533,6 @@ describe("TikTok event pipeline (smoke E2E)", () => {
       eventBus,
       config,
       constants: coreConstants,
-      textProcessing,
       obsGoals: { processDonationGoal: createMockFn() },
       vfxCommandService: {
         getVFXConfig: createMockFn().mockResolvedValue(null),
@@ -447,8 +542,18 @@ describe("TikTok event pipeline (smoke E2E)", () => {
       },
     });
     const runtime = {
-      handleGiftNotification: async (platform, username, payload) =>
-        notificationManager.handleNotification(payload.type, platform, payload),
+      handleGiftNotification: async (
+        platform: string,
+        _username: unknown,
+        payload: Record<string, unknown>,
+      ) => {
+        const notificationPayload = giftNotificationPayload(payload);
+        return notificationManager.handleNotification(
+          notificationPayload.type,
+          platform,
+          notificationPayload,
+        );
+      },
     };
 
     const router = new PlatformEventRouter({
@@ -459,14 +564,7 @@ describe("TikTok event pipeline (smoke E2E)", () => {
       logger,
     });
 
-    const connection = new EventEmitter();
-    const WebcastEvent = {
-      GIFT: "gift",
-    };
-    const ControlEvent = {
-      DISCONNECTED: "disconnected",
-      ERROR: "error",
-    };
+    const connection = new FakeTikTokConnection();
 
     const platform = new TikTokPlatform(
       {
@@ -485,10 +583,11 @@ describe("TikTok event pipeline (smoke E2E)", () => {
     );
 
     platform.connection = connection;
-    setupTikTokEventListeners(platform);
+    const routerPlatform = asRouterPlatform(platform);
+    setupTikTokEventListeners(routerPlatform);
 
     const baseEventTimestamp = Date.parse("2025-01-20T12:00:00.000Z");
-    const buildGiftPayload = (msgId, offsetMs) => ({
+    const buildGiftPayload = (msgId: string, offsetMs: number) => ({
       user: {
         userId: "test-user-id-2",
         uniqueId: "test-user-2",
@@ -526,7 +625,7 @@ describe("TikTok event pipeline (smoke E2E)", () => {
       await new Promise(setImmediate);
 
       expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
-      const queued = displayQueue.addItem.mock.calls[0][0];
+      const queued = firstQueuedNotification(displayQueue);
       expect(queued.type).toBe("platform:gift");
       expect(queued.data.giftType).toBe("Hand Heart");
       expect(queued.data.giftCount).toBe(4);
@@ -542,22 +641,14 @@ describe("TikTok event pipeline (smoke E2E)", () => {
       );
     } finally {
       router.dispose();
-      cleanupTikTokEventListeners(platform);
+      cleanupTikTokEventListeners(routerPlatform);
       clearAllTimers();
       useRealTimers();
     }
   });
 
   test("emits terminal no-reconnect lifecycle signal for terminal disconnect reasons", async () => {
-    const connection = new EventEmitter();
-    const WebcastEvent = {
-      DISCONNECT: "disconnect",
-      ERROR: "error",
-    };
-    const ControlEvent = {
-      DISCONNECTED: "disconnected",
-      ERROR: "error",
-    };
+    const connection = new FakeTikTokConnection();
 
     const platform = new TikTokPlatform(
       {
@@ -574,9 +665,12 @@ describe("TikTok event pipeline (smoke E2E)", () => {
     );
 
     platform.connection = connection;
-    setupTikTokEventListeners(platform);
-    const emittedEvents = [];
-    platform.on("platform:event", (event) => emittedEvents.push(event));
+    const routerPlatform = asRouterPlatform(platform);
+    setupTikTokEventListeners(routerPlatform);
+    const emittedEvents: Array<{ type: string; data: { willReconnect?: boolean } }> = [];
+    platform.on("platform:event", (event: { type: string; data: { willReconnect?: boolean } }) => {
+      emittedEvents.push(event);
+    });
 
     try {
       connection.emit(ControlEvent.DISCONNECTED, { message: "private account" });
@@ -586,9 +680,12 @@ describe("TikTok event pipeline (smoke E2E)", () => {
         (event) => event.type === "platform:stream-status",
       );
       expect(statusEvent).toBeDefined();
+      if (!statusEvent) {
+        throw new Error("Expected stream status event");
+      }
       expect(statusEvent.data.willReconnect).toBe(false);
     } finally {
-      cleanupTikTokEventListeners(platform);
+      cleanupTikTokEventListeners(routerPlatform);
     }
   });
 });
