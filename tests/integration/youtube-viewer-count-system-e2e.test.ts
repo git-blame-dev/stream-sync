@@ -1,6 +1,11 @@
 import { describe, test, beforeEach, afterEach, expect } from "bun:test";
 
-import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
+import {
+  createMockFn,
+  restoreAllMocks,
+  type TestMockFn,
+} from "../helpers/bun-mock-utils";
+import { waitForDelay } from "../helpers/time-utils";
 
 import { ViewerCountSystem } from "../../src/utils/viewer-count.ts";
 import { YouTubeViewerExtractor } from "../../src/extractors/youtube-viewer-extractor";
@@ -8,9 +13,65 @@ import { InnertubeFactory } from "../../src/factories/innertube-factory";
 import { OBSViewerCountObserver } from "../../src/observers/obs-viewer-count-observer.ts";
 import { createMockOBSManager } from "../helpers/mock-factories";
 import { expectNoTechnicalArtifacts } from "../helpers/behavior-validation";
-import { createSilentLogger } from "../helpers/test-logger";
 import { createConfigFixture } from "../helpers/config-fixture";
 import testClock from "../helpers/test-clock";
+
+type ViewerPlatform = {
+  getViewerCount: TestMockFn<[], Promise<number | null>>;
+  isEnabled: () => boolean;
+};
+type ViewerPlatformMap = Record<string, ViewerPlatform>;
+type ObsManager = ReturnType<typeof createMockOBSManager>;
+type TestConfig = ReturnType<typeof createConfigFixture>;
+type TestLogger = {
+  debug: (message: string, context?: string, payload?: unknown) => void;
+  info: (message: string, context?: string, payload?: unknown) => void;
+  warn: (message: string, context?: string, payload?: unknown) => void;
+  error: (message: string, context?: string, payload?: unknown) => void;
+};
+type ObsCall = [method: string, payload?: { inputSettings?: { text?: string } }];
+type ViewerUpdate = {
+  platform: string;
+  count: number;
+  isStreamLive: boolean;
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
+
+const isObsCall = (call: unknown[]): call is ObsCall =>
+  typeof call[0] === "string";
+
+const isSetInputSettingsCall = (call: unknown[]): call is ObsCall =>
+  isObsCall(call) && call[0] === "SetInputSettings";
+
+const isViewerUpdate = (value: unknown): value is ViewerUpdate =>
+  isRecord(value) &&
+  typeof value.platform === "string" &&
+  typeof value.count === "number" &&
+  typeof value.isStreamLive === "boolean";
+
+const createViewerPlatform = (count: number): ViewerPlatform => ({
+  getViewerCount: createMockFn<[], Promise<number | null>>().mockResolvedValue(
+    count,
+  ),
+  isEnabled: () => true,
+});
+
+const requireYouTubePlatform = (platforms: ViewerPlatformMap): ViewerPlatform => {
+  const platform = platforms.youtube;
+  if (!platform) {
+    throw new Error("Expected YouTube test platform to be configured");
+  }
+  return platform;
+};
+
+const createViewerCountLogger = (): TestLogger => ({
+  debug: createMockFn(),
+  info: createMockFn(),
+  warn: createMockFn(),
+  error: createMockFn(),
+});
 
 describe("YouTube Viewer Count System - End-to-End Integration", () => {
   afterEach(async () => {
@@ -21,22 +82,23 @@ describe("YouTube Viewer Count System - End-to-End Integration", () => {
     }
   });
 
-  let platforms, obsManager, viewerCountSystem, logger, testConfig;
+  let platforms: ViewerPlatformMap;
+  let obsManager: ObsManager;
+  let viewerCountSystem: ViewerCountSystem;
+  let logger: TestLogger;
+  let testConfig: TestConfig;
 
   beforeEach(async () => {
     testClock.reset();
-    logger = createSilentLogger();
+    logger = createViewerCountLogger();
     testConfig = createConfigFixture();
     platforms = {
-      youtube: {
-        getViewerCount: createMockFn().mockResolvedValue(1234),
-        isEnabled: () => true,
-      },
+      youtube: createViewerPlatform(1234),
     };
     obsManager = createMockOBSManager();
     const timeProvider = {
       now: () => testClock.now(),
-      createDate: (timestamp) => new Date(timestamp),
+      createDate: (timestamp: number) => new Date(timestamp),
     };
     viewerCountSystem = new ViewerCountSystem({
       platformProvider: () => platforms,
@@ -53,12 +115,9 @@ describe("YouTube Viewer Count System - End-to-End Integration", () => {
 
   describe("Dependency Injection", () => {
     test("should resolve updated platform maps when dependencies change", async () => {
-      const originalPlatform = platforms.youtube;
+      const originalPlatform = requireYouTubePlatform(platforms);
       const replacementPlatforms = {
-        youtube: {
-          getViewerCount: createMockFn().mockResolvedValue(777),
-          isEnabled: () => true,
-        },
+        youtube: createViewerPlatform(777),
       };
       platforms = replacementPlatforms;
       await viewerCountSystem.updateStreamStatus("youtube", true);
@@ -67,8 +126,10 @@ describe("YouTube Viewer Count System - End-to-End Integration", () => {
         viewerCountSystem.validatePlatformForPolling("youtube");
 
       expect(validation.valid).toBe(true);
-      expect(validation.platform).toBe(replacementPlatforms.youtube);
-      expect(validation.platform).not.toBe(originalPlatform);
+      if (validation.valid) {
+        expect(validation.platform).toBe(replacementPlatforms.youtube);
+        expect(validation.platform).not.toBe(originalPlatform);
+      }
     });
   });
 
@@ -81,24 +142,24 @@ describe("YouTube Viewer Count System - End-to-End Integration", () => {
       expect(viewerCountSystem.counts.youtube).toBe(1234);
       expect(viewerCountSystem.isStreamLive("youtube")).toBe(true);
       const obsUpdateCalls = obsManager.call.mock.calls.filter(
-        (call) => call[0] === "SetInputSettings",
+        isSetInputSettingsCall,
       );
       expect(obsUpdateCalls.length).toBeGreaterThan(0);
 
-      const latestObsUpdate = obsUpdateCalls[obsUpdateCalls.length - 1][1];
-      expect(latestObsUpdate.inputSettings.text).toMatch(
+      const latestObsUpdate = obsUpdateCalls[obsUpdateCalls.length - 1]?.[1];
+      expect(latestObsUpdate?.inputSettings?.text).toMatch(
         /^\d{1,3}(,\d{3})*(\.\d+)?[KMB]?$/,
       );
-      expect(latestObsUpdate.inputSettings.text).not.toBe("0");
+      expect(latestObsUpdate?.inputSettings?.text).not.toBe("0");
     });
 
     test("should handle multiple platform viewer counts simultaneously", async () => {
       platforms.twitch = {
-        getViewerCount: createMockFn().mockResolvedValue(567),
+        getViewerCount: createMockFn<[], Promise<number | null>>().mockResolvedValue(567),
         isEnabled: () => true,
       };
       platforms.tiktok = {
-        getViewerCount: createMockFn().mockResolvedValue(890),
+        getViewerCount: createMockFn<[], Promise<number | null>>().mockResolvedValue(890),
         isEnabled: () => true,
       };
       await viewerCountSystem.updateStreamStatus("youtube", true);
@@ -214,9 +275,9 @@ describe("YouTube Viewer Count System - End-to-End Integration", () => {
       viewerCountSystem.startPolling();
       await waitForDelay(50);
 
-      const observerUpdates = mockObserver.onViewerCountUpdate.mock.calls.map(
-        (call) => call[0],
-      );
+      const observerUpdates = mockObserver.onViewerCountUpdate.mock.calls
+        .map((call) => call[0])
+        .filter(isViewerUpdate);
       expect(observerUpdates.length).toBeGreaterThan(0);
       expect(
         observerUpdates.some(
@@ -270,32 +331,28 @@ describe("YouTube Viewer Count System - End-to-End Integration", () => {
       viewerCountSystem.startPolling();
       await waitForDelay(50);
 
-      const obsCall = obsManager.call.mock.calls.find(
-        (call) => call[0] === "SetInputSettings",
-      );
+      const obsCall = obsManager.call.mock.calls.find(isSetInputSettingsCall);
       expect(obsCall).toBeDefined();
-      const text = obsCall[1].inputSettings.text;
+      const text = obsCall?.[1]?.inputSettings?.text ?? "";
       expect(text).toMatch(/^\d{1,3}(,\d{3})*$/);
       expectNoTechnicalArtifacts(text);
     });
 
     test("should handle zero viewer counts appropriately", async () => {
-      platforms.youtube.getViewerCount.mockResolvedValue(0);
+      requireYouTubePlatform(platforms).getViewerCount.mockResolvedValue(0);
       await viewerCountSystem.updateStreamStatus("youtube", true);
       viewerCountSystem.startPolling();
       await waitForDelay(50);
 
       expect(viewerCountSystem.counts.youtube).toBe(0);
-      const obsCall = obsManager.call.mock.calls.find(
-        (call) => call[0] === "SetInputSettings",
-      );
-      expect(obsCall[1].inputSettings.text).toBe("0");
+      const obsCall = obsManager.call.mock.calls.find(isSetInputSettingsCall);
+      expect(obsCall?.[1]?.inputSettings?.text).toBe("0");
     });
   });
 
   describe("Error Recovery and Resilience", () => {
     test("should handle YouTube API errors gracefully", async () => {
-      platforms.youtube.getViewerCount.mockRejectedValue(
+      requireYouTubePlatform(platforms).getViewerCount.mockRejectedValue(
         new Error("API rate limit exceeded"),
       );
       await viewerCountSystem.updateStreamStatus("youtube", true);
@@ -308,7 +365,7 @@ describe("YouTube Viewer Count System - End-to-End Integration", () => {
     });
 
     test("should handle invalid viewer count responses", async () => {
-      platforms.youtube.getViewerCount
+      requireYouTubePlatform(platforms).getViewerCount
         .mockResolvedValueOnce(null)
         .mockResolvedValue(1337);
       await viewerCountSystem.updateStreamStatus("youtube", true);
@@ -323,7 +380,7 @@ describe("YouTube Viewer Count System - End-to-End Integration", () => {
     test("preserves last known viewer count when provider returns unavailable", async () => {
       await viewerCountSystem.updateStreamStatus("youtube", true);
 
-      platforms.youtube.getViewerCount
+      requireYouTubePlatform(platforms).getViewerCount
         .mockResolvedValueOnce(1234)
         .mockResolvedValueOnce(null);
 
@@ -335,7 +392,7 @@ describe("YouTube Viewer Count System - End-to-End Integration", () => {
     });
 
     test("should maintain system stability during connection failures", async () => {
-      platforms.youtube.getViewerCount.mockRejectedValue(
+      requireYouTubePlatform(platforms).getViewerCount.mockRejectedValue(
         new Error("Network timeout"),
       );
       await viewerCountSystem.updateStreamStatus("youtube", true);
@@ -364,7 +421,7 @@ describe("YouTube Viewer Count System - End-to-End Integration", () => {
     });
 
     test("should handle concurrent viewer count requests efficiently", async () => {
-      const promises = [];
+      const promises: Array<Promise<void>> = [];
       for (let i = 0; i < 5; i++) {
         promises.push(viewerCountSystem.updateStreamStatus("youtube", true));
       }

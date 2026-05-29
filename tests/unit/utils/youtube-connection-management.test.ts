@@ -1,32 +1,70 @@
 import { describe, expect, beforeEach, it, afterEach } from "bun:test";
-import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
+import {
+  createMockFn,
+  restoreAllMocks,
+  type TestMockFn,
+} from "../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../helpers/mock-factories";
 import { YouTubeConnectionManager } from "../../../src/platforms/youtube/youtube-connection-manager";
+
+type ManagedConnection = NonNullable<
+  ReturnType<YouTubeConnectionManager["getConnection"]>
+>;
+type TestConnection = ManagedConnection & {
+  id: string;
+  videoId: string;
+  status: string;
+  ready: boolean;
+  disconnect: TestMockFn<[], Promise<void>>;
+  isReady: TestMockFn<[], boolean>;
+};
+
+type HandleEventProcessingErrorMock = TestMockFn<
+    [
+      error: unknown,
+      eventType: string,
+      eventData?: unknown,
+      message?: string | null,
+      logContext?: string | null,
+    ],
+    void
+  >;
+
+const expectManagedConnection = (
+  connection: ManagedConnection | null | undefined,
+): ManagedConnection => {
+  if (!connection) {
+    throw new Error("Expected managed connection to exist");
+  }
+  return connection;
+};
+
 describe("YouTube Connection Manager - Lifecycle Behavior", () => {
   afterEach(() => {
     restoreAllMocks();
   });
 
-  let connectionManager;
-  let mockConnection;
-  let mockErrorHandler;
+  let connectionManager: YouTubeConnectionManager;
+  let mockConnection: TestConnection;
+  let mockErrorHandler: YouTubeConnectionManager["errorHandler"];
+  let handleEventProcessingError: HandleEventProcessingErrorMock;
 
   beforeEach(() => {
-    mockErrorHandler = {
-      handleEventProcessingError: createMockFn(),
-      logOperationalError: createMockFn(),
-    };
+    connectionManager = new YouTubeConnectionManager(noOpLogger);
+    handleEventProcessingError = createMockFn();
+    mockErrorHandler = connectionManager.errorHandler;
+    mockErrorHandler.handleEventProcessingError = handleEventProcessingError;
+    mockErrorHandler.logOperationalError = createMockFn();
 
     mockConnection = {
       id: "test-connection-1",
       videoId: "test-video-id",
       status: "connecting",
       ready: false,
-      disconnect: createMockFn(),
-      isReady: createMockFn().mockReturnValue(false),
+      disconnect: createMockFn<[], Promise<void>>().mockResolvedValue(),
+      isReady: createMockFn<[], boolean>().mockReturnValue(false),
     };
 
-    connectionManager = new YouTubeConnectionManager(noOpLogger);
     connectionManager.errorHandler = mockErrorHandler;
   });
 
@@ -60,7 +98,7 @@ describe("YouTube Connection Manager - Lifecycle Behavior", () => {
 
       expect(result1).toBe(true);
       expect(result2).toBe(false);
-      expect(connectionManager.getConnection(videoId).id).toBe("connection-1");
+      expect(expectManagedConnection(connectionManager.getConnection(videoId)).id).toBe("connection-1");
     });
 
     it("should track connection count correctly", async () => {
@@ -103,7 +141,10 @@ describe("YouTube Connection Manager - Lifecycle Behavior", () => {
 
     it("invokes connection disconnect hook when removal occurs", async () => {
       const videoId = "test-video-id";
-      const connection = { ...mockConnection, disconnect: createMockFn() };
+      const connection = {
+        ...mockConnection,
+        disconnect: createMockFn<[], Promise<void>>().mockResolvedValue(),
+      };
 
       await connectionManager.connectToStream(videoId, async () => connection);
       await connectionManager.removeConnection(videoId);
@@ -248,12 +289,12 @@ describe("YouTube Connection Manager - Lifecycle Behavior", () => {
       const connection1 = {
         ...mockConnection,
         videoId: "video-1",
-        disconnect: createMockFn(),
+        disconnect: createMockFn<[], Promise<void>>().mockResolvedValue(),
       };
       const connection2 = {
         ...mockConnection,
         videoId: "video-2",
-        disconnect: createMockFn(),
+        disconnect: createMockFn<[], Promise<void>>().mockResolvedValue(),
       };
 
       await connectionManager.connectToStream(
@@ -362,7 +403,7 @@ describe("YouTube Connection Manager - Lifecycle Behavior", () => {
     it("reports disconnect failures through the connection error channel", async () => {
       const connection = {
         ...mockConnection,
-        disconnect: createMockFn().mockRejectedValue(
+        disconnect: createMockFn<[], Promise<void>>().mockRejectedValue(
           new Error("Disconnect failed"),
         ),
       };
@@ -380,13 +421,15 @@ describe("YouTube Connection Manager - Lifecycle Behavior", () => {
 
       await Promise.resolve();
 
-      const handlerInstance =
-        connectionManager.errorHandler || mockErrorHandler;
-      expect(handlerInstance.handleEventProcessingError).toHaveBeenCalled();
+      expect(handleEventProcessingError).toHaveBeenCalled();
       const lastCallIndex =
-        handlerInstance.handleEventProcessingError.mock.calls.length - 1;
+        handleEventProcessingError.mock.calls.length - 1;
+      const lastCall = handleEventProcessingError.mock.calls[lastCallIndex];
+      if (!lastCall) {
+        throw new Error("Expected connection error handler to be called");
+      }
       const [errorArg, eventTypeArg, payloadArg, messageArg, platformArg] =
-        handlerInstance.handleEventProcessingError.mock.calls[lastCallIndex];
+        lastCall;
       expect(errorArg).toBeInstanceOf(Error);
       expect(String((errorArg as Error).message)).toContain("Disconnect failed");
       expect(eventTypeArg).toBe("connection");
