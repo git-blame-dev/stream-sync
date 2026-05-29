@@ -4,7 +4,7 @@ import { DEFAULT_AVATAR_URL } from '../../../src/constants/avatar';
 
 describe('Platform Event Interface Design', () => {
     describe('Platform Event Schema Validation', () => {
-        let validator;
+        let validator: PlatformEventValidator;
         
         beforeEach(() => {
             validator = new PlatformEventValidator();
@@ -412,7 +412,7 @@ describe('Platform Event Interface Design', () => {
     });
 
     describe('Cross-Platform Event Normalization', () => {
-        let builder;
+        let builder: PlatformEventBuilder;
         
         beforeEach(() => {
             builder = new PlatformEventBuilder();
@@ -537,7 +537,7 @@ describe('Platform Event Interface Design', () => {
     });
 
     describe('Platform Event Builder Consistency', () => {
-        let builder;
+        let builder: PlatformEventBuilder;
         
         beforeEach(() => {
             builder = new PlatformEventBuilder();
@@ -660,7 +660,7 @@ describe('Platform Event Interface Design', () => {
     });
 
     describe('Event Schema Compliance Validation', () => {
-        let validator;
+        let validator: PlatformEventValidator;
         
         beforeEach(() => {
             validator = new PlatformEventValidator();
@@ -686,6 +686,10 @@ describe('Platform Event Interface Design', () => {
         
         it('should enforce required fields for each event type', () => {
             const schema = validator.getEventSchema('platform:chat-message');
+            expect(schema).not.toBeNull();
+            if (schema === null) {
+                throw new Error('Expected chat message schema to be registered');
+            }
             expect(schema.required).toContain('type');
             expect(schema.required).toContain('platform');
             expect(schema.required).toContain('username');
@@ -724,7 +728,8 @@ describe('Platform Event Interface Design', () => {
     });
 
     describe('Event Interface Error Handling', () => {
-        let validator, builder;
+        let validator: PlatformEventValidator;
+        let builder: PlatformEventBuilder;
         
         beforeEach(() => {
             validator = new PlatformEventValidator();
@@ -765,8 +770,8 @@ describe('Platform Event Interface Design', () => {
             const result = validator.validate(problematicEvent);
             expect(result.valid).toBe(false);
             expect(result.errors.length).toBeGreaterThan(0);
-            expect(result.errors.some(err => err.includes('Invalid event type'))).toBe(true);
-            expect(result.errors.some(err => err.includes('Invalid platform'))).toBe(true);
+            expect(result.errors.some((err: string) => err.includes('Invalid event type'))).toBe(true);
+            expect(result.errors.some((err: string) => err.includes('Invalid platform'))).toBe(true);
         });
         
         it('should validate data type consistency across platforms', () => {

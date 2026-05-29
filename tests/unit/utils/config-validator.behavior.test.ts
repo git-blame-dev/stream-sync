@@ -1,6 +1,51 @@
 import { describe, expect, it } from "bun:test";
 import { ConfigValidator } from "../../../src/utils/config-validator";
 import { CONFIG_SCHEMA } from "../../../src/core/config-schema";
+import type {
+  ConfigFieldSpec,
+  ConfigSectionName,
+  NormalizedConfig,
+  NormalizedConfigSection,
+  RawConfigSection,
+} from "../../../src/core/types/config-types";
+import {
+  createTikTokConfigFixture,
+  createTwitchConfigFixture,
+  createYouTubeConfigFixture,
+} from "../../../tests/helpers/config-fixture";
+
+type ValidationPlatformOverrides = {
+  tiktok?: RawConfigSection;
+  twitch?: RawConfigSection;
+  youtube?: RawConfigSection;
+};
+
+function validateUncheckedConfig(
+  config: Partial<Record<ConfigSectionName, NormalizedConfigSection>>,
+) {
+  return ConfigValidator.validate(config as NormalizedConfig);
+}
+
+const requireFieldSpec = (value: unknown, label: string): ConfigFieldSpec => {
+  expect(value).toBeDefined();
+  if (value === undefined || value === null || typeof value !== "object") {
+    throw new Error(`Expected ${label} to be a config field spec`);
+  }
+  if (!("type" in value)) {
+    throw new Error(`Expected ${label} to define a type`);
+  }
+  return value as ConfigFieldSpec;
+};
+
+const normalizeRuntimeSection = (
+  sectionName: string,
+  rawData: RawConfigSection,
+): NormalizedConfigSection =>
+  Reflect.apply(ConfigValidator.normalizeFromSchema, ConfigValidator, [
+    sectionName,
+    rawData,
+  ]) as NormalizedConfigSection;
+
 describe("config-validator (utility) behavior", () => {
   it("parses booleans, strings, and numbers with defaults and bounds", () => {
     expect(ConfigValidator.parseBoolean("true", false)).toBe(true);
@@ -22,7 +67,7 @@ describe("config-validator (utility) behavior", () => {
 });
 
 describe("ConfigValidator.normalize()", () => {
-  const ALL_SECTIONS = [
+  const ALL_SECTIONS: readonly ConfigSectionName[] = [
     "general",
     "http",
     "obs",
@@ -146,6 +191,9 @@ describe("ConfigValidator._normalizeHttpSection()", () => {
     const result = ConfigValidator._normalizeHttpSection({});
 
     expect(Array.isArray(result.userAgents)).toBe(true);
+    if (!Array.isArray(result.userAgents)) {
+      throw new Error("Expected http.userAgents to normalize to an array");
+    }
     expect(result.userAgents.length).toBeGreaterThan(0);
   });
 });
@@ -719,14 +767,15 @@ describe("ConfigValidator simple command sections", () => {
 });
 
 describe("ConfigValidator.validate()", () => {
-  const createMinimalValidConfig = () => ({
+  const createMinimalValidConfig = (): NormalizedConfig => ({
+    ...ConfigValidator.normalize({}),
     general: { debugEnabled: false },
     obs: { enabled: false },
     commands: {},
-    tiktok: { enabled: false },
-    twitch: { enabled: false },
-    youtube: { enabled: false },
-    streamelements: { enabled: false },
+    tiktok: { enabled: false, username: "" },
+    twitch: { enabled: false, username: "", channel: "", clientId: "" },
+    youtube: { enabled: false, username: "" },
+    streamelements: { enabled: false, youtubeChannelId: "", twitchChannelId: "" },
     cooldowns: {
       defaultCooldown: 60,
       heavyCommandCooldown: 120,
@@ -750,9 +799,9 @@ describe("ConfigValidator.validate()", () => {
 
   it("returns error for missing general section", () => {
     const config = createMinimalValidConfig();
-    delete config.general;
+    const { general: _general, ...configWithoutGeneral } = config;
 
-    const result = ConfigValidator.validate(config);
+    const result = validateUncheckedConfig(configWithoutGeneral);
 
     expect(result.isValid).toBe(false);
     expect(result.errors).toContain(
@@ -762,18 +811,18 @@ describe("ConfigValidator.validate()", () => {
 
   it("accepts config without obs section (uses defaults)", () => {
     const config = createMinimalValidConfig();
-    delete config.obs;
+    const { obs: _obs, ...configWithoutObs } = config;
 
-    const result = ConfigValidator.validate(config);
+    const result = validateUncheckedConfig(configWithoutObs);
 
     expect(result.isValid).toBe(true);
   });
 
   it("accepts config without commands section (uses defaults)", () => {
     const config = createMinimalValidConfig();
-    delete config.commands;
+    const { commands: _commands, ...configWithoutCommands } = config;
 
-    const result = ConfigValidator.validate(config);
+    const result = validateUncheckedConfig(configWithoutCommands);
 
     expect(result.isValid).toBe(true);
   });
@@ -928,13 +977,10 @@ describe("getFieldsRequiredWhenEnabled()", () => {
 });
 
 describe("ConfigValidator.validateRequiredFields()", () => {
-  const {
-    createTikTokConfigFixture,
-    createTwitchConfigFixture,
-    createYouTubeConfigFixture,
-  } = require("../../../tests/helpers/config-fixture");
-
-  const createValidationTestConfig = (overrides = {}) => ({
+  const createValidationTestConfig = (
+    overrides: ValidationPlatformOverrides = {},
+  ): NormalizedConfig => ({
+    ...ConfigValidator.normalize({}),
     general: { debugEnabled: false },
     tiktok: createTikTokConfigFixture({ enabled: false, ...overrides.tiktok }),
     twitch: createTwitchConfigFixture({ enabled: false, ...overrides.twitch }),
@@ -949,7 +995,7 @@ describe("ConfigValidator.validateRequiredFields()", () => {
       tiktok: { enabled: true, username: "" },
     });
 
-    const errors = [];
+    const errors: string[] = [];
     ConfigValidator.validateRequiredFields(config, errors);
 
     expect(errors).toContain(
@@ -962,7 +1008,7 @@ describe("ConfigValidator.validateRequiredFields()", () => {
       youtube: { enabled: true, username: "" },
     });
 
-    const errors = [];
+    const errors: string[] = [];
     ConfigValidator.validateRequiredFields(config, errors);
 
     expect(errors).toContain(
@@ -983,7 +1029,7 @@ describe("ConfigValidator.validateRequiredFields()", () => {
         },
       });
 
-      const errors = [];
+      const errors: string[] = [];
       ConfigValidator.validateRequiredFields(config, errors);
 
       expect(errors).toContain(
@@ -1011,7 +1057,7 @@ describe("ConfigValidator.validateRequiredFields()", () => {
         youtube: { enabled: true },
       });
 
-      const errors = [];
+      const errors: string[] = [];
       ConfigValidator.validateRequiredFields(config, errors);
 
       expect(errors).toEqual([]);
@@ -1031,7 +1077,7 @@ describe("ConfigValidator.validateRequiredFields()", () => {
       youtube: { enabled: false, username: "" },
     });
 
-    const errors = [];
+    const errors: string[] = [];
     ConfigValidator.validateRequiredFields(config, errors);
 
     expect(errors).toEqual([]);
@@ -1052,7 +1098,7 @@ describe("ConfigValidator.validateRequiredFields()", () => {
         youtube: { enabled: true, username: "" },
       });
 
-      const errors = [];
+      const errors: string[] = [];
       ConfigValidator.validateRequiredFields(config, errors);
 
       expect(errors.length).toBe(5);
@@ -1085,7 +1131,7 @@ describe("ConfigValidator.validateRequiredFields()", () => {
       tiktok: { enabled: true, username: "   " },
     });
 
-    const errors = [];
+    const errors: string[] = [];
     ConfigValidator.validateRequiredFields(config, errors);
 
     expect(errors).toContain(
@@ -1139,8 +1185,16 @@ describe("ConfigValidator.normalizeFromSchema()", () => {
   });
 
   it("uses CONFIG_SCHEMA for section definitions", () => {
-    expect(CONFIG_SCHEMA.general).toBeDefined();
-    expect(CONFIG_SCHEMA.general.debugEnabled.type).toBe("boolean");
+    const generalSchema = CONFIG_SCHEMA.general;
+    expect(generalSchema).toBeDefined();
+    if (generalSchema === undefined) {
+      throw new Error("Expected general config schema to be defined");
+    }
+    const debugEnabled = requireFieldSpec(
+      generalSchema.debugEnabled,
+      "general.debugEnabled",
+    );
+    expect(debugEnabled.type).toBe("boolean");
   });
 
   it("returns empty object for dynamic sections", () => {
@@ -1151,7 +1205,7 @@ describe("ConfigValidator.normalizeFromSchema()", () => {
   });
 
   it("returns empty object for unknown sections", () => {
-    const result = ConfigValidator.normalizeFromSchema("nonexistent", {
+    const result = normalizeRuntimeSection("nonexistent", {
       foo: "bar",
     });
     expect(result).toEqual({});

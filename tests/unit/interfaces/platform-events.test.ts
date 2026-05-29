@@ -5,6 +5,10 @@ import { PlatformEvents, PlatformEventValidator } from '../../../src/interfaces/
 import { DEFAULT_AVATAR_URL } from '../../../src/constants/avatar';
 import testClock from '../../helpers/test-clock';
 
+function expectRecord(value: unknown): asserts value is Record<string, unknown> {
+    expect(value).toBeObject();
+}
+
 describe('Platform Events Interface', () => {
     describe('Event Schema Validation', () => {
         it('requires avatarUrl for chat events and permits optional avatar for notification payloads', () => {
@@ -768,6 +772,8 @@ describe('Platform Events Interface', () => {
 
             expect(event.platform).toBe('twitch');
             expect(event.type).toBe('platform:chat-message');
+            expectRecord(event.message);
+            expectRecord(event.metadata);
             expect(event.message.text).toBe('Built with fluent API');
             expect(event.metadata.vip).toBe(true);
         });

@@ -1,6 +1,6 @@
 import { describe, expect, beforeEach, afterEach, it } from "bun:test";
-import { spyOn, restoreAllMocks } from "../../helpers/bun-mock-utils";
-import { initializeTestLogging, TEST_TIMEOUTS } from "../../helpers/test-setup";
+import { restoreAllMocks } from "../../helpers/bun-mock-utils";
+import { initializeTestLogging } from "../../helpers/test-setup";
 initializeTestLogging();
 
 import { handleUserFacingError } from "../../../src/utils/user-friendly-errors.ts";
@@ -15,18 +15,24 @@ setupAutomatedCleanup({
   logPerformanceMetrics: true,
 });
 
+type TestLogger = typeof noOpLogger & {
+  console: (message: string, context?: string) => void;
+};
+
 describe(
   "User-Friendly Error System",
   () => {
     describe("handleUserFacingError", () => {
-      let mockLogger;
-      let consoleOutput;
+      let mockLogger: TestLogger;
+      let consoleOutput: string[];
 
       beforeEach(() => {
         consoleOutput = [];
-        mockLogger = noOpLogger;
-        mockLogger.console = (message) => {
-          consoleOutput.push(message);
+        mockLogger = {
+          ...noOpLogger,
+          console: (message: string) => {
+            consoleOutput.push(message);
+          },
         };
       });
 
@@ -86,20 +92,24 @@ describe(
       });
 
   describe("when handling exit scenarios", () => {
-    let mockProcessExit;
+    let originalProcessExit: typeof process.exit;
+    let exitCalled: boolean;
     let observedExitCode: number | undefined;
 
     beforeEach(() => {
+      exitCalled = false;
       observedExitCode = undefined;
-      mockProcessExit = spyOn(process, "exit").mockImplementation((code) => {
+      originalProcessExit = process.exit;
+      process.exit = ((code?: string | number | null | undefined) => {
+        exitCalled = true;
         observedExitCode = typeof code === "number" ? code : undefined;
         return undefined as never;
-      });
+      }) as typeof process.exit;
     });
 
         afterEach(() => {
           restoreAllMocks();
-          mockProcessExit.mockRestore();
+          process.exit = originalProcessExit;
         });
 
     it("exits with code 1 when exitOnError is true", () => {
@@ -113,7 +123,7 @@ describe(
             },
           );
 
-      expect(mockProcessExit).toHaveBeenCalled();
+      expect(exitCalled).toBe(true);
       expect(observedExitCode).toBe(1);
     });
 
@@ -122,10 +132,10 @@ describe(
 
           handleUserFacingError(normalError, { logger: mockLogger });
 
-          expect(mockProcessExit).not.toHaveBeenCalled();
+          expect(exitCalled).toBe(false);
+          expect(observedExitCode).toBeUndefined();
         });
       });
     });
-  },
-  TEST_TIMEOUTS.FAST,
+  }
 );
