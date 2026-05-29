@@ -3,9 +3,19 @@ import React from "react";
 import TestRenderer from "react-test-renderer";
 
 import { GiftAnimationLayer } from "../../../gui/src/shared/components/GiftAnimationLayer";
-import { createMockFn } from "../../helpers/bun-mock-utils";
+import type {
+  GuiGiftAnimationConfig,
+  GuiGiftAnimationEffectEnvelope,
+} from "../../../gui/src/shared/types";
+import { createMockFn, type TestMockFn } from "../../helpers/bun-mock-utils";
 
-function createEffect(overrides: Record<string, any> = {}) {
+type EffectOverrides = Partial<Omit<GuiGiftAnimationEffectEnvelope, "config">> & {
+  config?: Partial<GuiGiftAnimationConfig>;
+};
+
+function createEffect(
+  overrides: EffectOverrides = {},
+): GuiGiftAnimationEffectEnvelope {
   const baseConfig = {
     profileName: "portrait",
     sourceWidth: 960,
@@ -14,7 +24,8 @@ function createEffect(overrides: Record<string, any> = {}) {
     renderHeight: 854,
     rgbFrame: [0, 0, 480, 854],
     aFrame: [480, 0, 480, 854],
-  };
+  } satisfies GuiGiftAnimationConfig;
+  const { config: configOverrides, ...effectOverrides } = overrides;
 
   return {
     __guiEvent: "effect",
@@ -22,10 +33,10 @@ function createEffect(overrides: Record<string, any> = {}) {
     playbackId: "test-playback-id",
     durationMs: 2400,
     assetUrl: "/gui/runtime/test.mp4",
-    ...overrides,
+    ...effectOverrides,
     config: {
       ...baseConfig,
-      ...(overrides.config || {}),
+      ...(configOverrides || {}),
     },
   };
 }
@@ -56,10 +67,10 @@ type VideoNode = {
   onended: (() => void) | null;
   onerror: (() => void) | null;
   onloadeddata: (() => void) | null;
-  play: ReturnType<typeof createMockFn>;
-  pause: ReturnType<typeof createMockFn>;
-  removeAttribute: ReturnType<typeof createMockFn>;
-  load: ReturnType<typeof createMockFn>;
+  play: TestMockFn<[], Promise<undefined>>;
+  pause: TestMockFn;
+  removeAttribute: TestMockFn;
+  load: TestMockFn;
 };
 
 function createVideoNode(): VideoNode {
@@ -74,7 +85,7 @@ function createVideoNode(): VideoNode {
     onended: null,
     onerror: null,
     onloadeddata: null,
-    play: createMockFn().mockResolvedValue(undefined),
+    play: createMockFn<[], Promise<undefined>>().mockResolvedValue(undefined),
     pause: createMockFn(),
     removeAttribute: createMockFn(),
     load: createMockFn(),
@@ -489,8 +500,12 @@ describe("GiftAnimationLayer behavior", () => {
       expect(rgbBufferContext.putImageData.mock.calls.length).toBeGreaterThan(
         0,
       );
-      expect(rgbBufferContext.createImageData.mock.calls[0][0]).toBe(720);
-      expect(rgbBufferContext.createImageData.mock.calls[0][1]).toBe(1280);
+      const createImageDataCall = rgbBufferContext.createImageData.mock.calls[0];
+      if (!createImageDataCall) {
+        throw new Error("expected createImageData to be called");
+      }
+      expect(createImageDataCall[0]).toBe(720);
+      expect(createImageDataCall[1]).toBe(1280);
       expect(canvasContext.drawImage.mock.calls.length).toBeGreaterThan(0);
     } finally {
       if (renderer) {

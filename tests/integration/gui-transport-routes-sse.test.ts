@@ -88,6 +88,16 @@ function getBaseUrl(service: any) {
   return `http://127.0.0.1:${address.port}`;
 }
 
+function requireRuntimeErrorListener(
+  listener: ((error: Error) => void) | null,
+) {
+  if (!listener) {
+    throw new Error("Expected runtime server error listener to be registered");
+  }
+
+  return listener;
+}
+
 describe("GUI transport routes and SSE integration", () => {
   it("fails to start when host is missing", async () => {
     const config = buildConfig({
@@ -120,11 +130,11 @@ describe("GUI transport routes and SSE integration", () => {
       createServerCalls += 1;
       return {
         once: () => undefined,
-        listen: (_port: number, _host: string, callback: () => void) =>
-          callback(),
+        listen: (_port: number, _host: string, callback?: () => void) =>
+          callback?.(),
         address: () => ({ address: "127.0.0.1", family: "IPv4", port: 45678 }),
-        close: (callback: (error: Error) => void) =>
-          callback(new Error("forced-close-failure")),
+        close: (callback?: (error?: Error) => void) =>
+          callback?.(new Error("forced-close-failure")),
       };
     };
 
@@ -168,11 +178,13 @@ describe("GUI transport routes and SSE integration", () => {
         once: () => undefined,
         on: () => undefined,
         removeListener: () => undefined,
-        listen: (_port: number, _host: string, callback: () => void) => {
-          safeSetTimeout(callback, 15);
+        listen: (_port: number, _host: string, callback?: () => void) => {
+          if (callback) {
+            safeSetTimeout(callback, 15);
+          }
         },
         address: () => ({ address: "127.0.0.1", family: "IPv4", port: 45679 }),
-        close: (callback: (error?: Error) => void) => callback(),
+        close: (callback?: (error?: Error) => void) => callback?.(),
       };
     };
 
@@ -217,10 +229,10 @@ describe("GUI transport routes and SSE integration", () => {
             runtimeErrorListener = null;
           }
         },
-        listen: (_port: number, _host: string, callback: () => void) =>
-          callback(),
+        listen: (_port: number, _host: string, callback?: () => void) =>
+          callback?.(),
         address: () => ({ address: "127.0.0.1", family: "IPv4", port: 45680 }),
-        close: (callback: (error?: Error) => void) => callback(),
+        close: (callback?: (error?: Error) => void) => callback?.(),
       };
     };
 
@@ -233,13 +245,9 @@ describe("GUI transport routes and SSE integration", () => {
 
     await service.start();
     expect(service.isActive()).toBe(true);
-    if (!runtimeErrorListener) {
-      throw new Error(
-        "Expected runtime server error listener to be registered",
-      );
-    }
-
-    runtimeErrorListener(new Error("runtime transport error"));
+    requireRuntimeErrorListener(runtimeErrorListener)(
+      new Error("runtime transport error"),
+    );
     expect(service.isActive()).toBe(false);
     expect(service.getAddress()).toBe(null);
 
@@ -1821,7 +1829,7 @@ describe("GUI transport routes and SSE integration", () => {
     };
 
     for (let index = 0; index < toggleCases.length; index += 1) {
-      const toggleCase = toggleCases[index];
+      const toggleCase = toggleCases[index]!;
       const controlType =
         toggleCase.blockedType === "platform:follow"
           ? "platform:share"

@@ -245,18 +245,24 @@ describe("Chat demo main behavior", () => {
 
   it("bootstraps the demo entrypoint into the provided target", () => {
     const target = createTarget();
-    let renderedElement: { type: unknown } | null = null;
+    const renderedElements: React.ReactElement[] = [];
 
     const result = bootstrapChatDemo({
       target,
       createRootImpl: () => ({
-        render: (element: { type: unknown }) => {
-          renderedElement = element;
+        render: (element: React.ReactNode) => {
+          if (React.isValidElement(element)) {
+            renderedElements.push(element);
+          }
         },
       }),
     });
 
     expect(result).toBe(true);
-    expect(renderedElement?.type).toBe(ChatDemo);
+    const renderedElement = renderedElements[0];
+    if (!renderedElement) {
+      throw new Error("Expected ChatDemo element to render");
+    }
+    expect(renderedElement.type).toBe(ChatDemo);
   });
 });

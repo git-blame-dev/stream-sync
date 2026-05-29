@@ -4,6 +4,14 @@ import { waitForDelay } from "../../helpers/time-utils";
 
 type UnknownRecord = Record<string, any>;
 
+function requireValue<T>(value: T | undefined, description: string): T {
+  if (value === undefined) {
+    throw new Error(`Missing ${description}`);
+  }
+
+  return value;
+}
+
 type PreviewAdapter = "twitch" | "youtube" | "tiktok";
 
 type ScenarioEvent = {
@@ -126,10 +134,13 @@ describe("GUI local preview command behavior", () => {
         platform: "youtube",
       }),
     );
-    expect(events[0].adapter).toBe("twitch");
-    expect(events[1].adapter).toBe("tiktok");
-    expect(events[2].adapter).toBe("youtube");
-    expect(events[0].rawEvent).toBeDefined();
+    const firstEvent = requireValue(events[0], "first preview event");
+    const secondEvent = requireValue(events[1], "second preview event");
+    const thirdEvent = requireValue(events[2], "third preview event");
+    expect(firstEvent.adapter).toBe("twitch");
+    expect(secondEvent.adapter).toBe("tiktok");
+    expect(thirdEvent.adapter).toBe("youtube");
+    expect(firstEvent.rawEvent).toBeDefined();
   });
 
   it("inserts youtube member hi chat immediately after raid notification", () => {
@@ -142,7 +153,10 @@ describe("GUI local preview command behavior", () => {
 
     expect(raidIndex).toBeGreaterThan(-1);
 
-    const memberHiEvent = events[raidIndex + 1];
+    const memberHiEvent = requireValue(
+      events[raidIndex + 1],
+      "youtube member hi preview event",
+    );
     expect(memberHiEvent.adapter).toBe("youtube");
     expect(memberHiEvent.rawEvent.eventType).toBe("LiveChatTextMessage");
     expect(memberHiEvent.rawEvent.chatItem.testData.message).toBe("Hi!");
@@ -373,15 +387,22 @@ describe("GUI local preview command behavior", () => {
     expect(disposed).toBe(true);
     expect(createdPipelineArgs.length).toBe(1);
     expect(createdTransportArgs.length).toBe(1);
-    expect(typeof createdPipelineArgs[0].delay).toBe("function");
-    expect(createdPipelineArgs[0].giftAnimationResolver).toBeDefined();
+    const createdPipelineArg = requireValue(
+      createdPipelineArgs[0],
+      "created preview pipeline args",
+    );
+    expect(typeof createdPipelineArg.delay).toBe("function");
+    expect(createdPipelineArg.giftAnimationResolver).toBeDefined();
     expect(
-      typeof createdPipelineArgs[0].giftAnimationResolver
-        .resolveFromNotificationData,
+      typeof createdPipelineArg.giftAnimationResolver.resolveFromNotificationData,
     ).toBe("function");
-    expect(createdTransportArgs[0].eventBus).toBe(fakeEventBus);
+    expect(
+      requireValue(createdTransportArgs[0], "created transport args").eventBus,
+    ).toBe(fakeEventBus);
     expect(emittedEvents.length).toBeGreaterThanOrEqual(1);
-    expect(emittedEvents[0].eventName).toBe("platform:event");
+    expect(requireValue(emittedEvents[0], "first emitted event").eventName).toBe(
+      "platform:event",
+    );
     expect(
       emittedEvents.some((entry) => entry.eventName === "display:row"),
     ).toBe(false);
@@ -439,8 +460,12 @@ describe("GUI local preview command behavior", () => {
     });
 
     expect(ingested).toHaveLength(16);
-    expect(ingested[15].adapter).toBe("tiktok");
-    expect(ingested[15].rawEvent.eventType).toBe("ENVELOPE");
+    const finalIngestedEvent = requireValue(
+      ingested[15],
+      "final ingested preview event",
+    );
+    expect(finalIngestedEvent.adapter).toBe("tiktok");
+    expect(finalIngestedEvent.rawEvent.eventType).toBe("ENVELOPE");
   });
 
   it("routes ingest events through the preview pipeline boundaries", async () => {
@@ -541,9 +566,11 @@ describe("GUI local preview command behavior", () => {
     }
 
     expect(routedChats.length).toBe(1);
-    expect(routedChats[0].type).toBe("chat");
+    expect(requireValue(routedChats[0], "routed chat").type).toBe("chat");
     expect(routedNotifications.length).toBe(1);
-    expect(routedNotifications[0].type).toBe("platform:follow");
+    expect(
+      requireValue(routedNotifications[0], "routed notification").type,
+    ).toBe("platform:follow");
 
     await pipeline.dispose();
     expect(disposedCooldown).toBe(true);
@@ -1345,7 +1372,9 @@ describe("GUI local preview command behavior", () => {
     }
 
     expect(emittedEffects).toHaveLength(1);
-    expect(emittedEffects[0].durationMs).toBe(4200);
+    expect(requireValue(emittedEffects[0], "gift animation effect").durationMs).toBe(
+      4200,
+    );
 
     unsubscribeEffect();
     await pipeline.dispose();

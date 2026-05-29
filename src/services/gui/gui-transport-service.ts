@@ -24,12 +24,25 @@ type GuiTransportMapper = {
     mapDisplayRow: (row: DisplayRowMapperInput) => Promise<TransportRecord | null>;
 };
 
+type GuiHttpServer = {
+    address: Server['address'];
+    close: (callback?: (error?: Error) => void) => unknown;
+    listen: (port: number, host: string, callback?: () => void) => unknown;
+    on?: (eventName: string, listener: (error: Error) => void) => unknown;
+    once: (eventName: string, listener: (error: Error) => void) => unknown;
+    removeListener?: (eventName: string, listener: (error: Error) => void) => unknown;
+};
+
+type GuiHttpCreateServer = (
+    requestListener: (req: IncomingMessage, res: ServerResponse<IncomingMessage>) => void
+) => GuiHttpServer;
+
 type GuiTransportOptions = {
     config?: TransportRecord;
     logger?: GuiTransportLogger | null;
     eventBus?: GuiTransportEventBus;
     mapper?: GuiTransportMapper;
-    createServer?: typeof http.createServer;
+    createServer?: GuiHttpCreateServer;
     assetsRoot?: string;
     runtimeAssetRoots?: readonly string[];
     demoOnly?: boolean;
@@ -123,7 +136,7 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
         .filter((root) => root.length > 0)
         .map((root) => path.resolve(root));
 
-    let server: Server | null = null;
+    let server: GuiHttpServer | null = null;
     let active = false;
     let startPromise: Promise<void> | null = null;
     let serverRuntimeErrorHandler: ((error: Error) => void) | null = null;

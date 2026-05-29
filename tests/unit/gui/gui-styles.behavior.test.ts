@@ -4,8 +4,8 @@ import * as path from "node:path";
 
 function readSharedStyles() {
   const filePath = path.resolve(
-    import.meta.dir,
-    "../../../gui/src/shared/styles.css",
+    process.cwd(),
+    "gui/src/shared/styles.css",
   );
   return fs.readFileSync(filePath, "utf8");
 }
@@ -17,7 +17,7 @@ function readCssBlock(cssText: string, selector: string): string {
     "m",
   );
   const match = cssText.match(blockPattern);
-  return match ? match[1] : "";
+  return match?.[1] ?? "";
 }
 
 describe("GUI shared styles behavior", () => {

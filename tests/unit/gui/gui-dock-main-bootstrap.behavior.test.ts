@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import type { ReactNode } from "react";
 
 import {
   bootstrapDockApp,
@@ -16,6 +17,12 @@ function createTarget() {
       return attributes[name] || null;
     },
   };
+}
+
+function isElementWithProps(
+  value: unknown,
+): value is { props: Record<string, unknown> } {
+  return typeof value === "object" && value !== null && "props" in value;
 }
 
 describe("Dock main bootstrap behavior", () => {
@@ -59,8 +66,10 @@ describe("Dock main bootstrap behavior", () => {
         mode: "dock",
       }),
       createRootImpl: () => ({
-        render: (element: { props: Record<string, unknown> }) => {
-          renderedElement = element;
+        render: (element: ReactNode) => {
+          if (isElementWithProps(element)) {
+            renderedElement = element;
+          }
         },
       }),
     });
@@ -81,8 +90,10 @@ describe("Dock main bootstrap behavior", () => {
         mode: "tiktok-animations",
       }),
       createRootImpl: () => ({
-        render: (element: { props: Record<string, unknown> }) => {
-          renderedElement = element;
+        render: (element: ReactNode) => {
+          if (isElementWithProps(element)) {
+            renderedElement = element;
+          }
         },
       }),
     });

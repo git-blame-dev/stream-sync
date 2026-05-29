@@ -7,12 +7,26 @@ import {
 } from "../../../scripts/local/gui-gift-animation-preview.ts";
 
 type UnknownRecord = Record<string, unknown>;
-type PreviewPipelineArgs = {
-  giftAnimationResolver: {
-    resolveFromNotificationData: (...args: unknown[]) => unknown;
-  };
-  delay: (...args: unknown[]) => unknown;
-};
+
+function requireRecordAt(
+  records: UnknownRecord[],
+  index: number,
+): UnknownRecord {
+  const record = records[index];
+  if (!record) {
+    throw new Error(`Missing record at index ${index}`);
+  }
+
+  return record;
+}
+
+function requireValue<T>(value: T | undefined, description: string): T {
+  if (value === undefined) {
+    throw new Error(`Missing ${description}`);
+  }
+
+  return value;
+}
 
 describe("GUI gift animation preview command behavior", () => {
   it("builds the isolated Corgi gift preview event", () => {
@@ -20,8 +34,10 @@ describe("GUI gift animation preview command behavior", () => {
 
     expect(event).toBeDefined();
     expect(event.adapter).toBe("tiktok");
-    expect(event.rawEvent.eventType).toBe("GIFT");
-    expect(event.rawEvent.data.giftName).toBe("Corgi");
+    expect(event.rawEvent).toMatchObject({
+      eventType: "GIFT",
+      data: { giftName: "Corgi" },
+    });
   });
 
   it("runs isolated gift animation preview and disposes resources", async () => {
@@ -30,16 +46,17 @@ describe("GUI gift animation preview command behavior", () => {
     let disposed = false;
     const writes: string[] = [];
     const scheduledDurations: number[] = [];
-    const clearedHandles: number[] = [];
-    const createdPipelineArgs: PreviewPipelineArgs[] = [];
-    const emittedEvents: Array<{ eventName: string; payload: UnknownRecord }> =
+    const scheduledHandles: object[] = [];
+    const clearedHandles: unknown[] = [];
+    const createdPipelineArgs: UnknownRecord[] = [];
+    const emittedEvents: Array<{ eventName: string; payload: unknown }> =
       [];
 
     const fakeEventBus = {
       subscribe() {
         return () => {};
       },
-      emit(eventName: string, payload: UnknownRecord) {
+      emit(eventName: string, payload: unknown) {
         emittedEvents.push({ eventName, payload });
       },
     };
@@ -63,7 +80,7 @@ describe("GUI gift animation preview command behavior", () => {
 
     await runGuiGiftAnimationPreview({
       durationMs: 4,
-      createPreviewPipelineImpl: (args: PreviewPipelineArgs) => {
+      createPreviewPipelineImpl: (args: UnknownRecord) => {
         createdPipelineArgs.push(args);
         return fakePipeline;
       },
@@ -88,12 +105,14 @@ describe("GUI gift animation preview command behavior", () => {
       },
       safeSetTimeoutImpl: (resolve: () => void, duration: number) => {
         scheduledDurations.push(duration);
+        const handle = { duration };
+        scheduledHandles.push(handle);
         if (duration === 4) {
           resolve();
         }
-        return duration;
+        return handle;
       },
-      clearTimeoutImpl: (handle: number) => {
+      clearTimeoutImpl: (handle: unknown) => {
         clearedHandles.push(handle);
       },
       stdout: {
@@ -105,19 +124,27 @@ describe("GUI gift animation preview command behavior", () => {
     expect(stopped).toBe(true);
     expect(disposed).toBe(true);
     expect(createdPipelineArgs.length).toBe(1);
-    expect(
-      typeof createdPipelineArgs[0].giftAnimationResolver
-        .resolveFromNotificationData,
-    ).toBe("function");
-    expect(typeof createdPipelineArgs[0].delay).toBe("function");
+    const createdPipelineArg = requireRecordAt(createdPipelineArgs, 0);
+    expect(createdPipelineArg.giftAnimationResolver).toMatchObject({
+      resolveFromNotificationData: expect.any(Function),
+    });
+    expect(typeof createdPipelineArg.delay).toBe("function");
     expect(scheduledDurations).toContain(750);
     expect(scheduledDurations).toContain(2250);
     expect(scheduledDurations).toContain(4);
-    expect(clearedHandles).toContain(750);
-    expect(clearedHandles).toContain(2250);
+    expect(clearedHandles).toContain(
+      requireValue(scheduledHandles[0], "first scheduled timer handle"),
+    );
+    expect(clearedHandles).toContain(
+      requireValue(scheduledHandles[1], "second scheduled timer handle"),
+    );
     expect(emittedEvents.length).toBeGreaterThan(0);
-    expect(emittedEvents[0].eventName).toBe("display:gift-animation");
-    expect(emittedEvents[0].payload.platform).toBe("tiktok");
+    const emittedEvent = emittedEvents[0];
+    if (!emittedEvent) {
+      throw new Error("Expected gift animation event to be emitted");
+    }
+    expect(emittedEvent.eventName).toBe("display:gift-animation");
+    expect(emittedEvent.payload).toMatchObject({ platform: "tiktok" });
     expect(
       writes.some((line) =>
         line.includes("GUI gift animation preview running"),
@@ -134,7 +161,7 @@ describe("GUI gift animation preview command behavior", () => {
   });
 
   it("uses default preview duration when value is missing", async () => {
-    let capturedDuration: number | null = null;
+    const scheduledDurations: number[] = [];
 
     await runGuiGiftAnimationPreview({
       createPreviewPipelineImpl: () => ({
@@ -165,14 +192,15 @@ describe("GUI gift animation preview command behavior", () => {
         },
       },
       safeSetTimeoutImpl: (resolve: () => void, duration: number) => {
-        capturedDuration = duration;
+        scheduledDurations.push(duration);
         resolve();
+        return { duration };
       },
       stdout: {
         write() {},
       },
     });
 
-    expect(capturedDuration).toBe(DEFAULT_DURATION_MS);
+    expect(scheduledDurations).toContain(DEFAULT_DURATION_MS);
   });
 });

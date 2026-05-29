@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import TestRenderer from "react-test-renderer";
 
 import { GuiShell } from "../../../gui/src/shared/components/GuiShell";
+import type { GuiRowDto } from "../../../gui/src/shared/types";
 
 type ScrollListener = () => void;
 type OverlayLayout = { offsetTop: number; offsetHeight: number };
@@ -18,6 +19,10 @@ type ShellRenderer = {
     ) => Array<{ props: Record<string, any> }>;
   };
 };
+
+function isOverlayNode(value: unknown): value is OverlayNode {
+  return typeof value === "object" && value !== null;
+}
 
 function createDockShellMock({
   scrollTop = 0,
@@ -47,7 +52,7 @@ function createDockShellMock({
   };
 }
 
-function createGuiRow(index: number) {
+function createGuiRow(index: number): GuiRowDto {
   return {
     type: "chat",
     kind: "chat",
@@ -98,7 +103,11 @@ function createOverlayNodeMocks(
 
   return {
     shell,
-    createNodeMock: (element: OverlayNode) => {
+    createNodeMock: (element: unknown) => {
+      if (!isOverlayNode(element)) {
+        return {};
+      }
+
       if (element.type === "main") {
         return shell;
       }
@@ -314,9 +323,13 @@ describe("GuiShell behavior", () => {
 
       const exitNodes = findOverlayExitNodes(renderer!);
       expect(exitNodes.length).toBe(1);
+      const [exitNode] = exitNodes;
+      if (!exitNode) {
+        throw new Error("expected an overlay exit node");
+      }
 
       await TestRenderer.act(async () => {
-        exitNodes[0].props.onAnimationEnd({
+        exitNode.props.onAnimationEnd({
           animationName: "gui-overlay-row-exit",
         });
       });
@@ -669,7 +682,11 @@ describe("GuiShell behavior", () => {
             rows: [createGuiRow(1), createGuiRow(2), createGuiRow(3)],
           }),
           {
-            createNodeMock: (element: OverlayNode) => {
+            createNodeMock: (element: unknown) => {
+              if (!isOverlayNode(element)) {
+                return {};
+              }
+
               if (element.type === "main") {
                 return createDockShellMock();
               }
@@ -728,7 +745,11 @@ describe("GuiShell behavior", () => {
             ],
           }),
           {
-            createNodeMock: (element: OverlayNode) => {
+            createNodeMock: (element: unknown) => {
+              if (!isOverlayNode(element)) {
+                return {};
+              }
+
               if (element.type === "main") {
                 return dockShell;
               }
@@ -823,7 +844,11 @@ describe("GuiShell behavior", () => {
             ],
           }),
           {
-            createNodeMock: (element: OverlayNode) => {
+            createNodeMock: (element: unknown) => {
+              if (!isOverlayNode(element)) {
+                return {};
+              }
+
               if (element.type === "main") {
                 return dockShell;
               }
@@ -963,7 +988,11 @@ describe("GuiShell behavior", () => {
             ],
           }),
           {
-            createNodeMock: (element: OverlayNode) => {
+            createNodeMock: (element: unknown) => {
+              if (!isOverlayNode(element)) {
+                return {};
+              }
+
               if (element.type === "main") {
                 return dockShell;
               }
@@ -1106,7 +1135,11 @@ describe("GuiShell behavior", () => {
             rows: [],
           }),
           {
-            createNodeMock: (element: OverlayNode) => {
+            createNodeMock: (element: unknown) => {
+              if (!isOverlayNode(element)) {
+                return {};
+              }
+
               if (element.type === "main") {
                 return dockShell;
               }
@@ -1180,7 +1213,11 @@ describe("GuiShell behavior", () => {
             ],
           }),
           {
-            createNodeMock: (element: OverlayNode) => {
+            createNodeMock: (element: unknown) => {
+              if (!isOverlayNode(element)) {
+                return {};
+              }
+
               if (element.type === "main") {
                 return dockShell;
               }
@@ -1279,7 +1316,11 @@ describe("GuiShell behavior", () => {
             ],
           }),
           {
-            createNodeMock: (element: OverlayNode) => {
+            createNodeMock: (element: unknown) => {
+              if (!isOverlayNode(element)) {
+                return {};
+              }
+
               if (element.type === "main") {
                 return dockShell;
               }

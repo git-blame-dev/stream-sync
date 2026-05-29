@@ -11,6 +11,8 @@ const { safeSetTimeout, safeDelay } = load('../../src/utils/timeout-validator');
 
 const DEFAULT_DURATION_MS = 12000;
 
+type GiftAnimationPreviewTimerHandle = unknown;
+
 interface GiftAnimationPreviewOptions {
     baseConfig?: Record<string, unknown>;
     durationMs?: number;
@@ -29,8 +31,8 @@ interface GiftAnimationPreviewOptions {
         start: () => Promise<void>;
         stop?: () => Promise<void>;
     };
-    safeSetTimeoutImpl?: (callback: () => void, duration: number) => ReturnType<typeof setTimeout>;
-    clearTimeoutImpl?: (handle: ReturnType<typeof setTimeout>) => void;
+    safeSetTimeoutImpl?: (callback: () => void, duration: number) => GiftAnimationPreviewTimerHandle;
+    clearTimeoutImpl?: (handle: GiftAnimationPreviewTimerHandle) => void;
     stdout?: { write: (text: string) => void };
     delay?: (ms: number) => Promise<void>;
     eventBus?: unknown;
@@ -146,8 +148,8 @@ async function runGuiGiftAnimationPreview(options: GiftAnimationPreviewOptions =
     const errorHandler = createPlatformErrorHandler(logger, 'gui-gift-animation-preview');
     const createPreviewPipelineImpl = options.createPreviewPipelineImpl || createPreviewPipeline;
     const createGuiTransportServiceImpl = options.createGuiTransportServiceImpl || createGuiTransportService;
-    const safeSetTimeoutImpl = options.safeSetTimeoutImpl || safeSetTimeout;
-    const clearTimeoutImpl = options.clearTimeoutImpl || clearTimeout;
+    const safeSetTimeoutImpl = options.safeSetTimeoutImpl || ((callback, duration) => safeSetTimeout(callback, duration));
+    const clearTimeoutImpl = options.clearTimeoutImpl || ((handle) => clearTimeout(handle as ReturnType<typeof setTimeout>));
     const stdout = options.stdout || process.stdout;
     const delay = options.delay || ((ms) => {
         const parsed = Number(ms);
@@ -156,7 +158,7 @@ async function runGuiGiftAnimationPreview(options: GiftAnimationPreviewOptions =
 
     let pipeline: ReturnType<NonNullable<GiftAnimationPreviewOptions['createPreviewPipelineImpl']>> | null = null;
     let service: ReturnType<NonNullable<GiftAnimationPreviewOptions['createGuiTransportServiceImpl']>> | null = null;
-    const scheduledEmitTimers: Array<ReturnType<typeof setTimeout>> = [];
+    const scheduledEmitTimers: GiftAnimationPreviewTimerHandle[] = [];
 
     try {
         const giftAnimationResolver = options.giftAnimationResolver || createTikTokGiftAnimationResolver({ logger });
@@ -211,7 +213,7 @@ async function runGuiGiftAnimationPreview(options: GiftAnimationPreviewOptions =
         scheduledEmitTimers.push(safeSetTimeoutImpl(() => emitGiftAnimation(), 2250));
 
         await new Promise((resolve) => {
-            safeSetTimeoutImpl(resolve, durationMs);
+            safeSetTimeoutImpl(() => resolve(undefined), durationMs);
         });
 
         stdout.write('GUI gift animation preview finished\n');

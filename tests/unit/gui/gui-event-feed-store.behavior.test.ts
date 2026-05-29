@@ -2,6 +2,14 @@ import { describe, expect, it } from "bun:test";
 
 import { createGuiFeedStore } from "../../../gui/src/shared/feed-store";
 
+function expectFirstRow<T>(rows: T[]): T {
+  const [row] = rows;
+  if (!row) {
+    throw new Error("expected at least one GUI feed row");
+  }
+  return row;
+}
+
 function createRow(index: number) {
   return {
     type: "chat",
@@ -31,14 +39,15 @@ describe("GUI feed store behavior", () => {
 
     const rows = store.getRows();
     expect(rows.length).toBe(1);
-    expect(rows[0].type).toBe("chat");
-    expect(rows[0].kind).toBe("chat");
-    expect(rows[0].platform).toBe("twitch");
-    expect(rows[0].username).toBe("test-user");
-    expect(rows[0].text).toBe("hello world");
-    expect(rows[0].avatarUrl).toBe("https://example.invalid/test-avatar.png");
-    expect(rows[0].timestamp).toBe("2024-01-01T00:00:00.000Z");
-    expect(Object.prototype.hasOwnProperty.call(rows[0], "ignoredField")).toBe(
+    const row = expectFirstRow(rows);
+    expect(row.type).toBe("chat");
+    expect(row.kind).toBe("chat");
+    expect(row.platform).toBe("twitch");
+    expect(row.username).toBe("test-user");
+    expect(row.text).toBe("hello world");
+    expect(row.avatarUrl).toBe("https://example.invalid/test-avatar.png");
+    expect(row.timestamp).toBe("2024-01-01T00:00:00.000Z");
+    expect(Object.prototype.hasOwnProperty.call(row, "ignoredField")).toBe(
       false,
     );
   });
@@ -59,7 +68,7 @@ describe("GUI feed store behavior", () => {
 
     const rows = store.getRows();
     expect(rows.length).toBe(1);
-    expect(rows[0].isPaypiggy).toBe(true);
+    expect(expectFirstRow(rows).isPaypiggy).toBe(true);
   });
 
   it("preserves parts arrays emitted by GUI mapper", () => {
@@ -85,7 +94,7 @@ describe("GUI feed store behavior", () => {
 
     const rows = store.getRows();
     expect(rows).toHaveLength(1);
-    expect(rows[0].parts).toEqual([
+    expect(expectFirstRow(rows).parts).toEqual([
       {
         type: "emote",
         platform: "tiktok",
@@ -127,7 +136,7 @@ describe("GUI feed store behavior", () => {
 
     const rows = store.getRows();
     expect(rows).toHaveLength(1);
-    expect(rows[0].badgeImages).toEqual([
+    expect(expectFirstRow(rows).badgeImages).toEqual([
       {
         imageUrl: "https://example.invalid/badge-1.png",
         source: "twitch",
@@ -174,9 +183,13 @@ describe("GUI feed store behavior", () => {
 
     const rows = store.getRows();
     expect(rows.length).toBe(3);
-    expect(rows[0].username).toBe("test-user-1");
-    expect(rows[1].username).toBe("test-user-2");
-    expect(rows[2].username).toBe("test-user-3");
+    const [firstRow, secondRow, thirdRow] = rows;
+    if (!firstRow || !secondRow || !thirdRow) {
+      throw new Error("expected three GUI feed rows");
+    }
+    expect(firstRow.username).toBe("test-user-1");
+    expect(secondRow.username).toBe("test-user-2");
+    expect(thirdRow.username).toBe("test-user-3");
   });
 
   it("enforces overlay queue max rows by keeping latest rows", () => {

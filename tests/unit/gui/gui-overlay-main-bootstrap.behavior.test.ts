@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import type { ReactNode } from "react";
 
 import { bootstrapOverlayApp } from "../../../gui/src/overlay/main";
 
@@ -15,6 +16,12 @@ function createTarget() {
   };
 }
 
+function isElementWithProps(
+  value: unknown,
+): value is { props: Record<string, unknown> } {
+  return typeof value === "object" && value !== null && "props" in value;
+}
+
 describe("Overlay main bootstrap behavior", () => {
   it("renders overlay app when runtime config is valid", () => {
     const target = createTarget();
@@ -27,8 +34,10 @@ describe("Overlay main bootstrap behavior", () => {
         overlayMaxLinesPerMessage: 4,
       }),
       createRootImpl: () => ({
-        render: (element: { props: Record<string, unknown> }) => {
-          renderedElement = element;
+        render: (element: ReactNode) => {
+          if (isElementWithProps(element)) {
+            renderedElement = element;
+          }
         },
       }),
     });
