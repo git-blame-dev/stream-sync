@@ -4,11 +4,24 @@ import { captureStderr, captureStdout } from '../../helpers/output-capture';
 import fs from 'fs';
 import * as configModule from '../../../src/core/config.ts';
 
+type BuiltConfigShape = {
+    general: {
+        debugEnabled: boolean;
+        viewerCountPollingInterval: number;
+        anonymousUsername: string;
+    };
+    cooldowns: {
+        defaultCooldown: number;
+        heavyCommandCooldown: number;
+        maxEntries: number;
+    };
+};
+
 function loadFreshConfig() {
     configModule._resetConfigForTesting();
     const loadedConfig = configModule.config;
     void loadedConfig.general;
-    return { config: loadedConfig, configModule };
+    return { config: loadedConfig as unknown as BuiltConfigShape, configModule };
 }
 
 function loadFreshConfigModule() {
@@ -78,14 +91,14 @@ ${streamelementsSection}
 `;
 
 describe('Config loading behavior', () => {
-    let currentConfig: typeof configModule.config;
+    let currentConfig: BuiltConfigShape;
 
     const setupConfigMocks = (content: string, configPath = testConfigPath) => {
-        fs.existsSync = createMockFn((filePath) => filePath === configPath);
+        fs.existsSync = createMockFn((filePath) => filePath === configPath) as unknown as typeof fs.existsSync;
         fs.readFileSync = createMockFn((filePath) => {
             if (filePath === configPath) return content;
             throw new Error(`ENOENT: no such file: ${filePath}`);
-        });
+        }) as unknown as typeof fs.readFileSync;
     };
 
     const reloadConfig = (content: string, configPath = testConfigPath) => {
@@ -131,7 +144,11 @@ describe('Config loading behavior', () => {
             expect(() => loadFreshConfig()).toThrow(/Configuration file not found/);
             expect(stderrCapture.output.join('')).toContain('SETTINGS FILE MISSING');
         } finally {
-            process.env.NODE_ENV = originalNodeEnv;
+            if (originalNodeEnv === undefined) {
+                delete process.env.NODE_ENV;
+            } else {
+                process.env.NODE_ENV = originalNodeEnv;
+            }
             stderrCapture.restore();
         }
     });
@@ -322,12 +339,12 @@ enabled = true
             `[general]\nenvFileReadEnabled = true\nenvFilePath = ${envPath}\n`
         );
 
-        fs.existsSync = createMockFn((filePath) => filePath === testConfigPath || filePath === envPath);
+        fs.existsSync = createMockFn((filePath) => filePath === testConfigPath || filePath === envPath) as unknown as typeof fs.existsSync;
         fs.readFileSync = createMockFn((filePath) => {
             if (filePath === testConfigPath) return configWithEnv;
             if (filePath === envPath) return 'TWITCH_CLIENT_ID=test-env-client-id\n';
             throw new Error(`ENOENT: no such file: ${filePath}`);
-        });
+        }) as unknown as typeof fs.readFileSync;
 
         delete process.env.TWITCH_CLIENT_ID;
         process.env.CHAT_BOT_CONFIG_PATH = testConfigPath;
@@ -344,12 +361,12 @@ enabled = true
             `[general]\nenvFileReadEnabled = true\nenvFilePath = ${envPath}\n`
         );
 
-        fs.existsSync = createMockFn((filePath) => filePath === testConfigPath || filePath === envPath);
+        fs.existsSync = createMockFn((filePath) => filePath === testConfigPath || filePath === envPath) as unknown as typeof fs.existsSync;
         fs.readFileSync = createMockFn((filePath) => {
             if (filePath === testConfigPath) return configWithEnv;
             if (filePath === envPath) return 'TWITCH_CLIENT_ID=test-env-file-client-id\n';
             throw new Error(`ENOENT: no such file: ${filePath}`);
-        });
+        }) as unknown as typeof fs.readFileSync;
 
         process.env.TWITCH_CLIENT_ID = 'test-shell-client-id';
         process.env.CHAT_BOT_CONFIG_PATH = testConfigPath;
@@ -366,12 +383,12 @@ enabled = true
             `[general]\nenvFileReadEnabled = true\nenvFilePath = ${envPath}\n`
         );
 
-        fs.existsSync = createMockFn((filePath) => filePath === testConfigPath || filePath === envPath);
+        fs.existsSync = createMockFn((filePath) => filePath === testConfigPath || filePath === envPath) as unknown as typeof fs.existsSync;
         fs.readFileSync = createMockFn((filePath) => {
             if (filePath === testConfigPath) return configWithEnv;
             if (filePath === envPath) return 'OTHER_KEY=value\n';
             throw new Error(`ENOENT: no such file: ${filePath}`);
-        });
+        }) as unknown as typeof fs.readFileSync;
 
         delete process.env.TWITCH_CLIENT_ID;
         process.env.CHAT_BOT_CONFIG_PATH = testConfigPath;
@@ -404,7 +421,7 @@ enabled = true
                 return buildConfig();
             }
             throw new Error(`ENOENT: no such file: ${filePath}`);
-        });
+        }) as unknown as typeof fs.readFileSync;
 
         configModule._resetConfigForTesting();
         const first = configModule.loadConfig();
@@ -436,12 +453,12 @@ enabled = true
             `[general]\nenvFileReadEnabled = true\nenvFilePath = ${envPath}\n`
         );
 
-        fs.existsSync = createMockFn((filePath) => filePath === testConfigPath || filePath === envPath);
+        fs.existsSync = createMockFn((filePath) => filePath === testConfigPath || filePath === envPath) as unknown as typeof fs.existsSync;
         fs.readFileSync = createMockFn((filePath) => {
             if (filePath === testConfigPath) return configWithEnvEnabled;
             if (filePath === envPath) return 'TWITCH_CLIENT_ID=test-loaded-from-env\n';
             throw new Error(`ENOENT: no such file: ${filePath}`);
-        });
+        }) as unknown as typeof fs.readFileSync;
 
         delete process.env.TWITCH_CLIENT_ID;
         process.env.CHAT_BOT_CONFIG_PATH = testConfigPath;
@@ -460,7 +477,7 @@ enabled = true
                 throw new Error('env file should not be read when disabled');
             }
             throw new Error(`ENOENT: no such file: ${filePath}`);
-        });
+        }) as unknown as typeof fs.readFileSync;
         delete process.env.TWITCH_CLIENT_ID;
 
         const disabledModule = loadFreshConfigModule();

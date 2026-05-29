@@ -6,7 +6,7 @@ const envKeys = [
   "YOUTUBE_API_KEY",
   "OBS_PASSWORD",
   "STREAMELEMENTS_JWT_TOKEN",
-];
+] as const;
 
 import {
   secrets,
@@ -15,7 +15,7 @@ import {
 } from "../../../src/core/secrets.ts";
 
 describe("secrets", () => {
-  const originalEnv = {};
+  const originalEnv: Partial<Record<(typeof envKeys)[number], string | undefined>> = {};
 
   beforeEach(() => {
     envKeys.forEach((key) => {

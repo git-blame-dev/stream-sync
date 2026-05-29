@@ -3,6 +3,17 @@ import { ConfigValidator } from "../../src/utils/config-validator";
 import { buildConfig as _buildConfig } from "../../src/core/config-builders.ts";
 import { getRawTestConfig } from "../helpers/config-fixture";
 
+type PlatformLogoMappings = {
+  twitch?: unknown;
+  youtube?: unknown;
+  tiktok?: unknown;
+};
+
+function expectPlatformLogoMappings(value: unknown): asserts value is PlatformLogoMappings {
+  expect(value).toBeDefined();
+  expect(typeof value).toBe("object");
+}
+
 describe("Config build pipeline integration", () => {
   describe("buildConfig includes all sections required by main.js", () => {
     it("contains all config sections accessed by main.js", () => {
@@ -75,7 +86,7 @@ describe("Config build pipeline integration", () => {
       const normalized = ConfigValidator.normalize(rawConfig);
       const built = _buildConfig(normalized);
 
-      expect(built.obs.chatPlatformLogos).toBeDefined();
+      expectPlatformLogoMappings(built.obs.chatPlatformLogos);
       expect(built.obs.notificationPlatformLogos).toBeDefined();
       expect(built.obs.chatPlatformLogos.twitch).toBeDefined();
       expect(built.obs.chatPlatformLogos.youtube).toBeDefined();

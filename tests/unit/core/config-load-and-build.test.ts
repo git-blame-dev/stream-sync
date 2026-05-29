@@ -9,13 +9,28 @@ import * as configModuleRef from '../../../src/core/config.ts';
 import { buildLoggingConfig } from '../../../src/core/config-builders.ts';
 import { ConfigValidator } from '../../../src/utils/config-validator';
 
+type LoadedConfigModule = typeof configModuleRef;
+
+type BuiltConfigShape = {
+    general: { viewerCountPollingIntervalMs: number };
+    obs: { chatPlatformLogos: { twitch: string } };
+    gifts: { giftVideoSource: string };
+    envelopes: { command: string };
+    gui: { enableDock: boolean; overlayMaxMessages: number };
+    logging: unknown;
+};
+
+function getBuiltConfig(module: LoadedConfigModule): BuiltConfigShape {
+    return module.config as unknown as BuiltConfigShape;
+}
+
 describe('config load and build behavior', () => {
-    let tempDir;
-    let tempConfigPath;
-    let tempEnvPath;
-    let originalConfigPath;
-    let originalTwitchClientId;
-let configModule = configModuleRef;
+    let tempDir: string;
+    let tempConfigPath: string;
+    let tempEnvPath: string;
+    let originalConfigPath: string | undefined;
+    let originalTwitchClientId: string | undefined;
+    let configModule: LoadedConfigModule = configModuleRef;
 
     beforeEach(() => {
         tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'test-config-'));
@@ -36,11 +51,9 @@ let configModule = configModuleRef;
         } else {
             process.env.TWITCH_CLIENT_ID = originalTwitchClientId;
         }
-        if (configModule) {
-            configModule._resetConfigForTesting();
-        }
+        configModule._resetConfigForTesting();
         fs.rmSync(tempDir, { recursive: true, force: true });
-        configModule = null;
+        configModule = configModuleRef;
     });
 
     it('loads and builds configuration from ini file with debug enabled', () => {
@@ -91,7 +104,7 @@ configModule = configModuleRef;
             configModule._resetConfigForTesting();
 
             const normalized = configModule.loadConfig();
-            const built = configModule.config;
+            const built = getBuiltConfig(configModule);
 
             expect(normalized.general.debugEnabled).toBe(true);
             expect(built.general.viewerCountPollingIntervalMs).toBe(60000);
@@ -109,6 +122,9 @@ configModule = configModuleRef;
     it('normalizes out-of-range values to defaults and exposes config path', () => {
 configModule = configModuleRef;
         const rawConfig = getRawTestConfig();
+        if (!rawConfig.handcam) {
+            throw new Error('Expected handcam fixture section');
+        }
         rawConfig.cooldowns.defaultCooldown = '5';
         rawConfig.cooldowns.heavyCommandCooldown = '30';
         rawConfig.cooldowns.heavyCommandThreshold = '1';

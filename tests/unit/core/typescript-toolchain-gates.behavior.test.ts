@@ -8,6 +8,7 @@ const __dirname = dirname(__filename);
 
 const repoRoot = join(__dirname, '..', '..', '..');
 const packageJson = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8')) as {
+    main: string;
     scripts: Record<string, string>;
 };
 
@@ -124,7 +125,7 @@ function findCommonJsModuleSyntax(content: string) {
     ];
 
     for (let index = 0; index < lines.length; index += 1) {
-        const line = lines[index];
+        const line = lines[index] ?? '';
         if (syntaxPatterns.some(pattern => pattern.test(line))) {
             return index + 1;
         }

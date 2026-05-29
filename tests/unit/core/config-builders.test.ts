@@ -337,7 +337,7 @@ describe('config-builders', () => {
             expect(result.command).toBe('!testgift');
             expect(result.giftVideoSource).toBe('test-video');
             expect(result.giftAudioSource).toBe('test-audio');
-            expect(result.extraField).toBeUndefined();
+            expect('extraField' in result).toBe(false);
         });
     });
 
@@ -352,7 +352,7 @@ describe('config-builders', () => {
             const result = buildEnvelopeConfig(normalized);
 
             expect(result.command).toBe('!testenvelope');
-            expect(result.extraField).toBeUndefined();
+            expect('extraField' in result).toBe(false);
         });
     });
 
@@ -367,7 +367,7 @@ describe('config-builders', () => {
             const result = buildVfxConfig(normalized);
 
             expect(result.filePath).toBe('test/vfx.json');
-            expect(result.extraField).toBeUndefined();
+            expect('extraField' in result).toBe(false);
         });
     });
 

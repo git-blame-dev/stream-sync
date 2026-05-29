@@ -1,11 +1,19 @@
 import { describe, expect, it } from 'bun:test';
 import { CONFIG_SCHEMA, getFieldsRequiredWhenEnabled, buildDefaultsFromSchema, DEFAULTS } from '../../../src/core/config-schema.ts';
+import type { ConfigDefaultSectionName, ConfigDefaults, ConfigSchema } from '../../../src/core/types/config-types';
+
+function expectConfigSection<K extends ConfigDefaultSectionName>(
+    defaults: Partial<ConfigDefaults>,
+    sectionName: K,
+): asserts defaults is Partial<ConfigDefaults> & Pick<ConfigDefaults, K> {
+    expect(defaults[sectionName]).toBeDefined();
+}
 
 describe('buildDefaultsFromSchema()', () => {
     it('returns object with all sections from schema except dynamic', () => {
         const defaults = buildDefaultsFromSchema();
-        const schemaSections = Object.keys(CONFIG_SCHEMA).filter(
-            name => !CONFIG_SCHEMA[name]._dynamic
+        const schemaSections = (Object.keys(CONFIG_SCHEMA) as Array<keyof ConfigSchema>).filter(
+            name => !CONFIG_SCHEMA[name]?._dynamic
         );
 
         for (const sectionName of schemaSections) {
@@ -16,6 +24,8 @@ describe('buildDefaultsFromSchema()', () => {
 
     it('extracts default values from field specs', () => {
         const defaults = buildDefaultsFromSchema();
+        expectConfigSection(defaults, 'general');
+        expectConfigSection(defaults, 'cooldowns');
 
         expect(defaults.general.debugEnabled).toBe(false);
         expect(defaults.general.messagesEnabled).toBe(true);
@@ -25,6 +35,9 @@ describe('buildDefaultsFromSchema()', () => {
 
     it('skips fields without default (userDefined, inheritFrom)', () => {
         const defaults = buildDefaultsFromSchema();
+        expectConfigSection(defaults, 'youtube');
+        expectConfigSection(defaults, 'twitch');
+        expectConfigSection(defaults, 'tiktok');
 
         expect(defaults.youtube).not.toHaveProperty('viewerCountSource');
         expect(defaults.twitch).not.toHaveProperty('pollInterval');
@@ -33,6 +46,9 @@ describe('buildDefaultsFromSchema()', () => {
 
     it('includes all platform defaults', () => {
         const defaults = buildDefaultsFromSchema();
+        expectConfigSection(defaults, 'tiktok');
+        expectConfigSection(defaults, 'twitch');
+        expectConfigSection(defaults, 'youtube');
 
         expect(defaults.tiktok.enabled).toBe(false);
         expect(defaults.tiktok.viewerCountEnabled).toBe(true);
@@ -45,6 +61,8 @@ describe('buildDefaultsFromSchema()', () => {
 
     it('includes timing and handcam defaults', () => {
         const defaults = buildDefaultsFromSchema();
+        expectConfigSection(defaults, 'timing');
+        expectConfigSection(defaults, 'handcam');
 
         expect(defaults.timing.fadeDuration).toBe(750);
         expect(defaults.timing.chatMessageDuration).toBe(4500);
@@ -92,7 +110,7 @@ describe('DEFAULTS constant', () => {
     it('matches buildDefaultsFromSchema() for all sections', () => {
         const generated = buildDefaultsFromSchema();
 
-        for (const [sectionName, sectionDefaults] of Object.entries(generated)) {
+        for (const [sectionName, sectionDefaults] of Object.entries(generated) as Array<[ConfigDefaultSectionName, ConfigDefaults[ConfigDefaultSectionName]]>) {
             expect(DEFAULTS[sectionName]).toEqual(sectionDefaults);
         }
     });

@@ -24,12 +24,12 @@ describe("TTS Configuration Boolean Parsing", () => {
   });
 
   describe("when ttsEnabled is configured with different values", () => {
-    const createDisplayQueueWithTTS = (ttsValue) => {
+    const createDisplayQueueWithTTS = (ttsValue: unknown) => {
       const baseConstants = { PRIORITY_LEVELS };
       const config = {
         autoProcess: false,
         maxQueueSize: 100,
-        ttsEnabled: ttsValue,
+        ...(ttsValue === undefined ? {} : { ttsEnabled: ttsValue }),
         obs: {
           ttsTxt: "tts txt",
         },
@@ -58,12 +58,14 @@ describe("TTS Configuration Boolean Parsing", () => {
       };
 
       const mockOBS = {
+        ensureConnected: createMockFn().mockResolvedValue(),
         isConnected: () => true,
-        call: createMockFn().mockResolvedValue({}),
+        isReady: () => Promise.resolve(true),
+        call: createMockFn<[requestType: string, payload?: Record<string, unknown>], Promise<unknown>>().mockResolvedValue({}),
         updateTextSource: createMockFn().mockResolvedValue(true),
       };
 
-      const realSourcesManager = createOBSSourcesManager(mockOBS, {
+      const realSourcesManager = createOBSSourcesManager(mockOBS as unknown as Parameters<typeof createOBSSourcesManager>[0], {
         ...createSourcesConfigFixture(),
         logger: noOpLogger,
         ensureOBSConnected: createMockFn().mockResolvedValue(),
@@ -80,10 +82,10 @@ describe("TTS Configuration Boolean Parsing", () => {
         initializeGoalDisplay: createMockFn().mockResolvedValue(),
       };
 
-      return new DisplayQueue(mockOBS, config, baseConstants, null, {
+      return new DisplayQueue(mockOBS, config as unknown as ConstructorParameters<typeof DisplayQueue>[1], baseConstants, null, {
         sourcesManager: realSourcesManager,
         goalsManager: mockGoalsManager,
-      });
+      } as unknown as ConstructorParameters<typeof DisplayQueue>[4]);
     };
 
     describe('when ttsEnabled is string "false"', () => {

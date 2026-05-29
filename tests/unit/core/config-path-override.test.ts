@@ -142,7 +142,11 @@ describe("Config path override", () => {
     fs.existsSync = originalExistsSync;
     restoreAllMocks();
     resetConfigModule();
-    process.env.CHAT_BOT_CONFIG_PATH = originalConfigPath;
+    if (originalConfigPath === undefined) {
+      delete process.env.CHAT_BOT_CONFIG_PATH;
+    } else {
+      process.env.CHAT_BOT_CONFIG_PATH = originalConfigPath;
+    }
   });
 
   it("loads config from CHAT_BOT_CONFIG_PATH when set", () => {
@@ -158,7 +162,7 @@ describe("Config path override", () => {
     fs.readFileSync = createMockFn((filePath) => {
       if (filePath === testConfigPath) return configContent;
       throw new Error(`ENOENT: no such file: ${filePath}`);
-    });
+    }) as unknown as typeof fs.readFileSync;
 
     process.env.CHAT_BOT_CONFIG_PATH = testConfigPath;
     const { config } = loadFreshConfig();
@@ -178,7 +182,7 @@ describe("Config path override", () => {
     fs.readFileSync = createMockFn((filePath) => {
       if (filePath === testConfigPath) return configContent;
       throw new Error(`ENOENT: no such file: ${filePath}`);
-    });
+    }) as unknown as typeof fs.readFileSync;
 
     process.env.CHAT_BOT_CONFIG_PATH = testConfigPath;
     const { config } = loadFreshConfig();

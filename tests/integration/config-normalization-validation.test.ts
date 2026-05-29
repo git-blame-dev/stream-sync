@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { getRawTestConfig } from "../helpers/config-fixture";
 import { ConfigValidator } from "../../src/utils/config-validator";
+import type { NormalizedConfig } from "../../src/core/types/config-types";
 
 describe("ConfigValidator normalize + validate integration", () => {
   it("full config normalization and validation flow", () => {
@@ -27,7 +28,7 @@ describe("ConfigValidator normalize + validate integration", () => {
   });
 
   it("missing general section fails validation", () => {
-    const manualConfig = { obs: {}, commands: {} };
+    const manualConfig = { obs: {}, commands: {} } as Partial<NormalizedConfig> as NormalizedConfig;
     const validation = ConfigValidator.validate(manualConfig);
 
     expect(validation.isValid).toBe(false);

@@ -16,12 +16,31 @@ setupAutomatedCleanup({
 });
 
 describe("Terminology Consistency", () => {
-  const testOptions = { timeout: TEST_TIMEOUTS.UNIT };
+  const testOptions = { timeout: TEST_TIMEOUTS.FAST };
+
+  type HandledNotification = {
+    platform: string;
+    username: unknown;
+    data: Record<string, unknown>;
+  };
+
+  function firstHandled(handled: ReadonlyArray<HandledNotification>) {
+    const notification = handled[0];
+    expect(notification).toBeDefined();
+    if (!notification) {
+      throw new Error("Expected one handled notification");
+    }
+    return notification;
+  }
 
   const buildRouterHarness = () => {
-    const handled = [];
+    const handled: HandledNotification[] = [];
     const runtime = {
-      handlePaypiggyNotification: async (platform, username, data) => {
+      handlePaypiggyNotification: async (
+        platform: string,
+        username: unknown,
+        data: Record<string, unknown>,
+      ) => {
         handled.push({ platform, username, data });
       },
     };
@@ -70,10 +89,11 @@ describe("Terminology Consistency", () => {
         });
 
         expect(handled).toHaveLength(1);
-        expect(handled[0].platform).toBe("youtube");
-        expect(handled[0].username).toBe(user.username);
-        expect(handled[0].data.userId).toBe("user-1");
-        expect(handled[0].data.platform).toBe("youtube");
+        const notification = firstHandled(handled);
+        expect(notification.platform).toBe("youtube");
+        expect(notification.username).toBe(user.username);
+        expect(notification.data.userId).toBe("user-1");
+        expect(notification.data.platform).toBe("youtube");
       },
       testOptions,
     );
@@ -99,10 +119,11 @@ describe("Terminology Consistency", () => {
         });
 
         expect(handled).toHaveLength(1);
-        expect(handled[0].platform).toBe("twitch");
-        expect(handled[0].username).toBe(user.username);
-        expect(handled[0].data.userId).toBe("user-2");
-        expect(handled[0].data.platform).toBe("twitch");
+        const notification = firstHandled(handled);
+        expect(notification.platform).toBe("twitch");
+        expect(notification.username).toBe(user.username);
+        expect(notification.data.userId).toBe("user-2");
+        expect(notification.data.platform).toBe("twitch");
       },
       testOptions,
     );
@@ -143,13 +164,18 @@ describe("Terminology Consistency", () => {
     test(
       "resubscription aliases are not exposed in configs or priorities",
       () => {
-        expect(constants.NOTIFICATION_CONFIGS.resub).toBeUndefined();
-        expect(constants.NOTIFICATION_CONFIGS.resubscription).toBeUndefined();
-        expect(constants.PRIORITY_LEVELS.RESUB).toBeUndefined();
-        expect(constants.NOTIFICATION_TYPES).toBeUndefined();
-        expect(PlatformEvents.NOTIFICATION_TYPES.RESUB).toBeUndefined();
+        const notificationConfigs = constants.NOTIFICATION_CONFIGS as Record<string, unknown>;
+        const priorityLevels = constants.PRIORITY_LEVELS as Record<string, unknown>;
+        const exportedConstants = constants as Record<string, unknown>;
+        const platformNotificationTypes = PlatformEvents.NOTIFICATION_TYPES as Record<string, unknown>;
+
+        expect(notificationConfigs.resub).toBeUndefined();
+        expect(notificationConfigs.resubscription).toBeUndefined();
+        expect(priorityLevels.RESUB).toBeUndefined();
+        expect(exportedConstants.NOTIFICATION_TYPES).toBeUndefined();
+        expect(platformNotificationTypes.RESUB).toBeUndefined();
         expect(
-          PlatformEvents.NOTIFICATION_TYPES.RESUBSCRIPTION,
+          platformNotificationTypes.RESUBSCRIPTION,
         ).toBeUndefined();
       },
       testOptions,
