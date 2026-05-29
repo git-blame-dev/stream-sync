@@ -611,6 +611,54 @@ describe("PlatformLifecycleService", () => {
       expect(instance).toBeDefined();
       expect(typeof instance).toBe("object");
     });
+
+    it("uses dynamically named dependency factories for non-core platforms", async () => {
+      const mockDependencies = { streamElementsClient: "mock-client" };
+      const mockFactory = {
+        createStreamelementsDependencies: createMockFn<
+          [PlatformConfig, Record<string, unknown> | undefined],
+          Record<string, unknown>
+        >().mockReturnValue(mockDependencies),
+      };
+
+      service.dispose();
+      service = new PlatformLifecycleService({
+        config: configFixture,
+        eventBus: mockEventBus,
+        logger: noOpLogger,
+        dependencyFactory: mockFactory,
+        sharedDependencies: { config: configFixture },
+      });
+
+      class TestPlatform implements PlatformInstance {
+        readonly dependencies: Record<string, unknown>;
+        initialize = createMockFn<
+          [PlatformEventHandlers],
+          Promise<boolean>
+        >().mockResolvedValue(true);
+        cleanup = createMockFn<[], Promise<void>>().mockResolvedValue();
+        on = createMockFn<
+          [string, (...args: unknown[]) => unknown],
+          unknown
+        >();
+
+        constructor(_platformConfig: PlatformConfig, dependencies?: unknown) {
+          this.dependencies = isRecord(dependencies) ? dependencies : {};
+        }
+      }
+
+      const instance = await service.createPlatformInstance(
+        "streamelements",
+        TestPlatform,
+        { enabled: true },
+      );
+
+      expect(mockFactory.createStreamelementsDependencies).toHaveBeenCalledTimes(1);
+      expect(hasDependencies(instance)).toBe(true);
+      if (hasDependencies(instance)) {
+        expect(instance.dependencies).toBe(mockDependencies);
+      }
+    });
   });
 
   describe("Connection State Tracking", () => {

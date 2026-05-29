@@ -146,9 +146,10 @@ async function isExistingLockActive({
     const ownerIsAlive = pid !== null && isProcessAlive(pid);
     const directoryIsFresh = directoryAgeMs === null || directoryAgeMs <= staleMs;
     const isPendingLock = owner === null && heartbeat === null;
+    const ownerHasFreshIncompleteLock = ownerIsAlive && heartbeat === null && directoryIsFresh;
 
     return {
-        active: heartbeatFresh || ownerIsAlive || (isPendingLock && directoryIsFresh),
+        active: heartbeatFresh || ownerHasFreshIncompleteLock || (isPendingLock && directoryIsFresh),
         owner
     };
 }

@@ -69,6 +69,7 @@ type PlatformDependencyFactory = {
     createYoutubeDependencies?: DependencyFactoryMethod;
     createTiktokDependencies?: DependencyFactoryMethod;
     createTwitchDependencies?: DependencyFactoryMethod;
+    createStreamelementsDependencies?: DependencyFactoryMethod;
 };
 
 type PlatformLifecycleOptions = {
@@ -439,20 +440,10 @@ class PlatformLifecycleService {
             return null;
         }
 
-        let factoryMethod: unknown;
-        switch (platformName) {
-            case 'youtube':
-                factoryMethod = this.dependencyFactory.createYoutubeDependencies;
-                break;
-            case 'tiktok':
-                factoryMethod = this.dependencyFactory.createTiktokDependencies;
-                break;
-            case 'twitch':
-                factoryMethod = this.dependencyFactory.createTwitchDependencies;
-                break;
-            default:
-                return null;
-        }
+        const factoryMethod = Reflect.get(
+            this.dependencyFactory,
+            this.getDependencyFactoryMethodName(platformName)
+        );
 
         return typeof factoryMethod === 'function' ? factoryMethod as DependencyFactoryMethod : null;
     }

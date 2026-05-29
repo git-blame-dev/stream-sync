@@ -101,6 +101,30 @@ describe("SingleInstanceGuard", () => {
     await guard.release();
   });
 
+  it("removes stale heartbeat locks even when the recorded pid is alive", async () => {
+    useFakeTimers();
+    setSystemTime(new Date(5000));
+
+    const lockPath = getLockPath();
+    await fs.mkdir(lockPath);
+    await fs.writeFile(
+      path.join(lockPath, "owner.json"),
+      JSON.stringify({ instanceId: "stale-owner", pid: process.pid }),
+      "utf8",
+    );
+    await fs.writeFile(path.join(lockPath, "heartbeat"), "0", "utf8");
+
+    const guard = await acquireSingleInstanceGuard({
+      lockPath,
+      staleMs: 1000,
+      isProcessAlive: () => true,
+      registerProcessCleanup: false,
+    });
+
+    expect(guard.metadata.pid).toBe(process.pid);
+    await guard.release();
+  });
+
   it("allows only one concurrent acquirer", async () => {
     const lockPath = getLockPath();
 
