@@ -251,6 +251,50 @@ describe("Twitch EventSub WS lifecycle", () => {
     ).toBe(true);
   });
 
+  test("connectWebSocket rejects when subscription setup returns an aborted result", async () => {
+    const lifecycle = buildLifecycle();
+
+    const state = createState({
+      _setupEventSubscriptions: createMockFn(async () => ({
+        failures: [],
+        aborted: true,
+        abortReason: "connection-lost",
+      })),
+    });
+    const connectPromise = lifecycle.connectWebSocket(state);
+
+    state.ws.readyState = 1;
+    state.ws.emit("open");
+    state.ws.emit(
+      "message",
+      Buffer.from(
+        JSON.stringify({
+          metadata: { message_type: "session_welcome" },
+          payload: {
+            session: {
+              id: "aborted-session",
+              keepalive_timeout_seconds: 30,
+              status: "connected",
+              connected_at: "2024-01-01T00:00:00Z",
+            },
+          },
+        }),
+      ),
+    );
+
+    await expect(connectPromise).rejects.toThrow(
+      "Subscription setup aborted: connection-lost",
+    );
+    expect(state.subscriptionsReady).toBe(false);
+    expect(
+      state.emitCalls.some(
+        ({ event, payload }) =>
+          event === "eventSubSubscriptionFailed" &&
+          payload.reason === "connection-lost",
+      ),
+    ).toBe(true);
+  });
+
   test("connectWebSocket surfaces one startup failure path when subscription setup aborts on dead session loss", async () => {
     const lifecycle = buildLifecycle();
 
@@ -855,6 +899,49 @@ describe("Twitch EventSub WS lifecycle", () => {
     await advanceTimersByTime(1100);
 
     expect(state._isConnected).toBe(true);
+  });
+
+  test("reconnect cleans up subscriptions for the session that just closed", async () => {
+    const lifecycle = buildLifecycle();
+
+    const state = createState({
+      _setupEventSubscriptions: createMockFn(async () => ({ failures: [] })),
+      isInitialized: true,
+      retryAttempts: 0,
+      maxRetryAttempts: 5,
+      retryDelay: 1000,
+      _deleteAllSubscriptions: createMockFn(async () => {}),
+      _connectWebSocket: createMockFn(async () => {
+        state._isConnected = true;
+      }),
+    });
+    state._scheduleReconnect = () => lifecycle.scheduleReconnect(state);
+    state._reconnect = () => lifecycle.reconnect(state);
+
+    const connectPromise = lifecycle.connectWebSocket(state);
+
+    state.ws.readyState = 1;
+    state.ws.emit("open");
+    state.ws.emit(
+      "message",
+      Buffer.from(
+        JSON.stringify({
+          metadata: { message_type: "session_welcome" },
+          payload: { session: { id: "closed-session-for-cleanup" } },
+        }),
+      ),
+    );
+
+    await connectPromise;
+    state.ws.emit("close", 1006, "abnormal");
+    expect(state.sessionId).toBeNull();
+
+    await advanceTimersByTime(1100);
+
+    expect(state._deleteAllSubscriptions).toHaveBeenCalledWith({
+      sessionId: "closed-session-for-cleanup",
+    });
+    expect(state.disconnectedSessionId).toBeNull();
   });
 
   test("connectWebSocket handles various Twitch close codes", async () => {

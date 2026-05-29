@@ -226,6 +226,119 @@ describe("Twitch EventSub subscription manager", () => {
 
     expect(postCalls).toEqual(["channel.chat.message"]);
     expect(result.successful).toBe(1);
+    expect(result.aborted).toBe(true);
+    expect(result.abortReason).toBe("connection-lost");
+  });
+
+  test("does not retry a subscription after the websocket session is lost", async () => {
+    const postCalls = [];
+    let hasOpenSocket = true;
+    const post = async (_url, payload) => {
+      postCalls.push(payload.type);
+      hasOpenSocket = false;
+      const error = new Error("socket hang up") as Error & { code?: string };
+      error.code = "ECONNRESET";
+      throw error;
+    };
+    const manager = createManager({
+      axios: { post },
+      validateConnectionForSubscriptions: () => hasOpenSocket,
+    });
+
+    const result = await manager.setupEventSubscriptions({
+      requiredSubscriptions: [
+        {
+          name: "Chat",
+          type: "channel.chat.message",
+          version: "1",
+          getCondition: () => ({
+            broadcaster_user_id: "test-broadcaster-1",
+            user_id: "test-user-1",
+          }),
+        },
+        {
+          name: "Follows",
+          type: "channel.follow",
+          version: "2",
+          getCondition: () => ({
+            broadcaster_user_id: "test-broadcaster-1",
+            moderator_user_id: "test-user-1",
+          }),
+        },
+      ],
+      userId: "test-user-1",
+      broadcasterId: "test-broadcaster-1",
+      sessionId: "test-session-1",
+      subscriptionDelay: 0,
+      isConnected: true,
+    });
+
+    expect(postCalls).toEqual(["channel.chat.message"]);
+    expect(result.successful).toBe(0);
+    expect(result.failures).toHaveLength(1);
+    expect(result.aborted).toBe(true);
+    expect(result.abortReason).toBe("connection-lost");
+  });
+
+  test("aborts when a retry attempt receives a dead websocket session response", async () => {
+    const postCalls = [];
+    let callCount = 0;
+    const post = async (_url, payload) => {
+      postCalls.push(payload.type);
+      callCount += 1;
+      if (callCount === 1) {
+        const error = new Error("socket hang up") as Error & { code?: string };
+        error.code = "ECONNRESET";
+        throw error;
+      }
+
+      const error = new Error("dead session") as Error & { response?: unknown };
+      error.response = {
+        data: {
+          error: "Bad Request",
+          message: "websocket session has already disconnected",
+        },
+        status: 400,
+      };
+      throw error;
+    };
+    const manager = createManager({ axios: { post } });
+
+    const result = await manager.setupEventSubscriptions({
+      requiredSubscriptions: [
+        {
+          name: "Chat",
+          type: "channel.chat.message",
+          version: "1",
+          getCondition: () => ({
+            broadcaster_user_id: "test-broadcaster-1",
+            user_id: "test-user-1",
+          }),
+        },
+        {
+          name: "Follows",
+          type: "channel.follow",
+          version: "2",
+          getCondition: () => ({
+            broadcaster_user_id: "test-broadcaster-1",
+            moderator_user_id: "test-user-1",
+          }),
+        },
+      ],
+      userId: "test-user-1",
+      broadcasterId: "test-broadcaster-1",
+      sessionId: "test-session-1",
+      subscriptionDelay: 0,
+      isConnected: true,
+    });
+
+    expect(postCalls).toEqual(["channel.chat.message", "channel.chat.message"]);
+    expect(result.failures).toHaveLength(1);
+    expect(result.failures[0].error.message).toContain(
+      "websocket session has already disconnected",
+    );
+    expect(result.aborted).toBe(true);
+    expect(result.abortReason).toBe("connection-lost");
   });
 
   test("treats dead websocket session responses as terminal for the current setup pass", async () => {
@@ -282,6 +395,8 @@ describe("Twitch EventSub subscription manager", () => {
     expect(result.failures[0].error.message).toContain(
       "websocket session has already disconnected",
     );
+    expect(result.aborted).toBe(true);
+    expect(result.abortReason).toBe("connection-lost");
   });
 
   test("uses config clientId and secrets token for cleanup", async () => {

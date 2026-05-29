@@ -147,6 +147,7 @@ describe("TwitchEventSub lifecycle", () => {
       secrets.twitch.accessToken = "test-access-token";
       eventSub = createEventSub();
       eventSub.maxRetryAttempts = 0;
+      eventSub.initialStartupMaxAttempts = 1;
       eventSub._connectWebSocket = createMockFn(async () => {
         throw new Error("ws connect failed");
       });
@@ -155,6 +156,98 @@ describe("TwitchEventSub lifecycle", () => {
       expect(eventSub.isInitialized).toBe(false);
       expect(eventSub._isConnected).toBe(false);
       expect(eventSub.reconnectTimeout).toBeNull();
+    });
+
+    it("initialize retries transient websocket startup errors before succeeding", async () => {
+      secrets.twitch.accessToken = "test-access-token";
+      eventSub = createEventSub();
+      eventSub.initialStartupMaxAttempts = 2;
+      eventSub.initialStartupRetryDelay = 1;
+      eventSub._cleanupAllWebSocketSubscriptions = createMockFn(async () => {});
+      eventSub._deleteAllSubscriptions = createMockFn(async () => {});
+      eventSub._connectWebSocket = createMockFn(async () => {
+        if (eventSub._connectWebSocket.mock.calls.length === 1) {
+          const error = new Error("socket hang up") as Error & { code?: string };
+          error.code = "ECONNRESET";
+          throw error;
+        }
+        eventSub.ws = { readyState: 1, close: () => {}, removeAllListeners: () => {} };
+        eventSub.sessionId = "connected-session";
+        eventSub._isConnected = true;
+        eventSub.subscriptionsReady = true;
+      });
+
+      await eventSub.initialize();
+
+      expect(eventSub._connectWebSocket.mock.calls).toHaveLength(2);
+      expect(eventSub.isInitialized).toBe(true);
+      expect(eventSub._isConnected).toBe(true);
+      expect(eventSub.subscriptionsReady).toBe(true);
+      expect(eventSub.retryAttempts).toBe(0);
+      expect(eventSub.reconnectTimeout).toBeNull();
+    });
+
+    it("initialize retries Twitch transient startup close codes before succeeding", async () => {
+      secrets.twitch.accessToken = "test-access-token";
+      eventSub = createEventSub();
+      eventSub.initialStartupMaxAttempts = 2;
+      eventSub.initialStartupRetryDelay = 1;
+      eventSub._cleanupAllWebSocketSubscriptions = createMockFn(async () => {});
+      eventSub._deleteAllSubscriptions = createMockFn(async () => {});
+      eventSub._connectWebSocket = createMockFn(async () => {
+        if (eventSub._connectWebSocket.mock.calls.length === 1) {
+          const error = new Error("Connection closed before EventSub startup completed") as Error & { closeCode?: number };
+          error.closeCode = 4006;
+          throw error;
+        }
+        eventSub.ws = { readyState: 1, close: () => {}, removeAllListeners: () => {} };
+        eventSub.sessionId = "connected-session";
+        eventSub._isConnected = true;
+        eventSub.subscriptionsReady = true;
+      });
+
+      await eventSub.initialize();
+
+      expect(eventSub._connectWebSocket.mock.calls).toHaveLength(2);
+      expect(eventSub.isInitialized).toBe(true);
+    });
+
+    it("initialize cleans up partial websocket timers and state after startup failure", async () => {
+      secrets.twitch.accessToken = "test-access-token";
+      eventSub = createEventSub();
+      eventSub.initialStartupMaxAttempts = 1;
+      const closeCalls = [];
+      const removeListenersCalls = [];
+      eventSub._deleteAllSubscriptions = createMockFn(async () => {});
+      eventSub._connectWebSocket = createMockFn(async () => {
+        eventSub.ws = {
+          readyState: 1,
+          close: (code, reason) => closeCalls.push({ code, reason }),
+          removeAllListeners: () => removeListenersCalls.push(true),
+        };
+        eventSub.welcomeTimer = safeSetTimeout(() => {}, 10000);
+        eventSub.reconnectTimeout = safeSetTimeout(() => {}, 10000);
+        eventSub.sessionId = "partial-session";
+        eventSub._isConnected = true;
+        eventSub.subscriptionsReady = true;
+        eventSub.subscriptions.set("sub-1", { id: "sub-1" });
+        throw new Error("fatal startup failure");
+      });
+
+      await expect(eventSub.initialize()).rejects.toThrow("fatal startup failure");
+
+      expect(eventSub._deleteAllSubscriptions.mock.calls).toHaveLength(1);
+      expect(closeCalls).toHaveLength(1);
+      expect(closeCalls[0].code).toBe(1000);
+      expect(removeListenersCalls).toHaveLength(1);
+      expect(eventSub.ws).toBeNull();
+      expect(eventSub.welcomeTimer).toBeNull();
+      expect(eventSub.reconnectTimeout).toBeNull();
+      expect(eventSub.sessionId).toBeNull();
+      expect(eventSub._isConnected).toBe(false);
+      expect(eventSub.subscriptionsReady).toBe(false);
+      expect(eventSub.isInitialized).toBe(false);
+      expect(eventSub.subscriptions.size).toBe(0);
     });
 
     it("does not schedule hidden retry timers on initialization failure", async () => {

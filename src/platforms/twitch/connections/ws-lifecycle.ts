@@ -18,7 +18,7 @@ type LifecycleState = {
   emit?: (eventName: string, payload?: unknown) => void;
   handleWebSocketMessage?: (message: Record<string, unknown>) => Promise<void> | void;
   _validateConnectionForSubscriptions?: () => boolean;
-  _setupEventSubscriptions?: (validationAlreadyDone?: boolean) => Promise<{ failures?: unknown[] } | null | void>;
+  _setupEventSubscriptions?: (validationAlreadyDone?: boolean) => Promise<{ failures?: unknown[]; aborted?: boolean; abortReason?: string } | null | void>;
   _scheduleReconnect?: () => void;
   _deleteAllSubscriptions?: (options: { sessionId?: string | null }) => Promise<void>;
   _connectWebSocket?: () => Promise<void>;
@@ -27,6 +27,7 @@ type LifecycleState = {
   reconnectUrl?: string | null;
   ws?: LifecycleWebSocket | null;
   sessionId?: string | null;
+  disconnectedSessionId?: string | null;
   welcomeTimer?: ReturnType<typeof setTimeout> | null;
   twitchAuth?: { isReady?: () => boolean } | null;
   userId?: string;
@@ -236,6 +237,19 @@ function createTwitchEventSubWsLifecycle(options: WsLifecycleOptions = {}) {
                                     if (connectionResolved || !state._isConnected || !state.sessionId) {
                                         return;
                                     }
+                                    if (result?.aborted) {
+                                        state.subscriptionsReady = false;
+                                        logError('Subscription setup aborted', null, 'subscription-setup-aborted', {
+                                            abortReason: result.abortReason
+                                        });
+                                        emit('eventSubSubscriptionFailed', {
+                                            sessionId: state.sessionId,
+                                            reason: result.abortReason
+                                        });
+                                        connectionResolved = true;
+                                        reject(new Error(`Subscription setup aborted: ${result.abortReason || 'unknown'}`));
+                                        return;
+                                    }
                                     const failures = result?.failures || [];
                                     if (failures.length > 0) {
                                         state.subscriptionsReady = false;
@@ -333,9 +347,11 @@ function createTwitchEventSubWsLifecycle(options: WsLifecycleOptions = {}) {
                             : new Error(state.sessionId || receivedWelcome
                                 ? 'Connection closed before EventSub subscription setup completed'
                                 : 'Connection closed before EventSub startup completed');
+                        (startupError as Error & { closeCode?: number }).closeCode = closeCode;
                         reject(startupError);
                     }
 
+                    const closedSessionId = state.sessionId;
                     state._isConnected = false;
                     state.subscriptionsReady = false;
                     state.sessionId = null;
@@ -387,6 +403,9 @@ function createTwitchEventSubWsLifecycle(options: WsLifecycleOptions = {}) {
                     state.subscriptions?.clear?.();
 
                     const willReconnect = closeCode !== 1000 && !!state.isInitialized;
+                    if (willReconnect && closedSessionId) {
+                        state.disconnectedSessionId = closedSessionId;
+                    }
 
                     emit('eventSubDisconnected', {
                         code: closeCode,
@@ -497,10 +516,13 @@ function createTwitchEventSubWsLifecycle(options: WsLifecycleOptions = {}) {
                 state.ws = null;
             }
 
-            const previousSessionId = state.sessionId;
+            const previousSessionId = state.sessionId || state.disconnectedSessionId;
             if (previousSessionId && typeof state._deleteAllSubscriptions === 'function') {
                 try {
                     await state._deleteAllSubscriptions({ sessionId: previousSessionId });
+                    if (state.disconnectedSessionId === previousSessionId) {
+                        state.disconnectedSessionId = null;
+                    }
                 } catch (error) {
                     state._logEventSubError?.(
                         'Failed to clean up previous session subscriptions before reconnect',

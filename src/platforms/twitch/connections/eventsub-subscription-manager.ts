@@ -54,6 +54,15 @@ type SubscriptionErrorDetails = {
   details: Record<string, unknown>;
 };
 
+type SubscriptionSetupResult = {
+  successful: number;
+  total: number;
+  failures: Array<{ subscription: string; error: SubscriptionErrorDetails }>;
+  timestamp: number;
+  aborted?: boolean;
+  abortReason?: 'connection-lost' | 'auth-missing';
+};
+
 type EventSubRemoteSubscription = {
   id: string;
   status: string;
@@ -272,11 +281,19 @@ function createTwitchEventSubSubscriptionManager(options: SubscriptionManagerOpt
             return { success: false, error: 'retry-exhausted' };
         }
 
+        if (!safeValidateConnection()) {
+            return { success: false, error: 'connection-lost' };
+        }
+
         await safeDelay(
             validateTimeout(1000 * retriesRemaining, 1000),
             1000,
             'twitchEventSub:subscription-retry'
         );
+
+        if (!safeValidateConnection()) {
+            return { success: false, error: 'connection-lost' };
+        }
 
         const response = await requestWithAuthRetry(async () => {
             return await axios.post<EventSubSubscriptionResponse>('https://api.twitch.tv/helix/eventsub/subscriptions', payload, {
@@ -314,9 +331,16 @@ function createTwitchEventSubSubscriptionManager(options: SubscriptionManagerOpt
     sessionId: string | null;
     subscriptionDelay: number;
     validationAlreadyDone?: boolean;
-  }) => {
+  }): Promise<SubscriptionSetupResult> => {
         if (!validationAlreadyDone && !safeValidateConnection()) {
-            return null;
+            return {
+                successful: 0,
+                total: requiredSubscriptions.length,
+                failures: [],
+                timestamp: now(),
+                aborted: true,
+                abortReason: 'connection-lost'
+            };
         }
 
         if (!(await ensureAuthReady())) {
@@ -325,9 +349,18 @@ function createTwitchEventSubSubscriptionManager(options: SubscriptionManagerOpt
                 total: requiredSubscriptions.length,
                 failures: requiredSubscriptions.map((subscription) => ({
                     subscription: subscription.name,
-                    error: { code: 'AUTH_MISSING', message: 'Missing authentication tokens', isCritical: true, isRetryable: false }
+                    error: {
+                        code: 'AUTH_MISSING',
+                        message: 'Missing authentication tokens',
+                        status: null,
+                        isCritical: true,
+                        isRetryable: false,
+                        details: {}
+                    }
                 })),
-                timestamp: now()
+                timestamp: now(),
+                aborted: true,
+                abortReason: 'auth-missing'
             };
         }
 
@@ -339,7 +372,14 @@ function createTwitchEventSubSubscriptionManager(options: SubscriptionManagerOpt
             try {
                 if (!safeValidateConnection()) {
                     safeLogger.warn('Stopping subscription setup - connection lost during process', 'twitch');
-                    break;
+                    return {
+                        successful: successCount,
+                        total: requiredSubscriptions.length,
+                        failures: failedSubscriptions,
+                        timestamp: now(),
+                        aborted: true,
+                        abortReason: 'connection-lost'
+                    };
                 }
 
                 safeLogger.debug(`Creating subscription: ${subscription.name}`, 'twitch');
@@ -390,7 +430,7 @@ function createTwitchEventSubSubscriptionManager(options: SubscriptionManagerOpt
                 }
             } catch (error) {
                 const errorDetails = parseSubscriptionError(error, subscription);
-                let retryResult = null;
+                let retryResult: { success: boolean; error?: string; errorDetails?: SubscriptionErrorDetails } | null = null;
 
                 if (shouldRetrySubscription(errorDetails)) {
                     try {
@@ -408,13 +448,33 @@ function createTwitchEventSubSubscriptionManager(options: SubscriptionManagerOpt
                             retriesRemaining: 1
                         });
                     } catch (retryError) {
-                        retryResult = { success: false, error: getErrorMessage(retryError) };
+                        const retryErrorDetails = parseSubscriptionError(retryError, subscription);
+                        retryResult = {
+                            success: false,
+                            error: isTerminalSessionLoss(retryErrorDetails) ? 'connection-lost' : getErrorMessage(retryError),
+                            errorDetails: retryErrorDetails
+                        };
                     }
                 }
 
                 if (retryResult?.success) {
                     successCount++;
                     continue;
+                }
+
+                if (retryResult?.error === 'connection-lost') {
+                    failedSubscriptions.push({
+                        subscription: subscription.name,
+                        error: retryResult.errorDetails || errorDetails
+                    });
+                    return {
+                        successful: successCount,
+                        total: requiredSubscriptions.length,
+                        failures: failedSubscriptions,
+                        timestamp: now(),
+                        aborted: true,
+                        abortReason: 'connection-lost'
+                    };
                 }
 
                 failedSubscriptions.push({
@@ -435,7 +495,14 @@ function createTwitchEventSubSubscriptionManager(options: SubscriptionManagerOpt
 
                 if (isTerminalSessionLoss(errorDetails)) {
                     safeLogError('Terminal session loss encountered, stopping subscription setup', null, 'subscription-terminal-session-loss');
-                    break;
+                    return {
+                        successful: successCount,
+                        total: requiredSubscriptions.length,
+                        failures: failedSubscriptions,
+                        timestamp: now(),
+                        aborted: true,
+                        abortReason: 'connection-lost'
+                    };
                 }
             }
         }
