@@ -9,13 +9,49 @@ import { YouTubePlatform } from "../../src/platforms/youtube";
 import { ChatNotificationRouter } from "../../src/services/ChatNotificationRouter.ts";
 import { PlatformEventRouter } from "../../src/services/PlatformEventRouter.ts";
 
-const createEventBus = () => {
+type ChatRouterRuntime = {
+  config: ReturnType<typeof createConfigFixture>;
+  displayQueue: ReturnType<typeof createMockDisplayQueue>;
+  handleChatMessage: (
+    platform: string,
+    normalizedData: Record<string, unknown>,
+  ) => Promise<unknown>;
+};
+
+type TestEventBus = {
+  emit: (event: string, payload: unknown) => boolean;
+  subscribe: (
+    event: string,
+    handler: (payload: unknown) => Promise<void>,
+  ) => () => void;
+};
+
+type QueuedChatItem = {
+  type: string;
+  platform: string;
+  data: { message: unknown };
+};
+
+function expectQueuedChatItem(value: unknown): asserts value is QueuedChatItem {
+  expect(value).toEqual(
+    expect.objectContaining({
+      type: expect.any(String),
+      platform: expect.any(String),
+      data: expect.objectContaining({ message: expect.anything() }),
+    }),
+  );
+}
+
+const createEventBus = (): TestEventBus => {
   const emitter = new EventEmitter();
   return {
     emit: (event, payload) => emitter.emit(event, payload),
     subscribe: (event, handler) => {
-      emitter.on(event, handler);
-      return () => emitter.off(event, handler);
+      const listener = (payload: unknown) => {
+        void handler(payload);
+      };
+      emitter.on(event, listener);
+      return () => emitter.off(event, listener);
     },
   };
 };
@@ -36,7 +72,7 @@ describe("YouTube emote chat parts pipeline (smoke E2E)", () => {
       obs: { enabled: false },
     });
     const displayQueue = createMockDisplayQueue();
-    const runtime = {
+    const runtime: ChatRouterRuntime = {
       config,
       displayQueue,
       handleChatMessage: async (_platform, _normalizedData) => {},
@@ -72,7 +108,7 @@ describe("YouTube emote chat parts pipeline (smoke E2E)", () => {
         removeListener: createMockFn(),
       },
       ChatFileLoggingService: class {
-        logRawPlatformData() {}
+        async logRawPlatformData(): Promise<void> {}
       },
       USER_AGENTS: ["test-agent"],
     });
@@ -123,7 +159,11 @@ describe("YouTube emote chat parts pipeline (smoke E2E)", () => {
       await new Promise(setImmediate);
 
       expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
-      const queued = displayQueue.addItem.mock.calls[0][0];
+      const firstCall = displayQueue.addItem.mock.calls.at(0);
+      expect(firstCall).toBeDefined();
+      if (!firstCall) throw new Error("Expected a queued chat item");
+      const [queued] = firstCall;
+      expectQueuedChatItem(queued);
       expect(queued.type).toBe("chat");
       expect(queued.platform).toBe("youtube");
       expect(queued.data.message).toEqual({
@@ -159,7 +199,7 @@ describe("YouTube emote chat parts pipeline (smoke E2E)", () => {
       obs: { enabled: false },
     });
     const displayQueue = createMockDisplayQueue();
-    const runtime = {
+    const runtime: ChatRouterRuntime = {
       config,
       displayQueue,
       handleChatMessage: async (_platform, _normalizedData) => {},
@@ -195,7 +235,7 @@ describe("YouTube emote chat parts pipeline (smoke E2E)", () => {
         removeListener: createMockFn(),
       },
       ChatFileLoggingService: class {
-        logRawPlatformData() {}
+        async logRawPlatformData(): Promise<void> {}
       },
       USER_AGENTS: ["test-agent"],
     });
@@ -260,7 +300,11 @@ describe("YouTube emote chat parts pipeline (smoke E2E)", () => {
       await new Promise(setImmediate);
 
       expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
-      const queued = displayQueue.addItem.mock.calls[0][0];
+      const firstCall = displayQueue.addItem.mock.calls.at(0);
+      expect(firstCall).toBeDefined();
+      if (!firstCall) throw new Error("Expected a queued chat item");
+      const [queued] = firstCall;
+      expectQueuedChatItem(queued);
       expect(queued.type).toBe("chat");
       expect(queued.platform).toBe("youtube");
       expect(queued.data.message).toEqual({

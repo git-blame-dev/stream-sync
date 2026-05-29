@@ -40,7 +40,7 @@ const createPlatform = (configOverrides = {}, depsOverrides = {}) => {
     timestampService: { extractTimestamp: () => new Date().toISOString() },
     TwitchEventSub,
     ChatFileLoggingService: class {
-      logRawPlatformData() {}
+      async logRawPlatformData(): Promise<void> {}
     },
     ...depsOverrides,
   });

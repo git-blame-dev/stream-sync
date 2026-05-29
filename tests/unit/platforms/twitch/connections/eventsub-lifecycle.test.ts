@@ -23,7 +23,7 @@ class MockWebSocket {
 }
 
 class MockChatFileLoggingService {
-  logRawPlatformData() {}
+  async logRawPlatformData(): Promise<void> {}
 }
 
 const createTwitchAuth = (overrides = {}) => ({
@@ -742,9 +742,19 @@ describe("TwitchEventSub lifecycle", () => {
 
   describe("raw data logging", () => {
     it("delegates to chat file logging service", async () => {
-      const logCalls = [];
+      const logCalls: Array<{
+        platform: string;
+        type: string;
+        data: unknown;
+        config: unknown;
+      }> = [];
       const mockLoggingService = {
-        logRawPlatformData: (platform, type, data, config) => {
+        logRawPlatformData: async (
+          platform: string,
+          type: string,
+          data: unknown,
+          config: unknown,
+        ): Promise<void> => {
           logCalls.push({ platform, type, data, config });
         },
       };
