@@ -4,7 +4,7 @@ import {
   clearAllMocks,
   restoreAllMocks,
 } from "../../helpers/bun-mock-utils";
-import { noOpLogger } from "../../helpers/mock-factories";
+import type { TestMockFn } from "../../helpers/bun-mock-utils";
 import {
   secrets,
   _resetForTesting,
@@ -20,23 +20,68 @@ import {
 
 initializeTestLogging();
 
+declare const scheduleTestTimeout: (callback: () => void, delayMs: number) => ReturnType<typeof setTimeout>;
+
+type ConnectionDependencies = NonNullable<ConstructorParameters<typeof OBSConnectionManager>[0]>;
+type ObsConfig = NonNullable<ConnectionDependencies["config"]>;
+type ObsSocketLike = InstanceType<NonNullable<ConnectionDependencies["OBSWebSocket"]>> & {
+  identified?: boolean;
+};
+type ConnectMock = TestMockFn<
+  [address?: string, password?: string],
+  Promise<{ obsWebSocketVersion: string; negotiatedRpcVersion: string }>
+>;
+type TestObsSocket = Omit<ObsSocketLike, "connect"> & { connect: ConnectMock };
+type ObsWebSocketCtorMock = TestMockFn<[], ObsSocketLike> & (new () => ObsSocketLike);
+type IdentifiedHandler = () => void;
+
+const createObsSocketInstance = (): ObsSocketLike => ({
+  connect: createMockFn<[address?: string, password?: string], Promise<{ obsWebSocketVersion: string; negotiatedRpcVersion: string }>>().mockResolvedValue({
+    obsWebSocketVersion: "5.0.0",
+    negotiatedRpcVersion: "1",
+  }),
+  disconnect: createMockFn<[], Promise<void>>().mockResolvedValue(),
+  call: createMockFn<[string, Record<string, unknown>?], Promise<unknown>>().mockResolvedValue({}),
+  on: createMockFn<[string, (data?: { reason?: unknown; code?: unknown }) => void], void>(),
+  off: createMockFn<[string, (data?: { reason?: unknown; code?: unknown }) => void], void>(),
+  identified: false,
+});
+
+const createObsSocketConstructor = (): ObsWebSocketCtorMock =>
+  createMockFn<[], ObsSocketLike>().mockImplementation(createObsSocketInstance) as ObsWebSocketCtorMock;
+
+const createConnectingObsInstance = (): TestObsSocket => {
+  let identifiedHandler: IdentifiedHandler | null = null;
+  const mockOBSInstance: TestObsSocket = {
+    connect: createMockFn<[address?: string, password?: string], Promise<{ obsWebSocketVersion: string; negotiatedRpcVersion: string }>>().mockImplementation(async () => {
+      if (identifiedHandler) {
+        scheduleTestTimeout(() => identifiedHandler?.(), 10);
+      }
+      return {
+        obsWebSocketVersion: "5.0.0",
+        negotiatedRpcVersion: "1",
+      };
+    }),
+    disconnect: createMockFn<[], Promise<void>>().mockResolvedValue(),
+    call: createMockFn<[string, Record<string, unknown>?], Promise<unknown>>().mockResolvedValue({}),
+    on: createMockFn<[string, (data?: { reason?: unknown; code?: unknown }) => void], void>().mockImplementation((event, callback) => {
+      if (event === "Identified") {
+        identifiedHandler = () => callback();
+      }
+    }),
+    off: createMockFn<[string, (data?: { reason?: unknown; code?: unknown }) => void], void>(),
+    identified: false,
+  };
+  return mockOBSInstance;
+};
+
 describe("OBS Connection Configuration with Getter Properties", () => {
-  let mockOBSWebSocket;
-  let obsManager;
+  let mockOBSWebSocket: ObsWebSocketCtorMock;
+  let obsManager: OBSConnectionManager;
 
   beforeEach(() => {
     resetOBSConnectionManager();
-    mockOBSWebSocket = createMockFn().mockImplementation(() => ({
-      connect: createMockFn().mockResolvedValue({
-        obsWebSocketVersion: "5.0.0",
-        negotiatedRpcVersion: "1",
-      }),
-      disconnect: createMockFn().mockResolvedValue(),
-      call: createMockFn().mockResolvedValue({}),
-      on: createMockFn(),
-      off: createMockFn(),
-      identified: false,
-    }));
+    mockOBSWebSocket = createObsSocketConstructor();
 
     _resetForTesting();
   });
@@ -66,7 +111,6 @@ describe("OBS Connection Configuration with Getter Properties", () => {
       obsManager = new OBSConnectionManager({
         config: configWithGetters,
         OBSWebSocket: mockOBSWebSocket,
-        logger: noOpLogger,
       });
 
       expect(obsManager.config.address).toBe("ws://custom-obs-server:4444");
@@ -85,7 +129,6 @@ describe("OBS Connection Configuration with Getter Properties", () => {
       obsManager = new OBSConnectionManager({
         config: configWithoutPassword,
         OBSWebSocket: mockOBSWebSocket,
-        logger: noOpLogger,
       });
 
       expect(obsManager.config.password).toBe("secret-from-env");
@@ -174,34 +217,13 @@ test("connects to OBS with getter-derived address and password", async () => {
         },
       };
 
-      let identifiedHandler = null;
-      const mockOBSInstance = {
-        connect: createMockFn().mockImplementation(async () => {
-          if (identifiedHandler) {
-            scheduleTestTimeout(() => identifiedHandler(), 10);
-          }
-          return {
-            obsWebSocketVersion: "5.0.0",
-            negotiatedRpcVersion: "1",
-          };
-        }),
-        disconnect: createMockFn().mockResolvedValue(),
-        call: createMockFn().mockResolvedValue({}),
-        on: createMockFn().mockImplementation((event, callback) => {
-          if (event === "Identified") {
-            identifiedHandler = callback;
-          }
-        }),
-        off: createMockFn(),
-        identified: false,
-      };
+      const mockOBSInstance = createConnectingObsInstance();
 
       mockOBSWebSocket.mockReturnValue(mockOBSInstance);
 
       obsManager = new OBSConnectionManager({
         config: configWithGetters,
         OBSWebSocket: mockOBSWebSocket,
-        logger: noOpLogger,
       });
 
       await obsManager.connect();
@@ -219,7 +241,6 @@ test("connects to OBS with getter-derived address and password", async () => {
           enabled: true,
         },
         OBSWebSocket: mockOBSWebSocket,
-        logger: noOpLogger,
       });
 
       const partialGetterConfig = {
@@ -249,7 +270,6 @@ test("connects to OBS with getter-derived address and password", async () => {
       obsManager = new OBSConnectionManager({
         config: mixedConfig,
         OBSWebSocket: mockOBSWebSocket,
-        logger: noOpLogger,
       });
 
       expect(obsManager.config.address).toBe("ws://getter-address:8888");
@@ -270,33 +290,12 @@ test("initializes OBS connection from getter-based config values", async () => {
         },
       };
 
-      let identifiedHandler = null;
-      const mockOBSInstance = {
-        connect: createMockFn().mockImplementation(async () => {
-          if (identifiedHandler) {
-            scheduleTestTimeout(() => identifiedHandler(), 10);
-          }
-          return {
-            obsWebSocketVersion: "5.0.0",
-            negotiatedRpcVersion: "1",
-          };
-        }),
-        disconnect: createMockFn().mockResolvedValue(),
-        call: createMockFn().mockResolvedValue({}),
-        on: createMockFn().mockImplementation((event, callback) => {
-          if (event === "Identified") {
-            identifiedHandler = callback;
-          }
-        }),
-        off: createMockFn(),
-        identified: false,
-      };
+      const mockOBSInstance = createConnectingObsInstance();
 
       mockOBSWebSocket.mockReturnValue(mockOBSInstance);
 
       const manager = await initializeOBSConnection(configModuleStyle, {
         OBSWebSocket: mockOBSWebSocket,
-        logger: noOpLogger,
       });
 
       expect(manager.config.address).toBe("ws://init-test:9999");
@@ -324,7 +323,6 @@ test("initializes OBS connection from getter-based config values", async () => {
       obsManager = new OBSConnectionManager({
         config: getterConfig,
         OBSWebSocket: mockOBSWebSocket,
-        logger: noOpLogger,
       });
 
       const configCopy = obsManager.getConfig();
@@ -334,8 +332,9 @@ test("initializes OBS connection from getter-based config values", async () => {
       expect(configCopy.enabled).toBe(true);
 
       const descriptor = Object.getOwnPropertyDescriptor(configCopy, "address");
-      expect(descriptor.get).toBeUndefined();
-      expect(descriptor.value).toBe("ws://config-test:3333");
+      expect(descriptor).toBeDefined();
+      expect(descriptor?.get).toBeUndefined();
+      expect(descriptor?.value).toBe("ws://config-test:3333");
     });
 
     test("should maintain connection state with getter-based enabled property", () => {
@@ -354,7 +353,6 @@ test("initializes OBS connection from getter-based config values", async () => {
       obsManager = new OBSConnectionManager({
         config: disabledConfig,
         OBSWebSocket: mockOBSWebSocket,
-        logger: noOpLogger,
       });
 
       const state = obsManager.getConnectionState();
@@ -404,22 +402,16 @@ test("initializes OBS connection from getter-based config values", async () => {
 
   describe("Edge Cases and Error Scenarios", () => {
     test("should handle undefined getter values gracefully", () => {
-      const configWithUndefined = {
-        get address() {
-          return undefined;
-        },
-        get password() {
-          return undefined;
-        },
-        get enabled() {
-          return undefined;
-        },
-      };
+      const configWithUndefined: ObsConfig = {};
+      Object.defineProperties(configWithUndefined, {
+        address: { get: () => undefined, enumerable: true },
+        password: { get: () => undefined, enumerable: true },
+        enabled: { get: () => undefined, enumerable: true },
+      });
 
       obsManager = new OBSConnectionManager({
         config: configWithUndefined,
         OBSWebSocket: mockOBSWebSocket,
-        logger: noOpLogger,
       });
 
       expect(obsManager.config.address).toBeUndefined();
@@ -428,23 +420,21 @@ test("initializes OBS connection from getter-based config values", async () => {
     });
 
     test("should handle getter that throws an error", () => {
-      const configWithError = {
-        get address() {
+      const configWithError: ObsConfig = {
+        password: "valid-password",
+        enabled: true,
+      };
+      Object.defineProperty(configWithError, "address", {
+        get: () => {
           throw new Error("Config not loaded");
         },
-        get password() {
-          return "valid-password";
-        },
-        get enabled() {
-          return true;
-        },
-      };
+        enumerable: true,
+      });
 
       expect(() => {
         obsManager = new OBSConnectionManager({
           config: configWithError,
           OBSWebSocket: mockOBSWebSocket,
-          logger: noOpLogger,
         });
       }).toThrow("Config not loaded");
     });
@@ -467,7 +457,6 @@ test("initializes OBS connection from getter-based config values", async () => {
       obsManager = new OBSConnectionManager({
         config: nestedConfig.obs,
         OBSWebSocket: mockOBSWebSocket,
-        logger: noOpLogger,
       });
 
       expect(obsManager.config.address).toBe("ws://nested:1111");
@@ -498,27 +487,7 @@ test("initializes OBS connection from getter-based config values", async () => {
         },
       };
 
-      let identifiedHandler = null;
-      const mockOBSInstance = {
-        connect: createMockFn().mockImplementation(async () => {
-          if (identifiedHandler) {
-            scheduleTestTimeout(() => identifiedHandler(), 10);
-          }
-          return {
-            obsWebSocketVersion: "5.0.0",
-            negotiatedRpcVersion: "1",
-          };
-        }),
-        disconnect: createMockFn().mockResolvedValue(),
-        call: createMockFn().mockResolvedValue({}),
-        on: createMockFn().mockImplementation((event, callback) => {
-          if (event === "Identified") {
-            identifiedHandler = callback;
-          }
-        }),
-        off: createMockFn(),
-        identified: false,
-      };
+      const mockOBSInstance = createConnectingObsInstance();
 
       mockOBSWebSocket.mockReturnValue(mockOBSInstance);
 

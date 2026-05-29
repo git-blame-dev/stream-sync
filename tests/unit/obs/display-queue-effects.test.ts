@@ -5,12 +5,60 @@ import { DisplayQueueEffects } from "../../../src/obs/display-queue-effects.ts";
 import { waitForDelay } from "../../helpers/time-utils";
 import { PlatformEvents } from "../../../src/interfaces/PlatformEvents";
 
+type EffectsDependencies = ConstructorParameters<typeof DisplayQueueEffects>[0];
+type EffectQueueItem = Parameters<DisplayQueueEffects["handleGiftEffects"]>[0];
+type GiftAnimationResult = Awaited<
+  ReturnType<
+    NonNullable<EffectsDependencies["giftAnimationResolver"]>["resolveFromNotificationData"]
+  >
+>;
+
+type ObsCall = { method: string; payload: Record<string, unknown> };
+type GoalCall = { platform: string; amount: number };
+type EmittedEvent = { eventName: string; payload: Record<string, unknown> };
+type NamedEmission = { event: string; payload: Record<string, unknown> };
+
+class TestEventBus extends EventEmitter {
+  subscribe(eventName: string, handler: (payload: Record<string, unknown>) => void) {
+    this.on(eventName, handler);
+    return () => this.off(eventName, handler);
+  }
+
+  override emit(eventName: string, payload: Record<string, unknown>) {
+    return super.emit(eventName, payload);
+  }
+}
+
+const handcamConfig = (enabled: boolean): NonNullable<EffectsDependencies["config"]["handcam"]> => ({
+  enabled,
+  maxSize: 0,
+  rampUpDuration: 0,
+  holdDuration: 0,
+  rampDownDuration: 0,
+  totalSteps: 1,
+  easingEnabled: false,
+  sourceName: "handcam",
+  glowFilterName: "glow",
+});
+
+const extractUsername: EffectsDependencies["extractUsername"] = (data) =>
+  typeof data?.username === "string" ? data.username : null;
+
+const requireResolver = (
+  resolve: ((value: GiftAnimationResult) => void) | undefined,
+): ((value: GiftAnimationResult) => void) => {
+  if (!resolve) {
+    throw new Error("Expected animation resolver to be captured");
+  }
+  return resolve;
+};
+
 describe("DisplayQueueEffects", () => {
   it("runs TTS stages for non-gift notifications", async () => {
-    const ttsUpdates = [];
+    const ttsUpdates: string[] = [];
     const sourcesManager = {
       clearTextSource: async () => {},
-      updateTextSource: async (_source, text) => {
+      updateTextSource: async (_source: string, text: string) => {
         ttsUpdates.push(text);
       },
     };
@@ -18,14 +66,14 @@ describe("DisplayQueueEffects", () => {
       config: {
         ttsEnabled: true,
         obs: { ttsTxt: "tts" },
-        handcam: { enabled: false },
+        handcam: handcamConfig(false),
       },
       sourcesManager,
       obsManager: { call: async () => ({}) },
       goalsManager: { processDonationGoal: async () => {} },
       delay: async () => {},
       handleDisplayQueueError: () => {},
-      extractUsername: (data) => data?.username ?? null,
+      extractUsername,
     });
 
     await effects.handleNotificationEffects({
@@ -44,14 +92,14 @@ describe("DisplayQueueEffects", () => {
   });
 
   it("plays gift media, triggers handcam glow, and tracks goals", async () => {
-    const obsCalls = [];
-    const goalCalls = [];
+    const obsCalls: ObsCall[] = [];
+    const goalCalls: GoalCall[] = [];
     let handcamTriggered = false;
     const effects = new DisplayQueueEffects({
       config: {
         ttsEnabled: false,
         obs: { ttsTxt: "tts" },
-        handcam: { enabled: true },
+        handcam: handcamConfig(true),
         gifts: { giftVideoSource: "gift-video", giftAudioSource: "gift-audio" },
       },
       sourcesManager: {
@@ -59,13 +107,13 @@ describe("DisplayQueueEffects", () => {
         updateTextSource: async () => {},
       },
       obsManager: {
-        call: async (method, payload) => {
+        call: async (method: string, payload: Record<string, unknown>) => {
           obsCalls.push({ method, payload });
           return {};
         },
       },
       goalsManager: {
-        processDonationGoal: async (platform, amount) => {
+        processDonationGoal: async (platform: string, amount: number) => {
           goalCalls.push({ platform, amount });
         },
       },
@@ -74,7 +122,7 @@ describe("DisplayQueueEffects", () => {
       },
       delay: async () => {},
       handleDisplayQueueError: () => {},
-      extractUsername: (data) => data?.username ?? null,
+      extractUsername,
     });
 
     await effects.handleNotificationEffects({
@@ -96,26 +144,26 @@ describe("DisplayQueueEffects", () => {
   });
 
   it("skips VFX and continues TTS when sequential VFX match build fails", async () => {
-    const ttsUpdates = [];
-    const emittedVfx = [];
+    const ttsUpdates: string[] = [];
+    const emittedVfx: Record<string, unknown>[] = [];
     const effects = new DisplayQueueEffects({
       config: {
         ttsEnabled: true,
         obs: { ttsTxt: "tts" },
-        handcam: { enabled: false },
+        handcam: handcamConfig(false),
       },
       sourcesManager: {
         clearTextSource: async () => {},
-        updateTextSource: async (_source, text) => {
+        updateTextSource: async (_source: string, text: string) => {
           ttsUpdates.push(text);
         },
       },
       obsManager: { call: async () => ({}) },
       goalsManager: { processDonationGoal: async () => {} },
-      eventBus: { emit: (_event, payload) => emittedVfx.push(payload) },
+      eventBus: { emit: (_event: string, payload: Record<string, unknown>) => emittedVfx.push(payload) },
       delay: async () => {},
       handleDisplayQueueError: () => {},
-      extractUsername: (data) => data?.username ?? null,
+      extractUsername,
     });
 
     const result = await effects.handleSequentialEffects(
@@ -134,29 +182,29 @@ describe("DisplayQueueEffects", () => {
   });
 
   it("continues gift effects when VFX config is partial", async () => {
-    const ttsUpdates = [];
-    const emittedVfx = [];
+    const ttsUpdates: string[] = [];
+    const emittedVfx: NamedEmission[] = [];
     const effects = new DisplayQueueEffects({
       config: {
         ttsEnabled: true,
         obs: { ttsTxt: "tts" },
-        handcam: { enabled: false },
+        handcam: handcamConfig(false),
         gifts: { giftVideoSource: "gift-video", giftAudioSource: "gift-audio" },
       },
       sourcesManager: {
         clearTextSource: async () => {},
-        updateTextSource: async (_source, text) => {
+        updateTextSource: async (_source: string, text: string) => {
           ttsUpdates.push(text);
         },
       },
       obsManager: { call: async () => ({}) },
       goalsManager: { processDonationGoal: async () => {} },
       eventBus: {
-        emit: (event, payload) => emittedVfx.push({ event, payload }),
+        emit: (event: string, payload: Record<string, unknown>) => emittedVfx.push({ event, payload }),
       },
       delay: async () => {},
       handleDisplayQueueError: () => {},
-      extractUsername: (data) => data?.username ?? null,
+      extractUsername,
     });
 
     await effects.handleGiftEffects(
@@ -174,12 +222,12 @@ describe("DisplayQueueEffects", () => {
   });
 
   it("emits tiktok gift animation effect and sets hold duration", async () => {
-    const emittedEvents = [];
+    const emittedEvents: EmittedEvent[] = [];
     const effects = new DisplayQueueEffects({
       config: {
         ttsEnabled: false,
         obs: { ttsTxt: "tts" },
-        handcam: { enabled: false },
+        handcam: handcamConfig(false),
         gifts: { giftVideoSource: "gift-video", giftAudioSource: "gift-audio" },
         gui: { enableOverlay: true, enableDock: false, showGifts: true },
       },
@@ -190,12 +238,12 @@ describe("DisplayQueueEffects", () => {
       obsManager: { call: async () => ({}) },
       goalsManager: { processDonationGoal: async () => {} },
       eventBus: {
-        emit: (eventName, payload) =>
+        emit: (eventName: string, payload: Record<string, unknown>) =>
           emittedEvents.push({ eventName, payload }),
       },
       delay: async () => {},
       handleDisplayQueueError: () => {},
-      extractUsername: (data) => data?.username ?? null,
+      extractUsername,
       giftAnimationResolver: {
         resolveFromNotificationData: async () => ({
           mediaFilePath: "/tmp/test-animation.mp4",
@@ -214,7 +262,7 @@ describe("DisplayQueueEffects", () => {
       },
     });
 
-    const item = {
+    const item: EffectQueueItem = {
       type: "platform:gift",
       platform: "tiktok",
       data: {
@@ -233,7 +281,7 @@ describe("DisplayQueueEffects", () => {
       (entry) => entry.eventName === "display:gift-animation",
     );
     expect(animationEvent).toBeDefined();
-    expect(animationEvent.payload.durationMs).toBe(4500);
+    expect(animationEvent?.payload.durationMs).toBe(4500);
     expect(item.holdDurationMs).toBe(4500);
   });
 
@@ -243,7 +291,7 @@ describe("DisplayQueueEffects", () => {
       config: {
         ttsEnabled: false,
         obs: { ttsTxt: "tts" },
-        handcam: { enabled: false },
+        handcam: handcamConfig(false),
         gifts: { giftVideoSource: "gift-video", giftAudioSource: "gift-audio" },
         gui: { enableOverlay: true, enableDock: false, showGifts: true },
       },
@@ -256,7 +304,7 @@ describe("DisplayQueueEffects", () => {
       eventBus: { emit: () => {} },
       delay: async () => {},
       handleDisplayQueueError: () => {},
-      extractUsername: (data) => data?.username ?? null,
+      extractUsername,
       giftAnimationResolver: {
         resolveFromNotificationData: async () => {
           resolveCallCount += 1;
@@ -286,12 +334,12 @@ describe("DisplayQueueEffects", () => {
 
   it("does not resolve animation when gui gift animations are disabled", async () => {
     let resolveCallCount = 0;
-    const emittedEvents = [];
+    const emittedEvents: EmittedEvent[] = [];
     const effects = new DisplayQueueEffects({
       config: {
         ttsEnabled: false,
         obs: { ttsTxt: "tts" },
-        handcam: { enabled: false },
+        handcam: handcamConfig(false),
         gifts: { giftVideoSource: "gift-video", giftAudioSource: "gift-audio" },
         gui: { enableOverlay: false, enableDock: false, showGifts: true },
       },
@@ -302,12 +350,12 @@ describe("DisplayQueueEffects", () => {
       obsManager: { call: async () => ({}) },
       goalsManager: { processDonationGoal: async () => {} },
       eventBus: {
-        emit: (eventName, payload) =>
+        emit: (eventName: string, payload: Record<string, unknown>) =>
           emittedEvents.push({ eventName, payload }),
       },
       delay: async () => {},
       handleDisplayQueueError: () => {},
-      extractUsername: (data) => data?.username ?? null,
+      extractUsername,
       giftAnimationResolver: {
         resolveFromNotificationData: async () => {
           resolveCallCount += 1;
@@ -341,13 +389,13 @@ describe("DisplayQueueEffects", () => {
   });
 
   it("starts gift media effects before animation resolution settles", async () => {
-    const obsCalls = [];
-    let resolveAnimation;
+    const obsCalls: string[] = [];
+    let resolveAnimation: ((value: GiftAnimationResult) => void) | undefined;
     const effects = new DisplayQueueEffects({
       config: {
         ttsEnabled: false,
         obs: { ttsTxt: "tts" },
-        handcam: { enabled: false },
+        handcam: handcamConfig(false),
         gifts: { giftVideoSource: "gift-video", giftAudioSource: "gift-audio" },
         gui: { enableOverlay: true, enableDock: false, showGifts: true },
       },
@@ -356,7 +404,7 @@ describe("DisplayQueueEffects", () => {
         updateTextSource: async () => {},
       },
       obsManager: {
-        call: async (method) => {
+        call: async (method: string) => {
           obsCalls.push(method);
           return {};
         },
@@ -365,10 +413,10 @@ describe("DisplayQueueEffects", () => {
       eventBus: { emit: () => {} },
       delay: async () => {},
       handleDisplayQueueError: () => {},
-      extractUsername: (data) => data?.username ?? null,
+      extractUsername,
       giftAnimationResolver: {
         resolveFromNotificationData: () =>
-          new Promise((resolve) => {
+          new Promise<GiftAnimationResult>((resolve) => {
             resolveAnimation = resolve;
           }),
       },
@@ -394,18 +442,18 @@ describe("DisplayQueueEffects", () => {
 
     expect(obsCalls).toContain("TriggerMediaInputAction");
 
-    resolveAnimation(null);
+    requireResolver(resolveAnimation)(null);
     await handlePromise;
   });
 
   it("does not finish gift effects before animation hold resolution completes", async () => {
-    let resolveAnimation;
+    let resolveAnimation: ((value: GiftAnimationResult) => void) | undefined;
     let settled = false;
     const effects = new DisplayQueueEffects({
       config: {
         ttsEnabled: false,
         obs: { ttsTxt: "tts" },
-        handcam: { enabled: false },
+        handcam: handcamConfig(false),
         gifts: { giftVideoSource: "gift-video", giftAudioSource: "gift-audio" },
         gui: { enableOverlay: true, enableDock: false, showGifts: true },
       },
@@ -418,16 +466,16 @@ describe("DisplayQueueEffects", () => {
       eventBus: { emit: () => {} },
       delay: async () => {},
       handleDisplayQueueError: () => {},
-      extractUsername: (data) => data?.username ?? null,
+      extractUsername,
       giftAnimationResolver: {
         resolveFromNotificationData: () =>
-          new Promise((resolve) => {
+          new Promise<GiftAnimationResult>((resolve) => {
             resolveAnimation = resolve;
           }),
       },
     });
 
-    const item = {
+    const item: EffectQueueItem = {
       type: "platform:gift",
       platform: "tiktok",
       data: {
@@ -447,7 +495,7 @@ describe("DisplayQueueEffects", () => {
     await waitForDelay(1);
     expect(settled).toBe(false);
 
-    resolveAnimation({
+    requireResolver(resolveAnimation)({
       mediaFilePath: "/tmp/test-animation.mp4",
       mediaContentType: "video/mp4",
       durationMs: 4200,
@@ -467,17 +515,13 @@ describe("DisplayQueueEffects", () => {
   });
 
   it("waits for exact tuple completion when correlation id is absent", async () => {
-    const eventBus = new EventEmitter();
-    eventBus.subscribe = (eventName, handler) => {
-      eventBus.on(eventName, handler);
-      return () => eventBus.off(eventName, handler);
-    };
+    const eventBus = new TestEventBus();
 
     const effects = new DisplayQueueEffects({
       config: {
         ttsEnabled: false,
         obs: { ttsTxt: "tts" },
-        handcam: { enabled: false },
+        handcam: handcamConfig(false),
       },
       sourcesManager: {
         clearTextSource: async () => {},
@@ -518,21 +562,17 @@ describe("DisplayQueueEffects", () => {
 
     const result = await pending;
     expect(result.reason).toBe("completed");
-    expect(result.payload.filename).toBe("test-file");
+    expect(result.payload?.filename).toBe("test-file");
   });
 
   it("does not treat command executed as completion signal", async () => {
-    const eventBus = new EventEmitter();
-    eventBus.subscribe = (eventName, handler) => {
-      eventBus.on(eventName, handler);
-      return () => eventBus.off(eventName, handler);
-    };
+    const eventBus = new TestEventBus();
 
     const effects = new DisplayQueueEffects({
       config: {
         ttsEnabled: false,
         obs: { ttsTxt: "tts" },
-        handcam: { enabled: false },
+        handcam: handcamConfig(false),
       },
       sourcesManager: {
         clearTextSource: async () => {},
@@ -564,17 +604,13 @@ describe("DisplayQueueEffects", () => {
   });
 
   it("cleans up gift completion listeners when VFX emit fails", async () => {
-    const eventBus = new EventEmitter();
-    eventBus.subscribe = (eventName, handler) => {
-      eventBus.on(eventName, handler);
-      return () => eventBus.off(eventName, handler);
-    };
+    const eventBus = new TestEventBus();
 
     const effects = new DisplayQueueEffects({
       config: {
         ttsEnabled: false,
         obs: { ttsTxt: "tts" },
-        handcam: { enabled: false },
+        handcam: handcamConfig(false),
         gifts: { giftVideoSource: "gift-video", giftAudioSource: "gift-audio" },
       },
       sourcesManager: {
@@ -586,7 +622,7 @@ describe("DisplayQueueEffects", () => {
       eventBus,
       delay: async () => {},
       handleDisplayQueueError: () => {},
-      extractUsername: (data) => data?.username ?? null,
+      extractUsername,
     });
 
     await effects.handleGiftEffects(
@@ -609,14 +645,13 @@ describe("DisplayQueueEffects", () => {
   });
 
   it("holds gift effect completion until matching VFX completion event", async () => {
-    const eventBus = new EventEmitter();
-    eventBus.subscribe = (eventName, handler) => {
-      eventBus.on(eventName, handler);
-      return () => eventBus.off(eventName, handler);
-    };
+    const eventBus = new TestEventBus();
 
-    let capturedCorrelationId = null;
-    eventBus.on(PlatformEvents.VFX_COMMAND_RECEIVED, (payload) => {
+    let capturedCorrelationId: string | null = null;
+    eventBus.on(PlatformEvents.VFX_COMMAND_RECEIVED, (payload: Record<string, unknown>) => {
+      if (typeof payload.correlationId !== "string") {
+        throw new Error("Expected VFX command payload to include correlationId");
+      }
       capturedCorrelationId = payload.correlationId;
     });
 
@@ -624,7 +659,7 @@ describe("DisplayQueueEffects", () => {
       config: {
         ttsEnabled: false,
         obs: { ttsTxt: "tts" },
-        handcam: { enabled: false },
+        handcam: handcamConfig(false),
         gifts: { giftVideoSource: "gift-video", giftAudioSource: "gift-audio" },
       },
       sourcesManager: {
@@ -636,7 +671,7 @@ describe("DisplayQueueEffects", () => {
       eventBus,
       delay: async () => {},
       handleDisplayQueueError: () => {},
-      extractUsername: (data) => data?.username ?? null,
+      extractUsername,
     });
 
     let settled = false;

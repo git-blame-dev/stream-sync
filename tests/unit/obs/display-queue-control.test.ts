@@ -7,19 +7,47 @@ import { PRIORITY_LEVELS } from "../../../src/core/constants";
 
 initializeTestLogging();
 
+type Queue = InstanceType<typeof DisplayQueue>;
+type QueueItem = Queue["queue"][number];
+type DisplayQueueConfig = ConstructorParameters<typeof DisplayQueue>[1];
+type DisplayQueueConstants = ConstructorParameters<typeof DisplayQueue>[2];
+type DisplayQueueEventBus = ConstructorParameters<typeof DisplayQueue>[3];
+type DisplayQueueDependencies = ConstructorParameters<typeof DisplayQueue>[4];
+type DisplayQueueObsManager = ConstructorParameters<typeof DisplayQueue>[0];
+type DisplayRow = { eventName: string; payload: Record<string, unknown> };
+
+const expectLastChatMessage = (queue: Queue, message: string) => {
+  expect(queue.lastChatItem).not.toBeNull();
+  expect(queue.lastChatItem?.data.message).toBe(message);
+};
+
+const expectQueuedItem = (queue: Queue, index: number): QueueItem => {
+  const item = queue.queue[index];
+  expect(item).toBeDefined();
+  if (!item) {
+    throw new Error(`Expected queued item at index ${index}`);
+  }
+  return item;
+};
+
+const createReadyObsManager = (ready: boolean | (() => Promise<boolean>)): DisplayQueueObsManager => ({
+  isReady: typeof ready === "boolean" ? async () => ready : ready,
+  call: async () => ({}),
+});
+
 describe("DisplayQueue control", () => {
   afterEach(() => {
     restoreAllMocks();
   });
 
-  const constants = {
+  const constants: DisplayQueueConstants = {
     PRIORITY_LEVELS,
     CHAT_MESSAGE_DURATION: 4500,
     CHAT_TRANSITION_DELAY: 200,
     NOTIFICATION_CLEAR_DELAY: 100,
   };
 
-  const createConfig = (overrides = {}) => ({
+  const createConfig = (overrides: Partial<DisplayQueueConfig> = {}): DisplayQueueConfig => ({
     autoProcess: false,
     maxQueueSize: 3,
     chat: {
@@ -37,26 +65,40 @@ describe("DisplayQueue control", () => {
     ...overrides,
   });
 
-  const createMockDependencies = () => ({
+  const createMockDependencies = (): NonNullable<DisplayQueueDependencies> => ({
     sourcesManager: {
-      updateTextSource: createMockFn().mockResolvedValue(),
-      clearTextSource: createMockFn().mockResolvedValue(),
-      setSourceVisibility: createMockFn().mockResolvedValue(),
-      setNotificationDisplayVisibility: createMockFn().mockResolvedValue(),
-      setChatDisplayVisibility: createMockFn().mockResolvedValue(),
-      hideAllDisplays: createMockFn().mockResolvedValue(),
-      setPlatformLogoVisibility: createMockFn().mockResolvedValue(),
-      setNotificationPlatformLogoVisibility: createMockFn().mockResolvedValue(),
+      updateTextSource: createMockFn<[string, string?], Promise<void>>().mockResolvedValue(),
+      clearTextSource: createMockFn<[string], Promise<void>>().mockResolvedValue(),
+      updateChatMsgText: createMockFn<[string, string, string], Promise<void>>().mockResolvedValue(),
+      getSceneItemId: createMockFn<[string, string], Promise<{ sceneItemId: number; sceneName?: string }>>().mockResolvedValue({ sceneItemId: 1 }),
+      setSourceVisibility: createMockFn<[string, string, boolean], Promise<void>>().mockResolvedValue(),
+      getGroupSceneItemId: createMockFn<[string, string], Promise<{ sceneItemId: number; sceneName?: string }>>().mockResolvedValue({ sceneItemId: 1 }),
+      setGroupSourceVisibility: createMockFn<[string, string | null | undefined, boolean], Promise<void>>().mockResolvedValue(),
+      setNotificationDisplayVisibility: createMockFn<[boolean, string, Record<string, unknown>], Promise<void>>().mockResolvedValue(),
+      setChatDisplayVisibility: createMockFn<[boolean, string, Record<string, unknown>], Promise<void>>().mockResolvedValue(),
+      hideAllDisplays: createMockFn<[], Promise<void>>().mockResolvedValue(),
+      setPlatformLogoVisibility: createMockFn<[string, Record<string, unknown>], Promise<void>>().mockResolvedValue(),
+      setNotificationPlatformLogoVisibility: createMockFn<[string, Record<string, unknown>], Promise<void>>().mockResolvedValue(),
+      hideAllPlatformLogos: createMockFn<[Record<string, unknown>], Promise<void>>().mockResolvedValue(),
+      hideAllNotificationPlatformLogos: createMockFn<[Record<string, unknown>], Promise<void>>().mockResolvedValue(),
+      setSourceFilterEnabled: createMockFn<[string, string, boolean], Promise<void>>().mockResolvedValue(),
+      getSourceFilterSettings: createMockFn<[string, string], Promise<Record<string, unknown>>>().mockResolvedValue({}),
+      setSourceFilterSettings: createMockFn<[string, string, Record<string, unknown>], Promise<void>>().mockResolvedValue(),
+      clearSceneItemCache: createMockFn<[], void>(),
     },
     goalsManager: {
       processDonationGoal: createMockFn().mockResolvedValue({ success: true }),
       processPaypiggyGoal: createMockFn().mockResolvedValue({ success: true }),
       initializeGoalDisplay: createMockFn().mockResolvedValue(),
+      updateAllGoalDisplays: createMockFn().mockResolvedValue(),
+      updateGoalDisplay: createMockFn().mockResolvedValue(),
+      getCurrentGoalStatus: createMockFn().mockReturnValue(null),
+      getAllCurrentGoalStatuses: createMockFn().mockReturnValue({}),
     },
     delay: () => Promise.resolve(),
   });
 
-  const createQueue = (configOverrides = {}) => {
+  const createQueue = (configOverrides: Partial<DisplayQueueConfig> = {}) => {
     const config = createConfig(configOverrides);
     const queue = new DisplayQueue(
       createMockOBSManager("connected"),
@@ -77,7 +119,7 @@ describe("DisplayQueue control", () => {
         queue.addItem({
           type: "platform:gift",
           data: { username: "test-user" },
-        });
+        } as QueueItem);
       }).toThrow("platform");
     });
   });
@@ -100,13 +142,11 @@ describe("DisplayQueue control", () => {
   describe("delegation helpers", () => {
     it("delegates TTS helpers to the effects module", async () => {
       const queue = createQueue();
-      const ttsUpdates = [];
+      const ttsUpdates: string[] = [];
 
-      queue.effects = {
-        isTTSEnabled: () => true,
-        setTTSText: async (text) => {
-          ttsUpdates.push(text);
-        },
+      queue.effects.isTTSEnabled = () => true;
+      queue.effects.setTTSText = async (text: string) => {
+        ttsUpdates.push(text);
       };
 
       expect(queue.isTTSEnabled()).toBe(true);
@@ -181,7 +221,7 @@ describe("DisplayQueue control", () => {
         "first",
         "second",
       ]);
-      expect(queue.lastChatItem.data.message).toBe("second");
+      expectLastChatMessage(queue, "second");
     });
   });
 
@@ -191,6 +231,7 @@ describe("DisplayQueue control", () => {
       let processed = false;
       queue.displayItem = createMockFn(async () => {
         processed = true;
+        return true;
       });
 
       await queue.processChatMessage({
@@ -262,12 +303,12 @@ describe("DisplayQueue control", () => {
     });
 
     it("does not emit chat display row when queue item is only enqueued", () => {
-      const emittedRows = [];
+      const emittedRows: DisplayRow[] = [];
       const eventBus = {
-        emit: (eventName, payload) => {
+        emit: (eventName: string, payload: Record<string, unknown>) => {
           emittedRows.push({ eventName, payload });
         },
-      };
+      } satisfies NonNullable<DisplayQueueEventBus>;
 
       const queue = new DisplayQueue(
         createMockOBSManager("connected"),
@@ -291,12 +332,12 @@ describe("DisplayQueue control", () => {
     });
 
     it("emits chat display row when chat item is displayed", async () => {
-      const emittedRows = [];
+      const emittedRows: DisplayRow[] = [];
       const eventBus = {
-        emit: (eventName, payload) => {
+        emit: (eventName: string, payload: Record<string, unknown>) => {
           emittedRows.push({ eventName, payload });
         },
-      };
+      } satisfies NonNullable<DisplayQueueEventBus>;
 
       const queue = new DisplayQueue(
         createMockOBSManager("connected"),
@@ -320,18 +361,20 @@ describe("DisplayQueue control", () => {
 
       expect(displayResult).toBe(true);
       expect(emittedRows.length).toBe(1);
-      expect(emittedRows[0].eventName).toBe("display:row");
-      expect(emittedRows[0].payload.type).toBe("chat");
-      expect(emittedRows[0].payload.platform).toBe("twitch");
+      const firstRow = emittedRows[0];
+      expect(firstRow).toBeDefined();
+      expect(firstRow?.eventName).toBe("display:row");
+      expect(firstRow?.payload.type).toBe("chat");
+      expect(firstRow?.payload.platform).toBe("twitch");
     });
 
     it("emits notification display row only when notification is displayed", async () => {
-      const emittedRows = [];
+      const emittedRows: DisplayRow[] = [];
       const eventBus = {
-        emit: (eventName, payload) => {
+        emit: (eventName: string, payload: Record<string, unknown>) => {
           emittedRows.push({ eventName, payload });
         },
-      };
+      } satisfies NonNullable<DisplayQueueEventBus>;
 
       const queue = new DisplayQueue(
         createMockOBSManager("connected"),
@@ -362,7 +405,7 @@ describe("DisplayQueue control", () => {
         emittedRows.find((entry) => entry.payload?.type === "platform:gift"),
       ).toBeUndefined();
 
-      const displayResult = await queue.displayNotificationItem(queue.queue[0]);
+      const displayResult = await queue.displayNotificationItem(expectQueuedItem(queue, 0));
       expect(displayResult).toBe(true);
       expect(
         emittedRows.some(
@@ -377,7 +420,7 @@ describe("DisplayQueue control", () => {
   describe("processQueue readiness", () => {
     it("clears retry flag when OBS is not ready and queue is empty", async () => {
       const queue = new DisplayQueue(
-        { isReady: async () => false },
+        createReadyObsManager(false),
         createConfig(),
         constants,
         null,
@@ -392,11 +435,9 @@ describe("DisplayQueue control", () => {
 
     it("clears retry flag when OBS readiness check throws", async () => {
       const queue = new DisplayQueue(
-        {
-          isReady: async () => {
+        createReadyObsManager(async () => {
             throw new Error("readiness failed");
-          },
-        },
+          }),
         createConfig(),
         constants,
         null,
@@ -425,13 +466,15 @@ describe("DisplayQueue control", () => {
   describe("display routing", () => {
     it("routes chat and non-chat items to the correct display handlers", async () => {
       const queue = createQueue();
-      const routed = [];
+      const routed: string[] = [];
 
       queue.displayChatItem = createMockFn(async () => {
         routed.push("chat");
+        return true;
       });
       queue.displayNotificationItem = createMockFn(async () => {
         routed.push("notification");
+        return true;
       });
 
       await queue.displayItem({
@@ -459,9 +502,7 @@ describe("DisplayQueue control", () => {
     it("skips notification effects when renderer declines display", async () => {
       const queue = createQueue();
       let effectsHandled = false;
-      queue.renderer = {
-        displayNotificationItem: async () => false,
-      };
+      queue.renderer.displayNotificationItem = async () => false;
       queue.handleNotificationEffects = async () => {
         effectsHandled = true;
       };
@@ -482,25 +523,29 @@ describe("DisplayQueue control", () => {
         timing: { transitionDelay: 0, notificationClearDelay: 0 },
       });
       const queue = new DisplayQueue(
-        { isReady: async () => true },
+        createReadyObsManager(true),
         config,
         constants,
         null,
         createMockDependencies(),
       );
-      const displayed = [];
-      const hidden = [];
+      const displayed: string[] = [];
+      const hidden: string[] = [];
 
       queue.delay = async () => {};
       queue.getDuration = () => 0;
       queue.displayChatItem = async (item) => {
         displayed.push(item.type);
+        return true;
       };
       queue.displayNotificationItem = async (item) => {
         displayed.push(item.type);
+        return true;
       };
       queue.hideCurrentDisplay = async (item) => {
-        hidden.push(item.type);
+        if (item) {
+          hidden.push(item.type);
+        }
       };
       queue.displayLingeringChat = async () => {
         displayed.push("lingering");
@@ -531,7 +576,7 @@ describe("DisplayQueue control", () => {
         maxQueueSize: 10,
         timing: { transitionDelay: 0, notificationClearDelay: 0 },
       });
-      const displayedChatMessages = [];
+      const displayedChatMessages: unknown[] = [];
 
       queue.delay = async () => {};
       queue.getDuration = () => 0;
@@ -539,6 +584,7 @@ describe("DisplayQueue control", () => {
         if (item.type === "chat") {
           displayedChatMessages.push(item.data.message);
         }
+        return true;
       };
       queue.hideCurrentDisplay = async () => {};
       queue.displayLingeringChat = async () => {};
@@ -584,7 +630,7 @@ describe("DisplayQueue control", () => {
         "first queued chat",
         "second queued chat",
       ]);
-      expect(queue.lastChatItem.data.message).toBe("second queued chat");
+      expectLastChatMessage(queue, "second queued chat");
     });
 
     it("continues draining when new work arrives during teardown", async () => {
@@ -592,13 +638,14 @@ describe("DisplayQueue control", () => {
         autoProcess: false,
         timing: { transitionDelay: 0, notificationClearDelay: 0 },
       });
-      const processedTypes = [];
+      const processedTypes: string[] = [];
       let teardownInjectionDone = false;
 
       queue.delay = async () => {};
       queue.getDuration = () => 0;
       queue.displayItem = async (item) => {
         processedTypes.push(item.type);
+        return true;
       };
       queue.hideCurrentDisplay = async () => {};
       queue.displayLingeringChat = async () => {
@@ -666,7 +713,7 @@ describe("DisplayQueue control", () => {
 
       await queue.processQueue();
 
-      expect(queue.currentDisplay).toBe(null);
+      expect(queue.currentDisplay === null).toBe(true);
     });
   });
 
@@ -675,24 +722,26 @@ describe("DisplayQueue control", () => {
       const queue = createQueue();
       queue.currentDisplay = {
         type: "platform:gift",
+        platform: "twitch",
         data: { username: "test-user" },
       };
       queue.isProcessing = true;
       queue.queue.push({
         type: "chat",
+        platform: "twitch",
         data: { username: "test-user", message: "test" },
       });
 
       await queue.stop();
 
-      expect(queue.currentDisplay).toBe(null);
+      expect(queue.currentDisplay === null).toBe(true);
       expect(queue.isProcessing).toBe(false);
       expect(queue.queue.length).toBe(0);
     });
 
     it("aborts active processing loop when stop is called", async () => {
       const queue = createQueue();
-      const processed = [];
+      const processed: unknown[] = [];
       let itemCount = 0;
 
       queue.displayItem = createMockFn(async (item) => {
@@ -701,6 +750,7 @@ describe("DisplayQueue control", () => {
         if (itemCount === 1) {
           queue.stop();
         }
+        return true;
       });
 
       queue.addItem({
@@ -746,14 +796,15 @@ describe("DisplayQueue control", () => {
   describe("clearQueue behavior", () => {
     it("clears queue even when state is unset", () => {
       const queue = createQueue();
-      queue.state = null;
+      Object.defineProperty(queue, "state", { value: null, writable: true });
       queue.queue = [
-        { type: "chat", data: { username: "test-user", message: "hello" } },
+        { type: "chat", platform: "twitch", data: { username: "test-user", message: "hello" } },
       ];
       queue.isRetryScheduled = true;
       queue.isProcessing = true;
       queue.currentDisplay = {
         type: "chat",
+        platform: "twitch",
         data: { username: "test-user", message: "hello" },
       };
 
@@ -762,7 +813,7 @@ describe("DisplayQueue control", () => {
       expect(queue.queue.length).toBe(0);
       expect(queue.isRetryScheduled).toBe(false);
       expect(queue.isProcessing).toBe(false);
-      expect(queue.currentDisplay).toBe(null);
+      expect(queue.currentDisplay === null).toBe(true);
     });
   });
 });

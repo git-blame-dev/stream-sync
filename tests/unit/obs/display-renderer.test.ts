@@ -2,29 +2,68 @@ import { describe, expect, it } from "bun:test";
 
 import { DisplayRenderer } from "../../../src/obs/display-renderer.ts";
 
+type Action =
+  | { type: "chatText"; source: string; username: string; message: string }
+  | { type: "groupVisibility"; source: string; group: string | null | undefined; visible: boolean }
+  | { type: "chatDisplay"; visible: boolean; scene: string }
+  | { type: "notificationDisplay"; visible: boolean; scene: string }
+  | { type: "notificationText"; source: string; text: string }
+  | { type: "platformLogo"; platform: string }
+  | { type: "notificationLogo"; platform: string }
+  | { type: "error"; message: string; error: unknown; payload: Record<string, unknown> | undefined };
+
+type RendererOverrides = {
+  sourcesManager?: Partial<{
+    updateChatMsgText: (source: string, username: string, message: string) => Promise<void>;
+    setGroupSourceVisibility: (source: string, group: string | null | undefined, visible: boolean) => Promise<void>;
+    setChatDisplayVisibility: (visible: boolean, scene: string, platformLogos: Record<string, unknown>) => Promise<void>;
+    setNotificationDisplayVisibility: (visible: boolean, scene: string, platformLogos: Record<string, unknown>) => Promise<void>;
+    updateTextSource: (source: string, text: string) => Promise<void>;
+    setPlatformLogoVisibility: (platform: string, platformLogos: Record<string, unknown>) => Promise<void>;
+    setNotificationPlatformLogoVisibility: (platform: string, platformLogos: Record<string, unknown>) => Promise<void>;
+  }>;
+  handleDisplayQueueError?: (message: string, error: unknown, payload?: Record<string, unknown>) => void;
+  obsReady?: boolean;
+  config?: Record<string, unknown>;
+  delay?: (ms: number) => Promise<void>;
+  extractUsername?: (data: unknown) => string;
+  validateDisplayConfig?: (config: { sourceName?: unknown; sceneName?: unknown; groupName?: unknown }, type: string) => boolean;
+  isNotificationType?: (type: string) => boolean;
+  isChatType?: (type: string) => boolean;
+};
+
+type TestDisplayItem = {
+  type: string;
+  platform: string;
+  data: Record<string, unknown> & { message?: unknown; displayMessage?: unknown };
+};
+
 describe("DisplayRenderer", () => {
-  const createRenderer = (platformConfig = {}, overrides = {}) => {
-    const actions = [];
+  const createRenderer = (
+    platformConfig: Record<string, unknown> = {},
+    overrides: RendererOverrides = {},
+  ) => {
+    const actions: Action[] = [];
     const sourcesManager = {
-      updateChatMsgText: async (source, username, message) => {
+      updateChatMsgText: async (source: string, username: string, message: string) => {
         actions.push({ type: "chatText", source, username, message });
       },
-      setGroupSourceVisibility: async (source, group, visible) => {
+      setGroupSourceVisibility: async (source: string, group: string | null | undefined, visible: boolean) => {
         actions.push({ type: "groupVisibility", source, group, visible });
       },
-      setChatDisplayVisibility: async (visible, scene) => {
+      setChatDisplayVisibility: async (visible: boolean, scene: string) => {
         actions.push({ type: "chatDisplay", visible, scene });
       },
-      setNotificationDisplayVisibility: async (visible, scene) => {
+      setNotificationDisplayVisibility: async (visible: boolean, scene: string) => {
         actions.push({ type: "notificationDisplay", visible, scene });
       },
-      updateTextSource: async (source, text) => {
+      updateTextSource: async (source: string, text: string) => {
         actions.push({ type: "notificationText", source, text });
       },
-      setPlatformLogoVisibility: async (platform) => {
+      setPlatformLogoVisibility: async (platform: string) => {
         actions.push({ type: "platformLogo", platform });
       },
-      setNotificationPlatformLogoVisibility: async (platform) => {
+      setNotificationPlatformLogoVisibility: async (platform: string) => {
         actions.push({ type: "notificationLogo", platform });
       },
       ...(overrides.sourcesManager || {}),
@@ -32,7 +71,7 @@ describe("DisplayRenderer", () => {
 
     const handleDisplayQueueError =
       overrides.handleDisplayQueueError ||
-      ((message, error, payload) => {
+      ((message: string, error: unknown, payload?: Record<string, unknown>) => {
         actions.push({ type: "error", message, error, payload });
       });
 
@@ -59,25 +98,34 @@ describe("DisplayRenderer", () => {
       delay: overrides.delay || (async () => {}),
       handleDisplayQueueError,
       extractUsername:
-        overrides.extractUsername || ((data) => data?.username ?? null),
+        overrides.extractUsername ||
+        ((data: unknown) => {
+          if (data && typeof data === "object" && "username" in data) {
+            const username = data.username;
+            return typeof username === "string" ? username : "";
+          }
+          return "";
+        }),
       validateDisplayConfig: overrides.validateDisplayConfig || (() => true),
       isNotificationType:
         overrides.isNotificationType ||
-        ((type) => typeof type === "string" && type.startsWith("platform:")),
-      isChatType: overrides.isChatType || ((type) => type === "chat"),
+        ((type: string) => typeof type === "string" && type.startsWith("platform:")),
+      isChatType: overrides.isChatType || ((type: string) => type === "chat"),
     });
 
     return { renderer, actions };
   };
 
+  const chatItem = (message: unknown): TestDisplayItem => ({
+    type: "chat",
+    platform: "tiktok",
+    data: { username: "test-user", message },
+  });
+
   it("renders chat items when enabled", async () => {
     const { renderer, actions } = createRenderer();
 
-    await renderer.displayChatItem({
-      type: "chat",
-      platform: "tiktok",
-      data: { username: "test-user", message: "hello" },
-    });
+    await renderer.displayChatItem(chatItem("hello"));
 
     expect(actions.some((action) => action.type === "chatText")).toBe(true);
     expect(
@@ -90,31 +138,24 @@ describe("DisplayRenderer", () => {
   it("renders structured chat message text instead of object stringification", async () => {
     const { renderer, actions } = createRenderer();
 
-    await renderer.displayChatItem({
-      type: "chat",
-      platform: "tiktok",
-      data: {
-        username: "test-user",
-        message: {
-          text: "hello from object",
-          parts: [{ type: "text", text: "hello from object" }],
-        },
-      },
-    });
+    await renderer.displayChatItem(
+      chatItem({
+        text: "hello from object",
+        parts: [{ type: "text", text: "hello from object" }],
+      }),
+    );
 
     const chatTextUpdate = actions.find((action) => action.type === "chatText");
     expect(chatTextUpdate).toBeDefined();
-    expect(chatTextUpdate.message).toBe("hello from object");
+    expect(chatTextUpdate?.type === "chatText" ? chatTextUpdate.message : undefined).toBe(
+      "hello from object",
+    );
   });
 
   it("skips chat rendering when messages are disabled", async () => {
     const { renderer, actions } = createRenderer({ messagesEnabled: false });
 
-    await renderer.displayChatItem({
-      type: "chat",
-      platform: "tiktok",
-      data: { username: "test-user", message: "hello" },
-    });
+    await renderer.displayChatItem(chatItem("hello"));
 
     expect(actions.length).toBe(0);
   });
@@ -122,11 +163,7 @@ describe("DisplayRenderer", () => {
   it("returns false when OBS is not ready for chat", async () => {
     const { renderer, actions } = createRenderer({}, { obsReady: false });
 
-    const result = await renderer.displayChatItem({
-      type: "chat",
-      platform: "tiktok",
-      data: { username: "test-user", message: "hello" },
-    });
+    const result = await renderer.displayChatItem(chatItem("hello"));
 
     expect(result).toBe(false);
     expect(actions.length).toBe(0);
@@ -138,11 +175,7 @@ describe("DisplayRenderer", () => {
       { validateDisplayConfig: () => false },
     );
 
-    const result = await renderer.displayChatItem({
-      type: "chat",
-      platform: "tiktok",
-      data: { username: "test-user", message: "hello" },
-    });
+    const result = await renderer.displayChatItem(chatItem("hello"));
 
     expect(result).toBe(false);
     expect(actions.length).toBe(0);
@@ -150,12 +183,13 @@ describe("DisplayRenderer", () => {
 
   it("reports notification errors when displayMessage is missing", async () => {
     const { renderer, actions } = createRenderer();
-
-    const result = await renderer.displayNotificationItem({
+    const item: TestDisplayItem = {
       type: "platform:follow",
       platform: "tiktok",
       data: { username: "test-user" },
-    });
+    };
+
+    const result = await renderer.displayNotificationItem(item);
 
     expect(result).toBe(false);
     expect(actions.some((action) => action.type === "error")).toBe(true);
@@ -173,11 +207,7 @@ describe("DisplayRenderer", () => {
       },
     );
 
-    const result = await renderer.displayChatItem({
-      type: "chat",
-      platform: "tiktok",
-      data: { username: "test-user", message: "hello" },
-    });
+    const result = await renderer.displayChatItem(chatItem("hello"));
 
     expect(result).toBe(false);
     expect(actions.some((action) => action.type === "error")).toBe(true);
