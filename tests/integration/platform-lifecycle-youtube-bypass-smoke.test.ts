@@ -3,6 +3,26 @@ import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
 import { noOpLogger } from "../helpers/mock-factories";
 import { PlatformLifecycleService } from "../../src/services/PlatformLifecycleService.ts";
 
+type TestPlatformInstance = {
+  initialize: () => Promise<boolean>;
+  cleanup: () => Promise<void>;
+  on: () => void;
+};
+
+type TestPlatformConstructor = new (
+  config: unknown,
+  dependencies?: unknown,
+) => TestPlatformInstance;
+
+const createTestPlatformConstructor = (
+  initialize: () => Promise<boolean>,
+): TestPlatformConstructor =>
+  class {
+    initialize = initialize;
+    cleanup = createMockFn().mockResolvedValue(undefined);
+    on = createMockFn(() => undefined);
+  };
+
 describe("PlatformLifecycleService connection routing (smoke)", () => {
   afterEach(() => {
     restoreAllMocks();
@@ -22,21 +42,9 @@ describe("PlatformLifecycleService connection routing (smoke)", () => {
     const twitchInit = createMockFn().mockResolvedValue(true);
     const customInit = createMockFn().mockResolvedValue(true);
 
-    const youtubePlatform = createMockFn().mockImplementation(() => ({
-      initialize: youtubeInit,
-      cleanup: createMockFn().mockResolvedValue(),
-      on: createMockFn(),
-    }));
-    const twitchPlatform = createMockFn().mockImplementation(() => ({
-      initialize: twitchInit,
-      cleanup: createMockFn().mockResolvedValue(),
-      on: createMockFn(),
-    }));
-    const customPlatform = createMockFn().mockImplementation(() => ({
-      initialize: customInit,
-      cleanup: createMockFn().mockResolvedValue(),
-      on: createMockFn(),
-    }));
+    const youtubePlatform = createTestPlatformConstructor(youtubeInit);
+    const twitchPlatform = createTestPlatformConstructor(twitchInit);
+    const customPlatform = createTestPlatformConstructor(customInit);
 
     await lifecycle.initializeAllPlatforms({
       youtube: youtubePlatform,

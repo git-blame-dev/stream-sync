@@ -6,6 +6,7 @@ import {
 
 import { YouTubePlatform } from "../../../../../src/platforms/youtube";
 import { getSyntheticFixture } from "../../../../helpers/platform-test-data";
+import { waitForDelay } from "../../../../helpers/time-utils";
 const {
   initializeTestLogging,
   createMockPlatformDependencies,
@@ -14,12 +15,52 @@ import { createYouTubeConfigFixture } from "../../../../helpers/config-fixture";
 
 initializeTestLogging();
 
-const flushPromises = () => new Promise((resolve) => setImmediate(resolve));
-const getDebugCalls = (logger) =>
-  logger.debug.mock.calls.map(([message, _scope, metadata]) => ({
+type GiftPaypiggyEvent = {
+  type: string;
+  platform: string;
+  giftCount: number;
+  username: string;
+  id: string;
+  timestamp: string;
+};
+
+type DebugCall = {
+  message: string;
+  metadata: unknown;
+};
+
+type DebugLogger = {
+  debug: { mock: { calls: Array<[string, unknown?, unknown?]> } };
+};
+
+const isGiftPaypiggyEvent = (value: unknown): value is GiftPaypiggyEvent =>
+  !!value &&
+  typeof value === "object" &&
+  "type" in value &&
+  "platform" in value &&
+  "giftCount" in value &&
+  "username" in value &&
+  "id" in value &&
+  "timestamp" in value;
+
+const hasDebugCalls = (logger: unknown): logger is DebugLogger =>
+  !!logger &&
+  typeof logger === "object" &&
+  "debug" in logger &&
+  !!logger.debug &&
+  (typeof logger.debug === "object" || typeof logger.debug === "function") &&
+  "mock" in logger.debug;
+
+const flushPromises = () => waitForDelay(1);
+const getDebugCalls = (logger: unknown): DebugCall[] => {
+  if (!hasDebugCalls(logger)) {
+    return [];
+  }
+  return logger.debug.mock.calls.map(([message, _scope, metadata]) => ({
     message,
     metadata: metadata || null,
   }));
+};
 
 describe("YouTubePlatform event routing behavior", () => {
   afterEach(() => {
@@ -44,10 +85,14 @@ describe("YouTubePlatform event routing behavior", () => {
 
   test("routes gift membership purchase announcements to giftpaypiggy notifications", async () => {
     const platform = createPlatform();
-    const giftEvents = [];
+    const giftEvents: GiftPaypiggyEvent[] = [];
     platform.handlers = {
       ...(platform.handlers || {}),
-      onGiftPaypiggy: (event) => giftEvents.push(event),
+      onGiftPaypiggy: (event) => {
+        if (isGiftPaypiggyEvent(event)) {
+          giftEvents.push(event);
+        }
+      },
     };
 
     const giftPurchase = getSyntheticFixture("youtube", "gift-purchase-header");
@@ -56,6 +101,9 @@ describe("YouTubePlatform event routing behavior", () => {
 
     expect(giftEvents).toHaveLength(1);
     const [event] = giftEvents;
+    if (!event) {
+      throw new Error("expected gift event");
+    }
     expect(event.type).toBe("platform:giftpaypiggy");
     expect(event.platform).toBe("youtube");
     expect(event.giftCount).toBe(5);
@@ -67,10 +115,14 @@ describe("YouTubePlatform event routing behavior", () => {
 
   test("ignores gift membership redemption announcements", async () => {
     const platform = createPlatform();
-    const giftEvents = [];
+    const giftEvents: GiftPaypiggyEvent[] = [];
     platform.handlers = {
       ...(platform.handlers || {}),
-      onGiftPaypiggy: (event) => giftEvents.push(event),
+      onGiftPaypiggy: (event) => {
+        if (isGiftPaypiggyEvent(event)) {
+          giftEvents.push(event);
+        }
+      },
     };
 
     await platform.handleChatMessage({
@@ -95,6 +147,9 @@ describe("YouTubePlatform event routing behavior", () => {
       ),
     );
     expect(giftLog).toBeTruthy();
+    if (!giftLog) {
+      throw new Error("expected ignored gifted membership log");
+    }
     expect(giftLog.metadata).toMatchObject({
       action: "ignored_gifted_membership_announcement",
       recipient: "GiftedViewer",
@@ -126,6 +181,9 @@ describe("YouTubePlatform event routing behavior", () => {
       ),
     );
     expect(giftLog).toBeTruthy();
+    if (!giftLog) {
+      throw new Error("expected ignored gifted membership fallback log");
+    }
     expect(giftLog.metadata).toMatchObject({
       action: "ignored_gifted_membership_announcement",
       recipient: "Unknown User",
@@ -156,6 +214,9 @@ describe("YouTubePlatform event routing behavior", () => {
       message.includes("ignored duplicate LiveChatPaidMessageRenderer"),
     );
     expect(duplicateLog).toBeTruthy();
+    if (!duplicateLog) {
+      throw new Error("expected duplicate renderer log");
+    }
     expect(duplicateLog.metadata).toMatchObject({
       action: "ignored_duplicate",
       eventType: "LiveChatPaidMessageRenderer",

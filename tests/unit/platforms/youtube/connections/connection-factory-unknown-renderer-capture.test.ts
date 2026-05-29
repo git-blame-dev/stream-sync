@@ -13,7 +13,41 @@ type UnknownRendererCaptureInstallerOptions = {
     initialContinuation: string | null;
 };
 
-type FactoryOptions = Parameters<typeof createYouTubeConnectionFactory>[0];
+type FactoryOptions = NonNullable<Parameters<typeof createYouTubeConnectionFactory>[0]>;
+type FactoryPlatform = NonNullable<FactoryOptions['platform']>;
+type InnertubeInstanceManager = NonNullable<FactoryOptions['innertubeInstanceManager']>;
+type YouTubeClient = {
+    getInfo: (videoId: string, options: { client: string }) => Promise<{
+        getLiveChat: () => Promise<unknown>;
+        actions: LiveChatActions;
+        livechat: { continuation: string | null };
+    }>;
+};
+
+const createFactoryPlatform = (): FactoryPlatform => ({
+    logger: noOpLogger,
+    config: {},
+    setYouTubeConnectionReady: createMockFn(),
+    disconnectFromYouTubeStream: createMockFn().mockResolvedValue(true),
+    handleChatMessage: createMockFn(),
+    logRawPlatformData: createMockFn().mockResolvedValue(undefined),
+    _validateVideoForConnection: createMockFn().mockReturnValue({ shouldConnect: true }),
+    _handleProcessingError: createMockFn(),
+    _extractMessagesFromChatItem: createMockFn().mockReturnValue([]),
+    _shouldSkipMessage: createMockFn().mockReturnValue(false),
+    _resolveChatItemAuthorName: createMockFn().mockReturnValue('Unknown User')
+});
+
+const createInnertubeInstanceManager = (yt: YouTubeClient): InnertubeInstanceManager => {
+    const manager = {
+        getInstance: async <T>(_key: string, _factory: () => Promise<T>) => yt as T
+    };
+    return {
+        getInstance: () => manager
+    };
+};
+
+const withTimeout = <T>(promise: Promise<T>) => promise;
 
 describe('YouTube connection factory unknown renderer capture wiring', () => {
     test('installs unknown renderer capture before creating live chat connections', async () => {
@@ -21,29 +55,22 @@ describe('YouTube connection factory unknown renderer capture wiring', () => {
         const getLiveChat = createMockFn().mockResolvedValue(liveChat);
         const installLiveChatUnknownRendererCapture = createMockFn().mockResolvedValue(undefined);
         const info = {
-            getLiveChat,
+            getLiveChat: () => getLiveChat(),
             actions: {
-                execute: createMockFn()
+                execute: async () => undefined
             },
             livechat: {
                 continuation: 'test-live-chat-continuation'
             }
         };
-        const yt = {
-            getInfo: createMockFn().mockResolvedValue(info)
+        const getInfo = createMockFn().mockResolvedValue(info);
+        const yt: YouTubeClient = {
+            getInfo: (videoId, options) => getInfo(videoId, options)
         };
-        const manager = {
-            getInstance: createMockFn().mockResolvedValue(yt)
-        };
-        const innertubeInstanceManager = {
-            getInstance: createMockFn().mockReturnValue(manager)
-        };
-        const withTimeout = createMockFn((promise) => promise);
-        const platform = {
-            logger: noOpLogger,
-            _validateVideoForConnection: createMockFn().mockReturnValue({ shouldConnect: true }),
-            logRawPlatformData: createMockFn().mockResolvedValue(undefined)
-        };
+        const innertubeInstanceManager = createInnertubeInstanceManager(yt);
+        const platform = createFactoryPlatform();
+        platform._validateVideoForConnection = createMockFn().mockReturnValue({ shouldConnect: true });
+        platform.logRawPlatformData = createMockFn().mockResolvedValue(undefined);
 
         const factory = createYouTubeConnectionFactory({
             platform,
@@ -57,7 +84,12 @@ describe('YouTube connection factory unknown renderer capture wiring', () => {
 
         expect(result).toBe(liveChat);
         expect(installLiveChatUnknownRendererCapture).toHaveBeenCalledTimes(1);
-        expect(installLiveChatUnknownRendererCapture.mock.calls[0][0]).toMatchObject({
+        const [installerCall] = installLiveChatUnknownRendererCapture.mock.calls;
+        expect(installerCall).toBeDefined();
+        if (!installerCall) {
+            throw new Error('expected installer to be called');
+        }
+        expect(installerCall[0]).toMatchObject({
             videoId: 'video-unknown-renderer',
             initialContinuation: 'test-live-chat-continuation',
             actions: info.actions
@@ -69,32 +101,29 @@ describe('YouTube connection factory unknown renderer capture wiring', () => {
         const liveChat = { id: 'test-live-chat-sync-installer' };
         const getLiveChat = createMockFn().mockResolvedValue(liveChat);
         const info = {
-            getLiveChat,
+            getLiveChat: () => getLiveChat(),
             actions: {
-                execute: createMockFn()
+                execute: async () => undefined
             },
             livechat: {
                 continuation: null
             }
         };
-        const yt = {
-            getInfo: createMockFn().mockResolvedValue(info)
+        const getInfo = createMockFn().mockResolvedValue(info);
+        const yt: YouTubeClient = {
+            getInfo: (videoId, options) => getInfo(videoId, options)
         };
-        const manager = {
-            getInstance: createMockFn().mockResolvedValue(yt)
-        };
-        const innertubeInstanceManager = {
-            getInstance: createMockFn().mockReturnValue(manager)
-        };
-        const withTimeout = createMockFn((promise: Promise<unknown>) => promise);
-        const platform = {
-            logger: noOpLogger,
-            _validateVideoForConnection: createMockFn().mockReturnValue({ shouldConnect: true }),
-            logRawPlatformData: createMockFn().mockResolvedValue(undefined)
-        };
+        const innertubeInstanceManager = createInnertubeInstanceManager(yt);
+        const platform = createFactoryPlatform();
+        platform._validateVideoForConnection = createMockFn().mockReturnValue({ shouldConnect: true });
+        platform.logRawPlatformData = createMockFn().mockResolvedValue(undefined);
         const installerCalls: UnknownRendererCaptureInstallerOptions[] = [];
         const installLiveChatUnknownRendererCapture: NonNullable<FactoryOptions['installLiveChatUnknownRendererCapture']> = (options) => {
-            installerCalls.push(options);
+            installerCalls.push({
+                actions: options.actions,
+                videoId: options.videoId,
+                initialContinuation: options.initialContinuation ?? null
+            });
         };
 
         const factory = createYouTubeConnectionFactory({
@@ -109,7 +138,12 @@ describe('YouTube connection factory unknown renderer capture wiring', () => {
 
         expect(result).toBe(liveChat);
         expect(installerCalls).toHaveLength(1);
-        expect(installerCalls[0]).toMatchObject({
+        const [installerCall] = installerCalls;
+        expect(installerCall).toBeDefined();
+        if (!installerCall) {
+            throw new Error('expected installer to be called');
+        }
+        expect(installerCall).toMatchObject({
             videoId: 'video-sync-installer',
             initialContinuation: null,
             actions: info.actions

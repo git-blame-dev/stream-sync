@@ -3,6 +3,15 @@ import { createMockFn } from "../../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../../helpers/mock-factories";
 import { YouTubePlatform } from "../../../../src/platforms/youtube";
 
+type LoggedRawEvent = {
+  eventType: string;
+  payload: {
+    metadata: {
+      videoId?: unknown;
+    };
+  };
+};
+
 const createStreamDetectionService = () => ({
   detectLiveStreams: createMockFn().mockResolvedValue({
     success: true,
@@ -26,6 +35,17 @@ const createPlatform = () =>
       Innertube: null,
     },
   );
+
+const extractMessagesFromUnknownPayload = (
+  platform: YouTubePlatform,
+  payload: unknown,
+): ReturnType<YouTubePlatform["_extractMessagesFromChatItem"]> =>
+  Reflect.apply(platform._extractMessagesFromChatItem, platform, [payload]);
+
+const shouldSkipUnknownMessage = (
+  platform: YouTubePlatform,
+  message: unknown,
+): boolean => Reflect.apply(platform._shouldSkipMessage, platform, [message]);
 
 describe("YouTubePlatform internal behavior", () => {
   it("classifies live and upcoming stream validation states", () => {
@@ -77,18 +97,22 @@ describe("YouTubePlatform internal behavior", () => {
       item: { type: "LiveChatTextMessage", id: "single" },
     });
 
-    const invalidMessage = platform._extractMessagesFromChatItem(null);
+    const invalidMessage = extractMessagesFromUnknownPayload(platform, null);
 
     expect(batchedMessages).toHaveLength(2);
     expect(singleMessage).toHaveLength(1);
-    expect(singleMessage[0].type).toBe("LiveChatTextMessage");
+    const [message] = singleMessage;
+    if (!message) {
+      throw new Error("expected single extracted message");
+    }
+    expect(message.type).toBe("LiveChatTextMessage");
     expect(invalidMessage).toEqual([]);
   });
 
   it("applies message skip policy for invalid, duplicate, system, and normal items", () => {
     const platform = createPlatform();
 
-    expect(platform._shouldSkipMessage(null)).toBe(true);
+    expect(shouldSkipUnknownMessage(platform, null)).toBe(true);
     expect(
       platform._shouldSkipMessage({ type: "LiveChatPaidMessageRenderer" }),
     ).toBe(false);
@@ -102,9 +126,9 @@ describe("YouTubePlatform internal behavior", () => {
 
   it("logs and forwards unknown events with resolved video id metadata", async () => {
     const platform = createPlatform();
-    const loggedEvents = [];
-    platform.logRawPlatformData = createMockFn().mockImplementation(
-      async (eventType, payload) => {
+    const loggedEvents: LoggedRawEvent[] = [];
+    platform.logRawPlatformData = createMockFn(
+      async (eventType: string, payload: LoggedRawEvent["payload"]) => {
         loggedEvents.push({ eventType, payload });
       },
     );
@@ -116,7 +140,11 @@ describe("YouTubePlatform internal behavior", () => {
     await Promise.resolve();
 
     expect(loggedEvents).toHaveLength(1);
-    expect(loggedEvents[0].eventType).toBe("UnknownRenderer");
-    expect(loggedEvents[0].payload.metadata.videoId).toBe("video-from-item");
+    const [loggedEvent] = loggedEvents;
+    if (!loggedEvent) {
+      throw new Error("expected logged raw event");
+    }
+    expect(loggedEvent.eventType).toBe("UnknownRenderer");
+    expect(loggedEvent.payload.metadata.videoId).toBe("video-from-item");
   });
 });

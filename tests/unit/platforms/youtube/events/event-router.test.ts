@@ -12,6 +12,21 @@ type LoggerLike = {
     error: (...args: unknown[]) => void;
 };
 
+type ChatTextItemWithRuns = { item: { message: { runs: unknown[] } } };
+
+function hasChatTextRuns(value: unknown): value is ChatTextItemWithRuns {
+    return !!value
+        && typeof value === 'object'
+        && 'item' in value
+        && !!value.item
+        && typeof value.item === 'object'
+        && 'message' in value.item
+        && !!value.item.message
+        && typeof value.item.message === 'object'
+        && 'runs' in value.item.message
+        && Array.isArray(value.item.message.runs);
+}
+
 const logger: LoggerLike = noOpLogger;
 
 describe('YouTube event router', () => {
@@ -61,7 +76,11 @@ describe('YouTube event router', () => {
         expect(giftMessageViewCalls).toHaveLength(1);
         expect(chatTextCalls).toHaveLength(1);
         expect(lowPriorityCalls).toHaveLength(1);
-        expect(lowPriorityCalls[0].type).toBe('LiveChatViewerEngagementMessage');
+        const [lowPriorityCall] = lowPriorityCalls;
+        if (!lowPriorityCall) {
+            throw new Error('expected low priority handler call');
+        }
+        expect(lowPriorityCall.type).toBe('LiveChatViewerEngagementMessage');
     });
 
     test('emits platform error when handler is missing', async () => {
@@ -69,7 +88,6 @@ describe('YouTube event router', () => {
 
         const platform = {
             logger: noOpLogger,
-            handleSuperChat: undefined,
             _emitPlatformEvent: (eventType: string, payload: unknown) => emittedEvents.push({ eventType, payload }),
             eventFactory: {
                 createErrorEvent: () => ({ type: PlatformEvents.ERROR, platform: 'youtube' })
@@ -81,8 +99,12 @@ describe('YouTube event router', () => {
         await router.routeEvent({ item: { type: 'LiveChatPaidMessage' } }, 'LiveChatPaidMessage');
 
         expect(emittedEvents).toHaveLength(1);
-        expect(emittedEvents[0].eventType).toBe(PlatformEvents.ERROR);
-        expect(emittedEvents[0].payload).toMatchObject({
+        const [emittedEvent] = emittedEvents;
+        if (!emittedEvent) {
+            throw new Error('expected emitted error event');
+        }
+        expect(emittedEvent.eventType).toBe(PlatformEvents.ERROR);
+        expect(emittedEvent.payload).toMatchObject({
             type: PlatformEvents.ERROR,
             platform: 'youtube'
         });
@@ -93,7 +115,11 @@ describe('YouTube event router', () => {
 
         const platform = {
             logger: noOpLogger,
-            handleChatTextMessage: (item: { item: { message: { runs: unknown[] } } }) => chatTextCalls.push(item),
+            handleChatTextMessage: (item: unknown) => {
+                if (hasChatTextRuns(item)) {
+                    chatTextCalls.push(item);
+                }
+            },
             _emitPlatformEvent: () => {},
             eventFactory: {
                 createErrorEvent: () => ({ type: PlatformEvents.ERROR, platform: 'youtube' })
@@ -125,7 +151,11 @@ describe('YouTube event router', () => {
         await router.routeEvent(chatItem, 'LiveChatTextMessage');
 
         expect(chatTextCalls).toHaveLength(1);
-        expect(chatTextCalls[0].item.message.runs).toEqual(chatItem.item.message.runs);
+        const [chatTextCall] = chatTextCalls;
+        if (!chatTextCall) {
+            throw new Error('expected chat text handler call');
+        }
+        expect(chatTextCall.item.message.runs).toEqual(chatItem.item.message.runs);
     });
 
     test('throws when platform dependency is missing', () => {
@@ -191,8 +221,7 @@ describe('YouTube event router', () => {
     test('returns false for missing mapped handler without error event dependencies', async () => {
         const router = createYouTubeEventRouter({
             platform: {
-                logger: noOpLogger,
-                handleSuperChat: undefined
+                logger: noOpLogger
             }
         });
 
@@ -203,7 +232,6 @@ describe('YouTube event router', () => {
         const router = createYouTubeEventRouter({
             platform: {
                 logger: noOpLogger,
-                handleSuperChat: undefined,
                 _emitPlatformEvent: () => {
                     throw new Error('emit failed');
                 },

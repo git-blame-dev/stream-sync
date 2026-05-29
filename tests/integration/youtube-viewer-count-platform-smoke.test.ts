@@ -5,21 +5,33 @@ import NotificationManager from "../../src/notifications/NotificationManager";
 import { YouTubePlatform } from "../../src/platforms/youtube";
 import { createTestAppRuntime } from "../helpers/runtime-test-harness";
 import { createMockDisplayQueue, noOpLogger } from "../helpers/mock-factories";
-import { createTextProcessingManager } from "../../src/utils/text-processing";
 import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
 import {
   createConfigFixture,
   createYouTubeConfigFixture,
 } from "../helpers/config-fixture";
 
+type EventPayload = Record<string, unknown>;
+type EventHandler = (event: EventPayload) => void | Promise<void>;
+type ViewerCountUpdate = {
+  platform: string;
+  count: number;
+  previousCount: number;
+};
+
 const createEventBus = () => {
   const emitter = new EventEmitter();
   return {
-    emit: emitter.emit.bind(emitter),
-    on: emitter.on.bind(emitter),
-    subscribe: (event, handler) => {
+    emit: (event: string, payload: unknown) => emitter.emit(event, payload),
+    on: (event: string, handler: EventHandler) => {
       emitter.on(event, handler);
-      return () => emitter.off(event, handler);
+      return undefined;
+    },
+    subscribe: (event: string, handler: EventHandler) => {
+      emitter.on(event, handler);
+      return () => {
+        emitter.off(event, handler);
+      };
     },
   };
 };
@@ -33,7 +45,6 @@ describe("YouTube viewer count platform flow (smoke)", () => {
     const eventBus = createEventBus();
     const logger = noOpLogger;
     const displayQueue = createMockDisplayQueue();
-    const textProcessing = createTextProcessingManager({ logger });
     const configOverrides = {
       general: {},
       youtube: {
@@ -50,7 +61,6 @@ describe("YouTube viewer count platform flow (smoke)", () => {
       eventBus,
       config,
       constants: require("../../src/core/constants"),
-      textProcessing,
       obsGoals: { processDonationGoal: createMockFn() },
       vfxCommandService: {
         getVFXConfig: createMockFn().mockResolvedValue(null),
@@ -66,12 +76,21 @@ describe("YouTube viewer count platform flow (smoke)", () => {
       logger,
     });
 
+    const runtimePlatformLifecycleService = {
+      getAllPlatforms: () => platformLifecycleService.getAllPlatforms(),
+      initializeAllPlatforms: async (_platformModules: Record<string, unknown>) => ({}),
+      disconnectAll: () => platformLifecycleService.disconnectAll(),
+      getPlatformConnectionTime: (platformName: string) =>
+        platformLifecycleService.getPlatformConnectionTime(platformName),
+      getStatus: () => platformLifecycleService.getStatus(),
+    };
+
     const { runtime } = createTestAppRuntime(configOverrides, {
       eventBus,
       notificationManager,
       displayQueue,
       logger,
-      platformLifecycleService,
+      platformLifecycleService: runtimePlatformLifecycleService,
     });
 
     const platform = new YouTubePlatform(
@@ -90,7 +109,7 @@ describe("YouTube viewer count platform flow (smoke)", () => {
     platform.handlers =
       platformLifecycleService.createDefaultEventHandlers("youtube");
 
-    const updates = [];
+    const updates: ViewerCountUpdate[] = [];
     runtime.viewerCountSystem.addObserver({
       getObserverId: () => "test-viewer-count-observer",
       onViewerCountUpdate: (update) => {
@@ -101,12 +120,16 @@ describe("YouTube viewer count platform flow (smoke)", () => {
     try {
       platform.updateViewerCountForStream("test-stream-1", 321);
 
-      await new Promise(setImmediate);
+      await Promise.resolve();
 
       expect(updates).toHaveLength(1);
-      expect(updates[0].platform).toBe("youtube");
-      expect(updates[0].count).toBe(321);
-      expect(updates[0].previousCount).toBe(0);
+      const [update] = updates;
+      if (!update) {
+        throw new Error("expected viewer count update");
+      }
+      expect(update.platform).toBe("youtube");
+      expect(update.count).toBe(321);
+      expect(update.previousCount).toBe(0);
     } finally {
       runtime.platformEventRouter?.dispose();
       platformLifecycleService.dispose();

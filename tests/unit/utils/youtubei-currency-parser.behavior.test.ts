@@ -8,7 +8,9 @@ describe("YouTubeiCurrencyParser unknown currency handling", () => {
     const result = parser.parse("@@@");
 
     expect(result.success).toBe(false);
-    expect(result.reason).toBe("Unknown currency format");
+    if (!result.success) {
+      expect(result.reason).toBe("Unknown currency format");
+    }
   });
 
   it("returns failure result for invalid input", () => {
@@ -25,7 +27,9 @@ describe("YouTubeiCurrencyParser unknown currency handling", () => {
     const result = parser.parse("-$50.00");
 
     expect(result.success).toBe(false);
-    expect(result.reason).toBe("Negative amount not allowed");
+    if (!result.success) {
+      expect(result.reason).toBe("Negative amount not allowed");
+    }
   });
 
   it("parses known currency formats successfully", () => {

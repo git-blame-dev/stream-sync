@@ -14,9 +14,12 @@ initializeTestLogging();
 
 import { YouTubePlatform } from "../../../../../src/platforms/youtube";
 
+type YouTubeConfigFixture = ReturnType<typeof createYouTubeConfigFixture>;
+type PlatformDependencies = ReturnType<typeof createMockPlatformDependencies>;
+
 describe("YouTubePlatform connection state reporting", () => {
-  let config;
-  let dependencies;
+  let config: YouTubeConfigFixture;
+  let dependencies: PlatformDependencies;
 
   beforeEach(() => {
     config = createYouTubeConfigFixture({
@@ -32,14 +35,16 @@ describe("YouTubePlatform connection state reporting", () => {
 
   it("returns connection state based on connection manager data", () => {
     const platform = new YouTubePlatform(config, dependencies);
-    platform.connectionManager = {
+    Object.assign(platform, {
+      connectionManager: {
       getConnectionCount: createMockFn(() => 2),
-    };
+      },
+      monitoringInterval: 1,
+    });
     platform.getActiveYouTubeVideoIds = createMockFn(() => [
       "video-1",
       "video-2",
     ]);
-    platform.monitoringInterval = { id: "interval" };
     platform.isAnyYouTubeStreamReady = createMockFn(() => false);
 
     const state = platform.getConnectionState();
@@ -54,11 +59,13 @@ describe("YouTubePlatform connection state reporting", () => {
 
   it("summarizes stats using connection and monitoring status", () => {
     const platform = new YouTubePlatform(config, dependencies);
-    platform.connectionManager = {
+    Object.assign(platform, {
+      connectionManager: {
       getConnectionCount: createMockFn(() => 1),
-    };
+      },
+      monitoringInterval: 1,
+    });
     platform.getActiveYouTubeVideoIds = createMockFn(() => ["video-1"]);
-    platform.monitoringInterval = { id: "interval" };
     platform.isAnyYouTubeStreamReady = createMockFn(() => false);
 
     const stats = platform.getStats();

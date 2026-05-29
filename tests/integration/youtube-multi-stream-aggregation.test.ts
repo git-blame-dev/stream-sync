@@ -4,20 +4,31 @@ import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
 import { noOpLogger } from "../helpers/mock-factories";
 import { YouTubePlatform } from "../../src/platforms/youtube";
 
+type StreamConfig = {
+  videoId: string;
+  viewers: number;
+  isLive?: boolean;
+};
+
+type StreamScenarioOptions = {
+  detectedIds?: string[];
+  failingVideoIds?: string[];
+};
+
 describe("YouTube Multi-Stream Aggregation", () => {
   afterEach(() => {
     restoreAllMocks();
   });
 
-  const createStreamScenario = (streamData) => ({
+  const createStreamScenario = (streamData: StreamConfig[]) => ({
     name: `${streamData.length} streams with ${streamData.reduce((sum, s) => sum + s.viewers, 0)} total viewers`,
     streams: streamData,
     expectedTotal: streamData.reduce((sum, s) => sum + s.viewers, 0),
   });
 
   const createYouTubePlatformWithStreams = async (
-    streamConfigs,
-    options = {},
+    streamConfigs: StreamConfig[],
+    options: StreamScenarioOptions = {},
   ) => {
     const activeVideoIds = streamConfigs.map((stream) => stream.videoId);
     const failingVideoIds = options.failingVideoIds || [];
@@ -30,11 +41,19 @@ describe("YouTube Multi-Stream Aggregation", () => {
 
     const mockViewerExtractionService = {
       getAggregatedViewerCount: createMockFn().mockImplementation(
-        async (videoIds) => {
+        async (...args: unknown[]) => {
+          const [videoIds] = args;
+          if (!Array.isArray(videoIds)) {
+            return {
+              success: true,
+              totalCount: 0,
+              successfulStreams: 0,
+            };
+          }
           let totalCount = 0;
           let successfulStreams = 0;
           for (const videoId of videoIds) {
-            if (failingVideoIds.includes(videoId)) {
+            if (typeof videoId !== "string" || failingVideoIds.includes(videoId)) {
               continue;
             }
             const stream = streamConfigs.find((s) => s.videoId === videoId);

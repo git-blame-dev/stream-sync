@@ -6,6 +6,22 @@ import { PlatformEvents } from "../../../../src/interfaces/PlatformEvents";
 import { createMockPlatformDependencies } from "../../../helpers/test-setup";
 import { createYouTubeConfigFixture } from "../../../helpers/config-fixture";
 
+type PlatformPayload = {
+  platform: string;
+  [key: string]: unknown;
+};
+
+const isPlatformPayload = (value: unknown): value is PlatformPayload =>
+  !!value &&
+  typeof value === "object" &&
+  "platform" in value &&
+  typeof value.platform === "string";
+
+const isEmittedPlatformEvent = (
+  value: unknown,
+): value is { platform: string; data: unknown } =>
+  isPlatformPayload(value) && "data" in value;
+
 describe("YouTube Platform Event Routing", () => {
   afterEach(() => {
     restoreAllMocks();
@@ -93,7 +109,7 @@ describe("YouTube Platform Event Routing", () => {
       count: 42,
       timestamp: FIXED_TIMESTAMP,
     },
-  };
+  } satisfies Record<string, PlatformPayload>;
 
   const createPlatform = () =>
     new YouTubePlatform(baseConfig, {
@@ -112,26 +128,38 @@ describe("YouTube Platform Event Routing", () => {
     )) {
       test(`${eventType} routes to ${handlerName} with payload data`, () => {
         const platform = createPlatform();
-        const collected = [];
+        const collected: PlatformPayload[] = [];
         platform.handlers = {
           ...platform.handlers,
-          [handlerName]: (data) => collected.push(data),
+          [handlerName]: (data: unknown) => {
+            if (isPlatformPayload(data)) {
+              collected.push(data);
+            }
+          },
         };
 
         const payload = { ...PAYLOAD_BY_TYPE[eventType] };
         platform._emitPlatformEvent(eventType, payload);
 
         expect(collected).toHaveLength(1);
-        expect(collected[0][dataKey]).toBeDefined();
-        expect(collected[0].platform).toBe("youtube");
+        const [collectedEvent] = collected;
+        if (!collectedEvent) {
+          throw new Error("expected collected platform event");
+        }
+        expect(collectedEvent[dataKey]).toBeDefined();
+        expect(collectedEvent.platform).toBe("youtube");
       });
     }
   });
 
   test("emits platform:event on local EventEmitter for all mapped types", () => {
     const platform = createPlatform();
-    const emittedEvents = [];
-    platform.on("platform:event", (event) => emittedEvents.push(event));
+    const emittedEvents: Array<{ platform: string; data: unknown }> = [];
+    platform.on("platform:event", (event) => {
+      if (isEmittedPlatformEvent(event)) {
+        emittedEvents.push(event);
+      }
+    });
 
     for (const eventType of Object.keys(YOUTUBE_HANDLER_MAP)) {
       const payload = { ...PAYLOAD_BY_TYPE[eventType] };
@@ -160,7 +188,7 @@ describe("YouTube Platform Event Routing", () => {
 
   test("handles null handlers without throwing", () => {
     const platform = createPlatform();
-    platform.handlers = null;
+    Object.assign(platform, { handlers: null });
 
     expect(() => {
       platform._emitPlatformEvent(PlatformEvents.CHAT_MESSAGE, {
@@ -172,7 +200,7 @@ describe("YouTube Platform Event Routing", () => {
 
   test("unmapped event type does not invoke any handler", () => {
     const platform = createPlatform();
-    const collected = [];
+    const collected: unknown[] = [];
     platform.handlers = {
       onChat: (data) => collected.push(data),
       onGift: (data) => collected.push(data),

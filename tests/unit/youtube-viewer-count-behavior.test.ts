@@ -7,6 +7,7 @@ import {
 import { YouTubePlatform } from "../../src/platforms/youtube";
 
 type ViewerCountProvider = {
+  getViewerCount: () => Promise<number | null>;
   getViewerCountForVideo?: (videoId: string) => Promise<number>;
 };
 
@@ -40,6 +41,7 @@ describe("YouTubePlatform viewer count behavior", () => {
 
   it("returns provider value for the requested video id", async () => {
     const provider = {
+      getViewerCount: createMockFn(() => Promise.resolve(0)),
       getViewerCountForVideo: createMockFn((videoId: string) =>
         Promise.resolve(videoId === "video-123" ? 321 : 0),
       ),
@@ -60,7 +62,9 @@ describe("YouTubePlatform viewer count behavior", () => {
   });
 
   it("returns 0 when provider does not support per-video lookup", async () => {
-    const provider = {};
+    const provider = {
+      getViewerCount: createMockFn(() => Promise.resolve(0)),
+    };
     const platform = createPlatform(provider);
 
     const result = await platform.getViewerCountForVideo("video-123");
@@ -70,6 +74,7 @@ describe("YouTubePlatform viewer count behavior", () => {
 
   it("returns 0 when provider throws", async () => {
     const provider = {
+      getViewerCount: createMockFn(() => Promise.resolve(0)),
       getViewerCountForVideo: createMockFn().mockRejectedValue(
         new Error("network"),
       ),
