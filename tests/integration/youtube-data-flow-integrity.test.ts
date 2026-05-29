@@ -9,7 +9,6 @@ import {
 } from "../helpers/test-setup";
 import { getSyntheticFixture } from "../helpers/platform-test-data";
 import { createMockDisplayQueue, noOpLogger } from "../helpers/mock-factories";
-import { createTextProcessingManager } from "../../src/utils/text-processing";
 import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
 import {
   createConfigFixture,
@@ -20,12 +19,73 @@ initializeTestLogging();
 
 const realSuperChat = getSyntheticFixture("youtube", "superchat");
 
-const createEventBus = () => {
+type EventHandler = (event: unknown) => void;
+type TestEventBus = {
+  emit: (event: string, payload: unknown) => boolean;
+  on: (event: string, handler: EventHandler) => EventEmitter;
+  subscribe: (event: string, handler: EventHandler) => () => void;
+};
+type YouTubeGiftPayload = {
+  type: "platform:gift";
+  platform: "youtube";
+  id: string;
+  username: string;
+  timestamp: string;
+  displayMessage?: never;
+  ttsMessage?: never;
+  logMessage?: never;
+  [key: string]: unknown;
+};
+type NotificationOutput = {
+  displayMessage: string;
+  ttsMessage: string;
+  logMessage: string;
+};
+type NotificationResult = {
+  success: boolean;
+  notificationData?: NotificationOutput;
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  !!value && typeof value === "object";
+
+function assertYouTubeGiftPayload(
+  value: unknown,
+): asserts value is YouTubeGiftPayload {
+  expect(isRecord(value)).toBe(true);
+  if (!isRecord(value)) {
+    throw new Error("YouTube gift payload must be an object");
+  }
+  expect(value.type).toBe("platform:gift");
+  expect(value.platform).toBe("youtube");
+  expect(typeof value.id).toBe("string");
+  expect(typeof value.username).toBe("string");
+  expect(typeof value.timestamp).toBe("string");
+}
+
+function assertNotificationResult(
+  value: unknown,
+): asserts value is NotificationResult & {
+  notificationData: NotificationOutput;
+} {
+  expect(isRecord(value)).toBe(true);
+  if (!isRecord(value)) throw new Error("Notification result must be an object");
+  expect(value.success).toBe(true);
+  expect(isRecord(value.notificationData)).toBe(true);
+  if (!isRecord(value.notificationData)) {
+    throw new Error("Notification data must be an object");
+  }
+  expect(typeof value.notificationData.displayMessage).toBe("string");
+  expect(typeof value.notificationData.ttsMessage).toBe("string");
+  expect(typeof value.notificationData.logMessage).toBe("string");
+}
+
+const createEventBus = (): TestEventBus => {
   const emitter = new EventEmitter();
   return {
     emit: emitter.emit.bind(emitter),
     on: emitter.on.bind(emitter),
-    subscribe: (event, handler) => {
+    subscribe: (event: string, handler: EventHandler) => {
       emitter.on(event, handler);
       return () => emitter.off(event, handler);
     },
@@ -40,11 +100,11 @@ const createPlatformHarness = () => {
   });
   const dependencies = createMockPlatformDependencies("youtube", { logger });
   const platform = new YouTubePlatform(platformConfig, dependencies);
-  let capturedPayload;
+  let capturedPayload: unknown;
 
   platform.handlers = {
     ...(platform.handlers || {}),
-    onGift: (payload) => {
+    onGift: (payload: unknown) => {
       capturedPayload = payload;
     },
   };
@@ -58,7 +118,6 @@ const createPlatformHarness = () => {
 const createNotificationManagerHarness = () => {
   const displayQueue = createMockDisplayQueue();
   const logger = noOpLogger;
-  const textProcessing = createTextProcessingManager({ logger });
   const eventBus = createEventBus();
   const config = createConfigFixture({
     general: {
@@ -74,7 +133,6 @@ const createNotificationManagerHarness = () => {
     eventBus,
     config,
     constants: require("../../src/core/constants"),
-    textProcessing,
     obsGoals: { processDonationGoal: createMockFn() },
     vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) },
     userTrackingService: {
@@ -98,9 +156,7 @@ describe("YouTube data flow integrity", () => {
     await platform.handleChatMessage(realSuperChat);
     const capturedPayload = getCapturedPayload();
 
-    expect(capturedPayload).toBeDefined();
-    expect(capturedPayload.type).toBe("platform:gift");
-    expect(capturedPayload.platform).toBe("youtube");
+    assertYouTubeGiftPayload(capturedPayload);
     expect(capturedPayload.displayMessage).toBeUndefined();
     expect(capturedPayload.ttsMessage).toBeUndefined();
     expect(capturedPayload.logMessage).toBeUndefined();
@@ -116,7 +172,7 @@ describe("YouTube data flow integrity", () => {
       capturedPayload,
     );
 
-    expect(result.success).toBe(true);
+    assertNotificationResult(result);
     expect(result.notificationData.displayMessage).toContain("Super Chat");
     expect(result.notificationData.displayMessage).toContain(
       capturedPayload.username,

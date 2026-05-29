@@ -5,34 +5,90 @@ import { PlatformLifecycleService } from "../../src/services/PlatformLifecycleSe
 import NotificationManager from "../../src/notifications/NotificationManager";
 import { createTestAppRuntime } from "../helpers/runtime-test-harness";
 import { createMockDisplayQueue, noOpLogger } from "../helpers/mock-factories";
-import { createTextProcessingManager } from "../../src/utils/text-processing";
 import { expectNoTechnicalArtifacts } from "../helpers/assertion-helpers";
 import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
 import { createConfigFixture } from "../helpers/config-fixture";
+
+type RuntimeEvent = Record<string, unknown>;
+type EventHandler = (event: RuntimeEvent) => Promise<void> | void;
+type TestEventBus = {
+  emit: (event: string, payload: unknown) => void;
+  on: (event: string, handler: EventHandler) => EventEmitter;
+  subscribe: (event: string, handler: EventHandler) => () => void;
+};
+type GiftPaypiggyHandlers = {
+  onGiftPaypiggy: (payload: GiftPaypiggyPayload) => void;
+};
+type GiftPaypiggyPayload = {
+  username: string;
+  userId: string;
+  giftCount: number;
+  timestamp: string;
+};
+type UserFacingGiftPaypiggyData = GiftPaypiggyPayload & {
+  displayMessage: string;
+  ttsMessage: string;
+  logMessage: string;
+};
+type QueuedGiftPaypiggy = {
+  type: "platform:giftpaypiggy";
+  platform: "youtube";
+  data: UserFacingGiftPaypiggyData;
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  !!value && typeof value === "object";
+
+function assertQueuedGiftPaypiggy(
+  value: unknown,
+): asserts value is QueuedGiftPaypiggy {
+  expect(isRecord(value)).toBe(true);
+  if (!isRecord(value)) throw new Error("Queued item must be an object");
+  expect(value.type).toBe("platform:giftpaypiggy");
+  expect(value.platform).toBe("youtube");
+  expect(isRecord(value.data)).toBe(true);
+  if (!isRecord(value.data)) throw new Error("Queued data must be an object");
+  expect(value.data.username).toBe("GiftMember");
+  expect(value.data.userId).toBe("yt-gifter-1");
+  expect(value.data.giftCount).toBe(5);
+  expect(typeof value.data.timestamp).toBe("string");
+  expect(typeof value.data.displayMessage).toBe("string");
+  expect(typeof value.data.ttsMessage).toBe("string");
+  expect(typeof value.data.logMessage).toBe("string");
+}
 
 describe("YouTube giftpaypiggy platform flow (smoke)", () => {
   afterEach(() => {
     restoreAllMocks();
   });
 
-  const createEventBus = () => {
+  const createEventBus = (): TestEventBus => {
     const emitter = new EventEmitter();
     return {
-      emit: emitter.emit.bind(emitter),
+      emit: (event: string, payload: unknown) => {
+        emitter.emit(event, payload);
+      },
       on: emitter.on.bind(emitter),
-      subscribe: (event, handler) => {
+      subscribe: (event: string, handler: EventHandler) => {
         emitter.on(event, handler);
         return () => emitter.off(event, handler);
       },
     };
   };
 
-  const assertNonEmptyString = (value) => {
+  const assertNonEmptyString = (value: string) => {
     expect(typeof value).toBe("string");
     expect(value.trim()).not.toBe("");
   };
 
-  const assertUserFacingOutput = (data, { username, keyword, count }) => {
+  const assertUserFacingOutput = (
+    data: UserFacingGiftPaypiggyData,
+    {
+      username,
+      keyword,
+      count,
+    }: { username?: string; keyword?: string; count?: number },
+  ) => {
     assertNonEmptyString(data.displayMessage);
     assertNonEmptyString(data.ttsMessage);
     assertNonEmptyString(data.logMessage);
@@ -64,7 +120,6 @@ describe("YouTube giftpaypiggy platform flow (smoke)", () => {
     const eventBus = createEventBus();
     const logger = noOpLogger;
     const displayQueue = createMockDisplayQueue();
-    const textProcessing = createTextProcessingManager({ logger });
     const configOverrides = {
       general: {
         debugEnabled: false,
@@ -81,7 +136,6 @@ describe("YouTube giftpaypiggy platform flow (smoke)", () => {
       eventBus,
       config,
       constants: require("../../src/core/constants"),
-      textProcessing,
       obsGoals: { processDonationGoal: createMockFn() },
       vfxCommandService: {
         getVFXConfig: createMockFn().mockResolvedValue(null),
@@ -96,17 +150,15 @@ describe("YouTube giftpaypiggy platform flow (smoke)", () => {
       eventBus,
       logger,
     });
-
     const { runtime } = createTestAppRuntime(configOverrides, {
       eventBus,
       notificationManager,
       displayQueue,
       logger,
-      platformLifecycleService,
     });
 
     class MockYouTubePlatform {
-      async initialize(handlers) {
+      initialize(handlers: GiftPaypiggyHandlers): void {
         handlers.onGiftPaypiggy({
           username: "GiftMember",
           userId: "yt-gifter-1",
@@ -126,14 +178,15 @@ describe("YouTube giftpaypiggy platform flow (smoke)", () => {
       await platformLifecycleService.initializeAllPlatforms({
         youtube: MockYouTubePlatform,
       });
-      await new Promise(setImmediate);
+      await Promise.resolve();
+      await Promise.resolve();
 
       expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
-      const queued = displayQueue.addItem.mock.calls[0][0];
-      expect(queued.type).toBe("platform:giftpaypiggy");
-      expect(queued.platform).toBe("youtube");
-      expect(queued.data.username).toBe("GiftMember");
-      expect(queued.data.giftCount).toBe(5);
+      const firstAddItemCall = displayQueue.addItem.mock.calls[0];
+      expect(firstAddItemCall).toBeDefined();
+      if (!firstAddItemCall) throw new Error("Expected display queue item");
+      const [queued] = firstAddItemCall;
+      assertQueuedGiftPaypiggy(queued);
       assertUserFacingOutput(queued.data, {
         username: "GiftMember",
         keyword: "membership",

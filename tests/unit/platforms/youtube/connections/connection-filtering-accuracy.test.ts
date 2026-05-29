@@ -2,22 +2,23 @@ import { describe, test, expect, afterEach } from "bun:test";
 import { createMockFn } from "../../../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../../../helpers/mock-factories";
 import { YouTubePlatform } from "../../../../../src/platforms/youtube";
+import { YouTubeConnectionManager } from "../../../../../src/platforms/youtube/youtube-connection-manager";
 
-const createConnectionManager = (overrides = {}) => ({
-  connections: new Map(),
-  addConnection: createMockFn(),
-  removeConnection: createMockFn(),
-  setConnectionReady: createMockFn(),
-  isConnectionReady: createMockFn().mockReturnValue(false),
-  getActiveVideoIds: createMockFn().mockReturnValue([]),
-  getAllVideoIds: createMockFn().mockReturnValue([]),
-  getConnectionCount: createMockFn().mockReturnValue(0),
-  getReadyConnectionCount: createMockFn().mockReturnValue(0),
-  hasConnection: createMockFn(),
-  getConnection: createMockFn(),
-  getConnectionState: createMockFn(),
-  ...overrides,
-});
+type ConnectionManagerOverrides = Partial<{
+  isConnectionReady: (videoId: string) => boolean;
+  getActiveVideoIds: () => string[];
+  getAllVideoIds: () => string[];
+  getConnectionCount: () => number;
+  getReadyConnectionCount: () => number;
+}>;
+
+const createConnectionManager = (
+  overrides: ConnectionManagerOverrides = {},
+): YouTubeConnectionManager => {
+  const manager = new YouTubeConnectionManager(noOpLogger);
+  Object.assign(manager, overrides);
+  return manager;
+};
 
 const createPlatform = (configOverrides = {}, depsOverrides = {}) => {
   const config = {
@@ -42,12 +43,13 @@ const createPlatform = (configOverrides = {}, depsOverrides = {}) => {
 };
 
 describe("YouTube Connection Filtering Accuracy", () => {
-  let youtubePlatform;
+  let youtubePlatform: YouTubePlatform | null = null;
 
   afterEach(() => {
     if (youtubePlatform?.cleanup) {
       youtubePlatform.cleanup().catch(() => {});
     }
+    youtubePlatform = null;
   });
 
   describe("getActiveYouTubeVideoIds filtering accuracy", () => {
@@ -63,8 +65,8 @@ describe("YouTube Connection Filtering Accuracy", () => {
 
       const mockConnectionManager = createConnectionManager({
         getActiveVideoIds: createMockFn().mockReturnValue(storedVideoIds),
-        isConnectionReady: createMockFn().mockImplementation((videoId) =>
-          readyVideoIds.includes(videoId),
+        isConnectionReady: createMockFn<[string], boolean>().mockImplementation(
+          (videoId) => readyVideoIds.includes(videoId),
         ),
         getConnectionCount: createMockFn().mockReturnValue(4),
         getReadyConnectionCount: createMockFn().mockReturnValue(2),
@@ -134,8 +136,8 @@ describe("YouTube Connection Filtering Accuracy", () => {
         getActiveVideoIds: createMockFn().mockReturnValue(storedConnections),
         getConnectionCount: createMockFn().mockReturnValue(4),
         getReadyConnectionCount: createMockFn().mockReturnValue(2),
-        isConnectionReady: createMockFn().mockImplementation((id) =>
-          readyConnections.includes(id),
+        isConnectionReady: createMockFn<[string], boolean>().mockImplementation(
+          (id) => readyConnections.includes(id),
         ),
       });
       youtubePlatform.connectionManager = mockConnectionManager;
@@ -164,8 +166,8 @@ describe("YouTube Connection Filtering Accuracy", () => {
         getActiveVideoIds: createMockFn().mockReturnValue(allStoredIds),
         getConnectionCount: createMockFn().mockReturnValue(4),
         getReadyConnectionCount: createMockFn().mockReturnValue(2),
-        isConnectionReady: createMockFn().mockImplementation((id) =>
-          actualReadyIds.includes(id),
+        isConnectionReady: createMockFn<[string], boolean>().mockImplementation(
+          (id) => actualReadyIds.includes(id),
         ),
       });
       youtubePlatform.connectionManager = mockConnectionManager;
@@ -191,8 +193,8 @@ describe("YouTube Connection Filtering Accuracy", () => {
 
       const mockConnectionManager = createConnectionManager({
         getActiveVideoIds: createMockFn().mockReturnValue(storedStreams),
-        isConnectionReady: createMockFn().mockImplementation((id) =>
-          operationallyActiveStreams.includes(id),
+        isConnectionReady: createMockFn<[string], boolean>().mockImplementation(
+          (id) => operationallyActiveStreams.includes(id),
         ),
       });
       youtubePlatform.connectionManager = mockConnectionManager;
@@ -213,7 +215,10 @@ describe("YouTube Connection Filtering Accuracy", () => {
   describe("edge cases: connection filtering robustness", () => {
     test("handles undefined connection manager gracefully", () => {
       youtubePlatform = createPlatform();
-      youtubePlatform.connectionManager = null;
+      Object.defineProperty(youtubePlatform, "connectionManager", {
+        configurable: true,
+        value: null,
+      });
 
       const activeIds = youtubePlatform.getActiveYouTubeVideoIds();
 

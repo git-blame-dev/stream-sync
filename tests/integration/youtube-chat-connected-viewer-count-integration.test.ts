@@ -6,22 +6,35 @@ import { ViewerCountSystem } from "../../src/utils/viewer-count.ts";
 import { createConfigFixture } from "../helpers/config-fixture";
 import { noOpLogger } from "../helpers/mock-factories";
 
-const createEventBus = () => {
-  const listeners = new Map();
+type EventHandler = (payload: unknown) => Promise<unknown> | unknown;
+type TestEventBus = {
+  subscribe: (event: string, handler: EventHandler) => () => void;
+  emit: (event: string, payload: unknown) => Promise<void>;
+};
+type TestPlatforms = {
+  youtube: {
+    getViewerCount: () => Promise<number>;
+  };
+};
+
+const createEventBus = (): TestEventBus => {
+  const listeners = new Map<string, EventHandler[]>();
   return {
-    subscribe(event, handler) {
-      const existing = listeners.get(event) || [];
+    subscribe(event: string, handler: EventHandler) {
+      const existing = listeners.get(event) ?? [];
       existing.push(handler);
       listeners.set(event, existing);
       return () => {
         listeners.set(
           event,
-          (listeners.get(event) || []).filter((fn) => fn !== handler),
+          (listeners.get(event) ?? []).filter(
+            (fn: EventHandler) => fn !== handler,
+          ),
         );
       };
     },
-    async emit(event, payload) {
-      const handlers = listeners.get(event) || [];
+    async emit(event: string, payload: unknown) {
+      const handlers = listeners.get(event) ?? [];
       await Promise.all(handlers.map((handler) => handler(payload)));
     },
   };
@@ -36,9 +49,9 @@ describe("YouTube stream-status viewer count integration (smoke)", () => {
     }
   });
 
-  let viewerCountSystem;
-  let eventBus;
-  let platforms;
+  let viewerCountSystem: ViewerCountSystem | null;
+  let eventBus: TestEventBus;
+  let platforms: TestPlatforms;
 
   beforeEach(async () => {
     platforms = {
@@ -64,6 +77,12 @@ describe("YouTube stream-status viewer count integration (smoke)", () => {
   });
 
   test("starts polling YouTube when stream status is live and records viewer count", async () => {
+    const activeViewerCountSystem = viewerCountSystem;
+    expect(activeViewerCountSystem).not.toBeNull();
+    if (activeViewerCountSystem === null) {
+      throw new Error("Expected initialized viewer count system");
+    }
+
     await eventBus.emit("platform:event", {
       platform: "youtube",
       type: "platform:stream-status",
@@ -71,8 +90,8 @@ describe("YouTube stream-status viewer count integration (smoke)", () => {
     });
 
     expect(platforms.youtube.getViewerCount).toHaveBeenCalled();
-    expect(viewerCountSystem.counts.youtube).toBe(42);
-    expect(viewerCountSystem.isStreamLive("youtube")).toBe(true);
-    expect(viewerCountSystem.pollingHandles.youtube).toBeDefined();
+    expect(activeViewerCountSystem.counts.youtube).toBe(42);
+    expect(activeViewerCountSystem.isStreamLive("youtube")).toBe(true);
+    expect(activeViewerCountSystem.pollingHandles.youtube).toBeDefined();
   });
 });

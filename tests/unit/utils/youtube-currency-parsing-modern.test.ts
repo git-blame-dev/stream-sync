@@ -3,6 +3,9 @@ import { noOpLogger } from "../../helpers/mock-factories";
 import { getSyntheticFixture } from "../../helpers/platform-test-data";
 import * as YouTubeCurrencyParser from "../../../src/platforms/youtube/youtubei-currency-parser";
 import testClock from "../../helpers/test-clock";
+type YouTubeiCurrencyParser = InstanceType<
+  typeof YouTubeCurrencyParser.YouTubeiCurrencyParser
+>;
 const realSuperSticker = getSyntheticFixture("youtube", "supersticker");
 const realSuperChat = getSyntheticFixture("youtube", "superchat");
 const realSuperChatINR = getSyntheticFixture(
@@ -50,7 +53,7 @@ describe("YouTube Currency Parsing - Modern (Production Data)", () => {
   });
 
   describe("International Currency Formats", () => {
-    let parser;
+    let parser: YouTubeiCurrencyParser;
 
     beforeEach(() => {
       parser = new YouTubeCurrencyParser.YouTubeiCurrencyParser({
@@ -100,7 +103,7 @@ describe("YouTube Currency Parsing - Modern (Production Data)", () => {
   });
 
   describe("Error Handling - User Experience", () => {
-    let parser;
+    let parser: YouTubeiCurrencyParser;
 
     beforeEach(() => {
       parser = new YouTubeCurrencyParser.YouTubeiCurrencyParser({

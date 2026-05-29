@@ -7,7 +7,7 @@ describe("YouTube Connection Manager - Missing Methods", () => {
     restoreAllMocks();
   });
 
-  let connectionManager;
+  let connectionManager: YouTubeConnectionManager;
 
   beforeEach(() => {
     connectionManager = new YouTubeConnectionManager(noOpLogger);
@@ -86,6 +86,8 @@ describe("YouTube Connection Manager - Missing Methods", () => {
       const status = connectionManager.getConnectionStatus("test-video");
       const isReady = connectionManager.isConnectionReady("test-video");
 
+      expect(status).not.toBeNull();
+      if (status === null) throw new Error("Expected connection status");
       expect(status.ready).toBe(isReady);
       expect(status.ready).toBe(true);
       expect(isReady).toBe(true);

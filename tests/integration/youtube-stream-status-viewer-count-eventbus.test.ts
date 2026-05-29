@@ -7,23 +7,60 @@ import { createYouTubeConfigFixture } from "../helpers/config-fixture";
 import { noOpLogger } from "../helpers/mock-factories";
 import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
 
-const createEventBus = () => {
+type EventHandler = (event: unknown) => void;
+type TestEventBus = {
+  emit: (event: string, payload: unknown) => boolean;
+  subscribe: (event: string, handler: EventHandler) => () => void;
+};
+type PlatformEventPayload = {
+  type: string;
+  platform: string;
+  data: {
+    count?: number;
+    isLive?: boolean;
+    streamId?: string;
+    timestamp: string;
+  };
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  !!value && typeof value === "object";
+
+function assertPlatformEventPayload(
+  value: unknown,
+): asserts value is PlatformEventPayload {
+  expect(isRecord(value)).toBe(true);
+  if (!isRecord(value)) throw new Error("Platform event must be an object");
+  expect(typeof value.type).toBe("string");
+  expect(typeof value.platform).toBe("string");
+  expect(isRecord(value.data)).toBe(true);
+  if (!isRecord(value.data)) {
+    throw new Error("Platform event data must be an object");
+  }
+  expect(typeof value.data.timestamp).toBe("string");
+}
+
+const createEventBus = (): TestEventBus => {
   const emitter = new EventEmitter();
   return {
     emit: emitter.emit.bind(emitter),
-    subscribe: (event, handler) => {
+    subscribe: (event: string, handler: EventHandler) => {
       emitter.on(event, handler);
       return () => emitter.off(event, handler);
     },
   };
 };
 
-const waitForPlatformEvent = (eventBus) =>
-  new Promise((resolve) => {
-    const unsubscribe = eventBus.subscribe("platform:event", (event) => {
-      unsubscribe();
-      resolve(event);
-    });
+const waitForPlatformEvent = (eventBus: TestEventBus) =>
+  new Promise<PlatformEventPayload>((resolve) => {
+    const unsubscribe = eventBus.subscribe(
+      "platform:event",
+      (event: unknown) => {
+        unsubscribe();
+        assertPlatformEventPayload(event);
+        resolve(event);
+      },
+    );
   });
 
 const createPlatform = () =>
