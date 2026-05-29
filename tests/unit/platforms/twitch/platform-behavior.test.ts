@@ -6,13 +6,96 @@ import { createTwitchEventSubChatMessageEvent } from "../../../helpers/twitch-te
 import { TwitchPlatform } from "../../../../src/platforms/twitch.ts";
 import { DEFAULT_AVATAR_URL } from "../../../../src/constants/avatar";
 
+type ChatPayload = {
+  userId?: string;
+  username?: string;
+  avatarUrl?: string;
+  platform?: string;
+  timestamp?: string;
+  isMod?: boolean;
+  isBroadcaster?: boolean;
+  isPaypiggy?: boolean;
+  message: {
+    text: string;
+    parts?: unknown[];
+  };
+  metadata: {
+    isMod?: boolean;
+    isPaypiggy?: boolean;
+    missingFields?: string[];
+  };
+};
+
+type ConnectionPayload = {
+  platform: string;
+  status: string;
+};
+
+type PaypiggyPayload = {
+  type: string;
+  platform: string;
+  username: string;
+};
+
+type PlatformEventPayload<TPayload> = {
+  type: string;
+  data: TPayload;
+};
+
+type TwitchAuth = ReturnType<typeof createReadyTwitchAuth>;
+
+type PlatformDepsOverrides = Record<string, unknown> & {
+  twitchAuth?: TwitchAuth;
+  TwitchEventSub?: NonNullable<
+    ConstructorParameters<typeof TwitchPlatform>[1]
+  >["TwitchEventSub"];
+};
+
+type TwitchEventSubConstructor = NonNullable<
+  PlatformDepsOverrides["TwitchEventSub"]
+>;
+
+class DefaultTwitchEventSubFake {
+  async initialize(): Promise<void> {}
+  async sendMessage(_message: string): Promise<void> {}
+  async connect(): Promise<void> {}
+  async disconnect(): Promise<void> {}
+  async cleanup(): Promise<void> {}
+  on(_eventName: string, _handler: (...args: unknown[]) => void): void {}
+  isConnected = () => true;
+  isActive = () => true;
+}
+
+const first = <T>(items: T[]): T => {
+  const [item] = items;
+  if (!item) {
+    throw new Error("expected at least one item");
+  }
+  return item;
+};
+
+const isPaypiggyPayload = (payload: unknown): payload is PaypiggyPayload => {
+  if (!payload || typeof payload !== "object") {
+    return false;
+  }
+  const candidate = payload as Partial<PaypiggyPayload>;
+  return (
+    typeof candidate.type === "string" &&
+    typeof candidate.platform === "string" &&
+    typeof candidate.username === "string"
+  );
+};
+
 const createReadyTwitchAuth = () => ({
   isReady: () => true,
   refreshTokens: async () => true,
   getUserId: () => "test-user-id",
 });
 
-const createPlatform = (configOverrides = {}, depsOverrides = {}) => {
+const createPlatform = (
+  configOverrides: Record<string, unknown> = {},
+  depsOverrides: PlatformDepsOverrides = {},
+) => {
   const config = {
     enabled: true,
     username: "teststreamer",
@@ -24,16 +107,14 @@ const createPlatform = (configOverrides = {}, depsOverrides = {}) => {
     throw new Error("twitchAuth is required - provide explicit mock");
   }
   const twitchAuth = depsOverrides.twitchAuth;
-  const TwitchEventSub =
-    depsOverrides.TwitchEventSub ||
-    createMockFn().mockImplementation(() => ({
-      initialize: createMockFn().mockResolvedValue(),
-      connect: createMockFn().mockResolvedValue(),
-      disconnect: createMockFn().mockResolvedValue(),
-      cleanup: createMockFn().mockResolvedValue(),
-      on: createMockFn(),
-      isConnected: () => true,
-    }));
+  const {
+    TwitchEventSub: _ignoredEventSub,
+    twitchAuth: _ignoredTwitchAuth,
+    ...otherDepsOverrides
+  } = depsOverrides;
+  const defaultTwitchEventSub: TwitchEventSubConstructor = DefaultTwitchEventSubFake;
+  const TwitchEventSub: TwitchEventSubConstructor =
+    depsOverrides.TwitchEventSub ?? defaultTwitchEventSub;
   return new TwitchPlatform(config, {
     logger: noOpLogger,
     twitchAuth,
@@ -42,23 +123,24 @@ const createPlatform = (configOverrides = {}, depsOverrides = {}) => {
     ChatFileLoggingService: class {
       async logRawPlatformData(): Promise<void> {}
     },
-    ...depsOverrides,
+    ...otherDepsOverrides,
   });
 };
 
 describe("TwitchPlatform behavior standards", () => {
-  let platform;
+  let platform: TwitchPlatform | undefined;
 
   afterEach(() => {
     if (platform?.cleanup) {
       platform.cleanup().catch(() => {});
     }
+    platform = undefined;
   });
 
   it("emits chat events using the standardized schema", async () => {
     platform = createPlatform({}, { twitchAuth: createReadyTwitchAuth() });
-    const emitted = [];
-    platform.on("platform:event", (payload) => {
+    const emitted: ChatPayload[] = [];
+    platform.on("platform:event", (payload: PlatformEventPayload<ChatPayload>) => {
       if (payload.type === "platform:chat-message") emitted.push(payload.data);
     });
 
@@ -72,7 +154,7 @@ describe("TwitchPlatform behavior standards", () => {
     });
 
     expect(emitted).toHaveLength(1);
-    const payload = emitted[0];
+    const payload = first(emitted);
     expect(payload.userId).toBe("test-user-12345");
     expect(payload.username).toBe("testviewer1");
     expect(payload.message.text).toBe("hello");
@@ -86,8 +168,8 @@ describe("TwitchPlatform behavior standards", () => {
 
   it("emits canonical Twitch message parts for emote fragment chat payloads", async () => {
     platform = createPlatform({}, { twitchAuth: createReadyTwitchAuth() });
-    const emitted = [];
-    platform.on("platform:event", (payload) => {
+    const emitted: ChatPayload[] = [];
+    platform.on("platform:event", (payload: PlatformEventPayload<ChatPayload>) => {
       if (payload.type === "platform:chat-message") emitted.push(payload.data);
     });
 
@@ -103,7 +185,7 @@ describe("TwitchPlatform behavior standards", () => {
     await platform.onMessageHandler(event);
 
     expect(emitted).toHaveLength(1);
-    const payload = emitted[0];
+    const payload = first(emitted);
     expect(payload.message.text).toBe(
       "testEmote test message testEmote hello world this is a message to everyone testEmote how are we today?",
     );
@@ -141,8 +223,8 @@ describe("TwitchPlatform behavior standards", () => {
 
   it("accepts emote-only Twitch chat when canonical message parts exist", async () => {
     platform = createPlatform({}, { twitchAuth: createReadyTwitchAuth() });
-    const emitted = [];
-    platform.on("platform:event", (payload) => {
+    const emitted: ChatPayload[] = [];
+    platform.on("platform:event", (payload: PlatformEventPayload<ChatPayload>) => {
       if (payload.type === "platform:chat-message") emitted.push(payload.data);
     });
 
@@ -165,8 +247,9 @@ describe("TwitchPlatform behavior standards", () => {
     await platform.onMessageHandler(event);
 
     expect(emitted).toHaveLength(1);
-    expect(emitted[0].message.text).toBe("");
-    expect(emitted[0].message.parts).toEqual([
+    const payload = first(emitted);
+    expect(payload.message.text).toBe("");
+    expect(payload.message.parts).toEqual([
       {
         type: "emote",
         platform: "twitch",
@@ -179,8 +262,8 @@ describe("TwitchPlatform behavior standards", () => {
 
   it("treats subscriber badge version 0 as paypiggy while moderator 0 stays non-mod", async () => {
     platform = createPlatform({}, { twitchAuth: createReadyTwitchAuth() });
-    const emitted = [];
-    platform.on("platform:event", (payload) => {
+    const emitted: ChatPayload[] = [];
+    platform.on("platform:event", (payload: PlatformEventPayload<ChatPayload>) => {
       if (payload.type === "platform:chat-message") emitted.push(payload.data);
     });
 
@@ -197,15 +280,16 @@ describe("TwitchPlatform behavior standards", () => {
     });
 
     expect(emitted).toHaveLength(1);
-    expect(emitted[0].metadata.isMod).toBe(false);
-    expect(emitted[0].metadata.isPaypiggy).toBe(true);
-    expect(emitted[0].isPaypiggy).toBe(true);
+    const payload = first(emitted);
+    expect(payload.metadata.isMod).toBe(false);
+    expect(payload.metadata.isPaypiggy).toBe(true);
+    expect(payload.isPaypiggy).toBe(true);
   });
 
   it("treats founder badge as paypiggy status for chat payloads", async () => {
     platform = createPlatform({}, { twitchAuth: createReadyTwitchAuth() });
-    const emitted = [];
-    platform.on("platform:event", (payload) => {
+    const emitted: ChatPayload[] = [];
+    platform.on("platform:event", (payload: PlatformEventPayload<ChatPayload>) => {
       if (payload.type === "platform:chat-message") emitted.push(payload.data);
     });
 
@@ -219,14 +303,15 @@ describe("TwitchPlatform behavior standards", () => {
     });
 
     expect(emitted).toHaveLength(1);
-    expect(emitted[0].isPaypiggy).toBe(true);
-    expect(emitted[0].metadata.isPaypiggy).toBe(true);
+    const payload = first(emitted);
+    expect(payload.isPaypiggy).toBe(true);
+    expect(payload.metadata.isPaypiggy).toBe(true);
   });
 
   it("does not treat legacy subscriber payload flag as paypiggy without badges", async () => {
     platform = createPlatform({}, { twitchAuth: createReadyTwitchAuth() });
-    const emitted = [];
-    platform.on("platform:event", (payload) => {
+    const emitted: ChatPayload[] = [];
+    platform.on("platform:event", (payload: PlatformEventPayload<ChatPayload>) => {
       if (payload.type === "platform:chat-message") emitted.push(payload.data);
     });
 
@@ -241,14 +326,15 @@ describe("TwitchPlatform behavior standards", () => {
     });
 
     expect(emitted).toHaveLength(1);
-    expect(emitted[0].isPaypiggy).toBe(false);
-    expect(emitted[0].metadata.isPaypiggy).toBe(false);
+    const payload = first(emitted);
+    expect(payload.isPaypiggy).toBe(false);
+    expect(payload.metadata.isPaypiggy).toBe(false);
   });
 
   it("emits degraded chat payload when message text and message parts are both empty", async () => {
     platform = createPlatform({}, { twitchAuth: createReadyTwitchAuth() });
-    const emitted = [];
-    platform.on("platform:event", (payload) => {
+    const emitted: ChatPayload[] = [];
+    platform.on("platform:event", (payload: PlatformEventPayload<ChatPayload>) => {
       if (payload.type === "platform:chat-message") emitted.push(payload.data);
     });
 
@@ -274,16 +360,17 @@ describe("TwitchPlatform behavior standards", () => {
     });
 
     expect(emitted).toHaveLength(1);
-    expect(emitted[0].username).toBe("testvieweremptychat");
-    expect(emitted[0].avatarUrl).toBe(DEFAULT_AVATAR_URL);
-    expect(emitted[0].message).toEqual({ text: "Unknown Message" });
-    expect(emitted[0].metadata.missingFields).toContain("message");
+    const payload = first(emitted);
+    expect(payload.username).toBe("testvieweremptychat");
+    expect(payload.avatarUrl).toBe(DEFAULT_AVATAR_URL);
+    expect(payload.message).toEqual({ text: "Unknown Message" });
+    expect(payload.metadata.missingFields).toContain("message");
   });
 
   it("emits connection lifecycle events for EventSub changes", () => {
     platform = createPlatform({}, { twitchAuth: createReadyTwitchAuth() });
-    const connectedEvents = [];
-    platform.on("platform:event", (payload) => {
+    const connectedEvents: ConnectionPayload[] = [];
+    platform.on("platform:event", (payload: PlatformEventPayload<ConnectionPayload>) => {
       if (payload.type === "platform:connection")
         connectedEvents.push(payload.data);
     });
@@ -310,7 +397,7 @@ describe("TwitchPlatform behavior standards", () => {
     });
 
     expect(onConnection).toHaveBeenCalledTimes(1);
-    expect(onConnection.mock.calls[0][0]).toMatchObject({
+    expect(onConnection.mock.calls[0]?.[0]).toMatchObject({
       platform: "twitch",
       status: "disconnected",
       willReconnect: true,
@@ -355,10 +442,12 @@ describe("TwitchPlatform behavior standards", () => {
 
   it("routes paypiggy events through the canonical handler", () => {
     platform = createPlatform({}, { twitchAuth: createReadyTwitchAuth() });
-    const paypiggyHandlerCalls = [];
+    const paypiggyHandlerCalls: unknown[] = [];
 
     platform.handlers = {
-      onPaypiggy: (payload) => paypiggyHandlerCalls.push(payload),
+      onPaypiggy: (payload: unknown) => {
+        paypiggyHandlerCalls.push(payload);
+      },
     };
 
     const payload = {
@@ -369,7 +458,12 @@ describe("TwitchPlatform behavior standards", () => {
     platform._emitPlatformEvent("platform:paypiggy", payload);
 
     expect(paypiggyHandlerCalls).toHaveLength(1);
-    expect(paypiggyHandlerCalls[0]).toBe(payload);
+    const firstCall = paypiggyHandlerCalls[0];
+    expect(isPaypiggyPayload(firstCall)).toBe(true);
+    if (!isPaypiggyPayload(firstCall)) {
+      throw new Error("Expected paypiggy handler to receive a canonical payload");
+    }
+    expect(firstCall).toBe(payload);
   });
 
   it("returns zero when viewer count provider is missing", async () => {

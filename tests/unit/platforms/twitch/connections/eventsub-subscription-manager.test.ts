@@ -1,4 +1,5 @@
 import { describe, test, expect } from "bun:test";
+import type { AxiosResponse } from "axios";
 import { noOpLogger } from "../../../../helpers/mock-factories";
 import { createTwitchEventSubSubscriptionManager } from "../../../../../src/platforms/twitch/connections/eventsub-subscription-manager.ts";
 import {
@@ -7,25 +8,133 @@ import {
   initializeStaticSecrets,
 } from "../../../../../src/core/secrets";
 
-const createTwitchAuth = (overrides = {}) => ({
+type HttpHeaders = Record<string, string>;
+
+type HttpOptions = {
+  headers?: HttpHeaders;
+};
+
+type HttpResponse<T = unknown> = AxiosResponse<T>;
+
+type HttpClient = {
+  get: (url: string, options?: HttpOptions) => Promise<HttpResponse>;
+  post: (
+    url: string,
+    payload?: SubscriptionRequestPayload,
+    options?: HttpOptions,
+  ) => Promise<HttpResponse>;
+  delete: (url: string, options?: HttpOptions) => Promise<HttpResponse>;
+};
+
+type SubscriptionDefinition = {
+  name: string;
+  type: string;
+  version: string;
+  getCondition: (input: {
+    userId: string;
+    broadcasterId: string;
+  }) => Record<string, unknown>;
+};
+
+type SubscriptionRequestPayload = {
+  type: string;
+  version?: string;
+  condition?: Record<string, unknown>;
+  transport?: Record<string, unknown>;
+};
+
+type PostCall = {
+  url: string;
+  payload: SubscriptionRequestPayload;
+  headers?: HttpHeaders | undefined;
+};
+
+type RequestCall = {
+  url: string;
+  headers?: HttpHeaders | undefined;
+};
+
+type ErrorWithResponse = Error & {
+  response: {
+    data: { error: string; message: string };
+    status: number;
+  };
+};
+
+type ManagerOverrides = {
+  axios?: Partial<HttpClient>;
+  subscriptions?: Map<string, Record<string, unknown>>;
+  getClientId?: () => string | null;
+  validateConnectionForSubscriptions?: () => boolean;
+  logError?: (message: string, error?: unknown) => void;
+  now?: () => number;
+};
+
+type SubscriptionManagerOptions = NonNullable<
+  Parameters<typeof createTwitchEventSubSubscriptionManager>[0]
+>;
+
+const createHttpError = (
+  message: string,
+  response: ErrorWithResponse["response"],
+): ErrorWithResponse => {
+  const error = new Error(message) as ErrorWithResponse;
+  error.response = response;
+  return error;
+};
+
+const createHttpResponse = <T>(data: T): HttpResponse<T> =>
+  ({ data }) as HttpResponse<T>;
+
+const first = <T>(items: T[]): T => {
+  const [item] = items;
+  if (!item) {
+    throw new Error("expected at least one item");
+  }
+  return item;
+};
+
+const missingHttpMethod = async (): Promise<HttpResponse> => {
+  throw new Error("unexpected HTTP call");
+};
+
+const createSubscription = (
+  definition: SubscriptionDefinition,
+): SubscriptionDefinition => definition;
+
+const createTwitchAuth = (overrides: Record<string, unknown> = {}) => ({
   refreshTokens: async () => true,
   isReady: () => true,
   ...overrides,
 });
 
-const createManager = (overrides = {}) => {
+const createManager = (overrides: ManagerOverrides = {}) => {
   _resetForTesting();
   initializeStaticSecrets();
   secrets.twitch.accessToken = "testAccessToken";
-  return createTwitchEventSubSubscriptionManager({
+  const { axios: axiosOverrides } = overrides;
+  const axios: HttpClient = {
+    get: missingHttpMethod,
+    post: missingHttpMethod,
+    delete: missingHttpMethod,
+    ...axiosOverrides,
+  };
+  const managerOptions: SubscriptionManagerOptions = {
     logger: noOpLogger,
     twitchAuth: createTwitchAuth(),
     config: { clientId: "testClientId" },
-    subscriptions: new Map(),
-    getClientId: () => "testClientId",
-    validateConnectionForSubscriptions: () => true,
-    logError: () => {},
-    ...overrides,
+    subscriptions: overrides.subscriptions ?? new Map<string, Record<string, unknown>>(),
+    axios: axios as NonNullable<SubscriptionManagerOptions["axios"]>,
+    getClientId: overrides.getClientId ?? (() => "testClientId"),
+    validateConnectionForSubscriptions:
+      overrides.validateConnectionForSubscriptions ?? (() => true),
+    logError: overrides.logError ?? (() => {}),
+  };
+  if (overrides.now) {
+    managerOptions.now = overrides.now;
+  }
+  return createTwitchEventSubSubscriptionManager({
+    ...managerOptions,
   });
 };
 
@@ -40,7 +149,12 @@ describe("Twitch EventSub subscription manager", () => {
           status: 401,
         },
       },
-      { type: "channel.follow" },
+      createSubscription({
+        name: "Follows",
+        type: "channel.follow",
+        version: "2",
+        getCondition: () => ({ broadcaster_user_id: "broadcaster-1" }),
+      }),
     );
     const retryable = manager.parseSubscriptionError(
       {
@@ -49,7 +163,12 @@ describe("Twitch EventSub subscription manager", () => {
           status: 429,
         },
       },
-      { type: "channel.follow" },
+      createSubscription({
+        name: "Follows",
+        type: "channel.follow",
+        version: "2",
+        getCondition: () => ({ broadcaster_user_id: "broadcaster-1" }),
+      }),
     );
 
     expect(critical.isCritical).toBe(true);
@@ -57,20 +176,21 @@ describe("Twitch EventSub subscription manager", () => {
   });
 
   test("retries subscription creation for retryable failures", async () => {
-    const postCalls = [];
+    const postCalls: PostCall[] = [];
     let callCount = 0;
-    const post = async (url, payload, options) => {
+    const post: HttpClient["post"] = async (url, payload, options) => {
+      if (!payload) {
+        throw new Error("subscription payload is required");
+      }
       postCalls.push({ url, payload, headers: options?.headers });
       callCount++;
       if (callCount === 1) {
-        const error = new Error("Too Many Requests");
-        error.response = {
+        throw createHttpError("Too Many Requests", {
           data: { error: "Too Many Requests", message: "rate" },
           status: 429,
-        };
-        throw error;
+        });
       }
-      return { data: { data: [{ id: "sub-1", status: "enabled" }] } };
+      return createHttpResponse({ data: [{ id: "sub-1", status: "enabled" }] });
     };
     const manager = createManager({
       axios: { post },
@@ -90,21 +210,23 @@ describe("Twitch EventSub subscription manager", () => {
       broadcasterId: "broadcaster-1",
       sessionId: "session-1",
       subscriptionDelay: 0,
-      isConnected: true,
     });
 
     expect(result.failures).toHaveLength(0);
     expect(result.successful).toBe(1);
     expect(postCalls.length).toBeGreaterThan(1);
-    expect(postCalls[0].url).toContain("/eventsub/subscriptions");
-    expect(postCalls[0].payload.type).toBe("channel.follow");
+    expect(first(postCalls).url).toContain("/eventsub/subscriptions");
+    expect(first(postCalls).payload.type).toBe("channel.follow");
   });
 
   test("uses config clientId and secrets token for subscription requests", async () => {
-    const postCalls = [];
-    const post = async (url, payload, options) => {
+    const postCalls: PostCall[] = [];
+    const post: HttpClient["post"] = async (url, payload, options) => {
+      if (!payload) {
+        throw new Error("subscription payload is required");
+      }
       postCalls.push({ url, payload, headers: options?.headers });
-      return { data: { data: [{ id: "sub-1", status: "enabled" }] } };
+      return createHttpResponse({ data: [{ id: "sub-1", status: "enabled" }] });
     };
     const manager = createManager({ axios: { post } });
     secrets.twitch.accessToken = "authToken";
@@ -125,21 +247,23 @@ describe("Twitch EventSub subscription manager", () => {
       broadcasterId: "broadcaster-1",
       sessionId: "session-1",
       subscriptionDelay: 0,
-      isConnected: true,
     });
 
     expect(result.successful).toBe(1);
     expect(postCalls).toHaveLength(1);
-    expect(postCalls[0].headers["Client-Id"]).toBe("testClientId");
-    expect(postCalls[0].headers["Authorization"]).toBe("Bearer authToken");
-    expect(postCalls[0].payload.type).toBe("channel.chat.message");
+    expect(first(postCalls).headers?.["Client-Id"]).toBe("testClientId");
+    expect(first(postCalls).headers?.["Authorization"]).toBe("Bearer authToken");
+    expect(first(postCalls).payload.type).toBe("channel.chat.message");
   });
 
   test("processes multiple subscriptions successfully when subscriptionDelay is zero", async () => {
-    const post = async (_url, payload) => {
-      return {
-        data: { data: [{ id: `sub-${payload.type}`, status: "enabled" }] },
-      };
+    const post: HttpClient["post"] = async (_url, payload) => {
+      if (!payload) {
+        throw new Error("subscription payload is required");
+      }
+      return createHttpResponse({
+        data: [{ id: `sub-${payload.type}`, status: "enabled" }],
+      });
     };
     const manager = createManager({ axios: { post } });
 
@@ -168,7 +292,6 @@ describe("Twitch EventSub subscription manager", () => {
       broadcasterId: "test-broadcaster-1",
       sessionId: "test-session-1",
       subscriptionDelay: 0,
-      isConnected: true,
     });
 
     expect(result.successful).toBe(2);
@@ -176,12 +299,15 @@ describe("Twitch EventSub subscription manager", () => {
   });
 
   test("stops subscription setup immediately when connection validation fails before the next request", async () => {
-    const postCalls = [];
-    const post = async (_url, payload) => {
+    const postCalls: string[] = [];
+    const post: HttpClient["post"] = async (_url, payload) => {
+      if (!payload) {
+        throw new Error("subscription payload is required");
+      }
       postCalls.push(payload.type);
-      return {
-        data: { data: [{ id: `sub-${payload.type}`, status: "enabled" }] },
-      };
+      return createHttpResponse({
+        data: [{ id: `sub-${payload.type}`, status: "enabled" }],
+      });
     };
     let validationCalls = 0;
     const manager = createManager({
@@ -221,7 +347,6 @@ describe("Twitch EventSub subscription manager", () => {
       broadcasterId: "test-broadcaster-1",
       sessionId: "test-session-1",
       subscriptionDelay: 0,
-      isConnected: true,
     });
 
     expect(postCalls).toEqual(["channel.chat.message"]);
@@ -231,9 +356,12 @@ describe("Twitch EventSub subscription manager", () => {
   });
 
   test("does not retry a subscription after the websocket session is lost", async () => {
-    const postCalls = [];
+    const postCalls: string[] = [];
     let hasOpenSocket = true;
-    const post = async (_url, payload) => {
+    const post: HttpClient["post"] = async (_url, payload) => {
+      if (!payload) {
+        throw new Error("subscription payload is required");
+      }
       postCalls.push(payload.type);
       hasOpenSocket = false;
       const error = new Error("socket hang up") as Error & { code?: string };
@@ -270,7 +398,6 @@ describe("Twitch EventSub subscription manager", () => {
       broadcasterId: "test-broadcaster-1",
       sessionId: "test-session-1",
       subscriptionDelay: 0,
-      isConnected: true,
     });
 
     expect(postCalls).toEqual(["channel.chat.message"]);
@@ -281,9 +408,12 @@ describe("Twitch EventSub subscription manager", () => {
   });
 
   test("aborts when a retry attempt receives a dead websocket session response", async () => {
-    const postCalls = [];
+    const postCalls: string[] = [];
     let callCount = 0;
-    const post = async (_url, payload) => {
+    const post: HttpClient["post"] = async (_url, payload) => {
+      if (!payload) {
+        throw new Error("subscription payload is required");
+      }
       postCalls.push(payload.type);
       callCount += 1;
       if (callCount === 1) {
@@ -329,12 +459,11 @@ describe("Twitch EventSub subscription manager", () => {
       broadcasterId: "test-broadcaster-1",
       sessionId: "test-session-1",
       subscriptionDelay: 0,
-      isConnected: true,
     });
 
     expect(postCalls).toEqual(["channel.chat.message", "channel.chat.message"]);
     expect(result.failures).toHaveLength(1);
-    expect(result.failures[0].error.message).toContain(
+    expect(first(result.failures).error.message).toContain(
       "websocket session has already disconnected",
     );
     expect(result.aborted).toBe(true);
@@ -342,23 +471,24 @@ describe("Twitch EventSub subscription manager", () => {
   });
 
   test("treats dead websocket session responses as terminal for the current setup pass", async () => {
-    const postCalls = [];
-    const post = async (_url, payload) => {
+    const postCalls: string[] = [];
+    const post: HttpClient["post"] = async (_url, payload) => {
+      if (!payload) {
+        throw new Error("subscription payload is required");
+      }
       postCalls.push(payload.type);
       if (payload.type === "channel.chat.message") {
-        const error = new Error("dead session");
-        error.response = {
+        throw createHttpError("dead session", {
           data: {
             error: "Bad Request",
             message: "websocket session has already disconnected",
           },
           status: 400,
-        };
-        throw error;
+        });
       }
-      return {
-        data: { data: [{ id: `sub-${payload.type}`, status: "enabled" }] },
-      };
+      return createHttpResponse({
+        data: [{ id: `sub-${payload.type}`, status: "enabled" }],
+      });
     };
     const manager = createManager({ axios: { post } });
 
@@ -387,12 +517,11 @@ describe("Twitch EventSub subscription manager", () => {
       broadcasterId: "test-broadcaster-1",
       sessionId: "test-session-1",
       subscriptionDelay: 0,
-      isConnected: true,
     });
 
     expect(postCalls).toEqual(["channel.chat.message"]);
     expect(result.failures).toHaveLength(1);
-    expect(result.failures[0].error.message).toContain(
+    expect(first(result.failures).error.message).toContain(
       "websocket session has already disconnected",
     );
     expect(result.aborted).toBe(true);
@@ -400,25 +529,23 @@ describe("Twitch EventSub subscription manager", () => {
   });
 
   test("uses config clientId and secrets token for cleanup", async () => {
-    const getCalls = [];
-    const deleteCalls = [];
-    const get = async (url, options) => {
+    const getCalls: RequestCall[] = [];
+    const deleteCalls: RequestCall[] = [];
+    const get: HttpClient["get"] = async (url, options) => {
       getCalls.push({ url, headers: options?.headers });
-      return {
-        data: {
-          data: [
-            {
-              id: "sub-1",
-              status: "websocket_disconnected",
-              transport: { method: "websocket", session_id: "session-1" },
-            },
-          ],
-        },
-      };
+      return createHttpResponse({
+        data: [
+          {
+            id: "sub-1",
+            status: "websocket_disconnected",
+            transport: { method: "websocket", session_id: "session-1" },
+          },
+        ],
+      });
     };
-    const deleteCall = async (url, options) => {
+    const deleteCall: HttpClient["delete"] = async (url, options) => {
       deleteCalls.push({ url, headers: options?.headers });
-      return {};
+      return createHttpResponse({});
     };
     const manager = createManager({ axios: { get, delete: deleteCall } });
     secrets.twitch.accessToken = "authToken";
@@ -426,50 +553,48 @@ describe("Twitch EventSub subscription manager", () => {
     await manager.cleanupAllWebSocketSubscriptions({ sessionId: "session-1" });
 
     expect(getCalls).toHaveLength(1);
-    expect(getCalls[0].headers["Client-Id"]).toBe("testClientId");
-    expect(getCalls[0].headers["Authorization"]).toBe("Bearer authToken");
+    expect(first(getCalls).headers?.["Client-Id"]).toBe("testClientId");
+    expect(first(getCalls).headers?.["Authorization"]).toBe("Bearer authToken");
     expect(deleteCalls).toHaveLength(1);
-    expect(deleteCalls[0].url).toContain("sub-1");
+    expect(first(deleteCalls).url).toContain("sub-1");
   });
 
   test("cleanup deletes websocket subscriptions with bounded parallelism", async () => {
     let inFlightDeletes = 0;
     let maxInFlightDeletes = 0;
-    let releaseDeletes;
-    const deleteBarrier = new Promise((resolve) => {
+    let releaseDeletes: () => void = () => {};
+    const deleteBarrier = new Promise<void>((resolve) => {
       releaseDeletes = resolve;
     });
 
-    const get = async () => {
-      return {
-        data: {
-          data: [
-            {
-              id: "sub-1",
-              status: "websocket_disconnected",
-              transport: { method: "websocket", session_id: "session-a" },
-            },
-            {
-              id: "sub-2",
-              status: "websocket_disconnected",
-              transport: { method: "websocket", session_id: "session-b" },
-            },
-            {
-              id: "sub-3",
-              status: "websocket_disconnected",
-              transport: { method: "websocket", session_id: "session-c" },
-            },
-            {
-              id: "sub-4",
-              status: "websocket_disconnected",
-              transport: { method: "websocket", session_id: "session-d" },
-            },
-          ],
-        },
-      };
+    const get: HttpClient["get"] = async () => {
+      return createHttpResponse({
+        data: [
+          {
+            id: "sub-1",
+            status: "websocket_disconnected",
+            transport: { method: "websocket", session_id: "session-a" },
+          },
+          {
+            id: "sub-2",
+            status: "websocket_disconnected",
+            transport: { method: "websocket", session_id: "session-b" },
+          },
+          {
+            id: "sub-3",
+            status: "websocket_disconnected",
+            transport: { method: "websocket", session_id: "session-c" },
+          },
+          {
+            id: "sub-4",
+            status: "websocket_disconnected",
+            transport: { method: "websocket", session_id: "session-d" },
+          },
+        ],
+      });
     };
 
-    const deleteCall = async () => {
+    const deleteCall: HttpClient["delete"] = async () => {
       inFlightDeletes += 1;
       if (inFlightDeletes > maxInFlightDeletes) {
         maxInFlightDeletes = inFlightDeletes;
@@ -477,7 +602,7 @@ describe("Twitch EventSub subscription manager", () => {
 
       await deleteBarrier;
       inFlightDeletes -= 1;
-      return {};
+      return createHttpResponse({});
     };
 
     const manager = createManager({ axios: { get, delete: deleteCall } });
@@ -497,9 +622,9 @@ describe("Twitch EventSub subscription manager", () => {
   });
 
   test("cleanup skips websocket_connected subscriptions when no sessionId is provided", async () => {
-    const deleteCalls = [];
-    const get = async () => ({
-      data: {
+    const deleteCalls: string[] = [];
+    const get: HttpClient["get"] = async () =>
+      createHttpResponse({
         data: [
           {
             id: "enabled-sub",
@@ -517,31 +642,30 @@ describe("Twitch EventSub subscription manager", () => {
             transport: { method: "websocket", session_id: "session-stale" },
           },
         ],
-      },
-    });
-    const deleteCall = async (url) => {
+      });
+    const deleteCall: HttpClient["delete"] = async (url) => {
       deleteCalls.push(url);
-      return {};
+      return createHttpResponse({});
     };
 
     const manager = createManager({ axios: { get, delete: deleteCall } });
     await manager.cleanupAllWebSocketSubscriptions();
 
     expect(deleteCalls).toHaveLength(1);
-    expect(deleteCalls[0]).toContain("disconnected-sub");
+    expect(first(deleteCalls)).toContain("disconnected-sub");
   });
 
   test("deletes only current session subscriptions and updates local state", async () => {
-    const deleteCalls = [];
-    const errorLogs = [];
-    const subscriptions = new Map([
+    const deleteCalls: string[] = [];
+    const errorLogs: string[] = [];
+    const subscriptions = new Map<string, Record<string, unknown>>([
       ["test-ours-ok", { id: "test-ours-ok" }],
       ["test-ours-fail", { id: "test-ours-fail" }],
       ["test-other", { id: "test-other" }],
     ]);
 
-    const get = async () => ({
-      data: {
+    const get: HttpClient["get"] = async () =>
+      createHttpResponse({
         data: [
           {
             id: "test-ours-ok",
@@ -564,27 +688,26 @@ describe("Twitch EventSub subscription manager", () => {
             transport: { method: "webhook" },
           },
         ],
-      },
-    });
-    const deleteCall = async (url) => {
+      });
+    const deleteCall: HttpClient["delete"] = async (url) => {
       deleteCalls.push(url);
       if (url.includes("test-ours-fail")) {
         throw new Error("delete failed");
       }
-      return {};
+      return createHttpResponse({});
     };
 
     const manager = createManager({
       subscriptions,
       axios: { get, delete: deleteCall },
-      logError: (message) => errorLogs.push(message),
+      logError: (message: string) => errorLogs.push(message),
     });
 
     await manager.deleteAllSubscriptions({ sessionId: "test-session-1" });
 
     expect(deleteCalls).toHaveLength(2);
-    expect(deleteCalls[0]).toContain("test-ours-ok");
-    expect(deleteCalls[1]).toContain("test-ours-fail");
+    expect(first(deleteCalls)).toContain("test-ours-ok");
+    expect(deleteCalls.at(1)).toContain("test-ours-fail");
     expect(subscriptions.has("test-ours-ok")).toBe(false);
     expect(subscriptions.has("test-ours-fail")).toBe(true);
     expect(subscriptions.has("test-other")).toBe(true);
@@ -597,9 +720,9 @@ describe("Twitch EventSub subscription manager", () => {
       axios: {
         get: async () => {
           getCalls += 1;
-          return { data: { data: [] } };
+          return createHttpResponse({ data: [] });
         },
-        delete: async () => ({}),
+        delete: async () => createHttpResponse({}),
       },
     });
     secrets.twitch.accessToken = "";
@@ -610,15 +733,15 @@ describe("Twitch EventSub subscription manager", () => {
   });
 
   test("reports top-level cleanup failure when listing subscriptions fails", async () => {
-    const errorLogs = [];
+    const errorLogs: string[] = [];
     const manager = createManager({
       axios: {
         get: async () => {
           throw new Error("list failed");
         },
-        delete: async () => ({}),
+        delete: async () => createHttpResponse({}),
       },
-      logError: (message) => errorLogs.push(message),
+      logError: (message: string) => errorLogs.push(message),
     });
 
     await manager.deleteAllSubscriptions({ sessionId: "test-session-1" });
