@@ -20,7 +20,7 @@ type CommandParserConfig = {
 type ParsedVfxConfig = {
   filename: string;
   command: string;
-  keyword?: string;
+  keyword?: string | null;
 } | null;
 
 type CommandParserInstance = {

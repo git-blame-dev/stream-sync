@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "bun:test";
 
-import { createMockFn } from "../helpers/bun-mock-utils";
+import { createMockFn, type TestMockFn } from "../helpers/bun-mock-utils";
 import { noOpLogger } from "../helpers/mock-factories";
 import { clearStartupDisplays } from "../../src/obs/startup";
 import "../../src/obs/startup.ts";
@@ -13,10 +13,15 @@ type LoggerLike = {
   error: (...args: unknown[]) => void;
 };
 
-type MockFn = ReturnType<typeof createMockFn>;
+type IsConnectedMock = TestMockFn<[], boolean>;
+type HideAllDisplaysMock = TestMockFn<
+  [string, string, Record<string, string>, Record<string, string>, string, string],
+  Promise<void>
+>;
+type ClearTextSourceMock = TestMockFn<[string, string], Promise<void>>;
 
 type ObsManager = {
-  isConnected: MockFn;
+  isConnected: IsConnectedMock;
   connected: boolean;
 };
 
@@ -42,26 +47,26 @@ type StartupDeps = {
   logger: LoggerLike;
   getOBSConnectionManager: () => ObsManager | null;
   getDefaultSourcesManager: () => {
-    hideAllDisplays: MockFn;
-    clearTextSource: MockFn;
+    hideAllDisplays: HideAllDisplaysMock;
+    clearTextSource: ClearTextSourceMock;
   };
 };
 
 describe("OBS Startup Display Clearing - Regression Tests", () => {
   let mockOBSManager: ObsManager;
-  let hideAllDisplays: MockFn;
-  let clearTextSource: MockFn;
+  let hideAllDisplays: HideAllDisplaysMock;
+  let clearTextSource: ClearTextSourceMock;
   let configFixture: StartupConfig;
   let deps: StartupDeps;
 
   beforeEach(() => {
     mockOBSManager = {
-      isConnected: createMockFn(() => true),
+      isConnected: createMockFn<[], boolean>(() => true),
       connected: true,
     };
 
-    hideAllDisplays = createMockFn(async () => undefined);
-    clearTextSource = createMockFn(async () => undefined);
+    hideAllDisplays = createMockFn<Parameters<HideAllDisplaysMock>, Promise<void>>(async () => undefined);
+    clearTextSource = createMockFn<Parameters<ClearTextSourceMock>, Promise<void>>(async () => undefined);
 
     configFixture = {
       obs: {
@@ -117,7 +122,7 @@ describe("OBS Startup Display Clearing - Regression Tests", () => {
     });
 
     it("should skip clearing when OBS is not connected", async () => {
-      mockOBSManager.isConnected = createMockFn(() => false);
+      mockOBSManager.isConnected = createMockFn<[], boolean>(() => false);
 
       await clearStartupDisplays(configFixture, deps);
 
@@ -126,10 +131,20 @@ describe("OBS Startup Display Clearing - Regression Tests", () => {
     });
 
     it("should skip clearing when config is incomplete", async () => {
-      const incompleteConfig = {
+      const incompleteConfig: StartupConfig = {
         general: {},
-        obs: {},
-      } as unknown as StartupConfig;
+        obs: {
+          chatMsgScene: "",
+          chatMsgGroup: "",
+          notificationScene: "",
+          notificationTxt: "",
+          ttsTxt: "",
+          notificationMsgGroup: "",
+          chatPlatformLogos: {},
+          notificationPlatformLogos: {},
+        },
+        timing: { fadeDuration: 750 },
+      };
 
       await clearStartupDisplays(incompleteConfig, deps);
 
@@ -137,7 +152,7 @@ describe("OBS Startup Display Clearing - Regression Tests", () => {
     });
 
     it("should not invoke direct text source clearing", async () => {
-      clearTextSource = createMockFn(() => {
+      clearTextSource = createMockFn<Parameters<ClearTextSourceMock>, Promise<void>>(async () => {
         throw new Error("Source not found");
       });
       deps = {
@@ -186,7 +201,7 @@ describe("OBS Startup Display Clearing - Regression Tests", () => {
 
   describe("Error Handling", () => {
     it("should not throw errors when hideAllDisplays fails", async () => {
-      hideAllDisplays = createMockFn(async () => {
+      hideAllDisplays = createMockFn<Parameters<HideAllDisplaysMock>, Promise<void>>(async () => {
         throw new Error("OBS connection lost");
       });
       deps = {

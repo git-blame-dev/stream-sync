@@ -5,8 +5,11 @@ import { createConfigFixture } from "../../helpers/config-fixture";
 import { ChatNotificationRouter } from "../../../src/services/ChatNotificationRouter.ts";
 
 describe("ChatNotificationRouter TTS behavior", () => {
-  let mockLogger;
-  let testConfig;
+  let mockLogger: typeof noOpLogger;
+  let testConfig: ReturnType<typeof createConfigFixture>;
+
+  type RuntimeOverrides = Record<string, unknown>;
+  type QueuedItem = { type?: string; data?: { message?: unknown } };
 
   beforeEach(() => {
     mockLogger = noOpLogger;
@@ -24,10 +27,12 @@ describe("ChatNotificationRouter TTS behavior", () => {
   const createRouter = ({
     runtime: runtimeOverrides,
     config = testConfig,
-  } = {}) => {
+  }: { runtime?: RuntimeOverrides; config?: ReturnType<typeof createConfigFixture> } = {}) => {
     const baseRuntime = {
       config: {
-        general: { greetingsEnabled: true, messagesEnabled: true },
+        general: { greetingsEnabled: true, messagesEnabled: true, maxMessageLength: 500 },
+        cooldowns: { cmdCooldownMs: 0, heavyCommandCooldownMs: 0, globalCmdCooldownMs: 0 },
+        farewell: { enabled: true, command: "!bye", timeout: 0 },
         twitch: { greetingsEnabled: true, messagesEnabled: true },
         tiktok: { greetingsEnabled: true, messagesEnabled: true },
       },
@@ -72,10 +77,10 @@ describe("ChatNotificationRouter TTS behavior", () => {
     });
 
     const queuedChat = runtime.displayQueue.addItem.mock.calls
-      .map((c) => c[0])
-      .find((i) => i.type === "chat");
+      .map((call: unknown[]) => call[0] as QueuedItem)
+      .find((item: QueuedItem) => item.type === "chat");
     expect(queuedChat).toBeDefined();
-    expect(queuedChat.data.message).toEqual({ text: "test great stream" });
+    expect(queuedChat?.data?.message).toEqual({ text: "test great stream" });
   });
 
   it("enqueues valid chat messages", async () => {
@@ -87,8 +92,8 @@ describe("ChatNotificationRouter TTS behavior", () => {
     });
 
     const queuedChat = runtime.displayQueue.addItem.mock.calls
-      .map((c) => c[0])
-      .find((i) => i.type === "chat");
+      .map((call: unknown[]) => call[0] as QueuedItem)
+      .find((item: QueuedItem) => item.type === "chat");
     expect(queuedChat).toBeDefined();
   });
 });

@@ -3,7 +3,11 @@ import { createMockFn, clearAllMocks } from "../../helpers/bun-mock-utils";
 import * as ManagerModule from "../../../src/services/innertube-instance-manager.ts";
 
 describe("InnertubeInstanceManager behavior", () => {
-  let InnertubeInstanceManager;
+  const createManagedInstance = (id: string) => ({
+    id,
+    dispose: async () => {},
+    session: { close: async () => {} },
+  });
 
   const resetManager = async () => {
     await ManagerModule.cleanup();
@@ -13,7 +17,6 @@ describe("InnertubeInstanceManager behavior", () => {
   beforeEach(async () => {
     clearAllMocks();
     await resetManager();
-    InnertubeInstanceManager = ManagerModule.getInstance().constructor;
   });
 
   afterAll(async () => {
@@ -21,11 +24,12 @@ describe("InnertubeInstanceManager behavior", () => {
   });
 
   it("caches healthy instances and reuses them", async () => {
-    const createFn = createMockFn(async () => ({ id: "instance" }));
-    const manager = new InnertubeInstanceManager({ instanceTimeout: 5000 });
+    const createFn = createMockFn(async () => createManagedInstance("instance"));
+    const createInstance = () => createFn();
+    const manager = new ManagerModule.InnertubeInstanceManager({ instanceTimeout: 5000 });
 
-    const first = await manager.getInstance("default", createFn);
-    const second = await manager.getInstance("default", createFn);
+    const first = await manager.getInstance("default", createInstance);
+    const second = await manager.getInstance("default", createInstance);
 
     expect(first).toBe(second);
     expect(createFn).toHaveBeenCalledTimes(1);
@@ -34,44 +38,51 @@ describe("InnertubeInstanceManager behavior", () => {
 
   it("creates new instance when cached is unhealthy", async () => {
     const createFn = createMockFn()
-      .mockResolvedValueOnce({ id: "one" })
-      .mockResolvedValueOnce({ id: "two" });
-    const manager = new InnertubeInstanceManager({ instanceTimeout: 5000 });
+      .mockResolvedValueOnce(createManagedInstance("one"))
+      .mockResolvedValueOnce(createManagedInstance("two"));
+    const createInstance = () => createFn();
+    const manager = new ManagerModule.InnertubeInstanceManager({ instanceTimeout: 5000 });
 
-    await manager.getInstance("default", createFn);
+    await manager.getInstance("default", createInstance);
     manager.markInstanceUnhealthy("default");
-    const next = await manager.getInstance("default", createFn);
+    const next = await manager.getInstance("default", createInstance);
 
-    expect(next.id).toBe("two");
+    expect(next).toMatchObject({ id: "two" });
     expect(createFn).toHaveBeenCalledTimes(2);
   });
 
   it("cleans up oldest instance when exceeding maxInstances", async () => {
     const first = {
-      dispose: createMockFn(),
-      session: { close: createMockFn() },
+      dispose: createMockFn(async () => {}),
+      session: { close: createMockFn(async () => {}) },
     };
     const second = {
-      dispose: createMockFn(),
-      session: { close: createMockFn() },
+      dispose: createMockFn(async () => {}),
+      session: { close: createMockFn(async () => {}) },
     };
     const third = {
-      dispose: createMockFn(),
-      session: { close: createMockFn() },
+      dispose: createMockFn(async () => {}),
+      session: { close: createMockFn(async () => {}) },
     };
     const createFn = createMockFn()
       .mockResolvedValueOnce(first)
       .mockResolvedValueOnce(second)
       .mockResolvedValueOnce(third);
+    const createInstance = () => createFn();
 
-    const manager = new InnertubeInstanceManager({ instanceTimeout: 5000 });
+    const manager = new ManagerModule.InnertubeInstanceManager({ instanceTimeout: 5000 });
     manager.maxInstances = 2;
 
-    await manager.getInstance("a", createFn);
-    await manager.getInstance("b", createFn);
-    manager.activeInstances.get("a").lastAccessed = 0;
-    manager.activeInstances.get("b").lastAccessed = 1;
-    await manager.getInstance("c", createFn);
+    await manager.getInstance("a", createInstance);
+    await manager.getInstance("b", createInstance);
+    const firstCached = manager.activeInstances.get("a");
+    const secondCached = manager.activeInstances.get("b");
+    if (firstCached === undefined || secondCached === undefined) {
+      throw new Error("Expected cached instances for cleanup ordering");
+    }
+    firstCached.lastAccessed = 0;
+    secondCached.lastAccessed = 1;
+    await manager.getInstance("c", createInstance);
 
     expect(createFn).toHaveBeenCalledTimes(3);
     expect(manager.getStats().activeInstances).toBe(2);
@@ -79,10 +90,10 @@ describe("InnertubeInstanceManager behavior", () => {
 
   it("disposes all instances on cleanup", async () => {
     const inst = {
-      dispose: createMockFn(),
-      session: { close: createMockFn() },
+      dispose: createMockFn(async () => {}),
+      session: { close: createMockFn(async () => {}) },
     };
-    const manager = new InnertubeInstanceManager({ instanceTimeout: 5000 });
+    const manager = new ManagerModule.InnertubeInstanceManager({ instanceTimeout: 5000 });
     manager._cacheInstance("x", inst);
 
     await manager.cleanup();
@@ -92,13 +103,13 @@ describe("InnertubeInstanceManager behavior", () => {
   });
 
   it("rejects non-function importer in setInnertubeImporter", () => {
-    expect(() => ManagerModule.setInnertubeImporter("not-a-function")).toThrow(
+    expect(() => Reflect.apply(ManagerModule.setInnertubeImporter, null, ["not-a-function"])).toThrow(
       "Innertube importer must be a function",
     );
   });
 
   it("accepts valid function in setInnertubeImporter", () => {
-    const customImporter = () => Promise.resolve({ Innertube: {} });
+    const customImporter = () => Promise.resolve({ Innertube: { create: async () => ({}) } });
     expect(() =>
       ManagerModule.setInnertubeImporter(customImporter),
     ).not.toThrow();
@@ -107,7 +118,7 @@ describe("InnertubeInstanceManager behavior", () => {
 
   it("installs parser log adapter when parser API is provided by importer", async () => {
     let installCalls = 0;
-    const manager = new InnertubeInstanceManager({ instanceTimeout: 5000 });
+    const manager = new ManagerModule.InnertubeInstanceManager({ instanceTimeout: 5000 });
     manager.innertubeImporter = async () => ({
       Innertube: {
         create: async () => ({ id: "instance-with-parser" }),

@@ -276,7 +276,10 @@ describe("Extractor Service Integration", () => {
 
       expect(result.success).toBe(true);
       expect(result.count).toBe(5555);
-      expect(result.metadata.rawData).toBeDefined();
+      expect(result.metadata.rawData).not.toBeNull();
+      if (result.metadata.rawData === null) {
+        throw new Error("Expected debug rawData to be collected");
+      }
       expect(result.metadata.rawData.view_text).toMatchObject({
         viewText: "5,555 watching now",
         hasViewText: true,
@@ -307,7 +310,7 @@ describe("Extractor Service Integration", () => {
 
     test("collects error information in debug mode", () => {
       const videoInfo = {
-        primary_info: { view_count: null },
+        primary_info: { view_count: {} },
       };
 
       const result = YouTubeViewerExtractor.extractConcurrentViewers(
@@ -324,7 +327,11 @@ describe("Extractor Service Integration", () => {
 
   describe("Error Handling and Edge Cases", () => {
     test("handles null video info gracefully", () => {
-      const result = YouTubeViewerExtractor.extractConcurrentViewers(null);
+      const result = Reflect.apply(
+        YouTubeViewerExtractor.extractConcurrentViewers,
+        YouTubeViewerExtractor,
+        [null],
+      );
 
       expect(result.success).toBe(false);
       expect(result.count).toBe(0);
@@ -332,7 +339,11 @@ describe("Extractor Service Integration", () => {
     });
 
     test("handles undefined video info gracefully", () => {
-      const result = YouTubeViewerExtractor.extractConcurrentViewers(undefined);
+      const result = Reflect.apply(
+        YouTubeViewerExtractor.extractConcurrentViewers,
+        YouTubeViewerExtractor,
+        [undefined],
+      );
 
       expect(result.success).toBe(false);
       expect(result.count).toBe(0);

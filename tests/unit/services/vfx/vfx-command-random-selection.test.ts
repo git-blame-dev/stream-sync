@@ -7,10 +7,15 @@ import { VFXCommandService } from "../../../../src/services/VFXCommandService.ts
 
 describe("VFXCommandService random variant selection", () => {
   const originalRandomInt = crypto.randomInt;
-  let mockEffectsManager;
-  let capturedCommands;
+  type VfxPlaybackConfig = { filename: string } & Record<string, unknown>;
+  type EffectsManager = {
+    playMediaInOBS: ReturnType<typeof createMockFn>;
+  };
 
-  const createConfig = (commandValue) =>
+  let mockEffectsManager: EffectsManager;
+  let capturedCommands: VfxPlaybackConfig[];
+
+  const createConfig = (commandValue: string | null) =>
     createConfigFixture({
       gifts: { command: commandValue },
       farewell: {},
@@ -18,10 +23,26 @@ describe("VFXCommandService random variant selection", () => {
       cooldowns: { cmdCooldown: 60, globalCmdCooldownMs: 60000 },
     });
 
+  const isVfxPlaybackConfig = (config: unknown): config is VfxPlaybackConfig =>
+    typeof config === "object" &&
+    config !== null &&
+    "filename" in config &&
+    typeof config.filename === "string";
+
+  const createService = (config: ReturnType<typeof createConfig>) =>
+    Reflect.construct(VFXCommandService, [
+      config,
+      null,
+      { effectsManager: mockEffectsManager },
+    ]);
+
   beforeEach(() => {
     capturedCommands = [];
     mockEffectsManager = {
       playMediaInOBS: createMockFn().mockImplementation((config) => {
+        if (!isVfxPlaybackConfig(config)) {
+          throw new Error("Expected VFX playback config with filename");
+        }
         capturedCommands.push(config);
         return Promise.resolve();
       }),
@@ -36,9 +57,7 @@ describe("VFXCommandService random variant selection", () => {
     const config = createConfig("!one | !two | !three");
     crypto.randomInt = createMockFn().mockReturnValue(1); // picks index 1 => !two
 
-    const service = new VFXCommandService(config, null, {
-      effectsManager: mockEffectsManager,
-    });
+    const service = createService(config);
     service.commandParser = {
       getVFXConfig: createMockFn((message) => ({
         command: message,
@@ -59,15 +78,17 @@ describe("VFXCommandService random variant selection", () => {
 
     expect(result.success).toBe(true);
     expect(capturedCommands.length).toBe(1);
+    expect(capturedCommands[0]).toBeDefined();
+    if (capturedCommands[0] === undefined) {
+      throw new Error("Expected captured VFX command");
+    }
     expect(capturedCommands[0].filename).toBe("!two.mp4");
   });
 
   test("returns friendly failure when command key is missing from config", async () => {
     const config = createConfig(null);
 
-    const service = new VFXCommandService(config, null, {
-      effectsManager: mockEffectsManager,
-    });
+    const service = createService(config);
     const result = await service.executeCommandForKey("gifts", {
       username: "testUser1",
       platform: "tiktok",
@@ -82,14 +103,12 @@ describe("VFXCommandService random variant selection", () => {
 
   test("selects farewell trigger variants from trigger segment only", async () => {
     const config = createConfig("!one");
-    config.farewell = {
+    Reflect.set(config, "farewell", {
       command: "!bye|!bye2|!bye3, bye|goodbye|cya",
-    };
+    });
     crypto.randomInt = createMockFn().mockReturnValue(2);
 
-    const service = new VFXCommandService(config, null, {
-      effectsManager: mockEffectsManager,
-    });
+    const service = createService(config);
     service.commandParser = {
       getVFXConfig: createMockFn((message) => ({
         command: message,
@@ -110,6 +129,10 @@ describe("VFXCommandService random variant selection", () => {
 
     expect(result.success).toBe(true);
     expect(capturedCommands.length).toBe(1);
+    expect(capturedCommands[0]).toBeDefined();
+    if (capturedCommands[0] === undefined) {
+      throw new Error("Expected captured farewell VFX command");
+    }
     expect(capturedCommands[0].filename).toBe("!bye3.mp4");
   });
 });

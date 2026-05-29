@@ -1,19 +1,20 @@
 import { afterEach, describe, expect, test } from "bun:test";
 
-import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
+import { createMockFn, restoreAllMocks, type TestMockFn } from "../helpers/bun-mock-utils";
 import { createConfigFixture } from "../helpers/config-fixture";
 import { noOpLogger } from "../helpers/mock-factories";
 import { ChatNotificationRouter } from "../../src/services/ChatNotificationRouter.ts";
 
-type FlexibleMock = ReturnType<typeof createMockFn> & {
-  mockResolvedValue: (value: unknown) => FlexibleMock;
-};
-
-type MockFn = ReturnType<typeof createMockFn>;
+type RouterDependencies = ConstructorParameters<typeof ChatNotificationRouter>[0];
+type RouterRuntime = RouterDependencies["runtime"];
+type DisplayQueue = NonNullable<RouterRuntime["displayQueue"]>;
+type AddItemMock = TestMockFn<Parameters<DisplayQueue["addItem"]>, ReturnType<DisplayQueue["addItem"]>>;
+type GetVfxConfig = NonNullable<NonNullable<RouterRuntime["vfxCommandService"]>["getVFXConfig"]>;
+type GetVfxConfigMock = TestMockFn<Parameters<GetVfxConfig>, ReturnType<GetVfxConfig>>;
 
 type RouterOverrides = {
-  displayQueue?: { addItem: MockFn } | null;
-  vfxCommandService?: { getVFXConfig: MockFn } | null;
+  displayQueue?: { addItem: AddItemMock } | null;
+  vfxCommandService?: { getVFXConfig: GetVfxConfigMock } | null;
 };
 
 describe("Greeting System Diagnosis", () => {
@@ -23,26 +24,31 @@ describe("Greeting System Diagnosis", () => {
 
   const buildRouter = (overrides: RouterOverrides = {}) => {
     const logger = noOpLogger;
-    const displayQueue = overrides.displayQueue || { addItem: createMockFn() };
-    const runtime = {
-      config: { general: { greetingsEnabled: true } },
-      displayQueue,
-      vfxService: null,
-      vfxCommandService: overrides.vfxCommandService || null,
+    const config = createConfigFixture({
+      general: { greetingsEnabled: true },
+    });
+    const displayQueue = overrides.displayQueue || {
+      addItem: createMockFn<Parameters<DisplayQueue["addItem"]>, ReturnType<DisplayQueue["addItem"]>>(),
     };
+    const runtime = {
+      config,
+      displayQueue,
+      ...(overrides.vfxCommandService ? { vfxCommandService: overrides.vfxCommandService } : {}),
+    } satisfies RouterRuntime;
 
-    return new ChatNotificationRouter({
+    const router = new ChatNotificationRouter({
       runtime,
       logger,
-      config: createConfigFixture(),
+      config,
     });
+    return { router, displayQueue };
   };
 
   test("queueGreeting enqueues greeting items with username preserved", async () => {
-    const router = buildRouter();
-    const addItemSpy = router.runtime.displayQueue.addItem;
+    const { router, displayQueue } = buildRouter();
+    const addItemSpy = displayQueue.addItem;
 
-    await router.queueGreeting("tiktok", "ItzBurgs");
+    await router.queueGreeting("tiktok", "ItzBurgs", {});
 
     expect(addItemSpy).toHaveBeenCalledTimes(1);
     expect(addItemSpy.mock.calls).toContainEqual([
@@ -65,18 +71,19 @@ describe("Greeting System Diagnosis", () => {
       vfxFilePath: "./vfx",
       duration: 5000,
     };
-    const router = buildRouter({
+    const getVFXConfig = createMockFn<Parameters<GetVfxConfig>, ReturnType<GetVfxConfig>>(
+      async () => vfxConfig,
+    );
+    const { router, displayQueue } = buildRouter({
       vfxCommandService: {
-        getVFXConfig: (createMockFn() as FlexibleMock).mockResolvedValue(
-          vfxConfig,
-        ),
+        getVFXConfig,
       },
     });
 
-    await router.queueGreeting("youtube", "TestUser");
+    await router.queueGreeting("youtube", "TestUser", {});
 
-    expect(router.runtime.displayQueue.addItem).toHaveBeenCalledTimes(1);
-    expect(router.runtime.displayQueue.addItem.mock.calls).toContainEqual([
+    expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
+    expect(displayQueue.addItem.mock.calls).toContainEqual([
       expect.objectContaining({
         type: "greeting",
         vfxConfig: expect.objectContaining({
@@ -91,10 +98,10 @@ describe("Greeting System Diagnosis", () => {
   });
 
   test("queueGreeting exits silently when displayQueue missing", async () => {
-    const router = buildRouter({ displayQueue: null });
+    const { router } = buildRouter({ displayQueue: null });
 
     await expect(
-      router.queueGreeting("tiktok", "Userless"),
+      router.queueGreeting("tiktok", "Userless", {}),
     ).resolves.toBeUndefined();
   });
 });

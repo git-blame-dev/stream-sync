@@ -14,6 +14,9 @@ type TimeoutCall = [Promise<unknown>, number, string];
 
 const expectFirstTimeoutCall = (calls: unknown[][]): TimeoutCall => {
   const firstCall = calls[0];
+  if (!firstCall) {
+    throw new Error("Expected timeout call to be recorded");
+  }
   expect(firstCall).toBeDefined();
   expect(firstCall).toHaveLength(3);
 
@@ -21,6 +24,9 @@ const expectFirstTimeoutCall = (calls: unknown[][]): TimeoutCall => {
   expect(promise).toBeInstanceOf(Promise);
   expect(typeof timeoutMs).toBe("number");
   expect(typeof operationName).toBe("string");
+  if (!(promise instanceof Promise) || typeof timeoutMs !== "number" || typeof operationName !== "string") {
+    throw new Error("Expected timeout call arguments to match the timeout contract");
+  }
 
   return [promise, timeoutMs, operationName];
 };

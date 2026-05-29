@@ -1,12 +1,19 @@
 import { describe, it, expect } from "bun:test";
 import { SelfMessageDetectionService } from "../../../src/services/SelfMessageDetectionService.ts";
 
-const createPlainConfig = ({ general = {}, twitch, youtube, tiktok } = {}) => {
+type SelfMessageConfig = {
+  general?: { ignoreSelfMessages?: boolean } & Record<string, unknown>;
+  twitch?: { ignoreSelfMessages: boolean } & Record<string, unknown>;
+  youtube?: { ignoreSelfMessages: boolean } & Record<string, unknown>;
+  tiktok?: { ignoreSelfMessages: boolean } & Record<string, unknown>;
+};
+
+const createPlainConfig = ({ general = {}, twitch, youtube, tiktok }: SelfMessageConfig = {}) => {
   return {
     general,
-    twitch,
-    youtube,
-    tiktok,
+    twitch: twitch ?? { ignoreSelfMessages: false },
+    youtube: youtube ?? { ignoreSelfMessages: false },
+    tiktok: tiktok ?? { ignoreSelfMessages: false },
   };
 };
 

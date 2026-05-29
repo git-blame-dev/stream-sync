@@ -2,7 +2,7 @@ import { describe, it, expect } from "bun:test";
 import { createConfigFixture } from "../../../helpers/config-fixture";
 import { VFXCommandService } from "../../../../src/services/VFXCommandService.ts";
 
-const createService = (keywordParsingEnabled) =>
+const createService = (keywordParsingEnabled: boolean) =>
   new VFXCommandService(
     createConfigFixture({
       farewell: {

@@ -3,16 +3,30 @@ import { createMockFn } from "../../helpers/bun-mock-utils";
 import { ViewerCountExtractionService } from "../../../src/services/viewer-count-extraction-service.ts";
 
 describe("ViewerCountExtractionService error handler integration", () => {
-  let mockInnertube;
-  let mockExtractor;
-  let mockLogger;
+  type MockInnertube = { getVideoInfo: (videoId: string) => Promise<Record<string, unknown>> };
+  type ExtractionResult = { success: boolean; count: number; metadata: Record<string, unknown> };
+  type MockExtractor = { extractConcurrentViewers: () => ExtractionResult };
+  type MockLogger = {
+    debug: ReturnType<typeof createMockFn>;
+    info: ReturnType<typeof createMockFn>;
+    warn: ReturnType<typeof createMockFn>;
+    error: ReturnType<typeof createMockFn>;
+  };
+
+  let mockInnertube: MockInnertube;
+  let mockExtractor: MockExtractor;
+  let mockLogger: MockLogger;
 
   beforeEach(() => {
     mockInnertube = {
-      getVideoInfo: createMockFn(),
+      getVideoInfo: createMockFn(async () => ({})),
     };
     mockExtractor = {
-      extractConcurrentViewers: createMockFn(),
+      extractConcurrentViewers: createMockFn(() => ({
+        success: false,
+        count: 0,
+        metadata: {},
+      })),
     };
     mockLogger = {
       debug: createMockFn(),
@@ -23,7 +37,9 @@ describe("ViewerCountExtractionService error handler integration", () => {
   });
 
   it("routes extraction error through error handler at visible log level", async () => {
-    mockInnertube.getVideoInfo.mockRejectedValue(new Error("innertube failed"));
+    mockInnertube.getVideoInfo = createMockFn(async () => {
+      throw new Error("innertube failed");
+    });
 
     const service = new ViewerCountExtractionService(mockInnertube, {
       logger: mockLogger,
@@ -35,6 +51,9 @@ describe("ViewerCountExtractionService error handler integration", () => {
     expect(result.success).toBe(false);
     expect(mockLogger.error).toHaveBeenCalled();
     const errorCall = mockLogger.error.mock.calls[0];
+    if (errorCall === undefined) {
+      throw new Error("Expected extraction error logger call");
+    }
     expect(errorCall[0]).toContain("test-vid-1");
   });
 });

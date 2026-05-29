@@ -21,7 +21,10 @@ describe("main entrypoint behavior", () => {
       success: false,
       error: "test-entrypoint-failure",
     });
-    expect(process.exitCode).toBe(1);
+    if (process.exitCode !== 1) {
+      throw new Error(`Expected process.exitCode to be 1, got ${String(process.exitCode)}`);
+    }
+    expect(process.exitCode === 1).toBe(true);
 
     process.exitCode = originalExitCode;
   });

@@ -4,6 +4,25 @@ import { noOpLogger } from "../../helpers/mock-factories";
 import { createConfigFixture } from "../../helpers/config-fixture";
 import { PlatformEventRouter } from "../../../src/services/PlatformEventRouter.ts";
 
+type RoutedChatMessage = Record<string, unknown>;
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
+
+const getFirstRoutedChatMessage = (
+  calls: unknown[][],
+): [unknown, RoutedChatMessage] => {
+  const chatCall = calls[0];
+  if (!chatCall) {
+    throw new Error("Expected normalized chat message to be routed");
+  }
+  const [calledPlatform, normalized] = chatCall;
+  if (!isRecord(normalized)) {
+    throw new Error("Expected normalized chat payload to be an object");
+  }
+  return [calledPlatform, normalized];
+};
+
 describe("PlatformEventRouter chat normalization", () => {
   afterEach(() => {
     clearAllMocks();
@@ -58,8 +77,9 @@ describe("PlatformEventRouter chat normalization", () => {
     await router.routeEvent(event);
 
     expect(runtime.handleChatMessage).toHaveBeenCalledTimes(1);
-    const [calledPlatform, normalized] =
-      runtime.handleChatMessage.mock.calls[0];
+    const [calledPlatform, normalized] = getFirstRoutedChatMessage(
+      runtime.handleChatMessage.mock.calls,
+    );
     expect(calledPlatform).toBe(platform);
     expect(normalized.username).toBe("testUsername");
     expect(normalized.userId).toBe("testUserId");
@@ -87,7 +107,9 @@ describe("PlatformEventRouter chat normalization", () => {
     await router.routeEvent(event);
 
     expect(runtime.handleChatMessage).toHaveBeenCalledTimes(1);
-    const [, normalized] = runtime.handleChatMessage.mock.calls[0];
+    const [, normalized] = getFirstRoutedChatMessage(
+      runtime.handleChatMessage.mock.calls,
+    );
     expect(normalized.username).toBe("testStringUser");
     expect(normalized.userId).toBe("testUserId123");
     expect(normalized.message).toEqual({ text: "testPlainMessage" });
@@ -112,7 +134,9 @@ describe("PlatformEventRouter chat normalization", () => {
     await router.routeEvent(event);
 
     expect(runtime.handleChatMessage).toHaveBeenCalledTimes(1);
-    const [, normalized] = runtime.handleChatMessage.mock.calls[0];
+    const [, normalized] = getFirstRoutedChatMessage(
+      runtime.handleChatMessage.mock.calls,
+    );
     expect(normalized.avatarUrl).toBe(
       "https://example.invalid/chat-avatar.png",
     );
@@ -146,7 +170,9 @@ describe("PlatformEventRouter chat normalization", () => {
     await router.routeEvent(event);
 
     expect(runtime.handleChatMessage).toHaveBeenCalledTimes(1);
-    const [, normalized] = runtime.handleChatMessage.mock.calls[0];
+    const [, normalized] = getFirstRoutedChatMessage(
+      runtime.handleChatMessage.mock.calls,
+    );
     expect(normalized.message).toEqual({
       text: "",
       parts: [
@@ -187,7 +213,9 @@ describe("PlatformEventRouter chat normalization", () => {
     await router.routeEvent(event);
 
     expect(runtime.handleChatMessage).toHaveBeenCalledTimes(1);
-    const [, normalized] = runtime.handleChatMessage.mock.calls[0];
+    const [, normalized] = getFirstRoutedChatMessage(
+      runtime.handleChatMessage.mock.calls,
+    );
     expect(normalized.message).toEqual({
       text: "",
       parts: [
@@ -232,7 +260,9 @@ describe("PlatformEventRouter chat normalization", () => {
     await router.routeEvent(event);
 
     expect(runtime.handleChatMessage).toHaveBeenCalledTimes(1);
-    const [, normalized] = runtime.handleChatMessage.mock.calls[0];
+    const [, normalized] = getFirstRoutedChatMessage(
+      runtime.handleChatMessage.mock.calls,
+    );
     expect(normalized.message).toEqual({
       text: "",
       parts: [
@@ -269,16 +299,16 @@ describe("PlatformEventRouter chat normalization", () => {
     await router.routeEvent(event);
 
     expect(runtime.handleChatMessage).toHaveBeenCalledTimes(1);
-    const [, normalized] = runtime.handleChatMessage.mock.calls[0];
+    const [, normalized] = getFirstRoutedChatMessage(
+      runtime.handleChatMessage.mock.calls,
+    );
     expect(normalized.username).toBe("Unknown Username");
     expect(normalized.userId).toBeUndefined();
     expect(normalized.timestamp).toBeUndefined();
     expect(normalized.message).toEqual({ text: "partial chat content" });
-    expect(normalized.metadata.missingFields).toEqual([
-      "username",
-      "userId",
-      "timestamp",
-    ]);
+    expect(normalized.metadata).toEqual({
+      missingFields: ["username", "userId", "timestamp"],
+    });
   });
 
   it("allows degraded chat payloads with unknown-message placeholder when message is marked missing", async () => {
@@ -297,16 +327,15 @@ describe("PlatformEventRouter chat normalization", () => {
     await router.routeEvent(event);
 
     expect(runtime.handleChatMessage).toHaveBeenCalledTimes(1);
-    const [, normalized] = runtime.handleChatMessage.mock.calls[0];
+    const [, normalized] = getFirstRoutedChatMessage(
+      runtime.handleChatMessage.mock.calls,
+    );
     expect(normalized.message).toEqual({ text: "Unknown Message" });
     expect(normalized.username).toBe("Unknown Username");
     expect(normalized.userId).toBeUndefined();
     expect(normalized.timestamp).toBeUndefined();
-    expect(normalized.metadata.missingFields).toEqual([
-      "message",
-      "username",
-      "userId",
-      "timestamp",
-    ]);
+    expect(normalized.metadata).toEqual({
+      missingFields: ["message", "username", "userId", "timestamp"],
+    });
   });
 });

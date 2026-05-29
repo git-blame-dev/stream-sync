@@ -4,7 +4,6 @@ import {
   createTestUser,
   TEST_TIMEOUTS,
 } from "../../helpers/test-setup";
-import { noOpLogger } from "../../helpers/mock-factories";
 import { createConfigFixture } from "../../helpers/config-fixture";
 import { setupAutomatedCleanup } from "../../helpers/mock-lifecycle";
 import { CommandParser } from "../../../src/chat/commands";
@@ -16,11 +15,7 @@ setupAutomatedCleanup({
   logPerformanceMetrics: true,
 });
 
-type CommandParseResult = {
-  type: string;
-  command: string;
-  filename?: string;
-} | null;
+type CommandParseResult = ReturnType<InstanceType<typeof CommandParser>["parse"]>;
 
 type CommandParserConfig = ReturnType<typeof createConfigFixture>;
 
@@ -40,11 +35,9 @@ const itFast = (name: string, fn: () => void | Promise<void>) => {
 
 describe("CommandParser Keyword vs Command Display Fix", () => {
   let commandParser: InstanceType<typeof CommandParser>;
-  let mockLogger: typeof noOpLogger;
   let mockConfig: CommandParserConfig;
 
   beforeEach(() => {
-    mockLogger = noOpLogger;
     mockConfig = createConfigFixture({
       commands: {
         "im-a-mod": "!mod, vfx top, mod|mods",
@@ -53,7 +46,7 @@ describe("CommandParser Keyword vs Command Display Fix", () => {
       },
     });
 
-    commandParser = new CommandParser(mockConfig, mockLogger);
+    commandParser = new CommandParser(mockConfig);
   });
 
   describe("when VFX command is triggered by keyword match", () => {
@@ -162,7 +155,7 @@ describe("CommandParser Keyword vs Command Display Fix", () => {
           "simple-command": "!simple, vfx center",
         },
       });
-      commandParser = new CommandParser(mockConfig, mockLogger);
+      commandParser = new CommandParser(mockConfig);
 
       const testUser = createTestUser({ username: "testuser" });
       const chatData = {

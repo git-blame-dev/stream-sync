@@ -245,7 +245,7 @@ describe('MessageTTSHandler', () => {
             const stages = MessageTTSHandler.createTTSStages(notification);
             
             expect(stages).toHaveLength(1);
-            expect(stages[0].type).toBe('primary');
+            expect(stages[0]).toMatchObject({ type: 'primary' });
         });
 
         test('should handle very long messages with proper sanitization', () => {
@@ -261,8 +261,13 @@ describe('MessageTTSHandler', () => {
             const stages = MessageTTSHandler.createTTSStages(notification);
             
             expect(stages).toHaveLength(2);
-            expect(stages[1].text).toContain('VeryLongUser says');
-            expect(stages[1].text.length).toBeLessThan(600);
+            const messageStage = stages[1];
+            expect(messageStage).toBeDefined();
+            if (!messageStage) {
+                throw new Error('Expected long message TTS stage');
+            }
+            expect(messageStage.text).toContain('VeryLongUser says');
+            expect(messageStage.text.length).toBeLessThan(600);
         });
     });
 

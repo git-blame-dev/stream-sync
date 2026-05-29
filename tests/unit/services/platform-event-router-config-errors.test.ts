@@ -12,6 +12,9 @@ type InvalidRouterOptions = Omit<RouterOptions, "config" | "notificationManager"
   notificationManager?: unknown;
 };
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
+
 describe("PlatformEventRouter config gating error handling", () => {
   afterEach(() => {
     restoreAllMocks();
@@ -137,8 +140,14 @@ describe("PlatformEventRouter config gating error handling", () => {
     });
 
     expect(runtime.handleChatMessage).toHaveBeenCalledTimes(1);
-    const [calledPlatform, calledData] =
-      runtime.handleChatMessage.mock.calls[0];
+    const chatCall = runtime.handleChatMessage.mock.calls[0];
+    if (!chatCall) {
+      throw new Error("Expected chat message to be routed");
+    }
+    const [calledPlatform, calledData] = chatCall;
+    if (!isRecord(calledData)) {
+      throw new Error("Expected routed chat payload to be an object");
+    }
     expect(calledPlatform).toBe("twitch");
     expect(calledData?.message).toEqual({ text: "hi" });
   });

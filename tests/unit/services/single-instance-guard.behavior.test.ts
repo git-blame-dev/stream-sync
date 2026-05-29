@@ -114,6 +114,9 @@ describe("SingleInstanceGuard", () => {
 
     expect(fulfilled).toHaveLength(1);
     expect(rejected).toHaveLength(1);
+    if (rejected[0] === undefined || fulfilled[0] === undefined) {
+      throw new Error("Expected one fulfilled and one rejected acquisition");
+    }
     expect(rejected[0].reason).toBeInstanceOf(StreamSyncAlreadyRunningError);
 
     await fulfilled[0].value.release();

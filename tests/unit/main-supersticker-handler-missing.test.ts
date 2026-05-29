@@ -36,8 +36,13 @@ describe("SuperSticker Notification Handling", () => {
     });
 
     expect(notificationManager.handleNotification).toHaveBeenCalledTimes(1);
-    const [eventType, platform, payload] =
-      notificationManager.handleNotification.mock.calls[0];
+    const notificationCall = notificationManager.handleNotification.mock.calls[0];
+    expect(notificationCall).toBeDefined();
+    if (notificationCall === undefined) {
+      throw new Error("Expected handleNotification to receive a notification call");
+    }
+
+    const [eventType, platform, payload] = notificationCall;
     expect(eventType).toBe("platform:gift");
     expect(platform).toBe("youtube");
     expect(payload).toEqual(

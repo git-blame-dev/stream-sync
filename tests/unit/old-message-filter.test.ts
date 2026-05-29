@@ -7,39 +7,15 @@ import testClock from "../helpers/test-clock";
 import { createTestUser, initializeTestLogging } from "../helpers/test-setup";
 import { ChatNotificationRouter } from "../../src/services/ChatNotificationRouter.ts";
 
-type MockFn = ReturnType<typeof createMockFn>;
-
-type RouterRuntime = {
-  config: {
-    general: {
-      filterOldMessages: boolean;
-    };
-    twitch: {
-      messagesEnabled: boolean;
-      greetingsEnabled: boolean;
-    };
-  };
-  platformLifecycleService: {
-    getPlatformConnectionTime: MockFn;
-  };
-  gracefulExitService: unknown;
-};
-
-type RouterInstance = {
-  runtime: RouterRuntime;
-  handleChatMessage: (platform: string, message: unknown) => Promise<void>;
-  shouldSkipForConnection: (platform: string, timestamp: string) => boolean;
-  enqueueChatMessage: MockFn;
-  detectCommand: MockFn;
-  processCommand: MockFn;
-  isFirstMessage: MockFn;
-  isGreetingEnabled: MockFn;
-};
+type RouterDependencies = ConstructorParameters<typeof ChatNotificationRouter>[0];
+type RouterRuntime = RouterDependencies["runtime"];
+type PlatformLifecycleService = NonNullable<RouterRuntime["platformLifecycleService"]>;
+type GracefulExitService = NonNullable<RouterRuntime["gracefulExitService"]>;
 
 type RouterOverrides = {
   general?: Partial<RouterRuntime["config"]["general"]>;
   connectionTime?: number | null;
-  gracefulExitService?: unknown;
+  gracefulExitService?: GracefulExitService;
 };
 
 initializeTestLogging();
@@ -50,35 +26,38 @@ describe("Old Message Filter", () => {
   });
 
   const buildRouter = (overrides: RouterOverrides = {}) => {
-    const runtime: RouterRuntime = {
-      config: {
-        general: {
-          filterOldMessages: true,
-          ...overrides.general,
-        },
-        twitch: { messagesEnabled: true, greetingsEnabled: true },
+    const config = createConfigFixture({
+      general: {
+        filterOldMessages: true,
+        ...overrides.general,
       },
+      twitch: { messagesEnabled: true, greetingsEnabled: true },
+    });
+    const getPlatformConnectionTime = createMockFn<
+      Parameters<PlatformLifecycleService["getPlatformConnectionTime"]>,
+      ReturnType<PlatformLifecycleService["getPlatformConnectionTime"]>
+    >(() => overrides.connectionTime ?? null);
+    const runtime = {
+      config,
       platformLifecycleService: {
-        getPlatformConnectionTime: createMockFn(
-          () => overrides.connectionTime || null,
-        ),
+        getPlatformConnectionTime,
       },
-      gracefulExitService: overrides.gracefulExitService || null,
-    };
+      ...(overrides.gracefulExitService ? { gracefulExitService: overrides.gracefulExitService } : {}),
+    } satisfies RouterRuntime;
 
-    const router: RouterInstance = new ChatNotificationRouter({
+    const router = new ChatNotificationRouter({
       runtime,
       logger: noOpLogger,
-      config: createConfigFixture(),
+      config,
     });
 
-    router.enqueueChatMessage = createMockFn(() => undefined);
-    router.detectCommand = createMockFn(async () => null);
-    router.processCommand = createMockFn(() => undefined);
-    router.isFirstMessage = createMockFn(() => false);
-    router.isGreetingEnabled = createMockFn(() => false);
+    router.enqueueChatMessage = createMockFn<Parameters<typeof router.enqueueChatMessage>, ReturnType<typeof router.enqueueChatMessage>>(() => undefined);
+    router.detectCommand = createMockFn<Parameters<typeof router.detectCommand>, ReturnType<typeof router.detectCommand>>(async () => null);
+    router.processCommand = createMockFn<Parameters<typeof router.processCommand>, ReturnType<typeof router.processCommand>>(async () => undefined);
+    router.isFirstMessage = createMockFn<Parameters<typeof router.isFirstMessage>, ReturnType<typeof router.isFirstMessage>>(() => false);
+    router.isGreetingEnabled = createMockFn<Parameters<typeof router.isGreetingEnabled>, ReturnType<typeof router.isGreetingEnabled>>(() => false);
 
-    return { router, runtime };
+    return { router, runtime, getPlatformConnectionTime };
   };
 
   const createMessage = (timestamp: string) =>
@@ -91,8 +70,8 @@ describe("Old Message Filter", () => {
 
   test("skips messages sent before the latest platform connection", async () => {
     const connectionTime = testClock.now();
-    const { router, runtime } = buildRouter({ connectionTime });
-    runtime.platformLifecycleService.getPlatformConnectionTime.mockReturnValue(
+    const { router, getPlatformConnectionTime } = buildRouter({ connectionTime });
+    getPlatformConnectionTime.mockReturnValue(
       connectionTime,
     );
 
@@ -104,11 +83,11 @@ describe("Old Message Filter", () => {
 
   test("allows messages when filterOldMessages is disabled", async () => {
     const connectionTime = testClock.now();
-    const { router, runtime } = buildRouter({
+    const { router, getPlatformConnectionTime } = buildRouter({
       connectionTime,
       general: { filterOldMessages: false },
     });
-    runtime.platformLifecycleService.getPlatformConnectionTime.mockReturnValue(
+    getPlatformConnectionTime.mockReturnValue(
       connectionTime,
     );
 
@@ -129,10 +108,10 @@ describe("Old Message Filter", () => {
   });
 
   test("shouldSkipForConnection returns false for invalid timestamps", () => {
-    const { router, runtime } = buildRouter({
+    const { router, getPlatformConnectionTime } = buildRouter({
       connectionTime: testClock.now(),
     });
-    runtime.platformLifecycleService.getPlatformConnectionTime.mockReturnValue(
+    getPlatformConnectionTime.mockReturnValue(
       testClock.now(),
     );
 

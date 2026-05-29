@@ -148,7 +148,12 @@ describe("Main.js Greeting Username Extraction Fix", () => {
     logNotificationToConsole("greeting", "twitch", notificationData);
 
     expect(mockLogger.console).toHaveBeenCalledTimes(1);
-    const [message, category] = mockLogger.console.mock.calls[0];
+    const consoleCall = mockLogger.console.mock.calls[0];
+    expect(consoleCall).toBeDefined();
+    if (!consoleCall) {
+      throw new Error("Expected greeting notification to be logged");
+    }
+    const [message, category] = consoleCall;
     expect(message).toBe("[twitch] Greeting: TestUser");
     expect(category).toBe("notification");
   });
@@ -187,7 +192,12 @@ describe("Main.js Greeting Username Extraction Fix", () => {
       mockLogger.console.mockClear();
       logNotificationToConsole(type, "twitch", builtNotificationData);
 
-      const loggedMessage = mockLogger.console.mock.calls[0][0];
+      const consoleCall = mockLogger.console.mock.calls[0];
+      expect(consoleCall).toBeDefined();
+      if (!consoleCall) {
+        throw new Error(`Expected ${type} notification to be logged`);
+      }
+      const loggedMessage = consoleCall[0];
       expect(loggedMessage).toContain("TestFollower");
       expect(loggedMessage).not.toContain("undefined");
     });

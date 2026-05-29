@@ -180,7 +180,11 @@ describe('Greeting Display Username Fix', () => {
                         expect(result).toBe('mike smith');
                         expect(result.split(' ').length).toBe(2);
                     }
-                    expect(result).toContain(username.split(' ')[0]);
+                    const firstUsernameSegment = username.split(' ')[0];
+                    expect(firstUsernameSegment).toBeDefined();
+                    if (firstUsernameSegment) {
+                        expect(result).toContain(firstUsernameSegment);
+                    }
                 });
             });
         });
