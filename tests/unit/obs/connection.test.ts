@@ -1,35 +1,53 @@
 import { describe, expect, beforeEach, afterEach, it } from "bun:test";
 import {
+  type TestMockFn,
   createMockFn,
   clearAllMocks,
   restoreAllMocks,
 } from "../../helpers/bun-mock-utils";
+import { waitForDelay } from "../../helpers/time-utils";
 
 import { OBSConnectionManager } from "../../../src/obs/connection.ts";
 
+type ConnectResult = {
+  obsWebSocketVersion: string;
+  negotiatedRpcVersion: number;
+};
+
+type ObsEventHandler = (data?: { reason?: unknown; code?: unknown }) => void;
+
+type ObsSocketFake = {
+  connect: TestMockFn<[address?: string, password?: string], Promise<ConnectResult>>;
+  disconnect: TestMockFn<[], Promise<void>>;
+  call: TestMockFn<[requestType: string, requestData?: Record<string, unknown>], Promise<unknown>>;
+  on: TestMockFn<[eventName: string, handler: ObsEventHandler], void>;
+  once: TestMockFn<[eventName: string, handler: ObsEventHandler], void>;
+  off: TestMockFn<[eventName: string, handler: ObsEventHandler], void>;
+};
+
 describe("OBS Connection Race Condition - User Experience Validation", () => {
-  let mockOBS;
-  let connectionManager;
-  let identifiedCallback;
+  let mockOBS: ObsSocketFake;
+  let connectionManager: OBSConnectionManager;
+  let identifiedCallback: (() => void) | null;
 
   beforeEach(() => {
     identifiedCallback = null;
 
     mockOBS = {
-      connect: createMockFn(),
-      disconnect: createMockFn().mockResolvedValue(),
-      call: createMockFn(),
-      on: createMockFn().mockImplementation((event, callback) => {
+      connect: createMockFn<[address?: string, password?: string], Promise<ConnectResult>>(),
+      disconnect: createMockFn<[], Promise<void>>().mockResolvedValue(),
+      call: createMockFn<[requestType: string, requestData?: Record<string, unknown>], Promise<unknown>>(),
+      on: createMockFn<[eventName: string, handler: ObsEventHandler], void>().mockImplementation((event, callback) => {
         if (event === "Identified") {
           identifiedCallback = callback;
         }
       }),
-      once: createMockFn().mockImplementation((event, callback) => {
+      once: createMockFn<[eventName: string, handler: ObsEventHandler], void>().mockImplementation((event, callback) => {
         if (event === "Identified") {
           identifiedCallback = callback;
         }
       }),
-      off: createMockFn(),
+      off: createMockFn<[eventName: string, handler: ObsEventHandler], void>(),
     };
 
     connectionManager = new OBSConnectionManager({

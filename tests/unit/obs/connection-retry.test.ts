@@ -1,5 +1,6 @@
 import { describe, expect, beforeEach, afterEach, it } from "bun:test";
 import {
+  type TestMockFn,
   createMockFn,
   clearAllMocks,
   restoreAllMocks,
@@ -16,11 +17,28 @@ import {
   resetOBSConnectionManager,
 } from "../../../src/obs/connection.ts";
 
+type ConnectResult = {
+  obsWebSocketVersion: string;
+  negotiatedRpcVersion: number;
+};
+
+type ConnectionClosedData = { code: number; reason: string };
+type ObsEventHandler = (data?: { reason?: unknown; code?: unknown }) => void;
+
+type ObsSocketFake = {
+  connect: TestMockFn<[address?: string, password?: string], Promise<ConnectResult>>;
+  disconnect: TestMockFn<[], Promise<void>>;
+  call: TestMockFn<[requestType: string, requestData?: Record<string, unknown>], Promise<unknown>>;
+  on: TestMockFn<[eventName: string, handler: ObsEventHandler], void>;
+  once: TestMockFn<[eventName: string, handler: ObsEventHandler], void>;
+  off: TestMockFn<[eventName: string, handler: ObsEventHandler], void>;
+};
+
 describe("OBSConnectionManager reconnection behavior", () => {
-  let mockOBS;
-  let manager;
-  let identifiedCallback;
-  let connectionClosedCallback;
+  let mockOBS: ObsSocketFake;
+  let manager: OBSConnectionManager;
+  let identifiedCallback: (() => void) | null;
+  let connectionClosedCallback: ((data: ConnectionClosedData) => void) | null;
 
   const advanceTimers = async () => {
     runOnlyPendingTimers();
@@ -34,15 +52,15 @@ describe("OBSConnectionManager reconnection behavior", () => {
     connectionClosedCallback = null;
 
     mockOBS = {
-      connect: createMockFn(),
-      disconnect: createMockFn().mockResolvedValue(),
-      call: createMockFn(),
-      on: createMockFn((event, cb) => {
+      connect: createMockFn<[address?: string, password?: string], Promise<ConnectResult>>(),
+      disconnect: createMockFn<[], Promise<void>>().mockResolvedValue(),
+      call: createMockFn<[requestType: string, requestData?: Record<string, unknown>], Promise<unknown>>(),
+      on: createMockFn<[eventName: string, handler: ObsEventHandler], void>((event, cb) => {
         if (event === "Identified") identifiedCallback = cb;
         if (event === "ConnectionClosed") connectionClosedCallback = cb;
       }),
-      once: createMockFn(),
-      off: createMockFn(),
+      once: createMockFn<[eventName: string, handler: ObsEventHandler], void>(),
+      off: createMockFn<[eventName: string, handler: ObsEventHandler], void>(),
     };
 
     manager = new OBSConnectionManager({
@@ -126,16 +144,16 @@ describe("OBSConnectionManager reconnection behavior", () => {
   });
 
   it("clears pending reconnect work when singleton manager resets", async () => {
-    const singletonOBS = {
-      connect: createMockFn().mockResolvedValue({
+    const singletonOBS: ObsSocketFake = {
+      connect: createMockFn<[address?: string, password?: string], Promise<ConnectResult>>().mockResolvedValue({
         obsWebSocketVersion: "5",
         negotiatedRpcVersion: 1,
       }),
-      disconnect: createMockFn().mockResolvedValue(),
-      call: createMockFn(),
-      on: createMockFn(),
-      off: createMockFn(),
-      once: createMockFn(),
+      disconnect: createMockFn<[], Promise<void>>().mockResolvedValue(),
+      call: createMockFn<[requestType: string, requestData?: Record<string, unknown>], Promise<unknown>>(),
+      on: createMockFn<[eventName: string, handler: ObsEventHandler], void>(),
+      off: createMockFn<[eventName: string, handler: ObsEventHandler], void>(),
+      once: createMockFn<[eventName: string, handler: ObsEventHandler], void>(),
     };
 
     const singletonManager = getOBSConnectionManager({
