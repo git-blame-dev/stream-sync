@@ -4,6 +4,15 @@ import { PRIORITY_LEVELS } from "../../src/core/constants";
 import { PlatformEvents } from "../../src/interfaces/PlatformEvents";
 import { DisplayQueue } from "../../src/obs/display-queue.ts";
 
+type DisplayQueueDependencies = NonNullable<
+  ConstructorParameters<typeof DisplayQueue>[4]
+>;
+type SourcesManagerFixture = NonNullable<
+  DisplayQueueDependencies["sourcesManager"]
+>;
+type GoalsManagerFixture = NonNullable<DisplayQueueDependencies["goalsManager"]>;
+type EventBusHandler = (payload: Record<string, unknown>) => void;
+
 type QueueAction = {
   type: string;
   source?: string;
@@ -20,65 +29,108 @@ describe("DisplayQueue gift flow (smoke E2E)", () => {
   test("processes a gift notification end-to-end", async () => {
     const emitter = new EventEmitter();
     const eventBus = {
-      emit: (event, payload) => emitter.emit(event, payload),
-      subscribe: (event, handler) => {
+      emit: (event: string, payload: Record<string, unknown>) =>
+        emitter.emit(event, payload),
+      subscribe: (event: string, handler: EventBusHandler) => {
         emitter.on(event, handler);
         return () => emitter.off(event, handler);
       },
     };
 
     const vfxEvents: unknown[] = [];
-    emitter.on(PlatformEvents.VFX_COMMAND_RECEIVED, (payload) => {
-      vfxEvents.push(payload);
-      queueMicrotask(() => {
-        emitter.emit(PlatformEvents.VFX_EFFECT_COMPLETED, {
-          correlationId: payload.correlationId,
+    emitter.on(
+      PlatformEvents.VFX_COMMAND_RECEIVED,
+      (payload: Record<string, unknown>) => {
+        vfxEvents.push(payload);
+        queueMicrotask(() => {
+          emitter.emit(PlatformEvents.VFX_EFFECT_COMPLETED, {
+            correlationId: payload.correlationId,
+          });
         });
-      });
-    });
+      },
+    );
 
     const actions: QueueAction[] = [];
-    const sourcesManager = {
-      updateChatMsgText: async (source, username, message) => {
+    const sourcesManager: SourcesManagerFixture = {
+      updateChatMsgText: async (
+        source: string,
+        username: string,
+        message: string,
+      ) => {
         actions.push({ type: "chatText", source, username, message });
       },
-      updateTextSource: async (source, text) => {
+      updateTextSource: async (source: string, text = "") => {
         actions.push({ type: "text", source, text });
       },
-      clearTextSource: async (source) => {
+      clearTextSource: async (source: string) => {
         actions.push({ type: "clearText", source });
       },
-      setGroupSourceVisibility: async (source, group, visible) => {
+      getSceneItemId: async () => ({ sceneItemId: 1 }),
+      setSourceVisibility: async (
+        _sceneName: string,
+        source: string,
+        visible: boolean,
+      ) => {
+        actions.push({ type: "sourceVisibility", source, visible });
+      },
+      getGroupSceneItemId: async () => ({ sceneItemId: 1 }),
+      setGroupSourceVisibility: async (
+        source: string,
+        group: string | null | undefined,
+        visible: boolean,
+      ) => {
+        if (!group) {
+          return;
+        }
         actions.push({ type: "groupVisibility", source, group, visible });
       },
-      setChatDisplayVisibility: async (visible, scene) => {
-        actions.push({ type: "chatDisplay", visible, scene });
-      },
-      setNotificationDisplayVisibility: async (visible, scene) => {
-        actions.push({ type: "notificationDisplay", visible, scene });
-      },
-      setPlatformLogoVisibility: async (platform) => {
+      setPlatformLogoVisibility: async (platform: string) => {
         actions.push({ type: "platformLogo", platform });
       },
-      setNotificationPlatformLogoVisibility: async (platform) => {
+      setNotificationPlatformLogoVisibility: async (platform: string) => {
         actions.push({ type: "notificationLogo", platform });
       },
+      hideAllPlatformLogos: async () => {},
+      hideAllNotificationPlatformLogos: async () => {},
+      setChatDisplayVisibility: async (visible: boolean, scene: string) => {
+        actions.push({ type: "chatDisplay", visible, scene });
+      },
+      setNotificationDisplayVisibility: async (
+        visible: boolean,
+        scene: string,
+      ) => {
+        actions.push({ type: "notificationDisplay", visible, scene });
+      },
+      hideAllDisplays: async () => {},
+      setSourceFilterEnabled: async () => {},
+      getSourceFilterSettings: async () => ({}),
+      setSourceFilterSettings: async () => {},
+      clearSceneItemCache: () => {},
     };
 
     const obsCalls: Array<{ method: string; payload: unknown }> = [];
     const obsManager = {
       isReady: async () => true,
-      call: async (method, payload) => {
+      call: async (method: string, payload: Record<string, unknown>) => {
         obsCalls.push({ method, payload });
         return {};
       },
     };
 
     const goalCalls: Array<{ platform: string; amount: number }> = [];
-    const goalsManager = {
-      processDonationGoal: async (platform, amount) => {
-        goalCalls.push({ platform, amount });
+    const goalsManager: GoalsManagerFixture = {
+      initializeGoalDisplay: async () => {},
+      updateAllGoalDisplays: async () => {},
+      updateGoalDisplay: async () => {},
+      processDonationGoal: async (platform: unknown, amount: number) => {
+        if (typeof platform === "string") {
+          goalCalls.push({ platform, amount });
+        }
+        return { success: typeof platform === "string" };
       },
+      processPaypiggyGoal: async () => ({ success: true }),
+      getCurrentGoalStatus: () => ({ current: 0, target: 0, percentage: 0 }),
+      getAllCurrentGoalStatuses: () => ({}),
     };
 
     const config = {
