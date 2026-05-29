@@ -1,23 +1,36 @@
 import { describe, expect, beforeEach, it, afterEach } from "bun:test";
-import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
+import { createMockFn, restoreAllMocks, type TestMockFn } from "../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../helpers/mock-factories";
 import { createConfigFixture } from "../../helpers/config-fixture";
 
 import { PlatformEventRouter } from "../../../src/services/PlatformEventRouter.ts";
+
+type RouterOptions = ConstructorParameters<typeof PlatformEventRouter>[0];
+type RuntimeNotificationMock = TestMockFn<[string, unknown, Record<string, unknown>], unknown>;
+type RuntimeFake = {
+  handlePaypiggyNotification: RuntimeNotificationMock;
+};
+
+const firstMockCall = <Args extends unknown[]>(calls: Args[]): Args => {
+  const [call] = calls;
+  if (!call) {
+    throw new Error("Expected mock to have at least one call");
+  }
+  return call;
+};
 
 describe("PlatformEventRouter paypiggy months handling", () => {
   afterEach(() => {
     restoreAllMocks();
   });
 
-  let runtime;
-  let config;
+  let runtime: RuntimeFake;
+  let config: RouterOptions["config"];
 
   const buildRouter = () =>
     new PlatformEventRouter({
       eventBus: {
         subscribe: createMockFn(() => createMockFn()),
-        emit: createMockFn(),
       },
       runtime,
       notificationManager: { handleNotification: createMockFn() },
@@ -27,7 +40,7 @@ describe("PlatformEventRouter paypiggy months handling", () => {
 
   beforeEach(() => {
     runtime = {
-      handlePaypiggyNotification: createMockFn(),
+      handlePaypiggyNotification: createMockFn<[string, unknown, Record<string, unknown>], unknown>(),
     };
     config = createConfigFixture({ general: { paypiggiesEnabled: true } });
   });
@@ -51,7 +64,7 @@ describe("PlatformEventRouter paypiggy months handling", () => {
 
     expect(runtime.handlePaypiggyNotification).toHaveBeenCalledTimes(1);
     const [_platform, username, payload] =
-      runtime.handlePaypiggyNotification.mock.calls[0];
+      firstMockCall(runtime.handlePaypiggyNotification.mock.calls);
     expect(_platform).toBe("tiktok");
     expect(username).toBe("SuperFanUser");
     expect(payload.tier).toBe("superfan");
@@ -77,7 +90,7 @@ describe("PlatformEventRouter paypiggy months handling", () => {
 
     expect(runtime.handlePaypiggyNotification).toHaveBeenCalledTimes(1);
     const [_platform, username, payload] =
-      runtime.handlePaypiggyNotification.mock.calls[0];
+      firstMockCall(runtime.handlePaypiggyNotification.mock.calls);
     expect(_platform).toBe("twitch");
     expect(username).toBe("MonthsUser");
     expect(payload.months).toBe(6);

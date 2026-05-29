@@ -1,5 +1,6 @@
 import { describe, it, beforeEach, afterEach, expect } from "bun:test";
 import {
+  type TestMockFn,
   createMockFn,
   clearAllMocks,
   restoreAllMocks,
@@ -9,18 +10,67 @@ import { CommandCooldownService } from "../../../src/services/CommandCooldownSer
 import { createConfigFixture } from "../../helpers/config-fixture";
 import * as testClock from "../../helpers/test-clock";
 
+type CommandCooldownTestService = InstanceType<typeof CommandCooldownService>;
+type CooldownConfigOverrides = Partial<
+  CommandCooldownTestService["cooldownConfig"]
+>;
+type ConfigChangePayload = {
+  section?: string;
+  value?: CooldownConfigOverrides;
+};
+type ConfigSubscriptionHandler = (payload?: ConfigChangePayload) => void;
+type MockEventBus = {
+  emit: TestMockFn<[eventName: string, payload: unknown], void>;
+  subscribe: TestMockFn<
+    [eventName: string, handler: ConfigSubscriptionHandler],
+    () => void
+  >;
+};
+type TestConfig = ReturnType<typeof createConfigFixture>;
+
+const dispatchConfigChange = (
+  subscriptions: Record<string, ConfigSubscriptionHandler>,
+  eventName: string,
+  payload: ConfigChangePayload,
+) => {
+  const handler = subscriptions[eventName];
+  if (!handler) {
+    throw new Error(`Expected ${eventName} subscription to be registered`);
+  }
+  handler(payload);
+};
+
+const getOnlyEmittedPayload = (
+  eventBus: MockEventBus,
+  expectedEventName: string,
+) => {
+  const events = eventBus.emit.mock.calls.filter(
+    ([eventName]) => eventName === expectedEventName,
+  );
+  expect(events).toHaveLength(1);
+  const event = events[0];
+  if (!event) {
+    throw new Error(`Expected ${expectedEventName} event to be emitted`);
+  }
+  return event[1];
+};
+
 describe("CommandCooldownService", () => {
-  let service;
-  let mockEventBus;
-  let eventSubscriptions;
-  let testConfig;
+  let service: CommandCooldownTestService;
+  let mockEventBus: MockEventBus;
+  let eventSubscriptions: Record<string, ConfigSubscriptionHandler>;
+  let testConfig: TestConfig;
+  let testLogger: CommandCooldownTestService["logger"];
 
   beforeEach(() => {
     eventSubscriptions = {};
 
     mockEventBus = {
-      emit: createMockFn(),
-      subscribe: createMockFn((eventName, handler) => {
+      emit: createMockFn<[string, unknown], void>(),
+      subscribe: createMockFn<
+        [string, ConfigSubscriptionHandler],
+        () => void
+      >((eventName, handler) => {
         eventSubscriptions[eventName] = handler;
         return () => {
           delete eventSubscriptions[eventName];
@@ -29,9 +79,10 @@ describe("CommandCooldownService", () => {
     };
 
     testConfig = createConfigFixture();
+    testLogger = noOpLogger;
     service = new CommandCooldownService({
       eventBus: mockEventBus,
-      logger: noOpLogger,
+      logger: testLogger,
       config: testConfig,
     });
   });
@@ -49,7 +100,7 @@ describe("CommandCooldownService", () => {
       () =>
         new CommandCooldownService({
           eventBus: mockEventBus,
-          logger: noOpLogger,
+          logger: testLogger,
         }),
     ).toThrow("CommandCooldownService requires config");
   });
@@ -160,11 +211,9 @@ describe("CommandCooldownService", () => {
         service.updateUserCooldown(userId);
       }
 
-      const heavyDetectedEvents = mockEventBus.emit.mock.calls.filter(
-        ([eventName]: [string]) => eventName === "cooldown:heavy-detected",
-      );
-      expect(heavyDetectedEvents).toHaveLength(1);
-      expect(heavyDetectedEvents[0][1]).toEqual(
+      expect(
+        getOnlyEmittedPayload(mockEventBus, "cooldown:heavy-detected"),
+      ).toEqual(
         expect.objectContaining({
           userId,
           commandCount: threshold,
@@ -179,11 +228,7 @@ describe("CommandCooldownService", () => {
       );
 
       expect(canExecute).toBe(false);
-      const heavyBlockedEvents = mockEventBus.emit.mock.calls.filter(
-        ([eventName]: [string]) => eventName === "cooldown:blocked",
-      );
-      expect(heavyBlockedEvents).toHaveLength(1);
-      expect(heavyBlockedEvents[0][1]).toEqual(
+      expect(getOnlyEmittedPayload(mockEventBus, "cooldown:blocked")).toEqual(
         expect.objectContaining({
           userId,
           type: "heavy",
@@ -223,6 +268,9 @@ describe("CommandCooldownService", () => {
       service.updateUserCooldown(userId);
 
       const timestamps = service.userCommandTimestamps.get(userId);
+      if (!timestamps) {
+        throw new Error(`Expected timestamps for ${userId}`);
+      }
       expect(timestamps.length).toBe(1);
       expect(service.getCooldownStatus(userId).isHeavyLimit).toBe(false);
     });
@@ -236,11 +284,9 @@ describe("CommandCooldownService", () => {
       const canExecute = service.checkGlobalCooldown(commandName, 60000);
 
       expect(canExecute).toBe(false);
-      const globalBlockedEvents = mockEventBus.emit.mock.calls.filter(
-        ([eventName]: [string]) => eventName === "cooldown:global-blocked",
-      );
-      expect(globalBlockedEvents).toHaveLength(1);
-      expect(globalBlockedEvents[0][1]).toEqual(
+      expect(
+        getOnlyEmittedPayload(mockEventBus, "cooldown:global-blocked"),
+      ).toEqual(
         expect.objectContaining({
           commandName,
           remainingMs: expect.any(Number),
@@ -278,7 +324,7 @@ describe("CommandCooldownService", () => {
       service.dispose();
       service = new CommandCooldownService({
         eventBus: mockEventBus,
-        logger: noOpLogger,
+        logger: testLogger,
         config: customConfig,
       });
 
@@ -303,7 +349,7 @@ describe("CommandCooldownService", () => {
     });
 
     it("should apply config overrides from cooldown config events", () => {
-      eventSubscriptions["config:changed"]({
+      dispatchConfigChange(eventSubscriptions, "config:changed", {
         section: "cooldowns",
         value: {
           defaultCooldown: 2,
@@ -364,11 +410,7 @@ describe("CommandCooldownService", () => {
       );
 
       expect(canExecute).toBe(false);
-      const blockedEvents = mockEventBus.emit.mock.calls.filter(
-        ([eventName]: [string]) => eventName === "cooldown:blocked",
-      );
-      expect(blockedEvents).toHaveLength(1);
-      expect(blockedEvents[0][1]).toEqual(
+      expect(getOnlyEmittedPayload(mockEventBus, "cooldown:blocked")).toEqual(
         expect.objectContaining({
           userId,
           type: "regular",
@@ -401,11 +443,9 @@ describe("CommandCooldownService", () => {
         service.updateUserCooldown(userId);
       }
 
-      const heavyDetectedEvents = mockEventBus.emit.mock.calls.filter(
-        ([eventName]: [string]) => eventName === "cooldown:heavy-detected",
-      );
-      expect(heavyDetectedEvents).toHaveLength(1);
-      expect(heavyDetectedEvents[0][1]).toEqual(
+      expect(
+        getOnlyEmittedPayload(mockEventBus, "cooldown:heavy-detected"),
+      ).toEqual(
         expect.objectContaining({
           userId,
           commandCount: threshold,
@@ -462,11 +502,9 @@ describe("CommandCooldownService", () => {
       const status = service.getCooldownStatus(userId);
       expect(status.commandCount).toBe(0);
       expect(status.lastCommandTime).toBe(0);
-      const resetEvents = mockEventBus.emit.mock.calls.filter(
-        ([eventName]: [string]) => eventName === "cooldown:reset",
+      expect(getOnlyEmittedPayload(mockEventBus, "cooldown:reset")).toEqual(
+        expect.objectContaining({ userId }),
       );
-      expect(resetEvents).toHaveLength(1);
-      expect(resetEvents[0][1]).toEqual(expect.objectContaining({ userId }));
     });
   });
 });

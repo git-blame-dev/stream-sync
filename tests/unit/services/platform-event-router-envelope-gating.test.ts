@@ -5,16 +5,17 @@ import { createConfigFixture } from "../../helpers/config-fixture";
 
 import { PlatformEventRouter } from "../../../src/services/PlatformEventRouter.ts";
 
+type RouterOptions = ConstructorParameters<typeof PlatformEventRouter>[0];
+
 describe("PlatformEventRouter envelope gating", () => {
   afterEach(() => {
     restoreAllMocks();
   });
 
-  const createRouter = (config) =>
+  const createRouter = (config: RouterOptions["config"]) =>
     new PlatformEventRouter({
       eventBus: {
         subscribe: createMockFn(() => createMockFn()),
-        emit: createMockFn(),
       },
       runtime: {
         handleEnvelopeNotification: createMockFn(),

@@ -1,16 +1,27 @@
 import { describe, expect, it, beforeEach } from "bun:test";
-import { createMockFn } from "../../helpers/bun-mock-utils";
+import { createMockFn, type TestMockFn } from "../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../helpers/mock-factories";
 import { createConfigFixture } from "../../helpers/config-fixture";
 import { PlatformEventRouter } from "../../../src/services/PlatformEventRouter.ts";
 
+type RouterOptions = ConstructorParameters<typeof PlatformEventRouter>[0];
+type PlatformEventHandler = Parameters<RouterOptions["eventBus"]["subscribe"]>[1];
+type RoutedEventBus = RouterOptions["eventBus"] & {
+  emit: (eventName: string, payload: unknown) => Promise<void>;
+};
+type ChatMessageHandlerMock = TestMockFn<[string, Record<string, unknown>], Promise<unknown>>;
+type RuntimeFake = {
+  handleChatMessage: ChatMessageHandlerMock;
+};
+type NotificationManagerFake = RouterOptions["notificationManager"];
+
 describe("PlatformEventRouter error handling", () => {
-  let mockLogger;
-  let mockEventBus;
-  let mockRuntime;
-  let mockNotificationManager;
-  let mockConfig;
-  let subscriber;
+  let mockLogger: RouterOptions["logger"];
+  let mockEventBus: RoutedEventBus;
+  let mockRuntime: RuntimeFake;
+  let mockNotificationManager: NotificationManagerFake;
+  let mockConfig: RouterOptions["config"];
+  let subscriber: PlatformEventHandler | null;
 
   const baseEvent = {
     platform: "twitch",
@@ -33,7 +44,7 @@ describe("PlatformEventRouter error handling", () => {
         subscriber = handler;
         return () => {};
       }),
-      emit: async (event, payload) => {
+      emit: async (_eventName: string, payload: unknown) => {
         if (subscriber) {
           await subscriber(payload);
         }
@@ -41,7 +52,7 @@ describe("PlatformEventRouter error handling", () => {
     };
 
     mockRuntime = {
-      handleChatMessage: createMockFn().mockResolvedValue(),
+      handleChatMessage: createMockFn<[string, Record<string, unknown>], Promise<unknown>>().mockResolvedValue(),
     };
 
     mockNotificationManager = {

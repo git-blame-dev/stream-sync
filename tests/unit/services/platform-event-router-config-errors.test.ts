@@ -5,12 +5,19 @@ import { createConfigFixture } from "../../helpers/config-fixture";
 
 import { PlatformEventRouter } from "../../../src/services/PlatformEventRouter.ts";
 
+type RouterOptions = ConstructorParameters<typeof PlatformEventRouter>[0];
+type BuildRouterOptions = Pick<RouterOptions, "config" | "runtime" | "notificationManager" | "logger">;
+type InvalidRouterOptions = Omit<RouterOptions, "config" | "notificationManager"> & {
+  config?: unknown;
+  notificationManager?: unknown;
+};
+
 describe("PlatformEventRouter config gating error handling", () => {
   afterEach(() => {
     restoreAllMocks();
   });
 
-  const buildRouter = ({ config, runtime, notificationManager, logger }) =>
+  const buildRouter = ({ config, runtime, notificationManager, logger }: BuildRouterOptions) =>
     new PlatformEventRouter({
       runtime,
       notificationManager,
@@ -18,9 +25,11 @@ describe("PlatformEventRouter config gating error handling", () => {
       logger,
       eventBus: {
         subscribe: createMockFn(() => () => {}),
-        emit: createMockFn(),
       },
     });
+
+  const constructInvalidRouter = (options: InvalidRouterOptions) =>
+    Reflect.construct(PlatformEventRouter, [options]);
 
   it("throws when config is missing required notification setting", async () => {
     const config = createConfigFixture({
@@ -288,11 +297,14 @@ describe("PlatformEventRouter config gating error handling", () => {
       handleGiftNotification: createMockFn().mockResolvedValue(true),
     };
     expect(() =>
-      buildRouter({
+      constructInvalidRouter({
         config: null,
         runtime,
         notificationManager: {},
         logger: noOpLogger,
+        eventBus: {
+          subscribe: createMockFn(() => () => {}),
+        },
       }),
     ).toThrow(
       "PlatformEventRouter requires eventBus, runtime, notificationManager, config, and logger",
@@ -302,11 +314,14 @@ describe("PlatformEventRouter config gating error handling", () => {
   it("requires notification manager for routed events", async () => {
     const config = createConfigFixture();
     expect(() =>
-      buildRouter({
+      constructInvalidRouter({
         config,
         runtime: {},
         notificationManager: null,
         logger: noOpLogger,
+        eventBus: {
+          subscribe: createMockFn(() => () => {}),
+        },
       }),
     ).toThrow(
       "PlatformEventRouter requires eventBus, runtime, notificationManager, config, and logger",

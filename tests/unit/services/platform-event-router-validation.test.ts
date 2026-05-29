@@ -1,37 +1,71 @@
 import { describe, expect, it, afterEach } from "bun:test";
-import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
+import { createMockFn, restoreAllMocks, type TestMockFn } from "../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../helpers/mock-factories";
 import { createConfigFixture } from "../../helpers/config-fixture";
 
 import { PlatformEventRouter } from "../../../src/services/PlatformEventRouter.ts";
+
+type RouterOptions = ConstructorParameters<typeof PlatformEventRouter>[0];
+type ChatMessageHandlerMock = TestMockFn<[string, Record<string, unknown>], unknown>;
+type RuntimeNotificationMock = TestMockFn<[string, unknown, Record<string, unknown>], unknown>;
+type StreamDetectedHandlerMock = TestMockFn<[string, Record<string, unknown>], unknown>;
+type ViewerCountHandlerMock = TestMockFn<[string, number], unknown>;
+type NotificationManagerMock = TestMockFn<[string, string, Record<string, unknown>], unknown>;
+type RuntimeFake = {
+  handleChatMessage: ChatMessageHandlerMock;
+  handleGiftNotification: RuntimeNotificationMock;
+  handlePaypiggyNotification: RuntimeNotificationMock;
+  handleGiftPaypiggyNotification: RuntimeNotificationMock;
+  handleEnvelopeNotification: StreamDetectedHandlerMock;
+  handleStreamDetected: StreamDetectedHandlerMock;
+  handleRaidNotification: RuntimeNotificationMock;
+  handleShareNotification: RuntimeNotificationMock;
+  handleFollowNotification: RuntimeNotificationMock;
+  updateViewerCount: ViewerCountHandlerMock;
+};
+type NotificationManagerFake = {
+  handleNotification: NotificationManagerMock;
+};
+type BuildRouterOverrides = {
+  runtime?: Partial<RuntimeFake>;
+  config?: RouterOptions["config"];
+  notificationManager?: Partial<NotificationManagerFake>;
+};
+
+const firstMockCall = <Args extends unknown[]>(calls: Args[]): Args => {
+  const [call] = calls;
+  if (!call) {
+    throw new Error("Expected mock to have at least one call");
+  }
+  return call;
+};
 
 describe("PlatformEventRouter validation", () => {
   afterEach(() => {
     restoreAllMocks();
   });
 
-  const buildRouter = (overrides = {}) => {
+  const buildRouter = (overrides: BuildRouterOverrides = {}) => {
     const runtime = {
-      handleChatMessage: createMockFn(),
-      handleGiftNotification: createMockFn(),
-      handlePaypiggyNotification: createMockFn(),
-      handleGiftPaypiggyNotification: createMockFn(),
-      handleEnvelopeNotification: createMockFn(),
-      handleStreamDetected: createMockFn(),
-      handleRaidNotification: createMockFn(),
-      handleShareNotification: createMockFn(),
-      handleFollowNotification: createMockFn(),
-      updateViewerCount: createMockFn(),
+      handleChatMessage: createMockFn<[string, Record<string, unknown>], unknown>(),
+      handleGiftNotification: createMockFn<[string, unknown, Record<string, unknown>], unknown>(),
+      handlePaypiggyNotification: createMockFn<[string, unknown, Record<string, unknown>], unknown>(),
+      handleGiftPaypiggyNotification: createMockFn<[string, unknown, Record<string, unknown>], unknown>(),
+      handleEnvelopeNotification: createMockFn<[string, Record<string, unknown>], unknown>(),
+      handleStreamDetected: createMockFn<[string, Record<string, unknown>], unknown>(),
+      handleRaidNotification: createMockFn<[string, unknown, Record<string, unknown>], unknown>(),
+      handleShareNotification: createMockFn<[string, unknown, Record<string, unknown>], unknown>(),
+      handleFollowNotification: createMockFn<[string, unknown, Record<string, unknown>], unknown>(),
+      updateViewerCount: createMockFn<[string, number], unknown>(),
       ...overrides.runtime,
     };
     const config = overrides.config || createConfigFixture();
     const notificationManager = {
-      handleNotification: createMockFn(),
+      handleNotification: createMockFn<[string, string, Record<string, unknown>], unknown>(),
       ...overrides.notificationManager,
     };
     const eventBus = {
       subscribe: createMockFn(() => createMockFn()),
-      emit: createMockFn(),
     };
 
     return {
@@ -81,7 +115,7 @@ describe("PlatformEventRouter validation", () => {
     });
 
     const [calledPlatform, calledPayload] =
-      runtime.handleChatMessage.mock.calls[0];
+      firstMockCall(runtime.handleChatMessage.mock.calls);
     expect(calledPlatform).toBe("twitch");
     expect(calledPayload.message).toEqual({ text: "hello" });
     expect(calledPayload.timestamp).toBe(timestamp);
@@ -144,7 +178,7 @@ describe("PlatformEventRouter validation", () => {
     });
 
     expect(runtime.handleGiftNotification).toHaveBeenCalledTimes(1);
-    const [, , payload] = runtime.handleGiftNotification.mock.calls[0];
+    const [, , payload] = firstMockCall(runtime.handleGiftNotification.mock.calls);
     expect(payload.isAnonymous).toBe(true);
     expect(payload.username).toBeUndefined();
     expect(payload.userId).toBeUndefined();
@@ -171,7 +205,7 @@ describe("PlatformEventRouter validation", () => {
     });
 
     expect(runtime.handleGiftNotification).toHaveBeenCalledTimes(1);
-    const [, , payload] = runtime.handleGiftNotification.mock.calls[0];
+    const [, , payload] = firstMockCall(runtime.handleGiftNotification.mock.calls);
     expect(payload.userId).toBeUndefined();
     expect(payload.metadata).toEqual({ missingFields: ["userId"] });
   });
@@ -213,7 +247,7 @@ describe("PlatformEventRouter validation", () => {
     });
 
     expect(runtime.handleGiftPaypiggyNotification).toHaveBeenCalledTimes(1);
-    const [, , payload] = runtime.handleGiftPaypiggyNotification.mock.calls[0];
+    const [, , payload] = firstMockCall(runtime.handleGiftPaypiggyNotification.mock.calls);
     expect(payload.isAnonymous).toBe(true);
     expect(payload.username).toBeUndefined();
     expect(payload.userId).toBeUndefined();
@@ -238,7 +272,7 @@ describe("PlatformEventRouter validation", () => {
       },
     });
 
-    const [, , payload] = runtime.handleGiftNotification.mock.calls[0];
+    const [, , payload] = firstMockCall(runtime.handleGiftNotification.mock.calls);
     expect(payload.type).toBe("platform:gift");
     expect(payload.timestamp).toBe(timestamp);
   });
@@ -257,7 +291,7 @@ describe("PlatformEventRouter validation", () => {
 
     expect(runtime.handleStreamDetected).toHaveBeenCalledTimes(1);
     const [calledPlatform, calledPayload] =
-      runtime.handleStreamDetected.mock.calls[0];
+      firstMockCall(runtime.handleStreamDetected.mock.calls);
     expect(calledPlatform).toBe("youtube");
     expect(calledPayload.eventType).toBe("stream-detected");
   });
@@ -307,7 +341,7 @@ describe("PlatformEventRouter validation", () => {
 
     expect(runtime.handleEnvelopeNotification).toHaveBeenCalledTimes(1);
     const [calledPlatform, calledPayload] =
-      runtime.handleEnvelopeNotification.mock.calls[0];
+      firstMockCall(runtime.handleEnvelopeNotification.mock.calls);
     expect(calledPlatform).toBe("tiktok");
     expect(calledPayload.id).toBe("env-1");
     expect(calledPayload.sourceType).toBe("platform:envelope");
@@ -330,7 +364,7 @@ describe("PlatformEventRouter validation", () => {
 
     expect(notificationManager.handleNotification).toHaveBeenCalledTimes(1);
     const [notificationType, notificationPlatform, notificationPayload] =
-      notificationManager.handleNotification.mock.calls[0];
+      firstMockCall(notificationManager.handleNotification.mock.calls);
     expect(notificationType).toBe("farewell");
     expect(notificationPlatform).toBe("twitch");
     expect(notificationPayload.username).toBe("test-farewell-user");
@@ -392,7 +426,7 @@ describe("PlatformEventRouter validation", () => {
       },
     });
 
-    const [, , payload] = runtime.handleFollowNotification.mock.calls[0];
+    const [, , payload] = firstMockCall(runtime.handleFollowNotification.mock.calls);
     expect(payload.userId).toBe("12345");
   });
 
@@ -427,7 +461,7 @@ describe("PlatformEventRouter validation", () => {
       },
     });
 
-    const [, , payload] = runtime.handleFollowNotification.mock.calls[0];
+    const [, , payload] = firstMockCall(runtime.handleFollowNotification.mock.calls);
     expect(payload.userId).toBe("12345");
   });
 
@@ -445,7 +479,7 @@ describe("PlatformEventRouter validation", () => {
       },
     });
 
-    const [, , payload] = runtime.handleFollowNotification.mock.calls[0];
+    const [, , payload] = firstMockCall(runtime.handleFollowNotification.mock.calls);
     expect(payload.avatarUrl).toBe("https://example.invalid/follow-avatar.png");
   });
 
