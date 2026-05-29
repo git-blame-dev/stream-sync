@@ -51,6 +51,9 @@ describe("DisplayQueue gift flow (smoke E2E)", () => {
     );
 
     const actions: QueueAction[] = [];
+    const unexpectedSourceManagerCall = (methodName: string): never => {
+      throw new Error(`Unexpected source manager call in gift flow smoke test: ${methodName}`);
+    };
     const sourcesManager: SourcesManagerFixture = {
       updateChatMsgText: async (
         source: string,
@@ -90,8 +93,12 @@ describe("DisplayQueue gift flow (smoke E2E)", () => {
       setNotificationPlatformLogoVisibility: async (platform: string) => {
         actions.push({ type: "notificationLogo", platform });
       },
-      hideAllPlatformLogos: async () => {},
-      hideAllNotificationPlatformLogos: async () => {},
+      hideAllPlatformLogos: async () => {
+        actions.push({ type: "hideAllPlatformLogos" });
+      },
+      hideAllNotificationPlatformLogos: async () => {
+        actions.push({ type: "hideAllNotificationPlatformLogos" });
+      },
       setChatDisplayVisibility: async (visible: boolean, scene: string) => {
         actions.push({ type: "chatDisplay", visible, scene });
       },
@@ -101,11 +108,11 @@ describe("DisplayQueue gift flow (smoke E2E)", () => {
       ) => {
         actions.push({ type: "notificationDisplay", visible, scene });
       },
-      hideAllDisplays: async () => {},
-      setSourceFilterEnabled: async () => {},
-      getSourceFilterSettings: async () => ({}),
-      setSourceFilterSettings: async () => {},
-      clearSceneItemCache: () => {},
+      hideAllDisplays: async () => unexpectedSourceManagerCall("hideAllDisplays"),
+      setSourceFilterEnabled: async () => unexpectedSourceManagerCall("setSourceFilterEnabled"),
+      getSourceFilterSettings: async () => unexpectedSourceManagerCall("getSourceFilterSettings"),
+      setSourceFilterSettings: async () => unexpectedSourceManagerCall("setSourceFilterSettings"),
+      clearSceneItemCache: () => unexpectedSourceManagerCall("clearSceneItemCache"),
     };
 
     const obsCalls: Array<{ method: string; payload: unknown }> = [];

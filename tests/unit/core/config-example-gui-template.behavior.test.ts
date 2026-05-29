@@ -19,12 +19,16 @@ describe("config example GUI template behavior", () => {
   it("defines the gui section with schema-aligned keys and defaults", () => {
     const parsed = readConfigExample();
     expect(parsed.gui).toBeDefined();
+    const guiConfig = parsed.gui;
+    if (!guiConfig) {
+      throw new Error("Expected config.example.ini to define [gui]");
+    }
 
-    expect(Object.keys(parsed.gui).sort()).toEqual(
+    expect(Object.keys(guiConfig).sort()).toEqual(
       Object.keys(DEFAULTS.gui).sort(),
     );
 
-    const normalized = ConfigValidator.normalize({ gui: parsed.gui });
+    const normalized = ConfigValidator.normalize({ gui: guiConfig });
     expect(normalized.gui).toEqual(DEFAULTS.gui);
   });
 });

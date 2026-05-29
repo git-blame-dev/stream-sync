@@ -352,7 +352,7 @@ const hasNestedProperty = (obj: unknown, path: string): boolean => {
         current = current[key];
     }
 
-    return current !== null;
+    return current !== null && current !== undefined;
 };
 
 // ================================================================================================

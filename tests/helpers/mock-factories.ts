@@ -1654,7 +1654,7 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
                 messageType: 'chat',
                 platform: platformName,
                 username: normalizedUser.username,
-                messageContent: messageRecord.content || messageRecord.message || messageRecord.comment || 'Test message',
+                messageContent: messageRecord.content ?? messageRecord.message ?? messageRecord.comment ?? 'Test message',
                 userId: normalizedUser.userId,
                 timestamp: typeof messageRecord.timestamp === 'number'
                     ? new Date(messageRecord.timestamp).toISOString()
@@ -1674,13 +1674,13 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
                 return {
                     ...baseResult,
                     username: tiktokUser.username,
-                    messageContent: messageRecord.comment === null ? 'Empty message' : (messageRecord.comment || messageRecord.content || 'Test message'),
+                    messageContent: messageRecord.comment === null ? 'Empty message' : (messageRecord.comment ?? messageRecord.content ?? 'Test message'),
                     userId: tiktokUser.userId,
                     gifterLevel: tiktokUser.gifterLevel || 23,
                     isSubscriber: tiktokUser.isSubscriber || true,
                     userBadges: tiktokUser.userBadges || ['follower', 'verified'],
                     followRole: tiktokUser.followRole || 'new_follower',
-                    displayMessage: `${tiktokUser.username}: ${messageRecord.comment === null ? 'Empty message' : (messageRecord.comment || messageRecord.content || 'Test message')}`,
+                    displayMessage: `${tiktokUser.username}: ${messageRecord.comment === null ? 'Empty message' : (messageRecord.comment ?? messageRecord.content ?? 'Test message')}`,
                     emotes: messageRecord.emotes || []
                 };
             } else if (platformName === 'twitch') {
@@ -1870,8 +1870,8 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
             return {
                 messageType: 'viewerCount',
                 platform: 'tiktok',
-                viewerCount: viewerRecord.viewerCount || 100,
-                totalUsers: viewerRecord.totalUsers || 150,
+                viewerCount: viewerRecord.viewerCount ?? 100,
+                totalUsers: viewerRecord.totalUsers ?? 150,
                 processed: true,
                 timestamp: timestamp.iso
             };
@@ -1884,8 +1884,8 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
                 eventType: 'viewer_count',
                 messageType: 'viewerCount',
                 platform: 'tiktok',
-                viewerCount: roomUserRecord.viewerCount || 1847,
-                totalUserCount: roomUserRecord.totalUserCount || roomUserRecord.totalUsers || 2156,
+                viewerCount: roomUserRecord.viewerCount ?? 1847,
+                totalUserCount: roomUserRecord.totalUserCount ?? roomUserRecord.totalUsers ?? 2156,
                 processed: true,
                 timestamp: timestamp.iso
             };
@@ -2493,14 +2493,14 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
             // Override processRoomUser to update cache
             processRoomUser: createMockFn<[unknown], UnknownRecord>().mockImplementation((roomUserData) => {
                 const roomUserRecord = roomUserData as UnknownRecord;
-                cachedViewerCount = Number(roomUserRecord.viewerCount || 1847);
+                cachedViewerCount = Number(roomUserRecord.viewerCount ?? 1847);
                 const timestamp = createTimestamp();
                 return {
                     eventType: 'viewer_count',
                     messageType: 'viewerCount',
                     platform: 'tiktok',
-                    viewerCount: roomUserRecord.viewerCount || 1847,
-                    totalUserCount: roomUserRecord.totalUserCount || roomUserRecord.totalUsers || 2156,
+                    viewerCount: roomUserRecord.viewerCount ?? 1847,
+                    totalUserCount: roomUserRecord.totalUserCount ?? roomUserRecord.totalUsers ?? 2156,
                     processed: true,
                     timestamp: timestamp.iso
                 };
