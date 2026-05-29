@@ -1,9 +1,9 @@
 import { describe, it, beforeEach, afterEach, expect } from "bun:test";
 import {
+  type TestMockFn,
   createMockFn,
   clearAllMocks,
   restoreAllMocks,
-  spyOn,
 } from "../../helpers/bun-mock-utils";
 import {
   useFakeTimers,
@@ -13,24 +13,34 @@ import {
 
 import { GracefulExitService } from "../../../src/services/GracefulExitService.ts";
 
+type MockGracefulRuntime = {
+  shutdown: TestMockFn<[], Promise<void>>;
+  getPlatforms: TestMockFn<[], Record<string, unknown>>;
+};
+type ProcessExitMock = TestMockFn<[code?: string | number | null], never>;
+
 describe("GracefulExitService", () => {
-  let gracefulExitService;
-  let mockAppRuntime;
+  let gracefulExitService: GracefulExitService | null;
+  let mockAppRuntime: MockGracefulRuntime;
+  let originalExit: typeof process.exit;
+  let exitMock: ProcessExitMock;
 
   beforeEach(() => {
     clearAllMocks();
     useFakeTimers();
 
     mockAppRuntime = {
-      shutdown: createMockFn().mockResolvedValue(undefined),
-      getPlatforms: createMockFn().mockReturnValue({
+      shutdown: createMockFn<[], Promise<void>>().mockResolvedValue(undefined),
+      getPlatforms: createMockFn<[], Record<string, unknown>>().mockReturnValue({
         tiktok: {},
         twitch: {},
         youtube: {},
       }),
     };
 
-    spyOn(process, "exit").mockImplementation(() => {});
+    originalExit = process.exit;
+    exitMock = createMockFn<[code?: string | number | null], never>();
+    process.exit = exitMock;
   });
 
   afterEach(() => {
@@ -39,6 +49,8 @@ describe("GracefulExitService", () => {
     }
     useRealTimers();
     restoreAllMocks();
+    process.exit = originalExit;
+    gracefulExitService = null;
   });
 
   describe("Service Initialization", () => {
@@ -153,7 +165,7 @@ describe("GracefulExitService", () => {
       await Promise.resolve();
 
       expect(process.exit).toHaveBeenCalledTimes(1);
-      expect(process.exit.mock.calls[0]?.[0]).toBe(1);
+      expect(exitMock.mock.calls[0]?.[0]).toBe(1);
     });
   });
 
@@ -191,11 +203,12 @@ describe("GracefulExitService", () => {
 
   describe("Service Lifecycle", () => {
     it("should clean up resources when stopped", () => {
-      gracefulExitService = new GracefulExitService(mockAppRuntime, 10);
+      const service = new GracefulExitService(mockAppRuntime, 10);
+      gracefulExitService = service;
 
-      gracefulExitService.stop();
+      service.stop();
 
-      expect(() => gracefulExitService.incrementMessageCount()).not.toThrow();
+      expect(() => service.incrementMessageCount()).not.toThrow();
     });
   });
 });

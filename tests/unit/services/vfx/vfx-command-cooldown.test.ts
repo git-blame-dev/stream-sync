@@ -1,5 +1,6 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { createMockFn } from "../../../helpers/bun-mock-utils";
+import { createMockFn, type TestMockFn } from "../../../helpers/bun-mock-utils";
+import { noOpLogger } from "../../../helpers/mock-factories";
 import {
   useFakeTimers,
   useRealTimers,
@@ -9,11 +10,46 @@ import {
 import { createConfigFixture } from "../../../helpers/config-fixture";
 
 import { VFXCommandService } from "../../../../src/services/VFXCommandService.ts";
+import { OBSEffectsManager } from "../../../../src/obs/effects.ts";
+
+type VFXConfig = NonNullable<
+  Awaited<ReturnType<VFXCommandService["selectVFXCommand"]>>
+>;
+type CommandParserLike = NonNullable<VFXCommandService["commandParser"]>;
+type EffectsManagerLike = NonNullable<
+  NonNullable<ConstructorParameters<typeof VFXCommandService>[2]>["effectsManager"]
+>;
+type PlayMediaInOBS = EffectsManagerLike["playMediaInOBS"];
+type MockEffectsManager = EffectsManagerLike & {
+  playMediaInOBS: TestMockFn<Parameters<PlayMediaInOBS>, ReturnType<PlayMediaInOBS>>;
+};
+type CooldownOverrides = {
+  cmdCooldown?: number;
+  globalCmdCooldownMs?: number;
+};
+
+const createMockEffectsManager = (): MockEffectsManager => {
+  const obsManager = {
+    ensureConnected: createMockFn<[], Promise<void>>().mockResolvedValue(undefined),
+    call: createMockFn<[string, Record<string, unknown>?], Promise<unknown>>().mockResolvedValue({}),
+  };
+
+  return Object.assign(
+    new OBSEffectsManager(obsManager, {
+      logger: noOpLogger,
+      delay: async () => {},
+    }),
+    {
+      playMediaInOBS: createMockFn<Parameters<PlayMediaInOBS>, ReturnType<PlayMediaInOBS>>()
+        .mockResolvedValue(undefined),
+    },
+  );
+};
 
 describe("VFXCommandService cooldown handling", () => {
-  let mockEffectsManager;
+  let mockEffectsManager: MockEffectsManager;
 
-  const createConfig = (commandValue, overrides = {}) =>
+  const createConfig = (commandValue: string, overrides: CooldownOverrides = {}) =>
     createConfigFixture({
       gifts: { command: commandValue },
       farewell: {},
@@ -24,8 +60,8 @@ describe("VFXCommandService cooldown handling", () => {
       },
     });
 
-  const createMockCommandParser = () => ({
-    getVFXConfig: createMockFn((message) => ({
+  const createMockCommandParser = (): CommandParserLike => ({
+    getVFXConfig: createMockFn((message: string): VFXConfig => ({
       command: message,
       commandKey: message,
       filename: `${message}.mp4`,
@@ -36,9 +72,7 @@ describe("VFXCommandService cooldown handling", () => {
   });
 
   beforeEach(() => {
-    mockEffectsManager = {
-      playMediaInOBS: createMockFn().mockResolvedValue(undefined),
-    };
+    mockEffectsManager = createMockEffectsManager();
   });
 
   afterEach(() => {
@@ -94,9 +128,8 @@ describe("VFXCommandService cooldown handling", () => {
   });
 
   test("returns failure when VFX execution throws", async () => {
-    const failingEffectsManager = {
-      playMediaInOBS: createMockFn().mockRejectedValue(new Error("vfx failed")),
-    };
+    const failingEffectsManager = createMockEffectsManager();
+    failingEffectsManager.playMediaInOBS.mockRejectedValue(new Error("vfx failed"));
     const service = new VFXCommandService(createConfig("!one | !two"), null, {
       effectsManager: failingEffectsManager,
     });

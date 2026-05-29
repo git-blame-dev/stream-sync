@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
+import {
+  type TestMockFn,
+  createMockFn,
+  restoreAllMocks,
+} from "../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../helpers/mock-factories";
 import { createConfigFixture } from "../../helpers/config-fixture";
 import { PRIORITY_LEVELS } from "../../../src/core/constants";
@@ -22,12 +26,48 @@ type NotificationConstants = {
 };
 
 type DisplayQueueMock = {
-  addItem: ReturnType<typeof createMockFn>;
-  processQueue: ReturnType<typeof createMockFn>;
+  addItem: TestMockFn<[Record<string, unknown>], void>;
+  processQueue: TestMockFn<[], void>;
+  getQueueLength: TestMockFn<[], number>;
 };
 
 type SpamDetectorMock = {
-  handleDonationSpam: ReturnType<typeof createMockFn>;
+  handleDonationSpam: TestMockFn<
+    [unknown, unknown, number, unknown, number, string],
+    { shouldShow: boolean }
+  >;
+};
+
+type SpamConfig = {
+  enabled: boolean;
+  detectionWindow: number;
+  maxIndividualNotifications: number;
+  lowValueThreshold: number;
+};
+
+const isSpamConfig = (value: unknown): value is SpamConfig => {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  return (
+    "enabled" in value &&
+    typeof value.enabled === "boolean" &&
+    "detectionWindow" in value &&
+    typeof value.detectionWindow === "number" &&
+    "maxIndividualNotifications" in value &&
+    typeof value.maxIndividualNotifications === "number" &&
+    "lowValueThreshold" in value &&
+    typeof value.lowValueThreshold === "number"
+  );
+};
+
+const getSpamConfig = (): SpamConfig => {
+  const spamConfig = appConfig.spam;
+  if (!isSpamConfig(spamConfig)) {
+    throw new Error("Expected app config spam section to expose numeric spam settings");
+  }
+  return spamConfig;
 };
 
 setupAutomatedCleanup({
@@ -62,12 +102,16 @@ describe("NotificationManager Spam Protection Behavior - Modernized", () => {
     };
 
     mockDisplayQueue = {
-      addItem: createMockFn(),
-      processQueue: createMockFn(),
+      addItem: createMockFn<[Record<string, unknown>], void>(),
+      processQueue: createMockFn<[], void>(),
+      getQueueLength: createMockFn<[], number>().mockReturnValue(0),
     };
 
     mockSpamDetector = {
-      handleDonationSpam: createMockFn().mockReturnValue({ shouldShow: true }),
+      handleDonationSpam: createMockFn<
+        [unknown, unknown, number, unknown, number, string],
+        { shouldShow: boolean }
+      >().mockReturnValue({ shouldShow: true }),
     };
 
     config = createConfigFixture({
@@ -91,7 +135,6 @@ describe("NotificationManager Spam Protection Behavior - Modernized", () => {
         eventBus: mockEventBus,
         config,
         constants: mockConstants,
-        textProcessing: { formatChatMessage: createMockFn() },
         obsGoals: { processDonationGoal: createMockFn() },
         donationSpamDetector: mockSpamDetector,
         vfxCommandService: {
@@ -124,7 +167,6 @@ describe("NotificationManager Spam Protection Behavior - Modernized", () => {
         eventBus: mockEventBus,
         config,
         constants: mockConstants,
-        textProcessing: { formatChatMessage: createMockFn() },
         obsGoals: { processDonationGoal: createMockFn() },
         donationSpamDetector: mockSpamDetector,
         vfxCommandService: {
@@ -166,7 +208,6 @@ describe("NotificationManager Spam Protection Behavior - Modernized", () => {
         eventBus: mockEventBus,
         config,
         constants: mockConstants,
-        textProcessing: { formatChatMessage: createMockFn() },
         obsGoals: { processDonationGoal: createMockFn() },
         vfxCommandService: {
           getVFXConfig: createMockFn().mockResolvedValue(null),
@@ -207,7 +248,6 @@ describe("NotificationManager Spam Protection Behavior - Modernized", () => {
         eventBus: mockEventBus,
         config,
         constants: mockConstants,
-        textProcessing: { formatChatMessage: createMockFn() },
         obsGoals: { processDonationGoal: createMockFn() },
         vfxCommandService: {
           getVFXConfig: createMockFn().mockResolvedValue(null),
@@ -222,8 +262,7 @@ describe("NotificationManager Spam Protection Behavior - Modernized", () => {
   describe("when checking configuration availability", () => {
     describe("and verifying spam configuration structure", () => {
       it("should provide spam config compatible with SpamDetectionConfig constructor", () => {
-        const config = appConfig;
-        const spamConfig = config.spam;
+        const spamConfig = getSpamConfig();
 
         expect(spamConfig.enabled).toBeDefined();
         expect(spamConfig.detectionWindow).toBeDefined();
@@ -237,8 +276,7 @@ describe("NotificationManager Spam Protection Behavior - Modernized", () => {
       });
 
       it("should have valid spam configuration values", () => {
-        const config = appConfig;
-        const spamConfig = config.spam;
+        const spamConfig = getSpamConfig();
 
         expect(spamConfig).toBeTruthy();
         expect(spamConfig.enabled).toBeDefined();
@@ -264,7 +302,6 @@ describe("NotificationManager Spam Protection Behavior - Modernized", () => {
         eventBus: mockEventBus,
         config,
         constants: mockConstants,
-        textProcessing: { formatChatMessage: createMockFn() },
         obsGoals: { processDonationGoal: createMockFn() },
         donationSpamDetector: mockSpamDetector,
         vfxCommandService: {
@@ -306,7 +343,6 @@ describe("NotificationManager Spam Protection Behavior - Modernized", () => {
         eventBus: mockEventBus,
         config,
         constants: mockConstants,
-        textProcessing: { formatChatMessage: createMockFn() },
         obsGoals: { processDonationGoal: createMockFn() },
         donationSpamDetector: mockSpamDetector,
         vfxCommandService: {
@@ -350,7 +386,6 @@ describe("NotificationManager Spam Protection Behavior - Modernized", () => {
         eventBus: mockEventBus,
         config,
         constants: mockConstants,
-        textProcessing: { formatChatMessage: createMockFn() },
         obsGoals: { processDonationGoal: createMockFn() },
         donationSpamDetector: mockSpamDetector,
         vfxCommandService: {

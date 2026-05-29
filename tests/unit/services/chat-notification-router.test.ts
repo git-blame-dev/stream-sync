@@ -1,14 +1,56 @@
 import { describe, it, beforeEach, expect } from "bun:test";
-import { createMockFn } from "../../helpers/bun-mock-utils";
+import { type TestMockFn, createMockFn } from "../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../helpers/mock-factories";
 import { createConfigFixture } from "../../helpers/config-fixture";
 import { createRecordingLogger } from "../../helpers/recording-logger";
 import { ChatNotificationRouter } from "../../../src/services/ChatNotificationRouter.ts";
 import * as testClock from "../../helpers/test-clock";
 
+type RouterDependencies = ConstructorParameters<typeof ChatNotificationRouter>[0];
+type RouterRuntime = RouterDependencies["runtime"];
+type RouterConfig = RouterDependencies["config"];
+type LoggerLike = RouterDependencies["logger"];
+type VfxCommandServiceLike = NonNullable<RouterRuntime["vfxCommandService"]>;
+type SelectVfxCommand = NonNullable<VfxCommandServiceLike["selectVFXCommand"]>;
+type VfxConfig = NonNullable<
+  Awaited<ReturnType<SelectVfxCommand>>
+>;
+type QueuedItem = Record<string, unknown> & {
+  type?: string;
+  platform?: string;
+  data?: Record<string, unknown>;
+  vfxConfig?: VfxConfig;
+  secondaryVfxConfig?: VfxConfig;
+};
+type AddItemMock = TestMockFn<[QueuedItem], void>;
+type TestRuntime = RouterRuntime & {
+  displayQueue: { addItem: AddItemMock };
+  commandCooldownService: NonNullable<RouterRuntime["commandCooldownService"]>;
+};
+type ConfigOverride = Record<string, unknown> & {
+  general?: Record<string, unknown>;
+  cooldowns?: Partial<RouterConfig["cooldowns"]>;
+  farewell?: Partial<RouterConfig["farewell"]>;
+};
+type RuntimeOverrides = Omit<
+  Partial<RouterRuntime>,
+  "config" | "displayQueue" | "vfxCommandService"
+> & {
+  config?: ConfigOverride;
+  displayQueue?: { addItem: AddItemMock };
+  vfxCommandService?: RouterRuntime["vfxCommandService"] | null;
+  commandParser?: Record<string, unknown>;
+};
+
+const hasTextMessage = (value: unknown): value is { text: unknown } =>
+  value !== null && typeof value === "object" && "text" in value;
+
+const getQueuedItems = (runtime: TestRuntime): QueuedItem[] =>
+  runtime.displayQueue.addItem.mock.calls.map((call) => call[0]);
+
 describe("ChatNotificationRouter", () => {
-  let mockLogger;
-  let testConfig;
+  let mockLogger: LoggerLike & { entries?: unknown[] };
+  let testConfig: ReturnType<typeof createConfigFixture>;
 
   beforeEach(() => {
     mockLogger = noOpLogger;
@@ -26,10 +68,10 @@ describe("ChatNotificationRouter", () => {
   const createRouter = ({
     runtime: runtimeOverrides,
     config = testConfig,
-  } = {}) => {
-    const baseRuntime = {
-      config: {
+  }: { runtime?: RuntimeOverrides; config?: RouterConfig } = {}) => {
+    const baseConfig = {
         general: {
+          maxMessageLength: 500,
           messagesEnabled: true,
           greetingsEnabled: true,
         },
@@ -51,29 +93,36 @@ describe("ChatNotificationRouter", () => {
           messagesEnabled: true,
           farewellsEnabled: true,
         },
-      },
+      };
+    let runtime: TestRuntime;
+    const baseRuntime = {
+      config: baseConfig,
       platformLifecycleService: {
-        getPlatformConnectionTime: createMockFn().mockReturnValue(null),
+        getPlatformConnectionTime: createMockFn<[string], number | null>().mockReturnValue(null),
       },
       displayQueue: {
-        addItem: createMockFn(),
+        addItem: createMockFn<[QueuedItem], void>(),
       },
       commandCooldownService: {
-        checkUserCooldown: createMockFn().mockReturnValue(true),
-        checkGlobalCooldown: createMockFn().mockReturnValue(true),
-        updateUserCooldown: createMockFn(),
-        updateGlobalCooldown: createMockFn(),
+        checkUserCooldown: createMockFn<[unknown, number, number], boolean>().mockReturnValue(true),
+        checkGlobalCooldown: createMockFn<[string, number], boolean>().mockReturnValue(true),
+        updateUserCooldown: createMockFn<[unknown], void>(),
+        updateGlobalCooldown: createMockFn<[string], void>(),
       },
       userTrackingService: {
-        isFirstMessage: createMockFn().mockReturnValue(false),
+        isFirstMessage: createMockFn<[unknown, Record<string, unknown>], boolean>().mockReturnValue(false),
       },
       vfxCommandService: {
-        selectVFXCommand: createMockFn().mockResolvedValue(null),
-        matchFarewell: createMockFn().mockReturnValue(null),
-        getVFXConfig: createMockFn().mockResolvedValue(null),
+        selectVFXCommand: createMockFn<[string, string], Promise<VfxConfig | null>>().mockResolvedValue(null),
+        matchFarewell: createMockFn<[string, string], unknown>().mockReturnValue(null),
+        getVFXConfig: createMockFn<[string, string | null], Promise<VfxConfig | null>>().mockResolvedValue(null),
       },
-      handleFarewellNotification: async (platform, username, options) => {
-        runtime.displayQueue.addItem({
+      handleFarewellNotification: async (
+        platform: string,
+        username: string | undefined,
+        options: Record<string, unknown>,
+      ) => {
+        runtime.displayQueue?.addItem({
           type: "farewell",
           platform,
           data: {
@@ -84,10 +133,27 @@ describe("ChatNotificationRouter", () => {
         });
         return { success: true };
       },
-      isFirstMessage: createMockFn().mockReturnValue(false),
+      isFirstMessage: createMockFn<[unknown, Record<string, unknown>], boolean>().mockReturnValue(false),
     };
 
-    const runtime = { ...baseRuntime, ...runtimeOverrides };
+    runtime = baseRuntime;
+    Object.assign(runtime, runtimeOverrides);
+    runtime.config = {
+      ...baseRuntime.config,
+      ...runtimeOverrides?.config,
+      general: {
+        ...baseRuntime.config.general,
+        ...runtimeOverrides?.config?.general,
+      },
+      cooldowns: {
+        ...baseRuntime.config.cooldowns,
+        ...runtimeOverrides?.config?.cooldowns,
+      },
+      farewell: {
+        ...baseRuntime.config.farewell,
+        ...runtimeOverrides?.config?.farewell,
+      },
+    };
 
     const router = new ChatNotificationRouter({
       runtime,
@@ -104,7 +170,7 @@ describe("ChatNotificationRouter", () => {
     await router.handleChatMessage("twitch", { ...baseMessage });
 
     expect(runtime.displayQueue.addItem).toHaveBeenCalledTimes(1);
-    const [queuedItem] = runtime.displayQueue.addItem.mock.calls[0];
+    const queuedItem = getQueuedItems(runtime)[0];
     expect(queuedItem?.type).toBe("chat");
     expect(queuedItem?.platform).toBe("twitch");
   });
@@ -118,9 +184,14 @@ describe("ChatNotificationRouter", () => {
       message: "test-private-router-message",
     });
 
-    const [queuedItem] = runtime.displayQueue.addItem.mock.calls[0];
+    const queuedItem = getQueuedItems(runtime)[0];
     const serializedLogs = JSON.stringify(mockLogger.entries);
-    expect(queuedItem?.data?.message?.text).toBe("test-private-router-message");
+    const queuedMessage = queuedItem?.data?.message;
+    expect(hasTextMessage(queuedMessage)).toBe(true);
+    if (!hasTextMessage(queuedMessage)) {
+      throw new Error("Expected queued chat row to contain a text message object");
+    }
+    expect(queuedMessage.text).toBe("test-private-router-message");
     expect(serializedLogs).toContain("messageLength");
     expect(serializedLogs).not.toContain("test-private-router-message");
   });
@@ -133,7 +204,7 @@ describe("ChatNotificationRouter", () => {
       timestamp: "2026-01-02T03:04:05.000Z",
     });
 
-    const [queuedItem] = runtime.displayQueue.addItem.mock.calls[0];
+    const queuedItem = getQueuedItems(runtime)[0];
     expect(queuedItem?.data?.timestamp).toBe("2026-01-02T03:04:05.000Z");
   });
 
@@ -309,7 +380,7 @@ describe("ChatNotificationRouter", () => {
     );
     const commandItem = queuedItems.find((item) => item.type === "command");
     expect(commandItem).toBeDefined();
-    expect(commandItem.vfxConfig.command).toBe("!testboom");
+    expect(commandItem?.vfxConfig?.command).toBe("!testboom");
   });
 
   it("propagates avatarUrl on queued command notifications", async () => {
@@ -343,7 +414,7 @@ describe("ChatNotificationRouter", () => {
   });
 
   it("does not consume cooldowns when command enqueue fails", async () => {
-    const addItem = createMockFn((item) => {
+    const addItem = createMockFn<[QueuedItem], void>((item) => {
       if (item.type === "command") {
         throw new Error("queue failed");
       }
@@ -372,7 +443,7 @@ describe("ChatNotificationRouter", () => {
   });
 
 it("marks first-message state only after greeting enqueue succeeds", async () => {
-    const hasSeenUser = createMockFn().mockReturnValue(false);
+    const hasSeenUser = createMockFn<[unknown, Record<string, unknown>], boolean>().mockReturnValue(false);
     const markMessageSeen = createMockFn();
     const { router, runtime } = createRouter({
       runtime: {
@@ -381,7 +452,7 @@ it("marks first-message state only after greeting enqueue succeeds", async () =>
           markMessageSeen,
           isFirstMessage: createMockFn().mockReturnValue(true),
         },
-        isFirstMessage: createMockFn().mockImplementation(() => {
+        isFirstMessage: createMockFn<[unknown, Record<string, unknown>], boolean>().mockImplementation(() => {
           throw new Error("legacy first-message fallback should not be used");
         }),
       },
@@ -409,9 +480,9 @@ it("marks first-message state only after greeting enqueue succeeds", async () =>
 });
 
   it("does not consume first-message state when command enqueue fails", async () => {
-    const hasSeenUser = createMockFn().mockReturnValue(false);
+    const hasSeenUser = createMockFn<[unknown, Record<string, unknown>], boolean>().mockReturnValue(false);
     const markMessageSeen = createMockFn();
-    const addItem = createMockFn((item) => {
+    const addItem = createMockFn<[QueuedItem], void>((item) => {
       if (item.type === "command") {
         throw new Error("command enqueue failed");
       }
@@ -444,7 +515,7 @@ it("marks first-message state only after greeting enqueue succeeds", async () =>
           markMessageSeen,
           isFirstMessage: createMockFn().mockReturnValue(true),
         },
-        isFirstMessage: createMockFn().mockImplementation(() => {
+        isFirstMessage: createMockFn<[unknown, Record<string, unknown>], boolean>().mockImplementation(() => {
           throw new Error("legacy first-message fallback should not be used");
         }),
       },
@@ -502,7 +573,7 @@ it("marks first-message state only after greeting enqueue succeeds", async () =>
     );
     const greetingItem = queuedItems.find((item) => item.type === "greeting");
     expect(greetingItem).toBeDefined();
-    expect(greetingItem.vfxConfig.command).toBe("!testgreeting");
+    expect(greetingItem?.vfxConfig?.command).toBe("!testgreeting");
   });
 
   it("includes secondary VFX config in greeting for mapped greeting profile", async () => {
@@ -565,7 +636,7 @@ it("marks first-message state only after greeting enqueue succeeds", async () =>
     );
     const greetingItem = queuedItems.find((item) => item.type === "greeting");
     expect(greetingItem).toBeDefined();
-    expect(greetingItem.secondaryVfxConfig).toEqual(
+    expect(greetingItem?.secondaryVfxConfig).toEqual(
       expect.objectContaining({
         command: "!bye",
         commandKey: "bye",
@@ -633,7 +704,7 @@ it("marks first-message state only after greeting enqueue succeeds", async () =>
     );
     const greetingItem = queuedItems.find((item) => item.type === "greeting");
     expect(greetingItem).toBeDefined();
-    expect(greetingItem.secondaryVfxConfig).toEqual(
+    expect(greetingItem?.secondaryVfxConfig).toEqual(
       expect.objectContaining({
         command: "!bye",
         commandKey: "bye",
@@ -702,7 +773,7 @@ it("marks first-message state only after greeting enqueue succeeds", async () =>
     );
     const greetingItem = queuedItems.find((item) => item.type === "greeting");
     expect(greetingItem).toBeDefined();
-    expect(greetingItem.secondaryVfxConfig).toEqual(
+    expect(greetingItem?.secondaryVfxConfig).toEqual(
       expect.objectContaining({
         command: "!bye",
         commandKey: "bye",
@@ -711,7 +782,7 @@ it("marks first-message state only after greeting enqueue succeeds", async () =>
   });
 
   it("greets mapped profile only once across platforms", async () => {
-    const trackedFirstMessageKeys = new Set();
+    const trackedFirstMessageKeys = new Set<unknown>();
     const { router, runtime } = createRouter({
       runtime: {
         config: {
@@ -744,7 +815,7 @@ it("marks first-message state only after greeting enqueue succeeds", async () =>
             },
           },
         },
-        isFirstMessage: createMockFn().mockImplementation((trackingKey) => {
+        isFirstMessage: createMockFn<[unknown, Record<string, unknown>], boolean>().mockImplementation((trackingKey) => {
           if (trackedFirstMessageKeys.has(trackingKey)) {
             return false;
           }
@@ -840,7 +911,7 @@ it("marks first-message state only after greeting enqueue succeeds", async () =>
     expect(queuedTypes[0]).toBe("chat");
     expect(queuedTypes[1]).toBe("greeting");
     expect(queuedTypes[2]).toBe("command");
-    expect(queuedItems[1].secondaryVfxConfig).toEqual(
+    expect(queuedItems[1]?.secondaryVfxConfig).toEqual(
       expect.objectContaining({ command: "!bye" }),
     );
   });
@@ -868,12 +939,16 @@ it("marks first-message state only after greeting enqueue succeeds", async () =>
   });
 
   it("propagates avatarUrl to farewell notification payload options", async () => {
-    const addItem = createMockFn();
+    const addItem = createMockFn<[QueuedItem], void>();
     const { router, runtime } = createRouter({
       runtime: {
         displayQueue: { addItem },
         handleFarewellNotification: createMockFn(
-          async (platform, username, options) => {
+          async (
+            platform: string,
+            username: string | undefined,
+            options: Record<string, unknown>,
+          ) => {
             addItem({
               type: "farewell",
               platform,
@@ -1109,7 +1184,7 @@ it("marks first-message state only after greeting enqueue succeeds", async () =>
   });
 
   it("suppresses repeated farewell triggers on the same platform within timeout", async () => {
-    const activeCooldowns = new Set();
+    const activeCooldowns = new Set<string>();
     const { router, runtime } = createRouter({
       runtime: {
         config: {
@@ -1130,11 +1205,11 @@ it("marks first-message state only after greeting enqueue succeeds", async () =>
         },
         commandCooldownService: {
           checkUserCooldown: createMockFn().mockReturnValue(true),
-          checkGlobalCooldown: createMockFn().mockImplementation(
+          checkGlobalCooldown: createMockFn<[string, number], boolean>().mockImplementation(
             (key) => !activeCooldowns.has(key),
           ),
           updateUserCooldown: createMockFn(),
-          updateGlobalCooldown: createMockFn().mockImplementation((key) => {
+          updateGlobalCooldown: createMockFn<[string], void>().mockImplementation((key) => {
             activeCooldowns.add(key);
           }),
         },
@@ -1166,7 +1241,7 @@ it("marks first-message state only after greeting enqueue succeeds", async () =>
   });
 
   it("allows farewell triggers independently per platform within timeout window", async () => {
-    const activeCooldowns = new Set();
+    const activeCooldowns = new Set<string>();
     const { router, runtime } = createRouter({
       runtime: {
         config: {
@@ -1192,11 +1267,11 @@ it("marks first-message state only after greeting enqueue succeeds", async () =>
         },
         commandCooldownService: {
           checkUserCooldown: createMockFn().mockReturnValue(true),
-          checkGlobalCooldown: createMockFn().mockImplementation(
+          checkGlobalCooldown: createMockFn<[string, number], boolean>().mockImplementation(
             (key) => !activeCooldowns.has(key),
           ),
           updateUserCooldown: createMockFn(),
-          updateGlobalCooldown: createMockFn().mockImplementation((key) => {
+          updateGlobalCooldown: createMockFn<[string], void>().mockImplementation((key) => {
             activeCooldowns.add(key);
           }),
         },
@@ -1250,11 +1325,11 @@ it("marks first-message state only after greeting enqueue succeeds", async () =>
         },
         commandCooldownService: {
           checkUserCooldown: createMockFn().mockReturnValue(true),
-          checkGlobalCooldown: createMockFn().mockImplementation(
+          checkGlobalCooldown: createMockFn<[string, number], boolean>().mockImplementation(
             (key) => !activeCooldowns.has(key),
           ),
           updateUserCooldown: createMockFn(),
-          updateGlobalCooldown: createMockFn().mockImplementation((key) => {
+          updateGlobalCooldown: createMockFn<[string], void>().mockImplementation((key) => {
             activeCooldowns.add(key);
           }),
         },
@@ -1281,10 +1356,10 @@ it("marks first-message state only after greeting enqueue succeeds", async () =>
 
   it("uses isolated farewell cooldown keys that do not block regular command cooldown keys", async () => {
     const activeCooldowns = new Set(["farewell:twitch"]);
-    const checkGlobalCooldown = createMockFn().mockImplementation(
+    const checkGlobalCooldown = createMockFn<[string, number], boolean>().mockImplementation(
       (key) => !activeCooldowns.has(key),
     );
-    const updateGlobalCooldown = createMockFn().mockImplementation((key) => {
+    const updateGlobalCooldown = createMockFn<[string], void>().mockImplementation((key) => {
       activeCooldowns.add(key);
     });
     const { router, runtime } = createRouter({
@@ -1312,14 +1387,14 @@ it("marks first-message state only after greeting enqueue succeeds", async () =>
           updateGlobalCooldown,
         },
         vfxCommandService: {
-          selectVFXCommand: createMockFn().mockImplementation((trigger) => {
+          selectVFXCommand: createMockFn<[string, string], VfxConfig | null>().mockImplementation((trigger) => {
             if (trigger === "!testboom") {
               return { command: "!testboom" };
             }
             return null;
           }),
-          matchFarewell: createMockFn().mockImplementation(
-            (message, trigger) => {
+          matchFarewell: createMockFn<[string, string], string | null>().mockImplementation(
+            (_message: string, trigger: string) => {
               if (trigger === "!bye") {
                 return "!bye";
               }
@@ -1350,7 +1425,7 @@ it("marks first-message state only after greeting enqueue succeeds", async () =>
     const { router, runtime } = createRouter({
       runtime: {
         vfxCommandService: {
-          selectVFXCommand: createMockFn().mockImplementation((trigger) => {
+          selectVFXCommand: createMockFn<[string, string], VfxConfig | null>().mockImplementation((trigger) => {
             if (trigger === "!testboom") {
               return { command: "!testboom" };
             }
@@ -1460,8 +1535,8 @@ it("marks first-message state only after greeting enqueue succeeds", async () =>
       },
     });
 
-    const capturedErrors = [];
-    router._handleRouterError = createMockFn((message) =>
+    const capturedErrors: string[] = [];
+    router._handleRouterError = createMockFn<[string], number>((message) =>
       capturedErrors.push(message),
     );
 
