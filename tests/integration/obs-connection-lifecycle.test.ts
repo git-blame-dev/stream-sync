@@ -166,7 +166,7 @@ function createMockOBSWebSocket() {
       obsWebSocketVersion: "5.0.0",
       negotiatedRpcVersion: 1,
     }),
-    disconnect: createMockFn().mockResolvedValue(),
+    disconnect: createMockFn().mockResolvedValue(undefined),
     on: createMockFn(),
     off: createMockFn(),
     once: createMockFn(),

@@ -10,14 +10,19 @@ import { createEventBus } from "../../src/core/EventBus";
 import { createOBSEventService } from "../../src/obs/obs-event-service";
 import { safeSetTimeout } from "../../src/utils/timeout-validator";
 
+type ObsEventServiceDependencies = Parameters<typeof createOBSEventService>[0];
+type EventBusFixture = ObsEventServiceDependencies["eventBus"] &
+  Pick<ReturnType<typeof createEventBus>, "getListenerSummary" | "reset">;
+type ObsSourcesFixture = ObsEventServiceDependencies["obsSources"];
+
 describe("OBS Event Integration", () => {
-  let eventBus: ReturnType<typeof createEventBus>;
+  let eventBus: EventBusFixture;
   let obsEventService: ReturnType<typeof createOBSEventService>;
   let mockOBSConnection: ReturnType<typeof createMockOBSConnection>;
   let mockObsSources: ReturnType<typeof createMockObsSources>;
 
   beforeEach(() => {
-    eventBus = createEventBus({ debugEnabled: false });
+    eventBus = createEventBusFixture();
 
     mockOBSConnection = createMockOBSConnection();
     mockObsSources = createMockObsSources();
@@ -46,7 +51,9 @@ describe("OBS Event Integration", () => {
     await waitForDelay(20);
 
     expect(mockObsSources.updateTextSource).toHaveBeenCalled();
-    const [sourceName, text] = mockObsSources.updateTextSource.mock.calls[0];
+    const [sourceName, text] = getFirstMockCall<[string, string]>(
+      mockObsSources.updateTextSource.mock.calls,
+    );
     expect(sourceName).toBe("ChatMessage");
     expect(text).toBe("Hello from EventBus!");
   });
@@ -118,7 +125,7 @@ describe("OBS Event Integration", () => {
   test("event bus remains functional after OBS event service destruction", async () => {
     obsEventService.destroy();
 
-    const handler = createMockFn();
+    const handler = createMockFn(async () => undefined);
     eventBus.subscribe("test:event", handler);
 
     eventBus.emit("test:event", { data: "test" });
@@ -140,7 +147,7 @@ describe("OBS Event Integration", () => {
 
 function createMockOBSConnection() {
   return {
-    connect: createMockFn().mockResolvedValue(true),
+    connect: createMockFn().mockResolvedValue(undefined),
     disconnect: createMockFn().mockResolvedValue(undefined),
     isConnected: createMockFn(() => true),
     isReady: createMockFn().mockResolvedValue(true),
@@ -154,16 +161,40 @@ function createMockOBSConnection() {
   };
 }
 
+function createEventBusFixture(): EventBusFixture {
+  const productionEventBus = createEventBus({ debugEnabled: false });
+
+  return {
+    subscribe: (eventName, handler) =>
+      productionEventBus.subscribe(eventName, (payload: unknown) =>
+        handler(payload as Record<string, unknown>),
+      ),
+    emit: (eventName, payload) => {
+      productionEventBus.emit(eventName, payload);
+    },
+    getListenerSummary: () => productionEventBus.getListenerSummary(),
+    reset: () => productionEventBus.reset(),
+  };
+}
+
 function createMockObsSources() {
   return {
     updateTextSource: createMockFn().mockResolvedValue(undefined),
     setSourceVisibility: createMockFn().mockResolvedValue(undefined),
     clearTextSource: createMockFn().mockResolvedValue(undefined),
-  };
+  } satisfies ObsSourcesFixture;
 }
 
 function waitForDelay(ms: number) {
   return new Promise<void>((resolve) => {
-    safeSetTimeout(resolve, ms, "obs-event-integration test delay");
+    safeSetTimeout(resolve, ms);
   });
+}
+
+function getFirstMockCall<T extends unknown[]>(calls: unknown[][]): T {
+  const [firstCall] = calls;
+  if (!firstCall) {
+    throw new Error("Expected mock to have at least one call");
+  }
+  return firstCall as T;
 }
