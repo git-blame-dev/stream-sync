@@ -4,21 +4,52 @@ import { noOpLogger } from "../../helpers/mock-factories";
 import { YouTubeStreamDetectionService } from "../../../src/services/youtube-stream-detection-service.ts";
 import * as testClock from "../../helpers/test-clock";
 
-function createMockInnertubeClient(streamData = []) {
+type DetectionClient = ConstructorParameters<typeof YouTubeStreamDetectionService>[0];
+type DetectionService = InstanceType<typeof YouTubeStreamDetectionService>;
+
+type StreamFixture = {
+  videoId: string | null;
+  title: string;
+  isLive: boolean;
+  channelName: string;
+};
+
+type StatusError = Error & { status?: number };
+
+function createChannelVideo(stream: StreamFixture) {
+  return {
+    ...(stream.videoId === null
+      ? {}
+      : { id: stream.videoId, video_id: stream.videoId }),
+    title: { text: stream.title },
+    is_live: stream.isLive,
+    author: { name: stream.channelName },
+  };
+}
+
+function createSearchVideo(stream: StreamFixture) {
+  return {
+    ...(stream.videoId === null ? {} : { id: stream.videoId }),
+    title: stream.title,
+    is_live: stream.isLive,
+    author: { name: stream.channelName },
+  };
+}
+
+function createMockInnertubeClient(
+  streamData: StreamFixture[] = [],
+): DetectionClient {
   const mockChannel = {
-    getLiveStreams: createMockFn().mockResolvedValue({
-      videos: streamData.map((stream) => ({
-        id: stream.videoId,
-        video_id: stream.videoId,
-        title: { text: stream.title },
-        is_live: stream.isLive,
-        author: { name: stream.channelName },
-      })),
+    getLiveStreams: createMockFn<[], Promise<{ videos: ReturnType<typeof createChannelVideo>[] }>>().mockResolvedValue({
+      videos: streamData.map(createChannelVideo),
     }),
   };
 
   return {
-    search: createMockFn().mockImplementation((query, options) => {
+    search: createMockFn<
+      [string, Record<string, unknown>?],
+      Promise<{ videos?: ReturnType<typeof createSearchVideo>[]; channels?: { author: { id: string; name: string; handle: string } }[] }>
+    >().mockImplementation((_query, options) => {
       if (options && options.type === "channel") {
         return Promise.resolve({
           channels: [
@@ -33,33 +64,25 @@ function createMockInnertubeClient(streamData = []) {
         });
       }
       return Promise.resolve({
-        videos: streamData.map((stream) => ({
-          id: stream.videoId,
-          title: stream.title,
-          is_live: stream.isLive,
-          author: { name: stream.channelName },
-        })),
-        results: streamData.map((stream) => ({
-          id: stream.videoId,
-          title: stream.title,
-          is_live: stream.isLive,
-          author: { name: stream.channelName },
-        })),
+        videos: streamData.map(createSearchVideo),
       });
     }),
-    resolveURL: createMockFn().mockResolvedValue({
+    resolveURL: createMockFn<[string], Promise<{ payload?: { browseId?: string } }>>().mockResolvedValue({
       payload: { browseId: "UCmockChannelId123" },
     }),
-    getChannel: createMockFn().mockResolvedValue(mockChannel),
+    getChannel: createMockFn<[string], Promise<typeof mockChannel>>().mockResolvedValue(mockChannel),
   };
 }
 
-function createStreamDetectionService(mockClient = null) {
+function createStreamDetectionService(
+  mockClient: DetectionClient = createMockInnertubeClient(),
+  timeout = 2000,
+): DetectionService {
   const client = mockClient || createMockInnertubeClient();
-  return new YouTubeStreamDetectionService(client, { logger: noOpLogger });
+  return new YouTubeStreamDetectionService(client, { logger: noOpLogger, timeout });
 }
 
-function createLiveStreamData() {
+function createLiveStreamData(): StreamFixture[] {
   return [
     {
       videoId: "live123",
@@ -76,7 +99,7 @@ function createLiveStreamData() {
   ];
 }
 
-function createNonLiveStreamData() {
+function createNonLiveStreamData(): StreamFixture[] {
   return [
     {
       videoId: "video123",
@@ -87,14 +110,14 @@ function createNonLiveStreamData() {
   ];
 }
 
-function expectNoTechnicalArtifacts(message) {
+function expectNoTechnicalArtifacts(message: string) {
   expect(message).not.toMatch(/innertube|api|client|error|exception/i);
   expect(message).not.toContain("undefined");
   expect(message).not.toContain("null");
   expect(message).not.toContain("[object Object]");
 }
 
-function expectValidVideoId(videoId) {
+function expectValidVideoId(videoId: string) {
   expect(videoId).toBeDefined();
   expect(typeof videoId).toBe("string");
   expect(videoId.length).toBeGreaterThan(0);
@@ -102,8 +125,8 @@ function expectValidVideoId(videoId) {
 }
 
 describe("YouTubeStreamDetectionService", () => {
-  let service;
-  let mockClient;
+  let service: DetectionService;
+  let mockClient: DetectionClient;
 
   beforeEach(() => {
     clearAllMocks();
@@ -183,10 +206,12 @@ describe("YouTubeStreamDetectionService", () => {
 
     it("should timeout gracefully for slow responses", async () => {
       mockClient = {
-        resolveURL: createMockFn().mockImplementation(() => waitForDelay(5000)),
-        getChannel: createMockFn().mockResolvedValue({}),
+        resolveURL: createMockFn<[string], Promise<never>>(
+          () => new Promise<never>(() => undefined),
+        ),
+        getChannel: createMockFn<[string], Promise<{}>>().mockResolvedValue({}),
       };
-      service = createStreamDetectionService(mockClient);
+      service = createStreamDetectionService(mockClient, 1);
 
       const result = await service.detectLiveStreams("@slowchannel");
 
@@ -219,7 +244,7 @@ describe("YouTubeStreamDetectionService", () => {
     });
 
     it("should handle API rate limiting gracefully", async () => {
-      const rateLimitError = new Error("Quota exceeded");
+      const rateLimitError: StatusError = new Error("Quota exceeded");
       rateLimitError.status = 429;
       mockClient = {
         resolveURL: createMockFn().mockRejectedValue(rateLimitError),
@@ -237,7 +262,7 @@ describe("YouTubeStreamDetectionService", () => {
     });
 
     it("should handle invalid channel gracefully", async () => {
-      const notFoundError = new Error("Channel not found");
+      const notFoundError: StatusError = new Error("Channel not found");
       notFoundError.status = 404;
       mockClient = {
         resolveURL: createMockFn().mockResolvedValue({ payload: {} }),
@@ -292,7 +317,7 @@ describe("YouTubeStreamDetectionService", () => {
 
   describe("Data Quality and Validation", () => {
     it("should filter out invalid video IDs", async () => {
-      const mixedData = [
+      const mixedData: StreamFixture[] = [
         {
           videoId: "valid123",
           title: "Valid Stream",
@@ -335,21 +360,13 @@ describe("YouTubeStreamDetectionService", () => {
         ),
       };
       mockClient = {
-        resolveURL: createMockFn().mockResolvedValue({
+        resolveURL: createMockFn<[string], Promise<{ payload?: { browseId?: string } }>>().mockResolvedValue({
           payload: { browseId: "UC" + "p".repeat(22) },
         }),
-        search: createMockFn().mockResolvedValue({
-          channels: [
-            {
-              author: {
-                id: "UC" + "p".repeat(22),
-                name: "testchannel",
-                handle: "@testchannel",
-              },
-            },
-          ],
+        search: createMockFn<[string, Record<string, unknown>?], Promise<{ videos?: ReturnType<typeof createSearchVideo>[] }>>().mockResolvedValue({
+          videos: [],
         }),
-        getChannel: createMockFn().mockResolvedValue(malformedChannel),
+        getChannel: createMockFn<[string], Promise<typeof malformedChannel>>().mockResolvedValue(malformedChannel),
       };
       service = createStreamDetectionService(mockClient);
 
@@ -373,9 +390,14 @@ describe("YouTubeStreamDetectionService", () => {
       });
 
       expect(result.debug).toBeDefined();
-      expect(result.debug.requestTime).toBeDefined();
-      expect(result.debug.channelHandle).toBe("@testchannel");
-      expect(result.debug.totalVideosFound).toBe(2);
+      const debug = result.debug;
+      expect(debug).toBeDefined();
+      if (debug === undefined) {
+        throw new Error("Expected debug information");
+      }
+      expect(debug.requestTime).toBeDefined();
+      expect(debug.channelHandle).toBe("@testchannel");
+      expect(debug.totalVideosFound).toBe(2);
       expectNoTechnicalArtifacts(result.message);
     });
 

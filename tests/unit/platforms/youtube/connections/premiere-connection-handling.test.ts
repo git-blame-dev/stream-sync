@@ -1,16 +1,33 @@
 import { describe, test, expect, beforeEach } from "bun:test";
-import { createMockFn } from "../../../../helpers/bun-mock-utils";
+import { createMockFn, type TestMockFn } from "../../../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../../../helpers/mock-factories";
 import { YouTubeConnectionManager } from "../../../../../src/platforms/youtube/youtube-connection-manager";
 
-const createMockConnection = (videoId, isReady = false) => ({
+type ManagedConnectionFixture = {
+  videoId: string;
+  ready: boolean;
+  disconnect: TestMockFn<[], Promise<void>>;
+  status: string;
+  title?: string;
+};
+
+type ConnectionStatusSummary = {
+  totalConnections: number;
+  readyConnections: number;
+  activeVideoIds: string[];
+};
+
+const createMockConnection = (
+  videoId: string,
+  isReady = false,
+): ManagedConnectionFixture => ({
   videoId,
   ready: isReady,
-  disconnect: createMockFn(),
+  disconnect: createMockFn<[], Promise<void>>().mockResolvedValue(undefined),
   status: "connected",
 });
 
-const expectValidConnectionStatus = (status) => {
+const expectValidConnectionStatus = (status: ConnectionStatusSummary) => {
   expect(status).toBeDefined();
   expect(status).toHaveProperty("totalConnections");
   expect(status).toHaveProperty("readyConnections");
@@ -20,7 +37,7 @@ const expectValidConnectionStatus = (status) => {
   expect(Array.isArray(status.activeVideoIds)).toBe(true);
 };
 
-const expectNoTechnicalArtifacts = (content) => {
+const expectNoTechnicalArtifacts = (content: unknown) => {
   if (typeof content === "string") {
     expect(content).not.toMatch(/undefined/i);
     expect(content).not.toMatch(/\[object Object\]/i);
@@ -29,8 +46,18 @@ const expectNoTechnicalArtifacts = (content) => {
   }
 };
 
+const connectWithRuntimeFactory = (
+  manager: YouTubeConnectionManager,
+  videoId: string,
+  connectionFactory: (videoId: string) => Promise<unknown>,
+): Promise<boolean> =>
+  Reflect.apply(manager.connectToStream, manager, [
+    videoId,
+    connectionFactory,
+  ]) as Promise<boolean>;
+
 describe("YouTube Premiere Connection Handling", () => {
-  let connectionManager;
+  let connectionManager: YouTubeConnectionManager;
 
   beforeEach(() => {
     connectionManager = new YouTubeConnectionManager(noOpLogger);
@@ -79,7 +106,7 @@ describe("YouTube Premiere Connection Handling", () => {
       expect(allVideoIds).toHaveLength(3);
       expect(allVideoIds).toEqual(expect.arrayContaining(premiereVideoIds));
 
-      const readyVideoIds = allVideoIds.filter((id) =>
+      const readyVideoIds = allVideoIds.filter((id: string) =>
         connectionManager.isConnectionReady(id),
       );
       expect(readyVideoIds).toEqual(["premiere2"]);
@@ -184,11 +211,13 @@ describe("YouTube Premiere Connection Handling", () => {
       const invalidVideoId = "";
       const invalidConnection = null;
 
-      await connectionManager.connectToStream(
+      const connected = await connectWithRuntimeFactory(
+        connectionManager,
         invalidVideoId,
         async () => invalidConnection,
       );
 
+      expect(connected).toBe(true);
       expect(connectionManager.getConnectionCount()).toBe(1);
       expect(connectionManager.isConnectionReady(invalidVideoId)).toBe(false);
     });

@@ -1,42 +1,66 @@
 import { describe, test, expect, beforeEach } from "bun:test";
-import { createMockFn } from "../../../../helpers/bun-mock-utils";
+import { createMockFn, type TestMockFn } from "../../../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../../../helpers/mock-factories";
 import { EventEmitter } from "events";
 
-const createMockPlatform = () => {
+type MockConnectionManager = {
+  connections: Map<string, unknown>;
+  connectToStream: TestMockFn<[string, (videoId: string) => Promise<unknown>], Promise<boolean>>;
+  removeConnection: TestMockFn<[string], void>;
+  setConnectionReady: TestMockFn<[string], void>;
+  isConnectionReady: TestMockFn<[string], boolean>;
+  getActiveVideoIds: TestMockFn<[], string[]>;
+  getConnectionCount: TestMockFn<[], number>;
+  getReadyConnectionCount: TestMockFn<[], number>;
+  hasConnection: TestMockFn<[string], boolean>;
+  getConnection: TestMockFn<[string], unknown>;
+  getAllVideoIds: TestMockFn<[], string[]>;
+};
+
+type MockPlatform = EventEmitter & {
+  connectionManager: MockConnectionManager;
+  logger: typeof noOpLogger;
+  config: { youtube: { enabled: boolean; multiStreamEnabled: boolean } };
+  getActiveYouTubeVideoIds: TestMockFn<[], string[]>;
+};
+
+const createMockPlatform = (): MockPlatform => {
   const platform = new EventEmitter();
-  platform.connectionManager = {
+  const connectionManager: MockConnectionManager = {
     connections: new Map(),
-    connectToStream: createMockFn().mockResolvedValue(true),
-    removeConnection: createMockFn(),
-    setConnectionReady: createMockFn(),
-    isConnectionReady: createMockFn(),
-    getActiveVideoIds: createMockFn(),
-    getConnectionCount: createMockFn(),
-    getReadyConnectionCount: createMockFn(),
-    hasConnection: createMockFn(),
-    getConnection: createMockFn(),
-    getAllVideoIds: createMockFn(),
+    connectToStream: createMockFn<[string, (videoId: string) => Promise<unknown>], Promise<boolean>>().mockResolvedValue(true),
+    removeConnection: createMockFn<[string], void>(),
+    setConnectionReady: createMockFn<[string], void>(),
+    isConnectionReady: createMockFn<[string], boolean>(),
+    getActiveVideoIds: createMockFn<[], string[]>(),
+    getConnectionCount: createMockFn<[], number>(),
+    getReadyConnectionCount: createMockFn<[], number>(),
+    hasConnection: createMockFn<[string], boolean>(),
+    getConnection: createMockFn<[string], unknown>(),
+    getAllVideoIds: createMockFn<[], string[]>(),
   };
-  platform.logger = noOpLogger;
-  platform.config = {
+  const mockPlatform: MockPlatform = Object.assign(platform, {
+    connectionManager,
+    logger: noOpLogger,
+    config: {
     youtube: {
       enabled: true,
       multiStreamEnabled: true,
     },
-  };
-  platform.getActiveYouTubeVideoIds = createMockFn(() => {
-    return platform.connectionManager
+  },
+    getActiveYouTubeVideoIds: createMockFn<[], string[]>(() => {
+    return connectionManager
       .getActiveVideoIds()
-      .filter((videoId) =>
-        platform.connectionManager.isConnectionReady(videoId),
+      .filter((videoId: string) =>
+        connectionManager.isConnectionReady(videoId),
       );
+  }),
   });
-  return platform;
+  return mockPlatform;
 };
 
 describe("YouTube Connection Status Reporting", () => {
-  let platform;
+  let platform: MockPlatform;
 
   beforeEach(() => {
     platform = createMockPlatform();
@@ -73,8 +97,8 @@ describe("YouTube Connection Status Reporting", () => {
     test("should show accurate status distinguishing stored vs ready connections", () => {
       const storedConnections = ["video1", "video2", "video3"];
       platform.connectionManager.getAllVideoIds =
-        createMockFn().mockReturnValue(storedConnections);
-      platform.getActiveYouTubeVideoIds = createMockFn().mockReturnValue([
+        createMockFn<[], string[]>().mockReturnValue(storedConnections);
+      platform.getActiveYouTubeVideoIds = createMockFn<[], string[]>().mockReturnValue([
         "video1",
       ]);
 
@@ -140,7 +164,7 @@ describe("YouTube Connection Status Reporting", () => {
       platform.connectionManager.getConnectionCount.mockReturnValue(4);
       platform.connectionManager.getReadyConnectionCount.mockReturnValue(2);
       platform.connectionManager.isConnectionReady.mockImplementation(
-        (videoId) => readyConnections.includes(videoId),
+        (videoId: string) => readyConnections.includes(videoId),
       );
 
       const totalCount = platform.connectionManager.getConnectionCount();
@@ -214,7 +238,7 @@ describe("YouTube Connection Status Reporting", () => {
 
       platform.connectionManager.setConnectionReady("video1");
       platform.connectionManager.isConnectionReady.mockImplementation(
-        (id) => id === "video1",
+        (id: string) => id === "video1",
       );
 
       expect(platform.connectionManager.isConnectionReady("video1")).toBe(true);

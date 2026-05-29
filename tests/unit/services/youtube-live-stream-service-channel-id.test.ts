@@ -1,5 +1,9 @@
 import { describe, it, beforeEach, afterEach, expect } from "bun:test";
-import { createMockFn, clearAllMocks } from "../../helpers/bun-mock-utils";
+import {
+  createMockFn,
+  clearAllMocks,
+  type TestMockFn,
+} from "../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../helpers/mock-factories";
 import * as testClock from "../../helpers/test-clock";
 import {
@@ -8,14 +12,38 @@ import {
 } from "../../helpers/assertion-helpers";
 import { YouTubeLiveStreamService } from "../../../src/services/youtube-live-stream-service.ts";
 
+type LiveStreamClient = Parameters<typeof YouTubeLiveStreamService.getLiveStreams>[0];
+type ChannelLike = Awaited<ReturnType<LiveStreamClient["getChannel"]>>;
+type ChannelVideo = NonNullable<Awaited<ReturnType<NonNullable<NonNullable<ChannelLike>["getLiveStreams"]>>>["videos"]>[number];
+
+type MockInnertubeClient = {
+  getChannel: TestMockFn<[string], Promise<ChannelLike>>;
+  search: TestMockFn<[string, Record<string, unknown>?], Promise<{ videos?: ChannelVideo[] }>>;
+  resolveURL: TestMockFn<[string], Promise<{ payload?: { browseId?: string } }>>;
+};
+
+function expectFirstStream(
+  streams: Awaited<ReturnType<typeof YouTubeLiveStreamService.getLiveStreams>>["streams"],
+) {
+  const stream = streams[0];
+  expect(stream).toBeDefined();
+  if (stream === undefined) {
+    throw new Error("Expected first live stream");
+  }
+  return stream;
+}
+
 describe("YouTube Live Stream Service - Channel ID User Experience", () => {
-  let mockInnertubeClient;
+  let mockInnertubeClient: MockInnertubeClient;
 
   beforeEach(() => {
     mockInnertubeClient = {
-      getChannel: createMockFn(),
-      search: createMockFn(),
-      resolveURL: createMockFn(),
+      getChannel: createMockFn<[string], Promise<ChannelLike>>(),
+      search: createMockFn<
+        [string, Record<string, unknown>?],
+        Promise<{ videos?: ChannelVideo[] }>
+      >(),
+      resolveURL: createMockFn<[string], Promise<{ payload?: { browseId?: string } }>>(),
     };
   });
 
@@ -49,15 +77,15 @@ describe("YouTube Live Stream Service - Channel ID User Experience", () => {
       expect(result.success).toBe(true);
       expect(result.streams).toBeDefined();
       expect(result.streams).toHaveLength(1);
-      expect(result.streams[0].videoId).toBe("live123");
-      expect(result.streams[0].title).toBe("Amazing Live Stream");
-      expect(result.streams[0].isLive).toBe(true);
+      const stream = expectFirstStream(result.streams);
+      expect(stream.videoId).toBe("live123");
+      expect(stream.title).toBe("Amazing Live Stream");
+      expect(stream.isLive).toBe(true);
       expect(result.count).toBe(1);
 
-      expectNoTechnicalArtifacts(result.streams[0].title);
-      expectNoTechnicalArtifacts(result.streams[0].author);
-      validateUserFacingString(result.streams[0].title, {
-        audience: "general",
+      expectNoTechnicalArtifacts(stream.title);
+      expectNoTechnicalArtifacts(stream.author);
+      validateUserFacingString(stream.title, {
         minLength: 5,
       });
     });
@@ -132,7 +160,6 @@ describe("YouTube Live Stream Service - Channel ID User Experience", () => {
 
       expectNoTechnicalArtifacts(result.error);
       validateUserFacingString(result.error, {
-        audience: "general",
         minLength: 5,
       });
     });
@@ -380,13 +407,14 @@ it("resolves handles only for username input and skips it for Channel ID input",
       );
 
       expect(result.success).toBe(true);
-      expect(result.streams[0].title).toContain("中文");
-      expect(result.streams[0].title).toContain("العربية");
-      expect(result.streams[0].author).toContain("国际频道");
-      expect(result.streams[0].author).toContain("قناة دولية");
+      const stream = expectFirstStream(result.streams);
+      expect(stream.title).toContain("中文");
+      expect(stream.title).toContain("العربية");
+      expect(stream.author).toContain("国际频道");
+      expect(stream.author).toContain("قناة دولية");
 
-      expectNoTechnicalArtifacts(result.streams[0].title);
-      expectNoTechnicalArtifacts(result.streams[0].author);
+      expectNoTechnicalArtifacts(stream.title);
+      expectNoTechnicalArtifacts(stream.author);
     });
   });
 });

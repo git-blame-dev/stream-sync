@@ -1,26 +1,134 @@
 import { describe, it, beforeEach, expect } from "bun:test";
-import { createMockFn, clearAllMocks } from "../../helpers/bun-mock-utils";
+import {
+  createMockFn,
+  clearAllMocks,
+  type TestMockFn,
+} from "../../helpers/bun-mock-utils";
 import {
   installYouTubeParserLogAdapter,
   collectParserWarningsDuring,
+  type ParserWarningPayload,
 } from "../../../src/utils/youtube-parser-log-adapter.ts";
+
+type ParserWarningContext = Partial<{
+  error_type: string;
+  classname: string;
+  expected: string | string[];
+  error: Error | string;
+  classdata: Record<string, unknown>;
+  failed: number;
+  total: number;
+  titles: string[];
+}>;
+
+type ParserWarningHandler = (context: ParserWarningContext) => void;
+
+type ParserApiFixture = {
+  setParserErrorHandler: TestMockFn<[ParserWarningHandler], void>;
+};
+
+type LoggerFixture = {
+  debug: TestMockFn<[unknown, string?, unknown?], void>;
+  info: TestMockFn<[unknown, string?, unknown?], void>;
+  warn: TestMockFn<[unknown, string?, unknown?], void>;
+  error: TestMockFn<[unknown, string?, unknown?], void>;
+};
+
+function createLoggerFixture(): LoggerFixture {
+  return {
+    debug: createMockFn<[unknown, string?, unknown?], void>(),
+    info: createMockFn<[unknown, string?, unknown?], void>(),
+    warn: createMockFn<[unknown, string?, unknown?], void>(),
+    error: createMockFn<[unknown, string?, unknown?], void>(),
+  };
+}
+
+function createParserApiFixture(
+  implementation?: (handler: ParserWarningHandler) => void,
+): ParserApiFixture {
+  return {
+    setParserErrorHandler: createMockFn<[ParserWarningHandler], void>(
+      implementation,
+    ),
+  };
+}
+
+function getInstalledParserHandler(parserApi: ParserApiFixture): ParserWarningHandler {
+  const firstCall = parserApi.setParserErrorHandler.mock.calls[0];
+  expect(firstCall).toBeDefined();
+  if (firstCall === undefined) {
+    throw new Error("Expected parser error handler to be installed");
+  }
+  return firstCall[0];
+}
+
+function expectLoggerCall(
+  calls: [unknown, string?, unknown?][],
+  index: number,
+): [string, string | undefined, ParserWarningPayload] {
+  const call = calls[index];
+  expect(call).toBeDefined();
+  if (call === undefined) {
+    throw new Error(`Expected logger call at index ${index}`);
+  }
+  const [message, context, metadata] = call;
+  expect(typeof message).toBe("string");
+  expect(typeof context).toBe("string");
+  expect(isParserWarningPayload(metadata)).toBe(true);
+  if (
+    typeof message !== "string" ||
+    typeof context !== "string" ||
+    !isParserWarningPayload(metadata)
+  ) {
+    throw new Error("Expected parser warning logger call");
+  }
+  return [message, context, metadata];
+}
+
+function expectStringLoggerCall(
+  calls: [unknown, string?, unknown?][],
+  index: number,
+): [string, string | undefined, unknown] {
+  const call = calls[index];
+  expect(call).toBeDefined();
+  if (call === undefined) {
+    throw new Error(`Expected logger call at index ${index}`);
+  }
+  const [message, context, metadata] = call;
+  expect(typeof message).toBe("string");
+  if (typeof message !== "string") {
+    throw new Error("Expected logger message string");
+  }
+  return [message, context, metadata];
+}
+
+function isParserWarningPayload(value: unknown): value is ParserWarningPayload {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "errorType" in value &&
+    "className" in value &&
+    "expected" in value &&
+    "detail" in value &&
+    typeof value.errorType === "string" &&
+    typeof value.className === "string" &&
+    typeof value.expected === "string" &&
+    typeof value.detail === "string"
+  );
+}
+
 describe("youtube parser log adapter", () => {
-  let logger;
+  let logger: LoggerFixture;
 
   beforeEach(() => {
     clearAllMocks();
-    logger = {
-      debug: createMockFn(),
-      info: createMockFn(),
-      warn: createMockFn(),
-      error: createMockFn(),
-    };
+    logger = createLoggerFixture();
   });
 
   it("installs once per parser API and remains idempotent", () => {
     const parserApi = {
-      setParserErrorHandler: createMockFn(),
-    };
+      setParserErrorHandler: createMockFn<[ParserWarningHandler], void>(),
+    } satisfies ParserApiFixture;
 
     const firstInstall = installYouTubeParserLogAdapter({
       logger,
@@ -39,15 +147,15 @@ describe("youtube parser log adapter", () => {
 
   it("collapses parser typecheck warnings into one line", () => {
     const parserApi = {
-      setParserErrorHandler: createMockFn(),
-    };
+      setParserErrorHandler: createMockFn<[ParserWarningHandler], void>(),
+    } satisfies ParserApiFixture;
 
     installYouTubeParserLogAdapter({
       logger,
       youtubeModule: { Parser: parserApi },
     });
 
-    const handler = parserApi.setParserErrorHandler.mock.calls[0][0];
+    const handler = getInstalledParserHandler(parserApi);
     handler({
       error_type: "typecheck",
       classname: "ListItemView",
@@ -57,7 +165,7 @@ describe("youtube parser log adapter", () => {
 
     expect(logger.warn).toHaveBeenCalledTimes(1);
 
-    const [message, context, metadata] = logger.warn.mock.calls[0];
+    const [message, context, metadata] = expectLoggerCall(logger.warn.mock.calls, 0);
     expect(context).toBe("youtube-parser");
     expect(message).toContain("typecheck");
     expect(message).toContain("ListItemView");
@@ -68,15 +176,15 @@ describe("youtube parser log adapter", () => {
 
   it("collapses parse and class-not-found contexts into one line without stack output", () => {
     const parserApi = {
-      setParserErrorHandler: createMockFn(),
-    };
+      setParserErrorHandler: createMockFn<[ParserWarningHandler], void>(),
+    } satisfies ParserApiFixture;
 
     installYouTubeParserLogAdapter({
       logger,
       youtubeModule: { Parser: parserApi },
     });
 
-    const handler = parserApi.setParserErrorHandler.mock.calls[0][0];
+    const handler = getInstalledParserHandler(parserApi);
 
     handler({
       error_type: "parse",
@@ -90,8 +198,8 @@ describe("youtube parser log adapter", () => {
 
     expect(logger.warn).toHaveBeenCalledTimes(2);
 
-    const [parseMessage] = logger.warn.mock.calls[0];
-    const [notFoundMessage] = logger.warn.mock.calls[1];
+    const [parseMessage] = expectLoggerCall(logger.warn.mock.calls, 0);
+    const [notFoundMessage] = expectLoggerCall(logger.warn.mock.calls, 1);
 
     expect(parseMessage).toContain("parse");
     expect(parseMessage).toContain("MenuFlexibleItem");
@@ -104,7 +212,7 @@ describe("youtube parser log adapter", () => {
   it("no-ops when parser API is unavailable", () => {
     const installResult = installYouTubeParserLogAdapter({
       logger,
-      youtubeModule: { Innertube: {} },
+      youtubeModule: {},
     });
 
     expect(installResult.installed).toBe(false);
@@ -115,8 +223,8 @@ describe("youtube parser log adapter", () => {
 
   it("falls back to no-op logger when logger interface is missing", () => {
     const parserApi = {
-      setParserErrorHandler: createMockFn(),
-    };
+      setParserErrorHandler: createMockFn<[ParserWarningHandler], void>(),
+    } satisfies ParserApiFixture;
 
     const installResult = installYouTubeParserLogAdapter({
       logger: {},
@@ -125,7 +233,7 @@ describe("youtube parser log adapter", () => {
 
     expect(installResult.installed).toBe(true);
     expect(installResult.reason).toBe("installed");
-    const handler = parserApi.setParserErrorHandler.mock.calls[0][0];
+    const handler = getInstalledParserHandler(parserApi);
     expect(() => {
       handler({ error_type: "parse", classname: "MenuFlexibleItem" });
     }).not.toThrow();
@@ -133,15 +241,15 @@ describe("youtube parser log adapter", () => {
 
   it("formats string expected and string error details as one line", () => {
     const parserApi = {
-      setParserErrorHandler: createMockFn(),
-    };
+      setParserErrorHandler: createMockFn<[ParserWarningHandler], void>(),
+    } satisfies ParserApiFixture;
 
     installYouTubeParserLogAdapter({
       logger,
       youtubeModule: { Parser: parserApi },
     });
 
-    const handler = parserApi.setParserErrorHandler.mock.calls[0][0];
+    const handler = getInstalledParserHandler(parserApi);
     handler({
       error_type: "parse",
       classname: "MenuFlexibleItem",
@@ -149,7 +257,7 @@ describe("youtube parser log adapter", () => {
       error: "line1\nline2",
     });
 
-    const [message, context, metadata] = logger.warn.mock.calls[0];
+    const [message, context, metadata] = expectLoggerCall(logger.warn.mock.calls, 0);
     expect(context).toBe("youtube-parser");
     expect(message).toContain("expected=MenuServiceItem");
     expect(message).toContain("detail=line1 line2");
@@ -158,15 +266,15 @@ describe("youtube parser log adapter", () => {
 
   it("formats mutation and title metadata into one line detail output", () => {
     const parserApi = {
-      setParserErrorHandler: createMockFn(),
-    };
+      setParserErrorHandler: createMockFn<[ParserWarningHandler], void>(),
+    } satisfies ParserApiFixture;
 
     installYouTubeParserLogAdapter({
       logger,
       youtubeModule: { Parser: parserApi },
     });
 
-    const handler = parserApi.setParserErrorHandler.mock.calls[0][0];
+    const handler = getInstalledParserHandler(parserApi);
     handler({
       error_type: "mutation_data_invalid",
       classname: "MusicMultiSelectMenuItem",
@@ -179,22 +287,15 @@ describe("youtube parser log adapter", () => {
       titles: ["Song A", "Song B"],
     });
 
-    const [firstMessage] = logger.warn.mock.calls[0];
-    const [secondMessage] = logger.warn.mock.calls[1];
+    const [firstMessage] = expectLoggerCall(logger.warn.mock.calls, 0);
+    const [secondMessage] = expectLoggerCall(logger.warn.mock.calls, 1);
     expect(firstMessage).toContain("detail=2/4 mutation items failed");
     expect(secondMessage).toContain("titles=Song A, Song B");
   });
 
   it("reports adapter failures through platform error handler paths", () => {
-    const parserApi = {
-      setParserErrorHandler: createMockFn(),
-    };
-    const throwingLogger = {
-      debug: createMockFn(),
-      info: createMockFn(),
-      warn: createMockFn(),
-      error: createMockFn(),
-    };
+    const parserApi = createParserApiFixture();
+    const throwingLogger = createLoggerFixture();
 
     throwingLogger.warn.mockImplementationOnce(() => {
       throw new Error("warn logger failed");
@@ -208,13 +309,13 @@ describe("youtube parser log adapter", () => {
       youtubeModule: { Parser: parserApi },
     });
 
-    const handler = parserApi.setParserErrorHandler.mock.calls[0][0];
+    const handler = getInstalledParserHandler(parserApi);
     handler({ error_type: "parse", classname: "ParserClass" });
     handler({ error_type: "parse", classname: "ParserClass" });
 
     expect(throwingLogger.error).toHaveBeenCalledTimes(2);
-    const firstErrorMessage = throwingLogger.error.mock.calls[0][0];
-    const secondErrorMessage = throwingLogger.error.mock.calls[1][0];
+    const [firstErrorMessage] = expectStringLoggerCall(throwingLogger.error.mock.calls, 0);
+    const [secondErrorMessage] = expectStringLoggerCall(throwingLogger.error.mock.calls, 1);
     expect(firstErrorMessage).toContain(
       "Failed to normalize YouTube parser warning",
     );
@@ -225,16 +326,14 @@ describe("youtube parser log adapter", () => {
 
   it("degrades gracefully when parser handler installation fails", () => {
     const loggerWithErrors = {
-      debug: createMockFn(),
-      info: createMockFn(),
-      warn: createMockFn(),
-      error: createMockFn(),
-    };
-    const parserApi = {
-      setParserErrorHandler: createMockFn(() => {
+      debug: createMockFn<[unknown, string?, unknown?], void>(),
+      info: createMockFn<[unknown, string?, unknown?], void>(),
+      warn: createMockFn<[unknown, string?, unknown?], void>(),
+      error: createMockFn<[unknown, string?, unknown?], void>(),
+    } satisfies LoggerFixture;
+    const parserApi = createParserApiFixture(() => {
         throw new Error("cannot install parser handler");
-      }),
-    };
+      });
 
     const installResult = installYouTubeParserLogAdapter({
       logger: loggerWithErrors,
@@ -244,7 +343,7 @@ describe("youtube parser log adapter", () => {
     expect(installResult.installed).toBe(false);
     expect(installResult.reason).toBe("install-failed");
     expect(loggerWithErrors.error).toHaveBeenCalledTimes(1);
-    const [message, context] = loggerWithErrors.error.mock.calls[0];
+    const [message, context] = expectStringLoggerCall(loggerWithErrors.error.mock.calls, 0);
     expect(message).toContain(
       "Failed to install YouTube parser warning adapter",
     );
@@ -253,15 +352,15 @@ describe("youtube parser log adapter", () => {
 
   it("collects normalized parser warnings during a synchronous scope without suppressing logging", () => {
     const parserApi = {
-      setParserErrorHandler: createMockFn(),
-    };
+      setParserErrorHandler: createMockFn<[ParserWarningHandler], void>(),
+    } satisfies ParserApiFixture;
 
     installYouTubeParserLogAdapter({
       logger,
       youtubeModule: { Parser: parserApi },
     });
 
-    const handler = parserApi.setParserErrorHandler.mock.calls[0][0];
+    const handler = getInstalledParserHandler(parserApi);
     const collection = collectParserWarningsDuring(() => {
       handler({
         error_type: "class_not_found",
@@ -293,15 +392,15 @@ describe("youtube parser log adapter", () => {
 
   it("keeps nested parser warning collection scopes isolated", () => {
     const parserApi = {
-      setParserErrorHandler: createMockFn(),
-    };
+      setParserErrorHandler: createMockFn<[ParserWarningHandler], void>(),
+    } satisfies ParserApiFixture;
 
     installYouTubeParserLogAdapter({
       logger,
       youtubeModule: { Parser: parserApi },
     });
 
-    const handler = parserApi.setParserErrorHandler.mock.calls[0][0];
+    const handler = getInstalledParserHandler(parserApi);
     const outerCollection = collectParserWarningsDuring(() => {
       handler({
         error_type: "class_not_found",

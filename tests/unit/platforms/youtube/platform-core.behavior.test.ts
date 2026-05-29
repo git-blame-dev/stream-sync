@@ -1,14 +1,45 @@
 import { describe, it, expect, afterEach } from "bun:test";
-import { createMockFn, restoreAllMocks } from "../../../helpers/bun-mock-utils";
+import {
+  createMockFn,
+  restoreAllMocks,
+  type TestMockFn,
+} from "../../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../../helpers/mock-factories";
-import { createRecordingLogger } from "../../../helpers/recording-logger";
+import { createRecordingLogger, type RecordingLogger } from "../../../helpers/recording-logger";
 import { YouTubePlatform } from "../../../../src/platforms/youtube";
 import { DEFAULT_AVATAR_URL } from "../../../../src/constants/avatar";
 
 const FALLBACK_AVATAR_URL = DEFAULT_AVATAR_URL;
 
+type PlatformOverrides = {
+  logger?: typeof noOpLogger | RecordingLogger;
+  streamDetectionService?: ReturnType<typeof createStreamDetectionService>;
+  notificationManager?: {
+    emit: TestMockFn<unknown[], unknown>;
+    on: TestMockFn<unknown[], unknown>;
+    removeListener: TestMockFn<unknown[], unknown>;
+  };
+};
+
+type PlatformEventRecord = Record<string, unknown>;
+type ConnectedRecord = { videoId: string; reason?: string | undefined };
+type RefreshRecord = { videoId: string; reason: string; source: string };
+
+function isPlatformEventRecord(value: unknown): value is PlatformEventRecord {
+  return typeof value === "object" && value !== null;
+}
+
+function isRefreshRecord(value: unknown): value is RefreshRecord {
+  return (
+    isPlatformEventRecord(value) &&
+    typeof value.videoId === "string" &&
+    typeof value.reason === "string" &&
+    typeof value.source === "string"
+  );
+}
+
 const createStreamDetectionService = (overrides = {}) => ({
-  detectLiveStreams: createMockFn().mockResolvedValue({
+  detectLiveStreams: createMockFn<[unknown], Promise<{ success: boolean; videoIds: string[]; detectionMethod: string }>>().mockResolvedValue({
     success: true,
     videoIds: [],
     detectionMethod: "mock",
@@ -16,18 +47,18 @@ const createStreamDetectionService = (overrides = {}) => ({
   ...overrides,
 });
 
-const createPlatform = (overrides = {}) => {
-  const logger = overrides.logger || noOpLogger;
+const createPlatform = (overrides: PlatformOverrides = {}) => {
+  const logger = overrides.logger ?? noOpLogger;
   const streamDetectionService =
-    overrides.streamDetectionService || createStreamDetectionService();
+    overrides.streamDetectionService ?? createStreamDetectionService();
 
   const dependencies = {
     logger,
     streamDetectionService,
     notificationManager: overrides.notificationManager || {
-      emit: createMockFn(),
-      on: createMockFn(),
-      removeListener: createMockFn(),
+      emit: createMockFn<unknown[], unknown>(),
+      on: createMockFn<unknown[], unknown>(),
+      removeListener: createMockFn<unknown[], unknown>(),
     },
     USER_AGENTS: ["test-agent"],
     Innertube: null,
@@ -78,15 +109,16 @@ describe("YouTubePlatform behavior", () => {
     });
 
     const platform = createPlatform({ streamDetectionService });
-    const connected = [];
+    const connected: ConnectedRecord[] = [];
     platform.connectionManager.connectToStream = async (
       videoId,
       createConnection,
       options,
     ) => {
       connected.push({ videoId, reason: options?.reason });
+      return true;
     };
-    platform.startMultiStreamMonitoring = createMockFn().mockImplementation(
+    platform.startMultiStreamMonitoring = createMockFn<[], Promise<void>>().mockImplementation(
       async () => {
         await platform.checkMultiStream({ throwOnError: true });
       },
@@ -105,7 +137,7 @@ describe("YouTubePlatform behavior", () => {
     });
 
     const platform = createPlatform({ streamDetectionService });
-    platform.startMultiStreamMonitoring = createMockFn().mockImplementation(
+    platform.startMultiStreamMonitoring = createMockFn<[], Promise<void>>().mockImplementation(
       async () => {
         await platform.checkMultiStream({ throwOnError: true });
       },
@@ -116,10 +148,12 @@ describe("YouTubePlatform behavior", () => {
 
   it("emits platform events and invokes handler map", () => {
     const platform = createPlatform();
-    const handlerCalls = [];
-    platform.handlers.onChat = (payload) => handlerCalls.push(payload);
-    const emittedEvents = [];
-    platform.on("platform:event", (event) => emittedEvents.push(event));
+    const handlerCalls: PlatformEventRecord[] = [];
+    platform.handlers.onChat = (payload: unknown) => {
+      if (isPlatformEventRecord(payload)) handlerCalls.push(payload);
+    };
+    const emittedEvents: PlatformEventRecord[] = [];
+    platform.on("platform:event", (event: PlatformEventRecord) => emittedEvents.push(event));
 
     platform._emitPlatformEvent("platform:chat-message", {
       platform: "youtube",
@@ -152,8 +186,10 @@ describe("YouTubePlatform behavior", () => {
 
   it("emits monetization events with canonical avatarUrl from author thumbnail", async () => {
     const platform = createPlatform();
-    const giftEvents = [];
-    platform.handlers.onGift = (payload) => giftEvents.push(payload);
+    const giftEvents: PlatformEventRecord[] = [];
+    platform.handlers.onGift = (payload: unknown) => {
+      if (isPlatformEventRecord(payload)) giftEvents.push(payload);
+    };
 
     await platform.handleSuperChat({
       item: {
@@ -174,15 +210,17 @@ describe("YouTubePlatform behavior", () => {
     });
 
     expect(giftEvents).toHaveLength(1);
-    expect(giftEvents[0].avatarUrl).toBe(
+    expect(giftEvents[0]?.avatarUrl).toBe(
       "https://example.invalid/youtube-monetization-avatar.jpg",
     );
   });
 
   it("emits fallback avatarUrl for super chat when author thumbnail is missing", async () => {
     const platform = createPlatform();
-    const giftEvents = [];
-    platform.handlers.onGift = (payload) => giftEvents.push(payload);
+    const giftEvents: PlatformEventRecord[] = [];
+    platform.handlers.onGift = (payload: unknown) => {
+      if (isPlatformEventRecord(payload)) giftEvents.push(payload);
+    };
 
     await platform.handleSuperChat({
       item: {
@@ -201,13 +239,15 @@ describe("YouTubePlatform behavior", () => {
     });
 
     expect(giftEvents).toHaveLength(1);
-    expect(giftEvents[0].avatarUrl).toBe(FALLBACK_AVATAR_URL);
+    expect(giftEvents[0]?.avatarUrl).toBe(FALLBACK_AVATAR_URL);
   });
 
   it("emits monetization sticker events with canonical avatarUrl from author thumbnail", async () => {
     const platform = createPlatform();
-    const giftEvents = [];
-    platform.handlers.onGift = (payload) => giftEvents.push(payload);
+    const giftEvents: PlatformEventRecord[] = [];
+    platform.handlers.onGift = (payload: unknown) => {
+      if (isPlatformEventRecord(payload)) giftEvents.push(payload);
+    };
 
     await platform.handleSuperSticker({
       item: {
@@ -232,15 +272,17 @@ describe("YouTubePlatform behavior", () => {
     });
 
     expect(giftEvents).toHaveLength(1);
-    expect(giftEvents[0].avatarUrl).toBe(
+    expect(giftEvents[0]?.avatarUrl).toBe(
       "https://example.invalid/youtube-monetization-sticker-avatar.jpg",
     );
   });
 
   it("emits fallback avatarUrl on degraded super chat error payloads", async () => {
     const platform = createPlatform();
-    const giftEvents = [];
-    platform.handlers.onGift = (payload) => giftEvents.push(payload);
+    const giftEvents: PlatformEventRecord[] = [];
+    platform.handlers.onGift = (payload: unknown) => {
+      if (isPlatformEventRecord(payload)) giftEvents.push(payload);
+    };
 
     await platform.handleSuperChat({
       item: {
@@ -257,14 +299,16 @@ describe("YouTubePlatform behavior", () => {
     });
 
     expect(giftEvents).toHaveLength(1);
-    expect(giftEvents[0].isError).toBe(true);
-    expect(giftEvents[0].avatarUrl).toBe(FALLBACK_AVATAR_URL);
+    expect(giftEvents[0]?.isError).toBe(true);
+    expect(giftEvents[0]?.avatarUrl).toBe(FALLBACK_AVATAR_URL);
   });
 
   it("emits degraded gift payloads when GiftMessageView text is malformed", async () => {
     const platform = createPlatform();
-    const giftEvents = [];
-    platform.handlers.onGift = (payload) => giftEvents.push(payload);
+    const giftEvents: PlatformEventRecord[] = [];
+    platform.handlers.onGift = (payload: unknown) => {
+      if (isPlatformEventRecord(payload)) giftEvents.push(payload);
+    };
 
     await platform.handleGiftMessageView({
       item: {
@@ -286,14 +330,16 @@ describe("YouTubePlatform behavior", () => {
       id: "LCC.test-gift-message-view-error",
       isError: true,
     });
-    expect(giftEvents[0].userId).toBeUndefined();
-    expect(giftEvents[0].timestamp).toBe(new Date(1704067200000).toISOString());
+    expect(giftEvents[0]?.userId).toBeUndefined();
+    expect(giftEvents[0]?.timestamp).toBe(new Date(1704067200000).toISOString());
   });
 
   it("emits degraded paypiggy payloads when membership parsing fails", async () => {
     const platform = createPlatform();
-    const paypiggyEvents = [];
-    platform.handlers.onPaypiggy = (payload) => paypiggyEvents.push(payload);
+    const paypiggyEvents: PlatformEventRecord[] = [];
+    platform.handlers.onPaypiggy = (payload: unknown) => {
+      if (isPlatformEventRecord(payload)) paypiggyEvents.push(payload);
+    };
 
     await platform.handleMembership({
       item: {
@@ -317,16 +363,17 @@ describe("YouTubePlatform behavior", () => {
       id: "LCC.test-membership-error",
       isError: true,
     });
-    expect(paypiggyEvents[0].timestamp).toMatch(
+    expect(paypiggyEvents[0]?.timestamp).toMatch(
       /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
     );
   });
 
   it("emits degraded giftpaypiggy payloads when gift purchase parsing fails", async () => {
     const platform = createPlatform();
-    const giftPaypiggyEvents = [];
-    platform.handlers.onGiftPaypiggy = (payload) =>
-      giftPaypiggyEvents.push(payload);
+    const giftPaypiggyEvents: PlatformEventRecord[] = [];
+    platform.handlers.onGiftPaypiggy = (payload: unknown) => {
+      if (isPlatformEventRecord(payload)) giftPaypiggyEvents.push(payload);
+    };
 
     await platform.handleGiftMembershipPurchase({
       item: {
@@ -350,15 +397,17 @@ describe("YouTubePlatform behavior", () => {
       id: "LCC.test-gift-purchase-error",
       isError: true,
     });
-    expect(giftPaypiggyEvents[0].timestamp).toBe(
+    expect(giftPaypiggyEvents[0]?.timestamp).toBe(
       new Date(1704067200000).toISOString(),
     );
   });
 
   it("emits fallback avatarUrl for chat messages when thumbnail is missing", () => {
     const platform = createPlatform();
-    const chatEvents = [];
-    platform.handlers.onChat = (payload) => chatEvents.push(payload);
+    const chatEvents: PlatformEventRecord[] = [];
+    platform.handlers.onChat = (payload: unknown) => {
+      if (isPlatformEventRecord(payload)) chatEvents.push(payload);
+    };
 
     platform.handleChatTextMessage({
       item: {
@@ -377,13 +426,15 @@ describe("YouTubePlatform behavior", () => {
     });
 
     expect(chatEvents).toHaveLength(1);
-    expect(chatEvents[0].avatarUrl).toBe(FALLBACK_AVATAR_URL);
+    expect(chatEvents[0]?.avatarUrl).toBe(FALLBACK_AVATAR_URL);
   });
 
   it("emits badgeImages for chat messages when author badges include custom thumbnails", () => {
     const platform = createPlatform();
-    const chatEvents = [];
-    platform.handlers.onChat = (payload) => chatEvents.push(payload);
+    const chatEvents: PlatformEventRecord[] = [];
+    platform.handlers.onChat = (payload: unknown) => {
+      if (isPlatformEventRecord(payload)) chatEvents.push(payload);
+    };
 
     platform.handleChatTextMessage({
       item: {
@@ -427,7 +478,7 @@ describe("YouTubePlatform behavior", () => {
     });
 
     expect(chatEvents).toHaveLength(1);
-    expect(chatEvents[0].badgeImages).toEqual([
+    expect(chatEvents[0]?.badgeImages).toEqual([
       {
         imageUrl: "https://example.invalid/member-s32.png",
         source: "youtube",
@@ -438,7 +489,7 @@ describe("YouTubePlatform behavior", () => {
 
   it("requests one immediate refresh for duplicate terminal disconnect events", async () => {
     const platform = createPlatform();
-    const refreshCalls = [];
+    const refreshCalls: RefreshRecord[] = [];
 
     platform.connectionManager.getConnectionCount = createMockFn()
       .mockReturnValueOnce(1)
@@ -450,7 +501,9 @@ describe("YouTubePlatform behavior", () => {
     platform._emitStreamStatusIfNeeded = createMockFn();
     platform._youtubeMultiStreamManager.requestImmediateRefresh = createMockFn(
       async (context) => {
-        refreshCalls.push(context);
+        if (isRefreshRecord(context)) {
+          refreshCalls.push(context);
+        }
       },
     );
 
@@ -495,8 +548,8 @@ describe("YouTubePlatform behavior", () => {
 
   it("does not block disconnect completion when refresh is requested during active check", async () => {
     const platform = createPlatform();
-    let resolveRefresh = (..._args) => {};
-    const refreshPromise = new Promise((resolve) => {
+    let resolveRefresh: () => void = () => undefined;
+    const refreshPromise = new Promise<void>((resolve) => {
       resolveRefresh = resolve;
     });
 
@@ -508,7 +561,7 @@ describe("YouTubePlatform behavior", () => {
     platform._handleConnectionErrorLogging = createMockFn();
     platform._youtubeMultiStreamManager.isCheckInProgress =
       createMockFn().mockReturnValue(true);
-    platform._youtubeMultiStreamManager.requestImmediateRefresh = createMockFn(
+    platform._youtubeMultiStreamManager.requestImmediateRefresh = createMockFn<[Record<string, unknown>?], Promise<void>>(
       () => refreshPromise,
     );
 

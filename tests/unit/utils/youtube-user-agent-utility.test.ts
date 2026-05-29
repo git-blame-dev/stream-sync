@@ -10,7 +10,7 @@ describe("YouTube User-Agent Utility", () => {
     restoreAllMocks();
   });
 
-  let userAgentManager;
+  let userAgentManager: YouTubeUserAgentManager;
 
   beforeEach(() => {
     userAgentManager = new YouTubeUserAgentManager(noOpLogger);
@@ -33,7 +33,7 @@ describe("YouTube User-Agent Utility", () => {
     });
 
     it("should cycle through all user agents", () => {
-      const agents = new Set();
+      const agents = new Set<string>();
       const totalAgents = userAgentManager.getUserAgents().length;
 
       for (let i = 0; i < totalAgents; i++) {
@@ -65,7 +65,7 @@ describe("YouTube User-Agent Utility", () => {
     });
 
     it("should validate user agent format", () => {
-      const invalidAgents = ["", null, undefined];
+      const invalidAgents: unknown[] = ["", null, undefined];
 
       expect(() => {
         userAgentManager.setUserAgents(invalidAgents);
@@ -119,9 +119,14 @@ describe("YouTube User-Agent Utility", () => {
 
     it("should ignore duplicate additions and allow removals", () => {
       const first = userAgentManager.getUserAgents()[0];
+      expect(first).toBeDefined();
+      if (first === undefined) {
+        throw new Error("Expected at least one default user agent");
+      }
       userAgentManager.addUserAgent(first);
       expect(
-        userAgentManager.getUserAgents().filter((a) => a === first).length,
+        userAgentManager.getUserAgents().filter((agent: string) => agent === first)
+          .length,
       ).toBe(1);
 
       userAgentManager.removeUserAgent(first);
@@ -130,7 +135,7 @@ describe("YouTube User-Agent Utility", () => {
 
     it("should return empty string when pool becomes empty after removals", () => {
       const agents = userAgentManager.getUserAgents();
-      agents.forEach((agent) => userAgentManager.removeUserAgent(agent));
+      agents.forEach((agent: string) => userAgentManager.removeUserAgent(agent));
 
       expect(userAgentManager.getUserAgents()).toEqual([]);
       expect(userAgentManager.getNextUserAgent()).toBe("");
