@@ -13,7 +13,74 @@ import {
 import { TikTokPlatform } from "../../../../../src/platforms/tiktok.ts";
 import { PlatformEvents } from "../../../../../src/interfaces/PlatformEvents";
 
-const createPlatform = (configOverrides = {}, dependencyOverrides = {}) => {
+type WebcastEventMap = {
+  CHAT: string;
+  GIFT: string;
+  FOLLOW: string;
+  SOCIAL: string;
+  ROOM_USER: string;
+  ENVELOPE?: string;
+  SUBSCRIBE?: string;
+  SUPER_FAN?: string;
+  ERROR: string;
+  DISCONNECT: string;
+  STREAM_END?: string;
+};
+type PlatformEventPayload = Record<string, unknown> & {
+  type?: string;
+  platform?: string;
+  data?: Record<string, unknown>;
+  timestamp?: string;
+  userId?: string;
+  username?: string;
+  giftType?: string;
+  amount?: number;
+  currency?: string;
+  aggregatedCount?: number;
+  isAggregated?: boolean;
+  metadata?: unknown;
+};
+type RoutedGiftEvent = {
+  type: string;
+  platform: string;
+  data: PlatformEventPayload;
+};
+type DependencyOverrides = {
+  logger?: typeof noOpLogger;
+  notificationManager?: unknown;
+  connectionFactory?: {
+    createConnection: (platform: string, config: unknown, dependencies: unknown) => unknown;
+  };
+  TikTokWebSocketClient?: unknown;
+  WebcastEvent?: WebcastEventMap;
+  ControlEvent?: Record<string, string>;
+};
+
+const isPlatformEventPayload = (value: unknown): value is PlatformEventPayload =>
+  typeof value === "object" && value !== null;
+
+const expectDefined = <T>(value: T | undefined): T => {
+  expect(value).toBeDefined();
+  if (value === undefined) {
+    throw new Error("Expected value to be defined");
+  }
+  return value;
+};
+
+const defaultWebcastEvent = {
+  CHAT: "chat",
+  GIFT: "gift",
+  FOLLOW: "follow",
+  SOCIAL: "social",
+  ROOM_USER: "roomUser",
+  ERROR: "error",
+  DISCONNECT: "disconnect",
+} satisfies WebcastEventMap;
+
+const createPlatform = (
+  configOverrides: Record<string, unknown> = {},
+  dependencyOverrides: DependencyOverrides = {},
+) => {
   const logger = dependencyOverrides.logger || noOpLogger;
   const notificationManager = dependencyOverrides.notificationManager || {
     emit: createMockFn(),
@@ -26,8 +93,8 @@ const createPlatform = (configOverrides = {}, dependencyOverrides = {}) => {
       on: createMockFn(),
       emit: createMockFn(),
       removeAllListeners: createMockFn(),
-      connect: createMockFn(),
-      disconnect: createMockFn(),
+      connect: createMockFn().mockResolvedValue(undefined),
+      disconnect: createMockFn().mockResolvedValue(undefined),
     }),
   };
 
@@ -36,17 +103,14 @@ const createPlatform = (configOverrides = {}, dependencyOverrides = {}) => {
     createMockFn().mockImplementation(() => ({
       on: createMockFn(),
       off: createMockFn(),
-      connect: createMockFn(),
-      disconnect: createMockFn(),
+      connect: createMockFn().mockResolvedValue(undefined),
+      disconnect: createMockFn().mockResolvedValue(undefined),
       getState: createMockFn().mockReturnValue("DISCONNECTED"),
       isConnecting: false,
       isConnected: false,
     }));
 
-  const WebcastEvent = dependencyOverrides.WebcastEvent || {
-    ERROR: "error",
-    DISCONNECT: "disconnect",
-  };
+  const WebcastEvent = dependencyOverrides.WebcastEvent || defaultWebcastEvent;
   const ControlEvent = dependencyOverrides.ControlEvent || {};
 
   const config = {
@@ -75,16 +139,18 @@ describe("TikTokPlatform behavior alignment", () => {
   describe("gift handling", () => {
     it("emits a user-facing error when gift count is zero and does not throw", async () => {
       const platform = createPlatform();
-      const errors = [];
-      const routedGifts = [];
-      platform.on("platform:event", (payload) => {
+      const errors: PlatformEventPayload[] = [];
+      const routedGifts: PlatformEventPayload[] = [];
+      platform.on("platform:event", (payload: PlatformEventPayload) => {
         if (payload.type === PlatformEvents.ERROR) {
           errors.push(payload);
         }
       });
       platform.handlers = {
         ...platform.handlers,
-        onGift: (data) => routedGifts.push(data),
+        onGift: (data: unknown) => {
+          if (isPlatformEventPayload(data)) routedGifts.push(data);
+        },
       };
 
       await expect(
@@ -101,7 +167,7 @@ describe("TikTokPlatform behavior alignment", () => {
       ).resolves.toBeUndefined();
 
       expect(errors.length).toBe(1);
-      expect(errors[0]).toMatchObject({
+      expect(expectDefined(errors[0])).toMatchObject({
         type: PlatformEvents.ERROR,
         platform: "tiktok",
         data: expect.objectContaining({
@@ -114,23 +180,26 @@ describe("TikTokPlatform behavior alignment", () => {
         }),
       });
       expect(routedGifts).toHaveLength(1);
-      expect(routedGifts[0]).toMatchObject({
+      const routedGift = expectDefined(routedGifts[0]);
+      expect(routedGift).toMatchObject({
         platform: "tiktok",
         username: "alice",
         userId: "alice-id",
         isError: true,
       });
-      expect(routedGifts[0]).not.toHaveProperty("giftCount");
-      expect(routedGifts[0]).not.toHaveProperty("amount");
-      expect(routedGifts[0]).not.toHaveProperty("currency");
+      expect(routedGift).not.toHaveProperty("giftCount");
+      expect(routedGift).not.toHaveProperty("amount");
+      expect(routedGift).not.toHaveProperty("currency");
     });
 
     it("emits a user-facing error when gift normalization fails", async () => {
       const platform = createPlatform();
-      const routedGifts = [];
+      const routedGifts: PlatformEventPayload[] = [];
       platform.handlers = {
         ...platform.handlers,
-        onGift: (data) => routedGifts.push(data),
+        onGift: (data: unknown) => {
+          if (isPlatformEventPayload(data)) routedGifts.push(data);
+        },
       };
 
       await expect(
@@ -143,22 +212,25 @@ describe("TikTokPlatform behavior alignment", () => {
       ).resolves.toBeUndefined();
 
       expect(routedGifts).toHaveLength(1);
-      expect(routedGifts[0]).toMatchObject({
+      const routedGift = expectDefined(routedGifts[0]);
+      expect(routedGift).toMatchObject({
         platform: "tiktok",
         isError: true,
         type: PlatformEvents.GIFT,
         eventType: PlatformEvents.GIFT,
         avatarUrl: expect.any(String),
       });
-      expect(routedGifts[0].timestamp).toEqual(expect.any(String));
+      expect(routedGift.timestamp).toEqual(expect.any(String));
     });
 
     it("emits a user-facing error when gift timestamps are missing", async () => {
       const platform = createPlatform();
-      const routedGifts = [];
+      const routedGifts: PlatformEventPayload[] = [];
       platform.handlers = {
         ...platform.handlers,
-        onGift: (data) => routedGifts.push(data),
+        onGift: (data: unknown) => {
+          if (isPlatformEventPayload(data)) routedGifts.push(data);
+        },
       };
 
       await expect(
@@ -175,14 +247,15 @@ describe("TikTokPlatform behavior alignment", () => {
       ).resolves.toBeUndefined();
 
       expect(routedGifts).toHaveLength(1);
-      expect(routedGifts[0]).toMatchObject({
+      const routedGift = expectDefined(routedGifts[0]);
+      expect(routedGift).toMatchObject({
         platform: "tiktok",
         isError: true,
         type: PlatformEvents.GIFT,
         eventType: PlatformEvents.GIFT,
         avatarUrl: expect.any(String),
       });
-      expect(routedGifts[0].timestamp).toMatch(
+      expect(routedGift.timestamp).toMatch(
         /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
       );
     });
@@ -192,10 +265,12 @@ describe("TikTokPlatform behavior alignment", () => {
       setSystemTime(new Date("2025-01-20T10:00:00.000Z"));
       try {
         const platform = createPlatform();
-        const routedGifts = [];
+        const routedGifts: PlatformEventPayload[] = [];
         platform.handlers = {
           ...platform.handlers,
-          onGift: (data) => routedGifts.push(data),
+          onGift: (data: unknown) => {
+            if (isPlatformEventPayload(data)) routedGifts.push(data);
+          },
         };
 
         await expect(
@@ -212,7 +287,7 @@ describe("TikTokPlatform behavior alignment", () => {
         ).resolves.toBeUndefined();
 
         expect(routedGifts).toHaveLength(1);
-        expect(routedGifts[0].timestamp).toBe("2025-01-20T10:00:00.000Z");
+        expect(expectDefined(routedGifts[0]).timestamp).toBe("2025-01-20T10:00:00.000Z");
       } finally {
         useRealTimers();
       }
@@ -222,10 +297,10 @@ describe("TikTokPlatform behavior alignment", () => {
   describe("connection lifecycle events", () => {
     it("emits connected and disconnected events with correlation metadata", async () => {
       const platform = createPlatform();
-      const connectedEvents = [];
-      const disconnectedEvents = [];
+      const connectedEvents: PlatformEventPayload[] = [];
+      const disconnectedEvents: PlatformEventPayload[] = [];
 
-      platform.on("platform:event", (payload) => {
+      platform.on("platform:event", (payload: PlatformEventPayload) => {
         if (payload.type === PlatformEvents.CHAT_CONNECTED) {
           connectedEvents.push(payload);
         }
@@ -238,7 +313,7 @@ describe("TikTokPlatform behavior alignment", () => {
       await platform._handleDisconnection("test-close");
 
       expect(connectedEvents.length).toBe(1);
-      expect(connectedEvents[0]).toMatchObject({
+      expect(expectDefined(connectedEvents[0])).toMatchObject({
         type: PlatformEvents.CHAT_CONNECTED,
         platform: "tiktok",
         data: expect.objectContaining({
@@ -251,7 +326,7 @@ describe("TikTokPlatform behavior alignment", () => {
       });
 
       expect(disconnectedEvents.length).toBe(1);
-      expect(disconnectedEvents[0]).toMatchObject({
+      expect(expectDefined(disconnectedEvents[0])).toMatchObject({
         type: PlatformEvents.CHAT_DISCONNECTED,
         platform: "tiktok",
         data: expect.objectContaining({
@@ -269,20 +344,23 @@ describe("TikTokPlatform behavior alignment", () => {
   describe("gift aggregation and routing", () => {
     it("emits aggregated gift payload with correct schema", async () => {
       const platform = createPlatform();
-      const routedEvents = [];
-      const errors = [];
+      const routedEvents: RoutedGiftEvent[] = [];
+      const errors: PlatformEventPayload[] = [];
 
       platform.handlers = {
         ...platform.handlers,
-        onGift: (data) =>
-          routedEvents.push({
-            type: "platform:gift",
-            platform: "tiktok",
-            data,
-          }),
+        onGift: (data: unknown) => {
+          if (isPlatformEventPayload(data)) {
+            routedEvents.push({
+              type: "platform:gift",
+              platform: "tiktok",
+              data,
+            });
+          }
+        },
       };
 
-      platform.on("platform:event", (payload) => {
+      platform.on("platform:event", (payload: PlatformEventPayload) => {
         if (payload.type === PlatformEvents.ERROR) {
           errors.push(payload);
         }
@@ -314,7 +392,7 @@ describe("TikTokPlatform behavior alignment", () => {
       expect(errors).toEqual([]);
       expect(routedEvents.length).toBe(1);
 
-      const routed = routedEvents[0];
+      const routed = expectDefined(routedEvents[0]);
       expect(routed.type).toBe("platform:gift");
       expect(routed.platform).toBe("tiktok");
 
@@ -333,7 +411,7 @@ describe("TikTokPlatform behavior alignment", () => {
 
   describe("connection state and viewer count", () => {
     it("caches viewer count and emits viewer-count event", async () => {
-      const events = [];
+      const events: Array<{ type: string; platform: string; data: PlatformEventPayload }> = [];
       const platform = createPlatform(
         {},
         {
@@ -350,14 +428,14 @@ describe("TikTokPlatform behavior alignment", () => {
         },
       );
 
-      const listeners = {};
+      const listeners: Record<string, (payload: unknown) => void | Promise<void>> = {};
       const connection = {
-        on: createMockFn((event, handler) => {
+        on: createMockFn<[event: string, handler: (payload: unknown) => void | Promise<void>], void>((event, handler) => {
           listeners[event] = handler;
         }),
         off: createMockFn(),
-        connect: createMockFn(),
-        disconnect: createMockFn(),
+        connect: createMockFn().mockResolvedValue(undefined),
+        disconnect: createMockFn().mockResolvedValue(undefined),
         removeAllListeners: createMockFn(),
         isConnecting: false,
         isConnected: false,
@@ -367,8 +445,11 @@ describe("TikTokPlatform behavior alignment", () => {
 
       platform.handlers = {
         ...platform.handlers,
-        onViewerCount: (data) =>
-          events.push({ type: "viewer-count", platform: "tiktok", data }),
+        onViewerCount: (data: unknown) => {
+          if (isPlatformEventPayload(data)) {
+            events.push({ type: "viewer-count", platform: "tiktok", data });
+          }
+        },
       };
 
       platform.setupEventListeners();
@@ -382,7 +463,7 @@ describe("TikTokPlatform behavior alignment", () => {
       expect(platform.cachedViewerCount).toBe(42);
       const viewerEvent = events.find((evt) => evt.type === "viewer-count");
       expect(viewerEvent).toBeDefined();
-      expect(viewerEvent.data.count).toBe(42);
+      expect(expectDefined(viewerEvent).data.count).toBe(42);
     });
   });
 
@@ -393,7 +474,7 @@ describe("TikTokPlatform behavior alignment", () => {
           new TikTokPlatform(
             { enabled: true, username: "tester" },
             {
-              WebcastEvent: { ERROR: "error", DISCONNECT: "disconnect" },
+              WebcastEvent: defaultWebcastEvent,
               ControlEvent: {},
               connectionFactory: { createConnection: createMockFn() },
               logger: noOpLogger,

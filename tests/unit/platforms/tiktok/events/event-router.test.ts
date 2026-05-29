@@ -9,18 +9,62 @@ const {
   setupTikTokEventListeners,
 } = require("../../../../../src/platforms/tiktok/events/event-router.ts");
 
+type EventHandler = (payload?: unknown) => void | Promise<void>;
+type ListenerMap = {
+  chat: EventHandler;
+  gift: EventHandler;
+  follow: EventHandler;
+  social: EventHandler;
+  roomUser: EventHandler;
+  envelope: EventHandler;
+  subscribe: EventHandler;
+  superfan: EventHandler;
+  error: EventHandler;
+  disconnect: EventHandler;
+  streamEnd: EventHandler;
+  connected: EventHandler;
+  disconnected: EventHandler;
+  "control-error": EventHandler;
+  rawData: EventHandler;
+  [eventName: string]: EventHandler;
+};
+type EmittedEvent = {
+  type: string;
+  payload: Record<string, unknown> & { count?: number };
+};
+type NormalizedChatData = Record<string, unknown> & {
+  isPaypiggy?: boolean;
+  message?: unknown;
+  metadata: { missingFields?: string[] };
+};
+type HandledChatMessage = {
+  rawData: unknown;
+  normalizedData: NormalizedChatData;
+};
+type ChatPayload = {
+  common?: { msgId?: unknown };
+};
+
+const expectDefined = <T>(value: T | undefined): T => {
+  expect(value).toBeDefined();
+  if (value === undefined) {
+    throw new Error("Expected value to be defined");
+  }
+  return value;
+};
+
 describe("TikTok event router", () => {
   afterEach(() => {
     restoreAllMocks();
   });
 
-  const createPlatformHarness = (overrides = {}) => {
-    const listeners = {};
-    const emitted = [];
-    const handledChatMessages = [];
+  const createPlatformHarness = (overrides: Record<string, unknown> = {}) => {
+    const listeners = {} as ListenerMap;
+    const emitted: EmittedEvent[] = [];
+    const handledChatMessages: HandledChatMessage[] = [];
 
     const connection = {
-      on: createMockFn((eventName, handler) => {
+      on: createMockFn<[eventName: string, handler: EventHandler], void>((eventName, handler) => {
         listeners[eventName] = handler;
       }),
       removeAllListeners: createMockFn(),
@@ -41,12 +85,12 @@ describe("TikTok event router", () => {
         ERROR: "error",
         DISCONNECT: "disconnect",
         STREAM_END: "streamEnd",
-      },
+      } as const,
       ControlEvent: {
         CONNECTED: "connected",
         DISCONNECTED: "disconnected",
         ERROR: "control-error",
-      },
+      } as const,
       platformName: "tiktok",
       timestampService: null,
       selfMessageDetectionService: null,
@@ -61,7 +105,8 @@ describe("TikTok event router", () => {
         resolveEventTimestampMs: createMockFn(() => null),
       },
       _logIncomingEvent: createMockFn().mockResolvedValue(),
-      _emitPlatformEvent: (type, payload) => emitted.push({ type, payload }),
+      _emitPlatformEvent: (type: string, payload: EmittedEvent["payload"]) =>
+        emitted.push({ type, payload }),
       _handleStandardEvent: createMockFn().mockResolvedValue(),
       _handleStreamEnd: createMockFn(),
       handleConnectionIssue: createMockFn(),
@@ -74,7 +119,7 @@ describe("TikTok event router", () => {
       cachedViewerCount: 0,
       connectionTime: 0,
       _getTimestamp: createMockFn(() => "2025-01-02T03:04:05.000Z"),
-      _getPlatformMessageId: createMockFn((data) => {
+      _getPlatformMessageId: createMockFn((data: ChatPayload) => {
         const msgId = data?.common?.msgId;
         if (msgId === undefined || msgId === null) {
           return null;
@@ -82,7 +127,10 @@ describe("TikTok event router", () => {
         const normalized = String(msgId).trim();
         return normalized || null;
       }),
-      _handleChatMessage: async (rawData, normalizedData) =>
+      _handleChatMessage: async (
+        rawData: unknown,
+        normalizedData: NormalizedChatData,
+      ) =>
         handledChatMessages.push({ rawData, normalizedData }),
       ...overrides,
     };
@@ -205,7 +253,7 @@ describe("TikTok event router", () => {
     });
 
     expect(handledChatMessages).toHaveLength(1);
-    expect(handledChatMessages[0].normalizedData.isPaypiggy).toBe(false);
+    expect(expectDefined(handledChatMessages[0]).normalizedData.isPaypiggy).toBe(false);
     expect(
       selfMessageDetectionService.shouldFilterMessage.mock.calls,
     ).toHaveLength(1);
@@ -230,7 +278,7 @@ describe("TikTok event router", () => {
     });
 
     expect(handledChatMessages).toHaveLength(1);
-    expect(handledChatMessages[0].normalizedData.isPaypiggy).toBe(true);
+    expect(expectDefined(handledChatMessages[0]).normalizedData.isPaypiggy).toBe(true);
   });
 
   test("filters historical chat messages based on connection time", async () => {
@@ -319,7 +367,7 @@ describe("TikTok event router", () => {
 
     setupTikTokEventListeners(platform);
 
-    const makePayload = (msgId, comment) => ({
+    const makePayload = (msgId: string, comment: string) => ({
       comment,
       user: {
         userId: "test-user-mix",
@@ -396,9 +444,9 @@ describe("TikTok event router", () => {
     expect(platform.handleTikTokFollow.mock.calls).toHaveLength(1);
     expect(platform.handleTikTokSocial.mock.calls).toHaveLength(1);
     expect(platform._handleStandardEvent.mock.calls).toHaveLength(3);
-    expect(platform._handleStandardEvent.mock.calls[0][0]).toBe("envelope");
-    expect(platform._handleStandardEvent.mock.calls[1][0]).toBe("paypiggy");
-    expect(platform._handleStandardEvent.mock.calls[2][0]).toBe("paypiggy");
+    expect(
+      platform._handleStandardEvent.mock.calls.slice(0, 3).map((call) => call[0]),
+    ).toEqual(["envelope", "paypiggy", "paypiggy"]);
   });
 
   test("handles connection lifecycle events", async () => {
@@ -444,11 +492,12 @@ describe("TikTok event router", () => {
     await listeners[platform.WebcastEvent.CHAT]({ comment: 123 });
 
     expect(handledChatMessages).toHaveLength(1);
-    expect(handledChatMessages[0].normalizedData.message).toEqual({
+    const handledChatMessage = expectDefined(handledChatMessages[0]);
+    expect(handledChatMessage.normalizedData.message).toEqual({
       text: "Unknown Message",
     });
     expect(
-      handledChatMessages[0].normalizedData.metadata.missingFields,
+      handledChatMessage.normalizedData.metadata.missingFields,
     ).toContain("message");
   });
 
@@ -486,7 +535,9 @@ describe("TikTok event router", () => {
       platform.errorHandler.handleEventProcessingError.mock.calls,
     ).toHaveLength(1);
     expect(
-      platform.errorHandler.handleEventProcessingError.mock.calls[0][1],
+      expectDefined(
+        platform.errorHandler.handleEventProcessingError.mock.calls[0],
+      )[1],
     ).toBe("chat-message");
   });
 
@@ -565,11 +616,12 @@ describe("TikTok event router", () => {
     });
 
     expect(handledChatMessages).toHaveLength(1);
-    expect(handledChatMessages[0].normalizedData.message).toEqual({
+    const handledChatMessage = expectDefined(handledChatMessages[0]);
+    expect(handledChatMessage.normalizedData.message).toEqual({
       text: "Unknown Message",
     });
     expect(
-      handledChatMessages[0].normalizedData.metadata.missingFields,
+      handledChatMessage.normalizedData.metadata.missingFields,
     ).toContain("message");
   });
 
@@ -613,7 +665,8 @@ describe("TikTok event router", () => {
     await listeners.rawData(payload);
 
     expect(platform._logIncomingEvent.mock.calls).toHaveLength(1);
-    expect(platform._logIncomingEvent.mock.calls[0][0]).toBe("chat");
-    expect(platform._logIncomingEvent.mock.calls[0][1]).toBe(payload);
+    const logCall = expectDefined(platform._logIncomingEvent.mock.calls[0]);
+    expect(logCall[0]).toBe("chat");
+    expect(logCall[1]).toBe(payload);
   });
 });

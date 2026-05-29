@@ -5,6 +5,7 @@ import {
   clearAllMocks,
   restoreAllMocks,
 } from "../../helpers/bun-mock-utils";
+import type { TestMockFn } from "../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../helpers/mock-factories";
 import { setupAutomatedCleanup } from "../../helpers/mock-lifecycle";
 import { expectNoTechnicalArtifacts } from "../../helpers/assertion-helpers";
@@ -13,37 +14,127 @@ import * as testClock from "../../helpers/test-clock";
 
 initializeTestLogging();
 
-const createEnvelopeNotificationHandler = (mockLogger, mockGiftHandler) => {
-  return async (platform, data) => {
+type EnvelopeData = Record<string, unknown> & {
+  user?: Record<string, unknown>;
+  userId?: unknown;
+  username?: unknown;
+  giftType?: unknown;
+  giftCount?: unknown;
+  amount?: unknown;
+  currency?: unknown;
+  repeatCount?: unknown;
+  timestamp?: unknown;
+  id?: unknown;
+  isError?: unknown;
+};
+type EnvelopeGiftData = Record<string, unknown> & {
+  giftType: string;
+  giftCount: number;
+  amount: number;
+  currency: string;
+  type: "platform:envelope";
+  userId: string;
+  timestamp: unknown;
+  originalEnvelopeData: EnvelopeData;
+};
+type GiftHandlerResult = {
+  id: string;
+  type: string;
+  platform: string;
+  username: string;
+  displayMessage: string;
+  ttsMessage: string;
+  logMessage: string;
+  processedAt: number;
+  timestamp: string;
+  data: EnvelopeGiftData;
+};
+type GiftHandler = TestMockFn<
+  [platform: string, username: string, giftData: EnvelopeGiftData],
+  Promise<GiftHandlerResult>
+>;
+type TestLogger = {
+  debug: (...args: unknown[]) => void;
+  info: (...args: unknown[]) => void;
+  warn: (...args: unknown[]) => void;
+  error: (...args: unknown[]) => void;
+};
+type CanonicalIdentity = {
+  userId?: string;
+  username?: string;
+};
+
+const getErrorMessage = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
+
+const expectDefined = <T>(value: T | undefined): T => {
+  expect(value).toBeDefined();
+  if (value === undefined) {
+    throw new Error("Expected value to be defined");
+  }
+  return value;
+};
+
+const readStringProperty = (
+  record: Record<string, unknown>,
+  key: string,
+): string | undefined => {
+  const value = record[key];
+  return typeof value === "string" && value.trim() ? value : undefined;
+};
+
+const extractEnvelopeIdentity = (
+  platform: string,
+  envelopeData: EnvelopeData,
+): CanonicalIdentity => {
+  if (platform === "tiktok") {
+    return extractTikTokUserData(envelopeData);
+  }
+
+  const identity: CanonicalIdentity = {};
+  const userId = readStringProperty(envelopeData, "userId");
+  const username = readStringProperty(envelopeData, "username");
+  if (userId !== undefined) {
+    identity.userId = userId;
+  }
+  if (username !== undefined) {
+    identity.username = username;
+  }
+  return identity;
+};
+
+const createEnvelopeNotificationHandler = (
+  mockLogger: TestLogger,
+  mockGiftHandler: GiftHandler,
+) => {
+  return async (platform: string, data: EnvelopeData | null) => {
     try {
       mockLogger.info(
         `[Envelope] Treasure chest event on ${platform}`,
         platform,
       );
 
-      const identity =
-        platform === "tiktok"
-          ? extractTikTokUserData(data)
-          : { userId: data?.userId, username: data?.username };
+      const envelopeData = data ?? {};
+      const identity = extractEnvelopeIdentity(platform, envelopeData);
 
       if (!identity.userId || !identity.username) {
         mockLogger.warn(
           "[Envelope] Missing canonical identity in envelope data",
           platform,
-          { data },
+          { data: envelopeData },
         );
         return;
       }
 
-      const isError = data?.isError === true;
+      const isError = envelopeData.isError === true;
       const giftType =
-        typeof data?.giftType === "string" ? data.giftType.trim() : "";
-      const giftCount = Number(data?.giftCount);
-      const amount = Number(data?.amount);
+        typeof envelopeData.giftType === "string" ? envelopeData.giftType.trim() : "";
+      const giftCount = Number(envelopeData.giftCount);
+      const amount = Number(envelopeData.amount);
       const currency =
-        typeof data?.currency === "string" ? data.currency.trim() : "";
+        typeof envelopeData.currency === "string" ? envelopeData.currency.trim() : "";
       const repeatCount =
-        data?.repeatCount === undefined ? 1 : data.repeatCount;
+        envelopeData.repeatCount === undefined ? 1 : envelopeData.repeatCount;
 
       if (
         !giftType ||
@@ -52,14 +143,14 @@ const createEnvelopeNotificationHandler = (mockLogger, mockGiftHandler) => {
         !Number.isFinite(amount) ||
         amount < 0 ||
         !currency ||
-        !data?.timestamp
+        !envelopeData.timestamp
       ) {
         throw new Error(
           "Envelope notification requires giftType, giftCount, amount, currency, timestamp, and id",
         );
       }
 
-      if (!isError && (giftCount <= 0 || amount <= 0 || !data?.id)) {
+      if (!isError && (giftCount <= 0 || amount <= 0 || !envelopeData.id)) {
         throw new Error(
           "Envelope notification requires giftType, giftCount, amount, currency, timestamp, and id",
         );
@@ -73,16 +164,16 @@ const createEnvelopeNotificationHandler = (mockLogger, mockGiftHandler) => {
         repeatCount,
         type: "platform:envelope",
         userId: identity.userId,
-        timestamp: data.timestamp,
-        ...(data?.id ? { id: data.id } : {}),
+        timestamp: envelopeData.timestamp,
+        ...(envelopeData.id ? { id: envelopeData.id } : {}),
         ...(isError ? { isError: true } : {}),
-        originalEnvelopeData: data,
-      };
+        originalEnvelopeData: envelopeData,
+      } satisfies EnvelopeGiftData;
 
       await mockGiftHandler(platform, identity.username, giftData);
     } catch (error) {
       mockLogger.error(
-        `Error handling envelope notification: ${error.message}`,
+        `Error handling envelope notification: ${getErrorMessage(error)}`,
         platform,
         error,
       );
@@ -94,15 +185,16 @@ describe("TikTok Envelope Notification - Behavior Testing", () => {
   let mockLogger: typeof noOpLogger;
   let handleEnvelopeNotification: (
     platform: string,
-    data: any,
+    data: EnvelopeData | null,
   ) => Promise<void>;
-  let mockGiftHandler: ReturnType<typeof createMockFn>;
+  let mockGiftHandler: GiftHandler;
   let capturedGiftCalls: Array<{
     platform: string;
     username: string;
-    giftData: any;
+    giftData: EnvelopeGiftData;
     timestamp: number;
   }>;
+  let capturedGiftResults: GiftHandlerResult[];
 
   setupAutomatedCleanup();
 
@@ -110,29 +202,34 @@ describe("TikTok Envelope Notification - Behavior Testing", () => {
     mockLogger = noOpLogger;
 
     capturedGiftCalls = [];
+    capturedGiftResults = [];
 
-    mockGiftHandler = createMockFn(async (platform, username, giftData) => {
-      const call = {
-        platform,
-        username,
-        giftData,
-        timestamp: testClock.now(),
-      };
-      capturedGiftCalls.push(call);
+    mockGiftHandler = createMockFn(
+      async (platform: string, username: string, giftData: EnvelopeGiftData) => {
+        const call = {
+          platform,
+          username,
+          giftData,
+          timestamp: testClock.now(),
+        };
+        capturedGiftCalls.push(call);
 
-      return {
-        id: "test-notification-id",
-        type: "platform:envelope",
-        platform: platform,
-        username: username,
-        displayMessage: `${username} sent a Treasure Chest`,
-        ttsMessage: `${username} sent a treasure chest`,
-        logMessage: `[Gift] ${username} sent Treasure Chest`,
-        processedAt: testClock.now(),
-        timestamp: new Date(testClock.now()).toISOString(),
-        data: giftData,
-      };
-    });
+        const result = {
+          id: "test-notification-id",
+          type: "platform:envelope",
+          platform,
+          username,
+          displayMessage: `${username} sent a Treasure Chest`,
+          ttsMessage: `${username} sent a treasure chest`,
+          logMessage: `[Gift] ${username} sent Treasure Chest`,
+          processedAt: testClock.now(),
+          timestamp: new Date(testClock.now()).toISOString(),
+          data: giftData,
+        };
+        capturedGiftResults.push(result);
+        return result;
+      },
+    );
 
     handleEnvelopeNotification = createEnvelopeNotificationHandler(
       mockLogger,
@@ -144,24 +241,27 @@ describe("TikTok Envelope Notification - Behavior Testing", () => {
     clearAllMocks();
     restoreAllMocks();
     capturedGiftCalls = [];
+    capturedGiftResults = [];
   });
 
   const getLatestGiftCall = () =>
-    capturedGiftCalls[capturedGiftCalls.length - 1];
+    expectDefined(capturedGiftCalls[capturedGiftCalls.length - 1]);
+
+  const getLatestGiftResult = () =>
+    expectDefined(capturedGiftResults[capturedGiftResults.length - 1]);
 
   const expectGiftCallBehavior = (
-    expectedPlatform,
-    expectedUsername,
-    expectedGiftData,
+    expectedPlatform: string,
+    expectedUsername: string,
+    expectedGiftData: Partial<EnvelopeGiftData>,
   ) => {
     const latestCall = getLatestGiftCall();
-    expect(latestCall).toBeDefined();
     expect(latestCall.platform).toBe(expectedPlatform);
     expect(latestCall.username).toBe(expectedUsername);
     expect(latestCall.giftData).toMatchObject(expectedGiftData);
   };
 
-  const createEnvelopeData = (overrides = {}) => ({
+  const createEnvelopeData = (overrides: Partial<EnvelopeData> = {}) => ({
     user: {
       uniqueId: "testUserEnvelope",
       nickname: "TestEnvelopeDisplay",
@@ -203,13 +303,13 @@ describe("TikTok Envelope Notification - Behavior Testing", () => {
           originalEnvelopeData: completeEnvelopeData,
         });
 
-        const result = await mockGiftHandler.mock.results[0].value;
+        const result = getLatestGiftResult();
         expectNoTechnicalArtifacts(result.displayMessage);
         expectNoTechnicalArtifacts(result.ttsMessage);
         expect(result.displayMessage).toContain("TestEnvelopeDisplay");
         expect(result.displayMessage).toContain("Treasure Chest");
       },
-      TEST_TIMEOUTS.UNIT,
+      TEST_TIMEOUTS.FAST,
     );
 
     test(
@@ -232,7 +332,7 @@ describe("TikTok Envelope Notification - Behavior Testing", () => {
           currency: "coins",
         });
       },
-      TEST_TIMEOUTS.UNIT,
+      TEST_TIMEOUTS.FAST,
     );
   });
 
@@ -253,7 +353,7 @@ describe("TikTok Envelope Notification - Behavior Testing", () => {
 
         expect(capturedGiftCalls).toHaveLength(0);
       },
-      TEST_TIMEOUTS.UNIT,
+      TEST_TIMEOUTS.FAST,
     );
 
     test(
@@ -271,7 +371,7 @@ describe("TikTok Envelope Notification - Behavior Testing", () => {
 
         expect(capturedGiftCalls).toHaveLength(0);
       },
-      TEST_TIMEOUTS.UNIT,
+      TEST_TIMEOUTS.FAST,
     );
 
     test(
@@ -288,7 +388,7 @@ describe("TikTok Envelope Notification - Behavior Testing", () => {
 
         expect(capturedGiftCalls).toHaveLength(0);
       },
-      TEST_TIMEOUTS.UNIT,
+      TEST_TIMEOUTS.FAST,
     );
   });
 
@@ -320,7 +420,7 @@ describe("TikTok Envelope Notification - Behavior Testing", () => {
           originalEnvelopeData: nestedUserData,
         });
       },
-      TEST_TIMEOUTS.UNIT,
+      TEST_TIMEOUTS.FAST,
     );
   });
 
@@ -346,7 +446,7 @@ describe("TikTok Envelope Notification - Behavior Testing", () => {
           currency: "coins",
         });
       },
-      TEST_TIMEOUTS.UNIT,
+      TEST_TIMEOUTS.FAST,
     );
 
     test(
@@ -370,7 +470,7 @@ describe("TikTok Envelope Notification - Behavior Testing", () => {
           currency: "coins",
         });
       },
-      TEST_TIMEOUTS.UNIT,
+      TEST_TIMEOUTS.FAST,
     );
 
     test(
@@ -389,7 +489,7 @@ describe("TikTok Envelope Notification - Behavior Testing", () => {
 
         expect(capturedGiftCalls).toHaveLength(0);
       },
-      TEST_TIMEOUTS.UNIT,
+      TEST_TIMEOUTS.FAST,
     );
   });
 
@@ -410,7 +510,7 @@ describe("TikTok Envelope Notification - Behavior Testing", () => {
 
         expect(capturedGiftCalls).toHaveLength(0);
       },
-      TEST_TIMEOUTS.UNIT,
+      TEST_TIMEOUTS.FAST,
     );
 
     test(
@@ -434,7 +534,7 @@ describe("TikTok Envelope Notification - Behavior Testing", () => {
 
         expect(capturedGiftCalls).toHaveLength(0);
       },
-      TEST_TIMEOUTS.UNIT,
+      TEST_TIMEOUTS.FAST,
     );
 
     test(
@@ -458,7 +558,7 @@ describe("TikTok Envelope Notification - Behavior Testing", () => {
 
         expect(capturedGiftCalls).toHaveLength(0);
       },
-      TEST_TIMEOUTS.UNIT,
+      TEST_TIMEOUTS.FAST,
     );
   });
 
@@ -490,7 +590,7 @@ describe("TikTok Envelope Notification - Behavior Testing", () => {
         expect(giftData.timestamp).toBeDefined();
         expect(giftData.originalEnvelopeData).toEqual(envelopeData);
       },
-      TEST_TIMEOUTS.UNIT,
+      TEST_TIMEOUTS.FAST,
     );
 
     test(
@@ -516,10 +616,10 @@ describe("TikTok Envelope Notification - Behavior Testing", () => {
           "test_custom_data",
         );
 
-        const result = await mockGiftHandler.mock.results[0].value;
+        const result = getLatestGiftResult();
         expectNoTechnicalArtifacts(result.displayMessage);
       },
-      TEST_TIMEOUTS.UNIT,
+      TEST_TIMEOUTS.FAST,
     );
 
     test(
@@ -540,7 +640,7 @@ describe("TikTok Envelope Notification - Behavior Testing", () => {
         const giftData = latestCall.giftData;
         expect(giftData.userId).toBe("testUserWithId");
       },
-      TEST_TIMEOUTS.UNIT,
+      TEST_TIMEOUTS.FAST,
     );
   });
 
@@ -565,7 +665,7 @@ describe("TikTok Envelope Notification - Behavior Testing", () => {
         expect(giftData.amount).toBe(0);
         expect(giftData).not.toHaveProperty("id");
       },
-      TEST_TIMEOUTS.UNIT,
+      TEST_TIMEOUTS.FAST,
     );
 
     test(
@@ -575,7 +675,7 @@ describe("TikTok Envelope Notification - Behavior Testing", () => {
 
         expect(capturedGiftCalls).toHaveLength(0);
       },
-      TEST_TIMEOUTS.UNIT,
+      TEST_TIMEOUTS.FAST,
     );
 
     test(
@@ -585,7 +685,7 @@ describe("TikTok Envelope Notification - Behavior Testing", () => {
 
         expect(capturedGiftCalls).toHaveLength(0);
       },
-      TEST_TIMEOUTS.UNIT,
+      TEST_TIMEOUTS.FAST,
     );
 
     test(
@@ -604,7 +704,7 @@ describe("TikTok Envelope Notification - Behavior Testing", () => {
 
         expect(capturedGiftCalls).toHaveLength(0);
       },
-      TEST_TIMEOUTS.UNIT,
+      TEST_TIMEOUTS.FAST,
     );
   });
 
@@ -624,9 +724,10 @@ describe("TikTok Envelope Notification - Behavior Testing", () => {
         await handleEnvelopeNotification("tiktok", envelopeData);
 
         expect(capturedGiftCalls).toHaveLength(1);
-        expect(capturedGiftCalls[0].platform).toBe("tiktok");
-        expect(capturedGiftCalls[0].username).toBe("TestUserDelegation");
-        expect(capturedGiftCalls[0].giftData).toMatchObject({
+        const giftCall = getLatestGiftCall();
+        expect(giftCall.platform).toBe("tiktok");
+        expect(giftCall.username).toBe("TestUserDelegation");
+        expect(giftCall.giftData).toMatchObject({
           giftType: "Treasure Chest",
           giftCount: 1,
           amount: 700,
@@ -637,7 +738,7 @@ describe("TikTok Envelope Notification - Behavior Testing", () => {
           originalEnvelopeData: envelopeData,
         });
       },
-      TEST_TIMEOUTS.UNIT,
+      TEST_TIMEOUTS.FAST,
     );
 
     test(
@@ -661,7 +762,7 @@ describe("TikTok Envelope Notification - Behavior Testing", () => {
         expect(giftData.giftType).toBe("Treasure Chest");
         expect(giftData.giftCount).toBe(1);
       },
-      TEST_TIMEOUTS.UNIT,
+      TEST_TIMEOUTS.FAST,
     );
 
     test(
@@ -688,11 +789,11 @@ describe("TikTok Envelope Notification - Behavior Testing", () => {
           "test_extra_info",
         );
 
-        const result = await mockGiftHandler.mock.results[0].value;
+        const result = getLatestGiftResult();
         expectNoTechnicalArtifacts(result.displayMessage);
         expect(result.displayMessage).toContain("TestUserRich");
       },
-      TEST_TIMEOUTS.UNIT,
+      TEST_TIMEOUTS.FAST,
     );
   });
 });

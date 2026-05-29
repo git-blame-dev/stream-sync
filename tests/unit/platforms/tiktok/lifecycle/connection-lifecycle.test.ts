@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach } from "bun:test";
 import {
+  type TestMockFn,
   createMockFn,
   restoreAllMocks,
 } from "../../../../helpers/bun-mock-utils";
@@ -7,7 +8,111 @@ import { noOpLogger } from "../../../../helpers/mock-factories";
 import { TikTokPlatform } from "../../../../../src/platforms/tiktok.ts";
 import { PlatformEvents } from "../../../../../src/interfaces/PlatformEvents";
 
-const createPlatform = (configOverrides = {}, dependencyOverrides = {}) => {
+type WebcastEventMap = {
+  CHAT: string;
+  GIFT: string;
+  FOLLOW: string;
+  SOCIAL: string;
+  ROOM_USER: string;
+  ENVELOPE?: string;
+  SUBSCRIBE?: string;
+  SUPER_FAN?: string;
+  ERROR: string;
+  DISCONNECT: string;
+  STREAM_END?: string;
+};
+type PlatformEventPayload = Record<string, unknown> & {
+  type?: string;
+  platform?: string;
+  data?: Record<string, unknown>;
+};
+type EventHandler = (payload: unknown) => void | Promise<void>;
+type TikTokConnectionFake = {
+  connect: TestMockFn<[], Promise<unknown>>;
+  disconnect: TestMockFn<[], Promise<unknown>>;
+  on: TestMockFn<[eventName: string, handler: EventHandler], void>;
+  removeAllListeners: TestMockFn<[eventName?: string], void>;
+};
+type RetrySystemFake = {
+  resetRetryCount: TestMockFn<[platform: string], void>;
+  handleConnectionError: TestMockFn<
+    [
+      platform: string,
+      error: unknown,
+      reconnect: () => Promise<void>,
+      cleanup: () => Promise<void>,
+    ],
+    void
+  >;
+  isConnected: TestMockFn<[platform: string], boolean | undefined>;
+};
+type DependencyOverrides = {
+  logger?: typeof noOpLogger;
+  notificationManager?: unknown;
+  connectionFactory?: {
+    createConnection: (platform: string, config: unknown, dependencies: unknown) => unknown;
+  };
+  TikTokWebSocketClient?: unknown;
+  WebcastEvent?: WebcastEventMap;
+  ControlEvent?: Record<string, string>;
+  retrySystem?: RetrySystemFake;
+};
+
+const expectDefined = <T>(value: T | undefined): T => {
+  expect(value).toBeDefined();
+  if (value === undefined) {
+    throw new Error("Expected value to be defined");
+  }
+  return value;
+};
+
+const isPlatformEventPayload = (payload: unknown): payload is PlatformEventPayload =>
+  typeof payload === "object" && payload !== null;
+
+const capturePlatformEvent = (target: PlatformEventPayload[]) => (payload: unknown) => {
+  if (isPlatformEventPayload(payload)) {
+    target.push(payload);
+  }
+};
+
+const createConnectionFake = (
+  overrides: Partial<TikTokConnectionFake> = {},
+): TikTokConnectionFake => ({
+  connect: createMockFn<[], Promise<unknown>>().mockResolvedValue(undefined),
+  disconnect: createMockFn<[], Promise<unknown>>().mockResolvedValue(undefined),
+  on: createMockFn<[eventName: string, handler: EventHandler], void>(),
+  removeAllListeners: createMockFn<[eventName?: string], void>(),
+  ...overrides,
+});
+
+const defaultWebcastEvent = {
+  CHAT: "chat",
+  GIFT: "gift",
+  FOLLOW: "follow",
+  SOCIAL: "social",
+  ROOM_USER: "roomUser",
+  ERROR: "error",
+  DISCONNECT: "disconnect",
+} satisfies WebcastEventMap;
+
+const createRetrySystem = (): RetrySystemFake => ({
+  resetRetryCount: createMockFn<[platform: string], void>(),
+  handleConnectionError: createMockFn<
+    [
+      platform: string,
+      error: unknown,
+      reconnect: () => Promise<void>,
+      cleanup: () => Promise<void>,
+    ],
+    void
+  >(),
+  isConnected: createMockFn<[platform: string], boolean | undefined>(),
+});
+
+const createPlatform = (
+  configOverrides: Record<string, unknown> = {},
+  dependencyOverrides: DependencyOverrides = {},
+) => {
   const logger = dependencyOverrides.logger || noOpLogger;
   const notificationManager = dependencyOverrides.notificationManager || {
     emit: createMockFn(),
@@ -17,11 +122,8 @@ const createPlatform = (configOverrides = {}, dependencyOverrides = {}) => {
   };
   const connectionFactory = dependencyOverrides.connectionFactory || {
     createConnection: createMockFn().mockReturnValue({
-      on: createMockFn(),
       emit: createMockFn(),
-      removeAllListeners: createMockFn(),
-      connect: createMockFn().mockResolvedValue(),
-      disconnect: createMockFn(),
+      ...createConnectionFake(),
     }),
   };
 
@@ -30,17 +132,14 @@ const createPlatform = (configOverrides = {}, dependencyOverrides = {}) => {
     createMockFn().mockImplementation(() => ({
       on: createMockFn(),
       off: createMockFn(),
-      connect: createMockFn(),
-      disconnect: createMockFn(),
+      connect: createMockFn().mockResolvedValue(undefined),
+      disconnect: createMockFn().mockResolvedValue(undefined),
       getState: createMockFn().mockReturnValue("DISCONNECTED"),
       isConnecting: false,
       isConnected: false,
     }));
 
-  const WebcastEvent = dependencyOverrides.WebcastEvent || {
-    ERROR: "error",
-    DISCONNECT: "disconnect",
-  };
+  const WebcastEvent = dependencyOverrides.WebcastEvent || defaultWebcastEvent;
   const ControlEvent = dependencyOverrides.ControlEvent || {};
 
   const config = {
@@ -49,18 +148,33 @@ const createPlatform = (configOverrides = {}, dependencyOverrides = {}) => {
     ...configOverrides,
   };
 
-  return new TikTokPlatform(config, {
+  const dependencies = {
     logger,
     notificationManager,
     TikTokWebSocketClient,
     WebcastEvent,
     ControlEvent,
     connectionFactory,
-    ...dependencyOverrides,
-  });
+  };
+
+  return new TikTokPlatform(
+    config,
+    dependencyOverrides.retrySystem === undefined
+      ? dependencies
+      : { ...dependencies, retrySystem: dependencyOverrides.retrySystem },
+  );
 };
 
-const createSharePayload = (overrides = {}) => ({
+const replaceCreateIntervalWithMock = (platform: ReturnType<typeof createPlatform>) => {
+  const createInterval = createMockFn<
+    Parameters<typeof platform.intervalManager.createInterval>,
+    ReturnType<typeof platform.intervalManager.createInterval>
+  >();
+  platform.intervalManager.createInterval = createInterval;
+  return createInterval;
+};
+
+const createSharePayload = (overrides: Record<string, unknown> = {}) => ({
   user: {
     userId: "test-share-user-id",
     uniqueId: "test-share-user",
@@ -105,14 +219,10 @@ describe("TikTokPlatform connection lifecycle", () => {
     });
 
     it("schedules deferred reconnect checks for offline initialization failures", async () => {
-      const retrySystem = {
-        resetRetryCount: createMockFn(),
-        handleConnectionError: createMockFn(),
-        isConnected: createMockFn(),
-      };
+      const retrySystem = createRetrySystem();
       const platform = createPlatform({}, { retrySystem });
       platform.intervalManager.hasInterval = createMockFn().mockReturnValue(false);
-      platform.intervalManager.createInterval = createMockFn();
+      const createInterval = replaceCreateIntervalWithMock(platform);
       platform._connect = createMockFn().mockRejectedValue(
         new Error("Connection closed: User is not live"),
       );
@@ -121,8 +231,8 @@ describe("TikTokPlatform connection lifecycle", () => {
         "Connection closed: User is not live",
       );
       expect(retrySystem.handleConnectionError).not.toHaveBeenCalled();
-      expect(platform.intervalManager.createInterval).toHaveBeenCalledTimes(1);
-      expect(platform.intervalManager.createInterval.mock.calls[0][0]).toBe(
+      expect(createInterval).toHaveBeenCalledTimes(1);
+      expect(expectDefined(createInterval.mock.calls[0])[0]).toBe(
         "tiktok-stream-reconnect",
       );
     });
@@ -132,8 +242,8 @@ describe("TikTokPlatform connection lifecycle", () => {
     it("returns early when connectionActive is already true", async () => {
       const platform = createPlatform();
       platform.connectionActive = true;
-      const emittedEvents = [];
-      platform.on("platform:event", (e) => emittedEvents.push(e));
+      const emittedEvents: PlatformEventPayload[] = [];
+      platform.on("platform:event", capturePlatformEvent(emittedEvents));
 
       await platform.handleConnectionSuccess();
 
@@ -164,14 +274,14 @@ describe("TikTokPlatform connection lifecycle", () => {
     it("emits CHAT_CONNECTED event", async () => {
       const platform = createPlatform();
       platform.connectionActive = false;
-      const emittedEvents = [];
-      platform.on("platform:event", (e) => emittedEvents.push(e));
+      const emittedEvents: PlatformEventPayload[] = [];
+      platform.on("platform:event", capturePlatformEvent(emittedEvents));
 
       await platform.handleConnectionSuccess();
 
-      const connectedEvent = emittedEvents.find(
+      const connectedEvent = expectDefined(emittedEvents.find(
         (e) => e.type === PlatformEvents.CHAT_CONNECTED,
-      );
+      ));
       expect(connectedEvent).toBeDefined();
       expect(connectedEvent.platform).toBe("tiktok");
     });
@@ -180,7 +290,7 @@ describe("TikTokPlatform connection lifecycle", () => {
   describe("handleConnectionError", () => {
     it("cleans up event listeners and resets connection state", () => {
       const platform = createPlatform();
-      platform.connection = { removeAllListeners: createMockFn() };
+      platform.connection = createConnectionFake();
       platform.listenersConfigured = true;
       platform.connectionActive = true;
 
@@ -193,10 +303,14 @@ describe("TikTokPlatform connection lifecycle", () => {
 
     it("clears tracked share actors when stream is not live", async () => {
       const platform = createPlatform();
-      const shares = [];
+      const shares: PlatformEventPayload[] = [];
       platform.handlers = {
         ...platform.handlers,
-        onShare: (data) => shares.push(data),
+        onShare: (data) => {
+          if (isPlatformEventPayload(data)) {
+            shares.push(data);
+          }
+        },
       };
 
       await platform._handleShare(
@@ -225,10 +339,14 @@ describe("TikTokPlatform connection lifecycle", () => {
 
     it("keeps tracked share actors on recoverable connection errors", async () => {
       const platform = createPlatform();
-      const shares = [];
+      const shares: PlatformEventPayload[] = [];
       platform.handlers = {
         ...platform.handlers,
-        onShare: (data) => shares.push(data),
+        onShare: (data) => {
+          if (isPlatformEventPayload(data)) {
+            shares.push(data);
+          }
+        },
       };
 
       await platform._handleShare(
@@ -263,11 +381,7 @@ describe("TikTokPlatform connection lifecycle", () => {
     });
 
     it("returns retry-queued result for recoverable errors", () => {
-      const retrySystem = {
-        resetRetryCount: createMockFn(),
-        handleConnectionError: createMockFn(),
-        isConnected: createMockFn(),
-      };
+      const retrySystem = createRetrySystem();
       const platform = createPlatform({}, { retrySystem });
       platform.retryLock = false;
 
@@ -279,24 +393,20 @@ describe("TikTokPlatform connection lifecycle", () => {
     it("schedules deferred reconnect checks for not-live disconnects", () => {
       const platform = createPlatform();
       platform.intervalManager.hasInterval = createMockFn().mockReturnValue(false);
-      platform.intervalManager.createInterval = createMockFn();
+      const createInterval = replaceCreateIntervalWithMock(platform);
 
       const result = platform.handleRetry(
         new Error("Connection closed: User is not live"),
       );
 
       expect(result).toEqual({ action: "deferred-reconnect-scheduled" });
-      expect(platform.intervalManager.createInterval).toHaveBeenCalledTimes(1);
+      expect(createInterval).toHaveBeenCalledTimes(1);
     });
   });
 
   describe("queueRetry", () => {
     it("returns queued=true and sets retryLock when successful", () => {
-      const retrySystem = {
-        resetRetryCount: createMockFn(),
-        handleConnectionError: createMockFn(),
-        isConnected: createMockFn(),
-      };
+      const retrySystem = createRetrySystem();
       const platform = createPlatform({}, { retrySystem });
       platform.retryLock = false;
 
@@ -307,11 +417,7 @@ describe("TikTokPlatform connection lifecycle", () => {
     });
 
     it("returns queued=false with reason locked when already locked", () => {
-      const retrySystem = {
-        resetRetryCount: createMockFn(),
-        handleConnectionError: createMockFn(),
-        isConnected: createMockFn(),
-      };
+      const retrySystem = createRetrySystem();
       const platform = createPlatform({}, { retrySystem });
       platform.retryLock = true;
 
@@ -322,28 +428,32 @@ describe("TikTokPlatform connection lifecycle", () => {
     });
 
     it("routes reconnect callback failures through handleRetry", async () => {
-      const retrySystem = {
-        resetRetryCount: createMockFn(),
-        handleConnectionError: createMockFn(),
-        isConnected: createMockFn(),
-      };
+      const retrySystem = createRetrySystem();
       const platform = createPlatform({}, { retrySystem });
       platform.retryLock = false;
       platform._connect = createMockFn().mockRejectedValue(
         new Error("Connection closed: User is not live"),
       );
-      platform.handleRetry = createMockFn().mockReturnValue({
+      const handleRetry = createMockFn<
+        [err: unknown],
+        { action: string; reason?: string }
+      >().mockReturnValue({
         action: "skipped",
         reason: "non-recoverable",
       });
+      platform.handleRetry = handleRetry;
 
       platform.queueRetry(new Error("connection timeout"));
-      const reconnectFn = retrySystem.handleConnectionError.mock.calls[0][2];
+      const reconnectFn = expectDefined(
+        retrySystem.handleConnectionError.mock.calls[0],
+      )[2];
 
       await reconnectFn();
 
-      expect(platform.handleRetry).toHaveBeenCalledTimes(1);
-      expect(platform.handleRetry.mock.calls[0][0].message).toBe(
+      expect(handleRetry).toHaveBeenCalledTimes(1);
+      const retryError = expectDefined(handleRetry.mock.calls[0])[0];
+      expect(retryError).toBeInstanceOf(Error);
+      expect(retryError instanceof Error ? retryError.message : undefined).toBe(
         "Connection closed: User is not live",
       );
     });
@@ -353,10 +463,7 @@ describe("TikTokPlatform connection lifecycle", () => {
     it("sets connectionActive=false and cleans up", async () => {
       const platform = createPlatform();
       platform.connectionActive = true;
-      platform.connection = {
-        removeAllListeners: createMockFn(),
-        disconnect: createMockFn(),
-      };
+      platform.connection = createConnectionFake();
 
       await platform.handleConnectionIssue("stream ended");
 
@@ -366,8 +473,8 @@ describe("TikTokPlatform connection lifecycle", () => {
 
     it("emits disconnection event", async () => {
       const platform = createPlatform();
-      const emittedEvents = [];
-      platform.on("platform:event", (e) => emittedEvents.push(e));
+      const emittedEvents: PlatformEventPayload[] = [];
+      platform.on("platform:event", capturePlatformEvent(emittedEvents));
 
       await platform.handleConnectionIssue("stream ended");
 
@@ -378,11 +485,7 @@ describe("TikTokPlatform connection lifecycle", () => {
     });
 
     it("returns issueType=disconnection for regular disconnections", async () => {
-      const retrySystem = {
-        resetRetryCount: createMockFn(),
-        handleConnectionError: createMockFn(),
-        isConnected: createMockFn(),
-      };
+      const retrySystem = createRetrySystem();
       const platform = createPlatform({}, { retrySystem });
       platform.retryLock = false;
 
@@ -393,11 +496,7 @@ describe("TikTokPlatform connection lifecycle", () => {
     });
 
     it("returns issueType=error when isError=true", async () => {
-      const retrySystem = {
-        resetRetryCount: createMockFn(),
-        handleConnectionError: createMockFn(),
-        isConnected: createMockFn(),
-      };
+      const retrySystem = createRetrySystem();
       const platform = createPlatform({}, { retrySystem });
       platform.retryLock = false;
 
@@ -411,11 +510,7 @@ describe("TikTokPlatform connection lifecycle", () => {
     });
 
     it("returns issueType=stream-not-live for not-live messages", async () => {
-      const retrySystem = {
-        resetRetryCount: createMockFn(),
-        handleConnectionError: createMockFn(),
-        isConnected: createMockFn(),
-      };
+      const retrySystem = createRetrySystem();
       const platform = createPlatform({}, { retrySystem });
       platform.retryLock = false;
 
@@ -432,40 +527,37 @@ describe("TikTokPlatform connection lifecycle", () => {
     });
 
     it("emits stream-status disconnects with willReconnect=true for not-live issues", async () => {
-      const retrySystem = {
-        resetRetryCount: createMockFn(),
-        handleConnectionError: createMockFn(),
-        isConnected: createMockFn(),
-      };
+      const retrySystem = createRetrySystem();
       const platform = createPlatform({}, { retrySystem });
       platform.intervalManager.hasInterval = createMockFn().mockReturnValue(false);
-      platform.intervalManager.createInterval = createMockFn();
-      const emittedEvents = [];
-      platform.on("platform:event", (e) => emittedEvents.push(e));
+      const createInterval = replaceCreateIntervalWithMock(platform);
+      const emittedEvents: PlatformEventPayload[] = [];
+      platform.on("platform:event", capturePlatformEvent(emittedEvents));
 
       await platform.handleConnectionIssue({
         message: "Stream is not live",
         code: 4404,
       });
 
-      const disconnectEvent = emittedEvents.find(
+      const disconnectEvent = expectDefined(emittedEvents.find(
         (e) => e.type === PlatformEvents.CHAT_DISCONNECTED,
-      );
+      ));
       expect(disconnectEvent).toBeDefined();
-      expect(disconnectEvent.data.willReconnect).toBe(true);
+      expect(expectDefined(disconnectEvent.data).willReconnect).toBe(true);
+      expect(createInterval).toHaveBeenCalledTimes(1);
     });
 
     it("keeps tracked share actors on transient disconnection", async () => {
-      const retrySystem = {
-        resetRetryCount: createMockFn(),
-        handleConnectionError: createMockFn(),
-        isConnected: createMockFn(),
-      };
+      const retrySystem = createRetrySystem();
       const platform = createPlatform({}, { retrySystem });
-      const shares = [];
+      const shares: PlatformEventPayload[] = [];
       platform.handlers = {
         ...platform.handlers,
-        onShare: (data) => shares.push(data),
+        onShare: (data) => {
+          if (isPlatformEventPayload(data)) {
+            shares.push(data);
+          }
+        },
       };
 
       await platform._handleShare(
@@ -490,16 +582,16 @@ describe("TikTokPlatform connection lifecycle", () => {
     });
 
     it("clears tracked share actors on stream-not-live boundary", async () => {
-      const retrySystem = {
-        resetRetryCount: createMockFn(),
-        handleConnectionError: createMockFn(),
-        isConnected: createMockFn(),
-      };
+      const retrySystem = createRetrySystem();
       const platform = createPlatform({}, { retrySystem });
-      const shares = [];
+      const shares: PlatformEventPayload[] = [];
       platform.handlers = {
         ...platform.handlers,
-        onShare: (data) => shares.push(data),
+        onShare: (data) => {
+          if (isPlatformEventPayload(data)) {
+            shares.push(data);
+          }
+        },
       };
 
       await platform._handleShare(
@@ -527,11 +619,7 @@ describe("TikTokPlatform connection lifecycle", () => {
     });
 
     it("skips retry when platform is disabled", async () => {
-      const retrySystem = {
-        resetRetryCount: createMockFn(),
-        handleConnectionError: createMockFn(),
-        isConnected: createMockFn(),
-      };
+      const retrySystem = createRetrySystem();
       const platform = createPlatform({ enabled: false }, { retrySystem });
       platform.queueRetry = createMockFn().mockReturnValue({ queued: true });
 
@@ -544,11 +632,7 @@ describe("TikTokPlatform connection lifecycle", () => {
     });
 
     it("skips retry when disconnection is planned", async () => {
-      const retrySystem = {
-        resetRetryCount: createMockFn(),
-        handleConnectionError: createMockFn(),
-        isConnected: createMockFn(),
-      };
+      const retrySystem = createRetrySystem();
       const platform = createPlatform({}, { retrySystem });
       platform.queueRetry = createMockFn().mockReturnValue({ queued: true });
       platform.isPlannedDisconnection = true;
@@ -562,11 +646,7 @@ describe("TikTokPlatform connection lifecycle", () => {
     });
 
     it("skips retry for terminal account/config disconnect reasons", async () => {
-      const retrySystem = {
-        resetRetryCount: createMockFn(),
-        handleConnectionError: createMockFn(),
-        isConnected: createMockFn(),
-      };
+      const retrySystem = createRetrySystem();
       const platform = createPlatform({}, { retrySystem });
       platform.queueRetry = createMockFn().mockReturnValue({ queued: true });
 
@@ -583,10 +663,14 @@ describe("TikTokPlatform connection lifecycle", () => {
   describe("_handleStreamEnd", () => {
     it("clears tracked share actors when stream end is handled", async () => {
       const platform = createPlatform();
-      const shares = [];
+      const shares: PlatformEventPayload[] = [];
       platform.handlers = {
         ...platform.handlers,
-        onShare: (data) => shares.push(data),
+        onShare: (data) => {
+          if (isPlatformEventPayload(data)) {
+            shares.push(data);
+          }
+        },
       };
       platform.intervalManager.hasInterval =
         createMockFn().mockReturnValue(true);
@@ -616,7 +700,7 @@ describe("TikTokPlatform connection lifecycle", () => {
       const platform = createPlatform();
       platform.intervalManager.hasInterval =
         createMockFn().mockReturnValueOnce(false).mockReturnValue(true);
-      platform.intervalManager.createInterval = createMockFn();
+      const createInterval = replaceCreateIntervalWithMock(platform);
 
       await platform.handleConnectionIssue({
         message: "Stream is not live",
@@ -624,8 +708,8 @@ describe("TikTokPlatform connection lifecycle", () => {
       });
       await platform._handleStreamEnd({ reason: "User is not live" });
 
-      expect(platform.intervalManager.createInterval).toHaveBeenCalledTimes(1);
-      expect(platform.intervalManager.createInterval.mock.calls[0][0]).toBe(
+      expect(createInterval).toHaveBeenCalledTimes(1);
+      expect(expectDefined(createInterval.mock.calls[0])[0]).toBe(
         "tiktok-stream-reconnect",
       );
     });
@@ -634,12 +718,12 @@ describe("TikTokPlatform connection lifecycle", () => {
       const platform = createPlatform();
       platform.intervalManager.hasInterval =
         createMockFn().mockReturnValue(false);
-      platform.intervalManager.createInterval = createMockFn();
+      const createInterval = replaceCreateIntervalWithMock(platform);
 
       await platform._handleStreamEnd({});
 
-      expect(platform.intervalManager.createInterval).toHaveBeenCalledTimes(1);
-      expect(platform.intervalManager.createInterval.mock.calls[0][0]).toBe(
+      expect(createInterval).toHaveBeenCalledTimes(1);
+      expect(expectDefined(createInterval.mock.calls[0])[0]).toBe(
         "tiktok-stream-reconnect",
       );
     });
@@ -648,21 +732,21 @@ describe("TikTokPlatform connection lifecycle", () => {
       const platform = createPlatform();
       platform.intervalManager.hasInterval =
         createMockFn().mockReturnValue(false);
-      platform.intervalManager.createInterval = createMockFn();
-      const emittedEvents = [];
-      platform.on("platform:event", (e) => emittedEvents.push(e));
+      const createInterval = replaceCreateIntervalWithMock(platform);
+      const emittedEvents: PlatformEventPayload[] = [];
+      platform.on("platform:event", capturePlatformEvent(emittedEvents));
 
       await platform._handleStreamEnd({
         message: "Stream is not live",
         code: 4404,
       });
 
-      const disconnectEvent = emittedEvents.find(
+      const disconnectEvent = expectDefined(emittedEvents.find(
         (e) => e.type === PlatformEvents.CHAT_DISCONNECTED,
-      );
+      ));
       expect(disconnectEvent).toBeDefined();
-      expect(disconnectEvent.data.willReconnect).toBe(true);
-      expect(platform.intervalManager.createInterval).toHaveBeenCalledTimes(1);
+      expect(expectDefined(disconnectEvent.data).willReconnect).toBe(true);
+      expect(createInterval).toHaveBeenCalledTimes(1);
     });
   });
 });

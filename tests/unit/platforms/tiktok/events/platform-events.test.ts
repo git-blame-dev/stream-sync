@@ -13,6 +13,48 @@ const {
 } = require("../../../../helpers/avatar-source-matrix-fixtures");
 import { DEFAULT_AVATAR_URL } from "../../../../../src/constants/avatar";
 
+type EventHandler = (payload: unknown) => void | Promise<void>;
+type EventHandlerMap = Record<string, EventHandler>;
+type PlatformEventPayload = Record<string, unknown> & {
+  type?: string;
+  platform?: string;
+  userId?: string;
+  username?: string;
+  giftType?: string;
+  giftCount?: number;
+  amount?: number;
+  currency?: string;
+  avatarUrl?: string;
+  metadata?: Record<string, unknown>;
+  count?: number;
+  viewerCount?: number;
+  isLive?: boolean;
+  tier?: string;
+};
+
+const expectDefined = <T>(value: T | undefined): T => {
+  expect(value).toBeDefined();
+  if (value === undefined) {
+    throw new Error("Expected value to be defined");
+  }
+  return value;
+};
+
+const emitCapturedEvent = (
+  eventHandlers: EventHandlerMap,
+  eventName: string,
+  payload: unknown,
+): void | Promise<void> => expectDefined(eventHandlers[eventName])(payload);
+
+const capturePayload = (target: PlatformEventPayload[]) => (data: unknown) => {
+  if (isPlatformEventPayload(data)) {
+    target.push(data);
+  }
+};
+
+const isPlatformEventPayload = (data: unknown): data is PlatformEventPayload =>
+  typeof data === "object" && data !== null;
+
 describe("TikTokPlatform event emissions", () => {
   afterEach(() => {
     restoreAllMocks();
@@ -34,45 +76,53 @@ describe("TikTokPlatform event emissions", () => {
       SOCIAL: "social",
       ERROR: "error",
       DISCONNECT: "disconnect",
-    };
+      STREAM_END: "streamEnd",
+    } as const;
 
-    const dependencies = createMockTikTokPlatformDependencies({ webcastEvent });
-    dependencies.connectionFactory = {
-      createConnection: createMockFn().mockReturnValue({
-        on: createMockFn(),
-        removeAllListeners: createMockFn(),
-      }),
-      cleanup: createMockFn(),
+    const dependencies = {
+      ...createMockTikTokPlatformDependencies({ webcastEvent }),
+      WebcastEvent: webcastEvent,
+      connectionFactory: {
+        createConnection: createMockFn().mockReturnValue({
+          on: createMockFn(),
+          connect: createMockFn().mockResolvedValue(undefined),
+          disconnect: createMockFn().mockResolvedValue(undefined),
+          removeAllListeners: createMockFn(),
+        }),
+        cleanup: createMockFn(),
+      },
     };
     const platform = new TikTokPlatform(baseConfig, dependencies);
 
-    const eventHandlers = {};
+    const eventHandlers: EventHandlerMap = {};
     platform.connection = {
-      on: createMockFn((event, handler) => {
+      on: createMockFn<[event: string, handler: EventHandler], void>((event, handler) => {
         eventHandlers[event] = handler;
         return platform.connection;
       }),
+      connect: createMockFn().mockResolvedValue(undefined),
+      disconnect: createMockFn().mockResolvedValue(undefined),
       removeAllListeners: createMockFn(),
     };
 
-    const envelopes = [];
-    const shares = [];
-    const follows = [];
-    const gifts = [];
-    const paypiggies = [];
-    const viewerCounts = [];
-    const raids = [];
-    const streamStatuses = [];
+    const envelopes: PlatformEventPayload[] = [];
+    const shares: PlatformEventPayload[] = [];
+    const follows: PlatformEventPayload[] = [];
+    const gifts: PlatformEventPayload[] = [];
+    const paypiggies: PlatformEventPayload[] = [];
+    const viewerCounts: PlatformEventPayload[] = [];
+    const raids: PlatformEventPayload[] = [];
+    const streamStatuses: PlatformEventPayload[] = [];
     platform.handlers = {
       ...platform.handlers,
-      onEnvelope: (data) => envelopes.push(data),
-      onShare: (data) => shares.push(data),
-      onFollow: (data) => follows.push(data),
-      onGift: (data) => gifts.push(data),
-      onPaypiggy: (data) => paypiggies.push(data),
-      onViewerCount: (data) => viewerCounts.push(data),
-      onRaid: (data) => raids.push(data),
-      onStreamStatus: (data) => streamStatuses.push(data),
+      onEnvelope: capturePayload(envelopes),
+      onShare: capturePayload(shares),
+      onFollow: capturePayload(follows),
+      onGift: capturePayload(gifts),
+      onPaypiggy: capturePayload(paypiggies),
+      onViewerCount: capturePayload(viewerCounts),
+      onRaid: capturePayload(raids),
+      onStreamStatus: capturePayload(streamStatuses),
     };
 
     platform.setupEventListeners();
@@ -106,18 +156,19 @@ describe("TikTokPlatform event emissions", () => {
       },
     };
 
-    await eventHandlers[webcastEvent.ENVELOPE](envelopePayload);
+    await emitCapturedEvent(eventHandlers, webcastEvent.ENVELOPE, envelopePayload);
 
     expect(envelopes).toHaveLength(1);
-    expect(envelopes[0].type).toBe("platform:envelope");
-    expect(envelopes[0].userId).toBe("envelopeUser");
-    expect(envelopes[0].username).toBe("EnvelopeUser");
-    expect(envelopes[0].giftType).toBe("Treasure Chest");
-    expect(envelopes[0].giftCount).toBe(1);
-    expect(envelopes[0].amount).toBe(42);
-    expect(envelopes[0].currency).toBe("coins");
-    expect(envelopes[0].avatarUrl).toBe(fallbackAvatarUrl);
-    expect(envelopes[0].metadata).toBeUndefined();
+    const envelope = expectDefined(envelopes[0]);
+    expect(envelope.type).toBe("platform:envelope");
+    expect(envelope.userId).toBe("envelopeUser");
+    expect(envelope.username).toBe("EnvelopeUser");
+    expect(envelope.giftType).toBe("Treasure Chest");
+    expect(envelope.giftCount).toBe(1);
+    expect(envelope.amount).toBe(42);
+    expect(envelope.currency).toBe("coins");
+    expect(envelope.avatarUrl).toBe(fallbackAvatarUrl);
+    expect(envelope.metadata).toBeUndefined();
   });
 
   it("emits social (share) events through the share channel", async () => {
@@ -138,12 +189,13 @@ describe("TikTokPlatform event emissions", () => {
       },
     };
 
-    await eventHandlers[webcastEvent.SOCIAL](socialPayload);
+    await emitCapturedEvent(eventHandlers, webcastEvent.SOCIAL, socialPayload);
 
     expect(shares).toHaveLength(1);
-    expect(shares[0].metadata.interactionType).toBe("share");
-    expect(shares[0].username).toBe("ShareUser");
-    expect(shares[0].avatarUrl).toBe(fallbackAvatarUrl);
+    const share = expectDefined(shares[0]);
+    expect(share.metadata?.interactionType).toBe("share");
+    expect(share.username).toBe("ShareUser");
+    expect(share.avatarUrl).toBe(fallbackAvatarUrl);
     expect(follows).toHaveLength(0);
   });
 
@@ -151,10 +203,10 @@ describe("TikTokPlatform event emissions", () => {
     const { eventHandlers, shares, webcastEvent } = createPlatformUnderTest();
     const socialPayload = createTikTokSocialNotificationFixture("share");
 
-    await eventHandlers[webcastEvent.SOCIAL](socialPayload);
+    await emitCapturedEvent(eventHandlers, webcastEvent.SOCIAL, socialPayload);
 
     expect(shares).toHaveLength(1);
-    expect(shares[0].avatarUrl).toBe(
+    expect(expectDefined(shares[0]).avatarUrl).toBe(
       "https://example.invalid/tiktok/test-social-avatar.webp",
     );
   });
@@ -174,22 +226,23 @@ describe("TikTokPlatform event emissions", () => {
       },
     };
 
-    await eventHandlers[webcastEvent.SOCIAL](socialPayload);
+    await emitCapturedEvent(eventHandlers, webcastEvent.SOCIAL, socialPayload);
 
     expect(follows).toHaveLength(1);
     expect(shares).toHaveLength(0);
-    expect(follows[0].username).toBe("FollowUser");
-    expect(follows[0].avatarUrl).toBe(fallbackAvatarUrl);
+    const follow = expectDefined(follows[0]);
+    expect(follow.username).toBe("FollowUser");
+    expect(follow.avatarUrl).toBe(fallbackAvatarUrl);
   });
 
   it("emits follow events with avatarUrl extracted from nested user profile pictures", async () => {
     const { eventHandlers, follows, webcastEvent } = createPlatformUnderTest();
     const followPayload = createTikTokSocialNotificationFixture("follow");
 
-    await eventHandlers[webcastEvent.SOCIAL](followPayload);
+    await emitCapturedEvent(eventHandlers, webcastEvent.SOCIAL, followPayload);
 
     expect(follows).toHaveLength(1);
-    expect(follows[0].avatarUrl).toBe(
+    expect(expectDefined(follows[0]).avatarUrl).toBe(
       "https://example.invalid/tiktok/test-social-avatar.webp",
     );
   });
@@ -213,11 +266,12 @@ describe("TikTokPlatform event emissions", () => {
       },
     };
 
-    await eventHandlers[webcastEvent.FOLLOW](followPayload);
+    await emitCapturedEvent(eventHandlers, webcastEvent.FOLLOW, followPayload);
 
     expect(shares).toHaveLength(1);
-    expect(shares[0].metadata.interactionType).toBe("share");
-    expect(shares[0].username).toBe("ShareUser");
+    const share = expectDefined(shares[0]);
+    expect(share.metadata?.interactionType).toBe("share");
+    expect(share.username).toBe("ShareUser");
     expect(follows).toHaveLength(0);
   });
 
@@ -241,11 +295,11 @@ describe("TikTokPlatform event emissions", () => {
     };
     const followPayload = { ...socialPayload };
 
-    await eventHandlers[webcastEvent.SOCIAL](socialPayload);
-    await eventHandlers[webcastEvent.FOLLOW](followPayload);
+    await emitCapturedEvent(eventHandlers, webcastEvent.SOCIAL, socialPayload);
+    await emitCapturedEvent(eventHandlers, webcastEvent.FOLLOW, followPayload);
 
     expect(shares).toHaveLength(1);
-    expect(shares[0].username).toBe("ShareUser");
+    expect(expectDefined(shares[0]).username).toBe("ShareUser");
     expect(follows).toHaveLength(0);
   });
 
@@ -268,11 +322,11 @@ describe("TikTokPlatform event emissions", () => {
       },
     };
 
-    await eventHandlers[webcastEvent.FOLLOW](payload);
-    await eventHandlers[webcastEvent.SOCIAL](payload);
+    await emitCapturedEvent(eventHandlers, webcastEvent.FOLLOW, payload);
+    await emitCapturedEvent(eventHandlers, webcastEvent.SOCIAL, payload);
 
     expect(shares).toHaveLength(1);
-    expect(shares[0].username).toBe("ShareUser");
+    expect(expectDefined(shares[0]).username).toBe("ShareUser");
     expect(follows).toHaveLength(0);
   });
 
@@ -309,11 +363,11 @@ describe("TikTokPlatform event emissions", () => {
       },
     };
 
-    await eventHandlers[webcastEvent.SOCIAL](firstPayload);
-    await eventHandlers[webcastEvent.SOCIAL](secondPayload);
+    await emitCapturedEvent(eventHandlers, webcastEvent.SOCIAL, firstPayload);
+    await emitCapturedEvent(eventHandlers, webcastEvent.SOCIAL, secondPayload);
 
     expect(shares).toHaveLength(1);
-    expect(shares[0].username).toBe("Test Share User");
+    expect(expectDefined(shares[0]).username).toBe("Test Share User");
   });
 
   it("suppresses repeat shares for the same user across SOCIAL and FOLLOW when msgIds differ", async () => {
@@ -350,11 +404,11 @@ describe("TikTokPlatform event emissions", () => {
       },
     };
 
-    await eventHandlers[webcastEvent.SOCIAL](socialPayload);
-    await eventHandlers[webcastEvent.FOLLOW](followPayload);
+    await emitCapturedEvent(eventHandlers, webcastEvent.SOCIAL, socialPayload);
+    await emitCapturedEvent(eventHandlers, webcastEvent.FOLLOW, followPayload);
 
     expect(shares).toHaveLength(1);
-    expect(shares[0].username).toBe("Test Share User");
+    expect(expectDefined(shares[0]).username).toBe("Test Share User");
     expect(follows).toHaveLength(0);
   });
 
@@ -391,12 +445,12 @@ describe("TikTokPlatform event emissions", () => {
       },
     };
 
-    await eventHandlers[webcastEvent.SOCIAL](firstUserPayload);
-    await eventHandlers[webcastEvent.SOCIAL](secondUserPayload);
+    await emitCapturedEvent(eventHandlers, webcastEvent.SOCIAL, firstUserPayload);
+    await emitCapturedEvent(eventHandlers, webcastEvent.SOCIAL, secondUserPayload);
 
     expect(shares).toHaveLength(2);
-    expect(shares[0].username).toBe("Test Share User One");
-    expect(shares[1].username).toBe("Test Share User Two");
+    expect(expectDefined(shares[0]).username).toBe("Test Share User One");
+    expect(expectDefined(shares[1]).username).toBe("Test Share User Two");
   });
 
   it("emits subscribe events as paypiggy notifications", async () => {
@@ -410,10 +464,10 @@ describe("TikTokPlatform event emissions", () => {
       },
     };
 
-    await eventHandlers[webcastEvent.SUBSCRIBE](subscribePayload);
+    await emitCapturedEvent(eventHandlers, webcastEvent.SUBSCRIBE, subscribePayload);
 
     expect(paypiggies).toHaveLength(1);
-    const event = paypiggies[0];
+    const event = expectDefined(paypiggies[0]);
     expect(event.type).toBe("platform:paypiggy");
     expect(event.userId).toBe("sub123");
     expect(event.username).toBe("Subscriber");
@@ -431,10 +485,10 @@ describe("TikTokPlatform event emissions", () => {
       },
     };
 
-    await eventHandlers[webcastEvent.SUPER_FAN](superfanPayload);
+    await emitCapturedEvent(eventHandlers, webcastEvent.SUPER_FAN, superfanPayload);
 
     expect(paypiggies).toHaveLength(1);
-    const event = paypiggies[0];
+    const event = expectDefined(paypiggies[0]);
     expect(event.type).toBe("platform:paypiggy");
     expect(event.platform).toBe("tiktok");
     expect(event.userId).toBe("sf123");
@@ -451,11 +505,12 @@ describe("TikTokPlatform event emissions", () => {
       common: { createTime: eventTimestamp },
     };
 
-    eventHandlers[webcastEvent.ROOM_USER](viewerPayload);
+    emitCapturedEvent(eventHandlers, webcastEvent.ROOM_USER, viewerPayload);
 
     expect(viewerCounts).toHaveLength(1);
-    expect(viewerCounts[0].platform).toBe("tiktok");
-    expect(viewerCounts[0].count).toBe(777);
+    const viewerCount = expectDefined(viewerCounts[0]);
+    expect(viewerCount.platform).toBe("tiktok");
+    expect(viewerCount.count).toBe(777);
   });
 
   it("routes raid events to onRaid handler via _emitPlatformEvent", () => {
@@ -471,9 +526,10 @@ describe("TikTokPlatform event emissions", () => {
     platform._emitPlatformEvent(PlatformEvents.RAID, raidPayload);
 
     expect(raids).toHaveLength(1);
-    expect(raids[0].username).toBe("test-raider");
-    expect(raids[0].viewerCount).toBe(150);
-    expect(raids[0].platform).toBe("tiktok");
+    const raid = expectDefined(raids[0]);
+    expect(raid.username).toBe("test-raider");
+    expect(raid.viewerCount).toBe(150);
+    expect(raid.platform).toBe("tiktok");
   });
 
   it("routes stream-status events to onStreamStatus handler via _emitPlatformEvent", () => {
@@ -490,8 +546,9 @@ describe("TikTokPlatform event emissions", () => {
     );
 
     expect(streamStatuses).toHaveLength(1);
-    expect(streamStatuses[0].isLive).toBe(false);
-    expect(streamStatuses[0].platform).toBe("tiktok");
+    const streamStatus = expectDefined(streamStatuses[0]);
+    expect(streamStatus.isLive).toBe(false);
+    expect(streamStatus.platform).toBe("tiktok");
   });
 
   it("emits canonical gift error payload with fallback avatar from gift processing path", async () => {
@@ -511,8 +568,9 @@ describe("TikTokPlatform event emissions", () => {
     });
 
     expect(gifts).toHaveLength(1);
-    expect(gifts[0].type).toBe("platform:gift");
-    expect(gifts[0].avatarUrl).toBe(fallbackAvatarUrl);
+    const gift = expectDefined(gifts[0]);
+    expect(gift.type).toBe("platform:gift");
+    expect(gift.avatarUrl).toBe(fallbackAvatarUrl);
   });
 
   it("emits gift notifications with avatarUrl extracted from nested user profile pictures", async () => {
@@ -521,7 +579,7 @@ describe("TikTokPlatform event emissions", () => {
     await platform.handleTikTokGift(createTikTokGiftNotificationFixture());
 
     expect(gifts).toHaveLength(1);
-    expect(gifts[0].avatarUrl).toBe(
+    expect(expectDefined(gifts[0]).avatarUrl).toBe(
       "https://example.invalid/tiktok/test-gift-avatar.webp",
     );
   });
