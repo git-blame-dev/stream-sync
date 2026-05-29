@@ -3,11 +3,18 @@ import { createRequire } from 'node:module';
 
 const load = createRequire(__filename);
 const EventEmitter = load('events');
+interface NotificationManagerLike {
+    handleNotification(type: unknown, platform: string, payload: Record<string, unknown>): Promise<void>;
+}
+
 const NotificationManagerModule = load('../../src/notifications/NotificationManager') as {
-    default?: new (...args: unknown[]) => unknown;
-    NotificationManager?: new (...args: unknown[]) => unknown;
+    default?: new (...args: unknown[]) => NotificationManagerLike;
+    NotificationManager?: new (...args: unknown[]) => NotificationManagerLike;
 };
 const NotificationManager = NotificationManagerModule.default || NotificationManagerModule.NotificationManager;
+if (!NotificationManager) {
+    throw new Error('NotificationManager export is required for YouTube gift pipeline smoke test');
+}
 const { PlatformEventRouter } = load('../../src/services/PlatformEventRouter.ts');
 const { YouTubePlatform } = load('../../src/platforms/youtube');
 const { PlatformEvents } = load('../../src/interfaces/PlatformEvents');

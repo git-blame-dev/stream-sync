@@ -171,7 +171,7 @@ describe("YouTube Username Normalization", () => {
     });
 
     test("should handle all international username categories", () => {
-      const categories = [
+      const categories: Array<keyof typeof INTERNATIONAL_USERNAMES> = [
         "chinese",
         "chineseTraditional",
         "japanese",

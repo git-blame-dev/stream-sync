@@ -1,7 +1,7 @@
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
+import { describe, test, expect, beforeEach, afterEach, spyOn } from "bun:test";
+import fs from "node:fs";
 import {
   createMockFn,
-  spyOn,
   restoreAllMocks,
 } from "../../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../../helpers/mock-factories";
@@ -143,7 +143,7 @@ describe("YouTube Platform Configuration Validation", () => {
     });
 
     test("should surface data logging path errors via error handler", () => {
-      const mkdirMock = spyOn(require("fs"), "mkdirSync").mockImplementation(
+      const mkdirMock = spyOn(fs, "mkdirSync").mockImplementation(
         () => {
           throw new Error("disk full");
         },

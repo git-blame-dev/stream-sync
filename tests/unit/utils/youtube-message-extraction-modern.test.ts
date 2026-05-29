@@ -49,7 +49,11 @@ describe("YouTube Message Extraction - Modern (Production Data)", () => {
 
   describe("SuperSticker Handling", () => {
     it("returns empty string for SuperSticker (no message field)", () => {
-      const text = extractMessageText(realSuperSticker.item.message);
+      const text = extractMessageText(
+        "message" in realSuperSticker.item
+          ? realSuperSticker.item.message
+          : undefined,
+      );
       expect(text).toBe("");
     });
 

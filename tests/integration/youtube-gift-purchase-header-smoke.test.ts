@@ -14,6 +14,9 @@ const giftPurchaseTimestamp = new Date(
   Math.floor(Number(giftPurchaseHeaderOnly.item.timestamp_usec) / 1000),
 ).toISOString();
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
 describe("YouTube Gift Purchase Smoke (Canonical Author)", () => {
   afterEach(() => {
     restoreAllMocks();
@@ -28,16 +31,24 @@ describe("YouTube Gift Purchase Smoke (Canonical Author)", () => {
       logger: noOpLogger,
     });
     const platform = new YouTubePlatform(config, dependencies);
-    const giftEvents = [];
+    const giftEvents: Array<Record<string, unknown>> = [];
     platform.handlers = {
       ...platform.handlers,
-      onGiftPaypiggy: (event) => giftEvents.push(event),
+      onGiftPaypiggy: (event: unknown) => {
+        if (!isRecord(event)) {
+          throw new Error("Expected gift paypiggy event payload object");
+        }
+        giftEvents.push(event);
+      },
     };
 
     await platform.handleChatMessage(giftPurchaseHeaderOnly);
 
     expect(giftEvents).toHaveLength(1);
     const notification = giftEvents[0];
+    if (!notification) {
+      throw new Error("Expected gift purchase event to be routed");
+    }
     expect(notification.type).toBe("platform:giftpaypiggy");
     expect(notification.username).toBe("GiftGiver");
     expect(notification.userId).toBe(giftPurchaseHeaderOnly.item.author.id);

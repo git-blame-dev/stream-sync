@@ -104,9 +104,13 @@ describe("YouTube monetization parser", () => {
     const normalized = normalizeYouTubeEvent(
       createYouTubeGiftPurchaseHeaderOnlyFixture(),
     );
+    const normalizedChatItem = normalized.normalizedChatItem;
 
-    expect(normalized.normalizedChatItem).not.toBeNull();
-    const result = parser.parseGiftPurchase(normalized.normalizedChatItem);
+    expect(normalizedChatItem).not.toBeNull();
+    if (normalizedChatItem === null) {
+      throw new Error("Expected gift purchase header fixture to normalize");
+    }
+    const result = parser.parseGiftPurchase(normalizedChatItem);
 
     expect(result.avatarUrl).toBe(
       "https://example.invalid/youtube/test-giftpurchase-avatar.jpg",

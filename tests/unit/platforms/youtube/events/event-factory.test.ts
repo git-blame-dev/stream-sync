@@ -9,7 +9,6 @@ const FALLBACK_AVATAR_URL = DEFAULT_AVATAR_URL;
 describe("YouTube event factory behavior", () => {
   it("builds chat-connected events with deterministic timestamp", () => {
     const eventFactory = createStaticYouTubeEventFactory({
-      nowIso: () => "2024-01-01T00:00:00.000Z",
       generateCorrelationId: () => "corr-ignored",
     });
 

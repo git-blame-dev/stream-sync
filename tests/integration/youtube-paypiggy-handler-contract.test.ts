@@ -15,11 +15,17 @@ const createEventBus = () => {
   return {
     emit: emitter.emit.bind(emitter),
     on: emitter.on.bind(emitter),
-    subscribe: (event, handler) => {
+    subscribe: (event: string, handler: (...args: unknown[]) => void) => {
       emitter.on(event, handler);
       return () => emitter.off(event, handler);
     },
   };
+};
+
+type PlatformEventPayload = {
+  platform: string;
+  type: string;
+  data?: Record<string, unknown>;
 };
 
 const createYouTubePlatform = () => {
@@ -63,7 +69,7 @@ describe("YouTube paypiggy handler contract (integration)", () => {
       const platform = createYouTubePlatform();
       platform.handlers = lifecycle.createDefaultEventHandlers("youtube");
 
-      const received = [];
+      const received: PlatformEventPayload[] = [];
       eventBus.on("platform:event", (event) => received.push(event));
 
       const membershipItem = {
