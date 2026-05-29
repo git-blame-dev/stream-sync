@@ -40,7 +40,11 @@ describe("e2e-testing-infrastructure behavior", () => {
 
     expect(result).toEqual({ processed: true });
     expect(processedSpy).toHaveBeenCalledTimes(1);
-    const [processedEvent] = processedSpy.mock.calls[0];
+    const processedCall = processedSpy.mock.calls[0];
+    if (!processedCall) {
+      throw new Error("Expected messageProcessed event to be emitted");
+    }
+    const [processedEvent] = processedCall;
     expect(processedEvent).toMatchObject({
       platform: "twitch",
       message: { data: 1 },
@@ -66,11 +70,19 @@ describe("e2e-testing-infrastructure behavior", () => {
       ).rejects.toThrow("boom");
 
       expect(errorSpy).toHaveBeenCalled();
-      expect(errorSpy.mock.calls[0][0]).toMatchObject({
+      const firstErrorEvent = errorSpy.mock.calls[0]?.[0];
+      if (
+        typeof firstErrorEvent !== "object" ||
+        firstErrorEvent === null ||
+        !("error" in firstErrorEvent)
+      ) {
+        throw new Error("Expected messageProcessingError event payload");
+      }
+      expect(firstErrorEvent).toMatchObject({
         platform: "yt",
         message: { bad: true },
       });
-      expect(errorSpy.mock.calls[0][0].error).toBeInstanceOf(Error);
+      expect(firstErrorEvent.error).toBeInstanceOf(Error);
     });
   });
 

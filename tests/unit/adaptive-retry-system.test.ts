@@ -121,7 +121,7 @@ describe("Unified Adaptive Retry System", () => {
     test("should handle undefined retry count", () => {
       delete platformRetryCount.YouTube;
       const delay = retrySystem.incrementRetryCount("YouTube");
-      expect(platformRetryCount.YouTube).toBe(1);
+      expect(platformRetryCount.YouTube ?? 0).toBe(1);
       expect(delay).toBeCloseTo(2600);
     });
   });
@@ -208,7 +208,12 @@ test("computes adaptive retry delays consistently across supported platforms", (
         }
 
         const delay = retrySystem.calculateAdaptiveRetryDelay(platform);
-        expect(delay).toBeCloseTo(expectedDelays[index]);
+        const expectedDelay = expectedDelays[index];
+        expect(expectedDelay).toBeDefined();
+        if (expectedDelay === undefined) {
+          throw new Error(`Missing expected delay for ${platform}`);
+        }
+        expect(delay).toBeCloseTo(expectedDelay);
       });
     });
   });

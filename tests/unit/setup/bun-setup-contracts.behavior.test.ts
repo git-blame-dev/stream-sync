@@ -16,7 +16,7 @@ type TestGlobal = typeof globalThis & {
   restoreConsole: () => void;
 };
 
-type SetupMatcherAssertions = {
+type SetupMatcherAssertions = ReturnType<typeof expect> & {
   not: SetupMatcherAssertions;
   toHaveLengthGreaterThan: (expected: number) => void;
   toBeValidNotification: () => void;

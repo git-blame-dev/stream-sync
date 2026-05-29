@@ -20,6 +20,10 @@ describe("InitializationStatistics behavior", () => {
 
     expect(summary.successfulAttempts).toBe(1);
     expect(summary.averageInitializationTime).toBe(1000);
+    expect(summary.performanceMetrics.connectionEstablishmentTime).toBeDefined();
+    if (summary.performanceMetrics.connectionEstablishmentTime === undefined) {
+      throw new Error("Expected connection timing metrics");
+    }
     expect(summary.performanceMetrics.connectionEstablishmentTime.average).toBe(
       50,
     );

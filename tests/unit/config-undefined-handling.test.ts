@@ -15,6 +15,10 @@ type LoggerLike = {
   error: (...args: unknown[]) => void;
 };
 
+type RuntimeNotificationManager = {
+  handleNotification: (...args: unknown[]) => Promise<unknown>;
+};
+
 setupAutomatedCleanup({
   clearCallsBeforeEach: true,
   validateAfterCleanup: true,
@@ -29,9 +33,7 @@ describe("Gift Notification Config Resiliency", () => {
   const buildAppRuntime = (
     overrides: {
       logger?: LoggerLike;
-      notificationManager?: {
-        handleNotification: ReturnType<typeof createMockFn>;
-      };
+      notificationManager?: RuntimeNotificationManager;
     } = {},
   ) => {
     const mockLogger = overrides.logger || noOpLogger;
@@ -56,7 +58,7 @@ describe("Gift Notification Config Resiliency", () => {
 
   test("handleGiftNotification throws when config becomes undefined", async () => {
     const { runtime } = buildAppRuntime();
-    runtime.config = undefined;
+    Reflect.set(runtime, "config", undefined);
 
     await expect(
       runtime.handleGiftNotification("tiktok", "TestGifter", {

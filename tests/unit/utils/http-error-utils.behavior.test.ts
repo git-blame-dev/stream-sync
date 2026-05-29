@@ -74,6 +74,10 @@ describe("http-error-utils behavior", () => {
       maxResponseSnippetLength: 250,
     });
 
+    expect(details.responseSnippet).not.toBeNull();
+    if (details.responseSnippet === null) {
+      throw new Error("Expected response snippet for large response data");
+    }
     expect(details.responseSnippet.length).toBeLessThanOrEqual(250);
     expect(details.status).toBe(500);
     expect(details.url).toBe("https://api.example.com/v1/large");

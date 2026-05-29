@@ -1,13 +1,26 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { createRequire } from "node:module";
 
-import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
+import {
+  createMockFn,
+  restoreAllMocks,
+  type TestMockFn,
+} from "../helpers/bun-mock-utils";
 import { createConfigFixture } from "../helpers/config-fixture";
 import { noOpLogger } from "../helpers/mock-factories";
+import { safeDelay } from "../../src/utils/timeout-validator";
 
 const load = createRequire(import.meta.url);
 
-type ViewerCountPlatform = { getViewerCount: ReturnType<typeof createMockFn> };
+type ViewerCountPlatform = {
+  getViewerCount: TestMockFn<unknown[], Promise<number>>;
+};
+
+type ViewerCountObserver = {
+  getObserverId: () => string;
+  onViewerCountUpdate: TestMockFn<unknown[], Promise<void>>;
+  onStreamStatusChange: TestMockFn<unknown[], Promise<void>>;
+};
 
 type ViewerCountSystemInstance = {
   isPolling: boolean;
@@ -48,15 +61,21 @@ describe("Viewer Count Polling System Fix", () => {
     });
 
     mockYoutubePlatform = {
-      getViewerCount: createMockFn().mockResolvedValue(100),
+      getViewerCount: createMockFn<unknown[], Promise<number>>().mockResolvedValue(
+        100,
+      ),
     };
 
     mockTwitchPlatform = {
-      getViewerCount: createMockFn().mockResolvedValue(50),
+      getViewerCount: createMockFn<unknown[], Promise<number>>().mockResolvedValue(
+        50,
+      ),
     };
 
     mockTiktokPlatform = {
-      getViewerCount: createMockFn().mockResolvedValue(25),
+      getViewerCount: createMockFn<unknown[], Promise<number>>().mockResolvedValue(
+        25,
+      ),
     };
 
     platforms = {
@@ -71,10 +90,10 @@ describe("Viewer Count Polling System Fix", () => {
       config: testConfig,
     });
 
-    const mockObserver = {
+    const mockObserver: ViewerCountObserver = {
       getObserverId: () => "testObserver",
-      onViewerCountUpdate: createMockFn().mockResolvedValue(),
-      onStreamStatusChange: createMockFn().mockResolvedValue(),
+      onViewerCountUpdate: createMockFn<unknown[], Promise<void>>(async () => {}),
+      onStreamStatusChange: createMockFn<unknown[], Promise<void>>(async () => {}),
     };
     viewerCountSystem.addObserver(mockObserver);
 
@@ -113,7 +132,7 @@ describe("Viewer Count Polling System Fix", () => {
 
     test("starts polling for Twitch platform (always active)", async () => {
       viewerCountSystem.startPolling();
-      await new Promise((resolve) => setImmediate(resolve));
+      await safeDelay(1, 1, "viewer count polling test tick");
 
       expect(viewerCountSystem.pollingHandles["twitch"]).toBeDefined();
       expect(mockTwitchPlatform.getViewerCount).toHaveBeenCalled();
@@ -123,7 +142,7 @@ describe("Viewer Count Polling System Fix", () => {
       expect(viewerCountSystem.isStreamLive("tiktok")).toBe(false);
 
       viewerCountSystem.startPolling();
-      await new Promise((resolve) => setImmediate(resolve));
+      await safeDelay(1, 1, "viewer count polling test tick");
 
       expect(viewerCountSystem.pollingHandles["tiktok"]).toBeUndefined();
       expect(mockTiktokPlatform.getViewerCount).not.toHaveBeenCalled();
@@ -169,7 +188,7 @@ describe("Viewer Count Polling System Fix", () => {
       expect(viewerCountSystem.pollingHandles["tiktok"]).toBeUndefined();
 
       viewerCountSystem.updateStreamStatus("tiktok", true);
-      await new Promise((resolve) => setImmediate(resolve));
+      await safeDelay(1, 1, "viewer count polling test tick");
 
       expect(viewerCountSystem.pollingHandles["tiktok"]).toBeDefined();
       expect(mockTiktokPlatform.getViewerCount).toHaveBeenCalled();

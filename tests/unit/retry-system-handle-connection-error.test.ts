@@ -26,7 +26,7 @@ describe("RetrySystem.handleConnectionError", () => {
     retrySystem.handleConnectionError(
       "TikTok",
       new Error("test-error"),
-      () => {},
+      async () => {},
       cleanupFn,
     );
 
@@ -43,7 +43,7 @@ describe("RetrySystem.handleConnectionError", () => {
     retrySystem.handleConnectionError(
       "TikTok",
       new Error("first"),
-      () => {},
+      async () => {},
       null,
     );
     expect(retrySystem.getRetryCount("TikTok")).toBe(1);
@@ -51,7 +51,7 @@ describe("RetrySystem.handleConnectionError", () => {
     retrySystem.handleConnectionError(
       "TikTok",
       new Error("second"),
-      () => {},
+      async () => {},
       null,
     );
     expect(retrySystem.getRetryCount("TikTok")).toBe(2);
@@ -61,7 +61,7 @@ describe("RetrySystem.handleConnectionError", () => {
     retrySystem = new RetrySystem({ logger: noOpLogger });
 
     let reconnectCalled = false;
-    const reconnectFn = () => {
+    const reconnectFn = async () => {
       reconnectCalled = true;
     };
 
@@ -82,13 +82,13 @@ describe("RetrySystem.handleConnectionError", () => {
     retrySystem.handleConnectionError(
       "TikTok",
       new Error("error"),
-      () => {},
+      async () => {},
       null,
     );
     retrySystem.handleConnectionError(
       "TikTok",
       new Error("error"),
-      () => {},
+      async () => {},
       null,
     );
     expect(retrySystem.getRetryCount("TikTok")).toBe(2);

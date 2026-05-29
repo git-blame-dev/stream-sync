@@ -1,6 +1,8 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { InnertubeFactory } from "../../../src/factories/innertube-factory";
 
+type TestInnertubeInstance = { id: string };
+
 describe("InnertubeFactory behavior", () => {
   const restoreCache = () => {
     InnertubeFactory._innertubeClassCache = null;
@@ -48,7 +50,7 @@ describe("InnertubeFactory behavior", () => {
     let receivedConfig: unknown = null;
     const mockInstance = { id: "configured-instance" };
     const mockInnertube = {
-      create: async (config) => {
+      create: async (config?: Record<string, unknown>) => {
         receivedConfig = config;
         return mockInstance;
       },
@@ -115,7 +117,7 @@ describe("InnertubeFactory behavior", () => {
   test("createForTesting uses test-safe Innertube config", async () => {
     let receivedConfig: unknown = null;
     const mockInnertube = {
-      create: async (config) => {
+      create: async (config?: Record<string, unknown>) => {
         receivedConfig = config;
         return { id: "testing-instance" };
       },
@@ -127,14 +129,14 @@ describe("InnertubeFactory behavior", () => {
 
     const result = await InnertubeFactory.createForTesting();
 
-    expect(result.id).toBe("testing-instance");
+    expect((result as TestInnertubeInstance).id).toBe("testing-instance");
     expect(receivedConfig).toEqual({ debug: false, cache: false });
   });
 
   test("createWithTimeout uses configured path when config provided", async () => {
     let receivedConfig: unknown = null;
     const mockInnertube = {
-      create: async (config) => {
+      create: async (config?: Record<string, unknown>) => {
         receivedConfig = config;
         return { id: "timeout-configured" };
       },
@@ -148,7 +150,7 @@ describe("InnertubeFactory behavior", () => {
       cache: false,
     });
 
-    expect(result.id).toBe("timeout-configured");
+    expect((result as TestInnertubeInstance).id).toBe("timeout-configured");
     expect(receivedConfig).toEqual({ cache: false });
   });
 
@@ -163,12 +165,14 @@ describe("InnertubeFactory behavior", () => {
 
     const result = await InnertubeFactory.createWithTimeout(5000);
 
-    expect(result.id).toBe("timeout-default");
+    expect((result as TestInnertubeInstance).id).toBe("timeout-default");
   });
 
   test("configure rejects non-function importer", () => {
     expect(() =>
-      InnertubeFactory.configure({ importer: "not-a-function" }),
+      Reflect.apply(InnertubeFactory.configure, InnertubeFactory, [
+        { importer: "not-a-function" },
+      ]),
     ).toThrow("InnertubeFactory importer must be a function");
   });
 

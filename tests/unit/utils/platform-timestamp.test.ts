@@ -80,6 +80,9 @@ describe("TikTok timestamp resolution", () => {
         common: { createTime: 1_700_000_000 },
       });
       expect(typeof iso).toBe("string");
+      if (iso === null) {
+        throw new Error("Expected TikTok timestamp ISO string");
+      }
       expect(new Date(iso).getTime()).toBe(1_700_000_000_000);
     });
 

@@ -4,6 +4,14 @@ import {
     getLazyLogger,
     getLazyUnifiedLogger,
 } from "../../../src/utils/logger-utils.ts";
+
+const getDebugMember = (value: unknown): unknown => {
+  if ((typeof value !== "object" && typeof value !== "function") || value === null) {
+    return undefined;
+  }
+  return Reflect.get(value, "debug");
+};
+
 describe("logger-utils behavior", () => {
   const originalArgv = [...process.argv];
   const originalEnv = { ...process.env };
@@ -24,11 +32,19 @@ describe("logger-utils behavior", () => {
   test("lazily loads loggers", () => {
     const logger = getLazyLogger();
     expect(logger).toBeDefined();
-    expect(typeof logger.debug).toBe("function");
+    const loggerDebug = getDebugMember(logger);
+    if (typeof loggerDebug !== "function") {
+      throw new Error("Expected lazy logger to expose debug");
+    }
+    expect(typeof loggerDebug).toBe("function");
 
     const unifiedLogger = getLazyUnifiedLogger();
     expect(unifiedLogger).toBeDefined();
-    expect(typeof unifiedLogger.debug).toBe("function");
+    const unifiedLoggerDebug = getDebugMember(unifiedLogger);
+    if (typeof unifiedLoggerDebug !== "function") {
+      throw new Error("Expected lazy unified logger to expose debug");
+    }
+    expect(typeof unifiedLoggerDebug).toBe("function");
   });
 
 });

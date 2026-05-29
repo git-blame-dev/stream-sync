@@ -27,6 +27,10 @@ describe("logger-resolver behavior", () => {
     const resolved = resolveLogger(logger, "TestLogger");
 
     resolved.debug("test");
+    expect(resolved.console).toBeDefined();
+    if (resolved.console === undefined) {
+      throw new Error("Expected console logger method to be preserved");
+    }
     resolved.console("message", "source");
 
     expect(resolved.debugCalls).toBe(1);

@@ -254,7 +254,7 @@ describe("User-Facing Content Validation", () => {
     );
   });
 
-  function getTestDataForType(type, platform) {
+  function getTestDataForType(type: string, platform: string) {
     switch (type) {
       case "platform:gift":
         if (platform === "youtube") {

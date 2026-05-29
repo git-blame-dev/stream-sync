@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import fs from "node:fs";
+import type { PathLike, PathOrFileDescriptor } from "node:fs";
 import { createRequire } from "node:module";
 
 import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
@@ -9,9 +10,9 @@ import { captureStderr } from "../helpers/output-capture";
 const nodeRequire = createRequire(import.meta.url);
 
 type FsLike = {
-  readFileSync: (...args: unknown[]) => unknown;
-  existsSync: (...args: unknown[]) => boolean;
-  writeFileSync: (...args: unknown[]) => unknown;
+  readFileSync: typeof fs.readFileSync;
+  existsSync: typeof fs.existsSync;
+  writeFileSync: typeof fs.writeFileSync;
 };
 
 type LoadedConfig = {
@@ -57,6 +58,36 @@ type LoadedConfig = {
 };
 
 const CONFIG_MODULE_PATH = nodeRequire.resolve("../../src/core/config");
+
+function createReadFileSyncMock(
+  contentByPath: (filePath: PathOrFileDescriptor) => string,
+): typeof fs.readFileSync {
+  function readFileSyncMock(
+    path: PathOrFileDescriptor,
+    options?: { encoding?: null; flag?: string } | null,
+  ): Buffer;
+  function readFileSyncMock(
+    path: PathOrFileDescriptor,
+    options: BufferEncoding | { encoding: BufferEncoding; flag?: string },
+  ): string;
+  function readFileSyncMock(
+    path: PathOrFileDescriptor,
+    options?: BufferEncoding | { encoding?: BufferEncoding | null; flag?: string } | null,
+  ): string | Buffer {
+    const content = contentByPath(path);
+    const encoding = typeof options === "string" ? options : options?.encoding;
+    return encoding === undefined || encoding === null ? Buffer.from(content) : content;
+  }
+  return readFileSyncMock as typeof fs.readFileSync;
+}
+
+function restoreOptionalEnvValue(name: string, value: string | undefined): void {
+  if (value === undefined) {
+    delete process.env[name];
+  } else {
+    process.env[name] = value;
+  }
+}
 
 function resetConfigModule() {
   delete nodeRequire.cache[CONFIG_MODULE_PATH];
@@ -151,12 +182,12 @@ describe("Configuration System Behavior Tests", () => {
 
   const setupConfigMocks = (content: string, configPath = testConfigPath) => {
     fs.existsSync = createMockFn(
-      (filePath) => filePath === configPath,
+      (filePath: PathLike) => filePath === configPath,
     ) as FsLike["existsSync"];
-    fs.readFileSync = createMockFn((filePath) => {
+    fs.readFileSync = createReadFileSyncMock((filePath: PathOrFileDescriptor) => {
       if (filePath === configPath) return content;
       throw new Error(`ENOENT: no such file: ${filePath}`);
-    }) as FsLike["readFileSync"];
+    });
   };
 
   const reloadConfig = (
@@ -184,7 +215,7 @@ describe("Configuration System Behavior Tests", () => {
     fs.writeFileSync = originalWriteFileSync;
     restoreAllMocks();
     resetConfigModule();
-    process.env.CHAT_BOT_CONFIG_PATH = originalConfigPath;
+    restoreOptionalEnvValue("CHAT_BOT_CONFIG_PATH", originalConfigPath);
   });
 
   describe("System Startup Behavior", () => {
@@ -241,7 +272,7 @@ userAgents = test-agent-1|test-agent-2
           "SETTINGS FILE MISSING",
         );
       } finally {
-        process.env.NODE_ENV = originalNodeEnv;
+        restoreOptionalEnvValue("NODE_ENV", originalNodeEnv);
         stderrCapture.restore();
       }
     });
@@ -251,13 +282,13 @@ userAgents = test-agent-1|test-agent-2
       process.env.NODE_ENV = "production";
       try {
         fs.existsSync = createMockFn(
-          (path) => path === "/default/config.ini",
+          (path: PathLike) => path === "/default/config.ini",
         ) as FsLike["existsSync"];
         process.env.CHAT_BOT_CONFIG_PATH = "/nonexistent/config.ini";
 
         expect(() => loadFreshConfig()).toThrow(/Configuration file not found/);
       } finally {
-        process.env.NODE_ENV = originalNodeEnv;
+        restoreOptionalEnvValue("NODE_ENV", originalNodeEnv);
       }
     });
   });
@@ -484,9 +515,9 @@ userAgents = test-agent-1|test-agent-2
         const fallbackPath = "/fallback/config.ini";
 
         fs.existsSync = createMockFn(
-          (path) => path === fallbackPath,
+          (path: PathLike) => path === fallbackPath,
         ) as FsLike["existsSync"];
-        fs.readFileSync = createMockFn((path) => {
+        fs.readFileSync = createReadFileSyncMock((path: PathOrFileDescriptor) => {
           if (path === fallbackPath) return testConfigContent;
           throw new Error(`ENOENT: no such file: ${path}`);
         });
@@ -495,7 +526,7 @@ userAgents = test-agent-1|test-agent-2
 
         expect(() => loadFreshConfig()).toThrow(/Configuration file not found/);
       } finally {
-        process.env.NODE_ENV = originalNodeEnv;
+        restoreOptionalEnvValue("NODE_ENV", originalNodeEnv);
       }
     });
 
