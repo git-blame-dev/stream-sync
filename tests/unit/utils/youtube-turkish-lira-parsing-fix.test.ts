@@ -1,5 +1,6 @@
 import { describe, expect, beforeEach, it, afterEach } from "bun:test";
 import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
+import type { TestMockFn } from "../../helpers/bun-mock-utils";
 import { createConfigFixture } from "../../helpers/config-fixture";
 import { YouTubeiCurrencyParser } from "../../../src/platforms/youtube/youtubei-currency-parser";
 import NotificationManager from "../../../src/notifications/NotificationManager";
@@ -9,6 +10,34 @@ import { getDefaultGoalsManager } from "../../../src/obs/goals";
 import { noOpLogger } from "../../helpers/mock-factories";
 import { setupAutomatedCleanup } from "../../helpers/mock-lifecycle";
 import testClock from "../../helpers/test-clock";
+
+type NotificationDependencies = NonNullable<
+  ConstructorParameters<typeof NotificationManager>[0]
+>;
+type DisplayQueueFixture = NonNullable<NotificationDependencies["displayQueue"]> & {
+  addItem: TestMockFn<[Record<string, unknown>], boolean>;
+};
+type NotificationResult = Awaited<
+  ReturnType<NotificationManager["handleNotification"]>
+>;
+type NotificationData = Record<string, unknown>;
+type GoalsFixture = NonNullable<NotificationDependencies["obsGoals"]>;
+
+const createDisplayQueueFixture = (): DisplayQueueFixture => ({
+  addItem: createMockFn<[Record<string, unknown>], boolean>().mockReturnValue(
+    true,
+  ),
+  getQueueLength: createMockFn<[], number>().mockReturnValue(0),
+});
+
+const createObsGoalsFixture = (): GoalsFixture => ({
+  processDonationGoal: createMockFn<unknown[], unknown>(),
+});
+
+const expectNotificationSucceeded = (result: NotificationResult) => {
+  expect(result.success).toBe(true);
+  expect(result.filtered).not.toBe(true);
+};
 setupAutomatedCleanup({
   clearCallsBeforeEach: true,
   validateAfterCleanup: true,
@@ -29,8 +58,8 @@ describe("YouTube Turkish Lira (TRY) Currency Parsing", () => {
   });
 
   describe("YouTubei Currency Parser - TRY Format Support", () => {
-    let parser;
-    let mockLogger;
+    let parser: YouTubeiCurrencyParser;
+    let mockLogger: typeof noOpLogger;
 
     beforeEach(() => {
       mockLogger = noOpLogger;
@@ -239,18 +268,14 @@ describe("YouTube Turkish Lira (TRY) Currency Parsing", () => {
   });
 
   describe("Notification Manager - Zero Amount Filtering", () => {
-    let notificationManager;
-    let mockConfig;
-    let mockDisplayQueue;
-    let mockLogger;
+    let notificationManager: NotificationManager;
+    let mockConfig: ReturnType<typeof createTestConfig>;
+    let mockDisplayQueue: DisplayQueueFixture;
+    let mockLogger: typeof noOpLogger;
 
     beforeEach(() => {
       mockLogger = noOpLogger;
-      mockDisplayQueue = {
-        add: createMockFn().mockReturnValue(true),
-        addItem: createMockFn().mockReturnValue(true),
-        getQueueLength: createMockFn().mockReturnValue(0),
-      };
+      mockDisplayQueue = createDisplayQueueFixture();
       mockConfig = createTestConfig();
 
       const mockEventBus = {
@@ -258,10 +283,8 @@ describe("YouTube Turkish Lira (TRY) Currency Parsing", () => {
         on: createMockFn(),
         off: createMockFn(),
       };
-    const textProcessing = createTextProcessingManager({
-      logger: mockLogger,
-    });
-    const obsGoals = getDefaultGoalsManager();
+      createTextProcessingManager({ logger: mockLogger });
+      const obsGoals = createObsGoalsFixture();
       const vfxCommandService = {
         getVFXConfig: createMockFn().mockResolvedValue(null),
       };
@@ -271,7 +294,6 @@ describe("YouTube Turkish Lira (TRY) Currency Parsing", () => {
         eventBus: mockEventBus,
         config: mockConfig,
         constants,
-        textProcessing,
         obsGoals,
         vfxCommandService,
       });
@@ -279,7 +301,7 @@ describe("YouTube Turkish Lira (TRY) Currency Parsing", () => {
 
     describe("SuperChat with Parsing Failures", () => {
       it("should NOT filter out TRY 219.99 SuperChat", async () => {
-        const superChatData = {
+        const superChatData: NotificationData = {
           username: "TurkishUser",
           userId: "user123",
           giftType: "Super Chat",
@@ -303,7 +325,7 @@ describe("YouTube Turkish Lira (TRY) Currency Parsing", () => {
       });
 
       it("should correctly filter actual zero-amount gifts", async () => {
-        const zeroGiftData = {
+        const zeroGiftData: NotificationData = {
           username: "TestUser",
           userId: "user456",
           giftType: "Super Chat",
@@ -322,11 +344,11 @@ describe("YouTube Turkish Lira (TRY) Currency Parsing", () => {
         expect(result.success).toBe(false);
         expect(result.filtered).toBe(true);
         expect(result.reason).toBe("Zero amount not displayed");
-        expect(mockDisplayQueue.add).not.toHaveBeenCalled();
+        expect(mockDisplayQueue.addItem).not.toHaveBeenCalled();
       });
 
       it("should handle SuperChat with unparseable currency gracefully", async () => {
-        const superChatData = {
+        const superChatData: NotificationData = {
           username: "TestUser",
           userId: "user789",
           giftType: "Super Chat",
@@ -362,7 +384,7 @@ describe("YouTube Turkish Lira (TRY) Currency Parsing", () => {
 
       testCurrencies.forEach(({ code, amount, symbol }) => {
         it(`should process ${code} SuperChat with amount ${amount}`, async () => {
-          const superChatData = {
+          const superChatData: NotificationData = {
             username: `${code}User`,
             userId: `user_${code}`,
             giftType: "Super Chat",
@@ -383,10 +405,12 @@ describe("YouTube Turkish Lira (TRY) Currency Parsing", () => {
           expect(result.filtered).not.toBe(true);
           expect(mockDisplayQueue.addItem).toHaveBeenCalled();
 
-          const addedNotification = mockDisplayQueue.addItem.mock.calls[0][0];
+          const [addedNotification] = mockDisplayQueue.addItem.mock.calls[0] ?? [];
           expect(addedNotification).toBeDefined();
-          expect(addedNotification.data).toBeDefined();
-          expect(addedNotification.data.amount).toBe(amount);
+          expect(addedNotification?.data).toBeDefined();
+          expect((addedNotification?.data as { amount?: unknown }).amount).toBe(
+            amount,
+          );
         });
       });
     });
@@ -426,19 +450,16 @@ describe("YouTube Turkish Lira (TRY) Currency Parsing", () => {
         displayString: youtubeEvent.data.superchat.amount,
       };
 
-      const mockDisplayQueue = {
-        add: createMockFn().mockReturnValue(true),
-        addItem: createMockFn().mockReturnValue(true),
-        getQueueLength: createMockFn().mockReturnValue(0),
-      };
+      const mockDisplayQueue = createDisplayQueueFixture();
       const mockEventBus = {
         emit: createMockFn(),
         on: createMockFn(),
         off: createMockFn(),
       };
-    const logger = noOpLogger;
-    const textProcessing = createTextProcessingManager({ logger });
-    const obsGoals = getDefaultGoalsManager();
+      const logger = noOpLogger;
+      createTextProcessingManager({ logger });
+      getDefaultGoalsManager();
+      const obsGoals = createObsGoalsFixture();
       const vfxCommandService = {
         getVFXConfig: createMockFn().mockResolvedValue(null),
       };
@@ -448,7 +469,6 @@ describe("YouTube Turkish Lira (TRY) Currency Parsing", () => {
         eventBus: mockEventBus,
         config: createTestConfig(),
         constants,
-        textProcessing,
         obsGoals,
         vfxCommandService,
       });
@@ -459,14 +479,13 @@ describe("YouTube Turkish Lira (TRY) Currency Parsing", () => {
         notificationData,
       );
 
-      expect(result.success).toBe(true);
-      expect(result.filtered).not.toBe(true);
+      expectNotificationSucceeded(result);
     });
   });
 });
 
 describe("Currency Parsing Performance and Reliability", () => {
-  let parser;
+  let parser: YouTubeiCurrencyParser;
 
   beforeEach(() => {
     parser = new YouTubeiCurrencyParser({ logger: noOpLogger });

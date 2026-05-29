@@ -4,6 +4,7 @@ import {
   createMockFn,
   clearAllMocks,
 } from "../../../../helpers/bun-mock-utils";
+import type { TestMockFn } from "../../../../helpers/bun-mock-utils";
 
 const {
   installYouTubeParserLogAdapter,
@@ -26,9 +27,63 @@ const continuationForTypeCheck: string | undefined =
 void parseFlagForTypeCheck;
 void continuationForTypeCheck;
 
+type ParserError = { error_type: string; classname: string };
+type ParserErrorHandler = (error: ParserError) => void;
+type ParserApiFixture = {
+  setParserErrorHandler: TestMockFn<[ParserErrorHandler], void>;
+  parseResponse: TestMockFn<[unknown], unknown>;
+};
+type LiveChatActions = {
+  execute: TestMockFn<[string, CaptureActionArgs?], Promise<unknown>>;
+};
+type CapturedRendererLog = {
+  videoId?: string | null;
+  matchedRenderers?: Array<Record<string, unknown>>;
+};
+type LogUnknownRendererMock = TestMockFn<
+  [CapturedRendererLog],
+  Promise<void>
+>;
+
+const createParserApiFixture = (): ParserApiFixture => ({
+  setParserErrorHandler: createMockFn<[ParserErrorHandler], void>(),
+  parseResponse: createMockFn<[unknown], unknown>(),
+});
+
+const getParserErrorHandler = (
+  parserApi: ParserApiFixture,
+): ParserErrorHandler => {
+  const [handler] = parserApi.setParserErrorHandler.mock.calls[0] ?? [];
+  expect(handler).toBeDefined();
+  if (handler === undefined) {
+    throw new Error("Expected YouTube parser error handler to be installed");
+  }
+  return handler;
+};
+
+const createActions = (response: unknown): LiveChatActions => ({
+  execute: createMockFn<[string, CaptureActionArgs?], Promise<unknown>>().mockResolvedValue(response),
+});
+
+const createLogUnknownRendererMock = (): LogUnknownRendererMock =>
+  createMockFn<[CapturedRendererLog], Promise<void>>().mockResolvedValue(
+    undefined,
+  );
+
+const getLoggedRenderer = (
+  logUnknownRenderer: LogUnknownRendererMock,
+): CapturedRendererLog => {
+  const [payload] = logUnknownRenderer.mock.calls[0] ?? [];
+  expect(payload).toBeDefined();
+  if (payload === undefined) {
+    throw new Error("Expected unknown renderer log payload");
+  }
+  return payload;
+};
+
 describe("YouTube live chat unknown renderer capture", () => {
   let logger;
-  let parserApi;
+  let parserApi: ParserApiFixture;
 
   const createGiftRawResponse = (
     text = "sent Clapping seal for 250 Jewels",
@@ -83,10 +138,7 @@ describe("YouTube live chat unknown renderer capture", () => {
       warn: createMockFn(),
       error: createMockFn(),
     };
-    parserApi = {
-      setParserErrorHandler: createMockFn(),
-      parseResponse: createMockFn(),
-    };
+    parserApi = createParserApiFixture();
 
     installYouTubeParserLogAdapter({
       logger,
@@ -97,8 +149,8 @@ describe("YouTube live chat unknown renderer capture", () => {
   test("re-parses raw live chat responses and logs matched unknown renderers", async () => {
     const rawResponse = createGiftRawResponse();
     const parsedResponse = createParsedResponse();
-    const handler = parserApi.setParserErrorHandler.mock.calls[0][0];
-    parserApi.parseResponse.mockImplementation((data) => {
+    const handler = getParserErrorHandler(parserApi);
+    parserApi.parseResponse.mockImplementation((data: unknown) => {
       expect(data).toBe(rawResponse.data);
       handler({
         error_type: "class_not_found",
@@ -107,11 +159,9 @@ describe("YouTube live chat unknown renderer capture", () => {
       return parsedResponse;
     });
 
-    const execute = createMockFn().mockResolvedValue(rawResponse);
-    const actions = {
-      execute,
-    };
-    const logUnknownRenderer = createMockFn().mockResolvedValue(undefined);
+    const actions = createActions(rawResponse);
+    const { execute } = actions;
+    const logUnknownRenderer = createLogUnknownRendererMock();
 
     installYouTubeLiveChatUnknownRendererCapture({
       actions,
@@ -128,7 +178,7 @@ describe("YouTube live chat unknown renderer capture", () => {
 
     expect(result).toBe(parsedResponse);
     expect(logUnknownRenderer).toHaveBeenCalledTimes(1);
-    expect(logUnknownRenderer.mock.calls[0][0]).toMatchObject({
+    expect(getLoggedRenderer(logUnknownRenderer)).toMatchObject({
       videoId: "test-video-id",
       endpoint: "live_chat/get_live_chat",
       parserWarnings: [
@@ -141,7 +191,7 @@ describe("YouTube live chat unknown renderer capture", () => {
         }),
       ],
     });
-    expect(execute.mock.calls[0][1]).toMatchObject({
+    expect(execute.mock.calls[0]?.[1]).toMatchObject({
       continuation: "test-continuation-1",
       parse: false,
     });
@@ -150,7 +200,7 @@ describe("YouTube live chat unknown renderer capture", () => {
   test("captures the immediate item container for GiftMessageView so sibling item metadata can be inspected", async () => {
     const rawResponse = createGiftRawResponse("sent Girl power for 300 Jewels");
     const parsedResponse = createParsedResponse();
-    const handler = parserApi.setParserErrorHandler.mock.calls[0][0];
+    const handler = getParserErrorHandler(parserApi);
     parserApi.parseResponse.mockImplementation(() => {
       handler({
         error_type: "class_not_found",
@@ -159,10 +209,8 @@ describe("YouTube live chat unknown renderer capture", () => {
       return parsedResponse;
     });
 
-    const actions = {
-      execute: createMockFn().mockResolvedValue(rawResponse),
-    };
-    const logUnknownRenderer = createMockFn().mockResolvedValue(undefined);
+    const actions = createActions(rawResponse);
+    const logUnknownRenderer = createLogUnknownRendererMock();
 
     installYouTubeLiveChatUnknownRendererCapture({
       actions,
@@ -178,7 +226,7 @@ describe("YouTube live chat unknown renderer capture", () => {
     });
 
     expect(logUnknownRenderer).toHaveBeenCalledTimes(1);
-    expect(logUnknownRenderer.mock.calls[0][0]).toMatchObject({
+    expect(getLoggedRenderer(logUnknownRenderer)).toMatchObject({
       matchedRenderers: [
         expect.objectContaining({
           containerPath:
@@ -199,7 +247,7 @@ describe("YouTube live chat unknown renderer capture", () => {
   test("captures the enclosing raw action wrapper for GiftMessageView so sibling action metadata can be inspected", async () => {
     const rawResponse = createGiftRawResponse("sent Girl power for 300 Jewels");
     const parsedResponse = createParsedResponse();
-    const handler = parserApi.setParserErrorHandler.mock.calls[0][0];
+    const handler = getParserErrorHandler(parserApi);
     parserApi.parseResponse.mockImplementation(() => {
       handler({
         error_type: "class_not_found",
@@ -208,10 +256,8 @@ describe("YouTube live chat unknown renderer capture", () => {
       return parsedResponse;
     });
 
-    const actions = {
-      execute: createMockFn().mockResolvedValue(rawResponse),
-    };
-    const logUnknownRenderer = createMockFn().mockResolvedValue(undefined);
+    const actions = createActions(rawResponse);
+    const logUnknownRenderer = createLogUnknownRendererMock();
 
     installYouTubeLiveChatUnknownRendererCapture({
       actions,
@@ -227,8 +273,11 @@ describe("YouTube live chat unknown renderer capture", () => {
     });
 
     expect(logUnknownRenderer).toHaveBeenCalledTimes(1);
-    const capturedMatch =
-      logUnknownRenderer.mock.calls[0][0].matchedRenderers[0];
+    const [capturedMatch] = getLoggedRenderer(logUnknownRenderer).matchedRenderers ?? [];
+    expect(capturedMatch).toBeDefined();
+    if (capturedMatch === undefined) {
+      throw new Error("Expected a captured renderer match");
+    }
     expect(capturedMatch.actionPath).toBe(
       "$.continuationContents.liveChatContinuation.actions[0]",
     );
@@ -244,11 +293,8 @@ describe("YouTube live chat unknown renderer capture", () => {
     const parsedResponse = createParsedResponse();
     parserApi.parseResponse.mockReturnValue(parsedResponse);
 
-    const execute = createMockFn().mockResolvedValue({ data: { ok: true } });
-    const actions = {
-      execute,
-    };
-    const logUnknownRenderer = createMockFn().mockResolvedValue(undefined);
+    const actions = createActions({ data: { ok: true } });
+    const logUnknownRenderer = createLogUnknownRendererMock();
 
     installYouTubeLiveChatUnknownRendererCapture({
       actions,
@@ -270,7 +316,7 @@ describe("YouTube live chat unknown renderer capture", () => {
   test("does not attribute unresolved continuations to a stale stream id when multiple streams share actions", async () => {
     const rawResponse = createGiftRawResponse("sent Girl power for 300 Jewels");
     const parsedResponse = createParsedResponse("next-shared-token");
-    const handler = parserApi.setParserErrorHandler.mock.calls[0][0];
+    const handler = getParserErrorHandler(parserApi);
     parserApi.parseResponse.mockImplementation(() => {
       handler({
         error_type: "class_not_found",
@@ -279,9 +325,8 @@ describe("YouTube live chat unknown renderer capture", () => {
       return parsedResponse;
     });
 
-    const execute = createMockFn().mockResolvedValue(rawResponse);
-    const actions = { execute };
-    const logUnknownRenderer = createMockFn().mockResolvedValue(undefined);
+    const actions = createActions(rawResponse);
+    const logUnknownRenderer = createLogUnknownRendererMock();
 
     installYouTubeLiveChatUnknownRendererCapture({
       actions,
@@ -305,7 +350,7 @@ describe("YouTube live chat unknown renderer capture", () => {
     });
 
     expect(logUnknownRenderer).toHaveBeenCalledTimes(1);
-    expect(logUnknownRenderer.mock.calls[0][0]).toMatchObject({
+    expect(getLoggedRenderer(logUnknownRenderer)).toMatchObject({
       videoId: null,
       matchedRenderers: [
         expect.objectContaining({ rawKey: "giftMessageView" }),
@@ -316,7 +361,7 @@ describe("YouTube live chat unknown renderer capture", () => {
   test("falls back to the only known stream id when a single-stream continuation is unresolved", async () => {
     const rawResponse = createGiftRawResponse("sent Girl power for 300 Jewels");
     const parsedResponse = createParsedResponse("next-single-token");
-    const handler = parserApi.setParserErrorHandler.mock.calls[0][0];
+    const handler = getParserErrorHandler(parserApi);
     parserApi.parseResponse.mockImplementation(() => {
       handler({
         error_type: "class_not_found",
@@ -325,9 +370,8 @@ describe("YouTube live chat unknown renderer capture", () => {
       return parsedResponse;
     });
 
-    const execute = createMockFn().mockResolvedValue(rawResponse);
-    const actions = { execute };
-    const logUnknownRenderer = createMockFn().mockResolvedValue(undefined);
+    const actions = createActions(rawResponse);
+    const logUnknownRenderer = createLogUnknownRendererMock();
 
     installYouTubeLiveChatUnknownRendererCapture({
       actions,
@@ -343,7 +387,7 @@ describe("YouTube live chat unknown renderer capture", () => {
     });
 
     expect(logUnknownRenderer).toHaveBeenCalledTimes(1);
-    expect(logUnknownRenderer.mock.calls[0][0]).toMatchObject({
+    expect(getLoggedRenderer(logUnknownRenderer)).toMatchObject({
       videoId: "single-stream",
     });
   });

@@ -5,26 +5,114 @@ import { noOpLogger } from "../helpers/mock-factories";
 import {
   createMockFn,
   restoreAllMocks,
-  spyOn,
 } from "../helpers/bun-mock-utils";
 import { YouTubePlatform } from "../../src/platforms/youtube";
 
+type GiftPayload = {
+  type: string;
+  giftType: string;
+  giftCount: number;
+  amount: number;
+  currency: string;
+  message: string;
+  username: string;
+  userId: string;
+};
+type MockApp = {
+  handleGiftNotification: ReturnType<
+    typeof createMockFn<[string, string, GiftPayload], void>
+  >;
+};
+type SuperChatEvent = {
+  item: {
+    type?: string;
+    id?: string;
+    purchase_amount: string;
+    message?: { text?: string; runs?: Array<{ text?: string }> };
+    author?: { id?: unknown; name?: unknown; thumbnails?: unknown[]; badges?: unknown[] };
+  };
+  videoId?: string;
+};
+type ExecuteWithApiFallback = <Result>(
+  context: string,
+  apiFn: () => Promise<Result>,
+  scrapeFn?: () => Promise<Result>,
+  fallbackValue?: Result,
+) => Promise<Result | undefined>;
+type YouTubePlatformFixture = YouTubePlatform & {
+  executeWithAPIFallback: ExecuteWithApiFallback;
+  _getYouTubeApi?: () => { videos: { list: () => Promise<unknown> } };
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  !!value && typeof value === "object";
+
+const isGiftPayload = (value: unknown): value is GiftPayload =>
+  isRecord(value) &&
+  typeof value.type === "string" &&
+  typeof value.giftType === "string" &&
+  typeof value.giftCount === "number" &&
+  typeof value.amount === "number" &&
+  typeof value.currency === "string" &&
+  typeof value.message === "string" &&
+  typeof value.username === "string" &&
+  typeof value.userId === "string";
+
+const expectGiftPayload = (value: unknown): GiftPayload => {
+  expect(isRecord(value)).toBe(true);
+  expect(isRecord(value) ? typeof value.username : "missing").toBe("string");
+  expect(isRecord(value) ? typeof value.userId : "missing").toBe("string");
+  expect(isRecord(value) ? typeof value.message : "missing").toBe("string");
+  expect(isRecord(value) ? typeof value.amount : "missing").toBe("number");
+  expect(isRecord(value) ? typeof value.currency : "missing").toBe("string");
+  expect(isGiftPayload(value)).toBe(true);
+  return value as GiftPayload;
+};
+
+const expectSuperChatEvent = (value: unknown): SuperChatEvent => {
+  expect(isRecord(value)).toBe(true);
+  expect(isRecord(isRecord(value) ? value.item : null)).toBe(true);
+  expect(
+    isRecord(value) && isRecord(value.item)
+      ? typeof value.item.purchase_amount
+      : "missing",
+  ).toBe("string");
+  return value as SuperChatEvent;
+};
+
+const parseSuperChatEvent = (event: SuperChatEvent): GiftPayload => {
+  const author = event.item.author;
+  expect(isRecord(author)).toBe(true);
+  expect(isRecord(author) ? typeof author.id : "missing").toBe("string");
+  expect(isRecord(author) ? typeof author.name : "missing").toBe("string");
+  if (
+    !isRecord(author) ||
+    typeof author.id !== "string" ||
+    typeof author.name !== "string"
+  ) {
+    throw new Error("Expected Super Chat author id and name");
+  }
+  const amount = parseFloat(event.item.purchase_amount.replace(/[^\d.]/g, ""));
+  const currency = event.item.purchase_amount.replace(/[\d.]/g, "");
+  return {
+    type: "platform:gift",
+    giftType: "Super Chat",
+    giftCount: 1,
+    amount,
+    currency,
+    message: event.item.message?.text || event.item.message?.runs?.[0]?.text || "",
+    username: author.name,
+    userId: author.id,
+  };
+};
+
 describe("YouTube Error Fixes Integration", () => {
-  let mockApp;
-  let youtubePlatform;
+  let mockApp: MockApp;
+  let youtubePlatform: YouTubePlatformFixture;
   let receivedGiftNotifications: Array<{
     platform: string;
     username: string;
-    payload: {
-      type: string;
-      giftType: string;
-      giftCount: number;
-      amount: number;
-      currency: string;
-      message: string;
-      username: string;
-      userId: string;
-    };
+    payload: GiftPayload;
   }>;
 
   afterEach(() => {
@@ -34,19 +122,10 @@ describe("YouTube Error Fixes Integration", () => {
   beforeEach(() => {
     receivedGiftNotifications = [];
     mockApp = {
-      handleGiftNotification: createMockFn((
-        platform: string,
-        username: string,
-        payload: {
-          type: string;
-          giftType: string;
-          giftCount: number;
-          amount: number;
-          currency: string;
-          message: string;
-          username: string;
-          userId: string;
-        },
+      handleGiftNotification: createMockFn<[string, string, GiftPayload], void>((
+        platform,
+        username,
+        payload,
       ) => {
         receivedGiftNotifications.push({ platform, username, payload });
       }),
@@ -65,70 +144,43 @@ describe("YouTube Error Fixes Integration", () => {
       logger: noOpLogger,
     };
 
-    youtubePlatform = new YouTubePlatform(config, dependencies);
-
-    youtubePlatform.handlers = {
-      onGift: (data) =>
-        mockApp.handleGiftNotification("youtube", data.username, data),
+    const executeWithAPIFallback: ExecuteWithApiFallback = async <Result,>(
+      _context: string,
+      apiFn: () => Promise<Result>,
+      scrapeFn?: () => Promise<Result>,
+      fallbackValue?: Result,
+    ) => {
+      const enableAPI = youtubePlatform.config?.enableAPI;
+      if (!enableAPI && scrapeFn) {
+        return await scrapeFn();
+      }
+      try {
+        return await apiFn();
+      } catch {
+        if (scrapeFn) {
+          return await scrapeFn();
+        }
+        return fallbackValue;
+      }
     };
 
-    youtubePlatform.handleSuperChat = createMockFn((event) => {
-      if (youtubePlatform.handlers?.onGift) {
-        const amount = parseFloat(
-          event.item.purchase_amount.replace(/[^\d.]/g, ""),
-        );
-        const currency = event.item.purchase_amount.replace(/[\d.]/g, "");
-        youtubePlatform.handlers.onGift({
-          type: "platform:gift",
-          giftType: "Super Chat",
-          giftCount: 1,
-          amount: amount,
-          currency: currency,
-          message:
-            event.item.message?.text ||
-            event.item.message?.runs?.[0]?.text ||
-            "",
-          username: event.item.author.name,
-          userId: event.item.author.id,
-        });
-      }
+    youtubePlatform = Object.assign(new YouTubePlatform(config, dependencies), {
+      executeWithAPIFallback,
     });
 
-    if (typeof youtubePlatform.executeWithAPIFallback === "function") {
-      spyOn(youtubePlatform, "executeWithAPIFallback").mockImplementation(
-        async (context, apiFn, scrapeFn, fallbackValue) => {
-          const enableAPI = youtubePlatform.config?.enableAPI;
-          if (!enableAPI && scrapeFn) {
-            return await scrapeFn();
-          }
-          try {
-            return await apiFn();
-          } catch {
-            if (scrapeFn) {
-              return await scrapeFn();
-            }
-            return fallbackValue;
-          }
-        },
-      );
-    } else {
-      youtubePlatform.executeWithAPIFallback = createMockFn(
-        async (context, apiFn, scrapeFn, fallbackValue) => {
-          const enableAPI = youtubePlatform.config?.enableAPI;
-          if (!enableAPI && scrapeFn) {
-            return await scrapeFn();
-          }
-          try {
-            return await apiFn();
-          } catch {
-            if (scrapeFn) {
-              return await scrapeFn();
-            }
-            return fallbackValue;
-          }
-        },
-      );
-    }
+    youtubePlatform.handlers = {
+      onGift: (data: unknown) => {
+        const payload = expectGiftPayload(data);
+        mockApp.handleGiftNotification("youtube", payload.username, payload);
+      },
+    };
+
+    youtubePlatform.handleSuperChat = createMockFn<[unknown], Promise<void>>(async (event) => {
+      const superChatEvent = expectSuperChatEvent(event);
+      if (youtubePlatform.handlers?.onGift) {
+        youtubePlatform.handlers.onGift(parseSuperChatEvent(superChatEvent));
+      }
+    });
   });
 
   describe("Configuration Processing", () => {
@@ -140,7 +192,7 @@ describe("YouTube Error Fixes Integration", () => {
   });
 
   describe("Super Chat Error Scenarios", () => {
-    test("should handle Super Chat with no message gracefully", () => {
+    test("should handle Super Chat with no message gracefully", async () => {
       const superChatEvent = {
         item: {
           type: "LiveChatPaidMessage",
@@ -156,9 +208,7 @@ describe("YouTube Error Fixes Integration", () => {
         videoId: "test-video-id",
       };
 
-      expect(() => {
-        youtubePlatform.handleSuperChat(superChatEvent);
-      }).not.toThrow();
+      await expect(youtubePlatform.handleSuperChat(superChatEvent)).resolves.toBeUndefined();
 
       expect(receivedGiftNotifications).toHaveLength(1);
       expect(receivedGiftNotifications[0]).toMatchObject({
@@ -175,7 +225,7 @@ describe("YouTube Error Fixes Integration", () => {
       });
     });
 
-    test("should handle various currency formats without truncation", () => {
+    test("should handle various currency formats without truncation", async () => {
       const currencyTestCases = [
         { input: "CA$2.00", expectedCurrency: "CA$", expectedAmount: 2 },
         { input: "ARS$500.00", expectedCurrency: "ARS$", expectedAmount: 500 },
@@ -183,8 +233,7 @@ describe("YouTube Error Fixes Integration", () => {
         { input: "€10.50", expectedCurrency: "€", expectedAmount: 10.5 },
       ];
 
-      currencyTestCases.forEach(
-        ({ input, expectedCurrency, expectedAmount }, index) => {
+      for (const [index, { input, expectedCurrency, expectedAmount }] of currencyTestCases.entries()) {
           const superChatEvent = {
             item: {
               type: "LiveChatPaidMessage",
@@ -204,7 +253,7 @@ describe("YouTube Error Fixes Integration", () => {
             videoId: "test-video-id",
           };
 
-          youtubePlatform.handleSuperChat(superChatEvent);
+        await youtubePlatform.handleSuperChat(superChatEvent);
 
         expect(receivedGiftNotifications).toHaveLength(1);
         expect(receivedGiftNotifications[0]).toMatchObject({
@@ -220,8 +269,7 @@ describe("YouTube Error Fixes Integration", () => {
         });
 
         receivedGiftNotifications = [];
-        },
-      );
+      }
     });
   });
 
@@ -247,7 +295,7 @@ describe("YouTube Error Fixes Integration", () => {
   });
 
   describe("End-to-End Super Chat Processing", () => {
-    test("should process complete Super Chat workflow without errors", () => {
+    test("should process complete Super Chat workflow without errors", async () => {
       const superChatEvent = {
         item: {
           type: "LiveChatPaidMessage",
@@ -279,7 +327,7 @@ describe("YouTube Error Fixes Integration", () => {
         videoId: "test-video-123",
       };
 
-      youtubePlatform.handleSuperChat(superChatEvent);
+      await youtubePlatform.handleSuperChat(superChatEvent);
 
       expect(receivedGiftNotifications).toHaveLength(1);
       expect(receivedGiftNotifications[0]).toMatchObject({

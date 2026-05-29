@@ -6,9 +6,48 @@ import NotificationManager from "../../src/notifications/NotificationManager";
 import { createTestAppRuntime } from "../helpers/runtime-test-harness";
 import { createMockDisplayQueue, noOpLogger } from "../helpers/mock-factories";
 import { expectNoTechnicalArtifacts } from "../helpers/assertion-helpers";
-import { createTextProcessingManager } from "../../src/utils/text-processing";
 import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
 import { createConfigFixture } from "../helpers/config-fixture";
+
+type RuntimeEvent = Record<string, unknown>;
+type EventHandler = (event: RuntimeEvent) => Promise<void> | void;
+type PlatformHandlers = Parameters<PlatformLifecycleService["initializeAllPlatforms"]>[0] extends Record<string, infer Constructor>
+  ? Constructor extends new (...args: never[]) => { initialize: (handlers: infer Handlers) => unknown }
+    ? Handlers
+    : { onGift: (payload: unknown) => void }
+  : { onGift: (payload: unknown) => void };
+type GiftQueueData = {
+  giftType: string;
+  currency: string;
+  displayMessage: string;
+  ttsMessage: string;
+  logMessage: string;
+  message?: string;
+  parts?: unknown;
+  userId?: string;
+};
+type QueuedGiftItem = {
+  type: "platform:gift";
+  platform: "youtube";
+  data: GiftQueueData;
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  !!value && typeof value === "object";
+
+const isGiftQueueData = (value: unknown): value is GiftQueueData =>
+  isRecord(value) &&
+  typeof value.giftType === "string" &&
+  typeof value.currency === "string" &&
+  typeof value.displayMessage === "string" &&
+  typeof value.ttsMessage === "string" &&
+  typeof value.logMessage === "string";
+
+const isQueuedGiftItem = (value: unknown): value is QueuedGiftItem =>
+  isRecord(value) &&
+  value.type === "platform:gift" &&
+  value.platform === "youtube" &&
+  isGiftQueueData(value.data);
 
 describe("YouTube gift platform flow (smoke)", () => {
   afterEach(() => {
@@ -18,21 +57,30 @@ describe("YouTube gift platform flow (smoke)", () => {
   const createEventBus = () => {
     const emitter = new EventEmitter();
     return {
-      emit: emitter.emit.bind(emitter),
-      on: emitter.on.bind(emitter),
-      subscribe: (event, handler) => {
+      emit: (event: string, payload: unknown) => {
+        emitter.emit(event, payload);
+      },
+      on: (event: string, handler: EventHandler) => {
         emitter.on(event, handler);
-        return () => emitter.off(event, handler);
+      },
+      subscribe: (event: string, handler: EventHandler) => {
+        emitter.on(event, handler);
+        return () => {
+          emitter.off(event, handler);
+        };
       },
     };
   };
 
-  const assertNonEmptyString = (value) => {
+  const assertNonEmptyString = (value: string) => {
     expect(typeof value).toBe("string");
     expect(value.trim()).not.toBe("");
   };
 
-  const assertUserFacingOutput = (data, { username, keyword }) => {
+  const assertUserFacingOutput = (
+    data: GiftQueueData,
+    { username, keyword }: { username?: string; keyword?: string },
+  ) => {
     assertNonEmptyString(data.displayMessage);
     assertNonEmptyString(data.ttsMessage);
     assertNonEmptyString(data.logMessage);
@@ -68,7 +116,6 @@ describe("YouTube gift platform flow (smoke)", () => {
     const eventBus = createEventBus();
     const logger = noOpLogger;
     const displayQueue = createMockDisplayQueue();
-    const textProcessing = createTextProcessingManager({ logger });
     const config = createConfigFixture(configOverrides);
     const notificationManager = new NotificationManager({
       displayQueue,
@@ -76,7 +123,6 @@ describe("YouTube gift platform flow (smoke)", () => {
       eventBus,
       config,
       constants: require("../../src/core/constants"),
-      textProcessing,
       obsGoals: { processDonationGoal: createMockFn() },
       vfxCommandService: {
         getVFXConfig: createMockFn().mockResolvedValue(null),
@@ -97,7 +143,6 @@ describe("YouTube gift platform flow (smoke)", () => {
       notificationManager,
       displayQueue,
       logger,
-      platformLifecycleService,
     });
 
     return {
@@ -116,7 +161,7 @@ describe("YouTube gift platform flow (smoke)", () => {
       createRuntimeDeps();
 
     class MockYouTubePlatform {
-      async initialize(handlers) {
+      async initialize(handlers: PlatformHandlers) {
         handlers.onGift({
           username: "ChatHero",
           userId: "yt-chat-1",
@@ -143,7 +188,11 @@ describe("YouTube gift platform flow (smoke)", () => {
       await new Promise(setImmediate);
 
       expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
-      const queued = displayQueue.addItem.mock.calls[0][0];
+      const [queued] = displayQueue.addItem.mock.calls[0] ?? [];
+      expect(isQueuedGiftItem(queued)).toBe(true);
+      if (!isQueuedGiftItem(queued)) {
+        throw new Error("Expected a YouTube gift queue item");
+      }
       expect(queued.type).toBe("platform:gift");
       expect(queued.platform).toBe("youtube");
       expect(queued.data.giftType).toBe("Super Chat");
@@ -164,7 +213,7 @@ describe("YouTube gift platform flow (smoke)", () => {
       createRuntimeDeps();
 
     class MockYouTubePlatform {
-      async initialize(handlers) {
+      async initialize(handlers: PlatformHandlers) {
         handlers.onGift({
           username: "test-sticker-hero",
           userId: "yt-sticker-1",
@@ -194,7 +243,11 @@ describe("YouTube gift platform flow (smoke)", () => {
       await new Promise(setImmediate);
 
       expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
-      const queued = displayQueue.addItem.mock.calls[0][0];
+      const [queued] = displayQueue.addItem.mock.calls[0] ?? [];
+      expect(isQueuedGiftItem(queued)).toBe(true);
+      if (!isQueuedGiftItem(queued)) {
+        throw new Error("Expected a YouTube gift queue item");
+      }
       expect(queued.type).toBe("platform:gift");
       expect(queued.platform).toBe("youtube");
       expect(queued.data.giftType).toBe("Super Sticker");
@@ -225,7 +278,7 @@ describe("YouTube gift platform flow (smoke)", () => {
       createRuntimeDeps();
 
     class MockYouTubePlatform {
-      async initialize(handlers) {
+      async initialize(handlers: PlatformHandlers) {
         handlers.onGift({
           username: "test-jewels-user",
           giftType: "Girl power",
@@ -254,7 +307,11 @@ describe("YouTube gift platform flow (smoke)", () => {
       await new Promise(setImmediate);
 
       expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
-      const queued = displayQueue.addItem.mock.calls[0][0];
+      const [queued] = displayQueue.addItem.mock.calls[0] ?? [];
+      expect(isQueuedGiftItem(queued)).toBe(true);
+      if (!isQueuedGiftItem(queued)) {
+        throw new Error("Expected a YouTube gift queue item");
+      }
       expect(queued.type).toBe("platform:gift");
       expect(queued.platform).toBe("youtube");
       expect(queued.data.giftType).toBe("Girl power");

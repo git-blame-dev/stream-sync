@@ -9,6 +9,60 @@ import { createYouTubeSuperChatEvent } from "../../../../helpers/youtube-test-da
 import { createMockPlatformDependencies } from "../../../../helpers/test-setup";
 import { createYouTubeConfigFixture } from "../../../../helpers/config-fixture";
 
+type YouTubeGiftEvent = {
+  platform: "youtube";
+  type: "platform:gift";
+  username: string;
+  giftType: string;
+  giftCount: number;
+  amount: number;
+  currency: string;
+  message?: string;
+  userId?: string;
+  id?: string;
+  timestamp?: string;
+  metadata?: { missingFields?: string[] };
+};
+
+type YouTubeMembershipEvent = {
+  platform: "youtube";
+  type: "platform:paypiggy";
+  username: string;
+  userId: string;
+  avatarUrl?: string;
+  membershipLevel?: string;
+  message?: string;
+  months?: number;
+  timestamp?: string;
+};
+
+const expectSingleEvent = <Event>(events: Event[]): Event => {
+  expect(events).toHaveLength(1);
+  const [event] = events;
+  expect(event).toBeDefined();
+  if (event === undefined) {
+    throw new Error("Expected one YouTube event");
+  }
+  return event;
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  !!value && typeof value === "object";
+
+const expectGiftEvent = (event: unknown): YouTubeGiftEvent => {
+  expect(isRecord(event)).toBe(true);
+  expect(isRecord(event) ? event.platform : undefined).toBe("youtube");
+  expect(isRecord(event) ? event.type : undefined).toBe("platform:gift");
+  return event as YouTubeGiftEvent;
+};
+
+const expectMembershipEvent = (event: unknown): YouTubeMembershipEvent => {
+  expect(isRecord(event)).toBe(true);
+  expect(isRecord(event) ? event.platform : undefined).toBe("youtube");
+  expect(isRecord(event) ? event.type : undefined).toBe("platform:paypiggy");
+  return event as YouTubeMembershipEvent;
+};
+
 describe("YouTube monetized event pipeline", () => {
   afterEach(() => {
     restoreAllMocks();
@@ -32,10 +86,12 @@ describe("YouTube monetized event pipeline", () => {
 
   test("emits a single gift event for SuperChats through the unified pipeline", async () => {
     const youtubePlatform = createPlatform();
-    const giftEvents = [];
+    const giftEvents: YouTubeGiftEvent[] = [];
     youtubePlatform.handlers = {
       ...youtubePlatform.handlers,
-      onGift: (event) => giftEvents.push(event),
+      onGift: (event: unknown) => {
+        giftEvents.push(expectGiftEvent(event));
+      },
     };
 
     const superChat = createYouTubeSuperChatEvent(10, "USD", {
@@ -53,8 +109,8 @@ describe("YouTube monetized event pipeline", () => {
     await youtubePlatform.handleChatMessage(superChat);
     await new Promise((resolve) => setImmediate(resolve));
 
-    expect(giftEvents).toHaveLength(1);
-    expect(giftEvents[0]).toMatchObject({
+    const giftEvent = expectSingleEvent(giftEvents);
+    expect(giftEvent).toMatchObject({
       platform: "youtube",
       type: "platform:gift",
       username: "SuperChatUser",
@@ -63,19 +119,21 @@ describe("YouTube monetized event pipeline", () => {
       amount: 10,
       currency: "USD",
     });
-    expect(giftEvents[0].message).toBe(
+    expect(giftEvent.message).toBe(
       "Thanks for the amazing content! Keep it up!",
     );
-    expect(giftEvents[0].userId).toBeTruthy();
-    expect(giftEvents[0].id).toBeTruthy();
+    expect(giftEvent.userId).toBeTruthy();
+    expect(giftEvent.id).toBeTruthy();
   });
 
   test("emits paypiggy events for LiveChatMembershipItem payloads", async () => {
     const youtubePlatform = createPlatform();
-    const membershipEvents = [];
+    const membershipEvents: YouTubeMembershipEvent[] = [];
     youtubePlatform.handlers = {
       ...youtubePlatform.handlers,
-      onPaypiggy: (event) => membershipEvents.push(event),
+      onPaypiggy: (event: unknown) => {
+        membershipEvents.push(expectMembershipEvent(event));
+      },
     };
 
     const membershipItem = {
@@ -96,8 +154,8 @@ describe("YouTube monetized event pipeline", () => {
     await youtubePlatform.handleChatMessage(membershipItem);
     await new Promise((resolve) => setImmediate(resolve));
 
-    expect(membershipEvents).toHaveLength(1);
-    expect(membershipEvents[0]).toMatchObject({
+    const membershipEvent = expectSingleEvent(membershipEvents);
+    expect(membershipEvent).toMatchObject({
       platform: "youtube",
       type: "platform:paypiggy",
       username: "MemberUser",
@@ -106,17 +164,19 @@ describe("YouTube monetized event pipeline", () => {
       message: "Welcome to the membership",
       months: 3,
     });
-    expect(membershipEvents[0].timestamp).toBe(
+    expect(membershipEvent.timestamp).toBe(
       new Date(1704067200000).toISOString(),
     );
   });
 
   test("emits a YouTube jewels gift event for GiftMessageView without fabricating userId", async () => {
     const youtubePlatform = createPlatform();
-    const giftEvents = [];
+    const giftEvents: YouTubeGiftEvent[] = [];
     youtubePlatform.handlers = {
       ...youtubePlatform.handlers,
-      onGift: (event) => giftEvents.push(event),
+      onGift: (event: unknown) => {
+        giftEvents.push(expectGiftEvent(event));
+      },
     };
 
     await youtubePlatform.handleChatMessage({
@@ -134,8 +194,8 @@ describe("YouTube monetized event pipeline", () => {
     });
     await new Promise((resolve) => setImmediate(resolve));
 
-    expect(giftEvents).toHaveLength(1);
-    expect(giftEvents[0]).toMatchObject({
+    const giftEvent = expectSingleEvent(giftEvents);
+    expect(giftEvent).toMatchObject({
       platform: "youtube",
       type: "platform:gift",
       username: "test-jewels-gifter",
@@ -148,16 +208,18 @@ describe("YouTube monetized event pipeline", () => {
         missingFields: ["userId"],
       },
     });
-    expect(giftEvents[0].timestamp).toBe(new Date(1704067200000).toISOString());
-    expect(giftEvents[0].userId).toBeUndefined();
+    expect(giftEvent.timestamp).toBe(new Date(1704067200000).toISOString());
+    expect(giftEvent.userId).toBeUndefined();
   });
 
   test("resolves GiftMessageView usernames from snake_case author_name payloads", async () => {
     const youtubePlatform = createPlatform();
-    const giftEvents = [];
+    const giftEvents: YouTubeGiftEvent[] = [];
     youtubePlatform.handlers = {
       ...youtubePlatform.handlers,
-      onGift: (event) => giftEvents.push(event),
+      onGift: (event: unknown) => {
+        giftEvents.push(expectGiftEvent(event));
+      },
     };
 
     await youtubePlatform.handleChatMessage({
@@ -175,17 +237,19 @@ describe("YouTube monetized event pipeline", () => {
     });
     await new Promise((resolve) => setImmediate(resolve));
 
-    expect(giftEvents).toHaveLength(1);
-    expect(giftEvents[0].username).toBe("test-snake-gifter");
-    expect(giftEvents[0].currency).toBe("jewels");
+    const giftEvent = expectSingleEvent(giftEvents);
+    expect(giftEvent.username).toBe("test-snake-gifter");
+    expect(giftEvent.currency).toBe("jewels");
   });
 
   test("emits renewal paypiggy events for real snake_case YouTube membership milestone payloads", async () => {
     const youtubePlatform = createPlatform();
-    const membershipEvents = [];
+    const membershipEvents: YouTubeMembershipEvent[] = [];
     youtubePlatform.handlers = {
       ...youtubePlatform.handlers,
-      onPaypiggy: (event) => membershipEvents.push(event),
+      onPaypiggy: (event: unknown) => {
+        membershipEvents.push(expectMembershipEvent(event));
+      },
     };
 
     const membershipItem = {
@@ -222,8 +286,8 @@ describe("YouTube monetized event pipeline", () => {
     await youtubePlatform.handleChatMessage(membershipItem);
     await new Promise((resolve) => setImmediate(resolve));
 
-    expect(membershipEvents).toHaveLength(1);
-    expect(membershipEvents[0]).toMatchObject({
+    const membershipEvent = expectSingleEvent(membershipEvents);
+    expect(membershipEvent).toMatchObject({
       platform: "youtube",
       type: "platform:paypiggy",
       username: "MilestoneUser",
@@ -232,7 +296,7 @@ describe("YouTube monetized event pipeline", () => {
       months: 10,
       message: "Thanks for the membership!",
     });
-    expect(membershipEvents[0].timestamp).toBe(
+    expect(membershipEvent.timestamp).toBe(
       new Date(1773660646737).toISOString(),
     );
   });

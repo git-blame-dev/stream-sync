@@ -9,17 +9,44 @@ import {
 import { expectNoTechnicalArtifacts } from "../helpers/behavior-validation";
 import { YouTubePlatform } from "../../src/platforms/youtube";
 
+type StreamConfig = {
+  videoId: string;
+  viewers: number;
+  chatReady: boolean;
+  isLive?: boolean;
+};
+type MultiStreamScenario = {
+  name: string;
+  streams: StreamConfig[];
+  expectedViewerCount: number;
+  chatReadyCount: number;
+  detectedCount: number;
+};
+type NotificationManagerFixture = ReturnType<typeof createMockNotificationManager>;
+
+const expectViewerCount = (value: number | null, expected: number): number => {
+  expect(value).toBe(expected);
+  expect(value).not.toBeNull();
+  if (value === null) {
+    throw new Error("Expected YouTube viewer count to be available");
+  }
+  return value;
+};
+
 describe("YouTube Multi-Stream Viewer Count Separation", () => {
-  let mockNotificationManager, cleanup;
+  let mockNotificationManager: NotificationManagerFixture;
+  let cleanup: unknown;
 
   afterEach(async () => {
     restoreAllMocks();
-    if (cleanup && typeof cleanup === "function") {
+    if (typeof cleanup === "function") {
       await cleanup();
     }
   });
 
-  const createMultiStreamScenario = (streamConfigs) => {
+  const createMultiStreamScenario = (
+    streamConfigs: StreamConfig[],
+  ): MultiStreamScenario => {
     const totalViewers = streamConfigs
       .filter((stream) => stream.isLive !== false)
       .reduce((sum, stream) => sum + stream.viewers, 0);
@@ -38,10 +65,16 @@ describe("YouTube Multi-Stream Viewer Count Separation", () => {
     };
   };
 
-  const createYouTubePlatformWithMixedStates = async (scenario) => {
+  const createYouTubePlatformWithMixedStates = async (
+    scenario: MultiStreamScenario,
+  ) => {
     const mockViewerExtractionService = {
-      getAggregatedViewerCount: createMockFn().mockImplementation(
-        async (videoIds) => {
+      getAggregatedViewerCount: createMockFn<[string[]], Promise<{
+        success: boolean;
+        totalCount: number;
+        successfulStreams: number;
+      }>>().mockImplementation(
+        async (videoIds: string[]) => {
           let totalCount = 0;
           let successfulStreams = 0;
           for (const videoId of videoIds) {
@@ -58,7 +91,7 @@ describe("YouTube Multi-Stream Viewer Count Separation", () => {
           };
         },
       ),
-      extractViewerCount: createMockFn().mockImplementation(async (videoId) => {
+      extractViewerCount: createMockFn<[string], Promise<{ success: boolean; count: number }>>().mockImplementation(async (videoId) => {
         const stream = scenario.streams.find((s) => s.videoId === videoId);
         if (stream && stream.isLive !== false) {
           return {
@@ -93,26 +126,18 @@ describe("YouTube Multi-Stream Viewer Count Separation", () => {
       },
     );
 
-    const originalGetActiveVideoIds =
-      platform.connectionManager.getActiveVideoIds;
-    const originalIsConnectionReady =
-      platform.connectionManager.isConnectionReady;
-
     platform.connectionManager.getActiveVideoIds =
-      createMockFn().mockReturnValue(
+      createMockFn<[], string[]>().mockReturnValue(
         scenario.streams
           .filter((stream) => stream.isLive !== false)
           .map((stream) => stream.videoId),
       );
 
     platform.connectionManager.isConnectionReady =
-      createMockFn().mockImplementation((videoId) => {
+      createMockFn<[string], boolean>().mockImplementation((videoId) => {
         const stream = scenario.streams.find((s) => s.videoId === videoId);
         return stream ? stream.chatReady : false;
       });
-
-    platform._originalGetActiveVideoIds = originalGetActiveVideoIds;
-    platform._originalIsConnectionReady = originalIsConnectionReady;
 
     return platform;
   };
@@ -132,9 +157,8 @@ describe("YouTube Multi-Stream Viewer Count Separation", () => {
       ]);
       const platform = await createYouTubePlatformWithMixedStates(scenario);
 
-      const totalViewers = await platform.getViewerCount();
+      const totalViewers = expectViewerCount(await platform.getViewerCount(), 4100);
 
-      expect(totalViewers).toBe(4100);
       expect(totalViewers).toBe(scenario.expectedViewerCount);
       const chatReadyOnly = scenario.streams
         .filter((s) => s.chatReady)
@@ -165,9 +189,8 @@ describe("YouTube Multi-Stream Viewer Count Separation", () => {
       ]);
       const platform = await createYouTubePlatformWithMixedStates(scenario);
 
-      const totalViewers = await platform.getViewerCount();
+      const totalViewers = expectViewerCount(await platform.getViewerCount(), 4400);
 
-      expect(totalViewers).toBe(4400);
       const chatReadyTotal = 2000;
       expect(totalViewers).toBeGreaterThan(chatReadyTotal);
     });
@@ -191,9 +214,8 @@ describe("YouTube Multi-Stream Viewer Count Separation", () => {
       ]);
       const platform = await createYouTubePlatformWithMixedStates(scenario);
 
-      const totalViewers = await platform.getViewerCount();
+      const totalViewers = expectViewerCount(await platform.getViewerCount(), 5900);
 
-      expect(totalViewers).toBe(5900);
       expect(totalViewers).toBe(scenario.expectedViewerCount);
     });
 
@@ -214,16 +236,14 @@ describe("YouTube Multi-Stream Viewer Count Separation", () => {
       ]);
       const platform = await createYouTubePlatformWithMixedStates(scenario);
 
-      const initialCount = await platform.getViewerCount();
-      expect(initialCount).toBe(3000);
+      const initialCount = expectViewerCount(await platform.getViewerCount(), 3000);
 
       platform.connectionManager.isConnectionReady =
-        createMockFn().mockImplementation((videoId) => {
+        createMockFn<[string], boolean>().mockImplementation((videoId) => {
           return true;
         });
-      const afterChatReady = await platform.getViewerCount();
+      const afterChatReady = expectViewerCount(await platform.getViewerCount(), 3000);
 
-      expect(afterChatReady).toBe(3000);
       expect(afterChatReady).toBe(initialCount);
     });
   });
@@ -237,9 +257,8 @@ describe("YouTube Multi-Stream Viewer Count Separation", () => {
       ]);
       const platform = await createYouTubePlatformWithMixedStates(scenario);
 
-      const totalViewers = await platform.getViewerCount();
+      const totalViewers = expectViewerCount(await platform.getViewerCount(), 3900);
 
-      expect(totalViewers).toBe(3900);
       expect(totalViewers).toBeGreaterThan(0);
       expect(totalViewers).not.toBe(0);
     });
@@ -265,9 +284,8 @@ describe("YouTube Multi-Stream Viewer Count Separation", () => {
       platform.connectionManager.isAnyConnectionReady =
         createMockFn().mockReturnValue(false);
 
-      const viewerCount = await platform.getViewerCount();
+      const viewerCount = expectViewerCount(await platform.getViewerCount(), 4300);
 
-      expect(viewerCount).toBe(4300);
       expect(viewerCount).toBeGreaterThan(0);
     });
 
@@ -300,9 +318,8 @@ describe("YouTube Multi-Stream Viewer Count Separation", () => {
       ]);
       const platform = await createYouTubePlatformWithMixedStates(scenario);
 
-      const totalViewers = await platform.getViewerCount();
+      const totalViewers = expectViewerCount(await platform.getViewerCount(), 6500);
 
-      expect(totalViewers).toBe(6500);
       const chatOnlyTotal = scenario.streams
         .filter((s) => s.chatReady)
         .reduce((sum, s) => sum + s.viewers, 0);
@@ -326,14 +343,12 @@ describe("YouTube Multi-Stream Viewer Count Separation", () => {
       ]);
       const platform = await createYouTubePlatformWithMixedStates(scenario);
 
-      const beforeInterruption = await platform.getViewerCount();
-      expect(beforeInterruption).toBe(5000);
+      const beforeInterruption = expectViewerCount(await platform.getViewerCount(), 5000);
 
       platform.connectionManager.isConnectionReady =
         createMockFn().mockReturnValue(false);
-      const duringInterruption = await platform.getViewerCount();
+      const duringInterruption = expectViewerCount(await platform.getViewerCount(), 5000);
 
-      expect(duringInterruption).toBe(5000);
       expect(duringInterruption).toBe(beforeInterruption);
     });
   });
@@ -350,9 +365,9 @@ describe("YouTube Multi-Stream Viewer Count Separation", () => {
       ]);
       const platform = await createYouTubePlatformWithMixedStates(scenario);
 
-      const call1 = await platform.getViewerCount();
-      const call2 = await platform.getViewerCount();
-      const call3 = await platform.getViewerCount();
+      const call1 = expectViewerCount(await platform.getViewerCount(), 2500);
+      const call2 = expectViewerCount(await platform.getViewerCount(), 2500);
+      const call3 = expectViewerCount(await platform.getViewerCount(), 2500);
 
       expect(call1).toBe(2500);
       expect(call2).toBe(2500);
@@ -367,9 +382,8 @@ describe("YouTube Multi-Stream Viewer Count Separation", () => {
       ]);
       const platform = await createYouTubePlatformWithMixedStates(scenario);
 
-      const viewerCount = await platform.getViewerCount();
+      const viewerCount = expectViewerCount(await platform.getViewerCount(), 0);
 
-      expect(viewerCount).toBe(0);
       expect(typeof viewerCount).toBe("number");
     });
 
@@ -405,8 +419,8 @@ describe("YouTube Multi-Stream Viewer Count Separation", () => {
       const platform1 = await createYouTubePlatformWithMixedStates(scenario1);
       const platform2 = await createYouTubePlatformWithMixedStates(scenario2);
 
-      const count1 = await platform1.getViewerCount();
-      const count2 = await platform2.getViewerCount();
+      const count1 = expectViewerCount(await platform1.getViewerCount(), 1500);
+      const count2 = expectViewerCount(await platform2.getViewerCount(), 1500);
 
       expect(count1).toBe(1500);
       expect(count2).toBe(1500);
@@ -436,9 +450,8 @@ describe("YouTube Multi-Stream Viewer Count Separation", () => {
       ]);
       const platform = await createYouTubePlatformWithMixedStates(scenario);
 
-      const totalViewers = await platform.getViewerCount();
+      const totalViewers = expectViewerCount(await platform.getViewerCount(), 15892);
 
-      expect(totalViewers).toBe(15892);
       expect(typeof totalViewers).toBe("number");
       expect(totalViewers).toBeGreaterThan(0);
       expect(Number.isInteger(totalViewers)).toBe(true);

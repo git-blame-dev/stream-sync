@@ -1,6 +1,45 @@
 import { describe, it, beforeEach, afterEach, expect } from "bun:test";
 import { createMockFn, clearAllMocks } from "../../helpers/bun-mock-utils";
+import type { TestMockFn } from "../../helpers/bun-mock-utils";
 import { installYouTubeTextLogAdapter } from "../../../src/utils/youtube-text-log-adapter.ts";
+
+type LoggerFixture = {
+  debug: TestMockFn<[unknown, string?, unknown?], void>;
+  info: TestMockFn<[unknown, string?, unknown?], void>;
+  warn: TestMockFn<[unknown, string?, unknown?], void>;
+  error: TestMockFn<[unknown, string?, unknown?], void>;
+};
+type ConsoleWarnMock = TestMockFn<Parameters<typeof console.warn>, void>;
+type InstallResult = ReturnType<typeof installYouTubeTextLogAdapter>;
+type WarningMetadata = Record<string, unknown>;
+
+const createLoggerFixture = (): LoggerFixture => ({
+  debug: createMockFn<[unknown, string?, unknown?], void>(),
+  info: createMockFn<[unknown, string?, unknown?], void>(),
+  warn: createMockFn<[unknown, string?, unknown?], void>(),
+  error: createMockFn<[unknown, string?, unknown?], void>(),
+});
+
+const getMockCall = <Args extends unknown[]>(
+  calls: Args[],
+  index: number,
+): Args => {
+  const call = calls[index];
+  expect(call).toBeDefined();
+  if (call === undefined) {
+    throw new Error(`Expected mock call ${index}`);
+  }
+  return call;
+};
+
+const expectMetadata = (value: unknown): WarningMetadata => {
+  expect(value && typeof value === "object").toBe(true);
+  if (!value || typeof value !== "object") {
+    throw new Error("Expected warning metadata object");
+  }
+  return value as WarningMetadata;
+};
+
 function createPayload() {
   return {
     attachment_run: {
@@ -23,21 +62,16 @@ function createPayload() {
 }
 
 describe("youtube text log adapter", () => {
-  let originalConsoleWarn;
-  let passthroughWarn;
-  let logger;
+  let originalConsoleWarn: typeof console.warn;
+  let passthroughWarn: ConsoleWarnMock;
+  let logger: LoggerFixture;
 
   beforeEach(() => {
     clearAllMocks();
     originalConsoleWarn = console.warn;
-    passthroughWarn = createMockFn();
+    passthroughWarn = createMockFn<Parameters<typeof console.warn>, void>();
     console.warn = passthroughWarn;
-    logger = {
-      debug: createMockFn(),
-      info: createMockFn(),
-      warn: createMockFn(),
-      error: createMockFn(),
-    };
+    logger = createLoggerFixture();
   });
 
   afterEach(() => {
@@ -75,22 +109,24 @@ describe("youtube text log adapter", () => {
     expect(passthroughWarn).toHaveBeenCalledTimes(0);
 
     const [firstMessage, firstContext, firstMetadata] =
-      logger.warn.mock.calls[0];
+      getMockCall(logger.warn.mock.calls, 0);
     expect(firstContext).toBe("youtube-text");
     expect(firstMessage).toContain("style");
     expect(firstMessage).not.toContain("\n");
-    expect(firstMetadata.warningType).toBe("style");
+    expect(expectMetadata(firstMetadata).warningType).toBe("style");
 
     const [thirdMessage, thirdContext, thirdMetadata] =
-      logger.warn.mock.calls[2];
+      getMockCall(logger.warn.mock.calls, 2);
     expect(thirdContext).toBe("youtube-text");
     expect(thirdMessage).toContain("attachment");
-    expect(thirdMetadata.warningType).toBe("attachment");
-    expect(thirdMetadata.contentLength).toBe(expectedContentLength);
+    const thirdWarningMetadata = expectMetadata(thirdMetadata);
+    expect(thirdWarningMetadata.warningType).toBe("attachment");
+    expect(thirdWarningMetadata.contentLength).toBe(expectedContentLength);
 
-    const [, , secondMetadata] = logger.warn.mock.calls[1];
-    expect(secondMetadata.warningType).toBe("command");
-    expect(secondMetadata.commandRunCount).toBe(2);
+    const [, , secondMetadata] = getMockCall(logger.warn.mock.calls, 1);
+    const secondWarningMetadata = expectMetadata(secondMetadata);
+    expect(secondWarningMetadata.warningType).toBe("command");
+    expect(secondWarningMetadata.commandRunCount).toBe(2);
   });
 
   it("passes through non-matching console warnings unchanged", () => {
@@ -102,7 +138,7 @@ describe("youtube text log adapter", () => {
 
     expect(logger.warn).toHaveBeenCalledTimes(0);
     expect(passthroughWarn).toHaveBeenCalledTimes(1);
-    const args = passthroughWarn.mock.calls[0];
+    const args = getMockCall(passthroughWarn.mock.calls, 0);
     expect(args[0]).toBe("[YOUTUBEJS][Parser]:");
     expect(args[1]).toContain("ParsingError");
   });
@@ -118,7 +154,7 @@ describe("youtube text log adapter", () => {
 
     expect(logger.warn).toHaveBeenCalledTimes(0);
     expect(passthroughWarn).toHaveBeenCalledTimes(1);
-    const args = passthroughWarn.mock.calls[0];
+    const args = getMockCall(passthroughWarn.mock.calls, 0);
     expect(args[0]).toBe("[YOUTUBEJS][Text]:");
     expect(args[1]).toContain("emoji run");
   });
@@ -137,7 +173,7 @@ describe("youtube text log adapter", () => {
 
     expect(logger.error).toHaveBeenCalledTimes(1);
     expect(passthroughWarn).toHaveBeenCalledTimes(1);
-    const [message, context] = logger.error.mock.calls[0];
+    const [message, context] = getMockCall(logger.error.mock.calls, 0);
     expect(message).toContain("Failed to normalize YouTube Text warning");
     expect(context).toBe("youtube-text-log-adapter");
   });
@@ -178,7 +214,7 @@ describe("youtube text log adapter", () => {
       },
     });
 
-    let installResult;
+    let installResult: InstallResult;
     try {
       globalThis.console = fakeConsole as Console;
       installResult = installYouTubeTextLogAdapter({
@@ -191,7 +227,7 @@ describe("youtube text log adapter", () => {
     expect(installResult.installed).toBe(false);
     expect(installResult.reason).toBe("install-failed");
     expect(loggerWithErrors.error).toHaveBeenCalledTimes(1);
-    const [message, context] = loggerWithErrors.error.mock.calls[0];
+    const [message, context] = getMockCall(loggerWithErrors.error.mock.calls, 0);
     expect(message).toContain("Failed to install YouTube Text warning adapter");
     expect(context).toBe("youtube-text-log-adapter");
   });
