@@ -12,16 +12,118 @@ import {
 import { createTwitchNotificationPayload } from "../../../helpers/avatar-source-matrix-fixtures";
 import { DEFAULT_AVATAR_URL } from "../../../../src/constants/avatar";
 
-const createTwitchAuth = (overrides = {}) => ({
+type TwitchAuthFake = {
+  ready?: boolean;
+  userId?: string;
+};
+
+type CapturedEvent = Record<string, unknown> & {
+  avatarUrl?: string;
+  badgeImages?: unknown[];
+  giftImageUrl?: string;
+  isBroadcaster?: boolean;
+  isError?: boolean;
+  isMod?: boolean;
+  isPaypiggy?: boolean;
+  metadata?: Record<string, unknown>;
+  timestamp?: string;
+  userId?: string;
+  username?: string;
+};
+
+type TwitchApiClientFake = {
+  getBroadcasterId: (channel: string) => Promise<string>;
+  getStreamInfo: (channelName: string) => Promise<{
+    isLive: boolean;
+    stream: unknown | null;
+    viewerCount: number;
+  }>;
+  getGlobalChatBadges: () => Promise<unknown[]>;
+  getChannelChatBadges: (broadcasterId: unknown) => Promise<unknown[]>;
+  getCheermotes?: (broadcasterId: unknown) => Promise<unknown[]>;
+  getUserById?: (userId: string) => Promise<unknown | null>;
+};
+
+type TwitchEventSubFake = {
+  initialize: () => Promise<void>;
+  on: (eventName: string, handler: (...args: unknown[]) => void) => void;
+  isConnected: () => boolean;
+  isActive: () => boolean;
+  sendMessage: (message: string) => Promise<void>;
+};
+
+class TestTwitchApiClient implements TwitchApiClientFake {
+  getBroadcasterId = createMockFn<[string], Promise<string>>().mockResolvedValue("test-broadcaster-id");
+  getStreamInfo = createMockFn<[string], Promise<{ isLive: boolean; stream: unknown | null; viewerCount: number }>>()
+    .mockResolvedValue({ isLive: false, stream: null, viewerCount: 0 });
+  getGlobalChatBadges = createMockFn<[], Promise<unknown[]>>().mockResolvedValue([]);
+  getChannelChatBadges = createMockFn<[unknown], Promise<unknown[]>>().mockResolvedValue([]);
+}
+
+class TestTwitchEventSub implements TwitchEventSubFake {
+  initialize = createMockFn<[], Promise<void>>().mockResolvedValue();
+  on = createMockFn<[string, (...args: unknown[]) => void], void>();
+  isConnected = createMockFn<[], boolean>().mockReturnValue(true);
+  isActive = createMockFn<[], boolean>().mockReturnValue(true);
+  sendMessage = createMockFn<[string], Promise<void>>().mockResolvedValue();
+}
+
+type NotificationScenarioKey = "paypiggy" | "giftpaypiggy" | "raid" | "gift";
+type NotificationMethodName =
+  | "handlePaypiggyEvent"
+  | "handlePaypiggyGiftEvent"
+  | "handleRaidEvent"
+  | "handleGiftEvent";
+type AvatarFactoryEventType = NotificationScenarioKey | "follow";
+type AvatarFactoryMethodName =
+  | "createFollowEvent"
+  | "createPaypiggyEvent"
+  | "createGiftPaypiggyEvent"
+  | "createRaidEvent"
+  | "createGiftEvent";
+
+const isCapturedEvent = (payload: unknown): payload is CapturedEvent =>
+  typeof payload === "object" && payload !== null;
+
+const captureEvent = (events: CapturedEvent[]) => (payload: unknown) => {
+  if (!isCapturedEvent(payload)) {
+    throw new TypeError("Expected platform event payload object");
+  }
+  events.push(payload);
+};
+
+const capturedAt = (events: CapturedEvent[], index: number) => {
+  const event = events[index];
+  if (!event) {
+    throw new Error(`Expected captured event at index ${index}`);
+  }
+  return event;
+};
+
+const createApiClientFake = (
+  overrides: Partial<TwitchApiClientFake> = {},
+): TwitchApiClientFake => ({
+  getBroadcasterId: async () => "test-broadcaster-id",
+  getStreamInfo: async () => ({ isLive: false, stream: null, viewerCount: 0 }),
+  getGlobalChatBadges: async () => [],
+  getChannelChatBadges: async () => [],
+  ...overrides,
+});
+
+const createTwitchAuth = (overrides: TwitchAuthFake = {}) => ({
   isReady: createMockFn().mockReturnValue(overrides.ready ?? true),
   refreshTokens: createMockFn().mockResolvedValue(true),
   getUserId: createMockFn().mockReturnValue(overrides.userId || "test-user-id"),
   ...overrides,
 });
 
-const createMockApiClient = () => ({
-  getBroadcasterId: createMockFn().mockResolvedValue("test-broadcaster-id"),
-});
+const createNotificationPayloadWithUserId = (
+  type: NotificationScenarioKey,
+  overrides: Record<string, unknown> & { userId: string },
+): Record<string, unknown> & { userId: string } => {
+  const payload = createTwitchNotificationPayload(type, overrides);
+  return { ...payload, userId: overrides.userId };
+};
 
 const TEST_USER_ID = "test-user-id";
 const FALLBACK_AVATAR_URL = DEFAULT_AVATAR_URL;
@@ -70,15 +172,8 @@ describe("TwitchPlatform event behaviors", () => {
   it("keeps stream lifecycle transitions from crashing when polling hooks are missing", async () => {
     const platform = new TwitchPlatform(baseConfig, {
       twitchAuth: createTwitchAuth({ userId: TEST_USER_ID }),
-      TwitchApiClient: createMockFn().mockImplementation(() =>
-        createMockApiClient(),
-      ),
-      TwitchEventSub: createMockFn().mockImplementation(() => ({
-        initialize: createMockFn().mockResolvedValue(),
-        on: createMockFn(),
-        isConnected: () => true,
-        isActive: () => true,
-      })),
+      TwitchApiClient: TestTwitchApiClient,
+      TwitchEventSub: TestTwitchEventSub,
       logger: noOpLogger,
     });
 
@@ -95,8 +190,8 @@ describe("TwitchPlatform event behaviors", () => {
       logger: noOpLogger,
     });
 
-    const received = [];
-    platform.handlers = { onRaid: (payload) => received.push(payload) };
+    const received: CapturedEvent[] = [];
+    platform.handlers = { onRaid: captureEvent(received) };
 
     await platform.handleRaidEvent({
       username: "RaidLeader",
@@ -106,9 +201,10 @@ describe("TwitchPlatform event behaviors", () => {
     });
 
     expect(received).toHaveLength(1);
-    expect(received[0].username).toBe("RaidLeader");
-    expect(received[0].userId).toBe("raid-1");
-    expect(received[0].metadata.correlationId).toBeDefined();
+    const event = capturedAt(received, 0);
+    expect(event.username).toBe("RaidLeader");
+    expect(event.userId).toBe("raid-1");
+    expect(event.metadata?.correlationId).toBeDefined();
   });
 
   it("emits paypiggy error payloads when timestamps are missing", async () => {
@@ -117,8 +213,8 @@ describe("TwitchPlatform event behaviors", () => {
       logger: noOpLogger,
     });
 
-    const received = [];
-    platform.handlers = { onPaypiggy: (payload) => received.push(payload) };
+    const received: CapturedEvent[] = [];
+    platform.handlers = { onPaypiggy: captureEvent(received) };
 
     await platform.handlePaypiggyEvent({
       username: "Subscriber",
@@ -129,12 +225,13 @@ describe("TwitchPlatform event behaviors", () => {
     });
 
     expect(received).toHaveLength(1);
-    expect(received[0]).toMatchObject({
+    const event = capturedAt(received, 0);
+    expect(event).toMatchObject({
       platform: "twitch",
       isError: true,
     });
-    expect(received[0].avatarUrl).toBe(FALLBACK_AVATAR_URL);
-    expect(received[0].timestamp).toMatch(
+    expect(event.avatarUrl).toBe(FALLBACK_AVATAR_URL);
+    expect(event.timestamp).toMatch(
       /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
     );
   });
@@ -147,8 +244,8 @@ describe("TwitchPlatform event behaviors", () => {
       getErrorEnvelopeTimestampISO: () => processingTimestamp,
     });
 
-    const received = [];
-    platform.handlers = { onPaypiggy: (payload) => received.push(payload) };
+    const received: CapturedEvent[] = [];
+    platform.handlers = { onPaypiggy: captureEvent(received) };
 
     await platform.handlePaypiggyEvent({
       username: "test-subscriber",
@@ -157,8 +254,9 @@ describe("TwitchPlatform event behaviors", () => {
     });
 
     expect(received).toHaveLength(1);
-    expect(received[0].isError).toBe(true);
-    expect(received[0].timestamp).toBe(processingTimestamp);
+    const event = capturedAt(received, 0);
+    expect(event.isError).toBe(true);
+    expect(event.timestamp).toBe(processingTimestamp);
   });
 
   it("emits gift error payloads when usernames are missing", async () => {
@@ -167,8 +265,8 @@ describe("TwitchPlatform event behaviors", () => {
       logger: noOpLogger,
     });
 
-    const received = [];
-    platform.handlers = { onGift: (payload) => received.push(payload) };
+    const received: CapturedEvent[] = [];
+    platform.handlers = { onGift: captureEvent(received) };
 
     await platform.handleGiftEvent({
       userId: "test-gift-1",
@@ -180,19 +278,20 @@ describe("TwitchPlatform event behaviors", () => {
     });
 
     expect(received).toHaveLength(1);
-    expect(received[0]).toMatchObject({
+    const event = capturedAt(received, 0);
+    expect(event).toMatchObject({
       platform: "twitch",
       isError: true,
       userId: "test-gift-1",
     });
-    expect(received[0].avatarUrl).toBe(FALLBACK_AVATAR_URL);
-    expect(received[0].timestamp).toMatch(
+    expect(event.avatarUrl).toBe(FALLBACK_AVATAR_URL);
+    expect(event.timestamp).toMatch(
       /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
     );
   });
 
   it("enriches Twitch bits gifts with Helix cheermote image URL when single-type cheer metadata exists", async () => {
-    const getCheermotes = createMockFn().mockImplementation(
+    const getCheermotes = createMockFn<[unknown], Promise<unknown[]>>().mockImplementation(
       async (broadcasterId) => {
         if (broadcasterId !== "test-broadcaster-id") {
           return [];
@@ -222,11 +321,11 @@ describe("TwitchPlatform event behaviors", () => {
       twitchAuth: createTwitchAuth({ userId: TEST_USER_ID }),
       logger: noOpLogger,
     });
-    platform.apiClient = { getCheermotes };
+    platform.apiClient = createApiClientFake({ getCheermotes });
     platform.broadcasterId = "test-broadcaster-id";
 
-    const received = [];
-    platform.handlers = { onGift: (payload) => received.push(payload) };
+    const received: CapturedEvent[] = [];
+    platform.handlers = { onGift: captureEvent(received) };
 
     await platform.handleGiftEvent({
       username: "test-cheerer",
@@ -245,13 +344,13 @@ describe("TwitchPlatform event behaviors", () => {
     });
 
     expect(received).toHaveLength(1);
-    expect(received[0].giftImageUrl).toBe(
+    expect(capturedAt(received, 0).giftImageUrl).toBe(
       "https://example.invalid/twitch/cheer-100-dark-animated-3.gif",
     );
   });
 
   it("skips Twitch cheermote image enrichment for mixed bits gifts", async () => {
-    const getCheermotes = createMockFn().mockImplementation(async () => [
+    const getCheermotes = createMockFn<[unknown], Promise<unknown[]>>().mockImplementation(async () => [
       {
         prefix: "Cheer",
         tiers: [
@@ -272,11 +371,11 @@ describe("TwitchPlatform event behaviors", () => {
       twitchAuth: createTwitchAuth({ userId: TEST_USER_ID }),
       logger: noOpLogger,
     });
-    platform.apiClient = { getCheermotes };
+    platform.apiClient = createApiClientFake({ getCheermotes });
     platform.broadcasterId = "test-broadcaster-id";
 
-    const received = [];
-    platform.handlers = { onGift: (payload) => received.push(payload) };
+    const received: CapturedEvent[] = [];
+    platform.handlers = { onGift: captureEvent(received) };
 
     await platform.handleGiftEvent({
       username: "test-cheerer",
@@ -299,12 +398,12 @@ describe("TwitchPlatform event behaviors", () => {
     });
 
     expect(received).toHaveLength(1);
-    expect(received[0].giftImageUrl).toBeUndefined();
+    expect(capturedAt(received, 0).giftImageUrl).toBeUndefined();
   });
 
   it("reuses cached Twitch cheermote catalog across repeated bits gifts", async () => {
     let requestCount = 0;
-    const getCheermotes = createMockFn().mockImplementation(async () => {
+    const getCheermotes = createMockFn<[unknown], Promise<unknown[]>>().mockImplementation(async () => {
       requestCount += 1;
       if (requestCount === 1) {
         return [
@@ -333,11 +432,11 @@ describe("TwitchPlatform event behaviors", () => {
       twitchAuth: createTwitchAuth({ userId: TEST_USER_ID }),
       logger: noOpLogger,
     });
-    platform.apiClient = { getCheermotes };
+    platform.apiClient = createApiClientFake({ getCheermotes });
     platform.broadcasterId = "test-broadcaster-id";
 
-    const received = [];
-    platform.handlers = { onGift: (payload) => received.push(payload) };
+    const received: CapturedEvent[] = [];
+    platform.handlers = { onGift: captureEvent(received) };
 
     await platform.handleGiftEvent({
       username: "test-cheerer",
@@ -372,10 +471,10 @@ describe("TwitchPlatform event behaviors", () => {
     });
 
     expect(received).toHaveLength(2);
-    expect(received[0].giftImageUrl).toBe(
+    expect(capturedAt(received, 0).giftImageUrl).toBe(
       "https://example.invalid/twitch/cheer-100-dark-animated-3.gif",
     );
-    expect(received[1].giftImageUrl).toBe(
+    expect(capturedAt(received, 1).giftImageUrl).toBe(
       "https://example.invalid/twitch/cheer-100-dark-animated-3.gif",
     );
   });
@@ -386,8 +485,8 @@ describe("TwitchPlatform event behaviors", () => {
       logger: noOpLogger,
     });
 
-    const received = [];
-    platform.handlers = { onGiftPaypiggy: (payload) => received.push(payload) };
+    const received: CapturedEvent[] = [];
+    platform.handlers = { onGiftPaypiggy: captureEvent(received) };
 
     await platform.handlePaypiggyGiftEvent({
       username: "testGifter",
@@ -397,14 +496,15 @@ describe("TwitchPlatform event behaviors", () => {
     });
 
     expect(received).toHaveLength(1);
-    expect(received[0]).toMatchObject({
+    const event = capturedAt(received, 0);
+    expect(event).toMatchObject({
       platform: "twitch",
       isError: true,
       username: "testGifter",
       userId: "test-gift-2",
     });
-    expect(received[0].avatarUrl).toBe(FALLBACK_AVATAR_URL);
-    expect(received[0].timestamp).toMatch(
+    expect(event.avatarUrl).toBe(FALLBACK_AVATAR_URL);
+    expect(event.timestamp).toMatch(
       /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
     );
   });
@@ -415,8 +515,8 @@ describe("TwitchPlatform event behaviors", () => {
       logger: noOpLogger,
     });
 
-    const received = [];
-    platform.handlers = { onFollow: (payload) => received.push(payload) };
+    const received: CapturedEvent[] = [];
+    platform.handlers = { onFollow: captureEvent(received) };
 
     await platform.handleFollowEvent({
       username: "testFollower",
@@ -432,8 +532,8 @@ describe("TwitchPlatform event behaviors", () => {
       logger: noOpLogger,
     });
 
-    const events = [];
-    platform.handlers = { onChat: (payload) => events.push(payload) };
+    const events: CapturedEvent[] = [];
+    platform.handlers = { onChat: captureEvent(events) };
 
     await platform.onMessageHandler({
       chatter_user_id: "chat-1",
@@ -445,12 +545,13 @@ describe("TwitchPlatform event behaviors", () => {
     });
 
     expect(events).toHaveLength(1);
-    expect(events[0].avatarUrl).toBe(FALLBACK_AVATAR_URL);
-    expect(events[0].isMod).toBe(false);
-    expect(events[0].isBroadcaster).toBe(false);
-    expect(events[0].isPaypiggy).toBe(true);
-    expect(events[0].metadata.isPaypiggy).toBe(true);
-    expect(events[0].metadata.correlationId).toBeDefined();
+    const event = capturedAt(events, 0);
+    expect(event.avatarUrl).toBe(FALLBACK_AVATAR_URL);
+    expect(event.isMod).toBe(false);
+    expect(event.isBroadcaster).toBe(false);
+    expect(event.isPaypiggy).toBe(true);
+    expect(event.metadata?.isPaypiggy).toBe(true);
+    expect(event.metadata?.correlationId).toBeDefined();
   });
 
   it("resolves twitch badge image urls into canonical badgeImages", async () => {
@@ -459,8 +560,8 @@ describe("TwitchPlatform event behaviors", () => {
       logger: noOpLogger,
     });
 
-    platform.apiClient = {
-      getGlobalChatBadges: createMockFn().mockResolvedValue([
+    platform.apiClient = createApiClientFake({
+      getGlobalChatBadges: createMockFn<[], Promise<unknown[]>>().mockResolvedValue([
         {
           set_id: "moderator",
           versions: [
@@ -482,7 +583,7 @@ describe("TwitchPlatform event behaviors", () => {
           ],
         },
       ]),
-      getChannelChatBadges: createMockFn().mockResolvedValue([
+      getChannelChatBadges: createMockFn<[unknown], Promise<unknown[]>>().mockResolvedValue([
         {
           set_id: "founder",
           versions: [
@@ -494,10 +595,10 @@ describe("TwitchPlatform event behaviors", () => {
           ],
         },
       ]),
-    };
+    });
 
-    const events = [];
-    platform.handlers = { onChat: (payload) => events.push(payload) };
+    const events: CapturedEvent[] = [];
+    platform.handlers = { onChat: captureEvent(events) };
 
     await platform.onMessageHandler({
       chatter_user_id: "test-user-id",
@@ -513,7 +614,7 @@ describe("TwitchPlatform event behaviors", () => {
     });
 
     expect(events).toHaveLength(1);
-    expect(events[0].badgeImages).toEqual([
+    expect(capturedAt(events, 0).badgeImages).toEqual([
       {
         imageUrl: "https://example.invalid/twitch-mod-4x.png",
         source: "twitch",
@@ -538,8 +639,8 @@ describe("TwitchPlatform event behaviors", () => {
       logger: noOpLogger,
     });
 
-    platform.apiClient = {
-      getGlobalChatBadges: createMockFn().mockResolvedValue([
+    platform.apiClient = createApiClientFake({
+      getGlobalChatBadges: createMockFn<[], Promise<unknown[]>>().mockResolvedValue([
         {
           set_id: "moderator",
           versions: [
@@ -551,7 +652,7 @@ describe("TwitchPlatform event behaviors", () => {
           ],
         },
       ]),
-      getChannelChatBadges: createMockFn().mockResolvedValue([
+      getChannelChatBadges: createMockFn<[unknown], Promise<unknown[]>>().mockResolvedValue([
         {
           set_id: "moderator",
           versions: [
@@ -563,10 +664,10 @@ describe("TwitchPlatform event behaviors", () => {
           ],
         },
       ]),
-    };
+    });
 
-    const events = [];
-    platform.handlers = { onChat: (payload) => events.push(payload) };
+    const events: CapturedEvent[] = [];
+    platform.handlers = { onChat: captureEvent(events) };
 
     await platform.onMessageHandler({
       chatter_user_id: "test-user-id",
@@ -578,7 +679,7 @@ describe("TwitchPlatform event behaviors", () => {
     });
 
     expect(events).toHaveLength(1);
-    expect(events[0].badgeImages).toEqual([
+    expect(capturedAt(events, 0).badgeImages).toEqual([
       {
         imageUrl: "https://example.invalid/twitch-global-mod-4x.png",
         source: "twitch",
@@ -593,7 +694,7 @@ describe("TwitchPlatform event behaviors", () => {
       logger: noOpLogger,
     });
 
-    const getGlobalChatBadges = createMockFn()
+    const getGlobalChatBadges = createMockFn<[], Promise<unknown[]>>()
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([
         {
@@ -608,17 +709,17 @@ describe("TwitchPlatform event behaviors", () => {
           ],
         },
       ]);
-    const getChannelChatBadges = createMockFn()
+    const getChannelChatBadges = createMockFn<[unknown], Promise<unknown[]>>()
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([]);
 
-    platform.apiClient = {
+    platform.apiClient = createApiClientFake({
       getGlobalChatBadges,
       getChannelChatBadges,
-    };
+    });
 
-    const events = [];
-    platform.handlers = { onChat: (payload) => events.push(payload) };
+    const events: CapturedEvent[] = [];
+    platform.handlers = { onChat: captureEvent(events) };
 
     await platform.onMessageHandler({
       chatter_user_id: "test-user-id",
@@ -630,7 +731,7 @@ describe("TwitchPlatform event behaviors", () => {
     });
 
     expect(events).toHaveLength(1);
-    expect(events[0].badgeImages).toEqual([
+    expect(capturedAt(events, 0).badgeImages).toEqual([
       {
         imageUrl: "https://example.invalid/twitch-mod-reloaded-4x.png",
         source: "twitch",
@@ -645,19 +746,19 @@ describe("TwitchPlatform event behaviors", () => {
       logger: noOpLogger,
     });
 
-    const lookupCalls = [];
-    platform.apiClient = {
-      getUserById: createMockFn().mockImplementation(async (userId) => {
+    const lookupCalls: string[] = [];
+    platform.apiClient = createApiClientFake({
+      getUserById: createMockFn<[string], Promise<unknown | null>>().mockImplementation(async (userId) => {
         lookupCalls.push(userId);
         return {
           id: userId,
           profile_image_url: "https://example.invalid/twitch-user-avatar.jpg",
         };
       }),
-    };
+    });
 
-    const received = [];
-    platform.handlers = { onFollow: (payload) => received.push(payload) };
+    const received: CapturedEvent[] = [];
+    platform.handlers = { onFollow: captureEvent(received) };
 
     await platform.handleFollowEvent({
       username: "lookup-user",
@@ -672,10 +773,10 @@ describe("TwitchPlatform event behaviors", () => {
     });
 
     expect(received).toHaveLength(2);
-    expect(received[0].avatarUrl).toBe(
+    expect(capturedAt(received, 0).avatarUrl).toBe(
       "https://example.invalid/twitch-user-avatar.jpg",
     );
-    expect(received[1].avatarUrl).toBe(
+    expect(capturedAt(received, 1).avatarUrl).toBe(
       "https://example.invalid/twitch-user-avatar.jpg",
     );
     expect(lookupCalls).toEqual(["lookup-user-id"]);
@@ -687,31 +788,37 @@ describe("TwitchPlatform event behaviors", () => {
       logger: noOpLogger,
     });
 
-    const lookupCalls = [];
-    platform.apiClient = {
-      getUserById: createMockFn().mockImplementation(async (userId) => {
+    const lookupCalls: string[] = [];
+    platform.apiClient = createApiClientFake({
+      getUserById: createMockFn<[string], Promise<unknown | null>>().mockImplementation(async (userId) => {
         lookupCalls.push(userId);
         return {
           id: userId,
           profile_image_url: `https://example.invalid/twitch/${userId}.png`,
         };
       }),
-    };
+    });
 
-    const received = {
+    const received: Record<NotificationScenarioKey, CapturedEvent[]> = {
       paypiggy: [],
       giftpaypiggy: [],
       raid: [],
       gift: [],
     };
     platform.handlers = {
-      onPaypiggy: (payload) => received.paypiggy.push(payload),
-      onGiftPaypiggy: (payload) => received.giftpaypiggy.push(payload),
-      onRaid: (payload) => received.raid.push(payload),
-      onGift: (payload) => received.gift.push(payload),
+      onPaypiggy: captureEvent(received.paypiggy),
+      onGiftPaypiggy: captureEvent(received.giftpaypiggy),
+      onRaid: captureEvent(received.raid),
+      onGift: captureEvent(received.gift),
     };
 
-    const scenarios = [
+    const scenarios: Array<{
+      key: NotificationScenarioKey;
+      methodName: NotificationMethodName;
+      avatarUserId: string;
+      payload: Record<string, unknown>;
+      repeatedPayload: Record<string, unknown>;
+    }> = [
       {
         key: "paypiggy",
         methodName: "handlePaypiggyEvent",
@@ -771,10 +878,10 @@ describe("TwitchPlatform event behaviors", () => {
       await platform[scenario.methodName](scenario.repeatedPayload);
 
       expect(received[scenario.key]).toHaveLength(2);
-      expect(received[scenario.key][0].avatarUrl).toBe(
+      expect(capturedAt(received[scenario.key], 0).avatarUrl).toBe(
         `https://example.invalid/twitch/${scenario.avatarUserId}.png`,
       );
-      expect(received[scenario.key][1].avatarUrl).toBe(
+      expect(capturedAt(received[scenario.key], 1).avatarUrl).toBe(
         `https://example.invalid/twitch/${scenario.avatarUserId}.png`,
       );
     }
@@ -793,26 +900,55 @@ describe("TwitchPlatform event behaviors", () => {
       logger: noOpLogger,
     });
 
-    const lookupCalls = [];
-    platform.apiClient = {
-      getUserById: createMockFn().mockImplementation(async (userId) => {
+    const lookupCalls: string[] = [];
+    platform.apiClient = createApiClientFake({
+      getUserById: createMockFn<[string], Promise<unknown | null>>().mockImplementation(async (userId) => {
         lookupCalls.push(userId);
         return {
           id: userId,
           profile_image_url: `https://example.invalid/twitch/resolved-${userId}.png`,
         };
       }),
+    });
+
+    const factoryInputByEventType: Partial<Record<AvatarFactoryEventType, CapturedEvent>> = {};
+    const recordFactoryInput = (
+      eventType: AvatarFactoryEventType,
+      payload: unknown,
+    ): CapturedEvent => {
+      if (!isCapturedEvent(payload)) {
+        throw new TypeError("Expected event factory payload object");
+      }
+      factoryInputByEventType[eventType] = payload;
+      return payload;
     };
 
-    const factoryInputByEventType = {};
-    const wrapFactoryMethod = (factoryMethodName, eventType) => {
-      const originalMethod = platform.eventFactory[factoryMethodName].bind(
-        platform.eventFactory,
-      );
-      platform.eventFactory[factoryMethodName] = createMockFn((payload) => {
-        factoryInputByEventType[eventType] = payload;
-        return originalMethod(payload);
-      });
+    const wrapFactoryMethod = (
+      factoryMethodName: AvatarFactoryMethodName,
+      eventType: AvatarFactoryEventType,
+    ) => {
+      if (factoryMethodName === "createFollowEvent") {
+        const originalMethod = platform.eventFactory.createFollowEvent.bind(platform.eventFactory);
+        platform.eventFactory.createFollowEvent = (payload) => originalMethod(recordFactoryInput(eventType, payload));
+        return;
+      }
+      if (factoryMethodName === "createPaypiggyEvent") {
+        const originalMethod = platform.eventFactory.createPaypiggyEvent.bind(platform.eventFactory);
+        platform.eventFactory.createPaypiggyEvent = (payload) => originalMethod(recordFactoryInput(eventType, payload));
+        return;
+      }
+      if (factoryMethodName === "createGiftPaypiggyEvent") {
+        const originalMethod = platform.eventFactory.createGiftPaypiggyEvent.bind(platform.eventFactory);
+        platform.eventFactory.createGiftPaypiggyEvent = (payload) => originalMethod(recordFactoryInput(eventType, payload));
+        return;
+      }
+      if (factoryMethodName === "createRaidEvent") {
+        const originalMethod = platform.eventFactory.createRaidEvent.bind(platform.eventFactory);
+        platform.eventFactory.createRaidEvent = (payload) => originalMethod(recordFactoryInput(eventType, payload));
+        return;
+      }
+      const originalMethod = platform.eventFactory.createGiftEvent.bind(platform.eventFactory);
+      platform.eventFactory.createGiftEvent = (payload) => originalMethod(recordFactoryInput(eventType, payload));
     };
 
     wrapFactoryMethod("createFollowEvent", "follow");
@@ -821,7 +957,11 @@ describe("TwitchPlatform event behaviors", () => {
     wrapFactoryMethod("createRaidEvent", "raid");
     wrapFactoryMethod("createGiftEvent", "gift");
 
-    const scenarios = [
+    const scenarios: Array<{
+      eventType: AvatarFactoryEventType;
+      methodName: NotificationMethodName | "handleFollowEvent";
+      payload: Record<string, unknown> & { userId: string };
+    }> = [
       {
         eventType: "follow",
         methodName: "handleFollowEvent",
@@ -834,7 +974,7 @@ describe("TwitchPlatform event behaviors", () => {
       {
         eventType: "paypiggy",
         methodName: "handlePaypiggyEvent",
-        payload: createTwitchNotificationPayload("paypiggy", {
+        payload: createNotificationPayloadWithUserId("paypiggy", {
           userId: "test-paypiggy-avatar-user-id",
           timestamp: "2024-01-01T00:00:01.000Z",
         }),
@@ -842,7 +982,7 @@ describe("TwitchPlatform event behaviors", () => {
       {
         eventType: "giftpaypiggy",
         methodName: "handlePaypiggyGiftEvent",
-        payload: createTwitchNotificationPayload("giftpaypiggy", {
+        payload: createNotificationPayloadWithUserId("giftpaypiggy", {
           userId: "test-giftpaypiggy-avatar-user-id",
           timestamp: "2024-01-01T00:00:02.000Z",
         }),
@@ -850,7 +990,7 @@ describe("TwitchPlatform event behaviors", () => {
       {
         eventType: "raid",
         methodName: "handleRaidEvent",
-        payload: createTwitchNotificationPayload("raid", {
+        payload: createNotificationPayloadWithUserId("raid", {
           userId: "test-raid-avatar-user-id",
           timestamp: "2024-01-01T00:00:03.000Z",
         }),
@@ -858,7 +998,7 @@ describe("TwitchPlatform event behaviors", () => {
       {
         eventType: "gift",
         methodName: "handleGiftEvent",
-        payload: createTwitchNotificationPayload("gift", {
+        payload: createNotificationPayloadWithUserId("gift", {
           userId: "test-gift-avatar-user-id",
           timestamp: "2024-01-01T00:00:04.000Z",
         }),
@@ -887,16 +1027,16 @@ describe("TwitchPlatform event behaviors", () => {
       logger: noOpLogger,
     });
 
-    const lookupCalls = [];
-    platform.apiClient = {
-      getUserById: createMockFn().mockImplementation(async (userId) => {
+    const lookupCalls: string[] = [];
+    platform.apiClient = createApiClientFake({
+      getUserById: createMockFn<[string], Promise<unknown | null>>().mockImplementation(async (userId) => {
         lookupCalls.push(userId);
         return null;
       }),
-    };
+    });
 
-    const received = [];
-    platform.handlers = { onFollow: (payload) => received.push(payload) };
+    const received: CapturedEvent[] = [];
+    platform.handlers = { onFollow: captureEvent(received) };
 
     await platform.handleFollowEvent({
       username: "fallback-user",
@@ -910,8 +1050,8 @@ describe("TwitchPlatform event behaviors", () => {
     });
 
     expect(received).toHaveLength(2);
-    expect(received[0].avatarUrl).toBe(FALLBACK_AVATAR_URL);
-    expect(received[1].avatarUrl).toBe(FALLBACK_AVATAR_URL);
+    expect(capturedAt(received, 0).avatarUrl).toBe(FALLBACK_AVATAR_URL);
+    expect(capturedAt(received, 1).avatarUrl).toBe(FALLBACK_AVATAR_URL);
     expect(lookupCalls).toEqual(["fallback-user-id"]);
   });
 
@@ -921,16 +1061,16 @@ describe("TwitchPlatform event behaviors", () => {
       logger: noOpLogger,
     });
 
-    const lookupCalls = [];
-    platform.apiClient = {
-      getUserById: createMockFn().mockImplementation(async (userId) => {
+    const lookupCalls: string[] = [];
+    platform.apiClient = createApiClientFake({
+      getUserById: createMockFn<[string], Promise<unknown | null>>().mockImplementation(async (userId) => {
         lookupCalls.push(userId);
         throw new Error("helix unavailable");
       }),
-    };
+    });
 
-    const received = [];
-    platform.handlers = { onFollow: (payload) => received.push(payload) };
+    const received: CapturedEvent[] = [];
+    platform.handlers = { onFollow: captureEvent(received) };
 
     await platform.handleFollowEvent({
       username: "error-user",
@@ -944,8 +1084,8 @@ describe("TwitchPlatform event behaviors", () => {
     });
 
     expect(received).toHaveLength(2);
-    expect(received[0].avatarUrl).toBe(FALLBACK_AVATAR_URL);
-    expect(received[1].avatarUrl).toBe(FALLBACK_AVATAR_URL);
+    expect(capturedAt(received, 0).avatarUrl).toBe(FALLBACK_AVATAR_URL);
+    expect(capturedAt(received, 1).avatarUrl).toBe(FALLBACK_AVATAR_URL);
     expect(lookupCalls).toEqual(["error-user-id"]);
   });
 
@@ -956,8 +1096,8 @@ describe("TwitchPlatform event behaviors", () => {
       avatarCacheMaxSize: 2,
     });
 
-    const received = [];
-    platform.handlers = { onFollow: (payload) => received.push(payload) };
+    const received: CapturedEvent[] = [];
+    platform.handlers = { onFollow: captureEvent(received) };
 
     await platform.handleFollowEvent({
       username: "user-one",
@@ -990,11 +1130,11 @@ describe("TwitchPlatform event behaviors", () => {
     });
 
     expect(received).toHaveLength(5);
-    expect(received[0].avatarUrl).toBe("https://example.invalid/u1.png");
-    expect(received[1].avatarUrl).toBe("https://example.invalid/u2.png");
-    expect(received[2].avatarUrl).toBe("https://example.invalid/u3.png");
-    expect(received[3].avatarUrl).toBe(FALLBACK_AVATAR_URL);
-    expect(received[4].avatarUrl).toBe("https://example.invalid/u2.png");
+    expect(capturedAt(received, 0).avatarUrl).toBe("https://example.invalid/u1.png");
+    expect(capturedAt(received, 1).avatarUrl).toBe("https://example.invalid/u2.png");
+    expect(capturedAt(received, 2).avatarUrl).toBe("https://example.invalid/u3.png");
+    expect(capturedAt(received, 3).avatarUrl).toBe(FALLBACK_AVATAR_URL);
+    expect(capturedAt(received, 4).avatarUrl).toBe("https://example.invalid/u2.png");
   });
 
   it("clears avatar cache during cleanup", async () => {
@@ -1003,8 +1143,8 @@ describe("TwitchPlatform event behaviors", () => {
       logger: noOpLogger,
     });
 
-    const received = [];
-    platform.handlers = { onFollow: (payload) => received.push(payload) };
+    const received: CapturedEvent[] = [];
+    platform.handlers = { onFollow: captureEvent(received) };
 
     await platform.handleFollowEvent({
       username: "cleanup-user",
@@ -1014,7 +1154,7 @@ describe("TwitchPlatform event behaviors", () => {
     });
 
     await platform.cleanup();
-    platform.handlers = { onFollow: (payload) => received.push(payload) };
+    platform.handlers = { onFollow: captureEvent(received) };
 
     await platform.handleFollowEvent({
       username: "cleanup-user",
@@ -1023,10 +1163,10 @@ describe("TwitchPlatform event behaviors", () => {
     });
 
     expect(received).toHaveLength(2);
-    expect(received[0].avatarUrl).toBe(
+    expect(capturedAt(received, 0).avatarUrl).toBe(
       "https://example.invalid/cleanup-user.png",
     );
-    expect(received[1].avatarUrl).toBe(FALLBACK_AVATAR_URL);
+    expect(capturedAt(received, 1).avatarUrl).toBe(FALLBACK_AVATAR_URL);
   });
 
   it("returns user-friendly errors when sending without an EventSub connection", async () => {
@@ -1041,15 +1181,20 @@ describe("TwitchPlatform event behaviors", () => {
   });
 
   it("applies data logging toggles across chat and stream events", async () => {
-    const recorded = [];
+    const recorded: Array<{
+      platform: string;
+      eventType: string;
+      data: unknown;
+    }> = [];
     class RecordingLoggingService {
-      constructor() {
-        this.logRawPlatformData = createMockFn().mockImplementation(
-          async (platform, eventType, data) => {
-            recorded.push({ platform, eventType, data });
-          },
-        );
-      }
+      logRawPlatformData = createMockFn<
+        [platform: string, eventType: string, data: unknown],
+        Promise<void>
+      >().mockImplementation(async (platform, eventType, data) => {
+        recorded.push({ platform, eventType, data });
+      });
+
+      constructor() {}
     }
 
     const platform = new TwitchPlatform(
