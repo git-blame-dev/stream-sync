@@ -10,40 +10,10 @@ import { DisplayQueueEffects } from './display-queue-effects';
 import { DisplayRenderer } from './display-renderer';
 import { getDefaultGoalsManager } from './goals';
 import { getDefaultSourcesManager } from './sources';
+import type { DisplayQueueItem, DisplayQueueItemData, DisplayQueueMessage } from '../interfaces/DisplayQueue';
 
-type QueueMessagePart = {
-    text?: unknown;
-};
-
-type QueueMessage = {
-    text?: unknown;
-    parts?: QueueMessagePart[];
-};
-
-type QueueItemData = Record<string, unknown> & {
-    username?: string;
-    userId?: string;
-    message?: unknown;
-    timestamp?: unknown;
-    displayMessage?: unknown;
-    amount?: unknown;
-    currency?: unknown;
-    giftType?: unknown;
-    giftCount?: unknown;
-    repeatCount?: unknown;
-    tier?: unknown;
-    months?: unknown;
-    isError?: boolean;
-};
-
-type QueueItem = {
-    type: string;
-    platform: string;
-    data: QueueItemData;
-    priority?: number;
-    holdDurationMs?: number;
-    [key: string]: unknown;
-};
+type QueueItem = DisplayQueueItem;
+type QueueItemData = DisplayQueueItemData;
 
 type DisplayQueueConfig = {
     autoProcess?: boolean;
@@ -121,7 +91,7 @@ function resolveChatMessageText(message: unknown) {
     }
 
     if (message && typeof message === 'object') {
-        const messageObject = message as QueueMessage;
+        const messageObject = message as Exclude<DisplayQueueMessage, string>;
         if (typeof messageObject.text === 'string') {
             return messageObject.text;
         }

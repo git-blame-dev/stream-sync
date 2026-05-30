@@ -1,10 +1,6 @@
-type DisplayItem = {
-    type: string;
-    platform: string;
-    data: unknown;
-    priority?: number;
-    [key: string]: unknown;
-};
+import type { DisplayQueueItem } from '../interfaces/DisplayQueue';
+
+type DisplayItem = DisplayQueueItem;
 
 class DisplayQueueState {
     queue: DisplayItem[];

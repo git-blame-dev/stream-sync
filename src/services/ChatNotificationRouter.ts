@@ -5,6 +5,7 @@ import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 import { sanitizeForDisplay } from '../utils/validation';
 import { getValidMessageParts, normalizeBadgeImages } from '../utils/message-parts';
 import { normalizeGreetingIdentityKey } from '../utils/greeting-identity-key-normalizer';
+import type { DisplayQueueItem, DisplayQueueVfxConfig, DisplayQueueWriter } from '../interfaces/DisplayQueue';
 
 const LOG_TRUNCATION_LENGTH = 200;
 
@@ -83,7 +84,7 @@ type VfxResult = {
 
 type RuntimeLike = {
     config: RouterConfig;
-    displayQueue?: { addItem: (item: RouterRecord) => void };
+    displayQueue?: DisplayQueueWriter;
     platformLifecycleService?: { getPlatformConnectionTime: (platform: string) => number | undefined | null };
     gracefulExitService?: {
         isEnabled: () => boolean;
@@ -653,6 +654,9 @@ class ChatNotificationRouter {
             command: commandConfig.command.startsWith('!') ? commandConfig.command : `!${commandConfig.command}`,
             commandName: commandConfig.command.replace(/^!/, '')
         });
+        if (!isRecord(commandData)) {
+            throw new Error('Command notification build failed');
+        }
 
         this.runtime.displayQueue.addItem({
             type: 'command',
@@ -662,13 +666,13 @@ class ChatNotificationRouter {
         });
     }
 
-    buildVFXConfig(commandConfig: CommandConfig) {
+    buildVFXConfig(commandConfig: CommandConfig): DisplayQueueVfxConfig {
         const safeCommandConfig = commandConfig || {};
         return {
-            filename: safeCommandConfig.filename,
-            mediaSource: safeCommandConfig.mediaSource,
-            vfxFilePath: safeCommandConfig.vfxFilePath,
-            commandKey: safeCommandConfig.commandKey,
+            ...(typeof safeCommandConfig.filename === 'string' ? { filename: safeCommandConfig.filename } : {}),
+            ...(typeof safeCommandConfig.mediaSource === 'string' ? { mediaSource: safeCommandConfig.mediaSource } : {}),
+            ...(typeof safeCommandConfig.vfxFilePath === 'string' ? { vfxFilePath: safeCommandConfig.vfxFilePath } : {}),
+            ...(typeof safeCommandConfig.commandKey === 'string' ? { commandKey: safeCommandConfig.commandKey } : {}),
             command: safeCommandConfig.command,
             triggerWord: safeCommandConfig.command
         };
@@ -679,7 +683,13 @@ class ChatNotificationRouter {
             return null;
         }
 
-        if (!vfxResult.commandKey || !vfxResult.filename || !vfxResult.mediaSource || !vfxResult.vfxFilePath || !vfxResult.command || !Number.isFinite(vfxResult.duration)) {
+        if (typeof vfxResult.commandKey !== 'string' ||
+            typeof vfxResult.filename !== 'string' ||
+            typeof vfxResult.mediaSource !== 'string' ||
+            typeof vfxResult.vfxFilePath !== 'string' ||
+            typeof vfxResult.command !== 'string' ||
+            typeof vfxResult.duration !== 'number' ||
+            !Number.isFinite(vfxResult.duration)) {
             throw new Error(`${errorPrefix} requires commandKey, filename, mediaSource, vfxFilePath, command, and duration`);
         }
 
@@ -722,8 +732,11 @@ class ChatNotificationRouter {
             userId: safeOptions.userId,
             avatarUrl: safeOptions.avatarUrl
         });
+        if (!isRecord(greetingData)) {
+            throw new Error('Greeting notification build failed');
+        }
 
-        const queueItem: Record<string, unknown> = {
+        const queueItem: DisplayQueueItem = {
             type: 'greeting',
             data: greetingData,
             vfxConfig: await this.resolveGreetingVFX(),

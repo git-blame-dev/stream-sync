@@ -1,4 +1,5 @@
 import { logger } from '../core/logging';
+import type { DisplayQueueItem } from '../interfaces/DisplayQueue';
 
 type DisplaySourceManager = {
     updateChatMsgText: (sourceName: string, username: string, message: string) => Promise<void>;
@@ -95,7 +96,7 @@ class DisplayRenderer {
         this.isChatType = isChatType;
     }
 
-    async displayChatItem(item: { data: { message?: unknown }; platform: string; type: string }) {
+    async displayChatItem(item: DisplayQueueItem) {
         const username = this.extractUsername(item.data);
         const message = resolveChatMessageText(item.data.message);
         const platform = item.platform;
@@ -139,7 +140,7 @@ class DisplayRenderer {
         return true;
     }
 
-    async displayNotificationItem(item: { data: { displayMessage?: unknown }; platform: string; type: string }) {
+    async displayNotificationItem(item: DisplayQueueItem) {
         const platform = item.platform;
         const platformConfig = this.config[platform];
         if (!platform || !platformConfig) {
@@ -179,7 +180,7 @@ class DisplayRenderer {
         return true;
     }
 
-    async displayLingeringChat(lastChatItem: { data: { message?: unknown }; platform?: string } | null) {
+    async displayLingeringChat(lastChatItem: DisplayQueueItem | null) {
         if (!lastChatItem) {
             logger.debug('[Lingering Chat] No chat message available for lingering display', 'display-queue');
             return;

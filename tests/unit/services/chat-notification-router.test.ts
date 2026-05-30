@@ -4,6 +4,7 @@ import { noOpLogger } from "../../helpers/mock-factories";
 import { createConfigFixture } from "../../helpers/config-fixture";
 import { createRecordingLogger } from "../../helpers/recording-logger";
 import { ChatNotificationRouter } from "../../../src/services/ChatNotificationRouter.ts";
+import type { DisplayQueueItem } from "../../../src/interfaces/DisplayQueue";
 import * as testClock from "../../helpers/test-clock";
 
 type RouterDependencies = ConstructorParameters<typeof ChatNotificationRouter>[0];
@@ -15,13 +16,7 @@ type SelectVfxCommand = NonNullable<VfxCommandServiceLike["selectVFXCommand"]>;
 type VfxConfig = NonNullable<
   Awaited<ReturnType<SelectVfxCommand>>
 >;
-type QueuedItem = Record<string, unknown> & {
-  type?: string;
-  platform?: string;
-  data?: Record<string, unknown>;
-  vfxConfig?: VfxConfig;
-  secondaryVfxConfig?: VfxConfig;
-};
+type QueuedItem = DisplayQueueItem;
 type AddItemMock = TestMockFn<[QueuedItem], void>;
 type TestRuntime = RouterRuntime & {
   displayQueue: { addItem: AddItemMock };

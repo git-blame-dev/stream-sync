@@ -4,30 +4,14 @@ import { createTikTokGiftAnimationResolver } from '../services/tiktok-gift-anima
 import MessageTTSHandler from '../utils/message-tts-handler';
 import { safeDelay } from '../utils/timeout-validator';
 import { triggerHandcamGlow } from './handcam-glow';
+import type { DisplayQueueItem } from '../interfaces/DisplayQueue';
 
 const VFX_EVENTS = {
     EFFECT_COMPLETED: 'vfx:effect-completed',
     COMMAND_RECEIVED: 'vfx:command-received'
 } as const;
 
-type QueueItemData = Record<string, unknown> & {
-    username?: string;
-    userId?: string;
-    amount?: unknown;
-    currency?: unknown;
-    giftCount?: unknown;
-    isError?: boolean;
-    goalProcessed?: boolean;
-};
-
-type QueueItem = {
-    type: string;
-    platform?: string;
-    data: QueueItemData;
-    vfxConfig?: Record<string, unknown>;
-    secondaryVfxConfig?: Record<string, unknown>;
-    holdDurationMs?: number;
-};
+type QueueItem = DisplayQueueItem;
 
 type TtsStage = {
     text: string;

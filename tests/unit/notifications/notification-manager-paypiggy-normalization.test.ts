@@ -5,20 +5,9 @@ import { createConfigFixture } from "../../helpers/config-fixture";
 
 import NotificationManager from "../../../src/notifications/NotificationManager";
 import * as constants from "../../../src/core/constants";
+import type { DisplayQueueItem } from "../../../src/interfaces/DisplayQueue";
 
-type PaypiggyQueueItem = {
-  priority?: number;
-  vfxConfig?: { commandKey?: string } | null;
-  type?: string;
-  data?: {
-    type?: string;
-    displayMessage?: string;
-    username?: string;
-    tier?: string;
-    [key: string]: unknown;
-  };
-  [key: string]: unknown;
-};
+type PaypiggyQueueItem = DisplayQueueItem;
 
 const createDisplayQueueStub = () => {
   const items: PaypiggyQueueItem[] = [];

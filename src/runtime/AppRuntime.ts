@@ -15,6 +15,7 @@ import { getSystemTimestampISO } from '../utils/timestamp';
 import { safeSetTimeout } from '../utils/timeout-validator';
 import { ViewerCountSystem } from '../utils/viewer-count';
 import { wireStreamStatusHandlers } from '../viewer-count/stream-status-handler';
+import type { DisplayQueueWriter } from '../interfaces/DisplayQueue';
 
 type RuntimeRecord = Record<string, unknown>;
 
@@ -76,9 +77,7 @@ type RuntimeObsManager = {
     call: (requestType: string, requestData: Record<string, unknown>) => Promise<unknown>;
 };
 
-type RuntimeDisplayQueue = {
-    addItem: (item: RuntimeRecord) => void;
-};
+type RuntimeDisplayQueue = DisplayQueueWriter;
 
 type RuntimeSourcesManager = {
     hideAllDisplays: (

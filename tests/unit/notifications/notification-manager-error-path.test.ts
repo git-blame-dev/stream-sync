@@ -5,17 +5,9 @@ import { createConfigFixture } from "../../helpers/config-fixture";
 
 import NotificationManager from "../../../src/notifications/NotificationManager";
 import * as constants from "../../../src/core/constants";
+import type { DisplayQueueItem } from "../../../src/interfaces/DisplayQueue";
 
-type ErrorQueueItem = {
-  data?: {
-    isError?: boolean;
-    displayMessage?: string;
-    ttsMessage?: string;
-    logMessage?: string;
-    [key: string]: unknown;
-  };
-  [key: string]: unknown;
-};
+type ErrorQueueItem = DisplayQueueItem;
 
 const createDisplayQueueStub = () => {
   const items: ErrorQueueItem[] = [];

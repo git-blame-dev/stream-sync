@@ -8,15 +8,10 @@ import { createConfigFixture } from "../../helpers/config-fixture";
 
 import NotificationManager from "../../../src/notifications/NotificationManager";
 import * as constants from "../../../src/core/constants";
+import type { DisplayQueueItem } from "../../../src/interfaces/DisplayQueue";
 import { noOpLogger } from "../../helpers/mock-factories";
 
-type QueuedItem = {
-  priority?: number;
-  vfxConfig?: { commandKey?: string; filename?: string };
-  data?: { displayMessage?: string; ttsMessage?: string };
-  type?: string;
-  [key: string]: unknown;
-};
+type QueuedItem = DisplayQueueItem;
 
 type DisplayQueueMock = {
   addItem: TestMockFn<[QueuedItem], void>;

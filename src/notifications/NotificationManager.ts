@@ -5,6 +5,7 @@ import { NotificationBuilder } from '../utils/notification-builder';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 import { getAnonymousUsername } from '../utils/validation';
 import { hasNotificationPriorityMapping, resolvePriorityForType } from '../core/notification-priority';
+import type { DisplayQueueDependency, DisplayQueueVfxConfig, NotificationQueueItem } from '../interfaces/DisplayQueue';
 import { createSyntheticGiftFromAggregated } from './aggregated-donation-transformer';
 import { NotificationGate } from './notification-gate';
 import { NotificationInputValidator } from './notification-input-validator';
@@ -33,11 +34,6 @@ type NotificationConstants = {
 
 type NotificationRuntimeConfig = Record<string, Record<string, unknown>> & {
     general?: { debugEnabled?: boolean };
-};
-
-type DisplayQueueLike = {
-    addItem: (item: NotificationRecord) => void;
-    getQueueLength: () => number;
 };
 
 type VFXCommandServiceLike = {
@@ -77,7 +73,7 @@ type NotificationManagerDependencies = {
     config?: NotificationRuntimeConfig;
     vfxCommandService?: VFXCommandServiceLike;
     userTrackingService?: UserTrackingServiceLike;
-    displayQueue?: DisplayQueueLike;
+    displayQueue?: DisplayQueueDependency;
     donationSpamDetector?: DonationSpamDetectorLike;
 };
 
@@ -125,7 +121,7 @@ class NotificationManager extends EventEmitter {
     config: NotificationRuntimeConfig;
     vfxCommandService: VFXCommandServiceLike | undefined;
     userTrackingService: UserTrackingServiceLike | undefined;
-    displayQueue: DisplayQueueLike;
+    displayQueue: DisplayQueueDependency;
     donationSpamDetector: DonationSpamDetectorLike | undefined;
     PRIORITY_LEVELS: Record<string, number>;
     NOTIFICATION_CONFIGS: Record<string, NotificationConfig>;
@@ -387,10 +383,11 @@ class NotificationManager extends EventEmitter {
             }
         }
 
-        let vfxConfig = null;
+        let vfxConfig: DisplayQueueVfxConfig | null = null;
         try {
             const vfxMessage = typeof normalizedData.message === 'string' ? normalizedData.message : null;
-            vfxConfig = await this._getVFXConfigFromService(config.commandKey, vfxMessage);
+            const resolvedVfxConfig = await this._getVFXConfigFromService(config.commandKey, vfxMessage);
+            vfxConfig = isRecord(resolvedVfxConfig) ? resolvedVfxConfig : null;
         } catch (vfxError) {
             this._handleNotificationError(
                 `[NotificationManager] VFX config failed: ${getErrorMessage(vfxError)}`,
@@ -416,7 +413,7 @@ class NotificationManager extends EventEmitter {
                 throw new Error('NotificationBuilder.build() returned invalid data structure');
             }
             
-            if (!notificationData.displayMessage) {
+            if (typeof notificationData.displayMessage !== 'string' || notificationData.displayMessage.length === 0) {
                 throw new Error(`Missing displayMessage in notification data for ${notificationType}`);
             }
             if (!notificationData.ttsMessage) {
@@ -437,9 +434,12 @@ class NotificationManager extends EventEmitter {
         const displayType = notificationType;
         const appliedPriority = this.getPriorityForType(priorityType, config);
         
-        const item = {
+        const item: NotificationQueueItem = {
             type: displayType,
-            data: notificationData,
+            data: {
+                ...notificationData,
+                displayMessage: notificationData.displayMessage
+            },
             platform: platformName,
             priority: appliedPriority,
             vfxConfig: vfxConfig
