@@ -56,12 +56,50 @@ type UserSpamTracker = {
     platform: string;
 };
 
+type StableDonationTrackerIdentity = {
+    trackerKey: string;
+    userId: string;
+    username: string;
+    platform: string;
+};
+
 type PlatformConfig = {
     enabled: boolean;
     lowValueThreshold: number;
     detectionWindow: number;
     maxIndividualNotifications: number;
 };
+
+function trimNonEmptyString(value: unknown): string | null {
+    if (typeof value !== 'string') {
+        return null;
+    }
+
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+}
+
+function resolveStableDonationTrackerIdentity(input: {
+    userId: unknown;
+    username: unknown;
+    platform: unknown;
+}): StableDonationTrackerIdentity | null {
+    const userId = trimNonEmptyString(input.userId);
+    const username = trimNonEmptyString(input.username);
+    const platform = trimNonEmptyString(input.platform);
+
+    if (!userId || !username || !platform) {
+        return null;
+    }
+
+    const platformKey = platform.toLowerCase();
+    return {
+        trackerKey: `${platformKey}:userId:${userId}`,
+        userId,
+        username,
+        platform
+    };
+}
 
 class SpamDetectionConfig {
     logger: SpamLogger;
@@ -194,22 +232,25 @@ class DonationSpamDetection {
         unitAmount: number,
         giftType: string,
         giftCount: number,
-        platform = 'Unknown'
+        platform?: string | null
     ) {
-        const normalizedUserId = typeof userId === 'string' && userId.trim().length > 0 ? userId : 'unknown-user';
-        const normalizedUsername = typeof username === 'string' && username.trim().length > 0 ? username : 'Unknown User';
-        const normalizedPlatformKey = platform.toLowerCase();
-        const normalizedIdentityKey = normalizedUserId === 'unknown-user'
-            ? normalizedUsername.toLowerCase().replace(/\s+/g, '-')
-            : normalizedUserId;
-        const trackerKey = `${normalizedPlatformKey}:${normalizedIdentityKey}`;
+        const stableIdentity = resolveStableDonationTrackerIdentity({ userId, username, platform });
+        const logUsername = trimNonEmptyString(username) ?? '<missing username>';
+        const logPlatform = trimNonEmptyString(platform) ?? 'unknown';
 
         try {
-            this.logger.debug(`Processing ${platform} donation: ${normalizedUsername} -> ${giftType} x${giftCount} (${unitAmount})`, 'spam-detection');
+            this.logger.debug(`Processing ${logPlatform} donation: ${logUsername} -> ${giftType} x${giftCount} (${unitAmount})`, 'spam-detection');
 
-            const platformConfig = this.config.getPlatformConfig(platform);
+            if (!stableIdentity) {
+                this.logger.debug('Donation spam detection skipped: stable donor identity is unavailable', 'spam-detection');
+                return { shouldShow: true, aggregatedMessage: null };
+            }
 
-            if (!platformConfig.enabled || !this.isLowValueDonation(unitAmount, platform)) {
+            const { trackerKey, userId: normalizedUserId, username: normalizedUsername, platform: normalizedPlatform } = stableIdentity;
+
+            const platformConfig = this.config.getPlatformConfig(normalizedPlatform);
+
+            if (!platformConfig.enabled || !this.isLowValueDonation(unitAmount, normalizedPlatform)) {
                 this.logger.debug(`Allowing donation: ${!platformConfig.enabled ? 'system disabled' : 'high value'}`, 'spam-detection');
                 return { shouldShow: true, aggregatedMessage: null };
             }
@@ -225,7 +266,7 @@ class DonationSpamDetection {
                     lastReset: now,
                     aggregationTimer: null,
                     username: normalizedUsername,
-                    platform
+                    platform: normalizedPlatform
                 };
                 this.logger.debug(`Initialized tracking for user: ${trackerKey}`, 'spam-detection');
             }
@@ -245,7 +286,7 @@ class DonationSpamDetection {
                 coinValue: unitAmount,
                 giftType,
                 giftCount,
-                platform
+                platform: normalizedPlatform
             });
 
             const currentNotificationCount = userTracker.notifications.length;
@@ -261,27 +302,27 @@ class DonationSpamDetection {
 
             userTracker.aggregatedCount += giftCount;
             userTracker.username = normalizedUsername;
-            userTracker.platform = platform;
+            userTracker.platform = normalizedPlatform;
 
             this.logger.debug(`Spam threshold exceeded - aggregating notifications for ${trackerKey}`, 'spam-detection');
 
             if (!userTracker.aggregationTimer) {
-                this.logger.info(`${platform} - ${normalizedUsername}: Starting aggregation timer (${platformConfig.detectionWindow}s)`, 'spam-detection');
+                this.logger.info(`${normalizedPlatform} - ${normalizedUsername}: Starting aggregation timer (${platformConfig.detectionWindow}s)`, 'spam-detection');
                 userTracker.aggregationTimer = safeSetTimeout(() => {
                     this.processAggregatedDonation(trackerKey, userTracker);
                 }, platformConfig.detectionWindow * 1000);
             }
 
-            this.logger.info(`${platform} - ${normalizedUsername}: Suppressing individual notification ${currentNotificationCount} (aggregating)`, 'spam-detection');
+            this.logger.info(`${normalizedPlatform} - ${normalizedUsername}: Suppressing individual notification ${currentNotificationCount} (aggregating)`, 'spam-detection');
             return { shouldShow: false, aggregatedMessage: null };
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
-            this.handleSpamDetectionError(`Error processing donation spam for ${normalizedUsername}: ${errorMessage}`, error, {
-                userId: trackerKey,
-                platform,
+            this.handleSpamDetectionError(`Error processing donation spam for ${logUsername}: ${errorMessage}`, error, {
+                userId: stableIdentity?.trackerKey ?? userId ?? null,
+                platform: logPlatform,
                 giftType
             });
-            this.logger.debug(`Error processing donation spam for ${normalizedUsername}: ${errorMessage}`, 'spam-detection');
+            this.logger.debug(`Error processing donation spam for ${logUsername}: ${errorMessage}`, 'spam-detection');
             return { shouldShow: true, aggregatedMessage: null };
         }
     }

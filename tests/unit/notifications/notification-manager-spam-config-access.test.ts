@@ -122,6 +122,23 @@ describe("NotificationManager Spam Protection Behavior - Modernized", () => {
 
   });
 
+  const createManagerWithSpamDetector = () => new NotificationManager({
+    displayQueue: mockDisplayQueue,
+    logger: mockLogger,
+    eventBus: {
+      emit: createMockFn(),
+      on: createMockFn(),
+      off: createMockFn(),
+    },
+    config,
+    constants: mockConstants,
+    obsGoals: { processDonationGoal: createMockFn() },
+    donationSpamDetector: mockSpamDetector,
+    vfxCommandService: {
+      getVFXConfig: createMockFn().mockResolvedValue(null),
+    },
+  });
+
   describe("when spam protection is properly configured", () => {
     it("should enable spam protection when spam detector is provided", () => {
       const mockEventBus = {
@@ -410,6 +427,158 @@ describe("NotificationManager Spam Protection Behavior - Modernized", () => {
       );
 
       expect(mockSpamDetector.handleDonationSpam).not.toHaveBeenCalled();
+    });
+
+    it("should skip spam detection and show username-only gifts", async () => {
+      const notificationManager = createManagerWithSpamDetector();
+
+      const result = await notificationManager.handleNotification(
+        "platform:gift",
+        "youtube",
+        {
+          username: "JewelsUser",
+          giftType: "Super Sticker",
+          giftCount: 1,
+          amount: 10,
+          currency: "jewels",
+        },
+      );
+
+      expect(result.success).toBe(true);
+      expect(mockSpamDetector.handleDonationSpam).not.toHaveBeenCalled();
+      expect(mockDisplayQueue.addItem).toHaveBeenCalled();
+    });
+
+    it("should skip spam detection and show gifts with whitespace user id", async () => {
+      const notificationManager = createManagerWithSpamDetector();
+
+      const result = await notificationManager.handleNotification(
+        "platform:gift",
+        "youtube",
+        {
+          userId: "   ",
+          username: "JewelsUser",
+          giftType: "Super Sticker",
+          giftCount: 1,
+          amount: 10,
+          currency: "jewels",
+        },
+      );
+
+      expect(result.success).toBe(true);
+      expect(mockSpamDetector.handleDonationSpam).not.toHaveBeenCalled();
+      expect(mockDisplayQueue.addItem).toHaveBeenCalled();
+    });
+
+    it("should skip spam detection and show explicit anonymous gifts", async () => {
+      const notificationManager = createManagerWithSpamDetector();
+
+      const result = await notificationManager.handleNotification(
+        "platform:gift",
+        "twitch",
+        {
+          isAnonymous: true,
+          giftType: "Bits",
+          giftCount: 1,
+          amount: 10,
+          currency: "bits",
+        },
+      );
+
+      expect(result.success).toBe(true);
+      expect(mockSpamDetector.handleDonationSpam).not.toHaveBeenCalled();
+      expect(mockDisplayQueue.addItem).toHaveBeenCalledTimes(1);
+      const queuedItem = mockDisplayQueue.addItem.mock.calls[0]?.[0];
+      expect(queuedItem?.data).toEqual(
+        expect.objectContaining({ username: "Anonymous User" }),
+      );
+    });
+
+    it("should skip spam detection for anonymous gifts even when masked identity is present", async () => {
+      const notificationManager = createManagerWithSpamDetector();
+
+      const result = await notificationManager.handleNotification(
+        "platform:gift",
+        "twitch",
+        {
+          isAnonymous: true,
+          userId: "masked-user-id",
+          username: "Anonymous User",
+          giftType: "Bits",
+          giftCount: 1,
+          amount: 10,
+          currency: "bits",
+        },
+      );
+
+      expect(result.success).toBe(true);
+      expect(mockSpamDetector.handleDonationSpam).not.toHaveBeenCalled();
+      expect(mockDisplayQueue.addItem).toHaveBeenCalledTimes(1);
+    });
+
+    it("should reject normal gifts missing username without calling spam detection", async () => {
+      const notificationManager = createManagerWithSpamDetector();
+
+      const result = await notificationManager.handleNotification(
+        "platform:gift",
+        "tiktok",
+        {
+          userId: "user123",
+          giftType: "Rose",
+          giftCount: 1,
+          amount: 10,
+          currency: "coins",
+        },
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe("Missing username");
+      expect(mockSpamDetector.handleDonationSpam).not.toHaveBeenCalled();
+      expect(mockDisplayQueue.addItem).not.toHaveBeenCalled();
+    });
+
+    it("should reject normal gifts missing all donor identity without calling spam detection", async () => {
+      const notificationManager = createManagerWithSpamDetector();
+
+      const result = await notificationManager.handleNotification(
+        "platform:gift",
+        "tiktok",
+        {
+          giftType: "Rose",
+          giftCount: 1,
+          amount: 10,
+          currency: "coins",
+        },
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe("Missing username");
+      expect(mockSpamDetector.handleDonationSpam).not.toHaveBeenCalled();
+      expect(mockDisplayQueue.addItem).not.toHaveBeenCalled();
+    });
+
+    it("should queue gifts when spam detection throws", async () => {
+      mockSpamDetector.handleDonationSpam.mockImplementation(() => {
+        throw new Error("spam unavailable");
+      });
+      const notificationManager = createManagerWithSpamDetector();
+
+      const result = await notificationManager.handleNotification(
+        "platform:gift",
+        "tiktok",
+        {
+          userId: "user123",
+          username: "TestUser",
+          giftType: "Rose",
+          giftCount: 1,
+          amount: 10,
+          currency: "coins",
+        },
+      );
+
+      expect(result.success).toBe(true);
+      expect(mockSpamDetector.handleDonationSpam).toHaveBeenCalled();
+      expect(mockDisplayQueue.addItem).toHaveBeenCalledTimes(1);
     });
   });
 });

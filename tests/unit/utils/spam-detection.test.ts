@@ -196,6 +196,117 @@ describe("Spam Detection", () => {
       expect(result.aggregatedMessage).toBeNull();
     });
 
+    it("should fail open without a stable user id", () => {
+      const first = detection.handleDonationSpam(
+        undefined,
+        "JewelsUser",
+        5,
+        "Jewels Gift",
+        1,
+        "youtube",
+      );
+      const second = detection.handleDonationSpam(
+        undefined,
+        "JewelsUser",
+        5,
+        "Jewels Gift",
+        1,
+        "youtube",
+      );
+      const third = detection.handleDonationSpam(
+        undefined,
+        "JewelsUser",
+        5,
+        "Jewels Gift",
+        1,
+        "youtube",
+      );
+
+      expect(first.shouldShow).toBe(true);
+      expect(second.shouldShow).toBe(true);
+      expect(third.shouldShow).toBe(true);
+      expect(detection.getStatistics()).toEqual(
+        expect.objectContaining({ trackedUsers: 0, totalNotifications: 0 }),
+      );
+    });
+
+    it("should fail open without a stable platform", () => {
+      const first = detection.handleDonationSpam(
+        "user1",
+        "User1",
+        5,
+        "Rose",
+        1,
+      );
+      const second = detection.handleDonationSpam(
+        "user1",
+        "User1",
+        5,
+        "Rose",
+        1,
+      );
+
+      expect(first.shouldShow).toBe(true);
+      expect(second.shouldShow).toBe(true);
+      expect(detection.getStatistics()).toEqual(
+        expect.objectContaining({ trackedUsers: 0, totalNotifications: 0 }),
+      );
+    });
+
+    it("should fail open when identity fields are whitespace", () => {
+      const result = detection.handleDonationSpam(
+        "   ",
+        "WhitespaceUser",
+        5,
+        "Rose",
+        1,
+        "tiktok",
+      );
+
+      expect(result.shouldShow).toBe(true);
+      expect(result.aggregatedMessage).toBeNull();
+      expect(detection.getStatistics()).toEqual(
+        expect.objectContaining({ trackedUsers: 0, totalNotifications: 0 }),
+      );
+    });
+
+    it("should fail open without a stable username", () => {
+      detection.handleDonationSpam("anonymous", undefined, 5, "Bits", 1, "twitch");
+      const result = detection.handleDonationSpam(
+        "anonymous",
+        undefined,
+        5,
+        "Bits",
+        1,
+        "twitch",
+      );
+
+      expect(result.shouldShow).toBe(true);
+      expect(result.aggregatedMessage).toBeNull();
+      expect(detection.getStatistics()).toEqual(
+        expect.objectContaining({ trackedUsers: 0, totalNotifications: 0 }),
+      );
+    });
+
+    it("should fail open when donor identity is unavailable", () => {
+      detection.handleDonationSpam(null, null, 5, "Rose", 1, "tiktok");
+      detection.handleDonationSpam(null, null, 5, "Rose", 1, "tiktok");
+      const result = detection.handleDonationSpam(
+        null,
+        null,
+        5,
+        "Rose",
+        1,
+        "tiktok",
+      );
+
+      expect(result.shouldShow).toBe(true);
+      expect(result.aggregatedMessage).toBeNull();
+      expect(detection.getStatistics()).toEqual(
+        expect.objectContaining({ trackedUsers: 0, totalNotifications: 0 }),
+      );
+    });
+
     it("should reset tracking after time window expires", () => {
       detection.handleDonationSpam("user1", "User1", 5, "Rose", 1, "tiktok");
 

@@ -3,6 +3,7 @@ import { EventEmitter } from 'node:events';
 
 import { NotificationBuilder } from '../utils/notification-builder';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
+import { getAnonymousUsername } from '../utils/validation';
 import { createSyntheticGiftFromAggregated } from './aggregated-donation-transformer';
 import { NotificationGate } from './notification-gate';
 import { NotificationInputValidator } from './notification-input-validator';
@@ -98,6 +99,19 @@ function getErrorMessage(error: unknown) {
         return error.message;
     }
     return String(error);
+}
+
+function trimNonEmptyString(value: unknown): string | null {
+    if (typeof value !== 'string') {
+        return null;
+    }
+
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+}
+
+function hasStableGiftSpamIdentity(data: NotificationRecord): boolean {
+    return !!trimNonEmptyString(data.userId) && !!trimNonEmptyString(data.username);
 }
 
 class NotificationManager extends EventEmitter {
@@ -317,41 +331,50 @@ class NotificationManager extends EventEmitter {
             normalizedData.userId = String(normalizedData.userId);
         }
 
-        if (notificationType === 'platform:gift' && this.donationSpamDetector && !skipSpamDetection && !normalizedData.isAggregated && !isErrorPayload) {
-            try {
-                if (!normalizedData.giftType || normalizedData.giftCount === undefined || normalizedData.amount === undefined) {
-                    throw new Error('Gift spam detection requires giftType, giftCount, and amount');
-                }
-                const giftCount = Number(normalizedData.giftCount);
-                const amount = Number(normalizedData.amount);
-                if (!Number.isFinite(giftCount) || giftCount <= 0) {
-                    throw new Error('Gift spam detection requires valid giftCount');
-                }
-                if (!Number.isFinite(amount)) {
-                    throw new Error('Gift spam detection requires valid amount');
-                }
-                const perGiftAmount = amount / giftCount;
-                const spamResult = this.donationSpamDetector.handleDonationSpam(
-                    normalizedData.userId,
-                    normalizedData.username,
-                    perGiftAmount,
-                    normalizedData.giftType,
-                    giftCount,
-                    platformName
-                );
+        const isAnonymousGift = notificationType === 'platform:gift' && normalizedData.isAnonymous === true;
+        if (isAnonymousGift && !trimNonEmptyString(normalizedData.username)) {
+            normalizedData.username = getAnonymousUsername();
+        }
 
-                if (!spamResult.shouldShow) {
-                    this.platformLogger.debug(`Spam gift suppressed from ${normalizedData.username}.`, platformName);
-                    return {
-                        success: false,
-                        suppressed: true,
-                        reason: 'spam_detection',
-                        notificationType,
-                        platform: platformName
-                    };
+        if (notificationType === 'platform:gift' && this.donationSpamDetector && !skipSpamDetection && !normalizedData.isAggregated && !isErrorPayload) {
+            if (!isAnonymousGift && hasStableGiftSpamIdentity(normalizedData)) {
+                try {
+                    if (!normalizedData.giftType || normalizedData.giftCount === undefined || normalizedData.amount === undefined) {
+                        throw new Error('Gift spam detection requires giftType, giftCount, and amount');
+                    }
+                    const giftCount = Number(normalizedData.giftCount);
+                    const amount = Number(normalizedData.amount);
+                    if (!Number.isFinite(giftCount) || giftCount <= 0) {
+                        throw new Error('Gift spam detection requires valid giftCount');
+                    }
+                    if (!Number.isFinite(amount)) {
+                        throw new Error('Gift spam detection requires valid amount');
+                    }
+                    const perGiftAmount = amount / giftCount;
+                    const spamResult = this.donationSpamDetector.handleDonationSpam(
+                        normalizedData.userId,
+                        normalizedData.username,
+                        perGiftAmount,
+                        normalizedData.giftType,
+                        giftCount,
+                        platformName
+                    );
+
+                    if (!spamResult.shouldShow) {
+                        this.platformLogger.debug(`Spam gift suppressed from ${normalizedData.username}.`, platformName);
+                        return {
+                            success: false,
+                            suppressed: true,
+                            reason: 'spam_detection',
+                            notificationType,
+                            platform: platformName
+                        };
+                    }
+                } catch (error) {
+                    this.platformLogger.warn(`Error in spam detection: ${getErrorMessage(error)}`, platformName);
                 }
-            } catch (error) {
-                this.platformLogger.warn(`Error in spam detection: ${getErrorMessage(error)}`, platformName);
+            } else {
+                this.platformLogger.debug('Gift spam detection skipped: stable donor identity is unavailable.', platformName);
             }
         }
 
