@@ -67,7 +67,7 @@ describe("Goal Tracker - Core Functionality", () => {
 
         expect(youtubeState.current).toBe(0);
         expect(youtubeState.target).toBe(1.0);
-        expect(youtubeState.currency).toBe("dollars");
+        expect(youtubeState.currency).toBe("USD");
 
         expect(twitchState.current).toBe(0);
         expect(twitchState.target).toBe(100);
@@ -100,7 +100,7 @@ describe("Goal Tracker - Core Functionality", () => {
     test(
       "should process YouTube donation correctly",
       async () => {
-        const result = await goalTracker.addDonationToGoal("youtube", 0.5);
+        const result = await goalTracker.addDonationToGoal("youtube", 0.5, "USD");
 
         expect(result.success).toBe(true);
         expect(result.newTotal).toBe(0.5);
@@ -108,6 +108,45 @@ describe("Goal Tracker - Core Functionality", () => {
         expect(result.percentage).toBe(50);
         expect(result.goalCompleted).toBe(false);
         expect(result.formatted).toBe("$0.50/$1.00");
+      },
+      TEST_TIMEOUTS.FAST,
+    );
+
+    test(
+      "should skip donation when contribution currency does not match goal currency",
+      async () => {
+        const result = await goalTracker.addDonationToGoal("youtube", 500, "jewels");
+        const state = requireGoalState(goalTracker.getGoalState("youtube"), "youtube");
+
+        expect(result.success).toBe(false);
+        expect(result.error).toContain("does not match");
+        expect(result.skipped).toBe(true);
+        expect(state.current).toBe(0);
+      },
+      TEST_TIMEOUTS.FAST,
+    );
+
+    test(
+      "should accept YouTube jewels only when the YouTube goal currency is jewels",
+      async () => {
+        goalTracker = new GoalTracker({
+          config: {
+            goals: {
+              ...configFixture,
+              youtubeGoalTarget: 500,
+              youtubeGoalCurrency: "jewels",
+            },
+          },
+        });
+        await goalTracker.initializeGoalTracker();
+
+        const jewelsResult = await goalTracker.addDonationToGoal("youtube", 250, "jewels");
+        const usdResult = await goalTracker.addDonationToGoal("youtube", 1, "USD");
+
+        expect(jewelsResult.success).toBe(true);
+        expect(jewelsResult.formatted).toBe("250.00/500.00 jewels");
+        expect(usdResult.success).toBe(false);
+        expect(requireGoalState(goalTracker.getGoalState("youtube"), "youtube").current).toBe(250);
       },
       TEST_TIMEOUTS.FAST,
     );
@@ -203,7 +242,61 @@ describe("Goal Tracker - Core Functionality", () => {
           throw new Error("Expected TikTok paypiggy result value");
         }
         expect(result.paypiggyValue).toBe(50);
+        if (!("paypiggyCount" in result)) {
+          throw new Error("Expected TikTok paypiggy result count");
+        }
+        expect(result.paypiggyCount).toBe(1);
         expect(result.formatted).toBe("0050/1000 coins");
+      },
+      TEST_TIMEOUTS.FAST,
+    );
+
+    test(
+      "should multiply paypiggy value by gifted count",
+      async () => {
+        const result = await goalTracker.addPaypiggyToGoal("twitch", 3);
+
+        expect(result.success).toBe(true);
+        expect(result.newTotal).toBe(1050);
+        if (!("paypiggyValue" in result) || !("paypiggyCount" in result)) {
+          throw new Error("Expected Twitch paypiggy result value and count");
+        }
+        expect(result.paypiggyValue).toBe(350);
+        expect(result.paypiggyCount).toBe(3);
+      },
+      TEST_TIMEOUTS.FAST,
+    );
+
+    test(
+      "should reject invalid paypiggy counts",
+      async () => {
+        const result = await goalTracker.addPaypiggyToGoal("twitch", 0);
+
+        expect(result.success).toBe(false);
+        expect(result.error).toContain("positive integer");
+      },
+      TEST_TIMEOUTS.FAST,
+    );
+
+    test(
+      "should skip YouTube paypiggy when the YouTube goal tracks jewels",
+      async () => {
+        goalTracker = new GoalTracker({
+          config: {
+            goals: {
+              ...configFixture,
+              youtubeGoalTarget: 500,
+              youtubeGoalCurrency: "jewels",
+            },
+          },
+        });
+        await goalTracker.initializeGoalTracker();
+
+        const result = await goalTracker.addPaypiggyToGoal("youtube");
+
+        expect(result.success).toBe(false);
+        expect(result.error).toContain("does not match");
+        expect(requireGoalState(goalTracker.getGoalState("youtube"), "youtube").current).toBe(0);
       },
       TEST_TIMEOUTS.FAST,
     );

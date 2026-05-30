@@ -36,7 +36,8 @@ type DisplayQueueEffectsDependencies = {
         updateTextSource: (sourceName: string, text: string) => Promise<void>;
     };
     goalsManager: {
-        processDonationGoal: (platform: string, amount: number) => Promise<unknown>;
+        processDonationGoal: (platform: string, amount: number, currency?: string) => Promise<unknown>;
+        processPaypiggyGoal: (platform: string, count?: number) => Promise<unknown>;
     };
     eventBus?: {
         emit: (eventName: string, payload: Record<string, unknown>) => void;
@@ -202,9 +203,7 @@ class DisplayQueueEffects {
             const username = this.extractUsername(item?.data);
             logger.debug(`[Display Queue] Processing notification effects for ${item?.type} from ${username}`, 'display-queue');
 
-            if (item?.type === 'platform:gift') {
-                await this.processGiftGoal(item);
-            }
+            await this.processMonetizationGoal(item);
 
             const ttsStages = MessageTTSHandler.createTTSStages(item.data);
             logger.debug(`[Display Queue] Generated ${ttsStages.length} TTS stages`, 'display-queue', { stages: ttsStages });
@@ -219,7 +218,7 @@ class DisplayQueueEffects {
         }
     }
 
-    async processGiftGoal(item: QueueItem) {
+    async processMonetizationGoal(item: QueueItem) {
         if (!item?.data || item.data.isError) {
             return;
         }
@@ -229,36 +228,54 @@ class DisplayQueueEffects {
             return;
         }
 
-        const amountValue = Number(item.data.amount);
-        const currencyValue = typeof item.data.currency === 'string' ? item.data.currency.trim().toLowerCase() : '';
+        try {
+            if (item.type === 'platform:gift') {
+                await this.processDonationGoal(item);
+            } else if (item.type === 'platform:paypiggy') {
+                await this.goalsManager.processPaypiggyGoal(item.platform || '', 1);
+                logger.debug(`[Display Queue] Paypiggy goal tracking processed for ${item.platform}`, 'display-queue');
+            } else if (item.type === 'platform:giftpaypiggy') {
+                const giftCount = Number(item.data.giftCount);
+                if (!Number.isFinite(giftCount) || !Number.isInteger(giftCount) || giftCount <= 0) {
+                    throw new Error('Giftpaypiggy goal tracking requires giftCount');
+                }
+                await this.goalsManager.processPaypiggyGoal(item.platform || '', giftCount);
+                logger.debug(`[Display Queue] Giftpaypiggy goal tracking processed for ${item.platform}: ${giftCount}`, 'display-queue');
+            } else {
+                return;
+            }
+            item.data.goalProcessed = true;
+        } catch (error) {
+            this.handleDisplayQueueError(`[Display Queue] Goal tracking failed for ${item.platform}`, error, { platform: item.platform, type: item.type });
+        }
+    }
+
+    async processDonationGoal(item: QueueItem) {
+        const amountValue = Number(item.data?.amount);
+        const currencyValue = typeof item.data?.currency === 'string' ? item.data.currency.trim().toLowerCase() : '';
         const totalGiftValue = Number.isFinite(amountValue) ? amountValue : 0;
 
         if (totalGiftValue <= 0) {
             return;
         }
 
-        try {
-            if (!currencyValue) {
-                throw new Error('Gift goal tracking requires currency');
-            }
-            const giftCount = Number(item.data.giftCount);
-            if (currencyValue === 'coins') {
-                if (!Number.isFinite(giftCount) || giftCount <= 0) {
-                    throw new Error('Gift goal tracking requires giftCount');
-                }
-            }
-            await this.goalsManager.processDonationGoal(item.platform || '', totalGiftValue);
-            if (currencyValue === 'bits') {
-                logger.debug(`[Display Queue] Goal tracking processed for ${item.platform}: ${totalGiftValue} bits`, 'display-queue');
-            } else if (currencyValue === 'coins') {
-                const perGift = giftCount > 0 ? (totalGiftValue / giftCount) : totalGiftValue;
-                logger.debug(`[Display Queue] Goal tracking processed for ${item.platform}: ${totalGiftValue} coins (${perGift} × ${giftCount})`, 'display-queue');
-            } else {
-                logger.debug(`[Display Queue] Goal tracking processed for ${item.platform}: ${totalGiftValue} ${currencyValue}`, 'display-queue');
-            }
-            item.data.goalProcessed = true;
-        } catch (error) {
-            this.handleDisplayQueueError(`[Display Queue] Goal tracking failed for ${item.platform}`, error, { platform: item.platform, totalGiftValue });
+        if (!currencyValue) {
+            throw new Error('Gift goal tracking requires currency');
+        }
+
+        const giftCount = Number(item.data?.giftCount);
+        if (currencyValue === 'coins' && (!Number.isFinite(giftCount) || giftCount <= 0)) {
+            throw new Error('Gift goal tracking requires giftCount');
+        }
+
+        await this.goalsManager.processDonationGoal(item.platform || '', totalGiftValue, currencyValue);
+        if (currencyValue === 'bits') {
+            logger.debug(`[Display Queue] Goal tracking processed for ${item.platform}: ${totalGiftValue} bits`, 'display-queue');
+        } else if (currencyValue === 'coins') {
+            const perGift = giftCount > 0 ? (totalGiftValue / giftCount) : totalGiftValue;
+            logger.debug(`[Display Queue] Goal tracking processed for ${item.platform}: ${totalGiftValue} coins (${perGift} × ${giftCount})`, 'display-queue');
+        } else {
+            logger.debug(`[Display Queue] Goal tracking processed for ${item.platform}: ${totalGiftValue} ${currencyValue}`, 'display-queue');
         }
     }
 

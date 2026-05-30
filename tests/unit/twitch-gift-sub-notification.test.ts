@@ -100,7 +100,11 @@ describe("Twitch gift subscriptions", () => {
     const obsGoals = getDefaultGoalsManager();
     const obsGoalsDependency = {
       processDonationGoal: (...args: unknown[]) =>
-        obsGoals.processDonationGoal(String(args[0] ?? ""), typeof args[1] === "number" ? args[1] : 0),
+        obsGoals.processDonationGoal(
+          String(args[0] ?? ""),
+          typeof args[1] === "number" ? args[1] : 0,
+          typeof args[2] === "string" ? args[2] : undefined,
+        ),
     };
     const vfxCommandService = {
       getVFXConfig: (createMockFn() as FlexibleMock).mockResolvedValue(null),

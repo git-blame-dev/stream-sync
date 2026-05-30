@@ -68,6 +68,7 @@ type DisplayQueueObsManager = {
 
 let notificationTypeSet: Set<string> | null = null;
 const CHAT_TYPE = 'chat';
+const MONETIZATION_NOTIFICATION_TYPES = new Set(['platform:gift', 'platform:paypiggy', 'platform:giftpaypiggy', 'platform:envelope']);
 
 function isNotificationType(type: string) {
     if (typeof type !== 'string') {
@@ -83,6 +84,10 @@ function isNotificationType(type: string) {
 
 function isChatType(type: string) {
     return type === CHAT_TYPE;
+}
+
+function isMonetizationNotificationType(type: string) {
+    return MONETIZATION_NOTIFICATION_TYPES.has(type);
 }
 
 function resolveChatMessageText(message: unknown) {
@@ -384,6 +389,10 @@ class DisplayQueue {
     async displayNotificationItem(item: QueueItem) {
         const displayed = await this.renderer.displayNotificationItem(item);
         if (displayed === false) {
+            if (isMonetizationNotificationType(item.type)) {
+                this.emitDisplayRow(item);
+                await this.handleNotificationEffects(item);
+            }
             return false;
         }
 

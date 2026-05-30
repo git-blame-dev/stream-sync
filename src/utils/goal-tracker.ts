@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import { config as defaultConfig } from '../core/config';
 import { logger as defaultLogger } from '../core/logging';
 import { createPlatformErrorHandler } from './platform-error-handler';
+import { normalizeCurrency } from './currency-utils';
 
 type GoalPlatform = 'tiktok' | 'youtube' | 'twitch';
 
@@ -43,9 +44,21 @@ type GoalTrackerDependencies = {
 function createDefaultGoalState(): GoalStateRecord {
     return {
         tiktok: { current: 0, target: 1000, currency: 'coins' },
-        youtube: { current: 0.00, target: 1.00, currency: 'dollars' },
+        youtube: { current: 0.00, target: 1.00, currency: 'USD' },
         twitch: { current: 0, target: 100, currency: 'bits' }
     };
+}
+
+function normalizeGoalCurrency(currency: unknown): string {
+    const normalized = typeof currency === 'string' ? currency.trim() : '';
+    const lowerCurrency = normalized.toLowerCase();
+    if (lowerCurrency === 'dollars') {
+        return 'USD';
+    }
+    if (lowerCurrency === 'coins' || lowerCurrency === 'bits' || lowerCurrency === 'jewels') {
+        return lowerCurrency;
+    }
+    return normalizeCurrency(normalized, { logger: defaultLogger, warnUnknown: false });
 }
 
 function isGoalPlatform(platform: string): platform is GoalPlatform {
@@ -75,17 +88,17 @@ class GoalTracker {
 
             if (this.config.goals.tiktokGoalEnabled) {
                 this.goalState.tiktok.target = Number(this.config.goals.tiktokGoalTarget);
-                this.goalState.tiktok.currency = this.config.goals.tiktokGoalCurrency || this.goalState.tiktok.currency;
+                this.goalState.tiktok.currency = normalizeGoalCurrency(this.config.goals.tiktokGoalCurrency || this.goalState.tiktok.currency);
             }
 
             if (this.config.goals.youtubeGoalEnabled) {
                 this.goalState.youtube.target = Number(this.config.goals.youtubeGoalTarget);
-                this.goalState.youtube.currency = this.config.goals.youtubeGoalCurrency || this.goalState.youtube.currency;
+                this.goalState.youtube.currency = normalizeGoalCurrency(this.config.goals.youtubeGoalCurrency || this.goalState.youtube.currency);
             }
 
             if (this.config.goals.twitchGoalEnabled) {
                 this.goalState.twitch.target = Number(this.config.goals.twitchGoalTarget);
-                this.goalState.twitch.currency = this.config.goals.twitchGoalCurrency || this.goalState.twitch.currency;
+                this.goalState.twitch.currency = normalizeGoalCurrency(this.config.goals.twitchGoalCurrency || this.goalState.twitch.currency);
             }
 
             this.logger.debug('Goal tracking system initialized successfully', 'goal-tracker');
@@ -101,7 +114,7 @@ class GoalTracker {
         }
     }
 
-    addDonationToGoal(platform: unknown, amount: unknown) {
+    addDonationToGoal(platform: unknown, amount: unknown, contributionCurrencyInput?: unknown) {
         try {
             if (typeof platform !== 'string') {
                 return {
@@ -127,14 +140,28 @@ class GoalTracker {
                 };
             }
 
+            const goalCurrency = this.goalState[platformKey].currency;
+            if (contributionCurrencyInput !== undefined && contributionCurrencyInput !== null) {
+                const contributionCurrency = normalizeGoalCurrency(contributionCurrencyInput);
+                if (contributionCurrency !== goalCurrency) {
+                    return {
+                        success: false,
+                        error: `Donation currency ${contributionCurrency} does not match ${platform} goal currency ${goalCurrency}`,
+                        skipped: true,
+                        currency: contributionCurrency,
+                        goalCurrency
+                    };
+                }
+            }
+
             const oldCurrent = this.goalState[platformKey].current;
             this.goalState[platformKey].current += numAmount;
 
             const newCurrent = this.goalState[platformKey].current;
             const target = this.goalState[platformKey].target;
-            const currency = this.goalState[platformKey].currency;
+            const displayCurrency = this.goalState[platformKey].currency;
 
-            this.logger.debug(`${platform} goal updated: ${oldCurrent} → ${newCurrent} ${currency}`, 'goal-tracker');
+            this.logger.debug(`${platform} goal updated: ${oldCurrent} → ${newCurrent} ${displayCurrency}`, 'goal-tracker');
 
             const formatted = this.formatGoalDisplay(platformKey);
             const percentage = target > 0 ? Math.round((newCurrent / target) * 100 * 10) / 10 : 0;
@@ -145,7 +172,7 @@ class GoalTracker {
                 current: oldCurrent,
                 newTotal: newCurrent,
                 target,
-                currency,
+                currency: displayCurrency,
                 formatted,
                 percentage,
                 goalCompleted
@@ -162,7 +189,7 @@ class GoalTracker {
         }
     }
 
-    addPaypiggyToGoal(platform: unknown) {
+    addPaypiggyToGoal(platform: unknown, count = 1) {
         try {
             if (typeof platform !== 'string') {
                 return {
@@ -172,19 +199,30 @@ class GoalTracker {
             }
 
             const platformKey = platform.toLowerCase();
+            const paypiggyCount = Number(count);
+            if (!Number.isFinite(paypiggyCount) || !Number.isInteger(paypiggyCount) || paypiggyCount <= 0) {
+                return {
+                    success: false,
+                    error: `Paypiggy count must be a positive integer, received: ${count}`
+                };
+            }
             let paypiggyAmount = 0;
+            let paypiggyCurrency = '';
 
             switch (platformKey) {
                 case 'tiktok':
                     paypiggyAmount = Number(this.config.goals.tiktokPaypiggyEquivalent);
+                    paypiggyCurrency = 'coins';
                     this.logger.debug(`Converting TikTok paypiggy to ${paypiggyAmount} coins`, 'goal-tracker');
                     break;
                 case 'youtube':
                     paypiggyAmount = Number(this.config.goals.youtubePaypiggyPrice);
+                    paypiggyCurrency = 'USD';
                     this.logger.debug(`Converting YouTube paypiggy to $${paypiggyAmount}`, 'goal-tracker');
                     break;
                 case 'twitch':
                     paypiggyAmount = Number(this.config.goals.twitchPaypiggyEquivalent);
+                    paypiggyCurrency = 'bits';
                     this.logger.debug(`Converting Twitch paypiggy to ${paypiggyAmount} bits`, 'goal-tracker');
                     break;
                 default:
@@ -194,19 +232,21 @@ class GoalTracker {
                     };
             }
 
-            const result = this.addDonationToGoal(platform, paypiggyAmount);
+            const result = this.addDonationToGoal(platform, paypiggyAmount * paypiggyCount, paypiggyCurrency);
 
             if (result.success) {
                 return {
                     ...result,
-                    paypiggyValue: paypiggyAmount
+                    paypiggyValue: paypiggyAmount,
+                    paypiggyCount
                 };
             }
 
             return result;
         } catch (error) {
             this._handleGoalTrackerError(`[Goal Tracker] Error adding paypiggy to ${platform} goal`, error, {
-                platform
+                platform,
+                count
             });
             return {
                 success: false,
@@ -237,7 +277,9 @@ class GoalTracker {
             case 'tiktok':
                 return `${padNumber(currentAmount, targetAmount)}/${targetAmount} ${currency}`;
             case 'youtube':
-                return `$${currentAmount.toFixed(2)}/$${targetAmount.toFixed(2)}`;
+                return currency === 'USD'
+                    ? `$${currentAmount.toFixed(2)}/$${targetAmount.toFixed(2)}`
+                    : `${currentAmount.toFixed(2)}/${targetAmount.toFixed(2)} ${currency}`;
             case 'twitch':
                 return `${padNumber(currentAmount, targetAmount)}/${targetAmount} ${currency}`;
             default:

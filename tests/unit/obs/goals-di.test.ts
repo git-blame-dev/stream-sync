@@ -26,11 +26,11 @@ const createGoalTrackerFixture = (
   currentState: Record<string, unknown> = { formatted },
 ): GoalTrackerFixture => ({
   initializeGoalTracker: createMockFn<[], Promise<void>>(() => Promise.resolve()),
-  addDonationToGoal: createMockFn<[string, number], Promise<{ success: boolean; formatted: string }>>(async () => ({
+  addDonationToGoal: createMockFn<[string, number, string?], Promise<{ success: boolean; formatted: string }>>(async () => ({
     success: true,
     formatted,
   })),
-  addPaypiggyToGoal: createMockFn<[string], Promise<{ success: boolean; formatted: string }>>(async () => ({
+  addPaypiggyToGoal: createMockFn<[string, number?], Promise<{ success: boolean; formatted: string }>>(async () => ({
     success: true,
     formatted,
   })),

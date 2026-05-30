@@ -17,7 +17,7 @@ type ObsManagerLike = {
 
 type GoalTrackerLike = {
     initializeGoalTracker: () => void | Promise<void>;
-    addDonationToGoal: (platform: string, amount: number) => {
+    addDonationToGoal: (platform: string, amount: number, currency?: string) => {
         success: boolean;
         formatted?: string;
         [key: string]: unknown;
@@ -26,7 +26,7 @@ type GoalTrackerLike = {
         formatted?: string;
         [key: string]: unknown;
     }>;
-    addPaypiggyToGoal: (platform: string) => {
+    addPaypiggyToGoal: (platform: string, count?: number) => {
         success: boolean;
         formatted?: string;
         [key: string]: unknown;
@@ -72,8 +72,8 @@ type GoalsManager = {
     initializeGoalDisplay: () => Promise<void>;
     updateAllGoalDisplays: () => Promise<void>;
     updateGoalDisplay: (platform: string, formattedText?: string) => Promise<void>;
-    processDonationGoal: (platform: unknown, amount: number) => Promise<{ success: boolean; error?: string; [key: string]: unknown }>;
-    processPaypiggyGoal: (platform: string) => Promise<{ success: boolean; error?: string; [key: string]: unknown }>;
+    processDonationGoal: (platform: unknown, amount: number, currency?: string) => Promise<{ success: boolean; error?: string; [key: string]: unknown }>;
+    processPaypiggyGoal: (platform: string, count?: number) => Promise<{ success: boolean; error?: string; [key: string]: unknown }>;
     getCurrentGoalStatus: (platform: string) => Record<string, unknown> | null;
     getAllCurrentGoalStatuses: () => Record<string, unknown>;
 };
@@ -247,7 +247,7 @@ function buildGoalsManager(obsManager: ObsManagerLike, dependencies: GoalsDepend
         }
     }
 
-    async function processDonationGoal(platform: unknown, amount: number) {
+    async function processDonationGoal(platform: unknown, amount: number, currency?: string) {
         if (!platform || typeof platform !== 'string') {
             handleGoalsError('[Goal Display] processDonationGoal called with invalid platform', null, { platform, amount });
             return {
@@ -274,9 +274,9 @@ function buildGoalsManager(obsManager: ObsManagerLike, dependencies: GoalsDepend
                 };
             }
 
-            logger.debug(`[Goal Display] Processing ${amount} ${platform} donation for goal`, 'goals');
+            logger.debug(`[Goal Display] Processing ${amount} ${currency || platform} donation for ${platform} goal`, 'goals');
 
-            const updatedState = await addDonationToGoal(platform, amount);
+            const updatedState = await addDonationToGoal(platform, amount, currency);
             if (!updatedState.success) {
                 return updatedState;
             }
@@ -307,7 +307,7 @@ function buildGoalsManager(obsManager: ObsManagerLike, dependencies: GoalsDepend
         }
     }
 
-    async function processPaypiggyGoal(platform: string) {
+    async function processPaypiggyGoal(platform: string, count = 1) {
         try {
             if (!config.goals.enabled) {
                 logger.debug('[Goal Display] Goal system disabled, skipping paypiggy processing', 'goals');
@@ -326,9 +326,9 @@ function buildGoalsManager(obsManager: ObsManagerLike, dependencies: GoalsDepend
                 };
             }
 
-            logger.debug(`[Goal Display] Processing ${platform} paypiggy for goal`, 'goals');
+            logger.debug(`[Goal Display] Processing ${platform} paypiggy for goal`, 'goals', { count });
 
-            const updatedState = await addPaypiggyToGoal(platform);
+            const updatedState = await addPaypiggyToGoal(platform, count);
             if (!updatedState.success) {
                 return updatedState;
             }

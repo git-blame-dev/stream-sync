@@ -515,6 +515,63 @@ describe("DisplayQueue control", () => {
 
       expect(effectsHandled).toBe(false);
     });
+
+    it("still runs paid notification side effects when OBS render fails", async () => {
+      const emittedRows: DisplayRow[] = [];
+      const eventBus = {
+        emit: (eventName: string, payload: Record<string, unknown>) => {
+          emittedRows.push({ eventName, payload });
+        },
+      } satisfies NonNullable<DisplayQueueEventBus>;
+      const queue = new DisplayQueue(
+        createMockOBSManager("connected"),
+        createConfig({ autoProcess: false, timing: { transitionDelay: 0 } }),
+        constants,
+        eventBus,
+        createMockDependencies(),
+      );
+      const effectTypes: string[] = [];
+      queue.renderer.displayNotificationItem = async () => false;
+      queue.handleNotificationEffects = async (item) => {
+        effectTypes.push(item.type);
+      };
+      queue.hideCurrentDisplay = async () => {
+        throw new Error("Failed notification render should not hide current display");
+      };
+
+      const itemDataByType: Record<string, Record<string, unknown>> = {
+        "platform:gift": {
+          username: "test-user",
+          userId: "test-user-id",
+          giftType: "Rose",
+          giftCount: 1,
+          amount: 1,
+          currency: "coins",
+        },
+        "platform:paypiggy": { username: "member", userId: "member-id" },
+        "platform:giftpaypiggy": { username: "gifter", userId: "gifter-id", giftCount: 2 },
+        "platform:envelope": {
+          username: "sender",
+          userId: "sender-id",
+          giftType: "treasure chest",
+          giftCount: 1,
+          amount: 10,
+          currency: "coins",
+        },
+      };
+
+      for (const [type, data] of Object.entries(itemDataByType)) {
+        const result = await queue.displayNotificationItem({
+          type,
+          platform: "tiktok",
+          data,
+        });
+        expect(result).toBe(false);
+      }
+
+      expect(effectTypes).toEqual(["platform:gift", "platform:paypiggy", "platform:giftpaypiggy", "platform:envelope"]);
+      expect(emittedRows.map((row) => row.payload.type)).toEqual(effectTypes);
+    });
   });
 
   describe("processQueue flow", () => {

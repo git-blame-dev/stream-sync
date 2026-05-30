@@ -14,7 +14,7 @@ type GiftAnimationResult = Awaited<
 >;
 
 type ObsCall = { method: string; payload: Record<string, unknown> };
-type GoalCall = { platform: string; amount: number };
+type GoalCall = { platform: string; amount: number; currency: string | undefined };
 type EmittedEvent = { eventName: string; payload: Record<string, unknown> };
 type NamedEmission = { event: string; payload: Record<string, unknown> };
 
@@ -44,6 +44,11 @@ const handcamConfig = (enabled: boolean): NonNullable<EffectsDependencies["confi
 const extractUsername: EffectsDependencies["extractUsername"] = (data) =>
   typeof data?.username === "string" ? data.username : null;
 
+const createNoopGoalsManager = (): EffectsDependencies["goalsManager"] => ({
+  processDonationGoal: async () => {},
+  processPaypiggyGoal: async () => {},
+});
+
 const requireResolver = (
   resolve: ((value: GiftAnimationResult) => void) | undefined,
 ): ((value: GiftAnimationResult) => void) => {
@@ -70,7 +75,7 @@ describe("DisplayQueueEffects", () => {
       },
       sourcesManager,
       obsManager: { call: async () => ({}) },
-      goalsManager: { processDonationGoal: async () => {} },
+      goalsManager: createNoopGoalsManager(),
       delay: async () => {},
       handleDisplayQueueError: () => {},
       extractUsername,
@@ -113,9 +118,10 @@ describe("DisplayQueueEffects", () => {
         },
       },
       goalsManager: {
-        processDonationGoal: async (platform: string, amount: number) => {
-          goalCalls.push({ platform, amount });
+        processDonationGoal: async (platform: string, amount: number, currency?: string) => {
+          goalCalls.push({ platform, amount, currency });
         },
+        processPaypiggyGoal: async () => {},
       },
       triggerHandcamGlow: () => {
         handcamTriggered = true;
@@ -139,8 +145,87 @@ describe("DisplayQueueEffects", () => {
     });
 
     expect(handcamTriggered).toBe(true);
-    expect(goalCalls).toEqual([{ platform: "tiktok", amount: 100 }]);
+    expect(goalCalls).toEqual([{ platform: "tiktok", amount: 100, currency: "coins" }]);
     expect(obsCalls.length).toBe(2);
+  });
+
+  it("routes paypiggy and giftpaypiggy notifications to paypiggy goals", async () => {
+    const paypiggyCalls: Array<{ platform: string; count: number | undefined }> = [];
+    const effects = new DisplayQueueEffects({
+      config: {
+        ttsEnabled: false,
+        obs: { ttsTxt: "tts" },
+        handcam: handcamConfig(false),
+        gifts: { giftVideoSource: "gift-video", giftAudioSource: "gift-audio" },
+      },
+      sourcesManager: {
+        clearTextSource: async () => {},
+        updateTextSource: async () => {},
+      },
+      obsManager: { call: async () => ({}) },
+      goalsManager: {
+        processDonationGoal: async () => {},
+        processPaypiggyGoal: async (platform: string, count?: number) => {
+          paypiggyCalls.push({ platform, count });
+        },
+      },
+      delay: async () => {},
+      handleDisplayQueueError: () => {},
+      extractUsername,
+    });
+
+    await effects.handleNotificationEffects({
+      type: "platform:paypiggy",
+      platform: "youtube",
+      data: { username: "member", userId: "member-id" },
+    });
+    await effects.handleNotificationEffects({
+      type: "platform:giftpaypiggy",
+      platform: "twitch",
+      data: { username: "gifter", userId: "gifter-id", giftCount: 5 },
+    });
+
+    expect(paypiggyCalls).toEqual([
+      { platform: "youtube", count: 1 },
+      { platform: "twitch", count: 5 },
+    ]);
+  });
+
+  it("does not process goals for error monetization notifications", async () => {
+    const goalCalls: string[] = [];
+    const effects = new DisplayQueueEffects({
+      config: {
+        ttsEnabled: false,
+        obs: { ttsTxt: "tts" },
+        handcam: handcamConfig(false),
+      },
+      sourcesManager: {
+        clearTextSource: async () => {},
+        updateTextSource: async () => {},
+      },
+      obsManager: { call: async () => ({}) },
+      goalsManager: {
+        processDonationGoal: async () => {
+          goalCalls.push("donation");
+        },
+        processPaypiggyGoal: async () => {
+          goalCalls.push("paypiggy");
+        },
+      },
+      delay: async () => {},
+      handleDisplayQueueError: () => {},
+      extractUsername,
+    });
+
+    for (const type of ["platform:gift", "platform:paypiggy", "platform:giftpaypiggy"]) {
+      await effects.handleNotificationEffects({
+        type,
+        platform: "youtube",
+        data: { isError: true, errorMessage: "parse failed" },
+      });
+    }
+
+    expect(goalCalls).toEqual([]);
   });
 
   it("skips VFX and continues TTS when sequential VFX match build fails", async () => {
@@ -159,7 +244,7 @@ describe("DisplayQueueEffects", () => {
         },
       },
       obsManager: { call: async () => ({}) },
-      goalsManager: { processDonationGoal: async () => {} },
+      goalsManager: createNoopGoalsManager(),
       eventBus: { emit: (_event: string, payload: Record<string, unknown>) => emittedVfx.push(payload) },
       delay: async () => {},
       handleDisplayQueueError: () => {},
@@ -198,7 +283,7 @@ describe("DisplayQueueEffects", () => {
         },
       },
       obsManager: { call: async () => ({}) },
-      goalsManager: { processDonationGoal: async () => {} },
+      goalsManager: createNoopGoalsManager(),
       eventBus: {
         emit: (event: string, payload: Record<string, unknown>) => emittedVfx.push({ event, payload }),
       },
@@ -236,7 +321,7 @@ describe("DisplayQueueEffects", () => {
         updateTextSource: async () => {},
       },
       obsManager: { call: async () => ({}) },
-      goalsManager: { processDonationGoal: async () => {} },
+      goalsManager: createNoopGoalsManager(),
       eventBus: {
         emit: (eventName: string, payload: Record<string, unknown>) =>
           emittedEvents.push({ eventName, payload }),
@@ -300,7 +385,7 @@ describe("DisplayQueueEffects", () => {
         updateTextSource: async () => {},
       },
       obsManager: { call: async () => ({}) },
-      goalsManager: { processDonationGoal: async () => {} },
+      goalsManager: createNoopGoalsManager(),
       eventBus: { emit: () => {} },
       delay: async () => {},
       handleDisplayQueueError: () => {},
@@ -348,7 +433,7 @@ describe("DisplayQueueEffects", () => {
         updateTextSource: async () => {},
       },
       obsManager: { call: async () => ({}) },
-      goalsManager: { processDonationGoal: async () => {} },
+      goalsManager: createNoopGoalsManager(),
       eventBus: {
         emit: (eventName: string, payload: Record<string, unknown>) =>
           emittedEvents.push({ eventName, payload }),
@@ -409,7 +494,7 @@ describe("DisplayQueueEffects", () => {
           return {};
         },
       },
-      goalsManager: { processDonationGoal: async () => {} },
+      goalsManager: createNoopGoalsManager(),
       eventBus: { emit: () => {} },
       delay: async () => {},
       handleDisplayQueueError: () => {},
@@ -462,7 +547,7 @@ describe("DisplayQueueEffects", () => {
         updateTextSource: async () => {},
       },
       obsManager: { call: async () => ({}) },
-      goalsManager: { processDonationGoal: async () => {} },
+      goalsManager: createNoopGoalsManager(),
       eventBus: { emit: () => {} },
       delay: async () => {},
       handleDisplayQueueError: () => {},
@@ -528,7 +613,7 @@ describe("DisplayQueueEffects", () => {
         updateTextSource: async () => {},
       },
       obsManager: { call: async () => ({}) },
-      goalsManager: { processDonationGoal: async () => {} },
+      goalsManager: createNoopGoalsManager(),
       eventBus,
       delay: async () => {},
       handleDisplayQueueError: () => {},
@@ -579,7 +664,7 @@ describe("DisplayQueueEffects", () => {
         updateTextSource: async () => {},
       },
       obsManager: { call: async () => ({}) },
-      goalsManager: { processDonationGoal: async () => {} },
+      goalsManager: createNoopGoalsManager(),
       eventBus,
       delay: async () => {},
       handleDisplayQueueError: () => {},
@@ -618,7 +703,7 @@ describe("DisplayQueueEffects", () => {
         updateTextSource: async () => {},
       },
       obsManager: { call: async () => ({}) },
-      goalsManager: { processDonationGoal: async () => {} },
+      goalsManager: createNoopGoalsManager(),
       eventBus,
       delay: async () => {},
       handleDisplayQueueError: () => {},
@@ -667,7 +752,7 @@ describe("DisplayQueueEffects", () => {
         updateTextSource: async () => {},
       },
       obsManager: { call: async () => ({}) },
-      goalsManager: { processDonationGoal: async () => {} },
+      goalsManager: createNoopGoalsManager(),
       eventBus,
       delay: async () => {},
       handleDisplayQueueError: () => {},

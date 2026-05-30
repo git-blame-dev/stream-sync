@@ -124,14 +124,14 @@ describe("DisplayQueue gift flow (smoke E2E)", () => {
       },
     };
 
-    const goalCalls: Array<{ platform: string; amount: number }> = [];
+    const goalCalls: Array<{ platform: string; amount: number; currency: string | undefined }> = [];
     const goalsManager: GoalsManagerFixture = {
       initializeGoalDisplay: async () => {},
       updateAllGoalDisplays: async () => {},
       updateGoalDisplay: async () => {},
-      processDonationGoal: async (platform: unknown, amount: number) => {
+      processDonationGoal: async (platform: unknown, amount: number, currency?: string) => {
         if (typeof platform === "string") {
-          goalCalls.push({ platform, amount });
+          goalCalls.push({ platform, amount, currency });
         }
         return { success: typeof platform === "string" };
       },
@@ -205,7 +205,7 @@ describe("DisplayQueue gift flow (smoke E2E)", () => {
     await queue.processQueue();
 
     expect(queue.queue).toHaveLength(0);
-    expect(goalCalls).toEqual([{ platform: "tiktok", amount: 100 }]);
+    expect(goalCalls).toEqual([{ platform: "tiktok", amount: 100, currency: "coins" }]);
     expect(vfxEvents).toHaveLength(1);
     expect(vfxEvents[0]).toEqual(
       expect.objectContaining({

@@ -22,8 +22,8 @@ type MockSourcesManager = {
 };
 type MockGoalTracker = {
   initializeGoalTracker: TestMockFn<[], Promise<void>>;
-  addDonationToGoal: TestMockFn<[platform: string, amount: number], Promise<GoalResult>>;
-  addPaypiggyToGoal: TestMockFn<[platform: string], Promise<GoalResult>>;
+  addDonationToGoal: TestMockFn<[platform: string, amount: number, currency?: string], Promise<GoalResult>>;
+  addPaypiggyToGoal: TestMockFn<[platform: string, count?: number], Promise<GoalResult>>;
   getGoalState: TestMockFn<[platform: string], GoalState | null>;
   getAllGoalStates: TestMockFn<[], Record<string, GoalState | null>>;
 };
@@ -79,14 +79,14 @@ describe("OBS Goals Module Characterization Tests", () => {
 
     mockGoalTracker = {
       initializeGoalTracker: createMockFn<[], Promise<void>>().mockResolvedValue(),
-      addDonationToGoal: createMockFn<[string, number], Promise<GoalResult>>().mockResolvedValue({
+      addDonationToGoal: createMockFn<[string, number, string?], Promise<GoalResult>>().mockResolvedValue({
         success: true,
         formatted: "500/1000 coins",
         current: 500,
         target: 1000,
         percentage: 50,
       }),
-      addPaypiggyToGoal: createMockFn<[string], Promise<GoalResult>>().mockResolvedValue({
+      addPaypiggyToGoal: createMockFn<[string, number?], Promise<GoalResult>>().mockResolvedValue({
         success: true,
         formatted: "550/1000 coins",
         current: 550,
@@ -327,12 +327,13 @@ test(
 
         updateTextSource.mockResolvedValue();
 
-        const result = await goalsModule.processDonationGoal("tiktok", 100);
+        const result = await goalsModule.processDonationGoal("tiktok", 100, "coins");
 
-      const [sourceName, goalText] = firstTextUpdate();
-      expect(sourceName).toBe("tiktok goal txt");
-      expect(goalText).toBe("500/1000 coins");
-      expect(result.success).toBe(true);
+        expect(mockGoalTracker.addDonationToGoal).toHaveBeenCalledWith("tiktok", 100, "coins");
+        const [sourceName, goalText] = firstTextUpdate();
+        expect(sourceName).toBe("tiktok goal txt");
+        expect(goalText).toBe("500/1000 coins");
+        expect(result.success).toBe(true);
       },
       TEST_TIMEOUTS.FAST,
     );
@@ -354,12 +355,13 @@ test(
 
         updateTextSource.mockResolvedValue();
 
-        const result = await goalsModule.processPaypiggyGoal("tiktok");
+        const result = await goalsModule.processPaypiggyGoal("tiktok", 5);
 
-      const [sourceName, goalText] = firstTextUpdate();
-      expect(sourceName).toBe("tiktok goal txt");
-      expect(goalText).toBe("500/1000 coins");
-      expect(result.success).toBe(true);
+        expect(mockGoalTracker.addPaypiggyToGoal).toHaveBeenCalledWith("tiktok", 5);
+        const [sourceName, goalText] = firstTextUpdate();
+        expect(sourceName).toBe("tiktok goal txt");
+        expect(goalText).toBe("500/1000 coins");
+        expect(result.success).toBe(true);
       },
       TEST_TIMEOUTS.FAST,
     );
