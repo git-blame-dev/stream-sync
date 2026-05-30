@@ -278,6 +278,31 @@ describe("ConfigValidator._normalizeTwitchSection()", () => {
       }
     }
   });
+
+  it("does not expose twitch clientId as a config.ini schema field", () => {
+    const twitchSchema = CONFIG_SCHEMA.twitch;
+    expect(twitchSchema).toBeDefined();
+    if (twitchSchema === undefined) {
+      throw new Error("Expected twitch config schema to be defined");
+    }
+    expect(twitchSchema.clientId).toBeUndefined();
+
+    const originalTwitchClientId = process.env.TWITCH_CLIENT_ID;
+    try {
+      process.env.TWITCH_CLIENT_ID = "schema-env-client-id";
+      const result = ConfigValidator._normalizeTwitchSection({
+        clientId: "legacy-config-client-id",
+      });
+
+      expect(result.clientId).toBe("schema-env-client-id");
+    } finally {
+      if (originalTwitchClientId === undefined) {
+        delete process.env.TWITCH_CLIENT_ID;
+      } else {
+        process.env.TWITCH_CLIENT_ID = originalTwitchClientId;
+      }
+    }
+  });
 });
 
 describe("ConfigValidator._normalizeYoutubeSection()", () => {
@@ -402,6 +427,56 @@ describe("ConfigValidator._normalizeSpamSection()", () => {
     expect(result.lowValueThreshold).toBe(10);
     expect(result.detectionWindow).toBe(5);
     expect(result.maxIndividualNotifications).toBe(2);
+  });
+
+  it("falls back for non-positive and fractional spam bounds", () => {
+    const result = ConfigValidator._normalizeSpamSection({
+      lowValueThreshold: "0",
+      detectionWindow: "0",
+      maxIndividualNotifications: "2.5",
+      tiktokLowValueThreshold: "-1",
+      twitchLowValueThreshold: "0",
+      youtubeLowValueThreshold: "-0.5",
+    });
+
+    expect(result.lowValueThreshold).toBe(10);
+    expect(result.detectionWindow).toBe(5);
+    expect(result.maxIndividualNotifications).toBe(2);
+    expect(result.tiktokLowValueThreshold).toBeNull();
+    expect(result.twitchLowValueThreshold).toBeNull();
+    expect(result.youtubeLowValueThreshold).toBe(1);
+  });
+
+  it("accepts positive decimal thresholds and integer windows", () => {
+    const result = ConfigValidator._normalizeSpamSection({
+      lowValueThreshold: "0.5",
+      detectionWindow: "3",
+      maxIndividualNotifications: "4",
+      tiktokLowValueThreshold: "0.25",
+      twitchLowValueThreshold: "1.5",
+      youtubeLowValueThreshold: "0.75",
+    });
+
+    expect(result.lowValueThreshold).toBe(0.5);
+    expect(result.detectionWindow).toBe(3);
+    expect(result.maxIndividualNotifications).toBe(4);
+    expect(result.tiktokLowValueThreshold).toBe(0.25);
+    expect(result.twitchLowValueThreshold).toBe(1.5);
+    expect(result.youtubeLowValueThreshold).toBe(0.75);
+  });
+
+  it("applies spam numeric bounds through schema normalization", () => {
+    const result = ConfigValidator.normalizeFromSchema("spam", {
+      lowValueThreshold: "0",
+      detectionWindow: "2.5",
+      maxIndividualNotifications: "0",
+      youtubeLowValueThreshold: "0",
+    });
+
+    expect(result.lowValueThreshold).toBe(10);
+    expect(result.detectionWindow).toBe(5);
+    expect(result.maxIndividualNotifications).toBe(2);
+    expect(result.youtubeLowValueThreshold).toBe(1);
   });
 });
 

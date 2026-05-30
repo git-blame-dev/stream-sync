@@ -121,6 +121,7 @@ class ConfigValidator {
             defaultValue: DEFAULTS[section][field],
             ...(spec.min === undefined ? {} : { min: spec.min }),
             ...(spec.max === undefined ? {} : { max: spec.max }),
+            ...(spec.allowZero === undefined ? {} : { allowZero: spec.allowZero }),
             requireInteger: spec.integer === true
         });
     }
@@ -156,6 +157,7 @@ class ConfigValidator {
                     defaultValue,
                     ...(spec.min === undefined ? {} : { min: spec.min }),
                     ...(spec.max === undefined ? {} : { max: spec.max }),
+                    ...(spec.allowZero === undefined ? {} : { allowZero: spec.allowZero }),
                     requireInteger: spec.integer === true
                 });
             case 'string':
@@ -406,15 +408,15 @@ class ConfigValidator {
     static _normalizeSpamSection(raw: RawConfigSection): NormalizedConfigSection {
         return {
             enabled: ConfigValidator.parseBoolean(raw.enabled, DEFAULTS.spam.enabled),
-            lowValueThreshold: ConfigValidator.parseNumber(raw.lowValueThreshold, { defaultValue: DEFAULTS.spam.lowValueThreshold }),
-            detectionWindow: ConfigValidator.parseNumber(raw.detectionWindow, { defaultValue: DEFAULTS.spam.detectionWindow }),
-            maxIndividualNotifications: ConfigValidator.parseNumber(raw.maxIndividualNotifications, { defaultValue: DEFAULTS.spam.maxIndividualNotifications }),
+            lowValueThreshold: ConfigValidator.parseNumber(raw.lowValueThreshold, { defaultValue: DEFAULTS.spam.lowValueThreshold, min: 0, allowZero: false }),
+            detectionWindow: ConfigValidator.parseNumber(raw.detectionWindow, { defaultValue: DEFAULTS.spam.detectionWindow, min: 1, requireInteger: true }),
+            maxIndividualNotifications: ConfigValidator.parseNumber(raw.maxIndividualNotifications, { defaultValue: DEFAULTS.spam.maxIndividualNotifications, min: 1, requireInteger: true }),
             tiktokEnabled: ConfigValidator.parseBoolean(raw.tiktokEnabled, DEFAULTS.spam.tiktokEnabled),
-            tiktokLowValueThreshold: ConfigValidator.parseNumber(raw.tiktokLowValueThreshold, { defaultValue: DEFAULTS.spam.tiktokLowValueThreshold }),
+            tiktokLowValueThreshold: ConfigValidator.parseNumber(raw.tiktokLowValueThreshold, { defaultValue: DEFAULTS.spam.tiktokLowValueThreshold, min: 0, allowZero: false }),
             twitchEnabled: ConfigValidator.parseBoolean(raw.twitchEnabled, DEFAULTS.spam.twitchEnabled),
-            twitchLowValueThreshold: ConfigValidator.parseNumber(raw.twitchLowValueThreshold, { defaultValue: DEFAULTS.spam.twitchLowValueThreshold }),
+            twitchLowValueThreshold: ConfigValidator.parseNumber(raw.twitchLowValueThreshold, { defaultValue: DEFAULTS.spam.twitchLowValueThreshold, min: 0, allowZero: false }),
             youtubeEnabled: ConfigValidator.parseBoolean(raw.youtubeEnabled, DEFAULTS.spam.youtubeEnabled),
-            youtubeLowValueThreshold: ConfigValidator.parseNumber(raw.youtubeLowValueThreshold, { defaultValue: DEFAULTS.spam.youtubeLowValueThreshold })
+            youtubeLowValueThreshold: ConfigValidator.parseNumber(raw.youtubeLowValueThreshold, { defaultValue: DEFAULTS.spam.youtubeLowValueThreshold, min: 0, allowZero: false })
         };
     }
 

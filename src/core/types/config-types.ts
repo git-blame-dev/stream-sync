@@ -11,6 +11,7 @@ export interface ConfigFieldSpec {
     enum?: readonly string[];
     min?: number;
     max?: number;
+    allowZero?: boolean;
     integer?: boolean;
 }
 

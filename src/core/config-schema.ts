@@ -61,7 +61,6 @@ const CONFIG_SCHEMA: ConfigSchema = {
     twitch: {
         enabled: { type: 'boolean', default: false },
         username: { type: 'string', requiredWhenEnabled: true, default: '' },
-        clientId: { type: 'string', default: '' },
         channel: { type: 'string', requiredWhenEnabled: true, default: '' },
         viewerCountEnabled: { type: 'boolean', default: true },
         viewerCountSource: { type: 'string', userDefined: true },
@@ -108,15 +107,15 @@ const CONFIG_SCHEMA: ConfigSchema = {
 
     spam: {
         enabled: { type: 'boolean', default: true },
-        lowValueThreshold: { type: 'number', default: 10 },
-        detectionWindow: { type: 'number', default: 5 },
-        maxIndividualNotifications: { type: 'number', default: 2 },
+        lowValueThreshold: { type: 'number', default: 10, min: 0, allowZero: false },
+        detectionWindow: { type: 'number', default: 5, min: 1, integer: true },
+        maxIndividualNotifications: { type: 'number', default: 2, min: 1, integer: true },
         tiktokEnabled: { type: 'boolean', default: true },
-        tiktokLowValueThreshold: { type: 'number', userDefined: true },
+        tiktokLowValueThreshold: { type: 'number', userDefined: true, min: 0, allowZero: false },
         twitchEnabled: { type: 'boolean', default: true },
-        twitchLowValueThreshold: { type: 'number', userDefined: true },
+        twitchLowValueThreshold: { type: 'number', userDefined: true, min: 0, allowZero: false },
         youtubeEnabled: { type: 'boolean', default: false },
-        youtubeLowValueThreshold: { type: 'number', default: 1.00 }
+        youtubeLowValueThreshold: { type: 'number', default: 1.00, min: 0, allowZero: false }
     },
 
     displayQueue: {
