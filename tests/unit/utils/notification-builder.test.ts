@@ -70,6 +70,49 @@ describe("NotificationBuilder", () => {
     expect(notification.vfxConfig?.command).toBe("!money");
   });
 
+  test("stores the same normalized currency used for rendered notification copy", () => {
+    const dollarNotification = expectNotification(
+      NotificationBuilder.build({
+        platform: "youtube",
+        type: "platform:gift",
+        username: "Donor",
+        userId: "donor-1",
+        giftType: "Super Chat",
+        giftCount: 1,
+        amount: 5,
+        currency: "$",
+      }),
+    );
+    const lowercaseFiatNotification = expectNotification(
+      NotificationBuilder.build({
+        platform: "youtube",
+        type: "platform:gift",
+        username: "Donor",
+        userId: "donor-1",
+        giftType: "Super Sticker",
+        giftCount: 1,
+        amount: 2,
+        currency: "usd",
+      }),
+    );
+    const virtualCurrencyNotification = expectNotification(
+      NotificationBuilder.build({
+        platform: "tiktok",
+        type: "platform:gift",
+        username: "Gifter",
+        userId: "gifter-1",
+        giftType: "Rose",
+        giftCount: 1,
+        amount: 1,
+        currency: "coins",
+      }),
+    );
+
+    expect(dollarNotification.currency).toBe("USD");
+    expect(lowercaseFiatNotification.currency).toBe("USD");
+    expect(virtualCurrencyNotification.currency).toBe("coins");
+  });
+
   test("handles missing/invalid input gracefully", () => {
     const result1 = NotificationBuilder.build(null);
     const result2 = NotificationBuilder.build({});

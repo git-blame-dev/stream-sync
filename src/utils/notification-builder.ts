@@ -244,7 +244,11 @@ class NotificationBuilder {
             }
         }
         if (effectiveInput.amount !== undefined) notification.amount = effectiveInput.amount;
-        if (currency !== undefined) notification.currency = currency;
+        if (!isError && effectiveInput.currency !== undefined) {
+            notification.currency = effectiveInput.currency;
+        } else if (currency !== undefined) {
+            notification.currency = currency;
+        }
         if (vfxConfig !== undefined) notification.vfxConfig = vfxConfig;
         // Include any extra fields (e.g., tier, details) - optimized for performance
         // Use direct property access instead of Object.keys() for better performance
