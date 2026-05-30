@@ -14,6 +14,7 @@ import { noOpLogger } from "../helpers/mock-factories";
 import { PlatformEvents } from "../../src/interfaces/PlatformEvents";
 import { createConfigFixture } from "../helpers/config-fixture";
 import { waitFor } from "../helpers/event-driven-testing";
+import type { DisplayQueueDependency, DisplayQueueItem } from "../../src/interfaces/DisplayQueue";
 
 type EventBusHandler = (payload: unknown) => void | Promise<void>;
 type EventBus = {
@@ -32,9 +33,8 @@ type MonetizationPayload = Record<string, unknown> & {
   id: string;
   timestamp: string;
 };
-type DisplayQueueItem = {
+type MonetizationQueueItem = DisplayQueueItem & {
   type: MonetizationType;
-  platform: string;
   data: Record<string, unknown>;
 };
 type RecordedVfxEvent = {
@@ -54,7 +54,13 @@ type DisplayQueueObsManager = {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
 
-const requireDisplayQueueItem = (value: unknown): DisplayQueueItem => {
+const isMonetizationType = (value: unknown): value is MonetizationType =>
+  value === "platform:giftpaypiggy" ||
+  value === "platform:gift" ||
+  value === "platform:paypiggy" ||
+  value === "platform:envelope";
+
+const requireDisplayQueueItem = (value: unknown): DisplayQueueAddItem => {
   expect(isRecord(value)).toBe(true);
   if (!isRecord(value)) {
     throw new Error("Expected queued display item");
@@ -69,11 +75,16 @@ const requireDisplayQueueItem = (value: unknown): DisplayQueueItem => {
   ) {
     throw new Error("Queued display item has invalid shape");
   }
-  return {
-    type: value.type as MonetizationType,
-    platform: value.platform,
-    data: value.data,
-  };
+  return value as DisplayQueueAddItem;
+};
+
+const requireMonetizationQueueItem = (value: unknown): MonetizationQueueItem => {
+  const item = requireDisplayQueueItem(value);
+  expect(isMonetizationType(item.type)).toBe(true);
+  if (!isMonetizationType(item.type)) {
+    throw new Error("Expected monetization display item");
+  }
+  return item as MonetizationQueueItem;
 };
 
 const requireRecordedVfxEvent = (value: unknown): RecordedVfxEvent => {
@@ -172,7 +183,7 @@ describe("Monetisation pipeline integration", () => {
 
     displayQueue.processQueue = createMockFn(async () => {
       while (displayQueue.queue.length > 0) {
-        const item = requireDisplayQueueItem(displayQueue.queue.shift());
+        const item = requireMonetizationQueueItem(displayQueue.queue.shift());
         const commandKey =
           typeof item.data.commandKey === "string"
             ? item.data.commandKey
@@ -216,11 +227,11 @@ describe("Monetisation pipeline integration", () => {
       constants,
       obsGoals: { processDonationGoal: createMockFn() },
       displayQueue: {
-        addItem: (item: Record<string, unknown>) => {
+        addItem: (item: DisplayQueueItem) => {
           displayQueue.addItem(requireDisplayQueueItem(item));
         },
         getQueueLength: () => displayQueue.queue.length,
-      },
+      } satisfies DisplayQueueDependency,
       eventBus,
       config,
       vfxCommandService,

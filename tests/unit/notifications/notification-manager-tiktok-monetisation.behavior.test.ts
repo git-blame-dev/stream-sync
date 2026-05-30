@@ -9,19 +9,12 @@ import { createConfigFixture } from "../../helpers/config-fixture";
 
 import { EventEmitter } from "node:events";
 import NotificationManager from "../../../src/notifications/NotificationManager";
+import { PRIORITY_LEVELS } from "../../../src/core/constants";
+import type { DisplayQueueDependency, DisplayQueueItem } from "../../../src/interfaces/DisplayQueue";
 
-type DisplayQueueMock = {
-  addItem: TestMockFn<[Record<string, unknown>], void>;
+type DisplayQueueMock = DisplayQueueDependency & {
+  addItem: TestMockFn<[DisplayQueueItem], void>;
   getQueueLength: TestMockFn<[], number>;
-};
-
-type NotificationManagerLike = {
-  handleNotification: (
-    type: string,
-    platform: string,
-    data: Record<string, unknown>,
-  ) => Promise<unknown>;
-  PRIORITY_LEVELS: Record<string, number>;
 };
 
 describe("NotificationManager TikTok monetisation behavior", () => {
@@ -30,7 +23,7 @@ describe("NotificationManager TikTok monetisation behavior", () => {
   });
 
   let displayQueue: DisplayQueueMock;
-  let notificationManager: NotificationManagerLike;
+  let notificationManager: NotificationManager;
   let config: ReturnType<typeof createConfigFixture>;
 
   const baseDependencies = () => ({
@@ -48,7 +41,7 @@ describe("NotificationManager TikTok monetisation behavior", () => {
 
   beforeEach(() => {
     displayQueue = {
-      addItem: createMockFn<[Record<string, unknown>], void>(),
+      addItem: createMockFn<[DisplayQueueItem], void>(),
       getQueueLength: createMockFn<[], number>().mockReturnValue(0),
     };
     config = createConfigFixture({
@@ -85,7 +78,7 @@ describe("NotificationManager TikTok monetisation behavior", () => {
     const item = getQueuedItem();
     expect(item.type).toBe("platform:paypiggy");
     expect(item.platform).toBe("tiktok");
-    expect(item.priority).toBe(notificationManager.PRIORITY_LEVELS.PAYPIGGY);
+    expect(item.priority).toBe(PRIORITY_LEVELS.PAYPIGGY);
     expect(item.data).toEqual(expect.objectContaining({ username: "SuperFan" }));
   });
 
@@ -103,7 +96,7 @@ describe("NotificationManager TikTok monetisation behavior", () => {
     const item = getQueuedItem();
     expect(item.type).toBe("platform:gift");
     expect(item.platform).toBe("tiktok");
-    expect(item.priority).toBe(notificationManager.PRIORITY_LEVELS.GIFT);
+    expect(item.priority).toBe(PRIORITY_LEVELS.GIFT);
     expect(item.data).toEqual(expect.objectContaining({ username: "CoinHero" }));
   });
 
