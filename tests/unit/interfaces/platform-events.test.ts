@@ -336,59 +336,8 @@ describe('Platform Events Interface', () => {
             });
         });
 
-        it('should normalize gift data consistently across platforms', () => {
-            const rawGifts = {
-                tiktok: { 
-                    type: 'platform:gift',
-                    id: 'tt-gift-event-1',
-                    giftType: 'rose',
-                    giftCount: 1,
-                    amount: 50,
-                    currency: 'coins',
-                    username: 'Gifter',
-                    userId: 'tt-gift-1',
-                    timestamp: 1234567890000
-                },
-                twitch: {
-                    type: 'platform:gift',
-                    id: 'tw-gift-event-1',
-                    giftType: 'bits',
-                    giftCount: 1,
-                    amount: 100,
-                    currency: 'bits',
-                    username: 'Cheerer',
-                    userId: 'tw-bits-1',
-                    message: 'Take my bits!',
-                    timestamp: 1234567890001
-                },
-                youtube: {
-                    type: 'platform:gift',
-                    id: 'yt-gift-event-1',
-                    giftType: 'Super Chat',
-                    giftCount: 1,
-                    amount: 5,
-                    currency: 'USD',
-                    username: 'Donator',
-                    userId: 'yt-dono-1',
-                    message: 'Great stream!',
-                    timestamp: 1234567890002
-                }
-            };
-
-            Object.entries(rawGifts).forEach(([platform, rawGift]) => {
-                const normalizedGift = PlatformEvents.normalizeGift(platform, rawGift);
-                
-                expect(normalizedGift).toHaveProperty('id');
-                expect(normalizedGift).toHaveProperty('giftType');
-                expect(normalizedGift).toHaveProperty('giftCount');
-                expect(normalizedGift).toHaveProperty('amount');
-                expect(normalizedGift).toHaveProperty('currency');
-                expect(normalizedGift).toHaveProperty('username');
-                expect(normalizedGift).toHaveProperty('userId');
-                expect(normalizedGift).toHaveProperty('platform', platform);
-                expect(typeof normalizedGift.amount).toBe('number');
-                expect(normalizedGift.amount).toBeGreaterThan(0);
-            });
+        it('does not expose a stale generic gift normalizer on PlatformEvents', () => {
+            expect('normalizeGift' in PlatformEvents).toBe(false);
         });
     });
 

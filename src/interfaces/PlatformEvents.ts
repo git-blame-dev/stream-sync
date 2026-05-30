@@ -143,20 +143,6 @@ interface EnhancedNormalizedMessage extends Record<string, unknown> {
     metadata?: unknown;
 }
 
-interface EnhancedNormalizedGift extends Record<string, unknown> {
-    platform: string;
-    original: Record<string, unknown>;
-    id: string;
-    giftType: string;
-    giftCount: number;
-    amount: number;
-    currency: string;
-    username: string;
-    userId: string;
-    avatarUrl: string;
-    message?: unknown;
-}
-
 interface EventBuilderRecord extends Record<string, unknown> {
     id: string;
     correlationId: string;
@@ -856,7 +842,25 @@ class PlatformEventBuilder {
             throw new Error('Missing required gift timestamp');
         }
 
-        return {
+        let timestamp: Date;
+        if (data.timestamp instanceof Date) {
+            timestamp = data.timestamp;
+        } else if (typeof data.timestamp === 'number') {
+            timestamp = new Date(data.timestamp);
+        } else if (typeof data.timestamp === 'string') {
+            const numericTimestamp = Number(data.timestamp);
+            timestamp = Number.isFinite(numericTimestamp)
+                ? new Date(numericTimestamp)
+                : new Date(data.timestamp);
+        } else {
+            throw new Error('Invalid gift timestamp');
+        }
+
+        if (Number.isNaN(timestamp.getTime())) {
+            throw new Error('Invalid gift timestamp');
+        }
+
+        const normalizedGift: GiftEventRecord = {
             type: 'platform:gift',
             platform,
             username: data.username,
@@ -867,8 +871,15 @@ class PlatformEventBuilder {
             giftCount: data.giftCount,
             amount: data.amount,
             currency: data.currency,
-            timestamp: data.timestamp
+            timestamp: timestamp.toISOString()
         };
+
+        const validation = this.validator.validate(normalizedGift);
+        if (!validation.valid) {
+            throw new Error(`Invalid event: ${validation.errors.join(', ')}`);
+        }
+
+        return normalizedGift;
     }
     
     normalizeFollow(platform: string, data: Record<string, unknown>) {
@@ -1113,57 +1124,6 @@ class EnhancedPlatformEvents {
         }
 
         return normalizedMessage;
-    }
-
-    static normalizeGift(platform: string, rawGift: Record<string, unknown>) {
-        if (!isRecord(rawGift)) {
-            throw new Error('Gift payload must be an object');
-        }
-
-        const normalizedIdentity = this.normalizeIdentity(platform, rawGift);
-
-        if (!rawGift.type || typeof rawGift.type !== 'string') {
-            throw new Error('Missing required gift type');
-        }
-
-        if (!rawGift.giftType || typeof rawGift.giftType !== 'string') {
-            throw new Error('Missing required gift type');
-        }
-
-        if (!rawGift.id || typeof rawGift.id !== 'string') {
-            throw new Error('Missing required gift id');
-        }
-
-        if (typeof rawGift.giftCount !== 'number') {
-            throw new Error('Missing required gift count');
-        }
-
-        if (typeof rawGift.amount !== 'number') {
-            throw new Error('Missing required gift amount');
-        }
-
-        if (!rawGift.currency || typeof rawGift.currency !== 'string') {
-            throw new Error('Missing required gift currency');
-        }
-
-        const normalizedGift: EnhancedNormalizedGift = {
-            platform: this._validatePlatform(platform),
-            original: rawGift,
-            id: rawGift.id,
-            giftType: rawGift.giftType,
-            giftCount: rawGift.giftCount,
-            amount: rawGift.amount,
-            currency: rawGift.currency,
-            username: normalizedIdentity.username,
-            userId: normalizedIdentity.userId,
-            avatarUrl: normalizedIdentity.avatarUrl
-        };
-
-        if (rawGift.message !== undefined) {
-            normalizedGift.message = rawGift.message;
-        }
-
-        return normalizedGift;
     }
 
     static validateChatMessageEvent(event: unknown): boolean {
@@ -1485,7 +1445,6 @@ const CombinedPlatformEvents = Object.assign({}, PlatformEvents, {
     createErrorEvent: EnhancedPlatformEvents.createErrorEvent.bind(EnhancedPlatformEvents),
     normalizeIdentity: EnhancedPlatformEvents.normalizeIdentity.bind(EnhancedPlatformEvents),
     normalizeMessage: EnhancedPlatformEvents.normalizeMessage.bind(EnhancedPlatformEvents),
-    normalizeGift: EnhancedPlatformEvents.normalizeGift.bind(EnhancedPlatformEvents),
     validateChatMessageEvent: EnhancedPlatformEvents.validateChatMessageEvent.bind(EnhancedPlatformEvents),
     validateNotificationEvent: EnhancedPlatformEvents.validateNotificationEvent.bind(EnhancedPlatformEvents),
     validateConnectionEvent: EnhancedPlatformEvents.validateConnectionEvent.bind(EnhancedPlatformEvents),

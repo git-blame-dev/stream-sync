@@ -490,6 +490,8 @@ describe('Platform Event Interface Design', () => {
             const youtubeEvent = builder.normalizeGift('youtube', youtubeSuperchat);
             expect(tiktokEvent.type).toBe('platform:gift');
             expect(youtubeEvent.type).toBe('platform:gift');
+            expect(tiktokEvent.timestamp).toBe(new Date(1234567890000).toISOString());
+            expect(youtubeEvent.timestamp).toBe(new Date(1234567890001).toISOString());
             expect(tiktokEvent.id).toBe('tt-gift-evt-1');
             expect(youtubeEvent.id).toBe('yt-superchat-evt-1');
             
@@ -501,6 +503,22 @@ describe('Platform Event Interface Design', () => {
             
             expect(typeof tiktokEvent.amount).toBe('number');
             expect(typeof youtubeEvent.amount).toBe('number');
+            const eventValidator = new PlatformEventValidator();
+            expect(eventValidator.validate(tiktokEvent)).toEqual({ valid: true, errors: [] });
+            expect(eventValidator.validate(youtubeEvent)).toEqual({ valid: true, errors: [] });
+        });
+
+        it('should reject gift normalization with unsupported timestamp types', () => {
+            expect(() => builder.normalizeGift('tiktok', {
+                username: 'gifter123',
+                userId: 'tt-gift-1',
+                id: 'tt-gift-evt-1',
+                giftType: 'rose',
+                giftCount: 1,
+                amount: 1,
+                currency: 'coins',
+                timestamp: { invalid: true }
+            })).toThrow('Invalid gift timestamp');
         });
         
         it('should normalize follow events from different platforms', () => {
