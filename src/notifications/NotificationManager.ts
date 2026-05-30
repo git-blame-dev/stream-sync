@@ -4,6 +4,7 @@ import { EventEmitter } from 'node:events';
 import { NotificationBuilder } from '../utils/notification-builder';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 import { getAnonymousUsername } from '../utils/validation';
+import { hasNotificationPriorityMapping, resolvePriorityForType } from '../core/notification-priority';
 import { createSyntheticGiftFromAggregated } from './aggregated-donation-transformer';
 import { NotificationGate } from './notification-gate';
 import { NotificationInputValidator } from './notification-input-validator';
@@ -212,27 +213,12 @@ class NotificationManager extends EventEmitter {
         if (config && typeof config.priority === 'number') {
             return config.priority;
         }
-        
-        // Map notification types to priority levels for backward compatibility
-        const priorityMap: Record<string, string> = {
-            'platform:follow': 'FOLLOW',
-            'platform:gift': 'GIFT',
-            'platform:envelope': 'ENVELOPE',
-            'platform:paypiggy': 'PAYPIGGY',
-            'platform:raid': 'RAID',
-            'platform:share': 'SHARE',
-            'platform:giftpaypiggy': 'GIFTPAYPIGGY',
-            'command': 'COMMAND',
-            'greeting': 'GREETING',
-            'farewell': 'FAREWELL',
-            'platform:chat-message': 'CHAT'
-        };
-        
-        if (!Object.prototype.hasOwnProperty.call(priorityMap, notificationType)) {
+
+        if (!hasNotificationPriorityMapping(notificationType)) {
             throw new Error(`Missing priority mapping for ${notificationType}`);
         }
-        const priorityKey = priorityMap[notificationType];
-        const priority = priorityKey ? this.PRIORITY_LEVELS[priorityKey] : undefined;
+
+        const priority = resolvePriorityForType(notificationType, this.PRIORITY_LEVELS);
         if (typeof priority !== 'number') {
             throw new Error(`Missing priority level for ${notificationType}`);
         }

@@ -4,7 +4,7 @@ import { PRIORITY_LEVELS } from '../../../src/core/constants';
 import { DisplayQueue } from '../../../src/obs/display-queue';
 import { createMockOBSManager } from '../../helpers/mock-factories';
 
-describe('DisplayQueue share priority mapping', () => {
+describe('DisplayQueue priority mapping', () => {
     let displayQueue: DisplayQueue;
 
     beforeEach(() => {
@@ -16,8 +16,18 @@ describe('DisplayQueue share priority mapping', () => {
         displayQueue = new DisplayQueue(obsManager, { autoProcess: false }, constants, null, {});
     });
 
-    test('share notifications use SHARE priority level', () => {
-        const priority = displayQueue.getTypePriority('platform:share');
-        expect(priority).toBe(PRIORITY_LEVELS.SHARE);
+    test('mapped display item types use expected priority levels', () => {
+        const expectedPriorities = {
+            'platform:share': PRIORITY_LEVELS.SHARE,
+            'platform:paypiggy': PRIORITY_LEVELS.PAYPIGGY,
+            'platform:giftpaypiggy': PRIORITY_LEVELS.GIFTPAYPIGGY,
+            'platform:envelope': PRIORITY_LEVELS.ENVELOPE,
+            'platform:chat-message': PRIORITY_LEVELS.CHAT,
+            chat: PRIORITY_LEVELS.CHAT
+        };
+
+        for (const [type, expectedPriority] of Object.entries(expectedPriorities)) {
+            expect(displayQueue.getTypePriority(type)).toBe(expectedPriority);
+        }
     });
 });

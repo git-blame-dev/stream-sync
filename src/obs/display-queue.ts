@@ -1,5 +1,6 @@
 import { logger } from '../core/logging';
 import { PRIORITY_LEVELS, NOTIFICATION_CONFIGS } from '../core/constants';
+import { resolvePriorityForType } from '../core/notification-priority';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 import MessageTTSHandler from '../utils/message-tts-handler';
 import { safeSetTimeout, safeDelay } from '../utils/timeout-validator';
@@ -261,21 +262,7 @@ class DisplayQueue {
         }
 
         const priorityLevels = this.constants.PRIORITY_LEVELS;
-        const typeToPriorityMap = {
-            'platform:paypiggy': priorityLevels.PAYPIGGY,
-            'platform:gift': priorityLevels.GIFT,
-            'platform:follow': priorityLevels.FOLLOW,
-            'greeting': priorityLevels.GREETING,
-            'farewell': priorityLevels.FAREWELL,
-            'platform:raid': priorityLevels.RAID,
-            'platform:share': priorityLevels.SHARE,
-            'platform:envelope': priorityLevels.ENVELOPE,
-            'platform:giftpaypiggy': priorityLevels.GIFTPAYPIGGY,
-            'chat': priorityLevels.CHAT,
-            'command': priorityLevels.COMMAND
-        };
-
-        return typeToPriorityMap[type as keyof typeof typeToPriorityMap] || priorityLevels.CHAT;
+        return resolvePriorityForType(type, priorityLevels) ?? priorityLevels.CHAT;
     }
     
     addItem(item: QueueItem) {

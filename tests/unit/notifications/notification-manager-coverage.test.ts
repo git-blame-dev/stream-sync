@@ -273,11 +273,42 @@ describe("NotificationManager coverage", () => {
       expect(priority).toBe(PRIORITY_LEVELS.GIFT);
     });
 
+    it("returns mapped priorities for canonical notification priority types", () => {
+      const deps = createDeps();
+      const manager = new NotificationManager(deps);
+      const expectedPriorities = {
+        "platform:follow": PRIORITY_LEVELS.FOLLOW,
+        "platform:gift": PRIORITY_LEVELS.GIFT,
+        "platform:envelope": PRIORITY_LEVELS.ENVELOPE,
+        "platform:paypiggy": PRIORITY_LEVELS.PAYPIGGY,
+        "platform:raid": PRIORITY_LEVELS.RAID,
+        "platform:share": PRIORITY_LEVELS.SHARE,
+        "platform:giftpaypiggy": PRIORITY_LEVELS.GIFTPAYPIGGY,
+        "platform:chat-message": PRIORITY_LEVELS.CHAT,
+        command: PRIORITY_LEVELS.COMMAND,
+        greeting: PRIORITY_LEVELS.GREETING,
+        farewell: PRIORITY_LEVELS.FAREWELL,
+      };
+
+      for (const [notificationType, expectedPriority] of Object.entries(expectedPriorities)) {
+        expect(manager.getPriorityForType(notificationType, {})).toBe(expectedPriority);
+      }
+    });
+
     it("throws for unknown notification type", () => {
       const deps = createDeps();
       const manager = new NotificationManager(deps);
 
       expect(() => manager.getPriorityForType("unknown:type", {})).toThrow(
+        "Missing priority mapping",
+      );
+    });
+
+    it("throws for display-only chat priority aliases", () => {
+      const deps = createDeps();
+      const manager = new NotificationManager(deps);
+
+      expect(() => manager.getPriorityForType("chat", {})).toThrow(
         "Missing priority mapping",
       );
     });
