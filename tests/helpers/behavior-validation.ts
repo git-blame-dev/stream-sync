@@ -192,9 +192,7 @@ const isNotificationType = (type: string): type is NotificationType => {
     return ['platform:gift', 'platform:follow', 'platform:paypiggy', 'platform:raid', 'platform:envelope'].includes(type);
 };
 
-// ================================================================================================
 // USER WORKFLOW VALIDATION
-// ================================================================================================
 
 const validateUserGiftFlow = async (platform: GiftPlatform, giftData: unknown): Promise<UserGiftFlowResult> => {
     const result: UserGiftFlowResult = {
@@ -431,9 +429,7 @@ const validateCrossPlatformBehavior = async (platforms: Record<string, EventPlat
     return result;
 };
 
-// ================================================================================================
 // CONTENT VALIDATION UTILITIES
-// ================================================================================================
 
 const validateUserVisibleContent = (content: unknown): void => {
     if (typeof content !== 'string') {
@@ -506,9 +502,7 @@ const validateNotificationData = (notificationData: unknown): void => {
     }
 };
 
-// ================================================================================================
 // PERFORMANCE AND QUALITY ASSESSMENT
-// ================================================================================================
 
 const assessWorkflowQuality = (validationResult: WorkflowValidationResult): WorkflowQualityAssessment => {
     const assessment: WorkflowQualityAssessment = {
@@ -572,9 +566,7 @@ const assessWorkflowQuality = (validationResult: WorkflowValidationResult): Work
     return assessment;
 };
 
-// ================================================================================================
 // Behavior-focused validation patterns
-// ================================================================================================
 
 const expectValidDisplayedNotifications = (displayedNotifications: unknown, expectedBehavior: DisplayedNotificationExpectations = {}): void => {
     if (!Array.isArray(displayedNotifications)) {
@@ -868,9 +860,7 @@ const expectErrorRecoveryBehavior = async (
     return result;
 };
 
-// ================================================================================================
 // HELPER FUNCTIONS FOR TESTS
-// ================================================================================================
 
 const expectValidNotification = <Notification>(notification: Notification): Notification => {
     expect(notification).toBeDefined();
@@ -933,9 +923,7 @@ const expectValidUserFeedback = (feedback?: unknown): string => {
     return feedback;
 };
 
-// ================================================================================================
 // EXPORTS
-// ================================================================================================
 
 export {
     // User Workflow Validation

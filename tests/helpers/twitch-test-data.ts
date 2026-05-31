@@ -1,7 +1,5 @@
 
-// ================================================================================================
 // CORE TWITCH EVENT BUILDERS
-// ================================================================================================
 
 const BASE_TIMESTAMP_MS = Date.parse('2024-01-01T00:00:00.000Z');
 let sequence = 0;
@@ -223,9 +221,7 @@ const createTwitchEventSubChatMessageEvent = (overrides = {}) => {
     return mergeDeep(defaultEvent, overrides);
 };
 
-// ================================================================================================
 // UTILITY FUNCTIONS
-// ================================================================================================
 
 const generateRandomHexColor = (seed?: number) => {
     const value = typeof seed === 'number' ? seed : nextSequence();
@@ -265,9 +261,7 @@ const isObject = (item: unknown): item is UnknownRecord => {
     return !!item && typeof item === 'object' && !Array.isArray(item);
 };
 
-// ================================================================================================
 // EXPORTS
-// ================================================================================================
 
 export {
     // Core event builders

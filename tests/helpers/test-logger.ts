@@ -1,7 +1,5 @@
 
-// ================================================================================================
 // LOG LEVEL DEFINITIONS
-// ================================================================================================
 
 import { expect } from 'bun:test';
 
@@ -74,9 +72,7 @@ function getLogLevelName(level: number): string {
     return LOG_LEVEL_NAMES[level as keyof typeof LOG_LEVEL_NAMES] ?? String(level);
 }
 
-// ================================================================================================
 // LOG ENTRY STRUCTURE
-// ================================================================================================
 
 class LogEntry {
     level: number;
@@ -119,9 +115,7 @@ class LogEntry {
     }
 }
 
-// ================================================================================================
 // TEST LOGGER CLASS
-// ================================================================================================
 
 class TestLogger {
     options: TestLoggerOptions;
@@ -367,9 +361,7 @@ class TestLogger {
     }
 }
 
-// ================================================================================================
 // FACTORY FUNCTIONS
-// ================================================================================================
 
 const createTestLogger = (options: Partial<TestLoggerOptions> = {}): TestLogger => {
     return new TestLogger(options);
@@ -400,9 +392,7 @@ const createPerformanceLogger = (): TestLogger => {
     });
 };
 
-// ================================================================================================
 // ASSERTION HELPERS
-// ================================================================================================
 
 const assertNoErrors = (logger: TestLogger, message = 'No errors should be logged'): void => {
     expect(logger.hasErrors()).toBe(false);
@@ -434,9 +424,7 @@ const assertEntryCount = (logger: TestLogger, count: number, levelName: string |
     expect(entries.length).toBe(count);
 };
 
-// ================================================================================================
 // EXPORTS
-// ================================================================================================
 
 export {
     TestLogger,

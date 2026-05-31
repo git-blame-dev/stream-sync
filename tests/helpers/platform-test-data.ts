@@ -40,9 +40,7 @@ const nextSequence = () => {
 const timestampFromSeed = (seed: number, offsetMs = 0) => BASE_TIMESTAMP_MS + (seed * 1000) + offsetMs;
 const pickByIndex = <T>(values: readonly T[], index: number): T => values[index % values.length] as T;
 
-// ================================================================================================
 // INTERNATIONAL TEST DATA
-// ================================================================================================
 
 const INTERNATIONAL_USERNAMES = {
     // East Asian Scripts
@@ -164,9 +162,7 @@ const PHASE_5B_INTERNATIONAL_TEST_DATA = {
     }
 };
 
-// ================================================================================================
 // EDGE CASE AMOUNTS AND VALUES
-// ================================================================================================
 
 const EDGE_CASE_AMOUNTS = {
     // Boundary values
@@ -199,9 +195,7 @@ const EDGE_CASE_AMOUNTS = {
     commonAmounts: [0.99, 1.99, 4.99, 9.99, 19.99, 49.99, 99.99]
 };
 
-// ================================================================================================
 // BOUNDARY CONDITIONS
-// ================================================================================================
 
 const BOUNDARY_CONDITIONS = {
     // Length boundaries
@@ -260,9 +254,7 @@ function createDeepObject(depth: number): DeepTestRecord {
     return { level: depth, nested: createDeepObject(depth - 1) };
 }
 
-// ================================================================================================
 // SPECIAL CHARACTER SETS
-// ================================================================================================
 
 const SPECIAL_CHARACTERS = {
     // Basic symbols
@@ -296,9 +288,7 @@ const SPECIAL_CHARACTERS = {
     braille: '⠀⠁⠂⠃⠄⠅⠆⠇⠈⠉⠊⠋⠌⠍⠎⠏'
 };
 
-// ================================================================================================
 // EMOJI COLLECTIONS
-// ================================================================================================
 
 const EMOJI_SETS = {
     // Basic faces
@@ -332,9 +322,7 @@ const EMOJI_SETS = {
     modern: '🥺👉👈💅✨😌🔥💯📈📉🚀🌙⚡💎🎭🎪'
 };
 
-// ================================================================================================
 // SCENARIO BUILDERS
-// ================================================================================================
 
 const createMultiPlatformEventScenario = (platforms: string[] = ['youtube', 'twitch', 'tiktok'], eventCount = 10) => {
     const events: ScenarioEvent[] = [];
@@ -765,9 +753,7 @@ const createBoundaryTestSuite = (platform = 'youtube') => {
     };
 };
 
-// ================================================================================================
 // UTILITY FUNCTIONS
-// ================================================================================================
 
 const detectLanguage = (username: string) => {
     if (/[\u4e00-\u9fff]/.test(username)) return 'zh';
@@ -797,9 +783,7 @@ const isRightToLeft = (text: string) => {
     return /[\u0590-\u05ff\u0600-\u06ff\u0750-\u077f\u08a0-\u08ff\ufb50-\ufdff\ufe70-\ufeff]/.test(text);
 };
 
-// ================================================================================================
 // FIXTURE LOADING UTILITIES
-// ================================================================================================
 
 const FIXED_TIMESTAMP_MS = BASE_TIMESTAMP_MS;
 const FIXED_TIMESTAMP_USEC = '1700000000000000';
@@ -1643,9 +1627,7 @@ function loadPlatformFixture(platform: string, eventType: string) {
     return getSyntheticFixture(platform, eventType);
 }
 
-// ================================================================================================
 // EXPORTS
-// ================================================================================================
 
 export {
     // Core data collections

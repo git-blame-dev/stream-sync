@@ -178,9 +178,7 @@ const requireGiftFields = (payload: unknown): void => {
     requireNonEmptyString(giftPayload.currency, 'currency');
 };
 
-// ================================================================================================
 // USER DATA NORMALIZATION HELPERS
-// ================================================================================================
 
 const normalizeUserData = (userData: unknown) => {
     const userRecord = requireRecord(userData, 'userData');
@@ -211,9 +209,7 @@ const normalizeUserData = (userData: unknown) => {
     };
 };
 
-// ================================================================================================
 // NOTIFICATION SYSTEM MOCK FACTORIES
-// ================================================================================================
 
 const createMockNotificationDispatcher = (methodOverrides: UnknownRecord = {}) => {
     const baseMethods = {
@@ -452,9 +448,7 @@ const createMockNotificationManager = (overrides: UnknownRecord = {}) => {
     };
 };
 
-// ================================================================================================
 // PLATFORM SERVICE MOCK FACTORIES
-// ================================================================================================
 
 const createMockYouTubeServices = (configOverrides: UnknownRecord = {}) => {
     const defaultConfig = {
@@ -644,9 +638,7 @@ const createMockTwitchServices = (configOverrides: UnknownRecord = {}) => {
     };
 };
 
-// ================================================================================================
 // INFRASTRUCTURE MOCK FACTORIES
-// ================================================================================================
 
 const createMockOBSManager = (connectionState = 'connected', overrides = {}) => {
     const isConnected = connectionState === 'connected';
@@ -996,9 +988,7 @@ const createMockDisplayQueue = (queueState: DisplayQueueState = {}, methodOverri
     };
 };
 
-// ================================================================================================
 // MOCK LIFECYCLE MANAGEMENT
-// ================================================================================================
 
 const resetMock = (mockObject: unknown) => {
     const mockRecord = asRecord(mockObject);
@@ -1046,9 +1036,7 @@ const validateMockAPI = (mockObject: unknown, expectedMethods: string[] = []) =>
     return true;
 };
 
-// ================================================================================================
 // BEHAVIOR-FOCUSED PLATFORM-SPECIFIC FACTORIES (PHASE 4A)
-// ================================================================================================
 
 const createMockYouTubePlatform = (behaviorConfig: UnknownRecord = {}) => {
     const defaultBehavior = {
@@ -1280,9 +1268,7 @@ const createMockTikTokPlatform = (behaviorConfig: UnknownRecord = {}) => {
     };
 };
 
-// ================================================================================================
 // Behavior-focused scenario builders
-// ================================================================================================
 
 const createUserGiftScenario = (scenarioConfig: Partial<UserGiftScenarioState> = {}) => {
     const scenario: UserGiftScenarioState = {
@@ -1518,9 +1504,7 @@ const createInvalidEventBuilder = () => {
     };
 };
 
-// ================================================================================================
 // EXPORTS
-// ================================================================================================
 
 const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord = {}) => {
     const methodOverrides: MockMethodMap = {};
@@ -2766,9 +2750,7 @@ const createMockPlatformConnection = (handlerOverrides: UnknownRecord = {}) => {
     };
 };
 
-// ================================================================================================
 // Authentication system factories
-// ================================================================================================
 
 const createMockAuthService = (options: AuthFactoryOptions = {}) => {
     return {
@@ -3124,9 +3106,7 @@ const createMockHttpClient = (options: AuthFactoryOptions = {}) => {
     };
 };
 
-// ================================================================================================
 // E2E WEBSOCKET MESSAGE GENERATORS - For comprehensive E2E testing
-// ================================================================================================
 
 function createMockWebSocketMessage(platform: 'twitch', eventType: string, eventData?: UnknownRecord): TwitchWebSocketMessage;
 function createMockWebSocketMessage(platform: 'youtube', eventType: string, eventData?: UnknownRecord): YouTubeWebSocketMessage;

@@ -1,7 +1,5 @@
 
-// ================================================================================================
 // HELPER FUNCTIONS
-// ================================================================================================
 
 const BASE_TIMESTAMP_MS = Date.parse('2024-01-01T00:00:00.000Z');
 let sequence = 0;
@@ -32,9 +30,7 @@ type YouTubeSuperChatEventOverrides = DeepMergeObject & {
     currency?: string;
 };
 
-// ================================================================================================
 // CORE YOUTUBE EVENT BUILDERS
-// ================================================================================================
 
 const createYouTubeChatEvent = (
     messageTypeOrOverrides: string | YouTubeChatEventOverrides = 'text',
@@ -256,9 +252,7 @@ const createYouTubeRunsMessageChatItem = (overrides: DeepMergeObject = {}) => {
     return mergeDeep(defaultEvent, overrides);
 };
 
-// ================================================================================================
 // UTILITY FUNCTIONS
-// ================================================================================================
 
 const mergeDeep = <Target extends DeepMergeObject, Source extends DeepMergeObject>(target: Target, source: Source): Target & Source => {
     const output: DeepMergeObject = Object.assign({}, target);
@@ -284,9 +278,7 @@ const isObject = (item: unknown): item is DeepMergeObject => {
     return !!item && typeof item === 'object' && !Array.isArray(item);
 };
 
-// ================================================================================================
 // EXPORTS
-// ================================================================================================
 
 export {
     // Core event builders

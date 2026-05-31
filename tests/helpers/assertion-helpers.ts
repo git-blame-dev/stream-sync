@@ -1,7 +1,5 @@
 
-// ================================================================================================
 // NOTIFICATION ASSERTION HELPERS
-// ================================================================================================
 
 import { isMockFunction, type TestMockFn } from './bun-mock-utils';
 import testClock from './test-clock';
@@ -410,9 +408,7 @@ const expectNotificationSequence = (notifications: unknown[], expectedOrder: Not
     }
 };
 
-// ================================================================================================
 // PLATFORM-SPECIFIC ASSERTION HELPERS
-// ================================================================================================
 
 const expectYouTubeEventProcessing = (eventData: unknown, expectedOutcome: YouTubeExpectedOutcome): void => {
     const eventRecord = requireRecord(eventData, 'YouTube event');
@@ -695,9 +691,7 @@ const expectOBSIntegration = (obsCommands: unknown[], expectedSceneChanges: Part
     });
 };
 
-// ================================================================================================
 // MOCK INTERACTION ASSERTION HELPERS
-// ================================================================================================
 
 const expectOnlyMethodCalled = (mockObject: unknown, methodName: string, expectedArgs?: unknown[]): void => {
     const mockRecord = requireRecord(mockObject, 'Mock object') as MockFactoryObject;
@@ -850,9 +844,7 @@ const expectMockCallPattern = (mockObject: unknown, pattern: MockCallPattern): v
     });
 };
 
-// ================================================================================================
 // DATA STRUCTURE VALIDATION HELPERS
-// ================================================================================================
 
 const expectPlatformEventStructure = (event: unknown, platform: PlatformName | string, eventType: PlatformEventType): void => {
     const eventRecord = requireRecord(event, 'Platform event');
@@ -1028,13 +1020,9 @@ const expectValidStreamData = (streamData: unknown): void => {
     }
 };
 
-// ================================================================================================
 // CONTENT QUALITY VALIDATION HELPERS
-// ================================================================================================
 
-// ================================================================================================
 // PHASE 5B: INTERNATIONAL CONTENT VALIDATION HELPERS
-// ================================================================================================
 
 const expectInternationalContentSupport = (content: unknown, testData: unknown): void => {
     if (typeof content !== 'string') {
@@ -1451,9 +1439,7 @@ const expectCrossPlatformContentConsistency = (platformContents: Record<string, 
     }
 };
 
-// ================================================================================================
 // PHASE 4A: ENHANCED DOMAIN-SPECIFIC ASSERTIONS
-// ================================================================================================
 
 const expectValidGiftNotification = (notification: unknown, expectedData: GiftNotificationExpectations = {}): void => {
     if (!notification || typeof notification !== 'object') {
@@ -1755,13 +1741,9 @@ const validateGeneralCurrencyFormat = (amount: number, currency: string): void =
     }
 };
 
-// ================================================================================================
 // EXPORTS
-// ================================================================================================
 
-// ================================================================================================
 // Authentication consistency assertions
-// ================================================================================================
 
 const expectConsistentValidation = (validationResults: unknown[]): void => {
     if (!Array.isArray(validationResults) || validationResults.length < 2) {
@@ -1966,9 +1948,7 @@ const expectUnifiedErrorHandling = (errorResults: unknown[]): void => {
     });
 };
 
-// ================================================================================================
 // HTTP REQUEST PATTERNS CONSISTENCY ASSERTIONS
-// ================================================================================================
 
 const expectConsistentHttpBehavior = (httpBehaviors: unknown[]): void => {
     if (!Array.isArray(httpBehaviors) || httpBehaviors.length < 2) {

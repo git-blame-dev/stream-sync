@@ -150,9 +150,7 @@ const createMockReuseKey = <TMock extends object>(cacheKey: string): MockReuseKe
     return cacheKey as MockReuseKey<TMock>;
 };
 
-// ================================================================================================
 // MOCK LIFECYCLE MANAGER
-// ================================================================================================
 
 class MockLifecycleManager {
     private activeMocks: Map<string, MockLifecycleEntry>;
@@ -369,15 +367,11 @@ class MockLifecycleManager {
     }
 }
 
-// ================================================================================================
 // GLOBAL LIFECYCLE MANAGER INSTANCE
-// ================================================================================================
 
 const globalLifecycleManager = new MockLifecycleManager();
 
-// ================================================================================================
 // AUTOMATED CLEANUP HOOKS
-// ================================================================================================
 
 const setupAutomatedCleanup = (options: AutomatedCleanupOptions = {}): CleanupHooks => {
     const defaultOptions: ResolvedAutomatedCleanupOptions = {
@@ -419,9 +413,7 @@ const setupAutomatedCleanup = (options: AutomatedCleanupOptions = {}): CleanupHo
     };
 };
 
-// ================================================================================================
 // CONVENIENT FACTORY INTEGRATION
-// ================================================================================================
 
 const withLifecycleManagement = <Args extends unknown[], TMock extends object>(
     factoryFunction: (...args: Args) => TMock,
@@ -444,9 +436,7 @@ const createManagedMock = <TMock extends object>(mockObject: TMock, options: Lif
     return globalLifecycleManager.registerMock(mockId, mockObject, options);
 };
 
-// ================================================================================================
 // MOCK ISOLATION UTILITIES
-// ================================================================================================
 
 const checkMockIsolation = (mocksToCheck: object[]): IsolationResult => {
     const issues: string[] = [];
@@ -519,9 +509,7 @@ function withMockIsolation(
     };
 }
 
-// ================================================================================================
 // PERFORMANCE OPTIMIZATION
-// ================================================================================================
 
 class MockReuseCache {
     private cache: Map<string, object>;
@@ -601,9 +589,7 @@ class MockReuseCache {
 
 const globalMockCache = new MockReuseCache();
 
-// ================================================================================================
 // EXPORTS
-// ================================================================================================
 
 export {
     type LifecycleOptions,

@@ -1,6 +1,4 @@
-// ================================================================================================
 // API CONTRACT DEFINITIONS
-// ================================================================================================
 
 import { expect } from 'bun:test';
 
@@ -213,9 +211,7 @@ const isApiContractName = (contractName: string): contractName is ApiContractNam
     return contractName in API_CONTRACTS;
 };
 
-// ================================================================================================
 // VALIDATION FUNCTIONS
-// ================================================================================================
 
 const validateMockContract = (mockObject: unknown, contractName: string): MockContractValidation => {
     if (!isApiContractName(contractName)) {
@@ -355,9 +351,7 @@ const hasNestedProperty = (obj: unknown, path: string): boolean => {
     return current !== null && current !== undefined;
 };
 
-// ================================================================================================
 // BATCH VALIDATION FUNCTIONS
-// ================================================================================================
 
 const validateMockSuite = (mockSpecs: MockSpec[]): MockSuiteValidation => {
     const results: MockSuiteResult[] = mockSpecs.map((spec) => ({
@@ -406,9 +400,7 @@ const generateValidationSummary = (validationResults: MockSuiteResult[]): string
     return summary;
 };
 
-// ================================================================================================
 // AUTOMATED VALIDATION HELPERS
-// ================================================================================================
 
 const toMatchContract = function (mockObject: unknown, contractName: string): MatcherResult {
     const result = validateMockContract(mockObject, contractName);
@@ -435,9 +427,7 @@ const setupMockValidation = () => {
     globalThis.validatePlatformEvent = validatePlatformEventData;
 };
 
-// ================================================================================================
 // CONTINUOUS VALIDATION SYSTEM
-// ================================================================================================
 
 class MockContractMonitor {
     private registeredMocks: Map<string, MockSpec>;
@@ -474,9 +464,7 @@ class MockContractMonitor {
     }
 }
 
-// ================================================================================================
 // EXPORTS
-// ================================================================================================
 
 export {
     type MockContractValidation,

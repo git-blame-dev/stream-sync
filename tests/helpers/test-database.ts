@@ -114,9 +114,7 @@ const getErrorMessage = (error: unknown): string => {
     return error instanceof Error ? error.message : String(error);
 };
 
-// ================================================================================================
 // TEST DATA STORAGE
-// ================================================================================================
 
 class TestDataStore {
     private data: Map<TestDataKey, unknown>;
@@ -198,9 +196,7 @@ class TestDataStore {
     }
 }
 
-// ================================================================================================
 // TEST STATE MANAGEMENT
-// ================================================================================================
 
 class TestStateManager {
     currentTest: string | null;
@@ -303,9 +299,7 @@ class TestStateManager {
     }
 }
 
-// ================================================================================================
 // TEST ENVIRONMENT SETUP
-// ================================================================================================
 
 class TestEnvironment {
     dataStore: TestDataStore;
@@ -399,9 +393,7 @@ class TestEnvironment {
     }
 }
 
-// ================================================================================================
 // UTILITY FUNCTIONS
-// ================================================================================================
 
 function createTestDataFactory<Type extends keyof TestDataFactories>(type: Type, options?: Record<string, unknown>): TestDataFactories[Type];
 function createTestDataFactory(type: string, options?: Record<string, unknown>): (overrides?: Record<string, unknown>) => Record<string, unknown>;
@@ -486,9 +478,7 @@ const createMockTimer = (startTime = testClock.now()) => {
     };
 };
 
-// ================================================================================================
 // EXPORTS
-// ================================================================================================
 
 export {
     TestDataStore,

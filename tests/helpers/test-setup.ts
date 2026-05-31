@@ -544,9 +544,7 @@ const loadPlatformFixture = (platform: string, eventType: string) => {
     return loadSyntheticFixture(platform, eventType);
 };
 
-// ================================================================================================
 // PHASE 4A: ENHANCED LIFECYCLE MANAGEMENT
-// ================================================================================================
 
 const setupAutomatedCleanup = (options: Partial<CleanupOptions> = {}): AutomatedCleanup => {
     const defaultOptions = {

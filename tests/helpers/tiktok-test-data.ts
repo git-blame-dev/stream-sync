@@ -1,7 +1,5 @@
 
-// ================================================================================================
 // CORE TIKTOK EVENT BUILDERS
-// ================================================================================================
 
 const BASE_TIMESTAMP_MS = 1700000000000;
 const BASE_USER_ID = 7000000000000000;
@@ -232,9 +230,7 @@ const createTikTokConnectionEvent = (connectionState = 'connected', overrides = 
     return mergeDeep(baseEvent, overrides);
 };
 
-// ================================================================================================
 // BATCH EVENT BUILDERS
-// ================================================================================================
 
 const createTikTokGiftEventBatch = (count = 5, baseConfig: TestRecord & { userId?: string | number } = {}) => {
     const events: Array<ReturnType<typeof createTikTokGiftEvent>> = [];
@@ -325,9 +321,7 @@ const createTikTokChatConversation = (messages: string[], usernames = ['User1', 
     return events;
 };
 
-// ================================================================================================
 // UTILITY FUNCTIONS
-// ================================================================================================
 
 const mergeDeep = <Target extends TestRecord, Source extends TestRecord>(target: Target, source: Source) => {
     const output: TestRecord = Object.assign({}, target);
@@ -352,9 +346,7 @@ const isObject = (item: unknown): item is TestRecord => {
     return !!item && typeof item === 'object' && !Array.isArray(item);
 };
 
-// ================================================================================================
 // EXPORTS
-// ================================================================================================
 
 export {
     // Core event builders
