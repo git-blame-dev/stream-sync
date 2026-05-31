@@ -131,7 +131,7 @@ describe("ChatFileLoggingService - Behavior-Focused Regression Tests", () => {
     });
   });
 
-  describe("Service Extraction Compatibility", () => {
+  describe("Raw Payload Logging Contract", () => {
     it("maintains NDJSON wrapper for raw payloads", async () => {
       const giftData = {
         giftType: "Rose",

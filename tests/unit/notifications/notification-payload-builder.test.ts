@@ -28,7 +28,7 @@ describe("NotificationPayloadBuilder", () => {
       isBits: true,
       message: "hello",
       metadata: { origin: "custom" },
-      sourceType: "legacy",
+      sourceType: "test-source",
     };
 
     const result = payloadBuilder.buildPayload({
@@ -41,9 +41,9 @@ describe("NotificationPayloadBuilder", () => {
 
     expect(result.notificationData.metadata).toEqual({
       origin: "custom",
-      sourceType: "legacy",
+      sourceType: "test-source",
     });
-    expect(result.notificationData.sourceType).toBe("legacy");
+    expect(result.notificationData.sourceType).toBe("test-source");
     expect(result.notificationData.type).toBe("platform:follow");
   });
 
@@ -58,7 +58,7 @@ describe("NotificationPayloadBuilder", () => {
       amount: 100,
       currency: "coins",
       metadata: { origin: "custom" },
-      sourceType: "legacy",
+      sourceType: "test-source",
     };
 
     const result = payloadBuilder.buildPayload({
@@ -70,7 +70,7 @@ describe("NotificationPayloadBuilder", () => {
     });
 
     expect(result.notificationData.metadata).toBeUndefined();
-    expect(result.notificationData.sourceType).toBe("legacy");
+    expect(result.notificationData.sourceType).toBe("test-source");
   });
 
   it("overwrites notification type with the canonical type", () => {

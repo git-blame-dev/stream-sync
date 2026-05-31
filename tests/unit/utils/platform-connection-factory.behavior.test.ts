@@ -184,7 +184,7 @@ describe("platform-connection-factory behavior", () => {
     expect(() => new PlatformConnectionFactory(loggerWithOnlyDebug)).toThrow(/logger|info|warn|error/i);
   });
 
-  test("creates YouTube connection with compatibility methods", async () => {
+  test("creates YouTube connection with the shared connection interface", async () => {
     const factory = new PlatformConnectionFactory(noOpLogger);
     const connection = factory.createConnection(
       "youtube",

@@ -268,7 +268,7 @@ describe("handcam-glow", () => {
     expect(obs.call).not.toHaveBeenCalled();
   });
 
-  it("preserves named exports through the commonjs compatibility wrapper", () => {
+  it("preserves named exports through the module namespace", () => {
     expect(handcamGlowCompatModule.triggerHandcamGlow).toBe(triggerHandcamGlow);
     expect(handcamGlowCompatModule.initializeHandcamGlow).toBe(
       initializeHandcamGlow,

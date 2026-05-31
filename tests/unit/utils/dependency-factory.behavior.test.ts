@@ -84,7 +84,7 @@ describe("DependencyFactory behavior", () => {
     });
   });
 
-  describe("Strictness migration behavior", () => {
+  describe("Dependency strictness behavior", () => {
     it("lazily creates and caches Innertube for youtubei stream detection", async () => {
       const getChannel = createMockFn<
         [string],

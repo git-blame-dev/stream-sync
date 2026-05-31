@@ -20,7 +20,7 @@ type RouterOverrides = {
 
 initializeTestLogging();
 
-describe("Old Message Filter", () => {
+describe("Connection-Time Message Filter", () => {
   afterEach(() => {
     restoreAllMocks();
   });

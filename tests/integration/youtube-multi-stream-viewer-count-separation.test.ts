@@ -353,7 +353,7 @@ describe("YouTube Multi-Stream Viewer Count Separation", () => {
     });
   });
 
-  describe("Consistent Platform Interface (TikTok/Twitch Compatibility)", () => {
+  describe("Consistent Platform Interface Parity", () => {
     test("should provide reliable getViewerCount() like other platforms", async () => {
       const scenario = createMultiStreamScenario([
         {

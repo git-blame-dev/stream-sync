@@ -135,7 +135,7 @@ function findCommonJsModuleSyntax(content: string) {
 }
 
 
-describe('TypeScript toolchain migration gates behavior', () => {
+describe('TypeScript toolchain gates behavior', () => {
     it('keeps this toolchain gates module free of top-level commonjs declarations', () => {
         const content = readFileSync(__filename, 'utf8');
 
@@ -168,7 +168,7 @@ describe('TypeScript toolchain migration gates behavior', () => {
         }
     });
 
-    it('keeps source javascript migration inventory explicit and measurable', () => {
+    it('keeps source javascript inventory explicit and measurable', () => {
         const sourceInventory = collectExecutableJavaScriptInventory(join(repoRoot, 'src'));
 
         expect(sourceInventory.total).toBe(0);
@@ -1363,7 +1363,7 @@ describe('TypeScript toolchain migration gates behavior', () => {
 
     it('keeps unit root core config cohort b tests on TypeScript paths', () => {
         const cohortTsPaths = [
-            'tests/unit/old-message-filter.test.ts',
+            'tests/unit/connection-time-message-filter.test.ts',
             'tests/unit/greeting-system-diagnosis.test.ts',
             'tests/unit/bits-goal-counter-fix.test.ts',
             'tests/unit/tiktok-event-factory-behavior.test.ts',
@@ -1375,7 +1375,7 @@ describe('TypeScript toolchain migration gates behavior', () => {
             'tests/unit/twitch-gift-sub-notification.test.ts'
         ];
         const cohortJsPaths = [
-            'tests/unit/old-message-filter.test.js',
+            'tests/unit/connection-time-message-filter.test.js',
             'tests/unit/greeting-system-diagnosis.test.js',
             'tests/unit/bits-goal-counter-fix.test.js',
             'tests/unit/tiktok-event-factory-behavior.test.js',
@@ -1397,7 +1397,7 @@ describe('TypeScript toolchain migration gates behavior', () => {
 
     it('keeps unit root core config cohort b tests free of untyped mutable declarations', () => {
         const cohortPaths = [
-            'tests/unit/old-message-filter.test.ts',
+            'tests/unit/connection-time-message-filter.test.ts',
             'tests/unit/greeting-system-diagnosis.test.ts',
             'tests/unit/bits-goal-counter-fix.test.ts',
             'tests/unit/tiktok-event-factory-behavior.test.ts',
@@ -2281,7 +2281,7 @@ describe('TypeScript toolchain migration gates behavior', () => {
     it('keeps diagnosis config tiktok cohort tests free of top-level commonjs and transitional exports', () => {
         const testPaths = [
             'tests/unit/greeting-system-diagnosis.test.ts',
-            'tests/unit/old-message-filter.test.ts',
+            'tests/unit/connection-time-message-filter.test.ts',
             'tests/unit/tiktok-event-factory-behavior.test.ts',
             'tests/unit/debug-mode-command-line.test.ts',
             'tests/unit/config-undefined-handling.test.ts',

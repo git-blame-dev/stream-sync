@@ -448,7 +448,7 @@ it("marks first-message state only after greeting enqueue succeeds", async () =>
           isFirstMessage: createMockFn().mockReturnValue(true),
         },
         isFirstMessage: createMockFn<[unknown, Record<string, unknown>], boolean>().mockImplementation(() => {
-          throw new Error("legacy first-message fallback should not be used");
+          throw new Error("runtime first-message fallback should not be used");
         }),
       },
     });
@@ -511,7 +511,7 @@ it("marks first-message state only after greeting enqueue succeeds", async () =>
           isFirstMessage: createMockFn().mockReturnValue(true),
         },
         isFirstMessage: createMockFn<[unknown, Record<string, unknown>], boolean>().mockImplementation(() => {
-          throw new Error("legacy first-message fallback should not be used");
+          throw new Error("runtime first-message fallback should not be used");
         }),
       },
     });

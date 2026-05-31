@@ -372,7 +372,7 @@ describe('assertion-helpers behavior', () => {
         ])).not.toThrow();
         expect(() => expectUnifiedErrorHandling([
             { implementationType: 'delegated_to_central' },
-            { implementationType: 'legacy' }
+            { implementationType: 'local' }
         ])).toThrow('does not use centralized error handling');
 
         const httpBehaviors = [
@@ -438,7 +438,7 @@ describe('assertion-helpers behavior', () => {
         ])).toThrow('Retry pattern inconsistent');
     });
 
-    it('covers additional assertion-helper branch paths for migration parity', () => {
+    it('covers additional assertion-helper branch paths', () => {
         const oldNotification = createGiftNotification({ processedAt: testClock.now() - 1000 });
         expect(() => expectNotificationTiming(oldNotification, { maxAge: 100 })).toThrow('too old');
         expect(() => expectNotificationTiming({ processedAt: 'bad' }, {})).toThrow('numeric processedAt');

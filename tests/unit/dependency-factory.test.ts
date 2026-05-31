@@ -509,7 +509,7 @@ describe("DependencyFactory", () => {
       }).toThrow();
     });
 
-    it("should maintain backward compatibility with existing platform creation", () => {
+    it("should maintain platform dependency creation contracts", () => {
       const twitchAuth = { isReady: createMockFn().mockReturnValue(true) };
       const youtubeDeps = factory.createYoutubeDependencies(
         configFixture.youtube,

@@ -265,8 +265,8 @@ describe('MessageTTSHandler', () => {
         test('should return false for short paypiggy types', () => {
             const notification = {
                 type: 'paypiggy',
-                message: 'Legacy payload',
-                ttsMessage: 'Legacy payload'
+                message: 'Short alias payload',
+                ttsMessage: 'Short alias payload'
             };
 
             expect(MessageTTSHandler.supportsMessages(notification)).toBe(false);

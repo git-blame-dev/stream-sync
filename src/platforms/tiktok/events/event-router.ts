@@ -422,7 +422,7 @@ function setupTikTokEventListeners(platform: TikTokPlatformRouterContract) {
                 : null;
 
             if (platform.connectionTime > 0 && eventTimestampMs !== null && eventTimestampMs < platform.connectionTime) {
-                platform.logger.debug('Filtering historical message (pre-connection)', 'tiktok', {
+                platform.logger.debug('Filtering message sent before connection', 'tiktok', {
                     eventTimestamp: eventTimestampMs,
                     connectionRecordedAt: platform.connectionTime,
                     messageLength: typeof data.comment === 'string' ? data.comment.length : 0

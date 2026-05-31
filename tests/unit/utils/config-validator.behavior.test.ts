@@ -288,7 +288,7 @@ describe("ConfigValidator._normalizeTwitchSection()", () => {
     const originalTwitchClientId = process.env.TWITCH_CLIENT_ID;
     try {
       process.env.TWITCH_CLIENT_ID = "test-env-client-id";
-      const raw = { clientId: "legacy-config-client-id" };
+      const raw = { clientId: "config-file-client-id" };
       const result = ConfigValidator._normalizeTwitchSection(raw);
 
       expect(result.clientId).toBe("test-env-client-id");
@@ -313,7 +313,7 @@ describe("ConfigValidator._normalizeTwitchSection()", () => {
     try {
       process.env.TWITCH_CLIENT_ID = "schema-env-client-id";
       const result = ConfigValidator._normalizeTwitchSection({
-        clientId: "legacy-config-client-id",
+        clientId: "config-file-client-id",
       });
 
       expect(result.clientId).toBe("schema-env-client-id");
@@ -956,7 +956,7 @@ describe("ConfigValidator.validate()", () => {
       config.twitch = {
         enabled: true,
         username: "test-user",
-        clientId: "legacy-config-client-id",
+        clientId: "config-file-client-id",
         channel: "test-channel",
       };
 
@@ -1121,7 +1121,7 @@ describe("ConfigValidator.validateRequiredFields()", () => {
         twitch: {
           enabled: true,
           username: "test-user",
-          clientId: "legacy-config-client-id",
+          clientId: "config-file-client-id",
           channel: "",
         },
       });
@@ -1189,7 +1189,7 @@ describe("ConfigValidator.validateRequiredFields()", () => {
         twitch: {
           enabled: true,
           username: "",
-          clientId: "legacy-config-client-id",
+          clientId: "config-file-client-id",
           channel: "",
         },
         youtube: { enabled: true, username: "" },

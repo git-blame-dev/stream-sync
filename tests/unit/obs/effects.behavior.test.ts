@@ -229,7 +229,7 @@ describe("obs effects behavior", () => {
     expect(second).not.toBe(first);
   });
 
-  it("preserves named exports through the commonjs compatibility wrapper", () => {
+  it("preserves named exports through the module namespace", () => {
     expect(effectsCompatModule.OBSEffectsManager).toBe(OBSEffectsManager);
     expect(effectsCompatModule.getDefaultEffectsManager).toBe(
       getDefaultEffectsManager,

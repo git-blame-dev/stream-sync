@@ -154,8 +154,8 @@ describe("Centralized Endpoints Configuration", () => {
     });
   });
 
-  describe("Backward Compatibility", () => {
-    test("should export individual platform configurations for migration", () => {
+  describe("Public Endpoint Exports", () => {
+    test("should export individual platform configurations", () => {
       expect(TWITCH).toBeDefined();
       expect(YOUTUBE).toBeDefined();
       expect(STREAMELEMENTS).toBeDefined();

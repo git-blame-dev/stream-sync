@@ -15,7 +15,7 @@ type MockPlatformWithViewerCount = ReturnType<typeof createMockPlatform> & {
   initialize: TestMockFn<[], Promise<boolean>>;
 };
 
-const hasLegacyEarlyStartMethod = (system: ViewerCountSystemUnderTest) => {
+const hasSeparateEarlyStartMethod = (system: ViewerCountSystemUnderTest) => {
   const candidate = system as unknown as {
     startViewerCountSystemEarly?: unknown;
   };
@@ -113,7 +113,7 @@ describe("ViewerCount Unified Initialization Behavior", () => {
     test("should not have dual initialization artifacts", async () => {
       const { system } = createViewerCountSystemWithBehaviors();
 
-      const hasEarlyInitMethod = hasLegacyEarlyStartMethod(system);
+      const hasEarlyInitMethod = hasSeparateEarlyStartMethod(system);
       expect(hasEarlyInitMethod).toBe(false);
       expect(typeof system.initialize === "function").toBe(true);
     });
@@ -158,7 +158,7 @@ describe("ViewerCount Unified Initialization Behavior", () => {
       await system.initialize();
 
       const hasStartPolling = typeof system.startPolling === "function";
-      const hasSeparateEarlyPolling = hasLegacyEarlyStartMethod(system);
+      const hasSeparateEarlyPolling = hasSeparateEarlyStartMethod(system);
 
       expect(hasStartPolling).toBe(true);
       expect(hasSeparateEarlyPolling).toBe(false);

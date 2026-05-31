@@ -218,8 +218,8 @@ class StreamElementsPlatform extends EventEmitter {
         this.reconnectTimeout = null;
         this.handlers = this._createDefaultHandlers();
         
-        this.logger.warn('StreamElementsPlatform is deprecated and will be removed in a future version. Use YouTube platform with StreamElements service instead.', 'StreamElements');
-        this.logger.info('To migrate: Move StreamElements config to YouTube platform section and enable streamelements service.', 'StreamElements');
+        this.logger.warn('StreamElementsPlatform is deprecated and will be removed in a future version.', 'StreamElements');
+        this.logger.info('Keep the standalone [streamelements] config only if you still need StreamElements follow events.', 'StreamElements');
         
     }
     async initialize(handlers: StreamElementsHandlers = {}): Promise<boolean> {

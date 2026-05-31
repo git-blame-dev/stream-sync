@@ -187,7 +187,7 @@ class ChatNotificationRouter {
             }
 
             if (this.shouldSkipForConnection(platform, safeNormalizedData.timestamp)) {
-                this._logSkipped(platform, safeNormalizedData.username, 'old message (sent before connection)');
+                this._logSkipped(platform, safeNormalizedData.username, 'message sent before connection');
                 return;
             }
 

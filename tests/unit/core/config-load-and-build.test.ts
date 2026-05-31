@@ -210,7 +210,7 @@ configModule = configModuleRef;
             enabled: 'true',
             username: 'test-user',
             channel: 'test-channel',
-            clientId: 'legacy-config-client-id'
+            clientId: 'config-file-client-id'
         };
         rawConfig.general = {
             ...rawConfig.general,
@@ -233,7 +233,7 @@ configModule = configModuleRef;
             enabled: 'true',
             username: 'test-user',
             channel: 'test-channel',
-            clientId: 'legacy-config-client-id'
+            clientId: 'config-file-client-id'
         };
         rawConfig.general = {
             ...rawConfig.general,
@@ -259,7 +259,7 @@ configModule = configModuleRef;
             enabled: 'true',
             username: 'test-user',
             channel: 'test-channel',
-            clientId: 'legacy-config-client-id'
+            clientId: 'config-file-client-id'
         };
         rawConfig.general = {
             ...rawConfig.general,

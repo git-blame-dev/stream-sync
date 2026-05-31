@@ -308,7 +308,7 @@ describe("TwitchPlatform behavior standards", () => {
     expect(payload.metadata.isPaypiggy).toBe(true);
   });
 
-  it("does not treat legacy subscriber payload flag as paypiggy without badges", async () => {
+  it("does not treat subscriber shortcut payload flag as paypiggy without badges", async () => {
     platform = createPlatform({}, { twitchAuth: createReadyTwitchAuth() });
     const emitted: ChatPayload[] = [];
     platform.on("platform:event", (payload: PlatformEventPayload<ChatPayload>) => {

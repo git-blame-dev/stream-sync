@@ -491,7 +491,7 @@ describe("Text Processing", () => {
       expect(formatted).toContain("Hello world!");
     });
 
-    it("should default to truncation for backward compatibility when truncateUsername not specified", () => {
+    it("should default to truncation when truncateUsername is omitted", () => {
       const longUsername = "verylongusername123";
       const formatted = textProcessing.formatChatMessage(
         "chat",
