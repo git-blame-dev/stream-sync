@@ -90,4 +90,118 @@ describe("DisplayQueue notification TTS disabled", () => {
 
     expect(updateCalls).toEqual([]);
   });
+
+  it("skips notification TTS when ttsNotificationsEnabled is false", async () => {
+    const queueWithNotificationsDisabled = new DisplayQueue(
+      mockOBSManager,
+      {
+        ttsNotificationsEnabled: false,
+        chat: {},
+        notification: {},
+        obs: { ttsTxt: "tts txt", ttsNotificationsEnabled: false },
+        youtube: {},
+      },
+      testRuntimeConstants,
+      new EventEmitter(),
+      mockSourcesManager === undefined ? {} : { sourcesManager: mockSourcesManager },
+    );
+
+    await queueWithNotificationsDisabled.handleNotificationEffects({
+      type: "platform:paypiggy",
+      platform: "youtube",
+      data: {
+        username: "testMember",
+        displayMessage: "Welcome!",
+        ttsMessage: "Hi member",
+      },
+    });
+
+    expect(updateCalls).toEqual([]);
+  });
+
+  it("keeps notification TTS enabled from split config when legacy ttsEnabled is false", async () => {
+    const queueWithNotificationsEnabled = new DisplayQueue(
+      mockOBSManager,
+      {
+        ttsEnabled: false,
+        chat: {},
+        notification: {},
+        obs: { ttsTxt: "tts txt", ttsEnabled: false, ttsNotificationsEnabled: true },
+        youtube: {},
+      },
+      testRuntimeConstants,
+      new EventEmitter(),
+      mockSourcesManager === undefined ? {} : { sourcesManager: mockSourcesManager },
+    );
+
+    await queueWithNotificationsEnabled.handleNotificationEffects({
+      type: "platform:paypiggy",
+      platform: "youtube",
+      data: {
+        username: "testMember",
+        displayMessage: "Welcome!",
+        ttsMessage: "Hi member",
+      },
+    });
+
+    expect(updateCalls).toEqual(["Hi member"]);
+  });
+
+  it("plays chat TTS only after displayed chat and flattens structured messages", async () => {
+    const chatQueue = new DisplayQueue(
+      mockOBSManager,
+      {
+        chat: {},
+        notification: {},
+        obs: { ttsTxt: "tts txt", ttsChatEnabled: true, ttsNotificationsEnabled: true },
+        youtube: {},
+      },
+      testRuntimeConstants,
+      new EventEmitter(),
+      mockSourcesManager === undefined
+        ? { delay: async () => {} }
+        : { sourcesManager: mockSourcesManager, delay: async () => {} },
+    );
+    chatQueue.renderer.displayChatItem = createMockFn().mockResolvedValue(true);
+
+    await chatQueue.displayChatItem({
+      type: "chat",
+      platform: "twitch",
+      data: {
+        username: "chatUser",
+        message: { parts: [{ text: "hello " }, { text: "chat" }] },
+      },
+    });
+
+    expect(updateCalls).toEqual(["chatUser says hello chat"]);
+  });
+
+  it("does not play chat TTS when displayed chat TTS is disabled", async () => {
+    const chatQueue = new DisplayQueue(
+      mockOBSManager,
+      {
+        chat: {},
+        notification: {},
+        obs: { ttsTxt: "tts txt", ttsChatEnabled: false, ttsNotificationsEnabled: true },
+        youtube: {},
+      },
+      testRuntimeConstants,
+      new EventEmitter(),
+      mockSourcesManager === undefined
+        ? { delay: async () => {} }
+        : { sourcesManager: mockSourcesManager, delay: async () => {} },
+    );
+    chatQueue.renderer.displayChatItem = createMockFn().mockResolvedValue(true);
+
+    await chatQueue.displayChatItem({
+      type: "chat",
+      platform: "twitch",
+      data: {
+        username: "chatUser",
+        message: "hello chat",
+      },
+    });
+
+    expect(updateCalls).toEqual([]);
+  });
 });

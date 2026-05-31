@@ -47,8 +47,13 @@ type DisplayQueueEffectsDependencies = {
     } | null;
     config: {
         ttsEnabled?: boolean;
+        ttsChatEnabled?: boolean;
+        ttsNotificationsEnabled?: boolean;
         obs: {
             ttsTxt: string;
+            ttsEnabled?: boolean;
+            ttsChatEnabled?: boolean;
+            ttsNotificationsEnabled?: boolean;
         };
         handcam?: {
             enabled?: boolean;
@@ -189,7 +194,31 @@ class DisplayQueueEffects {
     }
 
     isTTSEnabled() {
-        return this.config.ttsEnabled === true;
+        return this.isNotificationTTSEnabled();
+    }
+
+    isChatTTSEnabled() {
+        return this.config.ttsChatEnabled === true || this.config.obs?.ttsChatEnabled === true;
+    }
+
+    isNotificationTTSEnabled() {
+        if (typeof this.config.ttsNotificationsEnabled === 'boolean') {
+            return this.config.ttsNotificationsEnabled;
+        }
+
+        if (typeof this.config.obs?.ttsNotificationsEnabled === 'boolean') {
+            return this.config.obs.ttsNotificationsEnabled;
+        }
+
+        if (Object.prototype.hasOwnProperty.call(this.config, 'ttsEnabled')) {
+            return this.config.ttsEnabled === true;
+        }
+
+        if (Object.prototype.hasOwnProperty.call(this.config.obs || {}, 'ttsEnabled')) {
+            return this.config.obs?.ttsEnabled === true;
+        }
+
+        return true;
     }
 
     async setTTSText(text: string) {
@@ -215,6 +244,33 @@ class DisplayQueueEffects {
             }
         } catch (error) {
             this.handleDisplayQueueError(`[Display Queue] Error handling notification effects for ${item?.type}`, error, { itemType: item?.type });
+        }
+    }
+
+    async handleChatTTSEffects(item: QueueItem, message: string) {
+        if (!this.isChatTTSEnabled()) {
+            return;
+        }
+
+        try {
+            const username = this.extractUsername(item?.data) || '';
+            const ttsStages = MessageTTSHandler.createTTSStages({
+                ...item.data,
+                type: item.type,
+                username,
+                message,
+                isComment: true
+            });
+
+            for (const stage of ttsStages) {
+                if (stage.delay > 0) {
+                    await this.delay(stage.delay);
+                }
+
+                await this.setTTSText(stage.text);
+            }
+        } catch (error) {
+            this.handleDisplayQueueError('[Display Queue] Error handling chat TTS effects', error, { itemType: item?.type });
         }
     }
 
@@ -325,7 +381,7 @@ class DisplayQueueEffects {
             }));
         }
 
-        if (this.isTTSEnabled()) {
+        if (this.isNotificationTTSEnabled()) {
             for (const stage of ttsStages) {
                 const ttsPromise = (async () => {
                     if (stage.delay > 0) {
@@ -435,7 +491,7 @@ class DisplayQueueEffects {
             }
         }
 
-        if (this.isTTSEnabled()) {
+        if (this.isNotificationTTSEnabled()) {
             for (const stage of ttsStages) {
                 if (stage.delay > 0) {
                     await this.delay(stage.delay);

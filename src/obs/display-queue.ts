@@ -19,6 +19,8 @@ type DisplayQueueConfig = {
     autoProcess?: boolean;
     maxQueueSize?: number;
     ttsEnabled?: boolean;
+    ttsChatEnabled?: boolean;
+    ttsNotificationsEnabled?: boolean;
     timing?: {
         transitionDelay?: number;
         notificationClearDelay?: number;
@@ -226,6 +228,10 @@ class DisplayQueue {
         return this.effects.isTTSEnabled();
     }
 
+    isChatTTSEnabled() {
+        return this.effects.isChatTTSEnabled();
+    }
+
     async setTTSText(text: string) {
         await this.effects.setTTSText(text);
     }
@@ -383,6 +389,7 @@ class DisplayQueue {
             return false;
         }
         this.emitDisplayRow(item);
+        await this.effects.handleChatTTSEffects(item, resolveChatMessageText(item.data.message));
         return true;
     }
 
@@ -469,7 +476,11 @@ class DisplayQueue {
             ? holdDurationMs
             : 0;
 
-        if (!this.config?.ttsEnabled) {
+        const ttsEnabledForItem = isChatType(item?.type)
+            ? this.effects.isChatTTSEnabled()
+            : this.effects.isNotificationTTSEnabled();
+
+        if (!ttsEnabledForItem) {
             return normalizedHoldDurationMs;
         }
 
@@ -479,7 +490,14 @@ class DisplayQueue {
 
         let ttsStages;
         try {
-            ttsStages = MessageTTSHandler.createTTSStages(item.data) || [];
+            ttsStages = isChatType(item.type)
+                ? MessageTTSHandler.createTTSStages({
+                    ...item.data,
+                    type: item.type,
+                    message: resolveChatMessageText(item.data.message),
+                    isComment: true
+                }) || []
+                : MessageTTSHandler.createTTSStages(item.data) || [];
         } catch {
             return normalizedHoldDurationMs;
         }

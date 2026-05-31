@@ -184,6 +184,8 @@ const CONFIG_SCHEMA: ConfigSchema = {
         connectionTimeoutMs: { type: 'number', default: 10000 },
         address: { type: 'string', default: 'ws://localhost:4455' },
         ttsEnabled: { type: 'boolean', default: false },
+        ttsChatEnabled: { type: 'boolean', default: false },
+        ttsNotificationsEnabled: { type: 'boolean', default: true },
         chatMsgTxt: { type: 'string', default: 'chat-message-text' },
         chatMsgScene: { type: 'string', default: 'chat-message-scene' },
         chatMsgGroup: { type: 'string', default: 'chat-message-group' },

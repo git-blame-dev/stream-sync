@@ -205,6 +205,8 @@ describe("ConfigValidator._normalizeObsSection()", () => {
     expect(result.enabled).toBe(false);
     expect(result.address).toBe("ws://localhost:4455");
     expect(result.connectionTimeoutMs).toBe(10000);
+    expect(result.ttsChatEnabled).toBe(false);
+    expect(result.ttsNotificationsEnabled).toBe(true);
   });
 
   it("converts string values correctly", () => {
@@ -213,6 +215,26 @@ describe("ConfigValidator._normalizeObsSection()", () => {
 
     expect(result.enabled).toBe(true);
     expect(result.address).toBe("ws://custom:4455");
+  });
+
+  it("treats legacy ttsEnabled as a notification TTS alias only", () => {
+    expect(
+      ConfigValidator._normalizeObsSection({ ttsEnabled: "false" })
+        .ttsNotificationsEnabled,
+    ).toBe(false);
+    expect(
+      ConfigValidator._normalizeObsSection({ ttsEnabled: "true" })
+        .ttsNotificationsEnabled,
+    ).toBe(true);
+    expect(
+      ConfigValidator._normalizeObsSection({
+        ttsEnabled: "false",
+        ttsNotificationsEnabled: "true",
+      }).ttsNotificationsEnabled,
+    ).toBe(true);
+    expect(
+      ConfigValidator._normalizeObsSection({ ttsEnabled: "true" }).ttsChatEnabled,
+    ).toBe(false);
   });
 });
 

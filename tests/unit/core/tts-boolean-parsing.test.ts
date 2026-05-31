@@ -117,9 +117,9 @@ describe("TTS Configuration Boolean Parsing", () => {
     });
 
     describe("when ttsEnabled is undefined", () => {
-      it("should default to disabled for safety", () => {
+      it("should default notification TTS to enabled", () => {
         const queue = createDisplayQueueWithTTS(undefined);
-        expect(queue.isTTSEnabled()).toBe(false);
+        expect(queue.isTTSEnabled()).toBe(true);
       });
     });
 
