@@ -56,6 +56,7 @@ const TIMESTAMP_RESOLVERS: Record<string, TimestampResolver> = {
   'stream.online': (event: Record<string, unknown> | null | undefined) => normalizeTimestampValue(event?.started_at),
   'channel.follow': (event: Record<string, unknown> | null | undefined) => normalizeTimestampValue(event?.followed_at),
     'channel.chat.message': metadataMessageTimestamp,
+    'channel.chat.notification': metadataMessageTimestamp,
     'channel.subscribe': metadataMessageTimestamp,
     'channel.subscription.message': metadataMessageTimestamp,
     'channel.subscription.gift': metadataMessageTimestamp,

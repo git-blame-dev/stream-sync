@@ -38,6 +38,9 @@ const getNumber = (event: TwitchEventPayload | null | undefined, key: string): n
 const getObject = (value: unknown): Record<string, unknown> | null =>
     value && typeof value === 'object' ? value as Record<string, unknown> : null;
 
+const RESUB_NOTICE_TYPES = new Set(['resub', 'shared_chat_resub']);
+const RESUB_DEDUPE_TTL_MS = 10_000;
+
 function createTwitchEventSubEventRouter(options: EventRouterOptions = {}) {
     const {
         config = {},
@@ -58,6 +61,42 @@ function createTwitchEventSubEventRouter(options: EventRouterOptions = {}) {
     const safeLogError = typeof logError === 'function' ? logError : () => {};
     const safeLogRaw = typeof logRawPlatformData === 'function' ? logRawPlatformData : async () => {};
     const errorHandler = createPlatformErrorHandler(safeLogger, 'twitch-eventsub-router');
+    const recentResubKeys = new Map<string, number>();
+
+    const pruneRecentResubKeys = (now: number): void => {
+        for (const [key, seenAt] of recentResubKeys.entries()) {
+            if (now - seenAt > RESUB_DEDUPE_TTL_MS) {
+                recentResubKeys.delete(key);
+            }
+        }
+    };
+
+    const getResubDedupeKey = (payload: Record<string, unknown>): string | null => {
+        const userId = typeof payload.userId === 'string' ? payload.userId : '';
+        const tier = typeof payload.tier === 'string' ? payload.tier : '';
+        const months = typeof payload.months === 'number' ? String(payload.months) : '';
+        const message = typeof payload.message === 'string' ? payload.message.trim() : '';
+        if (!userId || !tier || !months) {
+            return null;
+        }
+
+        return [userId, tier, months, message].join('|');
+    };
+
+    const markResubPayloadSeen = (payload: Record<string, unknown>): boolean => {
+        const now = Date.now();
+        pruneRecentResubKeys(now);
+        const key = getResubDedupeKey(payload);
+        if (!key) {
+            return false;
+        }
+        const lastSeen = recentResubKeys.get(key);
+        if (lastSeen !== undefined && now - lastSeen <= RESUB_DEDUPE_TTL_MS) {
+            return true;
+        }
+        recentResubKeys.set(key, now);
+        return false;
+    };
 
 const logRawIfEnabled = (
   eventType: string,
@@ -299,6 +338,66 @@ const resolveBitsGiftType = (cheermoteInfo: Record<string, unknown> = {}): strin
             payload.months = months;
         }
 
+        if (markResubPayloadSeen(payload)) {
+            safeLogger.debug('Duplicate EventSub resubscription message ignored', 'twitch-eventsub', {
+                userId,
+                tier,
+                months
+            });
+            return;
+        }
+
+        safeEmit('paypiggyMessage', payload);
+    };
+
+    const handleChatNotificationEvent = (event: TwitchEventPayload | null | undefined, rawEvent: unknown = event) => {
+        logRawIfEnabled('chat_notification', rawEvent, 'chat-notification-data-log', 'Error logging raw chat notification data');
+
+        const noticeType = getString(event, 'notice_type');
+        if (!noticeType || !RESUB_NOTICE_TYPES.has(noticeType)) {
+            safeLogger.debug('Ignoring unsupported chat notification type', 'twitch-eventsub', { noticeType });
+            return;
+        }
+
+        const resubDetails = getObject(event?.[noticeType]) || getObject(event?.resub) || getObject(event?.shared_chat_resub);
+        const username = getString(event, 'chatter_user_name') || getString(event, 'user_name');
+        const userId = getString(event, 'chatter_user_id') || getString(event, 'user_id');
+        const tier = getString(resubDetails, 'sub_tier') || getString(resubDetails, 'tier');
+        const timestamp = getString(event, 'timestamp');
+        if (!username || !userId || !tier || !timestamp) {
+            errorHandler.handleEventProcessingError(
+                new Error('Chat notification resub event requires chatter identity, tier, and timestamp'),
+                'paypiggy-message',
+                event
+            );
+            return;
+        }
+
+        const months = normalizeMonths(resubDetails?.cumulative_months)
+            ?? normalizeMonths(resubDetails?.duration_months)
+            ?? normalizeMonths(resubDetails?.streak_months);
+        const message = getObject(event?.message);
+        const payload: Record<string, unknown> = {
+            type: 'paypiggy',
+            ...normalizeUserIdentity(username, userId),
+            tier,
+            message: typeof message?.text === 'string' ? message.text : undefined,
+            timestamp
+        };
+        if (months !== undefined) {
+            payload.months = months;
+        }
+
+        if (markResubPayloadSeen(payload)) {
+            safeLogger.debug('Duplicate EventSub chat notification resub ignored', 'twitch-eventsub', {
+                noticeType,
+                userId,
+                tier,
+                months
+            });
+            return;
+        }
+
         safeEmit('paypiggyMessage', payload);
     };
 
@@ -362,6 +461,9 @@ const resolveBitsGiftType = (cheermoteInfo: Record<string, unknown> = {}): strin
             case 'channel.chat.message':
                 handleChatMessageEvent(normalizedEvent, event);
                 break;
+            case 'channel.chat.notification':
+                handleChatNotificationEvent(normalizedEvent, event);
+                break;
             case 'channel.follow':
                 handleFollowEvent(normalizedEvent, event);
                 break;
@@ -398,6 +500,7 @@ const resolveBitsGiftType = (cheermoteInfo: Record<string, unknown> = {}): strin
     return {
         handleNotificationEvent,
         handleChatMessageEvent,
+        handleChatNotificationEvent,
         handleFollowEvent,
         handlePaypiggyEvent,
         handleRaidEvent,

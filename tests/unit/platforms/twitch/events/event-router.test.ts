@@ -325,6 +325,83 @@ describe("Twitch EventSub event router", () => {
     });
   });
 
+  test("emits resub chat notifications as subscription messages", () => {
+    const emitted: EmittedEvent[] = [];
+    const router = createTwitchEventSubEventRouter({
+      config: { dataLoggingEnabled: false },
+      logger: noOpLogger,
+      emit: emitInto(emitted),
+      logRawPlatformData: async () => {},
+      logError: () => {},
+    });
+
+    router.handleNotificationEvent(
+      "channel.chat.notification",
+      {
+        notice_type: "resub",
+        chatter_user_name: "Chat Resubber",
+        chatter_user_id: "chat-resub-1",
+        message: { text: "back again" },
+        resub: {
+          cumulative_months: 7,
+          sub_tier: "1000",
+        },
+      },
+      {
+        message_timestamp: "2024-03-03T00:00:00.123456789Z",
+      },
+    );
+
+    const messageEvent = requireEmitted(emitted, "paypiggyMessage");
+    expect(messageEvent.payload).toMatchObject({
+      username: "Chat Resubber",
+      userId: "chat-resub-1",
+      tier: "1000",
+      months: 7,
+      message: "back again",
+      timestamp: "2024-03-03T00:00:00.123Z",
+    });
+  });
+
+  test("dedupes chat notification resubs against subscription message resubs", () => {
+    const emitted: EmittedEvent[] = [];
+    const router = createTwitchEventSubEventRouter({
+      config: { dataLoggingEnabled: false },
+      logger: noOpLogger,
+      emit: emitInto(emitted),
+      logRawPlatformData: async () => {},
+      logError: () => {},
+    });
+
+    router.handleNotificationEvent(
+      "channel.subscription.message",
+      {
+        user_name: "Resubber",
+        user_id: "resub-dedupe-1",
+        tier: "1000",
+        cumulative_months: 12,
+        message: { text: "Still here!" },
+      },
+      { message_timestamp: "2024-03-02T00:00:00.000Z" },
+    );
+    router.handleNotificationEvent(
+      "channel.chat.notification",
+      {
+        notice_type: "shared_chat_resub",
+        chatter_user_name: "Resubber",
+        chatter_user_id: "resub-dedupe-1",
+        message: { text: "Still here!" },
+        shared_chat_resub: {
+          cumulative_months: 12,
+          sub_tier: "1000",
+        },
+      },
+      { message_timestamp: "2024-03-02T00:00:01.000Z" },
+    );
+
+    expect(emitted.filter((event) => event.type === "paypiggyMessage").length).toBe(1);
+  });
+
   test("extracts text content from bits.use fragments and emits a gift payload", () => {
     const emitted: EmittedEvent[] = [];
     const router = createTwitchEventSubEventRouter({

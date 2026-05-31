@@ -14,6 +14,9 @@ describe("Twitch EventSub subscriptions", () => {
     };
 
     expect(byType("channel.chat.message").handler).toBe("handleChatMessage");
+    expect(byType("channel.chat.notification").handler).toBe(
+      "handleChatNotification",
+    );
     expect(byType("channel.follow").handler).toBe("handleFollow");
     expect(byType("channel.subscribe").handler).toBe("handlePaypiggy");
     expect(byType("channel.raid").handler).toBe("handleRaid");
@@ -31,6 +34,15 @@ describe("Twitch EventSub subscriptions", () => {
     const testBroadcasterId = "test-broadcaster-999";
     expect(
       byType("channel.chat.message").getCondition({
+        userId: testUserId,
+        broadcasterId: testBroadcasterId,
+      }),
+    ).toEqual({
+      broadcaster_user_id: testBroadcasterId,
+      user_id: testUserId,
+    });
+    expect(
+      byType("channel.chat.notification").getCondition({
         userId: testUserId,
         broadcasterId: testBroadcasterId,
       }),

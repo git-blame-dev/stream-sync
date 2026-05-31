@@ -199,6 +199,7 @@ function createTwitchEventSubWsLifecycle(options: WsLifecycleOptions = {}) {
                                 return;
                             }
 
+                            const isReconnectHandoff = !!state.reconnectUrl;
                             state.sessionId = sessionId;
                             state._isConnected = true;
                             state.reconnectUrl = null;
@@ -210,6 +211,13 @@ function createTwitchEventSubWsLifecycle(options: WsLifecycleOptions = {}) {
                             emit('eventSubConnected', {
                                 sessionId: state.sessionId
                             });
+
+                            if (isReconnectHandoff) {
+                                state.subscriptionsReady = true;
+                                connectionResolved = true;
+                                resolve();
+                                return;
+                            }
 
                             setImmediateFn(async () => {
                                 if (connectionResolved) {
@@ -351,10 +359,13 @@ function createTwitchEventSubWsLifecycle(options: WsLifecycleOptions = {}) {
                         reject(startupError);
                     }
 
-                    const closedSessionId = state.sessionId;
-                    state._isConnected = false;
-                    state.subscriptionsReady = false;
-                    state.sessionId = null;
+                    const isCurrentSocket = state.ws === ws;
+                    const closedSessionId = isCurrentSocket ? state.sessionId : null;
+                    if (isCurrentSocket) {
+                        state._isConnected = false;
+                        state.subscriptionsReady = false;
+                        state.sessionId = null;
+                    }
 
                     const connectionDuration = state.connectionStartTime ? now() - state.connectionStartTime : 'unknown';
 
@@ -399,6 +410,11 @@ function createTwitchEventSubWsLifecycle(options: WsLifecycleOptions = {}) {
                         `EventSub WebSocket closed after ${connectionDuration}ms: ${closeReason} - ${String(reason || 'no reason')}`,
                         'twitch'
                     );
+
+                    if (!isCurrentSocket) {
+                        state.logger?.debug?.('Ignoring stale EventSub WebSocket close after reconnect handoff', 'twitch');
+                        return;
+                    }
 
                     state.subscriptions?.clear?.();
 
@@ -491,6 +507,9 @@ function createTwitchEventSubWsLifecycle(options: WsLifecycleOptions = {}) {
         }
 
         state.retryAttempts++;
+        const isReconnectHandoff = !!state.reconnectUrl && !!state.sessionId && state.ws?.readyState === 1;
+        const handoffWebSocket = isReconnectHandoff ? state.ws : null;
+        const previousSessionId = state.sessionId || state.disconnectedSessionId;
 
         try {
             state.logger?.info?.(
@@ -503,7 +522,7 @@ function createTwitchEventSubWsLifecycle(options: WsLifecycleOptions = {}) {
                 throw new Error('Twitch auth not ready for reconnection');
             }
 
-            if (state.ws) {
+            if (state.ws && !isReconnectHandoff) {
                 try {
                     if (state.ws.readyState === 1) {
                         state.ws.close(1000, 'Reconnecting');
@@ -516,8 +535,7 @@ function createTwitchEventSubWsLifecycle(options: WsLifecycleOptions = {}) {
                 state.ws = null;
             }
 
-            const previousSessionId = state.sessionId || state.disconnectedSessionId;
-            if (previousSessionId && typeof state._deleteAllSubscriptions === 'function') {
+            if (!isReconnectHandoff && previousSessionId && typeof state._deleteAllSubscriptions === 'function') {
                 try {
                     await state._deleteAllSubscriptions({ sessionId: previousSessionId });
                     if (state.disconnectedSessionId === previousSessionId) {
@@ -534,20 +552,41 @@ function createTwitchEventSubWsLifecycle(options: WsLifecycleOptions = {}) {
             }
 
             state.sessionId = null;
-            state._isConnected = false;
-            state.subscriptions?.clear?.();
+            if (!isReconnectHandoff) {
+                state._isConnected = false;
+                state.subscriptions?.clear?.();
+            }
 
-            await safeDelay(
-                validateTimeout(1000, 1000),
-                1000,
-                'twitchEventSub:cleanup-delay'
-            );
+            if (!isReconnectHandoff) {
+                await safeDelay(
+                    validateTimeout(1000, 1000),
+                    1000,
+                    'twitchEventSub:cleanup-delay'
+                );
+            }
 
             await state._connectWebSocket?.();
+
+            if (handoffWebSocket?.readyState === 1) {
+                try {
+                    handoffWebSocket.close(1000, 'Reconnect handoff complete');
+                } catch (error) {
+                    state.logger?.debug?.('Error closing old WebSocket after reconnect handoff', 'twitch', {
+                        error: getErrorMessage(error)
+                    });
+                }
+            }
 
             state.retryAttempts = 0;
             state.logger?.info?.('EventSub reconnection successful', 'twitch');
         } catch (error) {
+            if (isReconnectHandoff && handoffWebSocket?.readyState === 1) {
+                state.ws = handoffWebSocket;
+                state.sessionId = previousSessionId || null;
+                state._isConnected = true;
+                state.subscriptionsReady = true;
+            }
+
             state._logEventSubError?.(
                 `EventSub reconnection failed (attempt ${state.retryAttempts}/${state.maxRetryAttempts})`,
                 null,

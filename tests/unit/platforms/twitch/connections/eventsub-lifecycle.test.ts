@@ -923,6 +923,27 @@ describe("TwitchEventSub lifecycle", () => {
       expect(eventSub.subscriptionsReady).toBe(true);
     });
 
+    it("recreates only the revoked subscription type", async () => {
+      eventSub = createEventSub();
+      eventSub.isInitialized = true;
+      eventSub.subscriptionsReady = true;
+      eventSub.sessionId = "test-session";
+      const replacementTypes: string[] = [];
+      eventSub._setupEventSubscriptions = async (_validationAlreadyDone, requiredSubscriptions) => {
+        replacementTypes.push(...(requiredSubscriptions || []).map((subscription) => subscription.type));
+        return { failures: [] };
+      };
+
+      await eventSub._handleSubscriptionRevocation({
+        type: "channel.follow",
+        id: "sub-1",
+        status: "revoked",
+      });
+
+      expect(replacementTypes).toEqual(["channel.follow"]);
+      expect(eventSub.subscriptionsReady).toBe(true);
+    });
+
     it("keeps subscriptions not ready when resubscription fails", async () => {
       eventSub = createEventSub();
       eventSub.isInitialized = true;

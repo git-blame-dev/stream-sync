@@ -49,6 +49,7 @@ function createSubscriptionCondition(
 function getHandlerName(subscriptionType: string): string {
     const handlerMap: Record<string, string> = {
         'channel.chat.message': 'handleChatMessage',
+        'channel.chat.notification': 'handleChatNotification',
         'channel.follow': 'handleFollow',
         'channel.subscribe': 'handlePaypiggy',
         'channel.raid': 'handleRaid',
@@ -65,6 +66,7 @@ function getHandlerName(subscriptionType: string): string {
 function createTwitchEventSubSubscriptions(): EventSubSubscriptionDefinition[] {
     const subscriptionConfigs = [
         { name: 'Chat Messages', type: 'channel.chat.message', version: '1', requiresUserScope: true },
+        { name: 'Chat Notifications', type: 'channel.chat.notification', version: '1', requiresUserScope: true },
         { name: 'Follows', type: 'channel.follow', version: '2', requiresModeratorScope: true },
         { name: 'Subscriptions', type: 'channel.subscribe', version: '1' },
         { name: 'Raids', type: 'channel.raid', version: '1', usesToBroadcaster: true },

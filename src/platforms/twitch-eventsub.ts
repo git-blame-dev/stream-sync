@@ -579,9 +579,12 @@ class TwitchEventSub extends EventEmitter {
         }
     }
 
-    async _setupEventSubscriptions(validationAlreadyDone = false): Promise<SubscriptionState | null> {
+    async _setupEventSubscriptions(
+        validationAlreadyDone = false,
+        requiredSubscriptions: SubscriptionDefinition[] = this.requiredSubscriptions
+    ): Promise<SubscriptionState | null> {
         const subscriptionState = await this.subscriptionManager.setupEventSubscriptions({
-            requiredSubscriptions: this.requiredSubscriptions,
+            requiredSubscriptions,
             userId: this.userId,
             broadcasterId: this.broadcasterId,
             sessionId: this.sessionId,
@@ -605,7 +608,6 @@ class TwitchEventSub extends EventEmitter {
             return;
         }
 
-        this.subscriptionsReady = false;
         const context = {
             subscriptionType: subscription.type,
             subscriptionId: subscription.id,
@@ -615,9 +617,16 @@ class TwitchEventSub extends EventEmitter {
 
         this._logEventSubError('EventSub subscription revoked', null, 'subscription-revoked', context);
 
+        const replacementSubscriptions = this.requiredSubscriptions.filter((requiredSubscription) => requiredSubscription.type === subscription.type);
+        if (replacementSubscriptions.length === 0) {
+            this._logEventSubError('EventSub resubscribe skipped for unknown revoked subscription type', null, 'subscription-resubscribe-unknown-type', context);
+            return;
+        }
+
         try {
-            const result = await this._setupEventSubscriptions(true);
+            const result = await this._setupEventSubscriptions(true, replacementSubscriptions);
             if (result?.aborted) {
+                this.subscriptionsReady = false;
                 this._logEventSubError('EventSub resubscribe aborted after revocation', null, 'subscription-resubscribe-aborted', {
                     ...context,
                     abortReason: result.abortReason
@@ -626,6 +635,7 @@ class TwitchEventSub extends EventEmitter {
             }
             const failures = result?.failures || [];
             if (failures.length > 0) {
+                this.subscriptionsReady = false;
                 this._logEventSubError('EventSub resubscribe failed after revocation', null, 'subscription-resubscribe-failed', {
                     ...context,
                     failures
@@ -635,6 +645,7 @@ class TwitchEventSub extends EventEmitter {
 
             this.subscriptionsReady = true;
         } catch (error) {
+            this.subscriptionsReady = false;
             this._logEventSubError('EventSub resubscribe threw after revocation', error, 'subscription-resubscribe-error', context);
         }
     }

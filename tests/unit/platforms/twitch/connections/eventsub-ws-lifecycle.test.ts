@@ -58,7 +58,7 @@ type LifecycleState = LifecycleMethodState & {
   emit: (event: string, payload?: unknown) => void;
   handleWebSocketMessage: (message: Record<string, unknown>) => Promise<void>;
   _validateConnectionForSubscriptions: () => boolean;
-  _setupEventSubscriptions: () => Promise<SubscriptionSetupResult>;
+  _setupEventSubscriptions: (validationAlreadyDone?: boolean) => Promise<SubscriptionSetupResult>;
   scheduleReconnectCalls: boolean[];
   _scheduleReconnect: () => void;
   reconnectCalls: boolean[];
@@ -201,7 +201,7 @@ describe("Twitch EventSub WS lifecycle", () => {
       },
       handleWebSocketMessage: createMockFn(async () => {}),
       _validateConnectionForSubscriptions: createMockFn(() => true),
-      _setupEventSubscriptions: createMockFn<[], Promise<SubscriptionSetupResult>>(async () => ({ failures: [] })),
+      _setupEventSubscriptions: createMockFn<[boolean?], Promise<SubscriptionSetupResult>>(async () => ({ failures: [] })),
       scheduleReconnectCalls,
       _scheduleReconnect: () => scheduleReconnectCalls.push(true),
       reconnectCalls,
@@ -1208,6 +1208,73 @@ describe("Twitch EventSub WS lifecycle", () => {
       code: 1000,
       reason: "Reconnecting",
     });
+  });
+
+  test("session_reconnect handoff keeps old subscriptions until replacement connects", async () => {
+    const lifecycle = buildLifecycle();
+
+    const existingWs = new MockWebSocket("wss://old-session");
+    existingWs.readyState = 1;
+    const deleteAllSubscriptions = createMockFn(async () => {});
+    const state = createState({
+      isInitialized: true,
+      ws: existingWs,
+      sessionId: "old-session-id",
+      reconnectUrl: "wss://reconnect-session",
+      subscriptionsReady: true,
+      _deleteAllSubscriptions: deleteAllSubscriptions,
+      _connectWebSocket: createMockFn(async () => {
+        expect(deleteAllSubscriptions).not.toHaveBeenCalled();
+        expect(existingWs.closeCalls).toHaveLength(0);
+        state.ws = new MockWebSocket("wss://new-session");
+        state.sessionId = "new-session-id";
+        state._isConnected = true;
+        state.subscriptionsReady = true;
+      }),
+    });
+
+    await lifecycle.reconnect(state);
+
+    expect(deleteAllSubscriptions).not.toHaveBeenCalled();
+    expect(existingWs.closeCalls).toHaveLength(1);
+    expect(requireCloseCall(existingWs.closeCalls[0])).toEqual({
+      code: 1000,
+      reason: "Reconnect handoff complete",
+    });
+    expect(state.subscriptionsReady).toBe(true);
+    expect(state.sessionId).toBe("new-session-id");
+  });
+
+  test("replacement session welcome preserves transferred subscriptions", async () => {
+    const lifecycle = buildLifecycle();
+    const state = createState({
+      reconnectUrl: "wss://reconnect-session",
+      sessionId: null,
+      _setupEventSubscriptions: createMockFn(async () => ({ failures: [] })),
+    });
+
+    const connectPromise = lifecycle.connectWebSocket(state);
+    state.ws.readyState = 1;
+    state.ws.emit("open");
+    state.ws.emit(
+      "message",
+      Buffer.from(
+        JSON.stringify({
+          metadata: { message_type: "session_welcome" },
+          payload: {
+            session: {
+              id: "replacement-session-id",
+              keepalive_timeout_seconds: 30,
+            },
+          },
+        }),
+      ),
+    );
+
+    await expect(connectPromise).resolves.toBeUndefined();
+    expect(state._setupEventSubscriptions).not.toHaveBeenCalled();
+    expect(state.sessionId).toBe("replacement-session-id");
+    expect(state.subscriptionsReady).toBe(true);
   });
 
   test("reconnect continues when deleting prior session subscriptions fails", async () => {
