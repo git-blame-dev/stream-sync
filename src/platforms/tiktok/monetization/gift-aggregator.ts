@@ -122,13 +122,134 @@ const normalizeRequiredPositive = (value: unknown, label: string): number => {
         return numeric;
     };
 
-    const cleanupGiftAggregation = (): void => {
-        for (const aggregationState of Object.values(platform.giftAggregation)) {
-            if (aggregationState.timer !== null) {
-                clearTimeoutFn(aggregationState.timer);
+    const flushGiftAggregation = async (key: string): Promise<void> => {
+        const aggregationData = platform.giftAggregation[key];
+        if (!aggregationData) {
+            platform.logger.warn(`Gift aggregation data missing for key ${key}`, 'tiktok');
+            return;
+        }
+
+        if (aggregationData.timer !== null) {
+            clearTimeoutFn(aggregationData.timer);
+            aggregationData.timer = null;
+        }
+
+        delete platform.giftAggregation[key];
+
+        const aggregatedCount = aggregationData.totalCount;
+        const storedUnitAmount = aggregationData.unitAmount;
+        if (!Number.isFinite(Number(aggregatedCount)) || aggregatedCount <= 0) {
+            throw new Error('Aggregated gift requires totalCount');
+        }
+        if (!Number.isFinite(Number(storedUnitAmount))) {
+            throw new Error('Aggregated gift requires unitAmount');
+        }
+        const totalAmount = Number(storedUnitAmount) * aggregatedCount;
+        const finalUsername = aggregationData.username;
+        const giftType = aggregationData.giftType;
+        const resolvedCurrency = aggregationData.currency;
+
+        if (typeof finalUsername !== 'string' || !finalUsername.trim()) {
+            platform.logger.warn('Gift aggregation missing username', 'tiktok', {
+                hasAggregationData: true,
+                hasUserId: typeof aggregationData.userId === 'string' && aggregationData.userId.length > 0,
+                hasOriginalData: aggregationData.lastGift?.rawData !== undefined,
+                giftType,
+                giftCount: aggregatedCount
+            });
+            return;
+        }
+
+        let giftMessage = `${finalUsername} sent ${aggregatedCount}x ${giftType}`;
+        giftMessage += formatCoinAmount(totalAmount, resolvedCurrency);
+
+        platform.logger.info(`[Gift] ${giftMessage}`, 'tiktok');
+
+        const enhancedGiftData = {
+            username: finalUsername,
+            userId: aggregationData.userId,
+            giftType,
+            giftCount: aggregatedCount,
+            amount: totalAmount,
+            currency: resolvedCurrency,
+            isAggregated: true,
+            isStreakCompleted: false,
+            originalData: aggregationData.lastGift?.rawData
+        };
+
+        if (!enhancedGiftData.giftType || !enhancedGiftData.giftCount || enhancedGiftData.giftCount <= 0) {
+            platform.logger.warn('Invalid enhanced gift data', 'tiktok', {
+                hasEnhancedGiftData: true,
+                hasGiftType: typeof enhancedGiftData.giftType === 'string' && enhancedGiftData.giftType.length > 0,
+                hasOriginalData: enhancedGiftData.originalData !== undefined,
+                aggregatedCount,
+                totalAmount,
+                originalGiftType: giftType,
+                originalGiftCount: aggregatedCount
+            });
+            return;
+        }
+
+        const giftPayload: TikTokAggregatedGiftPayload = {
+            platform: aggregationData.platform,
+            userId: aggregationData.userId,
+            username: finalUsername,
+            avatarUrl: aggregationData.avatarUrl,
+            giftImageUrl: aggregationData.giftImageUrl,
+            giftType,
+            giftCount: aggregatedCount,
+            repeatCount: aggregatedCount,
+            unitAmount: storedUnitAmount,
+            amount: totalAmount,
+            currency: resolvedCurrency,
+            id: aggregationData.lastId,
+            timestamp: aggregationData.lastTimestamp,
+            isAggregated: true,
+            aggregatedCount,
+            enhancedGiftData
+        };
+
+        if (aggregationData.sourceType) {
+            giftPayload.sourceType = aggregationData.sourceType;
+        }
+
+        try {
+            await platform._handleGift(giftPayload);
+        } catch (error) {
+            platform.errorHandler.handleEventProcessingError(
+                error,
+                'gift-notification',
+                enhancedGiftData,
+                'Error handling gift notification'
+            );
+            platform.logger.warn(
+                'Gift data unavailable after notification handling error',
+                'tiktok',
+                {
+                    aggregatedCount,
+                    totalAmount,
+                    hasEnhancedGiftData: true,
+                    hasOriginalData: enhancedGiftData.originalData !== undefined
+                }
+            );
+        }
+    };
+
+    const cleanupGiftAggregation = async (): Promise<void> => {
+        const keys = Object.keys(platform.giftAggregation);
+        for (const key of keys) {
+            try {
+                await flushGiftAggregation(key);
+            } catch (error) {
+                platform.errorHandler.handleEventProcessingError(
+                    error,
+                    'gift-aggregation-cleanup',
+                    { key },
+                    'Error flushing gift aggregation during cleanup'
+                );
+                delete platform.giftAggregation[key];
             }
         }
-        platform.giftAggregation = {};
     };
 
 const handleStandardGift = async (gift: TikTokGiftPayload): Promise<void> => {
@@ -248,109 +369,7 @@ const handleStandardGift = async (gift: TikTokGiftPayload): Promise<void> => {
 
         aggregationState.timer = safeSetTimeout(async () => {
             try {
-                const aggregationData = platform.giftAggregation[key];
-                if (!aggregationData) {
-                    platform.logger.warn(`Gift aggregation data missing for key ${key}`, 'tiktok');
-                    return;
-                }
-
-                const aggregatedCount = aggregationData.totalCount;
-                const storedUnitAmount = aggregationData.unitAmount;
-                if (!Number.isFinite(Number(aggregatedCount)) || aggregatedCount <= 0) {
-                    throw new Error('Aggregated gift requires totalCount');
-                }
-                if (!Number.isFinite(Number(storedUnitAmount))) {
-                    throw new Error('Aggregated gift requires unitAmount');
-                }
-                const totalAmount = Number(storedUnitAmount) * aggregatedCount;
-                const finalUsername = aggregationData.username;
-
-                if (typeof finalUsername !== 'string' || !finalUsername.trim()) {
-            platform.logger.warn('Gift aggregation missing username', 'tiktok', {
-                hasAggregationData: true,
-                hasUserId: typeof aggregationData.userId === 'string' && aggregationData.userId.length > 0,
-                hasOriginalData: aggregationData.lastGift?.rawData !== undefined,
-                giftType,
-                giftCount
-            });
-                    return;
-                }
-
-                let giftMessage = `${finalUsername} sent ${aggregatedCount}x ${giftType}`;
-                giftMessage += formatCoinAmount(totalAmount, resolvedCurrency);
-
-                platform.logger.info(`[Gift] ${giftMessage}`, 'tiktok');
-
-                const enhancedGiftData = {
-                    username: finalUsername,
-                    userId: aggregationData.userId,
-                    giftType,
-                    giftCount: aggregatedCount,
-                    amount: totalAmount,
-                    currency: resolvedCurrency,
-                    isAggregated: true,
-                    isStreakCompleted: false,
-                    originalData: aggregationData.lastGift?.rawData
-                };
-
-                if (!enhancedGiftData.giftType || !enhancedGiftData.giftCount || enhancedGiftData.giftCount <= 0) {
-            platform.logger.warn('Invalid enhanced gift data', 'tiktok', {
-                hasEnhancedGiftData: true,
-                hasGiftType: typeof enhancedGiftData.giftType === 'string' && enhancedGiftData.giftType.length > 0,
-                hasOriginalData: enhancedGiftData.originalData !== undefined,
-                aggregatedCount,
-                totalAmount,
-                originalGiftType: giftType,
-                        originalGiftCount: giftCount
-                    });
-                    return;
-                }
-
-                const giftPayload: TikTokAggregatedGiftPayload = {
-                    platform: aggregationData.platform,
-                    userId: aggregationData.userId,
-                    username: finalUsername,
-                    avatarUrl: aggregationData.avatarUrl,
-                    giftImageUrl: aggregationData.giftImageUrl,
-                    giftType,
-                    giftCount: aggregatedCount,
-                    repeatCount: aggregatedCount,
-                    unitAmount: storedUnitAmount,
-                    amount: totalAmount,
-                    currency: resolvedCurrency,
-                    id: aggregationData.lastId,
-                    timestamp: aggregationData.lastTimestamp,
-                    isAggregated: true,
-                    aggregatedCount,
-                    enhancedGiftData
-                };
-
-                if (aggregationData.sourceType) {
-                    giftPayload.sourceType = aggregationData.sourceType;
-                }
-
-                try {
-                    await platform._handleGift(giftPayload);
-                } catch (error) {
-                    platform.errorHandler.handleEventProcessingError(
-                error,
-                'gift-notification',
-                enhancedGiftData,
-                'Error handling gift notification'
-            );
-            platform.logger.warn(
-                'Gift data unavailable after notification handling error',
-                'tiktok',
-                {
-                    aggregatedCount,
-                    totalAmount,
-                    hasEnhancedGiftData: true,
-                    hasOriginalData: enhancedGiftData.originalData !== undefined
-                }
-            );
-                }
-
-                delete platform.giftAggregation[key];
+                await flushGiftAggregation(key);
             } catch (error) {
                 platform.errorHandler.handleEventProcessingError(
                     error,

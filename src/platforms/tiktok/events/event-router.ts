@@ -57,6 +57,7 @@ type TikTokWebcastEventMap = {
     CHAT: string;
     GIFT: string;
     FOLLOW: string;
+    SHARE?: string;
     SOCIAL: string;
     ROOM_USER: string;
     ENVELOPE?: string;
@@ -113,6 +114,7 @@ type TikTokPlatformRouterContract = {
     handleRetry: (error: unknown) => unknown;
     handleTikTokGift: (data: TikTokRawEvent) => Promise<void>;
     handleTikTokFollow: (data: TikTokRawEvent) => Promise<void>;
+    handleTikTokShare: (data: TikTokRawEvent) => Promise<void>;
     handleTikTokSocial: (data: TikTokRawEvent) => Promise<void>;
     connectionActive: boolean;
     cachedViewerCount: number;
@@ -319,6 +321,7 @@ function cleanupTikTokEventListeners(platform: TikTokPlatformRouterContract) {
             platform.WebcastEvent.CHAT,
             platform.WebcastEvent.GIFT,
             platform.WebcastEvent.FOLLOW,
+            platform.WebcastEvent.SHARE,
             platform.WebcastEvent.ROOM_USER,
             platform.WebcastEvent.ENVELOPE,
             platform.WebcastEvent.SUBSCRIBE,
@@ -534,6 +537,19 @@ function setupTikTokEventListeners(platform: TikTokPlatformRouterContract) {
             );
         }
     });
+
+    if (typeof platform.WebcastEvent.SHARE !== 'undefined') {
+        platform.connection.on(platform.WebcastEvent.SHARE, async (payload: unknown) => {
+            const data = asTikTokRawEvent(payload);
+            await platform._logIncomingEvent('share', data);
+
+            try {
+                await platform.handleTikTokShare(data);
+            } catch (error) {
+                platform.errorHandler.handleEventProcessingError(error, 'share', data, 'Error processing share event');
+            }
+        });
+    }
 
     if (typeof platform.WebcastEvent.ENVELOPE !== 'undefined') {
         platform.connection.on(platform.WebcastEvent.ENVELOPE, async (payload: unknown) => {

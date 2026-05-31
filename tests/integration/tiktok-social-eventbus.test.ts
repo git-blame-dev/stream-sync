@@ -59,6 +59,7 @@ const createPlatform = () =>
         CHAT: "chat",
         GIFT: "gift",
         FOLLOW: "follow",
+        SHARE: "share",
         SOCIAL: "social",
         ROOM_USER: "roomUser",
         ERROR: "error",
@@ -132,6 +133,41 @@ describe("TikTok social event bus routing (integration)", () => {
       expect(event.platform).toBe("tiktok");
       expect(event.data.userId).toBe("test-user-share");
       expect(event.data.username).toBe("test-user-share");
+      expect(event.data.timestamp).toBe(expectedTimestamp);
+    } finally {
+      lifecycle.dispose();
+    }
+  });
+
+  test("emits direct share events through lifecycle handlers", async () => {
+    const eventTimestampMs = Date.parse("2025-01-20T12:00:00.000Z");
+    const eventBus = createEventBus();
+    const lifecycle = new PlatformLifecycleService({
+      config: { tiktok: { enabled: true } },
+      eventBus,
+      logger: noOpLogger,
+    });
+    const platform = createPlatform();
+    platform.handlers = lifecycle.createDefaultEventHandlers("tiktok");
+
+    const shareEvent = createTikTokShareEvent({
+      user: { uniqueId: "test-user-direct-share", nickname: "DirectShare" },
+      common: { createTime: eventTimestampMs, msgId: "direct-share-msg-1" },
+      displayType: undefined,
+      label: undefined,
+    });
+    const eventPromise = waitForPlatformEvent(eventBus);
+
+    try {
+      await platform.handleTikTokShare(shareEvent);
+
+      const event = await eventPromise;
+      const expectedTimestamp = new Date(eventTimestampMs).toISOString();
+
+      expect(event.type).toBe(PlatformEvents.SHARE);
+      expect(event.platform).toBe("tiktok");
+      expect(event.data.userId).toBe("test-user-direct-share");
+      expect(event.data.username).toBe("DirectShare");
       expect(event.data.timestamp).toBe(expectedTimestamp);
     } finally {
       lifecycle.dispose();

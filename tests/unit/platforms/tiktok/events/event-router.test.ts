@@ -14,6 +14,7 @@ type ListenerMap = {
   chat: EventHandler;
   gift: EventHandler;
   follow: EventHandler;
+  share: EventHandler;
   social: EventHandler;
   roomUser: EventHandler;
   envelope: EventHandler;
@@ -77,6 +78,7 @@ describe("TikTok event router", () => {
         CHAT: "chat",
         GIFT: "gift",
         FOLLOW: "follow",
+        SHARE: "share",
         SOCIAL: "social",
         ROOM_USER: "roomUser",
         ENVELOPE: "envelope",
@@ -114,6 +116,7 @@ describe("TikTok event router", () => {
       handleRetry: createMockFn(),
       handleTikTokGift: createMockFn().mockResolvedValue(),
       handleTikTokFollow: createMockFn().mockResolvedValue(),
+      handleTikTokShare: createMockFn().mockResolvedValue(),
       handleTikTokSocial: createMockFn().mockResolvedValue(),
       connectionActive: false,
       cachedViewerCount: 0,
@@ -202,6 +205,7 @@ describe("TikTok event router", () => {
         CHAT: "chat",
         GIFT: "gift",
         FOLLOW: "follow",
+        SHARE: "share",
         ROOM_USER: "roomUser",
         ENVELOPE: "envelope",
         SUBSCRIBE: "subscribe",
@@ -221,9 +225,33 @@ describe("TikTok event router", () => {
 
     cleanupTikTokEventListeners(platform);
 
-    // 11 WebcastEvent types + 3 ControlEvent types + 1 rawData = 15
-    expect(removeAllListeners.mock.calls.length).toBe(15);
+    // 12 WebcastEvent types + 3 ControlEvent types + 1 rawData = 16
+    expect(removeAllListeners.mock.calls.length).toBe(16);
     expect(platform.listenersConfigured).toBe(false);
+  });
+
+  test("routes direct share events through share handler", async () => {
+    const { platform, listeners } = createPlatformHarness();
+
+    setupTikTokEventListeners(platform);
+
+    const sharePayload = {
+      user: {
+        userId: "share-user-id",
+        uniqueId: "share-user",
+        nickname: "ShareUser",
+      },
+      common: { createTime: "1700000000", msgId: "share-msg-1" },
+    };
+
+    await listeners[platform.WebcastEvent.SHARE](sharePayload);
+
+    expect(platform._logIncomingEvent.mock.calls[0]).toEqual([
+      "share",
+      sharePayload,
+    ]);
+    expect(platform.handleTikTokShare.mock.calls).toEqual([[sharePayload]]);
+    expect(platform.handleTikTokSocial.mock.calls).toHaveLength(0);
   });
 
   test("processes valid chat messages end-to-end", async () => {
@@ -635,6 +663,7 @@ describe("TikTok event router", () => {
       platform.WebcastEvent.CHAT,
       platform.WebcastEvent.GIFT,
       platform.WebcastEvent.FOLLOW,
+      platform.WebcastEvent.SHARE,
       platform.WebcastEvent.SOCIAL,
       platform.WebcastEvent.ROOM_USER,
       platform.WebcastEvent.ENVELOPE,

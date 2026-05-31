@@ -512,7 +512,7 @@ describe("TikTok gift aggregator", () => {
   });
 
   describe("cleanupGiftAggregation", () => {
-    test("cancels pending timers and prevents delivery", async () => {
+    test("flushes pending gifts exactly once and clears timers/state", async () => {
       const handledGifts: GiftPayload[] = [];
       const platform = createTestPlatform({
         _handleGift: async (payload) => handledGifts.push(payload),
@@ -524,21 +524,23 @@ describe("TikTok gift aggregator", () => {
 
       expect(getTimerCount()).toBe(1);
 
-      giftAggregator.cleanupGiftAggregation();
+      await giftAggregator.cleanupGiftAggregation();
 
       expect(getTimerCount()).toBe(0);
       expect(platform.giftAggregation).toEqual({});
+      expect(handledGifts).toHaveLength(1);
+      expect(firstHandledGift(handledGifts).giftCount).toBe(2);
 
       await advanceTimersByTime(platform.giftAggregationDelay * 2);
 
-      expect(handledGifts).toHaveLength(0);
+      expect(handledGifts).toHaveLength(1);
     });
 
-    test("handles empty aggregation state", () => {
+    test("handles empty aggregation state", async () => {
       const platform = createTestPlatform({ giftAggregation: {} });
       const giftAggregator = createTikTokGiftAggregator({ platform });
 
-      giftAggregator.cleanupGiftAggregation();
+      await giftAggregator.cleanupGiftAggregation();
 
       expect(platform.giftAggregation).toEqual({});
     });

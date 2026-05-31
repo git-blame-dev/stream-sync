@@ -108,6 +108,7 @@ type TikTokWebcastEventMap = {
     CHAT: string;
     GIFT: string;
     FOLLOW: string;
+    SHARE?: string;
     SOCIAL: string;
     ROOM_USER: string;
     ENVELOPE?: string;
@@ -562,6 +563,7 @@ class TikTokPlatform extends EventEmitter {
             handleRetry: (error: unknown) => platform.handleRetry(error),
             handleTikTokGift: (data: TikTokRawEvent) => platform.handleTikTokGift(data),
             handleTikTokFollow: (data: TikTokRawEvent) => platform.handleTikTokFollow(data),
+            handleTikTokShare: (data: TikTokRawEvent) => platform.handleTikTokShare(data),
             handleTikTokSocial: (data: TikTokRawEvent) => platform.handleTikTokSocial(data),
             get connectionActive() { return platform.connectionActive; },
             set connectionActive(connectionActive: boolean) { platform.connectionActive = connectionActive; },
@@ -1369,8 +1371,8 @@ class TikTokPlatform extends EventEmitter {
     }
 
 
-    cleanupGiftAggregation() {
-        this.giftAggregator.cleanupGiftAggregation();
+    async cleanupGiftAggregation() {
+        await this.giftAggregator.cleanupGiftAggregation();
     }
 
     static resolveEventTimestampMs(data: unknown) {
@@ -1461,6 +1463,36 @@ class TikTokPlatform extends EventEmitter {
                 'social-processing',
                 data,
                 `[TikTok Social] Error processing social event: ${getErrorMessage(err)}`
+            );
+        }
+    }
+
+    async handleTikTokShare(data: unknown) {
+        try {
+            if (!data || typeof data !== 'object') {
+                this.logger.warn('Received invalid share data', 'tiktok', { data });
+                return;
+            }
+
+            const { username, userId } = extractTikTokUserData(data);
+
+            if (!userId || !username) {
+                this.logger.warn('[TikTok Share] Missing canonical identity in direct share event data', 'tiktok', { data });
+                return;
+            }
+
+            if (this._shouldSkipDuplicatePlatformMessage(data).isDuplicate) {
+                return;
+            }
+
+            this.logger.debug(`[TikTok Share] ${username} shared`, 'tiktok');
+            await this._handleShare(data);
+        } catch (err) {
+            this.errorHandler.handleEventProcessingError(
+                err,
+                'share-processing',
+                data,
+                `[TikTok Share] Error processing share event: ${getErrorMessage(err)}`
             );
         }
     }
@@ -1557,7 +1589,7 @@ class TikTokPlatform extends EventEmitter {
         this.connectionStateManager.markDisconnected();
         
         // Clean up gift aggregation timers
-        this.cleanupGiftAggregation();
+        await this.cleanupGiftAggregation();
         
         // Reset all connection-related state
         this.connection = null;

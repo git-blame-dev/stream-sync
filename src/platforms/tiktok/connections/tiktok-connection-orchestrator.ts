@@ -146,7 +146,7 @@ function createTikTokConnectionOrchestrator(options: { platform?: TikTokOrchestr
             }
         }
 
-        platform.cleanup();
+        await platform.cleanup();
     };
 
     return {

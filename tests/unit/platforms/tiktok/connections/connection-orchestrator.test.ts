@@ -24,7 +24,7 @@ type TestPlatform = {
   setupEventListeners: () => void;
   handleConnectionSuccess: () => Promise<void>;
   handleConnectionError?: () => void;
-  cleanup: () => void;
+  cleanup: () => void | Promise<void>;
   connectionStateManager: {
     markDisconnected: () => void;
     markConnecting: () => void;
@@ -255,6 +255,44 @@ describe("TikTok connection orchestrator", () => {
     await orchestrator.disconnect();
 
     expect(platform.connectionActive).toBe(false);
+  });
+
+  test("disconnect waits for platform cleanup before resolving", async () => {
+    const calls: string[] = [];
+    let finishCleanup!: () => void;
+    const cleanupDone = new Promise<void>((resolve) => {
+      finishCleanup = resolve;
+    });
+    const platform = buildPlatform({
+      connection: {
+        disconnect: async () => {
+          calls.push("disconnect");
+        },
+        isConnecting: false,
+        isConnected: true,
+      },
+      cleanup: async () => {
+        calls.push("cleanup-start");
+        await cleanupDone;
+        calls.push("cleanup-finish");
+      },
+    });
+    const orchestrator = createTikTokConnectionOrchestrator({ platform });
+
+    let resolved = false;
+    const disconnectPromise = orchestrator.disconnect().then(() => {
+      resolved = true;
+    });
+    await Promise.resolve();
+
+    expect(calls).toEqual(["disconnect", "cleanup-start"]);
+    expect(resolved).toBe(false);
+
+    finishCleanup();
+    await disconnectPromise;
+
+    expect(calls).toEqual(["disconnect", "cleanup-start", "cleanup-finish"]);
+    expect(resolved).toBe(true);
   });
 
   test("disconnect completes without error when connection.disconnect fails", async () => {
