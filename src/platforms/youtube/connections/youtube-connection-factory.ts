@@ -138,8 +138,22 @@ function createYouTubeConnectionFactory(options: YouTubeConnectionFactoryOptions
             installYouTubeLiveChatUnknownRendererCapture({
                 ...captureOptions,
                 parser,
-                logUnknownRenderer: async (_entry) => {
-                    return;
+                logUnknownRenderer: async (entry) => {
+                    if (platform.config.dataLoggingEnabled !== true) {
+                        return;
+                    }
+
+                    try {
+                        await platform.logRawPlatformData('unknown-renderer', entry);
+                    } catch (error: unknown) {
+                        const errorMessage = error instanceof Error ? error.message : String(error);
+                        platform._handleProcessingError(
+                            `Error logging YouTube unknown renderer data: ${errorMessage}`,
+                            error,
+                            'data-logging',
+                            { videoId: entry.videoId, endpoint: entry.endpoint }
+                        );
+                    }
                 }
             });
         };

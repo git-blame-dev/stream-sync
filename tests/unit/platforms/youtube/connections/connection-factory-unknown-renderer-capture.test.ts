@@ -1,6 +1,7 @@
-import { describe, test, expect } from 'bun:test';
+import { afterEach, describe, test, expect } from 'bun:test';
 import { createMockFn } from '../../../../helpers/bun-mock-utils';
 import { noOpLogger } from '../../../../helpers/mock-factories';
+import { InnertubeFactory } from '../../../../../src/factories/innertube-factory';
 import { createYouTubeConnectionFactory } from '../../../../../src/platforms/youtube/connections/youtube-connection-factory';
 
 type LiveChatActions = {
@@ -50,6 +51,10 @@ const createInnertubeInstanceManager = (yt: YouTubeClient): InnertubeInstanceMan
 const withTimeout = <T>(promise: Promise<T>) => promise;
 
 describe('YouTube connection factory unknown renderer capture wiring', () => {
+    afterEach(() => {
+        InnertubeFactory.configure({});
+    });
+
     test('installs unknown renderer capture before creating live chat connections', async () => {
         const liveChat = { id: 'test-live-chat' };
         const getLiveChat = createMockFn().mockResolvedValue(liveChat);
@@ -149,5 +154,111 @@ describe('YouTube connection factory unknown renderer capture wiring', () => {
             actions: info.actions
         });
         expect(getLiveChat).toHaveBeenCalledTimes(1);
+    });
+
+    test('default unknown renderer sink logs only when enabled and does not disrupt execute on logging errors', async () => {
+        let parserErrorHandler: ((context?: Record<string, unknown>) => void) | undefined;
+        const parsedResponse = {
+            continuation_contents: {
+                continuation: {
+                    token: 'next-continuation'
+                }
+            }
+        };
+        const parser = {
+            setParserErrorHandler: (handler: (context?: Record<string, unknown>) => void) => {
+                parserErrorHandler = handler;
+            },
+            parseResponse: createMockFn().mockImplementation(() => {
+                parserErrorHandler?.({
+                    error_type: 'class_not_found',
+                    classname: 'GiftMessageView'
+                });
+                return parsedResponse;
+            })
+        };
+        InnertubeFactory.configure({
+            importer: async () => ({
+                Innertube: { create: async () => ({}) },
+                Parser: parser
+            })
+        });
+        const rawResponse = {
+            data: {
+                continuationContents: {
+                    liveChatContinuation: {
+                        actions: [
+                            {
+                                addChatItemAction: {
+                                    item: {
+                                        giftMessageView: {
+                                            id: 'test-gift-id',
+                                            text: { runs: [{ text: 'sent Girl power for 300 Jewels' }] }
+                                        }
+                                    }
+                                }
+                            }
+                        ]
+                    }
+                }
+            }
+        };
+        const actions: LiveChatActions = {
+            execute: createMockFn<[string, Record<string, unknown>?], Promise<unknown>>().mockResolvedValue(rawResponse)
+        };
+        const liveChat = { id: 'test-live-chat-default-installer' };
+        const info = {
+            getLiveChat: createMockFn().mockResolvedValue(liveChat),
+            actions,
+            livechat: {
+                continuation: 'test-live-chat-continuation'
+            }
+        };
+        const getInfo = createMockFn().mockResolvedValue(info);
+        const yt: YouTubeClient = {
+            getInfo: (videoId, options) => getInfo(videoId, options)
+        };
+        const platform = createFactoryPlatform();
+        platform.config = { dataLoggingEnabled: true };
+        platform.logRawPlatformData = createMockFn().mockRejectedValue(new Error('disk full'));
+        platform._handleProcessingError = createMockFn();
+
+        const factory = createYouTubeConnectionFactory({
+            platform,
+            innertubeInstanceManager: createInnertubeInstanceManager(yt),
+            withTimeout,
+            innertubeCreationTimeoutMs: 1000
+        });
+
+        await expect(factory.createConnection('video-default-sink')).resolves.toBe(liveChat);
+        await expect(actions.execute('live_chat/get_live_chat', {
+            continuation: 'test-live-chat-continuation',
+            parse: true
+        })).resolves.toBe(parsedResponse);
+
+        expect(platform.logRawPlatformData).toHaveBeenCalledWith(
+            'unknown-renderer',
+            expect.objectContaining({
+                videoId: 'video-default-sink',
+                endpoint: 'live_chat/get_live_chat'
+            })
+        );
+        expect(platform._handleProcessingError).toHaveBeenCalledWith(
+            expect.stringContaining('Error logging YouTube unknown renderer data'),
+            expect.any(Error),
+            'data-logging',
+            expect.objectContaining({
+                videoId: 'video-default-sink',
+                endpoint: 'live_chat/get_live_chat'
+            })
+        );
+
+        platform.config = { dataLoggingEnabled: false };
+        await actions.execute('live_chat/get_live_chat', {
+            continuation: 'next-continuation',
+            parse: true
+        });
+
+        expect(platform.logRawPlatformData).toHaveBeenCalledTimes(1);
     });
 });

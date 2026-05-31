@@ -22,7 +22,7 @@ import { createYouTubeConnectionFactory } from './youtube/connections/youtube-co
 import { createYouTubeEventFactory } from './youtube/events/event-factory';
 import { normalizeYouTubeEvent } from './youtube/events/event-normalizer';
 import { createYouTubeEventRouter } from './youtube/events/event-router';
-import { createYouTubeMonetizationParser } from './youtube/monetization/monetization-parser';
+import { createYouTubeMonetizationParser, resolveYouTubeGiftMembershipCount } from './youtube/monetization/monetization-parser';
 import { createYouTubeMultiStreamManager } from './youtube/streams/youtube-multistream-manager';
 import { extractAuthor } from './youtube/youtube-author-extractor';
 import { YouTubeConnectionManager } from './youtube/youtube-connection-manager';
@@ -1301,9 +1301,12 @@ class YouTubePlatform extends EventEmitter {
     }
 
     _handleMissingGiftPurchaseAuthor(chatItem: unknown, debugMetadata: UnknownMap | null | undefined): void {
-        const item = toUnknownMap(toUnknownMap(chatItem).item);
-        const giftCount = item.giftMembershipsCount;
-        const resolvedGiftCount = Number.isFinite(Number(giftCount)) ? Number(giftCount) : undefined;
+        let resolvedGiftCount: number | undefined;
+        try {
+            resolvedGiftCount = resolveYouTubeGiftMembershipCount(toUnknownMap(chatItem));
+        } catch {
+            resolvedGiftCount = undefined;
+        }
 
         this.logger.warn('Gift membership purchase missing author data; sending error notification', 'youtube', {
             eventType: debugMetadata?.eventType || 'LiveChatSponsorshipsGiftPurchaseAnnouncement',

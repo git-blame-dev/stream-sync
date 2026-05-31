@@ -41,6 +41,35 @@ describe("YouTube monetization parser", () => {
     });
   });
 
+  test("prefers allowlisted structured GiftMessageView Jewels fields over text parsing", () => {
+    const parser = createYouTubeMonetizationParser({ logger: noOpLogger });
+    const result = parser.parseGiftMessageView(
+      createGiftMessageViewItem({
+        text: { content: "sent ignored malformed text" },
+        giftName: { runs: [{ text: "Six seven" }] },
+        jewelAmount: { simpleText: "1,250 Jewels" },
+      }),
+    );
+
+    expect(result.giftType).toBe("Six seven");
+    expect(result.amount).toBe(1250);
+    expect(result.giftImageUrl).toBe(
+      "https://www.gstatic.com/youtube/img/pdg/gift/assets/six_seven.png=w480-h480",
+    );
+  });
+
+  test("parses GiftMessageView English fallback amounts with thousands separators", () => {
+    const parser = createYouTubeMonetizationParser({ logger: noOpLogger });
+    const result = parser.parseGiftMessageView(
+      createGiftMessageViewItem({
+        text: { content: "sent Girl power for 1,300 Jewels" },
+      }),
+    );
+
+    expect(result.giftType).toBe("Girl power");
+    expect(result.amount).toBe(1300);
+  });
+
   test("resolves jewels gift image URL variants for known gift types", () => {
     const parser = createYouTubeMonetizationParser({ logger: noOpLogger });
 
@@ -164,6 +193,23 @@ describe("YouTube monetization parser", () => {
     const result = parser.parseGiftPurchase(chatItem);
 
     expect(result.giftCount).toBe(7);
+  });
+
+  test("coerces membershipGiftCount numeric strings for gift purchase count", () => {
+    const parser = createYouTubeMonetizationParser({ logger: noOpLogger });
+    const fixture = getSyntheticFixture("youtube", "gift-purchase-header");
+    const chatItem = {
+      ...fixture,
+      item: {
+        ...fixture.item,
+        giftMembershipsCount: undefined,
+        membershipGiftCount: "9",
+      },
+    };
+
+    const result = parser.parseGiftPurchase(chatItem);
+
+    expect(result.giftCount).toBe(9);
   });
 
   test("accepts timestamp_usec for membership timestamps", () => {

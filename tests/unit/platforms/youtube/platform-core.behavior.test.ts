@@ -402,6 +402,35 @@ describe("YouTubePlatform behavior", () => {
     );
   });
 
+  it("uses membershipGiftCount in missing-author gift purchase fallback payloads", () => {
+    const platform = createPlatform();
+    const giftPaypiggyEvents: PlatformEventRecord[] = [];
+    platform.handlers.onGiftPaypiggy = (payload: unknown) => {
+      if (isPlatformEventRecord(payload)) giftPaypiggyEvents.push(payload);
+    };
+
+    platform._handleMissingGiftPurchaseAuthor(
+      {
+        item: {
+          type: "LiveChatSponsorshipsGiftPurchaseAnnouncement",
+          id: "LCC.test-gift-purchase-missing-author",
+          timestamp_usec: "1704067200000000",
+          membershipGiftCount: "11",
+        },
+      },
+      { eventType: "LiveChatSponsorshipsGiftPurchaseAnnouncement" },
+    );
+
+    expect(giftPaypiggyEvents).toHaveLength(1);
+    expect(giftPaypiggyEvents[0]).toMatchObject({
+      type: "platform:giftpaypiggy",
+      platform: "youtube",
+      id: "LCC.test-gift-purchase-missing-author",
+      giftCount: 11,
+      isError: true,
+    });
+  });
+
   it("emits fallback avatarUrl for chat messages when thumbnail is missing", () => {
     const platform = createPlatform();
     const chatEvents: PlatformEventRecord[] = [];

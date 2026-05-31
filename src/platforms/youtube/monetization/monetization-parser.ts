@@ -99,6 +99,30 @@ const YOUTUBE_JEWELS_GIFT_ASSET_FILES: Record<string, string> = {
     'six seven': 'six_seven.png'
 };
 
+const GIFT_MEMBERSHIP_COUNT_FIELDS = ['giftMembershipsCount', 'membershipGiftCount'] as const;
+const JEWELS_GIFT_NAME_FIELDS = ['giftName', 'gift_name', 'giftType', 'gift_type'] as const;
+const JEWELS_GIFT_AMOUNT_FIELDS = [
+    'jewelAmount',
+    'jewel_amount',
+    'jewelsAmount',
+    'jewels_amount',
+    'amount',
+    'amountText',
+    'amount_text'
+] as const;
+
+function resolveYouTubeGiftMembershipCount(chatItem: UnknownRecord, label = 'YouTube gift purchase'): number {
+    const item = toRecord(chatItem.item);
+    for (const fieldName of GIFT_MEMBERSHIP_COUNT_FIELDS) {
+        const giftCount = Number(item[fieldName]);
+        if (Number.isFinite(giftCount) && giftCount > 0) {
+            return giftCount;
+        }
+    }
+
+    throw new Error(`${label} requires giftMembershipsCount or membershipGiftCount`);
+}
+
 function createYouTubeMonetizationParser(options: YouTubeMonetizationParserOptions = {}): YouTubeMonetizationParser {
     const currencyParser = new YouTubeiCurrencyParser({ logger: options.logger });
 
@@ -255,8 +279,27 @@ function createYouTubeMonetizationParser(options: YouTubeMonetizationParserOptio
         return extractStructuredText(field);
     };
 
+    const parseJewelsAmount = (value: unknown): number | undefined => {
+        if (typeof value === 'number') {
+            return Number.isFinite(value) && value > 0 ? value : undefined;
+        }
+
+        const rawText = typeof value === 'string'
+            ? value.trim()
+            : extractStructuredText(value);
+        if (!rawText) {
+            return undefined;
+        }
+
+        const amountMatch = rawText.match(/\b(\d[\d,]*(?:\.\d+)?)\b/);
+        const amount = amountMatch?.[1]
+            ? Number(amountMatch[1].replace(/,/g, ''))
+            : Number(rawText.replace(/,/g, ''));
+        return Number.isFinite(amount) && amount > 0 ? amount : undefined;
+    };
+
     const parseJewelsGiftText = (message: string): { giftType: string; amount: number } => {
-        const match = message.match(/^sent\s+(.+?)\s+for\s+(\d+(?:\.\d+)?)\s+jewels$/i);
+        const match = message.match(/^sent\s+(.+?)\s+for\s+(\d[\d,]*(?:\.\d+)?)\s+jewels$/i);
         if (!match) {
             throw new Error('YouTube GiftMessageView requires text in "sent <gift> for <amount> Jewels" format');
         }
@@ -268,12 +311,30 @@ function createYouTubeMonetizationParser(options: YouTubeMonetizationParserOptio
         }
 
         const giftType = giftTypeRaw.trim();
-        const amount = Number(amountRaw);
-        if (!giftType || !Number.isFinite(amount) || amount <= 0) {
+        const amount = parseJewelsAmount(amountRaw);
+        if (!giftType || amount === undefined) {
             throw new Error('YouTube GiftMessageView requires text in "sent <gift> for <amount> Jewels" format');
         }
 
         return { giftType, amount };
+    };
+
+    const parseJewelsGiftStructuredFields = (item: UnknownRecord): { giftType?: string; amount?: number } => {
+        const giftType = extractFirstStructuredText(
+            ...JEWELS_GIFT_NAME_FIELDS.map((fieldName) => item[fieldName])
+        );
+
+        for (const fieldName of JEWELS_GIFT_AMOUNT_FIELDS) {
+            const amount = parseJewelsAmount(item[fieldName]);
+            if (amount !== undefined) {
+                return {
+                    ...(giftType ? { giftType } : {}),
+                    amount
+                };
+            }
+        }
+
+        return giftType ? { giftType } : {};
     };
 
     const resolveJewelsGiftImageUrl = (giftType: string): string => {
@@ -446,10 +507,7 @@ const parseSuperChat = (chatItem: UnknownRecord): ParsedSuperChat => {
 
     const parseGiftPurchase = (chatItem: UnknownRecord): ParsedGiftPurchase => {
         const item = toRecord(chatItem.item);
-        const giftCount = Number(item.giftMembershipsCount);
-        if (!Number.isFinite(giftCount) || giftCount <= 0) {
-            throw new Error('YouTube gift purchase requires giftMembershipsCount');
-        }
+        const giftCount = resolveYouTubeGiftMembershipCount(chatItem);
 
         const payload: ParsedGiftPurchase = {
             timestamp: resolveTimestamp(chatItem, 'YouTube gift purchase'),
@@ -501,11 +559,17 @@ const parseSuperChat = (chatItem: UnknownRecord): ParsedSuperChat => {
     const parseGiftMessageView = (chatItem: UnknownRecord): ParsedGiftMessageView => {
         const item = toRecord(chatItem.item);
         const message = resolveGiftMessageText(item.text);
-        if (!message) {
+        const structuredGift = parseJewelsGiftStructuredFields(item);
+        const parsedTextGift = (!structuredGift.giftType || structuredGift.amount === undefined) && message
+            ? parseJewelsGiftText(message)
+            : undefined;
+        const giftType = structuredGift.giftType || parsedTextGift?.giftType;
+        const amount = structuredGift.amount ?? parsedTextGift?.amount;
+
+        if (!giftType || amount === undefined) {
             throw new Error('YouTube GiftMessageView requires text in "sent <gift> for <amount> Jewels" format');
         }
 
-        const { giftType, amount } = parseJewelsGiftText(message);
         const giftImageUrl = resolveJewelsGiftImageUrl(giftType);
 
         const payload: ParsedGiftMessageView = {
@@ -515,7 +579,7 @@ const parseSuperChat = (chatItem: UnknownRecord): ParsedSuperChat => {
             giftCount: 1,
             amount,
             currency: 'jewels',
-            message
+            message: message || `sent ${giftType} for ${amount} Jewels`
         };
 
         if (giftImageUrl) {
@@ -536,4 +600,4 @@ const parseSuperChat = (chatItem: UnknownRecord): ParsedSuperChat => {
     };
 }
 
-export { createYouTubeMonetizationParser };
+export { createYouTubeMonetizationParser, resolveYouTubeGiftMembershipCount };
