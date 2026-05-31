@@ -84,7 +84,6 @@ function asError(error: unknown): ErrorWithStatus {
 
 class YouTubeStreamDetectionService {
     client: DetectionClient | null;
-    _innertubeClient: DetectionClient;
     logger: LoggerLike;
     errorHandler: ReturnType<typeof createPlatformErrorHandler>;
     timeout: number;
@@ -95,7 +94,6 @@ class YouTubeStreamDetectionService {
 
     constructor(innertubeClient: DetectionClient, options: DetectionServiceOptions) {
         this.client = innertubeClient;
-        this._innertubeClient = innertubeClient;
 
         if (!options.logger || typeof options.logger.error !== 'function') {
             throw new Error('YouTubeStreamDetectionService requires a logger');

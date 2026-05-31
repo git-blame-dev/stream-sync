@@ -85,16 +85,39 @@ describe("DependencyFactory behavior", () => {
   });
 
   describe("Strictness migration behavior", () => {
-    it("builds youtubei dependencies with deferred stream detection service", () => {
-      const InnertubeClass = {
-        create: createMockFn<[], Promise<{
-          search: () => Promise<{ results: never[] }>;
-          getChannel: () => Promise<{ videos: { contents: never[] } }>;
-        }>>().mockResolvedValue({
-          search: createMockFn().mockResolvedValue({ results: [] }),
-          getChannel: createMockFn().mockResolvedValue({ videos: { contents: [] } }),
-        }),
-      } as InnertubeDependency;
+    it("lazily creates and caches Innertube for youtubei stream detection", async () => {
+      const getChannel = createMockFn<
+        [string],
+        Promise<{
+          videos: {
+            contents: Array<{
+              id: string;
+              title: { text: string };
+              is_live: boolean;
+              author: { name: string };
+            }>;
+          };
+        }>
+      >().mockResolvedValue({
+        videos: {
+          contents: [
+            {
+              id: "liveVideo01",
+              title: { text: "Test live stream" },
+              is_live: true,
+              author: { name: "Test Channel" },
+            },
+          ],
+        },
+      });
+      const createInnertube = createMockFn<[], Promise<{
+        search: () => Promise<{ results: never[] }>;
+        getChannel: typeof getChannel;
+      }>>().mockResolvedValue({
+        search: createMockFn().mockResolvedValue({ results: [] }),
+        getChannel,
+      });
+      const InnertubeClass = { create: createInnertube };
 
       const deps = factory.createYoutubeDependencies(
         {
@@ -105,18 +128,21 @@ describe("DependencyFactory behavior", () => {
         {
           logger: noOpLogger,
           config: configFixture,
-          Innertube: InnertubeClass,
+          Innertube: InnertubeClass as InnertubeDependency,
         },
       );
 
       const streamDetectionService = deps.streamDetectionService as {
-        detectLiveStreams: unknown;
+        detectLiveStreams: (
+          channel: string,
+        ) => Promise<{ success: boolean; videoIds: string[] }>;
         getUsageMetrics: () => Record<string, unknown>;
       };
 
       expect(typeof streamDetectionService.detectLiveStreams).toBe(
         "function",
       );
+      expect(createInnertube).toHaveBeenCalledTimes(0);
       expect(streamDetectionService.getUsageMetrics()).toEqual({
         totalRequests: 0,
         successfulRequests: 0,
@@ -125,6 +151,18 @@ describe("DependencyFactory behavior", () => {
         errorRate: 0,
         errorsByType: {},
       });
+
+      const firstResult = await streamDetectionService.detectLiveStreams(
+        "UCabcdefghijklmnopqrstuv",
+      );
+      const secondResult = await streamDetectionService.detectLiveStreams(
+        "UCabcdefghijklmnopqrstuv",
+      );
+
+      expect(firstResult.success).toBe(true);
+      expect(secondResult.videoIds).toEqual(["liveVideo01"]);
+      expect(createInnertube).toHaveBeenCalledTimes(1);
+      expect(getChannel).toHaveBeenCalledTimes(2);
     });
 
     it("throws when TikTok websocket client dependency is missing", () => {
