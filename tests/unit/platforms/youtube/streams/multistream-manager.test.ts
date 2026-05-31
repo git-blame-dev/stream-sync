@@ -389,7 +389,7 @@ describe("YouTube multi-stream manager", () => {
       expect(platform.lastFullStreamCheck).toBe(currentTime);
     });
 
-    test("disconnects streams that are no longer live during full check", async () => {
+    test("preserves streams omitted from a partial full check", async () => {
       const currentTime = testClock.now();
       const disconnected: DisconnectRecord[] = [];
       const platform = buildPlatform({
@@ -416,11 +416,44 @@ describe("YouTube multi-stream manager", () => {
 
       await manager.checkMultiStream();
 
-      expect(disconnected).toContainEqual({
-        videoId: "stream-2",
-        reason: "stream limit exceeded",
-        options: { requestImmediateRefresh: true, source: "stream-reconciler" },
+      expect(disconnected).toEqual([]);
+    });
+
+    test("defers newly detected streams at capacity without evicting existing streams", async () => {
+      const currentTime = testClock.now();
+      const connected: string[] = [];
+      const disconnected: DisconnectRecord[] = [];
+      const platform = buildPlatform({
+        config: {
+          maxStreams: 2,
+          streamPollingInterval: 60,
+          fullCheckInterval: 1000,
+        },
+        connectionManager: {
+          getConnectionCount: createMockFn(() => 2),
+          getAllVideoIds: createMockFn(() => ["stream-1", "stream-2"]),
+          hasConnection: createMockFn((videoId: string) =>
+            videoId === "stream-1" || videoId === "stream-2",
+          ),
+        },
+        getActiveYouTubeVideoIds: createMockFn(() => ["stream-1", "stream-2"]),
+        getLiveVideoIds: createMockFn(async () => ["stream-1", "stream-3"]),
+        connectToYouTubeStream: createMockFn(async (videoId: string) => {
+          connected.push(videoId);
+        }),
+        disconnectFromYouTubeStream: createMockFn(
+          async (videoId: string, reason: string, options?: { requestImmediateRefresh?: boolean; source?: string }) => {
+            disconnected.push({ videoId, reason, options });
+          },
+        ),
+        lastFullStreamCheck: currentTime - 5000,
       });
+      const manager = buildManager(platform);
+
+      await manager.checkMultiStream();
+
+      expect(connected).toEqual([]);
+      expect(disconnected).toEqual([]);
     });
 
     test("preserves connections when stream detection returns empty at capacity", async () => {
@@ -551,17 +584,25 @@ describe("YouTube multi-stream manager", () => {
       expect(disconnected).toEqual([]);
     });
 
-    test("disconnects streams that are no longer detected", async () => {
+    test("preserves omitted existing streams while connecting newly detected streams", async () => {
+      const connected: string[] = [];
       const disconnected: DisconnectRecord[] = [];
       const platform = buildPlatform({
+        config: {
+          maxStreams: 2,
+          streamPollingInterval: 60,
+          fullCheckInterval: 1000,
+        },
         connectionManager: {
           getConnectionCount: createMockFn(() => 1),
           getAllVideoIds: createMockFn(() => ["old-stream"]),
-          hasConnection: createMockFn(() => true),
+          hasConnection: createMockFn((videoId: string) => videoId === "old-stream"),
         },
-        getActiveYouTubeVideoIds: createMockFn(() => []),
+        getActiveYouTubeVideoIds: createMockFn(() => ["old-stream"]),
         getLiveVideoIds: createMockFn(async () => ["new-stream"]),
-        connectToYouTubeStream: createMockFn<[string], Promise<void>>().mockResolvedValue(undefined),
+        connectToYouTubeStream: createMockFn(async (videoId: string) => {
+          connected.push(videoId);
+        }),
         disconnectFromYouTubeStream: createMockFn(
           async (videoId: string, reason: string, options?: { requestImmediateRefresh?: boolean; source?: string }) => {
             disconnected.push({ videoId, reason, options });
@@ -572,11 +613,34 @@ describe("YouTube multi-stream manager", () => {
 
       await manager.checkMultiStream();
 
-      expect(disconnected).toContainEqual({
-        videoId: "old-stream",
-        reason: "stream no longer live",
-        options: { requestImmediateRefresh: true, source: "stream-reconciler" },
+      expect(connected).toEqual(["new-stream"]);
+      expect(disconnected).toEqual([]);
+    });
+
+    test("connects only available slots when preserving existing streams", async () => {
+      const connected: string[] = [];
+      const platform = buildPlatform({
+        config: {
+          maxStreams: 2,
+          streamPollingInterval: 60,
+          fullCheckInterval: 1000,
+        },
+        connectionManager: {
+          getConnectionCount: createMockFn(() => 1),
+          getAllVideoIds: createMockFn(() => ["existing-stream"]),
+          hasConnection: createMockFn((videoId: string) => videoId === "existing-stream"),
+        },
+        getActiveYouTubeVideoIds: createMockFn(() => ["existing-stream"]),
+        getLiveVideoIds: createMockFn(async () => ["new-stream-1", "new-stream-2", "new-stream-3"]),
+        connectToYouTubeStream: createMockFn(async (videoId: string) => {
+          connected.push(videoId);
+        }),
       });
+      const manager = buildManager(platform);
+
+      await manager.checkMultiStream();
+
+      expect(connected).toEqual(["new-stream-1"]);
     });
   });
 

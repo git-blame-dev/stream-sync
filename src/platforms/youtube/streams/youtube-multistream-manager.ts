@@ -185,19 +185,17 @@ const runCheckMultiStream = async (throwOnError: boolean): Promise<void> => {
                     return;
                 }
 
-                let anyChanges = false;
-                for (const videoId of platform.connectionManager.getAllVideoIds()) {
-                    if (!limitedVideoIds.includes(videoId)) {
-                        platform.logger.info(`Stream ended, disconnecting: ${videoId}`, 'youtube');
-                        await platform.disconnectFromYouTubeStream(videoId, 'stream limit exceeded', {
-                            requestImmediateRefresh: true,
-                            source: 'stream-reconciler'
-                        });
-                        anyChanges = true;
-                    }
-                }
+                const connectedVideoIds = platform.connectionManager.getAllVideoIds();
+                const omittedConnectedVideoIds = connectedVideoIds.filter((videoId: string) =>
+                    !limitedVideoIds.includes(videoId)
+                );
 
-                if (!anyChanges) {
+                if (omittedConnectedVideoIds.length > 0) {
+                    platform.logger.warn(
+                        `Stream detection omitted ${omittedConnectedVideoIds.length} connected stream(s); preserving existing connections`,
+                        'youtube'
+                    );
+                } else {
                     platform.logger.debug(`All ${activeStreams.length} streams still live, no changes needed`, 'youtube');
                 }
 
@@ -224,24 +222,32 @@ const runCheckMultiStream = async (throwOnError: boolean): Promise<void> => {
 
             platform.lastYouTubeVideoIdsUpdateTime = currentTimeMs;
 
-            const previousVideoIds = platform.getActiveYouTubeVideoIds().filter(
-                (id: string) => platform.connectionManager.hasConnection(id)
+            const newStreamCandidates = videoIds.filter((id: string) =>
+                !platform.connectionManager.hasConnection(id)
             );
+            const availableSlots = maxStreams > 0
+                ? Math.max(maxStreams - currentConnections, 0)
+                : Number.POSITIVE_INFINITY;
+            const newStreamIds = Number.isFinite(availableSlots)
+                ? newStreamCandidates.slice(0, availableSlots)
+                : newStreamCandidates;
 
-            const newStreamIds = videoIds.filter((id: string) => !previousVideoIds.includes(id));
+            if (newStreamCandidates.length > newStreamIds.length) {
+                platform.logger.warn(
+                    `Deferring ${newStreamCandidates.length - newStreamIds.length} detected stream(s); maxStreams limit reached`,
+                    'youtube'
+                );
+            }
 
-            for (const videoId of videoIds) {
-                const hasExistingConnection = platform.connectionManager.hasConnection(videoId);
-                if (!hasExistingConnection) {
-                    try {
-                        await platform.connectToYouTubeStream(videoId);
-                    } catch (error: unknown) {
-                        platform._handleConnectionErrorLogging(
-                            `Failed to connect to stream ${videoId}: ${toErrorMessage(error)}`,
-                            error,
-                            'stream-connect'
-                        );
-                    }
+            for (const videoId of newStreamIds) {
+                try {
+                    await platform.connectToYouTubeStream(videoId);
+                } catch (error: unknown) {
+                    platform._handleConnectionErrorLogging(
+                        `Failed to connect to stream ${videoId}: ${toErrorMessage(error)}`,
+                        error,
+                        'stream-connect'
+                    );
                 }
             }
 
@@ -263,14 +269,15 @@ const runCheckMultiStream = async (throwOnError: boolean): Promise<void> => {
                 return;
             }
 
-            for (const videoId of platform.connectionManager.getAllVideoIds()) {
-                if (!videoIds.includes(videoId)) {
-                    platform.logger.debug(`Stream ended, disconnecting: ${videoId}`, 'youtube');
-                    await platform.disconnectFromYouTubeStream(videoId, 'stream no longer live', {
-                        requestImmediateRefresh: true,
-                        source: 'stream-reconciler'
-                    });
-                }
+            const omittedConnectedVideoIds = platform.connectionManager.getAllVideoIds().filter((videoId: string) =>
+                !videoIds.includes(videoId)
+            );
+
+            if (omittedConnectedVideoIds.length > 0) {
+                platform.logger.warn(
+                    `Stream detection omitted ${omittedConnectedVideoIds.length} connected stream(s); preserving existing connections`,
+                    'youtube'
+                );
             }
 
             platform._logMultiStreamStatus(true, true);
