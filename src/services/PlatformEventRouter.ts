@@ -3,7 +3,8 @@ import { NOTIFICATION_CONFIGS } from '../core/constants';
 import { isIsoTimestamp } from '../utils/timestamp';
 import { getValidMessageParts, normalizeBadgeImages } from '../utils/message-parts';
 import { UNKNOWN_CHAT_MESSAGE, UNKNOWN_CHAT_USERNAME } from '../constants/degraded-chat';
-import { allowsYouTubeJewelsMissingUserId, getMissingFields } from '../utils/missing-fields';
+import { getMissingFields } from '../utils/missing-fields';
+import { NotificationInputValidator } from '../notifications/notification-input-validator';
 
 const PlatformEvents = {
     CHAT_MESSAGE: 'platform:chat-message',
@@ -131,6 +132,7 @@ class PlatformEventRouter {
     config: Record<string, RouterRecord>;
     logger: RouterLogger;
     errorHandler: ReturnType<typeof createPlatformErrorHandler>;
+    inputValidator: NotificationInputValidator;
     subscription: (() => void) | null;
 
     constructor(options: RouterOptions) {
@@ -146,6 +148,7 @@ class PlatformEventRouter {
             throw new Error('PlatformEventRouter requires eventBus, runtime, notificationManager, config, and logger');
         }
         this.errorHandler = createPlatformErrorHandler(this.logger, 'platform-event-router');
+        this.inputValidator = new NotificationInputValidator(NOTIFICATION_CONFIGS);
         this.subscription = null;
 
         this.start();
@@ -411,93 +414,21 @@ class PlatformEventRouter {
     }
 
     _sanitizeNotificationPayload(data: unknown = {}, sourceType: string | null = null, sourcePlatform: string | null = null): RouterRecord {
-        if (!data || typeof data !== 'object') {
-            throw new Error('Notification payload must be an object');
-        }
-
-        const sanitized: RouterRecord = { ...asRouterRecord(data) };
-        const originalType = sourceType;
-        const originalPlatform = sourcePlatform;
-
-        delete sanitized.type;
-        delete sanitized.platform;
-        delete sanitized.user;
-        delete sanitized.displayName;
-
-        const isErrorPayload = sanitized.isError === true;
-
-        if (!originalPlatform) {
+        if (!sourcePlatform) {
             throw new Error('Notification payload requires platform');
         }
-        if (!originalType) {
+        if (!sourceType) {
             throw new Error('Notification payload requires type');
         }
-        if (!sanitized.timestamp || !isIsoTimestamp(String(sanitized.timestamp))) {
-            throw new Error('Notification payload requires ISO timestamp');
-        }
-
-        const normalizedUserIdValue = sanitized.userId === undefined || sanitized.userId === null
-            ? ''
-            : String(sanitized.userId).trim();
-        const normalizedUserId = normalizedUserIdValue || undefined;
-        const normalizedUsername = typeof sanitized.username === 'string' ? sanitized.username.trim() : '';
-        const metadata = sanitized.metadata && typeof sanitized.metadata === 'object'
-            ? asRouterRecord(sanitized.metadata)
-            : null;
-        const allowsMissingUserId = allowsYouTubeJewelsMissingUserId({
-            type: originalType,
-            platform: originalPlatform,
-            currency: sanitized.currency,
-            metadata
+        const validation = this.inputValidator.validateNotificationPayload(data, {
+            notificationType: sourceType,
+            platform: sourcePlatform,
+            requireTimestamp: true
         });
-        const isAnonymousPayload = sanitized.isAnonymous === true;
-        const allowsAnonymous = isAnonymousPayload &&
-            (originalType === PlatformEvents.GIFT || originalType === PlatformEvents.GIFTPAYPIGGY);
-
-        if (!isErrorPayload) {
-            if (!allowsAnonymous) {
-                if (!normalizedUsername) {
-                    throw new Error('Notification payload requires username');
-                }
-                if (!normalizedUserId && !allowsMissingUserId) {
-                    throw new Error('Notification payload requires userId');
-                }
-            } else if ((normalizedUsername && !normalizedUserId) || (!normalizedUsername && normalizedUserId)) {
-                throw new Error('Notification payload requires username and userId when identity is provided');
-            }
+        if (!validation.success) {
+            throw new Error(validation.error);
         }
-
-        if (!isErrorPayload) {
-            if (originalType === PlatformEvents.GIFT || originalType === PlatformEvents.ENVELOPE) {
-                const giftType = typeof sanitized.giftType === 'string' ? sanitized.giftType.trim() : '';
-                const giftCount = sanitized.giftCount;
-                const amount = sanitized.amount;
-                const currency = typeof sanitized.currency === 'string' ? sanitized.currency.trim() : '';
-                const id = sanitized.id;
-                if (!id || !giftType || giftCount === undefined || amount === undefined || !currency) {
-                    throw new Error('Notification payload requires id, giftType, giftCount, amount, and currency');
-                }
-            }
-            if (originalType === PlatformEvents.GIFTPAYPIGGY) {
-                if (sanitized.giftCount === undefined) {
-                    throw new Error('Notification payload requires giftCount');
-                }
-            }
-        }
-
-        const result = {
-            ...sanitized,
-            platform: originalPlatform,
-            sourceType: originalType,
-            type: originalType
-        } as RouterRecord;
-        if (normalizedUsername) {
-            result.username = normalizedUsername;
-        }
-        if (normalizedUserId !== undefined) {
-            result.userId = normalizedUserId;
-        }
-        return result;
+        return validation.payload;
     }
 
 }

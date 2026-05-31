@@ -16,6 +16,7 @@ import { safeSetTimeout } from '../utils/timeout-validator';
 import { ViewerCountSystem } from '../utils/viewer-count';
 import { wireStreamStatusHandlers } from '../viewer-count/stream-status-handler';
 import type { DisplayQueueWriter } from '../interfaces/DisplayQueue';
+import { NotificationInputValidator } from '../notifications/notification-input-validator';
 
 type RuntimeRecord = Record<string, unknown>;
 
@@ -317,6 +318,18 @@ class AppRuntime {
             const avatarUrl = resolveNotificationAvatarUrl(type, options);
             if (avatarUrl !== undefined) {
                 notificationData.avatarUrl = avatarUrl;
+            }
+
+            if (type.startsWith('platform:')) {
+                const validation = new NotificationInputValidator().validateNotificationPayload(notificationData, {
+                    notificationType: type,
+                    platform,
+                    requireTimestamp: true
+                });
+                if (!validation.success) {
+                    throw new Error(validation.error);
+                }
+                Object.assign(notificationData, validation.payload);
             }
 
             if (!this.notificationManager) {

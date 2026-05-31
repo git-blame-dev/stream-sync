@@ -287,6 +287,25 @@ class NotificationManager extends EventEmitter {
 
         const normalizedData = this.payloadBuilder.normalizeData(data as NotificationRecord, isMonetizationType);
         const isErrorPayload = normalizedData.isError === true;
+
+        if (isMonetizationType) {
+            const payloadValidation = this.inputValidator.validateNotificationPayload(data as NotificationRecord, {
+                notificationType,
+                platform: platformName,
+                requireTimestamp: false
+            });
+            if (!payloadValidation.success) {
+                this._handleNotificationError(
+                    `[NotificationManager] Invalid ${notificationType} payload: ${payloadValidation.error}`,
+                    null,
+                    { notificationType, platform: platformName, data: normalizedData },
+                    { eventType: payloadValidation.errorType }
+                );
+                return { success: false, error: payloadValidation.error, notificationType, platform: platformName };
+            }
+            const { metadata: _metadata, ...validatedPayload } = payloadValidation.payload;
+            Object.assign(normalizedData, validatedPayload);
+        }
         
         if (typeof config.settingKey !== 'string') {
             throw new Error(`Notification config missing settingKey for ${notificationType}`);

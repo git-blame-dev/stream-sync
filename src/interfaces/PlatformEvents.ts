@@ -241,6 +241,7 @@ const EVENT_SCHEMAS = {
     },
     'platform:paypiggy': {
         required: ['type', 'platform', 'username', 'userId', 'timestamp'],
+        optional: ['avatarUrl', 'tier', 'months', 'message', 'isRenewal', 'isError', 'eventType', 'metadata'],
         properties: {
             type: { type: 'string', enum: ['platform:paypiggy'] },
             platform: { type: 'string', enum: VALID_PLATFORMS },
@@ -250,11 +251,16 @@ const EVENT_SCHEMAS = {
             tier: { type: 'string' },
             months: { type: 'number' },
             message: { type: 'string' },
-            timestamp: { type: 'string' }
+            isRenewal: { type: 'boolean' },
+            timestamp: { type: 'string' },
+            isError: { type: 'boolean' },
+            eventType: { type: 'string' },
+            metadata: { type: 'object' }
         }
     },
     'platform:giftpaypiggy': {
         required: ['type', 'platform', 'giftCount', 'timestamp'],
+        optional: ['username', 'userId', 'avatarUrl', 'tier', 'isAnonymous', 'cumulativeTotal', 'isError', 'eventType', 'metadata'],
         properties: {
             type: { type: 'string', enum: ['platform:giftpaypiggy'] },
             platform: { type: 'string', enum: VALID_PLATFORMS },
@@ -265,7 +271,10 @@ const EVENT_SCHEMAS = {
             tier: { type: 'string' },
             isAnonymous: { type: 'boolean' },
             cumulativeTotal: { type: 'number' },
-            timestamp: { type: 'string' }
+            timestamp: { type: 'string' },
+            isError: { type: 'boolean' },
+            eventType: { type: 'string' },
+            metadata: { type: 'object' }
         }
     },
     'platform:gift': {
@@ -293,12 +302,13 @@ const EVENT_SCHEMAS = {
             aggregatedCount: { type: 'number' },
             enhancedGiftData: { type: 'object' },
             sourceType: { type: 'string' },
-            metadata: { type: 'object' }
+            metadata: { type: 'object' },
+            eventType: { type: 'string' }
         }
     },
     'platform:envelope': {
         required: ['type', 'platform', 'username', 'userId', 'id', 'giftType', 'giftCount', 'amount', 'currency', 'timestamp'],
-        optional: ['avatarUrl', 'repeatCount', 'message', 'isError', 'sourceType'],
+        optional: ['avatarUrl', 'repeatCount', 'message', 'isError', 'sourceType', 'eventType', 'metadata'],
         properties: {
             type: { type: 'string', enum: ['platform:envelope'] },
             platform: { type: 'string', enum: VALID_PLATFORMS },
@@ -314,7 +324,9 @@ const EVENT_SCHEMAS = {
             timestamp: { type: 'string' },
             message: { type: 'string' },
             isError: { type: 'boolean' },
-            sourceType: { type: 'string' }
+            sourceType: { type: 'string' },
+            eventType: { type: 'string' },
+            metadata: { type: 'object' }
         }
     },
     'platform:raid': {
@@ -532,11 +544,18 @@ class PlatformEventValidator {
         
         // Check required fields
         if (schema.required) {
+            const isMonetizationEvent = event.type === PlatformEvents.GIFT ||
+                event.type === PlatformEvents.GIFTPAYPIGGY ||
+                event.type === PlatformEvents.PAYPIGGY ||
+                event.type === PlatformEvents.ENVELOPE;
+            const isErrorMonetizationEvent = isMonetizationEvent && event.isError === true;
             const isAnonymousGift = (event.type === PlatformEvents.GIFT || event.type === PlatformEvents.GIFTPAYPIGGY)
                 && event.isAnonymous === true;
             const requiredFields = isAnonymousGift
                 ? schema.required.filter((field) => field !== 'username' && field !== 'userId')
-                : schema.required;
+                : isErrorMonetizationEvent
+                    ? schema.required.filter((field) => field === 'type' || field === 'platform' || field === 'timestamp')
+                    : schema.required;
             for (const field of requiredFields) {
                 const fieldSchema = schema.properties?.[field];
                 const fieldTypes = fieldSchema ? (Array.isArray(fieldSchema.type) ? fieldSchema.type : [fieldSchema.type]) : [];

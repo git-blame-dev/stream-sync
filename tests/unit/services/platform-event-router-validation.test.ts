@@ -253,6 +253,34 @@ describe("PlatformEventRouter validation", () => {
     expect(payload.userId).toBeUndefined();
   });
 
+  it("routes paypiggy and giftpaypiggy notifications without ids", async () => {
+    const { router, runtime } = buildRouter();
+    const timestamp = new Date().toISOString();
+
+    await router.routeEvent({
+      platform: "twitch",
+      type: "platform:paypiggy",
+      data: {
+        username: "PaidFan",
+        userId: "paid-1",
+        timestamp,
+      },
+    });
+    await router.routeEvent({
+      platform: "twitch",
+      type: "platform:giftpaypiggy",
+      data: {
+        username: "GiftSubFan",
+        userId: "gift-sub-1",
+        giftCount: 2,
+        timestamp,
+      },
+    });
+
+    expect(runtime.handlePaypiggyNotification).toHaveBeenCalledTimes(1);
+    expect(runtime.handleGiftPaypiggyNotification).toHaveBeenCalledTimes(1);
+  });
+
   it("routes gift notifications with canonical types", async () => {
     const { router, runtime } = buildRouter();
     const timestamp = new Date().toISOString();

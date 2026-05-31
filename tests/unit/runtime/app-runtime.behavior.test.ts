@@ -240,6 +240,11 @@ describe("AppRuntime behavior", () => {
 
     await runtime.handleUnifiedNotification("platform:gift", "tiktok", "", {
       isAnonymous: true,
+      id: "anonymous-gift-1",
+      giftType: "Rose",
+      giftCount: 1,
+      amount: 1,
+      currency: "coins",
       timestamp: "2024-01-01T00:00:00.000Z",
     });
 

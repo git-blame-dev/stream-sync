@@ -107,6 +107,7 @@ describe("NotificationManager Twitch monetisation behavior", () => {
 
   it("enqueues bits as gifts with gift priority", async () => {
     await notificationManager.handleNotification("platform:gift", "twitch", {
+      id: "tw-bits-hero-1",
       username: "BitsHero",
       userId: "user-3",
       bits: 500,

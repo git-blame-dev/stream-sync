@@ -84,6 +84,7 @@ describe("NotificationManager TikTok monetisation behavior", () => {
 
   it("enqueues coin gifts with gift priority", async () => {
     await notificationManager.handleNotification("platform:gift", "tiktok", {
+      id: "tt-gift-coinhero-1",
       username: "CoinHero",
       userId: "tk-user-2",
       giftType: "Rose",

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'bun:test';
 import { createTestUser } from '../../helpers/test-setup';
 import { PlatformEvents, PlatformEventValidator } from '../../../src/interfaces/PlatformEvents.ts';
 import { DEFAULT_AVATAR_URL } from '../../../src/constants/avatar';
+import { createMonetizationErrorPayload } from '../../../src/utils/monetization-error-utils';
 import testClock from '../../helpers/test-clock';
 
 function expectRecord(value: unknown): asserts value is Record<string, unknown> {
@@ -79,6 +80,7 @@ describe('Platform Events Interface', () => {
                     platform: 'youtube',
                     username: 'test-user',
                     userId: 'test-user-id',
+                    isRenewal: true,
                     timestamp
                 },
                 {
@@ -599,6 +601,20 @@ describe('Platform Events Interface', () => {
 
             monetizationEvents.forEach(event => {
                 expect(PlatformEvents.validateEvent(event)).toBe(true);
+            });
+        });
+
+        it('accepts degraded monetization error payloads for all monetization schemas', () => {
+            const timestamp = new Date(testClock.now()).toISOString();
+            const payloads = [
+                createMonetizationErrorPayload({ notificationType: 'platform:gift', platform: 'tiktok', timestamp }),
+                createMonetizationErrorPayload({ notificationType: 'platform:giftpaypiggy', platform: 'twitch', timestamp }),
+                createMonetizationErrorPayload({ notificationType: 'platform:paypiggy', platform: 'youtube', timestamp }),
+                createMonetizationErrorPayload({ notificationType: 'platform:envelope', platform: 'tiktok', timestamp })
+            ];
+
+            payloads.forEach((payload) => {
+                expect(PlatformEvents.validateEvent(payload)).toBe(true);
             });
         });
 
