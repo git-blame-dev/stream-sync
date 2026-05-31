@@ -12,7 +12,7 @@ type TtsStage = {
 };
 
 type MessageTTSHandlerLike = {
-    createTTSStages: (notification: Record<string, unknown>, config?: Record<string, unknown>) => TtsStage[];
+    createTTSStages: (notification: Record<string, unknown>) => TtsStage[];
     supportsMessages: (notification: Record<string, unknown>) => boolean;
     hasValidMessage: (value: unknown) => boolean;
     createMessageTTS: (username: string, message: string) => string;
@@ -49,31 +49,6 @@ describe('MessageTTSHandler', () => {
             });
             expect(stages[1]).toEqual({
                 text: 'TestUser says Thanks for the stream!',
-                delay: 4000,
-                type: 'message'
-            });
-        });
-
-        test('should not suppress profane messages when generating TTS stages', () => {
-            const notification = {
-                type: 'platform:gift',
-                isSuperChat: true,
-                username: 'TestUser',
-                ttsMessage: 'TestUser sent 5 dollars',
-                message: 'fuck this'
-            };
-            const config = {
-                contentFilter: {
-                    enabled: true,
-                    strictness: 'high'
-                }
-            };
-
-            const stages = MessageTTSHandler.createTTSStages(notification, config);
-
-            expect(stages).toHaveLength(2);
-            expect(stages[1]).toEqual({
-                text: 'TestUser says fuck this',
                 delay: 4000,
                 type: 'message'
             });
