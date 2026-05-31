@@ -9,11 +9,9 @@ class ViewerCountObserver {
     }
 
     async initialize() {
-        // Default implementation - can be overridden
     }
 
     async cleanup() {
-        // Default implementation - can be overridden
     }
 
     getObserverId() {

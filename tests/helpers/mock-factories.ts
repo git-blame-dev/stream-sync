@@ -178,8 +178,6 @@ const requireGiftFields = (payload: unknown): void => {
     requireNonEmptyString(giftPayload.currency, 'currency');
 };
 
-// USER DATA NORMALIZATION HELPERS
-
 const normalizeUserData = (userData: unknown) => {
     const userRecord = requireRecord(userData, 'userData');
 
@@ -199,7 +197,6 @@ const normalizeUserData = (userData: unknown) => {
     return {
         username,
         userId,
-        // Preserve key platform-specific data
         uniqueId: typeof source.uniqueId === 'string' ? source.uniqueId : null,
         gifterLevel: source.gifterLevel,
         isSubscriber: source.isSubscriber,
@@ -208,8 +205,6 @@ const normalizeUserData = (userData: unknown) => {
         followRole: source.followRole
     };
 };
-
-// NOTIFICATION SYSTEM MOCK FACTORIES
 
 const createMockNotificationDispatcher = (methodOverrides: UnknownRecord = {}) => {
     const baseMethods = {
@@ -225,7 +220,6 @@ const createMockNotificationDispatcher = (methodOverrides: UnknownRecord = {}) =
     return {
         ...baseMethods,
         ...methodOverrides,
-        // Meta information for validation
         _mockType: 'NotificationDispatcher',
         _validMethods: Object.keys(baseMethods)
     };
@@ -269,7 +263,6 @@ const createMockNotificationBuilder = (dataOverrides: UnknownRecord = {}) => {
 
 const createMockNotificationManager = (overrides: UnknownRecord = {}) => {
     const baseHandlers = {
-        // Event management methods required by dependency validator
         emit: createMockFn<unknown[], boolean>().mockImplementation((_event, _data) => true),
         on: createMockFn<unknown[], boolean>().mockImplementation((_event, _handler) => true),
         removeListener: createMockFn<unknown[], boolean>().mockImplementation((_event, _handler) => true),
@@ -282,7 +275,6 @@ const createMockNotificationManager = (overrides: UnknownRecord = {}) => {
         handleChatMessage: createMockFn().mockResolvedValue(true)
     };
 
-    // Behavior-focused approach (3-5 core methods)
     const behaviorMethods = {
         createNotification: createMockFn<[unknown?], UnknownRecord>().mockImplementation((notificationData = {}) => {
             const notificationRecord = requireRecord(notificationData, 'notificationData');
@@ -314,13 +306,10 @@ const createMockNotificationManager = (overrides: UnknownRecord = {}) => {
         }),
         normalizeMessage: createMockFn<[unknown], NormalizedMessageResult>().mockImplementation((message) => {
             const sourceMessage = asRecord(message);
-            // Handle case where displayMessage is missing - create it from content
             let displayMessage = typeof sourceMessage.displayMessage === 'string'
                 ? sourceMessage.displayMessage
                 : (typeof sourceMessage.content === 'string' ? sourceMessage.content : 'No message content');
             
-            // Check for Unicode characters (including emojis and accented characters)  
-            // For test data validation, if message contains known Unicode test patterns, always return true
             const hasUnicode = displayMessage.includes('Pokémon') || 
                                displayMessage.includes('💜') || 
                                displayMessage.includes('⚡') || 
@@ -328,7 +317,6 @@ const createMockNotificationManager = (overrides: UnknownRecord = {}) => {
                                displayMessage.includes("'s") ||
                                /[^\u0000-\u007F]/.test(displayMessage);
             
-            // Truncate displayMessage if it exceeds 500 characters
             if (displayMessage && displayMessage.length > 500) {
                 displayMessage = displayMessage.substring(0, 497) + '...';
             }
@@ -448,8 +436,6 @@ const createMockNotificationManager = (overrides: UnknownRecord = {}) => {
     };
 };
 
-// PLATFORM SERVICE MOCK FACTORIES
-
 const createMockYouTubeServices = (configOverrides: UnknownRecord = {}) => {
     const defaultConfig = {
         enabled: true,
@@ -463,7 +449,6 @@ const createMockYouTubeServices = (configOverrides: UnknownRecord = {}) => {
     };
 
     return {
-        // YouTube API Mock
         google: {
             youtube: createMockFn().mockReturnValue({
                 v3: {
@@ -474,7 +459,6 @@ const createMockYouTubeServices = (configOverrides: UnknownRecord = {}) => {
             })
         },
 
-        // YouTube Innertube Mock (for scraping)
         Innertube: {
             create: createMockFn().mockResolvedValue({
                 getInfo: createMockFn().mockResolvedValue({
@@ -488,10 +472,8 @@ const createMockYouTubeServices = (configOverrides: UnknownRecord = {}) => {
             })
         },
 
-        // HTTP Client Mock
         axios: createMockFn().mockResolvedValue({ data: { status: 'success' } }),
 
-        // Service Mocks
         ConnectionService: createMockFn<[], YouTubeConnectionService>().mockImplementation(() => ({
             connect: createMockFn().mockResolvedValue(true),
             disconnect: createMockFn().mockResolvedValue(true),
@@ -531,7 +513,6 @@ const createMockTikTokServices = (configOverrides: UnknownRecord = {}) => {
     };
 
     return {
-        // TikTok WebSocket client mock
         TikTokWebSocketClient: createMockFn<[], TikTokWebSocketClientConnection>().mockImplementation(() => ({
             connect: createMockFn().mockResolvedValue(true),
             disconnect: createMockFn().mockResolvedValue(true),
@@ -541,7 +522,6 @@ const createMockTikTokServices = (configOverrides: UnknownRecord = {}) => {
             getRoomInfo: createMockFn().mockResolvedValue({ viewerCount: 50, title: 'Test TikTok Stream' })
         })),
 
-        // Direct connection mock for connection stability tests
         mockConnection: {
             connect: createMockFn().mockResolvedValue(true),
             disconnect: createMockFn().mockResolvedValue(true),
@@ -551,7 +531,6 @@ const createMockTikTokServices = (configOverrides: UnknownRecord = {}) => {
             getRoomInfo: createMockFn().mockResolvedValue({ viewerCount: 50, title: 'Test TikTok Stream' })
         },
 
-        // TikTok Event Types
         WebcastEvent: {
             CHAT: 'chat',
             GIFT: 'gift',
@@ -568,7 +547,6 @@ const createMockTikTokServices = (configOverrides: UnknownRecord = {}) => {
             WEBSOCKET_CONNECTED: 'websocketConnected'
         },
 
-        // WebSocket Connection Mock
         WebcastPushConnection: createMockFn<[], TikTokServiceConnection>().mockImplementation(() => ({
             connect: createMockFn().mockResolvedValue(true),
             disconnect: createMockFn().mockResolvedValue(true),
@@ -592,7 +570,6 @@ const createMockTwitchServices = (configOverrides: UnknownRecord = {}) => {
     };
 
     return {
-        // TMI (Chat) Mock
         tmi: createMockFn().mockImplementation(() => ({
             connect: createMockFn().mockResolvedValue(['#testchannel']),
             disconnect: createMockFn().mockResolvedValue(['#testchannel']),
@@ -601,14 +578,12 @@ const createMockTwitchServices = (configOverrides: UnknownRecord = {}) => {
             getChannels: createMockFn().mockReturnValue(['#testchannel'])
         })),
 
-        // EventSub Mock
         TwitchEventSub: createMockFn<[], TwitchEventSubService>().mockImplementation(() => ({
             initialize: createMockFn().mockResolvedValue(true),
             shutdown: createMockFn().mockResolvedValue(true),
             isInitialized: true
         })),
 
-        // API Client Mock
         ApiClient: createMockFn<[], TwitchApiClient>().mockImplementation(() => ({
             users: {
                 getUserByName: createMockFn().mockResolvedValue({ id: 'test-user-id', displayName: 'TestUser' })
@@ -618,13 +593,11 @@ const createMockTwitchServices = (configOverrides: UnknownRecord = {}) => {
             }
         })),
 
-        // Auth Provider Mock
         RefreshingAuthProvider: createMockFn().mockImplementation(() => ({
             getAccessToken: createMockFn().mockResolvedValue({ accessToken: 'test-token' }),
             refresh: createMockFn().mockResolvedValue(true)
         })),
 
-        // EventSub WebSocket Mock
         EventSubWsListener: createMockFn().mockImplementation(() => ({
             start: createMockFn().mockResolvedValue(true),
             stop: createMockFn().mockResolvedValue(true),
@@ -638,8 +611,6 @@ const createMockTwitchServices = (configOverrides: UnknownRecord = {}) => {
     };
 };
 
-// INFRASTRUCTURE MOCK FACTORIES
-
 const createMockOBSManager = (connectionState = 'connected', overrides = {}) => {
     const isConnected = connectionState === 'connected';
     
@@ -652,21 +623,17 @@ const createMockOBSManager = (connectionState = 'connected', overrides = {}) => 
         addEventListener: createMockFn(),
         removeEventListener: createMockFn(),
         
-        // Scene Management
         setCurrentScene: createMockFn().mockResolvedValue(true),
         getCurrentScene: createMockFn().mockResolvedValue({ sceneName: 'main_scene' }),
         getSceneList: createMockFn().mockResolvedValue({ scenes: [{ sceneName: 'main_scene' }] }),
         
-        // Source Management
         setTextSource: createMockFn().mockResolvedValue(true),
         getSourceSettings: createMockFn().mockResolvedValue({ text: 'Test text' }),
         setSourceVisibility: createMockFn().mockResolvedValue(true),
         
-        // Media Control
         triggerMediaSource: createMockFn().mockResolvedValue(true),
         setMediaSource: createMockFn().mockResolvedValue(true),
         
-        // Filter Management
         setFilterEnabled: createMockFn().mockResolvedValue(true),
         getFilterList: createMockFn().mockResolvedValue({ filters: [] })
     };
@@ -721,7 +688,6 @@ const createMockRetrySystem = (behaviorConfig: UnknownRecord = {}) => {
         executeWithRetry: createMockFn<[unknown, () => unknown | Promise<unknown>], Promise<unknown>>().mockImplementation(async (_platform, fn) => {
             callCount++;
             
-            // Simulate failure based on success rate
             if (nextPseudoRandom() > defaultBehavior.successRate) {
                 throw new Error(`Simulated failure on attempt ${callCount}`);
             }
@@ -812,7 +778,6 @@ const createTestApp = (handlerOverrides: UnknownRecord = {}) => {
         handleRaidNotification: createMockFn().mockResolvedValue(true),
         updateViewerCount: createMockFn().mockResolvedValue(true),
         
-        // System handlers
         handlePlatformConnection: createMockFn().mockResolvedValue(true),
         handlePlatformDisconnection: createMockFn().mockResolvedValue(true),
         handleError: createMockFn().mockResolvedValue(true)
@@ -822,7 +787,6 @@ const createTestApp = (handlerOverrides: UnknownRecord = {}) => {
         ...baseHandlers,
         ...handlerOverrides,
         
-        // Application services
         notificationManager: createMockNotificationManager(),
         config: {
             general: { debug: false },
@@ -873,7 +837,6 @@ const createMockOBSConnection = (connectionState = 'connected', methodOverrides:
         once: createMockFn(),
         emit: createMockFn(),
         
-        // Missing methods that are being called in integration tests
         processSourceEvent: createMockFn<[unknown], UnknownRecord>().mockImplementation((sourceData) => {
             const sourceRecord = asRecord(sourceData);
             const eventData = asRecord(sourceRecord.eventData);
@@ -886,7 +849,6 @@ const createMockOBSConnection = (connectionState = 'connected', methodOverrides:
                 sourceName: eventData.sourceName || 'Test Source',
                 sourceUuid: eventData.sourceUuid || 'source-uuid',
                 inputKind: eventData.inputKind || 'text_source',
-                // Add expected fields from integration tests
                 inputName: eventData.inputName || eventData.sourceName || 'Chat Display',
                 newText: inputSettings.text || 'New chat message from viewer',
                 fontSize: inputSettings.font_size || 24,
@@ -905,7 +867,6 @@ const createMockOBSConnection = (connectionState = 'connected', methodOverrides:
                 platform: 'obs',
                 sceneName: eventData.sceneName || eventData.toSceneName || 'Main Scene',
                 sceneUuid: eventData.sceneUuid || eventData.toSceneUuid || 'scene-uuid',
-                // Scene transition specific properties
                 transitionName: eventData.transitionName || 'Fade',
                 fromScene: eventData.fromSceneName || 'Main Scene',
                 toScene: eventData.toSceneName || 'BRB Scene',
@@ -917,7 +878,6 @@ const createMockOBSConnection = (connectionState = 'connected', methodOverrides:
             };
         }),
         
-        // Missing method used in integration tests for display flow
         displayNotification: createMockFn<[unknown], UnknownRecord>().mockImplementation((notification) => {
             const notificationRecord = asRecord(notification);
             const timestamp = createTimestamp();
@@ -935,7 +895,6 @@ const createMockOBSConnection = (connectionState = 'connected', methodOverrides:
     return {
         ...baseMethods,
         ...methodOverrides,
-        // Meta information for validation
         _mockType: 'OBSConnection',
         _connectionState: connectionState,
         _validMethods: Object.keys(baseMethods)
@@ -988,8 +947,6 @@ const createMockDisplayQueue = (queueState: DisplayQueueState = {}, methodOverri
     };
 };
 
-// MOCK LIFECYCLE MANAGEMENT
-
 const resetMock = (mockObject: unknown) => {
     const mockRecord = asRecord(mockObject);
     if (!mockRecord._mockType) {
@@ -1025,7 +982,6 @@ const validateMockAPI = (mockObject: unknown, expectedMethods: string[] = []) =>
         return false;
     }
 
-    // Check if expected methods exist on the mock object
     const missingMethods = expectedMethods.filter(method => !Object.prototype.hasOwnProperty.call(mockRecord, method));
     
     if (missingMethods.length > 0) {
@@ -1035,8 +991,6 @@ const validateMockAPI = (mockObject: unknown, expectedMethods: string[] = []) =>
 
     return true;
 };
-
-// BEHAVIOR-FOCUSED PLATFORM-SPECIFIC FACTORIES (PHASE 4A)
 
 const createMockYouTubePlatform = (behaviorConfig: UnknownRecord = {}) => {
     const defaultBehavior = {
@@ -1240,11 +1194,10 @@ const createMockTikTokPlatform = (behaviorConfig: UnknownRecord = {}) => {
         }),
         aggregateGifts: createMockFn<[unknown], Promise<unknown>>().mockImplementation(async (giftEvents) => {
             if (defaultBehavior.giftAggregation === 'disabled') {
-                return giftEvents; // No aggregation
+                return giftEvents;
             }
             const gifts = Array.isArray(giftEvents) ? giftEvents.map(asRecord) : [];
             
-            // Simple aggregation logic
             const aggregated = gifts.reduce<Record<string, UnknownRecord & { giftCount: number }>>((acc, gift) => {
                 const key = `${gift.username}-${gift.giftType}`;
                 if (acc[key]) {
@@ -1268,7 +1221,6 @@ const createMockTikTokPlatform = (behaviorConfig: UnknownRecord = {}) => {
     };
 };
 
-// Behavior-focused scenario builders
 
 const createUserGiftScenario = (scenarioConfig: Partial<UserGiftScenarioState> = {}) => {
     const scenario: UserGiftScenarioState = {
@@ -1341,7 +1293,6 @@ const getUserExperienceState = () => {
 
 const getDisplayedNotifications = (notificationData: UnknownRecord[] = []) => {
     if (notificationData.length === 0) {
-        // Return empty array if no notifications provided
         return [];
     }
     
@@ -1434,8 +1385,6 @@ const createBulkGiftEvents = (count: number, giftTemplate: UnknownRecord = {}) =
 };
 
 const simulateNetworkFailure = (platform: string) => {
-    // This is a behavior testing helper - it doesn't actually simulate network failure
-    // It's used in combination with expectErrorRecoveryBehavior to test graceful degradation
     console.log(`Simulating network failure for ${platform} in behavior test`);
 };
 
@@ -1463,7 +1412,7 @@ const createTikTokGiftBuilder = () => {
         },
         
         withAmount(cents: number) {
-            gift.amount = cents / 100; // Convert cents to dollars
+            gift.amount = cents / 100;
             return this;
         },
         
@@ -1504,8 +1453,6 @@ const createInvalidEventBuilder = () => {
     };
 };
 
-// EXPORTS
-
 const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord = {}) => {
     const methodOverrides: MockMethodMap = {};
     const behaviorOverrides: UnknownRecord = {};
@@ -1517,7 +1464,6 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
         }
     });
 
-    // Behavior-focused approach
     const defaultBehavior: MockPlatformBehavior = {
         connectsBehavior: 'stable',
         processingSpeed: 'fast',
@@ -1533,10 +1479,8 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
 
         const giftRecord = giftData as UnknownRecord;
 
-        // Normalize user data for consistent access
         const normalizedUser = normalizeUserData(giftRecord.user || giftRecord);
 
-        // Handle TikTok-specific gift data structure
         let giftType: unknown;
         let giftCount: number;
         let amount: number;
@@ -1551,7 +1495,6 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
             currency = giftRecord.currency || 'coins';
             giftId = giftDetails.id ?? null;
         } else {
-            // For other platforms, use amount-based data
             const isTwitch = platformName === 'twitch';
             const isYouTube = platformName === 'youtube';
             giftType = giftRecord.giftType || (isTwitch ? 'bits' : (isYouTube ? 'Super Chat' : 'gift'));
@@ -1563,7 +1506,6 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
             giftId = giftRecord.id || null;
         }
 
-        // Return proper structure expected by validateUserGiftFlow
         const timestamp = createTimestamp();
         const notification = {
             id: buildTestId(`gift-${platformName}`),
@@ -1584,7 +1526,6 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
             timestamp: timestamp.iso
         };
 
-        // Return wrapped structure for user journey validation
         return {
             processed: true,
             notification: notification,
@@ -1594,7 +1535,6 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
         };
     };
     
-    // Behavior-focused methods (3-5 max)
     const behaviorMethods = {
         connectToChat: createMockFn<[], Promise<boolean>>().mockImplementation(async () => {
             if (defaultBehavior.connectsBehavior === 'unstable' && nextPseudoRandom() < getErrorRate()) {
@@ -1603,7 +1543,6 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
             return true;
         }),
         processMessage: createMockFn<[unknown], UnknownRecord>().mockImplementation((message) => {
-            // Error handling for malformed input
             if (message === null) {
                 throw new Error('Message data is missing - unable to process chat message');
             }
@@ -1628,11 +1567,9 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
                 // Simulate slow processing without actual delay in tests
             }
             
-            // Normalize user data for consistent access
             const normalizedUser = normalizeUserData(message);
             const fallbackTimestamp = createTimestamp();
             
-            // Return properly structured message data based on platform
             const baseResult = {
                 eventType: 'chat',
                 messageType: 'chat',
@@ -1646,14 +1583,11 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
                 processed: true
             };
             
-            // Add platform-specific properties
             if (platformName === 'tiktok') {
-                // TikTok-specific validation - only enforce for realistic chat messages, not test messages
                 if (messageUser.uniqueId === null && messageRecord.type !== 'test') {
                     throw new Error('TikTok user identifier is missing - unable to process message');
                 }
                 
-                // For TikTok, the message carries user data in the nested user field
                 const tiktokUser = normalizeUserData(message);
                 return {
                     ...baseResult,
@@ -1722,12 +1656,10 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
             }
             const eventRecord = event as UnknownRecord;
             
-            // Route to appropriate processor based on event type
             if (eventRecord.type === 'gift') {
                 return processGiftForPlatform(eventRecord);
             }
             
-            // Generic event processing
             const timestamp = createTimestamp();
             return {
                 id: buildTestId(`event-${platformName}`),
@@ -1742,9 +1674,7 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
             return { handled: true, notification };
         }),
         
-        // TikTok-specific methods
         processFollow: createMockFn<[unknown], UnknownRecord>().mockImplementation((followData) => {
-            // For TikTok, follow data contains user info under the user field
             const normalizedUser = normalizeUserData(followData);
             const timestamp = createTimestamp();
             return {
@@ -1766,7 +1696,6 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
         
         processMemberJoin: createMockFn<[unknown], UnknownRecord>().mockImplementation((memberData) => {
             const memberRecord = memberData as UnknownRecord;
-            // For TikTok, member data contains user info under the user field
             const normalizedUser = normalizeUserData(memberData);
             const timestamp = createTimestamp();
             return {
@@ -1875,7 +1804,6 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
             };
         }),
         
-        // Twitch EventSub methods
         processEventSubMessage: createMockFn<[unknown], UnknownRecord>().mockImplementation((messageData) => {
             const messageRecord = messageData as UnknownRecord;
             const chatter = asRecord(messageRecord.chatter);
@@ -1993,7 +1921,6 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
             };
         }),
         
-        // YouTube-specific methods
         processSuperSticker: createMockFn<[unknown], UnknownRecord>().mockImplementation((stickerData) => {
             const stickerRecord = stickerData as UnknownRecord;
             const item = asRecord(stickerRecord.item);
@@ -2058,7 +1985,6 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
             };
         }),
         
-        // StreamElements methods
         processFollowWebhook: createMockFn<[unknown], UnknownRecord>().mockImplementation((followData) => {
             const followRecord = followData as UnknownRecord;
             const data = asRecord(followRecord.data);
@@ -2100,14 +2026,13 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
         processWebhook: createMockFn<[unknown], UnknownRecord>().mockImplementation((webhookData) => {
             const webhookRecord = webhookData as UnknownRecord;
             const user = asRecord(webhookRecord.user);
-            // Determine event type - StreamElements subscriber webhook has 'subscriber_' in eventId
             const eventId = typeof webhookRecord.eventId === 'string' ? webhookRecord.eventId : '';
             const activity = typeof webhookRecord.activity === 'string' ? webhookRecord.activity : '';
             const isSubscriber = eventId.includes('subscriber_') ||
                                  activity.includes('subscriber_new') ||
                                  webhookRecord.listener === 'subscriber-latest';
             const eventType = isSubscriber ? 'subscriber' : 'follow';
-            const targetPlatform = webhookRecord.platform || 'youtube'; // Route to the actual platform
+            const targetPlatform = webhookRecord.platform || 'youtube';
             
             if (eventType === 'follow') {
                 const username = webhookRecord.username || user.displayName || 'TestFollower';
@@ -2158,7 +2083,6 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
             }
         }),
         
-        // OBS WebSocket methods
         processSceneTransition: createMockFn<[unknown], UnknownRecord>().mockImplementation((sceneData) => {
             const sceneRecord = sceneData as UnknownRecord;
             const eventData = asRecord(sceneRecord.eventData);
@@ -2213,7 +2137,6 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
                 platform: 'obs',
                 sceneName: eventData.sceneName || eventData.toSceneName || 'Main Scene',
                 sceneUuid: eventData.sceneUuid || eventData.toSceneUuid || 'scene-uuid',
-                // Scene transition specific properties
                 transitionName: eventData.transitionName || 'Fade',
                 fromScene: eventData.fromSceneName || 'Main Scene',
                 toScene: eventData.toSceneName || 'BRB Scene',
@@ -2238,7 +2161,6 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
                 sourceName: eventData.sourceName || eventData.inputName || 'Test Source',
                 sourceUuid: eventData.sourceUuid || eventData.inputUuid || 'source-uuid',
                 inputKind: eventData.inputKind || 'text_source',
-                // Add expected fields from integration tests
                 inputName: eventData.inputName || eventData.sourceName || 'Chat Display',
                 inputUuid: eventData.inputUuid || eventData.sourceUuid || '00000000-0000-0000-0000-000000000012',
                 newText: inputSettings.text || 'New chat message from viewer',
@@ -2259,7 +2181,6 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
         processViewerEvent: createMockFn<[unknown], UnknownRecord>().mockImplementation((viewerData) => {
             const viewerRecord = viewerData as UnknownRecord;
             const user = asRecord(viewerRecord.user);
-            // Normalize event type from PascalCase to snake_case
             let eventType = viewerRecord.type || 'viewer_join';
             if (eventType === 'ViewerJoin') eventType = 'viewer_join';
             if (eventType === 'ViewerLeave') eventType = 'viewer_leave';
@@ -2313,7 +2234,6 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
             };
         }),
 
-        // Platform-specific handlers that are expected by E2E tests
         handleChatMessage: createMockFn<[unknown], Promise<UnknownRecord>>().mockImplementation(async (message) => {
             const messageRecord = message as UnknownRecord;
             const timestamp = createTimestamp();
@@ -2404,7 +2324,6 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
             };
         }),
 
-        // Connection status methods
         isConnected: createMockFn<[], boolean>().mockImplementation(() => {
             return defaultBehavior.connectsBehavior !== 'disconnected';
         }),
@@ -2417,13 +2336,11 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
             return 1000;
         }),
 
-        // Connection status alias for TikTok
         get connectionStatus() {
             return this.isConnected();
         }
     };
 
-    // Add platform-specific methods
     let platformSpecificMethods: MockMethodMap = {};
     
     if (platformName === 'youtube') {
@@ -2459,7 +2376,6 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
                 };
             }),
             
-            // Add missing methods for Innertube tests
             searchLiveStreams: createMockFn().mockResolvedValue(['testvideoid1', 'testvideoid2']),
             connectToStream: createMockFn().mockResolvedValue(true),
             getInnertubeInstanceCount: createMockFn().mockReturnValue(1),
@@ -2469,12 +2385,10 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
             }
         };
     } else if (platformName === 'tiktok') {
-        // TikTok needs viewer count caching for processRoomUser
         let cachedViewerCount = 100;
         
         platformSpecificMethods = {
             getCachedViewerCount: createMockFn<[], number>().mockImplementation(() => cachedViewerCount),
-            // Override processRoomUser to update cache
             processRoomUser: createMockFn<[unknown], UnknownRecord>().mockImplementation((roomUserData) => {
                 const roomUserRecord = roomUserData as UnknownRecord;
                 cachedViewerCount = Number(roomUserRecord.viewerCount ?? 1847);
@@ -2489,7 +2403,6 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
                     timestamp: timestamp.iso
                 };
             }),
-            // Override processGift to return notification directly (not nested)
             processGift: createMockFn<[unknown], UnknownRecord>().mockImplementation((giftData) => {
                 const giftRecord = giftData as UnknownRecord;
                 const normalizedUser = normalizeUserData(giftRecord);
@@ -2502,7 +2415,6 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
                     : (Number(giftDetails.diamondCount) * giftCount || 0);
                 const timestamp = createTimestamp();
                 
-                // Return notification directly to match test expectations
                 return {
                     id: buildTestId('gift'),
                     type: 'platform:gift',
@@ -2537,7 +2449,6 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
     };
 };
 
-// REMOVED: createMockGiftDataLogger - GiftDataLogger functionality is redundant with logRawPlatformData
 
 
 const createMockSpamDetector = (behaviorOverrides = {}) => {
@@ -2614,7 +2525,6 @@ const createMockAuthManager = (state = 'READY', authOverrides = {}) => {
 
     return {
         ...baseMethods,
-        // Auth data
         config: { ...defaultAuthData },
         state,
         
@@ -2630,7 +2540,6 @@ const createMockTikTokPlatformDependencies = (behaviorOverrides: UnknownRecord =
     const controlEventOverrides = asRecord(behaviorOverrides.controlEvent);
     const pushConnectionOverrides = asRecord(behaviorOverrides.pushConnection);
     const constantsOverrides = asRecord(behaviorOverrides.constants);
-    // Mock TikTok WebSocket client with controlled behavior
     const mockTikTokWebSocketClient = createMockFn<[], TikTokWebSocketClientConnection>().mockImplementation(() => {
         const mockConnection = {
             connect: createMockFn().mockResolvedValue(true),
@@ -2653,7 +2562,6 @@ const createMockTikTokPlatformDependencies = (behaviorOverrides: UnknownRecord =
         return mockConnection;
     });
 
-    // Mock WebcastEvent with event types
     const mockWebcastEvent = {
         CHAT: 'WebcastChatMessage',
         GIFT: 'WebcastGiftMessage', 
@@ -2665,7 +2573,6 @@ const createMockTikTokPlatformDependencies = (behaviorOverrides: UnknownRecord =
         ...webcastEventOverrides
     };
 
-    // Mock ControlEvent with control types
     const mockControlEvent = {
         CONNECTED: 'connected',
         DISCONNECTED: 'disconnected',
@@ -2674,7 +2581,6 @@ const createMockTikTokPlatformDependencies = (behaviorOverrides: UnknownRecord =
         ...controlEventOverrides
     };
 
-    // Mock WebcastPushConnection with connection management
     const mockWebcastPushConnection = createMockFn<[], TikTokServiceConnection>().mockImplementation(() => ({
         connect: createMockFn().mockResolvedValue(true),
         disconnect: createMockFn().mockResolvedValue(true),
@@ -2703,36 +2609,29 @@ const createMockTikTokPlatformDependencies = (behaviorOverrides: UnknownRecord =
 
 const createMockPlatformConnection = (handlerOverrides: UnknownRecord = {}) => {
     const baseHandlers = {
-        // Chat handlers
         processChatMessage: createMockFn().mockResolvedValue(true),
         sendChatMessage: createMockFn().mockResolvedValue(true),
         
-        // Notification handlers
         processGiftNotification: createMockFn().mockResolvedValue(true),
         processFollowNotification: createMockFn().mockResolvedValue(true),
         processSubscriptionNotification: createMockFn().mockResolvedValue(true),
         
-        // Viewer count handlers
         getViewerCount: createMockFn().mockResolvedValue(100),
         updateViewerCount: createMockFn().mockResolvedValue(true),
         
-        // Connection handlers
         connect: createMockFn().mockResolvedValue(true),
         disconnect: createMockFn().mockResolvedValue(true),
         isConnected: createMockFn().mockReturnValue(true),
         getConnectionState: createMockFn().mockReturnValue('connected'),
         
-        // Platform-specific handlers
         handleTikTokMessage: createMockFn().mockResolvedValue(true),
         handleTwitchMessage: createMockFn().mockResolvedValue(true),
         handleYouTubeMessage: createMockFn().mockResolvedValue(true),
         
-        // Permission and validation
         checkPermissions: createMockFn().mockReturnValue(true),
         validateMessage: createMockFn().mockReturnValue(true),
         normalizeMessage: createMockFn<[UnknownRecord], UnknownRecord>().mockImplementation(msg => msg),
         
-        // Performance and optimization
         handleRapidMessages: createMockFn().mockResolvedValue(true),
         handleConcurrentOperations: createMockFn().mockResolvedValue(true)
     };
@@ -2741,7 +2640,6 @@ const createMockPlatformConnection = (handlerOverrides: UnknownRecord = {}) => {
         ...baseHandlers,
         ...handlerOverrides,
         
-        // Platform metadata
         platform: 'mock',
         version: '1.0.0',
         
@@ -2750,7 +2648,6 @@ const createMockPlatformConnection = (handlerOverrides: UnknownRecord = {}) => {
     };
 };
 
-// Authentication system factories
 
 const createMockAuthService = (options: AuthFactoryOptions = {}) => {
     return {
@@ -2785,7 +2682,6 @@ const createHttpMethods = (options: AuthFactoryOptions = {}) => {
     } : {};
     
     return {
-        // HTTP Request Headers - Consistent across all components
         getRequestHeaders: createMockFn<[string, string], Promise<RequestHeaders>>().mockImplementation(async (_endpoint, operation) => {
             return {
                 standardHeaders,
@@ -2794,7 +2690,6 @@ const createHttpMethods = (options: AuthFactoryOptions = {}) => {
             };
         }),
         
-        // HTTP Timeout Configuration - Unified across components
         getTimeoutConfig: createMockFn<[string], Promise<TimeoutConfig>>().mockImplementation(async (operation) => {
             const timeoutMap: Record<string, TimeoutConfig> = {
                 'token_validation': { requestTimeout: 10000, retryTimeout: 15000 },
@@ -2805,7 +2700,6 @@ const createHttpMethods = (options: AuthFactoryOptions = {}) => {
             return timeoutMap[operation] ?? { requestTimeout: 10000, retryTimeout: 15000 };
         }),
         
-        // HTTP Retry Configuration - Consistent across components
         getRetryConfig: createMockFn<[string], Promise<RetryConfig>>().mockImplementation(async (errorType) => {
             const retryMap: Record<string, RetryConfig> = {
                 'network_timeout': { maxRetries: 3, backoffMultiplier: 2 },
@@ -2816,7 +2710,6 @@ const createHttpMethods = (options: AuthFactoryOptions = {}) => {
             return retryMap[errorType] ?? { maxRetries: 3, backoffMultiplier: 2 };
         }),
         
-        // HTTP Response Status Handling - Unified behavior
         handleResponseStatus: createMockFn<[unknown], Promise<UnknownRecord>>().mockImplementation(async (response) => {
             const responseRecord = asRecord(response);
             const status = Number(responseRecord.status);
@@ -2831,7 +2724,6 @@ const createHttpMethods = (options: AuthFactoryOptions = {}) => {
             return statusCategories[status] ?? { category: 'unknown', shouldRetry: false };
         }),
         
-        // HTTP Response Data Parsing - Consistent patterns
         parseResponseData: createMockFn<[unknown, string], Promise<UnknownRecord>>().mockImplementation(async (response, format) => {
             const responseData = asRecord(asRecord(response).data);
             const userData = Array.isArray(responseData.data) ? asRecord(responseData.data[0]) : {};
@@ -2862,7 +2754,6 @@ const createHttpMethods = (options: AuthFactoryOptions = {}) => {
             return formatMappings[format] ?? { parsedFields: [], parsedData: {} };
         }),
         
-        // Network Error Handling - Unified across components
         handleNetworkError: createMockFn<[unknown], Promise<UnknownRecord>>().mockImplementation(async (error) => {
             const errorCode = String(asRecord(error).code ?? '');
             const errorMappings: Record<string, UnknownRecord> = {
@@ -2886,7 +2777,6 @@ const createHttpMethods = (options: AuthFactoryOptions = {}) => {
             };
         }),
         
-        // Request Cancellation Handling - Consistent behavior
         handleRequestCancellation: createMockFn<[string], Promise<UnknownRecord>>().mockImplementation(async (reason) => {
             const cancellationMessages: Record<string, string> = {
                 'user_initiated': 'Request cancelled by user',
@@ -2900,9 +2790,7 @@ const createHttpMethods = (options: AuthFactoryOptions = {}) => {
             };
         }),
         
-        // Request Lifecycle Management - Unified patterns
         handleLifecycleEvent: createMockFn<[string], Promise<LifecycleResult>>().mockImplementation(async (event) => {
-            // Use a shared timing mechanism for consistency across all mock components
             const mockTime = options._sharedTiming ?? createTimestamp().ms;
             
             const lifecycleActions: Record<string, LifecycleResult> = {
@@ -2923,7 +2811,6 @@ const createHttpMethods = (options: AuthFactoryOptions = {}) => {
             return lifecycleActions[event] ?? { actions: [], timing: {} };
         }),
         
-        // Request Priority and Queuing - Consistent across components
         queueRequest: createMockFn<[string], Promise<UnknownRecord>>().mockImplementation(async (requestType) => {
             const priorityMappings: Record<string, UnknownRecord> = {
                 'token_validation': { priority: 'high', queuePosition: 1 },
@@ -2934,7 +2821,6 @@ const createHttpMethods = (options: AuthFactoryOptions = {}) => {
             return priorityMappings[requestType] ?? { priority: 'medium', queuePosition: 2 };
         }),
         
-        // Centralized HTTP Operations - Single source of truth
         performHttpOperation: createMockFn<[unknown], Promise<UnknownRecord>>().mockImplementation(async (operation) => {
             return {
                 operationSource: 'centralized_http_client',
@@ -2944,7 +2830,6 @@ const createHttpMethods = (options: AuthFactoryOptions = {}) => {
             };
         }),
         
-        // Unified Request Builder - Consistent request building
         buildRequest: createMockFn<[unknown], Promise<BuiltRequestResult>>().mockImplementation(async (requestSpec) => {
             const spec = asRecord(requestSpec);
             const endpoint = typeof spec.endpoint === 'string' ? spec.endpoint : '';
@@ -2974,7 +2859,6 @@ const createMockTokenRefresh = (options: AuthFactoryOptions = {}) => {
         logger: options.logger || noOpLogger,
         fileSystem: options.fileSystem || createMockFileSystem(),
 
-        // Mock validation methods
         validateToken: createMockFn().mockResolvedValue(true),
         isPlaceholderToken: createMockFn().mockResolvedValue(false),
         validateTokenFormat: createMockFn().mockResolvedValue(true),
@@ -2983,7 +2867,6 @@ const createMockTokenRefresh = (options: AuthFactoryOptions = {}) => {
         performComprehensiveValidation: createMockFn().mockResolvedValue({ valid: true }),
         getValidationImplementationInfo: createMockFn().mockResolvedValue({ type: 'mock' }),
 
-        // Mock configuration methods
         updateConfig: createMockFn().mockResolvedValue({
             success: true,
             updatePattern: 'unified_token_update',
@@ -3003,7 +2886,6 @@ const createMockTokenRefresh = (options: AuthFactoryOptions = {}) => {
         performConfigOperation: createMockFn().mockResolvedValue(true),
         getCurrentState: createMockFn().mockResolvedValue({}),
 
-        // HTTP Request Methods - Consistent across all auth components
         ...createHttpMethods(options),
 
         _mockType: 'TokenRefresh'
@@ -3018,7 +2900,6 @@ const createMockAuthInitializer = (options: AuthFactoryOptions = {}) => {
         },
         logger: options.logger || noOpLogger,
 
-        // Mock validation methods
         validateToken: createMockFn().mockResolvedValue(true),
         isPlaceholderToken: createMockFn().mockResolvedValue(false),
         validateTokenFormat: createMockFn().mockResolvedValue(true),
@@ -3027,7 +2908,6 @@ const createMockAuthInitializer = (options: AuthFactoryOptions = {}) => {
         performComprehensiveValidation: createMockFn().mockResolvedValue({ valid: true }),
         getValidationImplementationInfo: createMockFn().mockResolvedValue({ type: 'mock' }),
 
-        // HTTP Request Methods - Consistent across all auth components
         ...createHttpMethods(options),
 
         _mockType: 'AuthInitializer'
@@ -3043,7 +2923,6 @@ const createMockOAuthHandler = (options: AuthFactoryOptions = {}) => {
         logger: options.logger || noOpLogger,
         fileSystem: options.fileSystem || createMockFileSystem(),
 
-        // Mock configuration methods
         updateConfig: createMockFn().mockResolvedValue({
             success: true,
             updatePattern: 'unified_token_update',
@@ -3065,12 +2944,10 @@ const createMockOAuthHandler = (options: AuthFactoryOptions = {}) => {
         maintainConfigurationState: createMockFn().mockResolvedValue(true),
         synchronizeConfigurationChanges: createMockFn().mockResolvedValue(true),
 
-        // Mock error handling methods
         categorizeError: createMockFn().mockReturnValue({ category: 'recoverable' }),
         attemptRecovery: createMockFn().mockResolvedValue({ recovered: true }),
         getImplementationInfo: createMockFn().mockReturnValue({ type: 'mock' }),
 
-        // Mock additional methods
         validateConfigData: createMockFn().mockResolvedValue(true),
         updateWithBackup: createMockFn().mockResolvedValue(true),
         handleConfigUpdateError: createMockFn().mockResolvedValue({ handled: true }),
@@ -3082,7 +2959,6 @@ const createMockOAuthHandler = (options: AuthFactoryOptions = {}) => {
         performComprehensiveValidation: createMockFn().mockResolvedValue({ valid: true }),
         getCurrentState: createMockFn().mockResolvedValue({}),
 
-        // HTTP Request Methods - Consistent across all auth components
         ...createHttpMethods(options),
 
         _mockType: 'OAuthHandler'
@@ -3099,14 +2975,11 @@ const createMockHttpClient = (options: AuthFactoryOptions = {}) => {
         logger: options.logger || noOpLogger,
         axios: options.axios || { request: createMockFn(), get: createMockFn(), post: createMockFn() },
         
-        // HTTP Request Methods - Consistent across all auth components
         ...createHttpMethods(options),
         
         _mockType: 'HttpClient'
     };
 };
-
-// E2E WEBSOCKET MESSAGE GENERATORS - For comprehensive E2E testing
 
 function createMockWebSocketMessage(platform: 'twitch', eventType: string, eventData?: UnknownRecord): TwitchWebSocketMessage;
 function createMockWebSocketMessage(platform: 'youtube', eventType: string, eventData?: UnknownRecord): YouTubeWebSocketMessage;
@@ -3460,12 +3333,10 @@ const createWebSocketMessageSimulator = (options: { platform?: SupportedPlatform
 };
 
 export {
-    // Notification System Factories
     createMockNotificationDispatcher,
     createMockNotificationBuilder,
     createMockNotificationManager,
 
-    // Platform Service Factories
     createMockYouTubeServices,
     createMockTikTokServices,
     createMockTwitchServices,
@@ -3473,12 +3344,10 @@ export {
     createMockPlatformConnection,
     createMockTikTokPlatformDependencies,
 
-    // Behavior-focused platform factories
     createMockYouTubePlatform,
     createMockTwitchPlatform,
     createMockTikTokPlatform,
 
-    // Infrastructure Factories
     createMockOBSManager,
     createMockSourcesManager,
     createMockRetrySystem,
@@ -3490,20 +3359,17 @@ export {
     createMockOBSConnection,
     createMockAuthManager,
 
-    // Authentication system factories
     createMockAuthService,
     createMockTokenRefresh,
     createMockAuthInitializer,
     createMockOAuthHandler,
     createMockHttpClient,
 
-    // Mock Lifecycle Management
     resetMock,
     clearMockCalls,
     validateMockAPI,
     setupAutomatedCleanup,
 
-    // Behavior-focused scenario builders
     createUserGiftScenario,
     getUserExperienceState,
     getDisplayedNotifications,
@@ -3515,7 +3381,6 @@ export {
     createTikTokGiftBuilder,
     createInvalidEventBuilder,
 
-    // E2E websocket helpers
     createMockWebSocketMessage,
     createTwitchWebSocketMessage,
     createYouTubeWebSocketMessage,

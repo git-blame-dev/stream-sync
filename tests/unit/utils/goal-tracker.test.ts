@@ -534,7 +534,7 @@ describe("Goal Tracker - Core Functionality", () => {
         });
 
         const finalState = goalTracker.getGoalState("tiktok");
-        expect(requireGoalState(finalState, "tiktok").current).toBe(100); // 10 donations of 10 each
+        expect(requireGoalState(finalState, "tiktok").current).toBe(100);
       },
       TEST_TIMEOUTS.MEDIUM,
     );
@@ -551,7 +551,7 @@ describe("Goal Tracker - Core Functionality", () => {
         }
 
         const duration = testClock.now() - startTime;
-        expect(duration).toBeLessThan(100); // Should complete in under 100ms
+        expect(duration).toBeLessThan(100);
       },
       TEST_TIMEOUTS.FAST,
     );

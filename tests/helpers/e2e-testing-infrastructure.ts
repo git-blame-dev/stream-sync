@@ -198,7 +198,7 @@ class WebSocketMessageSimulator extends EventEmitter {
         this.logger = options.logger || logger;
         this.platform = options.platform || 'generic';
         this.messageQueue = [];
-        this.processingDelay = options.processingDelay || 10; // ms
+        this.processingDelay = options.processingDelay || 10;
         this.errorHandler = createPlatformErrorHandler(this.logger, 'e2e-testing');
     }
 
@@ -210,14 +210,12 @@ class WebSocketMessageSimulator extends EventEmitter {
         }
 
         try {
-            // Simulate message processing with realistic timing
             const effectiveDelay = resolveDelay(this.processingDelay, this.processingDelay || 50);
             await safeDelay(effectiveDelay, this.processingDelay || 50, 'E2E message processing delay');
             testClock.advance(effectiveDelay);
             
             let result: Result;
             
-            // Route to appropriate platform handler
             if (typeof platform.handleWebSocketMessage !== 'function') {
                 throw new Error(`Platform ${this.platform} does not support WebSocket message injection`);
             }
@@ -270,7 +268,6 @@ class WebSocketMessageSimulator extends EventEmitter {
         let results: MessageProcessingResult[] = [];
         
         if (concurrent) {
-            // Process messages concurrently with concurrency limit
             const batches: unknown[][] = [];
             for (let i = 0; i < messages.length; i += maxConcurrency) {
                 batches.push(messages.slice(i, i + maxConcurrency));
@@ -287,7 +284,6 @@ class WebSocketMessageSimulator extends EventEmitter {
                 results.push(...batchResults);
             }
         } else {
-            // Process messages sequentially
             results = await this.processMessageSequence(messages, platform);
         }
         
@@ -327,7 +323,7 @@ class CrossPlatformIntegrationTester {
     errorHandler: PlatformErrorHandler;
 
     constructor(platforms: PlatformMap = {}, options: { logger?: TestLogger } = {}) {
-        this.platforms = platforms; // { twitch: platformInstance, youtube: platformInstance, etc. }
+        this.platforms = platforms;
         this.logger = options.logger || logger;
         this.notificationCapture = [];
         this.systemStateHistory = [];
@@ -343,12 +339,10 @@ class CrossPlatformIntegrationTester {
         const startTime = testClock.now();
         const results = {} as Record<Extract<keyof TEvents, string>, SimultaneousEventResult>;
         
-        // Capture initial system state
         const initialState = this._captureSystemState();
         this.systemStateHistory.push({ type: 'initial', state: initialState, timestamp: startTime });
         
         try {
-            // Process events concurrently
             const processPromises = Object.entries(simultaneousEvents).map(async ([platformName, event]) => {
                 const platform = this.platforms[platformName];
                 if (!platform) {
@@ -370,12 +364,10 @@ class CrossPlatformIntegrationTester {
 
             const allResults = await Promise.all(processPromises);
             
-            // Organize results by platform
             allResults.forEach(result => {
                 results[result.platformName as Extract<keyof TEvents, string>] = result;
             });
 
-            // Capture final system state
             const finalState = this._captureSystemState();
             const endTime = testClock.now();
             this.systemStateHistory.push({ type: 'final', state: finalState, timestamp: endTime });
@@ -407,32 +399,27 @@ class CrossPlatformIntegrationTester {
         
         this.logger.debug('[E2E] Testing cross-platform priority resolution', 'e2e-testing');
         
-        // Simulate notification processing with priority logic
         const processedNotifications: Array<PriorityNotification & { processedAt: number; processingOrder: number }> = [];
         const startTime = testClock.now();
         
-        // Sort by priority and value for resolution
         const sortedNotifications = [...competingNotifications].sort((a, b) => {
-            // Priority-based sorting
             const aPriority = a.priority ? PRIORITY_WEIGHT[a.priority] : 0;
             const bPriority = b.priority ? PRIORITY_WEIGHT[b.priority] : 0;
             
             if (aPriority !== bPriority) {
-                return bPriority - aPriority; // Higher priority first
+                return bPriority - aPriority;
             }
             
-            // Value-based tie-breaking
             const aValue = a.amount || a.diamonds || a.viewerCount || 0;
             const bValue = b.amount || b.diamonds || b.viewerCount || 0;
             
-            return bValue - aValue; // Higher value first
+            return bValue - aValue;
         });
 
-        // Process notifications in priority order within time window
         for (const notification of sortedNotifications) {
             const processTime = testClock.now();
             if (processTime - startTime > timeWindow) {
-                break; // Time window exceeded
+                break;
             }
 
             processedNotifications.push({
@@ -441,7 +428,6 @@ class CrossPlatformIntegrationTester {
                 processingOrder: processedNotifications.length + 1
             });
 
-            // Simulate processing delay
             await safeDelay(10, 10, 'E2E notification delay');
             testClock.advance(10);
         }
@@ -489,7 +475,6 @@ class CrossPlatformIntegrationTester {
         };
 
         if (platformState.connected && platformState.stable && !isStale) {
-            // Normal processing
             processingResult.processed = true;
             processingResult.result = {
                 status: 'processed',
@@ -497,7 +482,6 @@ class CrossPlatformIntegrationTester {
                 timestamp: currentTime
             };
         } else if (fallbackBehavior === 'queue') {
-            // Queue for later processing
             processingResult.queued = true;
             processingResult.result = {
                 status: 'queued',
@@ -506,7 +490,6 @@ class CrossPlatformIntegrationTester {
                 timestamp: currentTime
             };
         } else {
-            // Drop the event
             processingResult.dropped = true;
             processingResult.result = {
                 status: 'dropped',
@@ -595,22 +578,16 @@ class UserJourneyValidator {
         };
 
         try {
-            // Stage 1: Input Processing
             journey.stages.push(await this._validateInputProcessing(journeyInput));
 
-            // Stage 2: Message Parsing and Routing
             journey.stages.push(await this._validateMessageParsing(journeyInput));
 
-            // Stage 3: Event Processing
             journey.stages.push(await this._validateEventProcessing(journeyInput));
 
-            // Stage 4: Notification Generation
             journey.stages.push(await this._validateNotificationGeneration(journeyInput));
 
-            // Stage 5: Output Validation
             journey.stages.push(await this._validateFinalOutput(expectedOutput));
 
-            // Calculate overall success
             journey.success = journey.stages.every(stage => stage.success);
             journey.endTime = testClock.now();
             journey.duration = journey.endTime - journey.startTime;
@@ -650,7 +627,6 @@ class UserJourneyValidator {
         };
 
         try {
-            // Extract content from event
             const content = asString(eventData.message || eventData.text || eventData.content);
             
             if (!content) {
@@ -663,7 +639,6 @@ class UserJourneyValidator {
                 return validationResults;
             }
 
-            // HTML Sanitization Check
             if (sanitizeHTML) {
                 const htmlCheck = this._validateHTMLContent(content);
                 validationResults.checks.push(htmlCheck);
@@ -673,7 +648,6 @@ class UserJourneyValidator {
                 }
             }
 
-            // Malicious Link Check
             if (blockMaliciousLinks) {
                 const linkCheck = this._validateLinks(content);
                 validationResults.checks.push(linkCheck);
@@ -683,7 +657,6 @@ class UserJourneyValidator {
                 }
             }
 
-            // User Content Validation
             if (validateUserContent) {
                 const userContentCheck = this._validateUserContent(content);
                 validationResults.checks.push(userContentCheck);
@@ -706,7 +679,6 @@ class UserJourneyValidator {
         }
     }
 
-    // Private validation methods
     async _validateInputProcessing(input: JourneyInput): Promise<JourneyStage> {
         return {
             stage: 'input_processing',
@@ -721,7 +693,6 @@ class UserJourneyValidator {
     }
 
     async _validateMessageParsing(input: JourneyInput): Promise<JourneyStage> {
-        // Simulate message parsing validation
         const hasRequiredFields = !!(input.rawWebSocketData &&
                                 input.rawWebSocketData.subscription_type &&
                                 input.rawWebSocketData.event);
@@ -739,7 +710,6 @@ class UserJourneyValidator {
     }
 
     async _validateEventProcessing(input: JourneyInput): Promise<JourneyStage> {
-        // Simulate event processing validation
         return {
             stage: 'event_processing',
             success: true,
@@ -753,7 +723,6 @@ class UserJourneyValidator {
     }
 
     async _validateNotificationGeneration(input: JourneyInput): Promise<JourneyStage> {
-        // Simulate notification generation validation
         return {
             stage: 'notification_generation',
             success: true,
@@ -767,7 +736,6 @@ class UserJourneyValidator {
     }
 
     async _validateFinalOutput(expectedOutput: ExpectedJourneyOutput): Promise<JourneyStage> {
-        // Simulate final output validation
         return {
             stage: 'final_output',
             success: true,

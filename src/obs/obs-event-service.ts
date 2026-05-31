@@ -67,46 +67,39 @@ class OBSEventService {
         this.logger = logger;
         this.errorHandler = logger ? createPlatformErrorHandler(logger, 'obs-events') : null;
 
-        // Connection state tracking
         this.state = {
             connected: false,
             ready: false,
             lastError: null
         };
 
-        // Event unsubscribe functions for cleanup
         this.unsubscribeFns = [];
         this.connectionEventHandlers = [];
         this.connectPromise = null;
 
-        // Initialize event listeners
         this._setupEventListeners();
         this._setupConnectionMonitoring();
     }
 
     _setupEventListeners() {
-        // Text update command
         this.unsubscribeFns.push(
             this.eventBus.subscribe('obs:update-text', async (data) => {
                 await this._handleTextUpdate(data);
             })
         );
 
-        // Text clear command
         this.unsubscribeFns.push(
             this.eventBus.subscribe('obs:clear-text', async (data) => {
                 await this._handleTextClear(data);
             })
         );
 
-        // Visibility change command
         this.unsubscribeFns.push(
             this.eventBus.subscribe('obs:set-visibility', async (data) => {
                 await this._handleVisibilityChange(data);
             })
         );
 
-        // Scene switch command
         this.unsubscribeFns.push(
             this.eventBus.subscribe('obs:switch-scene', async (data) => {
                 await this._handleSceneSwitch(data);

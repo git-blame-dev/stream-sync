@@ -289,7 +289,6 @@ class UserExperienceObserver {
 const observeUserExperience = async <Result>(operation: () => Result | Promise<Result>) => {
     const observer = new UserExperienceObserver();
     
-    // Make observer available globally during test execution
     globalThis.testUserExperienceObserver = observer;
     
     try {
@@ -299,14 +298,12 @@ const observeUserExperience = async <Result>(operation: () => Result | Promise<R
             userExperience: observer.getObservations()
         };
     } finally {
-        // Clean up global observer
         Reflect.deleteProperty(globalThis, 'testUserExperienceObserver');
     }
 };
 
 
 const expectUserExperience = (experience: UserExperienceAssertionInput, expectations: UserExperienceExpectations) => {
-    // Validate visibility expectations
     if (expectations.shouldSeeNotification) {
         expect(experience.summary.notificationsSeen).toBeGreaterThan(0);
         const notificationContent = expectations.notificationContent;
@@ -317,7 +314,6 @@ const expectUserExperience = (experience: UserExperienceAssertionInput, expectat
         }
     }
 
-    // Validate audio expectations
     if (expectations.shouldHearAudio) {
         expect(experience.summary.audioEventsHeard).toBeGreaterThan(0);
         const audioContent = expectations.audioContent;
@@ -328,13 +324,11 @@ const expectUserExperience = (experience: UserExperienceAssertionInput, expectat
         }
     }
 
-    // Validate error expectations
     if (expectations.shouldBeErrorFree) {
         expect(experience.summary.errorsEncountered).toBe(0);
         expect(experience.summary.overallExperience).toBe('positive');
     }
 
-    // Validate status expectations
     if (expectations.shouldShowStatus) {
         expect(experience.summary.statusChangesObserved).toBeGreaterThan(0);
         if (expectations.statusComponent && expectations.statusValue) {
@@ -347,29 +341,24 @@ const expectUserExperience = (experience: UserExperienceAssertionInput, expectat
 };
 
 const expectFinalSystemState = (state: FinalSystemState, expectedState: ExpectedSystemState) => {
-    // Operational state (affects user experience)
     if (expectedState.operational !== undefined) {
         expect(state.operationalState).toBe(expectedState.operational);
     }
 
-    // User-visible state
     if (expectedState.userVisible) {
         expect(state.userVisibleState).toEqual(expectedState.userVisible);
     }
 
-    // Data integrity (affects user trust)
     if (expectedState.dataIntact !== undefined) {
         expect(state.dataIntegrity).toBe(expectedState.dataIntact ? 'intact' : 'compromised');
     }
 
-    // User experience quality
     if (expectedState.userExperienceQuality) {
         expect(state.userExperienceQuality).toBe(expectedState.userExperienceQuality);
     }
 };
 
 const expectNoTechnicalArtifacts = (content: string) => {
-    // Check for technical artifacts that users shouldn't see
     const technicalPatterns = [
         /undefined/,
         /null/,
@@ -387,7 +376,6 @@ const expectNoTechnicalArtifacts = (content: string) => {
         expect(content).not.toMatch(pattern);
     });
 
-    // Ensure content is user-friendly
     expect(typeof content).toBe('string');
     expect(content.trim().length).toBeGreaterThan(0);
 };
@@ -409,7 +397,6 @@ class TimeSimulator {
     advanceTime(milliseconds: number): void {
         this.currentTime += milliseconds;
         
-        // Check and fire timers
         for (const [id, timer] of this.timers.entries()) {
             if (timer.fireTime <= this.currentTime) {
                 timer.callback();
@@ -417,7 +404,6 @@ class TimeSimulator {
             }
         }
 
-        // Check and fire intervals
         for (const [_id, interval] of this.intervals.entries()) {
             while (interval.nextFire <= this.currentTime) {
                 interval.callback();
@@ -499,21 +485,17 @@ class NetworkEventSimulator extends EventEmitter {
 }
 
 export {
-    // Event-driven utilities
     waitForEvent,
     waitFor,
     waitForMultipleEvents,
     
-    // User experience observation
     UserExperienceObserver,
     observeUserExperience,
     
-    // Pure outcome validation
     expectUserExperience,
     expectFinalSystemState,
     expectNoTechnicalArtifacts,
     
-    // Deterministic time control
     TimeSimulator,
     NetworkEventSimulator
 };

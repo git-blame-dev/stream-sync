@@ -566,7 +566,6 @@ describe("Observer Pattern Integration", () => {
   });
 });
 
-// Helper function to create test observers
 function createTestObserver(id: string): TestObserver {
   return {
     getObserverId: () => id,

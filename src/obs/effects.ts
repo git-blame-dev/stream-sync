@@ -60,26 +60,21 @@ class OBSEffectsManager {
     errorHandler: ReturnType<typeof createPlatformErrorHandler>;
 
     constructor(obsManager: ObsManagerLike, dependencies: EffectsDependencies = {}) {
-        // Require OBS manager as first parameter
         if (!obsManager) {
             throw new Error('OBSEffectsManager requires OBSConnectionManager instance');
         }
 
-        // Direct reference to OBS manager (no wrapper indirection)
         this.obsManager = obsManager;
 
-        // Inject other dependencies with default implementations
         this.logger = dependencies.logger || logger;
         this.log = this.logger;
         this.sourcesManager = dependencies.sourcesManager;
         this.eventBus = dependencies.eventBus;
         this.retrySystem = dependencies.retrySystem ?? (createRetrySystem({ logger: this.logger }) as RetrySystemLike);
 
-        // Convenience bindings for OBS manager methods
         this.ensureOBSConnected = this.obsManager.ensureConnected.bind(this.obsManager);
         this.obsCall = this.obsManager.call.bind(this.obsManager);
 
-        // Bind sources manager methods if available
         if (this.sourcesManager) {
             if (this.sourcesManager.setSourceFilterEnabled) {
                 this.setSourceFilterEnabled = this.sourcesManager.setSourceFilterEnabled.bind(this.sourcesManager);
@@ -104,13 +99,11 @@ class OBSEffectsManager {
     
         await this.ensureOBSConnected();
 
-        // Construct VFX file path
         const filePath = `${commandConfig.vfxFilePath}/${commandConfig.filename}.mp4`;
     
     try {
             this.logger.debug(`[VFX] Playing media: ${commandConfig.filename} in source: ${commandConfig.mediaSource} from path: ${filePath}`, 'effects');
         
-        // Set media file path and properties
             await this.obsCall("SetInputSettings", { 
             inputName: commandConfig.mediaSource, 
             inputSettings: { 
@@ -120,13 +113,11 @@ class OBSEffectsManager {
             overlay: false 
         });
 
-        // Start the media playback
             await this.obsCall("TriggerMediaInputAction", { 
             inputName: commandConfig.mediaSource, 
             mediaAction: "OBS_WEBSOCKET_MEDIA_INPUT_ACTION_RESTART" 
         });
 
-        // Handle completion waiting if requested
         if (waitForCompletion) {
                 this.logger.debug(`[VFX] Waiting for media completion: ${commandConfig.filename}`, 'effects');
                 await this.waitForMediaCompletion(commandConfig.mediaSource);
@@ -226,7 +217,7 @@ let defaultInstance: OBSEffectsManager | null = null;
 function getDefaultEffectsManager() {
     if (!defaultInstance) {
         defaultInstance = createOBSEffectsManager(
-            getOBSConnectionManager(),  // Get singleton directly
+            getOBSConnectionManager(),
             {
                 logger,
                 sourcesManager: getDefaultSourcesManager()
@@ -240,7 +231,6 @@ function resetDefaultEffectsManager() {
     defaultInstance = null;
 }
 
-// Export class and factory functions
 export {
     OBSEffectsManager,
     getDefaultEffectsManager,

@@ -61,9 +61,9 @@ describe('Timeout Validator', () => {
 
     describe('validateExponentialBackoff', () => {
         test('should calculate valid exponential backoff delays', () => {
-            expect(validateExponentialBackoff(1000, 2, 0)).toBe(1000); // 1000 * 2^0 = 1000
-            expect(validateExponentialBackoff(1000, 2, 1)).toBe(2000); // 1000 * 2^1 = 2000
-            expect(validateExponentialBackoff(1000, 2, 2)).toBe(4000); // 1000 * 2^2 = 4000
+            expect(validateExponentialBackoff(1000, 2, 0)).toBe(1000);
+            expect(validateExponentialBackoff(1000, 2, 1)).toBe(2000);
+            expect(validateExponentialBackoff(1000, 2, 2)).toBe(4000);
         });
 
         test('should cap delays at maxDelay', () => {

@@ -1,7 +1,6 @@
 import { createPlatformErrorHandler } from './platform-error-handler';
 
 const ERROR_MESSAGES = {
-    // Authentication Errors
     'missing_twitch_credentials': {
         title: 'Twitch Setup Required',
         message: 'Your Twitch connection needs to be set up. This is required to use Twitch features.',
@@ -34,7 +33,6 @@ const ERROR_MESSAGES = {
         category: 'authentication'
     },
     
-    // Configuration Errors
     'missing_config_file': {
         title: 'Settings File Missing',
         message: 'The bot\'s settings file couldn\'t be found.',
@@ -99,7 +97,6 @@ const ERROR_MESSAGES = {
         category: 'configuration'
     },
     
-    // Connection Errors
     'obs_connection_failed': {
         title: 'OBS Connection Problem',
         message: 'The bot cannot connect to OBS Studio. Make sure OBS is running and the connection feature is enabled.',
@@ -124,7 +121,6 @@ const ERROR_MESSAGES = {
         category: 'connection'
     },
     
-    // Runtime Errors
     'permission_denied': {
         title: 'File Access Problem',
         message: 'The bot doesn\'t have permission to access a required file or folder.',
@@ -149,7 +145,6 @@ const ERROR_MESSAGES = {
         category: 'system'
     },
     
-    // PHASE 5B: Enhanced Platform-Specific Error Messages
     'youtube_connection_timeout': {
         title: 'YouTube Connection Problem',
         message: 'YouTube connection temporarily unavailable. This can happen during high traffic periods.',
@@ -351,7 +346,6 @@ const TECHNICAL_ERROR_PATTERNS = [
         ],
         errorKey: 'memory_low'
     },
-    // PHASE 5B: Enhanced Platform-Specific Error Patterns
     {
         patterns: [
             /YouTube.*connection.*timeout/i,
@@ -449,7 +443,6 @@ type HandleUserFacingErrorOptions = {
 function translateError(technicalError: unknown, context: ErrorContext = {}): FriendlyError {
     const errorMessage = technicalError instanceof Error ? technicalError.message : String(technicalError);
     
-    // Find matching pattern
     for (const { patterns, errorKey } of TECHNICAL_ERROR_PATTERNS) {
         if (patterns.some(pattern => pattern.test(errorMessage))) {
             const friendlyError = ERROR_MESSAGES[errorKey as ErrorMessageKey];
@@ -468,7 +461,6 @@ function translateError(technicalError: unknown, context: ErrorContext = {}): Fr
         }
     }
     
-    // Fallback for unrecognized errors
     const fallback: FriendlyError = {
         title: 'Unexpected Problem',
         message: 'Something unexpected happened. This might be a temporary issue.',
@@ -488,7 +480,6 @@ function formatErrorForConsole(friendlyError: FriendlyError, options: ConsoleFor
     
     let output = '';
     
-    // Header with severity indicator
     const severityLabels = {
         error: 'ERROR',
         warning: 'WARNING',
@@ -506,20 +497,16 @@ function formatErrorForConsole(friendlyError: FriendlyError, options: ConsoleFor
         output += `\n${severityLabel}: ${friendlyError.title.toUpperCase()}\n`;
     }
     
-    // Main message
     output += `\n${friendlyError.message}\n`;
     
-    // Action (if enabled and available)
     if (includeActions && friendlyError.action) {
         output += `\nWhat to do: ${friendlyError.action}\n`;
     }
     
-    // Technical details (if requested and available)
     if (showTechnical && friendlyError.technicalDetails) {
         output += `\nTechnical details: ${friendlyError.technicalDetails}\n`;
     }
     
-    // Footer
     if (colorize) {
         output += border + '\n';
     }
@@ -552,7 +539,6 @@ function showUserFriendlyError(technicalError: unknown, context: ErrorContext = 
         process.stderr.write(output);
     }
     
-    // Log technical details if logger is available
     if (context.logger) {
         const logMessage = formatErrorForLog(friendlyError);
         logUserFriendlyError(context, friendlyError, logMessage, technicalError);

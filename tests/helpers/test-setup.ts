@@ -346,7 +346,6 @@ function createMockPlatformDependencies(platformType = 'tiktok', overrides: Test
         notificationBridge: overrideBridge || null
     };
 
-    // Platform-specific mocks
     switch (platformType) {
         case 'tiktok':
             return {
@@ -422,7 +421,6 @@ const createTestRetrySystem = <Overrides extends TestRecord = Record<string, nev
     const retrySystem = createRetrySystem() as TestRetrySystem & Overrides;
 
     retrySystem.executeWithRetry = createMockFn<[platform: string, executeFunction: () => Promise<unknown>, maxRetries?: number], Promise<unknown>>().mockImplementation(async (_platform, executeFunction) => {
-        // Default behavior: just execute the function
         return await executeFunction();
     }) as RetryExecuteMock;
     retrySystem.resetRetryCount = createMockFn<[platform: string], void>();
@@ -457,7 +455,6 @@ const expectValidUserData = (user: UserLike) => {
 
 
 const expectValidNotification = (notification: NotificationLike, expectedType: string, expectedPlatform: string) => {
-    // Basic structure validation
     expect(notification).toHaveProperty('id');
     expect(notification).toHaveProperty('type');
     expect(notification).toHaveProperty('platform');
@@ -467,18 +464,15 @@ const expectValidNotification = (notification: NotificationLike, expectedType: s
     expect(notification).toHaveProperty('processedAt');
     expect(notification).toHaveProperty('timestamp');
     
-    // Type and platform validation
     expect(notification.type).toBe(expectedType);
     expect(notification.platform).toBe(expectedPlatform);
     
-    // Content quality validation
     expect(notification.id).toBeTruthy();
     expect(notification.displayMessage).toBeTruthy();
     expect(notification.ttsMessage).toBeTruthy();
     expect(notification.processedAt).toBeInstanceOf(Number);
     expect(notification.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
     
-    // User data validation
     expect(notification.username).toBeTruthy();
 };
 
@@ -486,7 +480,6 @@ const expectNoTechnicalArtifacts = (content: string) => {
     expect(content).toBeTruthy();
     expect(typeof content).toBe('string');
     
-    // Check for common technical artifacts
     expect(content).not.toContain('undefined');
     expect(content).not.toContain('null');
     expect(content).not.toContain('NaN');
@@ -496,20 +489,18 @@ const expectNoTechnicalArtifacts = (content: string) => {
     expect(content).not.toContain('TypeError');
     expect(content).not.toContain('ReferenceError');
     
-    // Check for malformed numbers
-    expect(content).not.toMatch(/\$\d+\.\d{3,}/); // More than 2 decimal places
+    expect(content).not.toMatch(/\$\d+\.\d{3,}/);
     expect(content).not.toMatch(/\$NaN/);
     expect(content).not.toMatch(/\$undefined/);
     
-    // Check for empty or whitespace-only content
     expect(content.trim()).toBeTruthy();
 };
 
 const TEST_TIMEOUTS = {
-    FAST: 1000,      // For unit tests
-    MEDIUM: 5000,    // For integration tests
-    SLOW: 10000,     // For complex integration tests
-    PERFORMANCE: 15000 // For performance tests with timeout protection
+    FAST: 1000,
+    MEDIUM: 5000,
+    SLOW: 10000,
+    PERFORMANCE: 15000
 };
 
 const INTERNATIONAL_USERNAMES = {
@@ -544,8 +535,6 @@ const loadPlatformFixture = (platform: string, eventType: string) => {
     return loadSyntheticFixture(platform, eventType);
 };
 
-// PHASE 4A: ENHANCED LIFECYCLE MANAGEMENT
-
 const setupAutomatedCleanup = (options: Partial<CleanupOptions> = {}): AutomatedCleanup => {
     const defaultOptions = {
         clearMocksAfterEach: true,
@@ -570,12 +559,10 @@ const setupAutomatedCleanup = (options: Partial<CleanupOptions> = {}): Automated
         
         beforeEach: () => {
             if (defaultOptions.validateMocksBeforeEach) {
-                // Validate existing mocks before starting new test
                 validateActiveMocks();
             }
             
             if (defaultOptions.trackMockUsage) {
-                // Reset usage tracking
                 mockUsageTracker.clear();
             }
         },
@@ -612,7 +599,6 @@ const setupAutomatedCleanup = (options: Partial<CleanupOptions> = {}): Automated
                         if (isMockFunction(mockObject[key])) {
                             mockObject[key].mockReset();
                         } else if (hasMockReset(mockObject[key])) {
-                            // Handle objects that have mockReset methods (like our test case)
                             mockObject[key].mockReset();
                         }
                     });
@@ -662,7 +648,6 @@ const validateMockUsage = (mockObject: unknown, options: Partial<MockUsageOption
         return validation;
     }
 
-    // Check mock type validation
     if (defaultOptions.validateMockTypes && mockObject._mockType) {
         validation.isFactoryMock = true;
         validation.mockTypeValid = !defaultOptions.expectedMockType || 
@@ -673,7 +658,6 @@ const validateMockUsage = (mockObject: unknown, options: Partial<MockUsageOption
         }
     }
 
-    // Detect unused methods
     if (defaultOptions.detectUnusedMocks) {
         const methods = Object.keys(mockObject).filter(key => 
             typeof mockObject[key] === 'function' && isMockFunction(mockObject[key])
@@ -689,7 +673,6 @@ const validateMockUsage = (mockObject: unknown, options: Partial<MockUsageOption
         }
     }
 
-    // Calculate complexity score
     const totalMethods = Object.keys(mockObject).filter(key => 
         typeof mockObject[key] === 'function'
     ).length;
@@ -700,7 +683,6 @@ const validateMockUsage = (mockObject: unknown, options: Partial<MockUsageOption
 
     validation.complexityScore = (totalMethods / 20) + (hasInternalProperties ? 0.3 : 0);
 
-    // Behavior-focused mode recommendations
     if (defaultOptions.behaviorFocusedMode) {
         if (totalMethods > defaultOptions.maxMethodsRecommended) {
             validation.recommendations.push('Mock has too many methods');
@@ -715,42 +697,35 @@ const validateMockUsage = (mockObject: unknown, options: Partial<MockUsageOption
     return validation;
 };
 
-// Helper functions for cleanup
 const clearAllActiveMocks = () => {
     let clearedCount = 0;
     clearAllMocks();
-    clearedCount++; // clearAllMocks counts as one operation
+    clearedCount++;
     return clearedCount;
 };
 
 const findUnusedMocks = () => {
-    // This would need to be implemented with a global mock registry
-    // For now, return empty array
     return [];
 };
 
 const collectMockUsageMetrics = () => {
     return {
         timestamp: testClock.now(),
-        totalMocksActive: 0, // Would need global tracking
+        totalMocksActive: 0,
         memoryUsage: process.memoryUsage()
     };
 };
 
 const validateActiveMocks = () => {
-    // Placeholder for mock validation logic
     return true;
 };
 
 export {
-    // Setup functions
     initializeTestLogging,
     
-    // Enhanced lifecycle management
     setupAutomatedCleanup,
     validateMockUsage,
     
-    // Factory functions
     createTestUser,
     createTestGift,
     createTestNotification,
@@ -758,20 +733,16 @@ export {
     createTestApp,
     createTestRetrySystem,
     
-    // Fixture utilities
     loadPlatformFixture,
     
-    // Assertion helpers
     expectValidNotificationData,
     expectValidUserData,
     
-    // Enterprise assertion helpers
     expectValidNotification,
     expectNoTechnicalArtifacts,
     
     INTERNATIONAL_USERNAMES,
     
-    // Constants
     TEST_TIMEOUTS,
     TEST_USERNAMES,
     TEST_COMMANDS

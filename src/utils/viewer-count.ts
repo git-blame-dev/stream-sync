@@ -135,24 +135,19 @@ class ViewerCountSystem {
         this.pollingInterval = null;
         this.pollingHandles = {};
         
-        // Observer pattern implementation
         this.observers = new Map();
         
-        // Initialize viewer counts to 0
         this.counts = {
             tiktok: VIEWER_COUNT_CONSTANTS.VIEWER_COUNT_ZERO,
             twitch: VIEWER_COUNT_CONSTANTS.VIEWER_COUNT_ZERO,
             youtube: VIEWER_COUNT_CONSTANTS.VIEWER_COUNT_ZERO
         };
         
-        // Track stream status for each platform with standardized management
         this.streamStatus = this._initializeStreamStatus();
         
-        // Stream status change tracking for optimization
-        this.statusChangeHistory = new Map(); // platform -> array of status changes
-        this.lastStatusUpdate = new Map(); // platform -> timestamp
+        this.statusChangeHistory = new Map();
+        this.lastStatusUpdate = new Map();
         
-        // Polling efficiency tracking with memory optimization
         this.pollingStats = {
             totalPolls: 0,
             successfulPolls: 0,
@@ -160,14 +155,12 @@ class ViewerCountSystem {
             memoryOptimized: true
         };
         
-        // Memory management configuration - Ultra-aggressive for memory tests
         this.memoryConfig = {
-            maxHistoryEntries: 3, // Ultra-aggressive limit to prevent memory bloat
-            cleanupInterval: 2 * 60 * 1000, // Cleanup every 2 minutes (very frequent)
+            maxHistoryEntries: 3,
+            cleanupInterval: 2 * 60 * 1000,
             lastCleanup: this._now()
         };
 
-        // Start memory optimization routine
         this._startMemoryOptimization();
 
         this._errorHandler = null;
@@ -238,14 +231,12 @@ class ViewerCountSystem {
         }
         history.push(change);
 
-        // Keep only last 2 changes for ultra-aggressive memory optimization
         if (history.length > 2) {
-            history.splice(0, history.length - 2); // Remove all but last 2
+            history.splice(0, history.length - 2);
         }
 
         this.lastStatusUpdate.set(platform, change.timestamp);
         
-        // Trigger immediate cleanup if too many status changes (for test scenarios)
         const totalHistoryEntries = (Array.from(this.statusChangeHistory.values()) as Array<{ length: number }>)
             .reduce((total: number, hist) => total + hist.length, 0);
         if (totalHistoryEntries > 10) {
@@ -302,7 +293,6 @@ class ViewerCountSystem {
             }
         }
 
-        // Wait for all observers to complete
         await Promise.allSettled(notificationPromises);
     }
 
@@ -325,48 +315,40 @@ class ViewerCountSystem {
             }
         }
 
-        // Wait for all observers to complete
         await Promise.allSettled(notificationPromises);
     }
 
     async updateStreamStatus(platform: string, isLive: boolean) {
         const platformKey = platform.toLowerCase();
-        // Validate platform before updating
         if (!(platformKey in this.streamStatus)) {
             this.logger.warn(`Unknown platform for status update: ${platform}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
             return;
         }
         const wasLive = this.streamStatus[platformKey] ?? false;
         
-        // Update status with tracking
         this.streamStatus[platformKey] = isLive;
         this._trackStatusChange(platform, wasLive, isLive);
         
         if (wasLive !== isLive) {
             this.logger.info(`Stream status changed for ${platform}: ${isLive ? 'LIVE' : 'OFFLINE'}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
             
-            // Notify observers of status change
             await this.notifyStreamStatusChange(platform, isLive, wasLive);
         } else {
             this.logger.debug(`Stream status confirmed for ${platform}: ${isLive ? 'LIVE' : 'OFFLINE'}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
         }
         
-        // Handle polling state changes with optimization
         await this._optimizePollingForStatusChange(platform, platformKey, isLive, wasLive);
     }
 
     async _optimizePollingForStatusChange(platform: string, platformKey: string, isLive: boolean, wasLive: boolean) {
         if (isLive && this.isPolling) {
-            // Start polling this platform immediately if not already polling
             this.logger.debug(`Auto-starting polling for ${platform} (system already active)`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
             this.startPlatformPolling(platform);
         } else if (!isLive) {
-            // Stop polling this platform and reset count
             this.stopPlatformPolling(platform);
             const previousCount = this.counts[platformKey] ?? VIEWER_COUNT_CONSTANTS.VIEWER_COUNT_ZERO;
             this.counts[platformKey] = VIEWER_COUNT_CONSTANTS.VIEWER_COUNT_ZERO;
             
-            // Notify observers of count reset with context
             await this.notifyObservers(platform, VIEWER_COUNT_CONSTANTS.VIEWER_COUNT_ZERO, previousCount);
             
             this.logger.debug(`Reset viewer count for ${platform} to 0 (stream offline)`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
@@ -380,10 +362,8 @@ class ViewerCountSystem {
     async initialize() {
         this.logger.info('Viewer count system initialized with counts: ' + JSON.stringify(this.counts), 'viewer-count');
 
-        // Set unified initialization flag to eliminate dual initialization paths
         this.hasUnifiedInitialization = true;
 
-        // Initialize all registered observers
         await this.initializeObservers();
         
         return Promise.resolve();
@@ -404,7 +384,6 @@ class ViewerCountSystem {
             }
         }
         
-        // Wait for all observers to initialize
         await Promise.allSettled(initializationPromises);
         this.logger.info(`Initialized ${this.observers.size} viewer count observers`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
     }
@@ -430,7 +409,6 @@ class ViewerCountSystem {
         this.isPolling = true;
         this.logger.info(`Starting stream-aware viewer count polling every ${pollingIntervalSeconds} seconds`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
 
-        // Only start polling for platforms that are currently live
         const platforms = this._getPlatforms();
         const platformNames = Object.keys(platforms);
         this.logger.debug(`Checking platforms for polling start. Available platforms: ${platformNames.join(', ')}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
@@ -452,7 +430,6 @@ class ViewerCountSystem {
     startPlatformPolling(platformName: string) {
         this.logger.debug(`startPlatformPolling called for ${platformName}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
         
-        // Don't start if already polling this platform
         if (this.pollingHandles[platformName]) {
             this.logger.debug(`Polling already active for ${platformName}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
             return;
@@ -460,10 +437,8 @@ class ViewerCountSystem {
 
         this.logger.info(`Starting viewer count polling for ${platformName} (interval: ${this.pollingInterval}ms)`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
         
-        // Immediate poll
         this.pollPlatformImmediately(platformName);
         
-        // Start interval polling
         this.pollingHandles[platformName] = safeSetInterval(
             () => {
                 this.logger.debug(`Interval poll triggered for ${platformName}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
@@ -529,7 +504,6 @@ class ViewerCountSystem {
     }
 
     _startMemoryOptimization() {
-        // Ensure any existing interval is cleared first
         if (this.memoryOptimizationInterval) {
             clearInterval(this.memoryOptimizationInterval);
             this.memoryOptimizationInterval = null;
@@ -543,7 +517,6 @@ class ViewerCountSystem {
     _performMemoryOptimization() {
         const now = this._now();
         
-        // Only run if enough time has passed (reduced threshold for more frequent cleanup)
         if (now - this.memoryConfig.lastCleanup < this.memoryConfig.cleanupInterval - 10000) {
             return;
         }
@@ -551,7 +524,6 @@ class ViewerCountSystem {
         try {
             this.logger.debug('Performing viewer count system memory optimization', VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
             
-            // Ultra-aggressively limit history entries to prevent memory bloat
             for (const [platform, history] of this.statusChangeHistory) {
                 if (history.length > this.memoryConfig.maxHistoryEntries) {
                     const excess = history.length - this.memoryConfig.maxHistoryEntries;
@@ -559,16 +531,14 @@ class ViewerCountSystem {
                     this.logger.debug(`Trimmed ${excess} history entries for ${platform}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
                 }
                 
-                // If still over limit, be even more aggressive
                 if (history.length > 2) {
                     history.splice(0, history.length - 2);
                 }
             }
             
-            // Clean up old status update timestamps (keep only last 3 platforms)
             if (this.lastStatusUpdate.size > 3) {
                 const entries = Array.from(this.lastStatusUpdate.entries()) as Array<[string, number]>;
-                entries.sort((a, b) => b[1] - a[1]); // Sort by timestamp descending
+                entries.sort((a, b) => b[1] - a[1]);
                 const toKeep = entries.slice(0, 3);
                 this.lastStatusUpdate.clear();
                 toKeep.forEach(([platform, timestamp]) => {
@@ -576,7 +546,6 @@ class ViewerCountSystem {
                 });
             }
             
-            // Clear any stale polling stats to prevent accumulation
             if (this.pollingStats.totalPolls > 10000) {
                 this.pollingStats.totalPolls = Math.min(this.pollingStats.totalPolls, 1000);
                 this.pollingStats.successfulPolls = Math.min(this.pollingStats.successfulPolls, this.pollingStats.totalPolls);
@@ -584,7 +553,6 @@ class ViewerCountSystem {
             
             this.memoryConfig.lastCleanup = now;
             
-            // Force garbage collection if available
             if (global.gc) {
                 global.gc();
             }
@@ -594,13 +562,11 @@ class ViewerCountSystem {
     }
 
     _performMemoryCleanup() {
-        // Clear memory optimization interval FIRST to prevent race conditions
         if (this.memoryOptimizationInterval) {
             clearInterval(this.memoryOptimizationInterval);
             this.memoryOptimizationInterval = null;
         }
         
-        // Clear polling handles
         for (const handle of Object.values(this.pollingHandles)) {
             if (handle) {
                 clearInterval(handle as ReturnType<typeof setInterval>);
@@ -608,17 +574,14 @@ class ViewerCountSystem {
         }
         this.pollingHandles = {};
         
-        // Clear all collections
         this.observers.clear();
         this.statusChangeHistory.clear();
         this.lastStatusUpdate.clear();
         
-        // Reset counts
         Object.keys(this.counts).forEach(platform => {
             this.counts[platform] = VIEWER_COUNT_CONSTANTS.VIEWER_COUNT_ZERO;
         });
         
-        // Reset polling statistics
         this.pollingStats = {
             totalPolls: 0,
             successfulPolls: 0,
@@ -680,7 +643,6 @@ class ViewerCountSystem {
         if (!this.isPolling) return;
         this.isPolling = false;
 
-        // Clear all polling handles with proper cleanup
         for (const platformName in this.pollingHandles) {
             if (Object.prototype.hasOwnProperty.call(this.pollingHandles, platformName)) {
                 const handle = this.pollingHandles[platformName];
@@ -779,20 +741,16 @@ class ViewerCountSystem {
     async cleanup() {
         this.logger.info('Cleaning up viewer count system', VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
         
-        // Stop polling first to prevent new operations
         this.stopPolling();
         
-        // Stop memory optimization interval immediately to prevent race conditions
         if (this.memoryOptimizationInterval) {
             clearInterval(this.memoryOptimizationInterval);
             this.memoryOptimizationInterval = null;
         }
         
-        // Capture observer references BEFORE clearing the map
         const cleanupPromises: Array<Promise<unknown>> = [];
         const observerEntries = Array.from(this.observers.entries()) as Array<[string, { cleanup?: () => Promise<unknown> | unknown }]>;
         
-        // Start observer cleanup process
         for (const [observerId, observer] of observerEntries) {
             try {
                 if (typeof observer.cleanup === 'function') {
@@ -819,7 +777,6 @@ class ViewerCountSystem {
             this.logger.warn(`Observer cleanup timed out or failed: ${getErrorMessage(error)}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
         }
         
-        // Perform final memory cleanup after observer cleanup attempts
         this._performMemoryCleanup();
         
         this.logger.info(`Viewer count system cleanup complete (cleaned ${observerEntries.length} observers)`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);

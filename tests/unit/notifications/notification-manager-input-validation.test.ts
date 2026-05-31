@@ -100,14 +100,12 @@ describe("NotificationManager input validation", () => {
       const deps = createDeps();
       const manager = new NotificationManager(deps);
 
-      // Call processNotification with mixed-case platform
       const result = await manager.processNotification({
         type: "platform:follow",
         platform: "TikTok",
         data: { username: "testUser", userId: "user123" },
       });
 
-      // Should not throw due to mixed case
       expect(result).not.toBeInstanceOf(Error);
     });
   });

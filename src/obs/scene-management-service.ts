@@ -45,7 +45,6 @@ class SceneManagementService {
         this.logger = logger;
         this.errorHandler = logger ? createPlatformErrorHandler(logger, 'obs-scenes') : null;
 
-        // Scene state tracking
         this.state = {
             currentScene: '',
             previousScene: '',
@@ -55,15 +54,13 @@ class SceneManagementService {
             cacheTimestamp: null
         };
 
-        // Configuration
         this.config = {
             maxHistorySize: 100,
-            cacheExpiry: 60000, // 1 minute
+            cacheExpiry: 60000,
             retryDelay: 100,
             maxRetries: 3
         };
 
-        // Event unsubscribe functions for cleanup
         this.unsubscribeFns = [];
 
         // Scene management no longer subscribes to scene:switch because there is no runtime producer.
@@ -71,7 +68,6 @@ class SceneManagementService {
 
     async validateScene(sceneName: string) {
         try {
-            // Check cache first
             const now = Date.now();
             if (
                 this.state.sceneListCache &&
@@ -81,7 +77,6 @@ class SceneManagementService {
                 return this.state.sceneListCache.some(scene => scene.sceneName === sceneName);
             }
 
-            // Fetch scene list from OBS
             const response = await this.obsConnection.call('GetSceneList', {});
             const scenes = (response && typeof response === 'object' && Array.isArray((response as { scenes?: unknown }).scenes))
                 ? (response as { scenes: Array<{ sceneName: string }> }).scenes

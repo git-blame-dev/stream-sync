@@ -161,7 +161,7 @@ describe("Text Processing", () => {
 
     it("truncates extremely long international usernames above hard cap", () => {
       const manager = new TextProcessingManager({ logger: mockLogger });
-      const username = "こんにちは世界".repeat(15); // length > 60
+      const username = "こんにちは世界".repeat(15);
 
       const result = manager.smartTruncateUsername(username, 20);
 
@@ -471,7 +471,7 @@ describe("Text Processing", () => {
         true,
       );
 
-      expect(formatted).toContain("verylonguser"); // 12-character limit
+      expect(formatted).toContain("verylonguser");
       expect(formatted).not.toContain("verylongusername123");
       expect(formatted).toContain("Hello world!");
     });
@@ -486,8 +486,8 @@ describe("Text Processing", () => {
         false,
       );
 
-      expect(formatted).toContain("verylongusername123"); // Full username preserved
-      expect(formatted).toBe("verylongusername123: Hello world!"); // Exact match - full username
+      expect(formatted).toContain("verylongusername123");
+      expect(formatted).toBe("verylongusername123: Hello world!");
       expect(formatted).toContain("Hello world!");
     });
 
@@ -499,7 +499,7 @@ describe("Text Processing", () => {
         "Hello world!",
       );
 
-      expect(formatted).toContain("verylonguser"); // Should default to truncated
+      expect(formatted).toContain("verylonguser");
       expect(formatted).not.toContain("verylongusername123");
     });
 
@@ -522,7 +522,7 @@ describe("Text Processing", () => {
 
       expect(formattedTTS).toContain("user");
       expect(formattedDisplay).toContain("user");
-      expect(formattedTTS).toBe(formattedDisplay); // Should be identical for short usernames
+      expect(formattedTTS).toBe(formattedDisplay);
     });
 
     it("should work with different message types and truncation settings", () => {
@@ -557,10 +557,10 @@ describe("Text Processing", () => {
         false,
       );
 
-      expect(giftTTS).toBe("verylonguser: Rose"); // TTS truncated - colon format (default)
-      expect(giftDisplay).toBe("verylongusername123: Rose"); // Display full - colon format (default)
-      expect(notificationTTS).toBe("[verylonguser] alert"); // TTS truncated - bracket format
-      expect(notificationDisplay).toBe("[verylongusername123] alert"); // Display full - bracket format
+      expect(giftTTS).toBe("verylonguser: Rose");
+      expect(giftDisplay).toBe("verylongusername123: Rose");
+      expect(notificationTTS).toBe("[verylonguser] alert");
+      expect(notificationDisplay).toBe("[verylongusername123] alert");
     });
   });
 

@@ -257,7 +257,6 @@ async function ensureSecrets(options: EnsureSecretsOptions = {}) {
     const envFileVars = allowEnvFileRead ? readEnvFile(envFilePath) : {};
 
     if (allowEnvFileRead) {
-        // Prime process.env from env file for consumers expecting it
         Object.entries(envFileVars).forEach(([key, value]) => {
             if (!process.env[key]) {
                 process.env[key] = value;

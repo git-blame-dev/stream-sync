@@ -42,10 +42,8 @@ class EventBus extends EventEmitter {
         this.maxListeners = options.maxListeners || 50;
         this.eventStats = new Map();
 
-        // Set max listeners to prevent memory leak warnings
         this.setMaxListeners(this.maxListeners);
         
-        // Bind methods to preserve context
         this.emit = this.emit.bind(this);
         this.subscribe = this.subscribe.bind(this);
         this.unsubscribe = this.unsubscribe.bind(this);
@@ -62,7 +60,6 @@ class EventBus extends EventEmitter {
 
         const { once = false, context = null } = options;
 
-        // Wrap handler with error isolation and debugging
         const wrappedHandler: WrappedEventHandler = async (...args: unknown[]) => {
             const startTime = Date.now();
 
@@ -74,7 +71,6 @@ class EventBus extends EventEmitter {
                     });
                 }
 
-                // Execute handler with proper context binding
                 const result = context ? handler.apply(context, args) : handler(...args);
 
                 if (isPromiseLike(result)) {
@@ -83,7 +79,6 @@ class EventBus extends EventEmitter {
 
                 const executionTime = Math.max(0, Date.now() - startTime);
 
-                // Update stats
                 this._updateEventStats(eventName, 'success', executionTime);
 
                 if (this.debugEnabled) {
@@ -100,7 +95,6 @@ class EventBus extends EventEmitter {
                 });
 
                 if (eventName !== 'handler-error') {
-                    // Emit error event but don't throw to prevent cascading failures
                     this.emit('handler-error', {
                         eventName,
                         error,
@@ -120,7 +114,6 @@ class EventBus extends EventEmitter {
             }
         };
 
-        // Store original handler reference for unsubscription
         wrappedHandler._originalHandler = handler;
         wrappedHandler._context = context;
 
@@ -138,7 +131,6 @@ class EventBus extends EventEmitter {
             });
         }
 
-        // Return unsubscribe function
         return () => this.unsubscribe(eventName, handler, context);
     }
 

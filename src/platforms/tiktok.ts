@@ -376,7 +376,7 @@ class TikTokPlatform extends EventEmitter {
     declare _lastNotLiveWarningAt: number | undefined;
 
     constructor(config: TikTokConfig = {}, dependencies: TikTokDependencies = {}) {
-        super(); // Call EventEmitter constructor first to ensure proper prototype chain
+        super();
 
         this.logger = resolveAppLogger(dependencies.logger, 'TikTok');
         const platformErrorHandler = createPlatformErrorHandler(this.logger, 'tiktok');
@@ -438,14 +438,11 @@ class TikTokPlatform extends EventEmitter {
             })
         });
 
-        // Track planned vs unexpected disconnections
         this.isPlannedDisconnection = false;
         
-        // Setup connection state interface for retry system using WebSocket state
         if (this.retrySystem && typeof this.retrySystem === 'object') {
             this.retrySystem.isConnected = (platform) => {
                 if (platform !== 'tiktok') return false;
-                // Use connection's built-in state management
                 return this.connection ? !!this.connection.isConnected : false;
             };
         }
@@ -454,7 +451,6 @@ class TikTokPlatform extends EventEmitter {
         this.connectionStateManager = new ConnectionStateManager('tiktok', this.connectionFactory);
         this.connectionStateManager.initialize(this.config, { ...dependencies, logger: this.logger });
         
-        // Initialize chat file logging service via dependency injection
         const ChatFileLoggingServiceClass = dependencies.ChatFileLoggingService || ChatFileLoggingService;
         const chatFileLoggingOptions: ChatFileLoggingOptions = {
             config: {
@@ -469,7 +465,6 @@ class TikTokPlatform extends EventEmitter {
             ...chatFileLoggingOptions
         });
         
-        // Initialize self-message detection service via dependency injection
         this.selfMessageDetectionService = isSelfMessageDetectionService(dependencies.selfMessageDetectionService)
             ? dependencies.selfMessageDetectionService
             : null;
@@ -487,12 +482,10 @@ class TikTokPlatform extends EventEmitter {
         this.retryLock = false;
         this._disconnectionInProgress = false;
 
-        // Gift aggregation system
-        this.giftAggregation = {}; // Track gift aggregation by user and gift name
-        this.giftAggregationDelay = 2000; // 2-second delay for gift aggregation
+        this.giftAggregation = {};
+        this.giftAggregationDelay = 2000;
         this.giftAggregator = createTikTokGiftAggregator({ platform: this, safeSetTimeout });
 
-        // Viewer count cache
         this.cachedViewerCount = 0;
         this.connectionOrchestrator = createTikTokConnectionOrchestrator({ platform: this._createOrchestratorPlatform() });
 
@@ -668,9 +661,8 @@ class TikTokPlatform extends EventEmitter {
     }
     
     async initialize(handlers: TikTokHandlers = {}): Promise<void> {
-        // Check if initialization should proceed
         if (!this.initializationManager.beginInitialization()) {
-            return; // Reinitialization prevented
+            return;
         }
         
         const attemptId = this.initializationStats.startInitializationAttempt({
@@ -678,14 +670,12 @@ class TikTokPlatform extends EventEmitter {
         });
         
         try {
-            // Store event handlers first
             const incomingHandlers = handlers || {};
             this.handlers = { ...this.handlers, ...incomingHandlers };
             this.logger.debug(`Platform initialized with event handlers: ${Object.keys(incomingHandlers).join(', ')}`, 'tiktok');
             this.logger.debug(`Event handlers available: ${Object.keys(this.handlers).join(', ')}`, 'tiktok');
             this.logger.debug(`onViewerCount handler present: ${!!this.handlers.onViewerCount}`, 'tiktok');
             
-            // Reset retry count on initialization
             if (this.retrySystem) {
                 this.retrySystem.resetRetryCount('tiktok');
             }
@@ -694,7 +684,6 @@ class TikTokPlatform extends EventEmitter {
             await this._connect(this.handlers);
             const connectionTime = Date.now() - startTime;
             
-            // Mark initialization as successful
             this.initializationManager.markInitializationSuccess({
                 handlersCount: Object.keys(this.handlers).length,
                 connectionTime
@@ -705,7 +694,6 @@ class TikTokPlatform extends EventEmitter {
             });
             
         } catch (error) {
-            // Mark initialization as failed
             this.initializationManager.markInitializationFailure(error, {
                 handlersCount: Object.keys(this.handlers).length
             });
@@ -715,7 +703,6 @@ class TikTokPlatform extends EventEmitter {
                 handlersCount: Object.keys(this.handlers).length
             });
             
-            // Handle connection error with retry logic
             if (this.retrySystem) {
                 this.handleRetry(error);
             } else {
@@ -726,7 +713,6 @@ class TikTokPlatform extends EventEmitter {
                 );
             }
 
-            // Propagate initialization failure so lifecycle managers can reflect accurate state
             throw error;
         }
     }
@@ -796,18 +782,15 @@ class TikTokPlatform extends EventEmitter {
 
         const username = this.config.username;
         this.connectionActive = true;
-        this.connectionTime = Date.now(); // Record the time of connection
+        this.connectionTime = Date.now();
         this.connectionStateManager.markConnected();
         this.intervalManager.clearInterval('tiktok-stream-reconnect');
         
-        // Reset planned disconnection flag - this is now a live connection
         this.isPlannedDisconnection = false;
         this.logger.info(`Connection successful for TikTok user '${username}'`, 'tiktok');
         
-        // Emit connection event instead of direct app call
         await this._handleConnection();
         
-        // Let retry system know
         if (this.retrySystem) {
             this.retrySystem.resetRetryCount('tiktok');
         }
@@ -834,14 +817,12 @@ class TikTokPlatform extends EventEmitter {
             );
         }
         
-        // Update connection state manager (Solution C pattern)
         this.connectionStateManager.markError(err);
         this.cleanupEventListeners();
         this.listenersConfigured = false;
         this.connection = null;
         this.connectionActive = false;
 
-        // Provide specific guidance for different error types
         if (!isStreamNotLive) {
             if (errorMessage.includes('TLS') || errorMessage.includes('socket disconnected')) {
                 this.logger.warn(`TLS/Network connection failed for TikTok user '${username}' - check firewall settings and network connectivity`, 'tiktok');
@@ -852,7 +833,6 @@ class TikTokPlatform extends EventEmitter {
             }
         }
 
-        // Automatically trigger retry logic
         this.handleRetry(err);
     }
 
@@ -1075,7 +1055,6 @@ class TikTokPlatform extends EventEmitter {
   }
 
     _isRecoverableError(errorMessage: string): boolean {
-        // Non-recoverable errors (likely configuration issues)
     const nonRecoverablePatterns = [
       'username is required',
       'invalid username',
@@ -1090,7 +1069,6 @@ class TikTokPlatform extends EventEmitter {
             }
         }
         
-        // Recoverable errors (likely temporary network/API issues)
         const recoverablePatterns = [
             'timeout',
             'network',
@@ -1109,7 +1087,6 @@ class TikTokPlatform extends EventEmitter {
             }
         }
         
-        // Default to recoverable for unknown errors (conservative approach)
         return true;
     }
     
@@ -1220,7 +1197,6 @@ class TikTokPlatform extends EventEmitter {
     }
 
     async handleTikTokGift(data: unknown) {
-        // Fast path for invalid data - skip expensive processing
         if (!data || typeof data !== 'object' || Object.keys(data).length === 0) {
             this.logger.warn('handleTikTokGift called with empty or invalid data', 'tiktok', { data });
             return;
@@ -1244,19 +1220,12 @@ class TikTokPlatform extends EventEmitter {
 
             this.logger.debug(`[TikTok Gift] Processing gift: ${identityKey} sent ${giftCount}x ${giftType} (${amount} ${currency}, comboType: ${comboType}, repeatEnd: ${repeatEnd})`, 'tiktok');
 
-            // OFFICIAL TIKTOK PATTERN: Process gifts based on giftType and repeatEnd
-            // - giftType: 1 = combo-enabled (only process when repeatEnd: true)
-            // - giftType: 0 or undefined = non-combo (process immediately)
+            // TikTok combo gifts emit interim repeat events; only repeatEnd is final.
             
             if (comboType === 1 && !repeatEnd) {
-                // Streak in progress - do NOT process yet, just log
                 this.logger.debug(`[TikTok Gift] Streak in progress: ${identityKey} sending ${giftType} x${giftCount} (waiting for repeatEnd: true)`, 'tiktok');
-                return; // Wait for final event with repeatEnd: true
+                return;
             }
-            
-            // Process gift in these cases:
-            // 1. giftType !== 1 (non-combo gift)
-            // 2. giftType === 1 AND repeatEnd === true (combo streak completed)
             
             const isStreakCompleted = (comboType === 1 && repeatEnd === true);
             
@@ -1266,14 +1235,12 @@ class TikTokPlatform extends EventEmitter {
                 this.logger.debug(`[TikTok Gift] Non-combo gift: ${identityKey} sent ${giftCount}x ${giftType}`, 'tiktok');
             }
 
-            // Check if gift aggregation is disabled - if so, send immediately
             if (!this.config.giftAggregationEnabled) {
                 this.logger.debug('[TikTok Gift] Aggregation disabled, sending gift immediately', 'tiktok');
                 await this.handleOfficialGift(normalizedGift, { isStreakCompleted });
-                return; // Exit early, no aggregation needed
+                return;
             }
 
-            // Use standard aggregation for all processable gifts
             await this.handleStandardGift(normalizedGift);
 
         } catch (error) {
@@ -1420,7 +1387,6 @@ class TikTokPlatform extends EventEmitter {
 
     async handleTikTokSocial(data: unknown) {
         try {
-            // Validate data structure
             if (!data || typeof data !== 'object') {
                 this.logger.warn('Received invalid social data', 'tiktok', { data });
                 return;
@@ -1535,7 +1501,6 @@ class TikTokPlatform extends EventEmitter {
     }
 
     async logRawPlatformData(eventType: string, data: unknown): Promise<unknown> {
-        // Delegate to centralized service
         return this.chatFileLoggingService.logRawPlatformData('tiktok', eventType, data, this.config);
     }
 
@@ -1544,7 +1509,6 @@ class TikTokPlatform extends EventEmitter {
     }
 
     async cleanup() {
-        // Mark this as a planned disconnection to prevent unnecessary reconnection attempts
         this.isPlannedDisconnection = true;
 
         const connection = this.connection;
@@ -1566,7 +1530,6 @@ class TikTokPlatform extends EventEmitter {
             }
         }
         
-        // Enhanced: Use IntervalManager for comprehensive cleanup
         try {
             const clearedIntervals = this.intervalManager.clearAllIntervals();
             if (clearedIntervals > 0) {
@@ -1580,18 +1543,14 @@ class TikTokPlatform extends EventEmitter {
             );
         }
 
-        // Clean up event listeners BEFORE resetting connection
         this.cleanupEventListeners();
         this.listenersConfigured = false;
 
-        // Use connection state manager for cleanup (Solution C pattern)
         this.connectionStateManager.cleanup();
         this.connectionStateManager.markDisconnected();
         
-        // Clean up gift aggregation timers
         await this.cleanupGiftAggregation();
         
-        // Reset all connection-related state
         this.connection = null;
         this.connectionActive = false;
         this.connectionTime = 0;
@@ -2134,10 +2093,8 @@ class TikTokPlatform extends EventEmitter {
     _emitPlatformEvent(type: string, payload: TikTokPayload): void {
         const platform = typeof payload.platform === 'string' ? payload.platform : 'tiktok';
 
-        // Emit unified platform:event for local listeners
         this.emit('platform:event', { platform, type, data: payload });
 
-        // Route event through injected handler to event bus
         const handlerMap: Partial<Record<TikTokEventType, DefaultHandlerName>> = {
             [PlatformEvents.CHAT_MESSAGE]: 'onChat',
             [PlatformEvents.GIFT]: 'onGift',

@@ -265,8 +265,8 @@ describe('EventBus', () => {
             
             const stats = eventBus.getEventStats();
             const testEventStats = getEventStatsFor(stats, 'test-event');
-            expect(testEventStats.success).toBe(2); // Two successful handlers
-            expect(testEventStats.error).toBe(1); // One failed handler
+            expect(testEventStats.success).toBe(2);
+            expect(testEventStats.error).toBe(1);
         });
 
         test('should emit handler-error event when handler fails', async () => {
@@ -339,7 +339,7 @@ describe('EventBus', () => {
             const errorEventArgs = asHandlerErrorEvent(getFirstCallArg(errorEventHandler));
             expect(errorEventArgs.eventName).toBe('test-event');
             expect(errorEventArgs.error).toBeInstanceOf(Error);
-            expect(String(errorEventArgs.args[0]).length).toBeLessThanOrEqual(100); // Should be truncated
+            expect(String(errorEventArgs.args[0]).length).toBeLessThanOrEqual(100);
         });
     });
 

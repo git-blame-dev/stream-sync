@@ -155,14 +155,9 @@ function createOBSSourcesManager(obsManager: SourcesObsManager, dependencies: So
         }
     };
 
-    // Use provided delay function (required dependency)
     const delayFunction = delay;
 
-    // Scene Item ID Cache
-    // Stores scene item IDs to avoid repeated OBS API calls
     const sceneItemCache = new Map<string, SceneItemCacheEntry>();
-    
-    // Scene detection removed - using direct source access only
     
     function getCacheKey(sceneName: string, sourceName: string) {
         return `${sceneName}:${sourceName}`;
@@ -194,21 +189,17 @@ function createOBSSourcesManager(obsManager: SourcesObsManager, dependencies: So
         async () => {
             await ensureConnected();
             
-            // Sanitize text to prevent Unicode corruption crashes
             const sanitizedMessage = sanitizeForOBS(message);
             
             logger.debug(`[OBS Source] Updating text source "${sourceName}" with: ${sanitizedMessage}`, 'obs-sources');
             
-            // Log if sanitization changed the message
             if (sanitizedMessage !== message) {
                 logger.debug(`[OBS Source] Text sanitized for OBS safety: "${message}" → "${sanitizedMessage}"`, 'obs-sources');
             }
             
-            // Get current input settings to preserve other properties
             const { inputSettings } = await callOBS('GetInputSettings', { inputName: sourceName }) as InputSettingsResponse;
             const currentInputSettings = inputSettings && typeof inputSettings === 'object' ? inputSettings : {};
             
-            // Update text while preserving other settings
             await callOBS('SetInputSettings', {
                 inputName: sourceName, 
                 inputSettings: { 
@@ -248,7 +239,7 @@ function createOBSSourcesManager(obsManager: SourcesObsManager, dependencies: So
 
     async function updateChatMsgText(sourceName: string, username: string, message: string): Promise<void> {
     try {
-        const sanitizedUsername = sanitizeDisplayName(username, 15); // 15 char limit for OBS display
+        const sanitizedUsername = sanitizeDisplayName(username, 15);
         const formattedMessage = `${sanitizedUsername}: ${message}`;
         
         logger.debug(`[OBS Source] Updating chat message text to: ${formattedMessage}`, 'obs-sources');
@@ -264,7 +255,6 @@ function createOBSSourcesManager(obsManager: SourcesObsManager, dependencies: So
     async function getSceneItemId(sceneName: string, sourceName: string): Promise<SceneItemCacheEntry> {
     const cacheKey = getCacheKey(sceneName, sourceName);
     
-    // Check cache first
     if (sceneItemCache.has(cacheKey)) {
         const cachedResult = sceneItemCache.get(cacheKey);
         if (cachedResult) {
@@ -284,7 +274,6 @@ function createOBSSourcesManager(obsManager: SourcesObsManager, dependencies: So
             if (typeof sceneItemId === 'number') {
                 const result = { sceneItemId, sceneName };
                 
-                // Cache the result
                 sceneItemCache.set(cacheKey, result);
                 
                 return result;
@@ -317,7 +306,6 @@ function createOBSSourcesManager(obsManager: SourcesObsManager, dependencies: So
                 sceneItemEnabled: visible 
             });
             
-            // Success - reduced verbosity
         },
         `Setting ${sourceName} visibility to ${visible} in scene ${sceneName}`
     );
@@ -325,14 +313,12 @@ function createOBSSourcesManager(obsManager: SourcesObsManager, dependencies: So
 
 
     async function getGroupSceneItemId(sourceName: string, groupName: string): Promise<SceneItemCacheEntry> {
-    // DRY: Validate group name before any operations
     if (!validateGroupName(groupName, `getGroupSceneItemId for ${sourceName}`)) {
         throw new Error(`Invalid group name: ${groupName}`);
     }
     
     const cacheKey = getCacheKey(`group:${groupName}`, sourceName);
     
-    // Check cache first
     if (sceneItemCache.has(cacheKey)) {
         const cachedResult = sceneItemCache.get(cacheKey);
         if (cachedResult) {
@@ -343,7 +329,6 @@ function createOBSSourcesManager(obsManager: SourcesObsManager, dependencies: So
     await ensureConnected();
     
     try {
-        // Get the list of items inside the group using OBS WebSocket API
         const groupItemListResponse = await callOBS('GetGroupSceneItemList', { sceneName: groupName }) as GroupSceneItemListResponse;
 
         if (!groupItemListResponse || !Array.isArray(groupItemListResponse.sceneItems)) {
@@ -362,12 +347,10 @@ function createOBSSourcesManager(obsManager: SourcesObsManager, dependencies: So
 
         const result = { sceneItemId: sourceInGroup.sceneItemId };
         
-        // Cache the result
         sceneItemCache.set(cacheKey, result);
         
         return result;
     } catch (error) {
-        // Don't cache failed lookups
         handleSourcesError(
             `[OBS Group] Error finding source '${sourceName}' in group '${groupName}'`,
             error,
@@ -378,7 +361,6 @@ function createOBSSourcesManager(obsManager: SourcesObsManager, dependencies: So
     }
 
     async function setGroupSourceVisibility(sourceName: string, groupName: string | null | undefined, visible: boolean): Promise<void> {
-    // DRY: Validate group name before any operations
     if (!validateGroupName(groupName, `setGroupSourceVisibility for ${sourceName}`)) {
         return;
     }
@@ -390,7 +372,6 @@ function createOBSSourcesManager(obsManager: SourcesObsManager, dependencies: So
         async () => {
             await ensureConnected();
             
-            // Use groupName as the sceneName for visibility changes within a group
             const { sceneItemId } = await getGroupSceneItemId(sourceName, validGroupName);
             
 
@@ -478,7 +459,6 @@ function createOBSSourcesManager(obsManager: SourcesObsManager, dependencies: So
 
                     await delayFunction(fadeDelay || 0);
                     
-                    // Hide all platform logos within the group for cleanup
                     await hideAllPlatformLogos(platformLogos);
                 }
             } else {
@@ -501,7 +481,6 @@ function createOBSSourcesManager(obsManager: SourcesObsManager, dependencies: So
 
                     await delayFunction(fadeDelay || 0);
                     
-                    // Hide all platform logos within the group for cleanup
                     await hideAllNotificationPlatformLogos(platformLogos);
                 }
             } else {
@@ -522,19 +501,16 @@ function createOBSSourcesManager(obsManager: SourcesObsManager, dependencies: So
         notificationSourceName: string
     ): Promise<void> {
             try {
-                // Hide both display systems
                 await Promise.all([
                     setChatDisplayVisibility(false, chatSceneName, chatPlatformLogos),
                     setNotificationDisplayVisibility(false, notificationSceneName, notificationPlatformLogos)
                 ]);
                 
-                // Clear text sources
                 await Promise.all([
                     clearTextSource(ttsSourceName),
                     clearTextSource(notificationSourceName)
                 ]);
                 
-                // Clean transition delay
                 await delayFunction(200);
                 
         } catch (err) {
@@ -617,38 +593,30 @@ function createOBSSourcesManager(obsManager: SourcesObsManager, dependencies: So
         }
     }
 
-    // Return all functions as an object
     return {
-        // Text source management
         updateTextSource,
         clearTextSource,
         updateChatMsgText,
         
-        // Source visibility management
         getSceneItemId,
         setSourceVisibility,
         
-        // Group source management
         getGroupSceneItemId,
         setGroupSourceVisibility,
         
-        // Platform logo management
         setPlatformLogoVisibility,
         setNotificationPlatformLogoVisibility,
         hideAllPlatformLogos,
         hideAllNotificationPlatformLogos,
         
-        // Display system control
         setChatDisplayVisibility,
         setNotificationDisplayVisibility,
         hideAllDisplays,
         
-        // Source filter management
         setSourceFilterEnabled,
         getSourceFilterSettings,
         setSourceFilterSettings,
         
-        // Cache management
         clearSceneItemCache
     };
 }

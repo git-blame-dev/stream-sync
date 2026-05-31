@@ -126,7 +126,7 @@ describe("OBSEventService", () => {
         new Error("Connection refused"),
       );
 
-      await obsEventService.connect().catch(() => {}); // Catch the thrown error
+      await obsEventService.connect().catch(() => {});
 
       const state = obsEventService.getConnectionState();
       expect(state.connected).toBe(false);

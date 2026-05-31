@@ -1,6 +1,4 @@
 
-// LOG LEVEL DEFINITIONS
-
 import { expect } from 'bun:test';
 
 import testClock from './test-clock';
@@ -72,8 +70,6 @@ function getLogLevelName(level: number): string {
     return LOG_LEVEL_NAMES[level as keyof typeof LOG_LEVEL_NAMES] ?? String(level);
 }
 
-// LOG ENTRY STRUCTURE
-
 class LogEntry {
     level: number;
     levelName: string;
@@ -114,8 +110,6 @@ class LogEntry {
         return `[${this.levelName}] ${this.message}${metaStr}`;
     }
 }
-
-// TEST LOGGER CLASS
 
 class TestLogger {
     options: TestLoggerOptions;
@@ -183,12 +177,10 @@ class TestLogger {
     log(level: number, message: string, meta: LogMeta = {}): LogEntry | undefined {
         const startTime = testClock.now();
 
-        // Check if message should be filtered
         if (this.filters.some(filter => !filter(level, message, meta))) {
             return;
         }
 
-        // Execute before hooks
         this.hooks.beforeLog.forEach(hook => {
             try {
                 hook(level, message, meta);
@@ -197,28 +189,22 @@ class TestLogger {
             }
         });
 
-        // Create log entry
         const entry = new LogEntry(level, message, meta);
 
-        // Add to entries if level is enabled
         if (level <= this.options.level) {
             this.entries.push(entry);
 
-            // Maintain max entries limit
             if (this.entries.length > this.options.maxEntries) {
                 this.entries.shift();
             }
 
-            // Update performance stats
             this.updatePerformanceStats(level, testClock.now() - startTime);
 
-            // Console output if enabled
             if (this.options.enableConsole) {
                 console.log(entry.toString());
             }
         }
 
-        // Execute after hooks
         this.hooks.afterLog.forEach(hook => {
             try {
                 hook(entry);
@@ -242,7 +228,6 @@ class TestLogger {
         this.performance.callsByLevel[levelName]++;
     }
 
-    // Convenience methods for different log levels
     error(message: string, meta: LogMeta = {}): LogEntry | undefined {
         return this.log(LOG_LEVELS.ERROR, message, meta);
     }
@@ -361,8 +346,6 @@ class TestLogger {
     }
 }
 
-// FACTORY FUNCTIONS
-
 const createTestLogger = (options: Partial<TestLoggerOptions> = {}): TestLogger => {
     return new TestLogger(options);
 };
@@ -391,8 +374,6 @@ const createPerformanceLogger = (): TestLogger => {
         enablePerformance: true
     });
 };
-
-// ASSERTION HELPERS
 
 const assertNoErrors = (logger: TestLogger, message = 'No errors should be logged'): void => {
     expect(logger.hasErrors()).toBe(false);
@@ -423,8 +404,6 @@ const assertEntryCount = (logger: TestLogger, count: number, levelName: string |
     const entries = levelName ? logger.getEntriesByLevel(levelName) : logger.entries;
     expect(entries.length).toBe(count);
 };
-
-// EXPORTS
 
 export {
     TestLogger,

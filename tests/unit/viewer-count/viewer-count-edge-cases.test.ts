@@ -776,7 +776,6 @@ describe("Viewer Count & OBS Observer Edge Case Tests", () => {
     test("should handle resource exhaustion scenarios gracefully", async () => {
       const { system } = createEdgeCaseTestEnvironment();
 
-      // Add many observers to create resource pressure
       for (let i = 0; i < 1000; i++) {
         const observer = createEdgeCaseObserver(`resource-observer-${i}`);
         system.addObserver(observer);

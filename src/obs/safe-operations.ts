@@ -27,7 +27,6 @@ function handleObsSafetyError(message: string, error: unknown, context: string) 
 }
 
 async function safeOBSOperation(obsManager: { isReady: () => Promise<boolean> }, operation: () => Promise<unknown>, context = 'Unknown Operation') {
-    // Check if OBS is ready for operations
     if (!await obsManager.isReady()) {
         logger.debug(`[OBS Safety] Skipping ${context} - OBS not ready`, 'obs-safety');
         return null;

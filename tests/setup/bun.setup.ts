@@ -19,8 +19,6 @@ const { initializeStaticSecrets, _resetForTesting } = nodeRequire('../../src/cor
     _resetForTesting: () => void;
 };
 
-// Initialize logging FIRST at module load time, before any test files import modules
-// This ensures getUnifiedLogger() works when production code falls back to it
 initializeTestLogging();
 const {
     createMockFn,
@@ -62,7 +60,6 @@ setupGlobal.restoreConsole = () => {
     setupGlobal.console = originalConsole;
 };
 
-// Helper for tests that need a mock logger - inject via DI, don't mock globally
 const createLoggerMock = () => ({
     info: createMockFn(),
     debug: createMockFn(),
@@ -71,7 +68,6 @@ const createLoggerMock = () => ({
     log: createMockFn()
 });
 
-// Make available globally for tests that need it
 setupGlobal.createLoggerMock = createLoggerMock;
 
 const createWebSocketMock = () => {

@@ -69,20 +69,17 @@ class GracefulExitService {
         this.processedMessageCount = 0;
         this.isShuttingDown = false;
 
-        // Configuration with defaults
         this.config = {
             progressEventInterval: config.progressEventInterval ?? 5,
             forceExitTimeoutMs: config.forceExitTimeoutMs ?? 10000,
             nearCompletionThreshold: config.nearCompletionThreshold ?? 0.9
         };
 
-        // Statistics
         this.stats = {
             startTime: Date.now(),
             lastMessageTime: null
         };
 
-        // Log initialization
         if (this.isEnabled()) {
             logger.debug(`[GracefulExitService] Initialized with target: ${targetMessageCount} messages`, 'graceful-exit');
         }
@@ -114,7 +111,6 @@ class GracefulExitService {
             'graceful-exit'
         );
 
-        // Check if target reached
         if (this.targetMessageCount !== null && this.processedMessageCount >= this.targetMessageCount) {
             logger.debug(
                 `[Message Counter] Target message count reached (${this.targetMessageCount}). Triggering graceful exit...`,
@@ -136,30 +132,24 @@ class GracefulExitService {
         this.isShuttingDown = true;
 
         try {
-            // Log exit reason and summary
             const exitMessage = `Graceful exit after processing ${this.processedMessageCount} actual messages (target: ${this.targetMessageCount})`;
             logger.console(`\n[GRACEFUL EXIT] ${exitMessage}`, 'graceful-exit');
             logger.info(exitMessage, 'system');
 
-            // Gather detailed summary
             const summary = this._buildExitSummary();
 
-            // Log detailed summary
             logger.info('Exit summary:', 'system', summary);
             logger.console(`[GRACEFUL EXIT] Summary: Processed ${this.processedMessageCount}/${this.targetMessageCount} messages`, 'graceful-exit');
             logger.console(`[GRACEFUL EXIT] Platforms: ${summary.platforms.join(', ')}`, 'graceful-exit');
             logger.console(`[GRACEFUL EXIT] Starting graceful shutdown...`, 'graceful-exit');
 
-            // Set force exit timeout
             const forceExitTimeout = safeSetTimeout(() => {
                 handleGracefulExitError('[GRACEFUL EXIT] Forcing exit due to shutdown timeout', null, 'shutdown-timeout');
                 process.exit(1);
             }, this.config.forceExitTimeoutMs);
 
-            // Perform graceful shutdown
             await this.runtime.shutdown();
 
-            // Clear timeout if shutdown succeeded
             clearTimeout(forceExitTimeout);
 
         } catch (error: unknown) {
@@ -167,13 +157,11 @@ class GracefulExitService {
             handleGracefulExitError(`Error during graceful exit: ${errorMessage}`, error, 'shutdown', 'system');
             handleGracefulExitError(`[GRACEFUL EXIT] Error during graceful exit: ${errorMessage}`, error, 'shutdown');
 
-            // Set force exit timeout
             safeSetTimeout(() => {
                 handleGracefulExitError('[GRACEFUL EXIT] Forcing exit due to shutdown error', null, 'shutdown-error');
                 process.exit(1);
             }, this.config.forceExitTimeoutMs);
 
-            // Still try to shutdown gracefully
             try {
                 await this.runtime.shutdown();
             } catch (shutdownError: unknown) {

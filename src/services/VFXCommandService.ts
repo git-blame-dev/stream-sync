@@ -151,16 +151,13 @@ class VFXCommandService {
         this.eventBus = eventBus;
         this._effectsManager = options.effectsManager || null;
 
-        // Initialize CommandParser with current config
         this.commandParser = null;
         this._initializeCommandParser();
         
-        // Cooldown management
         this.userLastCommand = new Map();
         this.globalCommandCooldowns = new Map();
         this.userCommandTimestamps = new Map();
         
-        // Performance monitoring
         this.stats = {
             totalCommands: 0,
             timedCommands: 0,
@@ -200,7 +197,6 @@ class VFXCommandService {
                 };
             }
             
-            // Parse command to get VFX configuration
             const vfxConfig = await this.selectVFXCommand(command, command);
             if (!vfxConfig) {
                 return {
@@ -212,7 +208,6 @@ class VFXCommandService {
                 };
             }
 
-            // Check cooldowns unless skipped
             if (!skipCooldown) {
                 if (!vfxConfig.commandKey) {
                     throw new Error('VFX config requires commandKey for cooldown checks');
@@ -232,7 +227,6 @@ class VFXCommandService {
                 }
             }
 
-            // Execute the command
             timedExecutionRecorded = true;
             const executionResult = await this._executeVFXCommand(vfxConfig, { username: commandUser, platform });
             
@@ -269,7 +263,7 @@ class VFXCommandService {
                         this.eventBus.emit(PlatformEvents.VFX_EFFECT_COMPLETED, effectCompletedPayload);
                     } catch (eventError) {
                         handleVFXCommandError(`[VFXCommandService] EventBus error: ${getErrorMessage(eventError)}`, eventError, 'event-bus');
-                        throw eventError; // Re-throw to be caught by outer catch
+                        throw eventError;
                     }
                 }
 
@@ -284,19 +278,16 @@ class VFXCommandService {
                 this.stats.failedCommands++;
             }
             
-            // Update average execution time with weighted calculation
-            const executionTime = Math.max(1, Date.now() - startTime); // Ensure minimum 1ms for tracking
+            const executionTime = Math.max(1, Date.now() - startTime);
             if (timedExecutionRecorded) {
                 this.stats.timedCommands += 1;
                 if (this.stats.timedCommands === 1) {
                     this.stats.avgExecutionTime = executionTime;
                 } else {
-                    // Running average: (oldAvg * (n-1) + newValue) / n
                     this.stats.avgExecutionTime = ((this.stats.avgExecutionTime * (this.stats.timedCommands - 1)) + executionTime) / this.stats.timedCommands;
                 }
             }
             
-            // Return enhanced result with command context for better user experience
             return {
                 ...executionResult,
                 command,
@@ -334,7 +325,6 @@ class VFXCommandService {
         }
 
         try {
-            // Use existing CommandParser to get VFX config
             const parserMessage = contextMessage !== null && contextMessage !== undefined
                 ? contextMessage
                 : message;
@@ -365,7 +355,6 @@ class VFXCommandService {
         }
 
         try {
-            // Get command from configuration
             const command = this._getCommand(commandKey);
             
             if (!command) {
@@ -380,7 +369,6 @@ class VFXCommandService {
                 return null;
             }
 
-            // Parse the command to get VFX config  
             const contextMessage = message !== null ? message : selectedCommand;
             return await this.selectVFXCommand(selectedCommand, contextMessage);
 
@@ -478,7 +466,6 @@ class VFXCommandService {
             const userCooldownMs = userCooldownSec * 1000;
             this._pruneCooldownBookkeeping(now);
             
-            // Check user cooldown
             const lastUserCommand = this.userLastCommand.get(userId);
             if (lastUserCommand !== undefined && userCooldownMs > 0 && (now - lastUserCommand) < userCooldownMs) {
                 return {
@@ -489,7 +476,6 @@ class VFXCommandService {
                 };
             }
             
-            // Check global command cooldown
             const lastGlobalCommand = this.globalCommandCooldowns.get(command);
             if (lastGlobalCommand !== undefined && globalCooldownMs > 0 && (now - lastGlobalCommand) < globalCooldownMs) {
                 return {
@@ -583,7 +569,6 @@ class VFXCommandService {
 
     async _executeVFXCommand(vfxConfig: VFXConfig, context: { username: string; platform: string }): Promise<CommandExecutionResult> {
         try {
-            // Prepare command data in format expected by runCommand
             const commandData = {
                 vfx: vfxConfig,
                 username: context.username,
@@ -625,12 +610,10 @@ class VFXCommandService {
         }
         const userCooldownMs = userCooldownSec * 1000;
         
-        // Update user cooldown
         if (userCooldownMs > 0) {
             this.userLastCommand.set(userId, now);
         }
         
-        // Update user command timestamps for tracking
         if (userCooldownMs > 0) {
             if (!this.userCommandTimestamps.has(userId)) {
                 this.userCommandTimestamps.set(userId, []);
@@ -641,7 +624,6 @@ class VFXCommandService {
             }
         }
         
-        // Update global command cooldown
         if (globalCooldownMs > 0) {
             this.globalCommandCooldowns.set(command, now);
         }
@@ -747,5 +729,4 @@ function createVFXCommandService(config: VFXServiceConfig, eventBus: EventBusLik
     return new VFXCommandService(config, eventBus, options);
 }
 
-// Export the class and factory
 export { VFXCommandService, createVFXCommandService };

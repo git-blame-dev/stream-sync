@@ -58,8 +58,8 @@ describe("OBSHealthChecker", () => {
       healthChecker = createHealthChecker();
 
       expect(healthChecker.obsManager).toBe(mockOBSManager);
-      expect(healthChecker.cacheTimeout).toBe(2000); // 2 seconds default
-      expect(healthChecker.maxFailures).toBe(3); // 3 failures default
+      expect(healthChecker.cacheTimeout).toBe(2000);
+      expect(healthChecker.maxFailures).toBe(3);
       expect(healthChecker.lastCheck).toBeNull();
       expect(healthChecker.lastResult).toBeNull();
       expect(healthChecker.consecutiveFailures).toBe(0);

@@ -1,5 +1,3 @@
-// API CONTRACT DEFINITIONS
-
 import { expect } from 'bun:test';
 
 import testClock from './test-clock';
@@ -211,8 +209,6 @@ const isApiContractName = (contractName: string): contractName is ApiContractNam
     return contractName in API_CONTRACTS;
 };
 
-// VALIDATION FUNCTIONS
-
 const validateMockContract = (mockObject: unknown, contractName: string): MockContractValidation => {
     if (!isApiContractName(contractName)) {
         return {
@@ -351,8 +347,6 @@ const hasNestedProperty = (obj: unknown, path: string): boolean => {
     return current !== null && current !== undefined;
 };
 
-// BATCH VALIDATION FUNCTIONS
-
 const validateMockSuite = (mockSpecs: MockSpec[]): MockSuiteValidation => {
     const results: MockSuiteResult[] = mockSpecs.map((spec) => ({
         ...validateMockContract(spec.mock, spec.contractName),
@@ -400,8 +394,6 @@ const generateValidationSummary = (validationResults: MockSuiteResult[]): string
     return summary;
 };
 
-// AUTOMATED VALIDATION HELPERS
-
 const toMatchContract = function (mockObject: unknown, contractName: string): MatcherResult {
     const result = validateMockContract(mockObject, contractName);
 
@@ -426,8 +418,6 @@ const setupMockValidation = () => {
     globalThis.validateNotification = validateNotificationData;
     globalThis.validatePlatformEvent = validatePlatformEventData;
 };
-
-// CONTINUOUS VALIDATION SYSTEM
 
 class MockContractMonitor {
     private registeredMocks: Map<string, MockSpec>;
@@ -464,8 +454,6 @@ class MockContractMonitor {
     }
 }
 
-// EXPORTS
-
 export {
     type MockContractValidation,
     type NotificationValidation,
@@ -473,22 +461,17 @@ export {
     type MockSuiteResult,
     type MockSuiteValidation,
 
-    // Core validation functions
     validateMockContract,
     validateNotificationData,
     validatePlatformEventData,
 
-    // Batch validation
     validateMockSuite,
     generateValidationSummary,
 
-    // Test runner integration
     setupMockValidation,
     toMatchContract,
 
-    // Continuous monitoring
     MockContractMonitor,
 
-    // API contracts (for reference)
     API_CONTRACTS
 };

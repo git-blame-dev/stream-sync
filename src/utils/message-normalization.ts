@@ -566,21 +566,18 @@ function extractTwitchMessageData(messageObj: unknown) {
         return { textContent: '', cheermoteInfo: null };
     }
     
-    // Extract text from fragments, excluding cheermotes
     const fragments = messageObj.fragments.filter(isRecord);
     const textParts = fragments
         .filter((fragment) => fragment.type === 'text')
         .map((fragment) => typeof fragment.text === 'string' ? fragment.text : '')
         .join('');
     
-    // Extract cheermote information (get the first/primary cheermote)
     const cheermoteFragments = fragments.filter((fragment) => fragment.type === 'cheermote');
     let cheermoteInfo: (Record<string, unknown> & { totalBits?: unknown }) | null = null;
     
     if (cheermoteFragments.length > 0) {
         const primaryCheermote = cheermoteFragments[0];
         if (isRecord(primaryCheermote) && isRecord(primaryCheermote.cheermote) && primaryCheermote.text) {
-            // Use unified cheermote processor for consistent processing
             const processedData = CheermoteProcessor.processEventSubFragments(messageObj.fragments);
             const parsedTier = Number(primaryCheermote.cheermote.tier);
             const tier = Number.isFinite(parsedTier) && parsedTier > 0
@@ -589,11 +586,11 @@ function extractTwitchMessageData(messageObj: unknown) {
             
             cheermoteInfo = {
                 prefix: primaryCheermote.cheermote.prefix,
-                text: primaryCheermote.text, // This contains "uni1", "Cheer100", etc.
+                text: primaryCheermote.text,
                 cleanPrefix: ('cleanPrimaryTypeOriginalCase' in processedData && typeof processedData.cleanPrimaryTypeOriginalCase === 'string'
                     ? processedData.cleanPrimaryTypeOriginalCase
-                    : primaryCheermote.cheermote.prefix), // NEW: Clean prefix without numbers, preserving case
-                textContent: processedData.textContent, // NEW: Clean text without cheermote patterns
+                    : primaryCheermote.cheermote.prefix),
+                textContent: processedData.textContent,
                 totalBits: processedData.totalBits,
                 count: cheermoteFragments.length,
                 types: processedData.types,
@@ -719,7 +716,6 @@ function validateNormalizedMessage(normalizedMessage: unknown) {
     
     const messageRecord = normalizedMessage as MessageRecord;
 
-    // Required fields
     const requiredFields = ['platform', 'userId', 'username', 'timestamp'];
     for (const field of requiredFields) {
         if (messageRecord[field] === undefined || messageRecord[field] === null) {
@@ -736,7 +732,6 @@ function validateNormalizedMessage(normalizedMessage: unknown) {
         }
     }
     
-    // Boolean fields
     const booleanFields = ['isMod', 'isPaypiggy', 'isBroadcaster'];
     for (const field of booleanFields) {
         if (messageRecord[field] === undefined || messageRecord[field] === null) {
@@ -746,19 +741,16 @@ function validateNormalizedMessage(normalizedMessage: unknown) {
         }
     }
     
-    // Validate platform names
     const validPlatforms = ['twitch', 'youtube', 'tiktok', 'tiktok-gift'];
     const platform = typeof messageRecord.platform === 'string' ? messageRecord.platform : '';
     if (platform && !validPlatforms.includes(platform.toLowerCase())) {
         issues.push(`Invalid platform: ${platform}`);
     }
     
-    // Metadata should be an object
     if (!isRecord(messageRecord.metadata)) {
         issues.push('Missing or invalid metadata field');
     }
     
-    // Timestamp should be valid ISO string
     const timestamp = typeof messageRecord.timestamp === 'string' ? messageRecord.timestamp : '';
     if (timestamp && isNaN(Date.parse(timestamp))) {
         issues.push('Invalid timestamp format');

@@ -49,7 +49,6 @@ const MANAGER_OWNED_DEPENDENCY_KEYS: ManagerOwnedDependencyKeys[] = ['obs', 'OBS
 
 const OBSWebSocketCtor = OBSWebSocket as new () => ObsSocketLike;
 
-// Dependency injection support
 class OBSConnectionManager {
     logger: ObsLogger;
     log: ObsLogger;
@@ -105,7 +104,6 @@ class OBSConnectionManager {
         this.obs = dependencies.obs || new this.OBSWebSocket();
         this.errorHandler = createPlatformErrorHandler(this.logger, 'obs-connection');
         
-        // Internal state
         this.isConnecting = false;
         this.connectionPromise = null;
         this.connectionCompleteHandler = null;
@@ -122,7 +120,6 @@ class OBSConnectionManager {
         this.eventHandlers = new Map();
         this.sourcesCacheInvalidator = null;
 
-        // Set up event handlers
         this.setupEventHandlers();
     }
     
@@ -173,7 +170,6 @@ class OBSConnectionManager {
             this.lifecycleState = 'connected';
             this.clearReconnectTimer();
             
-            // If there's a pending connection promise, complete it
             if (this.connectionCompleteHandler) {
                 this.logger.debug('[OBS Connection] Calling connection completion handler', 'obs-connection');
                 this.connectionCompleteHandler();
@@ -185,7 +181,6 @@ class OBSConnectionManager {
         this.eventHandlers.set('Identified', identifiedHandler);
         this.obs.on('Identified', identifiedHandler);
         
-        // Scene item cache invalidation events
         const sceneItemCreatedHandler = () => {
             this.clearSceneItemCache();
         };
@@ -285,12 +280,11 @@ class OBSConnectionManager {
             let identifiedTimeout: ReturnType<typeof globalThis.setTimeout> | null = null;
             let connectionCompleted = false;
             
-            // Set up a one-time completion handler
             const completeConnection = () => {
                 if (this.activeConnectAttemptVersion !== attemptVersion) {
                     return;
                 }
-                if (connectionCompleted) return; // Prevent double completion
+                if (connectionCompleted) return;
                 connectionCompleted = true;
                 
                 if (identifiedTimeout) {
@@ -304,7 +298,6 @@ class OBSConnectionManager {
                 resolve(true);
             };
             
-            // Store the completion handler so it can be called by the existing 'Identified' handler
             this.connectionCompleteHandler = completeConnection;
             
             try {
@@ -324,7 +317,6 @@ class OBSConnectionManager {
                     }
                 }, identifiedTimeoutMs);
                 
-                // Now attempt the connection
                 const { obsWebSocketVersion, negotiatedRpcVersion } = await this.obs.connect(this.config.address, this.config.password);
                 this.logger.debug(`[OBS Connection] WebSocket connected to server ${obsWebSocketVersion} (using RPC ${negotiatedRpcVersion})`, 'obs-connection');
                 
@@ -332,7 +324,6 @@ class OBSConnectionManager {
                 // The resolve() will be called by the existing 'Identified' handler in setupEventHandlers()
                 
             } catch (error) {
-                // Clean up on error
                 if (identifiedTimeout) {
                     clearTimeout(identifiedTimeout);
                 }
@@ -342,7 +333,6 @@ class OBSConnectionManager {
                 }
                 this.connectionCompleteHandler = null;
                 
-                // Clean up the error message for better readability
                 const connectionError = error instanceof Error ? error : new Error(String(error));
                 const errorCode = typeof error === 'object' && error !== null && 'code' in error
                     ? (error as { code?: unknown }).code
@@ -368,7 +358,7 @@ class OBSConnectionManager {
                 
                 this.isConnecting = false;
                 this.lifecycleState = this.isDisposed ? 'disposed' : 'disconnected';
-                this.connectionPromise = null; // Clear promise on failure
+                this.connectionPromise = null;
                 this.activeConnectAttemptVersion = null;
                 if (!this.isIntentionalDisconnect && !this.isDisposed) {
                     this.scheduleReconnect('connect-failed');
@@ -395,7 +385,6 @@ class OBSConnectionManager {
             this.logger.debug('[OBS Connection] Successfully disconnected from OBS WebSocket', 'obs-connection');
         }
         
-        // Invalidate health checker cache when disconnecting
         if (this.healthChecker) {
             this.healthChecker.invalidateCache();
         }
@@ -409,7 +398,6 @@ class OBSConnectionManager {
     }
 
     async isReady() {
-        // Lazy initialization of health checker
         if (!this.healthChecker) {
             this.healthChecker = new OBSHealthChecker(this);
         }
@@ -577,7 +565,6 @@ class OBSConnectionManager {
     }
 }
 
-// Global instance management
 let globalOBSManager: OBSConnectionManager | null = null;
 
 function assertNoIncompatibleSingletonOverrides(dependencies: ConnectionDependencies) {
@@ -596,7 +583,6 @@ function getOBSConnectionManager(dependencies: ConnectionDependencies = {}): OBS
         globalOBSManager = createOBSConnectionManager(dependencies);
     } else if (dependencies && Object.keys(dependencies).length > 0) {
         assertNoIncompatibleSingletonOverrides(dependencies);
-        // Update existing manager configuration if new dependencies provided
         if (dependencies.config) {
             globalOBSManager.updateConfig(dependencies.config);
         }
@@ -644,7 +630,6 @@ async function initializeOBSConnection(config: ObsConfig = {}, dependencies: Con
             }
             logger.debug('[OBS] OBS connection successful', 'OBS');
             
-            // Initialize handcam glow to 0 when enabled
             const handcamConfig = dependencies.handcam;
             if (handcamConfig?.enabled) {
                 try {
@@ -660,8 +645,6 @@ async function initializeOBSConnection(config: ObsConfig = {}, dependencies: Con
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
             logger.debug(`[OBS] OBS connection failed: ${errorMessage}`, 'OBS');
-            // Error is already logged in manager.connect(), no need to re-log
-            // We catch it here to prevent it from crashing the main application startup
         }
     } else {
         logger.debug('[OBS] OBS is disabled, skipping connection', 'OBS');

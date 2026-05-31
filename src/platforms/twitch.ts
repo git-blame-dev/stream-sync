@@ -273,34 +273,27 @@ class TwitchPlatform extends EventEmitter {
     eventFactory: TwitchEventFactory;
 
     constructor(config: TwitchConfig, dependencies: TwitchPlatformDependencies = {}) {
-        super(); // Call EventEmitter constructor first to ensure proper prototype chain
+        super();
 
-        // Inject dependencies with fallbacks to actual implementations
-        // EventSub WebSocket implementation for all Twitch functionality
         this.TwitchEventSub = dependencies.TwitchEventSub || (TwitchEventSub as unknown as TwitchEventSubConstructor);
 
-        // Initialize unified logger (with dependency injection support for testing)
         this.logger = dependencies.logger || getUnifiedLogger();
         this.errorHandler = createPlatformErrorHandler(this.logger, 'twitch');
         this.dependencies = { ...dependencies };
         this.retrySystem = dependencies.retrySystem || (createRetrySystem({ logger: this.logger }) as unknown as RetrySystemLike);
 
-        // Initialize connection state
         this.isConnected = false;
         this.isPlannedDisconnection = false;
         this.recoveryInFlight = false;
 
-        // Store configuration and app reference
         this.config = config;
 
-        // Require TwitchAuth via dependency injection
         const twitchAuth = dependencies.twitchAuth;
         if (!twitchAuth) {
             throw new Error('TwitchPlatform requires twitchAuth via dependency injection.');
         }
         this.twitchAuth = twitchAuth;
 
-        // Initialize chat file logging service via dependency injection
         const ChatFileLoggingServiceClass = dependencies.ChatFileLoggingService || (ChatFileLoggingService as unknown as ChatFileLoggingServiceConstructor);
         this.chatFileLoggingService = new ChatFileLoggingServiceClass({
             logger: this.logger,
@@ -320,7 +313,6 @@ class TwitchPlatform extends EventEmitter {
         this.eventSubWiring = null;
         this.handlers = {};
 
-        // Initialize modular components
         this.apiClient = null;
         this.viewerCountProvider = null;
         this.avatarUrlCache = new Map();
@@ -342,7 +334,6 @@ class TwitchPlatform extends EventEmitter {
             : 2000;
         this.fallbackAvatarUrl = DEFAULT_AVATAR_URL;
 
-        // Initialize connection state tracking
         this.isConnecting = false;
 
         if (this.retrySystem && typeof this.retrySystem === 'object') {
@@ -354,8 +345,6 @@ class TwitchPlatform extends EventEmitter {
                 return !!(this.eventSub?.isActive?.() || this.isConnected);
             };
         }
-
-        // EventSub will be initialized later when TwitchAuth is ready
 
         this.eventFactory = createTwitchEventFactory({
             platformName: this.platformName
@@ -521,7 +510,6 @@ class TwitchPlatform extends EventEmitter {
             ? event.broadcaster_user_id === event.chatter_user_id
             : false;
 
-        // Check if message should be filtered using configurable service
         if (this.selfMessageDetectionService) {
             const messageData = {
                 self: isSelf,
@@ -531,11 +519,9 @@ class TwitchPlatform extends EventEmitter {
                 return;
             }
         } else {
-            // Fallback to original behavior if service not available
             if (isSelf) return;
         }
 
-        // Log raw platform data if enabled
         try {
             await this._logRawEvent('chat', event);
         } catch (loggingError) {
@@ -632,10 +618,8 @@ class TwitchPlatform extends EventEmitter {
                     eventKeys: event && typeof event === 'object' ? Object.keys(event).sort() : [],
                     hasMessage: typeof normalizedData.message === 'string' && normalizedData.message.length > 0
                 });
-                // Continue processing with potentially incomplete data
             }
 
-            // Emit chat message event instead of calling app directly
             try {
                 const eventData: ChatMessagePayload = {
                     type: PlatformEvents.CHAT_MESSAGE,
@@ -670,7 +654,6 @@ class TwitchPlatform extends EventEmitter {
             }
         } catch (error) {
             this._logPlatformError(`Error processing chat message: ${getErrorMessage(error)}`, error, 'chat-message-processing');
-            // Don't rethrow to prevent chat processing pipeline from stopping
         }
     }
 
@@ -1113,7 +1096,6 @@ class TwitchPlatform extends EventEmitter {
 
         try {
 
-            // User validation (for events that require it)
             const allowAnonymous = data?.isAnonymous === true &&
                 (eventType === 'gift' || eventType === 'giftpaypiggy');
             if (options.validateUser && !data.username && !allowAnonymous) {
@@ -1126,17 +1108,14 @@ class TwitchPlatform extends EventEmitter {
                 return;
             }
 
-            // Log raw event (allow override for specific log type names)
             const logEventType = options.logEventType || eventType;
             await this._logRawEvent(logEventType, data);
 
-            // Build event using factory
             const factoryMethod = options.factoryMethod || this._resolveFactoryMethod(eventType);
             const normalizedPayload: Record<string, unknown> = { ...(data || {}), timestamp: payloadTimestamp };
             normalizedPayload.avatarUrl = await this._resolveAvatarUrl(normalizedPayload);
             const eventData: Record<string, unknown> = this.eventFactory[factoryMethod](normalizedPayload);
 
-            // Emit standardized event (allow override for specific emit type names)
             const emitEventType = options.emitEventType || (typeof eventData.type === 'string' ? eventData.type : '') || this._resolvePlatformEventType(eventType);
             this._emitPlatformEvent(emitEventType, eventData);
         } catch (error) {
@@ -1310,13 +1289,11 @@ class TwitchPlatform extends EventEmitter {
     }
 
     async cleanup(): Promise<void> {
-        // Mark this as a planned disconnection to prevent reconnection loops
         this.isPlannedDisconnection = true;
 
         try {
             this._clearEventSubWiringState();
 
-            // Disconnect EventSub WebSocket
             if (this.eventSub) {
                 if (typeof this.eventSub.removeAllListeners === 'function') {
                     this.eventSub.removeAllListeners();
@@ -1474,7 +1451,6 @@ class TwitchPlatform extends EventEmitter {
     }
 
     async getViewerCount(): Promise<number> {
-        // Delegate to modular viewer count provider for DRY principle
         if (!this.viewerCountProvider) {
             this.logger.debug('Viewer count provider not initialized, returning 0', 'twitch');
             return 0;
@@ -1501,7 +1477,6 @@ class TwitchPlatform extends EventEmitter {
     }
 
     async logRawPlatformData(eventType: string, data: unknown): Promise<void> {
-        // Delegate to centralized service
         return this.chatFileLoggingService.logRawPlatformData('twitch', eventType, data, this.config);
     }
 
@@ -1516,10 +1491,8 @@ class TwitchPlatform extends EventEmitter {
     _emitPlatformEvent(type: string, payload: Record<string, unknown>): void {
         const platform = payload?.platform || 'twitch';
 
-        // Emit unified platform:event for local listeners
         this.emit('platform:event', { platform, type, data: payload });
 
-        // Forward to injected handlers (e.g., EventBus via PlatformLifecycleService)
         const handlerMap: Record<string, string> = {
             [PlatformEvents.CHAT_MESSAGE]: 'onChat',
             [PlatformEvents.FOLLOW]: 'onFollow',

@@ -105,7 +105,6 @@ function validateYouTubePlatformDependencies(dependencies: unknown): asserts dep
 
     const dependencyRecord = dependencies as Record<string, unknown>;
 
-    // Validate required core dependencies
     if (!dependencyRecord.logger) {
         throw new Error('Missing required dependencies: logger. ' +
                        'Please provide a logger object with debug, info, error, and warn methods.');
@@ -118,10 +117,8 @@ function validateYouTubePlatformDependencies(dependencies: unknown): asserts dep
                        'Provide a service that can detect live YouTube streams for the configured channel.');
     }
 
-    // Validate logger interface
     validateLoggerInterface(dependencyRecord.logger);
 
-    // Validate optional dependencies when present
     if (dependencyRecord.notificationManager) {
         validateNotificationManagerInterface(dependencyRecord.notificationManager);
     }
@@ -133,7 +130,6 @@ function validateYouTubePlatformDependencies(dependencies: unknown): asserts dep
         }
     }
 
-    // Check for invalid dependency types
     const expectedTypes = {
         logger: 'object'
     };
@@ -159,7 +155,6 @@ function validateConnectionStateManagerDependencies(config: unknown, dependencie
 
     const dependencyRecord = dependencies as Record<string, unknown>;
 
-    // Logger is the most critical dependency for state manager
     if (!dependencyRecord.logger) {
         throw new Error('Initialization failed: missing required dependencies (logger). ' +
                        'Connection state manager requires a logger for operation tracking.');

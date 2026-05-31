@@ -144,7 +144,6 @@ class NotificationBuilder {
         }
         const now = Date.now();
 
-        // Normalize currency symbol to code for consistent formatting
         const normalizedInput: NotificationInput = currency && !isError
             ? (() => {
                 const trimmedCurrency = String(currency).trim();
@@ -167,7 +166,6 @@ class NotificationBuilder {
         if (normalizedMessage !== undefined) {
             normalizedInput.message = normalizedMessage;
         }
-        // Reject unsupported paid aliases; only canonical paypiggy should flow past this point
         const aliasPaidTypes = ['subscription', 'subscribe', 'membership', 'member', 'superfan', 'supporter', 'paid_supporter', 'resubscription'];
         if (aliasPaidTypes.includes(type)) {
             return null;
@@ -210,7 +208,6 @@ class NotificationBuilder {
             }
         }
 
-        // Pre-calculate display messages to reduce object creation overhead
         const displayMessage = this.generateDisplayMessage(effectiveInput);
         const ttsMessage = this.generateTtsMessage(effectiveInput);
         const logMessage = this.generateLogMessage(effectiveInput);
@@ -250,8 +247,6 @@ class NotificationBuilder {
             notification.currency = currency;
         }
         if (vfxConfig !== undefined) notification.vfxConfig = vfxConfig;
-        // Include any extra fields (e.g., tier, details) - optimized for performance
-        // Use direct property access instead of Object.keys() for better performance
         const excludedKeys = new Set(['amount','currency','vfxConfig','template','platform','type','username','userId','message', 'parts', 'id', 'displayMessage', 'ttsMessage', 'logMessage', 'processedAt', 'timestamp']);
         for (const key in effectiveInput) {
             if (Object.prototype.hasOwnProperty.call(effectiveInput, key) && !excludedKeys.has(key)) {
@@ -264,7 +259,6 @@ class NotificationBuilder {
         return notification;
     }
 
-    // Determine paypiggy variant for platform-facing wording (subscriber/member/superfan)
     static _getPaypiggyVariant(input: NotificationInput | null | undefined) {
         const safeInput = input || {};
         const type = safeInput.type;
@@ -418,8 +412,6 @@ class NotificationBuilder {
     static getTruncatedUsername(username: unknown, maxLength = 40) {
         const userName = (typeof username === 'string') ? username : '';
 
-        // Performance optimization: Use simple truncation for most cases to avoid expensive TextProcessingManager instantiation
-        // For international content quality tests, allow longer usernames up to 70 characters
         const effectiveMaxLength = userName.includes('测试') || userName.includes('テスト') || userName.includes('🌸') ? 70 : maxLength;
 
         if (userName.length <= effectiveMaxLength) {
@@ -535,7 +527,6 @@ class NotificationBuilder {
             if (!Number.isFinite(viewerCount)) {
                 throw new Error('Raid notification requires viewerCount');
             }
-            // Display uses 'viewers' for consistency (even for singular)
             const viewerText = 'viewers';
             return `Incoming raid from ${this.getTruncatedUsername(username)} with ${viewerCount} ${viewerText}!`;
         }
@@ -759,7 +750,6 @@ class NotificationBuilder {
             throw new Error('formatCurrency requires currency');
         }
 
-        // Use Intl.NumberFormat for consistent currency formatting
         try {
             const formatterKey = `${currency}:${currency === 'JPY' ? '0' : '2'}`;
             if (!this.currencyFormatters) {
@@ -781,7 +771,6 @@ class NotificationBuilder {
             }
             return formatter.format(amount);
         } catch {
-            // For truly invalid currency codes, show amount with code
             return `${amount.toFixed(2)} ${currency}`;
         }
     }
@@ -797,7 +786,6 @@ class NotificationBuilder {
         const main = Math.floor(amount);
         const sub = Math.round((amount - main) * 100);
 
-        // Get currency name from Intl (handles all ISO 4217 currencies)
         let currencyName;
         try {
             const formatterKey = `${currency}:name`;
@@ -821,12 +809,10 @@ class NotificationBuilder {
                 .formatToParts(main === 1 && sub === 0 ? 1 : 2)
                 .find((p) => p.type === 'currency')?.value;
 
-            // Handle singular form (Intl always returns plural)
             if (currencyName && main === 1 && sub === 0 && currencyName.endsWith('s') && !currencyName.endsWith('yen')) {
                 currencyName = currencyName.slice(0, -1);
             }
         } catch {
-            // Fallback for invalid currency codes: surface the provided code
             currencyName = currency;
         }
 
@@ -845,20 +831,17 @@ class NotificationBuilder {
             return '';
         }
         
-        // Remove emojis and most special Unicode characters, but preserve some common symbols
         let sanitized = username
-            .replace(/[\u{1F000}-\u{1F999}]/gu, '') // Remove emojis
-            .replace(/[\u{2000}-\u{2600}]/gu, '') // Remove punctuation and symbols (but preserve hearts)
-            .replace(/[\u{2700}-\u{3300}]/gu, '') // Remove other Unicode symbols
-            .replace(/[🌸🌈✨🦄🎮💎🔥💯]/g, '') // Remove specific emoji characters
-            .replace(/\d+/g, match => match.substring(0, 1)) // Sanitize numbers - keep only first digit
+            .replace(/[\u{1F000}-\u{1F999}]/gu, '')
+            .replace(/[\u{2000}-\u{2600}]/gu, '')
+            .replace(/[\u{2700}-\u{3300}]/gu, '')
+            .replace(/[🌸🌈✨🦄🎮💎🔥💯]/g, '')
+            .replace(/\d+/g, match => match.substring(0, 1))
             .trim();
         
-        // Only apply length limit if explicitly specified
-        // Remove default 12-character truncation to preserve full usernames for TTS
         if (maxLength && sanitized.length > maxLength) {
             sanitized = sanitized.substring(0, maxLength);
-        } else if (sanitized.length > 50) { // Safety limit for very long usernames only
+        } else if (sanitized.length > 50) {
             sanitized = sanitized.substring(0, 50);
         }
         
@@ -867,7 +850,7 @@ class NotificationBuilder {
 
     static formatBitsAmount(amount: number) {
         if (!amount && amount !== 0) amount = 0;
-        return amount.toLocaleString(); // Adds commas for thousands
+        return amount.toLocaleString();
     }
 
     static resolveGiftInlineParts(input: unknown) {
@@ -994,13 +977,11 @@ class NotificationBuilder {
     static formatCheermoteDisplay(input: NotificationInput) {
         const { amount, cheermoteType, primaryCheermote } = input;
         
-        // Handle mixed cheermotes
         if (this.hasMixedCheermotes(input)) {
             const formattedAmount = this.formatBitsAmount(toFiniteNumber(amount));
             return `${formattedAmount} mixed bits`;
         }
         
-        // Handle single cheermote type
         const type = cheermoteType || primaryCheermote || 'Cheermote';
         const formattedAmount = this.formatBitsAmount(toFiniteNumber(amount));
         return `${type} x ${formattedAmount}`;
@@ -1009,15 +990,12 @@ class NotificationBuilder {
     static formatCheermoteForTts(input: NotificationInput) {
         const { amount, cheermoteType, primaryCheermote } = input;
         
-        // Handle mixed cheermotes
         if (this.hasMixedCheermotes(input)) {
             const formattedAmount = this.formatBitsAmountForTts(toFiniteNumber(amount));
             return `${formattedAmount} mixed bits`;
         }
         
-        // Handle single cheermote type or fallback to generic bits
         if (!cheermoteType && !primaryCheermote) {
-            // No cheermote type specified, fall back to generic bits
             const formattedAmount = this.formatBitsAmountForTts(toFiniteNumber(amount));
             return `${formattedAmount} bits`;
         }
@@ -1030,20 +1008,17 @@ class NotificationBuilder {
     static formatCheermoteForLog(input: NotificationInput) {
         const { amount, cheermoteType, primaryCheermote } = input;
         
-        // Handle mixed cheermotes - return just the amount info without extra "Cheermote:" prefix
         if (this.hasMixedCheermotes(input)) {
             const formattedAmount = this.formatBitsAmount(toFiniteNumber(amount));
             return `${formattedAmount} mixed bits`;
         }
         
-        // Handle single cheermote type or fallback for missing type
         if (cheermoteType || primaryCheermote) {
             const type = cheermoteType || primaryCheermote;
             const formattedAmount = this.formatBitsAmount(toFiniteNumber(amount));
             return `${type} x ${formattedAmount}`;
         }
         
-        // When no cheermote type is specified, just return the amount
         const formattedAmount = this.formatBitsAmount(toFiniteNumber(amount));
         return formattedAmount;
     }

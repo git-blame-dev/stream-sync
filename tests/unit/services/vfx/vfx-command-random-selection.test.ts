@@ -55,7 +55,7 @@ describe("VFXCommandService random variant selection", () => {
 
   test("selects a single variant based on deterministic random value", async () => {
     const config = createConfig("!one | !two | !three");
-    crypto.randomInt = createMockFn().mockReturnValue(1); // picks index 1 => !two
+    crypto.randomInt = createMockFn().mockReturnValue(1);
 
     const service = createService(config);
     service.commandParser = {

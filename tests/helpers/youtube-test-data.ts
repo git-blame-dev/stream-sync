@@ -1,6 +1,4 @@
 
-// HELPER FUNCTIONS
-
 const BASE_TIMESTAMP_MS = Date.parse('2024-01-01T00:00:00.000Z');
 let sequence = 0;
 const nextSequence = () => {
@@ -30,8 +28,6 @@ type YouTubeSuperChatEventOverrides = DeepMergeObject & {
     currency?: string;
 };
 
-// CORE YOUTUBE EVENT BUILDERS
-
 const createYouTubeChatEvent = (
     messageTypeOrOverrides: string | YouTubeChatEventOverrides = 'text',
     overrides: YouTubeChatEventOverrides = {}
@@ -43,11 +39,9 @@ const createYouTubeChatEvent = (
     let actualOverrides: YouTubeChatEventOverrides;
     
     if (typeof messageTypeOrOverrides === 'object' && messageTypeOrOverrides !== null) {
-        // First parameter is overrides object
         actualOverrides = messageTypeOrOverrides;
         messageType = actualOverrides.messageType || 'text';
     } else {
-        // First parameter is messageType string
         messageType = messageTypeOrOverrides;
         actualOverrides = overrides;
     }
@@ -79,7 +73,6 @@ const createYouTubeChatEvent = (
 
     const mergedEvent = mergeDeep(defaultEvent, actualOverrides);
     
-    // Add flat properties for easier access by handlers
     if (actualOverrides.message) {
         mergedEvent.message = actualOverrides.message;
     } else {
@@ -98,7 +91,6 @@ const createYouTubeChatEvent = (
         mergedEvent.userId = baseUserId;
     }
     
-    // Add timestamp for message filtering
     mergedEvent.timestamp = actualOverrides.timestamp || nextTimestampMs();
     
     return mergedEvent;
@@ -187,7 +179,6 @@ const createYouTubeSuperChatEvent = (
                     ]
                 }
             },
-            // Additional format fields
             purchase_amount: `${actualCurrency === 'USD' ? '$' : actualCurrency}${amount.toFixed(2)}`,
             message: {
                 text: 'Thanks for the amazing content! Keep it up!',
@@ -252,8 +243,6 @@ const createYouTubeRunsMessageChatItem = (overrides: DeepMergeObject = {}) => {
     return mergeDeep(defaultEvent, overrides);
 };
 
-// UTILITY FUNCTIONS
-
 const mergeDeep = <Target extends DeepMergeObject, Source extends DeepMergeObject>(target: Target, source: Source): Target & Source => {
     const output: DeepMergeObject = Object.assign({}, target);
     if (isObject(target) && isObject(source)) {
@@ -278,14 +267,10 @@ const isObject = (item: unknown): item is DeepMergeObject => {
     return !!item && typeof item === 'object' && !Array.isArray(item);
 };
 
-// EXPORTS
-
 export {
-    // Core event builders
     createYouTubeChatEvent,
     createYouTubeSuperChatEvent,
     createYouTubeRunsMessageChatItem,
     
-    // Utilities
     mergeDeep
 };

@@ -50,9 +50,6 @@ function normalizePath(filePath: string): string {
   return filePath.replace(/\\/g, '/');
 }
 
-/**
- * Recursively collect files to scan.
- */
 function collectFiles(dir: string): string[] {
   const entries = fs.readdirSync(dir, { withFileTypes: true });
   const files: string[] = [];
@@ -74,9 +71,6 @@ function collectFiles(dir: string): string[] {
   return files;
 }
 
-/**
- * Determine whether a match is already using the safe wrapper.
- */
 function isSafeUsage(line: string, matchIndex: number): boolean {
   const charBefore = matchIndex > 0 ? line[matchIndex - 1] : '';
   if (charBefore === '\'' || charBefore === '"' || charBefore === '`') {
@@ -95,9 +89,6 @@ function isSafeUsage(line: string, matchIndex: number): boolean {
   return false;
 }
 
-/**
- * Scan a single file and return violations.
- */
 function scanFile(relativePath: string): TimeoutViolation[] {
   const absolutePath = path.join(PROJECT_ROOT, relativePath);
   const fileText = fs.readFileSync(absolutePath, 'utf8');

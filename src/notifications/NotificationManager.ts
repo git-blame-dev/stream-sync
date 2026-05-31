@@ -133,7 +133,7 @@ class NotificationManager extends EventEmitter {
     errorHandler: PlatformErrorHandlerLike | null;
 
     constructor(dependencies: NotificationManagerDependencies = {}) {
-        super(); // Initialize EventEmitter
+        super();
         
         if (!dependencies.logger) {
             throw new Error('NotificationManager requires logger dependency');
@@ -205,7 +205,6 @@ class NotificationManager extends EventEmitter {
     }
 
     getPriorityForType(notificationType: string, config?: NotificationConfig) {
-        // If config has priority, use it
         if (config && typeof config.priority === 'number') {
             return config.priority;
         }
@@ -322,7 +321,6 @@ class NotificationManager extends EventEmitter {
             return { success: false, error: 'Notifications disabled', notificationType, platform: platformName, disabled: true };
         }
 
-        // Filter zero-amount monetary notifications (fiat-based gifts only)
         if (!isErrorPayload && notificationType === 'platform:gift' &&
             typeof normalizedData.amount === 'number' &&
             normalizedData.amount <= 0) {
@@ -515,12 +513,10 @@ class NotificationManager extends EventEmitter {
             throw new Error(`Unsupported notification type for log message: ${notificationType}`);
         }
         
-        // Use custom template if provided
         if (config.logTemplate) {
             return this.interpolateTemplate(config.logTemplate, data);
         }
 
-        // Default logic for complex types
         switch (notificationType) {
             case 'platform:gift': {
                 if (!data.giftType || data.giftCount === undefined || data.amount === undefined || !data.currency) {
@@ -606,7 +602,6 @@ class NotificationManager extends EventEmitter {
             if (message !== null && typeof message !== 'string') {
                 throw new Error('VFX config lookup requires message string or null');
             }
-            // Try VFXCommandService
             if (this.vfxCommandService && typeof this.vfxCommandService.getVFXConfig === 'function') {
                 const vfxConfig = await this.vfxCommandService.getVFXConfig(commandKey, message);
                 this.logger.debug('[NotificationManager] VFX config received from VFXCommandService', 'notification-manager', vfxConfig);
@@ -664,7 +659,6 @@ class NotificationManager extends EventEmitter {
                     await this.vfxCommandService.executeCommand(vfxNotification.vfxCommand, context);
                     
                 } catch (vfxError) {
-                    // Re-throw to be caught by outer catch block
                     throw vfxError;
                 }
             } else if (vfxNotification.vfxCommand) {
@@ -704,7 +698,6 @@ class NotificationManager extends EventEmitter {
                 return;
             }
 
-            // Process through existing notification system (this might fail if handleNotification requires services)
             try {
                 if (!notification.data) {
                     throw new Error('Notification processing requires notification.data');

@@ -1,7 +1,6 @@
 import { logger } from '../core/logging';
 
 function validateDisplayConfig(config: { sourceName?: unknown; sceneName?: unknown; groupName?: unknown } | null | undefined, type: string) {
-    // Input validation
     if (!config || typeof config !== 'object') {
         logger.warn(`[ConfigValidator] Invalid ${type} config object - expected object but received ${typeof config}`, 'config-validator');
         return false;
@@ -12,11 +11,9 @@ function validateDisplayConfig(config: { sourceName?: unknown; sceneName?: unkno
         return false;
     }
 
-    // Extract configuration values with destructuring
     const { sourceName, sceneName, groupName } = config;
+    const groupsDisabled = groupName === null || groupName === undefined;
 
-    // Check for missing REQUIRED configuration values (sourceName and sceneName only)
-    // groupName is OPTIONAL - can be null when groups are disabled
     if (!sourceName || !sceneName) {
         logger.warn(`[ConfigValidator] Missing required ${type} configuration values - skipping display`, 'config-validator', {
             missing: {
@@ -34,7 +31,6 @@ function validateDisplayConfig(config: { sourceName?: unknown; sceneName?: unkno
         return false;
     }
 
-    // Validate that required values are non-empty strings
     if (typeof sourceName !== 'string' || sourceName.trim() === '') {
         logger.warn(`[ConfigValidator] Invalid ${type} sourceName - must be non-empty string`, 'config-validator', {
             sourceName: sourceName,
@@ -51,9 +47,8 @@ function validateDisplayConfig(config: { sourceName?: unknown; sceneName?: unkno
         return false;
     }
 
-    // Validate groupName only if it's provided (not null/undefined)
-    // When null/undefined, groups are considered intentionally disabled
-    if (groupName !== null && groupName !== undefined) {
+    let trimmedGroupName: string | null = null;
+    if (!groupsDisabled) {
         if (typeof groupName !== 'string' || groupName.trim() === '') {
             logger.warn(`[ConfigValidator] Invalid ${type} groupName - when provided, must be non-empty string`, 'config-validator', {
                 groupName: groupName,
@@ -62,15 +57,15 @@ function validateDisplayConfig(config: { sourceName?: unknown; sceneName?: unkno
             });
             return false;
         }
+        trimmedGroupName = groupName.trim();
     }
 
-    // All validation passed - log appropriate success message
-    if (groupName) {
+    if (trimmedGroupName) {
         logger.debug(`[ConfigValidator] ${type} configuration validation successful (groups enabled)`, 'config-validator', {
             configType: type,
             sourceName: sourceName.trim(),
             sceneName: sceneName.trim(),
-            groupName: groupName.trim(),
+            groupName: trimmedGroupName,
             groupsEnabled: true
         });
     } else {

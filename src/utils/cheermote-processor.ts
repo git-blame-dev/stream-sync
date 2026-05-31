@@ -15,7 +15,6 @@ class CheermoteProcessor {
             return this.createEmptyResult();
         }
 
-        // Extract cheermote fragments
         const typedFragments = fragments as CheermoteFragment[];
         const cheermoteFragments = typedFragments.filter(frag => frag.type === 'cheermote');
         const textFragments = typedFragments.filter(frag => frag.type === 'text');
@@ -24,10 +23,8 @@ class CheermoteProcessor {
             return this.createEmptyResult();
         }
 
-        // Extract text content without cheermotes (preserve leading/trailing spaces)
         const textContent = textFragments.map(frag => frag.text || '').join('');
 
-        // Analyze cheermote types
         const analysis = this.analyzeCheermoteTypes(cheermoteFragments);
 
         return {
@@ -46,7 +43,6 @@ class CheermoteProcessor {
         const typeStats: CheermoteTypeStats = {};
         let totalBits = 0;
 
-        // Count each type and accumulate bits
         for (const fragment of cheermoteFragments) {
             if (fragment.cheermote && fragment.cheermote.prefix) {
                 const cleanPrefix = this.extractCleanPrefix(fragment.cheermote.prefix);
@@ -73,7 +69,6 @@ class CheermoteProcessor {
             };
         }
 
-        // Find primary type (most common, or first if tied)
         const primaryType = this.findPrimaryType(typeStats);
         if (!primaryType) {
             return this.createEmptyResult();
@@ -84,8 +79,8 @@ class CheermoteProcessor {
         return {
             totalBits,
             primaryType: primaryType.toLowerCase(),
-            cleanPrimaryType: primaryType.toLowerCase(), // Lowercase for processor consistency
-            cleanPrimaryTypeOriginalCase: primaryType, // Original case for display  
+            cleanPrimaryType: primaryType.toLowerCase(),
+            cleanPrimaryTypeOriginalCase: primaryType,
             mixedTypes,
             otherTypesCount,
             types: typeNames.map(type => ({
@@ -101,7 +96,6 @@ class CheermoteProcessor {
             return '';
         }
 
-        // Remove trailing numbers while preserving the base name and case
         return prefix.replace(/\d+$/, '');
     }
 
@@ -112,7 +106,6 @@ class CheermoteProcessor {
             return null;
         }
 
-        // Sort by total bits (descending), then count, then alphabetically for ties
         entries.sort((a, b) => {
             if (b[1].bits !== a[1].bits) {
                 return b[1].bits - a[1].bits;

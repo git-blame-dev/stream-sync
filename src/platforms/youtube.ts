@@ -30,8 +30,7 @@ import { extractMessageText } from './youtube/youtube-message-extractor';
 import { YouTubeUserAgentManager } from './youtube/youtube-user-agent-manager';
 import { normalizeYouTubeUsername } from './youtube/youtube-username-normalizer';
 
-// Timeout and limit constants
-const INNERTUBE_CREATION_TIMEOUT_MS = 3000; // 3 seconds for Innertube instance creation
+const INNERTUBE_CREATION_TIMEOUT_MS = 3000;
 
 const IGNORED_DUPLICATE_EVENT_TYPES = new Set([
     'LiveChatPaidMessageRenderer',
@@ -261,9 +260,6 @@ class YouTubePlatform extends EventEmitter {
         super();
 
         this.handlers = {};
-        // FAIL-FAST: Validate dependencies before proceeding
-
-        // Allow flexible constructor patterns - handle incorrect dependency injection patterns
     if (typeof dependencyInput === 'string' || typeof dependencyInput === 'number') {
             throw new Error('Dependencies should be a single object with logger property, not separate parameters. ' +
                            'Use: new YouTubePlatform(config, { logger, notificationManager, ... }) instead of separate arguments.');
@@ -298,10 +294,9 @@ class YouTubePlatform extends EventEmitter {
         this.monetizationParser = createYouTubeMonetizationParser({ logger: this.logger });
         this._ensureDataLoggingPath();
 
-        // Extract dependencies (all required, no fallbacks)
         this.USER_AGENTS = dependencies.USER_AGENTS;
         this.Innertube = dependencies.Innertube; // Lazy-loaded youtubei.js Innertube (null initially for startup performance)
-        this.timestampService = dependencies.timestampService || null; // Timestamp extraction service
+        this.timestampService = dependencies.timestampService || null;
         this.viewerService = dependencies.viewerService || null;
 
         const defaultChatLoggingDependencies = {
@@ -312,13 +307,9 @@ class YouTubePlatform extends EventEmitter {
             ? new dependencies.ChatFileLoggingService({ logger: this.logger, config: this.config })
             : new ChatFileLoggingService(defaultChatLoggingDependencies));
 
-        // Logger reference for debug calls
-
-        // Track initialization and monitoring states
         this.isInitialized = false;
         this.monitoringInterval = null;
         
-        // Stream shortage warning state tracking
         this.shortageState = {
             lastWarningTime: null,
             isInShortage: false,
@@ -326,14 +317,12 @@ class YouTubePlatform extends EventEmitter {
             lastKnownRequired: 0
         };
 
-        // Initialize user agent manager
         this.userAgentManager = new YouTubeUserAgentManager(this.logger, {
             ...(this.USER_AGENTS ? { userAgents: this.USER_AGENTS } : {})
         });
 
         this.retrySystem = dependencies.retrySystem || createRetrySystem({ logger: this.logger });
         
-        // Replace old connection management with new utility
         this.connectionManager = new YouTubeConnectionManager(this.logger, {
             config: this.config
         });
@@ -352,14 +341,10 @@ class YouTubePlatform extends EventEmitter {
             now: () => Date.now()
         });
 
-        // Initialize stream detection service from dependencies
         this.streamDetectionService = dependencies.streamDetectionService;
-
-        // Multi-stream support - track multiple live streams and their connections
 
         this.logger.debug('YouTube platform initialized', 'youtube', summarizeYouTubeConfig(this.config));
 
-        // Validate critical properties are defined
         if (!this.handleChatMessage) {
             this._handleProcessingError(
                 'handleChatMessage not defined after constructor',
@@ -375,7 +360,6 @@ class YouTubePlatform extends EventEmitter {
             );
         }
         
-        // Initialize viewer count provider with dependency injection support
         this.viewerExtractionService = isYouTubeExtractionService(dependencies.viewerExtractionService)
             ? dependencies.viewerExtractionService
             : null;
@@ -384,7 +368,6 @@ class YouTubePlatform extends EventEmitter {
             this.viewerCountProvider = dependencies.viewerCountProvider;
             this.logger.debug('Using injected viewer count provider', 'youtube');
         } else {
-            // Create default provider using service layer dependencies
             try {
                 const providerDependencies: {
                     viewerExtractionService?: YouTubeProviderExtractionServiceLike;
@@ -557,15 +540,11 @@ class YouTubePlatform extends EventEmitter {
     }
 
 
-    // Multi-stream helper functions
-    
   removeYouTubeConnection(videoId: string) {
         this.connectionManager.removeConnection(videoId);
         
-        // Clear active stream in viewer service if this was the active stream
         if (this.viewerService && typeof this.viewerService.clearActiveStream === 'function') {
             try {
-                // Check if this videoId matches the current active stream
                 if (this.viewerService._activeStream && this.viewerService._activeStream.videoId === videoId) {
                     this.viewerService.clearActiveStream();
                     this.logger.debug(`Cleared active stream from viewer service: ${videoId}`, 'youtube');
@@ -632,7 +611,6 @@ class YouTubePlatform extends EventEmitter {
         if (!this.connectionManager) {
             return [];
         }
-        // Only return connections that are actually ready (have received start event)
         return this.connectionManager.getActiveVideoIds().filter((videoId: string) =>
             this.connectionManager.isConnectionReady(videoId)
         );
@@ -642,21 +620,13 @@ class YouTubePlatform extends EventEmitter {
         if (!this.connectionManager) {
             return [];
         }
-        // Return ALL detected streams - chat-independent for viewer count aggregation
         return this.connectionManager.getActiveVideoIds();
     }
 
     async initialize(handlers: HandlerMap = {}, forceReconnect = false): Promise<void> {
-        // SMART GUARD: Allow reconnection when new streams are detected
-        // Only skip reinitialization if BOTH conditions are true:
-        // 1. Already initialized (isInitialized = true)
-        // 2. Already have active stream connections (getConnectionCount() > 0)
-        // 3. No force reconnect flag
         if (this.isInitialized) {
-            // Check if we have active stream connections
             const activeConnectionCount = this.connectionManager.getConnectionCount();
 
-            // Skip reinitialization only if we already have streams connected
             if (activeConnectionCount > 0 && !forceReconnect) {
                 this.logger.debug(
                     `Already initialized with ${activeConnectionCount} active stream(s), skipping reinitialization`,
@@ -665,9 +635,6 @@ class YouTubePlatform extends EventEmitter {
                 return;
             }
 
-            // Allow reinitialization if:
-            // - No active streams (even if initialized), OR
-            // - forceReconnect flag is set
             if (activeConnectionCount === 0) {
                 this.logger.debug(
                     'Already initialized but no active streams detected, allowing reinitialization for new stream detection',
@@ -684,7 +651,6 @@ class YouTubePlatform extends EventEmitter {
         try {
             this.logger.info('Initializing YouTube platform with retry system...', 'youtube');
             
-            // Reset retry count on initialization
             this.retrySystem.resetRetryCount('YouTube');
             
             this.handlers = { ...this.handlers, ...handlers };
@@ -698,15 +664,12 @@ class YouTubePlatform extends EventEmitter {
                 }
             }
 
-            // Handle successful connection
             this.retrySystem.handleConnectionSuccess('YouTube', this.connectionManager.getAllConnections(), 'YouTube Live Chat');
             
-            // Mark as initialized and update statistics
             this.isInitialized = true;
             
         } catch (error) {
             this._handleProcessingError(`Error during initialization: ${getErrorMessage(error)}`, error, 'initialization');
-            // Handle connection error with retry logic
             await this.retrySystem.handleConnectionError(
                 'YouTube',
                 error,
@@ -763,17 +726,15 @@ class YouTubePlatform extends EventEmitter {
 
 
     async connectToYouTubeStream(videoId: string, options: StreamRefreshRequest = {}): Promise<boolean> {
-        // Check existing connection status before attempting
         const hasExisting = this.connectionManager.hasConnection(videoId);
         
         if (hasExisting) {
-            return true; // Already connected
+            return true;
         }
 
         const previousCount = this.connectionManager.getConnectionCount();
         
         try {
-            // Use the centralized connection manager
             const success = await this.connectionManager.connectToStream(
                 videoId, 
                 (videoId: string) => this._createYouTubeConnection(videoId),
@@ -828,14 +789,11 @@ class YouTubePlatform extends EventEmitter {
     async handleChatMessage(chatItem: unknown): Promise<void> {
         this.logger.debug('handleChatMessage() called', 'youtube');
         
-        // Enhanced validation with better error handling
         if (!chatItem) {
             this.logger.debug('Received null/undefined chat item, skipping', 'youtube');
             return;
         }
 
-        // Rate limiting removed - unified processing eliminates spam naturally
-        
         const chatRecord = toUnknownMap(chatItem);
         const modernEventType = toUnknownMap(chatRecord.item).type;
         const { normalizedChatItem, eventType, debugMetadata } = normalizeYouTubeEvent(chatItem);
@@ -851,7 +809,6 @@ class YouTubePlatform extends EventEmitter {
 
         const authorForLog = this._resolveChatItemAuthorNameForLog(normalizedChatItem);
 
-        // Skip events that should be filtered
         if (this._shouldSkipEvent(normalizedChatItem)) {
             this.logger.debug('Skipping filtered event', 'youtube', {
                 eventType: resolvedEventType,
@@ -998,7 +955,6 @@ class YouTubePlatform extends EventEmitter {
 
     _processRegularChatMessage(chatItem: UnknownMap): void {
 
-        // Normalize message
         let normalizedData;
         try {
             normalizedData = normalizeYouTubeMessage(chatItem, 'youtube');
@@ -1024,7 +980,6 @@ class YouTubePlatform extends EventEmitter {
         const isMessageMarkedMissing = missingFields.includes('message');
 
 
-        // Skip empty messages
         const messageText = typeof normalizedMessageRecord.text === 'string'
             ? normalizedMessageRecord.text
             : '';
@@ -1038,7 +993,6 @@ class YouTubePlatform extends EventEmitter {
             return;
         }
         
-        // Add video ID context
         const normalizedDataWithVideoId = normalizedData as UnknownMap & { videoId?: unknown; username?: unknown; message?: { text?: unknown } };
         normalizedDataWithVideoId.videoId = chatItem.videoId;
         
@@ -1049,7 +1003,6 @@ class YouTubePlatform extends EventEmitter {
             hasMessageParts
         });
 
-        // Emit standardized chat message event
         try {
             const eventData = this.eventFactory.createChatMessageEvent(normalizedData);
             this._emitPlatformEvent(PlatformEvents.CHAT_MESSAGE, eventData);
@@ -1260,9 +1213,6 @@ class YouTubePlatform extends EventEmitter {
                 }
             );
         }
-        
-        // Intentionally do nothing - this is a no-op to prevent unknown event logging
-        // These events are not critical for core streaming functionality
     }
 
     handleIgnoredDuplicateEvent(chatItem: unknown, eventType: string): void {
@@ -1387,12 +1337,10 @@ class YouTubePlatform extends EventEmitter {
         }
         
         try {
-            // Use provider's internal method if available (for single video)
             if (typeof this.viewerCountProvider.getViewerCountForVideo === 'function') {
                 const viewerCount = await this.viewerCountProvider.getViewerCountForVideo(videoId);
                 return typeof viewerCount === 'number' ? viewerCount : 0;
             } else {
-                // Fallback: provider doesn't support single video, return 0
                 this.logger.debug('Provider does not support single video viewer count', 'youtube');
                 return 0;
             }
@@ -1410,7 +1358,6 @@ class YouTubePlatform extends EventEmitter {
 
 
     async logRawPlatformData(eventType: string, data: unknown): Promise<void> {
-        // Delegate to centralized service
         return this.chatFileLoggingService.logRawPlatformData('youtube', eventType, data, this.config);
     }
 
@@ -1464,17 +1411,14 @@ class YouTubePlatform extends EventEmitter {
 
 
     isConnected(): boolean {
-        // Use extracted connection service if available
         if (this.connectionManager) {
             return this.connectionManager.getConnectionCount() > 0;
         }
         
-        // Fallback to old method
         return this.isAnyYouTubeStreamReady();
     }
 
     async sendMessage(message: unknown): Promise<boolean> {
-        // Try all active multi-stream connections
         for (const videoId of this.connectionManager.getAllVideoIds()) {
             const connection = this.connectionManager.getConnection(videoId);
             if (hasSendMessage(connection) && this.connectionManager.getConnectionStatus(videoId)?.ready) {
@@ -1539,12 +1483,10 @@ class YouTubePlatform extends EventEmitter {
             return { shouldConnect: false, isLive, isUpcoming, liveStatus, reason: 'Video is not live content (replay/VOD)' };
         }
         
-        // Default: treat as VOD if no modern live signals are present
         return { shouldConnect: false, isLive, isUpcoming, liveStatus, reason: 'Video is not live content (replay/VOD)' };
     }
 
     _handlePremiereDetection(videoId: string, isLive: boolean, isUpcoming: boolean, info: unknown): void {
-        // Check if this is a YouTube Premiere (both live AND upcoming)
         if (isLive && isUpcoming) {
             const title = toUnknownMap(toUnknownMap(info).basic_info).title || 'Unknown Title';
             this.logger.info(`Premiere detected: ${title} (${videoId})`, 'youtube');
@@ -1623,7 +1565,6 @@ class YouTubePlatform extends EventEmitter {
         this.streamViewerCounts.set(streamId, count);
         this.logger.debug(`Updated viewer count for ${streamId}: ${count}`, 'youtube');
 
-        // Emit total viewer count
         const totalViewers = this.getTotalViewerCount();
         try {
             const eventData = this.eventFactory.createViewerCountEvent({
@@ -1658,10 +1599,8 @@ class YouTubePlatform extends EventEmitter {
         const payloadRecord = toUnknownMap(payload);
         const platform = payloadRecord.platform || 'youtube';
 
-        // Emit unified platform:event for local listeners
         this.emit('platform:event', { platform, type, data: payload });
 
-        // Forward to injected handlers (e.g., EventBus via PlatformLifecycleService)
         const handlerMap = {
             [PlatformEvents.CHAT_MESSAGE]: 'onChat',
             [PlatformEvents.GIFT]: 'onGift',
@@ -1790,12 +1729,9 @@ class YouTubePlatform extends EventEmitter {
                 return [];
             }
 
-            // Handle different chat item structures
             const messages: UnknownMap[] = [];
             
-            // Check if this is a batched update with multiple actions
             if (Array.isArray(chatItem.actions)) {
-                // Multiple messages in batch
                 for (const action of chatItem.actions) {
                     const actionRecord = toUnknownMap(action);
                     const addChatItemAction = toUnknownMap(actionRecord.addChatItemAction);
@@ -1808,7 +1744,6 @@ class YouTubePlatform extends EventEmitter {
                     }
                 }
             } else {
-                // Single message - wrap in standardized format
                 const item = toUnknownMap(chatItem.item || chatItem);
                 messages.push({
                     type: item.type || chatItem.type || 'unknown',
@@ -1827,14 +1762,13 @@ class YouTubePlatform extends EventEmitter {
     _shouldSkipMessage(message: UnknownMap): boolean {
         try {
             if (typeof message.type !== 'string') {
-                return true; // Skip invalid messages
+                return true;
             }
 
             if (this._isIgnoredDuplicateEventType(message.type)) {
                 return false;
             }
 
-            // Skip system messages that don't need processing
             const systemMessages = [
                 'LiveChatViewerEngagementMessage',
                 'LiveChatPurchaseMessage',
@@ -1846,13 +1780,13 @@ class YouTubePlatform extends EventEmitter {
             ];
 
             if (systemMessages.includes(message.type)) {
-                return true; // Skip system messages
+                return true;
             }
 
-            return false; // Process this message
+            return false;
         } catch (error) {
             this.logger.debug(`Error checking if message should be skipped: ${getErrorMessage(error)}`, 'youtube');
-            return true; // Skip on error to be safe
+            return true;
         }
     }
 

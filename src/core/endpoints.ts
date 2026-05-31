@@ -1,14 +1,11 @@
 type QueryParam = string | number | boolean;
 
 function buildUrl(baseUrl: string, path = '', params: Record<string, QueryParam> = {}): string {
-    // Clean base URL and path
     const cleanBase = baseUrl.replace(/\/$/, '');
     const cleanPath = path.replace(/^\//, '');
     
-    // Build base URL with path
     let url = cleanPath ? `${cleanBase}/${cleanPath}` : cleanBase;
     
-    // Add query parameters if provided
     const paramKeys = Object.keys(params);
     if (paramKeys.length > 0) {
         const queryString = paramKeys

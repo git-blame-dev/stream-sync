@@ -95,21 +95,21 @@ function convertValueToString(value: unknown): string {
             if (extracted) {
                 return extracted;
             }
-        } catch { /* noop */ }
+        } catch { /* fall through to scalar conversion */ }
 
         try {
             const stringValue = value.toString();
             if (stringValue && stringValue !== '[object Object]') {
                 return stringValue;
             }
-        } catch { /* noop */ }
+        } catch { /* fall through to JSON conversion */ }
 
         try {
             const jsonString = JSON.stringify(value);
             if (jsonString && jsonString !== '{}' && jsonString.length < 100) {
                 return jsonString;
             }
-        } catch { /* noop */ }
+        } catch { /* fall through to empty placeholder */ }
 
         return '';
     }
@@ -154,7 +154,7 @@ function sanitizeDataForInterpolation(data: unknown): TemplateRecord {
                     if (stringValue !== '[object Object]') {
                         return sanitizeStringValue(stringValue);
                     }
-                } catch { /* noop */ }
+                } catch { /* fall through to record fields */ }
             }
 
             const record = value as TemplateRecord;

@@ -40,53 +40,43 @@ const nextSequence = () => {
 const timestampFromSeed = (seed: number, offsetMs = 0) => BASE_TIMESTAMP_MS + (seed * 1000) + offsetMs;
 const pickByIndex = <T>(values: readonly T[], index: number): T => values[index % values.length] as T;
 
-// INTERNATIONAL TEST DATA
-
 const INTERNATIONAL_USERNAMES = {
-    // East Asian Scripts
     chinese: '用户名中文测试',
     chineseTraditional: '用戶名繁體測試',
     japanese: 'ユーザー名テスト',
     korean: '사용자이름테스트',
     
-    // Arabic and RTL Scripts
     arabic: 'اسم المستخدم العربي',
     hebrew: 'שם משתמש עברי',
     persian: 'نام کاربری فارسی',
     
-    // European Scripts
     russian: 'имя пользователя',
     greek: 'όνομα χρήστη',
     german: 'benutzernämeäöüß',
     french: 'nomutilisateuràéè',
     polish: 'nazwauserzażółć',
     
-    // South Asian Scripts
     hindi: 'उपयोगकर्ता नाम',
     bengali: 'ব্যবহারকারীর নাম',
     tamil: 'பயனர் பெயர்',
     thai: 'ชื่อผู้ใช้ไทย',
     
-    // African Scripts
     amharic: 'የተጠቃሚ ስም',
     swahili: 'jina la mtumiaji',
     
-    // Emoji-heavy usernames
     emoji: '🌸DemoUser🌸',
     emojiMixed: '🎮Gamer用户123🎯',
     emojiOnly: '🔥💎⭐🎊💯',
     
-    // Mixed script combinations
     mixed: '用户🎮Gamer123',
     mixedRtl: 'User用户اسم123',
     
-    // Special cases
     longUnicode: '🌟非常长的用户名包含多种语言العربية和Русский以及🎮',
     mathematical: '𝕌𝕤𝕖𝕣𝔸𝕝𝕡𝕙𝔞',
     zalgo: 'U̸̢̻̺̫̺̬̪̬̯̤̲̤̟̯̻̝̅̈́̇̈́̊̌̈́̐̈̚ͅs̶̛̗̗̬̳̗̫̖̫̏̂̓͂̉̌̕e̴̢̧̨̛̗̙̱̼̰̳̘̞̮̥̱̯̰̎̐̇̄́̋̎̂̕ŕ̵̡̧̲̟̻̝̗̫̜̰̈́̂̊̍̊̾̉̀'
 };
 
-const PHASE_5B_INTERNATIONAL_TEST_DATA = {
+const INTERNATIONAL_CONTENT_TEST_DATA = {
     emoji: {
         username: "🎮GamerKing",
         language: "emoji",
@@ -162,10 +152,7 @@ const PHASE_5B_INTERNATIONAL_TEST_DATA = {
     }
 };
 
-// EDGE CASE AMOUNTS AND VALUES
-
 const EDGE_CASE_AMOUNTS = {
-    // Boundary values
     zero: 0.00,
     minimal: 0.01,
     small: 0.99,
@@ -173,78 +160,62 @@ const EDGE_CASE_AMOUNTS = {
     large: 999.99,
     maximum: 50000.00,
     
-    // Precision edge cases
     precision: 123.456789, // Will be rounded
     precisionLow: 0.001,    // Below minimum
     precisionHigh: 999.999,  // High precision
     
-    // Special values
     negative: -5.00,        // Invalid but possible input
     infinity: Infinity,     // Mathematical edge case
     nan: NaN,              // Invalid numeric
     
-    // Currency-specific
     japaneseYen: 1000,     // No decimal places
     bitcoinSatoshi: 0.00000001, // 8 decimal places
     
-    // Large numbers
     millionaire: 1000000.00,
     billionaire: 1000000000.00,
     
-    // Common payment amounts
     commonAmounts: [0.99, 1.99, 4.99, 9.99, 19.99, 49.99, 99.99]
 };
 
-// BOUNDARY CONDITIONS
-
 const BOUNDARY_CONDITIONS = {
-    // Length boundaries
     emptyString: '',
     singleChar: 'a',
     maxUsername: 'A'.repeat(255),     // Maximum typical username length
     maxMessage: 'A'.repeat(2000),     // Maximum typical message length
     longText: 'A'.repeat(10000),      // Extremely long text
     
-    // Null and undefined
     nullValue: null,
     undefinedValue: undefined,
     emptyObject: {},
     emptyArray: [],
     
-    // Whitespace variations
     singleSpace: ' ',
     multipleSpaces: '     ',
     tabCharacters: '\t\t\t',
     newlines: '\n\n\n',
     mixedWhitespace: ' \t\n\r ',
     
-    // Special characters
     specialChars: '!@#$%^&*()_+-=[]{}|;:,.<>?',
     htmlTags: '<script>alert("test")</script>',
     sqlInjection: "'; DROP TABLE users; --",
     pathTraversal: '../../../etc/passwd',
     
-    // Number boundaries
     maxInt32: 2147483647,
     minInt32: -2147483648,
     maxFloat: Number.MAX_VALUE,
     minFloat: Number.MIN_VALUE,
     
-    // Date boundaries
     epochZero: new Date(0),
     dateMax: new Date(8640000000000000),  // Maximum JS date
     dateMin: new Date(-8640000000000000), // Minimum JS date
     
-    // Platform-specific limits
     youtubeMaxChatLength: 200,
     twitchMaxChatLength: 500,
     tiktokMaxUsernameLength: 24,
     
-    // Network simulation
     verySlowResponse: 30000,    // 30 seconds
     timeoutResponse: 60000,     // 1 minute
     
-    // Memory pressure
     largeDataArray: new Array(100000).fill('test'),
     deepNesting: createDeepObject(100)
 };
@@ -254,75 +225,50 @@ function createDeepObject(depth: number): DeepTestRecord {
     return { level: depth, nested: createDeepObject(depth - 1) };
 }
 
-// SPECIAL CHARACTER SETS
-
 const SPECIAL_CHARACTERS = {
-    // Basic symbols
     symbols: '!@#$%^&*()_+-=[]{}|\\:";\'<>?,./',
     
-    // Punctuation
     punctuation: '.,;:!?"\'()[]{}',
     
-    // Mathematical
     mathematical: '±×÷=≠≤≥∑∏∫√∞∂∆∇',
     
-    // Currency symbols
     currency: '$€£¥₹₽₩₪₫₴₦₡₵',
     
-    // Arrows and directions
     arrows: '←↑→↓↔↕↖↗↘↙⇐⇑⇒⇓⇔',
     
     // Dangerous characters (potential injection)
     dangerous: '<>"\'&;`|$(){}[]\\',
     
-    // Zero-width characters
     zeroWidth: '\u200B\u200C\u200D\u2060\uFEFF',
     
-    // Control characters
     control: '\x00\x01\x02\x03\x04\x05\x06\x07\x08\x0E\x0F',
     
-    // Box drawing
     boxDrawing: '┌┐└┘├┤┬┴┼─│╔╗╚╝╠╣╦╩╬═║',
     
-    // Braille patterns
     braille: '⠀⠁⠂⠃⠄⠅⠆⠇⠈⠉⠊⠋⠌⠍⠎⠏'
 };
 
-// EMOJI COLLECTIONS
-
 const EMOJI_SETS = {
-    // Basic faces
     faces: '😀😁😂🤣😃😄😅😆😉😊😋😎😍🥰😘',
     
-    // Gaming and streaming
     gaming: '🎮🕹️🎯🎲🎪🎨🎭🎪🎨🎵🎶🎤🎧🎬🎥',
     
-    // Celebration
     celebration: '🎉🎊🥳🎈🎁🎀🎂🍰🥂🍾✨💫⭐🌟💥',
     
-    // Hearts and love
     hearts: '❤️🧡💛💚💙💜🖤🤍🤎💕💖💗💘💝💟💌',
     
-    // Animals
     animals: '🐶🐱🐭🐹🐰🦊🐻🐼🐨🐯🦁🐮🐷🐸🐵',
     
-    // Food and drinks
     food: '🍎🍕🍔🍟🌭🥪🌮🌯🥙🥗🍜🍲🍛🍣🍱',
     
-    // Activities
     activities: '⚽🏀🏈⚾🎾🏐🏉🎱🏓🏸🥅🏒🏑🏏⛳',
     
-    // Flags (country codes)
     flags: '🇺🇸🇬🇧🇨🇦🇦🇺🇩🇪🇫🇷🇯🇵🇰🇷🇨🇳🇮🇳🇧🇷',
     
-    // Hand gestures
     hands: '👋🤚🖐️✋🖖👌🤌🤏✌️🤞🤟🤘🤙👈👉👆🖕👇☝️',
     
-    // Recent additions (may not display on all systems)
     modern: '🥺👉👈💅✨😌🔥💯📈📉🚀🌙⚡💎🎭🎪'
 };
-
-// SCENARIO BUILDERS
 
 const createMultiPlatformEventScenario = (platforms: string[] = ['youtube', 'twitch', 'tiktok'], eventCount = 10) => {
     const events: ScenarioEvent[] = [];
@@ -331,7 +277,7 @@ const createMultiPlatformEventScenario = (platforms: string[] = ['youtube', 'twi
     
     for (let i = 0; i < eventCount; i++) {
         const platform = platforms[i % platforms.length] as string;
-        const eventTime = baseTime + (i * 2000); // 2 seconds apart
+        const eventTime = baseTime + (i * 2000);
         let event: ScenarioEvent | undefined;
         
         switch (platform) {
@@ -369,14 +315,12 @@ const createMultiPlatformEventScenario = (platforms: string[] = ['youtube', 'twi
                 
             case 'twitch':
                 if (i % 3 === 0) {
-                    // Subscription event
                     event = createTwitchSubscriptionEvent('1000', false, {
                         metadata: {
                             message_timestamp: new Date(eventTime).toISOString()
                         }
                     });
                 } else {
-                    // Chat event
                     event = createTwitchChatEvent(
                         `Hello from ${platform}! ${EMOJI_SETS.celebration}`,
                         Object.values(INTERNATIONAL_USERNAMES)[i % Object.values(INTERNATIONAL_USERNAMES).length],
@@ -454,7 +398,7 @@ const createGiftSpamScenario = (giftCount = 10, giftType = 'Rose', timeWindow = 
             startTime: startTime,
             endTime: startTime + timeWindow,
             detectionTrigger: giftCount >= 5 && timeWindow <= 5000, // Spam threshold
-            spamScore: Math.min(giftCount / timeWindow * 1000, 1.0) // Events per second normalized
+            spamScore: Math.min(giftCount / timeWindow * 1000, 1.0)
         }
     };
 };
@@ -466,13 +410,13 @@ const createRaidScenario = (maxViewers = 500, targetChannel = 'testchannel') => 
         Math.floor(maxViewers * 0.3),  // Early joiners
         Math.floor(maxViewers * 0.6),  // Mid raid
         Math.floor(maxViewers * 0.9),  // Near peak
-        maxViewers                      // Peak raid
+        maxViewers
     ];
     
     const baseTime = timestampFromSeed(nextSequence());
     
     viewerProgression.forEach((viewers, index) => {
-        const eventTime = baseTime + (index * 5000); // 5 seconds apart
+        const eventTime = baseTime + (index * 5000);
         const event = createTwitchRaidEvent(viewers, {
             metadata: {
                 message_timestamp: new Date(eventTime).toISOString()
@@ -579,7 +523,6 @@ const createInternationalUserScenario = (userCount = 10) => {
     const usernames = Object.values(INTERNATIONAL_USERNAMES);
     const platforms: PlatformName[] = ['youtube', 'twitch', 'tiktok'];
     
-    // Create diverse user profiles
     for (let i = 0; i < userCount; i++) {
         const username = usernames[i % usernames.length] as string;
         const user: InternationalUser = {
@@ -592,7 +535,6 @@ const createInternationalUserScenario = (userCount = 10) => {
         };
         users.push(user);
         
-        // Create platform-specific events for each user
         const baseTime = timestampFromSeed(nextSequence(), i * 3000);
         
         switch (user.platform) {
@@ -658,7 +600,6 @@ const createInternationalUserScenario = (userCount = 10) => {
 const createBoundaryTestSuite = (platform = 'youtube') => {
     const testCases = [];
     
-    // Max length tests
     testCases.push({
         type: 'max_length',
         description: 'Username at maximum length',
@@ -673,7 +614,6 @@ const createBoundaryTestSuite = (platform = 'youtube') => {
         expectedResult: 'truncate_or_reject'
     });
     
-    // Empty value tests
     testCases.push({
         type: 'empty_value',
         description: 'Empty username',
@@ -688,7 +628,6 @@ const createBoundaryTestSuite = (platform = 'youtube') => {
         expectedResult: 'reject_or_default'
     });
     
-    // Special character tests
     testCases.push({
         type: 'special_chars',
         description: 'Username with special characters',
@@ -703,7 +642,6 @@ const createBoundaryTestSuite = (platform = 'youtube') => {
         expectedResult: 'sanitize'
     });
     
-    // Unicode tests
     testCases.push({
         type: 'unicode',
         description: 'International username',
@@ -718,7 +656,6 @@ const createBoundaryTestSuite = (platform = 'youtube') => {
         expectedResult: 'preserve'
     });
     
-    // Numeric boundary tests
     testCases.push({
         type: 'numeric_boundary',
         description: 'Zero amount',
@@ -733,7 +670,6 @@ const createBoundaryTestSuite = (platform = 'youtube') => {
         expectedResult: 'validate_within_limits'
     });
     
-    // Performance tests
     testCases.push({
         type: 'performance',
         description: 'Large data processing',
@@ -753,8 +689,6 @@ const createBoundaryTestSuite = (platform = 'youtube') => {
     };
 };
 
-// UTILITY FUNCTIONS
-
 const detectLanguage = (username: string) => {
     if (/[\u4e00-\u9fff]/.test(username)) return 'zh';
     if (/[\u3040-\u309f\u30a0-\u30ff]/.test(username)) return 'ja';
@@ -765,7 +699,7 @@ const detectLanguage = (username: string) => {
     if (/[\u0370-\u03ff]/.test(username)) return 'el';
     if (/[\u0900-\u097f]/.test(username)) return 'hi';
     if (/[\u0e00-\u0e7f]/.test(username)) return 'th';
-    return 'en'; // Default to English
+    return 'en';
 };
 
 const detectScript = (username: string) => {
@@ -782,8 +716,6 @@ const detectScript = (username: string) => {
 const isRightToLeft = (text: string) => {
     return /[\u0590-\u05ff\u0600-\u06ff\u0750-\u077f\u08a0-\u08ff\ufb50-\ufdff\ufe70-\ufeff]/.test(text);
 };
-
-// FIXTURE LOADING UTILITIES
 
 const FIXED_TIMESTAMP_MS = BASE_TIMESTAMP_MS;
 const FIXED_TIMESTAMP_USEC = '1700000000000000';
@@ -1627,18 +1559,14 @@ function loadPlatformFixture(platform: string, eventType: string) {
     return getSyntheticFixture(platform, eventType);
 }
 
-// EXPORTS
-
 export {
-    // Core data collections
     INTERNATIONAL_USERNAMES,
-    PHASE_5B_INTERNATIONAL_TEST_DATA,
+    INTERNATIONAL_CONTENT_TEST_DATA,
     EDGE_CASE_AMOUNTS,
     BOUNDARY_CONDITIONS,
     SPECIAL_CHARACTERS,
     EMOJI_SETS,
     
-    // Scenario builders
     createMultiPlatformEventScenario,
     createGiftSpamScenario,
     createRaidScenario,
@@ -1646,12 +1574,10 @@ export {
     createInternationalUserScenario,
     createBoundaryTestSuite,
     
-    // Fixture loading utilities
     loadPlatformFixture,
     getSyntheticFixture,
     getSyntheticFixtureSet,
     
-    // Re-export platform builders for convenience
     createYouTubeSuperChatEvent,
     createYouTubeChatEvent,
     createTikTokGiftEvent,
@@ -1660,7 +1586,6 @@ export {
     createTwitchSubscriptionEvent,
     createTwitchRaidEvent,
     
-    // Utility functions
     detectLanguage,
     detectScript,
     isRightToLeft

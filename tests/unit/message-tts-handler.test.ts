@@ -363,7 +363,7 @@ describe('MessageTTSHandler', () => {
 
         test('should sanitize username for TTS', () => {
             const result = MessageTTSHandler.createMessageTTS('🎮VeryLongUsernameForTesting🎮', 'Hello');
-            expect(result).toBe('VeryLongUser says Hello'); // Should be sanitized and truncated
+            expect(result).toBe('VeryLongUser says Hello');
         });
 
         test('should trim message content', () => {

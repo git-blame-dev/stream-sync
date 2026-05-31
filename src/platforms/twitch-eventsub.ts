@@ -187,12 +187,10 @@ class TwitchEventSub extends EventEmitter {
             : getWebSocketCtor(WebSocketModule);
         this.broadcasterId = getString(this.config.broadcasterId) || '';
 
-        // WebSocket connection
         this.ws = null;
         this.sessionId = null;
         this.subscriptions = new Map();
 
-        // State management
         this.isInitialized = false;
         this._isConnected = false;
         this.subscriptionsReady = false;
@@ -201,24 +199,20 @@ class TwitchEventSub extends EventEmitter {
         this.connectionStartTime = null;
         this.disconnectedSessionId = null;
 
-        // Configuration
         this.maxRetryAttempts = 10;
         this.retryDelay = 5000;
         this.initialStartupMaxAttempts = 3;
         this.initialStartupRetryDelay = 1000;
         this.subscriptionDelay = 0;
 
-        // Required EventSub subscriptions
         this.requiredSubscriptions = createTwitchEventSubSubscriptions();
 
-        // Memory usage tracking for periodic cleanup
         this.memoryUsage = {
             lastCleanup: Date.now(),
             maxSubscriptions: 50,
-            cleanupInterval: 5 * 60 * 1000 // 5 minutes
+            cleanupInterval: 5 * 60 * 1000
         };
 
-        // EventSub dedupe + reconnect tracking
         this.reconnectUrl = null;
         this.recentMessageIds = new Map();
         this.messageIdTtlMs = 5 * 60 * 1000;
@@ -227,9 +221,8 @@ class TwitchEventSub extends EventEmitter {
         try {
             this.logger.info('Manual EventSub initialized', 'twitch');
         } catch (_error) {
-            // Logger initialization error - continue with fallback
+            // Logger failures are non-fatal during EventSub construction.
         }
-        // Initialize shared logging service
         const ChatFileLoggingServiceClass: ChatFileLoggingServiceCtor = typeof dependencies.ChatFileLoggingService === 'function'
             ? dependencies.ChatFileLoggingService as ChatFileLoggingServiceCtor
             : ChatFileLoggingService as unknown as ChatFileLoggingServiceCtor;
@@ -261,12 +254,10 @@ class TwitchEventSub extends EventEmitter {
             validateTimeout
         });
 
-        // Start periodic cleanup for memory optimization
         this._startPeriodicCleanup();
     }
 
   _startPeriodicCleanup(): void {
-        // Run cleanup every 5 minutes
         this.cleanupInterval = safeSetInterval(() => {
             this._performPeriodicCleanup();
         }, 5 * 60 * 1000);
@@ -275,22 +266,18 @@ class TwitchEventSub extends EventEmitter {
   _performPeriodicCleanup(): void {
         const now = Date.now();
 
-        // Only run if enough time has passed since last cleanup
         if (now - this.memoryUsage.lastCleanup < 4 * 60 * 1000) {
             return;
         }
 
         this.logger.debug('Performing periodic EventSub memory cleanup', 'twitch');
 
-        // Check subscription count and warn if too high
         if (this.subscriptions.size > this.memoryUsage.maxSubscriptions) {
             this.logger.warn(`High subscription count detected: ${this.subscriptions.size}/${this.memoryUsage.maxSubscriptions}`, 'twitch');
         }
 
-        // Update cleanup timestamp
         this.memoryUsage.lastCleanup = now;
 
-        // Force garbage collection if available (Node.js --expose-gc flag)
         if (global.gc) {
             global.gc();
             this.logger.debug('Forced garbage collection completed', 'twitch');
@@ -401,7 +388,6 @@ class TwitchEventSub extends EventEmitter {
             };
         }
 
-        // Client ID validation
         details.clientId = {
             value: clientIdSource,
             required: true,
@@ -414,7 +400,6 @@ class TwitchEventSub extends EventEmitter {
             details.clientId.valid = false;
         }
 
-        // Optional fields
         const optionalFields = {
             dataLoggingEnabled: { type: 'boolean', default: false }
         };
@@ -659,19 +644,16 @@ class TwitchEventSub extends EventEmitter {
     }
 
   _validateConnectionForSubscriptions(): boolean {
-        // Check session ID
         if (!this.sessionId || this.sessionId.trim() === '') {
             this._logEventSubError('Cannot set up subscriptions: no session ID', null, 'subscription-setup');
             return false;
         }
 
-        // Check connection flag
         if (!this._isConnected) {
             this._logEventSubError('Cannot set up subscriptions: WebSocket not connected', null, 'subscription-setup');
             return false;
         }
 
-        // Check WebSocket state
         if (!this.ws || this.ws.readyState !== 1) { // 1 = OPEN
             this._logEventSubError('Cannot set up subscriptions: WebSocket not in OPEN state', null, 'subscription-setup', {
                 readyState: this.ws?.readyState,
@@ -681,7 +663,6 @@ class TwitchEventSub extends EventEmitter {
             return false;
         }
 
-        // Validate auth manager state
         if (!this.twitchAuth || !this.twitchAuth.isReady?.()) {
             this._logEventSubError('Cannot set up subscriptions: Twitch auth not ready', null, 'subscription-setup', {
                 hasTwitchAuth: !!this.twitchAuth,
@@ -917,7 +898,6 @@ class TwitchEventSub extends EventEmitter {
     async cleanup(): Promise<void> {
         this.logger.info('Starting EventSub cleanup...', 'twitch');
 
-        // Clear any pending timers first
         if (this.reconnectTimeout) {
             clearTimeout(this.reconnectTimeout);
             this.reconnectTimeout = null;
@@ -928,21 +908,17 @@ class TwitchEventSub extends EventEmitter {
             this.welcomeTimer = null;
         }
 
-        // Clear the periodic cleanup interval
         if (this.cleanupInterval) {
             clearInterval(this.cleanupInterval);
             this.cleanupInterval = null;
         }
 
-        // Step 1: Delete all subscriptions via API (as per docs)
+        // Twitch recommends deleting EventSub subscriptions before closing the WebSocket session.
         await this._deleteAllSubscriptions();
 
-        // Step 2: Close WebSocket connection properly
         if (this.ws) {
             try {
-                // Remove WebSocket listeners before closing
                 this.ws.removeAllListeners();
-                // Close with normal closure code as per WebSocket spec
                 this.ws.close(1000, 'Normal cleanup');
                 this.logger.info('EventSub WebSocket closed normally', 'twitch');
             } catch (error) {
@@ -951,7 +927,6 @@ class TwitchEventSub extends EventEmitter {
             this.ws = null;
         }
 
-        // Step 3: Reset internal state
         this.isInitialized = false;
         this._isConnected = false;
         this.subscriptionsReady = false;

@@ -126,7 +126,6 @@ class PlatformLifecycleService {
         this.sharedDependencies = options.sharedDependencies || {};
         this.handlerFactory = options.handlerFactory || null;
 
-        // Track platform instances
         this.platforms = {};
         this.platformConnectionTimes = {};
         this.backgroundPlatformInits = [];
@@ -402,7 +401,6 @@ class PlatformLifecycleService {
     }
 
     async createPlatformInstance(platformName: string, PlatformClass: PlatformConstructor, config: PlatformConfig) {
-        // Validate inputs
         if (!PlatformClass || typeof PlatformClass !== 'function') {
             throw new Error(`Invalid PlatformClass for ${platformName}`);
         }
@@ -410,7 +408,6 @@ class PlatformLifecycleService {
         let instance;
 
         if (!this.dependencyFactory) {
-            // Fallback: create without dependencies
             this.logger.warn(`No dependency factory available, creating ${platformName} without DI`, 'PlatformLifecycleService');
             instance = new PlatformClass(config);
         } else {
@@ -459,7 +456,6 @@ class PlatformLifecycleService {
             return platformInstance;
         };
 
-        // Manage platform connection behavior
         try {
             const shouldRunInBackground = this.shouldRunPlatformInBackground(platformName, platformConfig);
 
@@ -481,7 +477,6 @@ class PlatformLifecycleService {
                 return;
             }
 
-            // Normal blocking initialization for platforms that connect quickly
             if (platformName === 'tiktok') {
                 this.logger.info(`Using TikTok platform's built-in stream detection`, 'PlatformLifecycleService');
                 await connectCallback();
@@ -511,7 +506,6 @@ class PlatformLifecycleService {
             return true;
         }
 
-        // Add other platforms that might block here
         return false;
     }
 
@@ -520,7 +514,6 @@ class PlatformLifecycleService {
             this.logger.info(`[${platformName}] Background initialization started`, 'PlatformLifecycleService');
 
             if (platformName === 'tiktok') {
-                // TikTok uses its own built-in stream detection
                 await connectCallback();
             } else {
                 await connectCallback();
@@ -530,7 +523,6 @@ class PlatformLifecycleService {
         } catch (error) {
             this._handleLifecycleError(`[${platformName}] Background initialization failed: ${getErrorMessage(error)}`, error, 'background-init');
             this.markPlatformFailure(platformName, error);
-            // Don't rethrow - let other systems continue
         }
     }
 
@@ -683,10 +675,8 @@ class PlatformLifecycleService {
         this.logger.info('Cleaning up all platforms...', 'PlatformLifecycleService');
         this.shutdownRequested = true;
 
-        // Wait for any background initializations to complete
         await this.waitForBackgroundInits(10000);
 
-        // Disconnect from all platforms
         for (const platformName in this.platforms) {
             let cleanupError: unknown = null;
             try {
@@ -723,7 +713,6 @@ class PlatformLifecycleService {
     }
 
     dispose() {
-        // Clear platform references
         this.platforms = {};
         this.platformConnectionTimes = {};
         this.backgroundPlatformInits = [];

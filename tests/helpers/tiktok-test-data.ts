@@ -1,6 +1,4 @@
 
-// CORE TIKTOK EVENT BUILDERS
-
 const BASE_TIMESTAMP_MS = 1700000000000;
 const BASE_USER_ID = 7000000000000000;
 const BASE_ROOM_ID = 7500000000000000;
@@ -72,7 +70,6 @@ const createTikTokGiftEvent = (giftName = 'Rose', giftCount = 1, overrides = {})
     const baseTimestamp = timestampFromSeed(seed);
     const baseUserId = userIdFromSeed(seed);
     
-    // Gift type configurations
     const giftConfigs: Record<string, GiftConfig> = {
         'Rose': { id: 5655, type: 1, diamonds: 1, picture: 'rose.webp' },
         'Perfume': { id: 5658, type: 1, diamonds: 20, picture: 'perfume.webp' },
@@ -230,8 +227,6 @@ const createTikTokConnectionEvent = (connectionState = 'connected', overrides = 
     return mergeDeep(baseEvent, overrides);
 };
 
-// BATCH EVENT BUILDERS
-
 const createTikTokGiftEventBatch = (count = 5, baseConfig: TestRecord & { userId?: string | number } = {}) => {
     const events: Array<ReturnType<typeof createTikTokGiftEvent>> = [];
     const giftTypes = ['Rose', 'Perfume', 'Swan', 'Heart Me', 'Sunglasses'];
@@ -303,7 +298,7 @@ const createTikTokChatConversation = (messages: string[], usernames = ['User1', 
 
     messages.forEach((message, index) => {
         const username = usernames[index % usernames.length] ?? `User${index + 1}`;
-        const eventTime = baseTime + (index * 1000); // 1 second apart
+        const eventTime = baseTime + (index * 1000);
         
         const event = createTikTokChatEvent(message, {
             user: {
@@ -320,8 +315,6 @@ const createTikTokChatConversation = (messages: string[], usernames = ['User1', 
 
     return events;
 };
-
-// UTILITY FUNCTIONS
 
 const mergeDeep = <Target extends TestRecord, Source extends TestRecord>(target: Target, source: Source) => {
     const output: TestRecord = Object.assign({}, target);
@@ -346,10 +339,7 @@ const isObject = (item: unknown): item is TestRecord => {
     return !!item && typeof item === 'object' && !Array.isArray(item);
 };
 
-// EXPORTS
-
 export {
-    // Core event builders
     createTikTokGiftEvent,
     createTikTokFollowEvent,
     createTikTokChatEvent,
@@ -357,11 +347,9 @@ export {
     createTikTokViewerCountEvent,
     createTikTokConnectionEvent,
     
-    // Batch builders
     createTikTokGiftEventBatch,
     createTikTokSpamGiftScenario,
     createTikTokChatConversation,
     
-    // Utilities
     mergeDeep
 };

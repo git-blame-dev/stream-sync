@@ -135,11 +135,9 @@ class ViewerCountExtractionService {
         this.logger = dependencies.logger;
         this.errorHandler = createPlatformErrorHandler(this.logger, 'viewer-count-extraction');
         
-        // Inject or fallback to core extractor
         this.YouTubeViewerExtractor = dependencies.YouTubeViewerExtractor || 
             YouTubeViewerExtractor;
         
-        // Configuration
         this.config = {
             timeout: resolvePositiveNumber(dependencies.timeout, 8000),
             strategies: resolveNonEmptyArray(dependencies.strategies, ['view_text', 'video_details', 'basic_info']),
@@ -147,7 +145,6 @@ class ViewerCountExtractionService {
             retries: resolveNonNegativeInteger(dependencies.retries, 0)
         };
         
-        // Statistics for monitoring
         this.stats = {
             totalRequests: 0,
             successfulExtractions: 0,
@@ -165,19 +162,16 @@ class ViewerCountExtractionService {
         try {
             this.logger?.debug?.(`[ViewerCountExtraction] Extracting viewer count for: ${videoId}`, 'viewer-extraction');
             
-            // Get video info through service layer
             const info = await this.innertubeService.getVideoInfo(videoId, {
                 timeout: resolvePositiveNumber(options.timeout, this.config.timeout),
                 instanceKey: options.instanceKey
             });
             
-            // Extract viewer count using dedicated extractor
             const extractionResult = this.YouTubeViewerExtractor.extractConcurrentViewers(info, {
                 debug: resolveBoolean(options.debug, this.config.debug),
                 strategies: resolveNonEmptyArray(options.strategies, this.config.strategies)
             });
             
-            // Update statistics
             const responseTime = Date.now() - startTime;
             this._updateStats(extractionResult.success, responseTime);
             
@@ -245,7 +239,6 @@ class ViewerCountExtractionService {
             
             const batchResults = await Promise.allSettled(batchPromises);
             
-            // Convert settled promises to results
             const processedResults: ExtractionResponse[] = batchResults.map((result, index) => {
                 if (result.status === 'fulfilled') {
                     return result.value;
@@ -287,7 +280,6 @@ streams: Array<{ videoId: string; count: number; success: boolean; strategy?: st
         
         const results = await this.extractViewerCountsBatch(videoIds, options);
         
-        // Aggregate results
         let totalCount = 0;
         let successfulStreams = 0;
         let failedStreams = 0;
@@ -364,7 +356,6 @@ _updateStats(success: boolean, responseTime: number, error: unknown = null): voi
             }
         }
         
-        // Update average response time
         const totalTime = this.stats.averageResponseTime * (this.stats.totalRequests - 1) + responseTime;
         this.stats.averageResponseTime = Math.round(totalTime / this.stats.totalRequests);
     }

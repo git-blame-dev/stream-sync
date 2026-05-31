@@ -9,13 +9,11 @@ const bootstrapProcess = process as typeof process & {
     __streamSyncUnhandledRejectionHandlerInstalled?: boolean;
 };
 
-// BOOTSTRAP LOGGING: Use console.log here because unified logging system is not yet initialized
-// Top-level debug print to confirm script startup (only in debug mode)
+// The unified logger is not initialized before main() starts.
 if (isDebugModeEnabled()) {
-    console.log('[DEBUG] [Bootstrap] Script starting...'); // BOOTSTRAP: Pre-logger initialization
+    console.log('[DEBUG] [Bootstrap] Script starting...');
 }
 
-// BOOTSTRAP ERROR HANDLING: Use emergency output for fatal errors before logger is available
 if (!bootstrapProcess.__streamSyncUncaughtExceptionHandlerInstalled) {
     bootstrapProcess.__streamSyncUncaughtExceptionHandlerInstalled = true;
     bootstrapProcess.on('uncaughtException', (err) => {
@@ -31,15 +29,13 @@ if (!bootstrapProcess.__streamSyncUnhandledRejectionHandlerInstalled) {
     });
 }
 
-// Now load the main application and start it
-// Start the main application and keep it running
 (async () => {
     try {
         if (isDebugModeEnabled()) {
-            console.log('[DEBUG] [Bootstrap] Importing main application...'); // BOOTSTRAP: Logger not fully initialized
+            console.log('[DEBUG] [Bootstrap] Importing main application...');
         }
         if (isDebugModeEnabled()) {
-            console.log('[DEBUG] [Bootstrap] Main application imported, starting...'); // BOOTSTRAP: Logger not fully initialized
+            console.log('[DEBUG] [Bootstrap] Main application imported, starting...');
         }
         if (isDebugModeEnabled()) {
             console.log('[DEBUG] [Bootstrap] About to call main()...');

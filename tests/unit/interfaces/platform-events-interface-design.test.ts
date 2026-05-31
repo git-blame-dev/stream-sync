@@ -680,14 +680,12 @@ describe('Platform Event Interface Design', () => {
         
         it('should validate all defined event types exist in schema', () => {
             const expectedEventTypes = [
-                // Platform Events
                 'platform:chat-message', 'platform:chat-connected', 'platform:chat-disconnected',
                 'platform:follow', 'platform:paypiggy', 'platform:giftpaypiggy', 'platform:gift', 'platform:raid', 'platform:share', 'platform:envelope',
                 'platform:connection-status', 'platform:authentication-required', 'platform:rate-limit-hit',
                 'platform:connection', 'platform:notification', 'platform:viewer-count', 'platform:stream-status',
                 'platform:stream-detected', 'platform:error', 'platform:health-check',
                 
-                // VFX Events
                 'vfx:command-received', 'vfx:command-executed', 'vfx:effect-completed'
             ];
             const schemaEventTypes = validator.getSupportedEventTypes();
@@ -776,7 +774,7 @@ describe('Platform Event Interface Design', () => {
                 type: 'invalid-type',
                 platform: 'invalid_platform',
                 username: 123,
-                message: 123, // Should be an object with text
+                message: 123,
                 timestamp: 'invalid_date'
             };
             const result = validator.validate(problematicEvent);

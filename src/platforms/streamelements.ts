@@ -185,13 +185,10 @@ class StreamElementsPlatform extends EventEmitter {
     constructor(config: StreamElementsConfig = {}, dependencies: StreamElementsDependencies = {}) {
         super();
         
-        // Extract dependencies with fallbacks
         const logger = dependencies.logger || getUnifiedLogger();
         const retrySystem = dependencies.retrySystem || createRetrySystem({ logger });
         
-        // Store injected dependencies
         this.errorHandler = createPlatformErrorHandler(logger, 'streamelements');
-        // debugLog function removed - using logger.debug directly
         this.logger = logger;
         this.platformLogger = logger;
         this.eventBus = dependencies.eventBus || null;
@@ -221,7 +218,6 @@ class StreamElementsPlatform extends EventEmitter {
         this.reconnectTimeout = null;
         this.handlers = this._createDefaultHandlers();
         
-        // Emit deprecation warnings
         this.logger.warn('StreamElementsPlatform is deprecated and will be removed in a future version. Use YouTube platform with StreamElements service instead.', 'StreamElements');
         this.logger.info('To migrate: Move StreamElements config to YouTube platform section and enable streamelements service.', 'StreamElements');
         
@@ -307,7 +303,6 @@ class StreamElementsPlatform extends EventEmitter {
             throw new Error('StreamElements connection missing after WebSocket setup');
         }
         
-        // Wait for connection to be established
         return new Promise((resolve, reject) => {
             const timeout = safeSetTimeout(() => {
                 reject(new Error('StreamElements connection timeout'));
@@ -353,10 +348,8 @@ class StreamElementsPlatform extends EventEmitter {
     handleConnectionOpen(): void {
         this.logger.debug('[StreamElements] WebSocket connection opened', 'streamelements');
         
-        // Authenticate with JWT token
         this.authenticate();
         
-        // Start ping/pong keep-alive
         this.startKeepAlive();
         
         this.connectionTime = Date.now();
@@ -378,7 +371,6 @@ class StreamElementsPlatform extends EventEmitter {
     }
 
     subscribeToFollowEvents(): void {
-        // Subscribe to YouTube follows if channel ID configured
         if (this.config.youtubeChannelId) {
             const youtubeSubscription = {
                 type: 'subscribe',
@@ -388,7 +380,6 @@ class StreamElementsPlatform extends EventEmitter {
             this.logger.debug(`[StreamElements] Subscribed to YouTube follows for channel: ${this.config.youtubeChannelId}`, 'streamelements');
         }
         
-        // Subscribe to Twitch follows if channel ID configured
         if (this.config.twitchChannelId) {
             const twitchSubscription = {
                 type: 'subscribe',
@@ -444,7 +435,6 @@ class StreamElementsPlatform extends EventEmitter {
     }
 
     async handleFollowEvent(message: StreamElementsMessage): Promise<void> {
-        // Log raw platform data if enabled
         if (this.config.dataLoggingEnabled) {
                 this.logRawPlatformData('follow', message).catch((err: unknown) => {
                     this.errorHandler.handleDataLoggingError(err, 'follow');
@@ -559,7 +549,6 @@ class StreamElementsPlatform extends EventEmitter {
     }
 
     startKeepAlive(): void {
-        // Send ping every 30 seconds
         this.pingInterval = safeSetInterval(() => {
             if (this.isConnected()) {
                 this.sendMessage({ type: 'ping' });
@@ -597,7 +586,6 @@ class StreamElementsPlatform extends EventEmitter {
         this.stopKeepAlive();
         this.cleanup();
         
-        // Attempt reconnection with exponential backoff
         this.scheduleReconnection();
     }
 
@@ -689,7 +677,6 @@ class StreamElementsPlatform extends EventEmitter {
             this.logger.debug(`Raw platform data logged to ${result.fileName}`, 'streamelements-platform');
         } catch (error) {
             this.errorHandler.handleDataLoggingError(error, 'platform');
-            // Don't throw - logging failures shouldn't break the main flow
         }
     }
 

@@ -37,7 +37,6 @@ describe("TikTokPlatform connection lifecycle", () => {
     const dependencies = createMockTikTokPlatformDependencies();
     dependencies.logger = noOpLogger;
 
-    // Track emitted platform events
     const emittedEvents: EmittedPlatformEvent[] = [];
     const originalEmit = TikTokPlatform.prototype.emit;
 
@@ -62,20 +61,17 @@ describe("TikTokPlatform connection lifecycle", () => {
       const { platform, emittedEvents, captureEvents } = createPlatform();
       captureEvents(platform);
 
-      // Simulate a gift processing error (non-connection error)
       await platform._handleError(new Error("Gift validation failed"), {
         operation: "handleGift",
         recoverable: true,
       });
 
-      // Find stream-status events
       const streamStatusEvents = emittedEvents.filter(
         (e) =>
           e.event === "platform:event" &&
           e.data?.type === "platform:stream-status",
       );
 
-      // Should NOT emit isLive:false for gift processing errors
       const falseLiveEvents = streamStatusEvents.filter(
         (e) => e.data?.data?.isLive === false,
       );
@@ -107,7 +103,6 @@ describe("TikTokPlatform connection lifecycle", () => {
       const { platform, emittedEvents, captureEvents } = createPlatform();
       captureEvents(platform);
 
-      // Connection error should emit isLive:false
       await platform._handleError(new Error("Connection lost"), {
         operation: "handleConnection",
         recoverable: false,
@@ -133,7 +128,6 @@ describe("TikTokPlatform connection lifecycle", () => {
       });
       captureEvents(platform);
 
-      // Setup connection state
       platform.connectionActive = true;
       platform.isPlannedDisconnection = false;
 
@@ -142,7 +136,6 @@ describe("TikTokPlatform connection lifecycle", () => {
         false,
       );
 
-      // Find disconnection events
       const disconnectionEvents = emittedEvents.filter(
         (e) =>
           e.event === "platform:event" &&
@@ -150,7 +143,6 @@ describe("TikTokPlatform connection lifecycle", () => {
             e.data?.type === "platform:stream-status"),
       );
 
-      // At least one event should have willReconnect: true
       const willReconnectTrue = disconnectionEvents.some(
         (e) => e.data?.data?.willReconnect === true,
       );
@@ -178,7 +170,6 @@ describe("TikTokPlatform connection lifecycle", () => {
             e.data?.type === "platform:stream-status"),
       );
 
-      // All events should have willReconnect: false since config.enabled is false
       const willReconnectFalse = disconnectionEvents.every(
         (e) => e.data?.data?.willReconnect === false,
       );
@@ -194,7 +185,6 @@ describe("TikTokPlatform connection lifecycle", () => {
       captureEvents(platform);
 
       // Simulate both being called concurrently (as happens when 4404 triggers both events)
-      // Don't await individually - fire both and then wait for both to complete
       const p1 = platform.handleConnectionIssue(
         { code: 4404, message: "Stream not live" },
         false,
@@ -202,7 +192,6 @@ describe("TikTokPlatform connection lifecycle", () => {
       const p2 = platform._handleStreamEnd();
       await Promise.all([p1, p2]);
 
-      // Find disconnection events
       const disconnectionEvents = emittedEvents.filter(
         (e) =>
           e.event === "platform:event" &&
@@ -210,9 +199,6 @@ describe("TikTokPlatform connection lifecycle", () => {
             e.data?.type === "platform:stream-status"),
       );
 
-      // Should only have events from ONE handler (deduplication prevents second)
-      // Each handler emits 2 events (chat-disconnected + stream-status)
-      // So we expect exactly 2, not 4
       expect(disconnectionEvents.length).toBe(2);
     });
   });

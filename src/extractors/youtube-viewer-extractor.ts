@@ -56,11 +56,6 @@ class YouTubeViewerExtractor {
         const debug = options.debug || false;
         const strategies = options.strategies || ['view_text', 'video_details'];
         
-        // Debug logging for troubleshooting when enabled  
-        if (debug && console) {
-            // Use proper logger instead for production debugging
-        }
-        
         const result: ExtractionResult = {
             count: 0,
             strategy: null,
@@ -76,7 +71,6 @@ class YouTubeViewerExtractor {
             return result;
         }
         
-        // Strategy 1: Extract from view_count text (most reliable for live streams)
         if (strategies.includes('view_text')) {
             const viewTextResult = this._extractFromViewText(videoInfo, debug);
             result.metadata.strategiesAttempted.push('view_text');
@@ -93,7 +87,6 @@ class YouTubeViewerExtractor {
             }
         }
         
-        // Strategy 2: Extract from video_details (backup method)
         if (strategies.includes('video_details') && !result.success) {
             const videoDetailsResult = this._extractFromVideoDetails(videoInfo, debug);
             result.metadata.strategiesAttempted.push('video_details');
@@ -110,7 +103,6 @@ class YouTubeViewerExtractor {
             }
         }
         
-        // Strategy 3: Extract from basic_info (last resort)
         if (strategies.includes('basic_info') && !result.success) {
             const basicInfoResult = this._extractFromBasicInfo(videoInfo, debug);
             result.metadata.strategiesAttempted.push('basic_info');
@@ -153,7 +145,6 @@ class YouTubeViewerExtractor {
                 }
                 
                 if (viewText && typeof viewText === 'string') {
-                    // Primary pattern: "X watching" or "X watching now"
                     const watchingMatch = this._parseWatchingText(viewText);
                     
                     if (watchingMatch.success) {
@@ -196,7 +187,6 @@ class YouTubeViewerExtractor {
                     };
                 }
                 
-                // Try viewer_count field first
                 if (videoInfo.video_details.viewer_count !== undefined) {
                     const count = parseInt(String(videoInfo.video_details.viewer_count), 10);
                     if (!isNaN(count) && count >= 0) {
@@ -210,7 +200,6 @@ class YouTubeViewerExtractor {
                     }
                 }
                 
-                // Try concurrent_viewers field as fallback
                 if (videoInfo.video_details.concurrent_viewers !== undefined) {
                     const count = parseInt(String(videoInfo.video_details.concurrent_viewers), 10);
                     if (!isNaN(count) && count >= 0) {
@@ -252,7 +241,6 @@ class YouTubeViewerExtractor {
                     };
                 }
                 
-                // Only extract if video is live
                 if (!!videoInfo.basic_info.is_live && videoInfo.basic_info.view_count !== undefined && videoInfo.basic_info.view_count !== null) {
                     const count = parseInt(String(videoInfo.basic_info.view_count), 10);
                     if (!isNaN(count) && count >= 0) {
@@ -286,11 +274,9 @@ class YouTubeViewerExtractor {
         };
         
         const patterns = [
-            // Primary patterns (most common)
             { name: 'watching_now', regex: /([0-9,]+)\s*watching\s*now/i },
             { name: 'watching', regex: /([0-9,]+)\s*watching/i },
             
-            // Alternative patterns (rare edge cases)
             { name: 'currently_watching', regex: /([0-9,]+)\s*currently\s*watching/i },
             { name: 'viewers_watching', regex: /([0-9,]+)\s*viewers?\s*watching/i },
             { name: 'people_watching', regex: /([0-9,]+)\s*people\s*watching/i }
@@ -299,7 +285,7 @@ class YouTubeViewerExtractor {
         for (const pattern of patterns) {
             const match = viewText.match(pattern.regex);
             if (match && match[1]) {
-                const countString = match[1].replace(/,/g, ''); // Remove commas
+                const countString = match[1].replace(/,/g, '');
                 const count = parseInt(countString, 10);
                 
                 if (!isNaN(count) && count >= 0) {
@@ -319,7 +305,7 @@ class YouTubeViewerExtractor {
         return typeof count === 'number' && 
                !isNaN(count) && 
                count >= 0 && 
-               count <= 10000000; // Reasonable upper limit
+               count <= 10000000;
     }
     
     static getCapabilities() {

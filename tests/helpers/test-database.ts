@@ -114,8 +114,6 @@ const getErrorMessage = (error: unknown): string => {
     return error instanceof Error ? error.message : String(error);
 };
 
-// TEST DATA STORAGE
-
 class TestDataStore {
     private data: Map<TestDataKey, unknown>;
     private metadata: Map<TestDataKey, TestDataMetadata>;
@@ -196,8 +194,6 @@ class TestDataStore {
     }
 }
 
-// TEST STATE MANAGEMENT
-
 class TestStateManager {
     currentTest: string | null;
     testSuite: string | null;
@@ -214,9 +210,7 @@ class TestStateManager {
     }
 
     startTest(testName: string, suiteName = 'unknown'): void {
-        // Defensive programming: If a test is already running, end it first
         if (this.currentTest !== null && this.executionStart !== null) {
-            // Silently end the previous test to prevent state corruption
             this.endTest();
         }
 
@@ -227,9 +221,7 @@ class TestStateManager {
     }
 
     endTest(): number {
-        // Defensive programming: Handle invalid state gracefully
         if (this.executionStart === null || this.executionStart === undefined) {
-            // If no test was started, return 0 instead of negative time
             this.currentTest = null;
             this.testSuite = null;
             this.executionStart = null;
@@ -239,10 +231,8 @@ class TestStateManager {
         const now = testClock.now();
         const executionTime = now - this.executionStart;
 
-        // Prevent negative timing values due to clock adjustments or race conditions
         const safeExecutionTime = Math.max(0, executionTime);
 
-        // Reset state
         this.currentTest = null;
         this.testSuite = null;
         this.executionStart = null;
@@ -299,8 +289,6 @@ class TestStateManager {
     }
 }
 
-// TEST ENVIRONMENT SETUP
-
 class TestEnvironment {
     dataStore: TestDataStore;
     stateManager: TestStateManager;
@@ -321,14 +309,12 @@ class TestEnvironment {
     initialize(config: Partial<TestEnvironmentConfig> = {}): void {
         this.config = { ...this.config, ...config };
         
-        // Set up global test utilities
         globalThis.testEnv = {
             data: this.dataStore,
             state: this.stateManager,
             config: this.config
         };
 
-        // Set up cleanup hooks
         this.setupCleanupHooks();
     }
 
@@ -354,7 +340,6 @@ class TestEnvironment {
             data: contextData,
             state: contextState,
             
-            // Convenience methods
             setData: (key: string, value: unknown, metadata?: Record<string, unknown>) => contextData.set(key, value, metadata),
             getData: <T = unknown>(key: string) => contextData.get<T>(key),
             hasData: (key: string) => contextData.has(key),
@@ -364,7 +349,6 @@ class TestEnvironment {
             endTest: () => contextState.endTest(),
             addCleanup: (fn: () => Promise<unknown> | unknown, description?: string) => contextState.addCleanupTask(fn, description),
             
-            // Cleanup method
             cleanup: async () => {
                 const results = await contextState.executeCleanup();
                 contextData.clear();
@@ -392,8 +376,6 @@ class TestEnvironment {
         };
     }
 }
-
-// UTILITY FUNCTIONS
 
 function createTestDataFactory<Type extends keyof TestDataFactories>(type: Type, options?: Record<string, unknown>): TestDataFactories[Type];
 function createTestDataFactory(type: string, options?: Record<string, unknown>): (overrides?: Record<string, unknown>) => Record<string, unknown>;
@@ -477,8 +459,6 @@ const createMockTimer = (startTime = testClock.now()) => {
         reset: () => { currentTime = startTime; }
     };
 };
-
-// EXPORTS
 
 export {
     TestDataStore,

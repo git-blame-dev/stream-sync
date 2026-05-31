@@ -76,7 +76,6 @@ class OBSViewerCountObserver extends ViewerCountObserver {
     override async initialize() {
         this.logger.info('Initializing OBS viewer count observer', VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.OBS_OBSERVER);
         
-        // Initialize all platform viewer counts to 0 in OBS if connected
         if (this.obsManager && this.obsManager.isConnected()) {
             await this.initializeObsViewerCounts();
         } else {
@@ -102,7 +101,6 @@ class OBSViewerCountObserver extends ViewerCountObserver {
     override async onViewerCountUpdate(update: ViewerCountUpdate) {
         const { platform, count, isStreamLive } = update;
         
-        // Only update OBS if stream is live
         if (!isStreamLive) {
             this.logger.debug(`Skipping OBS update for ${platform} (stream offline)`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.OBS_OBSERVER);
             return;
@@ -118,7 +116,6 @@ class OBSViewerCountObserver extends ViewerCountObserver {
     override async onStreamStatusChange(statusUpdate: StreamStatusUpdate) {
         const { platform, isLive, wasLive } = statusUpdate;
         
-        // If stream went offline, reset viewer count to 0
         if (wasLive && !isLive) {
             this.logger.info(`Stream went offline for ${platform}, resetting viewer count to 0`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.OBS_OBSERVER);
             try {
@@ -128,7 +125,6 @@ class OBSViewerCountObserver extends ViewerCountObserver {
             }
         }
         
-        // Log status change
         this.logger.info(`OBS observer notified of ${platform} status change: ${isLive ? 'LIVE' : 'OFFLINE'}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.OBS_OBSERVER);
     }
 
@@ -161,7 +157,6 @@ class OBSViewerCountObserver extends ViewerCountObserver {
     }
 
     async updateObsCount(platformName: string, count: number) {
-        // Validate input parameters
         const validation = this.validateObsUpdateParameters(platformName, count);
         if (!validation.valid) {
             this.logger.warn(`Invalid parameters for OBS update: ${validation.reason}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.OBS_OBSERVER);
@@ -216,7 +211,6 @@ class OBSViewerCountObserver extends ViewerCountObserver {
 
     override async cleanup() {
         this.logger.info('Cleaning up OBS viewer count observer', VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.OBS_OBSERVER);
-        // No specific cleanup needed for OBS observer
     }
 }
 

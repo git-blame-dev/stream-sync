@@ -4,7 +4,6 @@ import { allowsYouTubeJewelsMissingUserId } from '../utils/missing-fields';
 import { getSystemTimestampISO } from '../utils/timestamp';
 
 const PlatformEvents = {
-    // Platform Events
     CHAT_MESSAGE: 'platform:chat-message',
     CHAT_CONNECTED: 'platform:chat-connected', 
     CHAT_DISCONNECTED: 'platform:chat-disconnected',
@@ -26,12 +25,10 @@ const PlatformEvents = {
     ERROR: 'platform:error',
     HEALTH_CHECK: 'platform:health-check',
     
-    // VFX Events
     VFX_COMMAND_RECEIVED: 'vfx:command-received',
     VFX_COMMAND_EXECUTED: 'vfx:command-executed',
     VFX_EFFECT_COMPLETED: 'vfx:effect-completed',
     
-    // System Events (8 types)
     SYSTEM_STARTUP: 'system:startup',
     SYSTEM_READY: 'system:ready',
     SYSTEM_SHUTDOWN: 'system:shutdown',
@@ -41,7 +38,6 @@ const PlatformEvents = {
     SYSTEM_MEMORY_WARNING: 'system:memory-warning',
     SYSTEM_DEPENDENCY_RESOLVED: 'system:dependency-resolved',
     
-    // Configuration Events (6 types)
     CONFIG_LOADED: 'config:loaded',
     CONFIG_CHANGED: 'config:changed',
     CONFIG_VALIDATED: 'config:validated',
@@ -49,7 +45,6 @@ const PlatformEvents = {
     CONFIG_ERROR: 'config:error',
     CONFIG_MIGRATION: 'config:migration',
     
-    // Authentication Events (6 types)
     AUTH_TOKEN_REFRESHED: 'auth:token-refreshed',
     AUTH_TOKEN_EXPIRED: 'auth:token-expired',
     AUTH_AUTHENTICATION_FAILED: 'auth:authentication-failed',
@@ -456,7 +451,6 @@ const EVENT_SCHEMAS = {
             metrics: { type: 'object' }
         }
     },
-    // VFX Events
     'vfx:command-received': {
         required: ['type', 'command', 'username', 'platform', 'args', 'timestamp'],
         optional: ['userId'],
@@ -525,24 +519,20 @@ class PlatformEventValidator {
         const errors: string[] = [];
         const eventType = typeof event.type === 'string' ? event.type : '';
         
-        // Check if event type is supported
         if (!eventType || !this.schemas[eventType]) {
             errors.push(`Invalid event type: ${event.type}`);
         }
         
-        // Validate platform field specifically - check even for invalid event types
         if (event.platform && !isPlatformName(event.platform)) {
             errors.push(`Invalid platform: ${event.platform}. Must be one of: ${VALID_PLATFORMS.join(', ')}`);
         }
         
-        // If event type is invalid, return early but include platform validation error
         if (!eventType || !this.schemas[eventType]) {
             return { valid: false, errors };
         }
         
         const schema = this.schemas[eventType];
         
-        // Check required fields
         if (schema.required) {
             const isMonetizationEvent = event.type === PlatformEvents.GIFT ||
                 event.type === PlatformEvents.GIFTPAYPIGGY ||
@@ -566,7 +556,6 @@ class PlatformEventValidator {
             }
         }
         
-        // Validate field types
         if (schema.properties) {
             for (const [fieldName, fieldSchema] of Object.entries(schema.properties)) {
                 if (fieldName in event) {
@@ -606,12 +595,10 @@ class PlatformEventValidator {
         schema: EventFieldSchema,
         fieldName: string
     ): boolean {
-        // Handle enum validation
         if (schema.enum && !schema.enum.includes(value)) {
             return false;
         }
         
-        // Handle type validation
         if (schema.type) {
             const types = Array.isArray(schema.type) ? schema.type : [schema.type];
             const valueType = value === null ? 'null' : typeof value;
@@ -651,7 +638,6 @@ class PlatformEventValidator {
             }
         }
 
-        // Handle object validation with required fields
         if (schema.type === 'object' && isRecord(value)) {
             if (schema.required) {
                 for (const requiredField of schema.required) {
@@ -1452,9 +1438,7 @@ class EventBuilder {
     }
 }
 
-// Create combined PlatformEvents object with both constants and methods
 const CombinedPlatformEvents = Object.assign({}, PlatformEvents, {
-    // Add all static methods from EnhancedPlatformEvents, bound to the class
     VALID_PLATFORMS: EnhancedPlatformEvents.VALID_PLATFORMS,
     EVENT_TYPES: EnhancedPlatformEvents.EVENT_TYPES,
     NOTIFICATION_TYPES: EnhancedPlatformEvents.NOTIFICATION_TYPES,

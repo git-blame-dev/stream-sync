@@ -204,11 +204,7 @@ describe("TikTok connection orchestrator", () => {
     });
     const orchestrator = createTikTokConnectionOrchestrator({ platform });
 
-    try {
-      await orchestrator.connect({});
-    } catch {
-      // expected
-    }
+    await expect(orchestrator.connect({})).rejects.toThrow("fail");
 
     expect(platform.connectingPromise).toBeNull();
   });
@@ -231,11 +227,7 @@ describe("TikTok connection orchestrator", () => {
     delete platform.handleConnectionError;
     const orchestrator = createTikTokConnectionOrchestrator({ platform });
 
-    try {
-      await orchestrator.connect({});
-    } catch {
-      // expected
-    }
+    await expect(orchestrator.connect({})).rejects.toThrow("fail");
 
     expect(platform.connection).toBeNull();
     expect(platform.listenersConfigured).toBe(false);

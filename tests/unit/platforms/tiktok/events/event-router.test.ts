@@ -225,7 +225,6 @@ describe("TikTok event router", () => {
 
     cleanupTikTokEventListeners(platform);
 
-    // 12 WebcastEvent types + 3 ControlEvent types + 1 rawData = 16
     expect(removeAllListeners.mock.calls.length).toBe(16);
     expect(platform.listenersConfigured).toBe(false);
   });

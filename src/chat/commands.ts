@@ -83,20 +83,19 @@ class CommandParser {
     }
 
     parseDuration(parts: string[]): number {
-        // Check if there's a duration specified in the 3rd or 4th part
         for (let i = 2; i < parts.length; i++) {
             const parsed = parseInt(parts[i] ?? '', 10);
             if (!isNaN(parsed) && parsed > 0) {
                 return parsed;
             }
         }
-        return 5000; // Default duration
+        return 5000;
     }
 
     parseCommandConfigurations() {
         const parsed: ParsedCommands = {
-            triggers: new Map<string, ParsedCommandConfig>(), // trigger -> config
-            keywords: new Map<string, ParsedCommandConfig>()  // keyword -> config
+            triggers: new Map<string, ParsedCommandConfig>(),
+            keywords: new Map<string, ParsedCommandConfig>()
         };
 
         for (const [key, configLine] of Object.entries(this.commands)) {
@@ -108,20 +107,18 @@ class CommandParser {
             const keywords = (parts.length > 2) ? (parts[2] ?? '').split('|').map(k => k.trim().toLowerCase()).filter(k => k) : [];
 
             const config = {
-                filename: key,           // Standardized: VFX file name
-                mediaSource: parts[1],   // Standardized: OBS media source name
-                vfxFilePath: this.vfxFilePath, // Standardized: Full path to VFX files directory
-                duration: this.parseDuration(parts), // Standardized: Duration in milliseconds
-                commandKey: key,         // Standardized: Command that triggers this VFX
-                primaryCommand: triggers[0] ?? '' // Store first trigger as primary command for display
+                filename: key,
+                mediaSource: parts[1],
+                vfxFilePath: this.vfxFilePath,
+                duration: this.parseDuration(parts),
+                commandKey: key,
+                primaryCommand: triggers[0] ?? ''
             };
 
-            // Index by triggers
             triggers.forEach(trigger => {
                 parsed.triggers.set(trigger, config);
             });
 
-            // Index by keywords
             keywords.forEach(keyword => {
                 if (keyword) {
                     parsed.keywords.set(keyword, config);
@@ -169,9 +166,7 @@ class CommandParser {
 
     getCompiledRegex(keyword: string): RegExp {
         if (!this.regexCache.has(keyword)) {
-            // Escape special regex characters in the keyword
             const escapedKeyword = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            // For multi-word keywords, use word boundaries around the entire phrase
             this.regexCache.set(keyword, new RegExp(`\\b${escapedKeyword}\\b`, 'i'));
         }
         const regex = this.regexCache.get(keyword);
@@ -183,17 +178,15 @@ class CommandParser {
 
     _createVFXConfig(baseConfig: ParsedCommandConfig, matchedText: string, matchType: VfxMatchType): VfxRuntimeConfig {
         return {
-            // Standardized VFX config properties
-            filename: baseConfig.filename,        // Standardized: VFX file name
-            mediaSource: baseConfig.mediaSource,  // Standardized: OBS media source name
-            vfxFilePath: baseConfig.vfxFilePath,  // Standardized: Full path to VFX files directory
-            duration: baseConfig.duration || 5000, // Standardized: Duration in milliseconds
-            commandKey: baseConfig.commandKey,    // Standardized: Command that triggers this VFX
+            filename: baseConfig.filename,
+            mediaSource: baseConfig.mediaSource,
+            vfxFilePath: baseConfig.vfxFilePath,
+            duration: baseConfig.duration || 5000,
+            commandKey: baseConfig.commandKey,
 
-            // Additional properties for backward compatibility and debugging
-            command: baseConfig.primaryCommand,   // Always use primary command for display
+            command: baseConfig.primaryCommand,
             keyword: matchType === 'keyword' ? matchedText : null,
-            matchType: matchType                  // Keep original match type
+            matchType: matchType
         };
     }
 
@@ -202,7 +195,6 @@ class CommandParser {
             return null;
         }
 
-        // Handle null/undefined commandTrigger
         if (!commandTrigger || typeof commandTrigger !== 'string') {
             return null;
         }
@@ -210,14 +202,12 @@ class CommandParser {
         const normalizedMessage = typeof message === 'string' ? message : '';
         const triggerLower = commandTrigger.toLowerCase();
 
-        // Check triggers first (fastest lookup)
         const triggerConfig = this.parsedCommands.triggers.get(triggerLower);
         if (triggerConfig) {
             const vfxConfig = this._createVFXConfig(triggerConfig, commandTrigger, 'trigger');
             return vfxConfig;
         }
 
-        // Check keywords (slower but necessary for keyword-based commands)
         if (this.keywordParsingEnabled && normalizedMessage) {
             for (const [keyword, config] of this.parsedCommands.keywords) {
                 const regex = this.getCompiledRegex(keyword);
@@ -237,12 +227,10 @@ class CommandParser {
 
         const triggerLower = commandTrigger.toLowerCase();
 
-        // Check triggers first (fastest lookup)
         if (this.parsedFarewellCommands.triggers.has(triggerLower)) {
             return commandTrigger;
         }
 
-        // Check keywords
         if (this.keywordParsingEnabled) {
             for (const keyword of this.parsedFarewellCommands.keywords) {
                 const regex = this.getCompiledRegex(keyword);
@@ -259,14 +247,13 @@ class CommandParser {
 
     parse(data: CommandParseData, isFirst: boolean) {
         const { comment, message, username } = data;
-        const messageText = comment || message; // Support both comment and message fields
+        const messageText = comment || message;
         if (!messageText || typeof messageText !== 'string') {
             return null;
         }
 
         const commandTrigger = (messageText.split(' ')[0] ?? '').toLowerCase();
         
-        // Check for farewell commands first
         const farewellMatch = this.getMatchingFarewell(messageText, commandTrigger);
         if (farewellMatch) {
             return {
@@ -277,19 +264,16 @@ class CommandParser {
             };
         }
 
-        // Check for regular VFX commands
         const vfx = this.getVFXConfig(commandTrigger, messageText);
         if (vfx) {
             return { 
                 type: 'vfx',
-                // Standardized VFX config properties
-                filename: vfx.filename,        // Standardized: VFX file name
-                mediaSource: vfx.mediaSource,  // Standardized: OBS media source name
-                vfxFilePath: vfx.vfxFilePath,  // Standardized: Full path to VFX files directory
-                duration: vfx.duration,        // Standardized: Duration in milliseconds
-                commandKey: vfx.commandKey,    // Standardized: Command that triggers this VFX
+                filename: vfx.filename,
+                mediaSource: vfx.mediaSource,
+                vfxFilePath: vfx.vfxFilePath,
+                duration: vfx.duration,
+                commandKey: vfx.commandKey,
                 
-                // Additional properties
                 command: vfx.command,
                 keyword: vfx.keyword,
                 matchType: vfx.matchType,
@@ -299,7 +283,7 @@ class CommandParser {
             };
         }
 
-        return null; // Not a command
+        return null;
     }
 
     updateConfig(newConfig: Partial<CommandParserConfig>) {
@@ -310,11 +294,9 @@ class CommandParser {
             this.keywordParsingEnabled = newConfig.general.keywordParsingEnabled;
         }
         
-        // Re-parse configurations
         this.parsedCommands = this.parseCommandConfigurations();
         this.parsedFarewellCommands = this.parseFarewellConfigurations();
         
-        // Clear regex cache to prevent memory leaks
         this.regexCache.clear();
         
     }
@@ -330,24 +312,20 @@ class CommandParser {
             totalKeywords: totalKeywords,
             keywordParsingEnabled: this.keywordParsingEnabled,
             vfxFilePath: this.vfxFilePath,
-            commands: this.commands // Include commands object
+            commands: this.commands
         };
     }
 }
 
 async function runCommand(commandData: RunCommandData, vfxFilePath: string, effectsManager = getDefaultEffectsManager()) {
-    // Handle both old and new calling signatures
     let vfxData: RunCommandData | RunCommandData['vfx'];
 
     if (commandData.vfx) {
-        // New signature: structured object
         ({ vfx: vfxData } = commandData);
     } else {
-        // Old signature: commandData is the VFX config directly
         vfxData = commandData;
     }
 
-    // Validate standardized VFX config structure
     if (!vfxData || (!vfxData.filename && !vfxData.mediaSource)) {
         return;
     }
@@ -360,12 +338,10 @@ async function runCommand(commandData: RunCommandData, vfxFilePath: string, effe
         if (vfxData.mediaSource !== undefined) commandConfig.mediaSource = vfxData.mediaSource;
         if (vfxData.filename !== undefined) commandConfig.filename = vfxData.filename;
 
-        // Standardize wait behavior (default true unless explicitly false)
         const waitForCompletion = vfxData.waitForCompletion !== false;
 
         await effectsManager.playMediaInOBS(commandConfig, waitForCompletion);
     } catch (error) {
-        // Re-throw the error for test expectations
         logger.debug(`[runCommand] Failed to execute VFX for ${vfxData.filename || vfxData.mediaSource}. Error: ${getErrorMessage(error)}`, 'command-parser');
         throw error;
     }

@@ -1,6 +1,4 @@
 
-// NOTIFICATION ASSERTION HELPERS
-
 import { isMockFunction, type TestMockFn } from './bun-mock-utils';
 import testClock from './test-clock';
 
@@ -149,13 +147,11 @@ const requireRecord = (value: unknown, name: string): UnknownRecord => {
 
 const expectValidNotification = (notification: unknown, expectedType: string, expectedPlatform: string): void => {
     const notificationRecord = requireRecord(notification, 'Notification');
-    // Required fields for all notifications
     const requiredFields = [
         'id', 'type', 'platform', 'username', 'displayMessage',
         'ttsMessage', 'logMessage', 'processedAt', 'timestamp'
     ];
     
-    // Check for missing required fields
     requiredFields.forEach(field => {
         if (!hasOwn(notificationRecord, field)) {
             throw new Error(`Missing required notification field: ${field}`);
@@ -166,14 +162,12 @@ const expectValidNotification = (notification: unknown, expectedType: string, ex
         }
     });
     
-    // Validate notification type
     if (notificationRecord.type !== expectedType) {
         throw new Error(
             `Notification type mismatch. Expected: ${expectedType}, Got: ${notificationRecord.type}`
         );
     }
     
-    // Validate platform
     if (notificationRecord.platform !== expectedPlatform) {
         throw new Error(
             `Notification platform mismatch. Expected: ${expectedPlatform}, Got: ${notificationRecord.platform}`
@@ -184,7 +178,6 @@ const expectValidNotification = (notification: unknown, expectedType: string, ex
         throw new Error('Notification must have a valid username');
     }
     
-    // Validate timestamp formats
     if (typeof notificationRecord.processedAt !== 'number') {
         throw new Error('processedAt must be a numeric timestamp');
     }
@@ -193,10 +186,8 @@ const expectValidNotification = (notification: unknown, expectedType: string, ex
         throw new Error('timestamp must be a valid ISO date string');
     }
     
-    // Platform-specific validations
     validatePlatformSpecificNotification(notificationRecord, expectedType, expectedPlatform);
     
-    // Validate message content is non-empty
     if (typeof notificationRecord.displayMessage !== 'string' || !notificationRecord.displayMessage.trim()) {
         throw new Error('displayMessage cannot be empty');
     }
@@ -314,7 +305,6 @@ const expectNotificationTiming = (notification: unknown, expectedTiming: Notific
         throw new Error('Notification timing requires numeric processedAt and createdAt values');
     }
     
-    // Check processing delay
     if (expectedTiming.maxProcessingDelay) {
         const processingDelay = processedAt - createdAt;
         if (processingDelay > expectedTiming.maxProcessingDelay) {
@@ -325,7 +315,6 @@ const expectNotificationTiming = (notification: unknown, expectedTiming: Notific
         }
     }
     
-    // Check timestamp accuracy
     if (expectedTiming.timestampTolerance) {
         const timestampMs = new Date(String(notificationRecord.timestamp)).getTime();
         const timeDiff = Math.abs(timestampMs - processedAt);
@@ -337,7 +326,6 @@ const expectNotificationTiming = (notification: unknown, expectedTiming: Notific
         }
     }
     
-    // Check if notification is not too old
     if (expectedTiming.maxAge) {
         const age = now - processedAt;
         if (age > expectedTiming.maxAge) {
@@ -351,7 +339,7 @@ const expectNotificationTiming = (notification: unknown, expectedTiming: Notific
 
 const expectNotificationSequence = (notifications: unknown[], expectedOrder: NotificationOrder | string): void => {
     if (!Array.isArray(notifications) || notifications.length < 2) {
-        return; // Cannot validate sequence with less than 2 items
+        return;
     }
     const notificationRecords = notifications.map((notification, index) => requireRecord(notification, `Notification ${index}`));
     
@@ -408,17 +396,13 @@ const expectNotificationSequence = (notifications: unknown[], expectedOrder: Not
     }
 };
 
-// PLATFORM-SPECIFIC ASSERTION HELPERS
-
 const expectYouTubeEventProcessing = (eventData: unknown, expectedOutcome: YouTubeExpectedOutcome): void => {
     const eventRecord = requireRecord(eventData, 'YouTube event');
-    // Validate event structure
     const item = isRecord(eventRecord.item) ? eventRecord.item : null;
     if (!item) {
         throw new Error('YouTube event must have item property');
     }
     
-    // Check event type matches expected notification type
     const eventType = String(item.type);
     const expectedTypes: Record<string, string> = {
         'membership': 'LiveChatMembershipItem',
@@ -443,7 +427,6 @@ const expectYouTubeEventProcessing = (eventData: unknown, expectedOutcome: YouTu
         }
     }
     
-    // Validate monetary events have proper amount formatting
     if (eventType === 'LiveChatPaidMessage' || eventType === 'LiveChatPaidSticker') {
         if (!item.purchase_amount) {
             throw new Error('YouTube paid event must have purchase_amount field');
@@ -456,7 +439,6 @@ const expectYouTubeEventProcessing = (eventData: unknown, expectedOutcome: YouTu
         }
     }
     
-    // Validate author details
     const authorDetails = isRecord(item.authorDetails) ? item.authorDetails : null;
     if (!authorDetails) {
         throw new Error('YouTube event must have authorDetails');
@@ -472,7 +454,6 @@ const expectYouTubeEventProcessing = (eventData: unknown, expectedOutcome: YouTu
 
 const expectTwitchEventSubHandling = (eventData: unknown, expectedCallbacks?: unknown): void => {
     const eventRecord = requireRecord(eventData, 'Twitch EventSub event');
-    // Validate EventSub structure
     const subscription = isRecord(eventRecord.subscription) ? eventRecord.subscription : null;
     const event = isRecord(eventRecord.event) ? eventRecord.event : null;
     const metadata = isRecord(eventRecord.metadata) ? eventRecord.metadata : null;
@@ -489,7 +470,6 @@ const expectTwitchEventSubHandling = (eventData: unknown, expectedCallbacks?: un
         throw new Error('Twitch EventSub event must have metadata property');
     }
     
-    // Validate subscription structure
     const requiredSubFields = ['id', 'type', 'version', 'status', 'condition'];
     requiredSubFields.forEach(field => {
         if (!hasOwn(subscription, field)) {
@@ -497,7 +477,6 @@ const expectTwitchEventSubHandling = (eventData: unknown, expectedCallbacks?: un
         }
     });
     
-    // Validate metadata structure
     const requiredMetaFields = ['message_id', 'message_type', 'message_timestamp'];
     requiredMetaFields.forEach(field => {
         if (!hasOwn(metadata, field)) {
@@ -505,19 +484,15 @@ const expectTwitchEventSubHandling = (eventData: unknown, expectedCallbacks?: un
         }
     });
     
-    // Validate message type
     if (metadata.message_type !== 'notification') {
         throw new Error(
             `Twitch EventSub message_type should be 'notification', got: ${metadata.message_type}`
         );
     }
     
-    // Validate event data based on subscription type
     const subType = String(subscription.type);
     validateTwitchEventSubEventData(event, subType);
     
-    // Note: expectedCallbacks validation would typically be done against actual callback execution
-    // This is a placeholder for that validation logic
     if (expectedCallbacks && !Array.isArray(expectedCallbacks)) {
         throw new Error('expectedCallbacks must be an array');
     }
@@ -570,7 +545,6 @@ const expectTikTokGiftAggregation = (giftEvents: unknown[], expectedAggregation:
         return;
     }
     
-    // Calculate actual aggregation
     const actualTotal = giftEventRecords.reduce((sum, event) => {
         if (!event.giftCount || typeof event.giftCount !== 'number') {
             throw new Error('Each gift event must have a numeric giftCount');
@@ -578,7 +552,6 @@ const expectTikTokGiftAggregation = (giftEvents: unknown[], expectedAggregation:
         return sum + event.giftCount;
     }, 0);
     
-    // Validate total
     if (expectedAggregation.totalGifts !== actualTotal) {
         throw new Error(
             `Gift aggregation total mismatch. Expected: ${expectedAggregation.totalGifts}, ` +
@@ -586,7 +559,6 @@ const expectTikTokGiftAggregation = (giftEvents: unknown[], expectedAggregation:
         );
     }
     
-    // Validate gift type consistency
     if (expectedAggregation.giftType) {
         const giftTypes = [...new Set(giftEventRecords.map((event) => {
             if (!event.giftType) {
@@ -607,9 +579,8 @@ const expectTikTokGiftAggregation = (giftEvents: unknown[], expectedAggregation:
         }
     }
     
-    // Validate aggregation decision
     if (expectedAggregation.hasOwnProperty('shouldAggregate')) {
-        const timeWindow = 5000; // 5 seconds
+        const timeWindow = 5000;
         const timestamps = giftEventRecords.map(e => typeof e.timestamp === 'number' ? e.timestamp : testClock.now());
         const timeSpan = Math.max(...timestamps) - Math.min(...timestamps);
         const actualShouldAggregate = timeSpan <= timeWindow && giftEventRecords.length > 1;
@@ -629,7 +600,6 @@ const expectOBSIntegration = (obsCommands: unknown[], expectedSceneChanges: Part
     }
     const commandRecords = obsCommands.map((command, index) => requireRecord(command, `OBS command ${index}`));
     
-    // Count command types
     const commandCounts = {
         textUpdates: 0,
         effectTriggers: 0,
@@ -676,7 +646,6 @@ const expectOBSIntegration = (obsCommands: unknown[], expectedSceneChanges: Part
         }
     });
     
-    // Validate counts against expectations
     Object.keys(expectedSceneChanges).forEach(countType => {
         if (hasOwn(commandCounts, countType)) {
             const key = countType as keyof ObsCommandCounts;
@@ -691,8 +660,6 @@ const expectOBSIntegration = (obsCommands: unknown[], expectedSceneChanges: Part
     });
 };
 
-// MOCK INTERACTION ASSERTION HELPERS
-
 const expectOnlyMethodCalled = (mockObject: unknown, methodName: string, expectedArgs?: unknown[]): void => {
     const mockRecord = requireRecord(mockObject, 'Mock object') as MockFactoryObject;
     if (!mockRecord._mockType) {
@@ -704,12 +671,10 @@ const expectOnlyMethodCalled = (mockObject: unknown, methodName: string, expecte
         throw new Error(`${methodName} is not a mock function`);
     }
     
-    // Check if method was called
     if (mockMethod.mock.calls.length === 0) {
         throw new Error(`Expected ${methodName} to be called but it was not called`);
     }
     
-    // Check arguments if provided
     if (expectedArgs) {
         const actualArgs = mockMethod.mock.calls[0];
         if (JSON.stringify(actualArgs) !== JSON.stringify(expectedArgs)) {
@@ -720,7 +685,6 @@ const expectOnlyMethodCalled = (mockObject: unknown, methodName: string, expecte
         }
     }
     
-    // Check that no other methods were called
     const validMethods = getStringArray(mockRecord._validMethods);
     const calledMethods = validMethods.filter(method => {
         const candidate = mockRecord[method];
@@ -741,7 +705,6 @@ const expectMethodCallSequence = (mockObject: unknown, expectedSequence: string[
         throw new Error('Object is not a factory-created mock');
     }
     
-    // Collect all method calls with timestamps
     const allCalls: OrderedMockCall[] = [];
     const validMethods = getStringArray(mockRecord._validMethods);
     
@@ -752,20 +715,16 @@ const expectMethodCallSequence = (mockObject: unknown, expectedSequence: string[
                 allCalls.push({
                     method: methodName,
                     callIndex: callIndex,
-                    // Use invocationCallOrder for timing
                     order: mockMethod.mock.invocationCallOrder?.[callIndex] ?? allCalls.length
                 });
             });
         }
     });
     
-    // Sort by call order
     allCalls.sort((a, b) => a.order - b.order);
     
-    // Extract method sequence
     const actualSequence = allCalls.map(call => call.method);
     
-    // Validate sequence
     if (actualSequence.length !== expectedSequence.length) {
         throw new Error(
             `Method call sequence length mismatch. Expected: ${expectedSequence.length}, ` +
@@ -844,8 +803,6 @@ const expectMockCallPattern = (mockObject: unknown, pattern: MockCallPattern): v
     });
 };
 
-// DATA STRUCTURE VALIDATION HELPERS
-
 const expectPlatformEventStructure = (event: unknown, platform: PlatformName | string, eventType: PlatformEventType): void => {
     const eventRecord = requireRecord(event, 'Platform event');
     switch (platform) {
@@ -898,12 +855,10 @@ const expectPlatformEventStructure = (event: unknown, platform: PlatformName | s
 
 const expectInternationalContentPreservation = (originalContent: string, processedContent: string): void => {
     if (originalContent !== processedContent) {
-        // Check if it's just whitespace normalization
         if (originalContent.trim() === processedContent.trim()) {
-            return; // Acceptable whitespace normalization
+            return;
         }
         
-        // Check if Unicode characters were preserved
         const originalUnicodeCount = (originalContent.match(/[\u{80}-\u{10FFFF}]/gu) || []).length;
         const processedUnicodeCount = (processedContent.match(/[\u{80}-\u{10FFFF}]/gu) || []).length;
         
@@ -914,7 +869,6 @@ const expectInternationalContentPreservation = (originalContent: string, process
             );
         }
         
-        // If content differs but Unicode is preserved, check for acceptable transformations
         const lengthDiff = Math.abs(originalContent.length - processedContent.length);
         if (lengthDiff > originalContent.length * 0.1) { // More than 10% length change
             throw new Error(
@@ -942,7 +896,6 @@ const expectValidUserData = (userData: unknown): void => {
         }
     });
     
-    // Optional but commonly expected fields
     if (userRecord.userId && typeof userRecord.userId !== 'string') {
         throw new Error('Invalid user data: userId must be a string if provided');
     }
@@ -1020,10 +973,6 @@ const expectValidStreamData = (streamData: unknown): void => {
     }
 };
 
-// CONTENT QUALITY VALIDATION HELPERS
-
-// PHASE 5B: INTERNATIONAL CONTENT VALIDATION HELPERS
-
 const expectInternationalContentSupport = (content: unknown, testData: unknown): void => {
     if (typeof content !== 'string') {
         throw new Error('Content must be a string');
@@ -1034,7 +983,6 @@ const expectInternationalContentSupport = (content: unknown, testData: unknown):
     }
     const data = testData as InternationalTestData;
     
-    // Unicode preservation validation
     if (data.originalUsername) {
         if (!content.includes(data.originalUsername)) {
             throw new Error(
@@ -1043,7 +991,6 @@ const expectInternationalContentSupport = (content: unknown, testData: unknown):
         }
     }
     
-    // Emoji preservation validation
     if (data.containsEmoji || data.originalUsername && /[\u{1F600}-\u{1F64F}]|\u{1F300}-\u{1F5FF}|\u{1F680}-\u{1F6FF}|\u{1F700}-\u{1F77F}|\u{1F780}-\u{1F7FF}|\u{1F800}-\u{1F8FF}|\u{2600}-\u{26FF}|\u{2700}-\u{27BF}/u.test(data.originalUsername)) {
         const emojiPattern = /[\u{1F600}-\u{1F64F}]|\u{1F300}-\u{1F5FF}|\u{1F680}-\u{1F6FF}|\u{1F700}-\u{1F77F}|\u{1F780}-\u{1F7FF}|\u{1F800}-\u{1F8FF}|\u{2600}-\u{26FF}|\u{2700}-\u{27BF}/u;
         if (!emojiPattern.test(content)) {
@@ -1053,7 +1000,6 @@ const expectInternationalContentSupport = (content: unknown, testData: unknown):
         }
     }
     
-    // Currency symbol handling validation
     if (data.currency && data.currency.symbol) {
         const currencySymbol = data.currency.symbol;
         if (!content.includes(currencySymbol)) {
@@ -1063,9 +1009,7 @@ const expectInternationalContentSupport = (content: unknown, testData: unknown):
         }
     }
     
-    // RTL (right-to-left) character preservation
     if (data.language === 'arabic' || data.language === 'hebrew') {
-        // Check for RTL characters (Arabic, Hebrew ranges)
         const rtlPattern = /[\u0590-\u05FF\u0600-\u06FF\u0750-\u077F]/;
         if (data.originalUsername && rtlPattern.test(data.originalUsername)) {
             if (!rtlPattern.test(content)) {
@@ -1076,7 +1020,6 @@ const expectInternationalContentSupport = (content: unknown, testData: unknown):
         }
     }
     
-    // Chinese/Japanese/Korean character preservation
     if (data.language === 'chinese' || data.language === 'japanese' || data.language === 'korean') {
         const cjkPattern = /[\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF\uAC00-\uD7AF]/;
         if (data.originalUsername && cjkPattern.test(data.originalUsername)) {
@@ -1088,7 +1031,6 @@ const expectInternationalContentSupport = (content: unknown, testData: unknown):
         }
     }
     
-    // Validate no technical artifacts in international content
     expectNoTechnicalArtifacts(content);
 };
 
@@ -1097,10 +1039,8 @@ const expectUserFriendlyErrorMessage = (errorMessage: unknown, options: UserFrie
         throw new Error('Error message must be a string');
     }
     
-    // Should not contain technical details
     expectNoTechnicalArtifacts(errorMessage);
     
-    // Should be actionable and clear (minimum length check)
     const minLength = options.minLength || 10;
     if (errorMessage.trim().length < minLength) {
         throw new Error(
@@ -1108,17 +1048,14 @@ const expectUserFriendlyErrorMessage = (errorMessage: unknown, options: UserFrie
         );
     }
     
-    // Should not contain error codes
     if (/\d{3,}/.test(errorMessage) && !options.allowErrorCodes) {
         throw new Error(`Error message contains error codes: "${errorMessage}"`);
     }
     
-    // Should have proper capitalization
     if (!/^[A-Z]/.test(errorMessage.trim())) {
         throw new Error(`Error message should start with capital letter: "${errorMessage}"`);
     }
     
-    // Should not contain technical jargon
     const technicalTerms = [
         'API', 'HTTP', 'JSON', 'XML', 'SQL', 'REST', 'SOAP',
         'OAuth', 'JWT', 'SSL', 'TLS', 'WebSocket', 'TCP', 'UDP',
@@ -1135,7 +1072,6 @@ const expectUserFriendlyErrorMessage = (errorMessage: unknown, options: UserFrie
         });
     }
     
-    // Should provide guidance or next steps
     const guidanceIndicators = [
         'please', 'try', 'check', 'make sure', 'ensure', 'verify',
         'contact', 'visit', 'go to', 'click', 'select'
@@ -1213,10 +1149,8 @@ const validateUserFacingString = (userVisibleString: unknown, requirements: User
         throw new Error('User-visible content must be a string');
     }
     
-    // Check for technical artifacts first
     expectNoTechnicalArtifacts(userVisibleString, requirements);
     
-    // Check minimum content length
     const minLength = requirements.minLength || 5;
     if (userVisibleString.trim().length < minLength) {
         throw new Error(
@@ -1225,28 +1159,24 @@ const validateUserFacingString = (userVisibleString: unknown, requirements: User
         );
     }
     
-    // Check for proper whitespace formatting
     if (userVisibleString !== userVisibleString.trim()) {
         throw new Error(
             `User-visible content has leading/trailing whitespace: "${userVisibleString}"`
         );
     }
     
-    // Check for multiple consecutive spaces
     if (/\s{2,}/.test(userVisibleString)) {
         throw new Error(
             `User-visible content has multiple consecutive spaces: "${userVisibleString}"`
         );
     }
     
-    // Check for empty parentheses/brackets
     if (/\(\s*\)|\[\s*\]/.test(userVisibleString)) {
         throw new Error(
             `User-visible content has empty parentheses/brackets: "${userVisibleString}"`
         );
     }
     
-    // Validate expected content pattern if provided
     if (requirements.pattern) {
         if (!requirements.pattern.test(userVisibleString)) {
             throw new Error(
@@ -1256,7 +1186,6 @@ const validateUserFacingString = (userVisibleString: unknown, requirements: User
         }
     }
     
-    // Check for specific content if required
     if (requirements.mustContain) {
         const mustContain = Array.isArray(requirements.mustContain) ? 
             requirements.mustContain : [requirements.mustContain];
@@ -1270,7 +1199,6 @@ const validateUserFacingString = (userVisibleString: unknown, requirements: User
         });
     }
     
-    // Check for forbidden content
     if (requirements.mustNotContain) {
         const mustNotContain = Array.isArray(requirements.mustNotContain) ? 
             requirements.mustNotContain : [requirements.mustNotContain];
@@ -1284,7 +1212,6 @@ const validateUserFacingString = (userVisibleString: unknown, requirements: User
         });
     }
     
-    // Validate international content preservation
     if (requirements.originalContent) {
         expectInternationalContentPreservation(requirements.originalContent, userVisibleString);
     }
@@ -1295,7 +1222,6 @@ const expectSuccessfulTemplateInterpolation = (templateString: unknown, interpol
         throw new Error('Template and interpolated strings must be strings');
     }
     
-    // Check that result is different from template (unless no placeholders)
     const hasPlaceholders = /\{.*\}/.test(templateString);
     if (hasPlaceholders && templateString === interpolatedString) {
         throw new Error(
@@ -1303,17 +1229,14 @@ const expectSuccessfulTemplateInterpolation = (templateString: unknown, interpol
         );
     }
     
-    // Check that no placeholders remain
     expectNoTechnicalArtifacts(interpolatedString);
     
-    // Verify expected data was used
     if (templateData && typeof templateData === 'object') {
         const templateRecord = templateData as UnknownRecord;
         Object.keys(templateRecord).forEach(key => {
             const value = templateRecord[key];
             if (value !== null && value !== undefined && typeof value !== 'object') {
                 const stringValue = String(value);
-                // Only check for inclusion if the value is meaningful
                 if (stringValue.length > 0 && stringValue !== '0') {
                     if (!interpolatedString.includes(stringValue)) {
                         throw new Error(
@@ -1338,14 +1261,12 @@ const expectContentReadabilityForAudience = (content: unknown, audience: Audienc
     
     switch (audience) {
         case 'user':
-            // Check for file paths or code references first
             if (/src\/|\.js|\.json|\.ini/.test(content)) {
                 throw new Error(
                     `User-facing content contains file path references: "${content}"`
                 );
             }
             
-            // Users should not see technical jargon
             const technicalTerms = [
                 'API', 'WebSocket', 'HTTP', 'JSON', 'SSL', 'TLS', 'OAuth',
                 'callback', 'endpoint', 'buffer', 'parse', 'serialize',
@@ -1363,7 +1284,6 @@ const expectContentReadabilityForAudience = (content: unknown, audience: Audienc
             break;
             
         case 'admin':
-            // Admins can see some technical terms but not code details
             if (/function|class|const |let |var /.test(content)) {
                 throw new Error(
                     `Admin-facing content contains code syntax: "${content}"`
@@ -1372,8 +1292,6 @@ const expectContentReadabilityForAudience = (content: unknown, audience: Audienc
             break;
             
         case 'developer':
-            // Developers can see technical content
-            // Just check for basic formatting
             if (content.length > 500) {
                 throw new Error(
                     `Developer content too verbose (>500 chars): "${content.substring(0, 100)}..."`
@@ -1389,36 +1307,28 @@ const expectCrossPlatformContentConsistency = (platformContents: Record<string, 
         throw new Error('Need at least 2 platforms to check consistency');
     }
     
-    // Check each platform's content for technical artifacts
     platforms.forEach(platform => {
         const content = platformContents[platform];
         expectNoTechnicalArtifacts(content, options);
     });
     
-    // Check for consistent information across platforms
     if (!options.allowPlatformSpecificContent) {
-        // Extract key information (usernames, amounts, etc.)
         const contentInfo = platforms.map(platform => {
             const content = platformContents[platform];
             return {
                 platform,
                 content,
-                // Extract numbers (amounts, counts)
                 numbers: ((content ?? '').match(/\d+(?:\.\d+)?/g) || []).map(Number),
-                // Extract quoted strings (usernames, messages)
                 quotedStrings: (content ?? '').match(/"([^"]*)"/g) || [],
-                // Extract currencies
                 currencies: (content ?? '').match(/[$€£¥₹]/g) || []
             };
         });
         
-        // Compare key information
         const firstInfo = contentInfo[0];
         if (!firstInfo) {
             throw new Error('Need at least 2 platforms to check consistency');
         }
         contentInfo.slice(1).forEach(info => {
-            // Check numbers are consistent
             if (JSON.stringify(firstInfo.numbers.sort()) !== JSON.stringify(info.numbers.sort())) {
                 throw new Error(
                     `Inconsistent numbers across platforms. ` +
@@ -1427,7 +1337,6 @@ const expectCrossPlatformContentConsistency = (platformContents: Record<string, 
                 );
             }
             
-            // Check currencies are consistent
             if (JSON.stringify(firstInfo.currencies.sort()) !== JSON.stringify(info.currencies.sort())) {
                 throw new Error(
                     `Inconsistent currencies across platforms. ` +
@@ -1439,18 +1348,14 @@ const expectCrossPlatformContentConsistency = (platformContents: Record<string, 
     }
 };
 
-// PHASE 4A: ENHANCED DOMAIN-SPECIFIC ASSERTIONS
-
 const expectValidGiftNotification = (notification: unknown, expectedData: GiftNotificationExpectations = {}): void => {
     if (!notification || typeof notification !== 'object') {
         throw new Error('Gift notification must be an object');
     }
     const giftNotification = notification as UnknownRecord;
     
-    // First validate as general notification
     expectValidNotification(giftNotification, 'platform:gift', expectedData.platform || String(giftNotification.platform));
     
-    // Gift-specific validations
     const requiredGiftFields = ['amount', 'currency'];
     requiredGiftFields.forEach(field => {
         if (!hasOwn(giftNotification, field)) {
@@ -1458,7 +1363,6 @@ const expectValidGiftNotification = (notification: unknown, expectedData: GiftNo
         }
     });
     
-    // Validate amount
     if (typeof giftNotification.amount !== 'number' || giftNotification.amount <= 0) {
         throw new Error('Gift amount must be positive');
     }
@@ -1467,7 +1371,6 @@ const expectValidGiftNotification = (notification: unknown, expectedData: GiftNo
         throw new Error(`Gift amount ${giftNotification.amount} is below minimum ${expectedData.minAmount}`);
     }
     
-    // Validate currency
     if (typeof giftNotification.currency !== 'string' || !giftNotification.currency.trim()) {
         throw new Error('Gift currency must be a non-empty string');
     }
@@ -1480,7 +1383,6 @@ const expectValidGiftNotification = (notification: unknown, expectedData: GiftNo
         throw new Error(`Expected currency ${expectedData.requiredCurrency}, got ${giftNotification.currency}`);
     }
     
-    // Validate gift-specific content
     if (typeof giftNotification.displayMessage !== 'string' || !giftNotification.displayMessage.includes(giftNotification.amount.toString())) {
         throw new Error('Gift notification display message must include amount');
     }
@@ -1489,7 +1391,6 @@ const expectValidGiftNotification = (notification: unknown, expectedData: GiftNo
         throw new Error('Gift notification display message must include currency');
     }
     
-    // Validate no technical artifacts in gift content
     expectNoTechnicalArtifacts(giftNotification.displayMessage);
     expectNoTechnicalArtifacts(giftNotification.ttsMessage);
 };
@@ -1500,7 +1401,6 @@ const expectValidPlatformBehavior = (platform: unknown, behaviorType: string, ex
     }
     const platformRecord = platform as UnknownRecord;
     
-    // Check required methods
     if (expectations.requiredMethods) {
         expectations.requiredMethods.forEach(method => {
             if (!hasOwn(platformRecord, method)) {
@@ -1512,7 +1412,6 @@ const expectValidPlatformBehavior = (platform: unknown, behaviorType: string, ex
         });
     }
     
-    // Validate behavior-specific expectations
     switch (behaviorType) {
         case 'message_processing':
             const processMessage = platformRecord.processMessage;
@@ -1520,11 +1419,9 @@ const expectValidPlatformBehavior = (platform: unknown, behaviorType: string, ex
                 throw new Error('Platform missing required method: processMessage');
             }
             if (expectations.shouldProcessAsync && !isMockFunction(processMessage)) {
-                // For real implementations, we can't easily test async nature
                 break;
             }
             if (expectations.shouldReturnBoolean && isMockFunction(processMessage)) {
-                // Check if mock is configured to return boolean
                 const mockReturn = (processMessage as TestMockFn & { getMockImplementation?: () => (() => unknown) | undefined }).getMockImplementation?.();
                 const returned = mockReturn?.();
                 if (mockReturn && typeof returned !== 'boolean' && !(isRecord(returned) && typeof returned.then === 'function')) {
@@ -1545,15 +1442,12 @@ const expectValidPlatformBehavior = (platform: unknown, behaviorType: string, ex
                 if (typeof processMessage !== 'function') {
                     throw new Error('Platform missing required method: processMessage');
                 }
-                // Test error handling by trying to trigger an error
                 try {
                     const result = processMessage();
-                    // If processMessage is supposed to throw and doesn't, that's a problem
                     if (expectations.expectedErrorTypes && !result) {
                         throw new Error('Platform should handle errors gracefully');
                     }
                 } catch (error) {
-                    // If we expect error handling but get an unhandled error, that's a problem
                     const errorMessage = getErrorMessage(error);
                     if (expectations.expectedErrorTypes && !expectations.expectedErrorTypes.some(type => errorMessage.includes(type))) {
                         throw new Error('Platform should handle errors gracefully');
@@ -1563,7 +1457,6 @@ const expectValidPlatformBehavior = (platform: unknown, behaviorType: string, ex
             break;
     }
     
-    // Validate platform metadata if present
     if (platformRecord._mockType && expectations.expectedMockType) {
         if (platformRecord._mockType !== expectations.expectedMockType) {
             throw new Error(`Expected mock type ${expectations.expectedMockType}, got ${platformRecord._mockType}`);
@@ -1578,27 +1471,22 @@ const expectNoTechnicalArtifacts = (userVisibleString: unknown, options: { allow
     
     const violations = [];
     
-    // PHASE 5B: Enhanced JSON pattern detection
     if (/\{.*".*".*\}/.test(userVisibleString)) {
         violations.push('Contains JSON structure');
     }
     
-    // PHASE 5B: Enhanced debug marker detection  
     if (/\[(DEBUG|ERROR|LOG|INFO|WARN|TRACE)\]/.test(userVisibleString)) {
         violations.push('Contains debug markers');
     }
     
-    // PHASE 5B: Enhanced file path detection
     if (/(?:src|tests|node_modules|\.js|\.json|\.ini|\.md|\.ts|\.tsx)\//.test(userVisibleString)) {
         violations.push('Contains file paths');
     }
     
-    // PHASE 5B: Enhanced error code detection
     if (/Error:\s*\d+|Code:\s*\d+|HTTP\s*\d{3}/.test(userVisibleString)) {
         violations.push('Contains error codes');
     }
     
-    // PHASE 5B: Enhanced technical values detection
     const technicalArtifacts = ['undefined', 'null', 'NaN', '[object Object]', 'TypeError', 'ReferenceError', 'SyntaxError'];
     technicalArtifacts.forEach(artifact => {
         if (userVisibleString.includes(artifact)) {
@@ -1606,22 +1494,18 @@ const expectNoTechnicalArtifacts = (userVisibleString: unknown, options: { allow
         }
     });
     
-    // PHASE 5B: Test artifacts detection
     if (/mockObject|testData|fixture|stub|spy/.test(userVisibleString)) {
         violations.push('Contains test artifacts');
     }
     
-    // PHASE 5B: Template placeholder detection (previous and current patterns)
     if (/\{[^}]*\}|\$\{[^}]*\}|%[A-Za-z_][A-Za-z0-9_]*%/.test(userVisibleString)) {
         violations.push('Contains template placeholders');
     }
     
-    // Stack trace detection
     if (userVisibleString.includes('at ') && userVisibleString.includes('.js:')) {
         violations.push('Contains stack trace information');
     }
     
-    // Check for debug prefixes if not allowed
     if (!options.allowDebugPrefixes) {
         const debugPrefixes = ['DEBUG:', 'ERROR:', 'WARN:', 'INFO:', 'TRACE:', 'LOG:'];
         debugPrefixes.forEach(prefix => {
@@ -1631,22 +1515,18 @@ const expectNoTechnicalArtifacts = (userVisibleString: unknown, options: { allow
         });
     }
     
-    // PHASE 5B: API endpoint detection
     if (/\/api\/|\/v\d+\/|localhost:\d+|127\.0\.0\.1/.test(userVisibleString)) {
         violations.push('Contains API endpoints or localhost references');
     }
     
-    // PHASE 5B: Database/SQL artifacts (but exclude common words like "from")
     if (/\b(SELECT|INSERT|UPDATE|DELETE)\s+\w+/i.test(userVisibleString) || /\bWHERE\s+\w+\s*=/i.test(userVisibleString)) {
         violations.push('Contains SQL statements');
     }
     
-    // PHASE 5B: Configuration keys detection
     if (/[A-Z_]{3,}=|config\.|process\.env\./.test(userVisibleString)) {
         violations.push('Contains configuration references');
     }
     
-    // Report all violations at once for better debugging
     if (violations.length > 0) {
         throw new Error(`Technical artifacts detected: ${violations.join(', ')} in "${userVisibleString}"`);
     }
@@ -1665,27 +1545,22 @@ const expectProperCurrencyFormatting = (amount: unknown, currency: unknown, plat
         throw new Error('Platform must be a non-empty string');
     }
     
-    // Platform-specific currency rules
     switch (platform.toLowerCase()) {
         case 'youtube':
-            // YouTube supports decimal currencies
             validateYouTubeCurrencyFormat(amount, currency);
             break;
             
         case 'tiktok':
-            // TikTok typically doesn't use fractional currencies for gifts
             if (amount % 1 !== 0) {
                 throw new Error('TikTok platform does not support fractional currency amounts');
             }
             break;
             
         case 'twitch':
-            // Twitch supports decimal currencies for donations/bits
             validateTwitchCurrencyFormat(amount, currency);
             break;
             
         default:
-            // General currency validation
             validateGeneralCurrencyFormat(amount, currency);
     }
 };
@@ -1712,7 +1587,6 @@ const validateYouTubeCurrencyFormat = (amount: number, currency: string): void =
     if (rule.decimals > 0) {
         const decimalString = amount.toString().split('.')[1] || '';
         const decimalPlaces = decimalString.length;
-        // Allow reasonable decimal precision (0, 1, or 2 decimal places for most currencies)
         if (decimalPlaces > rule.decimals) {
             throw new Error(`${currency} currency cannot have more than ${rule.decimals} decimal places`);
         }
@@ -1720,7 +1594,6 @@ const validateYouTubeCurrencyFormat = (amount: number, currency: string): void =
 };
 
 const validateTwitchCurrencyFormat = (amount: number, currency: string): void => {
-    // Twitch follows similar rules to YouTube for most currencies
     validateYouTubeCurrencyFormat(amount, currency);
 };
 
@@ -1734,16 +1607,11 @@ const validateGeneralCurrencyFormat = (amount: number, currency: string): void =
         throw new Error(`Invalid currency format: ${currency}`);
     }
     
-    // Check for reasonable decimal precision (max 4 decimal places)
     const decimalPlaces = (amount.toString().split('.')[1] || '').length;
     if (decimalPlaces > 4) {
         throw new Error('Currency amount has too many decimal places');
     }
 };
-
-// EXPORTS
-
-// Authentication consistency assertions
 
 const expectConsistentValidation = (validationResults: unknown[]): void => {
     if (!Array.isArray(validationResults) || validationResults.length < 2) {
@@ -1757,7 +1625,6 @@ const expectConsistentValidation = (validationResults: unknown[]): void => {
     }
     const requiredFields = ['isValid', 'validationSource'];
     
-    // Check that all results have required fields
     validationRecords.forEach((result, index) => {
         requiredFields.forEach(field => {
             if (!hasOwn(result, field)) {
@@ -1766,7 +1633,6 @@ const expectConsistentValidation = (validationResults: unknown[]): void => {
         });
     });
     
-    // Check that all results have consistent validation outcomes
     for (let i = 1; i < validationRecords.length; i++) {
         const currentResult = validationRecords[i];
         if (!currentResult) {
@@ -1788,7 +1654,6 @@ const expectConsistentValidation = (validationResults: unknown[]): void => {
         }
     }
     
-    // Validate that centralized validation is being used
     validationRecords.forEach((result, index) => {
         if (result.validationSource !== 'centralized_validator') {
             throw new Error(
@@ -1811,7 +1676,6 @@ const expectUnifiedBehavior = (options: UnifiedBehaviorOptions): void => {
     }
     const resultRecords = results.map((result, index) => requireRecord(result, `Result ${index}`));
     
-    // Validate that all results indicate unified behavior
     resultRecords.forEach((result, index) => {
         if (!hasOwn(result, 'validationSource')) {
             throw new Error(`Result ${index} missing validationSource field`);
@@ -1825,7 +1689,6 @@ const expectUnifiedBehavior = (options: UnifiedBehaviorOptions): void => {
         }
     });
     
-    // Check that all results have consistent structure for the scenario
     const firstResult = resultRecords[0];
     if (!firstResult) {
         throw new Error('expectUnifiedBehavior requires at least 2 results to compare');
@@ -1848,7 +1711,6 @@ const expectUnifiedBehavior = (options: UnifiedBehaviorOptions): void => {
         });
     }
     
-    // Scenario-specific validation
     switch (scenario) {
         case 'token_validation':
         case 'standard-validation':
@@ -1897,7 +1759,6 @@ const expectConsistentConfigBehavior = (configResults: unknown[]): void => {
     const configRecords = configResults.map((result, index) => requireRecord(result, `Config result ${index}`));
     
     configRecords.forEach((result, index) => {
-        // Check if result has validation field (wrapped) or implementationType directly
         let targetValidation: UnknownRecord;
         if (hasOwn(result, 'validation') && isRecord(result.validation)) {
             targetValidation = result.validation;
@@ -1928,7 +1789,6 @@ const expectUnifiedErrorHandling = (errorResults: unknown[]): void => {
     
     const requiredFields = ['implementationType'];
     
-    // Check that all results have required fields
     errorRecords.forEach((result, index) => {
         requiredFields.forEach(field => {
             if (!hasOwn(result, field)) {
@@ -1937,7 +1797,6 @@ const expectUnifiedErrorHandling = (errorResults: unknown[]): void => {
         });
     });
     
-    // Check that all results indicate unified error handling
     errorRecords.forEach((result, index) => {
         if (result.implementationType !== 'delegated_to_central') {
             throw new Error(
@@ -1947,8 +1806,6 @@ const expectUnifiedErrorHandling = (errorResults: unknown[]): void => {
         }
     });
 };
-
-// HTTP REQUEST PATTERNS CONSISTENCY ASSERTIONS
 
 const expectConsistentHttpBehavior = (httpBehaviors: unknown[]): void => {
     if (!Array.isArray(httpBehaviors) || httpBehaviors.length < 2) {
@@ -1961,14 +1818,12 @@ const expectConsistentHttpBehavior = (httpBehaviors: unknown[]): void => {
         throw new Error('expectConsistentHttpBehavior requires at least 2 HTTP behavior objects to compare');
     }
     
-    // Validate all behaviors are objects
     behaviorRecords.forEach((behavior, index) => {
         if (!behavior || typeof behavior !== 'object') {
             throw new Error(`HTTP behavior at index ${index} must be a valid object`);
         }
     });
     
-    // Check for consistent header structure
     if (firstBehavior.standardHeaders) {
         const firstHeadersSource = firstBehavior.standardHeaders;
         behaviorRecords.forEach((behavior, index) => {
@@ -1976,7 +1831,6 @@ const expectConsistentHttpBehavior = (httpBehaviors: unknown[]): void => {
                 throw new Error(`HTTP behavior at index ${index} missing standardHeaders`);
             }
             
-            // Validate header consistency
             const firstHeaders = Object.keys(firstHeadersSource).sort();
             const currentHeaders = Object.keys(behavior.standardHeaders).sort();
             
@@ -1986,7 +1840,6 @@ const expectConsistentHttpBehavior = (httpBehaviors: unknown[]): void => {
         });
     }
     
-    // Check for consistent timeout patterns
     if (firstBehavior.requestTimeout !== undefined) {
         behaviorRecords.forEach((behavior, index) => {
             if (behavior.requestTimeout !== firstBehavior.requestTimeout) {
@@ -1995,7 +1848,6 @@ const expectConsistentHttpBehavior = (httpBehaviors: unknown[]): void => {
         });
     }
     
-    // Check for consistent retry patterns
     if (firstBehavior.maxRetries !== undefined) {
         behaviorRecords.forEach((behavior, index) => {
             if (behavior.maxRetries !== firstBehavior.maxRetries) {
@@ -2004,7 +1856,6 @@ const expectConsistentHttpBehavior = (httpBehaviors: unknown[]): void => {
         });
     }
     
-    // Check for consistent response handling
     if (firstBehavior.category !== undefined) {
         behaviorRecords.forEach((behavior, index) => {
             if (behavior.category !== firstBehavior.category) {
@@ -2013,7 +1864,6 @@ const expectConsistentHttpBehavior = (httpBehaviors: unknown[]): void => {
         });
     }
     
-    // Check for consistent error handling
     if (firstBehavior.userMessage !== undefined) {
         behaviorRecords.forEach((behavior, index) => {
             if (behavior.userMessage !== firstBehavior.userMessage) {
@@ -2034,14 +1884,12 @@ const expectUnifiedRequestPatterns = (requestPatterns: unknown[]): void => {
         throw new Error('expectUnifiedRequestPatterns requires at least 2 request pattern objects to compare');
     }
     
-    // Validate all patterns are objects
     requestRecords.forEach((pattern, index) => {
         if (!pattern || typeof pattern !== 'object') {
             throw new Error(`Request pattern at index ${index} must be a valid object`);
         }
     });
     
-    // Check for unified timeout configuration
     if (firstPattern.requestTimeout !== undefined || firstPattern.retryTimeout !== undefined) {
         requestRecords.forEach((pattern, index) => {
             if (pattern.requestTimeout !== firstPattern.requestTimeout) {
@@ -2054,7 +1902,6 @@ const expectUnifiedRequestPatterns = (requestPatterns: unknown[]): void => {
         });
     }
     
-    // Check for unified retry configuration
     if (firstPattern.maxRetries !== undefined || firstPattern.backoffMultiplier !== undefined) {
         requestRecords.forEach((pattern, index) => {
             if (pattern.maxRetries !== firstPattern.maxRetries) {
@@ -2067,7 +1914,6 @@ const expectUnifiedRequestPatterns = (requestPatterns: unknown[]): void => {
         });
     }
     
-    // Check for unified lifecycle actions
     if (firstPattern.actions && Array.isArray(firstPattern.actions)) {
         const firstActions = firstPattern.actions;
         requestRecords.forEach((pattern, index) => {
@@ -2081,7 +1927,6 @@ const expectUnifiedRequestPatterns = (requestPatterns: unknown[]): void => {
         });
     }
     
-    // Check for unified priority/queuing patterns
     if (firstPattern.priority !== undefined || firstPattern.queuePosition !== undefined) {
         requestRecords.forEach((pattern, index) => {
             if (pattern.priority !== firstPattern.priority) {
@@ -2094,7 +1939,6 @@ const expectUnifiedRequestPatterns = (requestPatterns: unknown[]): void => {
         });
     }
     
-    // Check for unified parsing patterns
     if (firstPattern.parsedFields && Array.isArray(firstPattern.parsedFields)) {
         const firstParsedFields = firstPattern.parsedFields;
         requestRecords.forEach((pattern, index) => {
@@ -2108,7 +1952,6 @@ const expectUnifiedRequestPatterns = (requestPatterns: unknown[]): void => {
         });
     }
     
-    // Check for unified request building patterns
     if (firstPattern.builderSource !== undefined) {
         requestRecords.forEach((pattern, index) => {
             if (pattern.builderSource !== firstPattern.builderSource) {
@@ -2117,7 +1960,6 @@ const expectUnifiedRequestPatterns = (requestPatterns: unknown[]): void => {
         });
     }
     
-    // Check for unified centralization patterns
     if (firstPattern.operationSource !== undefined) {
         requestRecords.forEach((pattern, index) => {
             if (pattern.operationSource !== firstPattern.operationSource) {
@@ -2128,57 +1970,47 @@ const expectUnifiedRequestPatterns = (requestPatterns: unknown[]): void => {
 };
 
 export {
-    // Notification assertions
     expectValidNotification,
     expectNotificationContent,
     expectNotificationTiming,
     expectNotificationSequence,
     
-    // Platform-specific assertions
     expectYouTubeEventProcessing,
     expectTwitchEventSubHandling,
     expectTikTokGiftAggregation,
     expectOBSIntegration,
     
-    // Mock interaction assertions
     expectOnlyMethodCalled,
     expectMethodCallSequence,
     expectNoUnexpectedCalls,
     expectMockCallPattern,
     
-    // Data structure assertions
     expectPlatformEventStructure,
     expectInternationalContentPreservation,
     expectValidUserData,
     expectValidGiftData,
     expectValidStreamData,
     
-    // Content quality assertions
     expectNoTechnicalArtifacts,
     validateUserFacingString,
     expectSuccessfulTemplateInterpolation,
     expectContentReadabilityForAudience,
     expectCrossPlatformContentConsistency,
     
-    // Enhanced domain-specific assertions
     expectValidGiftNotification,
     expectValidPlatformBehavior,
     expectProperCurrencyFormatting,
     
-    // International content and error message quality
     expectInternationalContentSupport,
     expectUserFriendlyErrorMessage,
     createInternationalTestData,
     
-    // Authentication consistency assertions
     expectConsistentValidation,
     expectUnifiedBehavior,
     
-    // HTTP Request Patterns Consistency Assertions
     expectConsistentHttpBehavior,
     expectUnifiedRequestPatterns,
     
-    // Configuration Management Consistency Assertions
     expectConsistentConfigBehavior,
     expectUnifiedErrorHandling
 };

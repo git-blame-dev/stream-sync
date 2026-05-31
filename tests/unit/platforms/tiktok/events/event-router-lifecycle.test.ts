@@ -143,7 +143,6 @@ describe("TikTok event router connection lifecycle", () => {
       requireListener(listeners, platform.ControlEvent.ERROR)(error);
       requireListener(listeners, platform.WebcastEvent.ERROR)(error);
 
-      // Should only queue retry once, not twice
       expect(retryCalls.length).toBe(1);
     });
   });
@@ -180,34 +179,28 @@ describe("TikTok event router connection lifecycle", () => {
 
       cleanupTikTokEventListeners(platform);
 
-      // rawData should be included in cleanup
       expect(cleanedEvents).toContain("rawData");
     });
   });
 
   describe("DISCONNECT resets listenersConfigured", () => {
     test("listenersConfigured should be set to false on DISCONNECT", async () => {
-      // Start with listenersConfigured: false so setupTikTokEventListeners actually runs
       const { platform, listeners } = createPlatformHarness({
         connectionActive: true,
       });
 
       setupTikTokEventListeners(platform);
 
-      // Verify listeners were configured
       expect(platform.listenersConfigured).toBe(true);
 
-      // Trigger DISCONNECT
       requireListener(listeners, platform.WebcastEvent.DISCONNECT)();
 
-      // listenersConfigured should be false so reconnect can reattach listeners
       expect(platform.listenersConfigured).toBe(false);
     });
   });
 
   describe("DISCONNECT triggers proper handling", () => {
     test("DISCONNECT should not trigger handleConnectionIssue", async () => {
-      // Start with listenersConfigured: false so setup runs
       const { platform, listeners, disconnectionEvents } =
         createPlatformHarness({
           connectionActive: true,
@@ -215,7 +208,6 @@ describe("TikTok event router connection lifecycle", () => {
 
       setupTikTokEventListeners(platform);
 
-      // Trigger DISCONNECT
       await requireListener(listeners, platform.WebcastEvent.DISCONNECT)();
 
       expect(disconnectionEvents).toEqual([]);
@@ -239,8 +231,6 @@ describe("TikTok event router connection lifecycle", () => {
       });
       await requireListener(listeners, platform.WebcastEvent.STREAM_END)({ code: 4404 });
 
-      // Event-router routes both events to handlers
-      // Deduplication is the platform's responsibility (tested in tiktok-connection-lifecycle.test.js)
       expect(disconnectionEvents).toEqual([
         { handler: "connectionIssue" },
         { handler: "streamEnd" },

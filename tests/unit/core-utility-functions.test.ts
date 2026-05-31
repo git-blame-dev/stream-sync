@@ -23,7 +23,6 @@ describe("Core Utility Functions", () => {
         expect(typeof ADAPTIVE_RETRY_CONFIG.MAX_DELAY).toBe("number");
         expect(typeof ADAPTIVE_RETRY_CONFIG.BACKOFF_MULTIPLIER).toBe("number");
 
-        // Validate configuration values
         expect(ADAPTIVE_RETRY_CONFIG.BASE_DELAY).toBeGreaterThan(0);
         expect(ADAPTIVE_RETRY_CONFIG.MAX_DELAY).toBeGreaterThanOrEqual(
           ADAPTIVE_RETRY_CONFIG.BASE_DELAY,

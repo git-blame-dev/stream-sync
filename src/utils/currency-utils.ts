@@ -3,23 +3,23 @@ type LoggerLike = {
 };
 
 const MANUAL_SYMBOL_TO_CODE: Record<string, string> = {
-    '₽': 'RUB', // Russian Ruble
-    '฿': 'THB', // Thai Baht
-    '₫': 'VND', // Vietnamese Dong
-    '₱': 'PHP', // Philippine Peso
-    '元': 'CNY', // Chinese Yuan (character symbol)
-    '円': 'JPY', // Japanese Yen (character symbol)
-    'NT$': 'TWD', // New Taiwan Dollar
-    '₩': 'KRW', // South Korean Won (alternate glyph)
-    '₴': 'UAH', // Ukrainian Hryvnia
-    '₦': 'NGN', // Nigerian Naira
-    '₵': 'GHS', // Ghanaian Cedi
-    '₭': 'LAK', // Lao Kip
-    '₲': 'PYG', // Paraguayan Guaraní
-    '₡': 'CRC', // Costa Rican Colón
-    '₺': 'TRY', // Turkish Lira
-    '₸': 'KZT', // Kazakhstani Tenge
-    '₮': 'MNT'  // Mongolian Tögrög
+    '₽': 'RUB',
+    '฿': 'THB',
+    '₫': 'VND',
+    '₱': 'PHP',
+    '元': 'CNY',
+    '円': 'JPY',
+    'NT$': 'TWD',
+    '₩': 'KRW',
+    '₴': 'UAH',
+    '₦': 'NGN',
+    '₵': 'GHS',
+    '₭': 'LAK',
+    '₲': 'PYG',
+    '₡': 'CRC',
+    '₺': 'TRY',
+    '₸': 'KZT',
+    '₮': 'MNT'
 };
 
 let symbolToCodeMap: Map<string, string> | null = null;

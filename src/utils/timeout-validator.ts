@@ -17,7 +17,6 @@ function validateTimeout(value: unknown, fallback = 5000, _context = 'timeout'):
         ? fallback
         : 5000;
 
-    // Check if value is a valid positive number
     if (typeof value === 'number' && !isNaN(value) && value > 0 && isFinite(value)) {
         return value;
     }
@@ -36,7 +35,6 @@ function validateExponentialBackoff(baseDelay: unknown, multiplier: unknown = 2,
     const calculation = safeBase * Math.pow(safeMultiplier, safeAttempt);
     const cappedDelay = Math.min(calculation, safeMaxDelay);
     
-    // Final safety check
     return validateTimeout(cappedDelay, safeBase, 'calculated delay');
 }
 
