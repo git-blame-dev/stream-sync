@@ -217,6 +217,56 @@ describe("Twitch EventSub event router", () => {
     expect(giftEvent.payload.cheermoteInfo).toBeNull();
   });
 
+  test("emits mixed bits gifts from EventSub cheermote fragments", () => {
+    const emitted: EmittedEvent[] = [];
+    const router = createTwitchEventSubEventRouter({
+      config: { dataLoggingEnabled: false },
+      logger: noOpLogger,
+      emit: emitInto(emitted),
+      logRawPlatformData: async () => {},
+      logError: () => {},
+    });
+
+    router.handleBitsUseEvent({
+      user_name: "MixedCheerer",
+      user_id: "mixed-cheerer-id",
+      user_login: "mixedcheerer",
+      bits: 200,
+      id: "mixed-bits-msg-1",
+      message: {
+        text: "Cheer100 Uni100 keep going",
+        fragments: [
+          {
+            type: "cheermote",
+            text: "Cheer100",
+            cheermote: { prefix: "Cheer", bits: 100, tier: 100 },
+          },
+          {
+            type: "cheermote",
+            text: "Uni100",
+            cheermote: { prefix: "Uni", bits: 100, tier: 100 },
+          },
+          { type: "text", text: " keep going" },
+        ],
+      },
+      timestamp: "2024-01-01T00:00:00Z",
+    });
+
+    const giftEvent = requireEmitted(emitted, "gift");
+    expect(giftEvent.payload).toMatchObject({
+      giftType: "mixed bits",
+      amount: 200,
+      bits: 200,
+      currency: "bits",
+      message: "keep going",
+      id: "mixed-bits-msg-1",
+    });
+    expect(giftEvent.payload.cheermoteInfo).toMatchObject({
+      isMixed: true,
+      totalBits: 200,
+    });
+  });
+
   test("does not emit stream status events without required timestamps", () => {
     const emitted: EmittedEvent[] = [];
     const router = createTwitchEventSubEventRouter({

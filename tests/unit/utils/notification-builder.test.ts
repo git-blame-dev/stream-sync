@@ -355,6 +355,45 @@ describe("NotificationBuilder", () => {
     expect(notification.parts).toBeUndefined();
   });
 
+  test("formats mixed bits without exposing cheermote type names", () => {
+    const notification = expectNotification(NotificationBuilder.build({
+      platform: "twitch",
+      type: "platform:gift",
+      username: "test-twitch-user",
+      userId: "test-twitch-user-id",
+      giftType: "mixed bits",
+      giftCount: 1,
+      amount: 200,
+      currency: "bits",
+      cheermoteInfo: {
+        isMixed: true,
+        types: [
+          { prefix: "Cheer", count: 1, totalBits: 100 },
+          { prefix: "Uni", count: 1, totalBits: 100 },
+        ],
+      },
+    }));
+
+    expect(notification.displayMessage).toBe(
+      "test-twitch-user sent 200 mixed bits",
+    );
+    expect(notification.ttsMessage).toBe(
+      "test-twitch-user sent 200 mixed bits",
+    );
+    expect(notification.logMessage).toBe(
+      "test-twitch-user sent 200 mixed bits",
+    );
+
+    for (const message of [
+      notification.displayMessage,
+      notification.ttsMessage,
+      notification.logMessage,
+    ]) {
+      expect(message).not.toContain("Cheer");
+      expect(message).not.toContain("Uni");
+    }
+  });
+
   test("builds YouTube Super Sticker inline parts with image first", () => {
     const notification = expectNotification(NotificationBuilder.build({
       platform: "youtube",
