@@ -27,6 +27,8 @@ type PayloadValidationOptions = {
     notificationType: string;
     platform: string;
     requireTimestamp?: boolean;
+    requireUserId?: boolean;
+    requireEventId?: boolean;
 };
 
 type PayloadValidationResult =
@@ -123,6 +125,8 @@ class NotificationInputValidator {
         const notificationType = options.notificationType;
         const platform = platformValidation.canonicalPlatform;
         const requireTimestamp = options.requireTimestamp !== false;
+        const requireUserId = options.requireUserId !== false;
+        const requireEventId = options.requireEventId !== false;
         const sanitized: NotificationRecord = { ...(data as NotificationRecord) };
 
         delete sanitized.type;
@@ -163,7 +167,7 @@ class NotificationInputValidator {
                 if (!normalizedUsername) {
                     return { success: false, error: 'Notification payload requires username', errorType: 'missing-username' };
                 }
-                if (!normalizedUserId && !allowsMissingUserId) {
+                if (requireUserId && !normalizedUserId && !allowsMissingUserId) {
                     return { success: false, error: 'Notification payload requires userId', errorType: 'missing-user-id' };
                 }
             } else if ((normalizedUsername && !normalizedUserId) || (!normalizedUsername && normalizedUserId)) {
@@ -178,7 +182,7 @@ class NotificationInputValidator {
                 const amount = sanitized.amount;
                 const currency = typeof sanitized.currency === 'string' ? sanitized.currency.trim() : '';
                 const id = sanitized.id;
-                if (!id || !giftType || giftCount === undefined || amount === undefined || !currency) {
+                if ((requireEventId && !id) || !giftType || giftCount === undefined || amount === undefined || !currency) {
                     return {
                         success: false,
                         error: 'Notification payload requires id, giftType, giftCount, amount, and currency',

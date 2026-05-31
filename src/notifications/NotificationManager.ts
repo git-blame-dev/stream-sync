@@ -292,16 +292,21 @@ class NotificationManager extends EventEmitter {
             const payloadValidation = this.inputValidator.validateNotificationPayload(data as NotificationRecord, {
                 notificationType,
                 platform: platformName,
-                requireTimestamp: false
+                requireTimestamp: false,
+                requireUserId: false,
+                requireEventId: false
             });
             if (!payloadValidation.success) {
+                const errorMessage = payloadValidation.errorType === 'missing-username'
+                    ? 'Missing username'
+                    : payloadValidation.error;
                 this._handleNotificationError(
-                    `[NotificationManager] Invalid ${notificationType} payload: ${payloadValidation.error}`,
+                    `[NotificationManager] Invalid ${notificationType} payload: ${errorMessage}`,
                     null,
                     { notificationType, platform: platformName, data: normalizedData },
                     { eventType: payloadValidation.errorType }
                 );
-                return { success: false, error: payloadValidation.error, notificationType, platform: platformName };
+                return { success: false, error: errorMessage, notificationType, platform: platformName };
             }
             const { metadata: _metadata, ...validatedPayload } = payloadValidation.payload;
             Object.assign(normalizedData, validatedPayload);
