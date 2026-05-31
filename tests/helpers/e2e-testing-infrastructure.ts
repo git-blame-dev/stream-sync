@@ -1,5 +1,4 @@
 
-import crypto from 'node:crypto';
 import { EventEmitter } from 'node:events';
 
 import type { AppLogger } from '../../src/core/logger/types';
@@ -321,6 +320,7 @@ class CrossPlatformIntegrationTester {
     notificationCapture: CapturedNotification[];
     systemStateHistory: Array<{ type: string; state: SystemState; timestamp: number }>;
     errorHandler: PlatformErrorHandler;
+    queuePositionCounter: number;
 
     constructor(platforms: PlatformMap = {}, options: { logger?: TestLogger } = {}) {
         this.platforms = platforms;
@@ -328,6 +328,7 @@ class CrossPlatformIntegrationTester {
         this.notificationCapture = [];
         this.systemStateHistory = [];
         this.errorHandler = createPlatformErrorHandler(this.logger, 'e2e-testing');
+        this.queuePositionCounter = 0;
     }
 
     async processSimultaneousEvents<TEvents extends Record<string, unknown>>(
@@ -486,7 +487,7 @@ class CrossPlatformIntegrationTester {
             processingResult.result = {
                 status: 'queued',
                 method: 'fallback',
-                queuePosition: crypto.randomInt(1, 11),
+                queuePosition: this._getNextQueuePosition(),
                 timestamp: currentTime
             };
         } else {
@@ -524,6 +525,12 @@ class CrossPlatformIntegrationTester {
         };
     }
 
+    _getNextQueuePosition(): number {
+        const queuePosition = (this.queuePositionCounter % 10) + 1;
+        this.queuePositionCounter += 1;
+        return queuePosition;
+    }
+
     captureNotification(notification: TestRecord): void {
         this.notificationCapture.push({
             ...notification,
@@ -554,17 +561,19 @@ class UserJourneyValidator {
     logger: TestLogger;
     contentQualityGates: TestRecord;
     journeyHistory: JourneyResult[];
+    journeyCounter: number;
 
     constructor(options: UserJourneyValidatorOptions = {}) {
         this.logger = options.logger || logger;
         this.contentQualityGates = options.contentQualityGates || {};
         this.journeyHistory = [];
+        this.journeyCounter = 0;
     }
 
     async validateCompleteUserJourney(journeyInput: JourneyInput, expectedOutput: ExpectedJourneyOutput): Promise<JourneyResult> {
         this.logger.debug('[E2E] Validating complete user journey', 'e2e-testing');
         
-        const journeyId = `journey_${crypto.randomUUID()}`;
+        const journeyId = this._getNextJourneyId();
         const startTime = testClock.now();
         
         const journey: JourneyResult = {
@@ -811,6 +820,11 @@ class UserJourneyValidator {
         }
 
         errorHandler.logOperationalError(message, 'e2e-testing', eventData);
+    }
+
+    _getNextJourneyId(): string {
+        this.journeyCounter += 1;
+        return `journey_${this.journeyCounter.toString().padStart(6, '0')}`;
     }
 
     getJourneyHistory(): JourneyResult[] {

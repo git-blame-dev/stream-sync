@@ -39,6 +39,9 @@ const nextSequence = () => {
     sequence += 1;
     return sequence;
 };
+const resetTikTokTestDataSequence = () => {
+    sequence = 0;
+};
 
 const timestampFromSeed = (seed: number) => BASE_TIMESTAMP_MS + (seed * 1000);
 const userIdFromSeed = (seed: number) => BASE_USER_ID + seed;
@@ -340,6 +343,7 @@ const isObject = (item: unknown): item is TestRecord => {
 };
 
 export {
+    resetTikTokTestDataSequence,
     createTikTokGiftEvent,
     createTikTokFollowEvent,
     createTikTokChatEvent,

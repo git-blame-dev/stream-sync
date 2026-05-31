@@ -6,6 +6,9 @@ const nextSequence = () => {
     sequence += 1;
     return sequence;
 };
+const resetTwitchTestDataSequence = () => {
+    sequence = 0;
+};
 
 const nextTimestampMs = () => BASE_TIMESTAMP_MS + (nextSequence() * 1000);
 const nextTimestampIso = () => new Date(nextTimestampMs()).toISOString();
@@ -258,6 +261,7 @@ const isObject = (item: unknown): item is UnknownRecord => {
 };
 
 export {
+    resetTwitchTestDataSequence,
     createTwitchChatEvent,
     createTwitchEventSubEvent,
     createTwitchEventSubChatMessageEvent,

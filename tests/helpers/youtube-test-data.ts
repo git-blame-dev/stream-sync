@@ -5,6 +5,9 @@ const nextSequence = () => {
     sequence += 1;
     return sequence;
 };
+const resetYouTubeTestDataSequence = () => {
+    sequence = 0;
+};
 const nextTimestampMs = () => BASE_TIMESTAMP_MS + (nextSequence() * 1000);
 const nextMessageId = () => `LCC.TEST.${nextSequence().toString(36).padStart(8, '0')}`;
 const generateYouTubeChannelId = () => `UC_TEST_CHANNEL_${nextSequence().toString(36).padStart(8, '0')}`;
@@ -268,6 +271,7 @@ const isObject = (item: unknown): item is DeepMergeObject => {
 };
 
 export {
+    resetYouTubeTestDataSequence,
     createYouTubeChatEvent,
     createYouTubeSuperChatEvent,
     createYouTubeRunsMessageChatItem,

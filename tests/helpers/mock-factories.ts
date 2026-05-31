@@ -146,6 +146,9 @@ const nextSequence = () => {
     sequence += 1;
     return sequence;
 };
+const resetMockFactorySequence = () => {
+    sequence = 0;
+};
 const nextIdSuffix = () => nextSequence().toString(36).padStart(8, '0');
 const buildTestId = (prefix: string) => `${prefix}-${nextIdSuffix()}`;
 const createTimestamp = () => {
@@ -3333,6 +3336,7 @@ const createWebSocketMessageSimulator = (options: { platform?: SupportedPlatform
 };
 
 export {
+    resetMockFactorySequence,
     createMockNotificationDispatcher,
     createMockNotificationBuilder,
     createMockNotificationManager,

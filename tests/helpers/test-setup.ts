@@ -226,6 +226,9 @@ const nextSequence = () => {
     sequence += 1;
     return sequence;
 };
+const resetTestSetupSequence = () => {
+    sequence = 0;
+};
 const nextTimestampMs = () => BASE_TIMESTAMP_MS + (nextSequence() * 1000);
 const nextTestId = (prefix: string) => `${prefix}-${nextSequence().toString(36).padStart(6, '0')}`;
 
@@ -721,6 +724,7 @@ const validateActiveMocks = () => {
 };
 
 export {
+    resetTestSetupSequence,
     initializeTestLogging,
     
     setupAutomatedCleanup,

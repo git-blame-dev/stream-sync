@@ -36,6 +36,9 @@ const nextSequence = () => {
     sequence += 1;
     return sequence;
 };
+const resetPlatformTestDataSequence = () => {
+    sequence = 0;
+};
 
 const timestampFromSeed = (seed: number, offsetMs = 0) => BASE_TIMESTAMP_MS + (seed * 1000) + offsetMs;
 const pickByIndex = <T>(values: readonly T[], index: number): T => values[index % values.length] as T;
@@ -1560,6 +1563,7 @@ function loadPlatformFixture(platform: string, eventType: string) {
 }
 
 export {
+    resetPlatformTestDataSequence,
     INTERNATIONAL_USERNAMES,
     INTERNATIONAL_CONTENT_TEST_DATA,
     EDGE_CASE_AMOUNTS,

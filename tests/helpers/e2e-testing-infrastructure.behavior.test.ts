@@ -230,6 +230,19 @@ describe('e2e-testing-infrastructure behavior', () => {
             { fallbackBehavior: 'queue', maxStaleTime: 10000 }
         );
 
+        const secondQueued = await tester.processEventWithConnectionStates(
+            { platform: 'youtube', id: 'queued-2' },
+            { youtube: { connected: false, stable: true, lastMessage: now } },
+            { fallbackBehavior: 'queue', maxStaleTime: 10000 }
+        );
+
+        const freshTester = new CrossPlatformIntegrationTester({}, { logger: createNoOpLogger() });
+        const freshQueued = await freshTester.processEventWithConnectionStates(
+            { platform: 'youtube', id: 'fresh-queued' },
+            { youtube: { connected: false, stable: true, lastMessage: now } },
+            { fallbackBehavior: 'queue', maxStaleTime: 10000 }
+        );
+
         const dropped = await tester.processEventWithConnectionStates(
             { platform: 'tiktok', id: 'dropped' },
             { tiktok: { connected: true, stable: false, lastMessage: now } },
@@ -244,6 +257,9 @@ describe('e2e-testing-infrastructure behavior', () => {
 
         expect(processed.processed).toBe(true);
         expect(queued.queued).toBe(true);
+        expect(queued.result?.queuePosition).toBe(1);
+        expect(secondQueued.result?.queuePosition).toBe(2);
+        expect(freshQueued.result?.queuePosition).toBe(1);
         expect(dropped.dropped).toBe(true);
         if (!dropped.result) {
             throw new Error('Expected dropped result details');
@@ -265,9 +281,18 @@ describe('e2e-testing-infrastructure behavior', () => {
         );
 
         expect(successJourney.success).toBe(true);
+        expect(successJourney.id).toBe('journey_000001');
         expect(successJourney.stages).toHaveLength(5);
         expect(incompleteJourney.success).toBe(false);
+        expect(incompleteJourney.id).toBe('journey_000002');
         expect(validator.getJourneyHistory()).toHaveLength(2);
+
+        const freshValidator = new UserJourneyValidator({ logger: createNoOpLogger() });
+        const freshJourney = await freshValidator.validateCompleteUserJourney(
+            { platform: 'twitch', rawWebSocketData: { subscription_type: 'chat', event: { text: 'hi' } } },
+            { obsDisplay: true, ttsOutput: true, logOutput: true }
+        );
+        expect(freshJourney.id).toBe('journey_000001');
 
         validator.clearHistory();
         expect(validator.getJourneyHistory()).toHaveLength(0);

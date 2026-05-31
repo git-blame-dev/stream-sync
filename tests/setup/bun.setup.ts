@@ -11,6 +11,9 @@ const testClock = nodeRequire('../helpers/test-clock') as {
     reset: () => number;
     useRealTime: () => void;
 };
+const { resetDeterministicTestState } = nodeRequire('../helpers/deterministic-test-state') as {
+    resetDeterministicTestState: () => void;
+};
 const { initializeTestLogging } = nodeRequire('../helpers/test-setup') as {
     initializeTestLogging: () => void;
 };
@@ -245,6 +248,7 @@ beforeAll(() => {
 
 beforeEach(() => {
     testClock.reset();
+    resetDeterministicTestState();
     clearAllMocks();
 });
 
