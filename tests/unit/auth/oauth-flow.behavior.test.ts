@@ -22,6 +22,7 @@ import {
   buildAuthUrl,
   startCallbackServer,
   renderCallbackHtml,
+  resolveBrowserOpenCommand,
   exchangeCodeForTokens,
   openBrowser,
   runOAuthFlow,
@@ -33,7 +34,7 @@ describe("oauth-flow behavior", () => {
   const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 
   const fetchLocal = (options: https.RequestOptions) =>
-    new Promise<{ statusCode: number | undefined; body: string }>((resolve, reject) => {
+    new Promise<{ statusCode: number | undefined; headers: IncomingMessage["headers"]; body: string }>((resolve, reject) => {
       const req = https.request({ ...options, agent: httpsAgent }, (res) => {
         let data = "";
         res.on("data", (chunk) => {
@@ -41,7 +42,7 @@ describe("oauth-flow behavior", () => {
         });
         res.on("end", () => {
           clearTimeout(timeoutId);
-          resolve({ statusCode: res.statusCode, body: data });
+          resolve({ statusCode: res.statusCode, headers: res.headers, body: data });
         });
       });
       const timeoutId = safeSetTimeout(() => {
@@ -143,6 +144,7 @@ it("exposes oauth-flow helper functions", () => {
     expect(typeof buildAuthUrl).toBe("function");
     expect(typeof startCallbackServer).toBe("function");
     expect(typeof renderCallbackHtml).toBe("function");
+    expect(typeof resolveBrowserOpenCommand).toBe("function");
     expect(typeof exchangeCodeForTokens).toBe("function");
     expect(typeof openBrowser).toBe("function");
     expect(typeof runOAuthFlow).toBe("function");
@@ -163,7 +165,18 @@ it("exposes oauth-flow helper functions", () => {
     expect(params.get("redirect_uri")).toBe("https://example.test/callback");
     expect(params.get("response_type")).toBe("code");
     expect(params.get("scope")).toBe("test-scope-one test-scope-two");
-    expect(params.get("state")?.startsWith("cb_")).toBe(true);
+    expect(params.get("state")).toMatch(/^[A-Za-z0-9_-]{43}$/);
+  });
+
+  it("buildAuthUrl can use a supplied state", () => {
+    const authUrl = buildAuthUrl(
+      "test-client-id",
+      "https://example.test/callback",
+      ["test-scope"],
+      "expected-state",
+    );
+
+    expect(new URL(authUrl).searchParams.get("state")).toBe("expected-state");
   });
 
   it("renderCallbackHtml returns headings for all outcomes", () => {
@@ -178,12 +191,24 @@ it("exposes oauth-flow helper functions", () => {
     expect(serverHtml).toContain("Server Error");
   });
 
+  it("renderCallbackHtml escapes callback details", () => {
+    const html = renderCallbackHtml("failed", {
+      error: '<script>alert("error")</script>',
+      description: "bad & worse 'quoted'",
+    });
+
+    expect(html).toContain("&lt;script&gt;alert(&quot;error&quot;)&lt;/script&gt;");
+    expect(html).toContain("bad &amp; worse &#39;quoted&#39;");
+    expect(html).not.toContain("<script>");
+  });
+
   it("startCallbackServer resolves authorization code", async () => {
     const { server, waitForCode, port, redirectUri } =
       await startCallbackServer({
         port: 0,
         autoFindPort: false,
         logger: noOpLogger,
+        expectedState: "expected-state",
       });
     const boundPort = getServerPort(server);
 
@@ -191,7 +216,7 @@ it("exposes oauth-flow helper functions", () => {
       await fetchLocal({
         hostname: "localhost",
         port: boundPort,
-        path: "/?code=test-auth-code",
+        path: "/?code=test-auth-code&state=expected-state",
         method: "GET",
       });
 
@@ -200,6 +225,31 @@ it("exposes oauth-flow helper functions", () => {
       expect(code).toBe("test-auth-code");
       expect(port).toBe(boundPort);
       expect(redirectUri).toBe(`https://localhost:${boundPort}`);
+    } finally {
+      server.close();
+    }
+  });
+
+  it("startCallbackServer sends no-store headers on callback responses", async () => {
+    const { server, waitForCode } = await startCallbackServer({
+      port: 0,
+      autoFindPort: false,
+      logger: noOpLogger,
+      expectedState: "expected-state",
+    });
+    const boundPort = getServerPort(server);
+
+    try {
+      const response = await fetchLocal({
+        hostname: "localhost",
+        port: boundPort,
+        path: "/?code=test-auth-code&state=expected-state",
+        method: "GET",
+      });
+      await waitForCode;
+
+      expect(response.headers["cache-control"]).toBe("no-store, max-age=0");
+      expect(response.headers.pragma).toBe("no-cache");
     } finally {
       server.close();
     }
@@ -218,6 +268,73 @@ it("exposes oauth-flow helper functions", () => {
       hostname: "localhost",
       port: boundPort,
       path: "/?error=access_denied&error_description=test-error",
+      method: "GET",
+    });
+
+    const error = await errorPromise;
+    expect(error.message).toContain("OAuth error: access_denied");
+    server.close();
+  });
+
+  it("startCallbackServer rejects missing state before accepting a code", async () => {
+    const { server, waitForCode } = await startCallbackServer({
+      port: 0,
+      autoFindPort: false,
+      logger: noOpLogger,
+      expectedState: "expected-state",
+    });
+    const boundPort = getServerPort(server);
+
+    const errorPromise = waitForCode.catch((error) => error);
+    await fetchLocal({
+      hostname: "localhost",
+      port: boundPort,
+      path: "/?code=test-auth-code",
+      method: "GET",
+    });
+
+    const error = await errorPromise;
+    expect(error.message).toContain("state did not match");
+    server.close();
+  });
+
+  it("startCallbackServer rejects mismatched state before provider errors", async () => {
+    const { server, waitForCode } = await startCallbackServer({
+      port: 0,
+      autoFindPort: false,
+      logger: noOpLogger,
+      expectedState: "expected-state",
+    });
+    const boundPort = getServerPort(server);
+
+    const errorPromise = waitForCode.catch((error) => error);
+    await fetchLocal({
+      hostname: "localhost",
+      port: boundPort,
+      path: "/?error=access_denied&state=wrong-state",
+      method: "GET",
+    });
+
+    const error = await errorPromise;
+    expect(error.message).toContain("state did not match");
+    expect(error.message).not.toContain("OAuth error");
+    server.close();
+  });
+
+  it("startCallbackServer accepts provider errors with matching state", async () => {
+    const { server, waitForCode } = await startCallbackServer({
+      port: 0,
+      autoFindPort: false,
+      logger: noOpLogger,
+      expectedState: "expected-state",
+    });
+    const boundPort = getServerPort(server);
+
+    const errorPromise = waitForCode.catch((error) => error);
+    await fetchLocal({
+      hostname: "localhost",
+      port: boundPort,
+      path: "/?error=access_denied&error_description=test-error&state=expected-state",
       method: "GET",
     });
 
@@ -379,6 +496,19 @@ it("exposes oauth-flow helper functions", () => {
     ).not.toThrow();
   });
 
+  it("resolveBrowserOpenCommand selects platform commands without side effects", () => {
+    expect(resolveBrowserOpenCommand("https://example.test", { platform: "win32" }).command).toContain("start");
+    expect(resolveBrowserOpenCommand("https://example.test", { platform: "darwin" }).command).toBe('open "https://example.test"');
+    expect(resolveBrowserOpenCommand("https://example.test", { platform: "linux", env: {}, procVersion: "Linux microsoft" })).toMatchObject({
+      command: "/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe -Command \"Start-Process 'https://example.test'\"",
+      isWsl: true,
+    });
+    expect(resolveBrowserOpenCommand("https://example.test", { platform: "linux", env: {}, procVersion: "Linux" })).toMatchObject({
+      command: 'xdg-open "https://example.test"',
+      isWsl: false,
+    });
+  });
+
   it("runOAuthFlow persists tokens and returns camelCase values", async () => {
     const startCallbackServer = createMockFn().mockResolvedValue(
       createCallbackServerStub(),
@@ -414,6 +544,18 @@ it("exposes oauth-flow helper functions", () => {
     );
     expect(stored.twitch.accessToken).toBe("test-access-token");
     expect(stored.twitch.refreshToken).toBe("test-refresh-token");
+    const startOptions = startCallbackServer.mock.calls[0]?.[0] as { expectedState?: unknown } | undefined;
+    const expectedState = startOptions?.expectedState;
+    expect(expectedState).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    if (typeof expectedState !== "string") {
+      throw new Error("Expected OAuth state to be generated");
+    }
+    const openedAuthUrl = openBrowser.mock.calls[0]?.[0];
+    if (typeof openedAuthUrl !== "string") {
+      throw new Error("Expected OAuth browser URL to be opened");
+    }
+    const openedUrl = new URL(openedAuthUrl);
+    expect(openedUrl.searchParams.get("state")).toBe(expectedState);
   });
 
   it("runOAuthFlow returns null when exchange returns null", async () => {

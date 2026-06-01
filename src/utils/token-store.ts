@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { createPlatformErrorHandler } from './platform-error-handler';
 import { getSystemTimestampISO } from './timestamp';
 
@@ -29,6 +30,7 @@ type FsApi = {
     readFile: (targetPath: string, encoding: 'utf8') => Promise<string> | string;
     writeFile: (targetPath: string, content: string, options: { encoding: 'utf8'; mode: number }) => Promise<void> | void;
     rename: (oldPath: string, newPath: string) => Promise<void> | void;
+    unlink?: (targetPath: string) => Promise<void> | void;
 };
 
 type FsImpl = {
@@ -72,6 +74,100 @@ const getFsApi = (fsImpl: unknown): FsApi => {
 
 const getErrorHandler = (logger: LoggerLike) => createPlatformErrorHandler(logger, LOG_CONTEXT);
 
+const isPlainObject = (value: unknown): value is Record<string, unknown> => {
+    if (!value || typeof value !== 'object') {
+        return false;
+    }
+
+    const prototype = Object.getPrototypeOf(value);
+    return prototype === Object.prototype || prototype === null;
+};
+
+const isUnsafeObjectKey = (key: string) => key === '__proto__' || key === 'constructor' || key === 'prototype';
+
+const createInvalidTokenStoreError = (tokenStorePath: string, detail: string) =>
+    new Error(`Invalid token store file: ${tokenStorePath} (${detail})`);
+
+const requireOptionalStringField = (
+    payload: Record<string, unknown>,
+    fieldName: keyof TwitchTokenPayload,
+    tokenStorePath: string
+) => {
+    const value = payload[fieldName];
+    if (value === undefined || value === null) {
+        return null;
+    }
+
+    if (typeof value !== 'string' || value.trim().length === 0) {
+        if (fieldName === 'accessToken') {
+            throw createInvalidTokenStoreError(tokenStorePath, 'Token store must provide string accessToken');
+        }
+        throw createInvalidTokenStoreError(tokenStorePath, `malformed twitch.${fieldName}`);
+    }
+
+    return value;
+};
+
+const validateTwitchTokenPayload = (value: unknown, tokenStorePath: string): TwitchTokenPayload | null => {
+    if (value === undefined || value === null) {
+        return null;
+    }
+
+    if (!isPlainObject(value)) {
+        throw createInvalidTokenStoreError(tokenStorePath, 'malformed twitch payload');
+    }
+
+    const twitch: TwitchTokenPayload = {};
+    const accessToken = requireOptionalStringField(value, 'accessToken', tokenStorePath);
+    const refreshToken = requireOptionalStringField(value, 'refreshToken', tokenStorePath);
+    const updatedAt = requireOptionalStringField(value, 'updatedAt', tokenStorePath);
+    const expiresAt = value.expiresAt;
+
+    if (expiresAt !== undefined && expiresAt !== null) {
+        if (typeof expiresAt !== 'number' || !Number.isFinite(expiresAt)) {
+            throw createInvalidTokenStoreError(tokenStorePath, 'malformed twitch.expiresAt');
+        }
+        twitch.expiresAt = expiresAt;
+    }
+
+    if (accessToken !== null) {
+        twitch.accessToken = accessToken;
+    }
+    if (refreshToken !== null) {
+        twitch.refreshToken = refreshToken;
+    }
+    if (updatedAt !== null) {
+        twitch.updatedAt = updatedAt;
+    }
+
+    return twitch;
+};
+
+const sanitizeTokenStoreData = (value: unknown, tokenStorePath: string): TokenStoreData => {
+    if (!isPlainObject(value)) {
+        throw createInvalidTokenStoreError(tokenStorePath, 'expected top-level object');
+    }
+
+    const sanitized: TokenStoreData = {};
+    for (const [key, fieldValue] of Object.entries(value)) {
+        if (isUnsafeObjectKey(key)) {
+            continue;
+        }
+
+        if (key === 'twitch') {
+            const twitch = validateTwitchTokenPayload(fieldValue, tokenStorePath);
+            if (twitch) {
+                sanitized.twitch = twitch;
+            }
+            continue;
+        }
+
+        sanitized[key] = fieldValue;
+    }
+
+    return sanitized;
+};
+
 const logTokenStoreError = (
     logger: LoggerLike,
     message: string,
@@ -84,6 +180,24 @@ const logTokenStoreError = (
         return;
     }
     handler.logOperationalError(message, LOG_CONTEXT, payload);
+};
+
+const cleanupTempTokenStoreFile = async (fsApi: FsApi, tempPath: string, logger: LoggerLike) => {
+    if (typeof fsApi.unlink !== 'function') {
+        return;
+    }
+
+    try {
+        await fsApi.unlink(tempPath);
+    } catch (cleanupError) {
+        if (getErrorCode(cleanupError) === 'ENOENT') {
+            return;
+        }
+
+        logTokenStoreError(logger, 'Failed to clean token store temp file', cleanupError, {
+            tempPath
+        });
+    }
 };
 
 const isPosixRuntime = () => process.platform !== 'win32';
@@ -141,22 +255,57 @@ const readTokenStoreFile = async (fsImpl: unknown, tokenStorePath: string): Prom
 
 const writeTokenStoreFile = async (fsImpl: unknown, tokenStorePath: string, payload: TokenStoreData, logger: LoggerLike) => {
     const fsApi = getFsApi(fsImpl);
-    const tempPath = `${tokenStorePath}.tmp`;
+    const tempPath = `${tokenStorePath}.${process.pid}.${Date.now()}-${randomUUID()}.tmp`;
     const content = JSON.stringify(payload, null, 2);
     const writeOptions: { encoding: 'utf8'; mode: number } = { encoding: 'utf8', mode: 0o600 };
 
-    await fsApi.writeFile(tempPath, content, writeOptions);
-    await trySetPermissions(fsApi, tempPath, 0o600, logger, 'token store temp file');
-    await fsApi.rename(tempPath, tokenStorePath);
-    await trySetPermissions(fsApi, tokenStorePath, 0o600, logger, 'token store file');
+    try {
+        await fsApi.writeFile(tempPath, content, writeOptions);
+        await trySetPermissions(fsApi, tempPath, 0o600, logger, 'token store temp file');
+        await fsApi.rename(tempPath, tokenStorePath);
+        await trySetPermissions(fsApi, tokenStorePath, 0o600, logger, 'token store file');
+    } catch (error) {
+        await cleanupTempTokenStoreFile(fsApi, tempPath, logger);
+        throw error;
+    }
 };
 
 const parseTokenStore = (raw: string, tokenStorePath: string): TokenStoreData => {
     try {
-        return JSON.parse(raw);
-    } catch {
+        return sanitizeTokenStoreData(JSON.parse(raw), tokenStorePath);
+    } catch (error) {
+        if (getErrorMessage(error)?.startsWith('Invalid token store file:')) {
+            throw error;
+        }
         throw new Error(`Invalid token store file: ${tokenStorePath}`);
     }
+};
+
+const requireSaveStringField = (fieldName: string, value: unknown) => {
+    if (typeof value !== 'string' || value.trim().length === 0) {
+        throw new Error(`${fieldName} is required to persist tokens`);
+    }
+    return value;
+};
+
+const optionalSaveStringField = (fieldName: string, value: unknown) => {
+    if (value === undefined || value === null) {
+        return null;
+    }
+    if (typeof value !== 'string' || value.trim().length === 0) {
+        throw new Error(`${fieldName} must be a non-empty string when provided`);
+    }
+    return value;
+};
+
+const optionalSaveExpiresAt = (value: unknown) => {
+    if (value === undefined || value === null) {
+        return null;
+    }
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+        throw new Error('expiresAt must be a finite number when provided');
+    }
+    return value;
 };
 
 async function loadTokens({ tokenStorePath, fs: fsImpl, logger }: { tokenStorePath: string; fs?: unknown; logger: unknown }) {
@@ -195,9 +344,9 @@ async function saveTokens(
     requireTokenStorePath(tokenStorePath);
     const safeLogger = requireLogger(logger);
 
-    if (!accessToken) {
-        throw new Error('accessToken is required to persist tokens');
-    }
+    const safeAccessToken = requireSaveStringField('accessToken', accessToken);
+    const safeRefreshToken = optionalSaveStringField('refreshToken', refreshToken);
+    const safeExpiresAt = optionalSaveExpiresAt(expiresAt);
 
     try {
         await ensureDirectoryExists(fsImpl, tokenStorePath, safeLogger);
@@ -226,11 +375,11 @@ async function saveTokens(
     }
 
     const previousRefreshToken = existing.twitch && existing.twitch.refreshToken;
-    const nextRefreshToken = refreshToken || previousRefreshToken;
+    const nextRefreshToken = safeRefreshToken || previousRefreshToken;
     const nextPayload: TokenStoreData = {
         ...existing,
         twitch: {
-            accessToken,
+            accessToken: safeAccessToken,
             updatedAt: getSystemTimestampISO()
         }
     };
@@ -238,8 +387,8 @@ async function saveTokens(
     if (nextRefreshToken && nextPayload.twitch) {
         nextPayload.twitch.refreshToken = nextRefreshToken;
     }
-    if (typeof expiresAt === 'number' && Number.isFinite(expiresAt) && nextPayload.twitch) {
-        nextPayload.twitch.expiresAt = expiresAt;
+    if (safeExpiresAt !== null && nextPayload.twitch) {
+        nextPayload.twitch.expiresAt = safeExpiresAt;
     }
 
     try {

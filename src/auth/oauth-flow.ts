@@ -1,4 +1,5 @@
 import { exec } from 'node:child_process';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import * as https from 'node:https';
 import * as querystring from 'node:querystring';
@@ -46,9 +47,36 @@ type RunOAuthFlowDependencies = {
         port?: number;
         autoFindPort?: boolean;
         logger: OAuthLogger;
+        expectedState?: string;
     }) => Promise<CallbackServerBootstrapResult>;
     exchangeCodeForTokens?: typeof exchangeCodeForTokens;
     openBrowser?: typeof openBrowser;
+};
+
+type BrowserCommandDependencies = {
+    platform?: NodeJS.Platform | undefined;
+    env?: NodeJS.ProcessEnv | undefined;
+    procVersion?: string | null | undefined;
+    readProcVersion?: (() => string | null) | undefined;
+};
+
+type BrowserOpenOptions = {
+    skipBrowserOpen?: boolean;
+    execCommand?: typeof exec;
+} & BrowserCommandDependencies;
+
+const HTML_ESCAPE_MAP: Record<string, string> = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+};
+
+const CALLBACK_HTML_HEADERS = {
+    'Content-Type': 'text/html; charset=utf-8',
+    'Cache-Control': 'no-store, max-age=0',
+    Pragma: 'no-cache'
 };
 
 const createOAuthFlowErrorHandler = (logger: OAuthLogger) => createPlatformErrorHandler(logger, 'oauth-flow');
@@ -83,6 +111,34 @@ const safeCloseServer = (server: { close?: () => void } | null | undefined) => {
     server.close();
 };
 
+function escapeHtml(value: string) {
+    return value.replace(/[&<>"']/g, (char) => HTML_ESCAPE_MAP[char] || char);
+}
+
+function generateOAuthState() {
+    return crypto.randomBytes(32).toString('base64url');
+}
+
+function safeReadProcVersion() {
+    try {
+        if (!fs.existsSync('/proc/version')) {
+            return null;
+        }
+        return fs.readFileSync('/proc/version', 'utf8');
+    } catch {
+        return null;
+    }
+}
+
+function isWslEnvironment({ env = process.env, procVersion, readProcVersion = safeReadProcVersion }: BrowserCommandDependencies = {}) {
+    if (env.WSL_DISTRO_NAME || env.WSLENV) {
+        return true;
+    }
+
+    const version = procVersion ?? readProcVersion();
+    return typeof version === 'string' && version.toLowerCase().includes('microsoft');
+}
+
 function summarizeInvalidTokenResponse(response: Record<string, unknown>): Record<string, unknown> {
     return {
         hasAccessToken: typeof response.access_token === 'string' && response.access_token.length > 0,
@@ -114,19 +170,22 @@ function generateSelfSignedCert() {
     return cachedCerts;
 }
 
-function buildAuthUrl(clientId: string, redirectUri: string, scopes: readonly string[] = TWITCH_OAUTH_SCOPES) {
+function buildAuthUrl(clientId: string, redirectUri: string, scopes: readonly string[] = TWITCH_OAUTH_SCOPES, state = generateOAuthState()) {
     const params = new URLSearchParams({
         client_id: clientId,
         redirect_uri: redirectUri,
         response_type: 'code',
         scope: scopes.join(' '),
-        state: `cb_${Date.now().toString(36)}`
+        state
     });
 
     return `${TWITCH.OAUTH.AUTHORIZE}?${params.toString()}`;
 }
 
 function renderCallbackHtml(status: string, details: { error?: string; description?: string } = {}) {
+    const error = escapeHtml(details.error || 'Unknown error');
+    const description = escapeHtml(details.description || 'Unknown error occurred');
+
     if (status === 'success') {
         return `
             <html>
@@ -145,8 +204,8 @@ function renderCallbackHtml(status: string, details: { error?: string; descripti
             <html>
                 <body style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
                     <h1 style="color: #FF0000;">Authentication Failed</h1>
-                    <p>Error: ${details.error || 'Unknown error'}</p>
-                    <p>${details.description || 'Unknown error occurred'}</p>
+                    <p>Error: ${error}</p>
+                    <p>${description}</p>
                     <p>Please try again or check your configuration.</p>
                 </body>
             </html>
@@ -176,7 +235,7 @@ function renderCallbackHtml(status: string, details: { error?: string; descripti
     `;
 }
 
-async function startCallbackServer({ port = OAUTH_SERVER_CONFIG.DEFAULT_PORT, autoFindPort = false, logger }: { port?: number; autoFindPort?: boolean; logger?: unknown }): Promise<CallbackServerBootstrapResult> {
+async function startCallbackServer({ port = OAUTH_SERVER_CONFIG.DEFAULT_PORT, autoFindPort = false, logger, expectedState }: { port?: number; autoFindPort?: boolean; logger?: unknown; expectedState?: string }): Promise<CallbackServerBootstrapResult> {
     const resolvedLogger: OAuthLogger = resolveLogger(logger, 'oauth-flow') as OAuthLogger;
     const handler = createOAuthFlowErrorHandler(resolvedLogger);
 
@@ -199,9 +258,18 @@ async function startCallbackServer({ port = OAUTH_SERVER_CONFIG.DEFAULT_PORT, au
         const requestUrl = new URL(req.url || '/', `https://localhost:${port || OAUTH_SERVER_CONFIG.DEFAULT_PORT}`);
 
         if (requestUrl.pathname === '/' || requestUrl.pathname === '/callback') {
+            if (expectedState && requestUrl.searchParams.get('state') !== expectedState) {
+                res.writeHead(400, CALLBACK_HTML_HEADERS);
+                res.end(renderCallbackHtml('invalid'));
+                clearTimeout(timeoutId);
+                server.close();
+                rejectCode(new Error('Invalid callback - state did not match expected OAuth state'));
+                return;
+            }
+
             const code = requestUrl.searchParams.get('code');
             if (code) {
-                res.writeHead(200, { 'Content-Type': 'text/html' });
+                res.writeHead(200, CALLBACK_HTML_HEADERS);
                 res.end(renderCallbackHtml('success'));
                 clearTimeout(timeoutId);
                 server.close();
@@ -212,7 +280,7 @@ async function startCallbackServer({ port = OAUTH_SERVER_CONFIG.DEFAULT_PORT, au
             const oauthError = requestUrl.searchParams.get('error');
             if (oauthError) {
                 const oauthErrorDescription = requestUrl.searchParams.get('error_description') || undefined;
-                res.writeHead(400, { 'Content-Type': 'text/html' });
+                res.writeHead(400, CALLBACK_HTML_HEADERS);
                 res.end(renderCallbackHtml('failed', {
                     error: oauthError,
                     ...(oauthErrorDescription === undefined ? {} : { description: oauthErrorDescription })
@@ -223,7 +291,7 @@ async function startCallbackServer({ port = OAUTH_SERVER_CONFIG.DEFAULT_PORT, au
                 return;
             }
 
-            res.writeHead(400, { 'Content-Type': 'text/html' });
+            res.writeHead(400, CALLBACK_HTML_HEADERS);
             res.end(renderCallbackHtml('invalid'));
             clearTimeout(timeoutId);
             server.close();
@@ -417,7 +485,28 @@ function displayOAuthInstructions(authUrl: string, logger: unknown, { scopes = T
     logConsole(resolvedLogger, '='.repeat(80));
 }
 
-function openBrowser(authUrl: string, logger: unknown, { skipBrowserOpen = false }: { skipBrowserOpen?: boolean } = {}) {
+function resolveBrowserOpenCommand(authUrl: string, { platform = process.platform, env = process.env, procVersion, readProcVersion }: BrowserCommandDependencies = {}) {
+    const isWsl = platform !== 'win32' && isWslEnvironment({ env, procVersion, readProcVersion });
+
+    if (platform === 'win32') {
+        return { command: `start "" "${authUrl}"`, isWsl: false };
+    }
+
+    if (platform === 'darwin') {
+        return { command: `open "${authUrl}"`, isWsl: false };
+    }
+
+    if (isWsl) {
+        return {
+            command: `/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe -Command "Start-Process '${authUrl}'"`,
+            isWsl: true
+        };
+    }
+
+    return { command: `xdg-open "${authUrl}"`, isWsl: false };
+}
+
+function openBrowser(authUrl: string, logger: unknown, { skipBrowserOpen = false, execCommand = exec, platform, env, procVersion, readProcVersion }: BrowserOpenOptions = {}) {
     const resolvedLogger: OAuthLogger = resolveLogger(logger, 'oauth-flow') as OAuthLogger;
     if (skipBrowserOpen) {
         resolvedLogger.info('Skipping automatic browser opening', 'oauth-flow');
@@ -425,26 +514,9 @@ function openBrowser(authUrl: string, logger: unknown, { skipBrowserOpen = false
         return;
     }
 
-    const platform = process.platform;
-    const isWsl = !!(
-        process.env.WSL_DISTRO_NAME
-        || process.env.WSLENV
-        || (fs.existsSync('/proc/version')
-            && fs.readFileSync('/proc/version', 'utf8').toLowerCase().includes('microsoft'))
-    );
+    const { command, isWsl } = resolveBrowserOpenCommand(authUrl, { platform, env, procVersion, readProcVersion });
 
-    let command;
-    if (platform === 'win32') {
-        command = `start "" "${authUrl}"`;
-    } else if (platform === 'darwin') {
-        command = `open "${authUrl}"`;
-    } else if (isWsl) {
-        command = `/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe -Command "Start-Process '${authUrl}'"`;
-    } else {
-        command = `xdg-open "${authUrl}"`;
-    }
-
-    exec(command, (error) => {
+    execCommand(command, (error) => {
         if (error) {
             if (!isWsl || getErrorCode(error) !== 1) {
                 resolvedLogger.warn('Failed to open browser automatically', 'oauth-flow', error);
@@ -478,14 +550,16 @@ async function runOAuthFlow(
 
     let serverRef: https.Server | null = null;
     try {
+        const state = generateOAuthState();
         const { server, waitForCode, redirectUri } = await startCallbackServerImpl({
             port,
             autoFindPort,
-            logger: resolvedLogger
+            logger: resolvedLogger,
+            expectedState: state
         });
         serverRef = server;
 
-        const authUrl = buildAuthUrl(clientId, redirectUri, scopes);
+        const authUrl = buildAuthUrl(clientId, redirectUri, scopes, state);
         displayOAuthInstructions(authUrl, resolvedLogger, { scopes, tokenStorePath });
         openBrowserImpl(authUrl, resolvedLogger, { skipBrowserOpen });
 
@@ -533,6 +607,7 @@ export {
     buildAuthUrl,
     startCallbackServer,
     renderCallbackHtml,
+    resolveBrowserOpenCommand,
     exchangeCodeForTokens,
     openBrowser,
     runOAuthFlow
