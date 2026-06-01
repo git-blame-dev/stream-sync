@@ -17,6 +17,8 @@ type StrategyResult = {
     rawData: Record<string, unknown> | null;
 };
 
+const extractionStrategies = ['view_text', 'video_details', 'basic_info'] as const;
+
 type ParseWatchingTextResult = {
     count: number;
     success: boolean;
@@ -71,55 +73,42 @@ class YouTubeViewerExtractor {
             return result;
         }
         
-        if (strategies.includes('view_text')) {
-            const viewTextResult = this._extractFromViewText(videoInfo, debug);
-            result.metadata.strategiesAttempted.push('view_text');
-            
-            if (debug && result.metadata.rawData && viewTextResult.rawData) {
-                result.metadata.rawData.view_text = viewTextResult.rawData;
+        for (const strategy of strategies) {
+            if (!this._isExtractionStrategy(strategy)) {
+                continue;
             }
-            
-            if (viewTextResult.success) {
-                result.count = viewTextResult.count;
-                result.strategy = 'view_text';
-                result.success = true;
-                return result;
+
+            const strategyResult = this._extractWithStrategy(strategy, videoInfo, debug);
+            result.metadata.strategiesAttempted.push(strategy);
+
+            if (debug && result.metadata.rawData && strategyResult.rawData) {
+                result.metadata.rawData[strategy] = strategyResult.rawData;
             }
-        }
-        
-        if (strategies.includes('video_details') && !result.success) {
-            const videoDetailsResult = this._extractFromVideoDetails(videoInfo, debug);
-            result.metadata.strategiesAttempted.push('video_details');
-            
-            if (debug && result.metadata.rawData && videoDetailsResult.rawData) {
-                result.metadata.rawData.video_details = videoDetailsResult.rawData;
-            }
-            
-            if (videoDetailsResult.success) {
-                result.count = videoDetailsResult.count;
-                result.strategy = 'video_details';
-                result.success = true;
-                return result;
-            }
-        }
-        
-        if (strategies.includes('basic_info') && !result.success) {
-            const basicInfoResult = this._extractFromBasicInfo(videoInfo, debug);
-            result.metadata.strategiesAttempted.push('basic_info');
-            
-            if (debug && result.metadata.rawData && basicInfoResult.rawData) {
-                result.metadata.rawData.basic_info = basicInfoResult.rawData;
-            }
-            
-            if (basicInfoResult.success) {
-                result.count = basicInfoResult.count;
-                result.strategy = 'basic_info';
+
+            if (strategyResult.success) {
+                result.count = strategyResult.count;
+                result.strategy = strategy;
                 result.success = true;
                 return result;
             }
         }
         
         return result;
+    }
+
+    static _isExtractionStrategy(strategy: string): strategy is ExtractionStrategy {
+        return extractionStrategies.includes(strategy as ExtractionStrategy);
+    }
+
+    static _extractWithStrategy(strategy: ExtractionStrategy, videoInfo: VideoInfo, debug: boolean): StrategyResult {
+        switch (strategy) {
+            case 'view_text':
+                return this._extractFromViewText(videoInfo, debug);
+            case 'video_details':
+                return this._extractFromVideoDetails(videoInfo, debug);
+            case 'basic_info':
+                return this._extractFromBasicInfo(videoInfo, debug);
+        }
     }
     
     static _extractFromViewText(videoInfo: VideoInfo, debug = false): StrategyResult {
@@ -188,8 +177,8 @@ class YouTubeViewerExtractor {
                 }
                 
                 if (videoInfo.video_details.viewer_count !== undefined) {
-                    const count = parseInt(String(videoInfo.video_details.viewer_count), 10);
-                    if (!isNaN(count) && count >= 0) {
+                    const count = this._parseStrictViewerCount(videoInfo.video_details.viewer_count);
+                    if (count !== null) {
                         result.count = count;
                         result.success = true;
                         
@@ -201,8 +190,8 @@ class YouTubeViewerExtractor {
                 }
                 
                 if (videoInfo.video_details.concurrent_viewers !== undefined) {
-                    const count = parseInt(String(videoInfo.video_details.concurrent_viewers), 10);
-                    if (!isNaN(count) && count >= 0) {
+                    const count = this._parseStrictViewerCount(videoInfo.video_details.concurrent_viewers);
+                    if (count !== null) {
                         result.count = count;
                         result.success = true;
                         
@@ -242,8 +231,8 @@ class YouTubeViewerExtractor {
                 }
                 
                 if (!!videoInfo.basic_info.is_live && videoInfo.basic_info.view_count !== undefined && videoInfo.basic_info.view_count !== null) {
-                    const count = parseInt(String(videoInfo.basic_info.view_count), 10);
-                    if (!isNaN(count) && count >= 0) {
+                    const count = this._parseStrictViewerCount(videoInfo.basic_info.view_count);
+                    if (count !== null) {
                         result.count = count;
                         result.success = true;
                         
@@ -264,6 +253,19 @@ class YouTubeViewerExtractor {
         
         return result;
     }
+
+    static _parseStrictViewerCount(value: unknown): number | null {
+        if (typeof value === 'number') {
+            return Number.isFinite(value) && Number.isInteger(value) && value >= 0 ? value : null;
+        }
+
+        if (typeof value !== 'string' || !/^\d+$/.test(value)) {
+            return null;
+        }
+
+        const count = Number(value);
+        return Number.isFinite(count) && Number.isInteger(count) ? count : null;
+    }
     
     static _parseWatchingText(viewText: string): ParseWatchingTextResult {
         const result: ParseWatchingTextResult = {
@@ -274,21 +276,21 @@ class YouTubeViewerExtractor {
         };
         
         const patterns = [
-            { name: 'watching_now', regex: /([0-9,]+)\s*watching\s*now/i },
-            { name: 'watching', regex: /([0-9,]+)\s*watching/i },
+            { name: 'watching_now', regex: /^\s*((?:\d+|\d{1,3}(?:,\d{3})+))\s+watching\s+now\s*$/i },
+            { name: 'watching', regex: /^\s*((?:\d+|\d{1,3}(?:,\d{3})+))\s+watching\s*$/i },
             
-            { name: 'currently_watching', regex: /([0-9,]+)\s*currently\s*watching/i },
-            { name: 'viewers_watching', regex: /([0-9,]+)\s*viewers?\s*watching/i },
-            { name: 'people_watching', regex: /([0-9,]+)\s*people\s*watching/i }
+            { name: 'currently_watching', regex: /^\s*((?:\d+|\d{1,3}(?:,\d{3})+))\s+currently\s+watching\s*$/i },
+            { name: 'viewers_watching', regex: /^\s*((?:\d+|\d{1,3}(?:,\d{3})+))\s+viewers?\s+watching\s*$/i },
+            { name: 'people_watching', regex: /^\s*((?:\d+|\d{1,3}(?:,\d{3})+))\s+people\s+watching\s*$/i }
         ];
         
         for (const pattern of patterns) {
             const match = viewText.match(pattern.regex);
             if (match && match[1]) {
                 const countString = match[1].replace(/,/g, '');
-                const count = parseInt(countString, 10);
+                const count = this._parseStrictViewerCount(countString);
                 
-                if (!isNaN(count) && count >= 0) {
+                if (count !== null) {
                     result.count = count;
                     result.success = true;
                     result.pattern = pattern.name;
@@ -303,7 +305,8 @@ class YouTubeViewerExtractor {
     
     static isValidViewerCount(count: unknown): boolean {
         return typeof count === 'number' && 
-               !isNaN(count) && 
+               Number.isFinite(count) &&
+               Number.isInteger(count) &&
                count >= 0 && 
                count <= 10000000;
     }

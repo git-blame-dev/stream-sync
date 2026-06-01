@@ -507,6 +507,10 @@ const touchCacheEntry = async (entryDirectory: string): Promise<void> => {
         }
     };
 
+const removeCacheEntry = async (entryDirectory: string): Promise<void> => {
+        await fsp.rm(entryDirectory, { recursive: true, force: true });
+    };
+
 const readJson = async (filePath: string): Promise<unknown> => {
         const raw = await fsp.readFile(filePath, 'utf8');
         return JSON.parse(raw);
@@ -535,21 +539,38 @@ const resolveCandidate = async (candidate: RankedAnimationCandidate): Promise<Re
             await fsp.mkdir(entryDirectory, { recursive: true });
 
             if (fs.existsSync(metadataPath)) {
-                const metadata = await readJson(metadataPath);
-                const metadataRecord = asRecord(metadata);
-                const metadataMediaFilePath = typeof metadataRecord?.mediaFilePath === 'string'
-                    ? metadataRecord.mediaFilePath
-                    : '';
-                if (metadataRecord && metadataMediaFilePath && fs.existsSync(metadataMediaFilePath)) {
+                let resolvedFromCache: ResolvedGiftAnimation | null = null;
+                try {
+                    const metadata = await readJson(metadataPath);
+                    const metadataRecord = asRecord(metadata);
+                    const metadataMediaFilePath = typeof metadataRecord?.mediaFilePath === 'string'
+                        ? metadataRecord.mediaFilePath
+                        : '';
+                    if (!metadataRecord || !metadataMediaFilePath || !fs.existsSync(metadataMediaFilePath)) {
+                        throw new Error('Cached gift animation metadata is invalid');
+                    }
+
                     const extractDirectory = path.join(entryDirectory, 'asset');
                     const safeMediaPath = await ensureMediaPathWithinExtractDirectory(extractDirectory, metadataMediaFilePath);
-                    const resolvedFromCache = {
+                    const cacheCandidate = {
                         ...metadataRecord,
                         mediaFilePath: safeMediaPath
                     };
-                    if (!isResolvedGiftAnimation(resolvedFromCache)) {
+                    if (!isResolvedGiftAnimation(cacheCandidate)) {
                         throw new Error('Cached gift animation metadata is invalid');
                     }
+                    resolvedFromCache = cacheCandidate;
+                } catch (cacheError) {
+                    logDebug('Evicting corrupt TikTok gift animation cache entry', {
+                        candidateUrl: candidate.url,
+                        cacheKey,
+                        error: normalizeString(asRecord(cacheError)?.message) || String(cacheError)
+                    });
+                    await removeCacheEntry(entryDirectory);
+                    await fsp.mkdir(entryDirectory, { recursive: true });
+                }
+
+                if (resolvedFromCache) {
                     await touchCacheEntry(entryDirectory);
                     await pruneCache();
                     logDebug('Resolved TikTok gift animation from cache', {

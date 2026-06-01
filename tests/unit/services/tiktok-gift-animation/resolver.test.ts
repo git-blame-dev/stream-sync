@@ -1,4 +1,5 @@
 import { describe, it, expect } from "bun:test";
+import * as crypto from "crypto";
 import * as fs from "fs";
 import * as fsp from "fs/promises";
 import * as os from "os";
@@ -8,6 +9,7 @@ import {
   createTikTokGiftAnimationResolver,
   getGiftAnimationDependencyStatus,
 } from "../../../../src/services/tiktok-gift-animation/resolver";
+import { safeDelay } from "../../../../src/utils/timeout-validator";
 
 type AnimationUrl = { label: string; url: string };
 type ExecuteFile = (command: string, args: string[]) => Promise<{ stdout?: string; stderr?: string }>;
@@ -50,6 +52,60 @@ function createNotificationData(urls: AnimationUrl[]) {
       },
     },
   };
+}
+
+async function writeAnimationAsset(
+  extractDirectory: string,
+  profileOverrides: Record<string, unknown> = {},
+) {
+  await fsp.writeFile(
+    path.join(extractDirectory, "config.json"),
+    JSON.stringify({
+      portrait: {
+        path: "output.mp4",
+        videoW: 960,
+        videoH: 864,
+        w: 480,
+        h: 854,
+        rgbFrame: [0, 0, 480, 854],
+        aFrame: [480, 0, 480, 854],
+        f: 75,
+        ...profileOverrides,
+      },
+    }),
+  );
+  await fsp.writeFile(
+    path.join(extractDirectory, "output.mp4"),
+    Buffer.from("ok"),
+  );
+}
+
+async function writeRootAnimationAsset(
+  extractDirectory: string,
+  profileOverrides: Record<string, unknown> = {},
+) {
+  await fsp.writeFile(
+    path.join(extractDirectory, "config.json"),
+    JSON.stringify({
+      path: "output.mp4",
+      videoW: 960,
+      videoH: 864,
+      w: 480,
+      h: 854,
+      rgbFrame: [0, 0, 480, 854],
+      aFrame: [480, 0, 480, 854],
+      f: 75,
+      ...profileOverrides,
+    }),
+  );
+  await fsp.writeFile(
+    path.join(extractDirectory, "output.mp4"),
+    Buffer.from("ok"),
+  );
+}
+
+function cacheKeyForUrl(url: string): string {
+  return crypto.createHash("sha1").update(url).digest("hex");
 }
 
 function createResolverTestHarness(options: HarnessOptions = {}) {
@@ -242,6 +298,284 @@ describe("TikTok gift animation resolver behavior", () => {
       );
 
       expect(resolved).toBeNull();
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("reuses cached metadata on repeat resolution without refetching", async () => {
+    let unzipCalls = 0;
+    const harness = createResolverTestHarness({
+      onUnzip: async ({ extractDirectory }) => {
+        unzipCalls += 1;
+        await writeAnimationAsset(extractDirectory);
+      },
+    });
+
+    try {
+      const notificationData = createNotificationData([
+        { label: "h264", url: "https://example.invalid/cache-hit.zip" },
+      ]);
+
+      const firstResolved = await harness.resolver.resolveFromNotificationData(
+        notificationData,
+      );
+      const secondResolved = await harness.resolver.resolveFromNotificationData(
+        notificationData,
+      );
+
+      expect(firstResolved).toBeDefined();
+      expect(secondResolved).toBeDefined();
+      expect(firstResolved?.mediaFilePath).toBe(secondResolved?.mediaFilePath);
+      expect(harness.fetchCalls).toEqual(["https://example.invalid/cache-hit.zip"]);
+      expect(unzipCalls).toBe(1);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("coalesces concurrent resolutions for the same candidate", async () => {
+    let unzipCalls = 0;
+    const harness = createResolverTestHarness({
+      onUnzip: async ({ extractDirectory }) => {
+        unzipCalls += 1;
+        await safeDelay(10, 10, "gift-animation-in-flight-test");
+        await writeAnimationAsset(extractDirectory);
+      },
+    });
+
+    try {
+      const notificationData = createNotificationData([
+        { label: "h264", url: "https://example.invalid/in-flight.zip" },
+      ]);
+
+      const [firstResolved, secondResolved] = await Promise.all([
+        harness.resolver.resolveFromNotificationData(notificationData),
+        harness.resolver.resolveFromNotificationData(notificationData),
+      ]);
+
+      expect(firstResolved).toBeDefined();
+      expect(secondResolved).toBeDefined();
+      expect(firstResolved?.mediaFilePath).toBe(secondResolved?.mediaFilePath);
+      expect(harness.fetchCalls).toEqual([
+        "https://example.invalid/in-flight.zip",
+      ]);
+      expect(unzipCalls).toBe(1);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("filters encrypted candidates and deduplicates repeated URLs", async () => {
+    let unzipCalls = 0;
+    const harness = createResolverTestHarness({
+      onUnzip: async ({ marker, extractDirectory }) => {
+        unzipCalls += 1;
+        expect(marker).toBe("https://example.invalid/clear.zip");
+        await writeAnimationAsset(extractDirectory);
+      },
+    });
+
+    try {
+      const resolved = await harness.resolver.resolveFromNotificationData(
+        createNotificationData([
+          {
+            label: "h264_encrypt",
+            url: "https://example.invalid/encrypted.zip",
+          },
+          { label: "h264", url: "https://example.invalid/clear.zip" },
+          { label: "480p", url: "https://example.invalid/clear.zip" },
+        ]),
+      );
+
+      expect(resolved).toBeDefined();
+      expect(harness.fetchCalls).toEqual(["https://example.invalid/clear.zip"]);
+      expect(unzipCalls).toBe(1);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("uses root config fields as the default animation profile", async () => {
+    const harness = createResolverTestHarness({
+      onUnzip: async ({ extractDirectory }) => {
+        await writeRootAnimationAsset(extractDirectory);
+      },
+    });
+
+    try {
+      const resolved = await harness.resolver.resolveFromNotificationData(
+        createNotificationData([
+          { label: "h264", url: "https://example.invalid/default-profile.zip" },
+        ]),
+      );
+
+      expect(resolved).toBeDefined();
+      if (!resolved) {
+        throw new Error("Expected resolved gift animation");
+      }
+      expect(resolved.animationConfig.profileName).toBe("default");
+      expect(resolved.durationMs).toBe(2500);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("uses duration seconds when frame count and durationMs are unavailable", async () => {
+    const harness = createResolverTestHarness({
+      onUnzip: async ({ extractDirectory }) => {
+        await writeAnimationAsset(extractDirectory, {
+          f: undefined,
+          durationMs: 0,
+          duration: 1.25,
+        });
+      },
+    });
+
+    try {
+      const resolved = await harness.resolver.resolveFromNotificationData(
+        createNotificationData([
+          { label: "h264", url: "https://example.invalid/duration-fallback.zip" },
+        ]),
+      );
+
+      expect(resolved).toBeDefined();
+      expect(resolved?.durationMs).toBe(1250);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("evicts invalid cached metadata and retries the same candidate once", async () => {
+    const invalidCacheUrl = "https://example.invalid/invalid-cache.zip";
+    let unzipCalls = 0;
+    const harness = createResolverTestHarness({
+      onUnzip: async ({ marker, extractDirectory }) => {
+        unzipCalls += 1;
+        expect(marker).toBe(invalidCacheUrl);
+        await writeAnimationAsset(extractDirectory);
+      },
+    });
+
+    try {
+      const invalidEntryDirectory = path.join(
+        harness.cacheDirectory,
+        cacheKeyForUrl(invalidCacheUrl),
+      );
+      const invalidAssetDirectory = path.join(invalidEntryDirectory, "asset");
+      const invalidMediaPath = path.join(invalidAssetDirectory, "output.mp4");
+      await fsp.mkdir(invalidAssetDirectory, { recursive: true });
+      await fsp.writeFile(invalidMediaPath, Buffer.from("invalid"));
+      await fsp.writeFile(
+        path.join(invalidEntryDirectory, "metadata.json"),
+        JSON.stringify({
+          mediaFilePath: invalidMediaPath,
+          mediaContentType: "video/mp4",
+          durationMs: "2500",
+          animationConfig: {},
+        }),
+      );
+
+      const resolved = await harness.resolver.resolveFromNotificationData(
+        createNotificationData([
+          { label: "h264", url: invalidCacheUrl },
+          { label: "bytevc1", url: "https://example.invalid/cache-fallback.zip" },
+        ]),
+      );
+
+      expect(resolved).toBeDefined();
+      expect(harness.fetchCalls).toEqual([invalidCacheUrl]);
+      expect(unzipCalls).toBe(1);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("does not trust cached media paths that escape the extract directory", async () => {
+    const invalidCacheUrl = "https://example.invalid/escaped-cache.zip";
+    const harness = createResolverTestHarness({
+      onUnzip: async ({ marker, extractDirectory }) => {
+        expect(marker).toBe(invalidCacheUrl);
+        await writeAnimationAsset(extractDirectory);
+      },
+    });
+
+    try {
+      const invalidEntryDirectory = path.join(
+        harness.cacheDirectory,
+        cacheKeyForUrl(invalidCacheUrl),
+      );
+      const invalidAssetDirectory = path.join(invalidEntryDirectory, "asset");
+      const escapedMediaPath = path.resolve(invalidAssetDirectory, "../../escaped.mp4");
+      await fsp.mkdir(invalidAssetDirectory, { recursive: true });
+      await fsp.mkdir(path.dirname(escapedMediaPath), { recursive: true });
+      await fsp.writeFile(escapedMediaPath, Buffer.from("escaped"));
+      await fsp.writeFile(
+        path.join(invalidEntryDirectory, "metadata.json"),
+        JSON.stringify({
+          mediaFilePath: escapedMediaPath,
+          mediaContentType: "video/mp4",
+          durationMs: 2500,
+          animationConfig: {
+            profileName: "portrait",
+            sourceWidth: 960,
+            sourceHeight: 864,
+            renderWidth: 480,
+            renderHeight: 854,
+            rgbFrame: [0, 0, 480, 854],
+            aFrame: [480, 0, 480, 854],
+          },
+        }),
+      );
+
+      const resolved = await harness.resolver.resolveFromNotificationData(
+        createNotificationData([
+          { label: "h264", url: invalidCacheUrl },
+        ]),
+      );
+
+      expect(resolved).toBeDefined();
+      expect(resolved?.mediaFilePath.startsWith(invalidAssetDirectory)).toBe(true);
+      expect(harness.fetchCalls).toEqual([invalidCacheUrl]);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("falls through when a corrupt cache retry remains unusable", async () => {
+    const invalidCacheUrl = "https://example.invalid/invalid-cache-retry.zip";
+    const fallbackUrl = "https://example.invalid/cache-fallback.zip";
+    const harness = createResolverTestHarness({
+      onUnzip: async ({ marker, extractDirectory }) => {
+        if (marker === invalidCacheUrl) {
+          throw new Error("fresh retry failed");
+        }
+
+        expect(marker).toBe(fallbackUrl);
+        await writeAnimationAsset(extractDirectory);
+      },
+    });
+
+    try {
+      const invalidEntryDirectory = path.join(
+        harness.cacheDirectory,
+        cacheKeyForUrl(invalidCacheUrl),
+      );
+      await fsp.mkdir(invalidEntryDirectory, { recursive: true });
+      await fsp.writeFile(
+        path.join(invalidEntryDirectory, "metadata.json"),
+        JSON.stringify({ mediaFilePath: "", durationMs: "bad" }),
+      );
+
+      const resolved = await harness.resolver.resolveFromNotificationData(
+        createNotificationData([
+          { label: "h264", url: invalidCacheUrl },
+          { label: "bytevc1", url: fallbackUrl },
+        ]),
+      );
+
+      expect(resolved).toBeDefined();
+      expect(harness.fetchCalls).toEqual([invalidCacheUrl, fallbackUrl]);
     } finally {
       await harness.cleanup();
     }

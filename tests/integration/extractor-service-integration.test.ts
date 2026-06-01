@@ -227,7 +227,7 @@ describe("Extractor Service Integration", () => {
       expect(result.metadata.strategiesAttempted).toEqual([]);
     });
 
-    test("uses strategy priority order", () => {
+    test("uses caller-provided strategy order", () => {
       const videoInfo = {
         primary_info: {
           view_count: { view_count: { text: "1111 watching now" } },
@@ -243,8 +243,8 @@ describe("Extractor Service Integration", () => {
       );
 
       expect(result.success).toBe(true);
-      expect(result.count).toBe(1111);
-      expect(result.strategy).toBe("view_text");
+      expect(result.count).toBe(2222);
+      expect(result.strategy).toBe("video_details");
 
       const result2 = YouTubeViewerExtractor.extractConcurrentViewers(
         videoInfo,
