@@ -36,6 +36,22 @@ describe("safeOBSOperation error handling", () => {
     ).rejects.toThrow("testOperationFailed");
   });
 
+  it("rethrows non-Error operation failures without hiding the original value", async () => {
+    const obsManager = {
+      isReady: createMockFn().mockResolvedValue(true),
+    };
+
+    await expect(
+      safeOBSOperation(
+        obsManager,
+        () => {
+          throw "stringOperationFailed";
+        },
+        "String failure operation",
+      ),
+    ).rejects.toBe("stringOperationFailed");
+  });
+
   it("returns null when OBS is not ready", async () => {
     const obsManager = {
       isReady: createMockFn().mockResolvedValue(false),
@@ -49,6 +65,32 @@ describe("safeOBSOperation error handling", () => {
     );
 
     expect(result).toBeNull();
+    expect(operation).not.toHaveBeenCalled();
+  });
+
+  it("propagates readiness-check failures without running the operation", async () => {
+    const obsManager = {
+      isReady: createMockFn().mockRejectedValue(new Error("readiness check failed")),
+    };
+
+    const operation = createMockFn<[], Promise<unknown>>(async () => undefined);
+
+    await expect(
+      safeOBSOperation(obsManager, operation, "Readiness failure test"),
+    ).rejects.toThrow("readiness check failed");
+    expect(operation).not.toHaveBeenCalled();
+  });
+
+  it("rethrows non-Error readiness failures without hiding the original value", async () => {
+    const obsManager = {
+      isReady: createMockFn().mockRejectedValue("readinessStringFailure"),
+    };
+
+    const operation = createMockFn<[], Promise<unknown>>(async () => undefined);
+
+    await expect(
+      safeOBSOperation(obsManager, operation, "String readiness failure"),
+    ).rejects.toBe("readinessStringFailure");
     expect(operation).not.toHaveBeenCalled();
   });
 

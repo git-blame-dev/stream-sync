@@ -27,7 +27,15 @@ function handleObsSafetyError(message: string, error: unknown, context: string) 
 }
 
 async function safeOBSOperation(obsManager: { isReady: () => Promise<boolean> }, operation: () => Promise<unknown>, context = 'Unknown Operation') {
-    if (!await obsManager.isReady()) {
+    let isReady = false;
+    try {
+        isReady = await obsManager.isReady();
+    } catch (error) {
+        handleObsSafetyError(`[OBS Safety] ${context} readiness check failed: ${getErrorMessage(error)}`, error, context);
+        throw error;
+    }
+
+    if (!isReady) {
         logger.debug(`[OBS Safety] Skipping ${context} - OBS not ready`, 'obs-safety');
         return null;
     }

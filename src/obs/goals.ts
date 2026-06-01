@@ -119,6 +119,96 @@ function buildGoalsManager(obsManager: ObsManagerLike, dependencies: GoalsDepend
         return obsManager && typeof obsManager.isConnected === 'function' && obsManager.isConnected();
     }
 
+    function isOBSNotConnectedError(error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        return errorMessage.includes('OBS not connected');
+    }
+
+    function getPlatformKey(platform: string) {
+        return platform.toLowerCase();
+    }
+
+    function getPlatformDisplayName(platform: string) {
+        const platformKey = getPlatformKey(platform);
+        if (platformKey === 'tiktok') {
+            return 'TikTok';
+        }
+        if (platformKey === 'youtube') {
+            return 'YouTube';
+        }
+        return `${platform.charAt(0).toUpperCase()}${platform.slice(1)}`;
+    }
+
+    function isGoalEnabled(platform: string) {
+        return !!config.goals[`${getPlatformKey(platform)}GoalEnabled`];
+    }
+
+    function getGoalSourceName(platform: string) {
+        const platformKey = getPlatformKey(platform);
+        switch (platformKey) {
+            case 'tiktok':
+                return String(config.goals.tiktokGoalSource || '');
+            case 'youtube':
+                return String(config.goals.youtubeGoalSource || '');
+            case 'twitch':
+                return String(config.goals.twitchGoalSource || '');
+            default:
+                throw new Error(`Unknown platform: ${platform}`);
+        }
+    }
+
+    function handleInitError(error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        logger.debug(`[Goals] Error initializing goal display system: ${errorMessage}`, 'goals');
+        if (isOBSNotConnectedError(error)) {
+            logger.debug('[Goal Display] Goal display system initialized - waiting for OBS connection', 'goals');
+            return;
+        }
+
+        handleGoalsError('[Goal Display] Error initializing goal display system', error);
+        throw error;
+    }
+
+    function handleAllDisplaysUpdateError(error: unknown) {
+        if (isOBSNotConnectedError(error)) {
+            logger.debug('[Goal Display] Goal display updates skipped - OBS not connected', 'goals');
+            return;
+        }
+
+        handleGoalsError('[Goal Display] Error updating all goal displays', error);
+        throw error;
+    }
+
+    function handleDisplayUpdateError(platform: string, error: unknown) {
+        if (isOBSNotConnectedError(error)) {
+            logger.debug(`[Goal Display] ${platform} goal display update skipped - OBS not connected`, 'goals');
+            return;
+        }
+
+        handleGoalsError(`[Goal Display] Error updating ${platform} goal display`, error, { platform });
+    }
+
+    async function updateDisplayAfterGoalMutation(platform: string, formattedText: string | undefined, eventType: 'donation' | 'paypiggy') {
+        if (!isOBSConnected()) {
+            logger.debug(`[Goal Display] ${platform} ${eventType === 'paypiggy' ? 'paypiggy ' : ''}goal state updated - OBS display will update when OBS connects`, 'goals');
+            return;
+        }
+
+        try {
+            await updateGoalDisplay(platform, formattedText);
+            const eventDescription = eventType === 'paypiggy' ? 'updated with paypiggy' : 'updated';
+            logger.debug(`[Goal Display] ${platform} goal ${eventDescription}: ${formattedText}`, 'goals');
+        } catch (obsError) {
+            if (isOBSNotConnectedError(obsError)) {
+                logger.debug(`[Goal Display] ${platform} ${eventType === 'paypiggy' ? 'paypiggy ' : ''}goal state updated - OBS display will update when OBS connects`, 'goals');
+                return;
+            }
+
+            const eventDescription = eventType === 'paypiggy' ? 'paypiggy goal' : 'goal';
+            handleGoalsError(`[Goal Display] OBS update failed for ${platform} ${eventDescription}, but goal state was updated`, obsError, { platform });
+        }
+    }
+
     async function initializeGoalDisplay() {
         try {
             if (!config.goals.enabled) {
@@ -136,14 +226,7 @@ function buildGoalsManager(obsManager: ObsManagerLike, dependencies: GoalsDepend
 
             logger.debug('[Goals] Goal system initialized', 'goals');
         } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : String(error);
-            logger.debug(`[Goals] Error initializing goal display system: ${errorMessage}`, 'goals');
-            if (errorMessage.includes('OBS not connected')) {
-                logger.debug('[Goal Display] Goal display system initialized - waiting for OBS connection', 'goals');
-            } else {
-                handleGoalsError('[Goal Display] Error initializing goal display system', error);
-                throw error;
-            }
+            handleInitError(error);
         }
     }
 
@@ -175,13 +258,7 @@ function buildGoalsManager(obsManager: ObsManagerLike, dependencies: GoalsDepend
 
             logger.debug('[Goal Display] All goal displays updated successfully', 'goals');
         } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : String(error);
-            if (errorMessage.includes('OBS not connected')) {
-                logger.debug('[Goal Display] Goal display updates skipped - OBS not connected', 'goals');
-            } else {
-                handleGoalsError('[Goal Display] Error updating all goal displays', error);
-                throw error;
-            }
+            handleAllDisplaysUpdateError(error);
         }
     }
 
@@ -198,33 +275,15 @@ function buildGoalsManager(obsManager: ObsManagerLike, dependencies: GoalsDepend
                 finalText = typeof goalState?.formatted === 'string' ? goalState.formatted : undefined;
             }
 
-            const platformKey = platform.toLowerCase();
-            const platformCapitalized = platformKey === 'tiktok'
-                ? 'TikTok'
-                : platformKey === 'youtube'
-                    ? 'YouTube'
-                    : `${platform.charAt(0).toUpperCase()}${platform.slice(1)}`;
-            const enabledKey = `${platformKey}GoalEnabled`;
+            const platformKey = getPlatformKey(platform);
+            const platformCapitalized = getPlatformDisplayName(platform);
 
-            if (!config.goals[enabledKey]) {
+            if (!isGoalEnabled(platform)) {
                 logger.debug(`[Goal Display] ${platformCapitalized} goal disabled, skipping goal display update`, 'goals');
                 return;
             }
 
-            let sourceName = '';
-            switch (platformKey) {
-                case 'tiktok':
-                    sourceName = String(config.goals.tiktokGoalSource || '');
-                    break;
-                case 'youtube':
-                    sourceName = String(config.goals.youtubeGoalSource || '');
-                    break;
-                case 'twitch':
-                    sourceName = String(config.goals.twitchGoalSource || '');
-                    break;
-                default:
-                    throw new Error(`Unknown platform: ${platform}`);
-            }
+            const sourceName = getGoalSourceName(platform);
 
             if (!sourceName) {
                 handleGoalsError('[Goal Display] Missing goal source configuration', null, {
@@ -238,12 +297,7 @@ function buildGoalsManager(obsManager: ObsManagerLike, dependencies: GoalsDepend
             await updateTextSource(sourceName, finalText);
             logger.debug(`[Goal Display] Successfully updated ${platformCapitalized} goal display`, 'goals');
         } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : String(error);
-            if (errorMessage.includes('OBS not connected')) {
-                logger.debug(`[Goal Display] ${platform} goal display update skipped - OBS not connected`, 'goals');
-            } else {
-                handleGoalsError(`[Goal Display] Error updating ${platform} goal display`, error, { platform });
-            }
+            handleDisplayUpdateError(platform, error);
         }
     }
 
@@ -265,8 +319,7 @@ function buildGoalsManager(obsManager: ObsManagerLike, dependencies: GoalsDepend
                 };
             }
 
-            const platformKey = platform.toLowerCase();
-            if (!config.goals[`${platformKey}GoalEnabled`]) {
+            if (!isGoalEnabled(platform)) {
                 logger.debug(`[Goal Display] ${platform} goal disabled, skipping donation processing`, 'goals');
                 return {
                     success: false,
@@ -281,21 +334,7 @@ function buildGoalsManager(obsManager: ObsManagerLike, dependencies: GoalsDepend
                 return updatedState;
             }
 
-            if (isOBSConnected()) {
-                try {
-                    await updateGoalDisplay(platform, updatedState.formatted);
-                    logger.debug(`[Goal Display] ${platform} goal updated: ${updatedState.formatted}`, 'goals');
-                } catch (obsError) {
-                    const obsErrorMessage = obsError instanceof Error ? obsError.message : String(obsError);
-                    if (obsErrorMessage.includes('OBS not connected')) {
-                        logger.debug(`[Goal Display] ${platform} goal state updated - OBS display will update when OBS connects`, 'goals');
-                    } else {
-                        handleGoalsError(`[Goal Display] OBS update failed for ${platform} goal, but goal state was updated`, obsError, { platform });
-                    }
-                }
-            } else {
-                logger.debug(`[Goal Display] ${platform} goal state updated - OBS display will update when OBS connects`, 'goals');
-            }
+            await updateDisplayAfterGoalMutation(platform, updatedState.formatted, 'donation');
 
             return updatedState;
         } catch (error) {
@@ -317,8 +356,7 @@ function buildGoalsManager(obsManager: ObsManagerLike, dependencies: GoalsDepend
                 };
             }
 
-            const platformKey = platform.toLowerCase();
-            if (!config.goals[`${platformKey}GoalEnabled`]) {
+            if (!isGoalEnabled(platform)) {
                 logger.debug(`[Goal Display] ${platform} goal disabled, skipping paypiggy processing`, 'goals');
                 return {
                     success: false,
@@ -333,21 +371,7 @@ function buildGoalsManager(obsManager: ObsManagerLike, dependencies: GoalsDepend
                 return updatedState;
             }
 
-            if (isOBSConnected()) {
-                try {
-                    await updateGoalDisplay(platform, updatedState.formatted);
-                    logger.debug(`[Goal Display] ${platform} goal updated with paypiggy: ${updatedState.formatted}`, 'goals');
-                } catch (obsError) {
-                    const obsErrorMessage = obsError instanceof Error ? obsError.message : String(obsError);
-                    if (obsErrorMessage.includes('OBS not connected')) {
-                        logger.debug(`[Goal Display] ${platform} paypiggy goal state updated - OBS display will update when OBS connects`, 'goals');
-                    } else {
-                        handleGoalsError(`[Goal Display] OBS update failed for ${platform} paypiggy goal, but goal state was updated`, obsError, { platform });
-                    }
-                }
-            } else {
-                logger.debug(`[Goal Display] ${platform} paypiggy goal state updated - OBS display will update when OBS connects`, 'goals');
-            }
+            await updateDisplayAfterGoalMutation(platform, updatedState.formatted, 'paypiggy');
 
             return updatedState;
         } catch (error) {
@@ -365,8 +389,7 @@ function buildGoalsManager(obsManager: ObsManagerLike, dependencies: GoalsDepend
                 return null;
             }
 
-            const platformKey = platform.toLowerCase();
-            if (!config.goals[`${platformKey}GoalEnabled`]) {
+            if (!isGoalEnabled(platform)) {
                 return null;
             }
 
