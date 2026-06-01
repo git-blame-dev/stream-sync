@@ -292,6 +292,9 @@ function createTwitchEventFactory(options: EventFactoryOptions = {}) {
             if (data.enhancedGiftData && typeof data.enhancedGiftData === 'object') {
                 result.enhancedGiftData = data.enhancedGiftData;
             }
+            if (typeof data.eventType === 'string') {
+                result.eventType = data.eventType;
+            }
             if (typeof data.sourceType === 'string') {
                 result.sourceType = data.sourceType;
             }

@@ -190,7 +190,7 @@ describe("Twitch EventSub event router", () => {
     });
   });
 
-  test("emits bits gifts when cheermote data is missing", () => {
+  test("does not emit cheer bits gifts when cheermote fragments are missing", () => {
     const emitted: EmittedEvent[] = [];
     const router = createTwitchEventSubEventRouter({
       config: { dataLoggingEnabled: false },
@@ -205,16 +205,13 @@ describe("Twitch EventSub event router", () => {
       user_id: "777",
       user_login: "cheerer",
       bits: 50,
+      type: "cheer",
       id: "bits-msg-1",
       message: { text: "hello" },
       timestamp: "2024-01-01T00:00:00Z",
     });
 
-    const giftEvent = requireEmitted(emitted, "gift");
-    expect(giftEvent.payload.giftType).toBe("bits");
-    expect(giftEvent.payload.message).toBe("hello");
-    expect(giftEvent.payload.id).toBe("bits-msg-1");
-    expect(giftEvent.payload.cheermoteInfo).toBeNull();
+    expect(emitted.find((evt) => evt.type === "gift")).toBeUndefined();
   });
 
   test("emits mixed bits gifts from EventSub cheermote fragments", () => {
@@ -232,6 +229,7 @@ describe("Twitch EventSub event router", () => {
       user_id: "mixed-cheerer-id",
       user_login: "mixedcheerer",
       bits: 200,
+      type: "cheer",
       id: "mixed-bits-msg-1",
       message: {
         text: "Cheer100 Uni100 keep going",
@@ -265,6 +263,221 @@ describe("Twitch EventSub event router", () => {
       isMixed: true,
       totalBits: 200,
     });
+  });
+
+  test("emits one-bit cheers without falling back to cheermote token text", () => {
+    const emitted: EmittedEvent[] = [];
+    const router = createTwitchEventSubEventRouter({
+      config: { dataLoggingEnabled: false },
+      logger: noOpLogger,
+      emit: emitInto(emitted),
+      logRawPlatformData: async () => {},
+      logError: () => {},
+    });
+
+    router.handleBitsUseEvent({
+      user_name: "OneBitUser",
+      user_id: "one-bit-user-id",
+      user_login: "onebituser",
+      bits: 1,
+      type: "cheer",
+      id: "one-bit-cheer-1",
+      message: {
+        text: "Cheer1",
+        fragments: [
+          {
+            type: "cheermote",
+            text: "Cheer1",
+            cheermote: { prefix: "Cheer", bits: 1 },
+          },
+        ],
+      },
+      timestamp: "2024-01-01T00:00:00Z",
+    });
+
+    const giftEvent = requireEmitted(emitted, "gift");
+    expect(giftEvent.payload).toMatchObject({
+      giftType: "bits",
+      amount: 1,
+      bits: 1,
+      message: "",
+      eventType: "cheer",
+    });
+  });
+
+  test("does not emit bits gifts when the bits amount is not positive", () => {
+    const emitted: EmittedEvent[] = [];
+    const router = createTwitchEventSubEventRouter({
+      config: { dataLoggingEnabled: false },
+      logger: noOpLogger,
+      emit: emitInto(emitted),
+      logRawPlatformData: async () => {},
+      logError: () => {},
+    });
+
+    router.handleBitsUseEvent({
+      user_name: "ZeroBitsUser",
+      user_id: "zero-bits-user-id",
+      user_login: "zerobitsuser",
+      bits: 0,
+      type: "cheer",
+      id: "zero-bit-cheer-1",
+      message: {
+        fragments: [
+          {
+            type: "cheermote",
+            text: "Cheer0",
+            cheermote: { prefix: "Cheer", bits: 0 },
+          },
+        ],
+      },
+      timestamp: "2024-01-01T00:00:00Z",
+    });
+
+    expect(emitted.find((evt) => evt.type === "gift")).toBeUndefined();
+  });
+
+  test("emits built-in Power-ups as Twitch bits gift subtypes", () => {
+    const emitted: EmittedEvent[] = [];
+    const router = createTwitchEventSubEventRouter({
+      config: { dataLoggingEnabled: false },
+      logger: noOpLogger,
+      emit: emitInto(emitted),
+      logRawPlatformData: async () => {},
+      logError: () => {},
+    });
+
+    router.handleBitsUseEvent({
+      user_name: "PowerUser",
+      user_id: "power-user-id",
+      user_login: "poweruser",
+      bits: 100,
+      type: "power_up",
+      id: "power-up-evt-1",
+      power_up: {
+        type: "message_effect",
+        message_effect_id: "effect-1",
+      },
+      message: { text: "glow time" },
+      timestamp: "2024-01-01T00:00:00Z",
+    });
+
+    const giftEvent = requireEmitted(emitted, "gift");
+    expect(giftEvent.payload).toMatchObject({
+      giftType: "Message Effect Power-up",
+      amount: 100,
+      bits: 100,
+      currency: "bits",
+      message: "glow time",
+      eventType: "power_up",
+    });
+    expect(giftEvent.payload.cheermoteInfo).toBeNull();
+    expect(giftEvent.payload.enhancedGiftData).toEqual({
+      bitsUseType: "power_up",
+      powerUp: {
+        type: "message_effect",
+        messageEffectId: "effect-1",
+      },
+    });
+  });
+
+  test("labels gigantify emote Power-ups with the emote name", () => {
+    const emitted: EmittedEvent[] = [];
+    const router = createTwitchEventSubEventRouter({
+      config: { dataLoggingEnabled: false },
+      logger: noOpLogger,
+      emit: emitInto(emitted),
+      logRawPlatformData: async () => {},
+      logError: () => {},
+    });
+
+    router.handleBitsUseEvent({
+      user_name: "PowerUser",
+      user_id: "power-user-id",
+      user_login: "poweruser",
+      bits: 75,
+      type: "power_up",
+      id: "power-up-evt-2",
+      power_up: {
+        type: "gigantify_an_emote",
+        emote: { id: "25", name: "Kappa" },
+      },
+      timestamp: "2024-01-01T00:00:00Z",
+    });
+
+    const giftEvent = requireEmitted(emitted, "gift");
+    expect(giftEvent.payload.giftType).toBe("Gigantify Kappa Power-up");
+    expect(giftEvent.payload.enhancedGiftData).toMatchObject({
+      bitsUseType: "power_up",
+      powerUp: {
+        type: "gigantify_an_emote",
+        emote: { id: "25", name: "Kappa" },
+      },
+    });
+  });
+
+  test("emits custom Power-ups as Twitch bits gift subtypes", () => {
+    const emitted: EmittedEvent[] = [];
+    const router = createTwitchEventSubEventRouter({
+      config: { dataLoggingEnabled: false },
+      logger: noOpLogger,
+      emit: emitInto(emitted),
+      logRawPlatformData: async () => {},
+      logError: () => {},
+    });
+
+    router.handleBitsUseEvent({
+      user_name: "CustomUser",
+      user_id: "custom-user-id",
+      user_login: "customuser",
+      bits: 500,
+      type: "custom_power_up",
+      id: "custom-power-up-evt-1",
+      custom_power_up: {
+        title: "Hydrate",
+        reward_id: "reward-1",
+      },
+      timestamp: "2024-01-01T00:00:00Z",
+    });
+
+    const giftEvent = requireEmitted(emitted, "gift");
+    expect(giftEvent.payload).toMatchObject({
+      giftType: "Custom Power-up: Hydrate",
+      amount: 500,
+      bits: 500,
+      currency: "bits",
+      eventType: "custom_power_up",
+    });
+    expect(giftEvent.payload.enhancedGiftData).toEqual({
+      bitsUseType: "custom_power_up",
+      customPowerUp: {
+        title: "Hydrate",
+        rewardId: "reward-1",
+      },
+    });
+  });
+
+  test("does not emit bits gifts for unknown bits use types", () => {
+    const emitted: EmittedEvent[] = [];
+    const router = createTwitchEventSubEventRouter({
+      config: { dataLoggingEnabled: false },
+      logger: noOpLogger,
+      emit: emitInto(emitted),
+      logRawPlatformData: async () => {},
+      logError: () => {},
+    });
+
+    router.handleBitsUseEvent({
+      user_name: "FutureUser",
+      user_id: "future-user-id",
+      user_login: "futureuser",
+      bits: 50,
+      type: "future_bits_use",
+      id: "future-bits-use-1",
+      timestamp: "2024-01-01T00:00:00Z",
+    });
+
+    expect(emitted.find((evt) => evt.type === "gift")).toBeUndefined();
   });
 
   test("does not emit stream status events without required timestamps", () => {
@@ -467,6 +680,7 @@ describe("Twitch EventSub event router", () => {
       user_id: "777",
       user_login: "cheerer",
       bits: 50,
+      type: "cheer",
       id: "bits-evt-1",
       message: {
         fragments: [
@@ -506,9 +720,19 @@ describe("Twitch EventSub event router", () => {
 
     router.handleBitsUseEvent({
       bits: 25,
+      type: "cheer",
       id: "bits-anon-1",
       is_anonymous: true,
-      message: { text: "wow" },
+      message: {
+        fragments: [
+          {
+            type: "cheermote",
+            text: "Cheer25",
+            cheermote: { prefix: "Cheer", bits: 25 },
+          },
+          { type: "text", text: "wow" },
+        ],
+      },
       timestamp: "2024-01-02T00:00:00Z",
     });
 
@@ -537,6 +761,7 @@ describe("Twitch EventSub event router", () => {
       user_id: "777",
       user_login: "cheerer",
       bits: 50,
+      type: "cheer",
       id: "bits-evt-missing-ts",
       message: {
         fragments: [
@@ -572,6 +797,7 @@ describe("Twitch EventSub event router", () => {
         user_id: "777",
         user_login: "cheerer",
         bits: 50,
+        type: "cheer",
         message: {
           fragments: [
             {
@@ -613,6 +839,7 @@ describe("Twitch EventSub event router", () => {
         user_id: "777",
         user_login: "cheerer",
         bits: 50,
+        type: "cheer",
         id: "bits-evt-from-event",
         message: {
           fragments: [
@@ -651,6 +878,7 @@ describe("Twitch EventSub event router", () => {
         user_id: "777",
         user_login: "cheerer",
         bits: 50,
+        type: "cheer",
         message_id: "payload-message-id-should-not-be-used",
         message: {
           fragments: [

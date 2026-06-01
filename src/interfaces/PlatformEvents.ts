@@ -285,7 +285,7 @@ const EVENT_SCHEMAS = {
     },
     'platform:gift': {
         required: ['type', 'platform', 'id', 'giftType', 'giftCount', 'amount', 'currency', 'timestamp'],
-        optional: ['avatarUrl', 'repeatCount', 'message', 'cheermoteInfo', 'giftImageUrl', 'isError', 'isAnonymous', 'isAggregated', 'aggregatedCount', 'enhancedGiftData', 'sourceType', 'metadata'],
+        optional: ['avatarUrl', 'repeatCount', 'message', 'cheermoteInfo', 'giftImageUrl', 'isError', 'isAnonymous', 'isAggregated', 'aggregatedCount', 'enhancedGiftData', 'sourceType', 'eventType', 'metadata'],
         properties: {
             type: { type: 'string', enum: ['platform:gift'] },
             platform: { type: 'string', enum: VALID_PLATFORMS },

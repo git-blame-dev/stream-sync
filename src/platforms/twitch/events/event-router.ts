@@ -226,6 +226,76 @@ const resolveBitsGiftType = (cheermoteInfo: Record<string, unknown> = {}): strin
         return 'bits';
     };
 
+    const isValidCheerCheermoteInfo = (cheermoteInfo: unknown): cheermoteInfo is Record<string, unknown> => {
+        if (!cheermoteInfo || typeof cheermoteInfo !== 'object') {
+            return false;
+        }
+        const totalBits = Number((cheermoteInfo as Record<string, unknown>).totalBits);
+        return Number.isFinite(totalBits) && totalBits > 0;
+    };
+
+    const normalizePowerUpEmote = (emote: Record<string, unknown> | null) => {
+        if (!emote) {
+            return undefined;
+        }
+        const id = getString(emote, 'id');
+        const name = getString(emote, 'name');
+        if (!id && !name) {
+            return undefined;
+        }
+        return {
+            ...(id ? { id } : {}),
+            ...(name ? { name } : {})
+        };
+    };
+
+    const resolvePowerUpGiftType = (powerUp: Record<string, unknown> | null): string => {
+        const powerUpType = getString(powerUp, 'type');
+        if (powerUpType === 'message_effect') {
+            return 'Message Effect Power-up';
+        }
+        if (powerUpType === 'celebration') {
+            return 'Celebration Power-up';
+        }
+        if (powerUpType === 'gigantify_an_emote') {
+            const emote = normalizePowerUpEmote(getObject(powerUp?.emote));
+            return emote?.name ? `Gigantify ${emote.name} Power-up` : 'Gigantify Emote Power-up';
+        }
+        return 'Power-up';
+    };
+
+    const buildPowerUpEnhancedGiftData = (powerUp: Record<string, unknown> | null) => {
+        const powerUpType = getString(powerUp, 'type');
+        const emote = normalizePowerUpEmote(getObject(powerUp?.emote));
+        const messageEffectId = getString(powerUp, 'message_effect_id');
+        const powerUpData: Record<string, unknown> = {
+            ...(powerUpType ? { type: powerUpType } : {}),
+            ...(emote ? { emote } : {}),
+            ...(messageEffectId ? { messageEffectId } : {})
+        };
+        return {
+            bitsUseType: 'power_up',
+            powerUp: powerUpData
+        };
+    };
+
+    const resolveCustomPowerUpGiftType = (customPowerUp: Record<string, unknown> | null): string => {
+        const title = getString(customPowerUp, 'title');
+        return title ? `Custom Power-up: ${title}` : 'Custom Power-up';
+    };
+
+    const buildCustomPowerUpEnhancedGiftData = (customPowerUp: Record<string, unknown> | null) => {
+        const title = getString(customPowerUp, 'title');
+        const rewardId = getString(customPowerUp, 'reward_id');
+        return {
+            bitsUseType: 'custom_power_up',
+            customPowerUp: {
+                ...(title ? { title } : {}),
+                ...(rewardId ? { rewardId } : {})
+            }
+        };
+    };
+
     const handleBitsUseEvent = (event: TwitchEventPayload | null | undefined, rawEvent: unknown = event) => {
         logRawIfEnabled('bits_use', rawEvent, 'bits-data-log', 'Error logging raw bits use data');
 
@@ -238,9 +308,9 @@ const resolveBitsGiftType = (cheermoteInfo: Record<string, unknown> = {}): strin
         const bits = getNumber(event, 'bits');
         const timestamp = getString(event, 'timestamp');
 
-        if (!eventId || bits === null || (!isAnonymous && !hasIdentity) || hasPartialIdentity || !timestamp) {
+        if (!eventId || bits === null || bits <= 0 || (!isAnonymous && !hasIdentity) || hasPartialIdentity || !timestamp) {
             errorHandler.handleEventProcessingError(
-                new Error('Bits use event requires id, bits, timestamp, and identity unless anonymous'),
+                new Error('Bits use event requires id, positive bits, timestamp, and identity unless anonymous'),
                 'gift',
                 event
             );
@@ -250,8 +320,42 @@ const resolveBitsGiftType = (cheermoteInfo: Record<string, unknown> = {}): strin
         const message = getObject(event?.message);
         const messageData = extractTwitchMessageData(message);
         const fallbackText = typeof message?.text === 'string' ? message.text.trim() : '';
-        const messageText = messageData.textContent || fallbackText;
-        const giftType = resolveBitsGiftType(messageData.cheermoteInfo || {});
+        let messageText = messageData.textContent || fallbackText;
+        const bitsUseType = getString(event, 'type');
+        let giftType: string;
+        let eventType: string | undefined;
+        let enhancedGiftData: Record<string, unknown> | undefined;
+
+        if (bitsUseType === 'cheer') {
+            if (!isValidCheerCheermoteInfo(messageData.cheermoteInfo)) {
+                errorHandler.handleEventProcessingError(
+                    new Error('Bits cheer event requires valid EventSub cheermote fragments'),
+                    'gift',
+                    event
+                );
+                return;
+            }
+            giftType = resolveBitsGiftType(messageData.cheermoteInfo);
+            eventType = 'cheer';
+            messageText = messageData.textContent;
+        } else if (bitsUseType === 'power_up') {
+            const powerUp = getObject(event?.power_up);
+            giftType = resolvePowerUpGiftType(powerUp);
+            eventType = 'power_up';
+            enhancedGiftData = buildPowerUpEnhancedGiftData(powerUp);
+        } else if (bitsUseType === 'custom_power_up') {
+            const customPowerUp = getObject(event?.custom_power_up);
+            giftType = resolveCustomPowerUpGiftType(customPowerUp);
+            eventType = 'custom_power_up';
+            enhancedGiftData = buildCustomPowerUpEnhancedGiftData(customPowerUp);
+        } else {
+            errorHandler.handleEventProcessingError(
+                new Error('Bits use event requires a supported type'),
+                'gift',
+                event
+            );
+            return;
+        }
 
         const identity = hasIdentity ? normalizeUserIdentity(rawUsername, rawUserId) : {};
         safeEmit('gift', {
@@ -267,7 +371,9 @@ const resolveBitsGiftType = (cheermoteInfo: Record<string, unknown> = {}): strin
             id: eventId,
             repeatCount: 1,
             timestamp,
-            isAnonymous
+            isAnonymous,
+            eventType,
+            ...(enhancedGiftData ? { enhancedGiftData } : {})
         });
     };
 

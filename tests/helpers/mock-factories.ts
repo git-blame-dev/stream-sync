@@ -3088,6 +3088,7 @@ const createTwitchWebSocketMessage = (eventType: string, eventData: UnknownRecor
                 broadcaster_user_name: 'teststreamer',
                 broadcaster_user_login: 'teststreamer',
                 bits: bitsAmount,
+                type: eventData.bitsUseType || eventData.type || 'cheer',
                 message: messagePayload
             };
             break;

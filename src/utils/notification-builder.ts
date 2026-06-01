@@ -16,6 +16,7 @@ type NotificationInput = Record<string, unknown> & {
     amount?: number | string;
     giftCount?: number | string;
     giftType?: string;
+    eventType?: string;
     tier?: string;
     membershipLevel?: string;
     months?: number | string;
@@ -486,6 +487,9 @@ class NotificationBuilder {
 
             if (currencyLower === 'bits') {
                 const formattedAmount = this.formatBitsAmount(amountValue);
+                if (input.platform === 'twitch' && (input.eventType === 'power_up' || input.eventType === 'custom_power_up')) {
+                    return `${userName} used ${giftType} with ${formattedAmount} bits${messageText}`;
+                }
                 return `${userName} sent ${formattedAmount} ${giftType}${messageText}`;
             }
 
@@ -582,6 +586,9 @@ class NotificationBuilder {
 
             if (currencyLower === 'bits') {
                 const formattedAmount = this.formatBitsAmountForTts(amountValue);
+                if (input.platform === 'twitch' && (input.eventType === 'power_up' || input.eventType === 'custom_power_up')) {
+                    return `${userName} used ${giftType} with ${formattedAmount} bits${messageText}`;
+                }
                 return `${userName} sent ${formattedAmount} ${giftType}${messageText}`;
             }
 

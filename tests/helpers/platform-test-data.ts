@@ -937,6 +937,7 @@ const SYNTHETIC_FIXTURES = Object.freeze({
             broadcaster_user_name: 'HeroStream',
             is_anonymous: false,
             bits: 100,
+            type: 'cheer',
             message: {
                 text: 'Cheer100 Great stream!',
                 fragments: [

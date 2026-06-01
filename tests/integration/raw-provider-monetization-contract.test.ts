@@ -253,6 +253,54 @@ describe("Raw provider monetization contract smokes", () => {
     );
   });
 
+  test("routes raw Twitch Power-up EventSub payload to final display queue data", async () => {
+    const { enqueue } = createNotificationHarness();
+    const emitted: TwitchRouterEvent[] = [];
+    const router = createTwitchEventSubEventRouter({
+      config: { dataLoggingEnabled: false },
+      logger: noOpLogger,
+      emit: (type, payload) => {
+        if (isRecord(payload)) emitted.push({ type, payload });
+      },
+      logRawPlatformData: async () => {},
+      logError: () => {},
+    });
+
+    router.handleNotificationEvent(
+      "channel.bits.use",
+      {
+        user_id: "power-user-id",
+        user_login: "poweruser",
+        user_name: "PowerUser",
+        broadcaster_user_id: "999000111",
+        broadcaster_user_login: "hero_stream",
+        broadcaster_user_name: "HeroStream",
+        bits: 100,
+        type: "power_up",
+        power_up: {
+          type: "celebration",
+        },
+      },
+      {
+        message_id: "eventsub-power-up-raw-smoke",
+        message_timestamp: "2024-01-01T00:00:00.123456789Z",
+      },
+    );
+    const gift = emitted.find((event) => event.type === "gift");
+    expect(gift).toBeDefined();
+    const queued = await enqueue("platform:gift", "twitch", gift?.payload ?? {});
+
+    expect(queued.type).toBe("platform:gift");
+    expect(queued.platform).toBe("twitch");
+    expect(queued.data.username).toBe("PowerUser");
+    expect(queued.data.amount).toBe(100);
+    expect(queued.data.currency).toBe("bits");
+    expect(queued.data.eventType).toBe("power_up");
+    expect(queued.data.displayMessage).toBe(
+      "PowerUser used Celebration Power-up with 100 bits",
+    );
+  });
+
   test("routes raw Twitch gifted sub EventSub payload to final display queue data", async () => {
     const { enqueue } = createNotificationHarness();
     const emitted: TwitchRouterEvent[] = [];

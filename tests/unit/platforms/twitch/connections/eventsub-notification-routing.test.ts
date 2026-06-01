@@ -286,8 +286,17 @@ describe("TwitchEventSub notification routing", () => {
           user_id: "bitscheerer-1",
           user_login: "bitscheerer",
           bits: 88,
+          type: "cheer",
           message: {
             text: "Cheer88 test message",
+            fragments: [
+              {
+                type: "cheermote",
+                text: "Cheer88",
+                cheermote: { prefix: "Cheer", bits: 88 },
+              },
+              { type: "text", text: " test message" },
+            ],
           },
         },
       },

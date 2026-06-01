@@ -15,6 +15,8 @@ type PlatformEventPayload = Record<string, unknown> & {
   currency?: string;
   giftType?: string;
   message?: string;
+  eventType?: string;
+  enhancedGiftData?: unknown;
 };
 
 type EmittedPlatformEvent = { evt: string; payload: unknown };
@@ -142,5 +144,33 @@ describe("TwitchPlatform monetisation mapping", () => {
     expect(giftEvent.giftCount).toBe(1);
     expect(giftEvent.message).toBe("Great stream!");
     expect(giftEvent.username).toBe("CheerUser");
+  });
+
+  it("preserves Twitch Power-up subtype metadata on gift events", async () => {
+    const enhancedGiftData = {
+      bitsUseType: "power_up",
+      powerUp: {
+        type: "celebration",
+      },
+    };
+    const handler = twitch.eventFactory.createGiftEvent({
+      userId: "p1",
+      username: "PowerUser",
+      giftType: "Celebration Power-up",
+      giftCount: 1,
+      amount: 100,
+      currency: "bits",
+      id: "power-up-evt-1",
+      eventType: "power_up",
+      enhancedGiftData,
+      timestamp: "2024-01-01T00:00:00.000Z",
+    });
+
+    twitch.emit("platform:event", handler);
+
+    const giftEvent = requirePlatformPayload(emitted.find((e) => e.evt === "platform:event")?.payload);
+    expect(giftEvent.type).toBe(PlatformEvents.GIFT);
+    expect(giftEvent.eventType).toBe("power_up");
+    expect(giftEvent.enhancedGiftData).toEqual(enhancedGiftData);
   });
 });
