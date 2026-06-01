@@ -34,7 +34,7 @@ const createPlatform = (configOverrides = {}, depsOverrides = {}) => {
       detectLiveStreams: createMockFn().mockResolvedValue([]),
     },
     notificationDispatcher: { dispatch: createMockFn() },
-    ChatFileLoggingService: class {
+    RawPlatformDataLoggingService: class {
       logRawPlatformData() {}
     },
     ...depsOverrides,

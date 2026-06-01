@@ -77,7 +77,7 @@ describe("TwitchEventSub chat sending", () => {
           close() {}
           removeAllListeners() {}
         },
-        ChatFileLoggingService: class {
+        RawPlatformDataLoggingService: class {
           async logRawPlatformData() {}
         },
       },
@@ -120,7 +120,7 @@ describe("TwitchEventSub chat sending", () => {
           close() {}
           removeAllListeners() {}
         },
-        ChatFileLoggingService: class {
+        RawPlatformDataLoggingService: class {
           async logRawPlatformData() {}
         },
       },
@@ -162,7 +162,7 @@ describe("TwitchEventSub chat sending", () => {
           close() {}
           removeAllListeners() {}
         },
-        ChatFileLoggingService: class {
+        RawPlatformDataLoggingService: class {
           async logRawPlatformData() {}
         },
       },

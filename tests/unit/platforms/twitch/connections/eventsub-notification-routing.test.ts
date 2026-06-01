@@ -56,7 +56,7 @@ const createEventSub = (
     WebSocketCtor: class {
       close() {}
     },
-    ChatFileLoggingService: class {
+    RawPlatformDataLoggingService: class {
       logRawPlatformData() {}
     },
     ...extraDeps,

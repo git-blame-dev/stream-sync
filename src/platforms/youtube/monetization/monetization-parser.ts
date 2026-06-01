@@ -1,6 +1,7 @@
 import { extractMessageText } from '../youtube-message-extractor';
 import { YouTubeiCurrencyParser } from '../youtubei-currency-parser';
 import type { UnknownRecord } from '../../../utils/record-contracts';
+import { resolveYouTubeTimestampISO } from '../../../utils/platform-timestamp';
 
 interface ParserLogger {
 debug?: (message: string, scope?: string, payload?: unknown) => void;
@@ -140,20 +141,11 @@ function createYouTubeMonetizationParser(options: YouTubeMonetizationParserOptio
             throw new Error(`${label} requires timestamp`);
         }
 
-        const numericTimestamp = typeof rawTimestamp === 'number' ? rawTimestamp : Number(rawTimestamp);
-        if (!Number.isFinite(numericTimestamp)) {
+        const parsedTimestamp = resolveYouTubeTimestampISO(chatItem);
+        if (parsedTimestamp === null) {
             throw new Error(`${label} requires valid timestamp`);
         }
-        const adjustedTimestamp = rawUsec !== undefined && rawUsec !== null
-            ? Math.floor(numericTimestamp / 1000)
-            : (numericTimestamp > 10000000000000
-                ? Math.floor(numericTimestamp / 1000)
-                : numericTimestamp);
-        const parsed = new Date(adjustedTimestamp);
-        if (Number.isNaN(parsed.getTime())) {
-            throw new Error(`${label} requires valid timestamp`);
-        }
-        return parsed.toISOString();
+        return parsedTimestamp;
     };
 
     const resolveId = (chatItem: UnknownRecord, label: string): string => {

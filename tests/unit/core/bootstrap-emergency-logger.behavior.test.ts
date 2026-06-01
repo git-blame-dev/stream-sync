@@ -96,14 +96,14 @@ describe("bootstrap emergency logger behavior", () => {
 
     test("creates the program log directory before writing when it is missing", () => {
         const stderrCapture = createStderrCapture();
-        const createdDirectories: string[] = [];
+        const createdDirectories: Array<{ path: string; options: { recursive: true } }> = [];
         const fileWrites: string[] = [];
         const logger = createBootstrapEmergencyLogger({
             logsDir: "/test-logs",
             stderr: stderrCapture.stderr,
             existsSync: () => false,
-            mkdirSync: (path) => {
-                createdDirectories.push(String(path));
+            mkdirSync: (path, options) => {
+                createdDirectories.push({ path: String(path), options: options as { recursive: true } });
                 return undefined;
             },
             appendFileSync: (path, data) => {
@@ -113,9 +113,33 @@ describe("bootstrap emergency logger behavior", () => {
 
         logger.writeUncaughtException(new Error("test-bootstrap-failure"));
 
-        expect(createdDirectories).toEqual(["/test-logs"]);
+        expect(createdDirectories).toEqual([{ path: "/test-logs", options: { recursive: true } }]);
         expect(fileWrites.join("")).toContain("/test-logs/program-log.txt");
         expect(fileWrites.join("")).toContain("test-bootstrap-failure");
+    });
+
+    test("reports emergency directory creation failures to stderr", () => {
+        const stderrCapture = createStderrCapture();
+        const fileWrites: string[] = [];
+        const logger = createBootstrapEmergencyLogger({
+            logsDir: "/test-logs",
+            stderr: stderrCapture.stderr,
+            existsSync: () => false,
+            mkdirSync: () => {
+                throw new Error("test-mkdir-failure");
+            },
+            appendFileSync: (_path, data) => {
+                fileWrites.push(String(data));
+            },
+        });
+
+        logger.writeUnhandledRejection(new Error("test-rejection"));
+
+        const stderr = stderrCapture.output.join("");
+        expect(stderr).toContain("[BOOTSTRAP] Unhandled Rejection:");
+        expect(stderr).toContain("[BOOTSTRAP] Failed to write to log file:");
+        expect(stderr).toContain("test-mkdir-failure");
+        expect(fileWrites).toEqual([]);
     });
 
     test("writes main failure emergencies to stderr without writing startup log files", () => {

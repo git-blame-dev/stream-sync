@@ -56,4 +56,24 @@ describe("RawEventLogWriter behavior", () => {
       await fs.rm(tempDir, { recursive: true, force: true });
     }
   });
+
+  it("creates nested raw event log directories before writing", async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "test-raw-events-"));
+    const nestedLogDir = path.join(tempDir, "nested", "raw-events");
+    const writer = new RawEventLogWriter();
+
+    try {
+      await writer.writeRawEvent({
+        dataLoggingPath: nestedLogDir,
+        platform: "tiktok",
+        eventType: "gift",
+        payload: { giftType: "Rose" },
+      });
+
+      const logContent = await fs.readFile(path.join(nestedLogDir, "tiktok-data-log.ndjson"), "utf8");
+      expect(logContent).toContain("Rose");
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
+  });
 });

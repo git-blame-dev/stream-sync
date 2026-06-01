@@ -2,7 +2,7 @@ import { DEFAULT_LOGGING_CONFIG } from './config-builders';
 import { shouldLogAtThreshold } from './logger/levels';
 import type { AppLogger, LogLevel, LogThreshold } from './logger/types';
 import { safeObjectStringify, sanitizeLogText } from './logger/safe-log-serializer';
-import { FileLogger } from '../utils/file-logger';
+import { LineFileAppender } from '../utils/line-file-appender';
 import { formatTimestampCompact } from '../utils/text-processing';
 
 type LogData = unknown;
@@ -169,24 +169,24 @@ class ConsoleOutputter {
 
 class FileOutputter {
     config: OutputConfig;
-    fileLogger: FileLogger | null;
+    fileAppender: LineFileAppender | null;
 
     constructor(config: OutputConfig = {}) {
         this.config = config;
         const logDir = this.config.directory;
         if (!this.config.enabled || !logDir) {
-            this.fileLogger = null;
+            this.fileAppender = null;
             return;
         }
 
-        this.fileLogger = new FileLogger({
+        this.fileAppender = new LineFileAppender({
             logDir,
             filename: this.config.filename || 'runtime.log'
         });
     }
     
     write(logEntry: LogEntry) {
-        if (!this.fileLogger) {
+        if (!this.fileAppender) {
             return;
         }
         const { timestamp, level, message, source, data } = logEntry;
@@ -197,7 +197,7 @@ class FileOutputter {
             logLine += ` | Data: ${safeObjectStringify(data)}`;
         }
         
-        this.fileLogger.log(logLine);
+        this.fileAppender.log(logLine);
     }
 }
 

@@ -99,7 +99,7 @@ describe('YouTube GiftMessageView pipeline (smoke E2E)', () => {
                 on: createMockFn(),
                 removeListener: createMockFn()
             },
-            ChatFileLoggingService: class { logRawPlatformData() {} },
+            RawPlatformDataLoggingService: class { logRawPlatformData() {} },
             USER_AGENTS: ['test-agent']
         });
 

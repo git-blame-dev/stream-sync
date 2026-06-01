@@ -1,33 +1,34 @@
 import defaultFs from 'node:fs';
 import path from 'node:path';
+import { ensureLogDirectorySync } from './log-directory';
 
-type FileLoggerConfig = {
+type LineFileAppenderConfig = {
     logDir?: string;
     filename?: string;
 };
 
-type FileLoggerResolvedConfig = {
+type LineFileAppenderResolvedConfig = {
     logDir: string;
     filename?: string;
 };
 
-type FileLoggerFs = Pick<typeof defaultFs, 'appendFileSync' | 'existsSync' | 'mkdirSync'>;
+type LineFileAppenderFs = Pick<typeof defaultFs, 'appendFileSync' | 'existsSync' | 'mkdirSync'>;
 
-type FileLoggerDependencies = {
-    fs?: FileLoggerFs;
+type LineFileAppenderDependencies = {
+    fs?: LineFileAppenderFs;
 };
 
 function toErrorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
 }
 
-export class FileLogger {
-    private readonly fs: FileLoggerFs;
-    private readonly config: FileLoggerResolvedConfig;
+export class LineFileAppender {
+    private readonly fs: LineFileAppenderFs;
+    private readonly config: LineFileAppenderResolvedConfig;
 
-    constructor(config: FileLoggerConfig = {}, deps: FileLoggerDependencies = {}) {
+    constructor(config: LineFileAppenderConfig = {}, deps: LineFileAppenderDependencies = {}) {
         if (!config.logDir) {
-            throw new Error('logDir is required for FileLogger');
+            throw new Error('logDir is required for LineFileAppender');
         }
 
         this.fs = deps.fs ?? defaultFs;
@@ -46,7 +47,7 @@ export class FileLogger {
             this.fs.appendFileSync(fullPath, `${content}\n`);
         } catch (error) {
             const message = toErrorMessage(error);
-            process.stderr.write(`[FileLogger] Failed to write to ${fullPath}: ${message}\n`);
+            process.stderr.write(`[LineFileAppender] Failed to write to ${fullPath}: ${message}\n`);
         }
     }
 
@@ -57,12 +58,13 @@ export class FileLogger {
 
     private ensureLogDirectory(): void {
         try {
-            if (!this.fs.existsSync(this.config.logDir)) {
-                this.fs.mkdirSync(this.config.logDir, { recursive: true });
-            }
+            ensureLogDirectorySync(this.config.logDir, {
+                existsSync: this.fs.existsSync,
+                mkdirSync: this.fs.mkdirSync
+            });
         } catch (error) {
             const message = toErrorMessage(error);
-            process.stderr.write(`[FileLogger] Failed to create log directory: ${message}\n`);
+            process.stderr.write(`[LineFileAppender] Failed to create log directory: ${message}\n`);
         }
     }
 }

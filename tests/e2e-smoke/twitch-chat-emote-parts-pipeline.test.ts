@@ -97,7 +97,7 @@ describe("Twitch emote chat parts pipeline (smoke E2E)", () => {
         isReady: () => true,
         refreshTokens: async () => true,
       },
-      ChatFileLoggingService: class {
+      RawPlatformDataLoggingService: class {
         async logRawPlatformData(): Promise<void> {}
       },
     });

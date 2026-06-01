@@ -57,12 +57,12 @@ const requireDefined = <T>(value: T | undefined, label: string): T => {
   return value;
 };
 
-const requireStubChatFileLoggingService = (
-  value: TwitchPlatformInstance["chatFileLoggingService"],
-): StubChatFileLoggingService => {
-  expect(value).toBeInstanceOf(StubChatFileLoggingService);
-  if (!(value instanceof StubChatFileLoggingService)) {
-    throw new Error("Expected stub chat file logging service");
+const requireStubRawPlatformDataLoggingService = (
+  value: TwitchPlatformInstance["rawPlatformDataLoggingService"],
+): StubRawPlatformDataLoggingService => {
+  expect(value).toBeInstanceOf(StubRawPlatformDataLoggingService);
+  if (!(value instanceof StubRawPlatformDataLoggingService)) {
+    throw new Error("Expected stub raw platform data logging service");
   }
   return value;
 };
@@ -72,7 +72,7 @@ const createReadyTwitchAuth = (): TwitchAuth => ({
   getUserId: () => "test-user-id",
 });
 
-class StubChatFileLoggingService {
+class StubRawPlatformDataLoggingService {
   logRawPlatformDataCalls: RawPlatformDataCall[];
 
   constructor() {
@@ -142,7 +142,7 @@ const createPlatform = (
     logger: noOpLogger,
     twitchAuth,
     timestampService: { extractTimestamp: () => new Date().toISOString() },
-    ChatFileLoggingService: StubChatFileLoggingService,
+    RawPlatformDataLoggingService: StubRawPlatformDataLoggingService,
     TwitchApiClient: StubTwitchApiClient,
     ...depsOverrides,
   });
@@ -428,10 +428,10 @@ describe("TwitchPlatform core behavior", () => {
       timestamp: "2024-01-01T00:00:00Z",
     });
 
-    const chatFileLoggingService = requireStubChatFileLoggingService(
-      platform.chatFileLoggingService,
+    const rawPlatformDataLoggingService = requireStubRawPlatformDataLoggingService(
+      platform.rawPlatformDataLoggingService,
     );
-    expect(chatFileLoggingService.logRawPlatformDataCalls).toHaveLength(1);
+    expect(rawPlatformDataLoggingService.logRawPlatformDataCalls).toHaveLength(1);
   });
 
   it("rejects sending messages when EventSub is unavailable", async () => {

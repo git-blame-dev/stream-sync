@@ -23,7 +23,7 @@ const createLoggerMock = (): LoggerMock => ({
   config: {},
   outputs: {
     console: { write() {} },
-    file: { config: {}, fileLogger: null, write() {} },
+    file: { config: {}, fileAppender: null, write() {} },
   },
   reconfigure() {},
   log() {},

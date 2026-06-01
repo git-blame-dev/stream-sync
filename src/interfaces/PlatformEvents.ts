@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { DEFAULT_AVATAR_URL } from '../constants/avatar';
 import { allowsYouTubeJewelsMissingUserId } from '../utils/missing-fields';
-import { getSystemTimestampISO } from '../utils/timestamp';
+import { getSystemTimestampISO, parseTimestampISO } from '../utils/timestamp';
 
 const PlatformEvents = {
     CHAT_MESSAGE: 'platform:chat-message',
@@ -157,6 +157,17 @@ function isPlatformName(value: unknown): value is PlatformName {
 function resolveAvatarUrl(avatarUrl: unknown): string {
     const normalizedAvatarUrl = typeof avatarUrl === 'string' ? avatarUrl.trim() : '';
     return normalizedAvatarUrl || DEFAULT_AVATAR_URL;
+}
+
+function requireTimestampISO(value: unknown, errorMessage: string): string {
+    const timestamp = parseTimestampISO(value, {
+        allowDateString: true,
+        allowDateObject: true
+    });
+    if (timestamp === null) {
+        throw new Error(errorMessage);
+    }
+    return timestamp;
 }
 
 const EVENT_SCHEMAS = {
@@ -627,7 +638,7 @@ class PlatformEventValidator {
             if ((fieldName === 'username' || fieldName === 'userId') && !value.trim()) {
                 return false;
             }
-            if (fieldName === 'timestamp' && Number.isNaN(Date.parse(value))) {
+            if (fieldName === 'timestamp' && parseTimestampISO(value, { allowDateString: true }) === null) {
                 return false;
             }
         }
@@ -777,19 +788,7 @@ class PlatformEventBuilder {
             throw new Error('Missing required message timestamp');
         }
 
-        let timestamp = new Date();
-        if (typeof data.timestamp === 'number') {
-            timestamp = new Date(data.timestamp);
-        } else if (typeof data.timestamp === 'string') {
-            const numericTimestamp = Number(data.timestamp);
-            timestamp = Number.isFinite(numericTimestamp)
-                ? new Date(numericTimestamp)
-                : new Date(data.timestamp);
-        }
-
-        if (Number.isNaN(timestamp.getTime())) {
-            throw new Error('Invalid timestamp for message');
-        }
+        const timestamp = requireTimestampISO(data.timestamp, 'Invalid timestamp for message');
 
         const normalizedMessage: NormalizedMessageRecord = {
             type: 'platform:chat-message',
@@ -800,7 +799,7 @@ class PlatformEventBuilder {
             message: {
                 text: data.message.text
             },
-            timestamp: timestamp.toISOString()
+            timestamp
         };
 
         if (data.metadata !== undefined) {
@@ -847,23 +846,7 @@ class PlatformEventBuilder {
             throw new Error('Missing required gift timestamp');
         }
 
-        let timestamp: Date;
-        if (data.timestamp instanceof Date) {
-            timestamp = data.timestamp;
-        } else if (typeof data.timestamp === 'number') {
-            timestamp = new Date(data.timestamp);
-        } else if (typeof data.timestamp === 'string') {
-            const numericTimestamp = Number(data.timestamp);
-            timestamp = Number.isFinite(numericTimestamp)
-                ? new Date(numericTimestamp)
-                : new Date(data.timestamp);
-        } else {
-            throw new Error('Invalid gift timestamp');
-        }
-
-        if (Number.isNaN(timestamp.getTime())) {
-            throw new Error('Invalid gift timestamp');
-        }
+        const timestamp = requireTimestampISO(data.timestamp, 'Invalid gift timestamp');
 
         const normalizedGift: GiftEventRecord = {
             type: 'platform:gift',
@@ -876,7 +859,7 @@ class PlatformEventBuilder {
             giftCount: data.giftCount,
             amount: data.amount,
             currency: data.currency,
-            timestamp: timestamp.toISOString()
+            timestamp
         };
 
         const validation = this.validator.validate(normalizedGift);
@@ -904,14 +887,7 @@ class PlatformEventBuilder {
             throw new Error('Missing required follow timestamp');
         }
 
-        if (!(typeof data.timestamp === 'string' || typeof data.timestamp === 'number' || data.timestamp instanceof Date)) {
-            throw new Error('Invalid follow timestamp');
-        }
-
-        const timestamp = new Date(data.timestamp);
-        if (Number.isNaN(timestamp.getTime())) {
-            throw new Error('Invalid follow timestamp');
-        }
+        const timestamp = requireTimestampISO(data.timestamp, 'Invalid follow timestamp');
 
         return {
             type: 'platform:follow',
@@ -919,7 +895,7 @@ class PlatformEventBuilder {
             username: data.username,
             userId: data.userId,
             avatarUrl: resolveAvatarUrl(data.avatarUrl),
-            timestamp: timestamp.toISOString(),
+            timestamp,
             metadata: {}
         };
     }
@@ -1097,24 +1073,12 @@ class EnhancedPlatformEvents {
             throw new Error('Missing required message timestamp');
         }
 
-        let timestamp = new Date();
-        if (typeof rawMessage.timestamp === 'number') {
-            timestamp = new Date(rawMessage.timestamp);
-        } else if (typeof rawMessage.timestamp === 'string') {
-            const numericTimestamp = Number(rawMessage.timestamp);
-            timestamp = Number.isFinite(numericTimestamp)
-                ? new Date(numericTimestamp)
-                : new Date(rawMessage.timestamp);
-        }
-
-        if (Number.isNaN(timestamp.getTime())) {
-            throw new Error('Invalid message timestamp');
-        }
+        const timestamp = requireTimestampISO(rawMessage.timestamp, 'Invalid message timestamp');
 
         const normalizedMessage: EnhancedNormalizedMessage = {
             text: String(text).trim(),
             platform: this._validatePlatform(platform),
-            timestamp: timestamp.toISOString(),
+            timestamp,
             username: normalizedIdentity.username,
             userId: normalizedIdentity.userId,
             avatarUrl: normalizedIdentity.avatarUrl

@@ -120,7 +120,7 @@ const createPlatform = (
     twitchAuth,
     timestampService: { extractTimestamp: () => new Date().toISOString() },
     TwitchEventSub,
-    ChatFileLoggingService: class {
+    RawPlatformDataLoggingService: class {
       async logRawPlatformData(): Promise<void> {}
     },
     ...otherDepsOverrides,

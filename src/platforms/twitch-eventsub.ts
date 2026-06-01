@@ -3,7 +3,7 @@ import type { AxiosResponse } from 'axios';
 import { EventEmitter } from 'node:events';
 import * as WebSocketModule from 'ws';
 import { secrets } from '../core/secrets';
-import { ChatFileLoggingService } from '../services/ChatFileLoggingService';
+import { RawPlatformDataLoggingService } from '../services/RawPlatformDataLoggingService';
 import { validateLoggerInterface } from '../utils/dependency-validator';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 import { getSystemTimestampISO } from '../utils/timestamp';
@@ -45,11 +45,11 @@ type WebSocketLike = {
 
 type WebSocketCtorLike = new (url: string) => WebSocketLike;
 
-type ChatFileLoggingServiceLike = {
+type RawPlatformDataLoggingServiceLike = {
     logRawPlatformData: (platform: string, eventType: string, data: unknown, platformConfig?: unknown) => Promise<void>;
 };
 
-type ChatFileLoggingServiceCtor = new (dependencies: { logger: unknown; config: Record<string, unknown> }) => ChatFileLoggingServiceLike;
+type RawPlatformDataLoggingServiceCtor = new (dependencies: { logger: unknown; config: Record<string, unknown> }) => RawPlatformDataLoggingServiceLike;
 
 type SubscriptionDefinition = {
     name: string;
@@ -167,7 +167,7 @@ class TwitchEventSub extends EventEmitter {
     recentMessageIds: Map<string, number>;
     messageIdTtlMs: number;
     maxMessageIds: number;
-    chatFileLoggingService: ChatFileLoggingServiceLike;
+    rawPlatformDataLoggingService: RawPlatformDataLoggingServiceLike;
     eventRouter: ReturnType<typeof createTwitchEventSubEventRouter>;
     subscriptionManager: ReturnType<typeof createTwitchEventSubSubscriptionManager>;
     wsLifecycle: ReturnType<typeof createTwitchEventSubWsLifecycle>;
@@ -223,10 +223,10 @@ class TwitchEventSub extends EventEmitter {
         } catch (_error) {
             // Logger failures are non-fatal during EventSub construction.
         }
-        const ChatFileLoggingServiceClass: ChatFileLoggingServiceCtor = typeof dependencies.ChatFileLoggingService === 'function'
-            ? dependencies.ChatFileLoggingService as ChatFileLoggingServiceCtor
-            : ChatFileLoggingService as unknown as ChatFileLoggingServiceCtor;
-        this.chatFileLoggingService = new ChatFileLoggingServiceClass({ logger: this.logger, config: this.config });
+        const RawPlatformDataLoggingServiceClass: RawPlatformDataLoggingServiceCtor = typeof dependencies.RawPlatformDataLoggingService === 'function'
+            ? dependencies.RawPlatformDataLoggingService as RawPlatformDataLoggingServiceCtor
+            : RawPlatformDataLoggingService as unknown as RawPlatformDataLoggingServiceCtor;
+        this.rawPlatformDataLoggingService = new RawPlatformDataLoggingServiceClass({ logger: this.logger, config: this.config });
 
         this.eventRouter = createTwitchEventSubEventRouter({
             config: this.config,
@@ -947,8 +947,8 @@ class TwitchEventSub extends EventEmitter {
         await this.subscriptionManager.deleteAllSubscriptions({ sessionId: options?.sessionId ?? this.sessionId });
     }
 
-  async logRawPlatformData(eventType: string, data: unknown): Promise<void> {
-        return this.chatFileLoggingService.logRawPlatformData('twitch', eventType, data, this.config);
+    async logRawPlatformData(eventType: string, data: unknown): Promise<void> {
+        return this.rawPlatformDataLoggingService.logRawPlatformData('twitch', eventType, data, this.config);
     }
 
     _logEventSubError(

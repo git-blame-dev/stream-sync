@@ -1202,7 +1202,7 @@ describe("TwitchPlatform event behaviors", () => {
       {
         twitchAuth: createTwitchAuth({ userId: TEST_USER_ID }),
         logger: noOpLogger,
-        ChatFileLoggingService: RecordingLoggingService,
+        RawPlatformDataLoggingService: RecordingLoggingService,
       },
     );
 

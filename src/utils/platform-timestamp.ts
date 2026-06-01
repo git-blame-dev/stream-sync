@@ -1,3 +1,5 @@
+import { parseTimestampISO, parseTimestampMs } from './timestamp';
+
 const MILLISECOND_THRESHOLD = 1_000_000_000_000;
 const MICROSECOND_THRESHOLD = 1_000_000_000_000_000;
 const YOUTUBE_MICROSECOND_THRESHOLD = 10_000_000_000_000;
@@ -9,49 +11,6 @@ function asRecord(value: unknown): TimestampRecord | null {
         return null;
     }
     return value as TimestampRecord;
-}
-
-function parseTimestampCandidate(value: unknown): number | null {
-    if (value === undefined || value === null) {
-        return null;
-    }
-
-    let numericValue: number;
-    if (typeof value === 'number') {
-        numericValue = value;
-    } else if (typeof value === 'string') {
-        const trimmed = value.trim();
-        if (trimmed.length === 0) {
-            return null;
-        }
-
-        const numericCandidate = Number(trimmed);
-        if (Number.isFinite(numericCandidate)) {
-            numericValue = numericCandidate;
-        } else {
-            const parsedDate = Date.parse(trimmed);
-            if (Number.isNaN(parsedDate)) {
-                return null;
-            }
-            numericValue = parsedDate;
-        }
-    } else {
-        return null;
-    }
-
-    if (!Number.isFinite(numericValue) || numericValue <= 0) {
-        return null;
-    }
-
-    if (numericValue < MILLISECOND_THRESHOLD) {
-        return numericValue * 1000;
-    }
-
-    if (numericValue >= MICROSECOND_THRESHOLD) {
-        return Math.round(numericValue / 1000);
-    }
-
-    return numericValue;
 }
 
 function resolveTikTokTimestampMs(data: unknown): number | null {
@@ -68,7 +27,14 @@ function resolveTikTokTimestampMs(data: unknown): number | null {
     ];
 
     for (const candidate of candidates) {
-        const parsed = parseTimestampCandidate(candidate);
+        const parsed = parseTimestampMs(candidate, {
+            allowDateString: true,
+            requirePositive: true,
+            inferSecondsBelow: MILLISECOND_THRESHOLD,
+            inferMicrosecondsThreshold: MICROSECOND_THRESHOLD,
+            inferMicrosecondsThresholdInclusive: true,
+            microsecondRounding: 'round'
+        });
         if (parsed !== null) {
             return parsed;
         }
@@ -92,15 +58,12 @@ function resolveYouTubeTimestampISO(data: unknown): string | null {
 
     const rawUsec = source.timestamp_usec;
     if (rawUsec !== undefined && rawUsec !== null) {
-        const usecValue = typeof rawUsec === 'number'
-            ? rawUsec
-            : parseNumericString(String(rawUsec));
-
-        if (usecValue === null || usecValue <= 0) {
-            return null;
-        }
-
-        return new Date(Math.floor(usecValue / 1000)).toISOString();
+        return parseTimestampISO(rawUsec, {
+            requirePositive: true,
+            requireIntegerNumericString: true,
+            numericUnit: 'microseconds',
+            microsecondRounding: 'floor'
+        });
     }
 
     const rawTimestamp = source.timestamp;
@@ -108,16 +71,12 @@ function resolveYouTubeTimestampISO(data: unknown): string | null {
         return null;
     }
 
-    let timestampValue = parseTimestampValue(rawTimestamp);
-    if (timestampValue === null) {
-        return null;
-    }
-
-    if (timestampValue > YOUTUBE_MICROSECOND_THRESHOLD) {
-        timestampValue = Math.floor(timestampValue / 1000);
-    }
-
-    return new Date(timestampValue).toISOString();
+    return parseTimestampISO(rawTimestamp, {
+        allowDateString: true,
+        requirePositive: true,
+        inferMicrosecondsThreshold: YOUTUBE_MICROSECOND_THRESHOLD,
+        microsecondRounding: 'floor'
+    });
 }
 
 function resolveTwitchTimestampISO(data: unknown): string | null {
@@ -131,55 +90,10 @@ function resolveTwitchTimestampISO(data: unknown): string | null {
         return null;
     }
 
-    const timeValue = typeof rawTimestamp === 'number'
-        ? rawTimestamp
-        : parseTimestampValue(String(rawTimestamp));
-
-    if (timeValue === null || timeValue <= 0) {
-        return null;
-    }
-
-    return new Date(timeValue).toISOString();
-}
-
-function parseNumericString(value: string): number | null {
-    if (value.length === 0) {
-        return null;
-    }
-
-    const num = Number(value);
-    if (!Number.isNaN(num) && Number.isFinite(num) && Number.isInteger(num)) {
-        return num;
-    }
-
-    return null;
-}
-
-function parseTimestampValue(value: unknown): number | null {
-    if (typeof value === 'number') {
-        return Number.isFinite(value) && value > 0 ? value : null;
-    }
-
-    if (typeof value !== 'string') {
-        return null;
-    }
-
-    const trimmed = value.trim();
-    if (!trimmed) {
-        return null;
-    }
-
-    const numericCandidate = Number(trimmed);
-    if (!Number.isNaN(numericCandidate) && Number.isFinite(numericCandidate)) {
-        return numericCandidate > 0 ? numericCandidate : null;
-    }
-
-    const parsedDate = Date.parse(trimmed);
-    if (Number.isNaN(parsedDate) || parsedDate <= 0) {
-        return null;
-    }
-
-    return parsedDate;
+    return parseTimestampISO(rawTimestamp, {
+        allowDateString: true,
+        requirePositive: true
+    });
 }
 
 export {

@@ -274,6 +274,41 @@ describe("YouTube monetization parser", () => {
     expect(() => parser.parseSuperChat(chatItem)).toThrow("requires timestamp");
   });
 
+  test("throws when monetization timestamp is non-positive", () => {
+    const parser = createYouTubeMonetizationParser({ logger: noOpLogger });
+    const chatItem = {
+      item: {
+        type: "LiveChatPaidMessage",
+        id: "LCC.superchat-zero-ts",
+        timestamp: 0,
+        purchase_amount: 5,
+        purchase_currency: "USD",
+        author: {
+          id: "UC_TEST_CHANNEL_000022",
+          name: "ZeroTsUser",
+        },
+        message: { text: "Hello" },
+      },
+    };
+
+    expect(() => parser.parseSuperChat(chatItem)).toThrow(
+      "YouTube Super Chat requires valid timestamp",
+    );
+  });
+
+  test("throws when timestamp_usec string is non-integer", () => {
+    const parser = createYouTubeMonetizationParser({ logger: noOpLogger });
+    const chatItem = {
+      item: {
+        timestamp_usec: "1704067200000000.5",
+      },
+    };
+
+    expect(() => parser.resolveTimestamp(chatItem, "YouTube Super Chat")).toThrow(
+      "YouTube Super Chat requires valid timestamp",
+    );
+  });
+
   test("converts microsecond timestamps when provided in timestamp field", () => {
     const parser = createYouTubeMonetizationParser({ logger: noOpLogger });
     const chatItem = {

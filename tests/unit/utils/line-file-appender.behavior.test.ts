@@ -3,18 +3,18 @@ import {
   createMockFn,
   restoreAllMocks,
 } from "../../helpers/bun-mock-utils";
-import { FileLogger } from "../../../src/utils/file-logger";
+import { LineFileAppender } from "../../../src/utils/line-file-appender";
 import { type TestMockFn } from "../../helpers/bun-mock-utils";
 type FileStore = Record<string, string>;
-type FileLoggerDependencies = NonNullable<ConstructorParameters<typeof FileLogger>[1]>;
-type FileLoggerFs = NonNullable<FileLoggerDependencies["fs"]>;
+type LineFileAppenderDependencies = NonNullable<ConstructorParameters<typeof LineFileAppender>[1]>;
+type LineFileAppenderFs = NonNullable<LineFileAppenderDependencies["fs"]>;
 type StderrWrite = typeof process.stderr.write;
-type MockFileLoggerFs = FileLoggerDependencies extends { fs?: infer Fs }
+type MockLineFileAppenderFs = LineFileAppenderDependencies extends { fs?: infer Fs }
   ? Omit<Fs, "appendFileSync" | "existsSync" | "mkdirSync"> & {
       _files: FileStore;
       _dirs: Set<string>;
       existsSync: TestMockFn<[string], boolean>;
-      mkdirSync: TestMockFn<[string], string | undefined>;
+      mkdirSync: TestMockFn<[string, { recursive: true }], unknown>;
       appendFileSync: TestMockFn<[string, string], void>;
     }
   : never;
@@ -30,7 +30,7 @@ function createMockFs() {
       (target: string) =>
         dirs.has(target) || Object.prototype.hasOwnProperty.call(files, target),
     ),
-    mkdirSync: createMockFn<[string], string | undefined>((dir: string) => {
+    mkdirSync: createMockFn<[string, { recursive: true }], unknown>((dir: string) => {
       dirs.add(dir);
       return undefined;
     }),
@@ -45,35 +45,36 @@ function createMockFs() {
     unlinkSync: createMockFn((target: string) => {
       delete files[target];
     }),
-  } as MockFileLoggerFs;
+  } as MockLineFileAppenderFs;
 }
 
-describe("file-logger behavior", () => {
+describe("line-file-appender behavior", () => {
   afterEach(() => {
     restoreAllMocks();
   });
 
   it("requires a log directory for construction", () => {
-    expect(() => new FileLogger()).toThrow("logDir is required");
+    expect(() => new LineFileAppender()).toThrow("logDir is required for LineFileAppender");
   });
 
   it("creates the configured log directory on construction", () => {
     const mockFs = createMockFs();
 
-    new FileLogger({ logDir: "logs-test" }, { fs: mockFs as FileLoggerFs });
+    new LineFileAppender({ logDir: "logs-test" }, { fs: mockFs as LineFileAppenderFs });
 
     expect(mockFs._dirs.has("logs-test")).toBe(true);
+    expect(mockFs.mkdirSync.mock.calls[0]).toEqual(["logs-test", { recursive: true }]);
   });
 
   it("writes log content to the configured file", () => {
     const mockFs = createMockFs();
 
-    const logger = new FileLogger(
+    const appender = new LineFileAppender(
       { logDir: "logs", filename: "app.log" },
-      { fs: mockFs as FileLoggerFs },
+      { fs: mockFs as LineFileAppenderFs },
     );
 
-    logger.log("new-line");
+    appender.log("new-line");
 
     expect(mockFs._files["logs/app.log"]).toBe("new-line\n");
   });
@@ -96,14 +97,37 @@ describe("file-logger behavior", () => {
     process.stderr.write = replacementStderrWrite;
 
     try {
-      const logger = new FileLogger(
+      const appender = new LineFileAppender(
         { logDir: "logs", filename: "app.log" },
-        { fs: mockFs as FileLoggerFs },
+        { fs: mockFs as LineFileAppenderFs },
       );
-      logger.log("entry");
+      appender.log("entry");
 
       expect(stderrWriteCount).toBeGreaterThan(0);
-      expect(stderrOutput.join("\n")).toContain("Failed to write");
+      expect(stderrOutput.join("\n")).toContain("[LineFileAppender] Failed to write");
+    } finally {
+      process.stderr.write = originalStderrWrite;
+    }
+  });
+
+  it("reports directory creation failures to stderr", () => {
+    const mockFs = createMockFs();
+    mockFs.mkdirSync.mockImplementation(() => {
+      throw new Error("mkdir failed");
+    });
+    const originalStderrWrite = process.stderr.write;
+    const stderrOutput: string[] = [];
+    const replacementStderrWrite: StderrWrite = (chunk, ...args) => {
+      stderrOutput.push(String(chunk));
+      const callback = args.find((arg): arg is (error?: Error | null) => void => typeof arg === "function");
+      callback?.();
+      return true;
+    };
+    process.stderr.write = replacementStderrWrite;
+
+    try {
+      expect(() => new LineFileAppender({ logDir: "logs" }, { fs: mockFs as LineFileAppenderFs })).not.toThrow();
+      expect(stderrOutput.join("\n")).toContain("[LineFileAppender] Failed to create log directory: mkdir failed");
     } finally {
       process.stderr.write = originalStderrWrite;
     }

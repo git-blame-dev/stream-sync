@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import crypto from 'node:crypto';
 import { DEFAULT_AVATAR_URL } from '../constants/avatar';
-import { ChatFileLoggingService } from '../services/ChatFileLoggingService';
+import { RawPlatformDataLoggingService } from '../services/RawPlatformDataLoggingService';
 import { ConnectionStateFactory } from '../utils/platform-connection-state';
 import { createTwitchEventFactory } from './twitch/events/event-factory';
 import { createTwitchEventSubWiring } from './twitch/connections/wiring';
@@ -109,14 +109,14 @@ type ViewerCountProviderLike = {
     getViewerCount: () => Promise<number>;
 };
 
-type ChatFileLoggingServiceLike = {
+type RawPlatformDataLoggingServiceLike = {
     logRawPlatformData: (platform: string, eventType: string, data: unknown, config: TwitchConfig) => Promise<void>;
 };
 
-type ChatFileLoggingServiceConstructor = new (options: {
+type RawPlatformDataLoggingServiceConstructor = new (options: {
     logger: LoggerLike;
     config: TwitchConfig;
-}) => ChatFileLoggingServiceLike;
+}) => RawPlatformDataLoggingServiceLike;
 
 type SelfMessageDetectionServiceLike = {
     shouldFilterMessage: (platform: string, messageData: Record<string, unknown>, config: TwitchConfig) => boolean;
@@ -158,7 +158,7 @@ type TwitchPlatformDependencies = Record<string, unknown> & {
     logger?: LoggerLike;
     twitchAuth?: TwitchAuthLike;
     retrySystem?: RetrySystemLike;
-    ChatFileLoggingService?: ChatFileLoggingServiceConstructor;
+    RawPlatformDataLoggingService?: RawPlatformDataLoggingServiceConstructor;
     selfMessageDetectionService?: SelfMessageDetectionServiceLike | null;
     validateNormalizedMessage?: (data: Record<string, unknown>) => ValidationResult;
     getErrorEnvelopeTimestampISO?: () => string;
@@ -251,7 +251,7 @@ class TwitchPlatform extends EventEmitter {
     recoveryInFlight: boolean;
     config: TwitchConfig;
     twitchAuth: TwitchAuthLike;
-    chatFileLoggingService: ChatFileLoggingServiceLike;
+    rawPlatformDataLoggingService: RawPlatformDataLoggingServiceLike;
     selfMessageDetectionService: SelfMessageDetectionServiceLike | null;
     validateNormalizedMessage: (data: Record<string, unknown>) => ValidationResult;
     getErrorEnvelopeTimestampISO: () => string;
@@ -294,8 +294,8 @@ class TwitchPlatform extends EventEmitter {
         }
         this.twitchAuth = twitchAuth;
 
-        const ChatFileLoggingServiceClass = dependencies.ChatFileLoggingService || (ChatFileLoggingService as unknown as ChatFileLoggingServiceConstructor);
-        this.chatFileLoggingService = new ChatFileLoggingServiceClass({
+        const RawPlatformDataLoggingServiceClass = dependencies.RawPlatformDataLoggingService || (RawPlatformDataLoggingService as unknown as RawPlatformDataLoggingServiceConstructor);
+        this.rawPlatformDataLoggingService = new RawPlatformDataLoggingServiceClass({
             logger: this.logger,
             config: this.config
         });
@@ -1477,7 +1477,7 @@ class TwitchPlatform extends EventEmitter {
     }
 
     async logRawPlatformData(eventType: string, data: unknown): Promise<void> {
-        return this.chatFileLoggingService.logRawPlatformData('twitch', eventType, data, this.config);
+        return this.rawPlatformDataLoggingService.logRawPlatformData('twitch', eventType, data, this.config);
     }
 
     async getConnectionStatus(): Promise<{ platform: 'twitch'; status: 'connected' | 'disconnected'; timestamp: string }> {

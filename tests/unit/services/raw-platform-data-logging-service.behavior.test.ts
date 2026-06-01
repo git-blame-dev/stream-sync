@@ -3,9 +3,9 @@ import { clearAllMocks, restoreAllMocks, createMockFn } from "../../helpers/bun-
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "path";
-import { ChatFileLoggingService } from "../../../src/services/ChatFileLoggingService.ts";
+import { RawPlatformDataLoggingService } from "../../../src/services/RawPlatformDataLoggingService.ts";
 
-type ServiceDependencies = ConstructorParameters<typeof ChatFileLoggingService>[0];
+type ServiceDependencies = ConstructorParameters<typeof RawPlatformDataLoggingService>[0];
 type RawEventLogWriterLike = NonNullable<NonNullable<ServiceDependencies>["rawEventLogWriter"]>;
 type WriteRawEvent = RawEventLogWriterLike["writeRawEvent"];
 type ResolveLogFileName = RawEventLogWriterLike["resolveLogFileName"];
@@ -23,13 +23,13 @@ const requireRecord = (value: unknown, label: string): Record<string, unknown> =
   return Object.fromEntries(Object.entries(value));
 };
 
-describe("ChatFileLoggingService - Behavior-Focused Regression Tests", () => {
-  let service: ChatFileLoggingService;
+describe("RawPlatformDataLoggingService behavior", () => {
+  let service: RawPlatformDataLoggingService;
   let writeRawEventSpy: ReturnType<typeof createMockFn<Parameters<WriteRawEvent>, ReturnType<WriteRawEvent>>>;
   let logDir: string;
 
   beforeEach(async () => {
-    logDir = await fs.mkdtemp(path.join(os.tmpdir(), "chat-file-logging-test-"));
+    logDir = await fs.mkdtemp(path.join(os.tmpdir(), "raw-platform-data-logging-test-"));
     writeRawEventSpy = createMockFn<Parameters<WriteRawEvent>, ReturnType<WriteRawEvent>>(
       async ({ platform, eventType }) => ({
         fileName: resolveLogFileName(platform, eventType),
@@ -37,7 +37,7 @@ describe("ChatFileLoggingService - Behavior-Focused Regression Tests", () => {
       }),
     );
 
-    service = new ChatFileLoggingService({
+    service = new RawPlatformDataLoggingService({
       config: { dataLoggingPath: logDir },
       rawEventLogWriter: {
         writeRawEvent: writeRawEventSpy,
@@ -117,7 +117,7 @@ describe("ChatFileLoggingService - Behavior-Focused Regression Tests", () => {
       expect(writeRawEventSpy.mock.calls).toHaveLength(0);
     });
 
-    it("handles filesystem errors gracefully without breaking chat", async () => {
+    it("handles filesystem errors gracefully without throwing to callers", async () => {
       writeRawEventSpy.mockRejectedValueOnce(new Error("Disk full"));
 
       await expect(
@@ -141,7 +141,7 @@ describe("ChatFileLoggingService - Behavior-Focused Regression Tests", () => {
         username: "Supporter123",
       };
 
-      const defaultWriterService = new ChatFileLoggingService({
+      const defaultWriterService = new RawPlatformDataLoggingService({
         config: { dataLoggingPath: logDir },
       });
 
@@ -170,7 +170,7 @@ describe("ChatFileLoggingService - Behavior-Focused Regression Tests", () => {
         },
       };
 
-      const defaultWriterService = new ChatFileLoggingService({
+      const defaultWriterService = new RawPlatformDataLoggingService({
         config: { dataLoggingPath: logDir },
       });
 

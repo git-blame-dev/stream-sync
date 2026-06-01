@@ -31,6 +31,18 @@ describe("TikTok timestamp resolution", () => {
       );
     });
 
+    it("rounds TikTok microsecond conversion", () => {
+      expect(
+        resolveTikTokTimestampMs({ common: { createTime: 1_700_000_000_000_999 } }),
+      ).toBe(1_700_000_000_001);
+    });
+
+    it("treats the TikTok microsecond threshold as inclusive", () => {
+      expect(
+        resolveTikTokTimestampMs({ common: { createTime: 1_000_000_000_000_000 } }),
+      ).toBe(1_000_000_000_000);
+    });
+
     it("parses ISO timestamps from data.timestamp", () => {
       const iso = "2026-01-04T09:43:46.004Z";
       expect(resolveTikTokTimestampMs({ timestamp: iso })).toBe(
@@ -108,6 +120,19 @@ describe("YouTube timestamp resolution", () => {
       expect(result).toBe(new Date(Math.floor(micros / 1000)).toISOString());
     });
 
+    it("requires integer string timestamp_usec values", () => {
+      expect(
+        resolveYouTubeTimestampISO({ timestamp_usec: "1700000000000000.5" }),
+      ).toBeNull();
+    });
+
+    it("floors YouTube microsecond conversion", () => {
+      const result = resolveYouTubeTimestampISO({
+        timestamp_usec: 1_700_000_000_000_999,
+      });
+      expect(result).toBe(new Date(1_700_000_000_000).toISOString());
+    });
+
     it("extracts timestamp from nested item object", () => {
       const micros = 1_700_000_000_000_000;
       const result = resolveYouTubeTimestampISO({
@@ -127,6 +152,16 @@ describe("YouTube timestamp resolution", () => {
       const result = resolveYouTubeTimestampISO({ timestamp: largeMicros });
       expect(result).toBe(
         new Date(Math.floor(largeMicros / 1000)).toISOString(),
+      );
+    });
+
+    it("preserves YouTube timestamp fallback threshold as greater-than only", () => {
+      const threshold = 10_000_000_000_000;
+      expect(resolveYouTubeTimestampISO({ timestamp: threshold })).toBe(
+        new Date(threshold).toISOString(),
+      );
+      expect(resolveYouTubeTimestampISO({ timestamp: threshold + 1_000 })).toBe(
+        new Date(Math.floor((threshold + 1_000) / 1000)).toISOString(),
       );
     });
 

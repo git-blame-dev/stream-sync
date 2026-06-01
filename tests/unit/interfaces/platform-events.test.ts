@@ -338,6 +338,15 @@ describe('Platform Events Interface', () => {
             });
         });
 
+        it('rejects enhanced message normalization with unsupported timestamp objects', () => {
+            expect(() => PlatformEvents.normalizeMessage('youtube', {
+                message: { text: 'Hello YouTube!' },
+                username: 'YTUser',
+                userId: 'yt-1',
+                timestamp: { invalid: true }
+            })).toThrow('Invalid message timestamp');
+        });
+
         it('does not expose a stale generic gift normalizer on PlatformEvents', () => {
             expect('normalizeGift' in PlatformEvents).toBe(false);
         });

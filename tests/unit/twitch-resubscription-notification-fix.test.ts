@@ -44,7 +44,7 @@ describe("TwitchEventSub Resubscription Notification Fix", () => {
         logger: noOpLogger,
         twitchAuth: mockTwitchAuth,
         WebSocketCtor: MockWebSocket,
-        ChatFileLoggingService: class {},
+        RawPlatformDataLoggingService: class {},
       },
     );
   });

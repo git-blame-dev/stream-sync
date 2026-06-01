@@ -62,7 +62,7 @@ class MockWebSocket {
   }
 }
 
-class MockChatFileLoggingService {
+class MockRawPlatformDataLoggingService {
   async logRawPlatformData(): Promise<void> {}
 }
 
@@ -93,7 +93,7 @@ const createEventSub = (
         delete: createMockFn(),
       },
       WebSocketCtor: MockWebSocket,
-      ChatFileLoggingService: MockChatFileLoggingService,
+      RawPlatformDataLoggingService: MockRawPlatformDataLoggingService,
       ...depsOverrides,
     },
   );
@@ -812,7 +812,7 @@ describe("TwitchEventSub lifecycle", () => {
         },
       };
       eventSub = createEventSub();
-      eventSub.chatFileLoggingService = mockLoggingService;
+      eventSub.rawPlatformDataLoggingService = mockLoggingService;
 
       await eventSub.logRawPlatformData("chat", { message: "test" });
 

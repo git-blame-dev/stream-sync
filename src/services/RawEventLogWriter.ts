@@ -1,6 +1,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
+import { ensureLogDirectory } from '../utils/log-directory';
 import { getSystemTimestampISO } from '../utils/timestamp';
 
 type RawEventLogWriterOptions = {
@@ -26,7 +27,7 @@ class RawEventLogWriter {
             payload: options.payload
         };
 
-        await fs.mkdir(options.dataLoggingPath, { recursive: true });
+        await ensureLogDirectory(options.dataLoggingPath);
         await fs.appendFile(filePath, `${JSON.stringify(logEntry)}\n`, 'utf8');
 
         return { filePath, fileName };

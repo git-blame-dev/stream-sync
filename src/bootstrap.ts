@@ -1,7 +1,7 @@
 import { resolve } from 'node:path';
 import { createBootstrapEmergencyLogger } from './core/bootstrap-emergency-logger';
 import { main } from './main';
-import { isDebugModeEnabled } from './utils/logger-utils';
+import { isBootstrapDebugModeEnabled } from './utils/bootstrap-debug-mode';
 
 const bootstrapEmergencyLogger = createBootstrapEmergencyLogger({ logsDir: resolve(process.cwd(), 'logs') });
 const bootstrapProcess = process as typeof process & {
@@ -10,7 +10,7 @@ const bootstrapProcess = process as typeof process & {
 };
 
 // The unified logger is not initialized before main() starts.
-if (isDebugModeEnabled()) {
+if (isBootstrapDebugModeEnabled()) {
     console.log('[DEBUG] [Bootstrap] Script starting...');
 }
 
@@ -31,17 +31,17 @@ if (!bootstrapProcess.__streamSyncUnhandledRejectionHandlerInstalled) {
 
 (async () => {
     try {
-        if (isDebugModeEnabled()) {
+        if (isBootstrapDebugModeEnabled()) {
             console.log('[DEBUG] [Bootstrap] Importing main application...');
         }
-        if (isDebugModeEnabled()) {
+        if (isBootstrapDebugModeEnabled()) {
             console.log('[DEBUG] [Bootstrap] Main application imported, starting...');
         }
-        if (isDebugModeEnabled()) {
+        if (isBootstrapDebugModeEnabled()) {
             console.log('[DEBUG] [Bootstrap] About to call main()...');
         }
         await main();
-        if (isDebugModeEnabled()) {
+        if (isBootstrapDebugModeEnabled()) {
             console.log('[DEBUG] [Bootstrap] main() completed successfully');
         }
     } catch (error) {

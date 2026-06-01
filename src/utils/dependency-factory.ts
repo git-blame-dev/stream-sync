@@ -3,7 +3,7 @@ import { getUnifiedLogger } from '../core/logging';
 import type { AppLogger } from '../core/logger/types';
 import { InnertubeFactory } from '../factories/innertube-factory';
 import { TikTokWebSocketClient } from '../platforms/tiktok-websocket-client';
-import { ChatFileLoggingService } from '../services/ChatFileLoggingService';
+import { RawPlatformDataLoggingService } from '../services/RawPlatformDataLoggingService';
 import { InnertubeService } from '../services/innertube-service';
 import { SelfMessageDetectionService } from '../services/SelfMessageDetectionService';
 import { ViewerCountExtractionService } from '../services/viewer-count-extraction-service';
@@ -25,7 +25,7 @@ type PlatformDependencyConfig = Record<string, unknown> & {
 
 type SelfMessageConfig = ConstructorParameters<typeof SelfMessageDetectionService>[0];
 
-type ChatFileLoggingServiceCtor = typeof ChatFileLoggingService;
+type RawPlatformDataLoggingServiceCtor = typeof RawPlatformDataLoggingService;
 
 type TikTokConnectorDependencyMap = {
     TikTokWebSocketClient?: unknown;
@@ -47,7 +47,7 @@ type DependencyFactoryOptions = Record<string, unknown> & {
     logger?: AppLogger;
     config?: SelfMessageConfig;
     streamDetectionService?: unknown;
-    ChatFileLoggingService?: ChatFileLoggingServiceCtor;
+    RawPlatformDataLoggingService?: RawPlatformDataLoggingServiceCtor;
     TikTokWebSocketClient?: unknown;
     WebcastEvent?: unknown;
     ControlEvent?: unknown;
@@ -138,7 +138,7 @@ class DependencyFactory {
             const innertubeService = this._createInnertubeService(innertubeFactory, logger, normalizedOptions);
             const viewerExtractionService = this._createViewerExtractionService(innertubeService, logger, normalizedOptions);
             
-            const ResolvedChatFileLoggingService = normalizedOptions.ChatFileLoggingService || ChatFileLoggingService;
+            const ResolvedRawPlatformDataLoggingService = normalizedOptions.RawPlatformDataLoggingService || RawPlatformDataLoggingService;
             
             if (!normalizedOptions.config) {
                 throw new Error('createYoutubeDependencies requires config object in options');
@@ -159,7 +159,7 @@ class DependencyFactory {
                 innertubeService,
                 viewerExtractionService,
                 
-                ChatFileLoggingService: ResolvedChatFileLoggingService,
+                RawPlatformDataLoggingService: ResolvedRawPlatformDataLoggingService,
                 selfMessageDetectionService,
                 
                 ...normalizedOptions
@@ -196,7 +196,7 @@ class DependencyFactory {
             delete sanitizedOptions.tiktokConnector;
             delete sanitizedOptions.modulePreloader;
             
-            const ResolvedChatFileLoggingService = options.ChatFileLoggingService || ChatFileLoggingService;
+            const ResolvedRawPlatformDataLoggingService = options.RawPlatformDataLoggingService || RawPlatformDataLoggingService;
             
             if (!options.config) {
                 throw new Error('createTikTokDependencies requires config object in options');
@@ -212,7 +212,7 @@ class DependencyFactory {
                 WebcastPushConnection,
                 connectionFactory: this._createTikTokConnectionFactory(config, logger),
                 stateManager: this._createTikTokStateManager(config, logger),
-                ChatFileLoggingService: ResolvedChatFileLoggingService,
+                RawPlatformDataLoggingService: ResolvedRawPlatformDataLoggingService,
                 selfMessageDetectionService,
                 ...sanitizedOptions
             };
@@ -256,7 +256,7 @@ class DependencyFactory {
                 throw new Error('createTwitchDependencies requires twitchAuth');
             }
 
-            const ResolvedChatFileLoggingService = options.ChatFileLoggingService || ChatFileLoggingService;
+            const ResolvedRawPlatformDataLoggingService = options.RawPlatformDataLoggingService || RawPlatformDataLoggingService;
             
             if (!options.config) {
                 throw new Error('createTwitchDependencies requires config object in options');
@@ -268,7 +268,7 @@ class DependencyFactory {
                 logger,
                 twitchAuth: injectedTwitchAuth,
                 apiClient: this._createTwitchApiClient(normalizedConfig, logger),
-                ChatFileLoggingService: ResolvedChatFileLoggingService,
+                RawPlatformDataLoggingService: ResolvedRawPlatformDataLoggingService,
                 selfMessageDetectionService,
                 axios: options.axios,
                 WebSocketCtor: options.WebSocketCtor,

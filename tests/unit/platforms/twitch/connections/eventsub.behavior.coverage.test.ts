@@ -9,7 +9,7 @@ import {
 
 import { TwitchEventSub } from "../../../../../src/platforms/twitch-eventsub.ts";
 
-class MockChatFileLoggingService {
+class MockRawPlatformDataLoggingService {
   async logRawPlatformData() {}
 }
 
@@ -59,7 +59,7 @@ const createEventSub = (configOverrides = {}, depsOverrides = {}) => {
         close() {}
         removeAllListeners() {}
       },
-      ChatFileLoggingService: MockChatFileLoggingService,
+      RawPlatformDataLoggingService: MockRawPlatformDataLoggingService,
       ...depsOverrides,
     },
   );

@@ -56,7 +56,7 @@ describe("TwitchPlatform monetisation mapping", () => {
         this.emitter.removeListener(eventName, handler);
       }
     }
-    class MockChatFileLoggingService {
+    class MockRawPlatformDataLoggingService {
       async logRawPlatformData(): Promise<void> {}
     }
 
@@ -67,7 +67,7 @@ describe("TwitchPlatform monetisation mapping", () => {
         twitchAuth: {
           isReady: createMockFn().mockReturnValue(true),
         },
-        ChatFileLoggingService: MockChatFileLoggingService,
+        RawPlatformDataLoggingService: MockRawPlatformDataLoggingService,
         TwitchEventSub: MockTwitchEventSub,
         eventBus,
       },

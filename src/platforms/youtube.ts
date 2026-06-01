@@ -1,17 +1,17 @@
-import fs from 'node:fs';
 import { EventEmitter } from 'node:events';
 
 import { UNKNOWN_CHAT_MESSAGE, UNKNOWN_CHAT_USERNAME } from '../constants/degraded-chat';
 import { PlatformEvents } from '../interfaces/PlatformEvents';
 import { YouTubeLiveStreamService } from '../services/youtube-live-stream-service';
 import * as innertubeInstanceManager from '../services/innertube-instance-manager';
-import { ChatFileLoggingService } from '../services/ChatFileLoggingService';
+import { RawPlatformDataLoggingService } from '../services/RawPlatformDataLoggingService';
 import { collectMissingFields, getMissingFields, mergeMissingFieldsMetadata } from '../utils/missing-fields';
 import { normalizeYouTubeMessage } from '../utils/message-normalization';
 import { getValidMessageParts } from '../utils/message-parts';
 import { validateYouTubePlatformDependencies } from '../utils/dependency-validator';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 import { resolveYouTubeTimestampISO } from '../utils/platform-timestamp';
+import { ensureLogDirectorySync } from '../utils/log-directory';
 import { createRetrySystem } from '../utils/retry-system';
 import { getSystemTimestampISO } from '../utils/timestamp';
 import { safeSetInterval, validateTimeout } from '../utils/timeout-validator';
@@ -75,11 +75,11 @@ type ErrorHandlerLike = {
   logOperationalError?: (message: string, action: string, metadata?: unknown) => void;
 };
 
-type ChatFileLoggingServiceLike = {
+type RawPlatformDataLoggingServiceLike = {
   logRawPlatformData: (platform: string, eventType: string, data: unknown, config: UnknownMap) => Promise<void>;
 };
 
-type ChatFileLoggingServiceConstructor = new (options: { logger: unknown; config: UnknownMap }) => ChatFileLoggingServiceLike;
+type RawPlatformDataLoggingServiceConstructor = new (options: { logger: unknown; config: UnknownMap }) => RawPlatformDataLoggingServiceLike;
 
 type ViewerServiceLike = {
   _activeStream?: { videoId?: string };
@@ -162,8 +162,8 @@ type YouTubeDependencies = UnknownMap & {
   Innertube?: unknown;
   timestampService?: unknown;
   viewerService?: ViewerServiceLike;
-  ChatFileLoggingService?: ChatFileLoggingServiceConstructor;
-  chatFileLoggingService?: ChatFileLoggingServiceLike;
+  RawPlatformDataLoggingService?: RawPlatformDataLoggingServiceConstructor;
+  rawPlatformDataLoggingService?: RawPlatformDataLoggingServiceLike;
   retrySystem?: RetrySystemLike;
   streamDetectionService?: StreamDetectionServiceLike;
   viewerCountProvider?: ViewerCountProviderLike;
@@ -232,7 +232,7 @@ class YouTubePlatform extends EventEmitter {
   Innertube: unknown;
   timestampService: unknown;
   viewerService: ViewerServiceLike | null;
-  chatFileLoggingService: ChatFileLoggingServiceLike;
+  rawPlatformDataLoggingService: RawPlatformDataLoggingServiceLike;
   isInitialized: boolean;
   monitoringInterval: ReturnType<typeof setInterval> | number | null;
   monitoringIntervalStart?: number | undefined;
@@ -299,13 +299,13 @@ class YouTubePlatform extends EventEmitter {
         this.timestampService = dependencies.timestampService || null;
         this.viewerService = dependencies.viewerService || null;
 
-        const defaultChatLoggingDependencies = {
+        const defaultRawPlatformDataLoggingDependencies = {
             logger: this.logger,
             config: this.config
-        } as ConstructorParameters<typeof ChatFileLoggingService>[0];
-        this.chatFileLoggingService = dependencies.chatFileLoggingService || (dependencies.ChatFileLoggingService
-            ? new dependencies.ChatFileLoggingService({ logger: this.logger, config: this.config })
-            : new ChatFileLoggingService(defaultChatLoggingDependencies));
+        } as ConstructorParameters<typeof RawPlatformDataLoggingService>[0];
+        this.rawPlatformDataLoggingService = dependencies.rawPlatformDataLoggingService || (dependencies.RawPlatformDataLoggingService
+            ? new dependencies.RawPlatformDataLoggingService({ logger: this.logger, config: this.config })
+            : new RawPlatformDataLoggingService(defaultRawPlatformDataLoggingDependencies));
 
         this.isInitialized = false;
         this.monitoringInterval = null;
@@ -1358,7 +1358,7 @@ class YouTubePlatform extends EventEmitter {
 
 
     async logRawPlatformData(eventType: string, data: unknown): Promise<void> {
-        return this.chatFileLoggingService.logRawPlatformData('youtube', eventType, data, this.config);
+        return this.rawPlatformDataLoggingService.logRawPlatformData('youtube', eventType, data, this.config);
     }
 
 
@@ -1675,7 +1675,7 @@ class YouTubePlatform extends EventEmitter {
             return;
         }
         try {
-            fs.mkdirSync(this.config.dataLoggingPath, { recursive: true });
+            ensureLogDirectorySync(this.config.dataLoggingPath, { checkExists: false });
         } catch (error) {
             this.errorHandler?.handleDataLoggingError?.(error, 'dataLoggingPath');
             this.logger?.warn?.(

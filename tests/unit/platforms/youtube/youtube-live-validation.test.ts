@@ -10,7 +10,7 @@ describe("YouTubePlatform live validation (modern signals)", () => {
   });
 
   const streamDetectionService = { detectLiveStreams: createMockFn() };
-  const chatFileLoggingService = {
+  const rawPlatformDataLoggingService = {
     logChatMessage: createMockFn(),
     close: createMockFn(),
   };
@@ -24,7 +24,7 @@ describe("YouTubePlatform live validation (modern signals)", () => {
     new YouTubePlatform(baseConfig, {
       logger: noOpLogger,
       streamDetectionService,
-      chatFileLoggingService,
+      rawPlatformDataLoggingService,
     });
 
   it("treats streams with modern live signals (HLS/live_status) as live even when is_live is false", () => {

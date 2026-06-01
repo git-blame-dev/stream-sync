@@ -21,7 +21,7 @@ const noOpUnifiedLogger: typeof coreLogger = {
     config: {},
     outputs: {
         console: { write: () => {} },
-        file: { config: {}, fileLogger: null, write: () => {} }
+        file: { config: {}, fileAppender: null, write: () => {} }
     },
     reconfigure: () => {},
     log: () => {},

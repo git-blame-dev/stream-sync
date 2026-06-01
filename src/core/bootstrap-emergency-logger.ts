@@ -1,6 +1,7 @@
 import { appendFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { safeObjectStringify, sanitizeLogText } from './logger/safe-log-serializer';
+import { ensureLogDirectorySync } from '../utils/log-directory';
 
 type BootstrapEmergencyLoggerDependencies = {
     logsDir: string;
@@ -37,9 +38,10 @@ function createBootstrapEmergencyLogger(dependencies: BootstrapEmergencyLoggerDe
 
     const writeProgramLog = (line: string, fallbackPrefix: string): void => {
         try {
-            if (!fileExistsSync(dependencies.logsDir)) {
-                createDirectorySync(dependencies.logsDir, { recursive: true });
-            }
+            ensureLogDirectorySync(dependencies.logsDir, {
+                existsSync: fileExistsSync,
+                mkdirSync: createDirectorySync
+            });
             appendLogFileSync(join(dependencies.logsDir, 'program-log.txt'), `${line}\n`);
         } catch (error) {
             stderr.write(`${fallbackPrefix} ${formatBootstrapErrorDetails(error)}\n`);

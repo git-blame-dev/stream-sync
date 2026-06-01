@@ -107,7 +107,7 @@ describe("YouTube emote chat parts pipeline (smoke E2E)", () => {
         on: createMockFn(),
         removeListener: createMockFn(),
       },
-      ChatFileLoggingService: class {
+      RawPlatformDataLoggingService: class {
         async logRawPlatformData(): Promise<void> {}
       },
       USER_AGENTS: ["test-agent"],
@@ -234,7 +234,7 @@ describe("YouTube emote chat parts pipeline (smoke E2E)", () => {
         on: createMockFn(),
         removeListener: createMockFn(),
       },
-      ChatFileLoggingService: class {
+      RawPlatformDataLoggingService: class {
         async logRawPlatformData(): Promise<void> {}
       },
       USER_AGENTS: ["test-agent"],

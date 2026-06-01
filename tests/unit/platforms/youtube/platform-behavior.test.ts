@@ -18,7 +18,7 @@ type TestOverrides = {
   streamDetectionService?: ReturnType<typeof createStreamDetectionService>;
   timestampService?: ReturnType<typeof createTimestampService>;
   viewerService?: unknown;
-  ChatFileLoggingService?: unknown;
+  RawPlatformDataLoggingService?: unknown;
   notificationManager?: unknown;
 };
 type TestConnectionManager = Partial<
@@ -143,7 +143,7 @@ const createPlatform = (overrides: TestOverrides = {}) => {
     streamDetectionService,
     timestampService,
     viewerService: overrides.viewerService || null,
-    ChatFileLoggingService: overrides.ChatFileLoggingService,
+    RawPlatformDataLoggingService: overrides.RawPlatformDataLoggingService,
     notificationManager: overrides.notificationManager || {
       emit: createMockFn(),
       on: createMockFn(),

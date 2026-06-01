@@ -200,7 +200,7 @@ describe('TypeScript toolchain gates behavior', () => {
 
         for (const { index } of debugConsoleLines) {
             const previousLine = contentLines[index - 1]?.trim();
-            expect(previousLine).toBe('if (isDebugModeEnabled()) {');
+            expect(previousLine).toBe('if (isBootstrapDebugModeEnabled()) {');
         }
     });
 
@@ -326,7 +326,7 @@ describe('TypeScript toolchain gates behavior', () => {
             'src/obs/startup.js',
             'src/observers/viewer-count-observer.js',
             'src/platforms/twitch/events/event-router.js',
-            'src/services/ChatFileLoggingService.js',
+            'src/services/RawPlatformDataLoggingService.js',
             'src/services/ChatNotificationRouter.js',
             'src/services/CommandCooldownService.js',
             'src/services/PlatformEventRouter.js',
@@ -398,7 +398,7 @@ describe('TypeScript toolchain gates behavior', () => {
     it('migrates first js-only utility batch to typescript source files', () => {
         const migratedUtilities = [
             'src/utils/env-file-parser',
-            'src/utils/file-logger'
+            'src/utils/line-file-appender'
         ];
 
         for (const modulePath of migratedUtilities) {
@@ -1219,7 +1219,7 @@ describe('TypeScript toolchain gates behavior', () => {
             'tests/unit/utils/spam-detection.test.ts',
             'tests/unit/utils/spam-detection.behavior.test.ts',
             'tests/unit/utils/user-facing-content-validation.test.ts',
-            'tests/unit/utils/file-logger.behavior.test.ts'
+            'tests/unit/utils/line-file-appender.behavior.test.ts'
         ];
         const cohortJsPaths = [
             'tests/unit/utils/config-validator.behavior.test.js',
@@ -1231,7 +1231,7 @@ describe('TypeScript toolchain gates behavior', () => {
             'tests/unit/utils/spam-detection.test.js',
             'tests/unit/utils/spam-detection.behavior.test.js',
             'tests/unit/utils/user-facing-content-validation.test.js',
-            'tests/unit/utils/file-logger.behavior.test.js'
+            'tests/unit/utils/line-file-appender.behavior.test.js'
         ];
 
         for (const testPath of cohortTsPaths) {
@@ -1253,7 +1253,7 @@ describe('TypeScript toolchain gates behavior', () => {
             'tests/unit/utils/spam-detection.test.ts',
             'tests/unit/utils/spam-detection.behavior.test.ts',
             'tests/unit/utils/user-facing-content-validation.test.ts',
-            'tests/unit/utils/file-logger.behavior.test.ts'
+            'tests/unit/utils/line-file-appender.behavior.test.ts'
         ];
 
         for (const testPath of cohortPaths) {
@@ -2344,7 +2344,7 @@ describe('TypeScript toolchain gates behavior', () => {
             'src/core/config.ts',
             'src/core/index.ts',
             'src/core/logging.ts',
-            'src/utils/logger-utils.ts',
+            'src/utils/bootstrap-debug-mode.ts',
             'src/utils/secret-manager.ts',
             'src/utils/user-friendly-errors.ts'
         ];
@@ -2450,7 +2450,7 @@ describe('TypeScript toolchain gates behavior', () => {
     it('keeps messaging and notification surface modules free of commonjs module syntax', () => {
         const modulePaths = [
             'src/chat/commands.ts',
-            'src/services/ChatFileLoggingService.ts',
+            'src/services/RawPlatformDataLoggingService.ts',
             'src/services/ChatNotificationRouter.ts',
             'src/services/SelfMessageDetectionService.ts',
             'src/services/UserTrackingService.ts',
@@ -2793,13 +2793,16 @@ describe('TypeScript toolchain gates behavior', () => {
                 path: 'src/core/logging.ts',
                 forbidden: [
                     "nodeRequire('../utils/text-processing')",
-                    "nodeRequire('../utils/file-logger')"
+                    "nodeRequire('../utils/file-logger')",
+                    "nodeRequire('../utils/line-file-appender')"
                 ]
             },
             {
-                path: 'src/utils/logger-utils.ts',
+                path: 'src/utils/bootstrap-debug-mode.ts',
                 forbidden: [
-                    "nodeRequire('../core/logging')"
+                    "nodeRequire('../core/logging')",
+                    "from '../core/logging'",
+                    "from '../core/logging.ts'"
                 ]
             },
             {

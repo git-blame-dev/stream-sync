@@ -21,7 +21,7 @@ import { cleanupTikTokEventListeners, setupTikTokEventListeners } from './tiktok
 import { createTikTokGiftAggregator } from './tiktok/monetization/gift-aggregator';
 import { createTikTokEventFactory } from './tiktok/events/event-factory';
 import { DEFAULT_AVATAR_URL } from '../constants/avatar';
-import { ChatFileLoggingService } from '../services/ChatFileLoggingService';
+import { RawPlatformDataLoggingService } from '../services/RawPlatformDataLoggingService';
 
 const PlatformEvents = {
     CHAT_MESSAGE: 'platform:chat-message',
@@ -44,8 +44,8 @@ type TikTokErrorContext = Record<string, unknown>;
 
 type TikTokPayload = Record<string, unknown>;
 
-type ChatFileLoggingOptions = NonNullable<ConstructorParameters<typeof ChatFileLoggingService>[0]>;
-type ChatFileLogger = NonNullable<ChatFileLoggingOptions['logger']>;
+type RawPlatformDataLoggingOptions = NonNullable<ConstructorParameters<typeof RawPlatformDataLoggingService>[0]>;
+type RawPlatformDataLoggingLogger = NonNullable<RawPlatformDataLoggingOptions['logger']>;
 
 type TikTokRawEvent = TikTokPayload & {
     common?: TikTokPayload & { msgId?: unknown };
@@ -154,7 +154,7 @@ type TikTokDependencies = {
     ControlEvent?: TikTokControlEventMap;
     retrySystem?: RetrySystem;
     connectionFactory?: ConnectionFactoryLike;
-    ChatFileLoggingService?: new (options: ChatFileLoggingOptions) => ChatFileLoggingService;
+    RawPlatformDataLoggingService?: new (options: RawPlatformDataLoggingOptions) => RawPlatformDataLoggingService;
     selfMessageDetectionService?: SelfMessageDetectionService | null;
     viewerCountProvider?: {
         getViewerCount: () => number;
@@ -280,7 +280,7 @@ const isRecord = (value: unknown): value is TikTokPayload => (
 
 const asRecord = (value: unknown): TikTokPayload => (isRecord(value) ? value : {});
 
-const isChatFileLogger = (value: unknown): value is ChatFileLogger => {
+const isRawPlatformDataLoggingLogger = (value: unknown): value is RawPlatformDataLoggingLogger => {
     const candidate = asRecord(value);
     return typeof candidate.debug === 'function'
         && typeof candidate.info === 'function'
@@ -358,7 +358,7 @@ class TikTokPlatform extends EventEmitter {
     declare isPlannedDisconnection: boolean;
     declare connectionFactory: ConnectionFactoryLike;
     declare connectionStateManager: ConnectionStateManager;
-    declare chatFileLoggingService: ChatFileLoggingService;
+    declare rawPlatformDataLoggingService: RawPlatformDataLoggingService;
     declare selfMessageDetectionService: SelfMessageDetectionService | null;
     declare viewerCountProvider: { getViewerCount: () => number; isReady: () => boolean };
     declare connection: TikTokConnection | null;
@@ -451,18 +451,18 @@ class TikTokPlatform extends EventEmitter {
         this.connectionStateManager = new ConnectionStateManager('tiktok', this.connectionFactory);
         this.connectionStateManager.initialize(this.config, { ...dependencies, logger: this.logger });
         
-        const ChatFileLoggingServiceClass = dependencies.ChatFileLoggingService || ChatFileLoggingService;
-        const chatFileLoggingOptions: ChatFileLoggingOptions = {
+        const RawPlatformDataLoggingServiceClass = dependencies.RawPlatformDataLoggingService || RawPlatformDataLoggingService;
+        const rawPlatformDataLoggingOptions: RawPlatformDataLoggingOptions = {
             config: {
                 ...(typeof this.config.dataLoggingPath === 'string' ? { dataLoggingPath: this.config.dataLoggingPath } : {}),
                 ...(typeof this.config.dataLoggingVerbose === 'boolean' ? { dataLoggingVerbose: this.config.dataLoggingVerbose } : {})
             }
         };
-        if (isChatFileLogger(this.logger)) {
-            chatFileLoggingOptions.logger = this.logger;
+        if (isRawPlatformDataLoggingLogger(this.logger)) {
+            rawPlatformDataLoggingOptions.logger = this.logger;
         }
-        this.chatFileLoggingService = new ChatFileLoggingServiceClass({
-            ...chatFileLoggingOptions
+        this.rawPlatformDataLoggingService = new RawPlatformDataLoggingServiceClass({
+            ...rawPlatformDataLoggingOptions
         });
         
         this.selfMessageDetectionService = isSelfMessageDetectionService(dependencies.selfMessageDetectionService)
@@ -1501,7 +1501,7 @@ class TikTokPlatform extends EventEmitter {
     }
 
     async logRawPlatformData(eventType: string, data: unknown): Promise<unknown> {
-        return this.chatFileLoggingService.logRawPlatformData('tiktok', eventType, data, this.config);
+        return this.rawPlatformDataLoggingService.logRawPlatformData('tiktok', eventType, data, this.config);
     }
 
     cleanupEventListeners() {

@@ -23,14 +23,14 @@ type PlatformLoggingConfig = {
 };
 
 type LogStatisticsResult = {
-size?: number;
-lastModified?: Date;
-path?: string;
-error?: string;
-exists?: boolean;
+    size?: number;
+    lastModified?: Date;
+    path?: string;
+    error?: string;
+    exists?: boolean;
 };
 
-class ChatFileLoggingService {
+class RawPlatformDataLoggingService {
     logger: LoggerLike;
     errorHandler: {
         handleDataLoggingError?: (error: Error, dataType: string, message: string) => void;
@@ -42,7 +42,7 @@ class ChatFileLoggingService {
 
     constructor(dependencies: LoggingDependencies = {}) {
         this.logger = dependencies.logger ?? defaultLogger;
-        this.errorHandler = createPlatformErrorHandler(this.logger, 'chat-file-logging');
+        this.errorHandler = createPlatformErrorHandler(this.logger, 'raw-platform-data-logging');
         this.config = dependencies.config ?? {};
         if (this.config.dataLoggingPath !== undefined) {
             this.dataLoggingPath = this.config.dataLoggingPath;
@@ -69,7 +69,7 @@ class ChatFileLoggingService {
             });
 
             if (platformConfig.dataLoggingVerbose) {
-                this.logger.debug?.('Logged platform data to raw event file', 'ChatFileLoggingService', {
+                this.logger.debug?.('Logged platform data to raw event file', 'RawPlatformDataLoggingService', {
                     platform,
                     eventType,
                     fileName: result.fileName
@@ -110,7 +110,7 @@ class ChatFileLoggingService {
         if (this.errorHandler && error instanceof Error) {
             this.errorHandler.handleDataLoggingError?.(error, dataType, message);
         } else {
-            this.errorHandler?.logOperationalError?.(message, 'ChatFileLoggingService', {
+            this.errorHandler?.logOperationalError?.(message, 'RawPlatformDataLoggingService', {
                 dataType,
                 error: this.resolveErrorMessage(error)
             });
@@ -130,4 +130,4 @@ class ChatFileLoggingService {
     }
 }
 
-export { ChatFileLoggingService };
+export { RawPlatformDataLoggingService };

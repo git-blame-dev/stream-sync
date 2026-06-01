@@ -514,6 +514,15 @@ describe('Platform Event Interface Design', () => {
                 timestamp: { invalid: true }
             })).toThrow('Invalid gift timestamp');
         });
+
+        it('should reject message normalization with unsupported timestamp types', () => {
+            expect(() => builder.normalizeMessage('twitch', {
+                username: 'TwitchUser',
+                userId: 'tw-123',
+                message: { text: 'Hello from Twitch!' },
+                timestamp: { invalid: true }
+            })).toThrow('Invalid timestamp for message');
+        });
         
         it('should normalize follow events from different platforms', () => {
             const tiktokFollow = {
@@ -525,7 +534,7 @@ describe('Platform Event Interface Design', () => {
             const twitchFollow = {
                 username: 'twitch_follower',
                 userId: 'tw-follow-1',
-                timestamp: '2024-01-01T12:00:00Z'
+                timestamp: new Date('2024-01-01T12:00:00Z')
             };
             const tiktokEvent = builder.normalizeFollow('tiktok', tiktokFollow);
             const twitchEvent = builder.normalizeFollow('twitch', twitchFollow);
@@ -537,6 +546,7 @@ describe('Platform Event Interface Design', () => {
             
             expect(tiktokEvent.username).toBe('new_follower');
             expect(twitchEvent.username).toBe('twitch_follower');
+            expect(twitchEvent.timestamp).toBe('2024-01-01T12:00:00.000Z');
         });
         
         it('should handle missing or malformed data gracefully during normalization', () => {

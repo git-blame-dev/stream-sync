@@ -69,7 +69,7 @@ class MockWebSocket {
 
 describe("TwitchEventSub behavior", () => {
   let mockTwitchAuth: { isReady: () => boolean; refreshTokens: () => Promise<boolean>; getUserId: () => string };
-  let MockChatFileLoggingService: new () => { logRawPlatformData: () => Promise<void> };
+  let MockRawPlatformDataLoggingService: new () => { logRawPlatformData: () => Promise<void> };
   let mockDependencies: MockDependencies;
 
   beforeEach(() => {
@@ -81,13 +81,13 @@ describe("TwitchEventSub behavior", () => {
       refreshTokens: createMockFn().mockResolvedValue(true),
       getUserId: () => "testUser123",
     };
-    MockChatFileLoggingService = class {
+    MockRawPlatformDataLoggingService = class {
       async logRawPlatformData(): Promise<void> {}
     };
     mockDependencies = {
       logger: noOpLogger,
       twitchAuth: mockTwitchAuth,
-      ChatFileLoggingService: MockChatFileLoggingService,
+      RawPlatformDataLoggingService: MockRawPlatformDataLoggingService,
       WebSocketCtor: MockWebSocket,
     };
   });
