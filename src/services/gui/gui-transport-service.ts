@@ -6,8 +6,17 @@ import crypto from 'node:crypto';
 import { createPlatformErrorHandler } from '../../utils/platform-error-handler';
 import { createEventToGuiContractMapper } from './event-to-gui-contract-mapper';
 import { GIFT_ANIMATION_CACHE_DIR } from '../tiktok-gift-animation/resolver';
-
-type TransportRecord = Record<string, unknown>;
+import {
+    renderActivePage,
+    renderDisabledPage,
+    isHeadRequest,
+    requireGetRequest,
+    resolveAssetFilePath,
+    sendNoCacheHtml,
+    sendNotFound,
+    sendStaticAsset
+} from './gui-http-responses';
+import { isGuiActive, toTransportRecord, type TransportRecord } from './gui-runtime-config';
 
 type GuiTransportLogger = {
     debug?: (message: string, scope: string, data?: unknown) => void;
@@ -64,19 +73,6 @@ isActive: () => boolean;
 type GuiMapperConfig = {
 gui?: Record<string, unknown>;
 };
-
-function toTransportRecord(value: unknown): TransportRecord {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) {
-        return {};
-    }
-
-    return { ...value };
-}
-
-function isGuiActive(config: unknown = {}): boolean {
-    const gui = toTransportRecord(toTransportRecord(config).gui);
-    return gui.enableDock === true || gui.enableOverlay === true;
-}
 
 function createGuiTransportErrorHandler(logger: GuiTransportLogger | undefined): ReturnType<typeof createPlatformErrorHandler> {
     return createPlatformErrorHandler(logger, 'gui-transport');
@@ -149,22 +145,6 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
 
     const RUNTIME_ASSET_MAX_ENTRIES = 64;
     const RUNTIME_ASSET_TTL_MS = 5 * 60 * 1000;
-
-    const getAssetContentType = (filePath: string) => {
-        if (filePath.endsWith('.js')) {
-            return 'application/javascript; charset=utf-8';
-        }
-        if (filePath.endsWith('.css')) {
-            return 'text/css; charset=utf-8';
-        }
-        if (filePath.endsWith('.map')) {
-            return 'application/json; charset=utf-8';
-        }
-        if (filePath.endsWith('.png')) {
-            return 'image/png';
-        }
-        return 'application/octet-stream';
-    };
 
     const normalizeRuntimeAssetRecord = (record: unknown): RuntimeAssetRecord | null => {
         if (!record || typeof record !== 'object') {
@@ -277,56 +257,6 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
                     'GUI transport dispatch failed'
                 );
             });
-    };
-
-    const resolveAssetFilePath = (url: string) => {
-        if (!url.startsWith('/gui/assets/')) {
-            return null;
-        }
-
-        let requestedPath;
-        try {
-            requestedPath = decodeURIComponent(url.replace('/gui/', ''));
-        } catch {
-            return null;
-        }
-
-        const normalizedPath = path.normalize(requestedPath);
-        if (normalizedPath.startsWith('..') || path.isAbsolute(normalizedPath)) {
-            return null;
-        }
-
-        const absolutePath = path.resolve(assetsRoot, normalizedPath);
-        const assetsDirectory = path.resolve(assetsRoot, 'assets');
-        const relativePath = path.relative(assetsDirectory, absolutePath);
-        if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
-            return null;
-        }
-
-        return absolutePath;
-    };
-
-    const renderDisabledPage = (title: string, message: string, transparent = false) => {
-        const bodyStyle = transparent
-            ? 'margin:0;background:transparent;color:#ffffff;font-family:Georgia,serif;'
-            : 'margin:0;background:#101317;color:#ffffff;font-family:Georgia,serif;';
-        return `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title></head><body style="${bodyStyle}"><div data-gui-disabled="true" style="padding:12px;opacity:0.9">${message}</div></body></html>`;
-    };
-
-    const renderActivePage = (title: string, runtimeKind: string, scriptKind = runtimeKind, transparent = false, includeEventGlobals = true) => {
-        const assetVersion = Date.now().toString(36);
-        const bodyStyle = transparent
-            ? 'margin:0;background:transparent;color:#ffffff;font-family:Georgia,serif;'
-            : 'margin:0;background:#101317;color:#ffffff;font-family:Georgia,serif;';
-        const runtimeGuiConfig = {
-            overlayMaxMessages: guiConfig.overlayMaxMessages,
-            overlayMaxLinesPerMessage: guiConfig.overlayMaxLinesPerMessage,
-            uiCompareMode: guiConfig.uiCompareMode === true
-        };
-        const runtimeGlobals = includeEventGlobals
-            ? `window.__STREAM_SYNC_GUI_KIND__=${JSON.stringify(runtimeKind)};window.__STREAM_SYNC_GUI_EVENTS__='/gui/events';window.__STREAM_SYNC_GUI_CONFIG__=${JSON.stringify(runtimeGuiConfig)};`
-            : `window.__STREAM_SYNC_GUI_KIND__=${JSON.stringify(runtimeKind)};`;
-        return `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><link rel="stylesheet" href="/gui/assets/styles.css?v=${assetVersion}"></head><body style="${bodyStyle}"><div id="app" data-kind="${runtimeKind}"></div><script>${runtimeGlobals}</script><script type="module" src="/gui/assets/${scriptKind}.js?v=${assetVersion}"></script></body></html>`;
     };
 
     const sendSse = (payload: unknown) => {
@@ -455,6 +385,7 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
 
     const requestHandler = (req: IncomingMessage, res: ServerResponse<IncomingMessage>) => {
         const rawUrl = typeof req.url === 'string' ? req.url : '/';
+        const sendBody = !isHeadRequest(req);
         let url = rawUrl;
         let routeProbe: string | null = null;
         try {
@@ -467,8 +398,10 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
 
         if (url === '/gui/events') {
             if (demoOnly) {
-                res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
-                res.end('Not Found');
+                sendNotFound(res);
+                return;
+            }
+            if (!requireGetRequest(req, res)) {
                 return;
             }
 
@@ -478,7 +411,11 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
                 Connection: 'keep-alive',
                 'X-Accel-Buffering': 'no'
             });
-            res.write(': connected\n\n');
+            if (!sendBody) {
+                res.end();
+                return;
+            }
+            res.write('retry: 3000\n: connected\n\n');
             clients.add(res);
             logDebug('GUI SSE client connected', {
                 clientCount: clients.size
@@ -496,29 +433,28 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
         const runtimeAssetMatch = url.match(/^\/gui\/runtime\/([a-f0-9]+)\.mp4$/);
         if (runtimeAssetMatch) {
             if (demoOnly) {
-                res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
-                res.end('Not Found');
+                sendNotFound(res);
+                return;
+            }
+            if (!requireGetRequest(req, res)) {
                 return;
             }
 
             const runtimeAssetId = runtimeAssetMatch[1];
             if (!runtimeAssetId) {
-                res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
-                res.end('Not Found');
+                sendNotFound(res);
                 return;
             }
 
             const runtimeAsset = resolveRuntimeAsset(runtimeAssetId);
             if (!runtimeAsset || !fs.existsSync(runtimeAsset.filePath)) {
-                res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
-                res.end('Not Found');
+                sendNotFound(res);
                 return;
             }
 
             const stat = fs.statSync(runtimeAsset.filePath);
             if (!stat.isFile()) {
-                res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
-                res.end('Not Found');
+                sendNotFound(res);
                 return;
             }
 
@@ -532,7 +468,7 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
                         'Content-Range': 'bytes */0',
                         'Accept-Ranges': 'bytes'
                     });
-                    res.end('Requested Range Not Satisfiable');
+                res.end(sendBody ? 'Requested Range Not Satisfiable' : undefined);
                     return;
                 }
 
@@ -559,7 +495,7 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
                         'Content-Range': `bytes */${totalSize}`,
                         'Accept-Ranges': 'bytes'
                     });
-                    res.end('Requested Range Not Satisfiable');
+                    res.end(sendBody ? 'Requested Range Not Satisfiable' : undefined);
                     return;
                 }
 
@@ -572,7 +508,7 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
                         'Content-Range': `bytes */${totalSize}`,
                         'Accept-Ranges': 'bytes'
                     });
-                    res.end('Requested Range Not Satisfiable');
+                    res.end(sendBody ? 'Requested Range Not Satisfiable' : undefined);
                     return;
                 }
 
@@ -584,7 +520,7 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
                             'Content-Range': `bytes */${totalSize}`,
                             'Accept-Ranges': 'bytes'
                         });
-                        res.end('Requested Range Not Satisfiable');
+                        res.end(sendBody ? 'Requested Range Not Satisfiable' : undefined);
                         return;
                     }
 
@@ -600,7 +536,7 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
                             'Content-Range': `bytes */${totalSize}`,
                             'Accept-Ranges': 'bytes'
                         });
-                        res.end('Requested Range Not Satisfiable');
+                        res.end(sendBody ? 'Requested Range Not Satisfiable' : undefined);
                         return;
                     }
 
@@ -610,7 +546,7 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
                             'Content-Range': `bytes */${totalSize}`,
                             'Accept-Ranges': 'bytes'
                         });
-                        res.end('Requested Range Not Satisfiable');
+                        res.end(sendBody ? 'Requested Range Not Satisfiable' : undefined);
                         return;
                     }
 
@@ -636,34 +572,42 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
                 res.writeHead(200, headers);
             }
 
+            if (!sendBody) {
+                res.end();
+                return;
+            }
+
             const stream = fs.createReadStream(runtimeAsset.filePath, { start, end });
             stream.on('error', () => {
                 if (!res.headersSent) {
                     res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
                 }
-                res.end('Failed to read runtime asset');
+                res.end(sendBody ? 'Failed to read runtime asset' : undefined);
             });
             stream.pipe(res);
             return;
         }
 
         if (url.startsWith('/gui/assets/')) {
-            const assetPath = resolveAssetFilePath(url);
-            if (!assetPath || !fs.existsSync(assetPath) || !fs.statSync(assetPath).isFile()) {
-                res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
-                res.end('Not Found');
+            if (!requireGetRequest(req, res)) {
                 return;
             }
 
-            res.writeHead(200, {
-                'Content-Type': getAssetContentType(assetPath),
-                'Cache-Control': 'no-cache, no-store, must-revalidate'
-            });
-            res.end(fs.readFileSync(assetPath));
+            const assetPath = resolveAssetFilePath(url, assetsRoot);
+            if (!assetPath || !fs.existsSync(assetPath) || !fs.statSync(assetPath).isFile()) {
+                sendNotFound(res);
+                return;
+            }
+
+            sendStaticAsset(res, assetPath, sendBody);
             return;
         }
 
         if (url === '/health') {
+            if (!requireGetRequest(req, res)) {
+                return;
+            }
+
             const requestedRoute = routeProbe && routeProbe.startsWith('/') ? routeProbe : null;
             const ok = requestedRoute ? isRouteAvailable(requestedRoute) : true;
             res.writeHead(200, {
@@ -671,72 +615,90 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
                 'Cache-Control': 'no-cache, no-store, must-revalidate',
                 'Access-Control-Allow-Origin': '*'
             });
-            res.end(JSON.stringify({ ok, service: 'stream-sync-gui', route: requestedRoute }));
+            res.end(sendBody ? JSON.stringify({ ok, service: 'stream-sync-gui', route: requestedRoute }) : undefined);
             return;
         }
 
         if (url === '/demo') {
             if (!demoOnly) {
-                res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
-                res.end('Not Found');
+                sendNotFound(res);
+                return;
+            }
+            if (!requireGetRequest(req, res)) {
                 return;
             }
 
-            res.writeHead(200, {
-                'Content-Type': 'text/html; charset=utf-8',
-                'Cache-Control': 'no-cache, no-store, must-revalidate'
-            });
-            res.end(renderActivePage('Stream Sync Demo', 'demo', 'demo', true, false));
+            sendNoCacheHtml(res, renderActivePage({
+                title: 'Stream Sync Demo',
+                runtimeKind: 'demo',
+                scriptKind: 'demo',
+                transparent: true,
+                includeEventGlobals: false,
+                guiConfig
+            }), sendBody);
             return;
         }
 
         if (demoOnly) {
-            res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
-            res.end('Not Found');
+            sendNotFound(res);
             return;
         }
 
         if (url === '/dock') {
-            res.writeHead(200, {
-                'Content-Type': 'text/html; charset=utf-8',
-                'Cache-Control': 'no-cache, no-store, must-revalidate'
-            });
-            if (guiConfig.enableDock === true) {
-                res.end(renderActivePage('Stream Sync Dock', 'dock', 'dock', true));
+            if (!requireGetRequest(req, res)) {
                 return;
             }
-            res.end(renderDisabledPage('Stream Sync Dock', 'Dock disabled', true));
+            if (guiConfig.enableDock === true) {
+                sendNoCacheHtml(res, renderActivePage({
+                    title: 'Stream Sync Dock',
+                    runtimeKind: 'dock',
+                    scriptKind: 'dock',
+                    transparent: true,
+                    guiConfig
+                }), sendBody);
+                return;
+            }
+            sendNoCacheHtml(res, renderDisabledPage('Stream Sync Dock', 'Dock disabled', true), sendBody);
             return;
         }
 
         if (url === '/tiktok-animations') {
-            res.writeHead(200, {
-                'Content-Type': 'text/html; charset=utf-8',
-                'Cache-Control': 'no-cache, no-store, must-revalidate'
-            });
-            if (guiConfig.enableDock === true || guiConfig.enableOverlay === true) {
-                res.end(renderActivePage('Stream Sync TikTok Animations', 'tiktok-animations', 'dock', true));
+            if (!requireGetRequest(req, res)) {
                 return;
             }
-            res.end(renderDisabledPage('Stream Sync TikTok Animations', 'TikTok animations disabled', true));
+            if (guiConfig.enableDock === true || guiConfig.enableOverlay === true) {
+                sendNoCacheHtml(res, renderActivePage({
+                    title: 'Stream Sync TikTok Animations',
+                    runtimeKind: 'tiktok-animations',
+                    scriptKind: 'dock',
+                    transparent: true,
+                    guiConfig
+                }), sendBody);
+                return;
+            }
+            sendNoCacheHtml(res, renderDisabledPage('Stream Sync TikTok Animations', 'TikTok animations disabled', true), sendBody);
             return;
         }
 
         if (url === '/overlay') {
-            res.writeHead(200, {
-                'Content-Type': 'text/html; charset=utf-8',
-                'Cache-Control': 'no-cache, no-store, must-revalidate'
-            });
-            if (guiConfig.enableOverlay === true) {
-                res.end(renderActivePage('Stream Sync Overlay', 'overlay', 'overlay', true));
+            if (!requireGetRequest(req, res)) {
                 return;
             }
-            res.end(renderDisabledPage('Stream Sync Overlay', 'Overlay disabled', true));
+            if (guiConfig.enableOverlay === true) {
+                sendNoCacheHtml(res, renderActivePage({
+                    title: 'Stream Sync Overlay',
+                    runtimeKind: 'overlay',
+                    scriptKind: 'overlay',
+                    transparent: true,
+                    guiConfig
+                }), sendBody);
+                return;
+            }
+            sendNoCacheHtml(res, renderDisabledPage('Stream Sync Overlay', 'Overlay disabled', true), sendBody);
             return;
         }
 
-        res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
-        res.end('Not Found');
+        sendNotFound(res);
     };
 
     const start = async () => {

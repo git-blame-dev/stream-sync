@@ -1243,6 +1243,93 @@ describe("GUI transport routes and SSE integration", () => {
     }
   });
 
+  it("returns 405 with Allow header for non-GET GUI routes", async () => {
+    const assetsRoot = fs.mkdtempSync(path.join(os.tmpdir(), "gui-method-assets-"));
+    const assetsDir = path.join(assetsRoot, "assets");
+    fs.mkdirSync(assetsDir, { recursive: true });
+    fs.writeFileSync(path.join(assetsDir, "dock.js"), 'console.log("dock");');
+
+    const port = 0;
+    const eventBus = new TestEventBus();
+    const config = buildConfig({
+      enableDock: true,
+      enableOverlay: true,
+      port,
+    });
+    const service = createGuiTransportService({
+      config,
+      eventBus,
+      logger: null,
+      assetsRoot,
+    });
+    await service.start();
+
+    const baseUrl = getBaseUrl(service);
+    try {
+      for (const route of [
+        "/health",
+        "/dock",
+        "/overlay",
+        "/tiktok-animations",
+        "/gui/assets/dock.js",
+        "/gui/events",
+      ]) {
+        const response = await fetch(`${baseUrl}${route}`, { method: "POST" });
+        const body = await response.text();
+
+        expect(response.status).toBe(405);
+        expect(response.headers.get("allow")).toBe("GET, HEAD");
+        expect(body).toContain("Method Not Allowed");
+      }
+    } finally {
+      await service.stop();
+      fs.rmSync(assetsRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("allows HEAD for readable GUI routes without opening SSE clients", async () => {
+    const assetsRoot = fs.mkdtempSync(path.join(os.tmpdir(), "gui-head-assets-"));
+    const assetsDir = path.join(assetsRoot, "assets");
+    fs.mkdirSync(assetsDir, { recursive: true });
+    fs.writeFileSync(path.join(assetsDir, "dock.js"), 'console.log("dock");');
+
+    const port = 0;
+    const eventBus = new TestEventBus();
+    const config = buildConfig({
+      enableDock: true,
+      enableOverlay: true,
+      port,
+    });
+    const service = createGuiTransportService({
+      config,
+      eventBus,
+      logger: null,
+      assetsRoot,
+    });
+    await service.start();
+
+    const baseUrl = getBaseUrl(service);
+    try {
+      for (const route of [
+        "/health",
+        "/dock",
+        "/overlay",
+        "/tiktok-animations",
+        "/gui/assets/dock.js",
+        "/gui/events",
+      ]) {
+        const response = await fetch(`${baseUrl}${route}`, { method: "HEAD" });
+        const body = await response.text();
+
+        expect(response.status).toBe(200);
+        expect(body).toBe("");
+      }
+    } finally {
+      await service.stop();
+      fs.rmSync(assetsRoot, { recursive: true, force: true });
+    }
+  });
+
   it("reports route-specific GUI readiness for OBS wrappers", async () => {
     const port = 0;
     const eventBus = new TestEventBus();
@@ -1404,6 +1491,38 @@ describe("GUI transport routes and SSE integration", () => {
       expect(html).toContain('"overlayMaxMessages":7');
       expect(html).toContain('"overlayMaxLinesPerMessage":4');
       expect(html).toContain('"uiCompareMode":false');
+    } finally {
+      await service.stop();
+    }
+  });
+
+  it("emits numeric overlay runtime config defaults instead of numeric strings", async () => {
+    const port = 0;
+    const eventBus = new TestEventBus();
+    const config = buildConfig({
+      enableDock: false,
+      enableOverlay: true,
+      overlayMaxMessages: "7",
+      overlayMaxLinesPerMessage: "4",
+      port,
+    } as any);
+    const service = createGuiTransportService({
+      config,
+      eventBus,
+      logger: null,
+    });
+    await service.start();
+
+    const baseUrl = getBaseUrl(service);
+    try {
+      const response = await fetch(`${baseUrl}/overlay`);
+      const html = await response.text();
+
+      expect(response.status).toBe(200);
+      expect(html).toContain('"overlayMaxMessages":3');
+      expect(html).toContain('"overlayMaxLinesPerMessage":3');
+      expect(html).not.toContain('"overlayMaxMessages":"7"');
+      expect(html).not.toContain('"overlayMaxLinesPerMessage":"4"');
     } finally {
       await service.stop();
     }

@@ -225,4 +225,28 @@ describe("GUI feed store behavior", () => {
       "message-5",
     ]);
   });
+
+  it("rejects malformed rows before they reach the display queue", () => {
+    const store = createGuiFeedStore();
+
+    store.pushEvent({
+      type: "chat",
+      kind: "chat",
+      platform: "twitch",
+      username: "missing-avatar-user",
+      text: "missing avatar",
+      timestamp: "2024-01-01T00:00:00.000Z",
+    });
+    store.pushEvent({
+      type: "chat",
+      kind: "unsupported-kind",
+      platform: "twitch",
+      username: "unsupported-kind-user",
+      text: "unsupported kind",
+      avatarUrl: "https://example.invalid/avatar.png",
+      timestamp: "2024-01-01T00:00:01.000Z",
+    });
+
+    expect(store.getRows()).toEqual([]);
+  });
 });

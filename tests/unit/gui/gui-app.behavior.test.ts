@@ -8,7 +8,7 @@ import { GuiShell } from "../../../gui/src/shared/components/GuiShell";
 
 type EventPayload = Record<string, unknown>;
 type EventHandler = (payload: EventPayload) => void;
-type EventFeedArgs = { onEvent: EventHandler };
+type EventFeedArgs = { url: string; onEvent: EventHandler };
 type AppRenderer = {
   toJSON: () => unknown;
   root: {
@@ -119,6 +119,45 @@ describe("GUI app behavior", () => {
     const text = JSON.stringify(renderer!.toJSON());
     expect(text).toContain("gui-shell--overlay");
     expect(text).toContain("test-user");
+  });
+
+  it("disposes the active event feed when events path changes and on unmount", async () => {
+    const openedUrls: string[] = [];
+    const disposedUrls: string[] = [];
+    const createEventFeedImpl = ({ url }: EventFeedArgs) => {
+      openedUrls.push(url);
+      return () => {
+        disposedUrls.push(url);
+      };
+    };
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await TestRenderer.act(async () => {
+      renderer = TestRenderer.create(
+        React.createElement(App, {
+          mode: "dock",
+          eventsPath: "/gui/events/one",
+          createEventFeedImpl,
+        }),
+      );
+    });
+
+    await TestRenderer.act(async () => {
+      renderer!.update(
+        React.createElement(App, {
+          mode: "dock",
+          eventsPath: "/gui/events/two",
+          createEventFeedImpl,
+        }),
+      );
+    });
+
+    await TestRenderer.act(async () => {
+      renderer!.unmount();
+    });
+
+    expect(openedUrls).toEqual(["/gui/events/one", "/gui/events/two"]);
+    expect(disposedUrls).toEqual(["/gui/events/one", "/gui/events/two"]);
   });
 
   it("applies overlay max message limit from app configuration", async () => {
