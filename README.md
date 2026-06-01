@@ -98,6 +98,21 @@ bun run build
 bun run verify
 ```
 
+### OBS browser sources
+
+Stream Sync includes small local HTML launchers for OBS Browser Sources under `obs/`. They load from disk, wait for the local GUI health check, then open the selected overlay route. This avoids manually reloading OBS browser sources when OBS starts before the Stream Sync app or GUI server.
+
+Use one of these local files in OBS:
+
+```text
+<repo>\obs\overlay.html
+<repo>\obs\dock.html
+<repo>\obs\demo.html
+<repo>\obs\tiktok-animations.html
+```
+
+The default GUI origin is `http://127.0.0.1:3399`.
+
 ### Run a release archive
 
 Download the Linux or Windows archive from [GitHub Releases](https://github.com/git-blame-dev/stream-sync/releases). Release assets are named like `stream-sync-vYYYY.MM.DD.N-linux-x64.tar.gz` and `stream-sync-vYYYY.MM.DD.N-windows-x64.zip`.
