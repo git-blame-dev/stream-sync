@@ -81,7 +81,13 @@ describe("OBS Sources Module Characterization Tests", () => {
 test(
   "updateTextSource preserves existing settings while writing sanitized text",
   async () => {
-        mockObsCall.mockResolvedValueOnce({ inputSettings: {} });
+        const existingSettings = {
+          font: { face: "Inter", size: 48 },
+          color: 16777215,
+          text: "old message",
+        };
+
+        mockObsCall.mockResolvedValueOnce({ inputSettings: existingSettings });
         mockObsCall.mockResolvedValueOnce();
 
         await sourcesModule.updateTextSource("test-source", "new message");
@@ -97,11 +103,27 @@ test(
           requestType: "SetInputSettings",
           payload: {
             inputName: "test-source",
-            inputSettings: { text: "new message" },
+            inputSettings: {
+              ...existingSettings,
+              text: "new message",
+            },
             overlay: false,
           },
         },
       ]);
+      },
+      TEST_TIMEOUTS.FAST,
+    );
+
+    test(
+      "updateTextSource skips OBS calls when the OBS manager is not ready",
+      async () => {
+        mockObsManager.isReady = createMockFn().mockResolvedValue(false);
+
+        await sourcesModule.updateTextSource("test-source", "new message");
+
+        expect(mockEnsureConnected).not.toHaveBeenCalled();
+        expect(mockObsCall).not.toHaveBeenCalled();
       },
       TEST_TIMEOUTS.FAST,
     );
@@ -250,6 +272,19 @@ test(
     );
 
     test(
+      "setSourceVisibility skips scene-item lookup when the OBS manager is not ready",
+      async () => {
+        mockObsManager.isReady = createMockFn().mockResolvedValue(false);
+
+        await sourcesModule.setSourceVisibility("test-scene", "test-source", true);
+
+        expect(mockEnsureConnected).not.toHaveBeenCalled();
+        expect(mockObsCall).not.toHaveBeenCalled();
+      },
+      TEST_TIMEOUTS.FAST,
+    );
+
+    test(
       "getSceneItemId should throw error for invalid scene item ID",
       async () => {
         mockObsCall.mockResolvedValue({ sceneItemId: null });
@@ -323,6 +358,17 @@ test(
     );
 
     test(
+      "setGroupSourceVisibility ignores disabled group names without OBS calls",
+      async () => {
+        await sourcesModule.setGroupSourceVisibility("test-source", null, true);
+
+        expect(mockEnsureConnected).not.toHaveBeenCalled();
+        expect(mockObsCall).not.toHaveBeenCalled();
+      },
+      TEST_TIMEOUTS.FAST,
+    );
+
+    test(
       "getGroupSceneItemId should handle missing source in group",
       async () => {
         const mockSceneItems = [
@@ -363,7 +409,44 @@ test(
           mockPlatformLogos,
         );
 
-        expect(mockObsCall).toHaveBeenCalled();
+        expect(obsRequests()).toEqual([
+          {
+            requestType: "GetGroupSceneItemList",
+            payload: { sceneName: "test-chat-group" },
+          },
+          {
+            requestType: "SetSceneItemEnabled",
+            payload: {
+              sceneName: "test-chat-group",
+              sceneItemId: 1,
+              sceneItemEnabled: true,
+            },
+          },
+          {
+            requestType: "GetGroupSceneItemList",
+            payload: { sceneName: "test-chat-group" },
+          },
+          {
+            requestType: "SetSceneItemEnabled",
+            payload: {
+              sceneName: "test-chat-group",
+              sceneItemId: 2,
+              sceneItemEnabled: false,
+            },
+          },
+          {
+            requestType: "GetGroupSceneItemList",
+            payload: { sceneName: "test-chat-group" },
+          },
+          {
+            requestType: "SetSceneItemEnabled",
+            payload: {
+              sceneName: "test-chat-group",
+              sceneItemId: 3,
+              sceneItemEnabled: false,
+            },
+          },
+        ]);
       },
       TEST_TIMEOUTS.FAST,
     );

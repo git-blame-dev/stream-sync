@@ -19,6 +19,22 @@ describe("display-config-validator", () => {
       expect(result).toBe(true);
     });
 
+    it("accepts valid config when groupName is omitted", () => {
+      const result = validateDisplayConfig(
+        { sourceName: "text", sceneName: "main" },
+        "chat",
+      );
+      expect(result).toBe(true);
+    });
+
+    it("rejects missing configuration type", () => {
+      const result = validateDisplayConfig(
+        { sourceName: "text", sceneName: "main", groupName: "grp" },
+        "",
+      );
+      expect(result).toBe(false);
+    });
+
     it("rejects invalid config objects", () => {
       const result = validateDisplayConfig(null, "chat");
       expect(result).toBe(false);
@@ -38,6 +54,21 @@ describe("display-config-validator", () => {
         "chat",
       );
       expect(result).toBe(false);
+    });
+
+    it("rejects whitespace-only source or scene names", () => {
+      expect(
+        validateDisplayConfig(
+          { sourceName: "   ", sceneName: "main", groupName: null },
+          "chat",
+        ),
+      ).toBe(false);
+      expect(
+        validateDisplayConfig(
+          { sourceName: "text", sceneName: "   ", groupName: null },
+          "chat",
+        ),
+      ).toBe(false);
     });
   });
 });

@@ -272,6 +272,27 @@ test(
       TEST_TIMEOUTS.FAST,
     );
 
+    test(
+      "updateAllGoalDisplays skips enabled platforms that do not have current goal state",
+      async () => {
+        const { updateTextSource } = mockSourcesManager;
+        mockGoalTracker.getAllGoalStates.mockReturnValueOnce({
+          tiktok: { current: 500, target: 1000, formatted: "500/1000 coins" },
+          youtube: null,
+          twitch: { current: 50, target: 100, formatted: "050/100 bits" },
+        });
+
+        await goalsModule.updateAllGoalDisplays();
+
+        const updates = updateTextSource.mock.calls.map(([source, text]) => ({ source, text }));
+        expect(updates).toEqual([
+          { source: "tiktok goal txt", text: "500/1000 coins" },
+          { source: "twitch goal txt", text: "050/100 bits" },
+        ]);
+      },
+      TEST_TIMEOUTS.FAST,
+    );
+
 test(
   "updateGoalDisplay writes the requested platform goal text",
   async () => {
@@ -362,6 +383,80 @@ test(
         expect(sourceName).toBe("tiktok goal txt");
         expect(goalText).toBe("500/1000 coins");
         expect(result.success).toBe(true);
+      },
+      TEST_TIMEOUTS.FAST,
+    );
+
+    test(
+      "processDonationGoal returns tracker failures without updating OBS text",
+      async () => {
+        const failedResult = {
+          success: false,
+          error: "Donation amount below goal minimum",
+        };
+        mockGoalTracker.addDonationToGoal.mockResolvedValueOnce(failedResult);
+
+        const result = await goalsModule.processDonationGoal("tiktok", 0, "coins");
+
+        expect(result).toEqual(failedResult);
+        expect(mockSourcesManager.updateTextSource).not.toHaveBeenCalled();
+      },
+      TEST_TIMEOUTS.FAST,
+    );
+
+    test(
+      "processPaypiggyGoal returns tracker failures without updating OBS text",
+      async () => {
+        const failedResult = {
+          success: false,
+          error: "Paypiggy goal is unavailable",
+        };
+        mockGoalTracker.addPaypiggyToGoal.mockResolvedValueOnce(failedResult);
+
+        const result = await goalsModule.processPaypiggyGoal("tiktok", 1);
+
+        expect(result).toEqual(failedResult);
+        expect(mockSourcesManager.updateTextSource).not.toHaveBeenCalled();
+      },
+      TEST_TIMEOUTS.FAST,
+    );
+
+    test(
+      "processDonationGoal records goal progress without OBS writes when disconnected",
+      async () => {
+        const updatedState = {
+          success: true,
+          formatted: "700/1000 coins",
+          current: 700,
+        };
+        mockObsManager.isConnected.mockReturnValue(false);
+        mockGoalTracker.addDonationToGoal.mockResolvedValueOnce(updatedState);
+
+        const result = await goalsModule.processDonationGoal("tiktok", 200, "coins");
+
+        expect(result).toEqual(updatedState);
+        expect(mockGoalTracker.addDonationToGoal).toHaveBeenCalledWith("tiktok", 200, "coins");
+        expect(mockSourcesManager.updateTextSource).not.toHaveBeenCalled();
+      },
+      TEST_TIMEOUTS.FAST,
+    );
+
+    test(
+      "processPaypiggyGoal records goal progress without OBS writes when disconnected",
+      async () => {
+        const updatedState = {
+          success: true,
+          formatted: "555/1000 coins",
+          current: 555,
+        };
+        mockObsManager.isConnected.mockReturnValue(false);
+        mockGoalTracker.addPaypiggyToGoal.mockResolvedValueOnce(updatedState);
+
+        const result = await goalsModule.processPaypiggyGoal("tiktok", 5);
+
+        expect(result).toEqual(updatedState);
+        expect(mockGoalTracker.addPaypiggyToGoal).toHaveBeenCalledWith("tiktok", 5);
+        expect(mockSourcesManager.updateTextSource).not.toHaveBeenCalled();
       },
       TEST_TIMEOUTS.FAST,
     );
