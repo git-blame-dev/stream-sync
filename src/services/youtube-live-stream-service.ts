@@ -16,10 +16,38 @@ type LoggerLike = {
 type ChannelVideo = {
     id?: string;
     video_id?: string;
-    title?: { text?: string } | string;
+    content_id?: string;
+    title?: { text?: string; content?: string } | string;
     is_live?: boolean;
     is_live_content?: boolean;
     badges?: Array<{ label?: string; text?: string; style?: string }>;
+    content_image?: {
+        overlays?: Array<{
+            badges?: Array<{
+                text?: string;
+                icon_name?: string;
+                badge_style?: string;
+            }>;
+        }>;
+    };
+    metadata?: {
+        title?: { text?: string; content?: string } | string;
+        metadata?: {
+            metadata_rows?: Array<{
+                metadata_parts?: Array<{
+                    text?: {
+                        text?: string;
+                        content?: string;
+                        endpoint?: {
+                            payload?: {
+                                browseId?: string;
+                            };
+                        };
+                    } | null;
+                }>;
+            }>;
+        };
+    };
     author?: {
         id?: string;
         name?: string;
@@ -28,9 +56,7 @@ type ChannelVideo = {
 };
 
 type ChannelLike = {
-    videos?: {
-        contents?: ChannelVideo[];
-    };
+    videos?: ChannelVideo[];
     getLiveStreams?: () => Promise<{ videos?: ChannelVideo[] }>;
 };
 
@@ -80,12 +106,20 @@ static isVideoLive(video: ChannelVideo | null | undefined): boolean {
                 || badge.text === 'LIVE'
                 || badge.style === 'BADGE_STYLE_TYPE_LIVE_NOW'
             ))
+            || video.content_image?.overlays?.some((overlay) =>
+                overlay.badges?.some((badge) =>
+                    badge.text === 'LIVE'
+                    || badge.icon_name === 'LIVE'
+                    || badge.badge_style === 'THUMBNAIL_OVERLAY_BADGE_STYLE_LIVE'
+                )
+            )
         );
     }
 
-static async getLiveStreams(innertubeClient: InnertubeClientLike, channelHandle: unknown, options: GetLiveStreamOptions = {}): Promise<LiveStreamsResult> {
+    static async getLiveStreams(innertubeClient: InnertubeClientLike, channelHandle: unknown, options: GetLiveStreamOptions = {}): Promise<LiveStreamsResult> {
         const timeout: number = options.timeout ?? 2000;
         const logger = options.logger;
+        const detectionStartedAt = Date.now();
 
         try {
             const normalizedHandle = normalizeChannelHandle(channelHandle);
@@ -129,11 +163,17 @@ static async getLiveStreams(innertubeClient: InnertubeClientLike, channelHandle:
             let liveStreams = this._extractLiveStreamsFromChannelVideos(channel, logger);
             detectionMeta.hasContent = detectionMeta.hasContent || this._channelHasVideoContent(channel);
 
-            if (!liveStreams.length && typeof channel.getLiveStreams === 'function') {
-                const apiStreams = await this._getLiveStreamsFromChannelApi(channel, timeout, logger);
+            if (typeof channel.getLiveStreams === 'function') {
+                const remainingTimeout = Math.max(1, timeout - (Date.now() - detectionStartedAt));
+                const apiTimeout = liveStreams.length
+                    ? Math.max(1, Math.floor(remainingTimeout / 2))
+                    : timeout;
+                const apiStreams = await this._getLiveStreamsFromChannelApi(channel, apiTimeout, logger);
                 detectionMeta.hasContent = detectionMeta.hasContent || apiStreams.hasContent;
-                liveStreams = apiStreams.streams;
-                if (liveStreams.length) {
+                const streamIds = new Set(liveStreams.map((stream) => stream.videoId));
+                const additionalApiStreams = apiStreams.streams.filter((stream) => !streamIds.has(stream.videoId));
+                liveStreams = liveStreams.concat(additionalApiStreams);
+                if (additionalApiStreams.length) {
                     detectionMeta.detectionMethod = 'channel_api';
                 }
             }
@@ -247,11 +287,11 @@ static _isChannelNotFoundError(error: unknown): boolean {
     }
 
 static _channelHasVideoContent(channel: ChannelLike): boolean {
-        return Array.isArray(channel?.videos?.contents) && channel.videos.contents.length > 0;
+        return Array.isArray(channel?.videos) && channel.videos.length > 0;
     }
 
 static _extractLiveStreamsFromChannelVideos(channel: ChannelLike, logger?: LoggerLike): LiveStreamRecord[] {
-        const videos = Array.isArray(channel?.videos?.contents) ? channel.videos.contents : [];
+        const videos = Array.isArray(channel?.videos) ? channel.videos : [];
         return this._mapLiveVideos(videos, logger, 'channel_videos');
     }
 
@@ -279,22 +319,54 @@ static async _getLiveStreamsFromChannelApi(channel: ChannelLike, timeout: number
             return [];
         }
 
+        const seenVideoIds = new Set<string>();
         return videos
             .filter((video) => {
                 const isLive = this.isVideoLive(video);
                 if (isLive) {
-                    const title = (typeof video.title === 'string' ? video.title : video.title?.text) || 'Live Stream';
-                    this._log(logger, 'debug', `[YouTube] Live stream found via ${context}: ${video.id || video.video_id} - ${title}`);
+                    const title = this._getVideoTitle(video);
+                    this._log(logger, 'debug', `[YouTube] Live stream found via ${context}: ${this._getVideoId(video)} - ${title}`);
                 }
                 return isLive;
             })
             .map((video) => ({
-                videoId: String(video.id || video.video_id || ''),
-                title: (typeof video.title === 'string' ? video.title : video.title?.text) || 'Live Stream',
+                videoId: this._getVideoId(video),
+                title: this._getVideoTitle(video),
                 isLive: true as const,
                 author: video.author?.name || null
             }))
-            .filter((stream): stream is LiveStreamRecord => typeof stream.videoId === 'string' && stream.videoId.length > 0);
+            .filter((stream): stream is LiveStreamRecord => {
+                if (!stream.videoId || seenVideoIds.has(stream.videoId)) {
+                    return false;
+                }
+                seenVideoIds.add(stream.videoId);
+                return true;
+            });
+    }
+
+    static _getVideoId(video: ChannelVideo): string {
+        return String(video.id || video.video_id || video.content_id || '');
+    }
+
+    static _getVideoTitle(video: ChannelVideo): string {
+        const title = video.title ?? video.metadata?.title;
+        if (typeof title === 'string') {
+            return title || 'Live Stream';
+        }
+        return title?.text || title?.content || 'Live Stream';
+    }
+
+    static _videoBelongsToChannel(video: ChannelVideo, channelId: string, normalizedHandle: string): boolean {
+        const authorHandle = video.author?.handle?.replace(/^@/, '').toLowerCase();
+        if (video.author?.id === channelId || authorHandle === normalizedHandle) {
+            return true;
+        }
+
+        return (video.metadata?.metadata?.metadata_rows ?? []).some((row) =>
+            (row.metadata_parts ?? []).some((part) =>
+                part.text?.endpoint?.payload?.browseId === channelId
+            )
+        );
     }
 
 static async _getOrResolveChannelId(
@@ -376,26 +448,13 @@ logger?: LoggerLike;
             const videos: ChannelVideo[] = searchResult?.videos ?? [];
             const normalizedHandle = channelHandle.replace(/^@/, '').toLowerCase();
 
-            const streams = videos
-                .filter((video) => {
-                    const authorHandle = video.author?.handle?.replace(/^@/, '').toLowerCase();
-                    const authorName = video.author?.name?.toLowerCase();
-                    const belongsToChannel = video.author?.id === channelId
-                        || (authorHandle && authorHandle === normalizedHandle)
-                        || (authorName && authorName.includes(normalizedHandle));
-                    return belongsToChannel && this.isVideoLive(video);
-                })
-                .map((video) => ({
-                    videoId: String(video.id || video.video_id || ''),
-                    title: (typeof video.title === 'string' ? video.title : video.title?.text) || 'Live Stream',
-                    isLive: true as const,
-                    author: video.author?.name || null
-                }))
-                .filter((stream) => stream.videoId);
+            const ownedVideos = videos
+                .filter((video) => this._videoBelongsToChannel(video, channelId, normalizedHandle));
+            const streams = this._mapLiveVideos(ownedVideos, logger, 'search');
 
             return {
                 streams,
-                hasContent: videos.length > 0
+                hasContent: ownedVideos.length > 0
             };
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);

@@ -50,6 +50,49 @@ const isTimeoutResult = (
   result: TimeoutRaceResult,
 ): result is { timedOut: true } => "timedOut" in result;
 
+const lockupView = (options: {
+  contentId: string;
+  title: string;
+  badge?: { text: string; iconName: string; badgeStyle: string };
+  duration?: string;
+  history?: string;
+}) => {
+  const overlayBadge = options.badge
+    ? {
+        text: options.badge.text,
+        icon_name: options.badge.iconName,
+        badge_style: options.badge.badgeStyle,
+      }
+    : options.duration
+      ? {
+          text: options.duration,
+          badge_style: "THUMBNAIL_OVERLAY_BADGE_STYLE_DEFAULT",
+        }
+      : null;
+
+  return {
+    type: "LockupView" as const,
+    content_type: "VIDEO" as const,
+    content_id: options.contentId,
+    metadata: {
+      title: { text: options.title },
+      metadata: {
+        metadata_rows: options.history
+          ? [
+              {
+                metadata_parts: [{ text: { text: options.history } }],
+                badges: [],
+              },
+            ]
+          : [],
+      },
+    },
+    content_image: {
+      overlays: overlayBadge ? [{ badges: [overlayBadge] }] : [],
+    },
+  };
+};
+
 describe("YouTube Live Stream Service - Complete User Experience", () => {
   let mockInnertubeClient: MockInnertubeClient;
 
@@ -69,11 +112,165 @@ describe("YouTube Live Stream Service - Complete User Experience", () => {
   });
 
   describe("Live Stream Detection User Experience", () => {
+    it("should map horizontal and vertical live LockupView channel entries", async () => {
+      const channelId = "UClockup1234567890123456";
+      const horizontal = lockupView({
+        contentId: "lockup-horizontal-live",
+        title: "Horizontal Live Newsroom",
+        badge: {
+          text: "LIVE",
+          iconName: "LIVE",
+          badgeStyle: "THUMBNAIL_OVERLAY_BADGE_STYLE_LIVE",
+        },
+      });
+      const vertical = lockupView({
+        contentId: "lockup-vertical-live",
+        title: "Vertical Live Studio",
+        badge: {
+          text: "LIVE",
+          iconName: "LIVE",
+          badgeStyle: "THUMBNAIL_OVERLAY_BADGE_STYLE_LIVE",
+        },
+      });
+      mockInnertubeClient.getChannel.mockResolvedValue({
+        videos: [horizontal, vertical],
+      });
+
+      const result = await YouTubeLiveStreamService.getLiveStreams(
+        mockInnertubeClient,
+        channelId,
+        { logger: noOpLogger },
+      );
+
+      expect(result.streams).toHaveLength(2);
+      expect(result.streams.map((stream) => stream.videoId)).toEqual([
+        "lockup-horizontal-live",
+        "lockup-vertical-live",
+      ]);
+      expect(result.streams.map((stream) => stream.title)).toEqual([
+        "Horizontal Live Newsroom",
+        "Vertical Live Studio",
+      ]);
+      expect(result.streams.every((stream) => stream.isLive)).toBe(true);
+    });
+
+    it("should exclude archived LockupView entries with duration and history metadata", async () => {
+      const channelId = "UC" + "a".repeat(22);
+      const archived = lockupView({
+        contentId: "lockup-archived-video",
+        title: "Yesterday's Archived Broadcast",
+        duration: "42:18",
+        history: "2 days ago",
+      });
+      mockInnertubeClient.getChannel.mockResolvedValue({
+        videos: [archived],
+      });
+
+      const result = await YouTubeLiveStreamService.getLiveStreams(
+        mockInnertubeClient,
+        channelId,
+        { logger: noOpLogger },
+      );
+
+      expect(result.streams).toHaveLength(0);
+      expect(result.hasContent).toBe(true);
+    });
+
+    it("should map live LockupView entries returned in the direct channel API videos array", async () => {
+      const channelId = "UC" + "b".repeat(22);
+      const apiLockup = lockupView({
+        contentId: "lockup-api-live",
+        title: "Direct API Live Session",
+        badge: {
+          text: "LIVE",
+          iconName: "LIVE",
+          badgeStyle: "THUMBNAIL_OVERLAY_BADGE_STYLE_LIVE",
+        },
+      });
+      mockInnertubeClient.getChannel.mockResolvedValue({
+        getLiveStreams: createMockFn().mockResolvedValue({
+          videos: [apiLockup],
+        }),
+      });
+
+      const result = await YouTubeLiveStreamService.getLiveStreams(
+        mockInnertubeClient,
+        channelId,
+        { logger: noOpLogger },
+      );
+
+      expect(result.streams).toHaveLength(1);
+      expect(streamAt(result.streams, 0).videoId).toBe("lockup-api-live");
+      expect(streamAt(result.streams, 0).title).toBe("Direct API Live Session");
+    });
+
+    it("should merge unique live streams across channel feed and direct API", async () => {
+      const channelId = "UC" + "c".repeat(22);
+      const channelLive = {
+        id: "live-a",
+        title: { text: "Channel Feed Live A" },
+        is_live: true,
+      };
+      const apiLiveB = {
+        id: "live-b",
+        title: { text: "Direct API Live B" },
+        is_live: true,
+      };
+      const getLiveStreams = createMockFn().mockResolvedValue({
+        videos: [channelLive, apiLiveB],
+      });
+      mockInnertubeClient.getChannel.mockResolvedValue({
+        videos: [channelLive],
+        getLiveStreams,
+      });
+
+      const result = await YouTubeLiveStreamService.getLiveStreams(
+        mockInnertubeClient,
+        channelId,
+        { logger: noOpLogger },
+      );
+
+      expect(getLiveStreams).toHaveBeenCalledTimes(1);
+      expect(result.streams.map((stream) => stream.videoId)).toEqual([
+        "live-a",
+        "live-b",
+      ]);
+      expect(result.videoIds).toEqual(["live-a", "live-b"]);
+      expect(result.count).toBe(2);
+      expect(result.hasContent).toBe(true);
+      expect(result.detectionMethod).toBe("channel_api");
+      expect(mockInnertubeClient.search).not.toHaveBeenCalled();
+    });
+
+    it("should deduplicate repeated live LockupView entries", async () => {
+      const channelId = "UC" + "d".repeat(22);
+      const repeatedLive = lockupView({
+        contentId: "repeated-lockup-live",
+        title: "Repeated Live Session",
+        badge: {
+          text: "LIVE",
+          iconName: "LIVE",
+          badgeStyle: "THUMBNAIL_OVERLAY_BADGE_STYLE_LIVE",
+        },
+      });
+      mockInnertubeClient.getChannel.mockResolvedValue({
+        videos: [repeatedLive, repeatedLive],
+      });
+
+      const result = await YouTubeLiveStreamService.getLiveStreams(
+        mockInnertubeClient,
+        channelId,
+        { logger: noOpLogger },
+      );
+
+      expect(result.streams).toHaveLength(1);
+      expect(streamAt(result.streams, 0).videoId).toBe("repeated-lockup-live");
+    });
+
     it("should provide live streams when user requests active channel streams", async () => {
       const channelId = "UCactive1234567890123456";
       const mockChannel = {
-        videos: {
-          contents: [
+        videos: [
             {
               id: "live123",
               title: { text: "Amazing Gaming Stream" },
@@ -89,7 +286,6 @@ describe("YouTube Live Stream Service - Complete User Experience", () => {
               published: new Date(testClock.now()).toISOString(),
             },
           ],
-        },
       };
       mockInnertubeClient.getChannel.mockResolvedValue(mockChannel);
 
@@ -128,8 +324,7 @@ describe("YouTube Live Stream Service - Complete User Experience", () => {
     it("should still detect live streams when channel does not expose getLiveStreams()", async () => {
       const channelId = "UC" + "n".repeat(22);
       const mockChannel = {
-        videos: {
-          contents: [
+        videos: [
             {
               id: "video789",
               title: { text: "Live Coding Marathon" },
@@ -137,7 +332,6 @@ describe("YouTube Live Stream Service - Complete User Experience", () => {
               author: { name: "DevCreator" },
             },
           ],
-        },
         header: { title: "DevCreator" },
       };
       mockInnertubeClient.getChannel.mockResolvedValue(mockChannel);
@@ -157,7 +351,7 @@ describe("YouTube Live Stream Service - Complete User Experience", () => {
 
     it("should handle channel with no live streams gracefully for users", async () => {
       const channelId = "UCinactive12345678901234";
-      const mockChannel = { videos: { contents: [] } };
+      const mockChannel = { videos: [] };
       mockInnertubeClient.getChannel.mockResolvedValue(mockChannel);
 
       const result = await YouTubeLiveStreamService.getLiveStreams(
@@ -178,7 +372,7 @@ describe("YouTube Live Stream Service - Complete User Experience", () => {
       const username = "fallbackCreator";
       const resolvedChannelId = "UC" + "f".repeat(22);
       const mockChannel = {
-        videos: { contents: [] },
+        videos: [],
         header: { title: "Fallback Creator" },
       };
 
@@ -208,6 +402,99 @@ describe("YouTube Live Stream Service - Complete User Experience", () => {
       expect(streamAt(result.streams, 0).videoId).toBe("searchLive123");
       expect(result.detectionMethod).toBe("search");
       expect(mockInnertubeClient.search).toHaveBeenCalledTimes(1);
+    });
+
+    it("should map and deduplicate owned live LockupView search entries", async () => {
+      const username = "lockupSearchCreator";
+      const resolvedChannelId = "UC" + "s".repeat(22);
+      const baseSearchLockup = lockupView({
+        contentId: "search-lockup-live",
+        title: "Search Lockup Live Session",
+        badge: {
+          text: "LIVE",
+          iconName: "LIVE",
+          badgeStyle: "THUMBNAIL_OVERLAY_BADGE_STYLE_LIVE",
+        },
+      });
+      const searchLockup = {
+        ...baseSearchLockup,
+        metadata: {
+          ...baseSearchLockup.metadata,
+          metadata: {
+            metadata_rows: [
+              {
+                metadata_parts: [
+                  {
+                    text: {
+                      text: "Synthetic playlist",
+                      endpoint: { payload: { browseId: "VLsyntheticplaylist" } },
+                    },
+                  },
+                  {
+                    text: {
+                      text: "Fallback Creator",
+                      endpoint: { payload: { browseId: resolvedChannelId } },
+                    },
+                  },
+                ],
+                badges: [],
+              },
+            ],
+          },
+        },
+      };
+
+      mockInnertubeClient.getChannel.mockResolvedValue({ videos: [] });
+      mockInnertubeClient.resolveURL.mockResolvedValue({
+        payload: { browseId: resolvedChannelId },
+      });
+      mockInnertubeClient.search.mockResolvedValue({
+        videos: [searchLockup, searchLockup],
+      });
+
+      const result = await YouTubeLiveStreamService.getLiveStreams(
+        mockInnertubeClient,
+        username,
+        { logger: noOpLogger },
+      );
+
+      expect(result.streams).toHaveLength(1);
+      expect(streamAt(result.streams, 0).videoId).toBe("search-lockup-live");
+      expect(streamAt(result.streams, 0).title).toBe(
+        "Search Lockup Live Session",
+      );
+      expect(result.detectionMethod).toBe("search");
+    });
+
+    it("should reject similarly named live search results from another channel", async () => {
+      const username = "news";
+      const resolvedChannelId = "UC" + "r".repeat(22);
+      mockInnertubeClient.getChannel.mockResolvedValue({ videos: [] });
+      mockInnertubeClient.resolveURL.mockResolvedValue({
+        payload: { browseId: resolvedChannelId },
+      });
+      mockInnertubeClient.search.mockResolvedValue({
+        videos: [
+          {
+            id: "unrelated-live-video",
+            title: { text: "Unrelated Live News" },
+            author: {
+              id: "UC" + "x".repeat(22),
+              name: "Daily News Network",
+            },
+            is_live: true,
+          },
+        ],
+      });
+
+      const result = await YouTubeLiveStreamService.getLiveStreams(
+        mockInnertubeClient,
+        username,
+        { logger: noOpLogger },
+      );
+
+      expect(result.streams).toHaveLength(0);
+      expect(result.hasContent).toBe(false);
     });
 
     it("should provide stream metadata for user content discovery", async () => {

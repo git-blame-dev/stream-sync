@@ -133,6 +133,29 @@ describe("YouTubeStreamDetectionService", () => {
   });
 
   describe("Core Stream Detection Behavior", () => {
+    it("should preserve feed live streams when the direct API never settles", async () => {
+      const feedStream = {
+        id: "feed-live-id",
+        title: { text: "Feed Live Stream" },
+        is_live: true,
+      };
+      mockClient = {
+        resolveURL: createMockFn().mockResolvedValue({
+          payload: { browseId: "UCfeedChannel123" },
+        }),
+        getChannel: createMockFn().mockResolvedValue({
+          videos: [feedStream],
+          getLiveStreams: createMockFn(() => new Promise<never>(() => undefined)),
+        }),
+      } as DetectionClient;
+      service = createStreamDetectionService(mockClient, 25);
+
+      const result = await service.detectLiveStreams("@feedchannel");
+
+      expect(result.success).toBe(true);
+      expect(result.videoIds).toEqual(["feed-live-id"]);
+    });
+
     it("should detect multiple live streams for a channel", async () => {
       const liveStreams = createLiveStreamData();
       mockClient = createMockInnertubeClient(liveStreams);

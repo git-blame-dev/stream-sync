@@ -17,7 +17,7 @@ type ChannelVideo = {
   badges?: Array<{ label?: string; text?: string; style?: string }>;
   author?: { id?: string; name?: string; handle?: string };
 };
-type ChannelLike = { videos?: { contents?: ChannelVideo[] } };
+type ChannelLike = { videos?: ChannelVideo[] };
 type DetectionClient = {
   getChannel: (channelId: string) => Promise<ChannelLike | null>;
 };

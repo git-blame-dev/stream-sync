@@ -424,7 +424,7 @@ class DependencyFactory {
             logger.debug('Using mock Innertube client for stream detection service', 'dependency-factory');
             const mockInnertubeClient: InnertubeDetectionClient = {
                 search: async (_query: string) => ({ videos: [] }),
-                getChannel: async (_handle: string) => ({ videos: { contents: [] } })
+                getChannel: async (_handle: string) => ({ videos: [] })
             };
             
             return new YouTubeStreamDetectionService(mockInnertubeClient, {

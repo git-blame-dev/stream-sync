@@ -89,26 +89,22 @@ describe("DependencyFactory behavior", () => {
       const getChannel = createMockFn<
         [string],
         Promise<{
-          videos: {
-            contents: Array<{
-              id: string;
-              title: { text: string };
-              is_live: boolean;
-              author: { name: string };
-            }>;
-          };
+          videos: Array<{
+            id: string;
+            title: { text: string };
+            is_live: boolean;
+            author: { name: string };
+          }>;
         }>
       >().mockResolvedValue({
-        videos: {
-          contents: [
-            {
-              id: "liveVideo01",
-              title: { text: "Test live stream" },
-              is_live: true,
-              author: { name: "Test Channel" },
-            },
-          ],
-        },
+        videos: [
+          {
+            id: "liveVideo01",
+            title: { text: "Test live stream" },
+            is_live: true,
+            author: { name: "Test Channel" },
+          },
+        ],
       });
       const createInnertube = createMockFn<[], Promise<{
         search: () => Promise<{ results: never[] }>;
