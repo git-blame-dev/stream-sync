@@ -10,7 +10,7 @@ import {
   _resetForTesting,
 } from "../../../src/core/secrets";
 import { TwitchAuth } from "../../../src/auth/TwitchAuth.ts";
-import { RetrySystem } from "../../../src/utils/retry-system";
+import { HttpRetryExecutor } from "../../../src/utils/http-retry-executor";
 
 const requiredScopes = [
   "user:read:chat",
@@ -27,7 +27,7 @@ type CreateAuthOptions = {
   expectedUsername?: unknown;
   httpClient?: unknown;
   oauthFlow?: unknown;
-  retrySystem?: unknown;
+  retryExecutor?: unknown;
 };
 
 const buildValidationResponse = (overrides: Record<string, unknown> = {}) => ({
@@ -74,7 +74,7 @@ describe("TwitchAuth behavior", () => {
     expectedUsername = "test-user",
     httpClient,
     oauthFlow,
-    retrySystem,
+    retryExecutor,
   }: CreateAuthOptions = {}) => {
     const authOptions: ConstructorParameters<typeof TwitchAuth>[0] = {
       tokenStorePath: tokenStorePathOverride,
@@ -92,17 +92,19 @@ describe("TwitchAuth behavior", () => {
         ConstructorParameters<typeof TwitchAuth>[0]["oauthFlow"]
       >;
     }
-    if (retrySystem !== undefined) {
-      (authOptions as unknown as { retrySystem: unknown }).retrySystem = retrySystem;
+    if (retryExecutor !== undefined) {
+      authOptions.retryExecutor = retryExecutor as NonNullable<
+        ConstructorParameters<typeof TwitchAuth>[0]["retryExecutor"]
+      >;
     }
     return new TwitchAuth(authOptions);
   };
 
-  const createValidationRetrySystem = (delay: unknown) =>
-    new RetrySystem({
+  const createValidationRetryExecutor = (delay: unknown) =>
+    new HttpRetryExecutor({
       logger: noOpLogger,
       safeDelay: delay as NonNullable<
-        NonNullable<ConstructorParameters<typeof RetrySystem>[0]>["safeDelay"]
+        NonNullable<ConstructorParameters<typeof HttpRetryExecutor>[0]>["safeDelay"]
       >,
     });
 
@@ -297,7 +299,7 @@ describe("TwitchAuth behavior", () => {
       const auth = createAuth({
         httpClient,
         oauthFlow,
-        retrySystem: createValidationRetrySystem(retryDelay),
+        retryExecutor: createValidationRetryExecutor(retryDelay),
       });
 
       await expect(auth.initialize()).resolves.toBe("test-user-id");
@@ -325,7 +327,7 @@ describe("TwitchAuth behavior", () => {
     const auth = createAuth({
       httpClient,
       oauthFlow,
-      retrySystem: createValidationRetrySystem(retryDelay),
+      retryExecutor: createValidationRetryExecutor(retryDelay),
     });
 
     await expect(auth.initialize()).rejects.toBe(exhaustedError);
@@ -353,7 +355,7 @@ describe("TwitchAuth behavior", () => {
     const auth = createAuth({
       httpClient,
       oauthFlow,
-      retrySystem: createValidationRetrySystem(retryDelay),
+      retryExecutor: createValidationRetryExecutor(retryDelay),
     });
 
     await expect(auth.initialize()).rejects.toThrow();
@@ -388,7 +390,7 @@ describe("TwitchAuth behavior", () => {
     const auth = createAuth({
       httpClient,
       oauthFlow,
-      retrySystem: createValidationRetrySystem(retryDelay),
+      retryExecutor: createValidationRetryExecutor(retryDelay),
     });
 
     await expect(auth.initialize()).resolves.toBe("test-user-id");
@@ -423,7 +425,7 @@ describe("TwitchAuth behavior", () => {
     const auth = createAuth({
       httpClient,
       oauthFlow,
-      retrySystem: createValidationRetrySystem(retryDelay),
+      retryExecutor: createValidationRetryExecutor(retryDelay),
     });
 
     await expect(auth.initialize()).rejects.toBe(transientError);

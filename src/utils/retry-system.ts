@@ -1,5 +1,4 @@
 import {
-    safeDelay,
     safeSetTimeout,
     validateExponentialBackoff,
     validateTimeout
@@ -13,13 +12,6 @@ const ADAPTIVE_RETRY_CONFIG = {
     BACKOFF_MULTIPLIER: 1.3
 } as const;
 
-const DEFAULT_HTTP_MAX_ATTEMPTS = 3;
-const RETRYABLE_HTTP_STATUSES = new Set([408, 425, 429, 500, 502, 503, 504]);
-
-type HttpHeaders = Record<string, unknown> & {
-    get?: (name: string) => unknown;
-};
-
 type RetryLogger = ReturnType<typeof resolveLogger>;
 
 type RetryDependencies = {
@@ -28,26 +20,23 @@ type RetryDependencies = {
         RETRY_MAX_ATTEMPTS?: number;
     } | null;
     safeSetTimeout?: typeof safeSetTimeout;
-    safeDelay?: typeof safeDelay;
     validateTimeout?: typeof validateTimeout;
     validateExponentialBackoff?: typeof validateExponentialBackoff;
 };
 
-type RetryExecutor = {
-    executeWithRetry: <T>(platform: string, executeFunction: () => Promise<T>, maxAttempts?: number) => Promise<T>;
-};
-
-class RetrySystem implements RetryExecutor {
+class RetrySystem {
     logger: RetryLogger;
     constants: RetryDependencies['constants'];
     errorHandler: ReturnType<typeof createPlatformErrorHandler>;
     retryTimers: Record<string, ReturnType<typeof setTimeout>>;
     safeSetTimeout: typeof safeSetTimeout;
-    safeDelay: typeof safeDelay;
     validateTimeout: typeof validateTimeout;
     validateExponentialBackoff: typeof validateExponentialBackoff;
     isConnected: ((platform: string) => boolean) | null;
     platformRetryCount: Record<string, number>;
+    private retryGenerations: Record<string, number>;
+    private cleanupPromises: Record<string, Promise<void>>;
+    private disposed: boolean;
 
     constructor(dependencies: RetryDependencies = {}) {
         this.logger = resolveLogger(dependencies.logger, 'RetrySystem');
@@ -56,11 +45,13 @@ class RetrySystem implements RetryExecutor {
         this.retryTimers = {};
 
         this.safeSetTimeout = dependencies.safeSetTimeout || safeSetTimeout;
-        this.safeDelay = dependencies.safeDelay || safeDelay;
         this.validateTimeout = dependencies.validateTimeout || validateTimeout;
         this.validateExponentialBackoff = dependencies.validateExponentialBackoff || validateExponentialBackoff;
 
         this.isConnected = null;
+        this.retryGenerations = {};
+        this.cleanupPromises = {};
+        this.disposed = false;
         this.platformRetryCount = {
             TikTok: 0,
             Twitch: 0,
@@ -208,6 +199,13 @@ class RetrySystem implements RetryExecutor {
         cleanupFunction: (() => Promise<unknown> | unknown) | null = null,
         setConnectionStateFn: ((platformName: string, connected: boolean, metadata: unknown, ready: boolean) => void) | null = null
     ): void {
+        if (this.disposed) {
+            return;
+        }
+
+        const retryGeneration = this.beginConnectionRetryGeneration(platform);
+        const retryIsActive = (): boolean => !this.disposed
+            && this.retryGenerations[platform] === retryGeneration;
         const errorMessage = this.extractErrorMessage(error);
         const normalizedError = errorMessage.toLowerCase();
 
@@ -220,16 +218,11 @@ class RetrySystem implements RetryExecutor {
             || normalizedError.includes('expectedusername is required for twitch authentication')
             || normalizedError.includes('twitch authentication is not ready')
         ) {
+            this.cancelConnectionRetry(platform);
             this.logger.warn('Connection failed due to unauthorized access (401). This is likely due to invalid credentials. Stopping retry attempts.', platform);
 
             if (cleanupFunction) {
-                try {
-                    void cleanupFunction();
-                    this.logger.debug('Cleanup function executed successfully', 'retry-system');
-                } catch (cleanupError) {
-                    this.logger.debug(`Error during cleanup: ${this.extractErrorMessage(cleanupError)}`, 'retry-system');
-                    this._handleRetryError(`${platform} cleanup failed`, cleanupError, 'cleanup', platform);
-                }
+                void this.runCleanup(platform, cleanupFunction);
             }
 
             if (setConnectionStateFn) {
@@ -256,6 +249,10 @@ class RetrySystem implements RetryExecutor {
         this.logger.info(`Retrying in ${adaptiveDelay / 1000} seconds...`, platform);
 
         const scheduleReconnect = (): void => {
+            if (!retryIsActive()) {
+                return;
+            }
+
             if (setConnectionStateFn) {
                 try {
                     setConnectionStateFn(platform, false, null, false);
@@ -269,7 +266,17 @@ class RetrySystem implements RetryExecutor {
             }
 
             const validatedDelay = this.validateTimeout(adaptiveDelay, ADAPTIVE_RETRY_CONFIG.BASE_DELAY, 'retry delay');
-            this.retryTimers[platform] = this.safeSetTimeout(async () => {
+            let retryTimer: ReturnType<typeof setTimeout> | undefined;
+            let callbackStarted = false;
+            const reconnectCallback = async () => {
+                callbackStarted = true;
+                if (retryTimer && this.retryTimers[platform] === retryTimer) {
+                    delete this.retryTimers[platform];
+                }
+                if (!retryIsActive()) {
+                    return;
+                }
+
                 if (this.isConnected && this.isConnected(platform)) {
                     this.logger.debug(`Cancelling scheduled retry - ${platform} already connected`, 'retry-system');
                     return;
@@ -279,22 +286,21 @@ class RetrySystem implements RetryExecutor {
                 try {
                     await reconnectFunction();
                 } catch (reconnectError) {
+                    if (!retryIsActive()) {
+                        return;
+                    }
                     this.logger.debug(`Error in scheduled reconnection: ${this.extractErrorMessage(reconnectError)}`, 'retry-system');
                     this.handleConnectionError(platform, reconnectError, reconnectFunction, cleanupFunction, setConnectionStateFn);
                 }
-            }, validatedDelay);
+            };
+            retryTimer = this.safeSetTimeout(reconnectCallback, validatedDelay);
+            if (!callbackStarted) {
+                this.retryTimers[platform] = retryTimer;
+            }
         };
 
         const cleanupPromise = cleanupFunction
-            ? Promise.resolve()
-                .then(() => cleanupFunction())
-                .then(() => {
-                    this.logger.debug('Cleanup function executed successfully', 'retry-system');
-                })
-                .catch((cleanupError) => {
-                    this.logger.debug(`Error during cleanup: ${this.extractErrorMessage(cleanupError)}`, 'retry-system');
-                    this._handleRetryError(`${platform} cleanup failed`, cleanupError, 'cleanup', platform);
-                })
+            ? this.runCleanup(platform, cleanupFunction)
             : null;
 
         if (cleanupPromise) {
@@ -308,11 +314,70 @@ class RetrySystem implements RetryExecutor {
     handleConnectionSuccess(platform: string, _connection: unknown, context = ''): void {
         const message = context ? `Successfully connected (${context})` : 'Successfully connected';
         this.logger.info(message, platform);
-        this.resetRetryCount(platform);
+        this.cancelConnectionRetry(platform);
+    }
+
+    cancelConnectionRetry(platform: string): void {
+        this.retryGenerations[platform] = (this.retryGenerations[platform] || 0) + 1;
         if (this.retryTimers[platform]) {
             clearTimeout(this.retryTimers[platform]);
             delete this.retryTimers[platform];
         }
+        this.resetRetryCount(platform);
+    }
+
+    dispose(): void {
+        this.disposed = true;
+        const platforms = new Set([
+            ...Object.keys(this.platformRetryCount),
+            ...Object.keys(this.retryTimers),
+            ...Object.keys(this.retryGenerations)
+        ]);
+        for (const platform of platforms) {
+            this.cancelConnectionRetry(platform);
+        }
+    }
+
+    private beginConnectionRetryGeneration(platform: string): number {
+        if (this.retryTimers[platform]) {
+            clearTimeout(this.retryTimers[platform]);
+            delete this.retryTimers[platform];
+        }
+        const generation = (this.retryGenerations[platform] || 0) + 1;
+        this.retryGenerations[platform] = generation;
+        return generation;
+    }
+
+    private runCleanup(platform: string, cleanupFunction: () => Promise<unknown> | unknown): Promise<void> {
+        const existingCleanup = this.cleanupPromises[platform];
+        if (existingCleanup) {
+            return existingCleanup;
+        }
+
+        let cleanupResult: Promise<unknown> | unknown;
+        try {
+            cleanupResult = cleanupFunction();
+        } catch (cleanupError) {
+            this.logger.debug(`Error during cleanup: ${this.extractErrorMessage(cleanupError)}`, 'retry-system');
+            this._handleRetryError(`${platform} cleanup failed`, cleanupError, 'cleanup', platform);
+            return Promise.resolve();
+        }
+
+        const cleanupPromise = Promise.resolve(cleanupResult)
+            .then(() => {
+                this.logger.debug('Cleanup function executed successfully', 'retry-system');
+            })
+            .catch((cleanupError) => {
+                this.logger.debug(`Error during cleanup: ${this.extractErrorMessage(cleanupError)}`, 'retry-system');
+                this._handleRetryError(`${platform} cleanup failed`, cleanupError, 'cleanup', platform);
+            })
+            .finally(() => {
+                if (this.cleanupPromises[platform] === cleanupPromise) {
+                    delete this.cleanupPromises[platform];
+                }
+            });
+        this.cleanupPromises[platform] = cleanupPromise;
+        return cleanupPromise;
     }
 
     getConnectionRetryStatistics() {
@@ -345,98 +410,6 @@ class RetrySystem implements RetryExecutor {
         }
 
         this.logger.debug(`Reset retry counts for: ${platforms.join(', ')}`, 'retry-system');
-    }
-
-    async executeWithRetry<T>(platform: string, executeFunction: () => Promise<T>, maxAttempts?: number): Promise<T> {
-        let lastError: unknown;
-        const configuredMaxAttempts = typeof maxAttempts === 'number'
-            ? maxAttempts
-            : this.getMaxAttempts();
-        const effectiveMaxAttempts = Number.isFinite(configuredMaxAttempts) && configuredMaxAttempts > 0
-            ? Math.max(1, Math.floor(configuredMaxAttempts))
-            : DEFAULT_HTTP_MAX_ATTEMPTS;
-        let attempts = 0;
-
-        while (attempts < effectiveMaxAttempts) {
-            attempts += 1;
-            try {
-                const result = await executeFunction();
-                return result;
-            } catch (error) {
-                lastError = error;
-
-                const status = this.getHttpStatus(error);
-                const errorMessage = this.extractErrorMessage(error);
-                const statuslessAuthError = status === undefined && /\b401\b|unauthorized/i.test(errorMessage);
-                const retryable = status === undefined
-                    ? !statuslessAuthError
-                    : RETRYABLE_HTTP_STATUSES.has(status);
-                if (!retryable || attempts >= effectiveMaxAttempts) {
-                    throw lastError;
-                }
-                const delay = status === 429
-                    ? this.getRateLimitDelay(error, attempts)
-                    : this.getHttpRetryDelay(attempts);
-                this.logger.warn(`HTTP request failed (attempt ${attempts}): ${errorMessage}`, platform);
-                this.logger.info(`Retrying in ${delay / 1000} seconds...`, platform);
-                if (delay > 0) {
-                    await this.safeDelay(delay, delay, 'RetrySystem http retry delay');
-                }
-            }
-        }
-
-        throw lastError;
-    }
-
-    private getHttpStatus(error: unknown): number | undefined {
-        if (!error || typeof error !== 'object') {
-            return undefined;
-        }
-        const value = error as { status?: unknown; response?: { status?: unknown } };
-        const status = value.response?.status ?? value.status;
-        return typeof status === 'number' && status > 0 ? status : undefined;
-    }
-
-    private getRateLimitDelay(error: unknown, attempt: number): number {
-        const response = (error as { response?: { headers?: unknown } }).response;
-        const headers = response?.headers as HttpHeaders | undefined;
-        const retryAfter = this.getHeader(headers, 'retry-after');
-        const numeric = typeof retryAfter === 'string' && /^\s*\d+(?:\.\d+)?\s*$/.test(retryAfter)
-            ? Number(retryAfter) * 1000
-            : typeof retryAfter === 'number' ? retryAfter * 1000 : Date.parse(String(retryAfter)) - Date.now();
-        if (Number.isFinite(numeric) && numeric >= 0) {
-            return Math.min(numeric, ADAPTIVE_RETRY_CONFIG.MAX_DELAY);
-        }
-
-        const reset = Number(this.getHeader(headers, 'ratelimit-reset'));
-        const resetDelay = (reset * 1000) - Date.now();
-        if (Number.isFinite(resetDelay) && resetDelay > 0) {
-            return Math.min(resetDelay, ADAPTIVE_RETRY_CONFIG.MAX_DELAY);
-        }
-
-        return this.getHttpRetryDelay(attempt);
-    }
-
-    private getHeader(headers: HttpHeaders | undefined, name: string): unknown {
-        if (!headers) {
-            return undefined;
-        }
-
-        const directKey = Object.keys(headers).find(key => key.toLowerCase() === name.toLowerCase());
-        if (directKey) {
-            return headers[directKey];
-        }
-
-        return headers.get?.(name);
-    }
-
-    private getHttpRetryDelay(attempt: number): number {
-        return this.validateExponentialBackoff(
-            ADAPTIVE_RETRY_CONFIG.BASE_DELAY,
-            ADAPTIVE_RETRY_CONFIG.BACKOFF_MULTIPLIER,
-            attempt - 1,
-            ADAPTIVE_RETRY_CONFIG.MAX_DELAY
-        );
     }
 
     validateRetryConfig(): true {
@@ -489,7 +462,6 @@ function createRetrySystem(dependencies?: RetryDependencies): RetrySystem {
 
 export {
     RetrySystem,
-    type RetryExecutor,
     createRetrySystem,
     ADAPTIVE_RETRY_CONFIG
 };

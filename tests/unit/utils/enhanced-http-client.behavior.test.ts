@@ -2,9 +2,10 @@ import { describe, expect, it, afterEach } from "bun:test";
 import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../helpers/mock-factories";
 import { EnhancedHttpClient } from "../../../src/utils/enhanced-http-client";
+import { HttpRetryExecutor } from "../../../src/utils/http-retry-executor";
 type EnhancedHttpClientConfig = NonNullable<ConstructorParameters<typeof EnhancedHttpClient>[0]>;
 type HttpClientAdapter = EnhancedHttpClientConfig["axios"];
-type RetrySystemAdapter = EnhancedHttpClientConfig["retrySystem"];
+type RetryExecutorAdapter = EnhancedHttpClientConfig["retryExecutor"];
 type RequestConfig = { headers: Record<string, string>; timeout?: unknown };
 
 const createHttpAdapter = (overrides: Partial<NonNullable<HttpClientAdapter>> = {}): NonNullable<HttpClientAdapter> => ({
@@ -63,14 +64,14 @@ describe("EnhancedHttpClient behavior", () => {
     const logger = noOpLogger;
     let executedThroughRetry = false;
 
-    const retrySystem = {
+    const retryExecutor = {
       executeWithRetry: createMockFn(async (_platform: string, handler: () => Promise<Record<string, unknown>>) => {
         executedThroughRetry = true;
         return handler();
       }),
-    } as Partial<NonNullable<RetrySystemAdapter>> as NonNullable<RetrySystemAdapter>;
+    } as Partial<NonNullable<RetryExecutorAdapter>> as NonNullable<RetryExecutorAdapter>;
 
-    const client = new EnhancedHttpClient({ axios, logger, retrySystem });
+    const client = new EnhancedHttpClient({ axios, logger, retryExecutor });
     const response = await client.get("https://example.com", {
       platform: "twitch",
     });
@@ -82,8 +83,8 @@ describe("EnhancedHttpClient behavior", () => {
   it("forwards maxAttempts rather than maxRetries to the retry system", async () => {
     const axios = createHttpAdapter();
     const executeWithRetry = createMockFn(async (_platform: string, handler: () => Promise<Record<string, unknown>>, maxAttempts?: number) => handler());
-    const retrySystem = { executeWithRetry } as Partial<NonNullable<RetrySystemAdapter>> as NonNullable<RetrySystemAdapter>;
-    const client = new EnhancedHttpClient({ axios, logger: noOpLogger, retrySystem });
+    const retryExecutor = { executeWithRetry } as Partial<NonNullable<RetryExecutorAdapter>> as NonNullable<RetryExecutorAdapter>;
+    const client = new EnhancedHttpClient({ axios, logger: noOpLogger, retryExecutor });
 
     await client.get("https://example.com", { platform: "twitch", maxAttempts: 4 });
 
@@ -102,8 +103,8 @@ describe("EnhancedHttpClient behavior", () => {
     const get = createMockFn<[string, Record<string, unknown>], Promise<Record<string, unknown>>>().mockResolvedValue({ status: 200 });
     const axios = createHttpAdapter({ get });
     const executeWithRetry = createMockFn(async (_scope: string, handler: () => Promise<Record<string, unknown>>) => handler());
-    const retrySystem = { executeWithRetry } as Partial<NonNullable<RetrySystemAdapter>> as NonNullable<RetrySystemAdapter>;
-    const client = new EnhancedHttpClient({ axios, logger: noOpLogger, retrySystem });
+    const retryExecutor = { executeWithRetry } as Partial<NonNullable<RetryExecutorAdapter>> as NonNullable<RetryExecutorAdapter>;
+    const client = new EnhancedHttpClient({ axios, logger: noOpLogger, retryExecutor });
 
     await client.get("https://example.com", { retryScope: "twitch-startup", maxAttempts: 3 });
 
@@ -112,16 +113,58 @@ describe("EnhancedHttpClient behavior", () => {
     expect(get.mock.calls[0]?.[1]).not.toHaveProperty("maxAttempts");
   });
 
+  it("does not retry POST requests without explicit unsafe-method approval", async () => {
+    const post = createMockFn<[string, unknown, Record<string, unknown>], Promise<Record<string, unknown>>>()
+      .mockResolvedValue({ status: 201 });
+    const retryExecutor = {
+      executeWithRetry: createMockFn(async (_scope: string, handler: () => Promise<Record<string, unknown>>) => handler()),
+    } as NonNullable<RetryExecutorAdapter>;
+    const client = new EnhancedHttpClient({
+      axios: createHttpAdapter({ post }),
+      logger: noOpLogger,
+      retryExecutor,
+    });
+
+    await client.post("https://example.com/messages", { message: "test" }, { retryScope: "message" });
+
+    expect(retryExecutor.executeWithRetry).not.toHaveBeenCalled();
+    expect(post).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries POST requests only when the caller asserts idempotency", async () => {
+    const post = createMockFn<[string, unknown, Record<string, unknown>], Promise<Record<string, unknown>>>()
+      .mockRejectedValueOnce(Object.assign(new Error("connection reset"), { code: "ECONNRESET" }))
+      .mockResolvedValueOnce({ status: 201 });
+    const retryExecutor = new HttpRetryExecutor({
+      logger: noOpLogger,
+      safeDelay: createMockFn().mockResolvedValue(undefined),
+    });
+    const client = new EnhancedHttpClient({
+      axios: createHttpAdapter({ post }),
+      logger: noOpLogger,
+      retryExecutor,
+    });
+
+    await client.post(
+      "https://example.com/idempotent-operation",
+      { value: "test" },
+      { retryScope: "idempotent-operation", idempotentRequest: true },
+    );
+
+    expect(post).toHaveBeenCalledTimes(2);
+    expect(post.mock.calls[0]?.[2]).not.toHaveProperty("idempotentRequest");
+  });
+
   it("bypasses retry system when disableRetry is true", async () => {
     const axios = {
       get: createMockFn<[string, Record<string, unknown>], Promise<Record<string, unknown>>>().mockRejectedValue(new Error("testNetworkError")),
     };
     const logger = noOpLogger;
-    const retrySystem = {
+    const retryExecutor = {
       executeWithRetry: createMockFn(async (_platform: string, handler: () => Promise<Record<string, unknown>>) => handler()),
-    } as Partial<NonNullable<RetrySystemAdapter>> as NonNullable<RetrySystemAdapter>;
+    } as Partial<NonNullable<RetryExecutorAdapter>> as NonNullable<RetryExecutorAdapter>;
 
-    const client = new EnhancedHttpClient({ axios: createHttpAdapter(axios), logger, retrySystem });
+    const client = new EnhancedHttpClient({ axios: createHttpAdapter(axios), logger, retryExecutor });
 
     await expect(
       client.get("https://example.com", {
@@ -129,7 +172,7 @@ describe("EnhancedHttpClient behavior", () => {
         disableRetry: true,
       }),
     ).rejects.toThrow("testNetworkError");
-    expect(retrySystem.executeWithRetry).not.toHaveBeenCalled();
+    expect(retryExecutor.executeWithRetry).not.toHaveBeenCalled();
   });
 
   it("encodes urlencoded post bodies", async () => {

@@ -17,7 +17,6 @@ type MutableAdaptiveRetryConfig = {
 };
 
 let mockSafeSetTimeout: NonNullable<RetryDependencies["safeSetTimeout"]> & ReturnType<typeof createMockFn>;
-let mockSafeDelay: NonNullable<RetryDependencies["safeDelay"]> & ReturnType<typeof createMockFn>;
 let mockValidateTimeout: NonNullable<RetryDependencies["validateTimeout"]> & ReturnType<typeof createMockFn>;
 let mockValidateExponentialBackoff: NonNullable<RetryDependencies["validateExponentialBackoff"]> & ReturnType<typeof createMockFn>;
 
@@ -26,7 +25,6 @@ const createTimeoutMocks = () => {
     fn();
     return 1 as unknown as ReturnType<typeof setTimeout>;
   }) as unknown as NonNullable<RetryDependencies["safeSetTimeout"]> & ReturnType<typeof createMockFn>;
-  mockSafeDelay = createMockFn(() => Promise.resolve()) as unknown as NonNullable<RetryDependencies["safeDelay"]> & ReturnType<typeof createMockFn>;
   mockValidateTimeout = createMockFn((delay: number) => delay) as unknown as NonNullable<RetryDependencies["validateTimeout"]> & ReturnType<typeof createMockFn>;
   mockValidateExponentialBackoff = createMockFn(
     (base: number, multiplier: number, retry: number, max: number) => {
@@ -37,7 +35,6 @@ const createTimeoutMocks = () => {
 
   return {
     safeSetTimeout: mockSafeSetTimeout,
-    safeDelay: mockSafeDelay,
     validateTimeout: mockValidateTimeout,
     validateExponentialBackoff: mockValidateExponentialBackoff,
   };
@@ -281,6 +278,152 @@ describe("RetrySystem", () => {
     expect(cleanup).toHaveBeenCalled();
   });
 
+  it("does not schedule reconnect after cancellation during async cleanup", async () => {
+    let resolveCleanup!: () => void;
+    const cleanup = createMockFn(
+      () => new Promise<void>((resolve) => {
+        resolveCleanup = resolve;
+      }),
+    );
+    const safeSetTimeout = createMockFn(
+      () => 1 as unknown as ReturnType<typeof setTimeout>,
+    ) as unknown as NonNullable<RetryDependencies["safeSetTimeout"]> & ReturnType<typeof createMockFn>;
+    const retrySystem = new RetrySystem({
+      logger: noOpLogger,
+      ...createTimeoutMocks(),
+      safeSetTimeout,
+    });
+    const reconnect = createMockFn<[], Promise<unknown>>().mockResolvedValue(undefined);
+
+    retrySystem.handleConnectionError(
+      "TikTok",
+      new Error("temporary failure"),
+      reconnect,
+      cleanup,
+    );
+    await Promise.resolve();
+    retrySystem.cancelConnectionRetry("TikTok");
+    resolveCleanup();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(safeSetTimeout).not.toHaveBeenCalled();
+    expect(reconnect).not.toHaveBeenCalled();
+  });
+
+  it("invalidates a scheduled reconnect callback when cancelled", async () => {
+    let scheduledReconnect!: () => Promise<void>;
+    const safeSetTimeout = createMockFn((callback: () => Promise<void>) => {
+      scheduledReconnect = callback;
+      return 1 as unknown as ReturnType<typeof setTimeout>;
+    }) as unknown as NonNullable<RetryDependencies["safeSetTimeout"]> & ReturnType<typeof createMockFn>;
+    const retrySystem = new RetrySystem({
+      logger: noOpLogger,
+      ...createTimeoutMocks(),
+      safeSetTimeout,
+    });
+    const reconnect = createMockFn<[], Promise<unknown>>().mockResolvedValue(undefined);
+
+    retrySystem.handleConnectionError("TikTok", new Error("temporary failure"), reconnect);
+    retrySystem.cancelConnectionRetry("TikTok");
+    await scheduledReconnect();
+
+    expect(reconnect).not.toHaveBeenCalled();
+    expect(retrySystem.getRetryCount("TikTok")).toBe(0);
+  });
+
+  it("serializes cleanup before a newer retry generation reconnects", async () => {
+    let resolveCleanup!: () => void;
+    const cleanup = createMockFn(
+      () => new Promise<void>((resolve) => {
+        resolveCleanup = resolve;
+      }),
+    );
+    const callbacks: Array<() => Promise<void>> = [];
+    const safeSetTimeout = createMockFn((callback: () => Promise<void>) => {
+      callbacks.push(callback);
+      return callbacks.length as unknown as ReturnType<typeof setTimeout>;
+    }) as unknown as NonNullable<RetryDependencies["safeSetTimeout"]> & ReturnType<typeof createMockFn>;
+    const retrySystem = new RetrySystem({ logger: noOpLogger, ...createTimeoutMocks(), safeSetTimeout });
+    const reconnect = createMockFn<[], Promise<unknown>>().mockResolvedValue(undefined);
+
+    retrySystem.handleConnectionError("TikTok", new Error("first"), reconnect, cleanup);
+    retrySystem.handleConnectionError("TikTok", new Error("second"), reconnect, cleanup);
+
+    expect(cleanup).toHaveBeenCalledTimes(1);
+    expect(callbacks).toHaveLength(0);
+
+    resolveCleanup();
+    await Promise.resolve();
+    await Promise.resolve();
+    await new Promise(setImmediate);
+
+    expect(callbacks).toHaveLength(1);
+    await callbacks[0]!();
+    expect(reconnect).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a newer timer registered when a stale callback runs", async () => {
+    const callbacks: Array<() => Promise<void>> = [];
+    const safeSetTimeout = createMockFn((callback: () => Promise<void>) => {
+      callbacks.push(callback);
+      return callbacks.length as unknown as ReturnType<typeof setTimeout>;
+    }) as unknown as NonNullable<RetryDependencies["safeSetTimeout"]> & ReturnType<typeof createMockFn>;
+    const retrySystem = new RetrySystem({ logger: noOpLogger, ...createTimeoutMocks(), safeSetTimeout });
+    const reconnect = createMockFn<[], Promise<unknown>>().mockResolvedValue(undefined);
+
+    retrySystem.handleConnectionError("TikTok", new Error("first"), reconnect);
+    retrySystem.handleConnectionError("TikTok", new Error("second"), reconnect);
+    await callbacks[0]!();
+
+    expect(retrySystem.retryTimers.TikTok).toBe(2 as unknown as ReturnType<typeof setTimeout>);
+
+    retrySystem.cancelConnectionRetry("TikTok");
+    expect(retrySystem.retryTimers.TikTok).toBeUndefined();
+  });
+
+  it("observes rejected async cleanup for terminal authorization failures", async () => {
+    const retrySystem = new RetrySystem({ logger: noOpLogger, ...createTimeoutMocks() });
+    const errorHandler = createMockErrorHandler();
+    retrySystem.errorHandler = errorHandler;
+    const cleanupError = new Error("async cleanup failed");
+    const cleanup = createMockFn<[], Promise<unknown>>().mockRejectedValue(cleanupError);
+
+    retrySystem.handleConnectionError(
+      "Twitch",
+      new Error("401 Unauthorized"),
+      createMockFn<[], Promise<unknown>>().mockResolvedValue(undefined),
+      cleanup,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(errorHandler.handleEventProcessingError).toHaveBeenCalledTimes(1);
+    expect(errorHandler.handleEventProcessingError.mock.calls[0]?.[0]).toBe(cleanupError);
+  });
+
+  it("disposes every scheduled connection retry", async () => {
+    const callbacks: Array<() => Promise<void>> = [];
+    const safeSetTimeout = createMockFn((callback: () => Promise<void>) => {
+      callbacks.push(callback);
+      return callbacks.length as unknown as ReturnType<typeof setTimeout>;
+    }) as unknown as NonNullable<RetryDependencies["safeSetTimeout"]> & ReturnType<typeof createMockFn>;
+    const retrySystem = new RetrySystem({
+      logger: noOpLogger,
+      ...createTimeoutMocks(),
+      safeSetTimeout,
+    });
+    const reconnect = createMockFn<[], Promise<unknown>>().mockResolvedValue(undefined);
+    retrySystem.handleConnectionError("TikTok", new Error("temporary failure"), reconnect);
+    retrySystem.handleConnectionError("YouTube", new Error("temporary failure"), reconnect);
+
+    retrySystem.dispose();
+    await Promise.all(callbacks.map((callback) => callback()));
+
+    expect(reconnect).not.toHaveBeenCalled();
+    expect(retrySystem.retryTimers).toEqual({});
+  });
+
   it("routes cleanup failures through platform error handler helper", async () => {
     const retrySystem = new RetrySystem({ logger: noOpLogger });
     const errorHandler = createMockErrorHandler();
@@ -331,150 +474,6 @@ describe("RetrySystem", () => {
 
     expect(reconnect).not.toHaveBeenCalled();
     expect(retrySystem.isConnected).toHaveBeenCalled();
-  });
-
-  it("halts executeWithRetry after configured max retries", async () => {
-    const retrySystem = new RetrySystem({ logger: noOpLogger });
-    retrySystem.errorHandler = createMockErrorHandler();
-    const failingCall = createMockFn<[], Promise<unknown>>().mockRejectedValue(
-      new Error("fail-fast"),
-    );
-
-    await expect(
-      retrySystem.executeWithRetry("TikTok", failingCall, 1),
-    ).rejects.toThrow("fail-fast");
-
-    expect(failingCall).toHaveBeenCalledTimes(1);
-  });
-
-  it("does not mutate connection retry counts when an HTTP retry succeeds", async () => {
-    const timeoutMocks = createTimeoutMocks();
-    const retrySystem = new RetrySystem({
-      logger: noOpLogger,
-      ...timeoutMocks,
-    });
-    retrySystem.errorHandler = createMockErrorHandler();
-    retrySystem.incrementRetryCount("YouTube");
-    const execute = createMockFn<[], Promise<string>>()
-      .mockRejectedValueOnce(new Error("flaky"))
-      .mockResolvedValueOnce("ok");
-
-    const result = await retrySystem.executeWithRetry("YouTube", execute, 3);
-
-    expect(result).toBe("ok");
-    expect(mockSafeDelay).toHaveBeenCalled();
-    expect(retrySystem.getRetryCount("YouTube")).toBe(1);
-  });
-
-  it("stops executeWithRetry immediately on non-retryable auth errors", async () => {
-    const timeoutMocks = createTimeoutMocks();
-    const retrySystem = new RetrySystem({
-      logger: noOpLogger,
-      ...timeoutMocks,
-    });
-    retrySystem.errorHandler = createMockErrorHandler();
-    const unauthorizedCall = createMockFn<[], Promise<unknown>>().mockRejectedValue(
-      new Error("401 Unauthorized"),
-    );
-
-    await expect(
-      retrySystem.executeWithRetry("Twitch", unauthorizedCall, 3),
-    ).rejects.toThrow("401");
-
-    expect(unauthorizedCall).toHaveBeenCalledTimes(1);
-    expect(mockSafeDelay).not.toHaveBeenCalled();
-  });
-
-  it("uses an invocation-local budget and treats maxAttempts as total calls", async () => {
-    const retrySystem = new RetrySystem({ logger: noOpLogger, ...createTimeoutMocks() });
-    const first = createMockFn<[], Promise<unknown>>().mockRejectedValue(new Error("first"));
-    const second = createMockFn<[], Promise<unknown>>().mockRejectedValue(new Error("second"));
-
-    await expect(retrySystem.executeWithRetry("Twitch", first, 2)).rejects.toThrow("first");
-    await expect(retrySystem.executeWithRetry("Twitch", second, 2)).rejects.toThrow("second");
-    expect(first).toHaveBeenCalledTimes(2);
-    expect(second).toHaveBeenCalledTimes(2);
-  });
-
-  it("uses a bounded three-attempt default for HTTP retries", async () => {
-    const retrySystem = new RetrySystem({ logger: noOpLogger, ...createTimeoutMocks() });
-    const call = createMockFn<[], Promise<unknown>>().mockRejectedValue(new Error("offline"));
-
-    await expect(retrySystem.executeWithRetry("Twitch", call)).rejects.toThrow("offline");
-
-    expect(call).toHaveBeenCalledTimes(3);
-  });
-
-  it("retries transport failures and transient HTTP statuses, but not terminal 4xx", async () => {
-    const retryableStatuses = [408, 425, 429, 500, 502, 503, 504];
-    for (const status of retryableStatuses) {
-      const retrySystem = new RetrySystem({ logger: noOpLogger, ...createTimeoutMocks() });
-      const call = createMockFn<[], Promise<unknown>>()
-        .mockRejectedValueOnce({ response: { status } })
-        .mockResolvedValueOnce("recovered");
-      await expect(retrySystem.executeWithRetry("Twitch", call, 2)).resolves.toBe("recovered");
-      expect(call).toHaveBeenCalledTimes(2);
-    }
-
-    for (const status of [400, 401, 403, 404, 422]) {
-      const retrySystem = new RetrySystem({ logger: noOpLogger, ...createTimeoutMocks() });
-      const call = createMockFn<[], Promise<unknown>>().mockRejectedValue({ response: { status } });
-      await expect(retrySystem.executeWithRetry("Twitch", call, 3)).rejects.toEqual({ response: { status } });
-      expect(call).toHaveBeenCalledTimes(1);
-    }
-  });
-
-  it("keeps concurrent calls scoped and honors rate-limit headers with a capped fallback", async () => {
-    const timeoutMocks = createTimeoutMocks();
-    const retrySystem = new RetrySystem({ logger: noOpLogger, ...timeoutMocks });
-    const first = createMockFn<[], Promise<unknown>>().mockRejectedValueOnce({
-      response: { status: 429, headers: { "retry-after": "2" } },
-    }).mockResolvedValue("one");
-    const second = createMockFn<[], Promise<unknown>>().mockRejectedValueOnce(new Error("offline")).mockResolvedValue("two");
-
-    await expect(Promise.all([
-      retrySystem.executeWithRetry("Twitch", first, 2),
-      retrySystem.executeWithRetry("Twitch", second, 2),
-    ])).resolves.toEqual(["one", "two"]);
-    expect(first).toHaveBeenCalledTimes(2);
-    expect(second).toHaveBeenCalledTimes(2);
-    expect(mockSafeDelay).toHaveBeenCalledWith(2000, expect.any(Number), expect.any(String));
-
-    const capped = createMockFn<[], Promise<unknown>>().mockRejectedValueOnce({
-      response: { status: 429, headers: { "retry-after": "120" } },
-    }).mockResolvedValue("capped");
-    await expect(retrySystem.executeWithRetry("Twitch", capped, 2)).resolves.toBe("capped");
-    expect(mockSafeDelay.mock.calls.some(([delay]) => delay === 60000)).toBe(true);
-  });
-
-  it("uses Retry-After dates, Twitch reset epochs, and adaptive fallback", async () => {
-    const now = testClock.now();
-    const timeoutMocks = createTimeoutMocks();
-    const retrySystem = new RetrySystem({ logger: noOpLogger, ...timeoutMocks });
-    const cases = [
-      { headers: { "retry-after": new Date(now + 3000).toUTCString() }, minimum: 2800 },
-      { headers: { "ratelimit-reset": String(Math.ceil((now + 4000) / 1000)) }, minimum: 3800 },
-      { headers: { "ratelimit-reset": String(Math.floor((now - 4000) / 1000)) }, expected: 2000 },
-      { headers: {}, expected: 2000 },
-    ];
-    for (const { headers, expected, minimum } of cases) {
-      const call = createMockFn<[], Promise<unknown>>().mockRejectedValueOnce({ response: { status: 429, headers } }).mockResolvedValue("ok");
-      await expect(retrySystem.executeWithRetry("Twitch", call, 2)).resolves.toBe("ok");
-      const delay = mockSafeDelay.mock.calls.at(-1)?.[0] as number;
-      if (minimum !== undefined) expect(delay).toBeGreaterThanOrEqual(minimum);
-      else expect(delay).toBe(expected);
-    }
-  });
-
-  it("honors an immediate Retry-After value without scheduling a delay", async () => {
-    const retrySystem = new RetrySystem({ logger: noOpLogger, ...createTimeoutMocks() });
-    const call = createMockFn<[], Promise<unknown>>()
-      .mockRejectedValueOnce({ response: { status: 429, headers: { get: () => "0" } } })
-      .mockResolvedValue("ok");
-
-    await expect(retrySystem.executeWithRetry("Twitch", call, 2)).resolves.toBe("ok");
-
-    expect(mockSafeDelay).not.toHaveBeenCalled();
   });
 
   it("extracts readable error messages from nested structures", () => {

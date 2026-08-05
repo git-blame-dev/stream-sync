@@ -6,9 +6,9 @@ import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 import { resolveLogger } from '../utils/logger-resolver';
 import { loadTokens, saveTokens } from '../utils/token-store';
 import { AuthConstants } from '../utils/auth-constants';
+import { createHttpRetryExecutor, type RetryExecutor } from '../utils/http-retry-executor';
 import { runOAuthFlow } from './oauth-flow';
 import { TWITCH_OAUTH_SCOPES } from './twitch-oauth-scopes';
-import { createRetrySystem, type RetryExecutor } from '../utils/retry-system';
 
 type AuthRecord = Record<string, unknown>;
 
@@ -62,7 +62,7 @@ type TwitchAuthOptions = {
     expectedUsername?: unknown;
     httpClient?: HttpClient;
     oauthFlow?: OAuthFlowRunner;
-    retrySystem?: RetryExecutor;
+    retryExecutor?: RetryExecutor;
 };
 
 type HttpErrorShape = {
@@ -210,15 +210,15 @@ class TwitchAuth {
     #expectedUsername: string | null;
     #httpClient: HttpClient;
     #oauthFlowRunner: OAuthFlowRunner;
-    #retrySystem: RetryExecutor;
+    #retryExecutor: RetryExecutor;
 
-    constructor({ tokenStorePath, clientId, logger, expectedUsername = null, httpClient, oauthFlow, retrySystem }: TwitchAuthOptions) {
+    constructor({ tokenStorePath, clientId, logger, expectedUsername = null, httpClient, oauthFlow, retryExecutor }: TwitchAuthOptions) {
         this.#tokenStorePath = typeof tokenStorePath === 'string' ? tokenStorePath : '';
         this.#clientId = typeof clientId === 'string' ? clientId : '';
         this.#logger = resolveLogger(logger, 'TwitchAuth') as ReturnType<typeof resolveLogger>;
         this.#expectedUsername = typeof expectedUsername === 'string' ? expectedUsername : null;
         this.#httpClient = httpClient || axiosModule.default || axiosModule;
-        this.#retrySystem = retrySystem || createRetrySystem({ logger: this.#logger });
+        this.#retryExecutor = retryExecutor || createHttpRetryExecutor({ logger: this.#logger });
         if (oauthFlow !== undefined && typeof oauthFlow !== 'function') {
             throw new Error('oauthFlow must be a function when provided');
         }
@@ -466,7 +466,7 @@ class TwitchAuth {
         }
 
         try {
-            const response = await this.#retrySystem.executeWithRetry(
+            const response = await this.#retryExecutor.executeWithRetry(
                 'twitch-auth-validation',
                 () => this.#httpClient.get(
                     TWITCH.OAUTH.VALIDATE,

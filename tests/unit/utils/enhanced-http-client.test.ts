@@ -6,7 +6,6 @@ import {
   restoreAllMocks,
 } from "../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../helpers/mock-factories";
-import { createTestRetrySystem } from "../../helpers/test-setup";
 type EnhancedHttpClientConstructor =
   typeof import("../../../src/utils/enhanced-http-client").EnhancedHttpClient;
 type EnhancedHttpClientConfig = NonNullable<ConstructorParameters<EnhancedHttpClientConstructor>[0]>;
@@ -19,10 +18,23 @@ type MockAxios = {
   put: MockFunction<[string, unknown, Record<string, unknown>]>;
   delete: MockFunction<[string, Record<string, unknown>]>;
 };
+type RetryExecutor = NonNullable<EnhancedHttpClientConfig["retryExecutor"]>;
+type MockRetryExecutor = RetryExecutor & {
+  executeWithRetry: TestMockFn<
+    [string, () => Promise<Record<string, unknown>>, number?],
+    Promise<Record<string, unknown>>
+  >;
+};
+
+const createTestHttpRetryExecutor = (): MockRetryExecutor => ({
+  executeWithRetry: createMockFn(
+    async (_scope: string, executeRequest: () => Promise<Record<string, unknown>>) => executeRequest(),
+  ),
+}) as unknown as MockRetryExecutor;
 
 describe("Enhanced HTTP Client", () => {
   let mockAxios: MockAxios;
-  let mockRetrySystem: ReturnType<typeof createTestRetrySystem>;
+  let mockRetryExecutor: MockRetryExecutor;
   let EnhancedHttpClient: EnhancedHttpClientConstructor;
   let client: InstanceType<EnhancedHttpClientConstructor>;
 
@@ -34,12 +46,12 @@ describe("Enhanced HTTP Client", () => {
       delete: createMockFn<[string, Record<string, unknown>], Promise<Record<string, unknown>>>(),
     };
 
-    mockRetrySystem = createTestRetrySystem();
+    mockRetryExecutor = createTestHttpRetryExecutor();
     EnhancedHttpClient =
       require("../../../src/utils/enhanced-http-client").EnhancedHttpClient;
 
     client = new EnhancedHttpClient({
-      retrySystem: mockRetrySystem,
+      retryExecutor: mockRetryExecutor,
       timeout: 10000,
       axios: mockAxios satisfies NonNullable<HttpClientAdapter>,
       logger: noOpLogger,
@@ -73,13 +85,13 @@ describe("Enhanced HTTP Client", () => {
     });
   });
 
-  describe("Retry System Integration", () => {
-    test("uses retry system for GET requests when platform is provided", async () => {
+  describe("Retry Executor Integration", () => {
+    test("uses retry executor for GET requests when platform is provided", async () => {
       const mockResponse = { data: "test", status: 200 };
       mockAxios.get.mockResolvedValue(mockResponse);
       let observedRetryPlatform: string | undefined;
-      let observedRetryResult: unknown;
-      mockRetrySystem.executeWithRetry.mockImplementation(
+      let observedRetryResult: Record<string, unknown> | undefined;
+      mockRetryExecutor.executeWithRetry.mockImplementation(
         async (platformName, executeRequest) => {
           observedRetryPlatform = platformName as string;
           observedRetryResult = await executeRequest();
@@ -100,7 +112,7 @@ describe("Enhanced HTTP Client", () => {
     test("forwards maxAttempts to executeWithRetry", async () => {
       mockAxios.get.mockResolvedValue({ data: "test", status: 200 });
       let observedMaxAttempts: number | undefined;
-      mockRetrySystem.executeWithRetry.mockImplementation(
+      mockRetryExecutor.executeWithRetry.mockImplementation(
         async (_platform, executeRequest, maxAttempts) => {
           observedMaxAttempts = maxAttempts as number | undefined;
           return executeRequest();
@@ -127,7 +139,7 @@ describe("Enhanced HTTP Client", () => {
 
       const result = await client.get("https://api.test.example.invalid/data");
 
-      expect(mockRetrySystem.executeWithRetry).not.toHaveBeenCalled();
+      expect(mockRetryExecutor.executeWithRetry).not.toHaveBeenCalled();
       expect(capturedUrl).toBe("https://api.test.example.invalid/data");
       expect(capturedConfig).toEqual(expect.objectContaining({
         timeout: 10000,
@@ -144,7 +156,7 @@ describe("Enhanced HTTP Client", () => {
       let observedRetryPlatform: string | undefined;
       let retryFallbackUsed = false;
 
-      mockRetrySystem.executeWithRetry.mockImplementation(
+      mockRetryExecutor.executeWithRetry.mockImplementation(
         async (platformName, executeRequest) => {
           observedRetryPlatform = platformName as string;
           try {
@@ -165,7 +177,7 @@ describe("Enhanced HTTP Client", () => {
       expect(retryFallbackUsed).toBe(true);
     });
 
-    test("bypasses retry system when disableRetry is true", async () => {
+    test("bypasses retry executor when disableRetry is true", async () => {
       const mockResponse = { data: "ok", status: 200 };
       let capturedUrl: string | undefined;
       let capturedData: unknown;
@@ -186,7 +198,7 @@ describe("Enhanced HTTP Client", () => {
         },
       );
 
-      expect(mockRetrySystem.executeWithRetry).not.toHaveBeenCalled();
+      expect(mockRetryExecutor.executeWithRetry).not.toHaveBeenCalled();
       expect(capturedUrl).toBe("https://api.test.example.invalid/token");
       expect(capturedData).toEqual({ grant_type: "refresh_token" });
       expect(capturedConfig).toEqual(expect.objectContaining({
@@ -201,7 +213,7 @@ describe("Enhanced HTTP Client", () => {
   describe("User-Agent Configuration", () => {
     test("uses configured user agent list when provided", () => {
       const customClient = new EnhancedHttpClient({
-        retrySystem: mockRetrySystem,
+        retryExecutor: mockRetryExecutor,
         timeout: 10000,
         axios: mockAxios satisfies NonNullable<HttpClientAdapter>,
         logger: noOpLogger,
@@ -293,7 +305,7 @@ describe("Enhanced HTTP Client", () => {
   });
 
   describe("Error Handling", () => {
-    test("should preserve original error when not using retry system", async () => {
+    test("should preserve original error when not using retry executor", async () => {
       mockAxios.get.mockRejectedValue(new Error("API Error"));
 
       await expect(
@@ -301,8 +313,8 @@ describe("Enhanced HTTP Client", () => {
       ).rejects.toThrow("API Error");
     });
 
-    test("should let retry system handle errors when platform specified", async () => {
-      mockRetrySystem.executeWithRetry.mockRejectedValue(
+    test("should let retry executor handle errors when platform specified", async () => {
+      mockRetryExecutor.executeWithRetry.mockRejectedValue(
         new Error("Network timeout"),
       );
 
@@ -354,9 +366,9 @@ describe("Enhanced HTTP Client", () => {
   });
 });
 
-describe("Enhanced HTTP Client - Retry System Requirement", () => {
-  test("retry system must have executeWithRetry method", () => {
-    const mockRetrySystem = createTestRetrySystem();
-    expect(typeof mockRetrySystem.executeWithRetry).toBe("function");
+describe("Enhanced HTTP Client - Retry Executor Requirement", () => {
+  test("retry executor must have executeWithRetry method", () => {
+    const mockRetryExecutor = createTestHttpRetryExecutor();
+    expect(typeof mockRetryExecutor.executeWithRetry).toBe("function");
   });
 });

@@ -1,8 +1,8 @@
 import * as axios from 'axios';
 
 import { AuthConstants } from './auth-constants';
+import { createHttpRetryExecutor, type RetryExecutor } from './http-retry-executor';
 import { resolveLogger } from './logger-resolver';
-import { createRetrySystem, type RetryExecutor } from './retry-system';
 import { config as appConfig } from '../core/config';
 
 type HttpClientAdapter = {
@@ -27,7 +27,7 @@ type EnhancedHttpClientConfig = {
     logger?: unknown;
     timeout?: unknown;
     reachabilityTimeoutMs?: unknown;
-    retrySystem?: RetryExecutor;
+    retryExecutor?: RetryExecutor;
     userAgents?: string[];
 };
 
@@ -45,6 +45,7 @@ type RequestOptions = Record<string, unknown> & {
     retryScope?: string;
     disableRetry?: boolean;
     maxAttempts?: number;
+    idempotentRequest?: boolean;
 };
 
 type OperationContextInput = {
@@ -96,7 +97,7 @@ class EnhancedHttpClient {
     logger: ReturnType<typeof resolveLogger>;
     defaultTimeout: number;
     reachabilityTimeoutMs: number;
-    retrySystem: RetryExecutor;
+    retryExecutor: RetryExecutor;
     userAgents: string[];
     currentUserAgentIndex: number;
 
@@ -106,7 +107,7 @@ class EnhancedHttpClient {
         const httpConfig = getHttpRuntimeConfig();
         this.defaultTimeout = resolveTimeout(config.timeout, resolveTimeout(httpConfig.enhancedTimeoutMs, 10_000));
         this.reachabilityTimeoutMs = resolveTimeout(config.reachabilityTimeoutMs, resolveTimeout(httpConfig.enhancedReachabilityTimeoutMs, 5_000));
-        this.retrySystem = config.retrySystem || createRetrySystem({ logger: this.logger });
+        this.retryExecutor = config.retryExecutor || createHttpRetryExecutor({ logger: this.logger });
         this.userAgents = Array.isArray(config.userAgents)
             ? config.userAgents.slice()
             : getConfiguredUserAgents(httpConfig.userAgents);
@@ -178,6 +179,7 @@ class EnhancedHttpClient {
             retryScope,
             disableRetry = false,
             maxAttempts,
+            idempotentRequest = false,
             maxRetries,
             ...requestOptions
         } = options;
@@ -250,8 +252,9 @@ class EnhancedHttpClient {
         };
 
         const retryOwner = retryScope || platform;
-        if (retryOwner && !disableRetry) {
-            return this.retrySystem.executeWithRetry(retryOwner, makeRequest, maxAttempts);
+        const retryAllowed = method !== 'POST' || idempotentRequest;
+        if (retryOwner && !disableRetry && retryAllowed) {
+            return this.retryExecutor.executeWithRetry(retryOwner, makeRequest, maxAttempts);
         }
 
         try {

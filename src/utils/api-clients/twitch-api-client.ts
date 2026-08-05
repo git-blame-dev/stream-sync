@@ -1,7 +1,7 @@
 import { getUnifiedLogger } from '../../core/logging';
 import { secrets } from '../../core/secrets';
 import { createEnhancedHttpClient } from '../enhanced-http-client';
-import { createRetrySystem, type RetryExecutor } from '../retry-system';
+import { createHttpRetryExecutor, type RetryExecutor } from '../http-retry-executor';
 import { createPlatformErrorHandler } from '../platform-error-handler';
 
 type LoggerLike = {
@@ -32,7 +32,7 @@ type HttpClientLike = {
 
 type TwitchApiClientDependencies = {
     enhancedHttpClient?: HttpClientLike;
-    retrySystem?: RetryExecutor;
+    retryExecutor?: RetryExecutor;
 };
 
 const TWITCH_STARTUP_REQUEST_OPTIONS = {
@@ -76,7 +76,7 @@ class TwitchApiClient {
         this.errorHandler = createPlatformErrorHandler(this.logger, 'twitch-api');
         this.httpClient = dependencies.enhancedHttpClient || createEnhancedHttpClient({
             logger: this.logger,
-            retrySystem: dependencies.retrySystem || createRetrySystem({ logger: this.logger })
+            retryExecutor: dependencies.retryExecutor || createHttpRetryExecutor({ logger: this.logger })
         });
         this.baseUrl = 'https://api.twitch.tv/helix';
     }
