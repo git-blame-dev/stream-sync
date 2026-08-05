@@ -68,7 +68,7 @@ type TestViewerCountProvider = Omit<ViewerCountProviderLike, "getViewerCount"> &
 };
 type TestRetrySystem = Omit<
   RetrySystemLike,
-  "isConnected" | "handleConnectionError" | "handleConnectionSuccess"
+  "isConnected" | "handleConnectionError" | "handleConnectionSuccess" | "cancelConnectionRetry"
 > & {
   isConnected: (platform: string) => boolean;
   handleConnectionError: TestMockFn<
@@ -82,6 +82,7 @@ type TestRetrySystem = Omit<
     void
   >;
   handleConnectionSuccess: TestMockFn<[string, unknown, string], void>;
+  cancelConnectionRetry: TestMockFn<[string], void>;
   resetRetryCount: TestMockFn;
   retryTimers: Record<string, unknown>;
 };
@@ -242,6 +243,7 @@ describe("Twitch Platform", () => {
         void
       >(),
       handleConnectionSuccess: createMockFn<[string, unknown, string], void>(),
+      cancelConnectionRetry: createMockFn<[string], void>(),
       resetRetryCount: createMockFn(),
       retryTimers: {},
     };
@@ -863,6 +865,7 @@ describe("Twitch Platform", () => {
 
     it("clears retry state when EventSub reconnects successfully", async () => {
       await platform.initialize(platformHandlerCallbacks);
+      mockRetrySystem.handleConnectionSuccess.mockClear();
 
       platform._handleEventSubConnectionChange(true, {
         reason: "session resumed",
@@ -948,10 +951,38 @@ describe("Twitch Platform", () => {
 
       await cleanup();
       expect(platform.eventSub).toBeNull();
+      expect(mockRetrySystem.cancelConnectionRetry).not.toHaveBeenCalled();
 
       mockTwitchEventSub.initialize.mockResolvedValue();
       await reconnect();
       expect(platform.isPlannedDisconnection).toBe(false);
+
+      await platform.cleanup();
+      expect(mockRetrySystem.cancelConnectionRetry).toHaveBeenCalledWith("twitch");
+    });
+
+    it("queues recovery again after two distinct terminal outage cycles", async () => {
+      await platform.initialize(platformHandlerCallbacks);
+      const recoveries: Array<() => Promise<void>> = [];
+      mockRetrySystem.handleConnectionError.mockImplementation(
+        (_platformName, _error, reconnect) => {
+          recoveries.push(reconnect);
+        },
+      );
+
+      platform._handleEventSubConnectionChange(false, {
+        reason: "first outage",
+        willReconnect: false,
+      });
+      expect(mockRetrySystem.handleConnectionError).toHaveBeenCalledTimes(1);
+
+      await recoveries[0]?.();
+      platform._handleEventSubConnectionChange(false, {
+        reason: "second outage",
+        willReconnect: false,
+      });
+
+      expect(mockRetrySystem.handleConnectionError).toHaveBeenCalledTimes(2);
     });
   });
 

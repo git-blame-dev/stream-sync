@@ -137,6 +137,7 @@ type RetrySystemLike = {
         updateState: (platform: string, isConnected: boolean, connection: unknown, isConnecting: boolean) => void
     ) => void;
     handleConnectionSuccess?: (platform: string, connection: unknown, context: string) => void;
+    cancelConnectionRetry?: (platform: string) => void;
 };
 
 type EventSubListener = {
@@ -493,6 +494,8 @@ class TwitchPlatform extends EventEmitter {
             this.logger.info('Twitch platform initialized with EventSub WebSocket', 'twitch');
             this.isConnected = this.eventSub?.isActive?.() || false;
             this.isConnecting = false;
+            this.retrySystem?.handleConnectionSuccess?.(this.platformName, this.eventSub, 'Twitch EventSub');
+            this.recoveryInFlight = false;
 
         } catch (error) {
             this._logPlatformError('Failed to initialize Twitch platform', error, 'platform-init');
@@ -1288,8 +1291,12 @@ class TwitchPlatform extends EventEmitter {
         }
     }
 
-    async cleanup(): Promise<void> {
+    async cleanup(cancelRecovery = true): Promise<void> {
         this.isPlannedDisconnection = true;
+        if (cancelRecovery) {
+            this.retrySystem?.cancelConnectionRetry?.(this.platformName);
+            this.recoveryInFlight = false;
+        }
 
         try {
             this._clearEventSubWiringState();
@@ -1352,7 +1359,7 @@ class TwitchPlatform extends EventEmitter {
                 await this.initialize(handlers);
             },
             async () => {
-                await this.cleanup();
+                await this.cleanup(false);
             },
             (platform, isConnected, _connection, isConnecting) => {
                 if (platform !== this.platformName) {
