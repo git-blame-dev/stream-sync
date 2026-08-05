@@ -5,8 +5,10 @@ import { secrets } from '../core/secrets';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 import { resolveLogger } from '../utils/logger-resolver';
 import { loadTokens, saveTokens } from '../utils/token-store';
+import { AuthConstants } from '../utils/auth-constants';
 import { runOAuthFlow } from './oauth-flow';
 import { TWITCH_OAUTH_SCOPES } from './twitch-oauth-scopes';
+import { createRetrySystem, type RetryExecutor } from '../utils/retry-system';
 
 type AuthRecord = Record<string, unknown>;
 
@@ -37,6 +39,11 @@ type TokenValidationFailure = {
 
 type TokenValidationResult = TokenValidationSuccess | TokenValidationFailure;
 
+type TokenRefreshResult = {
+    refreshed: boolean;
+    error: unknown | null;
+};
+
 type HttpClient = {
     get: (url: string, config?: AxiosRequestConfig) => Promise<{ data?: unknown }>;
     post: (url: string, data?: unknown, config?: AxiosRequestConfig) => Promise<{ data?: unknown }>;
@@ -55,6 +62,7 @@ type TwitchAuthOptions = {
     expectedUsername?: unknown;
     httpClient?: HttpClient;
     oauthFlow?: OAuthFlowRunner;
+    retrySystem?: RetryExecutor;
 };
 
 type HttpErrorShape = {
@@ -70,6 +78,7 @@ type HttpErrorShape = {
 };
 
 const createTwitchAuthErrorHandler = (logger: ReturnType<typeof resolveLogger>) => createPlatformErrorHandler(logger, 'twitch-auth');
+const TWITCH_VALIDATION_TIMEOUT_MS = AuthConstants.getStreamingOptimizedTimeout('low', 'tokenValidation');
 
 function asRecord(value: unknown): AuthRecord {
     return value && typeof value === 'object' ? (value as AuthRecord) : {};
@@ -194,24 +203,26 @@ const isAuthDisabled = () => {
 class TwitchAuth {
     #initialized = false;
     #userId: string | null = null;
-    #refreshPromise: Promise<boolean> | null = null;
+    #refreshPromise: Promise<TokenRefreshResult> | null = null;
     #tokenStorePath: string;
     #clientId: string;
     #logger: ReturnType<typeof resolveLogger>;
     #expectedUsername: string | null;
     #httpClient: HttpClient;
     #oauthFlowRunner: OAuthFlowRunner;
+    #retrySystem: RetryExecutor;
 
-    constructor({ tokenStorePath, clientId, logger, expectedUsername = null, httpClient, oauthFlow }: TwitchAuthOptions) {
+    constructor({ tokenStorePath, clientId, logger, expectedUsername = null, httpClient, oauthFlow, retrySystem }: TwitchAuthOptions) {
         this.#tokenStorePath = typeof tokenStorePath === 'string' ? tokenStorePath : '';
         this.#clientId = typeof clientId === 'string' ? clientId : '';
         this.#logger = resolveLogger(logger, 'TwitchAuth') as ReturnType<typeof resolveLogger>;
         this.#expectedUsername = typeof expectedUsername === 'string' ? expectedUsername : null;
         this.#httpClient = httpClient || axiosModule.default || axiosModule;
+        this.#retrySystem = retrySystem || createRetrySystem({ logger: this.#logger });
         if (oauthFlow !== undefined && typeof oauthFlow !== 'function') {
             throw new Error('oauthFlow must be a function when provided');
         }
-        this.#oauthFlowRunner = oauthFlow || (async (options) => ensureCamelTokenPayload(await runOAuthFlow(options), 'OAuth flow'));
+        this.#oauthFlowRunner = oauthFlow || (async (options) => ensureCamelTokenPayload(await runOAuthFlow({ ...options, persistTokens: false }), 'OAuth flow'));
     }
 
     async initialize() {
@@ -239,9 +250,21 @@ class TwitchAuth {
 
         let validation = await this.#validateToken();
         if (isValidationFailure(validation)) {
-            const refreshed = await this.refreshTokens();
-            if (refreshed) {
+            if (validation.status !== 401) {
+                throw validation.error;
+            }
+            const hadRefreshToken = !!secrets.twitch.refreshToken;
+            const refreshResult = await this.#refreshTokenResult();
+            if (refreshResult.refreshed) {
                 validation = await this.#validateToken();
+                if (isValidationFailure(validation) && validation.status !== 401) {
+                    throw validation.error;
+                }
+            } else if (hadRefreshToken) {
+                if (refreshResult.error !== null) {
+                    throw refreshResult.error;
+                }
+                throw new Error('Twitch authentication failed after refresh');
             }
         }
 
@@ -274,6 +297,11 @@ class TwitchAuth {
     }
 
     async refreshTokens() {
+        const result = await this.#refreshTokenResult();
+        return result.refreshed;
+    }
+
+    async #refreshTokenResult(): Promise<TokenRefreshResult> {
         if (this.#refreshPromise) {
             return this.#refreshPromise;
         }
@@ -342,19 +370,22 @@ class TwitchAuth {
         if (!oauthNormalized || !oauthNormalized.accessToken) {
             throw new Error(failureMessage);
         }
-        this.#applyTokens(oauthNormalized);
+        if (!oauthNormalized.refreshToken) {
+            throw new Error(`${failureMessage}: OAuth flow did not return a refresh token`);
+        }
         await this.#persistTokens(oauthNormalized);
+        this.#applyTokens(oauthNormalized);
         return oauthNormalized;
     }
 
     async #doRefresh() {
         if (!secrets.twitch.refreshToken) {
-            return false;
+            return { refreshed: false, error: null };
         }
 
         const clientSecret = secrets.twitch.clientSecret;
         if (!clientSecret) {
-            return false;
+            return { refreshed: false, error: null };
         }
 
         const handler = createTwitchAuthErrorHandler(this.#logger);
@@ -380,32 +411,32 @@ class TwitchAuth {
             const data = response && response.data ? response.data : null;
             const normalized = parseRefreshResponse(data);
 
-            this.#applyTokens({
-                accessToken: normalized.accessToken,
-                ...(normalized.refreshToken === undefined ? {} : { refreshToken: normalized.refreshToken })
-            });
+            const refreshToken = normalized.refreshToken === undefined
+                ? secrets.twitch.refreshToken
+                : normalized.refreshToken;
             await this.#persistTokens({
                 accessToken: normalized.accessToken,
-                refreshToken: normalized.refreshToken === undefined ? secrets.twitch.refreshToken : normalized.refreshToken,
+                refreshToken,
                 expiresIn: normalized.expiresIn
             });
-            return true;
+            this.#applyTokens({ accessToken: normalized.accessToken, refreshToken });
+            return { refreshed: true, error: null };
         } catch (error) {
             const httpError = asHttpError(error);
             if (this.#isTerminalRefreshError(httpError)) {
                 try {
                     await this.#runOAuthAndPersistTokens('OAuth flow did not return valid Twitch tokens');
-                    return true;
+                    return { refreshed: true, error: null };
                 } catch (oauthError) {
                     logAuthError(handler, 'OAuth flow failed after terminal refresh error', oauthError);
-                    return false;
+                    return { refreshed: false, error: oauthError };
                 }
             }
             logAuthError(handler, 'Token refresh failed', error, {
                 status: typeof httpError.response?.status === 'number' ? httpError.response.status : null,
                 error: typeof httpError.response?.data?.error === 'string' ? httpError.response.data.error : null
             });
-            return false;
+            return { refreshed: false, error };
         }
     }
 
@@ -435,13 +466,18 @@ class TwitchAuth {
         }
 
         try {
-            const response = await this.#httpClient.get(
-                TWITCH.OAUTH.VALIDATE,
-                {
-                    headers: {
-                        Authorization: `Bearer ${secrets.twitch.accessToken}`
+            const response = await this.#retrySystem.executeWithRetry(
+                'twitch-auth-validation',
+                () => this.#httpClient.get(
+                    TWITCH.OAUTH.VALIDATE,
+                    {
+                        headers: {
+                            Authorization: `Bearer ${secrets.twitch.accessToken}`
+                        },
+                        timeout: TWITCH_VALIDATION_TIMEOUT_MS
                     }
-                }
+                ),
+                3
             );
 
             const data = asRecord(response && response.data ? response.data : null);

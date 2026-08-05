@@ -558,6 +558,29 @@ it("exposes oauth-flow helper functions", () => {
     expect(openedUrl.searchParams.get("state")).toBe(expectedState);
   });
 
+  it("runOAuthFlow can return tokens without persisting when requested", async () => {
+    const result = await runOAuthFlow(
+      {
+        clientId: "test-client-id",
+        tokenStorePath,
+        logger: noOpLogger,
+        persistTokens: false,
+      },
+      {
+        startCallbackServer: createMockFn().mockResolvedValue(createCallbackServerStub()),
+        exchangeCodeForTokens: createMockFn().mockResolvedValue({
+          accessToken: "test-access-token",
+          refreshToken: "test-refresh-token",
+          expiresIn: 3600,
+        }),
+        openBrowser: createMockFn(),
+      },
+    );
+
+    expect(result).toMatchObject({ accessToken: "test-access-token", refreshToken: "test-refresh-token" });
+    expect(fs.existsSync(tokenStorePath)).toBe(false);
+  });
+
   it("runOAuthFlow returns null when exchange returns null", async () => {
     const startCallbackServer = createMockFn().mockResolvedValue(
       createCallbackServerStub(),

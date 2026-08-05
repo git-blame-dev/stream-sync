@@ -61,12 +61,10 @@ describe("TwitchApiClient error handler integration", () => {
     expect(result.isLive).toBe(false);
   });
 
-  it("routes getUserInfo API error through error handler", async () => {
+  it("routes getUserInfo API errors through the error handler", async () => {
     mockHttpClient.get.mockRejectedValue(new Error("user lookup failed"));
 
-    const result = await apiClient.getUserInfo("test-user");
-
-    expect(result).toBeNull();
+    await expect(apiClient.getUserInfo("test-user")).resolves.toBeNull();
   });
 
   it("routes getChannelInfo API error through error handler", async () => {

@@ -33,6 +33,7 @@ type OAuthFlowOptions = {
     autoFindPort?: boolean;
     skipBrowserOpen?: boolean;
     scopes?: readonly string[];
+    persistTokens?: boolean;
 };
 
 type CallbackServerBootstrapResult = {
@@ -528,7 +529,7 @@ function openBrowser(authUrl: string, logger: unknown, { skipBrowserOpen = false
 }
 
 async function runOAuthFlow(
-    { clientId, tokenStorePath, logger, port = OAUTH_SERVER_CONFIG.DEFAULT_PORT, autoFindPort = false, skipBrowserOpen = false, scopes = TWITCH_OAUTH_SCOPES }: OAuthFlowOptions,
+    { clientId, tokenStorePath, logger, port = OAUTH_SERVER_CONFIG.DEFAULT_PORT, autoFindPort = false, skipBrowserOpen = false, scopes = TWITCH_OAUTH_SCOPES, persistTokens = true }: OAuthFlowOptions,
     {
         startCallbackServer: startCallbackServerImpl = startCallbackServer,
         exchangeCodeForTokens: exchangeCodeForTokensImpl = exchangeCodeForTokens,
@@ -580,14 +581,16 @@ async function runOAuthFlow(
             ? Date.now() + (expiresIn * 1000)
             : null;
 
-        await saveTokens(
-            { tokenStorePath, logger: resolvedLogger },
-            {
-                accessToken: tokens.accessToken,
-                ...(tokens.refreshToken === undefined ? {} : { refreshToken: tokens.refreshToken }),
-                expiresAt
-            }
-        );
+        if (persistTokens) {
+            await saveTokens(
+                { tokenStorePath, logger: resolvedLogger },
+                {
+                    accessToken: tokens.accessToken,
+                    ...(tokens.refreshToken === undefined ? {} : { refreshToken: tokens.refreshToken }),
+                    expiresAt
+                }
+            );
+        }
 
         safeCloseServer(serverRef);
         return {

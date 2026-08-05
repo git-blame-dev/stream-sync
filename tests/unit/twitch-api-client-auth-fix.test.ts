@@ -114,6 +114,20 @@ describe("TwitchApiClient authentication", () => {
   });
 
   describe("getBroadcasterId", () => {
+    it("passes the explicit Twitch startup retry scope and three-attempt limit", async () => {
+      mockHttpClient.get.mockResolvedValue({
+        status: 200,
+        data: { data: [{ id: "startup-broadcaster-id", login: "testchannel" }] },
+      });
+
+      await apiClient.getBroadcasterId("testchannel");
+
+      expect(mockHttpClient.get.mock.calls[0]?.[1]).toMatchObject({
+        retryScope: "twitch-startup",
+        maxAttempts: 3,
+      });
+    });
+
     it("returns user ID from channel name", async () => {
       mockHttpClient.get.mockResolvedValue({
         status: 200,
@@ -144,6 +158,29 @@ describe("TwitchApiClient authentication", () => {
 
       await expect(apiClient.getBroadcasterId("badchannel")).rejects.toThrow(
         "Could not resolve broadcaster ID for channel: badchannel",
+      );
+    });
+
+    it("preserves an exhausted transport error from the enhanced HTTP boundary", async () => {
+      const exhaustedError = new Error("transport retries exhausted");
+      mockHttpClient.get.mockRejectedValue(exhaustedError);
+
+      await expect(apiClient.getBroadcasterId("unreachable-channel")).rejects.toBe(exhaustedError);
+    });
+
+    it("propagates terminal HTTP errors immediately", async () => {
+      const terminalError = { response: { status: 403 } };
+      mockHttpClient.get.mockRejectedValue(terminalError);
+
+      await expect(apiClient.getBroadcasterId("terminal-channel")).rejects.toBe(terminalError);
+      expect(mockHttpClient.get).toHaveBeenCalledTimes(1);
+    });
+
+    it("still maps a successful empty response to channel-not-found", async () => {
+      mockHttpClient.get.mockResolvedValue({ status: 200, data: { data: [] } });
+
+      await expect(apiClient.getBroadcasterId("empty-channel")).rejects.toThrow(
+        "Could not resolve broadcaster ID for channel: empty-channel",
       );
     });
   });
@@ -204,6 +241,8 @@ describe("TwitchApiClient authentication", () => {
       const result = await apiClient.getUserInfo("testuser");
 
       expect(result).toEqual({ id: "test-user-id", login: "testuser" });
+      expect(mockTwitchAuth.refreshTokens).toHaveBeenCalledTimes(1);
+      expect(mockHttpClient.get).toHaveBeenCalledTimes(2);
     });
 
     it("uses refreshed token in retry request", async () => {
@@ -226,6 +265,7 @@ describe("TwitchApiClient authentication", () => {
 
       const retryRequestOptions = mockHttpClient.get.mock.calls[1]?.[1];
       expect(retryRequestOptions?.authToken).toBe("new-refreshed-token");
+      expect(retryRequestOptions?.disableRetry).toBe(true);
     });
 
     it("throws when retry after 401 also fails", async () => {

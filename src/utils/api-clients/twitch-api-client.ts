@@ -1,7 +1,7 @@
 import { getUnifiedLogger } from '../../core/logging';
 import { secrets } from '../../core/secrets';
 import { createEnhancedHttpClient } from '../enhanced-http-client';
-import { createRetrySystem, type RetrySystem } from '../retry-system';
+import { createRetrySystem, type RetryExecutor } from '../retry-system';
 import { createPlatformErrorHandler } from '../platform-error-handler';
 
 type LoggerLike = {
@@ -32,8 +32,13 @@ type HttpClientLike = {
 
 type TwitchApiClientDependencies = {
     enhancedHttpClient?: HttpClientLike;
-    retrySystem?: RetrySystem;
+    retrySystem?: RetryExecutor;
 };
+
+const TWITCH_STARTUP_REQUEST_OPTIONS = {
+    retryScope: 'twitch-startup',
+    maxAttempts: 3
+} satisfies RequestOptions;
 
 const getRecord = (value: unknown): Record<string, unknown> | null =>
     value && typeof value === 'object' ? value as Record<string, unknown> : null;
@@ -79,7 +84,7 @@ class TwitchApiClient {
     async makeRequest(endpoint: string, options: RequestOptions = {}): Promise<unknown> {
         const url = `${this.baseUrl}${endpoint}`;
 
-        const executeRequest = async () => {
+        const executeRequest = async (disableRetry = false) => {
             const accessToken = secrets.twitch.accessToken;
             if (!accessToken) {
                 throw new Error('No access token available for Twitch API');
@@ -98,7 +103,8 @@ class TwitchApiClient {
                 authToken: accessToken,
                 authType: 'app',
                 ...(typeof this.config.clientId === 'string' ? { clientId: this.config.clientId } : {}),
-                ...requestOptions
+                ...requestOptions,
+                ...(disableRetry ? { disableRetry: true } : {})
             });
         };
 
@@ -120,7 +126,7 @@ class TwitchApiClient {
                 if (!refreshed) {
                     throw error;
                 }
-                const retryResponse = await executeRequest();
+                const retryResponse = await executeRequest(true);
                 this.logger.debug('Twitch API retry after refresh succeeded', 'twitch-api');
                 return retryResponse.data;
             } catch (retryError) {
@@ -162,11 +168,15 @@ class TwitchApiClient {
         }
     }
 
+    private async fetchUserInfo(username: string, requestOptions: RequestOptions = {}): Promise<unknown | null> {
+        const data = await this.makeRequest(`/users?login=${username}`, requestOptions);
+        const users = getDataArray(data);
+        return users.length > 0 ? users[0] : null;
+    }
+
     async getUserInfo(username: string): Promise<unknown | null> {
         try {
-            const data = await this.makeRequest(`/users?login=${username}`);
-            const users = getDataArray(data);
-            return users.length > 0 ? users[0] : null;
+            return await this.fetchUserInfo(username);
         } catch (error) {
             this._handleApiError(`Failed to get user info: ${getErrorMessage(error)}`, error, 'getUserInfo');
             return null;
@@ -185,7 +195,13 @@ class TwitchApiClient {
     }
 
     async getBroadcasterId(channel: string): Promise<string> {
-        const userInfo = await this.getUserInfo(channel);
+        let userInfo: unknown | null;
+        try {
+            userInfo = await this.fetchUserInfo(channel, TWITCH_STARTUP_REQUEST_OPTIONS);
+        } catch (error) {
+            this._handleApiError(`Failed to get user info: ${getErrorMessage(error)}`, error, 'getBroadcasterId');
+            throw error;
+        }
         const userId = getRecord(userInfo)?.id;
         if (typeof userId !== 'string' || !userId) {
             throw new Error(`Could not resolve broadcaster ID for channel: ${channel}`);
