@@ -925,6 +925,7 @@ describe("YouTubePlatform modern architecture", () => {
     expect(platform.isInitialized).toBe(false);
   });
 
+
   it("reconnect calls initialize with existing handlers", async () => {
     const { platform } = createPlatform();
     platform.handlers = { onChat: createMockFn() };

@@ -247,6 +247,25 @@ describe("YouTube Connection Manager - Behavior Excellence", () => {
   });
 
   describe("State Consistency and Resource Management", () => {
+    it("awaits every cleanup operation and isolates a failed connection", async () => {
+      let releaseSecond: (() => void) | undefined;
+      const firstStop = createMockFn<[], Promise<void>>().mockResolvedValue(undefined);
+      const secondStop = createMockFn<[], Promise<void>>().mockImplementation(() => new Promise((resolve) => {
+        releaseSecond = resolve;
+      }));
+      const failingDisconnect = createMockFn<[], Promise<void>>().mockRejectedValue(new Error("disconnect failed"));
+      await connectionManager.connectToStream("first", async () => ({ stop: firstStop }));
+      await connectionManager.connectToStream("second", async () => ({ stop: secondStop, disconnect: failingDisconnect }));
+
+      const cleanup = connectionManager.cleanupAllConnections();
+      await Promise.resolve();
+      expect(firstStop).toHaveBeenCalled();
+      expect(connectionManager.getConnectionCount()).toBe(0);
+      releaseSecond?.();
+      await cleanup;
+      expect(connectionManager.getConnectionCount()).toBe(0);
+    });
+
     it("should maintain accurate connection state during successful operations", async () => {
       const videoId = "state-test-stream";
 
@@ -416,7 +435,7 @@ describe("YouTube Connection Manager - Behavior Excellence", () => {
     });
 
     it("cleans up all connections without errors", async () => {
-      connectionManager.cleanupAllConnections();
+      await connectionManager.cleanupAllConnections();
 
       await connectionManager.connectToStream(
         "to-clean",
@@ -432,9 +451,30 @@ describe("YouTube Connection Manager - Behavior Excellence", () => {
         metadata: {},
       });
 
-      connectionManager.cleanupAllConnections();
+      await connectionManager.cleanupAllConnections();
 
       expect(connectionManager.getAllConnections()).toHaveLength(0);
+    });
+
+    it("shuts down a connection factory that resolves after cleanup", async () => {
+      let resolveFactory!: (connection: { stop: () => Promise<void>; disconnect: () => Promise<void> }) => void;
+      const stop = createMockFn<[], Promise<void>>().mockResolvedValue();
+      const disconnect = createMockFn<[], Promise<void>>().mockResolvedValue();
+      const factory = createMockFn(
+        () => new Promise<{ stop: () => Promise<void>; disconnect: () => Promise<void> }>((resolve) => {
+          resolveFactory = resolve;
+        }),
+      );
+
+      const connectionAttempt = connectionManager.connectToStream("late-stream", factory);
+      await Promise.resolve();
+      await connectionManager.cleanupAllConnections();
+      resolveFactory({ stop, disconnect });
+
+      await expect(connectionAttempt).resolves.toBe(false);
+      expect(stop).toHaveBeenCalledTimes(1);
+      expect(disconnect).toHaveBeenCalledTimes(1);
+      expect(connectionManager.hasConnection("late-stream")).toBe(false);
     });
 
     it("handles shutdown errors gracefully", async () => {

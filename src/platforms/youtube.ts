@@ -12,7 +12,6 @@ import { validateYouTubePlatformDependencies } from '../utils/dependency-validat
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 import { resolveYouTubeTimestampISO } from '../utils/platform-timestamp';
 import { ensureLogDirectorySync } from '../utils/log-directory';
-import { createRetrySystem } from '../utils/retry-system';
 import { getSystemTimestampISO } from '../utils/timestamp';
 import { safeSetInterval, validateTimeout } from '../utils/timeout-validator';
 import { withTimeout } from '../utils/timeout-wrapper';
@@ -93,17 +92,6 @@ type ViewerCountProviderLike = {
   getViewerCountForVideo?: (videoId: string) => Promise<number | null>;
 };
 
-type RetrySystemLike = {
-  resetRetryCount: (platform: string) => void;
-  handleConnectionSuccess: (platform: string, connections: unknown, label: string) => void;
-  handleConnectionError: (
-    platform: string,
-    error: unknown,
-    reconnect: () => Promise<void>,
-    cleanup: () => Promise<void>
-  ) => void | Promise<void>;
-};
-
 type StreamDetectionServiceLike = {
   detectLiveStreams: (channelHandle: unknown) => Promise<{
     success?: boolean;
@@ -164,7 +152,6 @@ type YouTubeDependencies = UnknownMap & {
   viewerService?: ViewerServiceLike;
   RawPlatformDataLoggingService?: RawPlatformDataLoggingServiceConstructor;
   rawPlatformDataLoggingService?: RawPlatformDataLoggingServiceLike;
-  retrySystem?: RetrySystemLike;
   streamDetectionService?: StreamDetectionServiceLike;
   viewerCountProvider?: ViewerCountProviderLike;
   viewerExtractionService?: YouTubeExtractionServiceLike;
@@ -243,7 +230,6 @@ class YouTubePlatform extends EventEmitter {
     lastKnownRequired: number;
   };
   userAgentManager: YouTubeUserAgentManager;
-  retrySystem: RetrySystemLike;
   connectionManager: YouTubeConnectionManager;
   _youtubeConnectionFactory: YouTubeConnectionFactoryLike;
   _youtubeMultiStreamManager: YouTubeMultiStreamManagerLike;
@@ -321,8 +307,6 @@ class YouTubePlatform extends EventEmitter {
             ...(this.USER_AGENTS ? { userAgents: this.USER_AGENTS } : {})
         });
 
-        this.retrySystem = dependencies.retrySystem || createRetrySystem({ logger: this.logger });
-        
         this.connectionManager = new YouTubeConnectionManager(this.logger, {
             config: this.config
         });
@@ -507,7 +491,7 @@ class YouTubePlatform extends EventEmitter {
             getActiveYouTubeVideoIds: () => this.getActiveYouTubeVideoIds(),
             getLiveVideoIds: () => this.getLiveVideoIds(),
             connectToYouTubeStream: async (videoId: string) => {
-                await this.connectToYouTubeStream(videoId);
+                return await this.connectToYouTubeStream(videoId);
             },
             disconnectFromYouTubeStream: async (
                 videoId: string,
@@ -651,9 +635,8 @@ class YouTubePlatform extends EventEmitter {
         try {
             this.logger.info('Initializing YouTube platform with retry system...', 'youtube');
             
-            this.retrySystem.resetRetryCount('YouTube');
-            
             this.handlers = { ...this.handlers, ...handlers };
+            this.connectionManager.startLifecycle();
 
             if (this.config.enabled && this.config.username) {
                 try {
@@ -664,18 +647,10 @@ class YouTubePlatform extends EventEmitter {
                 }
             }
 
-            this.retrySystem.handleConnectionSuccess('YouTube', this.connectionManager.getAllConnections(), 'YouTube Live Chat');
-            
             this.isInitialized = true;
             
         } catch (error) {
             this._handleProcessingError(`Error during initialization: ${getErrorMessage(error)}`, error, 'initialization');
-            await this.retrySystem.handleConnectionError(
-                'YouTube',
-                error,
-                () => this.initialize(handlers, true),
-                () => this.cleanup()
-            );
             throw error;
         }
     }

@@ -39,7 +39,7 @@ interface YouTubeMultiStreamPlatform {
     checkStreamShortageAndWarn: (availableCount: number, maxStreams: number) => void;
     getActiveYouTubeVideoIds: () => string[];
     getLiveVideoIds: () => Promise<string[]>;
-    connectToYouTubeStream: (videoId: string) => Promise<void>;
+    connectToYouTubeStream: (videoId: string) => Promise<boolean>;
     disconnectFromYouTubeStream: (
         videoId: string,
         reason: string,
@@ -132,7 +132,6 @@ const startMonitoring = async (): Promise<void> => {
                 error,
                 'multi-stream-check'
             );
-            throw error;
         }
     };
 
@@ -239,9 +238,13 @@ const runCheckMultiStream = async (throwOnError: boolean): Promise<void> => {
                 );
             }
 
+            const successfullyConnectedStreamIds: string[] = [];
             for (const videoId of newStreamIds) {
                 try {
-                    await platform.connectToYouTubeStream(videoId);
+                    const connected = await platform.connectToYouTubeStream(videoId);
+                    if (connected) {
+                        successfullyConnectedStreamIds.push(videoId);
+                    }
                 } catch (error: unknown) {
                     platform._handleConnectionErrorLogging(
                         `Failed to connect to stream ${videoId}: ${toErrorMessage(error)}`,
@@ -251,11 +254,11 @@ const runCheckMultiStream = async (throwOnError: boolean): Promise<void> => {
                 }
             }
 
-            if (newStreamIds.length > 0) {
+            if (successfullyConnectedStreamIds.length > 0) {
                 const streamDetectedEvent = {
                     platform: 'youtube',
                     eventType: 'stream-detected',
-                    newStreamIds,
+                    newStreamIds: successfullyConnectedStreamIds,
                     allStreamIds: videoIds,
                     detectionTime: now(),
                     connectionCount: platform.connectionManager.getConnectionCount()

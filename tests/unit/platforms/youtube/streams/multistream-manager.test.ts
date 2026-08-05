@@ -43,7 +43,7 @@ type MultiStreamPlatformFixture = {
   };
   getActiveYouTubeVideoIds: () => string[];
   getLiveVideoIds: () => Promise<string[]>;
-  connectToYouTubeStream: (videoId: string) => Promise<void>;
+  connectToYouTubeStream: (videoId: string) => Promise<boolean>;
   disconnectFromYouTubeStream: (
     videoId: string,
     reason: string,
@@ -107,7 +107,7 @@ describe("YouTube multi-stream manager", () => {
       },
       getActiveYouTubeVideoIds: createMockFn(() => []),
       getLiveVideoIds: createMockFn(async () => []),
-      connectToYouTubeStream: createMockFn<[string], Promise<void>>().mockResolvedValue(undefined),
+      connectToYouTubeStream: createMockFn<[string], Promise<boolean>>().mockResolvedValue(true),
       disconnectFromYouTubeStream: createMockFn<
         [string, string, { requestImmediateRefresh?: boolean; source?: string }?],
         Promise<void>
@@ -128,6 +128,25 @@ describe("YouTube multi-stream manager", () => {
 
     return platform;
   };
+
+  test("reports only streams connected successfully", async () => {
+    const events: PlatformEventRecord[] = [];
+    const platform = buildPlatform({
+      getLiveVideoIds: async () => ["candidate", "connected"],
+      connectToYouTubeStream: async (videoId) => {
+        if (videoId === "candidate") return false;
+        return true;
+      },
+      _emitPlatformEvent: (type, payload) => events.push({ type, payload }),
+    });
+    const manager = buildManager(platform);
+
+    await manager.checkMultiStream();
+
+    expect(events).toHaveLength(1);
+    expect(events[0]?.payload.newStreamIds).toEqual(["connected"]);
+    expect(events[0]?.payload.allStreamIds).toEqual(["candidate", "connected"]);
+  });
 
   const buildManager = (platform: MultiStreamPlatformFixture) =>
     createYouTubeMultiStreamManager({
@@ -278,7 +297,7 @@ describe("YouTube multi-stream manager", () => {
       expect(platform.monitoringIntervalStart).toBe(expectedTime);
     });
 
-    test("propagates error from initial check when throwOnError is true", async () => {
+    test("keeps monitoring after the initial check fails", async () => {
       const initialError = new Error("stream detection failed");
       const platform = buildPlatform({
         checkMultiStream: createMockFn(async () => {
@@ -287,9 +306,9 @@ describe("YouTube multi-stream manager", () => {
       });
       const manager = buildManager(platform);
 
-      await expect(manager.startMonitoring()).rejects.toThrow(
-        "stream detection failed",
-      );
+      await expect(manager.startMonitoring()).resolves.toBeUndefined();
+      expect(platform.monitoringInterval).not.toBeNull();
+      expect(platform._handleProcessingError).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -440,6 +459,7 @@ describe("YouTube multi-stream manager", () => {
         getLiveVideoIds: createMockFn(async () => ["stream-1", "stream-3"]),
         connectToYouTubeStream: createMockFn(async (videoId: string) => {
           connected.push(videoId);
+          return true;
         }),
         disconnectFromYouTubeStream: createMockFn(
           async (videoId: string, reason: string, options?: { requestImmediateRefresh?: boolean; source?: string }) => {
@@ -497,6 +517,7 @@ describe("YouTube multi-stream manager", () => {
         getLiveVideoIds: createMockFn(async () => ["s1", "s2", "s3", "s4"]),
         connectToYouTubeStream: createMockFn(async (videoId: string) => {
           connected.push(videoId);
+          return true;
         }),
       });
       const manager = buildManager(platform);
@@ -515,6 +536,7 @@ describe("YouTube multi-stream manager", () => {
         connectToYouTubeStream: createMockFn(async (videoId: string) => {
           if (videoId === "s1") throw new Error("connection failed");
           connected.push(videoId);
+          return true;
         }),
       });
       const manager = buildManager(platform);
@@ -548,6 +570,7 @@ describe("YouTube multi-stream manager", () => {
             throw new Error("first attempt failed");
           }
           connectedVideoIds.add(videoId);
+          return true;
         }),
       });
       const manager = buildManager(platform);
@@ -602,6 +625,7 @@ describe("YouTube multi-stream manager", () => {
         getLiveVideoIds: createMockFn(async () => ["new-stream"]),
         connectToYouTubeStream: createMockFn(async (videoId: string) => {
           connected.push(videoId);
+          return true;
         }),
         disconnectFromYouTubeStream: createMockFn(
           async (videoId: string, reason: string, options?: { requestImmediateRefresh?: boolean; source?: string }) => {
@@ -634,6 +658,7 @@ describe("YouTube multi-stream manager", () => {
         getLiveVideoIds: createMockFn(async () => ["new-stream-1", "new-stream-2", "new-stream-3"]),
         connectToYouTubeStream: createMockFn(async (videoId: string) => {
           connected.push(videoId);
+          return true;
         }),
       });
       const manager = buildManager(platform);

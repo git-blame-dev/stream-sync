@@ -56,6 +56,8 @@ class YouTubeConnectionManager {
     connections: Map<string, ConnectionData>;
     CONNECTION_STATES: ConnectionStates;
     operationLocks: Set<string>;
+    private lifecycleGeneration: number;
+    private acceptingConnections: boolean;
 
     constructor(logger: ConnectionLogger, options: { config?: ConnectionConfig } = {}) {
         this.logger = logger;
@@ -73,9 +75,20 @@ class YouTubeConnectionManager {
         };
 
         this.operationLocks = new Set();
+        this.lifecycleGeneration = 0;
+        this.acceptingConnections = true;
+    }
+
+    startLifecycle(): void {
+        this.lifecycleGeneration += 1;
+        this.acceptingConnections = true;
     }
 
     async connectToStream(videoId: string, connectionFactory: ConnectionFactory, options: { reason?: string } = {}): Promise<boolean> {
+        if (!this.acceptingConnections) {
+            return false;
+        }
+        const lifecycleGeneration = this.lifecycleGeneration;
         const lockKey = `connect_${videoId}`;
         if (this.operationLocks.has(lockKey)) {
             this.logger.warn(`Connection already in progress for ${videoId}`, 'youtube');
@@ -98,7 +111,8 @@ class YouTubeConnectionManager {
                 state: this.CONNECTION_STATES.CONNECTING,
                 metadata: {
                     connectedAt: getSystemTimestampISO(),
-                    reason: options.reason || 'stream detected'
+                    reason: options.reason || 'stream detected',
+                    lifecycleGeneration
                 }
             });
 
@@ -106,13 +120,19 @@ class YouTubeConnectionManager {
             const connection = await connectionFactory(videoId);
             const duration = Date.now() - startTime;
 
+            if (!this.acceptingConnections || lifecycleGeneration !== this.lifecycleGeneration) {
+                await this.shutdownConnection(connection, videoId);
+                return false;
+            }
+
             this.connections.set(videoId, {
                 connection,
                 state: this.CONNECTION_STATES.CONNECTED,
                 metadata: {
                     connectedAt: getSystemTimestampISO(),
                     reason: options.reason || 'stream detected',
-                    connectionDuration: duration
+                    connectionDuration: duration,
+                    lifecycleGeneration
                 }
             });
 
@@ -121,7 +141,9 @@ class YouTubeConnectionManager {
         } catch (error) {
             const errorMessage = this.getErrorMessage(error);
             this.handleConnectionError(`Failed to connect to ${videoId}: ${errorMessage}`, error, { videoId });
-            this.connections.delete(videoId);
+            if (this.connections.get(videoId)?.metadata.lifecycleGeneration === lifecycleGeneration) {
+                this.connections.delete(videoId);
+            }
             return false;
         } finally {
             this.operationLocks.delete(lockKey);
@@ -250,20 +272,25 @@ class YouTubeConnectionManager {
         return Array.from(this.connections.values());
     }
 
-    cleanupAllConnections(): void {
+    async cleanupAllConnections(): Promise<void> {
+        this.acceptingConnections = false;
+        this.lifecycleGeneration += 1;
         const count = this.connections.size;
         if (count === 0) {
             this.logger.debug('No connections to cleanup', 'youtube');
             return;
         }
 
-        for (const [videoId, connectionData] of this.connections) {
-            void this.shutdownConnection(connectionData.connection, videoId).catch((error) => {
-                this.handleConnectionError(`Error removing connection for video ${videoId}`, error, { videoId });
-            });
-        }
-
+        const connections = Array.from(this.connections);
         this.connections.clear();
+        await Promise.all(connections.map(async ([videoId, connectionData]) => {
+            try {
+                await this.shutdownConnection(connectionData.connection, videoId);
+            } catch (error) {
+                this.handleConnectionError(`Error removing connection for video ${videoId}`, error, { videoId });
+            }
+        }));
+
         this.logger.info(`Cleaned up all ${count} connections`, 'youtube');
     }
 
