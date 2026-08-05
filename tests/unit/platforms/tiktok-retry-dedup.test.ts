@@ -29,6 +29,7 @@ type RetrySystem = {
     reconnect: () => Promise<void>,
     cleanup: () => Promise<void>,
   ) => void;
+  cancelConnectionRetry?: (platform: string) => void;
 };
 
 const requiredWebcastEvents = {
@@ -112,5 +113,48 @@ describe("TikTokPlatform retry deduplication", () => {
 
     expect(retryCalls).toHaveLength(2);
     expect(connectCalls).toHaveLength(2);
+  });
+
+  it("cancels recovery only for lifecycle cleanup, not retry-owned cleanup", async () => {
+    let retryCleanup!: () => Promise<void>;
+    const cancelConnectionRetry = createMockFn<[string], void>();
+    const retrySystem: RetrySystem = {
+      resetRetryCount: createMockFn<[string], void>(),
+      cancelConnectionRetry,
+      handleConnectionError: (_platform, _error, _reconnect, cleanup) => {
+        retryCleanup = cleanup;
+      },
+    };
+    const platform = new TikTokPlatform(baseConfig, createDependencies(retrySystem));
+
+    platform.queueRetry(new Error("temporary"));
+    await retryCleanup();
+
+    expect(cancelConnectionRetry).not.toHaveBeenCalled();
+
+    await platform.cleanup();
+
+    expect(cancelConnectionRetry).toHaveBeenCalledTimes(1);
+    expect(cancelConnectionRetry).toHaveBeenCalledWith("tiktok");
+  });
+
+  it("queues another retry when the first post-cleanup reconnect fails", async () => {
+    const retries: RetryHandleArgs[] = [];
+    const retrySystem: RetrySystem = {
+      resetRetryCount: createMockFn<[string], void>(),
+      handleConnectionError: (...args) => {
+        retries.push(args);
+      },
+    };
+    const platform = new TikTokPlatform(baseConfig, createDependencies(retrySystem));
+    platform._connect = createMockFn<[], Promise<boolean>>().mockRejectedValue(new Error("still offline"));
+
+    platform.queueRetry(new Error("initial failure"));
+    const firstRetry = retries[0];
+    if (!firstRetry) throw new Error("Expected initial retry callbacks");
+    await firstRetry[3]();
+    await firstRetry[2]();
+
+    expect(retries).toHaveLength(2);
   });
 });

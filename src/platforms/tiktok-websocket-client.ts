@@ -27,6 +27,7 @@ type TikTokWebSocketClientOptions = {
     apiKey?: string | null;
     logger?: unknown;
     WebSocketCtor?: WebSocketClientConstructor;
+    autoReconnect?: boolean;
 };
 
 const WebSocketModuleRecord = asJsonObject(WebSocketModule);
@@ -65,6 +66,8 @@ class TikTokWebSocketClient extends EventEmitter {
     wsUrl: string;
     pingInterval: ReturnType<typeof setInterval> | null;
     pingIntervalMs: number;
+    reconnectTimer: ReturnType<typeof setTimeout> | null;
+    reconnectGeneration: number;
     stats: {
         connectTime: number | null;
         messageCount: number;
@@ -88,11 +91,13 @@ class TikTokWebSocketClient extends EventEmitter {
         this.reconnectAttempts = 0;
         this.maxReconnectAttempts = 10;
         this.reconnectDelay = 3000;
-        this.autoReconnect = true;
+        this.autoReconnect = options.autoReconnect ?? true;
 
         this.wsUrl = 'wss://ws.eulerstream.com';
         this.pingInterval = null;
         this.pingIntervalMs = 30000;
+        this.reconnectTimer = null;
+        this.reconnectGeneration = 0;
 
         this.stats = {
             connectTime: null,
@@ -342,6 +347,9 @@ class TikTokWebSocketClient extends EventEmitter {
     }
 
     scheduleReconnect(): void {
+        if (!this.autoReconnect) {
+            return;
+        }
         this.reconnectAttempts++;
         this.stats.reconnectCount++;
         const delay = this.reconnectDelay * Math.min(this.reconnectAttempts, 5);
@@ -352,7 +360,12 @@ class TikTokWebSocketClient extends EventEmitter {
             delay
         });
 
-        safeSetTimeout(() => {
+        const generation = this.reconnectGeneration;
+        this.reconnectTimer = safeSetTimeout(() => {
+            this.reconnectTimer = null;
+            if (!this.autoReconnect || generation !== this.reconnectGeneration) {
+                return;
+            }
             this.connect().catch((error: unknown) => {
                 const reconnectError = new Error(`Reconnect attempt ${this.reconnectAttempts} failed: ${getErrorMessage(error)}`);
                 this._handleClientError(`TikTok reconnect attempt ${this.reconnectAttempts} failed`, reconnectError, 'connection');
@@ -381,6 +394,11 @@ class TikTokWebSocketClient extends EventEmitter {
     }
 
     disconnect(reconnect = false): void {
+        this.reconnectGeneration++;
+        if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = null;
+        }
         this.autoReconnect = reconnect;
         if (this.ws) {
             this.stopPingInterval();

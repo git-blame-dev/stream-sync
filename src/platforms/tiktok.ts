@@ -134,6 +134,7 @@ type RetrySystem = {
         reconnect: () => Promise<void>,
         cleanup: () => Promise<void>
     ) => void;
+    cancelConnectionRetry?: (owner: string) => void;
 };
 
 type ConnectionFactoryLike = {
@@ -421,7 +422,8 @@ class TikTokPlatform extends EventEmitter {
             const retrySystem = createRetrySystem({ logger: this.logger });
             this.retrySystem = {
                 resetRetryCount: retrySystem.resetRetryCount.bind(retrySystem),
-                handleConnectionError: retrySystem.handleConnectionError.bind(retrySystem)
+                handleConnectionError: retrySystem.handleConnectionError.bind(retrySystem),
+                cancelConnectionRetry: retrySystem.cancelConnectionRetry.bind(retrySystem)
             };
         }
         this._validateDependencies(dependencies, this.config);
@@ -694,17 +696,9 @@ class TikTokPlatform extends EventEmitter {
             });
             
         } catch (error) {
-            this.initializationManager.markInitializationFailure(error, {
-                handlersCount: Object.keys(this.handlers).length
-            });
-            
-            this.initializationStats.recordFailure(attemptId, error, {
-                stage: 'connection',
-                handlersCount: Object.keys(this.handlers).length
-            });
-            
+            let recoveryResult: { action: string; reason?: string } = { action: 'skipped', reason: 'no-retry-system' };
             if (this.retrySystem) {
-                this.handleRetry(error);
+                recoveryResult = this.handleRetry(error);
             } else {
                 this.errorHandler.handleConnectionError(
                     error,
@@ -712,6 +706,23 @@ class TikTokPlatform extends EventEmitter {
                     `Connection failed: ${getErrorMessage(error)}`
                 );
             }
+
+            if (recoveryResult.action === 'retry-queued' || recoveryResult.action.startsWith('deferred-reconnect')) {
+                this.initializationManager.markInitializationSuccess({
+                    handlersCount: Object.keys(this.handlers).length,
+                    recoveryAction: recoveryResult.action
+                });
+                this.initializationStats.recordSuccess(attemptId);
+                return;
+            }
+
+            this.initializationManager.markInitializationFailure(error, {
+                handlersCount: Object.keys(this.handlers).length
+            });
+            this.initializationStats.recordFailure(attemptId, error, {
+                stage: 'connection',
+                handlersCount: Object.keys(this.handlers).length
+            });
 
             throw error;
         }
@@ -1102,6 +1113,7 @@ class TikTokPlatform extends EventEmitter {
 
         const reconnectFn = async () => {
             this.retryLock = false;
+            this.isPlannedDisconnection = false;
             try {
                 await this._connect(this.handlers);
             } catch (err) {
@@ -1113,7 +1125,7 @@ class TikTokPlatform extends EventEmitter {
             'tiktok',
             error,
             reconnectFn,
-            () => this.cleanup()
+            () => this.cleanup(false)
         );
 
         return { queued: true };
@@ -1508,8 +1520,11 @@ class TikTokPlatform extends EventEmitter {
         cleanupTikTokEventListeners(this._createEventRouterPlatformAdapter());
     }
 
-    async cleanup() {
+    async cleanup(cancelRecovery = true) {
         this.isPlannedDisconnection = true;
+        if (cancelRecovery) {
+            this.retrySystem?.cancelConnectionRetry?.('tiktok');
+        }
 
         const connection = this.connection;
         if (connection && typeof connection.disconnect === 'function') {

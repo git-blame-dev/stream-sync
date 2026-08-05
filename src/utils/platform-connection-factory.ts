@@ -211,7 +211,8 @@ class PlatformConnectionFactory {
 
         const baseConfig = {
             apiKey,
-            WebSocketCtor: dependencies.WebSocketCtor
+            WebSocketCtor: dependencies.WebSocketCtor,
+            autoReconnect: false
         };
 
         if (apiKey) {

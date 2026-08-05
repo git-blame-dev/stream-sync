@@ -232,9 +232,11 @@ describe("platform-connection-factory behavior", () => {
   test("strips @ prefix from tiktok username before constructing connection", () => {
     const factory = new PlatformConnectionFactory(noOpLogger);
     let capturedUsername: string | null = null;
+    let capturedConfig: Record<string, unknown> | null = null;
 
-    const TikTokWebSocketClient = createTikTokClientFactory((connection, username) => {
+    const TikTokWebSocketClient = createTikTokClientFactory((connection, username, config) => {
       capturedUsername = username;
+      capturedConfig = config;
       connection.connect = () => {};
       connection.on = () => {};
       connection.emit = () => {};
@@ -251,6 +253,7 @@ describe("platform-connection-factory behavior", () => {
     );
 
     expect(capturedUsername as string | null).toBe("testuser");
+    expect(capturedConfig).toMatchObject({ autoReconnect: false });
   });
 
   test("fails when TikTokWebSocketClient dependency is missing", () => {

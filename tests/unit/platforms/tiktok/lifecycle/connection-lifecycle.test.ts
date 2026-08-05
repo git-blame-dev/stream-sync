@@ -207,15 +207,15 @@ describe("TikTokPlatform connection lifecycle", () => {
       expect(platform.handlers.onChat).toBe(testHandler);
     });
 
-    it("propagates error when connection fails", async () => {
-      const platform = createPlatform();
+    it("keeps recovery ownership when the initial connection fails", async () => {
+      const retrySystem = createRetrySystem();
+      const platform = createPlatform({}, { retrySystem });
       platform._connect = createMockFn().mockRejectedValue(
         new Error("connection failed"),
       );
 
-      await expect(platform.initialize({})).rejects.toThrow(
-        "connection failed",
-      );
+      await expect(platform.initialize({})).resolves.toBeUndefined();
+      expect(retrySystem.handleConnectionError).toHaveBeenCalledTimes(1);
     });
 
     it("schedules deferred reconnect checks for offline initialization failures", async () => {
@@ -227,9 +227,7 @@ describe("TikTokPlatform connection lifecycle", () => {
         new Error("Connection closed: User is not live"),
       );
 
-      await expect(platform.initialize({})).rejects.toThrow(
-        "Connection closed: User is not live",
-      );
+      await expect(platform.initialize({})).resolves.toBeUndefined();
       expect(retrySystem.handleConnectionError).not.toHaveBeenCalled();
       expect(createInterval).toHaveBeenCalledTimes(1);
       expect(expectDefined(createInterval.mock.calls[0])[0]).toBe(

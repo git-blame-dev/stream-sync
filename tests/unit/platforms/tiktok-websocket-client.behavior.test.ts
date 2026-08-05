@@ -30,7 +30,7 @@ class MockWebSocket extends EventEmitter {
 describe("TikTokWebSocketClient (behavior)", () => {
   type TikTokWebSocketClientConstructor = new (
     username: string,
-    options: { WebSocketCtor: typeof MockWebSocket },
+    options: { WebSocketCtor: typeof MockWebSocket; autoReconnect?: boolean },
   ) => EventEmitter & { connect: () => Promise<{ roomId: string }>; disconnect: () => void };
   type ChatEvent = { comment: string };
   type GiftEvent = {
@@ -171,5 +171,31 @@ describe("TikTokWebSocketClient (behavior)", () => {
     advanceTimersByTime(16000);
 
     await expect(connectPromise).rejects.toThrow(/timeout/i);
+  });
+
+  test("does not reconnect after disconnect cancels a scheduled callback", async () => {
+    let constructionCount = 0;
+    const CountingWebSocket = class extends MockWebSocket {
+      constructor() {
+        super();
+        constructionCount += 1;
+        mockWs = this;
+      }
+    };
+    client = new TikTokWebSocketClient("testuser123", {
+      WebSocketCtor: CountingWebSocket,
+      autoReconnect: true,
+    });
+
+    const connectPromise = client.connect();
+    const ws = requireMockWebSocket();
+    ws.emit("open");
+    ws.emit("close", 1006, "abnormal");
+    await expect(connectPromise).rejects.toThrow();
+
+    client.disconnect();
+    advanceTimersByTime(5000);
+
+    expect(constructionCount).toBe(1);
   });
 });

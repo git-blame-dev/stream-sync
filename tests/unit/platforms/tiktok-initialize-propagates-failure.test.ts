@@ -32,12 +32,12 @@ const WEBCAST_EVENT = {
   STREAM_END: "stream_end",
 } satisfies TikTokWebcastEvent;
 
-describe("TikTokPlatform initialize failure propagation", () => {
+describe("TikTokPlatform initialize recovery ownership", () => {
   afterEach(() => {
     restoreAllMocks();
   });
 
-  it("rejects initialize when the initial connection attempt fails", async () => {
+  it("keeps the platform registered when initial connection recovery is queued", async () => {
     const failingConnection = new FailingTikTokConnection();
 
     const dependencies = {
@@ -64,8 +64,7 @@ describe("TikTokPlatform initialize failure propagation", () => {
       dependencies,
     );
 
-    await expect(platform.initialize(platform.handlers)).rejects.toThrow(
-      "room id failure",
-    );
+    await expect(platform.initialize(platform.handlers)).resolves.toBeUndefined();
+    expect(dependencies.retrySystem.handleConnectionError).toHaveBeenCalled();
   });
 });

@@ -98,11 +98,9 @@ describe("TikTokPlatform connection recovery", () => {
       },
     };
 
-    await expect(platform.initialize(platform.handlers)).rejects.toThrow(
-      "room id failure",
-    );
+    await expect(platform.initialize(platform.handlers)).resolves.toBeUndefined();
 
-    await platform.initialize(platform.handlers);
+    await platform._connect(platform.handlers);
     connection2.emit(platformDependencies.ControlEvent.CONNECTED);
     const viewerTimestamp = Date.parse("2024-01-01T00:00:00Z");
     connection2.emit(platformDependencies.WebcastEvent.ROOM_USER, {
