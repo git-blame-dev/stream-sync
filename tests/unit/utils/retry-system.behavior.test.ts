@@ -6,6 +6,7 @@ import {
   ADAPTIVE_RETRY_CONFIG,
 } from "../../../src/utils/retry-system";
 import { PlatformErrorHandler } from "../../../src/utils/platform-error-handler";
+import testClock from "../../helpers/test-clock";
 type RetryDependencies = NonNullable<ConstructorParameters<typeof RetrySystem>[0]>;
 type MockPlatformErrorHandler = PlatformErrorHandler & {
   handleEventProcessingError: ReturnType<typeof createMockFn>;
@@ -45,9 +46,11 @@ const createTimeoutMocks = () => {
 describe("RetrySystem", () => {
   afterEach(() => {
     restoreAllMocks();
+    testClock.useRealTime();
   });
 
   beforeEach(() => {
+    testClock.reset();
     createTimeoutMocks();
   });
 
@@ -344,13 +347,14 @@ describe("RetrySystem", () => {
     expect(failingCall).toHaveBeenCalledTimes(1);
   });
 
-  it("executes with retry until success then resets counts", async () => {
+  it("does not mutate connection retry counts when an HTTP retry succeeds", async () => {
     const timeoutMocks = createTimeoutMocks();
     const retrySystem = new RetrySystem({
       logger: noOpLogger,
       ...timeoutMocks,
     });
     retrySystem.errorHandler = createMockErrorHandler();
+    retrySystem.incrementRetryCount("YouTube");
     const execute = createMockFn<[], Promise<string>>()
       .mockRejectedValueOnce(new Error("flaky"))
       .mockResolvedValueOnce("ok");
@@ -359,7 +363,7 @@ describe("RetrySystem", () => {
 
     expect(result).toBe("ok");
     expect(mockSafeDelay).toHaveBeenCalled();
-    expect(retrySystem.getRetryCount("YouTube")).toBe(0);
+    expect(retrySystem.getRetryCount("YouTube")).toBe(1);
   });
 
   it("stops executeWithRetry immediately on non-retryable auth errors", async () => {
@@ -378,6 +382,98 @@ describe("RetrySystem", () => {
     ).rejects.toThrow("401");
 
     expect(unauthorizedCall).toHaveBeenCalledTimes(1);
+    expect(mockSafeDelay).not.toHaveBeenCalled();
+  });
+
+  it("uses an invocation-local budget and treats maxAttempts as total calls", async () => {
+    const retrySystem = new RetrySystem({ logger: noOpLogger, ...createTimeoutMocks() });
+    const first = createMockFn<[], Promise<unknown>>().mockRejectedValue(new Error("first"));
+    const second = createMockFn<[], Promise<unknown>>().mockRejectedValue(new Error("second"));
+
+    await expect(retrySystem.executeWithRetry("Twitch", first, 2)).rejects.toThrow("first");
+    await expect(retrySystem.executeWithRetry("Twitch", second, 2)).rejects.toThrow("second");
+    expect(first).toHaveBeenCalledTimes(2);
+    expect(second).toHaveBeenCalledTimes(2);
+  });
+
+  it("uses a bounded three-attempt default for HTTP retries", async () => {
+    const retrySystem = new RetrySystem({ logger: noOpLogger, ...createTimeoutMocks() });
+    const call = createMockFn<[], Promise<unknown>>().mockRejectedValue(new Error("offline"));
+
+    await expect(retrySystem.executeWithRetry("Twitch", call)).rejects.toThrow("offline");
+
+    expect(call).toHaveBeenCalledTimes(3);
+  });
+
+  it("retries transport failures and transient HTTP statuses, but not terminal 4xx", async () => {
+    const retryableStatuses = [408, 425, 429, 500, 502, 503, 504];
+    for (const status of retryableStatuses) {
+      const retrySystem = new RetrySystem({ logger: noOpLogger, ...createTimeoutMocks() });
+      const call = createMockFn<[], Promise<unknown>>()
+        .mockRejectedValueOnce({ response: { status } })
+        .mockResolvedValueOnce("recovered");
+      await expect(retrySystem.executeWithRetry("Twitch", call, 2)).resolves.toBe("recovered");
+      expect(call).toHaveBeenCalledTimes(2);
+    }
+
+    for (const status of [400, 401, 403, 404, 422]) {
+      const retrySystem = new RetrySystem({ logger: noOpLogger, ...createTimeoutMocks() });
+      const call = createMockFn<[], Promise<unknown>>().mockRejectedValue({ response: { status } });
+      await expect(retrySystem.executeWithRetry("Twitch", call, 3)).rejects.toEqual({ response: { status } });
+      expect(call).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it("keeps concurrent calls scoped and honors rate-limit headers with a capped fallback", async () => {
+    const timeoutMocks = createTimeoutMocks();
+    const retrySystem = new RetrySystem({ logger: noOpLogger, ...timeoutMocks });
+    const first = createMockFn<[], Promise<unknown>>().mockRejectedValueOnce({
+      response: { status: 429, headers: { "retry-after": "2" } },
+    }).mockResolvedValue("one");
+    const second = createMockFn<[], Promise<unknown>>().mockRejectedValueOnce(new Error("offline")).mockResolvedValue("two");
+
+    await expect(Promise.all([
+      retrySystem.executeWithRetry("Twitch", first, 2),
+      retrySystem.executeWithRetry("Twitch", second, 2),
+    ])).resolves.toEqual(["one", "two"]);
+    expect(first).toHaveBeenCalledTimes(2);
+    expect(second).toHaveBeenCalledTimes(2);
+    expect(mockSafeDelay).toHaveBeenCalledWith(2000, expect.any(Number), expect.any(String));
+
+    const capped = createMockFn<[], Promise<unknown>>().mockRejectedValueOnce({
+      response: { status: 429, headers: { "retry-after": "120" } },
+    }).mockResolvedValue("capped");
+    await expect(retrySystem.executeWithRetry("Twitch", capped, 2)).resolves.toBe("capped");
+    expect(mockSafeDelay.mock.calls.some(([delay]) => delay === 60000)).toBe(true);
+  });
+
+  it("uses Retry-After dates, Twitch reset epochs, and adaptive fallback", async () => {
+    const now = testClock.now();
+    const timeoutMocks = createTimeoutMocks();
+    const retrySystem = new RetrySystem({ logger: noOpLogger, ...timeoutMocks });
+    const cases = [
+      { headers: { "retry-after": new Date(now + 3000).toUTCString() }, minimum: 2800 },
+      { headers: { "ratelimit-reset": String(Math.ceil((now + 4000) / 1000)) }, minimum: 3800 },
+      { headers: { "ratelimit-reset": String(Math.floor((now - 4000) / 1000)) }, expected: 2000 },
+      { headers: {}, expected: 2000 },
+    ];
+    for (const { headers, expected, minimum } of cases) {
+      const call = createMockFn<[], Promise<unknown>>().mockRejectedValueOnce({ response: { status: 429, headers } }).mockResolvedValue("ok");
+      await expect(retrySystem.executeWithRetry("Twitch", call, 2)).resolves.toBe("ok");
+      const delay = mockSafeDelay.mock.calls.at(-1)?.[0] as number;
+      if (minimum !== undefined) expect(delay).toBeGreaterThanOrEqual(minimum);
+      else expect(delay).toBe(expected);
+    }
+  });
+
+  it("honors an immediate Retry-After value without scheduling a delay", async () => {
+    const retrySystem = new RetrySystem({ logger: noOpLogger, ...createTimeoutMocks() });
+    const call = createMockFn<[], Promise<unknown>>()
+      .mockRejectedValueOnce({ response: { status: 429, headers: { get: () => "0" } } })
+      .mockResolvedValue("ok");
+
+    await expect(retrySystem.executeWithRetry("Twitch", call, 2)).resolves.toBe("ok");
+
     expect(mockSafeDelay).not.toHaveBeenCalled();
   });
 
@@ -438,11 +534,11 @@ describe("RetrySystem", () => {
     });
   });
 
-  it("computes retry statistics and honors cap", () => {
+  it("computes connection retry statistics and honors cap", () => {
     const retrySystem = new RetrySystem({ logger: noOpLogger });
     retrySystem.platformRetryCount.TikTok = 3;
 
-    const stats = retrySystem.getRetryStatistics();
+    const stats = retrySystem.getConnectionRetryStatistics();
 
     expect(stats.TikTok?.count).toBe(3);
     expect(stats.TikTok?.nextDelay).toBeGreaterThan(0);

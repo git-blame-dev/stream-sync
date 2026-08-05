@@ -97,6 +97,24 @@ describe("Enhanced HTTP Client", () => {
       expect(observedRetryResult).toBe(mockResponse);
     });
 
+    test("forwards maxAttempts to executeWithRetry", async () => {
+      mockAxios.get.mockResolvedValue({ data: "test", status: 200 });
+      let observedMaxAttempts: number | undefined;
+      mockRetrySystem.executeWithRetry.mockImplementation(
+        async (_platform, executeRequest, maxAttempts) => {
+          observedMaxAttempts = maxAttempts as number | undefined;
+          return executeRequest();
+        },
+      );
+
+      await client.get("https://api.test.example.invalid/data", {
+        platform: "twitch",
+        maxAttempts: 4,
+      });
+
+      expect(observedMaxAttempts).toBe(4);
+    });
+
     test("makes direct requests when no platform is provided", async () => {
       const mockResponse = { data: "test", status: 200 };
       let capturedUrl: string | undefined;

@@ -13,6 +13,13 @@ const ADAPTIVE_RETRY_CONFIG = {
     BACKOFF_MULTIPLIER: 1.3
 } as const;
 
+const DEFAULT_HTTP_MAX_ATTEMPTS = 3;
+const RETRYABLE_HTTP_STATUSES = new Set([408, 425, 429, 500, 502, 503, 504]);
+
+type HttpHeaders = Record<string, unknown> & {
+    get?: (name: string) => unknown;
+};
+
 type RetryLogger = ReturnType<typeof resolveLogger>;
 
 type RetryDependencies = {
@@ -26,7 +33,11 @@ type RetryDependencies = {
     validateExponentialBackoff?: typeof validateExponentialBackoff;
 };
 
-class RetrySystem {
+type RetryExecutor = {
+    executeWithRetry: <T>(platform: string, executeFunction: () => Promise<T>, maxAttempts?: number) => Promise<T>;
+};
+
+class RetrySystem implements RetryExecutor {
     logger: RetryLogger;
     constants: RetryDependencies['constants'];
     errorHandler: ReturnType<typeof createPlatformErrorHandler>;
@@ -304,7 +315,7 @@ class RetrySystem {
         }
     }
 
-    getRetryStatistics() {
+    getConnectionRetryStatistics() {
         const stats: Record<string, {
             count: number;
             nextDelay: number;
@@ -336,41 +347,96 @@ class RetrySystem {
         this.logger.debug(`Reset retry counts for: ${platforms.join(', ')}`, 'retry-system');
     }
 
-    async executeWithRetry<T>(platform: string, executeFunction: () => Promise<T>, maxRetries?: number): Promise<T> {
+    async executeWithRetry<T>(platform: string, executeFunction: () => Promise<T>, maxAttempts?: number): Promise<T> {
         let lastError: unknown;
-        const effectiveMaxRetries = (typeof maxRetries === 'number' || maxRetries === Number.POSITIVE_INFINITY)
-            ? maxRetries
+        const configuredMaxAttempts = typeof maxAttempts === 'number'
+            ? maxAttempts
             : this.getMaxAttempts();
+        const effectiveMaxAttempts = Number.isFinite(configuredMaxAttempts) && configuredMaxAttempts > 0
+            ? Math.max(1, Math.floor(configuredMaxAttempts))
+            : DEFAULT_HTTP_MAX_ATTEMPTS;
+        let attempts = 0;
 
-        while (!this.hasExceededMaxRetries(platform, effectiveMaxRetries)) {
+        while (attempts < effectiveMaxAttempts) {
+            attempts += 1;
             try {
                 const result = await executeFunction();
-                this.resetRetryCount(platform);
                 return result;
             } catch (error) {
                 lastError = error;
 
+                const status = this.getHttpStatus(error);
                 const errorMessage = this.extractErrorMessage(error);
-                if (errorMessage.includes('401') || errorMessage.includes('Unauthorized')) {
-                    this.logger.warn(`Non-retryable error detected: ${errorMessage}`, platform);
-                    throw error;
-                }
-
-                const delay = this.incrementRetryCount(platform);
-                const attemptNumber = this.getRetryCount(platform);
-                this.logger.warn(`HTTP request failed (attempt ${attemptNumber}): ${errorMessage}`, platform);
-
-                if (this.hasExceededMaxRetries(platform, effectiveMaxRetries)) {
-                    this._handleRetryError(`Maximum retry attempts (${effectiveMaxRetries}) exceeded for ${platform}`, null, 'max-retries', platform);
+                const statuslessAuthError = status === undefined && /\b401\b|unauthorized/i.test(errorMessage);
+                const retryable = status === undefined
+                    ? !statuslessAuthError
+                    : RETRYABLE_HTTP_STATUSES.has(status);
+                if (!retryable || attempts >= effectiveMaxAttempts) {
                     throw lastError;
                 }
-
+                const delay = status === 429
+                    ? this.getRateLimitDelay(error, attempts)
+                    : this.getHttpRetryDelay(attempts);
+                this.logger.warn(`HTTP request failed (attempt ${attempts}): ${errorMessage}`, platform);
                 this.logger.info(`Retrying in ${delay / 1000} seconds...`, platform);
-                await this.safeDelay(delay, delay || 1000, 'RetrySystem http retry delay');
+                if (delay > 0) {
+                    await this.safeDelay(delay, delay, 'RetrySystem http retry delay');
+                }
             }
         }
 
         throw lastError;
+    }
+
+    private getHttpStatus(error: unknown): number | undefined {
+        if (!error || typeof error !== 'object') {
+            return undefined;
+        }
+        const value = error as { status?: unknown; response?: { status?: unknown } };
+        const status = value.response?.status ?? value.status;
+        return typeof status === 'number' && status > 0 ? status : undefined;
+    }
+
+    private getRateLimitDelay(error: unknown, attempt: number): number {
+        const response = (error as { response?: { headers?: unknown } }).response;
+        const headers = response?.headers as HttpHeaders | undefined;
+        const retryAfter = this.getHeader(headers, 'retry-after');
+        const numeric = typeof retryAfter === 'string' && /^\s*\d+(?:\.\d+)?\s*$/.test(retryAfter)
+            ? Number(retryAfter) * 1000
+            : typeof retryAfter === 'number' ? retryAfter * 1000 : Date.parse(String(retryAfter)) - Date.now();
+        if (Number.isFinite(numeric) && numeric >= 0) {
+            return Math.min(numeric, ADAPTIVE_RETRY_CONFIG.MAX_DELAY);
+        }
+
+        const reset = Number(this.getHeader(headers, 'ratelimit-reset'));
+        const resetDelay = (reset * 1000) - Date.now();
+        if (Number.isFinite(resetDelay) && resetDelay > 0) {
+            return Math.min(resetDelay, ADAPTIVE_RETRY_CONFIG.MAX_DELAY);
+        }
+
+        return this.getHttpRetryDelay(attempt);
+    }
+
+    private getHeader(headers: HttpHeaders | undefined, name: string): unknown {
+        if (!headers) {
+            return undefined;
+        }
+
+        const directKey = Object.keys(headers).find(key => key.toLowerCase() === name.toLowerCase());
+        if (directKey) {
+            return headers[directKey];
+        }
+
+        return headers.get?.(name);
+    }
+
+    private getHttpRetryDelay(attempt: number): number {
+        return this.validateExponentialBackoff(
+            ADAPTIVE_RETRY_CONFIG.BASE_DELAY,
+            ADAPTIVE_RETRY_CONFIG.BACKOFF_MULTIPLIER,
+            attempt - 1,
+            ADAPTIVE_RETRY_CONFIG.MAX_DELAY
+        );
     }
 
     validateRetryConfig(): true {
@@ -423,6 +489,7 @@ function createRetrySystem(dependencies?: RetryDependencies): RetrySystem {
 
 export {
     RetrySystem,
+    type RetryExecutor,
     createRetrySystem,
     ADAPTIVE_RETRY_CONFIG
 };

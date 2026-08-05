@@ -2,7 +2,7 @@ import * as axios from 'axios';
 
 import { AuthConstants } from './auth-constants';
 import { resolveLogger } from './logger-resolver';
-import { createRetrySystem, type RetrySystem } from './retry-system';
+import { createRetrySystem, type RetryExecutor } from './retry-system';
 import { config as appConfig } from '../core/config';
 
 type HttpClientAdapter = {
@@ -27,7 +27,7 @@ type EnhancedHttpClientConfig = {
     logger?: unknown;
     timeout?: unknown;
     reachabilityTimeoutMs?: unknown;
-    retrySystem?: RetrySystem;
+    retrySystem?: RetryExecutor;
     userAgents?: string[];
 };
 
@@ -42,8 +42,9 @@ type RequestOptions = Record<string, unknown> & {
     userAgent?: string;
     timeout?: unknown;
     platform?: string;
+    retryScope?: string;
     disableRetry?: boolean;
-    maxRetries?: number;
+    maxAttempts?: number;
 };
 
 type OperationContextInput = {
@@ -95,7 +96,7 @@ class EnhancedHttpClient {
     logger: ReturnType<typeof resolveLogger>;
     defaultTimeout: number;
     reachabilityTimeoutMs: number;
-    retrySystem: RetrySystem;
+    retrySystem: RetryExecutor;
     userAgents: string[];
     currentUserAgentIndex: number;
 
@@ -174,10 +175,16 @@ class EnhancedHttpClient {
     async executeRequest(method: HttpMethod, url: string, data: unknown, options: RequestOptions = {}): Promise<Record<string, unknown>> {
         const {
             platform,
+            retryScope,
             disableRetry = false,
+            maxAttempts,
             maxRetries,
             ...requestOptions
         } = options;
+
+        if (maxRetries !== undefined) {
+            throw new Error('maxRetries is not supported; use maxAttempts');
+        }
 
         const config = this.buildRequestConfig(requestOptions);
 
@@ -242,8 +249,9 @@ class EnhancedHttpClient {
             return response;
         };
 
-        if (platform && !disableRetry) {
-            return this.retrySystem.executeWithRetry(platform, makeRequest, maxRetries);
+        const retryOwner = retryScope || platform;
+        if (retryOwner && !disableRetry) {
+            return this.retrySystem.executeWithRetry(retryOwner, makeRequest, maxAttempts);
         }
 
         try {

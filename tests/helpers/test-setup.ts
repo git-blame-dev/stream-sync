@@ -149,8 +149,8 @@ type MockPlatformDependencies = MockPlatformBaseDependencies
     | TwitchMockPlatformDependencies
     | YouTubeMockPlatformDependencies;
 
-type RetryExecuteMock = TestMockFn<[platform: string, executeFunction: () => Promise<unknown>, maxRetries?: number], Promise<unknown>> & {
-    <T>(platform: string, executeFunction: () => Promise<T>, maxRetries?: number): Promise<T>;
+type RetryExecuteMock = TestMockFn<[platform: string, executeFunction: () => Promise<unknown>, maxAttempts?: number], Promise<unknown>> & {
+    <T>(platform: string, executeFunction: () => Promise<T>, maxAttempts?: number): Promise<T>;
 };
 
 type TestRetrySystem = Omit<RetrySystem, 'executeWithRetry' | 'resetRetryCount' | 'handleConnectionError' | 'handleConnectionSuccess' | 'incrementRetryCount' | 'getRetryCount'> & {
@@ -421,9 +421,9 @@ const createTestApp = <Overrides extends TestRecord = Record<string, never>>(ove
 });
 
 const createTestRetrySystem = <Overrides extends TestRecord = Record<string, never>>(overrides?: Overrides): TestRetrySystem & Overrides => {
-    const retrySystem = createRetrySystem() as TestRetrySystem & Overrides;
+    const retrySystem = createRetrySystem() as unknown as TestRetrySystem & Overrides;
 
-    retrySystem.executeWithRetry = createMockFn<[platform: string, executeFunction: () => Promise<unknown>, maxRetries?: number], Promise<unknown>>().mockImplementation(async (_platform, executeFunction) => {
+    retrySystem.executeWithRetry = createMockFn<[platform: string, executeFunction: () => Promise<unknown>, maxAttempts?: number], Promise<unknown>>().mockImplementation(async (_platform, executeFunction) => {
         return await executeFunction();
     }) as RetryExecuteMock;
     retrySystem.resetRetryCount = createMockFn<[platform: string], void>();

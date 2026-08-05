@@ -79,6 +79,39 @@ describe("EnhancedHttpClient behavior", () => {
     expect(response.status).toBe(204);
   });
 
+  it("forwards maxAttempts rather than maxRetries to the retry system", async () => {
+    const axios = createHttpAdapter();
+    const executeWithRetry = createMockFn(async (_platform: string, handler: () => Promise<Record<string, unknown>>, maxAttempts?: number) => handler());
+    const retrySystem = { executeWithRetry } as Partial<NonNullable<RetrySystemAdapter>> as NonNullable<RetrySystemAdapter>;
+    const client = new EnhancedHttpClient({ axios, logger: noOpLogger, retrySystem });
+
+    await client.get("https://example.com", { platform: "twitch", maxAttempts: 4 });
+
+    expect(executeWithRetry.mock.calls[0]?.[2]).toBe(4);
+  });
+
+  it("rejects the ambiguous legacy maxRetries option", async () => {
+    const client = new EnhancedHttpClient({ axios: createHttpAdapter(), logger: noOpLogger });
+
+    await expect(client.get("https://example.com", { maxRetries: 4 })).rejects.toThrow(
+      "maxRetries is not supported; use maxAttempts",
+    );
+  });
+
+  it("uses retryScope without leaking retry metadata to the HTTP adapter", async () => {
+    const get = createMockFn<[string, Record<string, unknown>], Promise<Record<string, unknown>>>().mockResolvedValue({ status: 200 });
+    const axios = createHttpAdapter({ get });
+    const executeWithRetry = createMockFn(async (_scope: string, handler: () => Promise<Record<string, unknown>>) => handler());
+    const retrySystem = { executeWithRetry } as Partial<NonNullable<RetrySystemAdapter>> as NonNullable<RetrySystemAdapter>;
+    const client = new EnhancedHttpClient({ axios, logger: noOpLogger, retrySystem });
+
+    await client.get("https://example.com", { retryScope: "twitch-startup", maxAttempts: 3 });
+
+    expect(executeWithRetry.mock.calls[0]?.[0]).toBe("twitch-startup");
+    expect(get.mock.calls[0]?.[1]).not.toHaveProperty("retryScope");
+    expect(get.mock.calls[0]?.[1]).not.toHaveProperty("maxAttempts");
+  });
+
   it("bypasses retry system when disableRetry is true", async () => {
     const axios = {
       get: createMockFn<[string, Record<string, unknown>], Promise<Record<string, unknown>>>().mockRejectedValue(new Error("testNetworkError")),
