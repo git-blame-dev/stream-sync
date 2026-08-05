@@ -313,6 +313,8 @@ class OBSConnectionManager {
                         this.connectionPromise = null;
                         this.connectionCompleteHandler = null;
                         this.activeConnectAttemptVersion = null;
+                        void this.obs.disconnect().catch(() => undefined);
+                        if (!this.isIntentionalDisconnect && !this.isDisposed) this.scheduleReconnect('authentication-timeout');
                         reject(new Error('OBS connection timed out waiting for authentication'));
                     }
                 }, identifiedTimeoutMs);
@@ -619,7 +621,8 @@ async function initializeOBSConnection(config: ObsConfig = {}, dependencies: Con
     logger.debug('[OBS] OBS connection manager obtained', 'OBS');
     
     logger.debug(`[OBS] Connection Config Check: enabled=${config.enabled}`, 'OBS');
-    if (config.enabled) {
+    let outcome: 'connected' | 'degraded' | 'disabled' = config.enabled === true ? 'degraded' : 'disabled';
+    if (config.enabled === true) {
         logger.debug('[OBS] OBS is enabled, attempting to connect...', 'OBS');
         try {
             if (dependencies.obsEventService && typeof dependencies.obsEventService.connect === 'function') {
@@ -629,6 +632,7 @@ async function initializeOBSConnection(config: ObsConfig = {}, dependencies: Con
                 await manager.connect();
             }
             logger.debug('[OBS] OBS connection successful', 'OBS');
+            outcome = 'connected';
             
             const handcamConfig = dependencies.handcam;
             if (handcamConfig?.enabled) {
@@ -651,7 +655,7 @@ async function initializeOBSConnection(config: ObsConfig = {}, dependencies: Con
     }
     
     logger.debug('[OBS] OBS connection initialization completed', 'OBS');
-    return manager;
+    return { manager, outcome };
 }
 
 async function obsCall(requestType: string, requestData: Record<string, unknown> = {}) {

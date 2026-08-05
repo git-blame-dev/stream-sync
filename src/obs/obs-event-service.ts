@@ -12,6 +12,7 @@ type ObsConnectionLike = {
     connect: () => Promise<void>;
     disconnect: () => Promise<void>;
     isReady: () => Promise<boolean>;
+    isConnected: () => boolean;
 };
 
 type ObsSourcesLike = {
@@ -25,8 +26,6 @@ type ObsEventLogger = {
 };
 
 type ObsEventState = {
-    connected: boolean;
-    ready: boolean;
     lastError: Error | null;
 };
 
@@ -68,8 +67,6 @@ class OBSEventService {
         this.errorHandler = logger ? createPlatformErrorHandler(logger, 'obs-events') : null;
 
         this.state = {
-            connected: false,
-            ready: false,
             lastError: null
         };
 
@@ -114,8 +111,6 @@ class OBSEventService {
         }
 
         const handleConnectionClosed = (data: { reason?: unknown; code?: unknown } = {}) => {
-            this.state.connected = false;
-            this.state.ready = false;
             this.logger.warn('OBS connection closed; emitting obs:connection-lost event', data);
             this.eventBus.emit('obs:connection-lost', {
                 reason: data.reason,
@@ -228,12 +223,8 @@ class OBSEventService {
             try {
                 await this.obsConnection.connect();
 
-                this.state.connected = true;
-                this.state.ready = true;
                 this.state.lastError = null;
             } catch (error) {
-                this.state.connected = false;
-                this.state.ready = false;
                 this.state.lastError = error instanceof Error ? error : new Error(String(error));
 
                 this._handleObsEventError('Failed to connect to OBS', error, { operation: 'connect' });
@@ -250,9 +241,6 @@ class OBSEventService {
     async disconnect() {
         try {
             await this.obsConnection.disconnect();
-
-            this.state.connected = false;
-            this.state.ready = false;
         } catch (error) {
             this._handleObsEventError('Failed to disconnect from OBS', error, { operation: 'disconnect' });
             throw error;
@@ -260,15 +248,17 @@ class OBSEventService {
     }
 
     getConnectionState() {
+        const connected = this.obsConnection.isConnected();
         return {
-            connected: this.state.connected,
-            ready: this.state.ready,
-            lastError: this.state.lastError
+            connected,
+            ready: connected,
+            lastError: connected ? null : this.state.lastError
         };
     }
 
     async getHealthStatus() {
-        const connected = this.state.connected;
+        const connectionState = this.getConnectionState();
+        const connected = connectionState.connected;
         let responsive = false;
 
         if (connected) {
@@ -283,7 +273,7 @@ class OBSEventService {
             healthy: connected && responsive,
             connected,
             responsive,
-            lastError: this.state.lastError?.message
+            lastError: connectionState.lastError?.message
         };
     }
 

@@ -294,10 +294,11 @@ test("initializes OBS connection from getter-based config values", async () => {
 
       mockOBSWebSocket.mockReturnValue(mockOBSInstance);
 
-      const manager = await initializeOBSConnection(configModuleStyle, {
+      const { manager, outcome } = await initializeOBSConnection(configModuleStyle, {
         OBSWebSocket: mockOBSWebSocket,
       });
 
+      expect(outcome).toBe("connected");
       expect(manager.config.address).toBe("ws://init-test:9999");
       expect(manager.config.password).toBe("init-password");
       expect(manager.config.enabled).toBe(true);

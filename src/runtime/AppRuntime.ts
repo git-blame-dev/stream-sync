@@ -875,10 +875,16 @@ class AppRuntime {
                         ? { obsEventService: { connect: this.obsEventService.connect.bind(this.obsEventService) } }
                         : {})
                 };
-                await initializeOBSConnection(this.config.obs, {
+                const { outcome } = await initializeOBSConnection(this.config.obs, {
                     ...obsConnectionDependencies
                 });
-                this.logger.info('OBS connection initialized', 'AppRuntime');
+                if (outcome === 'connected') {
+                    this.logger.info('OBS connected', 'AppRuntime');
+                } else if (outcome === 'disabled') {
+                    this.logger.info('OBS integration disabled', 'AppRuntime');
+                } else {
+                    this.logger.warn('OBS unavailable; continuing in degraded mode', 'AppRuntime');
+                }
             } catch (obsError) {
                 this._handleAppRuntimeError(
                     `OBS initialization failed: ${getErrorMessage(obsError)}`,

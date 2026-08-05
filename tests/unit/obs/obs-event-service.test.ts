@@ -78,6 +78,12 @@ describe("OBSEventService", () => {
         isConnecting: false,
       }),
     };
+    mockOBSConnection.connect.mockImplementation(async () => {
+      mockOBSConnection.isConnected.mockReturnValue(true);
+    });
+    mockOBSConnection.disconnect.mockImplementation(async () => {
+      mockOBSConnection.isConnected.mockReturnValue(false);
+    });
 
     mockObsSources = {
       updateTextSource: createMockFn<[string, string], Promise<void>>().mockResolvedValue(),
@@ -125,6 +131,7 @@ describe("OBSEventService", () => {
       mockOBSConnection.connect.mockRejectedValueOnce(
         new Error("Connection refused"),
       );
+      mockOBSConnection.isConnected.mockReturnValue(false);
 
       await obsEventService.connect().catch(() => {});
 
@@ -163,6 +170,7 @@ describe("OBSEventService", () => {
         const [, connectionClosedHandler] =
           firstRecordedCall(reconnectDisabledConnection.addEventListener.mock.calls, "addEventListener");
         connectionClosedHandler({ code: 1006, reason: "socket closed" });
+        reconnectDisabledConnection.isConnected.mockReturnValue(false);
         await waitForDelay(10);
 
         const state = service.getConnectionState();
@@ -328,6 +336,14 @@ describe("OBSEventService", () => {
   });
 
   describe("Connection State Tracking", () => {
+    test("derives state from manager after manager-owned reconnect", async () => {
+      await obsEventService.connect();
+      mockOBSConnection.isConnected.mockReturnValue(false);
+      expect(obsEventService.getConnectionState()).toMatchObject({ connected: false, ready: false });
+      mockOBSConnection.isConnected.mockReturnValue(true);
+      expect(obsEventService.getConnectionState()).toMatchObject({ connected: true, ready: true, lastError: null });
+    });
+
     test("maintains connection state after connection", async () => {
       await obsEventService.connect();
 

@@ -13,6 +13,7 @@ const {
   obsCall,
   ensureOBSConnected,
 } = require("../../../src/obs/connection.ts");
+const { initializeOBSConnection } = require("../../../src/obs/connection.ts");
 
 describe("OBSConnectionManager behavior", () => {
   let originalNodeEnv: string | undefined;
@@ -120,6 +121,28 @@ describe("OBSConnectionManager behavior", () => {
     manager.scheduleReconnect("test");
 
     expect(manager.reconnectTimer).toEqual({ id: "existing" });
+  });
+
+  it("closes timed-out transport and schedules one reconnect", async () => {
+    const mockOBS = createMockOBS();
+    const manager = new OBSConnectionManager(createDeps({ obs: mockOBS, config: { enabled: true, connectionTimeoutMs: 10 } }));
+    manager.reconnectIntervalMs = 1000;
+    await expect(manager.connect()).rejects.toThrow("timed out");
+    expect(mockOBS.disconnect).toHaveBeenCalledTimes(1);
+    expect(manager.reconnectTimer).not.toBeNull();
+    manager.scheduleReconnect("duplicate");
+    expect(manager.reconnectTimer).not.toBeNull();
+  });
+
+  it("returns an explicit startup outcome for disabled and degraded initialization", async () => {
+    const disabled = await initializeOBSConnection({ enabled: false }, { config: {} });
+    expect(disabled.outcome).toBe("disabled");
+    resetOBSConnectionManager();
+    const mockOBS = createMockOBS();
+    mockOBS.connect.mockRejectedValueOnce(new Error("offline"));
+    const degraded = await initializeOBSConnection({ enabled: true, connectionTimeoutMs: 10 }, { obs: mockOBS });
+    expect(degraded.outcome).toBe("degraded");
+    expect(degraded.manager).toBeDefined();
   });
 
   it("exposes connection state via getConnectionState", () => {
