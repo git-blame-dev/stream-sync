@@ -2,54 +2,75 @@ import { describe, it, expect, afterEach } from "bun:test";
 import { restoreAllMocks } from "../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../helpers/mock-factories";
 import { createStreamElementsConfigFixture } from "../../helpers/config-fixture";
+import { useFakeTimers, useRealTimers, advanceTimersByTime } from "../../helpers/bun-timers";
 import { StreamElementsPlatform } from "../../../src/platforms/streamelements";
 
-type ConnectionErrorHandlerCall = [Error, string, string?];
-type RetryConnectionCall = [string, Error, () => Promise<boolean>, () => void];
-type StreamElementsPlatformHarness = Omit<StreamElementsPlatform, "errorHandler" | "retryHandleConnectionError"> & {
-  errorHandler: {
-    handleConnectionError: (...args: ConnectionErrorHandlerCall) => void;
-  };
-  retryHandleConnectionError: (...args: RetryConnectionCall) => void;
-};
-
 afterEach(() => {
+  useRealTimers();
   restoreAllMocks();
 });
 
-describe("StreamElementsPlatform connection error handling", () => {
-  it("routes connection errors through error handler and retry handler", () => {
-    const platform = new StreamElementsPlatform(
-      createStreamElementsConfigFixture(),
-      { logger: noOpLogger },
-    );
-    const errorHandlerCalls: ConnectionErrorHandlerCall[] = [];
-    const errorHandler = {
-      handleConnectionError: (...args: ConnectionErrorHandlerCall) => {
-        errorHandlerCalls.push(args);
-      },
+const createPlatform = () => {
+  const retrySystem = {
+    incrementRetryCount: () => 10,
+    resetRetryCount: () => undefined,
+  };
+  return {
+    platform: new StreamElementsPlatform(createStreamElementsConfigFixture(), {
+      logger: noOpLogger,
+      retrySystem,
+    }),
+    retrySystem,
+  };
+};
+
+describe("StreamElementsPlatform connection recovery", () => {
+  it("uses one local reconnect attempt when error is followed by close", () => {
+    useFakeTimers();
+    const { platform } = createPlatform();
+    let attempts = 0;
+    platform.connect = async () => {
+      attempts += 1;
+      return false;
     };
-    const harness = platform as unknown as StreamElementsPlatformHarness;
-    harness.errorHandler = errorHandler;
-    const retryCalls: RetryConnectionCall[] = [];
-    harness.retryHandleConnectionError = (...args: RetryConnectionCall) => {
-      retryCalls.push(args);
+
+    platform.handleConnectionError(new Error("connection lost"));
+    platform.handleConnectionClose(1006, "lost");
+    advanceTimersByTime(10);
+
+    expect(attempts).toBe(1);
+  });
+
+  it("cancels recovery on disconnect after a failure", async () => {
+    useFakeTimers();
+    const { platform } = createPlatform();
+    let attempts = 0;
+    platform.connect = async () => {
+      attempts += 1;
+      return false;
     };
 
-    const error = new Error("connection lost");
-    platform.handleConnectionError(error);
+    platform.handleConnectionError(new Error("connection lost"));
+    await platform.disconnect();
+    advanceTimersByTime(10);
 
-    expect(errorHandlerCalls).toHaveLength(1);
-    const [errorArg, category, message] = errorHandlerCalls[0]!;
-    expect(errorArg).toBe(error);
-    expect(category).toBe("connection");
-    expect(message).toMatch(/connection lost/i);
+    expect(attempts).toBe(0);
+  });
 
-    expect(retryCalls).toHaveLength(1);
-    const [platformName, retryError, reconnectFn, cleanupFn] = retryCalls[0]!;
-    expect(platformName).toBe("StreamElements");
-    expect(retryError).toBe(error);
-    expect(typeof reconnectFn).toBe("function");
-    expect(typeof cleanupFn).toBe("function");
+  it("ignores an in-flight connection failure after disconnect", async () => {
+    useFakeTimers();
+    const { platform } = createPlatform();
+    let attempts = 0;
+    platform.connect = async () => {
+      attempts += 1;
+      return false;
+    };
+
+    const staleGeneration = 0;
+    await platform.disconnect();
+    platform.handleConnectionError(new Error("late failure"), staleGeneration);
+    advanceTimersByTime(20);
+
+    expect(attempts).toBe(0);
   });
 });
