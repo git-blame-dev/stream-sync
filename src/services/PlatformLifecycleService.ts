@@ -116,6 +116,7 @@ class PlatformLifecycleService {
     platformHealth: Record<string, PlatformHealthEntry>;
     platformErrors: Array<{ platform: string; message: string; timestamp: string }>;
     shutdownRequested: boolean;
+    platformCleanupPromises: Map<PlatformInstance, Promise<void>>;
 
     constructor(options: PlatformLifecycleOptions = {}) {
         this.config = options.config;
@@ -132,6 +133,7 @@ class PlatformLifecycleService {
         this.platformHealth = {};
         this.platformErrors = [];
         this.shutdownRequested = false;
+        this.platformCleanupPromises = new Map();
 
         this.logger.debug('PlatformLifecycleService initialized', 'PlatformLifecycleService');
     }
@@ -200,7 +202,7 @@ class PlatformLifecycleService {
             this.logger.info(`Platform ${platformName} initialized`, 'PlatformLifecycleService');
         } catch (error) {
             this._handleLifecycleError(`Failed to initialize platform ${platformName}: ${getErrorMessage(error)}`, error, 'initialize');
-            this.markPlatformFailure(platformName, error);
+            await this.markPlatformFailure(platformName, error);
         }
     }
 
@@ -522,7 +524,7 @@ class PlatformLifecycleService {
             this.logger.info(`[${platformName}] Background initialization completed successfully`, 'PlatformLifecycleService');
         } catch (error) {
             this._handleLifecycleError(`[${platformName}] Background initialization failed: ${getErrorMessage(error)}`, error, 'background-init');
-            this.markPlatformFailure(platformName, error);
+            await this.markPlatformFailure(platformName, error);
         }
     }
 
@@ -652,7 +654,7 @@ class PlatformLifecycleService {
 
     }
 
-    markPlatformFailure(platformName: string, error: unknown) {
+    async markPlatformFailure(platformName: string, error: unknown): Promise<void> {
         const timestamp = getSystemTimestampISO();
         const errorMessage = getErrorMessage(error);
         this.platformErrors.push({
@@ -661,8 +663,34 @@ class PlatformLifecycleService {
             timestamp
         });
 
+        const platform = this.platforms[platformName];
+        if (platform) {
+            try {
+                await this.cleanupPlatformInstance(platform);
+            } catch (cleanupError) {
+                this._handleLifecycleError(
+                    `Error cleaning up failed platform ${platformName}: ${getErrorMessage(cleanupError)}`,
+                    cleanupError,
+                    'cleanup'
+                );
+            }
+        }
+
+        if (this.platforms[platformName] !== platform) {
+            return;
+        }
+
         delete this.platforms[platformName];
         delete this.platformConnectionTimes[platformName];
+
+        if (this.shutdownRequested) {
+            this.updatePlatformHealth(platformName, {
+                state: 'disconnected',
+                lastError: null,
+                lastUpdated: getSystemTimestampISO()
+            });
+            return;
+        }
 
         this.updatePlatformHealth(platformName, {
             state: 'failed',
@@ -682,7 +710,7 @@ class PlatformLifecycleService {
             try {
                 const platform = this.platforms[platformName];
                 if (platform && typeof platform.cleanup === 'function') {
-                    await platform.cleanup();
+                    await this.cleanupPlatformInstance(platform);
                     this.logger.info(`Cleaned up ${platformName}`, 'PlatformLifecycleService');
                 } else {
                     cleanupError = new Error(`Platform ${platformName} is missing cleanup()`);
@@ -712,6 +740,23 @@ class PlatformLifecycleService {
         }
     }
 
+    private cleanupPlatformInstance(platform: PlatformInstance): Promise<void> {
+        const existingCleanup = this.platformCleanupPromises.get(platform);
+        if (existingCleanup) {
+            return existingCleanup;
+        }
+
+        const cleanupPromise = Promise.resolve()
+            .then(() => platform.cleanup())
+            .finally(() => {
+                if (this.platformCleanupPromises.get(platform) === cleanupPromise) {
+                    this.platformCleanupPromises.delete(platform);
+                }
+            });
+        this.platformCleanupPromises.set(platform, cleanupPromise);
+        return cleanupPromise;
+    }
+
     dispose() {
         this.platforms = {};
         this.platformConnectionTimes = {};
@@ -719,6 +764,7 @@ class PlatformLifecycleService {
         this.platformHealth = {};
         this.platformErrors = [];
         this.shutdownRequested = false;
+        this.platformCleanupPromises.clear();
 
         this.logger.debug('PlatformLifecycleService disposed', 'PlatformLifecycleService');
     }

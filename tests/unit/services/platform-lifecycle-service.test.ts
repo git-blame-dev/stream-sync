@@ -227,6 +227,102 @@ describe("PlatformLifecycleService", () => {
       expect(status.registeredPlatforms).not.toContain("youtube");
     });
 
+    it("retains a failed platform until asynchronous cleanup completes", async () => {
+      configFixture.youtube = { enabled: true, username: "channel" };
+      let resolveCleanup!: () => void;
+      const cleanup = createMockFn(
+        () => new Promise<void>((resolve) => {
+          resolveCleanup = resolve;
+        }),
+      );
+      const mockPlatformClass = createPlatformConstructor(() => ({
+        initialize: createMockFn<[PlatformEventHandlers], Promise<never>>()
+          .mockRejectedValue(new Error("connect failed")),
+        cleanup,
+        on: createMockFn<[string, (...args: unknown[]) => unknown], unknown>(),
+      }));
+
+      const initialization = service.initializeAllPlatforms({ youtube: mockPlatformClass });
+      for (let attempt = 0; attempt < 10 && cleanup.mock.calls.length === 0; attempt += 1) {
+        await Promise.resolve();
+      }
+
+      expect(service.getPlatform("youtube")).not.toBeNull();
+      expect(cleanup).toHaveBeenCalledTimes(1);
+
+      resolveCleanup();
+      await initialization;
+
+      expect(service.getPlatform("youtube")).toBeNull();
+      expect(service.getStatus().failedPlatforms).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ name: "youtube", lastError: "connect failed" }),
+        ]),
+      );
+    });
+
+    it("does not remove a replacement platform when stale failure cleanup completes", async () => {
+      configFixture.youtube = { enabled: true, username: "channel" };
+      let resolveCleanup!: () => void;
+      const failedCleanup = createMockFn(
+        () => new Promise<void>((resolve) => {
+          resolveCleanup = resolve;
+        }),
+      );
+      const failedPlatformClass = createPlatformConstructor(() => ({
+        initialize: createMockFn<[PlatformEventHandlers], Promise<never>>()
+          .mockRejectedValue(new Error("old failure")),
+        cleanup: failedCleanup,
+        on: createMockFn<[string, (...args: unknown[]) => unknown], unknown>(),
+      }));
+      const replacementCleanup = createMockFn<[], Promise<void>>().mockResolvedValue();
+      const replacementPlatformClass = createPlatformConstructor(() => ({
+        initialize: createMockFn<[PlatformEventHandlers], Promise<void>>().mockResolvedValue(),
+        cleanup: replacementCleanup,
+        on: createMockFn<[string, (...args: unknown[]) => unknown], unknown>(),
+      }));
+
+      const failedInitialization = service.initializePlatform("youtube", failedPlatformClass);
+      for (let attempt = 0; attempt < 10 && failedCleanup.mock.calls.length === 0; attempt += 1) {
+        await Promise.resolve();
+      }
+      await service.initializePlatform("youtube", replacementPlatformClass);
+      const replacement = service.getPlatform("youtube");
+
+      resolveCleanup();
+      await failedInitialization;
+
+      expect(service.getPlatform("youtube")).toBe(replacement);
+      expect(service.getStatus().initializedPlatforms).toContain("youtube");
+      expect(replacementCleanup).not.toHaveBeenCalled();
+    });
+
+    it("shares failed-platform cleanup with concurrent shutdown", async () => {
+      let resolveCleanup!: () => void;
+      const cleanup = createMockFn(
+        () => new Promise<void>((resolve) => {
+          resolveCleanup = resolve;
+        }),
+      );
+      service.platforms.youtube = {
+        initialize: createMockFn(),
+        cleanup,
+        on: createMockFn(),
+      };
+
+      const failure = service.markPlatformFailure("youtube", new Error("startup failed"));
+      for (let attempt = 0; attempt < 10 && cleanup.mock.calls.length === 0; attempt += 1) {
+        await Promise.resolve();
+      }
+      const shutdown = service.disconnectAll();
+      resolveCleanup();
+      await Promise.all([failure, shutdown]);
+
+      expect(cleanup).toHaveBeenCalledTimes(1);
+      expect(service.getPlatform("youtube")).toBeNull();
+      expect(service.getStatus().platformHealth.youtube?.state).toBe("disconnected");
+    });
+
     it("reports registered platforms consistently with accessors", () => {
       service.platforms = {
         twitch: createDefaultPlatformInstance(),
