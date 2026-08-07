@@ -489,7 +489,7 @@ describe("Twitch Platform", () => {
       );
     });
 
-    it("fails initialization when EventSub does not report an active connection", async () => {
+    it("reports recovery when EventSub does not report an active connection", async () => {
       platform.TwitchEventSub = class {
         initialize = createMockFn<[], Promise<void>>().mockResolvedValue();
         on = createMockFn<[string, (...args: unknown[]) => void], unknown>();
@@ -498,9 +498,10 @@ describe("Twitch Platform", () => {
         sendMessage = createMockFn<[string], Promise<void>>().mockResolvedValue();
       };
 
-      await expect(platform.initialize(platformHandlerCallbacks)).rejects.toThrow(
-        "connection is not active",
-      );
+      await expect(platform.initialize(platformHandlerCallbacks)).resolves.toMatchObject({
+        state: "recovering",
+        error: expect.any(Error),
+      });
     });
   });
 
@@ -518,17 +519,19 @@ describe("Twitch Platform", () => {
       expect(platform.handlers).toEqual(handlers);
     });
 
-    it("should handle connection errors gracefully", async () => {
+    it("should hand transient connection errors to background recovery", async () => {
       const connectionError = new Error("Connection failed");
       mockTwitchEventSub.initialize.mockRejectedValue(connectionError);
 
       const handlers = {};
 
-      await expect(platform.initialize(handlers)).rejects.toThrow(
-        "Connection failed",
-      );
+      await expect(platform.initialize(handlers)).resolves.toEqual({
+        state: "recovering",
+        error: connectionError,
+      });
 
       expect(platform.eventSub).toBeNull();
+      expect(mockRetrySystem.handleConnectionError).toHaveBeenCalledTimes(1);
     });
 
     it("should prepare to receive all user events after connection", async () => {
@@ -546,7 +549,7 @@ describe("Twitch Platform", () => {
       expect(platform.handlers.onPaypiggyNotification).toBeDefined();
     });
 
-    it("should fail initialization when EventSub subscriptions are not active yet", async () => {
+    it("should recover when EventSub subscriptions are not active yet", async () => {
       const handlers = {
         onChatMessage: createMockFn(),
         onFollowNotification: createMockFn(),
@@ -556,12 +559,106 @@ describe("Twitch Platform", () => {
       mockTwitchEventSub.isActive = createMockFn<[], boolean>().mockReturnValue(false);
       mockTwitchEventSub.subscriptionsReady = false;
 
-      await expect(platform.initialize(handlers)).rejects.toThrow(
-        "subscriptions are not active",
-      );
+      await expect(platform.initialize(handlers)).resolves.toMatchObject({
+        state: "recovering",
+        error: expect.any(Error),
+      });
 
       expect(eventSubCalls.initialize).toHaveLength(1);
       expect(platform.isConnected).toBe(false);
+    });
+
+    it("keeps the outer recovery retry pending while startup remains transient", async () => {
+      const connectionError = Object.assign(new Error("DNS lookup failed"), {
+        code: "ENOTFOUND",
+      });
+      mockTwitchEventSub.initialize.mockRejectedValue(connectionError);
+
+      await expect(platform.initialize({})).resolves.toMatchObject({
+        state: "recovering",
+      });
+
+      const retryCallback = mockRetrySystem.handleConnectionError.mock.calls[0]?.[2];
+      expect(retryCallback).toBeDefined();
+      await expect(retryCallback?.()).rejects.toBe(connectionError);
+      expect(mockRetrySystem.handleConnectionError).toHaveBeenCalledTimes(1);
+    });
+
+    it("reports connected when background recovery succeeds", async () => {
+      const connectionError = Object.assign(new Error("DNS lookup failed"), {
+        code: "EAI_AGAIN",
+      });
+      mockTwitchEventSub.initialize.mockRejectedValueOnce(connectionError);
+      const onConnection = createMockFn<[unknown], void>();
+
+      await platform.initialize({ onConnection });
+      const retryCallback = mockRetrySystem.handleConnectionError.mock.calls[0]?.[2];
+      expect(retryCallback).toBeDefined();
+
+      await retryCallback?.();
+
+      expect(onConnection).toHaveBeenCalledWith(
+        expect.objectContaining({
+          platform: "twitch",
+          status: "connected",
+          willReconnect: false,
+        }),
+      );
+      expect(platform.isConnected).toBe(true);
+    });
+
+    it("stops outer recovery when a later attempt becomes permanent", async () => {
+      const connectionError = Object.assign(new Error("DNS lookup failed"), {
+        code: "ENOTFOUND",
+      });
+      mockTwitchEventSub.initialize.mockRejectedValueOnce(connectionError);
+      const onConnection = createMockFn<[unknown], void>();
+
+      await platform.initialize({ onConnection });
+      const retryCallback = mockRetrySystem.handleConnectionError.mock.calls[0]?.[2];
+      mockTwitchAuth.isReady.mockReturnValue(false);
+
+      await expect(retryCallback?.()).rejects.toThrow(
+        "Twitch authentication is not ready",
+      );
+      expect(mockRetrySystem.cancelConnectionRetry).toHaveBeenCalledWith("twitch");
+      expect(onConnection).toHaveBeenCalledWith(
+        expect.objectContaining({
+          platform: "twitch",
+          status: "failed",
+          willReconnect: false,
+        }),
+      );
+    });
+
+    it("does not reconnect when terminal cleanup races an in-flight recovery", async () => {
+      const connectionError = Object.assign(new Error("DNS lookup failed"), {
+        code: "ENOTFOUND",
+      });
+      let resolveRecovery!: () => void;
+      const recoveryAttempt = new Promise<void>((resolve) => {
+        resolveRecovery = resolve;
+      });
+      mockTwitchEventSub.initialize
+        .mockRejectedValueOnce(connectionError)
+        .mockImplementationOnce(() => recoveryAttempt);
+      const onConnection = createMockFn<[unknown], void>();
+
+      await platform.initialize({ onConnection });
+      const retryCallback = mockRetrySystem.handleConnectionError.mock.calls[0]?.[2];
+      const reconnect = retryCallback?.();
+      await Promise.resolve();
+
+      await platform.cleanup();
+      resolveRecovery();
+      await reconnect;
+
+      expect(platform.eventSub).toBeNull();
+      expect(platform.isConnected).toBe(false);
+      expect(onConnection).not.toHaveBeenCalledWith(
+        expect.objectContaining({ status: "connected" }),
+      );
+      expect(mockRetrySystem.handleConnectionError).toHaveBeenCalledTimes(1);
     });
   });
 

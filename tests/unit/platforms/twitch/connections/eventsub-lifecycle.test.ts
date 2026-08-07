@@ -233,6 +233,59 @@ describe("TwitchEventSub lifecycle", () => {
       expect(eventSub.reconnectTimeout).toBeNull();
     });
 
+    for (const dnsCode of ["ENOTFOUND", "EAI_AGAIN"]) {
+      it(`initialize retries transient DNS startup error ${dnsCode}`, async () => {
+        secrets.twitch.accessToken = "test-access-token";
+        eventSub = createEventSub();
+        eventSub.initialStartupMaxAttempts = 2;
+        eventSub.initialStartupRetryDelay = 1;
+        eventSub._cleanupAllWebSocketSubscriptions = createMockFn(async () => {});
+        eventSub._deleteAllSubscriptions = createMockFn(async () => {});
+        const currentEventSub = eventSub;
+        const connectWebSocketMock = createMockFn(async () => {
+          if (connectWebSocketMock.mock.calls.length === 1) {
+            const error = new Error(`getaddrinfo ${dnsCode} eventsub.wss.twitch.tv`) as Error & { code?: string };
+            error.code = dnsCode;
+            throw error;
+          }
+          currentEventSub.ws = createWebSocket();
+          currentEventSub.sessionId = "connected-session";
+          currentEventSub._isConnected = true;
+          currentEventSub.subscriptionsReady = true;
+        });
+        eventSub._connectWebSocket = connectWebSocketMock;
+
+        await eventSub.initialize();
+
+        expect(connectWebSocketMock.mock.calls).toHaveLength(2);
+        expect(eventSub.isInitialized).toBe(true);
+        expect(eventSub._isConnected).toBe(true);
+        expect(eventSub.subscriptionsReady).toBe(true);
+        expect(eventSub.reconnectTimeout).toBeNull();
+      });
+    }
+
+    it("initialize stops retrying DNS startup errors after the attempt limit", async () => {
+      secrets.twitch.accessToken = "test-access-token";
+      eventSub = createEventSub();
+      eventSub.initialStartupMaxAttempts = 2;
+      eventSub.initialStartupRetryDelay = 1;
+      eventSub._cleanupAllWebSocketSubscriptions = createMockFn(async () => {});
+      const error = new Error("getaddrinfo ENOTFOUND eventsub.wss.twitch.tv") as Error & { code?: string };
+      error.code = "ENOTFOUND";
+      const connectWebSocketMock = createMockFn(async () => {
+        throw error;
+      });
+      eventSub._connectWebSocket = connectWebSocketMock;
+
+      await expect(eventSub.initialize()).rejects.toBe(error);
+
+      expect(connectWebSocketMock.mock.calls).toHaveLength(2);
+      expect(eventSub.isInitialized).toBe(false);
+      expect(eventSub._isConnected).toBe(false);
+      expect(eventSub.reconnectTimeout).toBeNull();
+    });
+
     it("initialize retries Twitch transient startup close codes before succeeding", async () => {
       secrets.twitch.accessToken = "test-access-token";
       eventSub = createEventSub();

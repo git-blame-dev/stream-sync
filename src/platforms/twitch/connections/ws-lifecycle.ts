@@ -208,12 +208,11 @@ function createTwitchEventSubWsLifecycle(options: WsLifecycleOptions = {}) {
                                 keepaliveTimeout: session?.keepalive_timeout_seconds ?? null
                             });
 
-                            emit('eventSubConnected', {
-                                sessionId: state.sessionId
-                            });
-
                             if (isReconnectHandoff) {
                                 state.subscriptionsReady = true;
+                                emit('eventSubConnected', {
+                                    sessionId: state.sessionId
+                                });
                                 connectionResolved = true;
                                 resolve();
                                 return;
@@ -277,6 +276,9 @@ function createTwitchEventSubWsLifecycle(options: WsLifecycleOptions = {}) {
                                     }
 
                                     state.subscriptionsReady = true;
+                                    emit('eventSubConnected', {
+                                        sessionId: state.sessionId
+                                    });
                                     connectionResolved = true;
                                     resolve();
                                 } catch (error) {

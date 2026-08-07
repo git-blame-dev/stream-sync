@@ -117,7 +117,7 @@ const isTransientStartupError = (error: unknown): boolean => {
     return closeCode === 1006
         || closeCode === 4005
         || closeCode === 4006
-        || ['ECONNRESET', 'ETIMEDOUT', 'ECONNREFUSED', 'EPIPE'].includes(code)
+        || ['ECONNRESET', 'ETIMEDOUT', 'ECONNREFUSED', 'EPIPE', 'ENOTFOUND', 'EAI_AGAIN'].includes(code)
         || message.includes('socket hang up')
         || message.includes('connection timeout')
         || message.includes('connection closed abnormally')

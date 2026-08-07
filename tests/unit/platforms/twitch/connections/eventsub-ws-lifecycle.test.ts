@@ -266,6 +266,9 @@ describe("Twitch EventSub WS lifecycle", () => {
     await Promise.resolve();
     await Promise.resolve();
     const resolvedBeforeSubscriptions = connectResolved;
+    const emittedConnectedBeforeSubscriptions = state.emitCalls.some(
+      ({ event }) => event === "eventSubConnected",
+    );
 
     resolveSubscriptions({ failures: [] });
     await connectPromise;
@@ -274,6 +277,7 @@ describe("Twitch EventSub WS lifecycle", () => {
     expect(state.sessionId).toBe("test-session-123");
     expect(state._isConnected).toBe(true);
     expect(resolvedBeforeSubscriptions).toBe(false);
+    expect(emittedConnectedBeforeSubscriptions).toBe(false);
     expect(
       state.emitCalls.some(
         (emittedEvent) =>
@@ -370,6 +374,9 @@ describe("Twitch EventSub WS lifecycle", () => {
     await Promise.resolve();
     expect(state.subscriptionsReady).toBe(false);
     expect(state.scheduleReconnectCalls).toHaveLength(1);
+    expect(
+      state.emitCalls.some(({ event }) => event === "eventSubConnected"),
+    ).toBe(false);
     expect(
       state.emitCalls.some(
         (emittedEvent) =>

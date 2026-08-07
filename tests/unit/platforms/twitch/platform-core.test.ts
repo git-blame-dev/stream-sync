@@ -264,7 +264,7 @@ describe("TwitchPlatform core behavior", () => {
     );
   });
 
-  it("fails platform initialization when EventSub is not connected after initialize", async () => {
+  it("hands an inactive EventSub startup to background recovery", async () => {
     const disconnectedEventSub = {
       initialize: createMockFn<[], Promise<void>>().mockResolvedValue(),
       sendMessage: createMockFn<[string], Promise<void>>().mockResolvedValue(),
@@ -280,9 +280,10 @@ describe("TwitchPlatform core behavior", () => {
       },
     );
 
-    await expect(platform.initialize({})).rejects.toThrow(
-      "Twitch EventSub initialization failed: connection is not active",
-    );
+    await expect(platform.initialize({})).resolves.toMatchObject({
+      state: "recovering",
+      error: expect.any(Error),
+    });
   });
 
   it("resets connection state when platform initialization fails", async () => {
@@ -302,14 +303,14 @@ describe("TwitchPlatform core behavior", () => {
     );
     platform.isConnected = true;
 
-    await expect(platform.initialize({})).rejects.toThrow(
-      "Twitch EventSub initialization failed: connection is not active",
-    );
+    await expect(platform.initialize({})).resolves.toMatchObject({
+      state: "recovering",
+    });
     expect(platform.isConnected).toBe(false);
     expect(platform.isConnecting).toBe(false);
   });
 
-  it("fails platform initialization when EventSub is connected but inactive after initialize", async () => {
+  it("hands inactive EventSub subscriptions to background recovery", async () => {
     const inactiveEventSub = {
       initialize: createMockFn<[], Promise<void>>().mockResolvedValue(),
       sendMessage: createMockFn<[string], Promise<void>>().mockResolvedValue(),
@@ -325,9 +326,10 @@ describe("TwitchPlatform core behavior", () => {
       },
     );
 
-    await expect(platform.initialize({})).rejects.toThrow(
-      "Twitch EventSub initialization failed: subscriptions are not active",
-    );
+    await expect(platform.initialize({})).resolves.toMatchObject({
+      state: "recovering",
+      error: expect.any(Error),
+    });
     expect(platform.isConnected).toBe(false);
   });
 
