@@ -160,7 +160,7 @@ describe("StreamElementsPlatform behavior", () => {
 
     const initialized = await platform.initialize({});
 
-    expect(initialized).toBe(false);
+    expect(initialized).toEqual({ state: "monitoring" });
     expect(platform.checkConnectionPrerequisites()).toBe(false);
     expect(platform.isConnected()).toBe(false);
   });
@@ -171,7 +171,7 @@ describe("StreamElementsPlatform behavior", () => {
 
     const initialized = await platform.initialize({});
 
-    expect(initialized).toBe(true);
+    expect(initialized).toEqual({ state: "ready" });
     expect(asMock(platform.connect).mock.calls).toHaveLength(1);
   });
 
@@ -182,18 +182,31 @@ describe("StreamElementsPlatform behavior", () => {
 
     const initialized = await platform.initialize({});
 
-    expect(initialized).toBe(true);
+    expect(initialized).toEqual({ state: "ready" });
     expect(asMock(platform.connect).mock.calls).toHaveLength(0);
   });
 
-  it("initialize throws when connection cannot be established", async () => {
+  it("reports transient connection failure while recovery remains enabled", async () => {
     const { platform } = createPlatform();
     platform.connect = createMockFn().mockResolvedValue(false);
     platform.isConnected = createMockFn(() => false);
 
-    await expect(platform.initialize({})).rejects.toThrow(
-      "unable to establish connection",
-    );
+    await expect(platform.initialize({})).resolves.toMatchObject({
+      state: "recovering",
+      error: expect.any(Error),
+    });
+  });
+
+  it("rejects unknown setup failures instead of retrying indefinitely", async () => {
+    const setupError = new Error("StreamElements WebSocket constructor is incompatible");
+    const { platform } = createPlatform();
+    platform.connect = createMockFn<[], Promise<boolean>>(async () => {
+      setPrivateField(platform, "lastConnectionError", setupError);
+      return false;
+    });
+    platform.isConnected = createMockFn(() => false);
+
+    await expect(platform.initialize({})).rejects.toBe(setupError);
   });
 
   it("skips connect when already connecting", async () => {
@@ -603,6 +616,30 @@ describe("StreamElementsPlatform behavior", () => {
     expect(getPrivateField<boolean>(platform, "isReady")).toBe(true);
   });
 
+  it("reports connection recovery transitions", () => {
+    useFakeTimers();
+    const { platform } = createPlatform();
+    const onConnection = createMockFn<[Record<string, unknown>], void>();
+    setPrivateField(platform, "handlers", { onConnection });
+    const connection = new MockWebSocket("ws://test");
+    connection.readyState = MockWebSocket.OPEN;
+    setPrivateField(platform, "connection", connection);
+
+    platform.handleConnectionError(new Error("network unavailable"));
+    platform.handleConnectionOpen();
+
+    expect(onConnection.mock.calls[0]?.[0]).toMatchObject({
+      platform: "streamelements",
+      status: "reconnecting",
+      willReconnect: true,
+    });
+    expect(onConnection.mock.calls[1]?.[0]).toMatchObject({
+      platform: "streamelements",
+      status: "connected",
+      willReconnect: false,
+    });
+  });
+
   it("schedules reconnection attempts when requested", () => {
     useFakeTimers();
     const { platform } = createPlatform();
@@ -616,15 +653,65 @@ describe("StreamElementsPlatform behavior", () => {
     expect(asMock(platform.connect).mock.calls).toHaveLength(1);
   });
 
+  it("continues recovery after an initial connection timeout", async () => {
+    useFakeTimers();
+    const { platform } = createPlatform();
+
+    const initialization = platform.initialize({});
+    expect(MockWebSocket.instances).toHaveLength(1);
+
+    advanceTimersByTime(15000);
+    await expect(initialization).resolves.toMatchObject({
+      state: "recovering",
+      error: expect.any(Error),
+    });
+    const timedOutConnection = MockWebSocket.instances[0]!;
+    expect(timedOutConnection.readyState).toBe(MockWebSocket.CLOSED);
+    expect(timedOutConnection.listenerCount("open")).toBe(0);
+    expect(timedOutConnection.listenerCount("close")).toBe(0);
+    expect(timedOutConnection.listenerCount("error")).toBe(0);
+
+    advanceTimersByTime(10);
+    await Promise.resolve();
+
+    expect(MockWebSocket.instances).toHaveLength(2);
+    const replacementConnection = MockWebSocket.instances[1]!;
+    timedOutConnection.emit("open");
+    timedOutConnection.emit("close", 1006, "late close");
+    expect(getPrivateField<MockWebSocket | null>(platform, "connection")).toBe(
+      replacementConnection,
+    );
+    expect(getPrivateField<boolean>(platform, "isReady")).toBe(false);
+    platform.cleanup();
+  });
+
+  it("cancels a pending connection attempt without scheduling stale recovery", async () => {
+    useFakeTimers();
+    const { platform } = createPlatform();
+    const onConnection = createMockFn<[Record<string, unknown>], void>();
+
+    const initialization = platform.initialize({ onConnection });
+    const pendingConnection = MockWebSocket.instances[0]!;
+    platform.cleanup();
+
+    await expect(initialization).rejects.toThrow("connection attempt cancelled");
+    advanceTimersByTime(60000);
+
+    expect(pendingConnection.readyState).toBe(MockWebSocket.CLOSED);
+    expect(MockWebSocket.instances).toHaveLength(1);
+    expect(onConnection).not.toHaveBeenCalled();
+  });
+
   it("cleans up connections when disconnecting", async () => {
     const { platform } = createPlatform();
     const removeAllListeners = createMockFn();
+    const close = createMockFn();
     setPrivateField(platform, "connection", {
       readyState: MockWebSocket.OPEN,
       on: createMockFn(),
       once: createMockFn(),
       send: createMockFn(),
-      close: createMockFn(),
+      close,
       removeAllListeners,
     });
     setPrivateField(platform, "pingInterval", safeSetInterval(() => {}, 1000));
@@ -635,6 +722,7 @@ describe("StreamElementsPlatform behavior", () => {
     expect(getPrivateField<unknown>(platform, "connection")).toBe(null);
     expect(getPrivateField<unknown>(platform, "reconnectTimeout")).toBe(null);
     expect(getPrivateField<unknown>(platform, "pingInterval")).toBe(null);
+    expect(close).toHaveBeenCalledTimes(1);
   });
 
   it("clears connections during cleanup even when listeners throw", () => {

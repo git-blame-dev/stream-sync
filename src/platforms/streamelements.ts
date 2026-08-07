@@ -5,9 +5,11 @@ import { STREAMELEMENTS } from '../core/endpoints';
 import { getUnifiedLogger } from '../core/logging';
 import { secrets } from '../core/secrets';
 import { PlatformEvents } from '../interfaces/PlatformEvents';
+import type { PlatformInitializationOutcome } from '../interfaces/PlatformLifecycle';
 import { RawEventLogWriter } from '../services/RawEventLogWriter';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 import { createRetrySystem } from '../utils/retry-system';
+import { getSystemTimestampISO } from '../utils/timestamp';
 import { safeSetInterval, safeSetTimeout } from '../utils/timeout-validator';
 
 type StreamElementsConfig = {
@@ -44,6 +46,8 @@ interface StreamElementsConnection {
     readyState: number;
     on: (event: string, listener: (...args: unknown[]) => void) => void;
     once: (event: string, listener: (...args: unknown[]) => void) => void;
+    off?: (event: string, listener: (...args: unknown[]) => void) => void;
+    removeListener?: (event: string, listener: (...args: unknown[]) => void) => void;
     send: (payload: string) => void;
     close: () => void;
     removeAllListeners: () => void;
@@ -56,7 +60,16 @@ interface StreamElementsWebSocketConstructor {
 
 interface StreamElementsHandlers {
     onFollow?: (data: StreamElementsEventPayload) => void;
+    onConnection?: (data: StreamElementsConnectionEvent) => void;
 }
+
+type StreamElementsConnectionEvent = {
+    platform: 'streamelements';
+    status: 'connected' | 'reconnecting' | 'disconnected';
+    timestamp: string;
+    willReconnect: boolean;
+    error?: unknown;
+};
 
 interface RetrySystemLike {
     incrementRetryCount: (platform: string) => number;
@@ -173,9 +186,12 @@ class StreamElementsPlatform extends EventEmitter {
     private connectionTime: number | null;
     private pingInterval: ReturnType<typeof safeSetInterval> | null;
     private reconnectTimeout: ReturnType<typeof safeSetTimeout> | null;
+    private connectionTimeout: ReturnType<typeof safeSetTimeout> | null;
+    private rejectConnectionAttempt: ((error: Error) => void) | null;
     private recoveryGeneration: number;
     private recoveryEnabled: boolean;
     private handlers: StreamElementsHandlers;
+    private lastConnectionError: unknown;
 
     constructor(config: StreamElementsConfig = {}, dependencies: StreamElementsDependencies = {}) {
         super();
@@ -210,15 +226,18 @@ class StreamElementsPlatform extends EventEmitter {
         this.connectionTime = null;
         this.pingInterval = null;
         this.reconnectTimeout = null;
+        this.connectionTimeout = null;
+        this.rejectConnectionAttempt = null;
         this.recoveryGeneration = 0;
         this.recoveryEnabled = this.config.enabled === true;
         this.handlers = this._createDefaultHandlers();
+        this.lastConnectionError = null;
         
         this.logger.warn('StreamElementsPlatform is deprecated and will be removed in a future version.', 'StreamElements');
         this.logger.info('Keep the standalone [streamelements] config only if you still need StreamElements follow events.', 'StreamElements');
         
     }
-    async initialize(handlers: StreamElementsHandlers = {}): Promise<boolean> {
+    async initialize(handlers: StreamElementsHandlers = {}): Promise<PlatformInitializationOutcome> {
         this.handlers = {
             ...this.handlers,
             ...(handlers || {})
@@ -226,22 +245,39 @@ class StreamElementsPlatform extends EventEmitter {
         
         if (!this.config.enabled) {
             this.logger.debug('[StreamElements] Platform disabled in configuration', 'streamelements');
-            return false;
+            return { state: 'monitoring' };
         }
 
         this.recoveryEnabled = true;
         this.recoveryGeneration += 1;
 
+        if (!this.checkConnectionPrerequisites()) {
+            throw new Error('StreamElements initialization failed: invalid configuration');
+        }
+
         if (this.isConnected()) {
-            return true;
+            return { state: 'ready' };
         }
 
         const connected = await this.connect();
         if (!connected && !this.isConnected()) {
-            throw new Error('StreamElements initialization failed: unable to establish connection');
+            const error = this.lastConnectionError
+                ?? new Error('StreamElements initialization failed: unable to establish connection');
+            if (!this.isRetryableStartupError(error)) {
+                throw error;
+            }
+            return { state: 'recovering', error };
         }
 
-        return true;
+        return { state: 'ready' };
+    }
+
+    private isRetryableStartupError(error: unknown): boolean {
+        const record = isRecord(error) ? error : {};
+        const code = typeof record.code === 'string' ? record.code.toUpperCase() : '';
+        const message = error instanceof Error ? error.message : String(error);
+        return ['ECONNRESET', 'ETIMEDOUT', 'ECONNREFUSED', 'EPIPE', 'ENOTFOUND', 'EAI_AGAIN'].includes(code)
+            || /connection (?:timed out|timeout|failed|closed)|unable to establish connection|socket hang up|network unavailable|getaddrinfo/i.test(message);
     }
 
     checkConnectionPrerequisites(): boolean {
@@ -285,10 +321,15 @@ class StreamElementsPlatform extends EventEmitter {
             this.logger.info('[StreamElements] Connecting to StreamElements for real-time follow notifications');
             
             await this.connectToWebSocket();
+            this.lastConnectionError = null;
             return true;
             
         } catch (err) {
-            this.handleConnectionError(err, recoveryGeneration);
+            this.lastConnectionError = err;
+            this.isConnecting = false;
+            if (!this.reconnectTimeout) {
+                this.handleConnectionError(err, recoveryGeneration);
+            }
             return false;
         }
     }
@@ -296,37 +337,82 @@ class StreamElementsPlatform extends EventEmitter {
     async connectToWebSocket(): Promise<void> {
         const wsUrl = STREAMELEMENTS.WEBSOCKET;
         
-        this.connection = new this.WebSocketCtor(wsUrl);
-        this.setupEventListeners();
-        const connection = this.connection;
+        const connection = new this.WebSocketCtor(wsUrl);
+        this.connection = connection;
+        this.setupEventListeners(connection);
         if (!connection) {
             throw new Error('StreamElements connection missing after WebSocket setup');
         }
         
         return new Promise((resolve, reject) => {
-            const timeout = safeSetTimeout(() => {
+            this.rejectConnectionAttempt = reject;
+            let timeout: ReturnType<typeof safeSetTimeout> | null = null;
+            const clearConnectionAttempt = () => {
+                if (timeout) {
+                    clearTimeout(timeout);
+                    if (this.connectionTimeout === timeout) {
+                        this.connectionTimeout = null;
+                    }
+                    timeout = null;
+                }
+                if (this.rejectConnectionAttempt === reject) {
+                    this.rejectConnectionAttempt = null;
+                }
+            };
+            const removeAttemptListeners = () => {
+                if (typeof connection.off === 'function') {
+                    connection.off('open', handleOpen);
+                    connection.off('error', handleError);
+                } else if (typeof connection.removeListener === 'function') {
+                    connection.removeListener('open', handleOpen);
+                    connection.removeListener('error', handleError);
+                }
+            };
+            const disposeFailedConnection = () => {
+                if (this.connection !== connection) {
+                    return;
+                }
+                try {
+                    connection.removeAllListeners();
+                } finally {
+                    this.connection = null;
+                }
+                try {
+                    connection.close();
+                } catch (cleanupError) {
+                    this.logger.debug('[StreamElements] Error closing failed connection:', 'streamelements', getErrorLogValue(cleanupError));
+                }
+            };
+            const handleOpen = () => {
+                clearConnectionAttempt();
+                removeAttemptListeners();
+                resolve();
+            };
+            const handleError = (err: unknown) => {
+                clearConnectionAttempt();
+                disposeFailedConnection();
+                reject(err);
+            };
+
+            timeout = safeSetTimeout(() => {
+                clearConnectionAttempt();
+                disposeFailedConnection();
                 reject(new Error('StreamElements connection timeout'));
             }, 15000);
+            this.connectionTimeout = timeout;
             
-            connection.once('open', () => {
-                clearTimeout(timeout);
-                resolve();
-            });
-            
-            connection.once('error', (err: unknown) => {
-                clearTimeout(timeout);
-                reject(err);
-            });
+            connection.once('open', handleOpen);
+            connection.once('error', handleError);
         });
     }
 
-    setupEventListeners(): void {
-        if (!this.connection) {
+    setupEventListeners(connection = this.connection): void {
+        if (!connection) {
             const error = new Error('StreamElements connection missing connection object');
             this.errorHandler.handleConnectionError(error, 'connection', error.message);
             throw error;
         }
-        if (typeof this.connection.on !== 'function') {
+        if (typeof connection.on !== 'function') {
             const error = new Error('StreamElements connection missing event emitter interface (on/removeAllListeners)');
             this.errorHandler.handleConnectionError(
                 error,
@@ -335,13 +421,19 @@ class StreamElementsPlatform extends EventEmitter {
             );
             throw error;
         }
-        
-        this.connection.on('open', () => this.handleConnectionOpen());
-        this.connection.on('message', (data: unknown) => this.handleMessage(data));
-        this.connection.on('close', (code: unknown, reason: unknown) => this.handleConnectionClose(Number(code), reason));
-        this.connection.on('error', (err: unknown) => this.handleConnectionError(err));
-        this.connection.on('pong', () => this.handlePong());
-        
+
+        const ifCurrentConnection = (handler: (...args: unknown[]) => void) => (...args: unknown[]) => {
+            if (this.connection === connection) {
+                handler(...args);
+            }
+        };
+
+        connection.on('open', ifCurrentConnection(() => this.handleConnectionOpen()));
+        connection.on('message', ifCurrentConnection((data: unknown) => this.handleMessage(data)));
+        connection.on('close', ifCurrentConnection((code: unknown, reason: unknown) => this.handleConnectionClose(Number(code), reason)));
+        connection.on('error', ifCurrentConnection((err: unknown) => this.handleConnectionError(err)));
+        connection.on('pong', ifCurrentConnection(() => this.handlePong()));
+
         this.logger.debug('[StreamElements] WebSocket event listeners configured', 'streamelements');
     }
 
@@ -363,6 +455,7 @@ class StreamElementsPlatform extends EventEmitter {
         
         this.resetRetryCount('StreamElements');
         this.logger.info('[StreamElements] Successfully connected to StreamElements WebSocket');
+        this.emitConnectionStatus('connected', false);
     }
 
     authenticate(): void {
@@ -512,7 +605,7 @@ class StreamElementsPlatform extends EventEmitter {
         const platform = payload?.platform || 'streamelements';
         this.emit('platform:event', { platform, type, data: payload });
 
-        const handlerMap: Partial<Record<string, keyof StreamElementsHandlers>> = {
+        const handlerMap: Partial<Record<string, 'onFollow'>> = {
             [PlatformEvents.FOLLOW]: 'onFollow'
         };
 
@@ -590,7 +683,7 @@ class StreamElementsPlatform extends EventEmitter {
         this.isReady = false;
         this.stopKeepAlive();
         this.cleanup(false);
-        
+        this.emitConnectionStatus(this.recoveryEnabled ? 'reconnecting' : 'disconnected', this.recoveryEnabled);
         this.scheduleReconnection();
     }
 
@@ -599,7 +692,26 @@ class StreamElementsPlatform extends EventEmitter {
         const errorMessage = connectionError?.message || connectionError?.toString?.() || 'Unknown error';
         this.errorHandler.handleConnectionError(err, 'connection', errorMessage);
 
+        if (recoveryGeneration !== this.recoveryGeneration) {
+            return;
+        }
+
+        this.emitConnectionStatus(this.recoveryEnabled ? 'reconnecting' : 'disconnected', this.recoveryEnabled, err);
         this.scheduleReconnection(recoveryGeneration);
+    }
+
+    private emitConnectionStatus(
+        status: StreamElementsConnectionEvent['status'],
+        willReconnect: boolean,
+        error?: unknown
+    ): void {
+        this.handlers.onConnection?.({
+            platform: 'streamelements',
+            status,
+            timestamp: getSystemTimestampISO(),
+            willReconnect,
+            ...(error === undefined ? {} : { error })
+        });
     }
 
     scheduleReconnection(recoveryGeneration = this.recoveryGeneration): void {
@@ -622,29 +734,8 @@ class StreamElementsPlatform extends EventEmitter {
 
     async disconnect(): Promise<void> {
         this.logger.debug('[StreamElements] Disconnecting from StreamElements WebSocket...', 'streamelements');
-        this.recoveryEnabled = false;
-        this.recoveryGeneration += 1;
-        
-        this.isConnecting = false;
-        this.isReady = false;
-        
-        this.stopKeepAlive();
-        
-        if (this.reconnectTimeout) {
-            clearTimeout(this.reconnectTimeout);
-            this.reconnectTimeout = null;
-        }
-        
-        if (this.connection) {
-            try {
-                this.connection.close();
-                this.logger.debug('[StreamElements] Successfully disconnected', 'streamelements');
-            } catch (err) {
-                this.logger.debug('[StreamElements] Error during disconnect:', 'streamelements', getErrorLogValue(err));
-            }
-        }
-        
         this.cleanup();
+        this.logger.debug('[StreamElements] Successfully disconnected', 'streamelements');
     }
 
     cleanup(cancelRecovery = true): void {
@@ -656,13 +747,31 @@ class StreamElementsPlatform extends EventEmitter {
             clearTimeout(this.reconnectTimeout);
             this.reconnectTimeout = null;
         }
+        if (this.connectionTimeout) {
+            clearTimeout(this.connectionTimeout);
+            this.connectionTimeout = null;
+        }
+        const rejectConnectionAttempt = this.rejectConnectionAttempt;
+        this.rejectConnectionAttempt = null;
+        rejectConnectionAttempt?.(new Error('StreamElements connection attempt cancelled'));
+
+        this.isConnecting = false;
+        this.isReady = false;
+        this.stopKeepAlive();
+
         if (this.connection) {
+            const connection = this.connection;
             try {
-                this.connection.removeAllListeners();
+                connection.removeAllListeners();
             } catch (cleanupError) {
                 this.logger.debug('[StreamElements] Error removing listeners during cleanup:', 'streamelements', getErrorLogValue(cleanupError));
             }
             this.connection = null;
+            try {
+                connection.close();
+            } catch (cleanupError) {
+                this.logger.debug('[StreamElements] Error closing connection during cleanup:', 'streamelements', getErrorLogValue(cleanupError));
+            }
         }
         this.connectionTime = null;
         this.logger.debug('[StreamElements] Connection cleanup completed', 'streamelements');
