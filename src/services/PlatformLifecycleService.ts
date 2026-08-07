@@ -3,6 +3,7 @@ import { safeDelay } from '../utils/timeout-validator';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 import { assertPlatformInterface } from '../utils/platform-interface-validator';
 import { getSystemTimestampISO } from '../utils/timestamp';
+import type { PlatformInitializationOutcome } from '../interfaces/PlatformLifecycle';
 
 const PlatformEvents = {
     CHAT_MESSAGE: 'platform:chat-message',
@@ -101,6 +102,14 @@ type PlatformHealthEntry = {
     lastError: string | null;
     lastConnection: string | null;
 };
+
+function isPlatformInitializationOutcome(value: unknown): value is PlatformInitializationOutcome {
+    if (!value || typeof value !== 'object' || !('state' in value)) {
+        return false;
+    }
+
+    return value.state === 'ready' || value.state === 'monitoring' || value.state === 'recovering';
+}
 
 class PlatformLifecycleService {
     config: Record<string, PlatformConfig> | undefined;
@@ -282,9 +291,27 @@ class PlatformLifecycleService {
             return;
         }
 
-        if (status === 'disconnected' || status === 'reconnecting') {
+        if (status === 'reconnecting' || (status === 'disconnected' && payload.willReconnect === true)) {
+            this.updatePlatformHealth(eventPlatform, {
+                state: 'recovering',
+                lastError: errorMessage,
+                lastUpdated: timestamp.iso
+            });
+            return;
+        }
+
+        if (status === 'disconnected') {
             this.updatePlatformHealth(eventPlatform, {
                 state: 'disconnected',
+                lastError: errorMessage,
+                lastUpdated: timestamp.iso
+            });
+            return;
+        }
+
+        if (status === 'failed') {
+            this.updatePlatformHealth(eventPlatform, {
+                state: 'failed',
                 lastError: errorMessage,
                 lastUpdated: timestamp.iso
             });
@@ -451,9 +478,8 @@ class PlatformLifecycleService {
         const connectCallback = async () => {
             this.logger.info(`Connecting to ${platformName}...`, 'PlatformLifecycleService');
 
-            await platformInstance.initialize(handlers);
-
-            this.markPlatformReady(platformName);
+            const outcome = await platformInstance.initialize(handlers);
+            this.applyPlatformInitializationOutcome(platformName, outcome);
 
             return platformInstance;
         };
@@ -568,6 +594,8 @@ class PlatformLifecycleService {
         const platformNames = Object.keys(this.platformHealth);
         const getHealthEntry = (name: string) => this.platformHealth[name] ?? this.ensurePlatformHealthEntry(name);
         const ready = platformNames.filter((name) => getHealthEntry(name).state === 'ready');
+        const monitoring = platformNames.filter((name) => getHealthEntry(name).state === 'monitoring');
+        const recovering = platformNames.filter((name) => getHealthEntry(name).state === 'recovering');
         const initializing = platformNames.filter((name) => getHealthEntry(name).state === 'initializing');
         const failed = platformNames.filter((name) => getHealthEntry(name).state === 'failed');
         const disabled = platformNames.filter((name) => getHealthEntry(name).state === 'disabled');
@@ -579,7 +607,14 @@ class PlatformLifecycleService {
             timestamp: getSystemTimestampISO(),
             totalConfigured,
             registeredPlatforms: Object.keys(this.platforms),
-            initializedPlatforms: ready,
+            initializedPlatforms: [...ready, ...monitoring],
+            monitoringPlatforms: monitoring,
+            recoveringPlatforms: recovering.map((name) => ({
+                name,
+                lastError: getHealthEntry(name).lastError || null,
+                failures: getHealthEntry(name).failures || 0,
+                lastUpdated: getHealthEntry(name).lastUpdated
+            })),
             initializingPlatforms: initializing,
             failedPlatforms: failed.map((name) => ({
                 name,
@@ -652,6 +687,30 @@ class PlatformLifecycleService {
             lastUpdated: timestamp
         });
 
+    }
+
+    applyPlatformInitializationOutcome(platformName: string, outcome: unknown) {
+        if (this.shutdownRequested || !this.platforms[platformName]) {
+            return;
+        }
+
+        if (!isPlatformInitializationOutcome(outcome) || outcome.state === 'ready') {
+            this.markPlatformReady(platformName);
+            return;
+        }
+
+        this.updatePlatformHealth(platformName, {
+            state: outcome.state,
+            lastError: outcome.state === 'recovering' ? getErrorMessage(outcome.error) : null
+        });
+
+        if (outcome.state === 'recovering') {
+            this.logger.warn(
+                `${platformName} initialized in recovering state`,
+                'PlatformLifecycleService',
+                outcome.error
+            );
+        }
     }
 
     async markPlatformFailure(platformName: string, error: unknown): Promise<void> {

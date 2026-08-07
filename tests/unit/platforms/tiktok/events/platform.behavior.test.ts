@@ -299,6 +299,11 @@ describe("TikTokPlatform behavior alignment", () => {
       const platform = createPlatform();
       const connectedEvents: PlatformEventPayload[] = [];
       const disconnectedEvents: PlatformEventPayload[] = [];
+      const connectionStates: Record<string, unknown>[] = [];
+      platform.handlers = {
+        ...platform.handlers,
+        onConnection: (payload) => connectionStates.push(payload as Record<string, unknown>),
+      };
 
       platform.on("platform:event", (payload: PlatformEventPayload) => {
         if (payload.type === PlatformEvents.CHAT_CONNECTED) {
@@ -338,6 +343,10 @@ describe("TikTokPlatform behavior alignment", () => {
           }),
         }),
       });
+      expect(connectionStates).toEqual([
+        expect.objectContaining({ status: "connected", willReconnect: false }),
+        expect.objectContaining({ status: "reconnecting", willReconnect: true }),
+      ]);
     });
   });
 

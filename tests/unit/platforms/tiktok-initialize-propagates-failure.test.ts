@@ -64,7 +64,38 @@ describe("TikTokPlatform initialize recovery ownership", () => {
       dependencies,
     );
 
-    await expect(platform.initialize(platform.handlers)).resolves.toBeUndefined();
+    await expect(platform.initialize(platform.handlers)).resolves.toMatchObject({
+      state: "recovering",
+      error: expect.any(Error),
+    });
     expect(dependencies.retrySystem.handleConnectionError).toHaveBeenCalled();
+  });
+
+  it("reports monitoring when an offline stream enters deferred polling", async () => {
+    const offlineConnection = new FailingTikTokConnection();
+    offlineConnection.connect = createMockFn<[], Promise<unknown>>().mockRejectedValue(
+      new Error("Stream is not live"),
+    );
+    const dependencies = {
+      ...createMockTikTokPlatformDependencies(),
+      WebcastEvent: WEBCAST_EVENT,
+      connectionFactory: {
+        createConnection: createMockFn().mockReturnValue(offlineConnection),
+      },
+      retrySystem: {
+        handleConnectionError: createMockFn(),
+        resetRetryCount: createMockFn(),
+        isConnected: createMockFn(),
+      },
+    } satisfies ConstructorParameters<typeof TikTokPlatform>[1];
+    const platform = new TikTokPlatform(
+      { enabled: true, username: "offline_tester" },
+      dependencies,
+    );
+
+    await expect(platform.initialize(platform.handlers)).resolves.toEqual({
+      state: "monitoring",
+    });
+    await platform.cleanup();
   });
 });

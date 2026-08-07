@@ -1328,6 +1328,93 @@ describe("AppRuntime behavior", () => {
     );
   });
 
+  it("emits degraded readiness while a platform is recovering", async () => {
+    const runtime = createRuntime({
+      platformLifecycleService: {
+        getAllPlatforms: createMockFn().mockReturnValue({}),
+        getStatus: createMockFn().mockReturnValue({
+          platformHealth: {
+            twitch: { state: "recovering", lastError: "temporary DNS failure" },
+          },
+          failedPlatforms: [],
+          recoveringPlatforms: [
+            { name: "twitch", lastError: "temporary DNS failure" },
+          ],
+        }),
+        recordPlatformConnection: createMockFn(),
+        initializeAllPlatforms: createMockFn().mockResolvedValue(),
+        disconnectAll: createMockFn().mockResolvedValue(),
+      },
+    });
+    setDependencyProperty(runtime, "obs", {
+      goalsManager: { initializeGoalDisplay: async () => {} },
+      connectionManager: { isConnected: () => false, call: async () => ({}) },
+    });
+    setRuntimeProperty(runtime, "viewerCountSystem", {
+      addObserver: createMockFn(),
+      initialize: createMockFn().mockResolvedValue(),
+      startPolling: createMockFn().mockResolvedValue(),
+    });
+    const readyPayloads: Array<ReturnType<RuntimeUnderTest["emitSystemReady"]>> = [];
+    const emitSystemReady = runtime.emitSystemReady.bind(runtime);
+    runtime.emitSystemReady = createMockFn((options) => {
+      const payload = emitSystemReady(options);
+      readyPayloads.push(payload);
+      return payload;
+    });
+
+    await runtime.start();
+
+    const readyPayload = getLastValue(readyPayloads);
+    expect(readyPayload.degraded).toBe(true);
+    expect(readyPayload.degradationReasons).toEqual(
+      expect.arrayContaining(["platform-recovering"]),
+    );
+  });
+
+  it("does not report operational monitoring as degraded", () => {
+    const runtime = createRuntime({
+      platformLifecycleService: {
+        getAllPlatforms: createMockFn().mockReturnValue({}),
+        getStatus: createMockFn().mockReturnValue({
+          initializedPlatforms: ["youtube"],
+          monitoringPlatforms: ["youtube"],
+          failedPlatforms: [],
+          recoveringPlatforms: [],
+        }),
+        recordPlatformConnection: createMockFn(),
+        initializeAllPlatforms: createMockFn().mockResolvedValue(),
+        disconnectAll: createMockFn().mockResolvedValue(),
+      },
+    });
+
+    const readyPayload = runtime.emitSystemReady({});
+
+    expect(readyPayload.degraded).not.toBe(true);
+    expect(readyPayload.degradationReasons).toBeUndefined();
+  });
+
+  it("emits degraded readiness while background platform initialization is pending", () => {
+    const runtime = createRuntime({
+      platformLifecycleService: {
+        getAllPlatforms: createMockFn().mockReturnValue({}),
+        getStatus: createMockFn().mockReturnValue({
+          initializingPlatforms: ["tiktok"],
+          failedPlatforms: [],
+          recoveringPlatforms: [],
+        }),
+        recordPlatformConnection: createMockFn(),
+        initializeAllPlatforms: createMockFn().mockResolvedValue(),
+        disconnectAll: createMockFn().mockResolvedValue(),
+      },
+    });
+
+    const readyPayload = runtime.emitSystemReady({});
+
+    expect(readyPayload.degraded).toBe(true);
+    expect(readyPayload.degradationReasons).toContain("platform-initializing");
+  });
+
   it("starts gui transport when gui is active", async () => {
     const guiTransportService = {
       start: createMockFn().mockResolvedValue(),

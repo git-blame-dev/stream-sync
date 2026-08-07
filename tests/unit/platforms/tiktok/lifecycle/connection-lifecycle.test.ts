@@ -214,7 +214,10 @@ describe("TikTokPlatform connection lifecycle", () => {
         new Error("connection failed"),
       );
 
-      await expect(platform.initialize({})).resolves.toBeUndefined();
+      await expect(platform.initialize({})).resolves.toMatchObject({
+        state: "recovering",
+        error: expect.any(Error),
+      });
       expect(retrySystem.handleConnectionError).toHaveBeenCalledTimes(1);
     });
 
@@ -227,7 +230,9 @@ describe("TikTokPlatform connection lifecycle", () => {
         new Error("Connection closed: User is not live"),
       );
 
-      await expect(platform.initialize({})).resolves.toBeUndefined();
+      await expect(platform.initialize({})).resolves.toEqual({
+        state: "monitoring",
+      });
       expect(retrySystem.handleConnectionError).not.toHaveBeenCalled();
       expect(createInterval).toHaveBeenCalledTimes(1);
       expect(expectDefined(createInterval.mock.calls[0])[0]).toBe(

@@ -22,6 +22,7 @@ import { createTikTokGiftAggregator } from './tiktok/monetization/gift-aggregato
 import { createTikTokEventFactory } from './tiktok/events/event-factory';
 import { DEFAULT_AVATAR_URL } from '../constants/avatar';
 import { RawPlatformDataLoggingService } from '../services/RawPlatformDataLoggingService';
+import type { PlatformInitializationOutcome } from '../interfaces/PlatformLifecycle';
 
 const PlatformEvents = {
     CHAT_MESSAGE: 'platform:chat-message',
@@ -662,9 +663,9 @@ class TikTokPlatform extends EventEmitter {
         return this.getStatus();
     }
     
-    async initialize(handlers: TikTokHandlers = {}): Promise<void> {
+    async initialize(handlers: TikTokHandlers = {}): Promise<PlatformInitializationOutcome> {
         if (!this.initializationManager.beginInitialization()) {
-            return;
+            return { state: this.connectionStatus ? 'ready' : 'monitoring' };
         }
         
         const attemptId = this.initializationStats.startInitializationAttempt({
@@ -694,6 +695,10 @@ class TikTokPlatform extends EventEmitter {
             this.initializationStats.recordSuccess(attemptId, {
                 connectionTime
             });
+
+            return {
+                state: this.connectionStatus ? 'ready' : 'monitoring'
+            };
             
         } catch (error) {
             let recoveryResult: { action: string; reason?: string } = { action: 'skipped', reason: 'no-retry-system' };
@@ -713,7 +718,10 @@ class TikTokPlatform extends EventEmitter {
                     recoveryAction: recoveryResult.action
                 });
                 this.initializationStats.recordSuccess(attemptId);
-                return;
+                if (recoveryResult.action.startsWith('deferred-reconnect')) {
+                    return { state: 'monitoring' };
+                }
+                return { state: 'recovering', error };
             }
 
             this.initializationManager.markInitializationFailure(error, {
@@ -1988,6 +1996,12 @@ class TikTokPlatform extends EventEmitter {
                 type: PlatformEvents.CHAT_CONNECTED,
                 data: eventData
             });
+            this.handlers.onConnection?.({
+                platform: 'tiktok',
+                status: 'connected',
+                timestamp: eventData.timestamp,
+                willReconnect: false
+            });
             this._emitPlatformEvent(PlatformEvents.STREAM_STATUS, {
                 platform: 'tiktok',
                 isLive: true,
@@ -2008,6 +2022,13 @@ class TikTokPlatform extends EventEmitter {
                 platform: eventPlatform,
                 type: PlatformEvents.CHAT_DISCONNECTED,
                 data: eventData
+            });
+            this.handlers.onConnection?.({
+                platform: 'tiktok',
+                status: reconnectFlag ? 'reconnecting' : 'disconnected',
+                timestamp: eventData.timestamp,
+                willReconnect: reconnectFlag,
+                error: { message: reason }
             });
             this._emitPlatformEvent(PlatformEvents.STREAM_STATUS, {
                 platform: 'tiktok',

@@ -119,6 +119,8 @@ type RuntimePlatformLifecycleService = {
     getPlatformConnectionTime: (platform: string) => number | undefined | null;
     getStatus?: () => {
         failedPlatforms?: Array<{ name?: unknown }>;
+        recoveringPlatforms?: Array<{ name?: unknown }>;
+        initializingPlatforms?: string[];
         [key: string]: unknown;
     };
 };
@@ -849,11 +851,11 @@ class AppRuntime {
             this.logger.debug('Initializing platforms...', 'AppRuntime');
             try {
                 await this.initializePlatforms();
-                const failedPlatforms = this._getFailedPlatformInitializations();
-                if (failedPlatforms.length === 0) {
+                const degradedPlatforms = this._getDegradedPlatformInitializations();
+                if (degradedPlatforms.length === 0) {
                     this.logger.info('Platform connections initialized', 'AppRuntime');
                 } else {
-                    this.logger.warn(`Platform initialization completed with failures: ${failedPlatforms.join(', ')}`, 'AppRuntime');
+                    this.logger.warn(`Platform initialization completed in degraded state: ${degradedPlatforms.join(', ')}`, 'AppRuntime');
                 }
             } catch (error) {
                 this._handleAppRuntimeError(
@@ -946,7 +948,7 @@ class AppRuntime {
         }
     }
 
-    _getFailedPlatformInitializations(): string[] {
+    _getDegradedPlatformInitializations(): string[] {
         if (!this.platformLifecycleService || typeof this.platformLifecycleService.getStatus !== 'function') {
             return [];
         }
@@ -955,9 +957,16 @@ class AppRuntime {
         const failedPlatforms = Array.isArray(status?.failedPlatforms)
             ? status.failedPlatforms
             : [];
-        return failedPlatforms
+        const recoveringPlatforms = Array.isArray(status?.recoveringPlatforms)
+            ? status.recoveringPlatforms
+            : [];
+        const initializingPlatforms = Array.isArray(status?.initializingPlatforms)
+            ? status.initializingPlatforms.map((name) => ({ name }))
+            : [];
+        return [...failedPlatforms, ...recoveringPlatforms, ...initializingPlatforms]
             .map((entry: { name?: unknown }) => entry?.name)
-            .filter((name: unknown): name is string => typeof name === 'string' && name.length > 0);
+            .filter((name: unknown): name is string => typeof name === 'string' && name.length > 0)
+            .filter((name, index, names) => names.indexOf(name) === index);
     }
 
     async rollbackStartup() {
@@ -1054,9 +1063,25 @@ class AppRuntime {
             const failedPlatforms = Array.isArray(platformStatus?.failedPlatforms)
                 ? platformStatus.failedPlatforms
                 : [];
+            const recoveringPlatforms = Array.isArray(platformStatus?.recoveringPlatforms)
+                ? platformStatus.recoveringPlatforms
+                : [];
+            const initializingPlatforms = Array.isArray(platformStatus?.initializingPlatforms)
+                ? platformStatus.initializingPlatforms
+                : [];
+            const degradationReasons: string[] = [];
             if (failedPlatforms.length > 0) {
+                degradationReasons.push('platform-initialization-failed');
+            }
+            if (recoveringPlatforms.length > 0) {
+                degradationReasons.push('platform-recovering');
+            }
+            if (initializingPlatforms.length > 0) {
+                degradationReasons.push('platform-initializing');
+            }
+            if (degradationReasons.length > 0) {
                 readyPayload.degraded = true;
-                readyPayload.degradationReasons = ['platform-initialization-failed'];
+                readyPayload.degradationReasons = degradationReasons;
             }
         }
 

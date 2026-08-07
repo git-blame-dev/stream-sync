@@ -227,6 +227,60 @@ describe("PlatformLifecycleService", () => {
       expect(status.registeredPlatforms).not.toContain("youtube");
     });
 
+    it("retains platforms that resolve startup in recovering state", async () => {
+      configFixture.twitch = {
+        enabled: true,
+        channel: "test-channel",
+        clientId: "test-client-id",
+      };
+      const recoveryError = new Error("temporary DNS failure");
+      const cleanup = createMockFn<[], Promise<void>>().mockResolvedValue();
+      const mockPlatformClass = createPlatformConstructor(() => ({
+        initialize: createMockFn().mockResolvedValue({
+          state: "recovering",
+          error: recoveryError,
+        }),
+        cleanup,
+        on: createMockFn<[string, (...args: unknown[]) => unknown], unknown>(),
+      }));
+
+      await service.initializeAllPlatforms({ twitch: mockPlatformClass });
+
+      const platform = service.getPlatform("twitch");
+      const status = service.getStatus();
+      expect(platform).not.toBeNull();
+      expect(status.registeredPlatforms).toContain("twitch");
+      expect(status.initializedPlatforms).not.toContain("twitch");
+      expect(status.recoveringPlatforms).toEqual([
+        expect.objectContaining({
+          name: "twitch",
+          lastError: "temporary DNS failure",
+        }),
+      ]);
+      expect(status.failedPlatforms).toEqual([]);
+      expect(cleanup).not.toHaveBeenCalled();
+    });
+
+    it("reports monitoring platforms as initialized without degradation", async () => {
+      configFixture.tiktok = { enabled: true, username: "streamer" };
+      const cleanup = createMockFn<[], Promise<void>>().mockResolvedValue();
+      const mockPlatformClass = createPlatformConstructor(() => ({
+        initialize: createMockFn().mockResolvedValue({ state: "monitoring" }),
+        cleanup,
+        on: createMockFn<[string, (...args: unknown[]) => unknown], unknown>(),
+      }));
+
+      await service.initializeAllPlatforms({ tiktok: mockPlatformClass });
+      await service.waitForBackgroundInits();
+
+      const status = service.getStatus();
+      expect(status.monitoringPlatforms).toContain("tiktok");
+      expect(status.initializedPlatforms).toContain("tiktok");
+      expect(status.recoveringPlatforms).toEqual([]);
+      expect(status.failedPlatforms).toEqual([]);
+      expect(cleanup).not.toHaveBeenCalled();
+    });
+
     it("retains a failed platform until asynchronous cleanup completes", async () => {
       configFixture.youtube = { enabled: true, username: "channel" };
       let resolveCleanup!: () => void;
@@ -1159,6 +1213,33 @@ describe("PlatformLifecycleService", () => {
       expect(status.platformHealth.tiktok?.state).not.toBe("ready");
       expect(cleanupSpy).toHaveBeenCalled();
     });
+
+    it("ignores a late recovering outcome after shutdown removes the platform", async () => {
+      configFixture.tiktok = { enabled: true, username: "test-streamer" };
+
+      const deferred = createDeferred<{
+        state: "recovering";
+        error: Error;
+      }>();
+      const cleanupSpy = createMockFn<[], Promise<void>>().mockResolvedValue();
+      const tiktokClass = createPlatformConstructor(() => ({
+        initialize: createMockFn().mockImplementation(() => deferred.promise),
+        cleanup: cleanupSpy,
+        on: createMockFn<[string, (...args: unknown[]) => unknown], unknown>(),
+      }));
+
+      await service.initializeAllPlatforms({ tiktok: tiktokClass });
+
+      const shutdownPromise = service.disconnectAll();
+      deferred.resolve({ state: "recovering", error: new Error("late failure") });
+      await shutdownPromise;
+
+      const status = service.getStatus();
+      expect(status.platformHealth.tiktok?.state).toBe("disconnected");
+      expect(status.recoveringPlatforms).toEqual([]);
+      expect(status.registeredPlatforms).not.toContain("tiktok");
+      expect(cleanupSpy).toHaveBeenCalled();
+    });
   });
 
   describe("Default Handler Contract Matrix", () => {
@@ -1427,7 +1508,7 @@ describe("PlatformLifecycleService", () => {
       });
 
       expect(service.getStatus().platformHealth.twitch?.state).toBe(
-        "disconnected",
+        "recovering",
       );
       expect(service.getPlatform("twitch")).toBe(livePlatform);
       expect(service.getPlatformConnectionTime("twitch")).toBe(1000);

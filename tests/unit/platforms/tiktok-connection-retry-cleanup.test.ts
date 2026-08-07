@@ -98,7 +98,10 @@ describe("TikTokPlatform connection recovery", () => {
       },
     };
 
-    await expect(platform.initialize(platform.handlers)).resolves.toBeUndefined();
+    await expect(platform.initialize(platform.handlers)).resolves.toMatchObject({
+      state: "recovering",
+      error: expect.any(Error),
+    });
 
     await platform._connect(platform.handlers);
     connection2.emit(platformDependencies.ControlEvent.CONNECTED);
