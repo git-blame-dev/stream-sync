@@ -48,6 +48,14 @@ const shouldSkipUnknownMessage = (
 ): boolean => Reflect.apply(platform._shouldSkipMessage, platform, [message]);
 
 describe("YouTubePlatform internal behavior", () => {
+  it("resolves modern snake-case GiftMessageView author names", () => {
+    const platform = createPlatform();
+
+    expect(platform._resolveChatItemAuthorName({
+      item: { author_name: { content: "@test-youtube-gifter " } },
+    })).toBe("test-youtube-gifter");
+  });
+
   it("classifies live and upcoming stream validation states", () => {
     const platform = createPlatform();
     platform._handlePremiereDetection = createMockFn();

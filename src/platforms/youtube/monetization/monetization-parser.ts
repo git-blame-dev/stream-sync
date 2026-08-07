@@ -60,7 +60,7 @@ interface ParsedGiftMessageView {
     timestamp: string;
     giftType: string;
     giftCount: 1;
-    amount: number;
+    amount?: number;
     currency: 'jewels';
     message: string;
     giftImageUrl?: string;
@@ -89,6 +89,7 @@ const toRecord = (value: unknown): UnknownRecord => (isRecord(value) ? value : {
 
 const YOUTUBE_GIFT_ASSET_BASE_URL = 'https://www.gstatic.com/youtube/img/pdg/gift/assets/';
 const YOUTUBE_GIFT_ASSET_QUERY_SUFFIX = '=w480-h480';
+const GIFT_MESSAGE_VIEW_REQUIREMENTS_ERROR = 'YouTube GiftMessageView requires a recognizable gift name';
 const YOUTUBE_JEWELS_GIFT_ASSET_FILES: Record<string, string> = {
     'clapping seal': 'clapping_seal.png',
     'ggez': 'ggez.png',
@@ -290,43 +291,63 @@ function createYouTubeMonetizationParser(options: YouTubeMonetizationParserOptio
         return Number.isFinite(amount) && amount > 0 ? amount : undefined;
     };
 
-    const parseJewelsGiftText = (message: string): { giftType: string; amount: number } => {
+    const parseJewelsGiftText = (message: string): { giftType: string; amount: number } | undefined => {
         const match = message.match(/^sent\s+(.+?)\s+for\s+(\d[\d,]*(?:\.\d+)?)\s+jewels$/i);
         if (!match) {
-            throw new Error('YouTube GiftMessageView requires text in "sent <gift> for <amount> Jewels" format');
+            return undefined;
         }
 
         const giftTypeRaw = match[1];
         const amountRaw = match[2];
         if (!giftTypeRaw || !amountRaw) {
-            throw new Error('YouTube GiftMessageView requires text in "sent <gift> for <amount> Jewels" format');
+            throw new Error(GIFT_MESSAGE_VIEW_REQUIREMENTS_ERROR);
         }
 
         const giftType = giftTypeRaw.trim();
         const amount = parseJewelsAmount(amountRaw);
         if (!giftType || amount === undefined) {
-            throw new Error('YouTube GiftMessageView requires text in "sent <gift> for <amount> Jewels" format');
+            throw new Error(GIFT_MESSAGE_VIEW_REQUIREMENTS_ERROR);
         }
 
         return { giftType, amount };
     };
 
-    const parseJewelsGiftStructuredFields = (item: UnknownRecord): { giftType?: string; amount?: number } => {
+    const parseAmountlessJewelsGiftType = (message: string): string => {
+        const match = message.match(/^sent\s+(.+?)$/i);
+        const giftType = match?.[1]?.trim() || '';
+        if (!giftType || giftType.toLowerCase() === 'a gift' || /\bfor\b/i.test(giftType)) {
+            return '';
+        }
+        return giftType;
+    };
+
+    const parseJewelsGiftStructuredFields = (
+        item: UnknownRecord
+    ): { giftType?: string; amount?: number; hasSuppliedAmount: boolean } => {
         const giftType = extractFirstStructuredText(
             ...JEWELS_GIFT_NAME_FIELDS.map((fieldName) => item[fieldName])
         );
+        let hasSuppliedAmount = false;
 
         for (const fieldName of JEWELS_GIFT_AMOUNT_FIELDS) {
+            if (item[fieldName] === undefined) {
+                continue;
+            }
+            hasSuppliedAmount = true;
             const amount = parseJewelsAmount(item[fieldName]);
             if (amount !== undefined) {
                 return {
                     ...(giftType ? { giftType } : {}),
-                    amount
+                    amount,
+                    hasSuppliedAmount
                 };
             }
         }
 
-        return giftType ? { giftType } : {};
+        return {
+            ...(giftType ? { giftType } : {}),
+            hasSuppliedAmount
+        };
     };
 
     const resolveJewelsGiftImageUrl = (giftType: string): string => {
@@ -337,6 +358,37 @@ function createYouTubeMonetizationParser(options: YouTubeMonetizationParserOptio
         }
 
         return `${YOUTUBE_GIFT_ASSET_BASE_URL}${assetFile}${YOUTUBE_GIFT_ASSET_QUERY_SUFFIX}`;
+    };
+
+    const resolveProviderGiftImageUrl = (item: UnknownRecord): string => {
+        const giftImage = item.gift_image ?? item.giftImage;
+        const giftImageRecord = toRecord(giftImage);
+        const sources = Array.isArray(giftImageRecord.sources)
+            ? giftImageRecord.sources
+            : (Array.isArray(giftImage) ? giftImage : []);
+        let selectedUrl = '';
+        let selectedArea = -1;
+        let fallbackUrl = '';
+
+        for (const source of sources) {
+            const sourceRecord = toRecord(source);
+            const url = typeof sourceRecord.url === 'string' ? sourceRecord.url.trim() : '';
+            const width = Number(sourceRecord.width);
+            const height = Number(sourceRecord.height);
+            if (!url) {
+                continue;
+            }
+            fallbackUrl ||= url;
+            const area = Number.isFinite(width) && width > 0 && Number.isFinite(height) && height > 0
+                ? width * height
+                : -1;
+            if (area > selectedArea) {
+                selectedUrl = url;
+                selectedArea = area;
+            }
+        }
+
+        return selectedUrl || fallbackUrl;
     };
 
     const parseMembershipMonthsFromHeaderText = (text: unknown): number | undefined => {
@@ -555,24 +607,38 @@ const parseSuperChat = (chatItem: UnknownRecord): ParsedSuperChat => {
         const parsedTextGift = (!structuredGift.giftType || structuredGift.amount === undefined) && message
             ? parseJewelsGiftText(message)
             : undefined;
-        const giftType = structuredGift.giftType || parsedTextGift?.giftType;
+        if (structuredGift.hasSuppliedAmount && structuredGift.amount === undefined && parsedTextGift?.amount === undefined) {
+            throw new Error(GIFT_MESSAGE_VIEW_REQUIREMENTS_ERROR);
+        }
+        const providerGiftImageUrl = resolveProviderGiftImageUrl(item);
         const amount = structuredGift.amount ?? parsedTextGift?.amount;
+        const amountlessGiftType = amount === undefined && providerGiftImageUrl && message
+            ? parseAmountlessJewelsGiftType(message)
+            : '';
+        const giftType = amount === undefined
+            ? amountlessGiftType
+            : (structuredGift.giftType || parsedTextGift?.giftType);
 
-        if (!giftType || amount === undefined) {
-            throw new Error('YouTube GiftMessageView requires text in "sent <gift> for <amount> Jewels" format');
+        if (!giftType) {
+            throw new Error(GIFT_MESSAGE_VIEW_REQUIREMENTS_ERROR);
         }
 
-        const giftImageUrl = resolveJewelsGiftImageUrl(giftType);
+        const giftImageUrl = providerGiftImageUrl || resolveJewelsGiftImageUrl(giftType);
 
         const payload: ParsedGiftMessageView = {
             id: resolveId(chatItem, 'YouTube GiftMessageView'),
             timestamp: resolveTimestamp(chatItem, 'YouTube GiftMessageView'),
             giftType,
             giftCount: 1,
-            amount,
             currency: 'jewels',
-            message: message || `sent ${giftType} for ${amount} Jewels`
+            message: message || (amount === undefined
+                ? `sent ${giftType}`
+                : `sent ${giftType} for ${amount} Jewels`)
         };
+
+        if (amount !== undefined) {
+            payload.amount = amount;
+        }
 
         if (giftImageUrl) {
             payload.giftImageUrl = giftImageUrl;

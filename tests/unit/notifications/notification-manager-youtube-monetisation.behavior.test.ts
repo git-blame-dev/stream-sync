@@ -104,6 +104,82 @@ describe("NotificationManager YouTube monetisation behavior", () => {
     expect(item.priority).toBe(PRIORITY_LEVELS.GIFT);
   });
 
+  it("queues an amountless YouTube jewels gift exactly once with sender and gift wording", async () => {
+    await notificationManager.handleNotification("platform:gift", "youtube", {
+      username: "test-youtube-gifter",
+      giftType: "Let em cook",
+      giftCount: 1,
+      currency: "jewels",
+      id: "gift-yt-amountless-1",
+      metadata: { missingFields: ["amount", "userId"] },
+      timestamp: "2025-01-01T00:00:00.000Z",
+    });
+
+    expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
+    const item = getQueuedItem();
+    for (const message of [item.data.displayMessage, item.data.ttsMessage, item.data.logMessage]) {
+      expect(message).toContain("test-youtube-gifter");
+      expect(message).toContain("Let em cook");
+      expect(message).not.toMatch(/undefined|NaN|0 jewels/i);
+    }
+  });
+
+  it("skips amount-based spam detection without dropping an amountless gift", async () => {
+    const handleDonationSpam = createMockFn().mockReturnValue({ shouldShow: false });
+    notificationManager = new NotificationManager({
+      ...baseDependencies(),
+      donationSpamDetector: { handleDonationSpam },
+    });
+
+    await notificationManager.handleNotification("platform:gift", "youtube", {
+      username: "test-youtube-gifter",
+      userId: "UC_TEST_YOUTUBE_GIFTER",
+      giftType: "Let em cook",
+      giftCount: 1,
+      currency: "jewels",
+      id: "gift-yt-amountless-stable-user-1",
+      metadata: { missingFields: ["amount"] },
+      timestamp: "2025-01-01T00:00:00.000Z",
+    });
+
+    expect(handleDonationSpam).not.toHaveBeenCalled();
+    expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
+  });
+
+  it("still checks priced gifts when stale metadata marks amount missing", async () => {
+    const handleDonationSpam = createMockFn().mockReturnValue({ shouldShow: true });
+    notificationManager = new NotificationManager({
+      ...baseDependencies(),
+      donationSpamDetector: { handleDonationSpam },
+    });
+
+    await notificationManager.handleNotification("platform:gift", "youtube", {
+      username: "test-youtube-gifter",
+      userId: "UC_TEST_YOUTUBE_GIFTER",
+      giftType: "Girl power",
+      giftCount: 1,
+      amount: 300,
+      currency: "jewels",
+      id: "gift-yt-priced-stale-metadata-1",
+      metadata: { missingFields: ["amount"] },
+      timestamp: "2025-01-01T00:00:00.000Z",
+    });
+
+    expect(handleDonationSpam).toHaveBeenCalledTimes(1);
+    expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
+  });
+
+  it("formats amountless gift debug logs without a synthetic count or value", () => {
+    expect(notificationManager.generateLogMessage("platform:gift", {
+      platform: "youtube",
+      username: "test-youtube-gifter",
+      giftType: "Let em cook",
+      giftCount: 1,
+      currency: "jewels",
+      metadata: { missingFields: ["amount", "userId"] },
+    })).toBe("Gift from test-youtube-gifter: Let em cook");
+  });
+
   it("enqueues Super Sticker as gift with gift priority", async () => {
     await notificationManager.handleNotification("platform:gift", "youtube", {
       username: "StickerHero",

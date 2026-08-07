@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { interpolateTemplate } from './notification-template-interpolator';
 import { normalizeCurrency } from './currency-utils';
 import { getAnonymousUsername } from './validation';
+import { allowsYouTubeJewelsMissingAmount } from './missing-fields';
 
 const HARDCODED_TYPES = ['platform:gift', 'platform:giftpaypiggy', 'platform:paypiggy', 'platform:follow', 'platform:share', 'platform:raid', 'platform:envelope'];
 const VIRTUAL_GIFT_CURRENCIES = new Set(['coins', 'bits', 'jewels']);
@@ -189,13 +190,23 @@ class NotificationBuilder {
         }
 
         if (finalType === 'platform:gift' && !isError) {
+            const allowsMissingAmount = allowsYouTubeJewelsMissingAmount({
+                type: finalType,
+                platform: normalizedPlatform,
+                currency: effectiveInput.currency,
+                metadata: effectiveInput.metadata
+            });
             if (typeof effectiveInput.giftType !== 'string' || !effectiveInput.giftType.trim()) {
                 throw new Error('Gift notification requires giftType');
             }
             if (typeof effectiveInput.giftCount !== 'number' || !Number.isFinite(effectiveInput.giftCount) || effectiveInput.giftCount <= 0) {
                 throw new Error('Gift notification requires giftCount');
             }
-            if (typeof effectiveInput.amount !== 'number' || !Number.isFinite(effectiveInput.amount) || effectiveInput.amount <= 0) {
+            if (effectiveInput.amount === undefined && !allowsMissingAmount) {
+                throw new Error('Gift notification requires amount');
+            }
+            if (effectiveInput.amount !== undefined &&
+                (typeof effectiveInput.amount !== 'number' || !Number.isFinite(effectiveInput.amount) || effectiveInput.amount <= 0)) {
                 throw new Error('Gift notification requires amount');
             }
             if (typeof effectiveInput.currency !== 'string' || !effectiveInput.currency.trim()) {
@@ -481,6 +492,7 @@ class NotificationBuilder {
             const giftTypeLower = giftType.toLowerCase();
             const resolvedGiftCount = Number(giftCount);
             const amountValue = Number(amount);
+            const hasAmount = amount !== undefined && Number.isFinite(amountValue) && amountValue > 0;
             const currencyValue = String(currency).trim();
             const currencyLower = currencyValue.toLowerCase();
             const messageText = message && message.trim() ? `: ${message}` : '';
@@ -494,6 +506,10 @@ class NotificationBuilder {
             }
 
             if (currencyLower === 'jewels') {
+                if (!hasAmount) {
+                    const countText = resolvedGiftCount > 1 ? `${resolvedGiftCount}x ` : '';
+                    return `${userName} sent ${countText}${giftType}`;
+                }
                 const jewelLabel = amountValue === 1 ? 'jewel' : 'jewels';
                 return `${userName} sent ${amountValue} ${jewelLabel} ${giftType}${messageText}`;
             }
@@ -580,6 +596,7 @@ class NotificationBuilder {
             }
             const resolvedGiftCount = Number(giftCount);
             const amountValue = Number(amount);
+            const hasAmount = amount !== undefined && Number.isFinite(amountValue) && amountValue > 0;
             const currencyValue = String(currency).trim();
             const currencyLower = currencyValue.toLowerCase();
             const messageText = message && message.trim() ? `. ${message}` : '';
@@ -593,6 +610,10 @@ class NotificationBuilder {
             }
 
             if (currencyLower === 'jewels') {
+                if (!hasAmount) {
+                    const countText = resolvedGiftCount > 1 ? `${resolvedGiftCount} ` : '';
+                    return `${userName} sent ${countText}${giftType}`;
+                }
                 const jewelLabel = amountValue === 1 ? 'jewel' : 'jewels';
                 return `${userName} sent ${amountValue} ${jewelLabel} ${giftType}${messageText}`;
             }
@@ -685,6 +706,7 @@ class NotificationBuilder {
             }
             const resolvedGiftCount = Number(giftCount);
             const amountValue = Number(amount);
+            const hasAmount = amount !== undefined && Number.isFinite(amountValue) && amountValue > 0;
             const currencyValue = String(currency).trim();
             const currencyLower = currencyValue.toLowerCase();
 
@@ -697,6 +719,10 @@ class NotificationBuilder {
             }
 
             if (currencyLower === 'jewels') {
+                if (!hasAmount) {
+                    const countText = resolvedGiftCount > 1 ? `${resolvedGiftCount}x ` : '';
+                    return `Gift from ${userName}: ${countText}${giftType}`;
+                }
                 const jewelLabel = amountValue === 1 ? 'jewel' : 'jewels';
                 return `Gift from ${userName}: ${giftType} (${amountValue} ${jewelLabel})`;
             }

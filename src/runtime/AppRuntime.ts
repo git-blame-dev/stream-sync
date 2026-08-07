@@ -10,7 +10,10 @@ import { PlatformEventRouter } from '../services/PlatformEventRouter';
 import { createGuiTransportService, isGuiActive } from '../services/gui/gui-transport-service';
 import type { AppLogger } from '../core/logger/types';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
-import { allowsYouTubeJewelsMissingUserId } from '../utils/missing-fields';
+import {
+    allowsYouTubeJewelsMissingAmount,
+    allowsYouTubeJewelsMissingUserId
+} from '../utils/missing-fields';
 import { getSystemTimestampISO } from '../utils/timestamp';
 import { safeSetTimeout } from '../utils/timeout-validator';
 import { ViewerCountSystem } from '../utils/viewer-count';
@@ -1156,6 +1159,12 @@ class AppRuntime {
             currency: options.currency,
             metadata: options.metadata
         });
+        const allowYouTubeJewelsMissingAmount = allowsYouTubeJewelsMissingAmount({
+            type: 'platform:gift',
+            platform,
+            currency: options.currency,
+            metadata: options.metadata
+        });
         if (!isError) {
             if (!options.timestamp) {
                 throw new Error('handleGiftNotification requires timestamp');
@@ -1185,17 +1194,16 @@ class AppRuntime {
         const rawGiftCount = options.giftCount;
         let giftCount = rawGiftCount === undefined || rawGiftCount === null ? undefined : Number(rawGiftCount);
         const rawAmount = options.amount;
-        let amount = rawAmount === undefined || rawAmount === null ? undefined : Number(rawAmount);
+        let amount = rawAmount === undefined ? undefined : Number(rawAmount);
         let currency: string | undefined = typeof options.currency === 'string' ? options.currency.trim() : '';
         const repeatCount = options.repeatCount;
 
         if (!isError) {
-            if (!giftType || giftCount === undefined || !Number.isFinite(giftCount) || giftCount < 0 || amount === undefined || !Number.isFinite(amount) || amount < 0 || !currency) {
+            if (!giftType || giftCount === undefined || !Number.isFinite(giftCount) || giftCount <= 0 ||
+                (amount !== undefined && (!Number.isFinite(amount) || amount <= 0)) ||
+                (amount === undefined && !allowYouTubeJewelsMissingAmount) || !currency) {
                 throw new Error('Gift notification requires giftType, giftCount, amount, and currency');
             }
-        }
-        if (!isError && (giftCount === undefined || amount === undefined || giftCount <= 0 || amount <= 0)) {
-            throw new Error('Gift notification requires giftType, giftCount, amount, and currency');
         }
 
         if (isError) {

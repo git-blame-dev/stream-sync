@@ -149,6 +149,44 @@ describe("DisplayQueueEffects", () => {
     expect(obsCalls.length).toBe(2);
   });
 
+  it("does not add amountless gifts to donation goals", async () => {
+    const goalCalls: GoalCall[] = [];
+    const effects = new DisplayQueueEffects({
+      config: {
+        ttsEnabled: false,
+        obs: { ttsTxt: "tts" },
+        handcam: handcamConfig(false),
+      },
+      sourcesManager: {
+        clearTextSource: async () => {},
+        updateTextSource: async () => {},
+      },
+      obsManager: { call: async () => ({}) },
+      goalsManager: {
+        processDonationGoal: async (platform: string, amount: number, currency?: string) => {
+          goalCalls.push({ platform, amount, currency });
+        },
+        processPaypiggyGoal: async () => {},
+      },
+      delay: async () => {},
+      handleDisplayQueueError: () => {},
+      extractUsername,
+    });
+
+    await effects.processDonationGoal({
+      type: "platform:gift",
+      platform: "youtube",
+      data: {
+        username: "test-youtube-gifter",
+        giftType: "Let em cook",
+        giftCount: 1,
+        currency: "jewels",
+      },
+    });
+
+    expect(goalCalls).toEqual([]);
+  });
+
   it("routes paypiggy and giftpaypiggy notifications to paypiggy goals", async () => {
     const paypiggyCalls: Array<{ platform: string; count: number | undefined }> = [];
     const effects = new DisplayQueueEffects({

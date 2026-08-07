@@ -505,6 +505,56 @@ describe("YouTube connection factory", () => {
     });
   });
 
+  test("forwards modern GiftMessageView events without item.author.name", async () => {
+    const handleChatMessage = createMockFn();
+    const extractMessagesFromChatItem = createMockFn().mockReturnValue([
+      {
+        type: "AddChatItemAction",
+        item: {
+          type: "GiftMessageView",
+          id: "gift-message-view-001",
+          timestamp_usec: "1704067200000000",
+          text: { content: "sent Let em cook" },
+          author_name: { content: "@test-youtube-gifter " },
+          gift_image: {
+            sources: [
+              { url: "https://example.invalid/let-em-cook-480.png", width: 480, height: 480 },
+              { url: "https://example.invalid/let-em-cook-640.png", width: 640, height: 640 },
+            ],
+          },
+          gift_image_a11y_label: "Let em cook",
+        },
+      },
+    ]);
+    const chatUpdateHandlers: HandlerMap = {};
+
+    const { factory } = createFactory({
+      validationResult: { shouldConnect: true },
+      platformOverrides: {
+        handleChatMessage,
+        _extractMessagesFromChatItem: extractMessagesFromChatItem,
+        _resolveChatItemAuthorName: createMockFn().mockReturnValue("test-youtube-gifter"),
+        config: { dataLoggingEnabled: false },
+      },
+    });
+    const connection = {
+      on: createMockFn((event: string, handler: ChatEventHandler) => {
+        chatUpdateHandlers[event] = handler;
+      }),
+      start: createMockFn(),
+      removeAllListeners: createMockFn(),
+    };
+
+    await factory.setupConnectionEventListeners(connection, "video-1");
+    getHandler(chatUpdateHandlers, "chat-update")({ type: "AddChatItemAction" });
+
+    expect(handleChatMessage).toHaveBeenCalledTimes(1);
+    expect(firstCall(handleChatMessage.mock.calls)[0]).toMatchObject({
+      videoId: "video-1",
+      item: { type: "GiftMessageView", author_name: { content: "@test-youtube-gifter " } },
+    });
+  });
+
   test("still skips non-gift complex chat updates when author is missing", async () => {
     const handleChatMessage = createMockFn();
     const extractMessagesFromChatItem = createMockFn().mockReturnValue([

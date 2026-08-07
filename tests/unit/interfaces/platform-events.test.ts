@@ -500,6 +500,34 @@ describe('Platform Events Interface', () => {
             expect(PlatformEvents.validateEvent(event)).toBe(true);
         });
 
+        it('accepts amountless YouTube jewels gifts only when metadata marks amount and userId missing', () => {
+            const event = {
+                type: 'platform:gift', platform: 'youtube', id: 'yt-jewels-amountless-1',
+                giftType: 'Girl power', giftCount: 1, currency: 'jewels', username: 'test-jewels-user',
+                timestamp: new Date(testClock.now()).toISOString(),
+                metadata: { missingFields: ['amount', 'userId'] }
+            };
+            expect(PlatformEvents.validateEvent(event)).toBe(true);
+        });
+
+        it('rejects amountless YouTube jewels gifts without missing amount metadata', () => {
+            const event = {
+                type: 'platform:gift', platform: 'youtube', id: 'yt-jewels-amountless-2',
+                giftType: 'Girl power', giftCount: 1, currency: 'jewels', username: 'test-jewels-user',
+                userId: 'user-amountless-jewels', timestamp: new Date(testClock.now()).toISOString()
+            };
+            expect(PlatformEvents.validateEvent(event)).toBe(false);
+        });
+
+        it('rejects amountless non-YouTube gifts even when metadata marks amount missing', () => {
+            const event = {
+                type: 'platform:gift', platform: 'tiktok', id: 'tt-amountless-1', giftType: 'Rose',
+                giftCount: 1, currency: 'coins', username: 'test-user', userId: 'tt-user',
+                timestamp: new Date(testClock.now()).toISOString(), metadata: { missingFields: ['amount'] }
+            };
+            expect(PlatformEvents.validateEvent(event)).toBe(false);
+        });
+
         it('rejects YouTube jewels gift payloads without userId when metadata does not mark userId', () => {
             const event = {
                 type: 'platform:gift',

@@ -1,6 +1,9 @@
 import crypto from 'node:crypto';
 import { DEFAULT_AVATAR_URL } from '../constants/avatar';
-import { allowsYouTubeJewelsMissingUserId } from '../utils/missing-fields';
+import {
+    allowsYouTubeJewelsMissingAmount,
+    allowsYouTubeJewelsMissingUserId
+} from '../utils/missing-fields';
 import { getSystemTimestampISO, parseTimestampISO } from '../utils/timestamp';
 
 const PlatformEvents = {
@@ -552,11 +555,19 @@ class PlatformEventValidator {
             const isErrorMonetizationEvent = isMonetizationEvent && event.isError === true;
             const isAnonymousGift = (event.type === PlatformEvents.GIFT || event.type === PlatformEvents.GIFTPAYPIGGY)
                 && event.isAnonymous === true;
-            const requiredFields = isAnonymousGift
+            let requiredFields = isAnonymousGift
                 ? schema.required.filter((field) => field !== 'username' && field !== 'userId')
                 : isErrorMonetizationEvent
                     ? schema.required.filter((field) => field === 'type' || field === 'platform' || field === 'timestamp')
                     : schema.required;
+            if (allowsYouTubeJewelsMissingAmount({
+                type: event.type,
+                platform: event.platform,
+                currency: event.currency,
+                metadata: event.metadata
+            })) {
+                requiredFields = requiredFields.filter((field) => field !== 'amount');
+            }
             for (const field of requiredFields) {
                 const fieldSchema = schema.properties?.[field];
                 const fieldTypes = fieldSchema ? (Array.isArray(fieldSchema.type) ? fieldSchema.type : [fieldSchema.type]) : [];

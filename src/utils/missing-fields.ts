@@ -73,12 +73,17 @@ function getMissingFields(metadata: unknown = {}): string[] {
     return normalizeMissingFields((metadata as { missingFields?: unknown }).missingFields);
 }
 
-function allowsYouTubeJewelsMissingUserId(input: {
+interface YouTubeJewelsMissingFieldInput {
     type?: unknown;
     platform?: unknown;
     currency?: unknown;
     metadata?: unknown;
-} = {}): boolean {
+}
+
+function allowsYouTubeJewelsMissingField(
+    input: YouTubeJewelsMissingFieldInput,
+    fieldName: string
+): boolean {
     const normalizedType = typeof input.type === 'string' ? input.type.trim() : '';
     const normalizedPlatform = typeof input.platform === 'string' ? input.platform.trim().toLowerCase() : '';
     const normalizedCurrency = typeof input.currency === 'string' ? input.currency.trim().toLowerCase() : '';
@@ -87,10 +92,19 @@ function allowsYouTubeJewelsMissingUserId(input: {
         return false;
     }
 
-    return getMissingFields(input.metadata).includes('userId');
+    return getMissingFields(input.metadata).includes(fieldName);
+}
+
+function allowsYouTubeJewelsMissingUserId(input: YouTubeJewelsMissingFieldInput = {}): boolean {
+    return allowsYouTubeJewelsMissingField(input, 'userId');
+}
+
+function allowsYouTubeJewelsMissingAmount(input: YouTubeJewelsMissingFieldInput = {}): boolean {
+    return allowsYouTubeJewelsMissingField(input, 'amount');
 }
 
 export {
+    allowsYouTubeJewelsMissingAmount,
     allowsYouTubeJewelsMissingUserId,
     collectMissingFields,
     getMissingFields,

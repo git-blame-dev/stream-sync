@@ -191,4 +191,47 @@ describe("NotificationInputValidator", () => {
     expectValidationFailure(normal as PayloadValidationResult, "Notification payload requires id, giftType, giftCount, amount, and currency");
     expect(degraded.success).toBe(true);
   });
+
+  it("accepts an explicitly degraded amountless YouTube jewels gift", () => {
+    const validator = new NotificationInputValidator(notificationConfigs);
+
+    const result = validator.validateNotificationPayload(
+      {
+        type: "platform:gift",
+        platform: "youtube",
+        id: "yt-let-em-cook-1",
+        username: "test-youtube-gifter",
+        giftType: "Let em cook",
+        giftCount: 1,
+        currency: "jewels",
+        metadata: { missingFields: ["amount", "userId"] },
+        timestamp: "2025-01-01T00:00:00.000Z",
+      },
+      { notificationType: "platform:gift", platform: "youtube" },
+    );
+
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects null amount on an explicitly degraded YouTube jewels gift", () => {
+    const validator = new NotificationInputValidator(notificationConfigs);
+
+    const result = validator.validateNotificationPayload(
+      {
+        type: "platform:gift",
+        platform: "youtube",
+        id: "yt-null-amount-1",
+        username: "test-youtube-gifter",
+        giftType: "Let em cook",
+        giftCount: 1,
+        amount: null,
+        currency: "jewels",
+        metadata: { missingFields: ["amount", "userId"] },
+        timestamp: "2025-01-01T00:00:00.000Z",
+      },
+      { notificationType: "platform:gift", platform: "youtube" },
+    );
+
+    expectValidationFailure(result as PayloadValidationResult, "Notification payload requires id, giftType, giftCount, amount, and currency");
+  });
 });

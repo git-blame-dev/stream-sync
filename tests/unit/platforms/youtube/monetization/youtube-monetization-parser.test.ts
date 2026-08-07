@@ -41,6 +41,50 @@ describe("YouTube monetization parser", () => {
     });
   });
 
+  test("parses modern GiftMessageView fields without a priced amount", () => {
+    const parser = createYouTubeMonetizationParser({ logger: noOpLogger });
+    const result = parser.parseGiftMessageView({
+      item: {
+        type: "GiftMessageView",
+        id: "gift-message-view-001",
+        timestamp_usec: "1704067200000000",
+        text: { content: "sent Let em cook" },
+        author_name: { content: "@test-youtube-gifter " },
+        gift_image: {
+          sources: [
+            { url: "https://example.invalid/let-em-cook-480.png", width: 480, height: 480 },
+            { url: "https://example.invalid/let-em-cook-640.png", width: 640, height: 640 },
+          ],
+        },
+        gift_image_a11y_label: "Let em cook",
+      },
+    });
+
+    expect(result).toEqual({
+      id: "gift-message-view-001",
+      timestamp: new Date(1704067200000).toISOString(),
+      giftType: "Let em cook",
+      giftCount: 1,
+      currency: "jewels",
+      message: "sent Let em cook",
+      giftImageUrl: "https://example.invalid/let-em-cook-640.png",
+    });
+    expect(result).not.toHaveProperty("amount");
+  });
+
+  test("selects the largest valid normalized gift image by area", () => {
+    const parser = createYouTubeMonetizationParser({ logger: noOpLogger });
+    const result = parser.parseGiftMessageView(createGiftMessageViewItem({
+      text: { content: "sent Let em cook" },
+      gift_image: [
+        { url: "https://example.invalid/wide-invalid.png", width: 640, height: 1 },
+        { url: "https://example.invalid/square.png", width: 480, height: 480 },
+      ],
+    }));
+
+    expect(result.giftImageUrl).toBe("https://example.invalid/square.png");
+  });
+
   test("prefers allowlisted structured GiftMessageView Jewels fields over text parsing", () => {
     const parser = createYouTubeMonetizationParser({ logger: noOpLogger });
     const result = parser.parseGiftMessageView(
@@ -156,8 +200,55 @@ describe("YouTube monetization parser", () => {
         }),
       ),
     ).toThrow(
-      'YouTube GiftMessageView requires text in "sent <gift> for <amount> Jewels" format',
+      "YouTube GiftMessageView requires a recognizable gift name",
     );
+  });
+
+  test("rejects malformed priced text even when a provider gift image is present", () => {
+    const parser = createYouTubeMonetizationParser({ logger: noOpLogger });
+
+    expect(() => parser.parseGiftMessageView(createGiftMessageViewItem({
+      text: { content: "sent Girl power for 300 Jewels extra" },
+      gift_image: {
+        sources: [{ url: "https://example.invalid/girl-power.png", width: 480, height: 480 }],
+      },
+    }))).toThrow("YouTube GiftMessageView requires a recognizable gift name");
+  });
+
+  test("rejects incomplete priced-form boundaries when a provider gift image is present", () => {
+    const parser = createYouTubeMonetizationParser({ logger: noOpLogger });
+
+    for (const content of ["sent Girl power for", "sent for 300 Jewels"]) {
+      expect(() => parser.parseGiftMessageView(createGiftMessageViewItem({
+        text: { content },
+        gift_image: {
+          sources: [{ url: "https://example.invalid/gift.png", width: 480, height: 480 }],
+        },
+      }))).toThrow("YouTube GiftMessageView requires a recognizable gift name");
+    }
+  });
+
+  test("rejects invalid supplied structured amounts instead of degrading them as missing", () => {
+    const parser = createYouTubeMonetizationParser({ logger: noOpLogger });
+
+    for (const amount of [0, null, "bogus"]) {
+      expect(() => parser.parseGiftMessageView(createGiftMessageViewItem({
+        text: { content: "sent Let em cook" },
+        gift_image: {
+          sources: [{ url: "https://example.invalid/gift.png", width: 480, height: 480 }],
+        },
+        amount,
+      }))).toThrow("YouTube GiftMessageView requires a recognizable gift name");
+    }
+  });
+
+  test("rejects structured gift names without an amount or modern provider image", () => {
+    const parser = createYouTubeMonetizationParser({ logger: noOpLogger });
+
+    expect(() => parser.parseGiftMessageView(createGiftMessageViewItem({
+      text: { content: "not a gift message" },
+      giftName: { simpleText: "Girl power" },
+    }))).toThrow("YouTube GiftMessageView requires a recognizable gift name");
   });
 
   test("parses numeric purchase_amount with explicit currency", () => {

@@ -156,4 +156,93 @@ describe('YouTube GiftMessageView pipeline (smoke E2E)', () => {
             await platform.cleanup();
         }
     });
+
+    test('routes observed amountless Let em cook GiftMessageView payload with author_name and gift_image URLs', async () => {
+        const eventBus = createEventBus();
+        const logger = noOpLogger;
+        const displayQueue = createMockDisplayQueue();
+        const textProcessing = createTextProcessingManager({ logger });
+        const config = createConfigFixture({
+            general: { giftsEnabled: true },
+            youtube: { enabled: true, username: 'test-youtube-channel' },
+            obs: { enabled: false }
+        });
+        const notificationManager = new NotificationManager({
+            displayQueue,
+            logger,
+            eventBus,
+            config,
+            constants: coreConstants,
+            textProcessing,
+            obsGoals: { processDonationGoal: createMockFn() },
+            vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) },
+            userTrackingService: { isFirstMessage: createMockFn().mockResolvedValue(false) }
+        });
+        const runtime = {
+            handleGiftNotification: async (platform: string, _username: string, payload: Record<string, unknown>) =>
+                notificationManager.handleNotification(payload.type, platform, payload)
+        };
+        const router = new PlatformEventRouter({ eventBus, runtime, notificationManager, config, logger });
+        const platform = new YouTubePlatform(config.youtube, {
+            logger,
+            streamDetectionService: {
+                detectLiveStreams: createMockFn().mockResolvedValue({
+                    success: true,
+                    videoIds: [],
+                    detectionMethod: 'test'
+                })
+            },
+            notificationManager: {
+                emit: createMockFn(),
+                on: createMockFn(),
+                removeListener: createMockFn()
+            },
+            RawPlatformDataLoggingService: class { logRawPlatformData() {} },
+            USER_AGENTS: ['test-agent']
+        });
+        platform.handlers = {
+            onGift: (payload: Record<string, unknown>) => eventBus.emit('platform:event', {
+                platform: 'youtube',
+                type: PlatformEvents.GIFT,
+                data: payload
+            })
+        };
+        try {
+            await platform.handleChatMessage({
+                item: {
+                    type: 'GiftMessageView',
+                    id: 'yt-let-em-cook-1',
+                    timestamp_usec: '1704067200000000',
+                    text: { content: 'sent Let em cook' },
+                    author_name: { content: '@test-youtube-gifter' },
+                    gift_image: {
+                        sources: [{
+                            url: 'https://www.gstatic.com/youtube/img/pdg/gift/assets/let_em_cook.png',
+                            width: 640,
+                            height: 640
+                        }]
+                    },
+                    gift_image_a11y_label: '@test-youtube-gifter sent a gift, Let em cook'
+                }
+            });
+            await new Promise(setImmediate);
+            expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
+            const queued = displayQueue.addItem.mock.calls[0][0];
+            expect(queued.data.username).toBe('test-youtube-gifter');
+            expect(queued.data.giftType).toBe('Let em cook');
+            expect(queued.data.amount).toBeUndefined();
+            expect(queued.data.currency).toBe('jewels');
+            expect(queued.data.giftImageUrl).toBe('https://www.gstatic.com/youtube/img/pdg/gift/assets/let_em_cook.png');
+            expect(queued.data.metadata.missingFields).toHaveLength(2);
+            expect(queued.data.metadata.missingFields).toEqual(expect.arrayContaining(['amount', 'userId']));
+            for (const message of [queued.data.displayMessage, queued.data.ttsMessage, queued.data.logMessage]) {
+                expect(message).toContain('test-youtube-gifter');
+                expect(message).toContain('Let em cook');
+                expect(message).not.toMatch(/undefined|NaN|0 jewels/i);
+            }
+        } finally {
+            router.dispose();
+            await platform.cleanup();
+        }
+    });
 });

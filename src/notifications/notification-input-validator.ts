@@ -1,4 +1,7 @@
-import { allowsYouTubeJewelsMissingUserId } from '../utils/missing-fields';
+import {
+    allowsYouTubeJewelsMissingAmount,
+    allowsYouTubeJewelsMissingUserId
+} from '../utils/missing-fields';
 import { isIsoTimestamp } from '../utils/timestamp';
 
 const MONETIZATION_TYPES = new Set([
@@ -159,6 +162,12 @@ class NotificationInputValidator {
             currency: sanitized.currency,
             metadata
         });
+        const allowsMissingAmount = allowsYouTubeJewelsMissingAmount({
+            type: notificationType,
+            platform,
+            currency: sanitized.currency,
+            metadata
+        });
         const allowsAnonymous = sanitized.isAnonymous === true &&
             (notificationType === 'platform:gift' || notificationType === 'platform:giftpaypiggy');
 
@@ -180,9 +189,13 @@ class NotificationInputValidator {
                 const giftType = typeof sanitized.giftType === 'string' ? sanitized.giftType.trim() : '';
                 const giftCount = sanitized.giftCount;
                 const amount = sanitized.amount;
+                const numericAmount = Number(amount);
+                const hasValidAmount = amount !== undefined && Number.isFinite(numericAmount) && numericAmount > 0;
                 const currency = typeof sanitized.currency === 'string' ? sanitized.currency.trim() : '';
                 const id = sanitized.id;
-                if ((requireEventId && !id) || !giftType || giftCount === undefined || amount === undefined || !currency) {
+                if ((requireEventId && !id) || !giftType || giftCount === undefined ||
+                    (amount === undefined && !allowsMissingAmount) ||
+                    (amount !== undefined && allowsMissingAmount && !hasValidAmount) || !currency) {
                     return {
                         success: false,
                         error: 'Notification payload requires id, giftType, giftCount, amount, and currency',

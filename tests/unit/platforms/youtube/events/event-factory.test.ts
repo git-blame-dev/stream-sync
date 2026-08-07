@@ -606,6 +606,69 @@ describe("YouTube event factory behavior", () => {
     expect(event.userId).toBeUndefined();
   });
 
+  it("allows amountless YouTube jewels gifts when metadata marks amount and userId missing", () => {
+    const { createYouTubeEventFactory } = require("../../../../../src/platforms/youtube/events/event-factory.ts");
+
+    const event = createYouTubeEventFactory().createGiftEvent({
+      username: "test-amountless-jewels-user",
+      id: "gift-jewels-amountless-123",
+      giftType: "Girl power",
+      giftCount: 1,
+      currency: "jewels",
+      timestamp: "2024-01-01T00:00:00.000Z",
+      metadata: { missingFields: ["amount", "userId"] },
+    });
+
+    expect(event.amount).toBeUndefined();
+    expect(event.metadata).toEqual({ missingFields: ["amount", "userId"] });
+  });
+
+  it("rejects amountless YouTube jewels gifts without missing-field metadata", () => {
+    const { createYouTubeEventFactory } = require("../../../../../src/platforms/youtube/events/event-factory.ts");
+
+    expect(() => createYouTubeEventFactory().createGiftEvent({
+      username: "test-amountless-jewels-user",
+      userId: "user-amountless-jewels",
+      id: "gift-jewels-amountless-124",
+      giftType: "Girl power",
+      giftCount: 1,
+      currency: "jewels",
+      timestamp: "2024-01-01T00:00:00.000Z",
+    })).toThrow("YouTube gift payload requires amount");
+  });
+
+  it("rejects an invalid supplied amount even when metadata marks amount missing", () => {
+    const { createYouTubeEventFactory } = require("../../../../../src/platforms/youtube/events/event-factory.ts");
+
+    expect(() => createYouTubeEventFactory().createGiftEvent({
+      username: "test-invalid-jewels-user",
+      userId: "user-invalid-jewels",
+      id: "gift-jewels-invalid-amount-1",
+      giftType: "Girl power",
+      giftCount: 1,
+      amount: 0,
+      currency: "jewels",
+      timestamp: "2024-01-01T00:00:00.000Z",
+      metadata: { missingFields: ["amount"] },
+    })).toThrow("YouTube gift payload requires amount");
+  });
+
+  it("rejects a null supplied amount even when metadata marks amount missing", () => {
+    const { createYouTubeEventFactory } = require("../../../../../src/platforms/youtube/events/event-factory.ts");
+
+    expect(() => createYouTubeEventFactory().createGiftEvent({
+      username: "test-null-jewels-user",
+      userId: "user-null-jewels",
+      id: "gift-jewels-null-amount-1",
+      giftType: "Girl power",
+      giftCount: 1,
+      amount: null,
+      currency: "jewels",
+      timestamp: "2024-01-01T00:00:00.000Z",
+      metadata: { missingFields: ["amount"] },
+    })).toThrow("YouTube gift payload requires amount");
+  });
+
   it("rejects YouTube jewels gift events with missing userId when metadata is absent", () => {
     const {
       createYouTubeEventFactory,

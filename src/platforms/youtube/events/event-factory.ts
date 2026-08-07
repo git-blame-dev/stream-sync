@@ -5,9 +5,10 @@ import { DEFAULT_AVATAR_URL } from '../../../constants/avatar';
 import { UNKNOWN_CHAT_MESSAGE, UNKNOWN_CHAT_USERNAME } from '../../../constants/degraded-chat';
 import { asRecord, type UnknownRecord } from '../../../utils/record-contracts';
 import {
-allowsYouTubeJewelsMissingUserId,
-getMissingFields,
-mergeMissingFieldsMetadata
+    allowsYouTubeJewelsMissingAmount,
+    allowsYouTubeJewelsMissingUserId,
+    getMissingFields,
+    mergeMissingFieldsMetadata
 } from '../../../utils/missing-fields';
 
 type ValidMessagePart =
@@ -242,6 +243,12 @@ createGiftEvent: (data: UnknownRecord = {}): UnknownRecord => {
                 currency: data.currency,
                 metadata
             });
+            const allowsMissingAmount = !isError && allowsYouTubeJewelsMissingAmount({
+                type: PlatformEvents.GIFT,
+                platform: platformName,
+                currency: data.currency,
+                metadata
+            });
             const identity = normalizeIdentity(data, { allowMissing: isError || allowsMissingUserId });
             const avatarUrl = resolveAvatarUrl(data);
             const giftType = normalizeText(data.giftType);
@@ -251,6 +258,7 @@ createGiftEvent: (data: UnknownRecord = {}): UnknownRecord => {
             const amount = isError
                 ? normalizeNonNegativeNumber(data.amount)
                 : normalizePositiveNumber(data.amount);
+            const hasSuppliedAmount = data.amount !== undefined;
             const currency = normalizeText(data.currency);
             const message = typeof data.message === 'string' ? data.message : undefined;
             const giftImageUrl = normalizeText(data.giftImageUrl);
@@ -262,7 +270,7 @@ createGiftEvent: (data: UnknownRecord = {}): UnknownRecord => {
                 if (giftCount === undefined) {
                     throw new Error('YouTube gift payload requires giftCount');
                 }
-                if (amount === undefined) {
+                if (amount === undefined && (hasSuppliedAmount || !allowsMissingAmount)) {
                     throw new Error('YouTube gift payload requires amount');
                 }
                 if (!currency) {

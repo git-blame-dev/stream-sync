@@ -501,6 +501,57 @@ describe("AppRuntime behavior", () => {
     expect(call[2].userId).toBeUndefined();
   });
 
+  it("forwards amountless YouTube jewels gifts when metadata marks amount and userId missing", async () => {
+    const calls = createNotificationCalls();
+    const notificationManager = createRecordingNotificationManager(calls);
+    const runtime = createRuntime({
+      notificationManager,
+      vfxCommandService: {
+        getVFXConfig: createMockFn().mockResolvedValue({ key: "gifts" }),
+      },
+    });
+
+    await runtime.handleGiftNotification("youtube", "test-youtube-gifter", {
+      type: "platform:gift",
+      timestamp: "2024-01-01T00:00:00.000Z",
+      giftType: "Let em cook",
+      giftCount: 1,
+      currency: "jewels",
+      id: "yt-jewels-gift-runtime-amountless-1",
+      metadata: {
+        missingFields: ["amount", "userId"],
+      },
+    });
+
+    expect(calls.length).toBe(1);
+    const call = getNotificationCall(calls);
+    expect(call[2]).toMatchObject({
+      username: "test-youtube-gifter",
+      giftType: "Let em cook",
+      currency: "jewels",
+      metadata: { missingFields: ["amount", "userId"] },
+    });
+    expect(call[2].amount).toBeUndefined();
+    expect(call[2].userId).toBeUndefined();
+  });
+
+  it("rejects null amount on a marked amountless YouTube jewels gift", async () => {
+    const runtime = createRuntime();
+
+    await expect(runtime.handleGiftNotification("youtube", "test-youtube-gifter", {
+      type: "platform:gift",
+      timestamp: "2024-01-01T00:00:00.000Z",
+      giftType: "Let em cook",
+      giftCount: 1,
+      amount: null,
+      currency: "jewels",
+      id: "yt-jewels-gift-runtime-null-1",
+      metadata: {
+        missingFields: ["amount", "userId"],
+      },
+    })).rejects.toThrow("Gift notification requires giftType, giftCount, amount, and currency");
+  });
+
   it("defaults gift notification type to platform:gift when omitted", async () => {
     const calls = createNotificationCalls();
     const notificationManager = createRecordingNotificationManager(calls);

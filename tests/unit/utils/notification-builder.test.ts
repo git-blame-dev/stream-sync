@@ -465,4 +465,22 @@ describe("NotificationBuilder", () => {
     expect(notification.ttsMessage).not.toContain("XXX");
     expect(notification.logMessage).not.toContain("XXX");
   });
+
+  test("renders degraded amountless YouTube jewels gifts without technical or zero-value wording", () => {
+    const notification = expectNotification(NotificationBuilder.build({
+      platform: "youtube",
+      type: "platform:gift",
+      username: "test-youtube-gifter",
+      giftType: "Let em cook",
+      giftCount: 1,
+      currency: "jewels",
+      id: "yt-let-em-cook-1",
+      giftImageUrl: "https://www.gstatic.com/youtube/img/pdg/gift/assets/let_em_cook.png",
+      metadata: { missingFields: ["amount", "userId"] },
+    }));
+
+    expect(notification.displayMessage).toBe("test-youtube-gifter sent Let em cook");
+    expect(notification.ttsMessage).toBe("test-youtube-gifter sent Let em cook");
+    expect(notification.logMessage).toBe("Gift from test-youtube-gifter: Let em cook");
+  });
 });

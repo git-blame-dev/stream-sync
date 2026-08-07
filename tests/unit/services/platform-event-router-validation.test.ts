@@ -210,6 +210,29 @@ describe("PlatformEventRouter validation", () => {
     expect(payload.metadata).toEqual({ missingFields: ["userId"] });
   });
 
+  it("allows amountless YouTube jewels gifts when metadata marks amount and userId missing", async () => {
+    const { router, runtime } = buildRouter();
+
+    await router.routeEvent({ platform: "youtube", type: "platform:gift", data: {
+      id: "gift-yt-jewels-amountless-1", giftType: "Girl power", giftCount: 1,
+      currency: "jewels", username: "test-jewels-user", timestamp: new Date().toISOString(),
+      metadata: { missingFields: ["amount", "userId"] },
+    }});
+
+    expect(runtime.handleGiftNotification).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects amountless non-jewels gifts even when metadata marks amount missing", async () => {
+    const { router, runtime } = buildRouter();
+
+    await expect(router.routeEvent({ platform: "youtube", type: "platform:gift", data: {
+      id: "gift-yt-superchat-amountless-1", giftType: "Super Chat", giftCount: 1,
+      currency: "USD", username: "test-user", userId: "yt-user",
+      timestamp: new Date().toISOString(), metadata: { missingFields: ["amount"] },
+    }})).rejects.toThrow("Notification payload requires id, giftType, giftCount, amount, and currency");
+    expect(runtime.handleGiftNotification).not.toHaveBeenCalled();
+  });
+
   it("rejects YouTube jewels gifts without userId when missing-field metadata is absent", async () => {
     const { router, runtime } = buildRouter();
 

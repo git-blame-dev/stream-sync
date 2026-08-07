@@ -860,7 +860,8 @@ class YouTubePlatform extends EventEmitter {
         try {
             const parsed = this.monetizationParser.parseGiftMessageView(toUnknownMap(chatItem));
             const missingFields = collectMissingFields({
-                userId: !!author.userId
+                userId: !!author.userId,
+                amount: parsed.amount !== undefined
             });
             const payload = this.eventFactory.createGiftEvent({
                 ...parsed,
@@ -1078,31 +1079,8 @@ class YouTubePlatform extends EventEmitter {
         const item = isRecord(chatRecord.item)
             ? chatRecord.item
             : {};
-        const resolveName = (candidate: unknown): string | null => {
-            if (typeof candidate === 'string') {
-                return normalizeYouTubeUsername(candidate);
-            }
-            if (!candidate || typeof candidate !== 'object') {
-                return null;
-            }
-            const candidateRecord = toUnknownMap(candidate);
-            if (typeof candidateRecord.content === 'string') {
-                return normalizeYouTubeUsername(candidateRecord.content);
-            }
-            if (typeof candidateRecord.text === 'string') {
-                return normalizeYouTubeUsername(candidateRecord.text);
-            }
-            if (typeof candidateRecord.simpleText === 'string') {
-                return normalizeYouTubeUsername(candidateRecord.simpleText);
-            }
-            return null;
-        };
-
         const itemAuthor = toUnknownMap(item.author);
-        const username = resolveName(item.authorName)
-            || resolveName(item.author_name)
-            || resolveName(itemAuthor.name);
-
+        const username = this._resolveChatItemAuthorName(chatItem);
         const rawUserId = typeof itemAuthor.id === 'string' ? itemAuthor.id.trim() : '';
         return {
             ...(username ? { username } : {}),
@@ -1246,8 +1224,18 @@ class YouTubePlatform extends EventEmitter {
     _resolveChatItemAuthorName(chatItem: unknown): string {
         const item = toUnknownMap(toUnknownMap(chatItem).item);
         const author = toUnknownMap(item.author);
-        const rawName = author.name;
-        return normalizeYouTubeUsername(rawName) || '';
+        const resolveName = (candidate: unknown): string => {
+            if (typeof candidate === 'string') {
+                return normalizeYouTubeUsername(candidate) || '';
+            }
+            const candidateRecord = toUnknownMap(candidate);
+            const rawName = candidateRecord.content ?? candidateRecord.text ?? candidateRecord.simpleText;
+            return normalizeYouTubeUsername(rawName) || '';
+        };
+
+        return resolveName(item.authorName) ||
+            resolveName(item.author_name) ||
+            resolveName(author.name);
     }
 
     _resolveChatItemAuthorNameForLog(chatItem: unknown): string {

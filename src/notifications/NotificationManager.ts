@@ -10,6 +10,7 @@ import { createSyntheticGiftFromAggregated } from './aggregated-donation-transfo
 import { NotificationGate } from './notification-gate';
 import { NotificationInputValidator } from './notification-input-validator';
 import { NotificationPayloadBuilder } from './notification-payload-builder';
+import { allowsYouTubeJewelsMissingAmount } from '../utils/missing-fields';
 
 type NotificationRecord = Record<string, unknown>;
 
@@ -307,8 +308,16 @@ class NotificationManager extends EventEmitter {
                 );
                 return { success: false, error: errorMessage, notificationType, platform: platformName };
             }
-            const { metadata: _metadata, ...validatedPayload } = payloadValidation.payload;
+            const { metadata, ...validatedPayload } = payloadValidation.payload;
             Object.assign(normalizedData, validatedPayload);
+            if (payloadValidation.payload.amount === undefined && allowsYouTubeJewelsMissingAmount({
+                type: notificationType,
+                platform: platformName,
+                currency: payloadValidation.payload.currency,
+                metadata
+            })) {
+                normalizedData.metadata = metadata;
+            }
         }
         
         if (typeof config.settingKey !== 'string') {
@@ -340,7 +349,14 @@ class NotificationManager extends EventEmitter {
             normalizedData.username = getAnonymousUsername();
         }
 
-        if (notificationType === 'platform:gift' && this.donationSpamDetector && !skipSpamDetection && !normalizedData.isAggregated && !isErrorPayload) {
+        const isAmountlessYouTubeJewelsGift = normalizedData.amount === undefined && allowsYouTubeJewelsMissingAmount({
+            type: notificationType,
+            platform: platformName,
+            currency: normalizedData.currency,
+            metadata: normalizedData.metadata
+        });
+        if (notificationType === 'platform:gift' && this.donationSpamDetector && !skipSpamDetection &&
+            !normalizedData.isAggregated && !isErrorPayload && !isAmountlessYouTubeJewelsGift) {
             if (!isAnonymousGift && hasStableGiftSpamIdentity(normalizedData)) {
                 try {
                     if (!normalizedData.giftType || normalizedData.giftCount === undefined || normalizedData.amount === undefined) {
@@ -519,11 +535,22 @@ class NotificationManager extends EventEmitter {
 
         switch (notificationType) {
             case 'platform:gift': {
-                if (!data.giftType || data.giftCount === undefined || data.amount === undefined || !data.currency) {
+                const allowsMissingAmount = allowsYouTubeJewelsMissingAmount({
+                    type: notificationType,
+                    platform: data.platform,
+                    currency: data.currency,
+                    metadata: data.metadata
+                });
+                if (!data.giftType || data.giftCount === undefined ||
+                    (data.amount === undefined && !allowsMissingAmount) || !data.currency) {
                     throw new Error('Gift log message requires giftType, giftCount, amount, and currency');
                 }
                 const giftCount = Number(data.giftCount);
                 const giftType = data.giftType;
+                if (data.amount === undefined) {
+                    const countText = giftCount > 1 ? `${giftCount}x ` : '';
+                    return `Gift from ${data.username}: ${countText}${giftType}`;
+                }
                 const amount = Number(data.amount);
                 const currency = String(data.currency).toLowerCase();
                 if (currency === 'bits') {
