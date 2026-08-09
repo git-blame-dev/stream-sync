@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { DisplayQueue } from "../../../src/obs/display-queue.ts";
 import { PRIORITY_LEVELS } from "../../../src/core/constants";
-import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
+import { restoreAllMocks } from "../../helpers/bun-mock-utils";
 import { initializeTestLogging } from "../../helpers/test-setup";
 
 initializeTestLogging();
@@ -25,14 +25,11 @@ describe("DisplayQueue sequences", () => {
       {
         autoProcess: false,
         ...(maxQueueSize === undefined ? {} : { maxQueueSize }),
-        chat: { sourceName: "chat", sceneName: "scene", groupName: "group", platformLogos: {} },
-        notification: { sourceName: "notification", sceneName: "scene", groupName: "group", platformLogos: {} },
       },
       { PRIORITY_LEVELS },
       null,
       { delay: () => Promise.resolve() },
     );
-    queue.getDuration = createMockFn().mockReturnValue(0);
     return queue;
   };
 
@@ -86,20 +83,18 @@ describe("DisplayQueue sequences", () => {
     expect(seen).toEqual(["active-unrelated", "source", "result"]);
   });
 
-  it("rejects an over-capacity sequence atomically and preserves lastChat", () => {
+  it("rejects an over-capacity sequence without changing admitted rows", () => {
     const queue = createQueue(2);
     queue.addItem(item("chat", "admitted"));
     const before = [...queue.queue];
     expect(() => queue.addSequence([item("chat", "one"), item("chat", "two")])).toThrow("Queue at capacity");
     expect(queue.queue).toEqual(before);
-    expect(queue.lastChatItem?.data.username).toBe("admitted");
   });
 
-  it("counts queued children and records the admitted sequence chat", () => {
+  it("counts every queued sequence child", () => {
     const queue = createQueue();
     queue.addSequence([item("chat", "one"), item("platform:gift", "gift"), item("chat", "two")]);
     expect(queue.getQueueLength()).toBe(3);
-    expect(queue.lastChatItem?.data.username).toBe("two");
   });
 
   it("counts remaining active children for queue length and capacity", async () => {
@@ -154,7 +149,7 @@ describe("DisplayQueue sequences", () => {
     expect(seen).toEqual(["active", "new-source", "new-result"]);
   });
 
-  it("counts chats in queued and active sequence backlog", async () => {
+  it("counts queued and active sequence children", async () => {
     const queue = createQueue();
     let release!: () => void;
     const displaying = new Promise<void>((resolve) => { release = resolve; });
@@ -163,80 +158,9 @@ describe("DisplayQueue sequences", () => {
     const processing = queue.processQueue();
     await Promise.resolve();
     queue.addSequence([item("chat", "queued"), item("chat", "queued-again")]);
-    expect(queue.hasMultipleQueuedChats()).toBe(true);
+    expect(queue.getQueueLength()).toBe(3);
     release();
     await processing;
   });
 
-  it("uses normal pacing for an unmarked sequence", () => {
-    const queue = createQueue();
-    queue.addSequence([item("chat", "default")]);
-
-    expect((queue.queue[0] as Record<string, unknown>).chatPacing).toBe("normal");
-  });
-
-  it("records accelerated pacing on a sequence", () => {
-    const queue = createQueue();
-
-    Reflect.apply(queue.addSequence, queue, [[item("chat", "accelerated")], { chatPacing: "accelerated" }]);
-
-    expect((queue.queue[0] as Record<string, unknown>).chatPacing).toBe("accelerated");
-  });
-
-  it("applies sequence pacing while processing its children", async () => {
-    const queue = createQueue();
-    queue.displayItem = async () => true;
-    Reflect.apply(queue.addSequence, queue, [[item("chat", "accelerated")], { chatPacing: "accelerated" }]);
-
-    await queue.processQueue();
-
-    expect(queue.getDuration).toHaveBeenCalledWith(
-      expect.objectContaining({ type: "chat" }),
-      "accelerated",
-    );
-  });
-
-  it.each([
-    ["accelerated", { chatPacing: "accelerated" }, [0, 250, 3000, 250]],
-    ["normal", undefined, [4500, 250, 3000, 250]],
-  ] as const)("uses %s chat pacing across a chat-notification sequence", async (_name, options, expectedDelays) => {
-    const delays: number[] = [];
-    const events: string[] = [];
-    const queue = new DisplayQueue(
-      { isReady: async () => true, call: async () => ({}) },
-      {
-        autoProcess: false,
-        ttsEnabled: false,
-        timing: { chatMessageDuration: 4500, transitionDelay: 250 },
-        chat: { sourceName: "chat", sceneName: "scene", groupName: "group", platformLogos: {} },
-        notification: { sourceName: "notification", sceneName: "scene", groupName: "group", platformLogos: {} },
-      },
-      { PRIORITY_LEVELS },
-      null,
-      { delay: async (ms) => { delays.push(ms); } },
-    );
-    queue.displayItem = async (entry) => {
-      events.push(`display:${entry.type}`);
-      return true;
-    };
-    queue.hideCurrentDisplay = async (entry) => {
-      events.push(`hide:${entry?.type}`);
-    };
-    queue.displayLingeringChat = async () => {};
-    const items = [
-      item("chat", "source"),
-      { ...item("command", "result"), holdDurationMs: 3000 },
-    ];
-
-    queue.addSequence(items, options);
-    await queue.processQueue();
-
-    expect(delays).toEqual([...expectedDelays]);
-    expect(events).toEqual([
-      "display:chat",
-      "hide:chat",
-      "display:command",
-      "hide:command",
-    ]);
-  });
 });

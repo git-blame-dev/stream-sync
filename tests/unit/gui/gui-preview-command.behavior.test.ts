@@ -1380,7 +1380,7 @@ describe("GUI local preview command behavior", () => {
     await pipeline.dispose();
   });
 
-  it("uses injected delay in preview pipeline so gift hold timing can block later notifications", async () => {
+  it("keeps preview row pacing independent from gift effect duration", async () => {
     const config = buildPreviewConfig();
     const delayCalls: number[] = [];
 
@@ -1446,7 +1446,7 @@ describe("GUI local preview command behavior", () => {
       await waitForDelay(1);
     }
 
-    expect(delayCalls.includes(4200)).toBe(true);
+    expect(delayCalls.includes(4200)).toBe(false);
 
     await pipeline.dispose();
   });

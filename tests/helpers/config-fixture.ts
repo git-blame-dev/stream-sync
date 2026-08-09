@@ -27,20 +27,13 @@ type TestConfigKnownSections = {
         password?: string;
         enabled?: boolean;
         connectionTimeoutMs?: number;
-        chatMsgTxt: string;
-        chatMsgScene: string;
-        chatMsgGroup: string;
         ttsTxt: string;
         ttsEnabled: boolean;
-        notificationMsgGroup: string;
-        notificationTxt: string;
-        notificationScene: string;
-        chatPlatformLogos: Record<string, string>;
-        notificationPlatformLogos: Record<string, string>;
     };
     displayQueue: {
         autoProcess: boolean;
         maxQueueSize: number;
+        rowIntervalMs: number;
     };
     cooldowns: {
         cmdCooldown: number;
@@ -51,12 +44,6 @@ type TestConfigKnownSections = {
         heavyCommandWindowMs: number;
         globalCmdCooldownMs: number;
         maxEntries: number;
-    };
-    timing: {
-        transitionDelay: number;
-        notificationClearDelay: number;
-        chatMessageDuration: number;
-        fadeDuration: number;
     };
     http: {
         userAgents: string[];
@@ -125,21 +112,12 @@ const RAW_TEST_CONFIG = {
         enabled: 'false',
         address: 'ws://localhost:4455',
         connectionTimeoutMs: '5000',
-        chatMsgGroup: 'test-chat-grp',
-        ttsTxt: 'test-tts-source',
-        notificationMsgGroup: 'test-notification-grp',
-        chatPlatformLogoTwitch: 'test-twitch-img',
-        chatPlatformLogoYouTube: 'test-youtube-img',
-        chatPlatformLogoTikTok: 'test-tiktok-img',
-        notificationPlatformLogoTwitch: 'test-twitch-img',
-        notificationPlatformLogoYouTube: 'test-youtube-img',
-        notificationPlatformLogoTikTok: 'test-tiktok-img'
+        ttsTxt: 'test-tts-source'
     },
-    timing: {
-        fadeDuration: '750',
-        transitionDelay: '200',
-        chatMessageDuration: '4000',
-        notificationClearDelay: '500'
+    displayQueue: {
+        autoProcess: 'false',
+        maxQueueSize: '100',
+        rowIntervalMs: '1000'
     },
     handcam: {
         enabled: 'false',
@@ -298,7 +276,7 @@ function createConfigFixture(overrides: ConfigFixtureOverrides = {}): TestConfig
         cooldowns: cooldownsOverrides,
         commands: commandsOverrides,
         obs: obsOverrides,
-        timing: timingOverrides,
+        displayQueue: displayQueueOverrides,
         spam: spamOverrides,
         http: httpOverrides,
         gui: guiOverrides,
@@ -315,7 +293,7 @@ function createConfigFixture(overrides: ConfigFixtureOverrides = {}): TestConfig
         cooldowns: { ...base.cooldowns, ...cooldownsOverrides },
         commands: { ...base.commands, ...commandsOverrides },
         obs: { ...base.obs, ...obsOverrides },
-        timing: { ...base.timing, ...timingOverrides },
+        displayQueue: { ...base.displayQueue, ...displayQueueOverrides },
         spam: { ...base.spam, ...spamOverrides },
         http: { ...base.http, ...httpOverrides },
         gui: { ...base.gui, ...guiOverrides },

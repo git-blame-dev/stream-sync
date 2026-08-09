@@ -78,7 +78,6 @@ describe("ConfigValidator.normalize()", () => {
     "goals",
     "gifts",
     "envelopes",
-    "timing",
     "cooldowns",
     "spam",
     "displayQueue",
@@ -499,16 +498,6 @@ describe("ConfigValidator._normalizeSpamSection()", () => {
     expect(result.detectionWindow).toBe(5);
     expect(result.maxIndividualNotifications).toBe(2);
     expect(result.youtubeLowValueThreshold).toBe(1);
-  });
-});
-
-describe("ConfigValidator._normalizeTimingSection()", () => {
-  it("applies timing defaults", () => {
-    const result = ConfigValidator._normalizeTimingSection({});
-
-    expect(result.fadeDuration).toBe(250);
-    expect(result.transitionDelay).toBe(250);
-    expect(result.chatMessageDuration).toBe(4500);
   });
 });
 

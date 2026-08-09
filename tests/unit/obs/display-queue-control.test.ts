@@ -1,879 +1,178 @@
-import { describe, expect, it, afterEach } from "bun:test";
-import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
-import { initializeTestLogging } from "../../helpers/test-setup";
-import { DisplayQueue } from "../../../src/obs/display-queue.ts";
-import { createMockOBSManager } from "../../helpers/mock-factories";
+import { afterEach, describe, expect, it } from "bun:test";
+import { EventEmitter } from "node:events";
+
 import { PRIORITY_LEVELS } from "../../../src/core/constants";
 import type { DisplayQueueItem } from "../../../src/interfaces/DisplayQueue";
+import { DisplayQueue } from "../../../src/obs/display-queue";
+import { restoreAllMocks } from "../../helpers/bun-mock-utils";
+import { initializeTestLogging } from "../../helpers/test-setup";
 
 initializeTestLogging();
 
-type Queue = InstanceType<typeof DisplayQueue>;
-type QueueItem = DisplayQueueItem;
-type DisplayQueueConfig = ConstructorParameters<typeof DisplayQueue>[1];
-type DisplayQueueConstants = ConstructorParameters<typeof DisplayQueue>[2];
-type DisplayQueueEventBus = ConstructorParameters<typeof DisplayQueue>[3];
-type DisplayQueueDependencies = ConstructorParameters<typeof DisplayQueue>[4];
-type DisplayQueueObsManager = ConstructorParameters<typeof DisplayQueue>[0];
-type DisplayRow = { eventName: string; payload: Record<string, unknown> };
-
-const expectLastChatMessage = (queue: Queue, message: string) => {
-  expect(queue.lastChatItem).not.toBeNull();
-  expect(queue.lastChatItem?.data.message).toBe(message);
-};
-
-const expectQueuedItem = (queue: Queue, index: number): QueueItem => {
-  const item = queue.queue[index];
-  expect(item).toBeDefined();
-  if (!item || queue.state.isSequence(item)) {
-    throw new Error(`Expected queued item at index ${index}`);
-  }
-  return item;
-};
-
-const createReadyObsManager = (ready: boolean | (() => Promise<boolean>)): DisplayQueueObsManager => ({
-  isReady: typeof ready === "boolean" ? async () => ready : ready,
-  call: async () => ({}),
+const chatItem = (message: string): DisplayQueueItem => ({
+  type: "chat",
+  platform: "twitch",
+  data: { username: "test-user", message },
 });
 
-describe("DisplayQueue control", () => {
+const notificationItem = (username: string): DisplayQueueItem => ({
+  type: "platform:follow",
+  platform: "twitch",
+  data: { username },
+});
+
+function createQueue(options: { rowIntervalMs?: number; readyError?: Error } = {}) {
+  const rows: Array<Record<string, unknown>> = [];
+  const delays: number[] = [];
+  const eventBus = new EventEmitter();
+  eventBus.on("display:row", (row) => rows.push(row as Record<string, unknown>));
+
+  const queue = new DisplayQueue(
+    {
+      isReady: async () => {
+        if (options.readyError) {
+          throw options.readyError;
+        }
+        return false;
+      },
+      call: async () => ({}),
+    },
+    {
+      autoProcess: false,
+      ...(options.rowIntervalMs === undefined ? {} : { rowIntervalMs: options.rowIntervalMs }),
+    },
+    { PRIORITY_LEVELS },
+    eventBus,
+    {
+      delay: async (ms) => {
+        delays.push(ms);
+      },
+      sourcesManager: {
+        updateTextSource: async () => {},
+        clearTextSource: async () => {},
+      },
+    },
+  );
+
+  queue.effects.handleChatTTSEffects = async () => {};
+  queue.effects.handleNotificationEffects = async () => {};
+
+  return { delays, queue, rows };
+}
+
+describe("DisplayQueue GUI-primary control", () => {
   afterEach(() => {
     restoreAllMocks();
   });
 
-  const constants: DisplayQueueConstants = {
-    PRIORITY_LEVELS,
-  };
+  it("rejects items without a platform", () => {
+    const { queue } = createQueue();
 
-  const createConfig = (overrides: Partial<DisplayQueueConfig> = {}): DisplayQueueConfig => ({
-    autoProcess: false,
-    maxQueueSize: 3,
-    chat: {
-      sourceName: "chat",
-      sceneName: "scene",
-      groupName: "group",
-      platformLogos: {},
-    },
-    notification: {
-      sourceName: "notification",
-      sceneName: "scene",
-      groupName: "group",
-      platformLogos: {},
-    },
-    ...overrides,
+    expect(() => queue.addItem({
+      type: "chat",
+      data: { username: "test-user", message: "hello" },
+    } as DisplayQueueItem)).toThrow("platform");
   });
 
-  const createMockDependencies = (): NonNullable<DisplayQueueDependencies> => ({
-    sourcesManager: {
-      updateTextSource: createMockFn<[string, string?], Promise<void>>().mockResolvedValue(),
-      clearTextSource: createMockFn<[string], Promise<void>>().mockResolvedValue(),
-      updateChatMsgText: createMockFn<[string, string, string], Promise<void>>().mockResolvedValue(),
-      getSceneItemId: createMockFn<[string, string], Promise<{ sceneItemId: number; sceneName?: string }>>().mockResolvedValue({ sceneItemId: 1 }),
-      setSourceVisibility: createMockFn<[string, string, boolean], Promise<void>>().mockResolvedValue(),
-      getGroupSceneItemId: createMockFn<[string, string], Promise<{ sceneItemId: number; sceneName?: string }>>().mockResolvedValue({ sceneItemId: 1 }),
-      setGroupSourceVisibility: createMockFn<[string, string | null | undefined, boolean], Promise<void>>().mockResolvedValue(),
-      setNotificationDisplayVisibility: createMockFn<[boolean, string, Record<string, unknown>], Promise<void>>().mockResolvedValue(),
-      setChatDisplayVisibility: createMockFn<[boolean, string, Record<string, unknown>], Promise<void>>().mockResolvedValue(),
-      hideAllDisplays: createMockFn<[], Promise<void>>().mockResolvedValue(),
-      setPlatformLogoVisibility: createMockFn<[string, Record<string, unknown>], Promise<void>>().mockResolvedValue(),
-      setNotificationPlatformLogoVisibility: createMockFn<[string, Record<string, unknown>], Promise<void>>().mockResolvedValue(),
-      hideAllPlatformLogos: createMockFn<[Record<string, unknown>], Promise<void>>().mockResolvedValue(),
-      hideAllNotificationPlatformLogos: createMockFn<[Record<string, unknown>], Promise<void>>().mockResolvedValue(),
-      setSourceFilterEnabled: createMockFn<[string, string, boolean], Promise<void>>().mockResolvedValue(),
-      getSourceFilterSettings: createMockFn<[string, string], Promise<Record<string, unknown>>>().mockResolvedValue({}),
-      setSourceFilterSettings: createMockFn<[string, string, Record<string, unknown>], Promise<void>>().mockResolvedValue(),
-      clearSceneItemCache: createMockFn<[], void>(),
-    },
-    goalsManager: {
-      processDonationGoal: createMockFn().mockResolvedValue({ success: true }),
-      processPaypiggyGoal: createMockFn().mockResolvedValue({ success: true }),
-      initializeGoalDisplay: createMockFn().mockResolvedValue(),
-      updateAllGoalDisplays: createMockFn().mockResolvedValue(),
-      updateGoalDisplay: createMockFn().mockResolvedValue(),
-      getCurrentGoalStatus: createMockFn().mockReturnValue(null),
-      getAllCurrentGoalStatuses: createMockFn().mockReturnValue({}),
-    },
-    delay: () => Promise.resolve(),
-  });
+  it("emits rows without checking OBS readiness", async () => {
+    const { queue, rows } = createQueue({ readyError: new Error("OBS unavailable") });
+    queue.addItem(chatItem("still visible"));
 
-  const createQueue = (configOverrides: Partial<DisplayQueueConfig> = {}) => {
-    const config = createConfig(configOverrides);
-    const queue = new DisplayQueue(
-      createMockOBSManager("connected"),
-      config,
-      constants,
-      null,
-      createMockDependencies(),
-    );
-    queue.getDuration = createMockFn().mockReturnValue(0);
-    return queue;
-  };
+    await queue.processQueue();
 
-  describe("platform validation", () => {
-    it("rejects items without platform", () => {
-      const queue = createQueue();
-
-      expect(() => {
-        queue.addItem({
-          type: "platform:gift",
-          data: { username: "test-user" },
-        } as QueueItem);
-      }).toThrow("platform");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      type: "chat",
+      platform: "twitch",
+      data: { message: "still visible" },
     });
   });
 
-  describe("priority mapping", () => {
-    it("falls back to chat priority when constants are missing", () => {
-      const queue = new DisplayQueue(
-        createMockOBSManager("connected"),
-        createConfig(),
-        {},
-        null,
-        createMockDependencies(),
-      );
+  it("assigns an event ID once and emits it with the row", async () => {
+    const { queue, rows } = createQueue();
+    const item = chatItem("identified");
+    queue.addItem(item);
 
-      expect(queue.getTypePriority("platform:gift")).toBe(PRIORITY_LEVELS.CHAT);
-      expect(queue.getTypePriority("unknown")).toBe(PRIORITY_LEVELS.CHAT);
-    });
+    await queue.processQueue();
+
+    expect(item.eventId).toBeString();
+    expect(rows[0]?.eventId).toBe(item.eventId);
   });
 
-  describe("delegation helpers", () => {
-    it("delegates TTS helpers to the effects module", async () => {
-      const queue = createQueue();
-      const ttsUpdates: string[] = [];
+  it("uses the configured interval for every presented row", async () => {
+    const { delays, queue } = createQueue({ rowIntervalMs: 750 });
+    queue.addItem(chatItem("one"));
+    queue.addItem(chatItem("two"));
 
-      queue.effects.isTTSEnabled = () => true;
-      queue.effects.setTTSText = async (text: string) => {
-        ttsUpdates.push(text);
-      };
+    await queue.processQueue();
 
-      expect(queue.isTTSEnabled()).toBe(true);
-
-      await queue.setTTSText("test-tts");
-
-      expect(ttsUpdates).toEqual(["test-tts"]);
-    });
+    expect(delays).toEqual([750, 750]);
   });
 
-  describe("maxQueueSize enforcement", () => {
-    it("rejects items when queue is at maxQueueSize capacity", () => {
-      const queue = createQueue({ maxQueueSize: 2 });
+  it("defaults row pacing to one second", async () => {
+    const { delays, queue } = createQueue();
+    queue.addItem(chatItem("default pace"));
 
-      queue.addItem({
-        type: "platform:gift",
-        platform: "twitch",
-        data: {
-          username: "test-user-1",
-          giftType: "Rose",
-          giftCount: 1,
-          amount: 10,
-          currency: "coins",
-        },
-      });
-      queue.addItem({
-        type: "platform:gift",
-        platform: "twitch",
-        data: {
-          username: "test-user-2",
-          giftType: "Rose",
-          giftCount: 1,
-          amount: 10,
-          currency: "coins",
-        },
-      });
+    await queue.processQueue();
 
-      expect(queue.queue.length).toBe(2);
-
-      expect(() => {
-        queue.addItem({
-          type: "platform:gift",
-          platform: "twitch",
-          data: {
-            username: "test-user-3",
-            giftType: "Rose",
-            giftCount: 1,
-            amount: 10,
-            currency: "coins",
-          },
-        });
-      }).toThrow();
-    });
+    expect(delays).toEqual([1000]);
   });
 
-  describe("chat item preservation", () => {
-    it("preserves earlier chat entries and records the latest message", () => {
-      const queue = createQueue();
+  it("preserves child order within an atomic sequence", async () => {
+    const { queue, rows } = createQueue({ rowIntervalMs: 0 });
+    queue.addSequence([chatItem("source chat"), notificationItem("linked-user")]);
 
-      queue.addItem({
-        type: "chat",
-        platform: "twitch",
-        data: { username: "test-user", message: "first" },
-      });
-      queue.addItem({
-        type: "chat",
-        platform: "twitch",
-        data: { username: "test-user", message: "second" },
-      });
+    await queue.processQueue();
 
-      expect(queue.queue.map((item) => {
-        if (queue.state.isSequence(item)) {
-          throw new Error("Expected ordinary chat queue item");
-        }
-        return item.data.message;
-      })).toEqual([
-        "first",
-        "second",
-      ]);
-      expectLastChatMessage(queue, "second");
-    });
+    expect(rows.map((row) => row.type)).toEqual(["chat", "platform:follow"]);
   });
 
-  describe("processChatMessage autoProcess respect", () => {
-    it("does not auto-process when autoProcess is false", async () => {
-      const queue = createQueue({ autoProcess: false });
-      let processed = false;
-      queue.displayItem = createMockFn(async () => {
-        processed = true;
-        return true;
-      });
-
-      await queue.processChatMessage({
-        type: "chat",
-        platform: "twitch",
-        data: { username: "test-user", message: "hello" },
-      });
-
-      expect(queue.queue.length).toBe(1);
-      expect(processed).toBe(false);
+  it("does not let pending OBS effects delay later GUI rows", async () => {
+    const { queue, rows } = createQueue({ rowIntervalMs: 0 });
+    let releaseFirstEffect: (() => void) | undefined;
+    const firstEffect = new Promise<void>((resolve) => {
+      releaseFirstEffect = resolve;
     });
-
-    it("rejects non-chat items", async () => {
-      const queue = createQueue({ autoProcess: false });
-
-      await expect(
-        queue.processChatMessage({
-          type: "platform:gift",
-          platform: "twitch",
-          data: {
-            username: "test-user",
-            giftType: "rose",
-            giftCount: 1,
-            amount: 1,
-            currency: "coins",
-          },
-        }),
-      ).rejects.toThrow("Invalid chat item");
-    });
-
-    it("auto-processes chat when autoProcess is true", async () => {
-      const queue = createQueue({ autoProcess: true });
-      let processed = false;
-      queue.processQueue = createMockFn(async () => {
-        processed = true;
-      });
-
-      await queue.processChatMessage({
-        type: "chat",
-        platform: "twitch",
-        data: { username: "test-user", message: "hello" },
-      });
-
-      expect(processed).toBe(true);
-    });
-  });
-
-  describe("auto-process behavior", () => {
-    it("starts processing when autoProcess is enabled and idle", () => {
-      const queue = createQueue({ autoProcess: true });
-      let processed = false;
-      queue.processQueue = createMockFn(async () => {
-        processed = true;
-      });
-
-      queue.addItem({
-        type: "platform:gift",
-        platform: "twitch",
-        data: {
-          username: "test-user",
-          giftType: "rose",
-          giftCount: 1,
-          amount: 1,
-          currency: "coins",
-        },
-      });
-
-      expect(processed).toBe(true);
-    });
-
-    it("does not emit chat display row when queue item is only enqueued", () => {
-      const emittedRows: DisplayRow[] = [];
-      const eventBus = {
-        emit: (eventName: string, payload: Record<string, unknown>) => {
-          emittedRows.push({ eventName, payload });
-        },
-      } satisfies NonNullable<DisplayQueueEventBus>;
-
-      const queue = new DisplayQueue(
-        createMockOBSManager("connected"),
-        createConfig({ autoProcess: false }),
-        constants,
-        eventBus,
-        createMockDependencies(),
-      );
-
-      queue.addItem({
-        type: "chat",
-        platform: "twitch",
-        data: {
-          username: "test-user",
-          userId: "test-user-id",
-          message: "hello",
-        },
-      });
-
-      expect(emittedRows.length).toBe(0);
-    });
-
-    it("emits chat display row when chat item is displayed", async () => {
-      const emittedRows: DisplayRow[] = [];
-      const eventBus = {
-        emit: (eventName: string, payload: Record<string, unknown>) => {
-          emittedRows.push({ eventName, payload });
-        },
-      } satisfies NonNullable<DisplayQueueEventBus>;
-
-      const queue = new DisplayQueue(
-        createMockOBSManager("connected"),
-        createConfig({ autoProcess: false }),
-        constants,
-        eventBus,
-        createMockDependencies(),
-      );
-
-      queue.renderer.displayChatItem = createMockFn().mockResolvedValue(true);
-
-      const displayResult = await queue.displayChatItem({
-        type: "chat",
-        platform: "twitch",
-        data: {
-          username: "test-user",
-          userId: "test-user-id",
-          message: "hello",
-        },
-      });
-
-      expect(displayResult).toBe(true);
-      expect(emittedRows.length).toBe(1);
-      const firstRow = emittedRows[0];
-      expect(firstRow).toBeDefined();
-      expect(firstRow?.eventName).toBe("display:row");
-      expect(firstRow?.payload.type).toBe("chat");
-      expect(firstRow?.payload.platform).toBe("twitch");
-    });
-
-    it("emits notification display row only when notification is displayed", async () => {
-      const emittedRows: DisplayRow[] = [];
-      const eventBus = {
-        emit: (eventName: string, payload: Record<string, unknown>) => {
-          emittedRows.push({ eventName, payload });
-        },
-      } satisfies NonNullable<DisplayQueueEventBus>;
-
-      const queue = new DisplayQueue(
-        createMockOBSManager("connected"),
-        createConfig({ autoProcess: false, timing: { transitionDelay: 0 } }),
-        constants,
-        eventBus,
-        createMockDependencies(),
-      );
-
-      queue.renderer.displayNotificationItem =
-        createMockFn().mockResolvedValue(true);
-      queue.handleNotificationEffects = createMockFn().mockResolvedValue();
-
-      queue.addItem({
-        type: "platform:gift",
-        platform: "tiktok",
-        data: {
-          username: "test-user",
-          userId: "test-user-id",
-          giftType: "Rose",
-          giftCount: 1,
-          amount: 1,
-          currency: "coins",
-        },
-      });
-
-      expect(
-        emittedRows.find((entry) => entry.payload?.type === "platform:gift"),
-      ).toBeUndefined();
-
-      const displayResult = await queue.displayNotificationItem(expectQueuedItem(queue, 0));
-      expect(displayResult).toBe(true);
-      expect(
-        emittedRows.some(
-          (entry) =>
-            entry.eventName === "display:row" &&
-            entry.payload?.type === "platform:gift",
-        ),
-      ).toBe(true);
-    });
-  });
-
-  describe("processQueue readiness", () => {
-    it("clears retry flag when OBS is not ready and queue is empty", async () => {
-      const queue = new DisplayQueue(
-        createReadyObsManager(false),
-        createConfig(),
-        constants,
-        null,
-        createMockDependencies(),
-      );
-
-      await queue.processQueue();
-
-      expect(queue.isRetryScheduled).toBe(false);
-      expect(queue.isProcessing).toBe(false);
-    });
-
-    it("clears retry flag when OBS readiness check throws", async () => {
-      const queue = new DisplayQueue(
-        createReadyObsManager(async () => {
-            throw new Error("readiness failed");
-          }),
-        createConfig(),
-        constants,
-        null,
-        createMockDependencies(),
-      );
-      queue.addItem({
-        type: "platform:gift",
-        platform: "twitch",
-        data: {
-          username: "test-user",
-          giftType: "Rose",
-          giftCount: 1,
-          amount: 10,
-          currency: "coins",
-        },
-      });
-
-      await queue.processQueue();
-
-      expect(queue.isRetryScheduled).toBe(false);
-      expect(queue.isProcessing).toBe(false);
-      expect(queue.getQueueLength()).toBe(1);
-    });
-  });
-
-  describe("display routing", () => {
-    it("routes chat and non-chat items to the correct display handlers", async () => {
-      const queue = createQueue();
-      const routed: string[] = [];
-
-      queue.displayChatItem = createMockFn(async () => {
-        routed.push("chat");
-        return true;
-      });
-      queue.displayNotificationItem = createMockFn(async () => {
-        routed.push("notification");
-        return true;
-      });
-
-      await queue.displayItem({
-        type: "chat",
-        platform: "twitch",
-        data: { username: "test-user", message: "hello" },
-      });
-      await queue.displayItem({
-        type: "platform:gift",
-        platform: "twitch",
-        data: {
-          username: "test-user",
-          giftType: "rose",
-          giftCount: 1,
-          amount: 1,
-          currency: "coins",
-        },
-      });
-
-      expect(routed).toEqual(["chat", "notification"]);
-    });
-  });
-
-  describe("notification effects gating", () => {
-    it("skips notification effects when renderer declines display", async () => {
-      const queue = createQueue();
-      let effectsHandled = false;
-      queue.renderer.displayNotificationItem = async () => false;
-      queue.handleNotificationEffects = async () => {
-        effectsHandled = true;
-      };
-
-      await queue.displayNotificationItem({
-        type: "platform:follow",
-        platform: "twitch",
-        data: { username: "test-user", displayMessage: "test-user followed" },
-      });
-
-      expect(effectsHandled).toBe(false);
-    });
-
-    it("still runs paid notification side effects when OBS render fails", async () => {
-      const emittedRows: DisplayRow[] = [];
-      const eventBus = {
-        emit: (eventName: string, payload: Record<string, unknown>) => {
-          emittedRows.push({ eventName, payload });
-        },
-      } satisfies NonNullable<DisplayQueueEventBus>;
-      const queue = new DisplayQueue(
-        createMockOBSManager("connected"),
-        createConfig({ autoProcess: false, timing: { transitionDelay: 0 } }),
-        constants,
-        eventBus,
-        createMockDependencies(),
-      );
-      const effectTypes: string[] = [];
-      queue.renderer.displayNotificationItem = async () => false;
-      queue.handleNotificationEffects = async (item) => {
-        effectTypes.push(item.type);
-      };
-      queue.hideCurrentDisplay = async () => {
-        throw new Error("Failed notification render should not hide current display");
-      };
-
-      const itemDataByType: Record<string, Record<string, unknown>> = {
-        "platform:gift": {
-          username: "test-user",
-          userId: "test-user-id",
-          giftType: "Rose",
-          giftCount: 1,
-          amount: 1,
-          currency: "coins",
-        },
-        "platform:paypiggy": { username: "member", userId: "member-id" },
-        "platform:giftpaypiggy": { username: "gifter", userId: "gifter-id", giftCount: 2 },
-        "platform:envelope": {
-          username: "sender",
-          userId: "sender-id",
-          giftType: "treasure chest",
-          giftCount: 1,
-          amount: 10,
-          currency: "coins",
-        },
-      };
-
-      for (const [type, data] of Object.entries(itemDataByType)) {
-        const result = await queue.displayNotificationItem({
-          type,
-          platform: "tiktok",
-          data,
-        });
-        expect(result).toBe(false);
+    queue.effects.handleChatTTSEffects = async (item) => {
+      if (item.data.message === "one") {
+        await firstEffect;
       }
+    };
+    queue.addItem(chatItem("one"));
+    queue.addItem(chatItem("two"));
 
-      expect(effectTypes).toEqual(["platform:gift", "platform:paypiggy", "platform:giftpaypiggy", "platform:envelope"]);
-      expect(emittedRows.map((row) => row.payload.type)).toEqual(effectTypes);
-    });
+    await queue.processQueue();
+
+    expect(rows.map((row) => (row.data as { message: string }).message)).toEqual(["one", "two"]);
+    releaseFirstEffect?.();
+    await queue.effectChain;
   });
 
-  describe("processQueue flow", () => {
-    it("processes queued items, hides after display, and shows lingering chat", async () => {
-      const config = createConfig({
-        timing: { transitionDelay: 0, notificationClearDelay: 0 },
-      });
-      const queue = new DisplayQueue(
-        createReadyObsManager(true),
-        config,
-        constants,
-        null,
-        createMockDependencies(),
-      );
-      const displayed: string[] = [];
-      const hidden: string[] = [];
+  it("isolates effect failures and runs later effects", async () => {
+    const { queue } = createQueue({ rowIntervalMs: 0 });
+    const processed: string[] = [];
+    queue.effects.handleChatTTSEffects = async (item) => {
+      const message = String(item.data.message);
+      if (message === "one") {
+        throw new Error("test effect failure");
+      }
+      processed.push(message);
+    };
+    queue.addItem(chatItem("one"));
+    queue.addItem(chatItem("two"));
 
-      queue.delay = async () => {};
-      queue.getDuration = () => 0;
-      queue.displayChatItem = async (item) => {
-        displayed.push(item.type);
-        return true;
-      };
-      queue.displayNotificationItem = async (item) => {
-        displayed.push(item.type);
-        return true;
-      };
-      queue.hideCurrentDisplay = async (item) => {
-        if (item) {
-          hidden.push(item.type);
-        }
-      };
-      queue.displayLingeringChat = async () => {
-        displayed.push("lingering");
-      };
+    await queue.processQueue();
+    await queue.effectChain;
 
-      queue.addItem({
-        type: "chat",
-        platform: "twitch",
-        priority: 10,
-        data: { username: "test-user", message: "hello" },
-      });
-      queue.addItem({
-        type: "platform:follow",
-        platform: "twitch",
-        priority: 5,
-        data: { username: "test-user", displayMessage: "followed" },
-      });
-
-      await queue.processQueue();
-
-      expect(displayed).toEqual(["chat", "platform:follow", "lingering"]);
-      expect(hidden).toEqual(["chat", "platform:follow"]);
-      expect(queue.isProcessing).toBe(false);
-    });
-
-    it("preserves chat messages queued behind gift and greeting blockers", async () => {
-      const queue = createQueue({
-        maxQueueSize: 10,
-        timing: { transitionDelay: 0, notificationClearDelay: 0 },
-      });
-      const displayedChatMessages: unknown[] = [];
-
-      queue.delay = async () => {};
-      queue.getDuration = () => 0;
-      queue.displayItem = async (item) => {
-        if (item.type === "chat") {
-          displayedChatMessages.push(item.data.message);
-        }
-        return true;
-      };
-      queue.hideCurrentDisplay = async () => {};
-      queue.displayLingeringChat = async () => {};
-
-      queue.addItem({
-        type: "platform:gift",
-        platform: "tiktok",
-        priority: PRIORITY_LEVELS.GIFT,
-        data: {
-          username: "test-gifter",
-          giftType: "Test Gift",
-          giftCount: 3,
-          amount: 15,
-          currency: "coins",
-          displayMessage: "test-gifter sent 3x Test Gift (15 coins)",
-        },
-      });
-      queue.addItem({
-        type: "chat",
-        platform: "tiktok",
-        priority: PRIORITY_LEVELS.CHAT,
-        data: { username: "test-viewer", message: "first queued chat" },
-      });
-      queue.addItem({
-        type: "greeting",
-        platform: "tiktok",
-        priority: PRIORITY_LEVELS.GREETING,
-        data: {
-          username: "test-viewer",
-          displayMessage: "Welcome, test-viewer!",
-        },
-      });
-      queue.addItem({
-        type: "chat",
-        platform: "tiktok",
-        priority: PRIORITY_LEVELS.CHAT,
-        data: { username: "test-viewer", message: "second queued chat" },
-      });
-
-      await queue.processQueue();
-
-      expect(displayedChatMessages).toEqual([
-        "first queued chat",
-        "second queued chat",
-      ]);
-      expectLastChatMessage(queue, "second queued chat");
-    });
-
-    it("continues draining when new work arrives during teardown", async () => {
-      const queue = createQueue({
-        autoProcess: false,
-        timing: { transitionDelay: 0, notificationClearDelay: 0 },
-      });
-      const processedTypes: string[] = [];
-      let teardownInjectionDone = false;
-
-      queue.delay = async () => {};
-      queue.getDuration = () => 0;
-      queue.displayItem = async (item) => {
-        processedTypes.push(item.type);
-        return true;
-      };
-      queue.hideCurrentDisplay = async () => {};
-      queue.displayLingeringChat = async () => {
-        if (teardownInjectionDone) {
-          return;
-        }
-
-        teardownInjectionDone = true;
-        queue.addItem({
-          type: "platform:gift",
-          platform: "tiktok",
-          priority: PRIORITY_LEVELS.GIFT,
-          data: {
-            username: "test-user",
-            userId: "test-user-id",
-            giftType: "Rose",
-            giftCount: 5,
-            amount: 5,
-            currency: "coins",
-            displayMessage: "test-user sent 5x Rose gift (5 coins)",
-          },
-        });
-      };
-
-      queue.addItem({
-        type: "chat",
-        platform: "tiktok",
-        priority: PRIORITY_LEVELS.CHAT,
-        data: {
-          username: "test-user",
-          userId: "test-user-id",
-          message: "test wakeup trigger",
-        },
-      });
-
-      queue.config.autoProcess = true;
-
-      await queue.processQueue();
-
-      expect(processedTypes).toEqual(["chat", "platform:gift"]);
-      expect(queue.getQueueLength()).toBe(0);
-    });
-
-    it("clears current display when notification rendering is declined", async () => {
-      const queue = createQueue({
-        autoProcess: false,
-        timing: { transitionDelay: 0, notificationClearDelay: 0 },
-      });
-
-      queue.renderer.displayNotificationItem =
-        createMockFn().mockResolvedValue(false);
-      queue.handleNotificationEffects = createMockFn().mockResolvedValue();
-      queue.hideCurrentDisplay = createMockFn().mockResolvedValue();
-
-      queue.addItem({
-        type: "platform:follow",
-        platform: "twitch",
-        priority: PRIORITY_LEVELS.FOLLOW,
-        data: {
-          username: "test-user",
-          userId: "test-user-id",
-          displayMessage: "test-user followed",
-        },
-      });
-
-      await queue.processQueue();
-
-      expect(queue.currentDisplay === null).toBe(true);
-    });
+    expect(processed).toEqual(["two"]);
   });
 
-  describe("stop() behavior", () => {
-    it("clears all state when stopping", async () => {
-      const queue = createQueue();
-      queue.currentDisplay = {
-        type: "platform:gift",
-        platform: "twitch",
-        data: { username: "test-user" },
-      };
-      queue.isProcessing = true;
-      queue.queue.push({
-        type: "chat",
-        platform: "twitch",
-        data: { username: "test-user", message: "test" },
-      });
+  it("counts active sequence children and clears pending rows", () => {
+    const { queue } = createQueue();
+    queue.addSequence([chatItem("one"), notificationItem("linked-user")]);
 
-      await queue.stop();
-
-      expect(queue.currentDisplay === null).toBe(true);
-      expect(queue.isProcessing).toBe(false);
-      expect(queue.queue.length).toBe(0);
-    });
-
-    it("aborts active processing loop when stop is called", async () => {
-      const queue = createQueue();
-      const processed: unknown[] = [];
-      let itemCount = 0;
-
-      queue.displayItem = createMockFn(async (item) => {
-        processed.push(item.data.username);
-        itemCount++;
-        if (itemCount === 1) {
-          queue.stop();
-        }
-        return true;
-      });
-
-      queue.addItem({
-        type: "platform:gift",
-        platform: "twitch",
-        data: {
-          username: "test-user-1",
-          giftType: "Rose",
-          giftCount: 1,
-          amount: 10,
-          currency: "coins",
-        },
-      });
-      queue.addItem({
-        type: "platform:gift",
-        platform: "twitch",
-        data: {
-          username: "test-user-2",
-          giftType: "Rose",
-          giftCount: 1,
-          amount: 10,
-          currency: "coins",
-        },
-      });
-      queue.addItem({
-        type: "platform:gift",
-        platform: "twitch",
-        data: {
-          username: "test-user-3",
-          giftType: "Rose",
-          giftCount: 1,
-          amount: 10,
-          currency: "coins",
-        },
-      });
-
-      await queue.processQueue();
-
-      expect(processed.length).toBe(1);
-    });
-  });
-
-  describe("clearQueue behavior", () => {
-    it("clears queue even when state is unset", () => {
-      const queue = createQueue();
-      Object.defineProperty(queue, "state", { value: null, writable: true });
-      queue.queue = [
-        { type: "chat", platform: "twitch", data: { username: "test-user", message: "hello" } },
-      ];
-      queue.isRetryScheduled = true;
-      queue.isProcessing = true;
-      queue.currentDisplay = {
-        type: "chat",
-        platform: "twitch",
-        data: { username: "test-user", message: "hello" },
-      };
-
-      queue.clearQueue();
-
-      expect(queue.queue.length).toBe(0);
-      expect(queue.isRetryScheduled).toBe(false);
-      expect(queue.isProcessing).toBe(false);
-      expect(queue.currentDisplay === null).toBe(true);
-    });
+    expect(queue.getQueueLength()).toBe(2);
+    queue.clearQueue();
+    expect(queue.getQueueLength()).toBe(0);
   });
 });

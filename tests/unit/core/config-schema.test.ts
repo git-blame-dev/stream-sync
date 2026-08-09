@@ -59,14 +59,12 @@ describe('buildDefaultsFromSchema()', () => {
         expect(defaults.youtube.chatMode).toBe('live');
     });
 
-    it('includes timing and handcam defaults', () => {
+    it('includes display queue and handcam defaults', () => {
         const defaults = buildDefaultsFromSchema();
-        expectConfigSection(defaults, 'timing');
+        expectConfigSection(defaults, 'displayQueue');
         expectConfigSection(defaults, 'handcam');
 
-        expect(defaults.timing.fadeDuration).toBe(250);
-        expect(defaults.timing.transitionDelay).toBe(250);
-        expect(defaults.timing.chatMessageDuration).toBe(4500);
+        expect(defaults.displayQueue.rowIntervalMs).toBe(1000);
         expect(defaults.handcam.enabled).toBe(false);
         expect(defaults.handcam.maxSize).toBe(50);
     });

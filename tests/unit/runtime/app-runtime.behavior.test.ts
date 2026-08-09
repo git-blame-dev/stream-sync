@@ -1188,7 +1188,7 @@ describe("AppRuntime behavior", () => {
   });
 
   it("uses injected OBS subsystem dependencies for startup display clearing and observer wiring", async () => {
-    const hideAllDisplays = createMockFn().mockResolvedValue();
+    const clearTextSource = createMockFn().mockResolvedValue();
     const connectionManager = {
       isConnected: createMockFn().mockReturnValue(true),
       isReady: createMockFn().mockReturnValue(true),
@@ -1217,7 +1217,7 @@ describe("AppRuntime behavior", () => {
     setDependencyProperty(runtime, "obs", {
       connectionManager,
       sourcesManager: {
-        hideAllDisplays,
+        clearTextSource,
         updateTextSource: createMockFn().mockResolvedValue(),
       },
       goalsManager,
@@ -1231,7 +1231,8 @@ describe("AppRuntime behavior", () => {
 
     await runtime.start();
 
-    expect(hideAllDisplays.mock.calls.length).toBe(1);
+    expect(clearTextSource.mock.calls.length).toBe(1);
+    expect(clearTextSource.mock.calls[0]).toEqual(["test-tts-source"]);
     expect(goalsManager.initializeGoalDisplay.mock.calls.length).toBe(1);
     const [obsViewerObserver] = getMockCall(addObserver.mock.calls);
     expect(obsViewerObserver).toMatchObject({ obsManager: connectionManager });

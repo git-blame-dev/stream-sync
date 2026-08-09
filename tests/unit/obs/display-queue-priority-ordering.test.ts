@@ -88,7 +88,6 @@ describe("DisplayQueue priority ordering", () => {
       sourcesManager: realSourcesManager,
       delay: () => Promise.resolve(),
     });
-    queue.getDuration = createMockFn().mockReturnValue(0);
     const displayItem = createMockFn<[QueueItem], Promise<boolean>>().mockResolvedValue(true);
     queue.displayItem = displayItem;
     return queue;

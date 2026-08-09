@@ -44,6 +44,7 @@ type DisplayQueueVfxConfig = Record<string, unknown> & {
 };
 
 type DisplayQueueItem = {
+    eventId?: string;
     type: string;
     platform: string;
     data: DisplayQueueItemData;
@@ -54,17 +55,10 @@ type DisplayQueueItem = {
     [key: string]: unknown;
 };
 
-type DisplayQueueChatPacing = 'normal' | 'accelerated';
-
-type DisplayQueueSequenceOptions = {
-    chatPacing?: DisplayQueueChatPacing;
-};
-
 type DisplayQueueSequence = {
     type: '__display_queue_sequence__';
     priority: number;
     children: DisplayQueueItem[];
-    chatPacing: DisplayQueueChatPacing;
 };
 
 type NotificationQueueItem = DisplayQueueItem & {
@@ -77,7 +71,7 @@ type DisplayQueueWriter = {
 };
 
 type DisplayQueueSequenceWriter = DisplayQueueWriter & {
-    addSequence(items: DisplayQueueItem[], options?: DisplayQueueSequenceOptions): void;
+    addSequence(items: DisplayQueueItem[]): void;
 };
 
 type DisplayQueueLengthReader = {
@@ -88,10 +82,8 @@ type DisplayQueueDependency = DisplayQueueWriter & DisplayQueueLengthReader;
 
 export type {
     DisplayQueueDependency,
-    DisplayQueueChatPacing,
     DisplayQueueItem,
     DisplayQueueSequence,
-    DisplayQueueSequenceOptions,
     DisplayQueueItemData,
     DisplayQueueLengthReader,
     DisplayQueueMessage,

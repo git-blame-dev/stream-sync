@@ -35,6 +35,7 @@ type MapperOptions = {
 };
 
 type SourceRow = {
+    eventId?: unknown;
     type?: unknown;
     platform?: unknown;
     timestamp?: unknown;
@@ -252,6 +253,7 @@ return cachedAvatar;
         }
 
         const data = toRecord(row.data);
+        const eventId = normalizeString(row.eventId) || normalizeString(data.eventId);
         const platform = normalizeString(row.platform || data.platform).toLowerCase();
         const username = normalizeString(data.username);
         const textSource = resolveText(type, data);
@@ -262,13 +264,14 @@ return cachedAvatar;
         const avatarUrl = await resolveAvatarUrl({ platform, data });
 
         const mapped: GuiRowDto = {
+            ...(eventId ? { eventId } : {}),
             type,
             kind: rule.kind,
             platform,
             username,
             text,
             avatarUrl,
-timestamp: normalizeTimestamp(data.timestamp || row.timestamp)
+            timestamp: normalizeTimestamp(data.timestamp || row.timestamp)
         };
 
         if (rule.kind === 'chat') {

@@ -3,7 +3,7 @@ import { createFarewellRoutingHarness } from "../helpers/farewell-routing-harnes
 
 describe("farewell chat routing integration", () => {
   it("prepares and queues source chat with farewell as one sequence", async () => {
-    const { platformEventRouter, queuedSequences, queuedSequenceOptions } = createFarewellRoutingHarness({
+    const { platformEventRouter, queuedSequences } = createFarewellRoutingHarness({
       general: { messagesEnabled: true, logChatMessages: false },
       twitch: { messagesEnabled: true, farewellsEnabled: true },
     });
@@ -21,7 +21,6 @@ describe("farewell chat routing integration", () => {
 
     expect(queuedSequences).toHaveLength(1);
     expect(queuedSequences[0]?.map((item) => item.type)).toEqual(["chat", "farewell"]);
-    expect(queuedSequenceOptions[0]).toEqual({ chatPacing: "accelerated" });
   });
 
   it("routes farewell notification rows even when messages are disabled", async () => {

@@ -86,28 +86,7 @@ function buildYoutubeConfig(normalized: NormalizedConfig, generalConfig: Generic
 }
 
 function buildObsConfig(normalized: NormalizedConfig): GenericRecord {
-    const obs = normalized.obs as GenericRecord & {
-        chatPlatformLogoTwitch: string;
-        chatPlatformLogoYouTube: string;
-        chatPlatformLogoTikTok: string;
-        notificationPlatformLogoTwitch: string;
-        notificationPlatformLogoYouTube: string;
-        notificationPlatformLogoTikTok: string;
-    };
-
-    return {
-        ...obs,
-        chatPlatformLogos: {
-            twitch: obs.chatPlatformLogoTwitch,
-            youtube: obs.chatPlatformLogoYouTube,
-            tiktok: obs.chatPlatformLogoTikTok
-        },
-        notificationPlatformLogos: {
-            twitch: obs.notificationPlatformLogoTwitch,
-            youtube: obs.notificationPlatformLogoYouTube,
-            tiktok: obs.notificationPlatformLogoTikTok
-        }
-    };
+    return { ...normalized.obs };
 }
 
 function buildHandcamConfig(normalized: NormalizedConfig): GenericRecord {
@@ -257,7 +236,6 @@ function buildConfig(normalized: NormalizedConfig, options: { debugMode?: boolea
         envelopes: buildEnvelopeConfig(normalized),
         displayQueue: { ...normalized.displayQueue },
         spam: buildSpamConfig(normalized),
-        timing: { ...normalized.timing },
         cooldowns: buildCooldownsConfig(normalized),
         gui: { ...normalized.gui },
         follows: { command: follows.command },

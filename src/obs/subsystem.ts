@@ -22,11 +22,7 @@ type LoggerLike = typeof defaultLogger;
 
 type ObsSubsystemConfig = {
     obs: {
-        chatMsgGroup: string;
-        notificationMsgGroup: string;
-    };
-    timing: {
-        fadeDuration: number;
+        [key: string]: unknown;
     };
     goals?: Record<string, unknown>;
     [key: string]: unknown;
@@ -78,9 +74,6 @@ function createOBSSubsystem(deps: ObsSubsystemDeps) {
     };
 
     const sourcesManager = createOBSSourcesManager(connectionManager, {
-        chatGroupName: deps.config.obs.chatMsgGroup,
-        notificationGroupName: deps.config.obs.notificationMsgGroup,
-        fadeDelay: deps.config.timing.fadeDuration,
         ensureOBSConnected: connectionManager.ensureConnected,
         obsCall: connectionManager.call,
         connection: {

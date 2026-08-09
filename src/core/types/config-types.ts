@@ -32,7 +32,6 @@ export type ConfigSectionName =
     | 'displayQueue'
     | 'gui'
     | 'logging'
-    | 'timing'
     | 'handcam'
     | 'cooldowns'
     | 'obs'

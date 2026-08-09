@@ -32,26 +32,20 @@ describe("config example template behavior", () => {
     expect(normalized.gui).toEqual(DEFAULTS.gui);
   });
 
-  it("defines timing and display queue sections with schema-aligned defaults", () => {
+  it("defines display queue section with schema-aligned defaults", () => {
     const parsed = readConfigExample();
-    const timingConfig = parsed.timing;
     const displayQueueConfig = parsed.displayQueue;
-    if (!timingConfig || !displayQueueConfig) {
-      throw new Error("Expected config.example.ini to define [timing] and [displayQueue]");
+    if (!displayQueueConfig) {
+      throw new Error("Expected config.example.ini to define [displayQueue]");
     }
 
-    expect(Object.keys(timingConfig).sort()).toEqual(
-      Object.keys(DEFAULTS.timing).sort(),
-    );
     expect(Object.keys(displayQueueConfig).sort()).toEqual(
       Object.keys(DEFAULTS.displayQueue).sort(),
     );
 
     const normalized = ConfigValidator.normalize({
-      timing: timingConfig,
       displayQueue: displayQueueConfig,
     });
-    expect(normalized.timing).toEqual(DEFAULTS.timing);
     expect(normalized.displayQueue).toEqual(DEFAULTS.displayQueue);
   });
 });

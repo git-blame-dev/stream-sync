@@ -149,27 +149,14 @@ type MainConfig = Record<string, Record<string, unknown>> & BuiltConfig & {
         password?: string;
         enabled?: boolean;
         connectionTimeoutMs?: number;
-        chatMsgTxt: string;
-        chatMsgScene: string;
-        chatMsgGroup: string;
         ttsEnabled: boolean;
-        notificationMsgGroup: string;
-        notificationTxt: string;
-        notificationScene: string;
-        chatPlatformLogos: Record<string, unknown>;
-        notificationPlatformLogos: Record<string, unknown>;
     } & Record<string, unknown>;
     displayQueue: Record<string, unknown> & {
         autoProcess: boolean;
         maxQueueSize: number;
+        rowIntervalMs: number;
     };
     cooldowns: Record<string, unknown> & CooldownsConfig;
-    timing: Record<string, unknown> & {
-        transitionDelay: number;
-        notificationClearDelay: number;
-        chatMessageDuration: number;
-        fadeDuration: number;
-    };
     http: Record<string, unknown> & {
         userAgents: string[];
     };
@@ -655,38 +642,17 @@ async function main(overrides: MainOverrides = {}) {
             }
         }
 
-        const { chatMsgTxt, chatMsgScene, chatMsgGroup, ttsEnabled,
-            notificationMsgGroup, notificationTxt, notificationScene } = config.obs;
-        if (!chatMsgTxt || !chatMsgScene) {
-            throw new Error('Display queue requires chatMsgTxt and chatMsgScene');
-        }
-        if (!notificationTxt || !notificationScene) {
-            throw new Error('Display queue requires notificationTxt and notificationScene');
-        }
-        const chatLogos = config.obs.chatPlatformLogos;
-        const notificationLogos = config.obs.notificationPlatformLogos;
+        const { ttsEnabled } = config.obs;
         const handcamConfig = config.handcam;
         const giftsConfig = config.gifts;
         
         const displayQueueConfig = {
             autoProcess: config.displayQueue.autoProcess,
             maxQueueSize: config.displayQueue.maxQueueSize,
-            chat: {
-                sourceName: chatMsgTxt,
-                sceneName: chatMsgScene,
-                groupName: chatMsgGroup,
-                platformLogos: chatLogos
-            },
-            notification: {
-                sourceName: notificationTxt,
-                sceneName: notificationScene,
-                groupName: notificationMsgGroup,
-                platformLogos: notificationLogos
-            },
+            rowIntervalMs: config.displayQueue.rowIntervalMs,
             obs: config.obs,
             handcam: handcamConfig,
             gifts: giftsConfig,
-            timing: config.timing,
             youtube: config.youtube,
             twitch: config.twitch,
             tiktok: config.tiktok,
@@ -708,7 +674,6 @@ async function main(overrides: MainOverrides = {}) {
         guiGiftAnimationState.guiEnabled = guiGiftAnimationState.enableDock || guiGiftAnimationState.enableOverlay;
         guiGiftAnimationState.giftAnimationsEnabled = guiGiftAnimationState.guiEnabled && guiGiftAnimationState.showGifts;
         
-        logger.debug(`[Display Queue Config] Notification: ${displayQueueConfig.notification.sourceName}, Chat: ${displayQueueConfig.chat.sourceName}`, 'Main');
         logger.debug('[Display Queue Config] GUI gift animation gating state', 'Main', guiGiftAnimationState);
 
         if (guiGiftAnimationState.giftAnimationsEnabled) {

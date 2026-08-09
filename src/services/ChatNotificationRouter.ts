@@ -7,14 +7,11 @@ import { getValidMessageParts, normalizeBadgeImages } from '../utils/message-par
 import { normalizeGreetingIdentityKey } from '../utils/greeting-identity-key-normalizer';
 import type {
     DisplayQueueItem,
-    DisplayQueueSequenceOptions,
     DisplayQueueSequenceWriter,
     DisplayQueueVfxConfig
 } from '../interfaces/DisplayQueue';
 
 const LOG_TRUNCATION_LENGTH = 200;
-const ACCELERATED_CHAT_SEQUENCE = { chatPacing: 'accelerated' } satisfies DisplayQueueSequenceOptions;
-
 type RouterRecord = Record<string, unknown>;
 
 type LoggerLike = {
@@ -262,7 +259,7 @@ class ChatNotificationRouter {
                     displayCommitted = this.enqueueDisplayItems([
                         ...(sourceChatItem ? [sourceChatItem] : []),
                         farewellOutcome.item
-                    ], sourceChatItem ? ACCELERATED_CHAT_SEQUENCE : undefined);
+                    ]);
                     if (displayCommitted) {
                         this.updateGlobalCooldown(farewellOutcome.cooldownKey);
                     }
@@ -295,7 +292,7 @@ class ChatNotificationRouter {
                 displayCommitted = this.enqueueDisplayItems([
                     ...(sourceChatItem ? [sourceChatItem] : []),
                     greetingItem
-                ], sourceChatItem ? ACCELERATED_CHAT_SEQUENCE : undefined);
+                ]);
                 if (displayCommitted) {
                     firstMessageState.consume();
                 }
@@ -598,10 +595,7 @@ class ChatNotificationRouter {
         }
 
         items.push(this.buildCommandItem(platform, normalizedData, commandConfig));
-        const committed = this.enqueueDisplayItems(
-            items,
-            sourceChatItem ? ACCELERATED_CHAT_SEQUENCE : undefined
-        );
+        const committed = this.enqueueDisplayItems(items);
         if (!committed) {
             return false;
         }
@@ -861,7 +855,7 @@ class ChatNotificationRouter {
         return queueItem;
     }
 
-    enqueueDisplayItems(items: DisplayQueueItem[], sequenceOptions?: DisplayQueueSequenceOptions): boolean {
+    enqueueDisplayItems(items: DisplayQueueItem[]): boolean {
         if (!this.runtime.displayQueue || items.length === 0) {
             return false;
         }
@@ -875,7 +869,7 @@ class ChatNotificationRouter {
             return true;
         }
 
-        this.runtime.displayQueue.addSequence(items, sequenceOptions);
+        this.runtime.displayQueue.addSequence(items);
         return true;
     }
 

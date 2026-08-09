@@ -27,7 +27,6 @@ type LoadedConfig = {
     enabled: boolean;
     ttsEnabled: boolean;
     address: string;
-    notificationTxt?: string;
     password?: string;
     [key: string]: unknown;
   };
@@ -638,13 +637,12 @@ ttsEnabled = true
     });
 
     it("should provide OBS integration settings that affect visual output", () => {
-      const obsConfig = `
+       const obsConfig = `
 ${testConfigContent}
 
 [obs]
 enabled = true
 address = ws://localhost:4455
-notificationTxt = Live Notifications
 connectionTimeoutMs = 10000
 notificationMsgGroup = statusbar notification grp
 chatPlatformLogoTwitch = twitch-img
@@ -657,18 +655,9 @@ notificationPlatformLogoTikTok = tiktok-img
       reloadConfig(obsConfig);
 
       const obsSettings = currentConfig.obs;
-      const notificationText = obsSettings.notificationTxt;
-
-      expect(obsSettings.enabled).toBe(true);
-      expect(obsSettings.address).toBe("ws://localhost:4455");
-      expect(notificationText).toBe("Live Notifications");
-      expect(notificationText).toBeDefined();
-
-      if (notificationText === undefined) {
-        throw new Error("Expected OBS notification text to be defined");
-      }
-
-      expectNoTechnicalArtifacts(notificationText);
+       expect(obsSettings.enabled).toBe(true);
+       expect(obsSettings.address).toBe("ws://localhost:4455");
+       expect(obsSettings.ttsEnabled).toBe(false);
     });
 
     it("should handle platform username configuration for user identification", () => {

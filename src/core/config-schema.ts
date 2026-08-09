@@ -120,7 +120,8 @@ const CONFIG_SCHEMA: ConfigSchema = {
 
     displayQueue: {
         autoProcess: { type: 'boolean', default: true },
-        maxQueueSize: { type: 'number', default: 100 }
+        maxQueueSize: { type: 'number', default: 100 },
+        rowIntervalMs: { type: 'number', default: 1000, min: 0 }
     },
 
     gui: {
@@ -149,13 +150,6 @@ const CONFIG_SCHEMA: ConfigSchema = {
         consoleLevel: { type: 'string', userDefined: true },
         fileLevel: { type: 'string', userDefined: true },
         fileLoggingEnabled: { type: 'boolean', userDefined: true }
-    },
-
-    timing: {
-        fadeDuration: { type: 'number', default: 250 },
-        notificationClearDelay: { type: 'number', default: 500 },
-        transitionDelay: { type: 'number', default: 250 },
-        chatMessageDuration: { type: 'number', default: 4500 }
     },
 
     handcam: {
@@ -187,19 +181,7 @@ const CONFIG_SCHEMA: ConfigSchema = {
         ttsEnabled: { type: 'boolean', default: false },
         ttsChatEnabled: { type: 'boolean', default: false },
         ttsNotificationsEnabled: { type: 'boolean', default: true },
-        chatMsgTxt: { type: 'string', default: 'chat-message-text' },
-        chatMsgScene: { type: 'string', default: 'chat-message-scene' },
-        chatMsgGroup: { type: 'string', default: 'chat-message-group' },
-        notificationTxt: { type: 'string', default: 'notification-text' },
-        notificationScene: { type: 'string', default: 'notification-scene' },
-        notificationMsgGroup: { type: 'string', default: 'notification-group' },
-        ttsTxt: { type: 'string', default: 'tts-text' },
-        chatPlatformLogoTwitch: { type: 'string', userDefined: true },
-        chatPlatformLogoYouTube: { type: 'string', userDefined: true },
-        chatPlatformLogoTikTok: { type: 'string', userDefined: true },
-        notificationPlatformLogoTwitch: { type: 'string', userDefined: true },
-        notificationPlatformLogoYouTube: { type: 'string', userDefined: true },
-        notificationPlatformLogoTikTok: { type: 'string', userDefined: true }
+        ttsTxt: { type: 'string', default: 'tts-text' }
     },
 
     goals: {

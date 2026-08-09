@@ -10,6 +10,8 @@ const EMPTY_ROW: GuiRowDto = {
   timestamp: null
 }
 
+const EVENT_ID_DEDUP_LIMIT = 1000
+
 function normalizeString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
 }
@@ -93,22 +95,23 @@ function normalizeRow(input: unknown): GuiRowDto {
     return { ...EMPTY_ROW }
   }
 
-const parts = normalizeParts(row.parts)
-const badgeImages = normalizeBadgeImages(row.badgeImages)
-const isPaypiggy = typeof row.isPaypiggy === 'boolean' ? row.isPaypiggy : null
+  const parts = normalizeParts(row.parts)
+  const badgeImages = normalizeBadgeImages(row.badgeImages)
+  const isPaypiggy = typeof row.isPaypiggy === 'boolean' ? row.isPaypiggy : null
 
-return {
-type: normalizeString(row.type),
-kind,
-platform: normalizeString(row.platform),
-username: normalizeString(row.username),
-text: normalizeString(row.text),
-...(parts ? { parts } : {}),
-...(badgeImages ? { badgeImages } : {}),
-...(isPaypiggy === null ? {} : { isPaypiggy }),
-avatarUrl: normalizeString(row.avatarUrl),
-timestamp: row.timestamp === null ? null : normalizeString(row.timestamp)
-}
+  return {
+    ...(normalizeString(row.eventId) ? { eventId: normalizeString(row.eventId) } : {}),
+    type: normalizeString(row.type),
+    kind,
+    platform: normalizeString(row.platform),
+    username: normalizeString(row.username),
+    text: normalizeString(row.text),
+    ...(parts ? { parts } : {}),
+    ...(badgeImages ? { badgeImages } : {}),
+    ...(isPaypiggy === null ? {} : { isPaypiggy }),
+    avatarUrl: normalizeString(row.avatarUrl),
+    timestamp: row.timestamp === null ? null : normalizeString(row.timestamp)
+  }
 }
 
 export interface GuiFeedStoreOptions {
@@ -123,11 +126,21 @@ function normalizeMaxRows(value: unknown): number {
 export function createGuiFeedStore(options: GuiFeedStoreOptions = {}) {
   let rows: GuiRowDto[] = []
   const maxRows = normalizeMaxRows(options.maxRows)
+  const seenEventIds = new Set<string>()
 
   const pushEvent = (event: unknown): void => {
     const row = normalizeRow(event)
     if (!row.type || !row.avatarUrl) {
       return
+    }
+
+    if (row.eventId) {
+      if (seenEventIds.has(row.eventId)) return
+      seenEventIds.add(row.eventId)
+      if (seenEventIds.size > Math.max(EVENT_ID_DEDUP_LIMIT, maxRows)) {
+        const oldest = seenEventIds.values().next().value
+        if (typeof oldest === 'string') seenEventIds.delete(oldest)
+      }
     }
 
     rows = [...rows, row]

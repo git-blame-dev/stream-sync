@@ -1,9 +1,6 @@
-import { config as coreConfig } from '../core/config';
 import { logger as coreLogger } from '../core/logging';
 import { safeOBSOperation } from './safe-operations';
-import { safeDelay } from '../utils/timeout-validator';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
-import { sanitizeDisplayName as defaultSanitizeDisplayName } from '../utils/validation';
 import {
     ensureOBSConnected as defaultEnsureOBSConnected,
     getOBSConnectionManager as defaultGetOBSConnectionManager,
@@ -37,13 +34,6 @@ type SourcesDependencies = {
         obsCall?: ObsCall;
         getOBSConnectionManager?: () => SourcesObsManager;
     };
-    chatGroupName?: string;
-    notificationGroupName?: string;
-    fadeDelay?: number;
-    utils?: {
-        delay?: (ms: number) => Promise<void>;
-        sanitizeDisplayName?: (name: string, maxLength: number) => string;
-    };
 };
 
 type SceneItemCacheEntry = {
@@ -59,20 +49,9 @@ type SceneItemIdResponse = {
     sceneItemId?: unknown;
 };
 
-type GroupSceneItem = {
-    sourceName?: unknown;
-    sceneItemId?: unknown;
-};
-
-type GroupSceneItemListResponse = {
-    sceneItems?: GroupSceneItem[];
-};
-
 type SourceFilterResponse = {
     filterSettings?: Record<string, unknown>;
 };
-
-type PlatformLogos = Record<string, unknown>;
 
 function getErrorMessage(error: unknown): string {
     if (error instanceof Error) {
@@ -88,10 +67,6 @@ function sanitizeForOBS(text: unknown): string {
     }
     
     return text.replace(/[^\x20-\x7E]/g, '');
-}
-
-function isNonEmptySourceName(sourceName: unknown): sourceName is string {
-    return typeof sourceName === 'string' && sourceName.trim().length > 0;
 }
 
 function createOBSSourcesManager(obsManager: SourcesObsManager, dependencies: SourcesDependencies = {}) {
@@ -126,18 +101,6 @@ function createOBSSourcesManager(obsManager: SourcesObsManager, dependencies: So
     const ensureConnected = ensureOBSConnected;
     const callOBS = obsCall;
 
-    const chatGroupName = dependencies.chatGroupName;
-    const notificationGroupName = dependencies.notificationGroupName;
-    const fadeDelay = dependencies.fadeDelay;
-
-    if (!chatGroupName || !notificationGroupName || fadeDelay === undefined) {
-        throw new Error('OBSSourcesManager requires chatGroupName, notificationGroupName, and fadeDelay');
-    }
-
-    const utils = dependencies.utils || {};
-    const delay = utils.delay || ((ms: number) => safeDelay(ms, ms || 500, 'OBS sources delay'));
-    const sanitizeDisplayName = utils.sanitizeDisplayName || defaultSanitizeDisplayName;
-
     let sourcesErrorHandler = logger ? createPlatformErrorHandler(logger, 'obs-sources') : null;
 
     const handleSourcesError = (message: string, error: unknown, payload: Record<string, unknown> | null = null) => {
@@ -155,8 +118,6 @@ function createOBSSourcesManager(obsManager: SourcesObsManager, dependencies: So
         }
     };
 
-    const delayFunction = delay;
-
     const sceneItemCache = new Map<string, SceneItemCacheEntry>();
     
     function getCacheKey(sceneName: string, sourceName: string) {
@@ -172,15 +133,6 @@ function createOBSSourcesManager(obsManager: SourcesObsManager, dependencies: So
     if (activeConnectionManager && typeof activeConnectionManager.setSourcesCacheInvalidator === 'function') {
         activeConnectionManager.setSourcesCacheInvalidator(clearSceneItemCache);
     }
-
-    function validateGroupName(groupName: string | null | undefined, operationType = 'group operation'): groupName is string {
-        if (!groupName || groupName === null || groupName === undefined || groupName === "") {
-            logger.debug(`[OBS Group] Invalid group name (${groupName}) - skipping ${operationType}`, 'obs-sources');
-            return false;
-        }
-        return true;
-    }
-
 
     async function updateTextSource(sourceName: string, message?: string): Promise<void> {
     const obsManager = getOBSConnectionManager();
@@ -236,21 +188,6 @@ function createOBSSourcesManager(obsManager: SourcesObsManager, dependencies: So
         `Clearing text source "${sourceName}"`
     );
     }
-
-    async function updateChatMsgText(sourceName: string, username: string, message: string): Promise<void> {
-    try {
-        const sanitizedUsername = sanitizeDisplayName(username, 15);
-        const formattedMessage = `${sanitizedUsername}: ${message}`;
-        
-        logger.debug(`[OBS Source] Updating chat message text to: ${formattedMessage}`, 'obs-sources');
-        
-        await updateTextSource(sourceName, formattedMessage);
-    } catch (err) { 
-        handleSourcesError('[OBS Source] Error updating chat message text source', err, { sourceName, context: 'OBS' });
-        throw err;
-    }
-    }
-
 
     async function getSceneItemId(sceneName: string, sourceName: string): Promise<SceneItemCacheEntry> {
     const cacheKey = getCacheKey(sceneName, sourceName);
@@ -309,218 +246,6 @@ function createOBSSourcesManager(obsManager: SourcesObsManager, dependencies: So
         },
         `Setting ${sourceName} visibility to ${visible} in scene ${sceneName}`
     );
-    }
-
-
-    async function getGroupSceneItemId(sourceName: string, groupName: string): Promise<SceneItemCacheEntry> {
-    if (!validateGroupName(groupName, `getGroupSceneItemId for ${sourceName}`)) {
-        throw new Error(`Invalid group name: ${groupName}`);
-    }
-    
-    const cacheKey = getCacheKey(`group:${groupName}`, sourceName);
-    
-    if (sceneItemCache.has(cacheKey)) {
-        const cachedResult = sceneItemCache.get(cacheKey);
-        if (cachedResult) {
-            return cachedResult;
-        }
-    }
-    
-    await ensureConnected();
-    
-    try {
-        const groupItemListResponse = await callOBS('GetGroupSceneItemList', { sceneName: groupName }) as GroupSceneItemListResponse;
-
-        if (!groupItemListResponse || !Array.isArray(groupItemListResponse.sceneItems)) {
-            throw new Error(`Could not retrieve a valid list of items from group '${groupName}'.`);
-        }
-
-        const sourceInGroup = groupItemListResponse.sceneItems.find((item) => item.sourceName === sourceName);
-        
-        if (!sourceInGroup) {
-            throw new Error(`Source '${sourceName}' not found inside group '${groupName}'`);
-        }
-        
-        if (typeof sourceInGroup.sceneItemId !== 'number') {
-            throw new Error(`Source '${sourceName}' in group '${groupName}' has invalid scene item id`);
-        }
-
-        const result = { sceneItemId: sourceInGroup.sceneItemId };
-        
-        sceneItemCache.set(cacheKey, result);
-        
-        return result;
-    } catch (error) {
-        handleSourcesError(
-            `[OBS Group] Error finding source '${sourceName}' in group '${groupName}'`,
-            error,
-            { sourceName, groupName, context: 'OBS' }
-        );
-        throw error;
-    }
-    }
-
-    async function setGroupSourceVisibility(sourceName: string, groupName: string | null | undefined, visible: boolean): Promise<void> {
-    if (!validateGroupName(groupName, `setGroupSourceVisibility for ${sourceName}`)) {
-        return;
-    }
-    const validGroupName = groupName;
-    
-    const obsManager = getOBSConnectionManager();
-    await safeOBSOperation(
-        obsManager,
-        async () => {
-            await ensureConnected();
-            
-            const { sceneItemId } = await getGroupSceneItemId(sourceName, validGroupName);
-            
-
-            await callOBS('SetSceneItemEnabled', {
-                sceneName: validGroupName,
-                sceneItemId: sceneItemId,
-                sceneItemEnabled: visible
-            });
-        },
-        `Setting ${sourceName} visibility in group ${groupName} to ${visible}`
-    );
-    }
-
-
-    async function setPlatformLogoVisibility(activePlatform: string, platformLogos: PlatformLogos): Promise<void> {
-    for (const platform in platformLogos) {
-        const logoSource = platformLogos[platform];
-        if (!isNonEmptySourceName(logoSource)) {
-            continue;
-        }
-        const isVisible = platform.toLowerCase() === activePlatform.toLowerCase();
-        
-        try {
-            await setGroupSourceVisibility(logoSource, chatGroupName, isVisible);
-        } catch (error) {
-            handleSourcesError(
-                `[Platform Logo] Failed to set ${platform} logo visibility in ${chatGroupName}: ${getErrorMessage(error)}`,
-                error,
-                { platform, groupName: chatGroupName, context: 'OBS' }
-            );
-        }
-    }
-    }
-
-    async function setNotificationPlatformLogoVisibility(activePlatform: string, platformLogos: PlatformLogos): Promise<void> {
-    for (const platform in platformLogos) {
-        const logoSource = platformLogos[platform];
-        if (!isNonEmptySourceName(logoSource)) {
-            continue;
-        }
-        const isVisible = platform.toLowerCase() === activePlatform.toLowerCase();
-        
-        try {
-            await setGroupSourceVisibility(logoSource, notificationGroupName, isVisible);
-        } catch (error) {
-            handleSourcesError(
-                `[Notification Logo] Failed to set ${platform} logo visibility in ${notificationGroupName}: ${getErrorMessage(error)}`,
-                error,
-                { platform, groupName: notificationGroupName, context: 'OBS' }
-            );
-        }
-    }
-    }
-
-    async function hideAllPlatformLogos(platformLogos: PlatformLogos): Promise<void> {
-    for (const platform in platformLogos) {
-        const logoSource = platformLogos[platform];
-        if (!isNonEmptySourceName(logoSource)) {
-            continue;
-        }
-        await setGroupSourceVisibility(logoSource, chatGroupName, false);
-    }
-    }
-
-    async function hideAllNotificationPlatformLogos(platformLogos: PlatformLogos): Promise<void> {
-
-        for (const platform in platformLogos) {
-            const logoSource = platformLogos[platform];
-            if (!isNonEmptySourceName(logoSource)) {
-                continue;
-            }
-            await setGroupSourceVisibility(logoSource, notificationGroupName, false);
-        }
-    }
-
-
-    async function setChatDisplayVisibility(visible: boolean, sceneName: string, platformLogos: PlatformLogos): Promise<void> {
-        try {
-            if (chatGroupName) {
-                if (visible) {
-                    logger.debug(`[Chat Display] Showing statusbar group`, 'obs-sources');
-                    await setSourceVisibility(sceneName, chatGroupName, true);
-                } else {
-                    await setSourceVisibility(sceneName, chatGroupName, false);
-
-                    await delayFunction(fadeDelay || 0);
-                    
-                    await hideAllPlatformLogos(platformLogos);
-                }
-            } else {
-                logger.debug(`[Chat Display] Group operations disabled - using direct source access`, 'obs-sources');
-            }
-        } catch (err) {
-            handleSourcesError('[Chat Display] Error setting visibility', err, { context: 'OBS', sceneName, visible });
-            throw err;
-        }
-    }
-
-    async function setNotificationDisplayVisibility(visible: boolean, sceneName: string, platformLogos: PlatformLogos): Promise<void> {
-        try {
-            if (notificationGroupName) {
-                if (visible) {
-                    logger.debug(`[Notification Display] Showing notification statusbar group`, 'obs-sources');
-                    await setSourceVisibility(sceneName, notificationGroupName, true);
-                } else {
-                    await setSourceVisibility(sceneName, notificationGroupName, false);
-
-                    await delayFunction(fadeDelay || 0);
-                    
-                    await hideAllNotificationPlatformLogos(platformLogos);
-                }
-            } else {
-                logger.debug(`[Notification Display] Group operations disabled - using direct source access`, 'obs-sources');
-            }
-        } catch (err) {
-            handleSourcesError('[Notification Display] Error setting visibility', err, { context: 'OBS', sceneName, visible });
-            throw err;
-        }
-    }
-
-    async function hideAllDisplays(
-        chatSceneName: string,
-        notificationSceneName: string,
-        chatPlatformLogos: PlatformLogos,
-        notificationPlatformLogos: PlatformLogos,
-        ttsSourceName: string,
-        notificationSourceName: string
-    ): Promise<void> {
-            try {
-                await Promise.all([
-                    setChatDisplayVisibility(false, chatSceneName, chatPlatformLogos),
-                    setNotificationDisplayVisibility(false, notificationSceneName, notificationPlatformLogos)
-                ]);
-                
-                await Promise.all([
-                    clearTextSource(ttsSourceName),
-                    clearTextSource(notificationSourceName)
-                ]);
-                
-                await delayFunction(200);
-                
-        } catch (err) {
-            handleSourcesError('[Display Control] Error hiding displays', err, {
-                chatSceneName,
-                notificationSceneName,
-                context: 'OBS'
-            });
-            throw err;
-        }
     }
 
 
@@ -596,22 +321,9 @@ function createOBSSourcesManager(obsManager: SourcesObsManager, dependencies: So
     return {
         updateTextSource,
         clearTextSource,
-        updateChatMsgText,
         
         getSceneItemId,
         setSourceVisibility,
-        
-        getGroupSceneItemId,
-        setGroupSourceVisibility,
-        
-        setPlatformLogoVisibility,
-        setNotificationPlatformLogoVisibility,
-        hideAllPlatformLogos,
-        hideAllNotificationPlatformLogos,
-        
-        setChatDisplayVisibility,
-        setNotificationDisplayVisibility,
-        hideAllDisplays,
         
         setSourceFilterEnabled,
         getSourceFilterSettings,
@@ -635,19 +347,8 @@ type SourcesManagerApi = ReturnType<typeof createOBSSourcesManager> & {
 let defaultInstance: SourcesManagerApi | null = null;
 let defaultConnectionManagerForCacheInvalidation: SourcesObsManager | null = null;
 
-type DefaultSourcesConfig = {
-    obs: {
-        chatMsgGroup: string;
-        notificationMsgGroup: string;
-    };
-    timing: {
-        fadeDuration: number;
-    };
-};
-
 type DefaultSourcesManagerDependencies = {
     logger?: SourcesLogger;
-    config?: DefaultSourcesConfig;
     ensureOBSConnected?: () => Promise<void>;
     obsCall?: ObsCall;
     getOBSConnectionManager?: () => SourcesObsManager;
@@ -656,14 +357,9 @@ type DefaultSourcesManagerDependencies = {
 function getDefaultSourcesManager(dependencies: DefaultSourcesManagerDependencies = {}) {
     if (!defaultInstance) {
         const logger = dependencies.logger || coreLogger;
-        const config: DefaultSourcesConfig = dependencies.config || (coreConfig as DefaultSourcesConfig);
         const ensureOBSConnected = dependencies.ensureOBSConnected || defaultEnsureOBSConnected;
         const obsCall = dependencies.obsCall || defaultObsCall;
         const getOBSConnectionManager = dependencies.getOBSConnectionManager || defaultGetOBSConnectionManager;
-
-        const chatGroupName = config.obs.chatMsgGroup;
-        const notificationGroupName = config.obs.notificationMsgGroup;
-        const fadeDelay = config.timing.fadeDuration;
 
         let obsManager: SourcesObsManager | null;
         let isDegraded = false;
@@ -693,9 +389,6 @@ function getDefaultSourcesManager(dependencies: DefaultSourcesManagerDependencie
 
         defaultInstance = createOBSSourcesManager(obsManager, {
             logger,
-            chatGroupName,
-            notificationGroupName,
-            fadeDelay,
             ensureOBSConnected,
             obsCall
         });

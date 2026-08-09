@@ -1,18 +1,15 @@
 import type {
-    DisplayQueueChatPacing,
     DisplayQueueItem,
-    DisplayQueueSequence,
-    DisplayQueueSequenceOptions
+    DisplayQueueSequence
 } from '../interfaces/DisplayQueue';
 
 type DisplayItem = DisplayQueueItem | DisplayQueueSequence;
-type AddSequenceOptions = DisplayQueueSequenceOptions & {
+type AddSequenceOptions = {
     reservedRows?: number;
 };
 
 class DisplayQueueState {
     queue: DisplayItem[] = [];
-    lastChatItem: DisplayQueueItem | null = null;
     maxQueueSize: number | null;
     getPriority: ((itemType: string) => number) | null;
 
@@ -50,10 +47,6 @@ class DisplayQueueState {
         if (item.priority === undefined && this.getPriority) {
             item.priority = this.getPriority(item.type);
         }
-        if (item.type === 'chat') {
-            this.lastChatItem = { ...item };
-        }
-
         const insertIndex = this._findInsertIndex(item.priority);
         this.queue.splice(insertIndex, 0, item);
         return { insertIndex };
@@ -66,9 +59,6 @@ class DisplayQueueState {
             Number.isInteger(requestedReservedRows) && requestedReservedRows >= 0
             ? requestedReservedRows
             : 0;
-        const chatPacing: DisplayQueueChatPacing = safeOptions.chatPacing === 'accelerated'
-            ? 'accelerated'
-            : 'normal';
         if (!Array.isArray(children) || children.length === 0) {
             throw new Error('Invalid display sequence: expected non-empty children');
         }
@@ -83,17 +73,11 @@ class DisplayQueueState {
         const sequence: DisplayQueueSequence = {
             type: '__display_queue_sequence__',
             priority: Math.max(...normalized.map((item) => item.priority ?? 0)),
-            children: normalized,
-            chatPacing
+            children: normalized
         };
         const insertIndex = this._findInsertIndex(sequence.priority);
         this.queue.splice(insertIndex, 0, sequence);
 
-        for (const item of normalized) {
-            if (item.type === 'chat') {
-                this.lastChatItem = { ...item };
-            }
-        }
         return { insertIndex };
     }
 
@@ -103,7 +87,6 @@ class DisplayQueueState {
 
     clear() {
         this.queue.length = 0;
-        this.lastChatItem = null;
     }
 
     assertCapacity(additionalRows: number) {

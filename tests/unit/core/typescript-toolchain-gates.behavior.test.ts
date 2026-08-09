@@ -208,9 +208,7 @@ describe('TypeScript toolchain gates behavior', () => {
         const removedWrapperPaths = [
             'src/core/EventBus.js',
             'src/core/config-builders.js',
-            'src/obs/display-config-validator.js',
             'src/obs/display-queue-state.js',
-            'src/obs/display-renderer.js',
             'src/obs/obs-event-service.js',
             'src/obs/safe-operations.js',
             'src/utils/currency-utils.js',
@@ -2382,9 +2380,7 @@ describe('TypeScript toolchain gates behavior', () => {
 
     it('keeps obs helper and rendering leaf modules free of commonjs module syntax', () => {
         const modulePaths = [
-            'src/obs/display-config-validator.ts',
             'src/obs/display-queue-state.ts',
-            'src/obs/display-renderer.ts',
             'src/obs/effects.ts',
             'src/obs/handcam-glow.ts',
             'src/obs/health-checker.ts',

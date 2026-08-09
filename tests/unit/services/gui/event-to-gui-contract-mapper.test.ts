@@ -32,6 +32,23 @@ function createMapper(configOverrides = {}, optionsOverrides = {}) {
 }
 
 describe("Event-to-GUI contract mapper behavior", () => {
+  it("preserves the queue event ID on mapped GUI rows", async () => {
+    const mapper = createMapper();
+
+    const mapped = await mapper.mapDisplayRow({
+      eventId: "test-event-id",
+      type: "chat",
+      platform: "twitch",
+      data: {
+        username: "test-user",
+        avatarUrl: "https://example.invalid/avatar.png",
+        message: "hello",
+      },
+    });
+
+    expect(mapped?.eventId).toBe("test-event-id");
+  });
+
   it("maps every supported source row to stable GUI kind contracts", async () => {
     const mapper = createMapper();
 

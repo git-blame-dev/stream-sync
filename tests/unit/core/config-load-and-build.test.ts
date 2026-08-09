@@ -13,7 +13,7 @@ type LoadedConfigModule = typeof configModuleRef;
 
 type BuiltConfigShape = {
     general: { viewerCountPollingIntervalMs: number };
-    obs: { chatPlatformLogos: { twitch: string } };
+    obs: { enabled: boolean; address: string; ttsEnabled: boolean };
     gifts: { giftVideoSource: string };
     envelopes: { command: string };
     gui: { enableDock: boolean; overlayMaxMessages: number };
@@ -62,6 +62,7 @@ describe('config load and build behavior', () => {
 configModule = configModuleRef;
             const rawConfig = getRawTestConfig();
             rawConfig.general.debugEnabled = 'true';
+            rawConfig.obs.enabled = 'true';
             rawConfig.tiktok.enabled = 'true';
             rawConfig.tiktok.username = 'test-tiktok-user';
             rawConfig.displayQueue = { autoProcess: 'true', maxQueueSize: '100' };
@@ -108,7 +109,9 @@ configModule = configModuleRef;
 
             expect(normalized.general.debugEnabled).toBe(true);
             expect(built.general.viewerCountPollingIntervalMs).toBe(60000);
-            expect(built.obs.chatPlatformLogos.twitch).toBe('test-twitch-img');
+            expect(built.obs.enabled).toBe(true);
+            expect(built.obs.address).toBe('ws://localhost:4455');
+            expect(built.obs.ttsEnabled).toBe(false);
             expect(built.gifts.giftVideoSource).toBe('test-gift-video');
             expect(built.envelopes.command).toBe('!testenvelope');
             expect(built.gui.enableDock).toBe(true);

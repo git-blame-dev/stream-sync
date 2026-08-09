@@ -174,7 +174,6 @@ describe("Monetisation pipeline integration", () => {
     );
     displayQueue.playGiftVideoAndAudio = createMockFn().mockResolvedValue();
     displayQueue.isTTSEnabled = createMockFn(() => false);
-    displayQueue.getDuration = createMockFn(() => 0);
     const originalAddItem = displayQueue.addItem.bind(displayQueue);
     addItemMock = createMockFn<[DisplayQueueAddItem], void>((item) => {
       originalAddItem(item);

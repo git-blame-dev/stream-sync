@@ -51,6 +51,8 @@ describe("DisplayQueue gift flow (smoke E2E)", () => {
     );
 
     const actions: QueueAction[] = [];
+    const rows: Record<string, unknown>[] = [];
+    emitter.on("display:row", (row: Record<string, unknown>) => rows.push(row));
     const unexpectedSourceManagerCall = (methodName: string): never => {
       throw new Error(`Unexpected source manager call in gift flow smoke test: ${methodName}`);
     };
@@ -178,7 +180,6 @@ describe("DisplayQueue gift flow (smoke E2E)", () => {
         delay: async () => {},
       },
     );
-    queue.getDuration = () => 0;
 
     queue.addItem({
       type: "platform:gift",
@@ -203,6 +204,7 @@ describe("DisplayQueue gift flow (smoke E2E)", () => {
     });
 
     await queue.processQueue();
+    await queue.effectChain;
 
     expect(queue.queue).toHaveLength(0);
     expect(goalCalls).toEqual([{ platform: "tiktok", amount: 100, currency: "coins" }]);
@@ -215,21 +217,19 @@ describe("DisplayQueue gift flow (smoke E2E)", () => {
       }),
     );
 
-    const notificationText = actions.find(
-      (action) => action.type === "text" && action.source === "notif-source",
-    );
     const ttsText = actions.find(
       (action) => action.type === "text" && action.source === "tts-source",
     );
 
-    expect(notificationText?.text).toBe("test-user sent a gift");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toEqual(
+      expect.objectContaining({
+        type: "platform:gift",
+        platform: "tiktok",
+        data: expect.objectContaining({ displayMessage: "test-user sent a gift" }),
+      }),
+    );
     expect(ttsText?.text).toBe("test-user sent a gift");
-    expect(
-      actions.some(
-        (action) =>
-          action.type === "notificationDisplay" && action.visible === true,
-      ),
-    ).toBe(true);
     expect(obsCalls.length).toBe(2);
   });
 });

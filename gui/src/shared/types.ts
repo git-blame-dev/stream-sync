@@ -11,6 +11,7 @@ export interface GuiBadgeImage {
 }
 
 export interface GuiRowDto {
+  eventId?: string
   type: string
   kind: GuiRowKind
   platform: string

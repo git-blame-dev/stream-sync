@@ -3,17 +3,6 @@ import { ConfigValidator } from "../../src/utils/config-validator";
 import { buildConfig as _buildConfig } from "../../src/core/config-builders.ts";
 import { getRawTestConfig } from "../helpers/config-fixture";
 
-type PlatformLogoMappings = {
-  twitch?: unknown;
-  youtube?: unknown;
-  tiktok?: unknown;
-};
-
-function expectPlatformLogoMappings(value: unknown): asserts value is PlatformLogoMappings {
-  expect(value).toBeDefined();
-  expect(typeof value).toBe("object");
-}
-
 describe("Config build pipeline integration", () => {
   describe("buildConfig includes all sections required by main.js", () => {
     it("contains all config sections accessed by main.js", () => {
@@ -31,7 +20,6 @@ describe("Config build pipeline integration", () => {
       expect(built.gifts).toBeDefined();
       expect(built.envelopes).toBeDefined();
       expect(built.displayQueue).toBeDefined();
-      expect(built.timing).toBeDefined();
       expect(built.spam).toBeDefined();
       expect(built.cooldowns).toBeDefined();
       expect(built.vfx).toBeDefined();
@@ -52,6 +40,8 @@ describe("Config build pipeline integration", () => {
       expect(built.displayQueue.maxQueueSize).toBeDefined();
       expect(typeof built.displayQueue.autoProcess).toBe("boolean");
       expect(typeof built.displayQueue.maxQueueSize).toBe("number");
+      expect(built.displayQueue.rowIntervalMs).toBeDefined();
+      expect(typeof built.displayQueue.rowIntervalMs).toBe("number");
     });
 
     it("platform sections contain fields needed for DisplayQueue gating", () => {
@@ -68,30 +58,6 @@ describe("Config build pipeline integration", () => {
       expect(built.tiktok.enabled).toBeDefined();
     });
 
-    it("timing section contains fields needed for display timing", () => {
-      const rawConfig = getRawTestConfig();
-      const normalized = ConfigValidator.normalize(rawConfig);
-      const built = _buildConfig(normalized);
-
-      expect(built.timing.transitionDelay).toBeDefined();
-      expect(built.timing.notificationClearDelay).toBeDefined();
-      expect(built.timing.chatMessageDuration).toBeDefined();
-      expect(typeof built.timing.transitionDelay).toBe("number");
-      expect(typeof built.timing.notificationClearDelay).toBe("number");
-      expect(typeof built.timing.chatMessageDuration).toBe("number");
-    });
-
-    it("obs section contains platform logo mappings", () => {
-      const rawConfig = getRawTestConfig();
-      const normalized = ConfigValidator.normalize(rawConfig);
-      const built = _buildConfig(normalized);
-
-      expectPlatformLogoMappings(built.obs.chatPlatformLogos);
-      expect(built.obs.notificationPlatformLogos).toBeDefined();
-      expect(built.obs.chatPlatformLogos.twitch).toBeDefined();
-      expect(built.obs.chatPlatformLogos.youtube).toBeDefined();
-      expect(built.obs.chatPlatformLogos.tiktok).toBeDefined();
-    });
 
     it("general section contains required startup fields", () => {
       const rawConfig = getRawTestConfig();
@@ -100,9 +66,6 @@ describe("Config build pipeline integration", () => {
 
       expect(built.general.debugEnabled).toBeDefined();
       expect(built.general.envFilePath).toBeDefined();
-      expect(built.obs.ttsEnabled).toBeDefined();
-      expect(built.obs.chatMsgTxt).toBeDefined();
-      expect(built.obs.chatMsgScene).toBeDefined();
       expect(built.general.envFileReadEnabled).toBeDefined();
       expect(built.general.envFileWriteEnabled).toBeDefined();
     });
@@ -149,18 +112,15 @@ describe("Config build pipeline integration", () => {
     it("number fields remain numbers through pipeline", () => {
       const rawConfig = {
         ...getRawTestConfig(),
-        displayQueue: { maxQueueSize: "200" },
-        timing: { transitionDelay: "500", chatMessageDuration: "6000" },
+         displayQueue: { maxQueueSize: "200", rowIntervalMs: "6000" },
       };
       const normalized = ConfigValidator.normalize(rawConfig);
       const built = _buildConfig(normalized);
 
       expect(typeof built.displayQueue.maxQueueSize).toBe("number");
       expect(built.displayQueue.maxQueueSize).toBe(200);
-      expect(typeof built.timing.transitionDelay).toBe("number");
-      expect(built.timing.transitionDelay).toBe(500);
-      expect(typeof built.timing.chatMessageDuration).toBe("number");
-      expect(built.timing.chatMessageDuration).toBe(6000);
+      expect(typeof built.displayQueue.rowIntervalMs).toBe("number");
+      expect(built.displayQueue.rowIntervalMs).toBe(6000);
     });
   });
 
@@ -175,16 +135,6 @@ describe("Config build pipeline integration", () => {
       expect(built.displayQueue.maxQueueSize).toBe(100);
     });
 
-    it("timing defaults applied when section missing", () => {
-      const rawConfig = getRawTestConfig();
-      delete rawConfig.timing;
-      const normalized = ConfigValidator.normalize(rawConfig);
-      const built = _buildConfig(normalized);
-
-      expect(built.timing.transitionDelay).toBeDefined();
-      expect(built.timing.notificationClearDelay).toBeDefined();
-      expect(built.timing.chatMessageDuration).toBeDefined();
-    });
   });
 
   describe("platform configs include inherited flags", () => {

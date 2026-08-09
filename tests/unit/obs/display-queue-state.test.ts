@@ -85,7 +85,6 @@ describe("DisplayQueueState", () => {
       "first",
       "second",
     ]);
-    expect(expectRecordData(state.lastChatItem).message).toBe("second");
   });
 
   it("enforces maxQueueSize limits", () => {
@@ -124,28 +123,6 @@ describe("DisplayQueueState", () => {
 
     expect(state.queue).toHaveLength(1);
     expect(expectRecordData(state.queue[0]).message).toBe("first");
-    expect(expectRecordData(state.lastChatItem).message).toBe("first");
   });
 
-  it("stores accelerated mode on a sequence and defaults unmarked sequences to normal", () => {
-    const state = new DisplayQueueState({ maxQueueSize: 10, getPriority });
-    const child = { type: "chat", platform: "test", data: { username: "test-user" } };
-
-    Reflect.apply(state.addSequence, state, [[child], { chatPacing: "accelerated" }]);
-    Reflect.apply(state.addSequence, state, [[child]]);
-
-    expect((state.queue[0] as Record<string, unknown>).chatPacing).toBe("accelerated");
-    expect((state.queue[1] as Record<string, unknown>).chatPacing).toBe("normal");
-  });
-
-  it("normalizes malformed sequence options to normal pacing", () => {
-    const state = new DisplayQueueState({ maxQueueSize: 10, getPriority });
-    const child = { type: "chat", platform: "test", data: { username: "test-user" } };
-
-    Reflect.apply(state.addSequence, state, [[child], null]);
-    Reflect.apply(state.addSequence, state, [[child], { chatPacing: "turbo" }]);
-
-    expect((state.queue[0] as Record<string, unknown>).chatPacing).toBe("normal");
-    expect((state.queue[1] as Record<string, unknown>).chatPacing).toBe("normal");
-  });
 });

@@ -3,7 +3,7 @@ import { InnertubeFactory } from '../factories/innertube-factory';
 import { PlatformEvents } from '../interfaces/PlatformEvents';
 import { OBSViewerCountObserver } from '../observers/obs-viewer-count-observer';
 import { getOBSConnectionManager, initializeOBSConnection } from '../obs/connection';
-import { clearStartupDisplays } from '../obs/startup';
+import { clearStartupTTS } from '../obs/startup';
 import { getDefaultGoalsManager } from '../obs/goals';
 import { ChatNotificationRouter } from '../services/ChatNotificationRouter';
 import { PlatformEventRouter } from '../services/PlatformEventRouter';
@@ -43,12 +43,7 @@ type RuntimeObsConfig = RuntimeRecord & {
     password?: string;
     enabled?: boolean;
     connectionTimeoutMs?: number;
-    chatMsgScene: string;
-    notificationScene: string;
-    chatPlatformLogos: Record<string, string>;
-    notificationPlatformLogos: Record<string, string>;
     ttsTxt: string;
-    notificationTxt: string;
 };
 
 type RuntimeHandcamConfig = RuntimeRecord & {
@@ -99,14 +94,7 @@ type RuntimeObsManager = {
 type RuntimeDisplayQueue = DisplayQueueSequenceWriter;
 
 type RuntimeSourcesManager = {
-    hideAllDisplays: (
-        chatSceneName: string,
-        notificationSceneName: string,
-        chatPlatformLogos: Record<string, string>,
-        notificationPlatformLogos: Record<string, string>,
-        ttsSourceName: string,
-        notificationSourceName: string
-    ) => Promise<void>;
+    clearTextSource: (sourceName: string) => Promise<void>;
 };
 
 type RuntimeEventBus = {
@@ -948,13 +936,13 @@ class AppRuntime {
             const obsManager = this._getObsConnectionManager();
             const sourcesManager = this._getObsSourcesManager();
 
-            this.logger.info('Clearing previous displays...', 'AppRuntime');
-            await clearStartupDisplays(this.config, {
+            this.logger.info('Clearing previous TTS...', 'AppRuntime');
+            await clearStartupTTS(this.config, {
                 logger: this.logger,
                 obsManager,
                 ...(sourcesManager ? { sourcesManager } : {})
             });
-            this.logger.info('Displays cleared', 'AppRuntime');
+            this.logger.info('TTS cleared', 'AppRuntime');
 
             this.logger.info('Initializing goal display...', 'AppRuntime');
             const goalsManager = this._getDefaultGoalsManager();

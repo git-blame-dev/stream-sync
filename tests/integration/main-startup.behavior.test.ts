@@ -50,13 +50,8 @@ const buildMainConfig = (overrides: ConfigFixtureOverrides = {}) =>
     displayQueue: {
       autoProcess: false,
       maxQueueSize: 5,
+      rowIntervalMs: 1000,
       ...overrides.displayQueue,
-    },
-    timing: {
-      transitionDelay: 1000,
-      notificationClearDelay: 500,
-      chatMessageDuration: 1000,
-      ...overrides.timing,
     },
     http: {
       userAgents: ["test-agent"],

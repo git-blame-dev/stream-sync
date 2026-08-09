@@ -13,9 +13,9 @@ type FsLike = {
 
 type ConfigShape = {
   obs: {
-    chatMsgScene: string;
+    address: string;
     ttsEnabled: boolean;
-    chatMsgTxt: string;
+    connectionTimeoutMs: number;
   };
 };
 
@@ -48,11 +48,8 @@ function buildMinimalConfig(
     },
     obs: {
       enabled: "false",
-      chatMsgScene: "__smoke_scene__",
-      chatMsgTxt: "smoke chat txt",
       chatMsgGroup: "",
       ttsEnabled: "false",
-      notificationTxt: "smoke notification txt",
       notificationScene: "smoke notification scene",
       notificationMsgGroup: "smoke notification group",
       chatPlatformLogoTwitch: "smoke chat twitch",
@@ -150,9 +147,9 @@ describe("Config path override", () => {
   });
 
   it("loads config from CHAT_BOT_CONFIG_PATH when set", () => {
-    const uniqueScene = "__smoke_scene_override__";
-    const configContent = buildMinimalConfig({
-      obs: { chatMsgScene: uniqueScene },
+     const uniqueAddress = "ws://override:4455";
+     const configContent = buildMinimalConfig({
+       obs: { address: uniqueAddress },
     });
     const testConfigPath = "/test/override/config.ini";
 
@@ -167,12 +164,12 @@ describe("Config path override", () => {
     process.env.CHAT_BOT_CONFIG_PATH = testConfigPath;
     const { config } = loadFreshConfig();
 
-    expect(config.obs.chatMsgScene).toBe(uniqueScene);
+     expect(config.obs.address).toBe(uniqueAddress);
   });
 
   it("provides startup-critical defaults when values are missing", () => {
     const configContent = buildMinimalConfig({
-      obs: { chatMsgScene: "__smoke_scene_defaults__" },
+       obs: { address: "ws://defaults:4455" },
     });
     const testConfigPath = "/test/defaults/config.ini";
 
@@ -188,9 +185,8 @@ describe("Config path override", () => {
     const { config } = loadFreshConfig();
 
     expect(typeof config.obs.ttsEnabled).toBe("boolean");
-    expect(typeof config.obs.chatMsgTxt).toBe("string");
-    expect(config.obs.chatMsgTxt.length).toBeGreaterThan(0);
-    expect(typeof config.obs.chatMsgScene).toBe("string");
-    expect(config.obs.chatMsgScene.length).toBeGreaterThan(0);
+     expect(typeof config.obs.address).toBe("string");
+     expect(config.obs.address.length).toBeGreaterThan(0);
+     expect(config.obs.connectionTimeoutMs).toBe(1000);
   });
 });

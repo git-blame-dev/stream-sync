@@ -90,19 +90,24 @@ describe("DisplayQueue platform notification gating", () => {
       getAllCurrentGoalStatuses: createMockFn<[], Record<string, unknown>>(() => ({})),
     };
 
+    const eventBus = new EventEmitter();
     const queue = new DisplayQueue(
       obsManager,
       config,
       { PRIORITY_LEVELS },
-      new EventEmitter(),
+       eventBus,
       { sourcesManager: mockSourcesManager, goalsManager: mockGoalsManager },
     );
 
-    return { queue, mockSourcesManager, mockGoalsManager };
+    return { queue, mockSourcesManager, mockGoalsManager, eventBus };
   }
 
   it("displays notification for configured platform", async () => {
-    const { queue, mockSourcesManager } = createQueue({});
+    const { queue, mockSourcesManager, eventBus } = createQueue({
+      twitch: { messagesEnabled: true },
+    });
+    const rows: Record<string, unknown>[] = [];
+    eventBus.on("display:row", (row: Record<string, unknown>) => rows.push(row));
 
     const notificationItem = {
       type: "platform:follow",
@@ -117,13 +122,15 @@ describe("DisplayQueue platform notification gating", () => {
 
     await queue.displayNotificationItem(notificationItem);
 
-    expect(
-      mockSourcesManager.setNotificationDisplayVisibility,
-    ).toHaveBeenCalled();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toEqual(expect.objectContaining({ type: "platform:follow", platform: "twitch" }));
+    expect(mockSourcesManager.setNotificationDisplayVisibility).not.toHaveBeenCalled();
   });
 
   it("displays notification for platforms without explicit config", async () => {
-    const { queue, mockSourcesManager } = createQueue({});
+    const { queue, mockSourcesManager, eventBus } = createQueue({});
+    const rows: Record<string, unknown>[] = [];
+    eventBus.on("display:row", (row: Record<string, unknown>) => rows.push(row));
 
     const notificationItem = {
       type: "platform:follow",
@@ -138,8 +145,8 @@ describe("DisplayQueue platform notification gating", () => {
 
     await queue.displayNotificationItem(notificationItem);
 
-    expect(
-      mockSourcesManager.setNotificationDisplayVisibility,
-    ).toHaveBeenCalled();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toEqual(expect.objectContaining({ type: "platform:follow", platform: "youtube" }));
+    expect(mockSourcesManager.setNotificationDisplayVisibility).not.toHaveBeenCalled();
   });
 });

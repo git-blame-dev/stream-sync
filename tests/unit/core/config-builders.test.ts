@@ -110,30 +110,21 @@ describe('config-builders', () => {
     });
 
     describe('buildObsConfig', () => {
-        it('maps individual logo fields into nested platform objects', () => {
+        it('preserves OBS integration fields without presentation mappings', () => {
             const normalized = {
                 obs: {
                     enabled: true,
-                    chatPlatformLogoTwitch: 'test-twitch-chat.png',
-                    chatPlatformLogoYouTube: 'test-youtube-chat.png',
-                    chatPlatformLogoTikTok: 'test-tiktok-chat.png',
-                    notificationPlatformLogoTwitch: 'test-twitch-notif.png',
-                    notificationPlatformLogoYouTube: 'test-youtube-notif.png',
-                    notificationPlatformLogoTikTok: 'test-tiktok-notif.png'
+                    address: 'ws://test:4455',
+                    connectionTimeoutMs: 10000,
+                    ttsEnabled: false
                 }
             };
             const result = buildObsConfig(normalized);
 
-            expect(result.chatPlatformLogos).toEqual({
-                twitch: 'test-twitch-chat.png',
-                youtube: 'test-youtube-chat.png',
-                tiktok: 'test-tiktok-chat.png'
-            });
-            expect(result.notificationPlatformLogos).toEqual({
-                twitch: 'test-twitch-notif.png',
-                youtube: 'test-youtube-notif.png',
-                tiktok: 'test-tiktok-notif.png'
-            });
+            expect(result.enabled).toBe(true);
+            expect(result.address).toBe('ws://test:4455');
+            expect(result.connectionTimeoutMs).toBe(10000);
+            expect(result.ttsEnabled).toBe(false);
         });
 
         it('spreads remaining obs fields through', () => {
@@ -141,12 +132,8 @@ describe('config-builders', () => {
                 obs: {
                     enabled: false,
                     address: 'ws://test:4455',
-                    chatPlatformLogoTwitch: '',
-                    chatPlatformLogoYouTube: '',
-                    chatPlatformLogoTikTok: '',
-                    notificationPlatformLogoTwitch: '',
-                    notificationPlatformLogoYouTube: '',
-                    notificationPlatformLogoTikTok: ''
+                    connectionTimeoutMs: 10000,
+                    ttsEnabled: true
                 }
             };
             const result = buildObsConfig(normalized);

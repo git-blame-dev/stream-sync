@@ -144,20 +144,6 @@ describe("Config field presence - all normalizers return expected fields", () =>
       "enabled",
       "address",
       "connectionTimeoutMs",
-      "ttsEnabled",
-      "chatMsgTxt",
-      "chatMsgScene",
-      "chatMsgGroup",
-      "notificationTxt",
-      "notificationScene",
-      "notificationMsgGroup",
-      "ttsTxt",
-      "chatPlatformLogoTwitch",
-      "chatPlatformLogoYouTube",
-      "chatPlatformLogoTikTok",
-      "notificationPlatformLogoTwitch",
-      "notificationPlatformLogoYouTube",
-      "notificationPlatformLogoTikTok",
     ];
 
     it("returns all expected fields", () => {
@@ -361,23 +347,6 @@ describe("Config field presence - all normalizers return expected fields", () =>
     });
   });
 
-  describe("_normalizeTimingSection", () => {
-    const EXPECTED_FIELDS = [
-      "fadeDuration",
-      "notificationClearDelay",
-      "transitionDelay",
-      "chatMessageDuration",
-    ];
-
-    it("returns all expected fields", () => {
-      const result = ConfigValidator._normalizeTimingSection({});
-
-      EXPECTED_FIELDS.forEach((field) => {
-        expect(result).toHaveProperty(field);
-      });
-    });
-  });
-
   describe("_normalizeCooldownsSection", () => {
     const EXPECTED_FIELDS = [
       "defaultCooldown",
@@ -420,7 +389,7 @@ describe("Config field presence - all normalizers return expected fields", () =>
   });
 
   describe("_normalizeDisplayQueueSection", () => {
-    const EXPECTED_FIELDS = ["autoProcess", "maxQueueSize"];
+    const EXPECTED_FIELDS = ["autoProcess", "maxQueueSize", "rowIntervalMs"];
 
     it("returns all expected fields", () => {
       const result = ConfigValidator._normalizeDisplayQueueSection({});

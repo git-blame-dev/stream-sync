@@ -3,7 +3,6 @@ import { createMockFn, type TestMockFn } from "../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../helpers/mock-factories";
 import { createConfigFixture } from "../../helpers/config-fixture";
 import { ChatNotificationRouter } from "../../../src/services/ChatNotificationRouter.ts";
-import type { DisplayQueueSequenceOptions } from "../../../src/interfaces/DisplayQueue";
 
 type TestConfig = ReturnType<typeof createConfigFixture>;
 type QueueItem = Record<string, unknown> & { type?: string; priority?: number };
@@ -11,7 +10,7 @@ type RouterRuntime = {
   config: TestConfig;
   displayQueue: {
     addItem: TestMockFn<[QueueItem], void>;
-    addSequence: TestMockFn<[QueueItem[], DisplayQueueSequenceOptions?], void>;
+    addSequence: TestMockFn<[QueueItem[]], void>;
   };
   platformLifecycleService: { getPlatformConnectionTime: TestMockFn<[platform: string], null> };
   commandCooldownService: {
@@ -63,7 +62,7 @@ describe("ChatNotificationRouter lingering/priority/TTS", () => {
       },
       displayQueue: {
         addItem,
-        addSequence: createMockFn<[QueueItem[], DisplayQueueSequenceOptions?], void>((items) => {
+        addSequence: createMockFn<[QueueItem[]], void>((items) => {
           items.forEach((item) => addItem(item));
         }),
       },
@@ -119,7 +118,6 @@ describe("ChatNotificationRouter lingering/priority/TTS", () => {
       "chat",
       "greeting",
     ]);
-    expect(runtime.displayQueue.addSequence.mock.calls[0]?.[1]).toEqual({ chatPacing: "accelerated" });
   });
 
   it("does not enqueue greeting when platform greeting disabled", async () => {

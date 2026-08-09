@@ -107,7 +107,7 @@ describe("ConfigValidator normalize + validate integration", () => {
       cooldowns: { cmdCooldown: "120" },
       obs: { connectionTimeoutMs: "5000" },
       commands: {},
-      timing: { fadeDuration: "500", chatMessageDuration: "3000" },
+       displayQueue: { rowIntervalMs: "3000" },
     };
 
     const normalized = ConfigValidator.normalize(rawConfig);
@@ -115,8 +115,7 @@ describe("ConfigValidator normalize + validate integration", () => {
     expect(normalized.cooldowns.cmdCooldown).toBe(120);
     expect(normalized.general.maxMessageLength).toBe(1000);
     expect(normalized.obs.connectionTimeoutMs).toBe(5000);
-    expect(normalized.timing.fadeDuration).toBe(500);
-    expect(normalized.timing.chatMessageDuration).toBe(3000);
+    expect(normalized.displayQueue.rowIntervalMs).toBe(3000);
   });
 
   it("invalid string values fall back to defaults", () => {
@@ -290,10 +289,7 @@ describe("ConfigValidator normalize + validate integration", () => {
       tiktok: { enabled: "true", username: "test-tiktok" },
       twitch: { enabled: "false" },
       youtube: { enabled: "false" },
-      timing: {
-        fadeDuration: "500",
-        chatMessageDuration: "5000",
-      },
+      displayQueue: { rowIntervalMs: "5000" },
       cooldowns: {
         cmdCooldown: "30",
         defaultCooldown: "60",
@@ -313,7 +309,7 @@ describe("ConfigValidator normalize + validate integration", () => {
     expect(typeof normalized.http.defaultTimeoutMs).toBe("number");
     expect(typeof normalized.obs.enabled).toBe("boolean");
     expect(typeof normalized.obs.connectionTimeoutMs).toBe("number");
-    expect(typeof normalized.timing.fadeDuration).toBe("number");
+    expect(typeof normalized.displayQueue.rowIntervalMs).toBe("number");
     expect(typeof normalized.cooldowns.defaultCooldown).toBe("number");
   });
 

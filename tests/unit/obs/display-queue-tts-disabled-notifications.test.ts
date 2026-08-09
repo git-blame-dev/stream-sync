@@ -162,8 +162,6 @@ describe("DisplayQueue notification TTS disabled", () => {
         ? { delay: async () => {} }
         : { sourcesManager: mockSourcesManager, delay: async () => {} },
     );
-    chatQueue.renderer.displayChatItem = createMockFn().mockResolvedValue(true);
-
     await chatQueue.displayChatItem({
       type: "chat",
       platform: "twitch",
@@ -172,6 +170,7 @@ describe("DisplayQueue notification TTS disabled", () => {
         message: { parts: [{ text: "hello " }, { text: "chat" }] },
       },
     });
+    await chatQueue.effectChain;
 
     expect(updateCalls).toEqual(["chatUser says hello chat"]);
   });
@@ -191,8 +190,6 @@ describe("DisplayQueue notification TTS disabled", () => {
         ? { delay: async () => {} }
         : { sourcesManager: mockSourcesManager, delay: async () => {} },
     );
-    chatQueue.renderer.displayChatItem = createMockFn().mockResolvedValue(true);
-
     await chatQueue.displayChatItem({
       type: "chat",
       platform: "twitch",
@@ -201,6 +198,7 @@ describe("DisplayQueue notification TTS disabled", () => {
         message: "hello chat",
       },
     });
+    await chatQueue.effectChain;
 
     expect(updateCalls).toEqual([]);
   });

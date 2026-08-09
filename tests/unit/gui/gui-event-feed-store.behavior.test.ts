@@ -192,6 +192,31 @@ describe("GUI feed store behavior", () => {
     expect(thirdRow.username).toBe("test-user-3");
   });
 
+  it("suppresses duplicate event IDs without collapsing distinct rows", () => {
+    const store = createGuiFeedStore();
+    const row = createRow(1);
+
+    store.pushEvent({ ...row, eventId: "event-1" });
+    store.pushEvent({ ...row, eventId: "event-1" });
+    store.pushEvent({ ...row, eventId: "event-2" });
+
+    expect(store.getRows().map((entry) => entry.eventId)).toEqual([
+      "event-1",
+      "event-2",
+    ]);
+  });
+
+  it("bounds event ID history and admits an evicted ID again", () => {
+    const store = createGuiFeedStore();
+
+    for (let index = 0; index <= 1000; index += 1) {
+      store.pushEvent({ ...createRow(index), eventId: `event-${index}` });
+    }
+    store.pushEvent({ ...createRow(0), eventId: "event-0" });
+
+    expect(store.getRows()).toHaveLength(1002);
+  });
+
   it("enforces overlay queue max rows by keeping latest rows", () => {
     const store = createGuiFeedStore({ maxRows: 3 });
 

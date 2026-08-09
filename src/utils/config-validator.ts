@@ -203,7 +203,6 @@ class ConfigValidator {
             goals: ConfigValidator._normalizeGoalsSection(rawConfig.goals || {}),
             gifts: ConfigValidator._normalizeGiftsSection(rawConfig.gifts || {}),
             envelopes: ConfigValidator._normalizeEnvelopesSection(rawConfig.envelopes || {}),
-            timing: ConfigValidator._normalizeTimingSection(rawConfig.timing || {}),
             cooldowns: ConfigValidator._normalizeCooldownsSection(rawConfig.cooldowns || {}),
             spam: ConfigValidator._normalizeSpamSection(rawConfig.spam || {}),
             displayQueue: ConfigValidator._normalizeDisplayQueueSection(rawConfig.displayQueue || {}),
@@ -275,19 +274,7 @@ class ConfigValidator {
                     hasLegacyTtsEnabled ? raw.ttsEnabled : undefined,
                     DEFAULTS.obs.ttsNotificationsEnabled
                 ),
-            chatMsgTxt: ConfigValidator.parseString(raw.chatMsgTxt, DEFAULTS.obs.chatMsgTxt),
-            chatMsgScene: ConfigValidator.parseString(raw.chatMsgScene, DEFAULTS.obs.chatMsgScene),
-            chatMsgGroup: ConfigValidator.parseString(raw.chatMsgGroup, DEFAULTS.obs.chatMsgGroup),
-            notificationTxt: ConfigValidator.parseString(raw.notificationTxt, DEFAULTS.obs.notificationTxt),
-            notificationScene: ConfigValidator.parseString(raw.notificationScene, DEFAULTS.obs.notificationScene),
-            notificationMsgGroup: ConfigValidator.parseString(raw.notificationMsgGroup, DEFAULTS.obs.notificationMsgGroup),
-            ttsTxt: ConfigValidator.parseString(raw.ttsTxt, DEFAULTS.obs.ttsTxt),
-            chatPlatformLogoTwitch: ConfigValidator.parseString(raw.chatPlatformLogoTwitch, ''),
-            chatPlatformLogoYouTube: ConfigValidator.parseString(raw.chatPlatformLogoYouTube, ''),
-            chatPlatformLogoTikTok: ConfigValidator.parseString(raw.chatPlatformLogoTikTok, ''),
-            notificationPlatformLogoTwitch: ConfigValidator.parseString(raw.notificationPlatformLogoTwitch, ''),
-            notificationPlatformLogoYouTube: ConfigValidator.parseString(raw.notificationPlatformLogoYouTube, ''),
-            notificationPlatformLogoTikTok: ConfigValidator.parseString(raw.notificationPlatformLogoTikTok, '')
+            ttsTxt: ConfigValidator.parseString(raw.ttsTxt, DEFAULTS.obs.ttsTxt)
         };
     }
 
@@ -393,15 +380,6 @@ class ConfigValidator {
         };
     }
 
-    static _normalizeTimingSection(raw: RawConfigSection): NormalizedConfigSection {
-        return {
-            fadeDuration: ConfigValidator.parseNumber(raw.fadeDuration, { defaultValue: DEFAULTS.timing.fadeDuration }),
-            notificationClearDelay: ConfigValidator.parseNumber(raw.notificationClearDelay, { defaultValue: DEFAULTS.timing.notificationClearDelay }),
-            transitionDelay: ConfigValidator.parseNumber(raw.transitionDelay, { defaultValue: DEFAULTS.timing.transitionDelay }),
-            chatMessageDuration: ConfigValidator.parseNumber(raw.chatMessageDuration, { defaultValue: DEFAULTS.timing.chatMessageDuration })
-        };
-    }
-
     static _normalizeCooldownsSection(raw: RawConfigSection): NormalizedConfigSection {
         const num = (field: string) => ConfigValidator._parseNumberFromSchema('cooldowns', field, raw[field]);
         return {
@@ -433,7 +411,8 @@ class ConfigValidator {
     static _normalizeDisplayQueueSection(raw: RawConfigSection): NormalizedConfigSection {
         return {
             autoProcess: ConfigValidator.parseBoolean(raw.autoProcess, DEFAULTS.displayQueue.autoProcess),
-            maxQueueSize: ConfigValidator.parseNumber(raw.maxQueueSize, { defaultValue: DEFAULTS.displayQueue.maxQueueSize })
+            maxQueueSize: ConfigValidator.parseNumber(raw.maxQueueSize, { defaultValue: DEFAULTS.displayQueue.maxQueueSize }),
+            rowIntervalMs: ConfigValidator.parseNumber(raw.rowIntervalMs, { defaultValue: DEFAULTS.displayQueue.rowIntervalMs, min: 0 })
         };
     }
 

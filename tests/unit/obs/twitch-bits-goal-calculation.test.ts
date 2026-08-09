@@ -164,6 +164,7 @@ describe("DisplayQueue - Twitch Bits Goal Calculation", () => {
 
       displayQueue.addItem(bitsEvent);
       await displayQueue.processQueue();
+      await displayQueue.effectChain;
 
       expect(recordedGoals).toEqual([{ platform: "twitch", amount: 200 }]);
     });
@@ -197,6 +198,7 @@ describe("DisplayQueue - Twitch Bits Goal Calculation", () => {
       }
 
       await displayQueue.processQueue();
+      await displayQueue.effectChain;
 
       expect(recordedGoals).toEqual([
         { platform: "twitch", amount: 100 },
@@ -226,6 +228,7 @@ describe("DisplayQueue - Twitch Bits Goal Calculation", () => {
 
       displayQueue.addItem(singleBitEvent);
       await displayQueue.processQueue();
+      await displayQueue.effectChain;
 
       expect(recordedGoals).toEqual([{ platform: "twitch", amount: 1 }]);
     });
@@ -253,6 +256,7 @@ describe("DisplayQueue - Twitch Bits Goal Calculation", () => {
 
       displayQueue.addItem(bitsEvent);
       await displayQueue.processQueue();
+      await displayQueue.effectChain;
 
       expect(recordedGoals).toEqual([{ platform: "twitch", amount: 200 }]);
     });
@@ -279,6 +283,7 @@ describe("DisplayQueue - Twitch Bits Goal Calculation", () => {
 
       displayQueue.addItem(realWorldScenario);
       await displayQueue.processQueue();
+      await displayQueue.effectChain;
 
       expect(recordedGoals).toEqual([{ platform: "twitch", amount: 200 }]);
     });

@@ -56,11 +56,7 @@ const buildSmokeConfig = () =>
     displayQueue: {
       autoProcess: false,
       maxQueueSize: 5,
-    },
-    timing: {
-      transitionDelay: 1000,
-      notificationClearDelay: 500,
-      chatMessageDuration: 1000,
+      rowIntervalMs: 1000,
     },
     http: { userAgents: ["test-smoke-agent"] },
     twitch: { enabled: false },

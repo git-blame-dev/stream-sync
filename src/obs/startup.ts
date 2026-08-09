@@ -12,24 +12,12 @@ type ObsManagerLike = {
 };
 
 type SourcesManagerLike = {
-    hideAllDisplays: (
-        chatSceneName: string,
-        notificationSceneName: string,
-        chatPlatformLogos: Record<string, string>,
-        notificationPlatformLogos: Record<string, string>,
-        ttsSourceName: string,
-        notificationSourceName: string
-    ) => Promise<void>;
+    clearTextSource: (sourceName: string) => Promise<void>;
 };
 
 type StartupConfig = {
     obs: {
-        chatMsgScene: string;
-        notificationScene: string;
-        chatPlatformLogos: Record<string, string>;
-        notificationPlatformLogos: Record<string, string>;
         ttsTxt: string;
-        notificationTxt: string;
     };
 };
 
@@ -41,7 +29,7 @@ type StartupDeps = {
     getDefaultSourcesManager?: () => SourcesManagerLike;
 };
 
-async function clearStartupDisplays(config: StartupConfig | null | undefined, deps: StartupDeps = {}) {
+async function clearStartupTTS(config: StartupConfig | null | undefined, deps: StartupDeps = {}) {
     const {
         logger = defaultLogger,
         obsManager: providedObsManager,
@@ -52,45 +40,32 @@ async function clearStartupDisplays(config: StartupConfig | null | undefined, de
 
     try {
         if (!config) {
-            logger.warn('clearStartupDisplays requires config; skipping display clearing', 'OBSStartup');
+            logger.warn('clearStartupTTS requires config; skipping TTS clearing', 'OBSStartup');
             return;
         }
 
         const sourcesManager = providedSourcesManager || getDefaultSourcesManager();
-        const { hideAllDisplays } = sourcesManager;
         const obsManager = providedObsManager || getOBSConnectionManager();
         if (!obsManager || !obsManager.isConnected()) {
-            logger.debug('OBS not connected, skipping display clearing', 'OBSStartup');
+            logger.debug('OBS not connected, skipping TTS clearing', 'OBSStartup');
             return;
         }
 
-        const chatSceneName = config.obs.chatMsgScene;
-        const notificationSceneName = config.obs.notificationScene;
-        const chatPlatformLogos = config.obs.chatPlatformLogos;
-        const notificationPlatformLogos = config.obs.notificationPlatformLogos;
         const ttsSourceName = config.obs.ttsTxt;
-        const notificationSourceName = config.obs.notificationTxt;
 
-        if (!chatSceneName || !notificationSceneName || !ttsSourceName || !notificationSourceName) {
-            logger.warn('Missing required OBS display configuration; skipping display clearing', 'OBSStartup');
+        if (!ttsSourceName) {
+            logger.warn('Missing OBS TTS source configuration; skipping TTS clearing', 'OBSStartup');
             return;
         }
 
-        await hideAllDisplays(
-            chatSceneName,
-            notificationSceneName,
-            chatPlatformLogos,
-            notificationPlatformLogos,
-            ttsSourceName,
-            notificationSourceName
-        );
+        await sourcesManager.clearTextSource(ttsSourceName);
 
-        logger.debug('Startup displays cleared successfully', 'OBSStartup');
+        logger.debug('Startup TTS cleared successfully', 'OBSStartup');
     } catch (error) {
-        logger.warn('Failed to clear startup displays', 'OBSStartup', error);
+        logger.warn('Failed to clear startup TTS', 'OBSStartup', error);
     }
 }
 
 export {
-    clearStartupDisplays
+    clearStartupTTS
 };
