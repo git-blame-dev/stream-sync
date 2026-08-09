@@ -451,6 +451,7 @@ describe("NotificationBuilder", () => {
       amount: 300,
       currency: "jewels",
       id: "yt-jewels-notification-1",
+      giftImageUrl: "https://example.invalid/test-priced-youtube-jewel.png",
       metadata: {
         missingFields: ["userId"],
       },
@@ -464,6 +465,7 @@ describe("NotificationBuilder", () => {
     expect(notification.displayMessage).not.toContain("XXX");
     expect(notification.ttsMessage).not.toContain("XXX");
     expect(notification.logMessage).not.toContain("XXX");
+    expect(notification.parts).toBeUndefined();
   });
 
   test("renders degraded amountless YouTube jewels gifts without technical or zero-value wording", () => {
@@ -475,12 +477,44 @@ describe("NotificationBuilder", () => {
       giftCount: 1,
       currency: "jewels",
       id: "yt-let-em-cook-1",
-      giftImageUrl: "https://www.gstatic.com/youtube/img/pdg/gift/assets/let_em_cook.png",
+      giftImageUrl: "https://example.invalid/test-youtube-jewel.png",
       metadata: { missingFields: ["amount", "userId"] },
     }));
 
+    expect(notification.parts).toEqual([
+      { type: "text", text: "sent " },
+      {
+        type: "emote",
+        platform: "youtube",
+        emoteId: "Let em cook",
+        imageUrl: "https://example.invalid/test-youtube-jewel.png",
+      },
+      { type: "text", text: "Let em cook" },
+    ]);
     expect(notification.displayMessage).toBe("test-youtube-gifter sent Let em cook");
     expect(notification.ttsMessage).toBe("test-youtube-gifter sent Let em cook");
     expect(notification.logMessage).toBe("Gift from test-youtube-gifter: Let em cook");
+    for (const message of [
+      notification.displayMessage,
+      notification.ttsMessage,
+      notification.logMessage,
+    ]) {
+      expect(message).not.toMatch(/\b(?:0|300)\s+jewels\b/i);
+    }
+  });
+
+  test("keeps amountless YouTube jewels notifications text-only without giftImageUrl", () => {
+    const notification = expectNotification(NotificationBuilder.build({
+      platform: "youtube",
+      type: "platform:gift",
+      username: "test-youtube-gifter",
+      giftType: "test-jewel-gift",
+      giftCount: 1,
+      currency: "jewels",
+      id: "test-youtube-jewels-notification",
+      metadata: { missingFields: ["amount", "userId"] },
+    }));
+
+    expect(notification.parts).toBeUndefined();
   });
 });

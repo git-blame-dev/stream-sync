@@ -943,26 +943,41 @@ class NotificationBuilder {
         }
 
         if (platform === 'youtube') {
-            const giftType = typeof safeInput.giftType === 'string' ? safeInput.giftType.trim().toLowerCase() : '';
-            if (giftType !== 'super sticker') {
+            const giftType = typeof safeInput.giftType === 'string' ? safeInput.giftType.trim() : '';
+            const normalizedGiftType = giftType.toLowerCase();
+            if (normalizedGiftType === 'super sticker') {
+                const parts: Array<Record<string, unknown>> = [
+                    {
+                        type: 'emote',
+                        platform: 'youtube',
+                        emoteId: 'supersticker',
+                        imageUrl: giftImageUrl
+                    }
+                ];
+
+                const messageText = typeof safeInput.message === 'string' ? safeInput.message.trim() : '';
+                if (messageText) {
+                    parts.push({ type: 'text', text: ` ${messageText}` });
+                }
+
+                return parts;
+            }
+
+            const currency = typeof safeInput.currency === 'string' ? safeInput.currency.trim().toLowerCase() : '';
+            if (currency !== 'jewels' || safeInput.amount !== undefined || !giftType) {
                 return [];
             }
 
-            const parts: Array<Record<string, unknown>> = [
+            return [
+                { type: 'text', text: 'sent ' },
                 {
                     type: 'emote',
                     platform: 'youtube',
-                    emoteId: 'supersticker',
+                    emoteId: giftType,
                     imageUrl: giftImageUrl
-                }
+                },
+                { type: 'text', text: giftType }
             ];
-
-            const messageText = typeof safeInput.message === 'string' ? safeInput.message.trim() : '';
-            if (messageText) {
-                parts.push({ type: 'text', text: ` ${messageText}` });
-            }
-
-            return parts;
         }
 
         return [];

@@ -72,6 +72,14 @@ describe("YouTube monetization parser", () => {
     expect(result).not.toHaveProperty("amount");
   });
 
+  test("rejects a supplied invalid GiftMessageView timestamp", () => {
+    const parser = createYouTubeMonetizationParser({ logger: noOpLogger });
+
+    expect(() => parser.parseGiftMessageView(createGiftMessageViewItem({
+      timestamp_usec: "invalid",
+    }))).toThrow("YouTube GiftMessageView requires valid timestamp");
+  });
+
   test("selects the largest valid normalized gift image by area", () => {
     const parser = createYouTubeMonetizationParser({ logger: noOpLogger });
     const result = parser.parseGiftMessageView(createGiftMessageViewItem({

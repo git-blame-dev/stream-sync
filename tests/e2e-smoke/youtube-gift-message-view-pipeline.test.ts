@@ -245,4 +245,84 @@ describe('YouTube GiftMessageView pipeline (smoke E2E)', () => {
             await platform.cleanup();
         }
     });
+
+    test('routes the newest amountless Laughing disco GiftMessageView shape using receipt time and largest direct images', async () => {
+        const eventBus = createEventBus();
+        const logger = noOpLogger;
+        const displayQueue = createMockDisplayQueue();
+        const config = createConfigFixture({
+            general: { giftsEnabled: true },
+            youtube: { enabled: true, username: 'test-youtube-channel' },
+            obs: { enabled: false }
+        });
+        const notificationManager = new NotificationManager({
+            displayQueue, logger, eventBus, config, constants: coreConstants,
+            textProcessing: createTextProcessingManager({ logger }),
+            obsGoals: { processDonationGoal: createMockFn() },
+            vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) },
+            userTrackingService: { isFirstMessage: createMockFn().mockResolvedValue(false) }
+        });
+        const runtime = {
+            handleGiftNotification: async (platform: string, _username: string, payload: Record<string, unknown>) =>
+                notificationManager.handleNotification(payload.type, platform, payload)
+        };
+        const router = new PlatformEventRouter({ eventBus, runtime, notificationManager, config, logger });
+        const platform = new YouTubePlatform(config.youtube, {
+            logger,
+            streamDetectionService: { detectLiveStreams: createMockFn().mockResolvedValue({ success: true, videoIds: [], detectionMethod: 'test' }) },
+            notificationManager: { emit: createMockFn(), on: createMockFn(), removeListener: createMockFn() },
+            RawPlatformDataLoggingService: class { logRawPlatformData() {} }, USER_AGENTS: ['test-agent']
+        });
+        platform.handlers = {
+            onGift: (payload: Record<string, unknown>) => eventBus.emit('platform:event', {
+                platform: 'youtube', type: PlatformEvents.GIFT, data: payload
+            })
+        };
+        try {
+            await platform.handleChatMessage({ item: {
+                type: 'GiftMessageView',
+                id: 'test-laughing-disco-gift',
+                text: { content: 'sent Laughing disco' },
+                author_name: { content: '@test-laughing-disco-user' },
+                author_avatar: { image: [
+                    { url: 'https://example.invalid/test-avatar-32.png', width: 32, height: 32 },
+                    { url: 'https://example.invalid/test-avatar-64.png', width: 64, height: 64 }
+                ] },
+                gift_image: { sources: [
+                    { url: 'https://example.invalid/test-gift-480.png', width: 480, height: 480 },
+                    { url: 'https://example.invalid/test-gift-640.png', width: 640, height: 640 }
+                ] }
+            } });
+            await new Promise(setImmediate);
+            expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
+            const queued = displayQueue.addItem.mock.calls[0][0];
+            expect(queued.data.isError).not.toBe(true);
+            assertNonEmptyString(queued.data.id);
+            expect(queued.data.giftType).toBe('Laughing disco');
+            expect(typeof queued.data.timestamp).toBe('string');
+            expect(Number.isNaN(Date.parse(queued.data.timestamp))).toBe(false);
+            expect(queued.data.metadata.timestampSource).toBe('received');
+            expect(queued.data.avatarUrl).toBe('https://example.invalid/test-avatar-64.png');
+            expect(queued.data.giftImageUrl).toBe('https://example.invalid/test-gift-640.png');
+            expect(queued.data.parts).toEqual([
+                { type: 'text', text: 'sent ' },
+                {
+                    type: 'emote',
+                    platform: 'youtube',
+                    emoteId: 'Laughing disco',
+                    imageUrl: 'https://example.invalid/test-gift-640.png'
+                },
+                { type: 'text', text: 'Laughing disco' }
+            ]);
+            expect(queued.data.amount).toBeUndefined();
+            expect(queued.data.userId).toBeUndefined();
+            expect(queued.data.metadata.missingFields).toEqual(expect.arrayContaining(['amount', 'userId']));
+            for (const message of [queued.data.displayMessage, queued.data.ttsMessage, queued.data.logMessage]) {
+                expect(message).not.toMatch(/undefined|NaN|0 jewels|technical|error/i);
+            }
+        } finally {
+            router.dispose();
+            await platform.cleanup();
+        }
+    });
 });

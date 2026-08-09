@@ -57,12 +57,13 @@ interface ParsedMembership {
 
 interface ParsedGiftMessageView {
     id: string;
-    timestamp: string;
+    timestamp?: string;
     giftType: string;
     giftCount: 1;
     amount?: number;
     currency: 'jewels';
     message: string;
+    avatarUrl?: string;
     giftImageUrl?: string;
 }
 
@@ -147,6 +148,14 @@ function createYouTubeMonetizationParser(options: YouTubeMonetizationParserOptio
             throw new Error(`${label} requires valid timestamp`);
         }
         return parsedTimestamp;
+    };
+
+    const resolveOptionalGiftMessageViewTimestamp = (chatItem: UnknownRecord): string | undefined => {
+        const item = toRecord(chatItem.item);
+        if (item.timestamp_usec === undefined && item.timestamp === undefined) {
+            return undefined;
+        }
+        return resolveTimestamp(chatItem, 'YouTube GiftMessageView');
     };
 
     const resolveId = (chatItem: UnknownRecord, label: string): string => {
@@ -360,17 +369,13 @@ function createYouTubeMonetizationParser(options: YouTubeMonetizationParserOptio
         return `${YOUTUBE_GIFT_ASSET_BASE_URL}${assetFile}${YOUTUBE_GIFT_ASSET_QUERY_SUFFIX}`;
     };
 
-    const resolveProviderGiftImageUrl = (item: UnknownRecord): string => {
-        const giftImage = item.gift_image ?? item.giftImage;
-        const giftImageRecord = toRecord(giftImage);
-        const sources = Array.isArray(giftImageRecord.sources)
-            ? giftImageRecord.sources
-            : (Array.isArray(giftImage) ? giftImage : []);
+    const resolveLargestImageUrl = (sources: unknown): string => {
+        const imageSources = Array.isArray(sources) ? sources : [];
         let selectedUrl = '';
         let selectedArea = -1;
         let fallbackUrl = '';
 
-        for (const source of sources) {
+        for (const source of imageSources) {
             const sourceRecord = toRecord(source);
             const url = typeof sourceRecord.url === 'string' ? sourceRecord.url.trim() : '';
             const width = Number(sourceRecord.width);
@@ -389,6 +394,25 @@ function createYouTubeMonetizationParser(options: YouTubeMonetizationParserOptio
         }
 
         return selectedUrl || fallbackUrl;
+    };
+
+    const resolveProviderGiftImageUrl = (item: UnknownRecord): string => {
+        const giftImage = item.gift_image ?? item.giftImage;
+        const giftImageRecord = toRecord(giftImage);
+        const sources = Array.isArray(giftImageRecord.sources)
+            ? giftImageRecord.sources
+            : giftImage;
+        return resolveLargestImageUrl(sources);
+    };
+
+    const resolveGiftMessageViewAvatarUrl = (item: UnknownRecord): string => {
+        const authorAvatar = toRecord(item.author_avatar ?? item.authorAvatar);
+        const image = authorAvatar.image;
+        const imageRecord = toRecord(image);
+        const sources = Array.isArray(image)
+            ? image
+            : imageRecord.sources;
+        return resolveLargestImageUrl(sources);
     };
 
     const parseMembershipMonthsFromHeaderText = (text: unknown): number | undefined => {
@@ -624,10 +648,11 @@ const parseSuperChat = (chatItem: UnknownRecord): ParsedSuperChat => {
         }
 
         const giftImageUrl = providerGiftImageUrl || resolveJewelsGiftImageUrl(giftType);
+        const avatarUrl = resolveGiftMessageViewAvatarUrl(item);
+        const timestamp = resolveOptionalGiftMessageViewTimestamp(chatItem);
 
         const payload: ParsedGiftMessageView = {
             id: resolveId(chatItem, 'YouTube GiftMessageView'),
-            timestamp: resolveTimestamp(chatItem, 'YouTube GiftMessageView'),
             giftType,
             giftCount: 1,
             currency: 'jewels',
@@ -636,8 +661,16 @@ const parseSuperChat = (chatItem: UnknownRecord): ParsedSuperChat => {
                 : `sent ${giftType} for ${amount} Jewels`)
         };
 
+        if (timestamp) {
+            payload.timestamp = timestamp;
+        }
+
         if (amount !== undefined) {
             payload.amount = amount;
+        }
+
+        if (avatarUrl) {
+            payload.avatarUrl = avatarUrl;
         }
 
         if (giftImageUrl) {

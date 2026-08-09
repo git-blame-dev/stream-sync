@@ -857,17 +857,25 @@ class YouTubePlatform extends EventEmitter {
 
     async handleGiftMessageView(chatItem: unknown): Promise<void> {
         const author = this._resolveGiftMessageViewAuthor(chatItem);
+        const receivedTimestamp = getSystemTimestampISO();
         try {
             const parsed = this.monetizationParser.parseGiftMessageView(toUnknownMap(chatItem));
+            const usedReceivedTimestamp = parsed.timestamp === undefined;
             const missingFields = collectMissingFields({
                 userId: !!author.userId,
                 amount: parsed.amount !== undefined
             });
+            const hasMetadata = missingFields.length > 0 || usedReceivedTimestamp;
             const payload = this.eventFactory.createGiftEvent({
                 ...parsed,
+                timestamp: parsed.timestamp ?? receivedTimestamp,
                 ...author,
-                ...(missingFields.length > 0
-                    ? { metadata: mergeMissingFieldsMetadata({}, missingFields) }
+                ...(hasMetadata
+                    ? {
+                        metadata: mergeMissingFieldsMetadata({}, missingFields, {
+                            ...(usedReceivedTimestamp ? { timestampSource: 'received' } : {})
+                        })
+                    }
                     : {})
             });
             this._emitPlatformEvent(PlatformEvents.GIFT, payload);
