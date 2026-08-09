@@ -1310,7 +1310,7 @@ describe('TypeScript toolchain gates behavior', () => {
     it('keeps unit core config cohort a tests on TypeScript paths', () => {
         const cohortTsPaths = [
             'tests/unit/core/terminology-consistency.test.ts',
-            'tests/unit/core/config-example-gui-template.behavior.test.ts',
+            'tests/unit/core/config-example-template.behavior.test.ts',
             'tests/unit/core/config-path-override.test.ts',
             'tests/unit/core/spam-configuration-missing-fix.test.ts',
             'tests/unit/core/spam-config-notification-manager-integration.test.ts',
@@ -1322,7 +1322,7 @@ describe('TypeScript toolchain gates behavior', () => {
         ];
         const cohortJsPaths = [
             'tests/unit/core/terminology-consistency.test.js',
-            'tests/unit/core/config-example-gui-template.behavior.test.js',
+            'tests/unit/core/config-example-template.behavior.test.js',
             'tests/unit/core/config-path-override.test.js',
             'tests/unit/core/spam-configuration-missing-fix.test.js',
             'tests/unit/core/spam-config-notification-manager-integration.test.js',
@@ -1344,7 +1344,7 @@ describe('TypeScript toolchain gates behavior', () => {
     it('keeps unit core config cohort a tests free of untyped mutable declarations', () => {
         const cohortPaths = [
             'tests/unit/core/terminology-consistency.test.ts',
-            'tests/unit/core/config-example-gui-template.behavior.test.ts',
+            'tests/unit/core/config-example-template.behavior.test.ts',
             'tests/unit/core/config-path-override.test.ts',
             'tests/unit/core/spam-configuration-missing-fix.test.ts',
             'tests/unit/core/spam-config-notification-manager-integration.test.ts',
