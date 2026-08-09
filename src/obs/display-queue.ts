@@ -10,7 +10,14 @@ import { DisplayQueueEffects } from './display-queue-effects';
 import { DisplayRenderer } from './display-renderer';
 import { getDefaultGoalsManager } from './goals';
 import { getDefaultSourcesManager } from './sources';
-import type { DisplayQueueItem, DisplayQueueItemData, DisplayQueueMessage, DisplayQueueSequence } from '../interfaces/DisplayQueue';
+import type {
+    DisplayQueueChatPacing,
+    DisplayQueueItem,
+    DisplayQueueItemData,
+    DisplayQueueMessage,
+    DisplayQueueSequence,
+    DisplayQueueSequenceOptions
+} from '../interfaces/DisplayQueue';
 
 type QueueItem = DisplayQueueItem;
 type QueueEntry = QueueItem | DisplayQueueSequence;
@@ -262,8 +269,11 @@ class DisplayQueue {
         }
     }
 
-    addSequence(items: QueueItem[]) {
-        const { insertIndex } = this.state.addSequence(items, this.activeSequenceRemaining.length);
+    addSequence(items: QueueItem[], options: DisplayQueueSequenceOptions = {}) {
+        const { insertIndex } = this.state.addSequence(items, {
+            ...options,
+            reservedRows: this.activeSequenceRemaining.length
+        });
         logger.debug(`[Display Queue] Added sequence (${items.length} items) at position ${insertIndex}. Queue length: ${this.getQueueLength()}`, 'display-queue');
         if (!this.processingRunActive && !this.isProcessing && !this.isRetryScheduled && this.config.autoProcess) {
             this.processQueue();
@@ -335,14 +345,21 @@ class DisplayQueue {
                 if (!entry) {
                     continue;
                 }
-                const children = this.state.isSequence(entry) ? entry.children : [entry];
+                const isSequence = this.state.isSequence(entry);
+                const children = isSequence ? entry.children : [entry];
+                const chatPacing = isSequence ? entry.chatPacing : 'normal';
                 this.activeSequenceRemaining = [...children];
                 while (this.activeSequenceRemaining.length > 0) {
                     const item = this.activeSequenceRemaining.shift();
                     if (!item) {
                         continue;
                     }
-                    await this.processSingleItem(item, transitionDelay, this.activeSequenceRemaining.length > 0);
+                    await this.processSingleItem(
+                        item,
+                        transitionDelay,
+                        this.activeSequenceRemaining.length > 0,
+                        chatPacing
+                    );
                 }
                 this.activeSequenceRemaining = [];
             }
@@ -364,19 +381,24 @@ class DisplayQueue {
         }
     }
 
-    async processSingleItem(item: QueueItem, transitionDelay: number, sequenceHasRemaining = false) {
+    async processSingleItem(
+        item: QueueItem,
+        transitionDelay: number,
+        sequenceHasRemaining = false,
+        chatPacing: DisplayQueueChatPacing = 'normal'
+    ) {
         this.currentDisplay = item;
         try {
             const displayed = await this.displayItem(item);
             const isNotification = isNotificationType(item.type);
             if (isNotification) {
                 if (displayed === false) return;
-                await this.delay(this.getDuration(item));
+                await this.delay(this.getDuration(item, chatPacing));
                 await this.hideCurrentDisplay(item);
                 await this.delay(transitionDelay);
                 return;
             }
-            await this.delay(this.getDuration(item));
+            await this.delay(this.getDuration(item, chatPacing));
             if (isChatType(item.type) && (sequenceHasRemaining || this.queue.length > 0 || !this.lastChatItem)) {
                 await this.hideCurrentDisplay(item);
             }
@@ -488,7 +510,7 @@ class DisplayQueue {
         logger.info('[Display Queue] Processing stopped and queue cleared.');
     }
 
-    getDuration(item: QueueItem) {
+    getDuration(item: QueueItem, chatPacing: DisplayQueueChatPacing = 'normal') {
         const holdDurationMs = Number(item?.holdDurationMs);
         const normalizedHoldDurationMs = Number.isFinite(holdDurationMs) && holdDurationMs > 0
             ? holdDurationMs
@@ -497,8 +519,11 @@ class DisplayQueue {
         const normalizedChatDurationMs = Number.isFinite(configuredChatDurationMs) && configuredChatDurationMs >= 0
             ? configuredChatDurationMs
             : 0;
-        const baseHoldDurationMs = isChatType(item?.type)
-            ? (this.hasMultipleQueuedChats() ? BACKLOG_CHAT_HOLD_MS : normalizedChatDurationMs)
+        const isChat = isChatType(item?.type);
+        const shouldAccelerateChat = isChat &&
+            (chatPacing === 'accelerated' || this.hasMultipleQueuedChats());
+        const baseHoldDurationMs = isChat
+            ? (shouldAccelerateChat ? BACKLOG_CHAT_HOLD_MS : normalizedChatDurationMs)
             : 0;
         const requiredHoldDurationMs = Math.max(normalizedHoldDurationMs, baseHoldDurationMs);
 

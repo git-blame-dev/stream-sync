@@ -4,7 +4,7 @@ import { noOpLogger } from "../../helpers/mock-factories";
 import { createConfigFixture } from "../../helpers/config-fixture";
 import { createRecordingLogger } from "../../helpers/recording-logger";
 import { ChatNotificationRouter } from "../../../src/services/ChatNotificationRouter.ts";
-import type { DisplayQueueItem } from "../../../src/interfaces/DisplayQueue";
+import type { DisplayQueueItem, DisplayQueueSequenceOptions } from "../../../src/interfaces/DisplayQueue";
 import * as testClock from "../../helpers/test-clock";
 
 type RouterDependencies = ConstructorParameters<typeof ChatNotificationRouter>[0];
@@ -18,7 +18,7 @@ type VfxConfig = NonNullable<
 >;
 type QueuedItem = DisplayQueueItem;
 type AddItemMock = TestMockFn<[QueuedItem], void>;
-type AddSequenceMock = TestMockFn<[QueuedItem[]], void>;
+type AddSequenceMock = TestMockFn<[QueuedItem[], DisplayQueueSequenceOptions?], void>;
 type TestRuntime = RouterRuntime & {
   displayQueue: { addItem: AddItemMock; addSequence: AddSequenceMock };
   commandCooldownService: NonNullable<RouterRuntime["commandCooldownService"]>;
@@ -97,7 +97,7 @@ describe("ChatNotificationRouter", () => {
       };
     let runtime: TestRuntime;
     const addItem = createMockFn<[QueuedItem], void>();
-    const addSequence = createMockFn<[QueuedItem[]], void>((items) => {
+    const addSequence = createMockFn<[QueuedItem[], DisplayQueueSequenceOptions?], void>((items) => {
       items.forEach((item) => addItem(item));
     });
     const baseRuntime = {
@@ -147,7 +147,7 @@ describe("ChatNotificationRouter", () => {
     runtime = baseRuntime;
     Object.assign(runtime, runtimeOverrides);
     if (!runtime.displayQueue.addSequence) {
-      runtime.displayQueue.addSequence = createMockFn<[QueuedItem[]], void>((items) => {
+      runtime.displayQueue.addSequence = createMockFn<[QueuedItem[], DisplayQueueSequenceOptions?], void>((items) => {
         items.forEach((item) => runtime.displayQueue.addItem(item));
       });
     }
@@ -318,6 +318,7 @@ describe("ChatNotificationRouter", () => {
     const calls = runtime.displayQueue.addItem.mock.calls.map((c) => c[0].type);
     expect(calls).toContain("greeting");
     expect(calls).toContain("command");
+    expect(runtime.displayQueue.addSequence.mock.calls[0]?.[1]).toEqual({ chatPacing: "accelerated" });
   });
 
   it("includes userId on queued greeting items for first-time messages", async () => {
@@ -460,6 +461,7 @@ describe("ChatNotificationRouter", () => {
       "chat",
       "command",
     ]);
+    expect(runtime.displayQueue.addSequence.mock.calls[0]?.[1]).toEqual({ chatPacing: "accelerated" });
   });
 
   it("uses the same source-first sequence for keyword command matches", async () => {
@@ -509,6 +511,37 @@ describe("ChatNotificationRouter", () => {
 
     expect(runtime.displayQueue.addSequence).not.toHaveBeenCalled();
     expect(getQueuedItems(runtime).map((item) => item.type)).toEqual(["command"]);
+  });
+
+  it("keeps notification-only greeting and command sequences on normal pacing", async () => {
+    const { router, runtime } = createRouter({
+      runtime: {
+        config: {
+          twitch: {
+            greetingsEnabled: true,
+            messagesEnabled: false,
+            farewellsEnabled: true,
+          },
+        },
+        isFirstMessage: createMockFn().mockReturnValue(true),
+        vfxCommandService: {
+          selectVFXCommand: createMockFn().mockResolvedValue({ command: "!testboom" }),
+          matchFarewell: createMockFn().mockReturnValue(null),
+          getVFXConfig: createMockFn().mockResolvedValue(null),
+        },
+      },
+    });
+
+    await router.handleChatMessage("twitch", {
+      ...baseMessage,
+      message: "!testboom now",
+    });
+
+    expect(runtime.displayQueue.addSequence.mock.calls[0]?.[0].map((item) => item.type)).toEqual([
+      "greeting",
+      "command",
+    ]);
+    expect(runtime.displayQueue.addSequence.mock.calls[0]?.[1]).toBeUndefined();
   });
 
   it("queues only chat and preserves cooldown state when a command is blocked", async () => {

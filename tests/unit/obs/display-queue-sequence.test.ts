@@ -167,4 +167,76 @@ describe("DisplayQueue sequences", () => {
     release();
     await processing;
   });
+
+  it("uses normal pacing for an unmarked sequence", () => {
+    const queue = createQueue();
+    queue.addSequence([item("chat", "default")]);
+
+    expect((queue.queue[0] as Record<string, unknown>).chatPacing).toBe("normal");
+  });
+
+  it("records accelerated pacing on a sequence", () => {
+    const queue = createQueue();
+
+    Reflect.apply(queue.addSequence, queue, [[item("chat", "accelerated")], { chatPacing: "accelerated" }]);
+
+    expect((queue.queue[0] as Record<string, unknown>).chatPacing).toBe("accelerated");
+  });
+
+  it("applies sequence pacing while processing its children", async () => {
+    const queue = createQueue();
+    queue.displayItem = async () => true;
+    Reflect.apply(queue.addSequence, queue, [[item("chat", "accelerated")], { chatPacing: "accelerated" }]);
+
+    await queue.processQueue();
+
+    expect(queue.getDuration).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "chat" }),
+      "accelerated",
+    );
+  });
+
+  it.each([
+    ["accelerated", { chatPacing: "accelerated" }, [0, 250, 3000, 250]],
+    ["normal", undefined, [4500, 250, 3000, 250]],
+  ] as const)("uses %s chat pacing across a chat-notification sequence", async (_name, options, expectedDelays) => {
+    const delays: number[] = [];
+    const events: string[] = [];
+    const queue = new DisplayQueue(
+      { isReady: async () => true, call: async () => ({}) },
+      {
+        autoProcess: false,
+        ttsEnabled: false,
+        timing: { chatMessageDuration: 4500, transitionDelay: 250 },
+        chat: { sourceName: "chat", sceneName: "scene", groupName: "group", platformLogos: {} },
+        notification: { sourceName: "notification", sceneName: "scene", groupName: "group", platformLogos: {} },
+      },
+      { PRIORITY_LEVELS },
+      null,
+      { delay: async (ms) => { delays.push(ms); } },
+    );
+    queue.displayItem = async (entry) => {
+      events.push(`display:${entry.type}`);
+      return true;
+    };
+    queue.hideCurrentDisplay = async (entry) => {
+      events.push(`hide:${entry?.type}`);
+    };
+    queue.displayLingeringChat = async () => {};
+    const items = [
+      item("chat", "source"),
+      { ...item("command", "result"), holdDurationMs: 3000 },
+    ];
+
+    queue.addSequence(items, options);
+    await queue.processQueue();
+
+    expect(delays).toEqual([...expectedDelays]);
+    expect(events).toEqual([
+      "display:chat",
+      "hide:chat",
+      "display:command",
+      "hide:command",
+    ]);
+  });
 });

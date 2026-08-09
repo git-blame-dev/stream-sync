@@ -1,6 +1,14 @@
-import type { DisplayQueueItem, DisplayQueueSequence } from '../interfaces/DisplayQueue';
+import type {
+    DisplayQueueChatPacing,
+    DisplayQueueItem,
+    DisplayQueueSequence,
+    DisplayQueueSequenceOptions
+} from '../interfaces/DisplayQueue';
 
 type DisplayItem = DisplayQueueItem | DisplayQueueSequence;
+type AddSequenceOptions = DisplayQueueSequenceOptions & {
+    reservedRows?: number;
+};
 
 class DisplayQueueState {
     queue: DisplayItem[] = [];
@@ -51,7 +59,16 @@ class DisplayQueueState {
         return { insertIndex };
     }
 
-    addSequence(children: DisplayQueueItem[], reservedRows = 0) {
+    addSequence(children: DisplayQueueItem[], options: AddSequenceOptions = {}) {
+        const safeOptions = options && typeof options === 'object' ? options : {};
+        const requestedReservedRows = safeOptions.reservedRows;
+        const reservedRows = typeof requestedReservedRows === 'number' &&
+            Number.isInteger(requestedReservedRows) && requestedReservedRows >= 0
+            ? requestedReservedRows
+            : 0;
+        const chatPacing: DisplayQueueChatPacing = safeOptions.chatPacing === 'accelerated'
+            ? 'accelerated'
+            : 'normal';
         if (!Array.isArray(children) || children.length === 0) {
             throw new Error('Invalid display sequence: expected non-empty children');
         }
@@ -66,7 +83,8 @@ class DisplayQueueState {
         const sequence: DisplayQueueSequence = {
             type: '__display_queue_sequence__',
             priority: Math.max(...normalized.map((item) => item.priority ?? 0)),
-            children: normalized
+            children: normalized,
+            chatPacing
         };
         const insertIndex = this._findInsertIndex(sequence.priority);
         this.queue.splice(insertIndex, 0, sequence);

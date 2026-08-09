@@ -5,9 +5,15 @@ import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 import { sanitizeForDisplay } from '../utils/validation';
 import { getValidMessageParts, normalizeBadgeImages } from '../utils/message-parts';
 import { normalizeGreetingIdentityKey } from '../utils/greeting-identity-key-normalizer';
-import type { DisplayQueueItem, DisplayQueueSequenceWriter, DisplayQueueVfxConfig } from '../interfaces/DisplayQueue';
+import type {
+    DisplayQueueItem,
+    DisplayQueueSequenceOptions,
+    DisplayQueueSequenceWriter,
+    DisplayQueueVfxConfig
+} from '../interfaces/DisplayQueue';
 
 const LOG_TRUNCATION_LENGTH = 200;
+const ACCELERATED_CHAT_SEQUENCE = { chatPacing: 'accelerated' } satisfies DisplayQueueSequenceOptions;
 
 type RouterRecord = Record<string, unknown>;
 
@@ -256,7 +262,7 @@ class ChatNotificationRouter {
                     displayCommitted = this.enqueueDisplayItems([
                         ...(sourceChatItem ? [sourceChatItem] : []),
                         farewellOutcome.item
-                    ]);
+                    ], sourceChatItem ? ACCELERATED_CHAT_SEQUENCE : undefined);
                     if (displayCommitted) {
                         this.updateGlobalCooldown(farewellOutcome.cooldownKey);
                     }
@@ -289,7 +295,7 @@ class ChatNotificationRouter {
                 displayCommitted = this.enqueueDisplayItems([
                     ...(sourceChatItem ? [sourceChatItem] : []),
                     greetingItem
-                ]);
+                ], sourceChatItem ? ACCELERATED_CHAT_SEQUENCE : undefined);
                 if (displayCommitted) {
                     firstMessageState.consume();
                 }
@@ -592,7 +598,10 @@ class ChatNotificationRouter {
         }
 
         items.push(this.buildCommandItem(platform, normalizedData, commandConfig));
-        const committed = this.enqueueDisplayItems(items);
+        const committed = this.enqueueDisplayItems(
+            items,
+            sourceChatItem ? ACCELERATED_CHAT_SEQUENCE : undefined
+        );
         if (!committed) {
             return false;
         }
@@ -852,7 +861,7 @@ class ChatNotificationRouter {
         return queueItem;
     }
 
-    enqueueDisplayItems(items: DisplayQueueItem[]): boolean {
+    enqueueDisplayItems(items: DisplayQueueItem[], sequenceOptions?: DisplayQueueSequenceOptions): boolean {
         if (!this.runtime.displayQueue || items.length === 0) {
             return false;
         }
@@ -866,7 +875,7 @@ class ChatNotificationRouter {
             return true;
         }
 
-        this.runtime.displayQueue.addSequence(items);
+        this.runtime.displayQueue.addSequence(items, sequenceOptions);
         return true;
     }
 

@@ -30,6 +30,12 @@ describe("DisplayQueue TTS-driven durations", () => {
   const getDurationAtRuntimeBoundary = (queue: DisplayQueue, item: unknown): number =>
     Reflect.apply(queue.getDuration, queue, [item]) as number;
 
+  const getDurationWithOptionsAtRuntimeBoundary = (
+    queue: DisplayQueue,
+    item: unknown,
+    chatPacing: unknown,
+  ): number => Reflect.apply(queue.getDuration, queue, [item, chatPacing]) as number;
+
   beforeEach(() => {
     originalNodeEnv = process.env.NODE_ENV;
     process.env.NODE_ENV = "test";
@@ -219,6 +225,34 @@ describe("DisplayQueue TTS-driven durations", () => {
       queue.queue = [chatItem("pending-1"), chatItem("pending-2")];
 
       expect(queue.getDuration(queue.currentDisplay)).toBe(2000);
+    });
+
+    it("suppresses configured chat hold in accelerated mode", () => {
+      const queue = createHoldQueue();
+      const current = chatItem("current");
+      queue.currentDisplay = current;
+
+      expect(getDurationWithOptionsAtRuntimeBoundary(queue, current, "accelerated")).toBe(0);
+    });
+
+    it("keeps explicit positive hold and chat TTS as floors in accelerated mode", () => {
+      const holdQueue = createHoldQueue();
+      const held = { ...chatItem("held"), holdDurationMs: 4200 };
+      holdQueue.currentDisplay = held;
+      expect(getDurationWithOptionsAtRuntimeBoundary(holdQueue, held, "accelerated")).toBe(4200);
+
+      const ttsQueue = createQueue();
+      const spoken = chatItem("spoken");
+      ttsQueue.currentDisplay = spoken;
+      expect(getDurationWithOptionsAtRuntimeBoundary(ttsQueue, spoken, "accelerated")).toBe(2000);
+    });
+
+    it("does not accelerate notification duration", () => {
+      const queue = createQueue();
+      const notification = notificationItem();
+
+      expect(getDurationWithOptionsAtRuntimeBoundary(queue, notification, "accelerated"))
+        .toBe(getDurationWithOptionsAtRuntimeBoundary(queue, notification, "normal"));
     });
   });
 });

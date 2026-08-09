@@ -152,6 +152,23 @@ describe("DisplayRenderer", () => {
     );
   });
 
+  it("preserves configured chat transition and notification clear delays", async () => {
+    const delays: number[] = [];
+    const { renderer } = createRenderer({}, {
+      config: { timing: { transitionDelay: 250, notificationClearDelay: 500 } },
+      delay: async (ms) => { delays.push(ms); },
+    });
+
+    await renderer.displayChatItem(chatItem("hello"));
+    await renderer.displayNotificationItem({
+      type: "platform:follow",
+      platform: "tiktok",
+      data: { username: "test-user", displayMessage: "followed" },
+    });
+
+    expect(delays).toEqual([250, 500]);
+  });
+
   it("skips chat rendering when messages are disabled", async () => {
     const { renderer, actions } = createRenderer({ messagesEnabled: false });
 

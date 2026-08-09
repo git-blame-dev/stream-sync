@@ -4,6 +4,7 @@ import { AppRuntime } from '../../src/runtime/AppRuntime';
 import { ChatNotificationRouter } from '../../src/services/ChatNotificationRouter';
 import { PlatformEventRouter } from '../../src/services/PlatformEventRouter';
 import { VFXCommandService } from '../../src/services/VFXCommandService';
+import type { DisplayQueueSequenceOptions } from '../../src/interfaces/DisplayQueue';
 
 import { createConfigFixture } from './config-fixture';
 import { noOpLogger } from './mock-factories';
@@ -57,6 +58,7 @@ function createFarewellRoutingHarness(configOverrides: FarewellRoutingHarnessOve
     platformEventRouter: PlatformEventRouter;
     queuedItems: QueuedNotificationCollection;
     queuedSequences: QueuedNotification[][];
+    queuedSequenceOptions: Array<DisplayQueueSequenceOptions | undefined>;
 } {
     const farewellConfig = {
         command: '!bye|!bye2|!bye3, bye|goodbye|cya',
@@ -92,13 +94,17 @@ function createFarewellRoutingHarness(configOverrides: FarewellRoutingHarnessOve
 
     const queuedItems = [] as unknown as QueuedNotificationCollection;
     const queuedSequences: QueuedNotification[][] = [];
+    const queuedSequenceOptions: Array<DisplayQueueSequenceOptions | undefined> = [];
     const platformFarewellCooldowns = new Set<string>();
-    const displayQueue: DisplayQueue & { addSequence: (items: Array<Record<string, unknown>>) => void } = {
+    const displayQueue: DisplayQueue & {
+        addSequence: (items: Array<Record<string, unknown>>, options?: DisplayQueueSequenceOptions) => void;
+    } = {
         addItem: (item: Record<string, unknown>) => {
             queuedItems.push(item as QueuedNotification);
         },
-        addSequence: (items) => {
+        addSequence: (items, options?: DisplayQueueSequenceOptions) => {
             queuedSequences.push(items as QueuedNotification[]);
+            queuedSequenceOptions.push(options);
             for (const item of items) {
                 queuedItems.push(item as QueuedNotification);
             }
@@ -193,7 +199,8 @@ function createFarewellRoutingHarness(configOverrides: FarewellRoutingHarnessOve
     return {
         platformEventRouter,
         queuedItems,
-        queuedSequences
+        queuedSequences,
+        queuedSequenceOptions
     };
 }
 
