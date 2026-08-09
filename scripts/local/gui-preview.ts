@@ -105,6 +105,7 @@ const { PlatformEventRouter } = load('../../src/services/PlatformEventRouter.ts'
 const { ChatNotificationRouter } = load('../../src/services/ChatNotificationRouter.ts');
 type PreviewNotificationManager = {
     handleNotification: (type: string, platform: string, payload: UnknownRecord) => Promise<unknown>;
+    prepareNotification: (type: string, platform: string, payload: UnknownRecord) => Promise<unknown>;
 };
 
 type NotificationManagerCtor = new (...args: unknown[]) => PreviewNotificationManager;
@@ -271,6 +272,7 @@ interface PreviewRuntime {
     handlePaypiggyNotification?: (platform: string, username: string, payload?: UnknownRecord) => Promise<unknown>;
     handleGiftPaypiggyNotification?: (platform: string, username: string, payload?: UnknownRecord) => Promise<unknown>;
     handleFarewellNotification?: (platform: string, username: string, payload?: UnknownRecord) => Promise<unknown>;
+    prepareFarewellNotification?: (platform: string, username: string, payload?: UnknownRecord) => Promise<unknown>;
     handleEnvelopeNotification?: (platform: string, payload?: UnknownRecord) => Promise<unknown>;
     handleChatMessage?: (platform: string, normalizedData?: UnknownRecord) => Promise<unknown>;
 }
@@ -1295,6 +1297,13 @@ function createPreviewRuntime(options: CreatePreviewRuntimeOptions) {
     runtime.handlePaypiggyNotification = forwardNotification(PlatformEvents.PAYPIGGY);
     runtime.handleGiftPaypiggyNotification = forwardNotification(PlatformEvents.GIFTPAYPIGGY);
     runtime.handleFarewellNotification = forwardNotification('farewell');
+    runtime.prepareFarewellNotification = async (platform: string, username: string, payload: UnknownRecord = {}) => {
+        return notificationManager.prepareNotification('farewell', platform, {
+            ...payload,
+            username,
+            type: 'farewell'
+        });
+    };
     runtime.handleEnvelopeNotification = async (platform: string, payload: UnknownRecord = {}) => {
         return notificationManager.handleNotification(PlatformEvents.ENVELOPE, platform, {
             ...payload,

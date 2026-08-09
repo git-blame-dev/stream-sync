@@ -240,6 +240,31 @@ class NotificationManager extends EventEmitter {
     }
 
     async handleNotificationInternal(notificationType: string, platform: unknown, data: unknown, skipSpamDetection: boolean) {
+        const prepared = await this.prepareNotificationInternal(notificationType, platform, data, skipSpamDetection);
+        if (!prepared.success) return prepared;
+        const item = prepared.item;
+        try {
+            if (!item) {
+                throw new Error('Notification preparation returned no item');
+            }
+            this.displayQueue.addItem(item);
+        } catch (error) {
+            this._handleNotificationError(
+                `Error in notification processing for ${notificationType} from ${prepared.platform}: ${getErrorMessage(error)}`,
+                error,
+                { notificationType, platform: prepared.platform, item: prepared.item, data },
+                { eventType: 'display-queue' }
+            );
+            return { success: false, error: 'Display queue error', details: getErrorMessage(error) };
+        }
+        return prepared;
+    }
+
+    async prepareNotification(notificationType: string, platform: unknown, data: unknown) {
+        return this.prepareNotificationInternal(notificationType, platform, data, false, true);
+    }
+
+    async prepareNotificationInternal(notificationType: string, platform: unknown, data: unknown, skipSpamDetection: boolean, preparationOnly = false) {
         const platformValidation = this.inputValidator.validatePlatform(platform);
         if (!platformValidation.success) {
             this.logger.warn(`[NotificationManager] Invalid platform: ${String(platform)}`, 'notification-manager', { notificationType, platform });
@@ -284,6 +309,15 @@ class NotificationManager extends EventEmitter {
         const isMonetizationType = typeValidation.isMonetizationType;
         const originalType = notificationType;
         notificationType = canonicalType;
+
+        if (preparationOnly && isMonetizationType) {
+            return {
+                success: false,
+                error: 'Monetization notifications require immediate handling',
+                notificationType,
+                platform: platformName
+            };
+        }
 
         const normalizedData = this.payloadBuilder.normalizeData(data as NotificationRecord, isMonetizationType);
         const isErrorPayload = normalizedData.isError === true;
@@ -493,25 +527,14 @@ class NotificationManager extends EventEmitter {
             return { success: false, error: 'Invalid data structure', details: 'item.data is not a valid object' };
         }
         
-        try {
-            this.displayQueue.addItem(item);
-        } catch (error) {
-            this._handleNotificationError(
-                `Error in notification processing for ${notificationType} from ${platformName}: ${getErrorMessage(error)}`,
-                error,
-                { notificationType, platform: platformName, item, data: normalizedData },
-                { eventType: 'display-queue' }
-            );
-            return { success: false, error: 'Display queue error', details: getErrorMessage(error) };
-        }
-
         return {
             success: true,
             notificationType,
             platform: platformName,
             notificationData,
             priority: appliedPriority,
-            vfxConfig
+            vfxConfig,
+            item
         };
     }
 

@@ -51,9 +51,13 @@ describe("Connection-Time Message Filter", () => {
       config,
     });
 
-    router.enqueueChatMessage = createMockFn<Parameters<typeof router.enqueueChatMessage>, ReturnType<typeof router.enqueueChatMessage>>(() => undefined);
+    router.buildChatMessageItem = createMockFn<Parameters<typeof router.buildChatMessageItem>, ReturnType<typeof router.buildChatMessageItem>>((platform) => ({
+      type: "chat",
+      platform,
+      data: {},
+    }));
     router.detectCommand = createMockFn<Parameters<typeof router.detectCommand>, ReturnType<typeof router.detectCommand>>(async () => null);
-    router.processCommand = createMockFn<Parameters<typeof router.processCommand>, ReturnType<typeof router.processCommand>>(async () => undefined);
+    router.processCommand = createMockFn<Parameters<typeof router.processCommand>, ReturnType<typeof router.processCommand>>(async () => false);
     router.isFirstMessage = createMockFn<Parameters<typeof router.isFirstMessage>, ReturnType<typeof router.isFirstMessage>>(() => false);
     router.isGreetingEnabled = createMockFn<Parameters<typeof router.isGreetingEnabled>, ReturnType<typeof router.isGreetingEnabled>>(() => false);
 
@@ -78,7 +82,7 @@ describe("Connection-Time Message Filter", () => {
     const oldTimestamp = new Date(connectionTime - 1000).toISOString();
     await router.handleChatMessage("twitch", createMessage(oldTimestamp));
 
-    expect(router.enqueueChatMessage).not.toHaveBeenCalled();
+    expect(router.buildChatMessageItem).not.toHaveBeenCalled();
   });
 
   test("allows messages when filterOldMessages is disabled", async () => {
@@ -94,7 +98,7 @@ describe("Connection-Time Message Filter", () => {
     const oldTimestamp = new Date(connectionTime - 2000).toISOString();
     await router.handleChatMessage("twitch", createMessage(oldTimestamp));
 
-    expect(router.enqueueChatMessage).toHaveBeenCalled();
+    expect(router.buildChatMessageItem).toHaveBeenCalled();
   });
 
   test("allows messages when connection time is unavailable", async () => {
@@ -104,7 +108,7 @@ describe("Connection-Time Message Filter", () => {
       createMessage(new Date(testClock.now()).toISOString()),
     );
 
-    expect(router.enqueueChatMessage).toHaveBeenCalled();
+    expect(router.buildChatMessageItem).toHaveBeenCalled();
   });
 
   test("shouldSkipForConnection returns false for invalid timestamps", () => {

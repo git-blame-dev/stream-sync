@@ -76,6 +76,7 @@ describe("ChatNotificationRouter platform chat behavior", () => {
       },
       displayQueue: {
         addItem: createMockFn<[DisplayQueueItem], void>(),
+        addSequence: createMockFn<[DisplayQueueItem[]], void>(),
       },
       commandCooldownService: {
         checkUserCooldown: createMockFn().mockReturnValue(true),

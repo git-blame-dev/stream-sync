@@ -46,6 +46,9 @@ type HarnessRuntime = ChatRouterRuntime & PlatformRouterRuntime & {
     displayQueue: DisplayQueue;
     handleUnifiedNotification: AppRuntime['handleUnifiedNotification'];
     handleFarewellNotification: AppRuntime['handleFarewellNotification'];
+    prepareUnifiedNotification: AppRuntime['prepareUnifiedNotification'];
+    prepareFarewellNotification: AppRuntime['prepareFarewellNotification'];
+    _runUnifiedNotification: AppRuntime['_runUnifiedNotification'];
     handleChatMessage: NonNullable<PlatformRouterRuntime['handleChatMessage']>;
     _handleAppRuntimeError: (error: unknown, context?: unknown) => void;
 };
@@ -53,6 +56,7 @@ type HarnessRuntime = ChatRouterRuntime & PlatformRouterRuntime & {
 function createFarewellRoutingHarness(configOverrides: FarewellRoutingHarnessOverrides = {}): {
     platformEventRouter: PlatformEventRouter;
     queuedItems: QueuedNotificationCollection;
+    queuedSequences: QueuedNotification[][];
 } {
     const farewellConfig = {
         command: '!bye|!bye2|!bye3, bye|goodbye|cya',
@@ -87,10 +91,17 @@ function createFarewellRoutingHarness(configOverrides: FarewellRoutingHarnessOve
     const config = createConfigFixture(configFixtureOverrides);
 
     const queuedItems = [] as unknown as QueuedNotificationCollection;
+    const queuedSequences: QueuedNotification[][] = [];
     const platformFarewellCooldowns = new Set<string>();
-    const displayQueue: DisplayQueue = {
+    const displayQueue: DisplayQueue & { addSequence: (items: Array<Record<string, unknown>>) => void } = {
         addItem: (item: Record<string, unknown>) => {
             queuedItems.push(item as QueuedNotification);
+        },
+        addSequence: (items) => {
+            queuedSequences.push(items as QueuedNotification[]);
+            for (const item of items) {
+                queuedItems.push(item as QueuedNotification);
+            }
         },
         getQueueLength: () => queuedItems.length
     };
@@ -140,11 +151,20 @@ function createFarewellRoutingHarness(configOverrides: FarewellRoutingHarnessOve
         },
         isFirstMessage: () => false,
         _handleAppRuntimeError: () => {},
+        _runUnifiedNotification: (...args: Parameters<AppRuntime['_runUnifiedNotification']>) => (
+            AppRuntime.prototype._runUnifiedNotification.apply(runtime as unknown as AppRuntime, args)
+        ),
         handleUnifiedNotification: (...args: Parameters<AppRuntime['handleUnifiedNotification']>) => (
             AppRuntime.prototype.handleUnifiedNotification.apply(runtime as unknown as AppRuntime, args)
         ),
         handleFarewellNotification: (...args: Parameters<AppRuntime['handleFarewellNotification']>) => (
             AppRuntime.prototype.handleFarewellNotification.apply(runtime as unknown as AppRuntime, args)
+        ),
+        prepareUnifiedNotification: (...args: Parameters<AppRuntime['prepareUnifiedNotification']>) => (
+            AppRuntime.prototype.prepareUnifiedNotification.apply(runtime as unknown as AppRuntime, args)
+        ),
+        prepareFarewellNotification: (...args: Parameters<AppRuntime['prepareFarewellNotification']>) => (
+            AppRuntime.prototype.prepareFarewellNotification.apply(runtime as unknown as AppRuntime, args)
         ),
         handleChatMessage: async (platform: string, normalizedData: Record<string, unknown>) => {
             if (!chatRouter) {
@@ -172,7 +192,8 @@ function createFarewellRoutingHarness(configOverrides: FarewellRoutingHarnessOve
 
     return {
         platformEventRouter,
-        queuedItems
+        queuedItems,
+        queuedSequences
     };
 }
 

@@ -38,6 +38,7 @@ describe("ChatNotificationRouter TTS behavior", () => {
       },
       displayQueue: {
         addItem: createMockFn(),
+        addSequence: createMockFn(),
       },
       platformLifecycleService: {
         getPlatformConnectionTime: createMockFn().mockReturnValue(null),

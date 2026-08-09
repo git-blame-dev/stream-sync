@@ -5,7 +5,7 @@ import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 import { sanitizeForDisplay } from '../utils/validation';
 import { getValidMessageParts, normalizeBadgeImages } from '../utils/message-parts';
 import { normalizeGreetingIdentityKey } from '../utils/greeting-identity-key-normalizer';
-import type { DisplayQueueItem, DisplayQueueVfxConfig, DisplayQueueWriter } from '../interfaces/DisplayQueue';
+import type { DisplayQueueItem, DisplayQueueSequenceWriter, DisplayQueueVfxConfig } from '../interfaces/DisplayQueue';
 
 const LOG_TRUNCATION_LENGTH = 200;
 
@@ -71,7 +71,13 @@ type ProcessCommandOptions = {
     firstMessageState?: FirstMessageState;
     greetingsEnabled?: boolean;
     greetingProfile?: GreetingProfile | null | undefined;
+    sourceChatItem?: DisplayQueueItem | null;
 };
+
+type FarewellOutcome =
+    | { status: 'not-handled' }
+    | { status: 'handled-without-notification' }
+    | { status: 'prepared'; item: DisplayQueueItem; cooldownKey: string };
 
 type VfxResult = {
     commandKey?: unknown;
@@ -84,7 +90,7 @@ type VfxResult = {
 
 type RuntimeLike = {
     config: RouterConfig;
-    displayQueue?: DisplayQueueWriter;
+    displayQueue?: DisplayQueueSequenceWriter;
     platformLifecycleService?: { getPlatformConnectionTime: (platform: string) => number | undefined | null };
     gracefulExitService?: {
         isEnabled: () => boolean;
@@ -108,7 +114,7 @@ type RuntimeLike = {
         isFirstMessage?: (userId: unknown, context: RouterRecord) => boolean;
     };
     isFirstMessage?: (userId: unknown, context: RouterRecord) => boolean;
-    handleFarewellNotification?: (platform: string, username: string | undefined, data: RouterRecord) => Promise<unknown> | unknown;
+    prepareFarewellNotification?: (platform: string, username: string | undefined, data: RouterRecord) => Promise<unknown> | unknown;
 };
 
 type RouterDependencies = {
@@ -128,6 +134,13 @@ function isRecord(value: unknown): value is RouterRecord {
 
 function isCommandConfig(value: unknown): value is CommandConfig {
     return isRecord(value) && typeof value.command === 'string';
+}
+
+function isDisplayQueueItem(value: unknown): value is DisplayQueueItem {
+    return isRecord(value) &&
+        typeof value.type === 'string' &&
+        typeof value.platform === 'string' &&
+        isRecord(value.data);
 }
 
 function getErrorMessage(error: unknown) {
@@ -155,6 +168,8 @@ class ChatNotificationRouter {
 
     async handleChatMessage(platform: string, normalizedData: NormalizedChatData) {
         const safeNormalizedData: NormalizedChatData = normalizedData || {};
+        let sourceChatItem: DisplayQueueItem | null = null;
+        let displayCommitted = false;
         try {
             const messageText = this.getMessageText(safeNormalizedData);
             this.logger.debug('Chat message via router', 'chat-router', {
@@ -227,38 +242,71 @@ class ChatNotificationRouter {
             const greetingsEnabled = this.isGreetingEnabled(platform);
 
             if (chatEnabled) {
-                this.enqueueChatMessage(platform, safeNormalizedData, sanitizedMessage.message, messageParts);
+                sourceChatItem = this.buildChatMessageItem(platform, safeNormalizedData, sanitizedMessage.message, messageParts);
             }
 
             const farewellTrigger = this.detectFarewell(sanitizedMessage.message);
             if (farewellTrigger) {
-                const handledFarewell = await this.processFarewell(platform, safeNormalizedData, farewellTrigger);
-                if (handledFarewell) {
+                const farewellOutcome = await this.prepareFarewell(platform, safeNormalizedData, farewellTrigger);
+                if (farewellOutcome.status === 'prepared') {
+                    displayCommitted = this.enqueueDisplayItems([
+                        ...(sourceChatItem ? [sourceChatItem] : []),
+                        farewellOutcome.item
+                    ]);
+                    if (displayCommitted) {
+                        this.updateGlobalCooldown(farewellOutcome.cooldownKey);
+                    }
+                    return;
+                }
+                if (farewellOutcome.status === 'handled-without-notification') {
+                    displayCommitted = this.enqueueDisplayItems(sourceChatItem ? [sourceChatItem] : []);
                     return;
                 }
             }
 
             const commandConfig = await this.detectCommand(sanitizedMessage.message);
             if (commandConfig) {
-                await this.processCommand(platform, safeNormalizedData, commandConfig, {
+                const commandCommitted = await this.processCommand(platform, safeNormalizedData, commandConfig, {
                     firstMessageState,
                     greetingsEnabled,
-                    greetingProfile
+                    greetingProfile,
+                    sourceChatItem
                 });
+                displayCommitted = commandCommitted || this.enqueueDisplayItems(sourceChatItem ? [sourceChatItem] : []);
                 return;
             }
 
             if (firstMessageState.isFirstMessage && greetingsEnabled) {
-                await this.queueGreeting(platform, safeNormalizedData.username, {
+                const greetingItem = await this.buildGreetingItem(platform, safeNormalizedData.username, {
                     userId,
                     avatarUrl: safeNormalizedData.avatarUrl,
                     greetingProfile
                 });
-                firstMessageState.consume();
+                displayCommitted = this.enqueueDisplayItems([
+                    ...(sourceChatItem ? [sourceChatItem] : []),
+                    greetingItem
+                ]);
+                if (displayCommitted) {
+                    firstMessageState.consume();
+                }
+                return;
             }
+
+            displayCommitted = this.enqueueDisplayItems(sourceChatItem ? [sourceChatItem] : []);
         } catch (error) {
             const errorDetails = getErrorMessage(error);
             this._handleRouterError(`Error routing chat message: ${errorDetails}`, error, 'chat-routing');
+            if (!displayCommitted && sourceChatItem) {
+                try {
+                    displayCommitted = this.enqueueDisplayItems([sourceChatItem]);
+                } catch (fallbackError) {
+                    this._handleRouterError(
+                        `Error queueing chat fallback: ${getErrorMessage(fallbackError)}`,
+                        fallbackError,
+                        'chat-fallback'
+                    );
+                }
+            }
         }
     }
 
@@ -452,6 +500,13 @@ class ChatNotificationRouter {
             return;
         }
 
+        this.runtime.displayQueue.addItem(
+            this.buildChatMessageItem(platform, normalizedData, sanitizedMessage, messageParts)
+        );
+    }
+
+    buildChatMessageItem(platform: string, normalizedData: NormalizedChatData, sanitizedMessage: string, messageParts: Array<Record<string, unknown>> = []): DisplayQueueItem {
+
         const baseChatData = {
             type: 'chat',
             platform,
@@ -484,28 +539,29 @@ class ChatNotificationRouter {
             chatData.badgeImages = badgeImages;
         }
 
-        this.runtime.displayQueue.addItem({
+        return {
             type: 'chat',
             data: chatData,
             platform
-        });
+        };
     }
 
-    async processCommand(platform: string, normalizedData: NormalizedChatData, commandConfig: CommandConfig, options: ProcessCommandOptions) {
+    async processCommand(platform: string, normalizedData: NormalizedChatData, commandConfig: CommandConfig, options: ProcessCommandOptions): Promise<boolean> {
         const safeOptions = options || {};
-        if (!this.runtime.commandCooldownService) {
+        const commandCooldownService = this.runtime.commandCooldownService;
+        if (!commandCooldownService) {
             this.logger.warn('CommandCooldownService not available; cannot process command', 'chat-router');
-            return;
+            return false;
         }
 
-        const { firstMessageState, greetingsEnabled, greetingProfile } = safeOptions;
+        const { firstMessageState, greetingsEnabled, greetingProfile, sourceChatItem } = safeOptions;
         const isFirstMessage = firstMessageState?.isFirstMessage === true;
         const consumeFirstMessage = typeof firstMessageState?.consume === 'function'
             ? firstMessageState.consume
             : () => {};
         const { perUserCooldown, heavyCooldown, globalCooldown } = this.getCooldownSettings();
 
-        const userAllowed = this.runtime.commandCooldownService.checkUserCooldown(
+        const userAllowed = commandCooldownService.checkUserCooldown(
             normalizedData.userId,
             perUserCooldown,
             heavyCooldown
@@ -513,31 +569,54 @@ class ChatNotificationRouter {
 
         if (!userAllowed) {
             this.logger.warn(`${normalizedData.username} tried to use ${commandConfig.command} but is on per-user cooldown`, platform);
-            return;
+            return false;
         }
 
         const globalAllowed = this.checkGlobalCooldown(commandConfig.command, globalCooldown);
         if (!globalAllowed) {
             this.logger.warn(`${normalizedData.username} tried to use ${commandConfig.command} but is on global cooldown`, platform);
-            return;
+            return false;
         }
 
+        const items = sourceChatItem ? [sourceChatItem] : [];
         if (isFirstMessage && greetingsEnabled) {
-            await this.queueGreeting(platform, normalizedData.username, {
-                priority: 6,
+            items.push(await this.buildGreetingItem(platform, normalizedData.username, {
                 userId: normalizedData.userId,
                 avatarUrl: normalizedData.avatarUrl,
                 greetingProfile
-            });
-            consumeFirstMessage();
+            }));
         }
 
-        await this.queueCommand(platform, normalizedData, commandConfig);
-        if (isFirstMessage && !greetingsEnabled) {
-            consumeFirstMessage();
+        items.push(this.buildCommandItem(platform, normalizedData, commandConfig));
+        const committed = this.enqueueDisplayItems(items);
+        if (!committed) {
+            return false;
         }
-        this.runtime.commandCooldownService.updateUserCooldown(normalizedData.userId);
-        this.updateGlobalCooldown(commandConfig.command);
+
+        if (isFirstMessage) {
+            this.runCommandStateUpdate(consumeFirstMessage, 'first-message state');
+        }
+        this.runCommandStateUpdate(
+            () => commandCooldownService.updateUserCooldown(normalizedData.userId),
+            'user cooldown'
+        );
+        this.runCommandStateUpdate(
+            () => this.updateGlobalCooldown(commandConfig.command),
+            'global cooldown'
+        );
+        return true;
+    }
+
+    runCommandStateUpdate(update: () => void, description: string) {
+        try {
+            update();
+        } catch (error) {
+            this._handleRouterError(
+                `Command ${description} update failed after display admission: ${getErrorMessage(error)}`,
+                error,
+                'command-state-update'
+            );
+        }
     }
 
     getFirstMessageState(normalizedData: NormalizedChatData, platform: string, trackingUserId: unknown = normalizedData.userId): FirstMessageState {
@@ -570,14 +649,14 @@ class ChatNotificationRouter {
         };
     }
 
-    async processFarewell(platform: string, normalizedData: NormalizedChatData, farewellTrigger: string) {
+    async prepareFarewell(platform: string, normalizedData: NormalizedChatData, farewellTrigger: string): Promise<FarewellOutcome> {
         if (!this.isFarewellEnabled(platform)) {
             this._logSkipped(platform, normalizedData.username, 'farewells disabled');
-            return false;
+            return { status: 'not-handled' };
         }
 
-        if (typeof this.runtime.handleFarewellNotification !== 'function') {
-            throw new Error('Runtime missing handleFarewellNotification');
+        if (typeof this.runtime.prepareFarewellNotification !== 'function') {
+            throw new Error('Runtime missing prepareFarewellNotification');
         }
 
         const farewellCooldownMs = this.getFarewellCooldownMs();
@@ -585,11 +664,11 @@ class ChatNotificationRouter {
         const globalAllowed = this.checkGlobalCooldown(farewellCooldownKey, farewellCooldownMs);
         if (!globalAllowed) {
             this._logSkipped(platform, normalizedData.username, 'farewell timeout active');
-            return true;
+            return { status: 'handled-without-notification' };
         }
 
         try {
-            const result = await this.runtime.handleFarewellNotification(platform, normalizedData.username, {
+            const result = await this.runtime.prepareFarewellNotification(platform, normalizedData.username, {
                 command: farewellTrigger,
                 trigger: farewellTrigger,
                 userId: normalizedData.userId,
@@ -597,16 +676,19 @@ class ChatNotificationRouter {
                 timestamp: normalizedData.timestamp
             });
 
-            if (isRecord(result) && result.success === true) {
-                this.updateGlobalCooldown(farewellCooldownKey);
-                return true;
+            if (isRecord(result) && result.success === true && isDisplayQueueItem(result.item)) {
+                return {
+                    status: 'prepared',
+                    item: result.item,
+                    cooldownKey: farewellCooldownKey
+                };
             }
 
-            this._logSkipped(platform, normalizedData.username, 'farewell notification not enqueued');
-            return false;
+            this._logSkipped(platform, normalizedData.username, 'farewell notification not prepared');
+            return { status: 'not-handled' };
         } catch (error) {
-            this._handleRouterError(`Error handling farewell notification: ${getErrorMessage(error)}`, error, 'farewell-routing');
-            return false;
+            this._handleRouterError(`Error preparing farewell notification: ${getErrorMessage(error)}`, error, 'farewell-routing');
+            return { status: 'not-handled' };
         }
     }
 
@@ -645,6 +727,11 @@ class ChatNotificationRouter {
             return;
         }
 
+        this.runtime.displayQueue.addItem(this.buildCommandItem(platform, normalizedData, commandConfig));
+    }
+
+    buildCommandItem(platform: string, normalizedData: NormalizedChatData, commandConfig: CommandConfig): DisplayQueueItem {
+
         const commandData = NotificationBuilder.build({
             type: 'command',
             platform,
@@ -658,12 +745,12 @@ class ChatNotificationRouter {
             throw new Error('Command notification build failed');
         }
 
-        this.runtime.displayQueue.addItem({
+        return {
             type: 'command',
             data: commandData,
             vfxConfig: this.buildVFXConfig(commandConfig),
             platform
-        });
+        };
     }
 
     buildVFXConfig(commandConfig: CommandConfig): DisplayQueueVfxConfig {
@@ -725,6 +812,12 @@ class ChatNotificationRouter {
             return;
         }
 
+        this.runtime.displayQueue.addItem(await this.buildGreetingItem(platform, username, safeOptions));
+    }
+
+    async buildGreetingItem(platform: string, username: string | undefined, options: { userId?: unknown; avatarUrl?: unknown; priority?: number; greetingProfile?: GreetingProfile | null | undefined }): Promise<DisplayQueueItem> {
+        const safeOptions = options || {};
+
         const greetingData = NotificationBuilder.build({
             type: 'greeting',
             platform,
@@ -752,7 +845,25 @@ class ChatNotificationRouter {
             queueItem.priority = safeOptions.priority;
         }
 
-        this.runtime.displayQueue.addItem(queueItem);
+        return queueItem;
+    }
+
+    enqueueDisplayItems(items: DisplayQueueItem[]): boolean {
+        if (!this.runtime.displayQueue || items.length === 0) {
+            return false;
+        }
+
+        if (items.length === 1) {
+            const item = items[0];
+            if (!item) {
+                return false;
+            }
+            this.runtime.displayQueue.addItem(item);
+            return true;
+        }
+
+        this.runtime.displayQueue.addSequence(items);
+        return true;
     }
 
     async resolveGreetingVFX() {

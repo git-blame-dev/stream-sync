@@ -4,11 +4,12 @@ import { initializeTestLogging } from "../../helpers/test-setup";
 import { DisplayQueue } from "../../../src/obs/display-queue.ts";
 import { createMockOBSManager } from "../../helpers/mock-factories";
 import { PRIORITY_LEVELS } from "../../../src/core/constants";
+import type { DisplayQueueItem } from "../../../src/interfaces/DisplayQueue";
 
 initializeTestLogging();
 
 type Queue = InstanceType<typeof DisplayQueue>;
-type QueueItem = Queue["queue"][number];
+type QueueItem = DisplayQueueItem;
 type DisplayQueueConfig = ConstructorParameters<typeof DisplayQueue>[1];
 type DisplayQueueConstants = ConstructorParameters<typeof DisplayQueue>[2];
 type DisplayQueueEventBus = ConstructorParameters<typeof DisplayQueue>[3];
@@ -24,7 +25,7 @@ const expectLastChatMessage = (queue: Queue, message: string) => {
 const expectQueuedItem = (queue: Queue, index: number): QueueItem => {
   const item = queue.queue[index];
   expect(item).toBeDefined();
-  if (!item) {
+  if (!item || queue.state.isSequence(item)) {
     throw new Error(`Expected queued item at index ${index}`);
   }
   return item;
@@ -214,7 +215,12 @@ describe("DisplayQueue control", () => {
         data: { username: "test-user", message: "second" },
       });
 
-      expect(queue.queue.map((item) => item.data.message)).toEqual([
+      expect(queue.queue.map((item) => {
+        if (queue.state.isSequence(item)) {
+          throw new Error("Expected ordinary chat queue item");
+        }
+        return item.data.message;
+      })).toEqual([
         "first",
         "second",
       ]);

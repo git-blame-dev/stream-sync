@@ -2,6 +2,27 @@ import { describe, it, expect } from "bun:test";
 import { createFarewellRoutingHarness } from "../helpers/farewell-routing-harness";
 
 describe("farewell chat routing integration", () => {
+  it("prepares and queues source chat with farewell as one sequence", async () => {
+    const { platformEventRouter, queuedSequences } = createFarewellRoutingHarness({
+      general: { messagesEnabled: true, logChatMessages: false },
+      twitch: { messagesEnabled: true, farewellsEnabled: true },
+    });
+
+    await platformEventRouter.routeEvent({
+      platform: "twitch",
+      type: "platform:chat-message",
+      data: {
+        username: "test-user",
+        userId: "test-user-id",
+        message: { text: "!bye everyone" },
+        timestamp: "2024-01-01T00:00:00.000Z",
+      },
+    });
+
+    expect(queuedSequences).toHaveLength(1);
+    expect(queuedSequences[0]?.map((item) => item.type)).toEqual(["chat", "farewell"]);
+  });
+
   it("routes farewell notification rows even when messages are disabled", async () => {
     const { platformEventRouter, queuedItems } = createFarewellRoutingHarness();
 

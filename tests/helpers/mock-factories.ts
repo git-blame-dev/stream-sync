@@ -915,6 +915,12 @@ const createMockDisplayQueue = (queueState: DisplayQueueState = {}, methodOverri
         : createMockFn().mockResolvedValue(true);
     const baseMethods = {
         addItem: addItemMock,
+        addSequence: createMockFn<[unknown[]], boolean>().mockImplementation((items) => {
+            for (const item of items) {
+                addItemMock(item);
+            }
+            return true;
+        }),
         addToQueue: createMockFn().mockResolvedValue(true),
         processQueue: createMockFn().mockResolvedValue(true),
         removeItem: createMockFn().mockResolvedValue(true),

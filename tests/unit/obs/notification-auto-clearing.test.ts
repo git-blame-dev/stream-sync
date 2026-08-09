@@ -10,6 +10,7 @@ import { createSourcesConfigFixture } from "../../helpers/config-fixture";
 import { createOBSSourcesManager } from "../../../src/obs/sources.ts";
 import { PRIORITY_LEVELS } from "../../../src/core/constants";
 import { DisplayQueue } from "../../../src/obs/display-queue.ts";
+import type { DisplayQueueItem } from "../../../src/interfaces/DisplayQueue";
 
 setupAutomatedCleanup({
   clearCallsBeforeEach: true,
@@ -23,7 +24,7 @@ describe("Notification Auto-Clearing Behavior", () => {
   });
 
   type Queue = InstanceType<typeof DisplayQueue>;
-  type QueueItem = Queue["queue"][number];
+  type QueueItem = DisplayQueueItem;
   type DisplayQueueConstants = ConstructorParameters<typeof DisplayQueue>[2];
   type DisplayQueueObsManager = ConstructorParameters<typeof DisplayQueue>[0];
   type ObsCallResult = Record<string, unknown>;

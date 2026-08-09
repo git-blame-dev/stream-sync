@@ -8,7 +8,10 @@ type TestConfig = ReturnType<typeof createConfigFixture>;
 type QueueItem = Record<string, unknown> & { type?: string; priority?: number };
 type RouterRuntime = {
   config: TestConfig;
-  displayQueue: { addItem: TestMockFn<[QueueItem], void> };
+  displayQueue: {
+    addItem: TestMockFn<[QueueItem], void>;
+    addSequence: TestMockFn<[QueueItem[]], void>;
+  };
   platformLifecycleService: { getPlatformConnectionTime: TestMockFn<[platform: string], null> };
   commandCooldownService: {
     checkUserCooldown: TestMockFn<[userId: unknown, perUserCooldown: number, heavyCooldown: number], boolean>;
@@ -50,6 +53,7 @@ describe("ChatNotificationRouter lingering/priority/TTS", () => {
     runtime: runtimeOverrides,
     config = testConfig,
   }: { runtime?: Partial<RouterRuntime>; config?: TestConfig } = {}) => {
+    const addItem = createMockFn<[QueueItem], void>();
     const baseRuntime: RouterRuntime = {
       config: {
         ...testConfig,
@@ -57,7 +61,10 @@ describe("ChatNotificationRouter lingering/priority/TTS", () => {
         twitch: { ...testConfig.twitch, greetingsEnabled: true, messagesEnabled: true },
       },
       displayQueue: {
-        addItem: createMockFn<[QueueItem], void>(),
+        addItem,
+        addSequence: createMockFn<[QueueItem[]], void>((items) => {
+          items.forEach((item) => addItem(item));
+        }),
       },
       platformLifecycleService: {
         getPlatformConnectionTime: createMockFn<[platform: string], null>().mockReturnValue(null),
@@ -88,7 +95,7 @@ describe("ChatNotificationRouter lingering/priority/TTS", () => {
     return { router, runtime };
   };
 
-  it("queues chat with lower priority than greeting when first message", async () => {
+  it("queues first-message chat and greeting as one ordered sequence", async () => {
     const { router, runtime } = createRouter({
       runtime: {
         isFirstMessage: createMockFn<[unknown, Record<string, unknown>], boolean>().mockReturnValue(true),
@@ -106,12 +113,11 @@ describe("ChatNotificationRouter lingering/priority/TTS", () => {
 
     expect(chatItem).toBeDefined();
     expect(greetingItem).toBeDefined();
-    if (!chatItem || !greetingItem) {
-      throw new Error("Expected both chat and greeting queue items");
-    }
-    expect(chatItem.priority ?? 0).toBeLessThanOrEqual(
-      greetingItem.priority ?? Infinity,
-    );
+    expect(runtime.displayQueue.addSequence).toHaveBeenCalledTimes(1);
+    expect(runtime.displayQueue.addSequence.mock.calls[0]?.[0].map((item) => item.type)).toEqual([
+      "chat",
+      "greeting",
+    ]);
   });
 
   it("does not enqueue greeting when platform greeting disabled", async () => {

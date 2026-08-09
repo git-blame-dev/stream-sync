@@ -22,7 +22,7 @@ describe("DisplayQueueState", () => {
 
   const expectRecordData = (item: DisplayItem | null | undefined): DisplayData => {
     expect(item).toBeDefined();
-    const data = item?.data;
+    const data = item && "data" in item ? item.data : undefined;
     expect(data).toBeObject();
     if (data === null || typeof data !== "object") {
       throw new Error("Expected display item data object");

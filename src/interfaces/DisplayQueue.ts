@@ -54,6 +54,12 @@ type DisplayQueueItem = {
     [key: string]: unknown;
 };
 
+type DisplayQueueSequence = {
+    type: '__display_queue_sequence__';
+    priority: number;
+    children: DisplayQueueItem[];
+};
+
 type NotificationQueueItem = DisplayQueueItem & {
     priority: number;
     data: NotificationQueueItemData;
@@ -61,6 +67,10 @@ type NotificationQueueItem = DisplayQueueItem & {
 
 type DisplayQueueWriter = {
     addItem(item: DisplayQueueItem): void;
+};
+
+type DisplayQueueSequenceWriter = DisplayQueueWriter & {
+    addSequence(items: DisplayQueueItem[]): void;
 };
 
 type DisplayQueueLengthReader = {
@@ -72,10 +82,12 @@ type DisplayQueueDependency = DisplayQueueWriter & DisplayQueueLengthReader;
 export type {
     DisplayQueueDependency,
     DisplayQueueItem,
+    DisplayQueueSequence,
     DisplayQueueItemData,
     DisplayQueueLengthReader,
     DisplayQueueMessage,
     DisplayQueueMessagePart,
+    DisplayQueueSequenceWriter,
     DisplayQueueVfxConfig,
     DisplayQueueWriter,
     NotificationQueueItem,

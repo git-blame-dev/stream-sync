@@ -93,6 +93,7 @@ describe("Display items avoid hardcoded durations", () => {
       const runtime = {
         displayQueue: {
           addItem: (item: QueueItem) => queuedItems.push(item),
+          addSequence: (items: QueueItem[]) => queuedItems.push(...items),
         },
         config: createConfigFixture(),
         commandCooldownService: {

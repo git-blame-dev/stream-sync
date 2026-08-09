@@ -9,11 +9,12 @@ type RouterDependencies = ConstructorParameters<typeof ChatNotificationRouter>[0
 type RouterRuntime = RouterDependencies["runtime"];
 type DisplayQueue = NonNullable<RouterRuntime["displayQueue"]>;
 type AddItemMock = TestMockFn<Parameters<DisplayQueue["addItem"]>, ReturnType<DisplayQueue["addItem"]>>;
+type AddSequenceMock = TestMockFn<Parameters<DisplayQueue["addSequence"]>, ReturnType<DisplayQueue["addSequence"]>>;
 type GetVfxConfig = NonNullable<NonNullable<RouterRuntime["vfxCommandService"]>["getVFXConfig"]>;
 type GetVfxConfigMock = TestMockFn<Parameters<GetVfxConfig>, ReturnType<GetVfxConfig>>;
 
 type RouterOverrides = {
-  displayQueue?: { addItem: AddItemMock } | null;
+  displayQueue?: { addItem: AddItemMock; addSequence: AddSequenceMock } | null;
   vfxCommandService?: { getVFXConfig: GetVfxConfigMock } | null;
 };
 
@@ -29,6 +30,7 @@ describe("Greeting System Diagnosis", () => {
     });
     const displayQueue = overrides.displayQueue || {
       addItem: createMockFn<Parameters<DisplayQueue["addItem"]>, ReturnType<DisplayQueue["addItem"]>>(),
+      addSequence: createMockFn<Parameters<DisplayQueue["addSequence"]>, ReturnType<DisplayQueue["addSequence"]>>(),
     };
     const runtime = {
       config,

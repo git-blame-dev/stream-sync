@@ -10,9 +10,10 @@ import { DisplayQueueEffects } from './display-queue-effects';
 import { DisplayRenderer } from './display-renderer';
 import { getDefaultGoalsManager } from './goals';
 import { getDefaultSourcesManager } from './sources';
-import type { DisplayQueueItem, DisplayQueueItemData, DisplayQueueMessage } from '../interfaces/DisplayQueue';
+import type { DisplayQueueItem, DisplayQueueItemData, DisplayQueueMessage, DisplayQueueSequence } from '../interfaces/DisplayQueue';
 
 type QueueItem = DisplayQueueItem;
+type QueueEntry = QueueItem | DisplayQueueSequence;
 type QueueItemData = DisplayQueueItemData;
 
 type DisplayQueueConfig = {
@@ -138,7 +139,7 @@ function defaultDelay(ms: number) {
 }
 
 class DisplayQueue {
-    queue: QueueItem[];
+    queue: QueueEntry[];
     isProcessing: boolean;
     isRetryScheduled: boolean;
     currentDisplay: QueueItem | null;
@@ -152,6 +153,8 @@ class DisplayQueue {
     state: DisplayQueueState;
     renderer: DisplayRenderer;
     effects: DisplayQueueEffects;
+    activeSequenceRemaining: QueueItem[];
+    processingRunActive: boolean;
 
     constructor(
         obsManager: DisplayQueueObsManager,
@@ -168,6 +171,8 @@ class DisplayQueue {
             this.isProcessing = false;
             this.isRetryScheduled = false;
             this.currentDisplay = null;
+            this.activeSequenceRemaining = [];
+            this.processingRunActive = false;
             this.obsManager = obsManager;
             this.constants = constants;
             this.sourcesManager = dependencies.sourcesManager || getDefaultSourcesManager();
@@ -181,7 +186,7 @@ class DisplayQueue {
                 ...(this.config.maxQueueSize === undefined ? {} : { maxQueueSize: this.config.maxQueueSize }),
                 getPriority: (type) => this.getTypePriority(type) ?? PRIORITY_LEVELS.CHAT
             });
-            this.queue = this.state.queue as QueueItem[];
+            this.queue = this.state.queue;
 
             this.renderer = new DisplayRenderer({
                 obsManager: this.obsManager,
@@ -249,10 +254,18 @@ class DisplayQueue {
     }
     
     addItem(item: QueueItem) {
-        const { insertIndex } = this.state.addItem(item);
+        const { insertIndex } = this.state.addItem(item, this.activeSequenceRemaining.length);
         logger.debug(`[Display Queue] Added ${item.type} (priority ${item.priority}) at position ${insertIndex}. Queue length: ${this.queue.length}`, 'display-queue');
         
-        if (!this.isProcessing && !this.isRetryScheduled && this.config.autoProcess) {
+        if (!this.processingRunActive && !this.isProcessing && !this.isRetryScheduled && this.config.autoProcess) {
+            this.processQueue();
+        }
+    }
+
+    addSequence(items: QueueItem[]) {
+        const { insertIndex } = this.state.addSequence(items, this.activeSequenceRemaining.length);
+        logger.debug(`[Display Queue] Added sequence (${items.length} items) at position ${insertIndex}. Queue length: ${this.getQueueLength()}`, 'display-queue');
+        if (!this.processingRunActive && !this.isProcessing && !this.isRetryScheduled && this.config.autoProcess) {
             this.processQueue();
         }
     }
@@ -283,10 +296,11 @@ class DisplayQueue {
     }
     
     async processQueue() {
-        if (this.isProcessing || this.isRetryScheduled || !this.obsManager) return;
+        if (this.processingRunActive || this.isProcessing || this.isRetryScheduled || !this.obsManager) return;
 
         const transitionDelay = this.config.timing?.transitionDelay ?? 0;
 
+        this.processingRunActive = true;
         this.isRetryScheduled = true;
 
         try {
@@ -301,10 +315,12 @@ class DisplayQueue {
                 } else {
                     this.isRetryScheduled = false;
                 }
+                this.processingRunActive = false;
                 return;
             }
         } catch (error) {
             this.isRetryScheduled = false;
+            this.processingRunActive = false;
             handleDisplayQueueError('[Display Queue] Failed readiness check during processing', error);
             return;
         }
@@ -315,49 +331,20 @@ class DisplayQueue {
         
         try {
             while (this.queue.length > 0) {
-                const item = this.state.shift() as QueueItem | undefined;
-                if (!item) {
+                const entry = this.state.shift() as QueueEntry | undefined;
+                if (!entry) {
                     continue;
                 }
-                this.currentDisplay = item;
-                logger.debug(`[Display Queue] Processing ${item.type} item. Remaining: ${this.queue.length}`, 'display-queue');
-                
-                try {
-                    const displayed = await this.displayItem(item);
-                    const isNotification = isNotificationType(item.type);
-                    const isDisplayedNotification = isNotification && displayed !== false;
-
-                    if (isNotification) {
-                        if (!isDisplayedNotification) {
-                            logger.debug(`[Display Queue] Notification ${item.type} was not displayed; skipping wait/hide/transition`, 'display-queue');
-                            this.currentDisplay = null;
-                            continue;
-                        }
-
-                        await this.delay(this.getDuration(item));
-                        await this.hideCurrentDisplay(item);
-                        await this.delay(transitionDelay);
-                        this.currentDisplay = null;
+                const children = this.state.isSequence(entry) ? entry.children : [entry];
+                this.activeSequenceRemaining = [...children];
+                while (this.activeSequenceRemaining.length > 0) {
+                    const item = this.activeSequenceRemaining.shift();
+                    if (!item) {
                         continue;
                     }
-
-                    await this.delay(this.getDuration(item));
-
-                    if (isChatType(item.type)) {
-                        if (this.queue.length > 0 || !this.lastChatItem) {
-                            await this.hideCurrentDisplay(item);
-                        }
-                    }
-
-                    await this.delay(transitionDelay);
-                    this.currentDisplay = null;
-
-                } catch (err) {
-                    handleDisplayQueueError(`[Display Queue] Error processing ${item.type}`, err, { itemType: item.type });
-                    if (this.currentDisplay) {
-                        await this.hideCurrentDisplay(this.currentDisplay);
-                    }
+                    await this.processSingleItem(item, transitionDelay, this.activeSequenceRemaining.length > 0);
                 }
+                this.activeSequenceRemaining = [];
             }
             
             if (this.lastChatItem) {
@@ -367,12 +354,40 @@ class DisplayQueue {
             }
         } finally {
             this.isProcessing = false;
+            this.processingRunActive = false;
             logger.debug('[Display Queue] Queue processing complete', 'display-queue');
 
             if (this.config.autoProcess && !this.isRetryScheduled && this.queue.length > 0) {
                 logger.debug('[Display Queue] New items queued during teardown, restarting processing', 'display-queue');
                 void this.processQueue();
             }
+        }
+    }
+
+    async processSingleItem(item: QueueItem, transitionDelay: number, sequenceHasRemaining = false) {
+        this.currentDisplay = item;
+        try {
+            const displayed = await this.displayItem(item);
+            const isNotification = isNotificationType(item.type);
+            if (isNotification) {
+                if (displayed === false) return;
+                await this.delay(this.getDuration(item));
+                await this.hideCurrentDisplay(item);
+                await this.delay(transitionDelay);
+                return;
+            }
+            await this.delay(this.getDuration(item));
+            if (isChatType(item.type) && (sequenceHasRemaining || this.queue.length > 0 || !this.lastChatItem)) {
+                await this.hideCurrentDisplay(item);
+            }
+            await this.delay(transitionDelay);
+        } catch (err) {
+            handleDisplayQueueError(`[Display Queue] Error processing ${item.type}`, err, { itemType: item.type });
+            if (this.currentDisplay) {
+                await this.hideCurrentDisplay(this.currentDisplay);
+            }
+        } finally {
+            this.currentDisplay = null;
         }
     }
     
@@ -447,7 +462,7 @@ class DisplayQueue {
     }
     
     getQueueLength() {
-        return this.queue.length;
+        return this.state.getQueueLength() + this.activeSequenceRemaining.length;
     }
 
     clearQueue() {
@@ -458,6 +473,7 @@ class DisplayQueue {
         }
         this.isRetryScheduled = false;
         this.isProcessing = false;
+        this.activeSequenceRemaining = [];
         this.currentDisplay = null;
         logger.debug('[Display Queue] Queue cleared', 'display-queue');
     }
@@ -542,17 +558,15 @@ class DisplayQueue {
         let queuedChatCount = 0;
 
         for (const queuedItem of this.queue) {
-            if (!isChatType(queuedItem.type)) {
-                continue;
-            }
-
-            queuedChatCount += 1;
+            const children = this.state.isSequence(queuedItem) ? queuedItem.children : [queuedItem];
+            queuedChatCount += children.filter((item) => isChatType(item.type)).length;
             if (queuedChatCount > 1) {
                 return true;
             }
         }
 
-        return false;
+        queuedChatCount += this.activeSequenceRemaining.filter((item) => isChatType(item.type)).length;
+        return queuedChatCount > 1;
     }
 
     extractUsername(data: unknown): string | null {

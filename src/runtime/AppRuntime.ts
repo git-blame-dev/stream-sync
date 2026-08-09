@@ -18,7 +18,7 @@ import { getSystemTimestampISO } from '../utils/timestamp';
 import { safeSetTimeout } from '../utils/timeout-validator';
 import { ViewerCountSystem } from '../utils/viewer-count';
 import { wireStreamStatusHandlers } from '../viewer-count/stream-status-handler';
-import type { DisplayQueueWriter } from '../interfaces/DisplayQueue';
+import type { DisplayQueueSequenceWriter } from '../interfaces/DisplayQueue';
 import { NotificationInputValidator } from '../notifications/notification-input-validator';
 
 type RuntimeRecord = Record<string, unknown>;
@@ -96,7 +96,7 @@ type RuntimeObsManager = {
     call: (requestType: string, requestData: Record<string, unknown>) => Promise<unknown>;
 };
 
-type RuntimeDisplayQueue = DisplayQueueWriter;
+type RuntimeDisplayQueue = DisplayQueueSequenceWriter;
 
 type RuntimeSourcesManager = {
     hideAllDisplays: (
@@ -116,6 +116,7 @@ type RuntimeEventBus = {
 
 type RuntimeNotificationManager = {
     handleNotification: (type: string, platform: string, payload: RuntimeRecord) => Promise<unknown>;
+    prepareNotification?: (type: string, platform: string, payload: RuntimeRecord) => Promise<unknown>;
 };
 
 type RuntimeVfxCommandService = RuntimeRecord & {
@@ -289,7 +290,7 @@ class AppRuntime {
     chatNotificationRouter: ChatNotificationRouter;
     youtube?: { initialize?: (handlers?: RuntimeRecord, reconnect?: boolean) => Promise<unknown> | unknown };
 
-    async handleUnifiedNotification(type: string, platform: string, username: unknown, options: NotificationOptions) {
+    async _runUnifiedNotification(type: string, platform: string, username: unknown, options: NotificationOptions, process: RuntimeNotificationManager['handleNotification'] | undefined) {
         if (!options || typeof options !== 'object') {
             throw new Error('handleUnifiedNotification requires options');
         }
@@ -356,7 +357,10 @@ class AppRuntime {
                 throw new Error(`Notification manager not available for ${type} notification`);
             }
 
-            const managerResult = await this.notificationManager.handleNotification(type, platform, notificationData);
+            if (typeof process !== 'function') {
+                throw new Error(`Notification manager preparation unavailable for ${type}`);
+            }
+            const managerResult = await process.call(this.notificationManager, type, platform, notificationData);
             const managerRecord = managerResult && typeof managerResult === 'object' ? managerResult as RuntimeRecord : null;
             if (managerRecord && typeof managerRecord.success === 'boolean') {
                 return managerResult;
@@ -379,6 +383,14 @@ class AppRuntime {
                 username: typeof username === 'string' ? username : null
             };
         }
+    }
+
+    async handleUnifiedNotification(type: string, platform: string, username: unknown, options: NotificationOptions) {
+        return this._runUnifiedNotification(type, platform, username, options, this.notificationManager?.handleNotification);
+    }
+
+    async prepareUnifiedNotification(type: string, platform: string, username: unknown, options: NotificationOptions) {
+        return this._runUnifiedNotification(type, platform, username, options, this.notificationManager?.prepareNotification);
     }
 
     constructor(config: RuntimeConfig, dependencies: RuntimeDependencies) {
@@ -1299,6 +1311,19 @@ class AppRuntime {
             throw new Error('handleFarewellNotification requires command');
         }
         return this.handleUnifiedNotification('farewell', platform, username, {
+            command: options.command,
+            ...options
+        });
+    }
+
+    async prepareFarewellNotification(platform: string, username: unknown, options: NotificationOptions) {
+        if (!options || typeof options !== 'object') {
+            throw new Error('prepareFarewellNotification requires options');
+        }
+        if (!options.command) {
+            throw new Error('prepareFarewellNotification requires command');
+        }
+        return this.prepareUnifiedNotification('farewell', platform, username, {
             command: options.command,
             ...options
         });

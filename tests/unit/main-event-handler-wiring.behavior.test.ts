@@ -22,7 +22,7 @@ describe("main.js event handler wiring", () => {
     notificationManager: {
       handleNotification: createMockFn(),
     },
-    displayQueue: { addItem: createMockFn() },
+    displayQueue: { addItem: createMockFn(), addSequence: createMockFn() },
     eventBus: {
             subscribe: createMockFn(),
             emit: createMockFn(),

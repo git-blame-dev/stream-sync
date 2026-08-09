@@ -17,7 +17,10 @@ type DisplayQueueAddItem = TestMockFn<[QueueItem], void>;
 type RouterRuntime = {
   config: TestConfig;
   platformLifecycleService: { getPlatformConnectionTime: TestMockFn<[platform: string], null> };
-  displayQueue: { addItem: DisplayQueueAddItem };
+  displayQueue: {
+    addItem: DisplayQueueAddItem;
+    addSequence: TestMockFn<[QueueItem[]], void>;
+  };
   commandCooldownService: {
     checkUserCooldown: TestMockFn<[userId: unknown, perUserCooldown: number, heavyCooldown: number], boolean>;
     checkGlobalCooldown: TestMockFn<[commandName: string, globalCooldownMs: number], boolean>;
@@ -58,6 +61,9 @@ describe("ChatNotificationRouter error handling", () => {
     },
     displayQueue: {
       addItem: displayQueueBehavior,
+      addSequence: createMockFn<[QueueItem[]], void>((items) => {
+        items.forEach((item) => displayQueueBehavior(item));
+      }),
     },
     commandCooldownService: {
       checkUserCooldown: createMockFn<[unknown, number, number], boolean>().mockReturnValue(true),

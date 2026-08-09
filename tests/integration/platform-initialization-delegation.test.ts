@@ -135,7 +135,7 @@ describe("Platform Initialization Delegation", () => {
 
     mockDependencies = {
       logging: noOpLogger,
-      displayQueue: { addItem: createMockFn() },
+      displayQueue: { addItem: createMockFn(), addSequence: createMockFn() },
       eventBus: {
         subscribe: createMockFn(),
         emit: createMockFn(),
