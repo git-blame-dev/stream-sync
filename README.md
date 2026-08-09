@@ -113,6 +113,19 @@ Use one of these local files in OBS:
 
 The default GUI origin is `http://127.0.0.1:3399`.
 
+### Read-only chat event feed
+
+Enable the opt-in normalized chat feed in `config.ini`:
+
+```ini
+[gui]
+enableChatFeed = true
+```
+
+When enabled, connect an SSE client to `http://127.0.0.1:3399/api/v1/chat/events`. Windows applications can use this localhost address when Stream Sync runs in WSL. The feed is loopback-only, has no CORS support or authentication, and does not replay events; consumers receive events published after they connect.
+
+Each `chat.message` event has `schemaVersion: 1` and JSON data with `type`, `eventId`, `platform`, `occurredAt`, `receivedAt`, `user`, and `message` fields. `user` includes `displayName`, `isModerator`, and `isBroadcaster`; `message` includes `text`. Treat the versioned payload as the contract and own all parsing, validation, and reconnect behavior in the consumer.
+
 ### Run a release archive
 
 Download the Linux or Windows archive from [GitHub Releases](https://github.com/git-blame-dev/stream-sync/releases). Release assets are named like `stream-sync-vYYYY.MM.DD.N-linux-x64.tar.gz` and `stream-sync-vYYYY.MM.DD.N-windows-x64.zip`.

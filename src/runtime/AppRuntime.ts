@@ -161,6 +161,7 @@ type RuntimeObsEventService = RuntimeRecord & {
 type RuntimeGuiTransportService = {
     start?: () => Promise<unknown> | unknown;
     stop?: () => Promise<unknown> | unknown;
+    publishChatMessage?: (platform: string, payload: RuntimeRecord) => void;
 };
 
 type RuntimeGracefulExitService = {
@@ -490,7 +491,10 @@ class AppRuntime {
         this.chatNotificationRouter = new ChatNotificationRouter({
             runtime: this,
             logger: this.logger,
-            config: this.config
+            config: this.config,
+            ...(this.guiTransportService.publishChatMessage
+                ? { publishChatMessage: this.guiTransportService.publishChatMessage }
+                : {})
         });
 
         this.registerEventHandlers();

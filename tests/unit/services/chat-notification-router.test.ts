@@ -64,7 +64,12 @@ describe("ChatNotificationRouter", () => {
   const createRouter = ({
     runtime: runtimeOverrides,
     config = testConfig,
-  }: { runtime?: RuntimeOverrides; config?: RouterConfig } = {}) => {
+    publishChatMessage,
+  }: {
+    runtime?: RuntimeOverrides;
+    config?: RouterConfig;
+    publishChatMessage?: RouterDependencies["publishChatMessage"];
+  } = {}) => {
     const baseConfig = {
         general: {
           maxMessageLength: 500,
@@ -167,6 +172,7 @@ describe("ChatNotificationRouter", () => {
       runtime,
       logger: mockLogger,
       config,
+      ...(publishChatMessage ? { publishChatMessage } : {}),
     });
 
     return { router, runtime };
@@ -181,6 +187,48 @@ describe("ChatNotificationRouter", () => {
     const queuedItem = getQueuedItems(runtime)[0];
     expect(queuedItem?.type).toBe("chat");
     expect(queuedItem?.platform).toBe("twitch");
+  });
+
+  it("publishes eligible normalized chat without display sanitization", async () => {
+    const published: Array<[string, Record<string, unknown>]> = [];
+    const { router } = createRouter({
+      publishChatMessage: (platform, payload) => {
+        published.push([platform, payload]);
+      },
+    });
+    const message = "<b>a</b>\u200b";
+
+    await router.handleChatMessage("twitch", {
+      ...baseMessage,
+      message: { text: message },
+    });
+
+    expect(published).toHaveLength(1);
+    expect(published[0]?.[0]).toBe("twitch");
+    expect(published[0]?.[1].message).toEqual({ text: message });
+  });
+
+  it("does not publish messages filtered as older than the connection", async () => {
+    const published: Array<[string, Record<string, unknown>]> = [];
+    const { router } = createRouter({
+      runtime: {
+        config: { general: { filterOldMessages: true } },
+        platformLifecycleService: {
+          getPlatformConnectionTime: createMockFn<[string], number | null>()
+            .mockReturnValue(testClock.now()),
+        },
+      },
+      publishChatMessage: (platform, payload) => {
+        published.push([platform, payload]);
+      },
+    });
+
+    await router.handleChatMessage("twitch", {
+      ...baseMessage,
+      timestamp: new Date(testClock.now() - 1).toISOString(),
+    });
+
+    expect(published).toHaveLength(0);
   });
 
   it("logs routine chat summaries without removing display message content", async () => {

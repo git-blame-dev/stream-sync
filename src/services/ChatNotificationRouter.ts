@@ -121,6 +121,7 @@ type RouterDependencies = {
     runtime: RuntimeLike;
     logger: LoggerLike;
     config: RouterConfig;
+    publishChatMessage?: (platform: string, payload: Record<string, unknown>) => void;
 };
 
 type PlatformErrorHandlerLike = {
@@ -155,8 +156,9 @@ class ChatNotificationRouter {
     logger: LoggerLike;
     maxMessageLength: number;
     errorHandler: PlatformErrorHandlerLike;
+    publishChatMessage?: RouterDependencies['publishChatMessage'];
 
-    constructor({ runtime, logger, config }: RouterDependencies) {
+    constructor({ runtime, logger, config, publishChatMessage }: RouterDependencies) {
         this.runtime = runtime;
         this.logger = logger;
         if (!config) {
@@ -164,6 +166,7 @@ class ChatNotificationRouter {
         }
         this.maxMessageLength = config.general.maxMessageLength;
         this.errorHandler = createPlatformErrorHandler(this.logger, 'chat-router');
+        this.publishChatMessage = publishChatMessage;
     }
 
     async handleChatMessage(platform: string, normalizedData: NormalizedChatData) {
@@ -217,6 +220,7 @@ class ChatNotificationRouter {
                 this._logSkipped(platform, safeNormalizedData.username, 'empty after sanitization');
                 return;
             }
+            this.publishChatMessage?.(platform, safeNormalizedData);
 
             const level = this.runtime.config.general.logChatMessages ? 'console' : 'debug';
             if (level === 'console' && typeof this.logger.console === 'function') {

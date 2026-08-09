@@ -17,6 +17,7 @@ import {
     sendStaticAsset
 } from './gui-http-responses';
 import { isGuiActive, toTransportRecord, type TransportRecord } from './gui-runtime-config';
+import { getSystemTimestampISO, isIsoTimestamp } from '../../utils/timestamp';
 
 type GuiTransportLogger = {
     debug?: (message: string, scope: string, data?: unknown) => void;
@@ -67,7 +68,8 @@ type GuiTransportService = {
 start: () => Promise<void>;
 stop: () => Promise<void>;
 getAddress: () => ReturnType<Server['address']> | null;
-isActive: () => boolean;
+    isActive: () => boolean;
+    publishChatMessage: (platform: string, payload: Record<string, unknown>) => void;
 };
 
 type GuiMapperConfig = {
@@ -139,6 +141,11 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
     let unsubscribeDisplayRows: (() => void) | null = null;
     let unsubscribeDisplayEffects: (() => void) | null = null;
     const clients = new Set<ServerResponse<IncomingMessage>>();
+    const chatClients = new Set<ServerResponse<IncomingMessage>>();
+    const chatFeedEnabled = guiConfig.enableChatFeed === true;
+    const CHAT_MAX_CLIENTS = 4;
+    const CHAT_MAX_PACKET_BYTES = 16 * 1024;
+    const CHAT_MAX_BUFFERED_BYTES = 64 * 1024;
     const runtimeAssetRegistry = new Map<string, RuntimeAssetRecord>();
     let dispatchChain = Promise.resolve();
     let dispatchEpoch = 0;
@@ -280,6 +287,50 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
                     { payloadType: payloadRecord.type },
                     'Failed writing GUI SSE event'
                 );
+            }
+        }
+    };
+
+    const publishChatMessage = (platform: string, payload: Record<string, unknown>) => {
+        if (!chatFeedEnabled) {
+            return;
+        }
+
+        const receivedAt = getSystemTimestampISO();
+        const user = {
+            displayName: String(payload.username ?? ''),
+            isModerator: payload.isMod === true,
+            isBroadcaster: payload.isBroadcaster === true,
+            ...(typeof payload.userId === 'string' && payload.userId ? { id: payload.userId } : {})
+        };
+        const text = typeof payload.message === 'object' && payload.message !== null
+            ? String((payload.message as Record<string, unknown>).text ?? '')
+            : String(payload.message ?? '');
+        const event = {
+            schemaVersion: 1,
+            type: 'chat.message',
+            eventId: crypto.randomUUID(),
+            platform,
+            occurredAt: isIsoTimestamp(payload.timestamp) ? String(payload.timestamp) : receivedAt,
+            receivedAt,
+            user,
+            message: { text }
+        };
+        const packet = `id: ${event.eventId}\nevent: chat.message\ndata: ${JSON.stringify(event)}\n\n`;
+
+        if (Buffer.byteLength(packet, 'utf8') > CHAT_MAX_PACKET_BYTES) {
+            return;
+        }
+
+        for (const client of chatClients) {
+            try {
+                if (client.writableLength > CHAT_MAX_BUFFERED_BYTES || !client.write(packet)) {
+                    chatClients.delete(client);
+                    client.destroy();
+                }
+            } catch {
+                chatClients.delete(client);
+                client.destroy();
             }
         }
     };
@@ -427,6 +478,45 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
                     clientCount: clients.size
                 });
             });
+            return;
+        }
+
+        if (url === '/api/v1/chat/events') {
+            if (!chatFeedEnabled) {
+                sendNotFound(res);
+                return;
+            }
+            if (req.headers.origin) {
+                res.writeHead(403);
+                res.end();
+                return;
+            }
+            if (!requireGetRequest(req, res)) {
+                return;
+            }
+            if (chatClients.size >= CHAT_MAX_CLIENTS) {
+                res.writeHead(503);
+                res.end('chat feed full');
+                return;
+            }
+
+            res.writeHead(200, {
+                'Content-Type': 'text/event-stream; charset=utf-8',
+                'Cache-Control': 'no-cache, no-transform',
+                Connection: 'keep-alive',
+                'X-Accel-Buffering': 'no'
+            });
+            if (!sendBody) {
+                res.end();
+                return;
+            }
+
+            res.write(': connected\n\n');
+            chatClients.add(res);
+            const removeClient = () => chatClients.delete(res);
+            req.once('close', removeClient);
+            res.once('close', removeClient);
+            res.once('error', removeClient);
             return;
         }
 
@@ -715,7 +805,7 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
                 await stop();
             }
 
-            if (!demoOnly && !isGuiActive(config)) {
+            if (!demoOnly && !isGuiActive(config) && !chatFeedEnabled) {
                 active = false;
                 return;
             }
@@ -723,6 +813,9 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
             const host = typeof guiConfig.host === 'string' ? guiConfig.host.trim() : '';
             if (!host) {
                 throw new Error('GUI transport requires non-empty host');
+            }
+            if (chatFeedEnabled && !['127.0.0.1', 'localhost', '::1'].includes(host)) {
+                throw new Error('Chat feed requires loopback host');
             }
             const port = Number(guiConfig.port);
             if (!Number.isInteger(port) || port < 0 || port > 65535) {
@@ -802,6 +895,10 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
             }
         }
         clients.clear();
+        for (const client of chatClients) {
+            client.end();
+        }
+        chatClients.clear();
 
         if (!server) {
             active = false;
@@ -841,7 +938,8 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
         start,
         stop,
         getAddress,
-        isActive
+        isActive,
+        publishChatMessage
     };
 }
 

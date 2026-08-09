@@ -45,11 +45,11 @@ function createSseReader(response: any) {
   };
 
   return {
-    async readEvent() {
+    async readEvent(timeoutMs = 2000) {
       while (true) {
         const separatorIndex = buffer.indexOf("\n\n");
         if (separatorIndex === -1) {
-          const { value, done } = await readWithTimeout();
+          const { value, done } = await readWithTimeout(timeoutMs);
           if (done) {
             throw new Error("SSE stream ended before receiving an event");
           }
@@ -1987,6 +1987,140 @@ describe("GUI transport routes and SSE integration", () => {
         abortController.abort();
         await service.stop();
       }
+    }
+  });
+  it("serves the opt-in normalized chat feed independently", async () => {
+    const service = createGuiTransportService({
+      config: buildConfig({ enableChatFeed: true, port: 0 }),
+      eventBus: new TestEventBus(),
+      logger: null,
+    });
+    await service.start();
+    const abortController = new AbortController();
+    try {
+      const baseUrl = getBaseUrl(service);
+      const response = await fetch(`${baseUrl}/api/v1/chat/events`, {
+        signal: abortController.signal,
+      });
+      expect(response.status).toBe(200);
+      const reader = createSseReader(response);
+      service.publishChatMessage("twitch", {
+        username: "viewer",
+        userId: "user-1",
+        isMod: false,
+        isBroadcaster: false,
+        timestamp: "2026-08-09T16:30:00.000Z",
+        message: { text: "<b>a</b>\u200b" },
+      });
+      const event = await reader.readEvent();
+      expect(event.type).toBe("chat.message");
+      expect(event.schemaVersion).toBe(1);
+      expect(event.platform).toBe("twitch");
+      expect(event.user).toEqual({ displayName: "viewer", isModerator: false, isBroadcaster: false, id: "user-1" });
+      expect(event.message.text).toBe("<b>a</b>\u200b");
+      expect(response.url).toContain("/api/v1/chat/events");
+
+      service.publishChatMessage("twitch", {
+        username: "viewer",
+        timestamp: "not-a-timestamp",
+        message: { text: "a" },
+      });
+      const fallbackTimestampEvent = await reader.readEvent();
+      expect(fallbackTimestampEvent.occurredAt).toBe(
+        fallbackTimestampEvent.receivedAt,
+      );
+    } finally {
+      abortController.abort();
+      await service.stop();
+    }
+  });
+
+  it("does not expose the chat feed when it is disabled", async () => {
+    const service = createGuiTransportService({
+      config: buildConfig({ enableDock: true, port: 0 }),
+      eventBus: new TestEventBus(),
+      logger: null,
+    });
+    await service.start();
+
+    try {
+      const response = await fetch(`${getBaseUrl(service)}/api/v1/chat/events`);
+      expect(response.status).toBe(404);
+    } finally {
+      await service.stop();
+    }
+  });
+
+  it("rejects chat feed requests with an Origin header", async () => {
+    const service = createGuiTransportService({
+      config: buildConfig({ enableChatFeed: true, port: 0 }),
+      eventBus: new TestEventBus(),
+      logger: null,
+    });
+    await service.start();
+
+    try {
+      const response = await fetch(`${getBaseUrl(service)}/api/v1/chat/events`, {
+        headers: { Origin: "https://example.invalid" },
+      });
+      expect(response.status).toBe(403);
+    } finally {
+      await service.stop();
+    }
+  });
+
+  it("rejects enabled chat feed on non-loopback hosts", async () => {
+    const service = createGuiTransportService({
+      config: buildConfig({ enableChatFeed: true, host: "0.0.0.0", port: 0 }),
+      eventBus: new TestEventBus(),
+      logger: null,
+    });
+
+    await expect(service.start()).rejects.toThrow(
+      "Chat feed requires loopback host",
+    );
+    expect(service.isActive()).toBe(false);
+    await service.stop();
+  });
+
+  it("keeps GUI events separate from raw chat feed events", async () => {
+    const eventBus = new TestEventBus();
+    const service = createGuiTransportService({
+      config: buildConfig({ enableChatFeed: true, port: 0 }),
+      eventBus,
+      logger: null,
+    });
+    await service.start();
+    const guiAbort = new AbortController();
+    const chatAbort = new AbortController();
+
+    try {
+      const baseUrl = getBaseUrl(service);
+      const guiResponse = await fetch(`${baseUrl}/gui/events`, {
+        signal: guiAbort.signal,
+      });
+      const chatResponse = await fetch(`${baseUrl}/api/v1/chat/events`, {
+        signal: chatAbort.signal,
+      });
+      expect(guiResponse.status).toBe(200);
+      expect(chatResponse.status).toBe(200);
+      const chatReader = createSseReader(chatResponse);
+      const guiReader = createSseReader(guiResponse);
+
+      service.publishChatMessage("twitch", {
+        username: "viewer",
+        userId: "user-1",
+        timestamp: "2026-08-09T16:30:00.000Z",
+        message: { text: "raw chat" },
+      });
+
+      const chatEvent = await chatReader.readEvent();
+      expect(chatEvent.type).toBe("chat.message");
+      await expect(guiReader.readEvent(300)).rejects.toThrow();
+    } finally {
+      guiAbort.abort();
+      chatAbort.abort();
+      await service.stop();
     }
   });
 });

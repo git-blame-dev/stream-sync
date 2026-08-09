@@ -126,6 +126,7 @@ const CONFIG_SCHEMA: ConfigSchema = {
     gui: {
         enableDock: { type: 'boolean', default: false },
         enableOverlay: { type: 'boolean', default: false },
+        enableChatFeed: { type: 'boolean', default: false },
         host: { type: 'string', default: '127.0.0.1' },
         port: { type: 'number', default: 3399, min: 0, max: 65535, integer: true },
         messageCharacterLimit: { type: 'number', default: 0, min: 0, integer: true },

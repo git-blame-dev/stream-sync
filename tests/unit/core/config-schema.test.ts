@@ -75,6 +75,7 @@ describe('buildDefaultsFromSchema()', () => {
         const defaults = buildDefaultsFromSchema();
 
         expect(defaults.gui).toEqual({
+            enableChatFeed: false,
             enableDock: false,
             enableOverlay: false,
             host: '127.0.0.1',
