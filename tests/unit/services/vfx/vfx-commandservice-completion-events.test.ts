@@ -122,6 +122,48 @@ describe("VFXCommandService completion events", () => {
     );
   });
 
+  test("omits userId for automatic executions while preserving event correlation and context", async () => {
+    const service = new VFXCommandService(createConfig(), eventBus, {
+      effectsManager: mockEffectsManager,
+    });
+    service.selectVFXCommand = createMockFn().mockResolvedValue({
+      commandKey: "greetings",
+      filename: "synthetic-automatic",
+      mediaSource: "Synthetic VFX Source",
+      vfxFilePath: "/tmp/synthetic-automatic.vfx",
+      command: "!hello",
+      duration: 5000,
+    });
+
+    await service.executeCommand("!hello", {
+      username: "  Synthetic Automation  ",
+      platform: "twitch",
+      skipCooldown: true,
+      correlationId: "synthetic-correlation-1",
+      notificationType: "synthetic-automatic",
+    });
+
+    for (const eventName of [
+      PlatformEvents.VFX_COMMAND_EXECUTED,
+      PlatformEvents.VFX_EFFECT_COMPLETED,
+    ]) {
+      const event = expectRecordedEvent(recordedEvents, eventName);
+      expect(PlatformEvents.validateEvent(event.payload)).toBe(true);
+      expect(event.payload).not.toHaveProperty("userId");
+      expect(event.payload.username).toBe("Synthetic Automation");
+      expect(event.payload.correlationId).toBe("synthetic-correlation-1");
+      expect(event.payload.context).not.toHaveProperty("userId");
+      expect(event.payload.context).toEqual(
+        expect.objectContaining({
+          correlationId: "synthetic-correlation-1",
+          notificationType: "synthetic-automatic",
+          platform: "twitch",
+          username: "Synthetic Automation",
+        }),
+      );
+    }
+  });
+
   test("factory passes injected effects manager through to service construction", () => {
     const config = createConfig();
     const customEffectsManager = createMockEffectsManager();

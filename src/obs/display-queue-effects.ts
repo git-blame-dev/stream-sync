@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import { logger } from '../core/logging';
 import { createTikTokGiftAnimationResolver } from '../services/tiktok-gift-animation/resolver';
 import MessageTTSHandler from '../utils/message-tts-handler';
-import { safeDelay } from '../utils/timeout-validator';
+import { safeSetTimeout } from '../utils/timeout-validator';
 import { triggerHandcamGlow } from './handcam-glow';
 import type { DisplayQueueItem } from '../interfaces/DisplayQueue';
 
@@ -25,6 +25,20 @@ type VfxMatch = {
     mediaSource: string;
     command: string;
     correlationId?: string;
+};
+
+type VfxEmitOptions = {
+    delayApplied?: number;
+};
+
+type VfxCompletionResult = {
+    reason: 'cancelled' | 'completed' | 'no-eventbus' | 'timeout';
+    payload?: Record<string, unknown>;
+};
+
+type VfxCompletionWaiter = {
+    promise: Promise<VfxCompletionResult>;
+    cancel: () => void;
 };
 
 type DisplayQueueEffectsDependencies = {
@@ -359,17 +373,6 @@ class DisplayQueueEffects {
             });
         const vfxConfig = item.vfxConfig;
         const hasVfx = !!(this.eventBus && vfxConfig);
-        let vfxMatch: VfxMatch | null = null;
-        if (hasVfx) {
-            try {
-                vfxMatch = this.buildVfxMatch(vfxConfig);
-            } catch (error) {
-                this.handleDisplayQueueError('[Gift] Invalid VFX config for gift notification', error, {
-                    notificationType: item?.type,
-                    platform: item?.platform
-                });
-            }
-        }
         allPromises.push(this.playGiftVideoAndAudio());
 
         const handcamConfig = this.config.handcam;
@@ -394,41 +397,11 @@ class DisplayQueueEffects {
             }
         }
 
-        const eventBus = this.eventBus;
-        if (vfxMatch && eventBus && vfxConfig) {
+        if (hasVfx) {
             const vfxPromise = this.delay(2000).then(async () => {
-                let payload: Record<string, unknown> | undefined;
-                try {
-                    const { command, commandKey, filename, mediaSource, vfxFilePath } = vfxConfig;
-                    if (!command || !commandKey || !filename || !mediaSource || !vfxFilePath) {
-                        throw new Error('Gift VFX config requires command, commandKey, filename, mediaSource, and vfxFilePath');
-                    }
-                    if (!username || !item.platform || !item.data?.userId) {
-                        throw new Error('Gift VFX emit requires username, platform, and userId');
-                    }
-                    const correlationId = crypto.randomUUID();
-                    payload = {
-                        command,
-                        commandKey,
-                        filename,
-                        mediaSource,
-                        username,
-                        platform: item.platform,
-                        userId: item.data.userId,
-                        notificationType: item.type,
-                        delayApplied: 2000,
-                        correlationId,
-                        source: 'display-queue',
-                        context: { source: 'display-queue', notificationType: item.type, delayApplied: 2000, skipCooldown: true, correlationId },
-                        vfxConfig
-                    };
-
-                    vfxMatch.correlationId = correlationId;
-                    const completionPromise = this.waitForVfxCompletion(vfxMatch);
-                    eventBus.emit(VFX_EVENTS.COMMAND_RECEIVED, payload);
-                    await completionPromise;
-                } catch (error) {
-                    this.handleDisplayQueueError('[Gift] Error emitting VFX command', error, payload);
+                const result = await this.emitVfxFromConfig(item, username, { delayApplied: 2000 });
+                if (result.completionPromise) {
+                    await result.completionPromise;
                 }
             });
             allPromises.push(vfxPromise);
@@ -557,14 +530,23 @@ class DisplayQueueEffects {
         };
     }
 
-    async waitForVfxCompletion(match: Partial<VfxMatch> = {}, options: { timeoutMs?: number } = {}) {
+    createVfxCompletionWaiter(
+        match: Partial<VfxMatch> = {},
+        options: { timeoutMs?: number } = {}
+    ): VfxCompletionWaiter {
         const noEventBus = !this.eventBus || (!this.eventBus.subscribe && !this.eventBus.on);
         if (noEventBus) {
             logger.debug('[DisplayQueue] EventBus not available for VFX completion wait', 'display-queue', { match });
-            return { reason: 'no-eventbus' };
+            return {
+                promise: Promise.resolve({ reason: 'no-eventbus' }),
+                cancel: () => {}
+            };
         }
 
-        const timeoutMs = typeof options.timeoutMs === 'number' ? options.timeoutMs : 10000;
+        const requestedTimeoutMs = Number(options.timeoutMs);
+        const timeoutMs = Number.isFinite(requestedTimeoutMs) && requestedTimeoutMs > 0
+            ? requestedTimeoutMs
+            : 10000;
         const eventNames = [VFX_EVENTS.EFFECT_COMPLETED];
         const eventBus = this.eventBus;
         const subscribe = (eventName: string, handler: (payload: Record<string, unknown>) => void) => {
@@ -582,11 +564,17 @@ class DisplayQueueEffects {
             return () => {};
         };
 
-        return new Promise<{ reason: string; payload?: Record<string, unknown> }>((resolve) => {
+        let cancelWait = () => {};
+        let timeoutHandle: ReturnType<typeof safeSetTimeout> | undefined;
+        const promise = new Promise<VfxCompletionResult>((resolve) => {
             let resolved = false;
             const unsubscribeFns: Array<() => void> = [];
 
             const cleanup = () => {
+                if (timeoutHandle !== undefined) {
+                    clearTimeout(timeoutHandle);
+                    timeoutHandle = undefined;
+                }
                 unsubscribeFns.forEach(unsub => {
                     try {
                         unsub();
@@ -594,6 +582,15 @@ class DisplayQueueEffects {
                         logger.debug('[DisplayQueue] Error cleaning up VFX completion subscription', 'display-queue', err);
                     }
                 });
+            };
+
+            const settle = (result: VfxCompletionResult) => {
+                if (resolved) {
+                    return;
+                }
+                resolved = true;
+                cleanup();
+                resolve(result);
             };
 
             const matches = (payload: Record<string, unknown> = {}) => {
@@ -638,25 +635,33 @@ class DisplayQueueEffects {
                     return;
                 }
 
-                resolved = true;
-                cleanup();
-                resolve({ reason: 'completed', payload });
+                settle({ reason: 'completed', payload });
             };
 
             eventNames.forEach(name => {
-                unsubscribeFns.push(subscribe(name, handler));
+                const unsubscribe = subscribe(name, handler);
+                if (typeof unsubscribe === 'function') {
+                    unsubscribeFns.push(unsubscribe);
+                }
             });
 
-            safeDelay(timeoutMs, timeoutMs, 'vfx-completion-wait').then(() => {
-                if (resolved) return;
-                resolved = true;
-                cleanup();
-                resolve({ reason: 'timeout' });
-            });
+            cancelWait = () => settle({ reason: 'cancelled' });
+            timeoutHandle = safeSetTimeout(() => {
+                settle({ reason: 'timeout' });
+            }, timeoutMs);
         });
+
+        return {
+            promise,
+            cancel: () => cancelWait()
+        };
     }
 
-    async emitVfxFromConfig(item: QueueItem, username: string | null) {
+    async waitForVfxCompletion(match: Partial<VfxMatch> = {}, options: { timeoutMs?: number } = {}) {
+        return this.createVfxCompletionWaiter(match, options).promise;
+    }
+
+    async emitVfxFromConfig(item: QueueItem, username: string | null, options: VfxEmitOptions = {}) {
         const vfxConfig = item && item.vfxConfig ? item.vfxConfig : null;
         if (!this.eventBus || !vfxConfig) {
             return { emitted: false, match: null, completionPromise: null };
@@ -668,31 +673,49 @@ class DisplayQueueEffects {
             if (!command || !commandKey || !filename || !mediaSource || !vfxFilePath) {
                 throw new Error('VFX config requires command, commandKey, filename, mediaSource, and vfxFilePath');
             }
-            if (!username || !item.platform || !item.data?.userId) {
-                throw new Error('VFX emit requires username, platform, and userId');
+            if (!username || !item.platform) {
+                throw new Error('VFX emit requires username and platform');
             }
 
             const correlationId = crypto.randomUUID();
             const match = this.buildVfxMatch(vfxConfig);
             match.correlationId = correlationId;
+            const userId = typeof item.data?.userId === 'string' ? item.data.userId.trim() : '';
+            const delayApplied = Number(options.delayApplied);
+            const hasDelayApplied = Number.isFinite(delayApplied) && delayApplied >= 0;
+            const context = {
+                source: 'display-queue',
+                notificationType: item.type || null,
+                ...(hasDelayApplied ? { delayApplied } : {}),
+                correlationId,
+                skipCooldown: true
+            };
 
             payload = {
+                type: VFX_EVENTS.COMMAND_RECEIVED,
                 command,
                 commandKey,
                 filename,
                 mediaSource,
                 username,
                 platform: item.platform,
-                userId: item.data.userId,
+                ...(userId ? { userId } : {}),
+                notificationType: item.type || null,
+                ...(hasDelayApplied ? { delayApplied } : {}),
                 correlationId,
-                context: { source: 'display-queue', notificationType: item.type || null, correlationId, skipCooldown: true },
+                context,
                 source: 'display-queue',
                 vfxConfig
             };
 
-            const completionPromise = this.waitForVfxCompletion(match);
-            this.eventBus.emit(VFX_EVENTS.COMMAND_RECEIVED, payload);
-            return { emitted: true, match, completionPromise };
+            const completionWaiter = this.createVfxCompletionWaiter(match);
+            try {
+                this.eventBus.emit(VFX_EVENTS.COMMAND_RECEIVED, payload);
+            } catch (error) {
+                completionWaiter.cancel();
+                throw error;
+            }
+            return { emitted: true, match, completionPromise: completionWaiter.promise };
         } catch (error) {
             this.handleDisplayQueueError('[DisplayQueue] Error emitting VFX command', error, payload);
             return { emitted: false, match: null, completionPromise: null, error };

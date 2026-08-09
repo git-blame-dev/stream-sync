@@ -108,7 +108,10 @@ describe("DisplayQueue monetization VFX context", () => {
     restoreAllMocks();
   });
 
-  function createQueue(eventBus: DisplayQueueEventBus): DisplayQueue {
+  function createQueue(
+    eventBus: DisplayQueueEventBus,
+    delay: NonNullable<DisplayQueueDependencies["delay"]> = async () => {},
+  ): DisplayQueue {
     const obsManager = createObsManager();
 
     const baseConfig = {
@@ -143,7 +146,7 @@ describe("DisplayQueue monetization VFX context", () => {
     const mockDependencies: DisplayQueueDependencies = {
       sourcesManager: createSourcesManager(),
       goalsManager: createGoalsManager(),
-      delay: async () => {},
+      delay,
     };
 
     const queue = new DisplayQueue(
@@ -196,6 +199,7 @@ describe("DisplayQueue monetization VFX context", () => {
     await queue.effects.handleGiftEffects(item, []);
 
     expect(capturedVfx).toHaveLength(1);
+    expect(PlatformEvents.validateEvent(capturedVfx[0])).toBe(true);
     expect(capturedVfx[0]).toEqual(
       expect.objectContaining({
         commandKey: "gifts",
@@ -204,6 +208,109 @@ describe("DisplayQueue monetization VFX context", () => {
         platform: "youtube",
       }),
     );
+  });
+
+  it("starts gift media, waits two seconds, then emits VFX on every platform", async () => {
+    for (const platform of ["youtube", "twitch", "tiktok"]) {
+      const eventBus = new EventEmitter();
+      const timeline: string[] = [];
+      let releaseDelay: (() => void) | undefined;
+      let markDelayStarted: (() => void) | undefined;
+      const delayStarted = new Promise<void>((resolve) => {
+        markDelayStarted = resolve;
+      });
+      const queue = createQueue(eventBus, async (milliseconds) => {
+        timeline.push(`delay:${milliseconds}`);
+        markDelayStarted?.();
+        await new Promise<void>((resolve) => {
+          releaseDelay = resolve;
+        });
+      });
+      queue.effects.playGiftVideoAndAudio = createMockFn(async () => {
+        timeline.push("media");
+        return true;
+      });
+      eventBus.on(PlatformEvents.VFX_COMMAND_RECEIVED, (payload: VfxPayload) => {
+        timeline.push("vfx");
+        eventBus.emit(PlatformEvents.VFX_EFFECT_COMPLETED, {
+          correlationId: payload.correlationId,
+        });
+      });
+
+      const effectsPromise = queue.effects.handleGiftEffects(
+        {
+          type: "platform:gift",
+          platform,
+          vfxConfig: {
+            commandKey: "gifts",
+            command: "!gift",
+            filename: "gift.mp4",
+            mediaSource: "vfx top",
+            vfxFilePath: "/tmp/vfx",
+            duration: 5000,
+          },
+          data: {
+            username: `test-${platform}-gift-user`,
+            displayMessage: "sent a gift",
+          },
+        },
+        [],
+      );
+
+      await delayStarted;
+      expect(timeline).toEqual(["media", "delay:2000"]);
+      if (!releaseDelay) {
+        throw new Error("Expected the gift VFX delay to be pending");
+      }
+      releaseDelay();
+      await effectsPromise;
+
+      expect(timeline).toEqual(["media", "delay:2000", "vfx"]);
+    }
+  });
+
+  it("emits one anonymous YouTube gift VFX request with the display-queue context", async () => {
+    const eventBus = new EventEmitter();
+    const capturedVfx: VfxPayload[] = [];
+    const queue = createQueue(eventBus);
+    const item = {
+      type: "platform:gift",
+      platform: "youtube",
+      vfxConfig: {
+        commandKey: "test-gifts",
+        command: "!test-gift",
+        filename: "test-gift.mp4",
+        mediaSource: "test-vfx",
+        vfxFilePath: "/tmp/test-vfx",
+        duration: 2000,
+      },
+      data: { username: "test-youtube-gifter", displayMessage: "sent a gift" },
+    };
+
+    eventBus.on(PlatformEvents.VFX_COMMAND_RECEIVED, (payload: VfxPayload) => {
+      capturedVfx.push(payload);
+      safeSetTimeout(() => {
+        eventBus.emit(PlatformEvents.VFX_EFFECT_COMPLETED, {
+          correlationId: payload.correlationId,
+        });
+      }, 1);
+    });
+
+    await queue.effects.handleGiftEffects(item, []);
+
+    expect(capturedVfx).toHaveLength(1);
+    const payload = capturedVfx[0];
+    expect(payload).toBeDefined();
+    if (!payload) throw new Error("Expected one VFX payload to be emitted");
+    expect(payload).not.toHaveProperty("userId");
+    expect(payload.context).toEqual({
+      source: "display-queue",
+      notificationType: "platform:gift",
+      delayApplied: 2000,
+      skipCooldown: true,
+      correlationId: payload.correlationId,
+    });
+    expect(payload.delayApplied).toBe(2000);
   });
 
   it("emits VFX_COMMAND_RECEIVED for sequential notifications", async () => {

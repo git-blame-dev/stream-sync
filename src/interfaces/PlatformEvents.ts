@@ -466,20 +466,49 @@ const EVENT_SCHEMAS = {
         }
     },
     'vfx:command-received': {
-        required: ['type', 'command', 'username', 'platform', 'args', 'timestamp'],
-        optional: ['userId'],
+        required: ['type', 'username', 'platform', 'context'],
+        optional: [
+            'command',
+            'commandKey',
+            'filename',
+            'mediaSource',
+            'userId',
+            'correlationId',
+            'source',
+            'notificationType',
+            'delayApplied',
+            'vfxConfig'
+        ],
         properties: {
             type: { type: 'string', enum: ['vfx:command-received'] },
             command: { type: 'string' },
+            commandKey: { type: 'string' },
+            filename: { type: 'string' },
+            mediaSource: { type: 'string' },
             username: { type: 'string' },
             userId: { type: 'string' },
             platform: { type: 'string', enum: VALID_PLATFORMS },
-            args: { type: 'array' },
-            timestamp: { type: 'string' }
+            correlationId: { type: 'string' },
+            source: { type: 'string' },
+            notificationType: { type: ['string', 'null'] },
+            delayApplied: { type: 'number' },
+            vfxConfig: { type: 'object' },
+            context: {
+                type: 'object',
+                required: ['skipCooldown'],
+                properties: {
+                    skipCooldown: { type: 'boolean' },
+                    correlationId: { type: 'string' },
+                    source: { type: 'string' },
+                    notificationType: { type: ['string', 'null'] },
+                    delayApplied: { type: 'number' }
+                }
+            }
         }
     },
     'vfx:command-executed': {
-        required: ['type', 'command', 'commandKey', 'username', 'platform', 'userId', 'correlationId', 'result', 'duration', 'context'],
+        required: ['type', 'command', 'commandKey', 'username', 'platform', 'correlationId', 'result', 'duration', 'context'],
+        optional: ['userId'],
         properties: {
             type: { type: 'string', enum: ['vfx:command-executed'] },
             command: { type: 'string' },
@@ -493,7 +522,13 @@ const EVENT_SCHEMAS = {
             vfxConfig: { type: 'object' },
             result: { type: 'object' },
             duration: { type: 'number' },
-            context: { type: 'object' }
+            context: {
+                type: 'object',
+                required: ['skipCooldown'],
+                properties: {
+                    skipCooldown: { type: 'boolean' }
+                }
+            }
         }
     },
     'vfx:effect-completed': {
@@ -506,9 +541,12 @@ const EVENT_SCHEMAS = {
             duration: { type: 'number' },
             command: { type: 'string' },
             commandKey: { type: 'string' },
+            filename: { type: 'string' },
+            mediaSource: { type: 'string' },
             username: { type: 'string' },
             userId: { type: 'string' },
             platform: { type: 'string', enum: VALID_PLATFORMS },
+            vfxConfig: { type: 'object' },
             result: { type: 'object' },
             context: { type: 'object' }
         }
@@ -594,6 +632,37 @@ class PlatformEventValidator {
             for (const fieldName of Object.keys(event)) {
                 if (!allowedFields.has(fieldName)) {
                     errors.push(`Unexpected field: ${fieldName}`);
+                }
+            }
+        }
+
+        if (eventType === PlatformEvents.VFX_COMMAND_RECEIVED) {
+            const command = typeof event.command === 'string' ? event.command.trim() : '';
+            const commandKey = typeof event.commandKey === 'string' ? event.commandKey.trim() : '';
+            if (!command && !commandKey) {
+                errors.push('Missing required field: command or commandKey');
+            }
+
+            const context = isRecord(event.context) ? event.context : {};
+            const eventCorrelationId = typeof event.correlationId === 'string' ? event.correlationId.trim() : '';
+            const contextCorrelationId = typeof context.correlationId === 'string' ? context.correlationId.trim() : '';
+            if (!eventCorrelationId && !contextCorrelationId) {
+                errors.push('Missing required field: correlationId');
+            } else if (eventCorrelationId && contextCorrelationId && eventCorrelationId !== contextCorrelationId) {
+                errors.push('VFX command event correlationId mismatch');
+            }
+        }
+
+        if (
+            eventType === PlatformEvents.VFX_COMMAND_RECEIVED
+            || eventType === PlatformEvents.VFX_COMMAND_EXECUTED
+            || eventType === PlatformEvents.VFX_EFFECT_COMPLETED
+        ) {
+            const context = isRecord(event.context) ? event.context : {};
+            if (context.skipCooldown === false) {
+                const userId = typeof event.userId === 'string' ? event.userId.trim() : '';
+                if (!userId) {
+                    errors.push('Missing required field: userId');
                 }
             }
         }
@@ -1294,6 +1363,7 @@ class EnhancedPlatformEvents {
             case 'platform:envelope':
             case 'platform:follow':
             case 'platform:share':
+            case PlatformEvents.VFX_COMMAND_RECEIVED:
             case PlatformEvents.VFX_COMMAND_EXECUTED:
             case PlatformEvents.VFX_EFFECT_COMPLETED:
                 return validator.validate(event).valid;

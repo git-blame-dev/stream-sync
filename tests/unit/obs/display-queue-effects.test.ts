@@ -29,6 +29,15 @@ class TestEventBus extends EventEmitter {
   }
 }
 
+class ThrowingCommandEventBus extends TestEventBus {
+  override emit(eventName: string, payload: Record<string, unknown>) {
+    if (eventName === PlatformEvents.VFX_COMMAND_RECEIVED) {
+      throw new Error("synthetic command emission failure");
+    }
+    return super.emit(eventName, payload);
+  }
+}
+
 const handcamConfig = (enabled: boolean): NonNullable<EffectsDependencies["config"]["handcam"]> => ({
   enabled,
   maxSize: 0,
@@ -726,8 +735,37 @@ describe("DisplayQueueEffects", () => {
     expect(result.reason).toBe("completed");
   });
 
-  it("cleans up gift completion listeners when VFX emit fails", async () => {
+  it("uses the safety timeout and removes its completion listener", async () => {
     const eventBus = new TestEventBus();
+    const effects = new DisplayQueueEffects({
+      config: {
+        ttsEnabled: false,
+        obs: { ttsTxt: "tts" },
+        handcam: handcamConfig(false),
+      },
+      sourcesManager: {
+        clearTextSource: async () => {},
+        updateTextSource: async () => {},
+      },
+      obsManager: { call: async () => ({}) },
+      goalsManager: createNoopGoalsManager(),
+      eventBus,
+      delay: async () => {},
+      handleDisplayQueueError: () => {},
+      extractUsername: () => "test-user",
+    });
+
+    const result = await effects.waitForVfxCompletion(
+      { correlationId: "test-timeout-correlation" },
+      { timeoutMs: 5 },
+    );
+
+    expect(result.reason).toBe("timeout");
+    expect(eventBus.listenerCount(PlatformEvents.VFX_EFFECT_COMPLETED)).toBe(0);
+  });
+
+  it("cleans up gift completion listeners when VFX emit fails", async () => {
+    const eventBus = new ThrowingCommandEventBus();
 
     const effects = new DisplayQueueEffects({
       config: {
@@ -821,6 +859,12 @@ describe("DisplayQueueEffects", () => {
     await waitForDelay(1);
     expect(settled).toBe(false);
     expect(typeof capturedCorrelationId).toBe("string");
+
+    eventBus.emit(PlatformEvents.VFX_COMMAND_EXECUTED, {
+      correlationId: capturedCorrelationId,
+    });
+    await waitForDelay(1);
+    expect(settled).toBe(false);
 
     eventBus.emit(PlatformEvents.VFX_EFFECT_COMPLETED, {
       correlationId: capturedCorrelationId,

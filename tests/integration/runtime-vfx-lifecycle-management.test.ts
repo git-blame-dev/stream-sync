@@ -427,6 +427,94 @@ describe("AppRuntime VFXCommandService Lifecycle Management", () => {
     );
 
     test(
+      "routes automatic VFX without userId and omits userId from service context",
+      async () => {
+        const { dependencies } = createAppRuntimeTestDependencies();
+        runtime = new AppRuntime(config, dependencies);
+        await runtime.start();
+
+        const executions: Record<string, unknown>[] = [];
+        runtime.vfxCommandService.executeCommandForKey = createMockFn(
+          async (_commandKey: unknown, context: Record<string, unknown>) => {
+            executions.push(context);
+            return { success: true };
+          },
+        );
+
+        emitVfxCommand(runtime, {
+          commandKey: "automatic-confetti",
+          username: "SyntheticViewer",
+          platform: "twitch",
+          context: {
+            skipCooldown: true,
+            correlationId: "anonymous-auto-vfx",
+            platform: "nested-noncanonical-platform",
+            userId: "nested-noncanonical-id",
+            username: "nested-noncanonical-username",
+          },
+        });
+
+        await flushAsyncEvents();
+
+        expect(executions).toHaveLength(1);
+        expect(executions[0]).toMatchObject({
+          username: "SyntheticViewer",
+          platform: "twitch",
+          skipCooldown: true,
+          correlationId: "anonymous-auto-vfx",
+          source: "eventbus",
+        });
+        expect(executions[0]).not.toHaveProperty("userId");
+      },
+      { timeout: integrationTimeout },
+    );
+
+    test(
+      "does not execute VFX requests with conflicting correlation IDs",
+      async () => {
+        const { dependencies } = createAppRuntimeTestDependencies();
+        runtime = new AppRuntime(config, dependencies);
+        await runtime.start();
+        runtime.vfxCommandService.executeCommandForKey = createMockFn();
+
+        emitVfxCommand(runtime, {
+          commandKey: "automatic-confetti",
+          username: "SyntheticViewer",
+          platform: "twitch",
+          correlationId: "top-level-correlation",
+          context: { skipCooldown: true, correlationId: "context-correlation" },
+        });
+
+        await flushAsyncEvents();
+
+        expect(runtime.vfxCommandService.executeCommandForKey).not.toHaveBeenCalled();
+      },
+      { timeout: integrationTimeout },
+    );
+
+    test(
+      "does not execute a VFX request without userId when cooldown is enforced",
+      async () => {
+        const { dependencies } = createAppRuntimeTestDependencies();
+        runtime = new AppRuntime(config, dependencies);
+        await runtime.start();
+        runtime.vfxCommandService.executeCommandForKey = createMockFn();
+
+        emitVfxCommand(runtime, {
+          commandKey: "automatic-confetti",
+          username: "SyntheticViewer",
+          platform: "twitch",
+          context: { skipCooldown: false, correlationId: "anonymous-cooldown-vfx" },
+        });
+
+        await flushAsyncEvents();
+
+        expect(runtime.vfxCommandService.executeCommandForKey).not.toHaveBeenCalled();
+      },
+      { timeout: integrationTimeout },
+    );
+
+    test(
       "routes commandKey events even when commands are disabled",
       async () => {
         const { dependencies } = createAppRuntimeTestDependencies();

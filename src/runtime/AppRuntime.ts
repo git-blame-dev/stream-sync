@@ -23,6 +23,21 @@ import { NotificationInputValidator } from '../notifications/notification-input-
 
 type RuntimeRecord = Record<string, unknown>;
 
+const VFX_CONTEXT_RESERVED_KEYS = new Set([
+    'correlationId',
+    'platform',
+    'skipCooldown',
+    'source',
+    'userId',
+    'username'
+]);
+
+function resolveVfxContextExtras(context: RuntimeRecord): RuntimeRecord {
+    return Object.fromEntries(
+        Object.entries(context).filter(([key]) => !VFX_CONTEXT_RESERVED_KEYS.has(key))
+    );
+}
+
 type RuntimeObsConfig = RuntimeRecord & {
     address?: string;
     password?: string;
@@ -506,24 +521,34 @@ class AppRuntime {
                 if (!platform) {
                     throw new Error('VFX command event requires platform');
                 }
-                if (!userId) {
-                    throw new Error('VFX command event requires userId');
-                }
                 const contextRecord = context && typeof context === 'object' ? context as RuntimeRecord : {};
                 const skipCooldown = contextRecord.skipCooldown;
                 if (typeof skipCooldown !== 'boolean') {
                     throw new Error('VFX command event requires skipCooldown boolean');
                 }
-                const correlationId = contextRecord.correlationId || event.correlationId;
+                const normalizedUserId = typeof userId === 'string' ? userId.trim() : '';
+                if (!skipCooldown && !normalizedUserId) {
+                    throw new Error('Cooldown-controlled VFX command event requires userId');
+                }
+                const contextCorrelationId = typeof contextRecord.correlationId === 'string'
+                    ? contextRecord.correlationId.trim()
+                    : '';
+                const eventCorrelationId = typeof event.correlationId === 'string'
+                    ? event.correlationId.trim()
+                    : '';
+                if (contextCorrelationId && eventCorrelationId && contextCorrelationId !== eventCorrelationId) {
+                    throw new Error('VFX command event correlationId mismatch');
+                }
+                const correlationId = contextCorrelationId || eventCorrelationId;
                 if (!correlationId) {
                     throw new Error('VFX command event requires correlationId');
                 }
 
                 const executionContext = {
-                    ...contextRecord,
+                    ...resolveVfxContextExtras(contextRecord),
                     username,
                     platform,
-                    userId,
+                    ...(normalizedUserId ? { userId: normalizedUserId } : {}),
                     source: 'eventbus',
                     skipCooldown,
                     correlationId

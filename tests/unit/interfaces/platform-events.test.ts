@@ -707,6 +707,29 @@ describe('Platform Events Interface', () => {
         });
 
         it('validates emitted vfx command lifecycle payload contracts', () => {
+            const commandReceivedEvent = {
+                type: PlatformEvents.VFX_COMMAND_RECEIVED,
+                command: '!gift',
+                commandKey: 'gifts',
+                filename: 'gift.mp4',
+                mediaSource: 'VFX Top',
+                username: 'test-viewer',
+                platform: 'youtube',
+                correlationId: 'test-request-correlation-id',
+                source: 'display-queue',
+                notificationType: 'platform:gift',
+                delayApplied: 2000,
+                vfxConfig: {
+                    commandKey: 'gifts'
+                },
+                context: {
+                    skipCooldown: true,
+                    correlationId: 'test-request-correlation-id',
+                    source: 'display-queue',
+                    notificationType: 'platform:gift',
+                    delayApplied: 2000
+                }
+            };
             const commandExecutedEvent = {
                 type: PlatformEvents.VFX_COMMAND_EXECUTED,
                 command: '!hello',
@@ -734,8 +757,52 @@ describe('Platform Events Interface', () => {
                 correlationId: 'test-correlation-id'
             };
 
+            expect(PlatformEvents.validateEvent(commandReceivedEvent)).toBe(true);
+            const { command: _command, correlationId: _correlationId, ...commandKeyOnlyEvent } = commandReceivedEvent;
+            expect(PlatformEvents.validateEvent(commandKeyOnlyEvent)).toBe(true);
             expect(PlatformEvents.validateEvent(commandExecutedEvent)).toBe(true);
             expect(PlatformEvents.validateEvent(effectCompletedEvent)).toBe(true);
+        });
+
+        it('exposes the vfx request schema through the validator API', () => {
+            const validator = new PlatformEventValidator();
+            const schema = validator.getEventSchema(PlatformEvents.VFX_COMMAND_RECEIVED);
+
+            expect(validator.getSupportedEventTypes()).toContain(PlatformEvents.VFX_COMMAND_RECEIVED);
+            expect(schema).not.toBeNull();
+            expect(Array.isArray(schema?.required)).toBe(true);
+            expect(schema?.required).toContain('username');
+            expect(schema?.required).toContain('context');
+            expect(schema?.optional).toContain('correlationId');
+            expect(validator.getEventSchema('test:unknown-event')).toBeNull();
+        });
+
+        it('accepts anonymous vfx:command-executed only when skipCooldown is true', () => {
+            const validator = new PlatformEventValidator();
+            const baseEvent = {
+                type: PlatformEvents.VFX_COMMAND_EXECUTED,
+                command: 'automatic-confetti',
+                commandKey: 'automatic-confetti',
+                filename: 'confetti',
+                mediaSource: 'Synthetic VFX Source',
+                username: 'SyntheticViewer',
+                platform: 'twitch',
+                correlationId: 'anonymous-vfx-contract',
+                vfxConfig: { commandKey: 'automatic-confetti' },
+                result: { success: true },
+                duration: 42,
+            };
+
+            expect(validator.validate({
+                ...baseEvent,
+                context: { skipCooldown: true },
+            })).toEqual({ valid: true, errors: [] });
+            const cooldownControlledResult = validator.validate({
+                ...baseEvent,
+                context: { skipCooldown: false },
+            });
+            expect(cooldownControlledResult.valid).toBe(false);
+            expect(cooldownControlledResult.errors).toContain('Missing required field: userId');
         });
 
         it('should handle Unicode and emoji content properly', () => {

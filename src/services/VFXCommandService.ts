@@ -52,15 +52,29 @@ type CommandParserLike = {
     getMatchingFarewell?: (message: string, commandTrigger: string) => string | null;
 };
 
-type CommandExecutionContext = {
+type CommandExecutionContextBase = {
     username?: string;
     platform: string;
-    userId: string;
-    skipCooldown: boolean;
     correlationId?: string;
     message?: string | null;
     [key: string]: unknown;
 };
+
+type CommandExecutionContext = CommandExecutionContextBase & (
+    | { skipCooldown: false; userId: string }
+    | { skipCooldown: true; userId?: string }
+);
+
+function resolveExecutionUserId(
+    context: CommandExecutionContext,
+    operation: 'executeCommand' | 'executeCommandForKey'
+): string {
+    const normalizedUserId = typeof context.userId === 'string' ? context.userId.trim() : '';
+    if (!context.skipCooldown && !normalizedUserId) {
+        throw new Error(`Cooldown-controlled ${operation} requires userId`);
+    }
+    return normalizedUserId;
+}
 
 type CooldownCheck =
     | {
@@ -183,10 +197,11 @@ class VFXCommandService {
             if (!context || typeof context !== 'object') {
                 throw new Error('executeCommand requires context');
             }
-            const { username, platform, userId, skipCooldown, correlationId } = context;
-            if (!platform || !userId || typeof skipCooldown !== 'boolean') {
-                throw new Error('executeCommand requires platform, userId, and skipCooldown');
+            const { username, platform, skipCooldown, correlationId } = context;
+            if (!platform || typeof skipCooldown !== 'boolean') {
+                throw new Error('executeCommand requires platform and skipCooldown');
             }
+            const normalizedUserId = resolveExecutionUserId(context, 'executeCommand');
             const commandUser = (typeof username === 'string') ? username.trim() : '';
             if (!commandUser) {
                 return {
@@ -212,7 +227,7 @@ class VFXCommandService {
                 if (!vfxConfig.commandKey) {
                     throw new Error('VFX config requires commandKey for cooldown checks');
                 }
-                const cooldownCheck = this.checkCommandCooldown(userId, vfxConfig.commandKey);
+                const cooldownCheck = this.checkCommandCooldown(normalizedUserId, vfxConfig.commandKey);
                 if (!cooldownCheck.allowed) {
                     this.stats.cooldownBlocked++;
                     
@@ -236,6 +251,13 @@ class VFXCommandService {
                         if (!correlationId) {
                             throw new Error('executeCommand requires correlationId when emitting events');
                         }
+                        const {
+                            correlationId: _correlationId,
+                            platform: _platform,
+                            userId: _userId,
+                            username: _username,
+                            ...contextExtras
+                        } = context;
                         const eventPayload = {
                             command,
                             commandKey: vfxConfig.commandKey,
@@ -243,12 +265,18 @@ class VFXCommandService {
                             mediaSource: vfxConfig.mediaSource,
                             username: commandUser,
                             platform,
-                            userId,
+                            ...(normalizedUserId ? { userId: normalizedUserId } : {}),
                             correlationId,
                             vfxConfig,
                             result: executionResult,
                             duration: Date.now() - startTime,
-                            context: { ...context, correlationId }
+                            context: {
+                                ...contextExtras,
+                                username: commandUser,
+                                platform,
+                                ...(normalizedUserId ? { userId: normalizedUserId } : {}),
+                                correlationId
+                            }
                         };
                         const commandExecutedPayload = {
                             ...eventPayload,
@@ -271,7 +299,7 @@ class VFXCommandService {
                     if (!vfxConfig.commandKey) {
                         throw new Error('VFX config requires commandKey for cooldown updates');
                     }
-                    this._updateCooldowns(userId, vfxConfig.commandKey);
+                    this._updateCooldowns(normalizedUserId, vfxConfig.commandKey);
                 }
                 this.stats.successfulCommands++;
             } else {
@@ -407,10 +435,11 @@ class VFXCommandService {
             if (!context || typeof context !== 'object') {
                 throw new Error('executeCommandForKey requires context');
             }
-            const { username, platform, userId, skipCooldown, correlationId } = context;
-            if (!platform || !userId || typeof skipCooldown !== 'boolean') {
-                throw new Error('executeCommandForKey requires platform, userId, and skipCooldown');
+            const { username, platform, skipCooldown, correlationId } = context;
+            if (!platform || typeof skipCooldown !== 'boolean') {
+                throw new Error('executeCommandForKey requires platform and skipCooldown');
             }
+            resolveExecutionUserId(context, 'executeCommandForKey');
             if (this.eventBus && !correlationId) {
                 throw new Error('executeCommandForKey requires correlationId when events are enabled');
             }
@@ -442,10 +471,7 @@ class VFXCommandService {
             if (!resolvedCommand) {
                 throw new Error('VFX config requires command');
             }
-            return await this.executeCommand(resolvedCommand, {
-                ...context,
-                skipCooldown: context.skipCooldown
-            });
+            return await this.executeCommand(resolvedCommand, context);
         } catch (error) {
             handleVFXCommandError(`[VFXCommandService] Error executing command for key ${commandKey}: ${getErrorMessage(error)}`, error, 'notification');
             return {

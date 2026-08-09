@@ -127,6 +127,64 @@ describe("VFXCommandService cooldown handling", () => {
     expect(second.success).toBe(true);
   });
 
+  test("allows repeated automatic executions without userId and keeps cooldown maps empty", async () => {
+    const service = new VFXCommandService(createConfig("!automatic"), null, {
+      effectsManager: mockEffectsManager,
+    });
+    service.commandParser = createMockCommandParser();
+
+    const context = {
+      username: "Synthetic Automation",
+      platform: "twitch" as const,
+      skipCooldown: true as const,
+    };
+    const first = await service.executeCommand("!automatic", context);
+    const second = await service.executeCommand("!automatic", context);
+
+    expect(first.success).toBe(true);
+    expect(second.success).toBe(true);
+    expect(service.userLastCommand.size).toBe(0);
+    expect(service.userCommandTimestamps.size).toBe(0);
+    expect(service.globalCommandCooldowns.size).toBe(0);
+  });
+
+  test("rejects cooldown-enforced execution without userId", async () => {
+    const service = new VFXCommandService(createConfig("!automatic"), null, {
+      effectsManager: mockEffectsManager,
+    });
+    service.commandParser = createMockCommandParser();
+
+    const result = await Reflect.apply(service.executeCommand, service, [
+      "!automatic",
+      {
+        username: "Synthetic Automation",
+        platform: "twitch",
+        skipCooldown: false,
+      },
+    ]);
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("userId");
+  });
+
+  test("allows automatic command-key execution without userId", async () => {
+    const service = new VFXCommandService(createConfig("!automatic"), null, {
+      effectsManager: mockEffectsManager,
+    });
+    service.commandParser = createMockCommandParser();
+
+    const result = await service.executeCommandForKey("gifts", {
+      username: "Synthetic Automation",
+      platform: "twitch",
+      skipCooldown: true,
+    });
+
+    expect(result.success).toBe(true);
+    expect(service.userLastCommand.size).toBe(0);
+    expect(service.userCommandTimestamps.size).toBe(0);
+    expect(service.globalCommandCooldowns.size).toBe(0);
+  });
+
   test("returns failure when VFX execution throws", async () => {
     const failingEffectsManager = createMockEffectsManager();
     failingEffectsManager.playMediaInOBS.mockRejectedValue(new Error("vfx failed"));
