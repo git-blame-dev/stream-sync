@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import TestRenderer from "react-test-renderer";
+import TestRenderer, { type ReactTestRenderer } from "react-test-renderer";
 
 import { App } from "../../../gui/src/shared/App";
 import { GuiShell } from "../../../gui/src/shared/components/GuiShell";
@@ -9,12 +9,31 @@ import { GuiShell } from "../../../gui/src/shared/components/GuiShell";
 type EventPayload = Record<string, unknown>;
 type EventHandler = (payload: EventPayload) => void;
 type EventFeedArgs = { url: string; onEvent: EventHandler };
-type AppRenderer = {
-  toJSON: () => unknown;
-  root: {
-    findByType: (component: unknown) => { props: Record<string, unknown> };
-  };
+type AppRenderer = ReactTestRenderer;
+type EffectShellProps = {
+  activeEffect: { playbackId: string };
+  onEffectComplete: (playbackId: string) => void;
 };
+
+function getEffectShellProps(renderer: AppRenderer): EffectShellProps {
+  const props: Record<string, unknown> = renderer.root.findByType(GuiShell).props;
+  const activeEffect = props.activeEffect;
+  const onEffectComplete = props.onEffectComplete;
+  if (
+    !activeEffect ||
+    typeof activeEffect !== "object" ||
+    !("playbackId" in activeEffect) ||
+    typeof activeEffect.playbackId !== "string" ||
+    typeof onEffectComplete !== "function"
+  ) {
+    throw new Error("Expected GuiShell to expose an active effect contract");
+  }
+
+  return {
+    activeEffect: { playbackId: activeEffect.playbackId },
+    onEffectComplete: (playbackId: string) => onEffectComplete(playbackId),
+  };
+}
 
 let originalConsoleTimeStamp: typeof console.timeStamp | undefined;
 
@@ -417,25 +436,15 @@ describe("GUI app behavior", () => {
       });
     });
 
-    let shell = renderer!.root.findByType(GuiShell) as {
-      props: {
-        activeEffect: { playbackId: string };
-        onEffectComplete: (playbackId: string) => void;
-      };
-    };
-    expect(shell.props.activeEffect.playbackId).toBe("effect-1");
+    let shellProps = getEffectShellProps(renderer!);
+    expect(shellProps.activeEffect.playbackId).toBe("effect-1");
 
     await TestRenderer.act(async () => {
-      shell.props.onEffectComplete("effect-1");
+      shellProps.onEffectComplete("effect-1");
     });
 
-    shell = renderer!.root.findByType(GuiShell) as {
-      props: {
-        activeEffect: { playbackId: string };
-        onEffectComplete: (playbackId: string) => void;
-      };
-    };
-    expect(shell.props.activeEffect.playbackId).toBe("effect-2");
+    shellProps = getEffectShellProps(renderer!);
+    expect(shellProps.activeEffect.playbackId).toBe("effect-2");
   });
 
   it("ignores gift animation effects in overlay mode", async () => {

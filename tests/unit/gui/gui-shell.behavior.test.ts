@@ -1,24 +1,15 @@
 import { describe, expect, it } from "bun:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import TestRenderer from "react-test-renderer";
+import TestRenderer, { type ReactTestRenderer } from "react-test-renderer";
 
 import { GuiShell } from "../../../gui/src/shared/components/GuiShell";
 import type { GuiRowDto } from "../../../gui/src/shared/types";
 
 type ScrollListener = () => void;
 type OverlayLayout = { offsetTop: number; offsetHeight: number };
-type OverlayNode = { type?: unknown; props?: Record<string, any> };
-type ShellRenderer = {
-  toJSON: () => unknown;
-  unmount: () => void;
-  update: (element: unknown) => void;
-  root: {
-    findAll: (
-      predicate: (node: any) => boolean,
-    ) => Array<{ props: Record<string, any> }>;
-  };
-};
+type OverlayNode = { type?: unknown; props?: Record<string, unknown> };
+type ShellRenderer = ReactTestRenderer;
 
 function isOverlayNode(value: unknown): value is OverlayNode {
   return typeof value === "object" && value !== null;
@@ -68,8 +59,8 @@ function createOverlayNodeMocks(
   layoutByAvatarUrl: Record<string, OverlayLayout>,
   shellClientHeight = 220,
 ) {
-  function extractAvatarUrl(element: OverlayNode): string {
-    if (!element || !element.props) {
+  function extractAvatarUrl(element: unknown): string {
+    if (!isOverlayNode(element) || !element.props) {
       return "";
     }
 
@@ -86,7 +77,7 @@ function createOverlayNodeMocks(
     const children = Array.isArray(element.props.children)
       ? element.props.children
       : [element.props.children];
-    for (const child of children as OverlayNode[]) {
+    for (const child of children) {
       const childAvatarUrl = extractAvatarUrl(child);
       if (childAvatarUrl) {
         return childAvatarUrl;
@@ -136,7 +127,7 @@ function createOverlayNodeMocks(
 }
 
 function findOverlayExitNodes(renderer: ShellRenderer) {
-  return renderer.root.findAll((node: any) => {
+  return renderer.root.findAll((node) => {
     if (node.type !== "div") {
       return false;
     }
