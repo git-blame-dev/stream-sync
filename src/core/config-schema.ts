@@ -151,9 +151,9 @@ const CONFIG_SCHEMA: ConfigSchema = {
     },
 
     timing: {
-        fadeDuration: { type: 'number', default: 750 },
+        fadeDuration: { type: 'number', default: 250 },
         notificationClearDelay: { type: 'number', default: 500 },
-        transitionDelay: { type: 'number', default: 200 },
+        transitionDelay: { type: 'number', default: 250 },
         chatMessageDuration: { type: 'number', default: 4500 }
     },
 

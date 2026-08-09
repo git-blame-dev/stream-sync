@@ -506,7 +506,8 @@ describe("ConfigValidator._normalizeTimingSection()", () => {
   it("applies timing defaults", () => {
     const result = ConfigValidator._normalizeTimingSection({});
 
-    expect(result.fadeDuration).toBe(750);
+    expect(result.fadeDuration).toBe(250);
+    expect(result.transitionDelay).toBe(250);
     expect(result.chatMessageDuration).toBe(4500);
   });
 });

@@ -42,9 +42,6 @@ describe("DisplayQueue control", () => {
 
   const constants: DisplayQueueConstants = {
     PRIORITY_LEVELS,
-    CHAT_MESSAGE_DURATION: 4500,
-    CHAT_TRANSITION_DELAY: 200,
-    NOTIFICATION_CLEAR_DELAY: 100,
   };
 
   const createConfig = (overrides: Partial<DisplayQueueConfig> = {}): DisplayQueueConfig => ({

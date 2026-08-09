@@ -47,12 +47,8 @@ describe("DisplayQueue TTS-driven durations", () => {
   function createQueue() {
     return new DisplayQueue(
       createObsManager(),
-      { ttsEnabled: true },
-      {
-        CHAT_MESSAGE_DURATION: 4500,
-        CHAT_TRANSITION_DELAY: 0,
-        PRIORITY_LEVELS,
-      },
+      { ttsEnabled: true, ttsChatEnabled: true, timing: { chatMessageDuration: 4500 } },
+      { PRIORITY_LEVELS },
       new EventEmitter(),
       {},
     );
@@ -130,11 +126,7 @@ describe("DisplayQueue TTS-driven durations", () => {
     const queue = new DisplayQueue(
       createObsManager(),
       { ttsEnabled: false },
-      {
-        CHAT_MESSAGE_DURATION: 4500,
-        CHAT_TRANSITION_DELAY: 0,
-        PRIORITY_LEVELS,
-      },
+      { PRIORITY_LEVELS },
       new EventEmitter(),
       {},
     );
@@ -150,11 +142,7 @@ describe("DisplayQueue TTS-driven durations", () => {
     const queue = new DisplayQueue(
       createObsManager(),
       { ttsEnabled: false },
-      {
-        CHAT_MESSAGE_DURATION: 4500,
-        CHAT_TRANSITION_DELAY: 0,
-        PRIORITY_LEVELS,
-      },
+      { PRIORITY_LEVELS },
       new EventEmitter(),
       {},
     );
@@ -176,5 +164,61 @@ describe("DisplayQueue TTS-driven durations", () => {
     }));
 
     expect(duration).toBe(9000);
+  });
+
+  describe("chat queue hold duration", () => {
+    const chatItem = (message = "chat"): QueueItem => createQueueItem({
+      type: "chat",
+      data: { username: "viewer", message },
+    });
+
+    const notificationItem = (): QueueItem => createQueueItem({
+      type: "platform:gift",
+      data: { username: "viewer", ttsMessage: "notification" },
+    });
+
+    const createHoldQueue = () => new DisplayQueue(
+      createObsManager(),
+      { ttsEnabled: false, timing: { chatMessageDuration: 4500 } },
+      { PRIORITY_LEVELS },
+      new EventEmitter(),
+      {},
+    );
+
+    it.each([
+      [0, 4500],
+      [1, 4500],
+      [2, 0],
+    ])("uses the configured hold for %d pending chats, then releases at two", (pendingChats, expected) => {
+      const queue = createHoldQueue();
+      queue.currentDisplay = chatItem("current");
+      queue.queue = Array.from({ length: pendingChats }, (_, index) => chatItem(`pending-${index}`));
+
+      expect(queue.getDuration(queue.currentDisplay)).toBe(expected);
+    });
+
+    it("does not count notifications toward the pending-chat threshold", () => {
+      const queue = createHoldQueue();
+      queue.currentDisplay = chatItem("current");
+      queue.queue = [notificationItem(), notificationItem(), chatItem("pending")];
+
+      expect(queue.getDuration(queue.currentDisplay)).toBe(4500);
+    });
+
+    it("keeps explicit hold duration as a floor after the threshold", () => {
+      const queue = createHoldQueue();
+      queue.currentDisplay = chatItem("current");
+      queue.queue = [chatItem("pending-1"), chatItem("pending-2")];
+
+      expect(queue.getDuration({ ...queue.currentDisplay, holdDurationMs: 4200 })).toBe(4200);
+    });
+
+    it("keeps chat TTS duration as a floor after the threshold", () => {
+      const queue = createQueue();
+      queue.currentDisplay = chatItem("current");
+      queue.queue = [chatItem("pending-1"), chatItem("pending-2")];
+
+      expect(queue.getDuration(queue.currentDisplay)).toBe(2000);
+    });
   });
 });

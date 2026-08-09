@@ -64,7 +64,8 @@ describe('buildDefaultsFromSchema()', () => {
         expectConfigSection(defaults, 'timing');
         expectConfigSection(defaults, 'handcam');
 
-        expect(defaults.timing.fadeDuration).toBe(750);
+        expect(defaults.timing.fadeDuration).toBe(250);
+        expect(defaults.timing.transitionDelay).toBe(250);
         expect(defaults.timing.chatMessageDuration).toBe(4500);
         expect(defaults.handcam.enabled).toBe(false);
         expect(defaults.handcam.maxSize).toBe(50);

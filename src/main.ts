@@ -722,17 +722,9 @@ async function main(overrides: MainOverrides = {}) {
             }
         }
         
-        const chatTransitionDelay = config.timing.transitionDelay;
-        const notificationClearDelay = config.timing.notificationClearDelay;
-        const chatMessageDuration = config.timing.chatMessageDuration;
-        const notificationConfigs = NOTIFICATION_CONFIGS;
         const priorityLevels = PRIORITY_LEVELS;
         
         const displayQueueConstants = {
-            CHAT_TRANSITION_DELAY: chatTransitionDelay, 
-            NOTIFICATION_CLEAR_DELAY: notificationClearDelay,
-            CHAT_MESSAGE_DURATION: chatMessageDuration,
-            NOTIFICATION_CONFIGS: notificationConfigs,
             PRIORITY_LEVELS: priorityLevels
         };
         

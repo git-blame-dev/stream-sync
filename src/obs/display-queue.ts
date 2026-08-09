@@ -24,6 +24,7 @@ type DisplayQueueConfig = {
     timing?: {
         transitionDelay?: number;
         notificationClearDelay?: number;
+        chatMessageDuration?: number;
     };
     chat?: {
         sourceName?: string;
@@ -70,6 +71,7 @@ type DisplayQueueObsManager = {
 
 let notificationTypeSet: Set<string> | null = null;
 const CHAT_TYPE = 'chat';
+const BACKLOG_CHAT_HOLD_MS = 0;
 const MONETIZATION_NOTIFICATION_TYPES = new Set(['platform:gift', 'platform:paypiggy', 'platform:giftpaypiggy', 'platform:envelope']);
 
 function isNotificationType(type: string) {
@@ -475,17 +477,25 @@ class DisplayQueue {
         const normalizedHoldDurationMs = Number.isFinite(holdDurationMs) && holdDurationMs > 0
             ? holdDurationMs
             : 0;
+        const configuredChatDurationMs = Number(this.config.timing?.chatMessageDuration);
+        const normalizedChatDurationMs = Number.isFinite(configuredChatDurationMs) && configuredChatDurationMs >= 0
+            ? configuredChatDurationMs
+            : 0;
+        const baseHoldDurationMs = isChatType(item?.type)
+            ? (this.hasMultipleQueuedChats() ? BACKLOG_CHAT_HOLD_MS : normalizedChatDurationMs)
+            : 0;
+        const requiredHoldDurationMs = Math.max(normalizedHoldDurationMs, baseHoldDurationMs);
 
         const ttsEnabledForItem = isChatType(item?.type)
             ? this.effects.isChatTTSEnabled()
             : this.effects.isNotificationTTSEnabled();
 
         if (!ttsEnabledForItem) {
-            return normalizedHoldDurationMs;
+            return requiredHoldDurationMs;
         }
 
         if (!item?.data) {
-            return normalizedHoldDurationMs;
+            return requiredHoldDurationMs;
         }
 
         let ttsStages;
@@ -499,10 +509,10 @@ class DisplayQueue {
                 }) || []
                 : MessageTTSHandler.createTTSStages(item.data) || [];
         } catch {
-            return normalizedHoldDurationMs;
+            return requiredHoldDurationMs;
         }
         if (ttsStages.length === 0) {
-            return normalizedHoldDurationMs;
+            return requiredHoldDurationMs;
         }
 
         const estimateSpeechMs = (text: unknown) => {
@@ -525,7 +535,24 @@ class DisplayQueue {
         const maxWindow = 20000;
 
         const ttsWindowMs = Math.min(maxWindow, Math.max(minWindow, maxStageMs + tailBufferMs));
-        return Math.max(ttsWindowMs, normalizedHoldDurationMs);
+        return Math.max(ttsWindowMs, requiredHoldDurationMs);
+    }
+
+    hasMultipleQueuedChats() {
+        let queuedChatCount = 0;
+
+        for (const queuedItem of this.queue) {
+            if (!isChatType(queuedItem.type)) {
+                continue;
+            }
+
+            queuedChatCount += 1;
+            if (queuedChatCount > 1) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     extractUsername(data: unknown): string | null {

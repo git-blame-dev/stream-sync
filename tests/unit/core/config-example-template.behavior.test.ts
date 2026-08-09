@@ -15,7 +15,7 @@ function readConfigExample() {
   return ini.parse(raw);
 }
 
-describe("config example GUI template behavior", () => {
+describe("config example template behavior", () => {
   it("defines the gui section with schema-aligned keys and defaults", () => {
     const parsed = readConfigExample();
     expect(parsed.gui).toBeDefined();
@@ -30,5 +30,28 @@ describe("config example GUI template behavior", () => {
 
     const normalized = ConfigValidator.normalize({ gui: guiConfig });
     expect(normalized.gui).toEqual(DEFAULTS.gui);
+  });
+
+  it("defines timing and display queue sections with schema-aligned defaults", () => {
+    const parsed = readConfigExample();
+    const timingConfig = parsed.timing;
+    const displayQueueConfig = parsed.displayQueue;
+    if (!timingConfig || !displayQueueConfig) {
+      throw new Error("Expected config.example.ini to define [timing] and [displayQueue]");
+    }
+
+    expect(Object.keys(timingConfig).sort()).toEqual(
+      Object.keys(DEFAULTS.timing).sort(),
+    );
+    expect(Object.keys(displayQueueConfig).sort()).toEqual(
+      Object.keys(DEFAULTS.displayQueue).sort(),
+    );
+
+    const normalized = ConfigValidator.normalize({
+      timing: timingConfig,
+      displayQueue: displayQueueConfig,
+    });
+    expect(normalized.timing).toEqual(DEFAULTS.timing);
+    expect(normalized.displayQueue).toEqual(DEFAULTS.displayQueue);
   });
 });
