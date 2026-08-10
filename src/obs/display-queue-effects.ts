@@ -60,12 +60,10 @@ type DisplayQueueEffectsDependencies = {
         off?: (eventName: string, handler: (payload: Record<string, unknown>) => void) => void;
     } | null;
     config: {
-        ttsEnabled?: boolean;
         ttsChatEnabled?: boolean;
         ttsNotificationsEnabled?: boolean;
         obs: {
             ttsTxt: string;
-            ttsEnabled?: boolean;
             ttsChatEnabled?: boolean;
             ttsNotificationsEnabled?: boolean;
         };
@@ -207,10 +205,6 @@ class DisplayQueueEffects {
         return durationMs;
     }
 
-    isTTSEnabled() {
-        return this.isNotificationTTSEnabled();
-    }
-
     isChatTTSEnabled() {
         return this.config.ttsChatEnabled === true || this.config.obs?.ttsChatEnabled === true;
     }
@@ -222,14 +216,6 @@ class DisplayQueueEffects {
 
         if (typeof this.config.obs?.ttsNotificationsEnabled === 'boolean') {
             return this.config.obs.ttsNotificationsEnabled;
-        }
-
-        if (Object.prototype.hasOwnProperty.call(this.config, 'ttsEnabled')) {
-            return this.config.ttsEnabled === true;
-        }
-
-        if (Object.prototype.hasOwnProperty.call(this.config.obs || {}, 'ttsEnabled')) {
-            return this.config.obs?.ttsEnabled === true;
         }
 
         return true;

@@ -13,7 +13,7 @@ type LoadedConfigModule = typeof configModuleRef;
 
 type BuiltConfigShape = {
     general: { viewerCountPollingIntervalMs: number };
-    obs: { enabled: boolean; address: string; ttsEnabled: boolean };
+    obs: { enabled: boolean; address: string; ttsChatEnabled: boolean; ttsNotificationsEnabled: boolean };
     gifts: { giftVideoSource: string };
     envelopes: { command: string };
     gui: { enableDock: boolean; overlayMaxMessages: number };
@@ -111,7 +111,8 @@ configModule = configModuleRef;
             expect(built.general.viewerCountPollingIntervalMs).toBe(60000);
             expect(built.obs.enabled).toBe(true);
             expect(built.obs.address).toBe('ws://localhost:4455');
-            expect(built.obs.ttsEnabled).toBe(false);
+            expect(built.obs.ttsChatEnabled).toBe(false);
+            expect(built.obs.ttsNotificationsEnabled).toBe(true);
             expect(built.gifts.giftVideoSource).toBe('test-gift-video');
             expect(built.envelopes.command).toBe('!testenvelope');
             expect(built.gui.enableDock).toBe(true);

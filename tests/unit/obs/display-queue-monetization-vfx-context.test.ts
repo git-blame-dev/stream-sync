@@ -140,7 +140,8 @@ describe("DisplayQueue monetization VFX context", () => {
       youtube: {},
       twitch: {},
       tiktok: {},
-      ttsEnabled: false,
+      ttsChatEnabled: false,
+      ttsNotificationsEnabled: false,
     };
 
     const mockDependencies: DisplayQueueDependencies = {

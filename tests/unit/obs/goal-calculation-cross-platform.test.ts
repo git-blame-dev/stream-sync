@@ -117,7 +117,8 @@ describe("Cross-Platform Goal Calculation", () => {
       youtube: {},
       twitch: {},
       tiktok: {},
-      ttsEnabled: false,
+      ttsChatEnabled: false,
+      ttsNotificationsEnabled: false,
     };
 
     mockConstants = {

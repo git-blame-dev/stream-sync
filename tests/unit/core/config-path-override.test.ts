@@ -14,7 +14,8 @@ type FsLike = {
 type ConfigShape = {
   obs: {
     address: string;
-    ttsEnabled: boolean;
+    ttsChatEnabled: boolean;
+    ttsNotificationsEnabled: boolean;
     connectionTimeoutMs: number;
   };
 };
@@ -49,7 +50,8 @@ function buildMinimalConfig(
     obs: {
       enabled: "false",
       chatMsgGroup: "",
-      ttsEnabled: "false",
+      ttsChatEnabled: "false",
+      ttsNotificationsEnabled: "true",
       notificationScene: "smoke notification scene",
       notificationMsgGroup: "smoke notification group",
       chatPlatformLogoTwitch: "smoke chat twitch",
@@ -184,7 +186,8 @@ describe("Config path override", () => {
     process.env.CHAT_BOT_CONFIG_PATH = testConfigPath;
     const { config } = loadFreshConfig();
 
-    expect(typeof config.obs.ttsEnabled).toBe("boolean");
+    expect(typeof config.obs.ttsChatEnabled).toBe("boolean");
+    expect(typeof config.obs.ttsNotificationsEnabled).toBe("boolean");
      expect(typeof config.obs.address).toBe("string");
      expect(config.obs.address.length).toBeGreaterThan(0);
      expect(config.obs.connectionTimeoutMs).toBe(1000);

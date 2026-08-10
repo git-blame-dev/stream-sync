@@ -39,7 +39,8 @@ const buildMainConfig = (overrides: ConfigFixtureOverrides = {}) =>
       chatMsgTxt: "test-chat-text",
       chatMsgScene: "test-chat-scene",
       chatMsgGroup: "test-chat-group",
-      ttsEnabled: false,
+      ttsChatEnabled: false,
+      ttsNotificationsEnabled: true,
       notificationTxt: "test-notification-text",
       notificationScene: "test-notification-scene",
       notificationMsgGroup: "test-notification-group",
@@ -306,7 +307,11 @@ describe("main startup behavior", () => {
 
     expect(result.success).toBe(true);
     const capturedDisplayQueueConfig = getCapturedDisplayQueueConfig();
-    expect(capturedDisplayQueueConfig).toMatchObject({ gui: config.gui });
+    expect(capturedDisplayQueueConfig).toMatchObject({
+      gui: config.gui,
+      ttsChatEnabled: config.obs.ttsChatEnabled,
+      ttsNotificationsEnabled: config.obs.ttsNotificationsEnabled,
+    });
   });
 
   it("rejects non-function startup override dependencies", async () => {

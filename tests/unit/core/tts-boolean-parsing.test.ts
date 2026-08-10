@@ -23,15 +23,15 @@ describe("TTS Configuration Boolean Parsing", () => {
     clearAllMocks();
   });
 
-  describe("when ttsEnabled is configured with different values", () => {
+  describe("when ttsNotificationsEnabled is configured with different values", () => {
     const createDisplayQueueWithTTS = (ttsValue: unknown) => {
       const baseConstants = { PRIORITY_LEVELS };
       const config = {
         autoProcess: false,
         maxQueueSize: 100,
-        ...(ttsValue === undefined ? {} : { ttsEnabled: ttsValue }),
         obs: {
           ttsTxt: "tts txt",
+          ...(ttsValue === undefined ? {} : { ttsNotificationsEnabled: ttsValue }),
         },
         chat: {
           sourceName: "chat",
@@ -88,87 +88,80 @@ describe("TTS Configuration Boolean Parsing", () => {
       } as unknown as ConstructorParameters<typeof DisplayQueue>[4]);
     };
 
-    describe('when ttsEnabled is string "false"', () => {
-      it('should disable TTS (not treat string "false" as truthy)', () => {
-        const queue = createDisplayQueueWithTTS("false");
-        expect(queue.isTTSEnabled()).toBe(false);
-      });
-    });
-
-    describe("when ttsEnabled is boolean false", () => {
+    describe("when ttsNotificationsEnabled is false", () => {
       it("should disable TTS", () => {
         const queue = createDisplayQueueWithTTS(false);
-        expect(queue.isTTSEnabled()).toBe(false);
+        expect(queue.effects.isNotificationTTSEnabled()).toBe(false);
       });
     });
 
-    describe('when ttsEnabled is string "true"', () => {
-      it("should not enable TTS (config must be pre-normalized at startup)", () => {
+    describe("when ttsNotificationsEnabled is a non-boolean value", () => {
+      it("should use the default notification setting", () => {
         const queue = createDisplayQueueWithTTS("true");
-        expect(queue.isTTSEnabled()).toBe(false);
+        expect(queue.effects.isNotificationTTSEnabled()).toBe(true);
       });
     });
 
-    describe("when ttsEnabled is boolean true", () => {
+    describe("when ttsNotificationsEnabled is boolean true", () => {
       it("should enable TTS", () => {
         const queue = createDisplayQueueWithTTS(true);
-        expect(queue.isTTSEnabled()).toBe(true);
+        expect(queue.effects.isNotificationTTSEnabled()).toBe(true);
       });
     });
 
-    describe("when ttsEnabled is undefined", () => {
+    describe("when ttsNotificationsEnabled is undefined", () => {
       it("should default notification TTS to enabled", () => {
         const queue = createDisplayQueueWithTTS(undefined);
-        expect(queue.isTTSEnabled()).toBe(true);
+        expect(queue.effects.isNotificationTTSEnabled()).toBe(true);
       });
     });
 
-    describe("when ttsEnabled is null", () => {
-      it("should default to disabled for safety", () => {
+    describe("when ttsNotificationsEnabled is null", () => {
+      it("should use the default notification setting", () => {
         const queue = createDisplayQueueWithTTS(null);
-        expect(queue.isTTSEnabled()).toBe(false);
+        expect(queue.effects.isNotificationTTSEnabled()).toBe(true);
       });
     });
 
-    describe("when ttsEnabled is empty string", () => {
-      it("should default to disabled for safety", () => {
+    describe("when ttsNotificationsEnabled is empty string", () => {
+      it("should use the default notification setting", () => {
         const queue = createDisplayQueueWithTTS("");
-        expect(queue.isTTSEnabled()).toBe(false);
+        expect(queue.effects.isNotificationTTSEnabled()).toBe(true);
       });
     });
 
-    describe("when ttsEnabled has any other truthy value", () => {
-      it("should disable TTS (only explicit true/'true' enables)", () => {
+    describe("when ttsNotificationsEnabled has any other truthy value", () => {
+      it("should use the default notification setting", () => {
         const queue1 = createDisplayQueueWithTTS("yes");
-        expect(queue1.isTTSEnabled()).toBe(false);
+        expect(queue1.effects.isNotificationTTSEnabled()).toBe(true);
 
         const queue2 = createDisplayQueueWithTTS(1);
-        expect(queue2.isTTSEnabled()).toBe(false);
+        expect(queue2.effects.isNotificationTTSEnabled()).toBe(true);
 
         const queue3 = createDisplayQueueWithTTS("1");
-        expect(queue3.isTTSEnabled()).toBe(false);
+        expect(queue3.effects.isNotificationTTSEnabled()).toBe(true);
       });
     });
   });
 
   describe("main.js config parsing", () => {
-    it("should properly parse ttsEnabled from INI config object", () => {
+    it("should properly parse ttsNotificationsEnabled from INI config object", () => {
       const testConfigs = [
-        { input: { general: { ttsEnabled: "false" } }, expected: false },
-        { input: { general: { ttsEnabled: "true" } }, expected: true },
-        { input: { general: { ttsEnabled: false } }, expected: false },
-        { input: { general: { ttsEnabled: true } }, expected: true },
+        { input: { general: { ttsNotificationsEnabled: "false" } }, expected: false },
+        { input: { general: { ttsNotificationsEnabled: "true" } }, expected: true },
+        { input: { general: { ttsNotificationsEnabled: false } }, expected: false },
+        { input: { general: { ttsNotificationsEnabled: true } }, expected: true },
         { input: { general: {} }, expected: false },
-        { input: { general: { ttsEnabled: "" } }, expected: false },
-        { input: { general: { ttsEnabled: null } }, expected: false },
+        { input: { general: { ttsNotificationsEnabled: "" } }, expected: false },
+        { input: { general: { ttsNotificationsEnabled: null } }, expected: false },
       ];
 
       testConfigs.forEach(({ input, expected }) => {
         const config = input;
-        const ttsEnabled =
-          config.general.ttsEnabled === true ||
-          config.general.ttsEnabled === "true";
-        expect(ttsEnabled).toBe(expected);
+        const ttsNotificationsEnabled =
+          config.general.ttsNotificationsEnabled === true ||
+          config.general.ttsNotificationsEnabled === "true";
+        expect(ttsNotificationsEnabled).toBe(expected);
       });
     });
   });

@@ -24,7 +24,6 @@ type DisplayQueueConfig = {
     autoProcess?: boolean;
     maxQueueSize?: number;
     rowIntervalMs?: number;
-    ttsEnabled?: boolean;
     ttsChatEnabled?: boolean;
     ttsNotificationsEnabled?: boolean;
     [platform: string]: unknown;
@@ -179,10 +178,6 @@ class DisplayQueue {
                 ? {}
                 : { giftAnimationResolver: dependencies.giftAnimationResolver })
         });
-    }
-
-    isTTSEnabled() {
-        return this.effects.isTTSEnabled();
     }
 
     isChatTTSEnabled() {

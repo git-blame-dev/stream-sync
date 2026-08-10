@@ -149,7 +149,8 @@ type MainConfig = Record<string, Record<string, unknown>> & BuiltConfig & {
         password?: string;
         enabled?: boolean;
         connectionTimeoutMs?: number;
-        ttsEnabled: boolean;
+        ttsChatEnabled: boolean;
+        ttsNotificationsEnabled: boolean;
     } & Record<string, unknown>;
     displayQueue: Record<string, unknown> & {
         autoProcess: boolean;
@@ -642,7 +643,6 @@ async function main(overrides: MainOverrides = {}) {
             }
         }
 
-        const { ttsEnabled } = config.obs;
         const handcamConfig = config.handcam;
         const giftsConfig = config.gifts;
         
@@ -657,7 +657,8 @@ async function main(overrides: MainOverrides = {}) {
             twitch: config.twitch,
             tiktok: config.tiktok,
             gui: config.gui,
-            ttsEnabled
+            ttsChatEnabled: config.obs.ttsChatEnabled,
+            ttsNotificationsEnabled: config.obs.ttsNotificationsEnabled
         };
 
         const guiGiftAnimationState: {

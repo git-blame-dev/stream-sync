@@ -78,7 +78,8 @@ describe("DisplayQueueEffects", () => {
     };
     const effects = new DisplayQueueEffects({
       config: {
-        ttsEnabled: true,
+        ttsChatEnabled: true,
+        ttsNotificationsEnabled: true,
         obs: { ttsTxt: "tts" },
         handcam: handcamConfig(false),
       },
@@ -111,7 +112,8 @@ describe("DisplayQueueEffects", () => {
     let handcamTriggered = false;
     const effects = new DisplayQueueEffects({
       config: {
-        ttsEnabled: false,
+        ttsChatEnabled: false,
+        ttsNotificationsEnabled: false,
         obs: { ttsTxt: "tts" },
         handcam: handcamConfig(true),
         gifts: { giftVideoSource: "gift-video", giftAudioSource: "gift-audio" },
@@ -162,7 +164,8 @@ describe("DisplayQueueEffects", () => {
     const goalCalls: GoalCall[] = [];
     const effects = new DisplayQueueEffects({
       config: {
-        ttsEnabled: false,
+        ttsChatEnabled: false,
+        ttsNotificationsEnabled: false,
         obs: { ttsTxt: "tts" },
         handcam: handcamConfig(false),
       },
@@ -200,7 +203,8 @@ describe("DisplayQueueEffects", () => {
     const paypiggyCalls: Array<{ platform: string; count: number | undefined }> = [];
     const effects = new DisplayQueueEffects({
       config: {
-        ttsEnabled: false,
+        ttsChatEnabled: false,
+        ttsNotificationsEnabled: false,
         obs: { ttsTxt: "tts" },
         handcam: handcamConfig(false),
         gifts: { giftVideoSource: "gift-video", giftAudioSource: "gift-audio" },
@@ -242,7 +246,8 @@ describe("DisplayQueueEffects", () => {
     const goalCalls: string[] = [];
     const effects = new DisplayQueueEffects({
       config: {
-        ttsEnabled: false,
+        ttsChatEnabled: false,
+        ttsNotificationsEnabled: false,
         obs: { ttsTxt: "tts" },
         handcam: handcamConfig(false),
       },
@@ -280,7 +285,8 @@ describe("DisplayQueueEffects", () => {
     const emittedVfx: Record<string, unknown>[] = [];
     const effects = new DisplayQueueEffects({
       config: {
-        ttsEnabled: true,
+        ttsChatEnabled: true,
+        ttsNotificationsEnabled: true,
         obs: { ttsTxt: "tts" },
         handcam: handcamConfig(false),
       },
@@ -318,7 +324,8 @@ describe("DisplayQueueEffects", () => {
     const emittedVfx: NamedEmission[] = [];
     const effects = new DisplayQueueEffects({
       config: {
-        ttsEnabled: true,
+        ttsChatEnabled: true,
+        ttsNotificationsEnabled: true,
         obs: { ttsTxt: "tts" },
         handcam: handcamConfig(false),
         gifts: { giftVideoSource: "gift-video", giftAudioSource: "gift-audio" },
@@ -357,7 +364,8 @@ describe("DisplayQueueEffects", () => {
     const emittedEvents: EmittedEvent[] = [];
     const effects = new DisplayQueueEffects({
       config: {
-        ttsEnabled: false,
+        ttsChatEnabled: false,
+        ttsNotificationsEnabled: false,
         obs: { ttsTxt: "tts" },
         handcam: handcamConfig(false),
         gifts: { giftVideoSource: "gift-video", giftAudioSource: "gift-audio" },
@@ -421,7 +429,8 @@ describe("DisplayQueueEffects", () => {
     let resolveCallCount = 0;
     const effects = new DisplayQueueEffects({
       config: {
-        ttsEnabled: false,
+        ttsChatEnabled: false,
+        ttsNotificationsEnabled: false,
         obs: { ttsTxt: "tts" },
         handcam: handcamConfig(false),
         gifts: { giftVideoSource: "gift-video", giftAudioSource: "gift-audio" },
@@ -469,7 +478,8 @@ describe("DisplayQueueEffects", () => {
     const emittedEvents: EmittedEvent[] = [];
     const effects = new DisplayQueueEffects({
       config: {
-        ttsEnabled: false,
+        ttsChatEnabled: false,
+        ttsNotificationsEnabled: false,
         obs: { ttsTxt: "tts" },
         handcam: handcamConfig(false),
         gifts: { giftVideoSource: "gift-video", giftAudioSource: "gift-audio" },
@@ -525,7 +535,8 @@ describe("DisplayQueueEffects", () => {
     let resolveAnimation: ((value: GiftAnimationResult) => void) | undefined;
     const effects = new DisplayQueueEffects({
       config: {
-        ttsEnabled: false,
+        ttsChatEnabled: false,
+        ttsNotificationsEnabled: false,
         obs: { ttsTxt: "tts" },
         handcam: handcamConfig(false),
         gifts: { giftVideoSource: "gift-video", giftAudioSource: "gift-audio" },
@@ -583,7 +594,8 @@ describe("DisplayQueueEffects", () => {
     let settled = false;
     const effects = new DisplayQueueEffects({
       config: {
-        ttsEnabled: false,
+        ttsChatEnabled: false,
+        ttsNotificationsEnabled: false,
         obs: { ttsTxt: "tts" },
         handcam: handcamConfig(false),
         gifts: { giftVideoSource: "gift-video", giftAudioSource: "gift-audio" },
@@ -651,7 +663,8 @@ describe("DisplayQueueEffects", () => {
 
     const effects = new DisplayQueueEffects({
       config: {
-        ttsEnabled: false,
+        ttsChatEnabled: false,
+        ttsNotificationsEnabled: false,
         obs: { ttsTxt: "tts" },
         handcam: handcamConfig(false),
       },
@@ -702,7 +715,8 @@ describe("DisplayQueueEffects", () => {
 
     const effects = new DisplayQueueEffects({
       config: {
-        ttsEnabled: false,
+        ttsChatEnabled: false,
+        ttsNotificationsEnabled: false,
         obs: { ttsTxt: "tts" },
         handcam: handcamConfig(false),
       },
@@ -739,7 +753,8 @@ describe("DisplayQueueEffects", () => {
     const eventBus = new TestEventBus();
     const effects = new DisplayQueueEffects({
       config: {
-        ttsEnabled: false,
+        ttsChatEnabled: false,
+        ttsNotificationsEnabled: false,
         obs: { ttsTxt: "tts" },
         handcam: handcamConfig(false),
       },
@@ -769,7 +784,8 @@ describe("DisplayQueueEffects", () => {
 
     const effects = new DisplayQueueEffects({
       config: {
-        ttsEnabled: false,
+        ttsChatEnabled: false,
+        ttsNotificationsEnabled: false,
         obs: { ttsTxt: "tts" },
         handcam: handcamConfig(false),
         gifts: { giftVideoSource: "gift-video", giftAudioSource: "gift-audio" },
@@ -818,7 +834,8 @@ describe("DisplayQueueEffects", () => {
 
     const effects = new DisplayQueueEffects({
       config: {
-        ttsEnabled: false,
+        ttsChatEnabled: false,
+        ttsNotificationsEnabled: false,
         obs: { ttsTxt: "tts" },
         handcam: handcamConfig(false),
         gifts: { giftVideoSource: "gift-video", giftAudioSource: "gift-audio" },

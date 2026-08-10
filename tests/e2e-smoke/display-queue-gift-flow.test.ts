@@ -165,7 +165,7 @@ describe("DisplayQueue gift flow (smoke E2E)", () => {
       obs: { ttsTxt: "tts-source" },
       gifts: { giftVideoSource: "gift-video", giftAudioSource: "gift-audio" },
       handcam: { enabled: false },
-      ttsEnabled: true,
+      ttsNotificationsEnabled: true,
       tiktok: { messagesEnabled: true },
     };
 

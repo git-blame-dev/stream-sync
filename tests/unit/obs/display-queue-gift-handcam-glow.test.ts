@@ -70,7 +70,8 @@ describe("DisplayQueue gift effects handcam glow", () => {
     const queue = new DisplayQueue(
       obsManager,
       {
-        ttsEnabled: true,
+        ttsChatEnabled: true,
+        ttsNotificationsEnabled: true,
         chat: {},
         notification: {},
         obs: { ttsTxt: "testTtsTxt" },

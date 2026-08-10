@@ -60,11 +60,14 @@ describe("NotificationManager Service Dependency Injection - Modernized", () => 
 
     mockConfig = createConfigFixture({
       general: {
-        ttsEnabled: true,
         debugEnabled: false,
         followsEnabled: true,
         giftsEnabled: true,
         paypiggiesEnabled: true,
+      },
+      obs: {
+        ttsChatEnabled: true,
+        ttsNotificationsEnabled: true,
       },
     });
 

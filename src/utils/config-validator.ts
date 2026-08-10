@@ -259,21 +259,12 @@ class ConfigValidator {
     }
 
     static _normalizeObsSection(raw: RawConfigSection): NormalizedConfigSection {
-        const hasTtsNotificationsEnabled = Object.prototype.hasOwnProperty.call(raw, 'ttsNotificationsEnabled');
-        const hasLegacyTtsEnabled = Object.prototype.hasOwnProperty.call(raw, 'ttsEnabled');
-
         return {
             enabled: ConfigValidator.parseBoolean(raw.enabled, DEFAULTS.obs.enabled),
             address: ConfigValidator.parseString(raw.address, DEFAULTS.obs.address),
             connectionTimeoutMs: ConfigValidator.parseNumber(raw.connectionTimeoutMs, { defaultValue: DEFAULTS.obs.connectionTimeoutMs }),
-            ttsEnabled: ConfigValidator.parseBoolean(raw.ttsEnabled, DEFAULTS.obs.ttsEnabled),
             ttsChatEnabled: ConfigValidator.parseBoolean(raw.ttsChatEnabled, DEFAULTS.obs.ttsChatEnabled),
-            ttsNotificationsEnabled: hasTtsNotificationsEnabled
-                ? ConfigValidator.parseBoolean(raw.ttsNotificationsEnabled, DEFAULTS.obs.ttsNotificationsEnabled)
-                : ConfigValidator.parseBoolean(
-                    hasLegacyTtsEnabled ? raw.ttsEnabled : undefined,
-                    DEFAULTS.obs.ttsNotificationsEnabled
-                ),
+            ttsNotificationsEnabled: ConfigValidator.parseBoolean(raw.ttsNotificationsEnabled, DEFAULTS.obs.ttsNotificationsEnabled),
             ttsTxt: ConfigValidator.parseString(raw.ttsTxt, DEFAULTS.obs.ttsTxt)
         };
     }

@@ -55,7 +55,8 @@ describe("DisplayQueue notification TTS disabled", () => {
     queue = new DisplayQueue(
       mockOBSManager,
       {
-        ttsEnabled: false,
+        ttsChatEnabled: false,
+        ttsNotificationsEnabled: false,
         chat: {
           sourceName: "chat",
           sceneName: "scene",
@@ -77,7 +78,7 @@ describe("DisplayQueue notification TTS disabled", () => {
     );
   });
 
-  it("skips notification TTS when ttsEnabled is false", async () => {
+  it("skips notification TTS when ttsNotificationsEnabled is false", async () => {
     await queue.handleNotificationEffects({
       type: "platform:paypiggy",
       platform: "youtube",
@@ -119,14 +120,15 @@ describe("DisplayQueue notification TTS disabled", () => {
     expect(updateCalls).toEqual([]);
   });
 
-  it("keeps notification TTS enabled from split config when legacy ttsEnabled is false", async () => {
+  it("keeps notification TTS enabled when chat TTS is disabled", async () => {
     const queueWithNotificationsEnabled = new DisplayQueue(
       mockOBSManager,
       {
-        ttsEnabled: false,
+        ttsChatEnabled: false,
+        ttsNotificationsEnabled: true,
         chat: {},
         notification: {},
-        obs: { ttsTxt: "tts txt", ttsEnabled: false, ttsNotificationsEnabled: true },
+        obs: { ttsTxt: "tts txt", ttsChatEnabled: false, ttsNotificationsEnabled: true },
         youtube: {},
       },
       testRuntimeConstants,

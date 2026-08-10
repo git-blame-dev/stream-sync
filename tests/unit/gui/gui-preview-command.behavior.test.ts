@@ -267,6 +267,8 @@ describe("GUI local preview command behavior", () => {
     expect(config.gui.showPaypiggies).toBe(true);
     expect(config.gui.showGiftPaypiggies).toBe(true);
     expect(config.gui.showEnvelopes).toBe(true);
+    expect(config.obs.ttsChatEnabled).toBe(false);
+    expect(config.obs.ttsNotificationsEnabled).toBe(false);
 
     expect(config.twitch.messagesEnabled).toBe(true);
     expect(config.twitch.commandsEnabled).toBe(true);

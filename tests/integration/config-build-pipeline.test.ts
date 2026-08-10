@@ -95,7 +95,7 @@ describe("Config build pipeline integration", () => {
       const rawConfig = {
         ...getRawTestConfig(),
         general: { debugEnabled: "true" },
-        obs: { ...getRawTestConfig().obs, ttsEnabled: "false" },
+        obs: { ...getRawTestConfig().obs, ttsChatEnabled: "false", ttsNotificationsEnabled: "true" },
         displayQueue: { autoProcess: "true" },
       };
       const normalized = ConfigValidator.normalize(rawConfig);
@@ -103,8 +103,10 @@ describe("Config build pipeline integration", () => {
 
       expect(typeof built.general.debugEnabled).toBe("boolean");
       expect(built.general.debugEnabled).toBe(true);
-      expect(typeof built.obs.ttsEnabled).toBe("boolean");
-      expect(built.obs.ttsEnabled).toBe(false);
+      expect(typeof built.obs.ttsChatEnabled).toBe("boolean");
+      expect(typeof built.obs.ttsNotificationsEnabled).toBe("boolean");
+      expect(built.obs.ttsChatEnabled).toBe(false);
+      expect(built.obs.ttsNotificationsEnabled).toBe(true);
       expect(typeof built.displayQueue.autoProcess).toBe("boolean");
       expect(built.displayQueue.autoProcess).toBe(true);
     });

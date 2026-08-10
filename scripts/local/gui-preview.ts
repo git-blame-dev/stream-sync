@@ -537,7 +537,10 @@ function buildPreviewConfig(baseConfig: UnknownRecord = {}): UnknownRecord {
         filterOldMessages: false
     });
 
-    merged.ttsEnabled = false;
+    merged.obs = mergeSection(getPreviewRecord(sourceConfig, 'obs'), getPreviewRecord(overrideConfig, 'obs'), {
+        ttsChatEnabled: false,
+        ttsNotificationsEnabled: false
+    });
 
     const platformFlags = {
         messagesEnabled: true,

@@ -43,7 +43,6 @@ function createPlatformDelegationConfig(): PlatformDelegationConfig {
     general: {
       debugEnabled: false,
       commandPrefix: "!",
-      ttsEnabled: false,
       maxMessageLength: 500,
     },
     twitch: {
@@ -56,6 +55,8 @@ function createPlatformDelegationConfig(): PlatformDelegationConfig {
     tiktok: { enabled: false },
     obs: {
       enabled: false,
+      ttsChatEnabled: false,
+      ttsNotificationsEnabled: false,
       chatMsgScene: "test-chat-scene",
       notificationScene: "test-notification-scene",
       chatPlatformLogos: {},

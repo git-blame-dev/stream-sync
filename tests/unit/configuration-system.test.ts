@@ -25,7 +25,8 @@ type LoadedConfig = {
   };
   obs: {
     enabled: boolean;
-    ttsEnabled: boolean;
+    ttsChatEnabled: boolean;
+    ttsNotificationsEnabled: boolean;
     address: string;
     password?: string;
     [key: string]: unknown;
@@ -117,7 +118,8 @@ maxMessageLength = 500
 enabled = true
 address = ws://localhost:4455
 connectionTimeoutMs = 10000
-ttsEnabled = false
+ttsChatEnabled = false
+ttsNotificationsEnabled = true
 chatMsgGroup = statusbar chat grp
 notificationMsgGroup = statusbar notification grp
 chatPlatformLogoTwitch = twitch-img
@@ -349,7 +351,8 @@ maxMessageLength = 500
 enabled = yes
 address = ws://localhost:4455
 connectionTimeoutMs = 10000
-ttsEnabled = TRUE
+ttsChatEnabled = TRUE
+ttsNotificationsEnabled = TRUE
 chatMsgGroup = statusbar chat grp
 notificationMsgGroup = statusbar notification grp
 chatPlatformLogoTwitch = twitch-img
@@ -366,7 +369,8 @@ enabled = 1
 
       expect(currentConfig.general.debugEnabled).toBe(true);
       expect(currentConfig.general.messagesEnabled).toBe(false);
-      expect(currentConfig.obs.ttsEnabled).toBe(true);
+      expect(currentConfig.obs.ttsChatEnabled).toBe(true);
+      expect(currentConfig.obs.ttsNotificationsEnabled).toBe(true);
       expect(currentConfig.general.greetingsEnabled).toBe(false);
       expect(currentConfig.obs.enabled).toBe(false);
     });
@@ -569,7 +573,8 @@ maxMessageLength = 500
 enabled = broken
 address = ws://localhost:4455
 connectionTimeoutMs = 10000
-ttsEnabled = invalid
+ttsChatEnabled = invalid
+ttsNotificationsEnabled = invalid
 chatMsgGroup = statusbar chat grp
 notificationMsgGroup = statusbar notification grp
 chatPlatformLogoTwitch = twitch-img
@@ -586,7 +591,8 @@ enabled = notabool
 
       expect(currentConfig.general.debugEnabled).toBe(false);
       expect(currentConfig.general.messagesEnabled).toBe(true);
-      expect(currentConfig.obs.ttsEnabled).toBe(false);
+      expect(currentConfig.obs.ttsChatEnabled).toBe(false);
+      expect(currentConfig.obs.ttsNotificationsEnabled).toBe(true);
       expect(currentConfig.obs.enabled).toBe(false);
     });
   });
@@ -628,11 +634,13 @@ viewerCountPollingInterval = 60
 maxMessageLength = 500
 
 [obs]
-ttsEnabled = true
+ttsChatEnabled = true
+ttsNotificationsEnabled = true
 `;
       reloadConfig(ttsConfig);
 
-      expect(currentConfig.obs.ttsEnabled).toBe(true);
+      expect(currentConfig.obs.ttsChatEnabled).toBe(true);
+      expect(currentConfig.obs.ttsNotificationsEnabled).toBe(true);
       expect(currentConfig.general.messagesEnabled).toBe(true);
     });
 
@@ -657,7 +665,8 @@ notificationPlatformLogoTikTok = tiktok-img
       const obsSettings = currentConfig.obs;
        expect(obsSettings.enabled).toBe(true);
        expect(obsSettings.address).toBe("ws://localhost:4455");
-       expect(obsSettings.ttsEnabled).toBe(false);
+       expect(obsSettings.ttsChatEnabled).toBe(false);
+       expect(obsSettings.ttsNotificationsEnabled).toBe(true);
     });
 
     it("should handle platform username configuration for user identification", () => {

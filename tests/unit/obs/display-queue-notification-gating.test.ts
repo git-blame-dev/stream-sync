@@ -52,7 +52,8 @@ describe("DisplayQueue platform notification gating", () => {
 
     const config = {
       autoProcess: false,
-      ttsEnabled: false,
+      ttsChatEnabled: false,
+      ttsNotificationsEnabled: false,
       maxQueueSize: 100,
       chat: {
         sourceName: "chat",

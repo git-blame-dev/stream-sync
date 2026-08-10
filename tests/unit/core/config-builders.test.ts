@@ -48,13 +48,15 @@ describe('config-builders', () => {
             const normalized = {
                 general: {
                     viewerCountPollingInterval: 10,
-                    ttsEnabled: true,
+                    ttsChatEnabled: true,
+                    ttsNotificationsEnabled: true,
                     debugEnabled: false
                 }
             };
             const result = buildGeneralConfig(normalized);
 
-            expect(result.ttsEnabled).toBe(true);
+            expect(result.ttsChatEnabled).toBe(true);
+            expect(result.ttsNotificationsEnabled).toBe(true);
             expect(result.debugEnabled).toBe(false);
         });
     });
@@ -116,7 +118,8 @@ describe('config-builders', () => {
                     enabled: true,
                     address: 'ws://test:4455',
                     connectionTimeoutMs: 10000,
-                    ttsEnabled: false
+                    ttsChatEnabled: false,
+                    ttsNotificationsEnabled: true
                 }
             };
             const result = buildObsConfig(normalized);
@@ -124,7 +127,8 @@ describe('config-builders', () => {
             expect(result.enabled).toBe(true);
             expect(result.address).toBe('ws://test:4455');
             expect(result.connectionTimeoutMs).toBe(10000);
-            expect(result.ttsEnabled).toBe(false);
+            expect(result.ttsChatEnabled).toBe(false);
+            expect(result.ttsNotificationsEnabled).toBe(true);
         });
 
         it('spreads remaining obs fields through', () => {
@@ -133,7 +137,8 @@ describe('config-builders', () => {
                     enabled: false,
                     address: 'ws://test:4455',
                     connectionTimeoutMs: 10000,
-                    ttsEnabled: true
+                    ttsChatEnabled: true,
+                    ttsNotificationsEnabled: true
                 }
             };
             const result = buildObsConfig(normalized);

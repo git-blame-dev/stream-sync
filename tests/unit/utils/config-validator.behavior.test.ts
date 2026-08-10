@@ -216,24 +216,14 @@ describe("ConfigValidator._normalizeObsSection()", () => {
     expect(result.address).toBe("ws://custom:4455");
   });
 
-  it("treats legacy ttsEnabled as a notification TTS alias only", () => {
-    expect(
-      ConfigValidator._normalizeObsSection({ ttsEnabled: "false" })
-        .ttsNotificationsEnabled,
-    ).toBe(false);
-    expect(
-      ConfigValidator._normalizeObsSection({ ttsEnabled: "true" })
-        .ttsNotificationsEnabled,
-    ).toBe(true);
-    expect(
-      ConfigValidator._normalizeObsSection({
-        ttsEnabled: "false",
-        ttsNotificationsEnabled: "true",
-      }).ttsNotificationsEnabled,
-    ).toBe(true);
-    expect(
-      ConfigValidator._normalizeObsSection({ ttsEnabled: "true" }).ttsChatEnabled,
-    ).toBe(false);
+  it("normalizes explicit chat and notification TTS settings independently", () => {
+    const result = ConfigValidator._normalizeObsSection({
+      ttsChatEnabled: "true",
+      ttsNotificationsEnabled: "false",
+    });
+
+    expect(result.ttsChatEnabled).toBe(true);
+    expect(result.ttsNotificationsEnabled).toBe(false);
   });
 });
 

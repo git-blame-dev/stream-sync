@@ -136,7 +136,8 @@ describe("DisplayQueue notification TTS staging", () => {
     const queue = new DisplayQueue(
       obsManager,
       {
-        ttsEnabled: true,
+        ttsChatEnabled: true,
+        ttsNotificationsEnabled: true,
         chat: {},
         notification: {},
         obs: { ttsTxt: "testTts" },

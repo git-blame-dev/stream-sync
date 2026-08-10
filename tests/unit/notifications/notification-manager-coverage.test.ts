@@ -44,7 +44,7 @@ describe("NotificationManager coverage", () => {
       emit: createMockFn(),
       subscribe: createMockFn(),
     },
-    config: createConfigFixture({ general: { ttsEnabled: true } }),
+    config: createConfigFixture({ obs: { ttsChatEnabled: true, ttsNotificationsEnabled: true } }),
     constants: {
       PRIORITY_LEVELS,
       NOTIFICATION_CONFIGS: {

@@ -28,7 +28,8 @@ type TestConfigKnownSections = {
         enabled?: boolean;
         connectionTimeoutMs?: number;
         ttsTxt: string;
-        ttsEnabled: boolean;
+        ttsChatEnabled: boolean;
+        ttsNotificationsEnabled: boolean;
     };
     displayQueue: {
         autoProcess: boolean;
@@ -112,7 +113,9 @@ const RAW_TEST_CONFIG = {
         enabled: 'false',
         address: 'ws://localhost:4455',
         connectionTimeoutMs: '5000',
-        ttsTxt: 'test-tts-source'
+        ttsTxt: 'test-tts-source',
+        ttsChatEnabled: 'false',
+        ttsNotificationsEnabled: 'true'
     },
     displayQueue: {
         autoProcess: 'false',

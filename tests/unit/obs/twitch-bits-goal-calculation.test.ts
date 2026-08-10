@@ -126,7 +126,8 @@ describe("DisplayQueue - Twitch Bits Goal Calculation", () => {
       youtube: {},
       twitch: {},
       tiktok: {},
-      ttsEnabled: false,
+      ttsChatEnabled: false,
+      ttsNotificationsEnabled: false,
     };
 
     displayQueue = new DisplayQueue(mockOBSManager, configFixture, {}, null, {

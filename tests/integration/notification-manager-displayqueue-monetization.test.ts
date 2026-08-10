@@ -141,7 +141,8 @@ describe("Monetisation pipeline integration", () => {
     const displayQueueConfig = {
       autoProcess: false,
       maxQueueSize: 25,
-      ttsEnabled: false,
+      ttsChatEnabled: false,
+      ttsNotificationsEnabled: false,
       chat: {
         sourceName: "chat-source",
         sceneName: "chat-scene",
@@ -173,7 +174,7 @@ describe("Monetisation pipeline integration", () => {
       eventBus,
     );
     displayQueue.playGiftVideoAndAudio = createMockFn().mockResolvedValue();
-    displayQueue.isTTSEnabled = createMockFn(() => false);
+    displayQueue.effects.isNotificationTTSEnabled = createMockFn(() => false);
     const originalAddItem = displayQueue.addItem.bind(displayQueue);
     addItemMock = createMockFn<[DisplayQueueAddItem], void>((item) => {
       originalAddItem(item);
