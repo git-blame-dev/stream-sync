@@ -21,6 +21,11 @@ const FREE_TEXT_SECRET_PATTERNS: readonly RegExp[] = [
     /\b((?:api[_-]?key|x-api-key|client[_-]?secret|password|secret)\s*[:=]\s*)[^\s,;&]+/gi,
     /\b((?:cookie|set-cookie)\s*[:=]\s*)[^\r\n]+/gi,
 ];
+const MAX_ENTRIES = 100;
+const MAX_STRING_LENGTH = 4096;
+const MAX_TOTAL_NODES = 1000;
+const MAX_TOTAL_STRING_CHARS = 100_000;
+const TRUNCATION_MARKER = '...';
 
 function normalizeLogKey(key: string): string {
     return key.replace(/[_-]/g, '').toLowerCase();
@@ -33,6 +38,8 @@ function isSensitiveLogKey(key: string): boolean {
 function stripUrlSecrets(value: string): string {
     try {
         const parsed = new URL(value);
+        parsed.username = '';
+        parsed.password = '';
         parsed.search = '';
         parsed.hash = '';
         return parsed.toString();
@@ -49,7 +56,9 @@ function sanitizeLogText(value: string): string {
     );
 }
 
-function sanitizeLogValue(value: unknown, key = '', depth = 0, ancestors: WeakSet<object> = new WeakSet(), maxDepth = 3): unknown {
+type SanitizationBudget = { nodes: number; stringChars: number };
+function sanitizeLogValue(value: unknown, key = '', depth = 0, ancestors: WeakSet<object> = new WeakSet(), maxDepth = 3, budget?: SanitizationBudget): unknown {
+    if (budget && budget.nodes-- <= 0) return '[Traversal budget exceeded]';
 if (isSensitiveLogKey(key)) {
 return '[REDACTED]';
 }
@@ -57,17 +66,32 @@ return '[REDACTED]';
         return '[REDACTED_RAW_PAYLOAD]';
     }
     if (value instanceof Error) {
-        return { name: value.name, message: sanitizeLogText(value.message) };
+        return {
+            name: sanitizeLogValue(value.name, 'name', depth + 1, ancestors, maxDepth, budget),
+            message: sanitizeLogValue(value.message, 'message', depth + 1, ancestors, maxDepth, budget),
+        };
     }
     if (value === null || value === undefined) {
         return value;
     }
     if (typeof value === 'string') {
-        return SENSITIVE_URL_KEY_PATTERN.test(key) ? stripUrlSecrets(value) : sanitizeLogText(value);
+        const sanitized = SENSITIVE_URL_KEY_PATTERN.test(key)
+            ? sanitizeLogText(stripUrlSecrets(value))
+            : sanitizeLogText(value);
+        const limited = sanitized.length > MAX_STRING_LENGTH ? `${sanitized.slice(0, MAX_STRING_LENGTH)}${TRUNCATION_MARKER}` : sanitized;
+        if (!budget) return limited;
+        const available = Math.max(0, budget.stringChars);
+        budget.stringChars -= limited.length;
+        return limited.length > available ? `${limited.slice(0, available)}${TRUNCATION_MARKER}` : limited;
     }
-    if (typeof value !== 'object') {
-        return value;
+    if (typeof value === 'number') {
+        return Number.isFinite(value) ? value : String(value);
     }
+    if (typeof value === 'bigint') return `${value}n`;
+    if (typeof value === 'symbol') return String(value);
+    if (typeof value === 'function') return `[Function: ${value.name || 'anonymous'}]`;
+    if (typeof value === 'boolean') return value;
+    if (typeof value !== 'object') return String(value);
     if (ancestors.has(value)) {
         return '[Circular]';
     }
@@ -76,22 +100,53 @@ return '[REDACTED]';
     }
     ancestors.add(value);
     try {
-        if (Array.isArray(value)) {
-            return value.map((item) => sanitizeLogValue(item, key, depth + 1, ancestors, maxDepth));
+        if (value instanceof Date) return Number.isNaN(value.getTime()) ? '[Invalid Date]' : value.toISOString();
+        if (value instanceof Map) {
+            const entries: unknown[] = [];
+            let count = 0;
+            for (const [mapKey, mapValue] of value) {
+                if (count++ >= MAX_ENTRIES) break;
+                const displayedKey = sanitizeLogValue(mapKey, '', depth + 1, ancestors, maxDepth, budget);
+                const valueKey = typeof mapKey === 'string' ? mapKey : '';
+                entries.push([displayedKey, sanitizeLogValue(mapValue, valueKey, depth + 1, ancestors, maxDepth, budget)]);
+            }
+            return { type: 'Map', size: value.size, entries };
         }
-        return Object.fromEntries(
-            Object.entries(value as Record<string, unknown>).sort(([left], [right]) => left.localeCompare(right)).map(([entryKey, entryValue]) => [
-                entryKey,
-                sanitizeLogValue(entryValue, entryKey, depth + 1, ancestors, maxDepth)
-            ])
-        );
+        if (value instanceof Set) {
+            const entries: unknown[] = [];
+            let count = 0;
+            for (const item of value) {
+                if (count++ >= MAX_ENTRIES) break;
+                entries.push(sanitizeLogValue(item, '', depth + 1, ancestors, maxDepth, budget));
+            }
+            return { type: 'Set', size: value.size, values: entries };
+        }
+        if (Array.isArray(value)) {
+            const result: unknown[] = [];
+            for (let index = 0; index < Math.min(value.length, MAX_ENTRIES); index++) {
+                try { result.push(sanitizeLogValue(value[index], key, depth + 1, ancestors, maxDepth, budget)); }
+                catch { result.push('[Un readable]'); }
+            }
+            if (value.length > MAX_ENTRIES) result.push(`[${value.length - MAX_ENTRIES} more items]`);
+            return result;
+        }
+        const result: Record<string, unknown> = {};
+        let keys: string[];
+        try { keys = Object.keys(value as object).sort(); } catch { return '[Un readable object]'; }
+        for (const entryKey of keys.slice(0, MAX_ENTRIES)) {
+            try { result[entryKey] = sanitizeLogValue((value as Record<string, unknown>)[entryKey], entryKey, depth + 1, ancestors, maxDepth, budget); }
+            catch { result[entryKey] = '[Unreadable]'; }
+        }
+        if (keys.length > MAX_ENTRIES) result.__more = keys.length - MAX_ENTRIES;
+        return result;
     } finally {
         ancestors.delete(value);
     }
 }
 
 function safeObjectStringify(obj: unknown, maxDepth = 3): string {
-    const sanitized = sanitizeLogValue(obj, '', 0, new WeakSet(), maxDepth);
+    const budget = { nodes: MAX_TOTAL_NODES, stringChars: MAX_TOTAL_STRING_CHARS };
+    const sanitized = sanitizeLogValue(obj, '', 0, new WeakSet(), maxDepth, budget);
     if (obj === null) return 'null';
     if (obj === undefined) return 'undefined';
     if (typeof sanitized === 'string') return sanitized;
@@ -99,12 +154,18 @@ function safeObjectStringify(obj: unknown, maxDepth = 3): string {
 
     try {
         return JSON.stringify(sanitized);
-    } catch (err) {
+    } catch (_err) {
         const constructorName = typeof obj === 'object' && obj !== null && 'constructor' in obj && typeof (obj as { constructor?: { name?: unknown } }).constructor?.name === 'string'
             ? (obj as { constructor: { name: string } }).constructor.name
             : 'Unknown';
-        return `[Object: ${constructorName} - stringify failed${err instanceof Error ? `: ${err.message}` : ''}]`;
+        return `[Object: ${constructorName} - stringify failed]`;
     }
 }
 
-export { sanitizeLogText, safeObjectStringify };
+function sanitizeLogData(value: unknown, maxDepth = 3): unknown {
+    const budget = { nodes: MAX_TOTAL_NODES, stringChars: MAX_TOTAL_STRING_CHARS };
+    try { return sanitizeLogValue(value, '', 0, new WeakSet(), maxDepth, budget); }
+    catch { return '[Unserializable]'; }
+}
+
+export { sanitizeLogText, safeObjectStringify, sanitizeLogData };

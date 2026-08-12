@@ -17,7 +17,7 @@ describe('core/logging behavior', () => {
                 platforms: { tiktok: { enabled: true }, twitch: { enabled: true }, youtube: { enabled: true } },
                 chat: { enabled: false, separateFiles: true, directory: './logs' }
             }
-        });
+        }, { operatorCaptureEnabled: false });
     });
 
     afterEach(() => {
@@ -29,6 +29,102 @@ describe('core/logging behavior', () => {
         expect(config).toBeDefined();
         expect(config.console).toBeDefined();
         expect(config.file).toBeDefined();
+    });
+
+    it('captures operator logs only when explicitly enabled', () => {
+        logging.initializeLoggingConfig({ logging: { console: { enabled: true, level: 'info' }, file: { enabled: false } } });
+        expect(logging.getOperatorLogSource()).toBeNull();
+    });
+
+    it('retains sanitized console-visible entries in the operator source', () => {
+        logging.initializeLoggingConfig({ logging: { console: { enabled: true, level: 'info' }, file: { enabled: false } } }, { operatorCaptureEnabled: true });
+        const stdoutCapture = captureStdout();
+        const logger = logging.getUnifiedLogger();
+
+        try {
+            logger.info('hello', 'source', { access_token: 'secret', nested: { value: 'safe' } });
+
+            const entry = logging.getOperatorLogSource()?.history().entries.at(-1);
+            expect(entry).toMatchObject({
+                id: expect.any(Number), message: 'hello', source: 'source',
+                data: { access_token: '[REDACTED]', nested: { value: 'safe' } },
+            });
+        } finally {
+            stdoutCapture.restore();
+        }
+    });
+
+    it('preserves one operator source while capture is toggled', () => {
+        logging.initializeLoggingConfig({ logging: { console: { enabled: true, level: 'info' }, file: { enabled: false } } }, { operatorCaptureEnabled: true });
+        const stdoutCapture = captureStdout();
+        const logger = logging.getUnifiedLogger();
+        try {
+            const source = logging.getOperatorLogSource();
+            logger.info('before-reconfigure');
+            logging.initializeLoggingConfig({ logging: { console: { enabled: true, level: 'info' }, file: { enabled: false } } }, { operatorCaptureEnabled: true });
+            expect(logging.getOperatorLogSource()).toBe(source);
+            logger.info('after-reconfigure');
+            expect(source?.history().entries.map((entry) => entry.message).slice(-2)).toEqual(['before-reconfigure', 'after-reconfigure']);
+
+            logging.initializeLoggingConfig(
+                { logging: { console: { enabled: true, level: 'info' }, file: { enabled: false } } },
+                { operatorCaptureEnabled: false }
+            );
+            expect(logging.getOperatorLogSource()).toBeNull();
+            logger.info('while-disabled');
+            logging.initializeLoggingConfig(
+                { logging: { console: { enabled: true, level: 'info' }, file: { enabled: false } } },
+                { operatorCaptureEnabled: true }
+            );
+            expect(logging.getOperatorLogSource()).toBe(source);
+            expect(source?.history().entries.some((entry) => entry.message === 'while-disabled')).toBe(false);
+        } finally {
+            stdoutCapture.restore();
+        }
+    });
+
+    it('captures only entries passing the console threshold', () => {
+        logging.initializeLoggingConfig({ logging: { console: { enabled: true, level: 'warn' }, file: { enabled: false } } }, { operatorCaptureEnabled: true });
+        const stdoutCapture = captureStdout();
+        const logger = logging.getUnifiedLogger();
+
+        try {
+            logger.info('suppressed');
+            logger.warn('retained');
+            const messages = logging.getOperatorLogSource()?.history().entries.map((entry) => entry.message) ?? [];
+            expect(messages).not.toContain('suppressed');
+            expect(messages).toContain('retained');
+        } finally {
+            stdoutCapture.restore();
+        }
+    });
+
+    it('does not traverse suppressed log data', () => {
+        logging.initializeLoggingConfig({ logging: { console: { enabled: true, level: 'warn' }, file: { enabled: false } } }, { operatorCaptureEnabled: true });
+        const stdoutCapture = captureStdout();
+        const logger = logging.getUnifiedLogger();
+        const data = {};
+        Object.defineProperty(data, 'throwing', { get() { throw new Error('must not read'); } });
+
+        try {
+            expect(() => logger.info('suppressed', 'test', data)).not.toThrow();
+            expect(logging.getOperatorLogSource()?.history().entries.at(-1)?.message).not.toBe('suppressed');
+        } finally {
+            stdoutCapture.restore();
+        }
+    });
+
+    it('bounds oversized entries retained for operator replay', () => {
+        logging.initializeLoggingConfig({ logging: { console: { enabled: true, level: 'info' }, file: { enabled: false } } }, { operatorCaptureEnabled: true });
+        const stdoutCapture = captureStdout();
+        const logger = logging.getUnifiedLogger();
+
+        try {
+            logger.info('large-entry', 'x'.repeat(100_000), { value: 'small' });
+            expect(logging.getOperatorLogSource()?.history().entries.at(-1)?.data).toBe('[TRUNCATED]');
+        } finally {
+            stdoutCapture.restore();
+        }
     });
 
     it('initializes configuration from appConfig.logging', () => {

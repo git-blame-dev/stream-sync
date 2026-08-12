@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { safeObjectStringify, sanitizeLogText } from "../../../../src/core/logger/safe-log-serializer.ts";
+import { safeObjectStringify, sanitizeLogText, sanitizeLogData } from "../../../../src/core/logger/safe-log-serializer.ts";
 
 describe("safe log serializer behavior", () => {
     test("safely stringifies primitives and objects", () => {
@@ -134,5 +134,63 @@ describe("safe log serializer behavior", () => {
         expect(serialized).not.toContain("test-private-chat-text");
         expect(serialized).not.toContain("test-private-provider-payload");
         expect(serialized).not.toContain("test-token");
+    });
+
+    test("sanitizes Map values according to their displayed string keys", () => {
+        const serialized = safeObjectStringify(new Map<string, unknown>([
+            ["access_token", "map-access-secret"],
+            ["payload", { private: "map-raw-secret" }],
+            ["callback_url", "https://example.test/path?secret=map-url-secret"],
+        ]));
+
+        expect(serialized).not.toContain("map-access-secret");
+        expect(serialized).not.toContain("map-raw-secret");
+        expect(serialized).not.toContain("map-url-secret");
+        expect(serialized).toContain("[REDACTED_RAW_PAYLOAD]");
+        expect(serialized).toContain("[REDACTED]");
+    });
+
+    test("does not expose stringify failure messages", () => {
+        const value = {
+            toJSON: () => { throw new Error("proxy-getter-secret"); },
+        };
+
+        const serialized = safeObjectStringify(value);
+
+        expect(serialized).not.toContain("proxy-getter-secret");
+    });
+
+    test("bounds Error name and message within the shared budget", () => {
+        const data = sanitizeLogData(new Error("error-" + "x".repeat(5000))) as { message: string };
+        expect(data.message.length).toBe(4099);
+
+        const broad = safeObjectStringify({ values: Array.from({ length: 100 }, () => Array.from({ length: 100 }, (_, index) => ({ value: `value-${index}` }))) });
+        expect(broad).toContain("[Traversal budget exceeded]");
+    });
+
+    test("sanitizes hostile and non-JSON values without throwing", () => {
+        const hostile = new Proxy({}, { ownKeys: () => { throw new Error("boom"); } });
+        const data = sanitizeLogData({ hostile, big: 1n, symbol: Symbol("x"), fn() {}, nan: NaN, inf: Infinity, date: new Date("2020-01-01") });
+        expect(() => JSON.stringify(data)).not.toThrow();
+        expect(data).toMatchObject({ big: "1n", symbol: "Symbol(x)", nan: "NaN", inf: "Infinity", date: "2020-01-01T00:00:00.000Z" });
+    });
+
+    test("bounds strings and collection breadth and strips URL credentials", () => {
+        const many = Array.from({ length: 105 }, (_, index) => index);
+        const data = sanitizeLogData({ url: "https://user:pass@example.com/path?secret=x#hash", text: "x".repeat(5000), many }) as Record<string, unknown>;
+        expect(data.url).toBe("https://example.com/path");
+        expect((data.text as string).length).toBe(4099);
+        expect((data.many as unknown[]).length).toBe(101);
+    });
+
+    test("redacts secret text in malformed URL-like fields", () => {
+        const data = sanitizeLogData({ endpoint: "not a url Authorization: Bearer mixed-secret" }) as Record<string, unknown>;
+        expect(data.endpoint).toBe("not a url Authorization: Bearer [REDACTED]");
+    });
+
+    test("shares traversal budget across broad nested payloads", () => {
+        const data = sanitizeLogData({ branches: Array.from({ length: 100 }, () => Array.from({ length: 100 }, (_, index) => ({ value: `value-${index}` }))) }) as { branches: unknown[] };
+        expect(data.branches.some((entry) => entry === "[Traversal budget exceeded]")).toBe(true);
+        expect(() => JSON.stringify(data)).not.toThrow();
     });
 });
