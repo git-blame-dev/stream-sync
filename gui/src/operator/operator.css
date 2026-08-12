@@ -1,0 +1,360 @@
+:root {
+  color: #e8edf2;
+  background: #11161b;
+  color-scheme: dark;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-width: 320px;
+  margin: 0;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+.operator-console {
+  max-width: 1400px;
+  min-height: 100vh;
+  margin-inline: auto;
+  padding: 0 2.125rem 1.75rem;
+}
+
+header,
+.section-heading {
+  display: flex;
+  gap: 1.25rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+h1,
+h2 {
+  margin: 0.25rem 0 0;
+  letter-spacing: -0.03em;
+}
+
+h1 {
+  font-size: clamp(1.7rem, 3vw, 2.7rem);
+}
+
+h2 {
+  font-size: 1.15rem;
+}
+
+.eyebrow {
+  color: #8fa5b7;
+  font: 600 0.68rem/1.2 ui-monospace, SFMono-Regular, Consolas, monospace;
+  letter-spacing: 0.16em;
+}
+
+.status {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 0.35rem 0.45rem;
+  align-items: center;
+  color: #a8d8b4;
+  font-size: 0.82rem;
+}
+
+.status small {
+  grid-column: 2;
+  color: #8796a1;
+}
+
+.status-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: #56c878;
+}
+
+.status[data-state="reconnecting"] {
+  color: #f0bd72;
+}
+
+.status[data-state="reconnecting"] .status-dot {
+  background: #e7a84f;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.8fr) minmax(420px, 1.2fr);
+  gap: 1.75rem;
+  margin-top: 0;
+}
+
+.controls,
+.logs {
+  min-width: 0;
+}
+
+.control-list {
+  margin-top: 1.125rem;
+}
+
+.control {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 1rem;
+  padding: 0.9rem 0.2rem;
+  border-bottom: 1px solid #26313a;
+  cursor: pointer;
+}
+
+.control strong,
+.control em {
+  display: block;
+}
+
+.control strong {
+  font-size: 0.92rem;
+}
+
+.control em {
+  margin-top: 0.25rem;
+  color: #e3a65c;
+  font-size: 0.69rem;
+  font-style: normal;
+}
+
+.control input {
+  position: absolute;
+  opacity: 0;
+}
+
+.control > span:first-child {
+  min-width: 0;
+}
+
+.switch-track {
+  position: relative;
+  flex: 0 0 auto;
+  width: 2.5rem;
+  height: 1.375rem;
+  border: 1px solid #60717d;
+  border-radius: 1.25rem;
+  transition: background-color 150ms ease, border-color 150ms ease;
+}
+
+.switch-track::after {
+  position: absolute;
+  top: 0.125rem;
+  left: 0.125rem;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 50%;
+  background: #81909a;
+  content: "";
+  transition: transform 150ms ease, background-color 150ms ease;
+}
+
+.control input:checked + .switch-track {
+  border-color: #59cf9b;
+  background: #317b63;
+}
+
+.control input:checked + .switch-track::after {
+  background: #d8ffed;
+  transform: translateX(1.125rem);
+}
+
+.control input:disabled + .switch-track {
+  opacity: 0.55;
+}
+
+.control input:focus-visible + .switch-track,
+button:focus-visible {
+  outline: 2px solid #70c9ff;
+  outline-offset: 3px;
+}
+
+.quiet,
+.filters button {
+  padding: 0.5rem 0.625rem;
+  border: 1px solid #465762;
+  border-radius: 0.2rem;
+  color: #cbd5dc;
+  background: none;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.quiet:hover,
+.filters button:hover {
+  border-color: #83a4b7;
+  color: #fff;
+}
+
+.quiet:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+.log-actions,
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.filters {
+  margin: 1rem 0 0.75rem;
+}
+
+.filters button[aria-pressed="false"] {
+  opacity: 0.48;
+}
+
+.level-debug,
+.level-console {
+  color: #9eb0bb;
+}
+
+.level-info {
+  color: #79c7f2;
+}
+
+.level-warn {
+  color: #f0bd72;
+}
+
+.level-error,
+.level-emergency {
+  color: #ff8989;
+}
+
+.log-list {
+  height: min(68vh, 740px);
+  min-height: 24rem;
+  overflow: auto;
+  border: 1px solid #27333b;
+  background: #0b1014;
+  scrollbar-color: #3f505c #0b1014;
+}
+
+.log-row {
+  border-bottom: 1px solid #202a31;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.73rem;
+}
+
+.log-row summary {
+  display: grid;
+  grid-template-columns: 5.75rem 4.8rem minmax(5rem, 0.35fr) minmax(12rem, 1fr);
+  gap: 0.65rem;
+  align-items: baseline;
+  padding: 0.6rem 0.75rem;
+  cursor: pointer;
+}
+
+.log-row summary:hover {
+  background: #121a20;
+}
+
+.log-row time,
+.log-row summary > span {
+  color: #82919b;
+}
+
+.log-row summary > strong {
+  overflow-wrap: anywhere;
+  color: #dce4e9;
+  font-weight: 500;
+}
+
+.log-row pre {
+  max-height: 18rem;
+  margin: 0;
+  padding: 0.75rem 1rem 1rem 7.2rem;
+  overflow: auto;
+  color: #aebbc3;
+  white-space: pre-wrap;
+}
+
+.error {
+  padding: 0.75rem;
+  border-inline-start: 3px solid #f46f6f;
+  color: #ffd0d0;
+  background: #351d20;
+}
+
+.empty {
+  margin: 0;
+  padding: 2rem;
+  color: #84949f;
+  text-align: center;
+}
+
+.paused-indicator {
+  color: #f0bd72;
+  font-size: 0.75rem;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 820px) {
+  .operator-console {
+    padding: 0 1rem 1.25rem;
+  }
+
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .log-list {
+    height: 58vh;
+  }
+
+  .log-row summary {
+    grid-template-columns: 4.7rem 4.5rem 1fr;
+  }
+
+  .log-row summary > strong {
+    grid-column: 1 / -1;
+  }
+
+  .log-row pre {
+    padding-inline-start: 0.75rem;
+  }
+}
+
+@media (max-width: 520px) {
+  header,
+  .section-heading {
+    align-items: flex-start;
+  }
+
+  .section-heading {
+    flex-direction: column;
+  }
+
+  .log-actions {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -2,6 +2,7 @@
   "$schema": "https://unpkg.com/knip@5/schema.json",
   "entry": [
     "eslint.config.js",
+    "gui/src/operator/main.tsx",
     "tests/**/*.test.ts",
     "tests/setup/**/*.ts"
   ],
