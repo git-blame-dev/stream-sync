@@ -6,7 +6,7 @@ export type Control = {
 }
 
 export type OperatorState = { revision: number; controls: Control[] }
-export type LogEntry = { id: string | number; timestamp: string; level: string; message: string; source: string; data?: unknown }
+export type LogEntry = { id: number; timestamp: string; level: string; message: string; source: string; data?: unknown }
 export const CONTROL_KEYS = [
   'messagesEnabled',
   'commandsEnabled',
@@ -47,7 +47,7 @@ export function parseOperatorState(value: unknown): OperatorState | null {
 export function parseLogEntry(value: unknown): LogEntry | null {
   if (!value || typeof value !== 'object') return null
   const item = value as Record<string, unknown>
-  return (typeof item.id === 'string' || typeof item.id === 'number')
+  return (typeof item.id === 'number' && Number.isSafeInteger(item.id) && item.id >= 0)
     && typeof item.timestamp === 'string'
     && typeof item.level === 'string'
     && logLevels.has(item.level)
@@ -58,14 +58,7 @@ export function parseLogEntry(value: unknown): LogEntry | null {
 }
 
 export function appendLogRow(rows: LogEntry[], entry: LogEntry): LogEntry[] {
-  if (rows.some((row) => String(row.id) === String(entry.id))) return rows
-  if (typeof entry.id === 'number') {
-    const newestNumericId = rows.reduce(
-      (newest, row) => typeof row.id === 'number' ? Math.max(newest, row.id) : newest,
-      Number.NEGATIVE_INFINITY,
-    )
-    if (entry.id <= newestNumericId) return rows
-  }
+  if (rows.some((row) => row.id >= entry.id)) return rows
   return [...rows, entry].slice(-MAX_LOG_ROWS)
 }
 

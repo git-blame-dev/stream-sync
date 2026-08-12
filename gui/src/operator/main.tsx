@@ -23,29 +23,34 @@ const mutationHeaders = {
 
 function useEventStream(
   url: string,
-  event: string,
-  onData: (value: unknown) => void,
+  handlers: Record<string, (value: unknown) => void>,
   onStatus: (value: StreamStatus) => void,
 ) {
-  const dataRef = useRef(onData)
+  const handlersRef = useRef(handlers)
   const statusRef = useRef(onStatus)
-  dataRef.current = onData
+  handlersRef.current = handlers
   statusRef.current = onStatus
 
   useEffect(() => {
     const source = new EventSource(url)
-    const receive = (message: MessageEvent) => {
-      try {
-        dataRef.current(JSON.parse(message.data) as unknown)
-      } catch {
-        statusRef.current('Invalid data')
+    const receives = Object.entries(handlersRef.current).map(([event, handler]) => {
+      const receive = (message: MessageEvent) => {
+        try {
+          handler(JSON.parse(message.data) as unknown)
+        } catch {
+          statusRef.current('Invalid data')
+        }
       }
-    }
-    source.addEventListener(event, receive)
+      source.addEventListener(event, receive)
+      return [event, receive] as const
+    })
     source.onopen = () => statusRef.current('Live')
     source.onerror = () => statusRef.current('Reconnecting')
-    return () => source.close()
-  }, [event, url])
+    return () => {
+      for (const [event, receive] of receives) source.removeEventListener(event, receive)
+      source.close()
+    }
+  }, [url])
 }
 
 async function request(url: string, init?: RequestInit): Promise<unknown> {
@@ -88,9 +93,12 @@ function OperatorApp() {
       setLogs((rows) => appendLogRow(rows, next))
     }
   }
+  const resetLogs = () => {
+    setLogs([])
+  }
 
-  useEventStream('/api/v1/operator/events', 'state', receiveState, setStateStreamStatus)
-  useEventStream('/api/v1/logs/events', 'log', receiveLog, setLogStreamStatus)
+  useEventStream('/api/v1/operator/events', { state: receiveState }, setStateStreamStatus)
+  useEventStream('/api/v1/logs/events', { log: receiveLog, 'log.history': resetLogs }, setLogStreamStatus)
 
   useEffect(() => {
     request('/api/v1/operator/state')

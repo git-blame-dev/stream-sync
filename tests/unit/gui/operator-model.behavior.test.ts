@@ -19,6 +19,7 @@ describe('operator model behavior', () => {
     if (!existing) throw new Error('Expected an existing row')
     expect(appendLogRow(rows, existing)).toBe(rows)
     expect(appendLogRow(rows, { ...existing, id: -1 })).toBe(rows)
+    expect(appendLogRow(rows, { ...existing, id: MAX_LOG_ROWS - 1 })).toBe(rows)
   })
 
   test('toggles a copied level set without mutating the source', () => {
@@ -33,6 +34,11 @@ describe('operator model behavior', () => {
     expect(parseLogEntry({ id: 1, level: 'info' })).toBeNull()
     expect(parseLogEntry({ id: 1, timestamp: '', level: 'info', message: 'ok', source: 'test' })).not.toBeNull()
     expect(parseLogEntry({ id: 1, timestamp: '', level: 'trace', message: 'hidden', source: 'test' })).toBeNull()
+    for (const id of ['1', -1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+      expect(parseLogEntry({ id, timestamp: '', level: 'info', message: 'invalid', source: 'test' })).toBeNull()
+    }
+    expect(parseLogEntry({ id: 0, timestamp: '', level: 'info', message: 'valid', source: 'test' })).not.toBeNull()
+    expect(parseLogEntry({ id: Number.MAX_SAFE_INTEGER, timestamp: '', level: 'info', message: 'valid', source: 'test' })).not.toBeNull()
   })
 
   test('accepts only one complete authoritative control set', () => {
