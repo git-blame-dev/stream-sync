@@ -15,6 +15,7 @@ import { DisplayQueueEffects } from './display-queue-effects';
 import { DisplayQueueState } from './display-queue-state';
 import { getDefaultGoalsManager } from './goals';
 import { getDefaultSourcesManager } from './sources';
+import type { OperatorControlService } from '../services/operator/operator-control-service';
 
 type QueueItem = DisplayQueueItem;
 type QueueEntry = QueueItem | DisplayQueueSequence;
@@ -39,6 +40,7 @@ type DisplayQueueEventBus = {
 } | null;
 
 type DisplayQueueDependencies = {
+    operatorControls?: Pick<OperatorControlService, 'isEnabled' | 'subscribe'>;
     sourcesManager?: DisplayQueueSourcesManager;
     goalsManager?: ReturnType<typeof getDefaultGoalsManager>;
     delay?: (ms: number) => Promise<void>;
@@ -139,6 +141,8 @@ class DisplayQueue {
     state: DisplayQueueState;
     effects: DisplayQueueEffects;
     effectChain: Promise<void> = Promise.resolve();
+    operatorControls?: DisplayQueueDependencies['operatorControls'];
+    unsubscribeOperatorControls?: () => void;
 
     constructor(
         obsManager: DisplayQueueObsManager,
@@ -158,6 +162,7 @@ class DisplayQueue {
         this.eventBus = eventBus;
         this.delay = dependencies.delay || defaultDelay;
         this.config = config;
+        this.operatorControls = dependencies.operatorControls;
         this.state = new DisplayQueueState({
             ...(this.config.maxQueueSize === undefined ? {} : { maxQueueSize: this.config.maxQueueSize }),
             getPriority: (type) => this.getTypePriority(type) ?? PRIORITY_LEVELS.CHAT
@@ -178,6 +183,13 @@ class DisplayQueue {
                 ? {}
                 : { giftAnimationResolver: dependencies.giftAnimationResolver })
         });
+        if (this.operatorControls) {
+            this.unsubscribeOperatorControls = this.operatorControls.subscribe((snapshot) => {
+                for (const [key, enabled] of Object.entries(snapshot.controls)) {
+                    if (!enabled) this.cancelDisabledItems(key);
+                }
+            });
+        }
     }
 
     isChatTTSEnabled() {
@@ -198,13 +210,27 @@ class DisplayQueue {
     }
 
     addItem(item: QueueItem) {
+        this.state.validate(item);
+        if (!this.isViewerOutputEnabled(item)) {
+            this.accountMonetization(item);
+            return;
+        }
         const { insertIndex } = this.state.addItem(item, this.activeSequenceRemaining.length);
         logger.debug(`[Display Queue] Added ${item.type} at position ${insertIndex}. Queue length: ${this.getQueueLength()}`, 'display-queue');
         this.startProcessingIfNeeded();
     }
 
     addSequence(items: QueueItem[]) {
-        const { insertIndex } = this.state.addSequence(items, {
+        if (!Array.isArray(items) || items.length === 0) {
+            this.state.addSequence(items);
+            return;
+        }
+        items.forEach((item) => this.state.validate(item));
+        const classified = items.map((item) => ({ item, enabled: this.isViewerOutputEnabled(item) }));
+        const admitted = classified.filter(({ enabled }) => enabled).map(({ item }) => item);
+        classified.filter(({ enabled }) => !enabled).forEach(({ item }) => this.accountMonetization(item));
+        if (admitted.length === 0) return;
+        const { insertIndex } = this.state.addSequence(admitted, {
             reservedRows: this.activeSequenceRemaining.length
         });
         logger.debug(`[Display Queue] Added sequence (${items.length} items) at position ${insertIndex}. Queue length: ${this.getQueueLength()}`, 'display-queue');
@@ -361,6 +387,8 @@ class DisplayQueue {
     }
 
     async stop() {
+        this.unsubscribeOperatorControls?.();
+        delete this.unsubscribeOperatorControls;
         this.clearQueue();
         await this.effectChain;
         logger.info('[Display Queue] Processing stopped and queue cleared.');
@@ -373,6 +401,28 @@ class DisplayQueue {
 
         const username = (data as QueueItemData).username;
         return typeof username === 'string' && username.trim() ? username.trim() : null;
+    }
+
+    private isViewerOutputEnabled(item: QueueItem) {
+        if (!this.operatorControls) return true;
+        const settingKey = isChatType(item.type) ? 'messagesEnabled' : NOTIFICATION_CONFIGS[item.type as keyof typeof NOTIFICATION_CONFIGS]?.settingKey;
+        return !settingKey || this.operatorControls.isEnabled(settingKey);
+    }
+
+    private accountMonetization(item: QueueItem) {
+        if (item.type === 'platform:gift' || item.type === 'platform:paypiggy' || item.type === 'platform:giftpaypiggy') {
+            this.effectChain = this.effectChain.then(() => this.effects.processMonetizationGoal(item)).catch((error) => {
+                handleDisplayQueueError(`[Display Queue] Error processing ${item.type} monetization`, error, { itemType: item.type });
+            });
+        }
+    }
+
+    private cancelDisabledItems(settingKey: string) {
+        const removed = this.state.removeMatching((item) => {
+            const itemKey = isChatType(item.type) ? 'messagesEnabled' : NOTIFICATION_CONFIGS[item.type as keyof typeof NOTIFICATION_CONFIGS]?.settingKey;
+            return itemKey === settingKey;
+        });
+        removed.forEach((item) => this.accountMonetization(item));
     }
 }
 

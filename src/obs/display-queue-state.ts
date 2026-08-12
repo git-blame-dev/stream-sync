@@ -89,6 +89,25 @@ class DisplayQueueState {
         this.queue.length = 0;
     }
 
+    removeMatching(predicate: (item: DisplayQueueItem) => boolean) {
+        const removed: DisplayQueueItem[] = [];
+        const retained: DisplayItem[] = this.queue.flatMap((entry): DisplayItem[] => {
+            if (!this.isSequence(entry)) {
+                const matches = predicate(entry);
+                if (matches) removed.push(entry);
+                return matches ? [] : [entry];
+            }
+            const children = entry.children.filter((child) => {
+                const matches = predicate(child);
+                if (matches) removed.push(child);
+                return !matches;
+            });
+            return children.length === 0 ? [] : [{ ...entry, children }];
+        });
+        this.queue.splice(0, this.queue.length, ...retained);
+        return removed;
+    }
+
     assertCapacity(additionalRows: number) {
         if (this.maxQueueSize && this.getQueueLength() + additionalRows > this.maxQueueSize) {
             throw new Error(`Queue at capacity (${this.maxQueueSize})`);
