@@ -91,7 +91,9 @@ type RuntimeObsManager = {
     call: (requestType: string, requestData: Record<string, unknown>) => Promise<unknown>;
 };
 
-type RuntimeDisplayQueue = DisplayQueueSequenceWriter;
+type RuntimeDisplayQueue = DisplayQueueSequenceWriter & {
+    stop?: () => Promise<void> | void;
+};
 
 type RuntimeSourcesManager = {
     clearTextSource: (sourceName: string) => Promise<void>;
@@ -718,6 +720,17 @@ class AppRuntime {
         }
 
         try {
+            await this.displayQueue.stop?.();
+        } catch (error) {
+            this._handleAppRuntimeError(
+                `Error stopping display queue: ${getErrorMessage(error)}`,
+                error,
+                null,
+                { eventType: 'shutdown', logContext: 'system' }
+            );
+        }
+
+        try {
             await this.platformLifecycleService.disconnectAll();
         } catch (error) {
             this._handleAppRuntimeError(
@@ -1004,6 +1017,10 @@ class AppRuntime {
     async rollbackStartup() {
         await this._runStartupRollbackStep('stop GUI transport', async () => {
             await this._stopGuiTransport();
+        });
+
+        await this._runStartupRollbackStep('stop display queue', async () => {
+            await this.displayQueue.stop?.();
         });
 
         await this._runStartupRollbackStep('disconnect platforms', async () => {

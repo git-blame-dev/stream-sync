@@ -994,7 +994,12 @@ describe("AppRuntime behavior", () => {
 
   it("shuts down services and calls cleanup hooks", async () => {
     const calls = { disconnectAll: 0, cleanup: 0 };
+    const displayQueue = {
+      ...createMockDisplayQueue(),
+      stop: createMockFn().mockResolvedValue(),
+    };
     const runtime = createRuntime({
+      displayQueue,
       notificationManager: {},
       platformLifecycleService: {
         getAllPlatforms: createMockFn().mockReturnValue({}),
@@ -1017,6 +1022,7 @@ describe("AppRuntime behavior", () => {
 
       expect(calls.disconnectAll).toBe(1);
       expect(calls.cleanup).toBe(1);
+      expect(displayQueue.stop.mock.calls.length).toBe(1);
     } finally {
       Reflect.set(process, "exit", originalExit);
     }
@@ -1112,9 +1118,20 @@ describe("AppRuntime behavior", () => {
         ),
       },
     });
+    const logged: unknown[][] = [];
+    const displayQueue = {
+      ...createMockDisplayQueue(),
+      stop: createMockFn().mockRejectedValue(new Error("display queue stop failed")),
+    };
+    const viewerCountCleanup = createMockFn().mockResolvedValue();
+    setRuntimeProperty(runtime, "displayQueue", displayQueue);
+    setRuntimeProperty(runtime, "errorHandler", {
+      handleEventProcessingError: (...args: unknown[]) => logged.push(args),
+      logOperationalError: (...args: unknown[]) => logged.push(args),
+    });
     setRuntimeProperty(runtime, "viewerCountSystem", {
       stopPolling: createMockFn(),
-      cleanup: createMockFn().mockResolvedValue(),
+      cleanup: viewerCountCleanup,
     });
     setRuntimeProperty(runtime, "viewerCountStatusCleanup", createMockFn());
     const originalExit = process.exit;
@@ -1122,7 +1139,10 @@ describe("AppRuntime behavior", () => {
 
     try {
       await runtime.shutdown();
+      expect(displayQueue.stop.mock.calls.length).toBe(1);
+      expect(logged.some((args) => args.some((value) => String(value).includes("Error stopping display queue")))).toBe(true);
       expect(obsEventService.disconnect.mock.calls.length).toBe(1);
+      expect(viewerCountCleanup.mock.calls.length).toBe(1);
     } finally {
       Reflect.set(process, "exit", originalExit);
     }
@@ -1248,6 +1268,10 @@ describe("AppRuntime behavior", () => {
 
   it("rolls back initialized services when startup fails after platform initialization", async () => {
     const disconnectAll = createMockFn().mockResolvedValue();
+    const displayQueue = {
+      ...createMockDisplayQueue(),
+      stop: createMockFn().mockResolvedValue(),
+    };
     const runtime = createRuntime({
       platformLifecycleService: {
         getAllPlatforms: createMockFn().mockReturnValue({}),
@@ -1257,6 +1281,7 @@ describe("AppRuntime behavior", () => {
         disconnectAll,
       },
     });
+    setRuntimeProperty(runtime, "displayQueue", displayQueue);
     setDependencyProperty(runtime, "obs", {
       goalsManager: { initializeGoalDisplay: async () => {} },
       connectionManager: { isConnected: () => false, call: async () => ({}) },
@@ -1270,6 +1295,7 @@ describe("AppRuntime behavior", () => {
     });
 
     await expect(runtime.start()).rejects.toThrow("viewer count init failed");
+    expect(displayQueue.stop.mock.calls.length).toBe(1);
     expect(disconnectAll.mock.calls.length).toBe(1);
   });
 
