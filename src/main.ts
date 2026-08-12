@@ -3,7 +3,7 @@ import { createEventBus } from './core/EventBus';
 import { buildLoggingConfig } from './core/config-builders';
 import { PRIORITY_LEVELS, NOTIFICATION_CONFIGS } from './core/constants';
 import { config as defaultConfig, loadConfig } from './core/config';
-import { getUnifiedLogger, initializeLoggingConfig, setDebugMode } from './core/logging';
+import { getOperatorLogSource, getUnifiedLogger, initializeLoggingConfig, setDebugMode } from './core/logging';
 import { InnertubeFactory } from './factories/innertube-factory';
 import NotificationManagerModule from './notifications/NotificationManager';
 import { getOBSConnectionManager } from './obs/connection';
@@ -21,6 +21,12 @@ import { createUserTrackingService } from './services/UserTrackingService';
 import { createVFXCommandService } from './services/VFXCommandService';
 import { getGiftAnimationDependencyStatus } from './services/tiktok-gift-animation/resolver';
 import * as innertubeInstanceManager from './services/innertube-instance-manager';
+import {
+    createOperatorControlService,
+    OPERATOR_CONTROL_KEYS,
+    type OperatorControlService,
+    type OperatorControls
+} from './services/operator/operator-control-service';
 import { TwitchAuth } from './auth/TwitchAuth';
 import dependencyFactoryModule from './utils/dependency-factory';
 import { validateLoggerInterface } from './utils/dependency-validator';
@@ -122,6 +128,7 @@ type MainOverrides = Record<string, unknown> & {
     createGracefulExitService?: typeof createGracefulExitService;
     createProductionDependencies?: typeof createProductionDependencies;
     createSingleInstanceGuard?: typeof acquireSingleInstanceGuard;
+    createOperatorControlService?: typeof createOperatorControlService;
 };
 
 type CooldownsConfig = {
@@ -174,6 +181,7 @@ type MainConfig = Record<string, Record<string, unknown>> & BuiltConfig & {
     gui?: {
         enableDock?: boolean;
         enableOverlay?: boolean;
+        enableOperator?: boolean;
         showGifts?: boolean;
     };
     spam: Record<string, unknown>;
@@ -183,6 +191,22 @@ type MainConfig = Record<string, Record<string, unknown>> & BuiltConfig & {
         filePath: string;
     };
 };
+
+function buildOperatorControlDefaults(config: MainConfig): OperatorControls {
+    const general = config.general as Record<string, unknown>;
+    return Object.fromEntries(OPERATOR_CONTROL_KEYS.map((key) => [key, general[key] !== false])) as OperatorControls;
+}
+
+function enableOperatorNotificationPreparation(config: MainConfig): MainConfig {
+    const enabledControls = Object.fromEntries(OPERATOR_CONTROL_KEYS.map((key) => [key, true]));
+    return {
+        ...config,
+        general: { ...config.general, ...enabledControls },
+        tiktok: { ...config.tiktok, ...enabledControls },
+        twitch: { ...config.twitch, ...enabledControls },
+        youtube: { ...config.youtube, ...enabledControls }
+    } as MainConfig;
+}
 
 function createDefaultDependencyFactory(): PlatformLifecycleDependencyFactory {
     const factory = new DependencyFactory();
@@ -348,7 +372,9 @@ if (cliArgs.debug) {
     config.logging = buildLoggingConfig(normalizedConfig, { debugMode: true });
 }
 
-initializeLoggingConfig(createLoggingInitializerConfig(config.logging));
+initializeLoggingConfig(createLoggingInitializerConfig(config.logging), {
+    operatorCaptureEnabled: config.gui?.enableOperator === true
+});
 
 const logger = getUnifiedLogger();
 if (!logger || typeof logger.debug !== 'function') {
@@ -450,7 +476,8 @@ const MAIN_FUNCTION_OVERRIDE_KEYS = [
     'createDonationSpamDetection',
     'createGracefulExitService',
     'createProductionDependencies',
-    'createSingleInstanceGuard'
+    'createSingleInstanceGuard',
+    'createOperatorControlService'
 ];
 
 async function releaseSingleInstanceGuard(singleInstanceGuard: SingleInstanceGuard | null) {
@@ -568,6 +595,9 @@ async function main(overrides: MainOverrides = {}) {
     if (runtimeConfig !== config) {
         config = runtimeConfig;
     }
+    initializeLoggingConfig(createLoggingInitializerConfig(config.logging), {
+        operatorCaptureEnabled: config.gui?.enableOperator === true
+    });
     if (!runtimeCliArgs.debug && config.general.debugEnabled) {
         setDebugMode(true);
         logger.info('Debug mode enabled via config.ini', 'system');
@@ -645,6 +675,15 @@ async function main(overrides: MainOverrides = {}) {
 
         const handcamConfig = config.handcam;
         const giftsConfig = config.gifts;
+        const operatorControls: OperatorControlService | undefined = config.gui?.enableOperator === true
+            ? await (runtimeOverrides.createOperatorControlService || createOperatorControlService)({
+                defaults: buildOperatorControlDefaults(config),
+                warn: (message) => logger.warn(message, 'operator-controls')
+            })
+            : undefined;
+        const runtimeProcessingConfig = operatorControls
+            ? enableOperatorNotificationPreparation(config)
+            : config;
         
         const displayQueueConfig = {
             autoProcess: config.displayQueue.autoProcess,
@@ -712,7 +751,8 @@ async function main(overrides: MainOverrides = {}) {
         logger.debug('About to initialize display queue...', 'Main');
         const displayQueueDependencies = {
             sourcesManager: obsSubsystem.sourcesManager,
-            goalsManager: obsSubsystem.goalsManager
+            goalsManager: obsSubsystem.goalsManager,
+            ...(operatorControls ? { operatorControls } : {})
         };
         const displayQueue = runtimeOverrides.initializeDisplayQueue
             ? initializeDisplayQueueFn(
@@ -752,7 +792,7 @@ async function main(overrides: MainOverrides = {}) {
         const notificationManager = new NotificationManagerCtor({
             displayQueue: displayQueue,
             eventBus: eventBus,
-            config: config,
+            config: runtimeProcessingConfig,
             vfxCommandService: vfxCommandService,
             userTrackingService: userTrackingService,
             logger,
@@ -793,6 +833,12 @@ async function main(overrides: MainOverrides = {}) {
         dependencies.vfxCommandService = vfxCommandService;
         dependencies.userTrackingService = userTrackingService;
         dependencies.obsEventService = obsEventService;
+        if (operatorControls) {
+            dependencies.operatorControls = operatorControls;
+            const operatorLogs = getOperatorLogSource();
+            if (!operatorLogs) throw new Error('Operator console requires structured log capture');
+            dependencies.operatorLogs = operatorLogs;
+        }
 
         const sharedPlatformDependencies: Record<string, unknown> = {
             logger,
@@ -824,7 +870,7 @@ async function main(overrides: MainOverrides = {}) {
         dependencies.platformLifecycleService = platformLifecycleService;
         
         assertRuntimeDependencies(dependencies);
-        app = createAppRuntime(toAppRuntimeConfig(config), dependencies);
+        app = createAppRuntime(toAppRuntimeConfig(runtimeProcessingConfig), dependencies);
 
         const gracefulExitService = createGracefulExitServiceFn(
             app,

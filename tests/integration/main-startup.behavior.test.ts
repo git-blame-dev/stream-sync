@@ -106,6 +106,7 @@ const buildOverrides = (options: BuildOverridesOptions = {}) => {
     removeEventListener: () => undefined,
   };
   let capturedDisplayQueueConfig: unknown = null;
+  let capturedDisplayQueueDependencies: unknown = null;
 
   const ensureSecrets: NonNullable<MainOverridesArg["ensureSecrets"]> = async () => {
     ensureSecretsCalls.push(true);
@@ -146,8 +147,12 @@ const buildOverrides = (options: BuildOverridesOptions = {}) => {
   const initializeDisplayQueueForTest = (
     _obsManager: unknown,
     displayQueueConfig: unknown,
+    _constants: unknown,
+    _eventBus: unknown,
+    dependencies: unknown,
   ) => {
     capturedDisplayQueueConfig = displayQueueConfig;
+    capturedDisplayQueueDependencies = dependencies;
     return createMockDisplayQueue();
   };
 
@@ -165,6 +170,7 @@ const buildOverrides = (options: BuildOverridesOptions = {}) => {
   return {
     overrides,
     getCapturedDisplayQueueConfig: () => capturedDisplayQueueConfig,
+    getCapturedDisplayQueueDependencies: () => capturedDisplayQueueDependencies,
     getEnsureSecretsCalls: () => ensureSecretsCalls,
     getSingleInstanceReleaseCalls: () => singleInstanceReleaseCalls,
   };
@@ -312,6 +318,86 @@ describe("main startup behavior", () => {
       ttsChatEnabled: config.obs.ttsChatEnabled,
       ttsNotificationsEnabled: config.obs.ttsNotificationsEnabled,
     });
+  });
+
+  it("wires global operator defaults while keeping notification preparation active", async () => {
+    process.env.CHAT_BOT_STARTUP_ONLY = "true";
+    const { overrides, getCapturedDisplayQueueDependencies } = buildOverrides({ cliArgs: { chat: 1 } });
+    const config = buildMainConfig({
+      general: { giftsEnabled: false },
+      gui: {
+        enableDock: false,
+        enableOverlay: false,
+        enableOperator: true,
+        host: "127.0.0.1",
+        port: 0,
+      },
+    });
+    const capturedDefaults: Array<Record<string, boolean>> = [];
+    const notificationConfigs: Array<Record<string, Record<string, unknown>>> = [];
+    const listeners = new Set<(snapshot: { controls: Record<string, boolean> }) => void>();
+    const operatorControls = {
+      controls: {} as Record<string, boolean>,
+      overriddenKeys: [] as string[],
+      revision: 0,
+      isEnabled(key: string) { return this.controls[key] !== false; },
+      subscribe(listener: (snapshot: { controls: Record<string, boolean> }) => void) {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+      async setEnabled() {},
+      async reset() {},
+    };
+    const dependencyFactory = {
+      createYoutubeDependencies: () => ({}),
+      createTiktokDependencies: () => ({}),
+      createTwitchDependencies: () => ({}),
+    };
+    const testLogger = {
+      debug: () => undefined,
+      info: () => undefined,
+      warn: () => undefined,
+      error: () => undefined,
+    };
+    class CapturingNotificationManager {
+      donationSpamDetector?: unknown;
+      constructor(options: unknown) {
+        const candidate = options as { config: Record<string, Record<string, unknown>> };
+        notificationConfigs.push(candidate.config);
+      }
+      async handleNotification() { return { success: true }; }
+      async prepareNotification() { return { success: false }; }
+      handleAggregatedDonation() {}
+    }
+
+    const result = await main({
+      ...overrides,
+      config,
+      createOperatorControlService: async (options: unknown) => {
+        const defaults = (options as { defaults: Record<string, boolean> }).defaults;
+        capturedDefaults.push(defaults);
+        operatorControls.controls = { ...defaults };
+        return operatorControls as never;
+      },
+      createProductionDependencies: (() => ({
+        obs: {},
+        dependencyFactory,
+        lazyInnertube: {},
+        logging: testLogger,
+        logger: testLogger,
+        guiTransportService: {
+          start: async () => undefined,
+          stop: async () => undefined,
+          publishChatMessage: () => undefined,
+        },
+      })) as never,
+      NotificationManager: CapturingNotificationManager,
+    });
+
+    expect(result.success).toBe(true);
+    expect(capturedDefaults[0]?.giftsEnabled).toBe(false);
+    expect(notificationConfigs[0]?.tiktok?.giftsEnabled).toBe(true);
+    expect(getCapturedDisplayQueueDependencies()).toMatchObject({ operatorControls });
   });
 
   it("rejects non-function startup override dependencies", async () => {

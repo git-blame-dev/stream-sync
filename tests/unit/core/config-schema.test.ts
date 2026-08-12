@@ -75,6 +75,7 @@ describe('buildDefaultsFromSchema()', () => {
         expect(defaults.gui).toEqual({
             enableChatFeed: false,
             enableDock: false,
+            enableOperator: false,
             enableOverlay: false,
             host: '127.0.0.1',
             port: 3399,
