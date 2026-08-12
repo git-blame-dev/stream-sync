@@ -20,6 +20,8 @@ import { ViewerCountSystem } from '../utils/viewer-count';
 import { wireStreamStatusHandlers } from '../viewer-count/stream-status-handler';
 import type { DisplayQueueSequenceWriter } from '../interfaces/DisplayQueue';
 import { NotificationInputValidator } from '../notifications/notification-input-validator';
+import type { OperatorControlService } from '../services/operator/operator-control-service';
+import type { OperatorLogSource } from '../services/operator/operator-log-source';
 
 type RuntimeRecord = Record<string, unknown>;
 
@@ -175,6 +177,8 @@ type RuntimeDependencies = RuntimeRecord & {
     commandCooldownService: RuntimeCommandCooldownService;
     platformLifecycleService: RuntimePlatformLifecycleService;
     gracefulExitService?: RuntimeGracefulExitService;
+    operatorControls?: OperatorControlService;
+    operatorLogs?: OperatorLogSource;
     obs?: {
         connectionManager?: RuntimeObsManager;
         goalsManager?: { initializeGoalDisplay: () => Promise<unknown> | unknown };
@@ -412,7 +416,9 @@ class AppRuntime {
         this.guiTransportService = this.dependencies.guiTransportService || createGuiTransportService({
             config: this.config,
             eventBus: this.eventBus,
-            logger: this.logger
+            logger: this.logger,
+            ...(this.dependencies.operatorControls ? { operatorControls: this.dependencies.operatorControls } : {}),
+            ...(this.dependencies.operatorLogs ? { operatorLogs: this.dependencies.operatorLogs } : {})
         });
         this.obsEventService = this.dependencies.obsEventService;
 
