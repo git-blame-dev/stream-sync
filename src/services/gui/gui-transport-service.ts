@@ -13,13 +13,18 @@ import {
     requireGetRequest,
     resolveAssetFilePath,
     sendNoCacheHtml,
+    sendOperatorHtml,
     sendNotFound,
     sendStaticAsset
 } from './gui-http-responses';
 import { isGuiActive, toTransportRecord, type TransportRecord } from './gui-runtime-config';
 import { getSystemTimestampISO, isIsoTimestamp } from '../../utils/timestamp';
+import type { AppLogger } from '../../core/logger/types';
+import type { OperatorControlService } from '../operator/operator-control-service';
+import type { OperatorLogSource } from '../operator/operator-log-source';
+import { createOperatorApi, isOperatorRoute } from './operator-api';
 
-type GuiTransportLogger = {
+type GuiTransportLogger = Partial<AppLogger> & {
     debug?: (message: string, scope: string, data?: unknown) => void;
     info?: (message: string, scope: string, data?: unknown) => void;
 };
@@ -56,6 +61,8 @@ type GuiTransportOptions = {
     assetsRoot?: string;
     runtimeAssetRoots?: readonly string[];
     demoOnly?: boolean;
+    operatorControls?: OperatorControlService;
+    operatorLogs?: OperatorLogSource;
 };
 
 type RuntimeAssetRecord = {
@@ -143,6 +150,16 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
     const clients = new Set<ServerResponse<IncomingMessage>>();
     const chatClients = new Set<ServerResponse<IncomingMessage>>();
     const chatFeedEnabled = guiConfig.enableChatFeed === true;
+    const operatorEnabled = guiConfig.enableOperator === true;
+    const operatorApi = operatorEnabled && options.operatorControls && options.operatorLogs
+        ? createOperatorApi({
+            controls: options.operatorControls,
+            logs: options.operatorLogs,
+            ...(logger && typeof logger.warn === 'function' && typeof logger.error === 'function'
+                ? { logger: { warn: logger.warn, error: logger.error } }
+                : {})
+        })
+        : null;
     const CHAT_MAX_CLIENTS = 4;
     const CHAT_MAX_PACKET_BYTES = 16 * 1024;
     const CHAT_MAX_BUFFERED_BYTES = 64 * 1024;
@@ -431,6 +448,7 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
 
         return route === '/dock'
             || route === '/overlay'
+            || route === '/operator'
             || route === '/tiktok-animations';
     };
 
@@ -445,6 +463,15 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
             routeProbe = parsedUrl.searchParams.get('route');
         } catch {
             url = rawUrl;
+        }
+
+        if (isOperatorRoute(url)) {
+            if (!operatorEnabled || !operatorApi) {
+                sendNotFound(res);
+                return;
+            }
+            void operatorApi.handle(req, res, url);
+            return;
         }
 
         if (url === '/gui/events') {
@@ -734,6 +761,18 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
             return;
         }
 
+        if (url === '/operator') {
+            if (!requireGetRequest(req, res)) {
+                return;
+            }
+            if (operatorEnabled && operatorApi) {
+                sendOperatorHtml(res, sendBody);
+                return;
+            }
+            sendNoCacheHtml(res, renderDisabledPage('Stream Sync Operator', 'Operator console disabled'), sendBody);
+            return;
+        }
+
         if (url === '/dock') {
             if (!requireGetRequest(req, res)) {
                 return;
@@ -817,11 +856,18 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
             if (chatFeedEnabled && !['127.0.0.1', 'localhost', '::1'].includes(host)) {
                 throw new Error('Chat feed requires loopback host');
             }
+            if (operatorEnabled && !['127.0.0.1', 'localhost', '::1'].includes(host)) {
+                throw new Error('Operator console requires loopback host');
+            }
+            if (operatorEnabled && !operatorApi) {
+                throw new Error('Operator console requires runtime controls and logs');
+            }
             const port = Number(guiConfig.port);
             if (!Number.isInteger(port) || port < 0 || port > 65535) {
                 throw new Error('GUI transport requires integer port between 0 and 65535');
             }
 
+            operatorApi?.start();
             subscribeToDisplayRows();
             subscribeToDisplayEffects();
 
@@ -856,6 +902,7 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
             } catch (error) {
                 unsubscribeFromDisplayRows();
                 unsubscribeFromDisplayEffects();
+                operatorApi?.stop();
                 if (server) {
                     if (serverRuntimeErrorHandler && typeof server.removeListener === 'function') {
                         server.removeListener('error', serverRuntimeErrorHandler);
@@ -885,6 +932,7 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
         unsubscribeFromDisplayEffects();
         await dispatchChain;
         runtimeAssetRegistry.clear();
+        operatorApi?.stop();
         for (const client of clients) {
             try {
                 client.end();

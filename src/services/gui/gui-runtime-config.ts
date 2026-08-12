@@ -34,7 +34,7 @@ function buildGuiRuntimeConfig(guiConfig: TransportRecord): GuiRuntimeConfig {
 
 function isGuiActive(config: unknown = {}): boolean {
     const gui = toTransportRecord(toTransportRecord(config).gui);
-    return gui.enableDock === true || gui.enableOverlay === true;
+    return gui.enableDock === true || gui.enableOverlay === true || gui.enableOperator === true;
 }
 
 export { buildGuiRuntimeConfig, isGuiActive, toTransportRecord };

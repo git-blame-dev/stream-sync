@@ -83,6 +83,11 @@ function renderActivePage(options: GuiPageOptions): string {
     return `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><link rel="stylesheet" href="/gui/assets/styles.css?v=${assetVersion}"></head><body style="${bodyStyle}"><div id="app" data-kind="${runtimeKind}"></div><script>${runtimeGlobals}</script><script type="module" src="/gui/assets/${scriptKind}.js?v=${assetVersion}"></script></body></html>`;
 }
 
+function renderOperatorPage(): string {
+    const assetVersion = Date.now().toString(36);
+    return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Stream Sync Operator</title><link rel="stylesheet" href="/gui/assets/operator.css?v=${assetVersion}"></head><body><div id="operator-root"></div><script type="module" src="/gui/assets/operator.js?v=${assetVersion}"></script></body></html>`;
+}
+
 function sendNotFound(res: ServerResponse<IncomingMessage>): void {
     res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
     res.end('Not Found');
@@ -121,6 +126,17 @@ function sendNoCacheHtml(res: ServerResponse<IncomingMessage>, html: string, sen
     res.end(sendBody ? html : undefined);
 }
 
+function sendOperatorHtml(res: ServerResponse<IncomingMessage>, sendBody = true): void {
+    res.writeHead(200, {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'self'",
+        'Referrer-Policy': 'no-referrer',
+        'X-Content-Type-Options': 'nosniff'
+    });
+    res.end(sendBody ? renderOperatorPage() : undefined);
+}
+
 function sendStaticAsset(res: ServerResponse<IncomingMessage>, assetPath: string, sendBody = true): void {
     res.writeHead(200, {
         'Content-Type': getAssetContentType(assetPath),
@@ -134,10 +150,12 @@ export {
     isHeadRequest,
     renderActivePage,
     renderDisabledPage,
+    renderOperatorPage,
     requireGetRequest,
     resolveAssetFilePath,
     sendMethodNotAllowed,
     sendNoCacheHtml,
+    sendOperatorHtml,
     sendNotFound,
     sendStaticAsset
 };
