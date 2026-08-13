@@ -287,7 +287,7 @@ html, body {
 
 .gui-row__avatar-wrapper .gui-row__platform-icon {
   position: absolute;
-  left: -4px;
+  left: -9px;
   bottom: -4px;
   z-index: 2;
 }

@@ -94,6 +94,7 @@ export function GuiRow({ row, mode, rowRef, className, style, onAnimationEnd, ar
           ) : null}
           <div className={["gui-row__header", isMemberChatRow ? 'gui-row__header--member-chat' : ''].filter(Boolean).join(' ')}>
             {isPaypiggyChatRow ? <span className="gui-row__member-tag">MEMBER</span> : null}
+            <span className={["gui-row__username", isMemberChatRow ? 'gui-row__username--member-chat' : ''].filter(Boolean).join(' ')}>{row.username}</span>
             {badgeImages.length > 0 ? (
               <span className="gui-row__badges" aria-hidden="true">
                 {badgeImages.map((badge, index) => (
@@ -108,7 +109,6 @@ export function GuiRow({ row, mode, rowRef, className, style, onAnimationEnd, ar
                 ))}
               </span>
             ) : null}
-            <span className={["gui-row__username", isMemberChatRow ? 'gui-row__username--member-chat' : ''].filter(Boolean).join(' ')}>{row.username}</span>
           </div>
           <span className={textClass}>
             {hasParts
