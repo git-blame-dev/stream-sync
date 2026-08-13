@@ -1,4 +1,4 @@
-import React, { useLayoutEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 
 import { GuiRow } from './GuiRow'
 import { GiftAnimationLayer } from './GiftAnimationLayer'
@@ -6,6 +6,7 @@ import type { GuiGiftAnimationEffectEnvelope, GuiRowDto } from '../types'
 import { applyOverlayRowShiftMotion } from '../overlay-row-motion'
 
 const ROW_SLIDE_ANIMATION_MS = 1000
+export const OVERLAY_EXIT_CLEANUP_MS = ROW_SLIDE_ANIMATION_MS + 100
 const DOCK_PINNED_BOTTOM_THRESHOLD_PX = 8
 const OVERLAY_EXIT_BUFFER_PX = 2
 const OVERLAY_ROW_GAP_PX = 10
@@ -176,6 +177,20 @@ function createOverlayExitStyle(topPx: number, travelPx: number): React.CSSPrope
   return style
 }
 
+export function resolveGuiRowRenderKey(
+  row: GuiRowDto,
+  getFallbackKey: (row: GuiRowDto) => string
+): string {
+  const eventId = typeof row.eventId === 'string' ? row.eventId.trim() : ''
+  return eventId ? `event:${eventId}` : getFallbackKey(row)
+}
+
+function readsReducedMotionPreference(): boolean {
+  return typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+}
+
 export function GuiShell({
   rows,
   mode,
@@ -209,12 +224,13 @@ export function GuiShell({
   const overlayPreviousGeometryByKeyRef = useRef(new Map<string, OverlayRowGeometry>())
   const overlaySuppressedRowKeysRef = useRef(new Set<string>())
   const overlayExitSequenceRef = useRef(0)
+  const overlayExitCleanupTimersRef = useRef(new Map<string, ReturnType<typeof globalThis.setTimeout>>())
   const [overlayVisibleRowKeys, setOverlayVisibleRowKeys] = useState<string[]>([])
   const [overlayExitingRows, setOverlayExitingRows] = useState<OverlayExitingRow[]>([])
   const [overlayVisibilityInputSignature, setOverlayVisibilityInputSignature] = useState('')
   const [overlayMeasurementToken, setOverlayMeasurementToken] = useState(0)
 
-  const resolveRowRenderKey = (row: GuiRowDto): string => {
+  const getFallbackRowRenderKey = (row: GuiRowDto): string => {
     const existingKey = rowRenderKeyByRef.current.get(row)
     if (existingKey) {
       return existingKey
@@ -230,7 +246,7 @@ export function GuiShell({
     return rows.map((row) => {
       return {
         row,
-        key: resolveRowRenderKey(row)
+        key: resolveGuiRowRenderKey(row, getFallbackRowRenderKey)
       }
     })
   }, [rows])
@@ -238,6 +254,15 @@ export function GuiShell({
   const overlayInputSignature = `${overlayMeasurementToken}:${rowKeysSignature}`
   const isOverlayVisibilityReady = mode === 'overlay' && overlayVisibilityInputSignature === overlayInputSignature
   const overlayVisibleRowKeySet = useMemo(() => new Set(overlayVisibleRowKeys), [overlayVisibleRowKeys])
+  const reducedMotion = mode === 'overlay' && readsReducedMotionPreference()
+  const removeOverlayExitRow = useCallback((exitId: string) => {
+    const timer = overlayExitCleanupTimersRef.current.get(exitId)
+    if (timer !== undefined) {
+      globalThis.clearTimeout(timer)
+      overlayExitCleanupTimersRef.current.delete(exitId)
+    }
+    setOverlayExitingRows((currentRows) => currentRows.filter((row) => row.exitId !== exitId))
+  }, [])
   const renderedRowEntries = useMemo(() => {
     if (mode !== 'overlay') {
       return rowEntries
@@ -394,6 +419,41 @@ export function GuiShell({
   }, [mode, overlayExitingRows.length])
 
   useLayoutEffect(() => {
+    const activeExitIds = new Set(overlayExitingRows.map((row) => row.exitId))
+    for (const [exitId, timer] of overlayExitCleanupTimersRef.current) {
+      if (activeExitIds.has(exitId) && mode === 'overlay') {
+        continue
+      }
+      globalThis.clearTimeout(timer)
+      overlayExitCleanupTimersRef.current.delete(exitId)
+    }
+
+    if (mode !== 'overlay') {
+      return
+    }
+
+    for (const exitRow of overlayExitingRows) {
+      if (overlayExitCleanupTimersRef.current.has(exitRow.exitId)) {
+        continue
+      }
+      const timer = globalThis.setTimeout(
+        () => removeOverlayExitRow(exitRow.exitId),
+        reducedMotion ? 0 : OVERLAY_EXIT_CLEANUP_MS
+      )
+      overlayExitCleanupTimersRef.current.set(exitRow.exitId, timer)
+    }
+  }, [mode, overlayExitingRows, reducedMotion, removeOverlayExitRow])
+
+  useLayoutEffect(() => {
+    return () => {
+      for (const timer of overlayExitCleanupTimersRef.current.values()) {
+        globalThis.clearTimeout(timer)
+      }
+      overlayExitCleanupTimersRef.current.clear()
+    }
+  }, [])
+
+  useLayoutEffect(() => {
     if (mode !== 'overlay') {
       return
     }
@@ -455,7 +515,8 @@ export function GuiShell({
       durationMs: ROW_SLIDE_ANIMATION_MS,
       fallbackEntryShiftPx: overlayExitingRows.reduce((maxShift, row) => {
         return row.entryShiftPx > maxShift ? row.entryShiftPx : maxShift
-      }, 0)
+      }, 0),
+      reducedMotion
     })
 
     if (mode !== 'dock') {
@@ -486,10 +547,10 @@ export function GuiShell({
     if (typeof requestAnimationFrame === 'function') {
       requestAnimationFrame(scrollDockToBottom)
     }
-  }, [isOverlayVisibilityReady, mode, overlayExitingRows, renderedRowEntries])
+  }, [isOverlayVisibilityReady, mode, overlayExitingRows, reducedMotion, renderedRowEntries])
 
   return (
-    <main className={`gui-shell gui-shell--${mode}`} style={shellStyle} ref={shellRef}>
+    <main className={`gui-shell gui-shell--${mode}`} style={shellStyle} ref={shellRef} aria-label="Livestream activity">
       {mode === 'overlay'
         ? overlayExitingRows.map((exitRow) => {
             return (
@@ -498,15 +559,14 @@ export function GuiShell({
                 row={exitRow.row}
                 mode={mode}
                 className="gui-row--overlay-exit"
+                ariaHidden
                 style={createOverlayExitStyle(exitRow.topPx, exitRow.travelPx)}
                 onAnimationEnd={(event) => {
                   if (event.target !== event.currentTarget) {
                     return
                   }
 
-                  setOverlayExitingRows((currentRows) =>
-                    currentRows.filter((row) => row.exitId !== exitRow.exitId)
-                  )
+                  removeOverlayExitRow(exitRow.exitId)
                 }}
               />
             )

@@ -34,6 +34,7 @@ interface ApplyOverlayRowShiftMotionOptions {
   previousTopByKey: Map<string, number>
   durationMs: number
   fallbackEntryShiftPx?: number
+  reducedMotion?: boolean
 }
 
 function applyShiftTransition(element: OverlayRowElement, shiftPx: number, durationMs: number): void {
@@ -59,7 +60,8 @@ export function applyOverlayRowShiftMotion({
   rowElementsByKey,
   previousTopByKey,
   durationMs,
-  fallbackEntryShiftPx = 0
+  fallbackEntryShiftPx = 0,
+  reducedMotion = false
 }: ApplyOverlayRowShiftMotionOptions): Map<string, number> {
   const newRowKeys: string[] = []
   const currentTopByKey = new Map<string, number>()
@@ -74,6 +76,14 @@ export function applyOverlayRowShiftMotion({
     }
 
     currentTopByKey.set(key, element.getBoundingClientRect().top)
+  }
+
+  if (reducedMotion) {
+    for (const element of rowElementsByKey.values()) {
+      element.style.transition = 'none'
+      element.style.transform = 'none'
+    }
+    return currentTopByKey
   }
 
   const deltas = calculateOverlayRowShiftDeltas(previousTopByKey, currentTopByKey)

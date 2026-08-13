@@ -162,4 +162,31 @@ describe("overlay row motion behavior", () => {
       }
     }
   });
+
+  it("updates row positions without transitions when reduced motion is requested", () => {
+    const rowA = createFakeElement(90);
+    const rowB = createFakeElement(150);
+
+    const currentTopByKey = applyOverlayRowShiftMotion({
+      rowKeys: ["row-a", "row-b"],
+      rowElementsByKey: new Map([
+        ["row-a", rowA],
+        ["row-b", rowB],
+      ]),
+      previousTopByKey: new Map([["row-a", 120]]),
+      durationMs: 1000,
+      reducedMotion: true,
+    });
+
+    expect(currentTopByKey).toEqual(
+      new Map([
+        ["row-a", 90],
+        ["row-b", 150],
+      ]),
+    );
+    expect(rowA.style.transition).toBe("none");
+    expect(rowA.style.transform).toBe("none");
+    expect(rowB.style.transition).toBe("none");
+    expect(rowB.style.transform).toBe("none");
+  });
 });

@@ -3,8 +3,13 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import TestRenderer, { type ReactTestRenderer } from "react-test-renderer";
 
-import { GuiShell } from "../../../gui/src/shared/components/GuiShell";
+import {
+  GuiShell,
+  OVERLAY_EXIT_CLEANUP_MS,
+  resolveGuiRowRenderKey,
+} from "../../../gui/src/shared/components/GuiShell";
 import type { GuiRowDto } from "../../../gui/src/shared/types";
+import { waitForDelay } from "../../helpers/time-utils";
 
 type ScrollListener = () => void;
 type OverlayLayout = { offsetTop: number; offsetHeight: number };
@@ -139,6 +144,33 @@ function findOverlayExitNodes(renderer: ShellRenderer) {
 }
 
 describe("GuiShell behavior", () => {
+  it("uses eventId for stable row identity and object identity as fallback", () => {
+    let fallbackSequence = 0;
+    const fallbackKeys = new WeakMap<GuiRowDto, string>();
+    const getFallbackKey = (row: GuiRowDto) => {
+      const existing = fallbackKeys.get(row);
+      if (existing) return existing;
+      fallbackSequence += 1;
+      const key = `row:${fallbackSequence}`;
+      fallbackKeys.set(row, key);
+      return key;
+    };
+    const original = { ...createGuiRow(1), eventId: "event-1" };
+    const reconstructed = { ...original, text: "updated message" };
+    const legacy = createGuiRow(2);
+
+    expect(resolveGuiRowRenderKey(original, getFallbackKey)).toBe("event:event-1");
+    expect(resolveGuiRowRenderKey(reconstructed, getFallbackKey)).toBe(
+      "event:event-1",
+    );
+    expect(resolveGuiRowRenderKey(legacy, getFallbackKey)).toBe(
+      resolveGuiRowRenderKey(legacy, getFallbackKey),
+    );
+    expect(resolveGuiRowRenderKey(createGuiRow(2), getFallbackKey)).not.toBe(
+      resolveGuiRowRenderKey(legacy, getFallbackKey),
+    );
+  });
+
   it("renders rows and mode class", () => {
     const html = renderToStaticMarkup(
       React.createElement(GuiShell, {
@@ -159,6 +191,7 @@ describe("GuiShell behavior", () => {
     );
 
     expect(html).toContain("gui-shell--overlay");
+    expect(html).toContain('aria-label="Livestream activity"');
     expect(html).toContain("test-user");
     expect(html).toContain("hello");
   });
@@ -318,6 +351,7 @@ describe("GuiShell behavior", () => {
       if (!exitNode) {
         throw new Error("expected an overlay exit node");
       }
+      expect(exitNode.props["aria-hidden"]).toBe(true);
 
       await TestRenderer.act(async () => {
         exitNode.props.onAnimationEnd({
@@ -341,6 +375,50 @@ describe("GuiShell behavior", () => {
       } else {
         Reflect.deleteProperty(console, "timeStamp");
       }
+    }
+  });
+
+  it("removes an exit row after the cleanup fallback", async () => {
+    const previousTimeStamp = console.timeStamp;
+    console.timeStamp = previousTimeStamp || (() => {});
+    const overlayNodeMocks = createOverlayNodeMocks(
+      {
+        "https://example.invalid/test-avatar-1.png": {
+          offsetTop: -18,
+          offsetHeight: 60,
+        },
+        "https://example.invalid/test-avatar-2.png": {
+          offsetTop: 52,
+          offsetHeight: 60,
+        },
+      },
+      140,
+    );
+    let renderer: ShellRenderer | null = null;
+
+    try {
+      await TestRenderer.act(async () => {
+        renderer = TestRenderer.create(
+          React.createElement(GuiShell, {
+            mode: "overlay",
+            overlayMaxLinesPerMessage: 3,
+            rows: [createGuiRow(1), createGuiRow(2)],
+          }),
+          { createNodeMock: overlayNodeMocks.createNodeMock },
+        );
+      });
+
+      expect(findOverlayExitNodes(renderer!)).toHaveLength(1);
+      await TestRenderer.act(async () => {
+        await waitForDelay(OVERLAY_EXIT_CLEANUP_MS + 25);
+      });
+      expect(findOverlayExitNodes(renderer!)).toHaveLength(0);
+    } finally {
+      if (renderer) {
+        await TestRenderer.act(async () => renderer!.unmount());
+      }
+      if (previousTimeStamp) console.timeStamp = previousTimeStamp;
+      else Reflect.deleteProperty(console, "timeStamp");
     }
   });
 
