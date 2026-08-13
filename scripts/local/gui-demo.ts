@@ -19,9 +19,20 @@ function toRecord(value: unknown): UnknownRecord {
     : {};
 }
 
+function buildGuiDemoConfig(source: unknown): UnknownRecord {
+  const config = toRecord(source);
+  return {
+    ...config,
+    gui: {
+      ...toRecord(config.gui),
+      enableOperator: false
+    }
+  };
+}
+
 async function runGuiDemo(): Promise<void> {
-  const guiConfig = toRecord(baseConfig.gui);
-  const config = toRecord(baseConfig);
+  const config = buildGuiDemoConfig(baseConfig);
+  const guiConfig = toRecord(config.gui);
 
   const service: DemoService = createGuiTransportService({
     config,
@@ -63,4 +74,4 @@ if (require.main === module) {
   });
 }
 
-export { runGuiDemo };
+export { buildGuiDemoConfig, runGuiDemo };
