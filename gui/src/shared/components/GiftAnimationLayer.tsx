@@ -55,6 +55,14 @@ export function GiftAnimationLayer({ effect, onComplete }: GiftAnimationLayerPro
     }
 
     const activePlaybackId = effect.playbackId
+    let playbackCompleted = false
+    const finishPlayback = () => {
+      if (playbackCompleted || currentPlaybackIdRef.current !== activePlaybackId) {
+        return
+      }
+      playbackCompleted = true
+      onCompleteRef.current(activePlaybackId)
+    }
     const { config } = effect
     const rgbFrame = clampFrame(config.rgbFrame, config.sourceWidth, config.sourceHeight)
     const alphaFrame = config.aFrame ? clampFrame(config.aFrame, config.sourceWidth, config.sourceHeight) : null
@@ -116,20 +124,13 @@ export function GiftAnimationLayer({ effect, onComplete }: GiftAnimationLayerPro
     const rgbContext = rgbBuffer.getContext('2d', { willReadFrequently: true })
     const alphaContext = alphaBuffer?.getContext('2d', { willReadFrequently: true }) || null
     if (!canvasContext || !rgbContext) {
-      onCompleteRef.current(activePlaybackId)
+      finishPlayback()
       return
     }
 
     const drawToViewport = (source: HTMLCanvasElement) => {
       canvasContext.clearRect(0, 0, viewportWidth, viewportHeight)
       canvasContext.drawImage(source, drawX, drawY, drawWidth, drawHeight)
-    }
-
-    const finishPlayback = () => {
-      if (currentPlaybackIdRef.current !== activePlaybackId) {
-        return
-      }
-      onCompleteRef.current(activePlaybackId)
     }
 
     const tryResumePlayback = () => {

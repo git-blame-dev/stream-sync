@@ -314,6 +314,14 @@ describe("GiftAnimationLayer behavior", () => {
       });
 
       expect(onCompleteCalls).toEqual(["test-playback-id"]);
+
+      await TestRenderer.act(async () => {
+        videoNode.onended!();
+        videoNode.onerror!();
+        harness.runLatestTimeout();
+      });
+
+      expect(onCompleteCalls).toEqual(["test-playback-id"]);
     } finally {
       if (renderer) {
         await TestRenderer.act(async () => {
