@@ -248,6 +248,7 @@ describe("GUI local preview command behavior", () => {
       gui: {
         enableDock: false,
         enableOverlay: false,
+        enableOperator: true,
         host: "127.0.0.1",
         port: 3399,
       },
@@ -255,7 +256,7 @@ describe("GUI local preview command behavior", () => {
 
     expect(config.gui.enableDock).toBe(true);
     expect(config.gui.enableOverlay).toBe(true);
-    expect(config.gui.uiCompareMode).toBe(true);
+    expect(config.gui.enableOperator).toBe(false);
     expect(config.gui.showMessages).toBe(true);
     expect(config.gui.showCommands).toBe(true);
     expect(config.gui.showGreetings).toBe(true);
@@ -399,6 +400,9 @@ describe("GUI local preview command behavior", () => {
       typeof createdPipelineArg.giftAnimationResolver.resolveFromNotificationData,
     ).toBe("function");
     expect(
+      await createdPipelineArg.giftAnimationResolver.resolveFromNotificationData({}),
+    ).toBeNull();
+    expect(
       requireValue(createdTransportArgs[0], "created transport args").eventBus,
     ).toBe(fakeEventBus);
     expect(emittedEvents.length).toBeGreaterThanOrEqual(1);
@@ -409,8 +413,13 @@ describe("GUI local preview command behavior", () => {
       emittedEvents.some((entry) => entry.eventName === "display:row"),
     ).toBe(false);
     expect(writes.some((line) => line.includes("Dock URL"))).toBe(true);
-    expect(writes.some((line) => line.includes("TikTok Animation URL"))).toBe(
-      true,
+    expect(
+      writes.some((line) =>
+        line.includes("For TikTok gift animation preview, run: bun run gui:preview:gift-animation"),
+      ),
+    ).toBe(true);
+    expect(writes.some((line) => line.includes("tiktok-animations"))).toBe(
+      false,
     );
     expect(writes.some((line) => line.includes("GUI preview finished"))).toBe(
       true,
@@ -474,6 +483,7 @@ describe("GUI local preview command behavior", () => {
     const routedNotifications: UnknownRecord[] = [];
     const routedChats: UnknownRecord[] = [];
     let disposedCooldown = false;
+    let stoppedDisplayQueue = false;
 
     const config = buildPreviewConfig();
     const pipeline = createPreviewPipeline({
@@ -487,6 +497,9 @@ describe("GUI local preview command behavior", () => {
       displayQueue: {
         addItem(item: UnknownRecord) {
           routedChats.push(item);
+        },
+        async stop() {
+          stoppedDisplayQueue = true;
         },
       },
       notificationManager: {
@@ -576,6 +589,86 @@ describe("GUI local preview command behavior", () => {
 
     await pipeline.dispose();
     expect(disposedCooldown).toBe(true);
+    expect(stoppedDisplayQueue).toBe(true);
+  });
+
+  it("acknowledges preview VFX commands as executed and completed", async () => {
+    const config = buildPreviewConfig();
+    const pipeline = createPreviewPipeline({
+      config,
+      logger: {
+        debug: () => {},
+        info: () => {},
+        warn: () => {},
+        error: () => {},
+      },
+      displayQueue: {
+        addItem() {},
+        async stop() {},
+      },
+      commandCooldownService: {
+        dispose() {},
+        checkUserCooldown() {
+          return true;
+        },
+        checkGlobalCooldown() {
+          return true;
+        },
+        updateUserCooldown() {},
+        updateGlobalCooldown() {},
+      },
+      userTrackingService: {
+        isFirstMessage() {
+          return false;
+        },
+      },
+      vfxCommandService: {
+        async selectVFXCommand() {
+          return null;
+        },
+        matchFarewell() {
+          return null;
+        },
+        async getVFXConfig() {
+          return null;
+        },
+      },
+      platformLifecycleService: {
+        getPlatformConnectionTime() {
+          return null;
+        },
+      },
+    });
+    const acknowledgements: UnknownRecord[] = [];
+    const unsubscribeExecuted = pipeline.eventBus.subscribe(
+      "vfx:command-executed",
+      (payload: UnknownRecord) => acknowledgements.push(payload),
+    );
+    const unsubscribeCompleted = pipeline.eventBus.subscribe(
+      "vfx:effect-completed",
+      (payload: UnknownRecord) => acknowledgements.push(payload),
+    );
+
+    pipeline.eventBus.emit("vfx:command-received", {
+      correlationId: "test-preview-correlation",
+    });
+    await waitForDelay(1);
+
+    expect(acknowledgements).toEqual([
+      {
+        correlationId: "test-preview-correlation",
+        type: "vfx:command-executed",
+      },
+      {
+        correlationId: "test-preview-correlation",
+        type: "vfx:effect-completed",
+      },
+    ]);
+
+    unsubscribeExecuted();
+    unsubscribeCompleted();
+    await pipeline.dispose();
+    await pipeline.dispose();
   });
 
   it("creates raw ingest adapters that emit canonical platform events", async () => {

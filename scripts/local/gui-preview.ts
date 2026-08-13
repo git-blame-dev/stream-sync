@@ -120,7 +120,6 @@ if (typeof NotificationManager !== 'function') {
 }
 const NotificationManagerClass: NotificationManagerCtor = NotificationManager;
 const { DisplayQueue } = load('../../src/obs/display-queue');
-const { createTikTokGiftAnimationResolver } = load('../../src/services/tiktok-gift-animation/resolver');
 const { createYouTubeEventRouter } = load('../../src/platforms/youtube/events/event-router');
 const { setupTikTokEventListeners } = load('../../src/platforms/tiktok/events/event-router.ts');
 const { DEFAULT_AVATAR_URL } = load('../../src/constants/avatar');
@@ -564,7 +563,7 @@ function buildPreviewConfig(baseConfig: UnknownRecord = {}): UnknownRecord {
     merged.gui = mergeSection(getPreviewRecord(sourceConfig, 'gui'), getPreviewRecord(overrideConfig, 'gui'), {
         enableDock: true,
         enableOverlay: true,
-        uiCompareMode: true,
+        enableOperator: false,
         showMessages: true,
         showCommands: true,
         showGreetings: true,
@@ -1353,7 +1352,8 @@ function createPreviewPipeline(options: CreatePreviewPipelineOptions = {}): Prev
     };
 
     const previewGoalsManager = {
-        processDonationGoal: async () => {}
+        processDonationGoal: async () => {},
+        processPaypiggyGoal: async () => {}
     };
 
     const displayQueue = options.displayQueue || new DisplayQueue(
@@ -1437,10 +1437,17 @@ function createPreviewPipeline(options: CreatePreviewPipelineOptions = {}): Prev
     });
 
     const unsubscribePreviewVfxAck = eventBus.subscribe(PlatformEvents.VFX_COMMAND_RECEIVED, (payload: unknown) => {
-        safeSetTimeout(() => {
-            eventBus.emit(PlatformEvents.VFX_COMMAND_EXECUTED, payload);
-        }, 0);
+        const payloadRecord = toPreviewRecord(payload);
+        eventBus.emit(PlatformEvents.VFX_COMMAND_EXECUTED, {
+            ...payloadRecord,
+            type: PlatformEvents.VFX_COMMAND_EXECUTED
+        });
+        eventBus.emit(PlatformEvents.VFX_EFFECT_COMPLETED, {
+            ...payloadRecord,
+            type: PlatformEvents.VFX_EFFECT_COMPLETED
+        });
     });
+    let disposed = false;
 
     return {
         eventBus,
@@ -1448,6 +1455,11 @@ function createPreviewPipeline(options: CreatePreviewPipelineOptions = {}): Prev
             eventBus.emit('platform:event', event);
         },
         async dispose() {
+            if (disposed) {
+                return;
+            }
+            disposed = true;
+
             try {
                 platformEventRouter.dispose();
             } catch (error) {
@@ -1458,6 +1470,15 @@ function createPreviewPipeline(options: CreatePreviewPipelineOptions = {}): Prev
                 unsubscribePreviewVfxAck();
             } catch (error) {
                 errorHandler.handleEventProcessingError(error, 'pipeline-dispose', null, 'Failed disposing preview VFX acknowledgement');
+            }
+
+            const stoppableDisplayQueue = displayQueue as { stop?: () => Promise<void> | void };
+            if (typeof stoppableDisplayQueue.stop === 'function') {
+                try {
+                    await stoppableDisplayQueue.stop();
+                } catch (error) {
+                    errorHandler.handleEventProcessingError(error, 'pipeline-dispose', null, 'Failed stopping preview display queue');
+                }
             }
 
             if (commandCooldownService && typeof commandCooldownService.dispose === 'function') {
@@ -1570,7 +1591,9 @@ async function runGuiPreview(options: RunGuiPreviewOptions = {}): Promise<void> 
     let pipeline: PreviewPipeline | null = null;
     let service: PreviewService | null = null;
     let intervalHandle: ReturnType<typeof setInterval> | number | null = null;
-    const giftAnimationResolver = options.giftAnimationResolver || createTikTokGiftAnimationResolver({ logger });
+    const giftAnimationResolver = options.giftAnimationResolver || {
+        resolveFromNotificationData: async () => null
+    };
 
     try {
         const previewPipelineOptions: CreatePreviewPipelineOptions = {
@@ -1604,7 +1627,7 @@ async function runGuiPreview(options: RunGuiPreviewOptions = {}): Promise<void> 
         const port = typeof guiConfig.port === 'number' || typeof guiConfig.port === 'string' ? guiConfig.port : 3000;
         stdout.write(`GUI preview running for ${Math.floor(durationMs / 1000)}s\n`);
         stdout.write(`Dock URL: http://${host}:${port}/dock\n`);
-        stdout.write(`TikTok Animation URL: http://${host}:${port}/tiktok-animations\n`);
+        stdout.write('For TikTok gift animation preview, run: bun run gui:preview:gift-animation\n');
         stdout.write(`Overlay URL: http://${host}:${port}/overlay\n`);
 
         const scenarioEvents = buildPreviewScenarioEvents(durationMs, intervalMs);
