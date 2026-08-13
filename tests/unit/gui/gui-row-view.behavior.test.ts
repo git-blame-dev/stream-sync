@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { GuiRow } from "../../../gui/src/shared/components/GuiRow";
 
 describe("GuiRow rendering behavior", () => {
-  it("renders avatar first with circular avatar class", () => {
+  it("renders the avatar and platform icon together before row content", () => {
     const html = renderToStaticMarkup(
       React.createElement(GuiRow, {
         mode: "dock",
@@ -21,15 +21,21 @@ describe("GuiRow rendering behavior", () => {
       }),
     );
 
-    const avatarIndex = html.indexOf('class="gui-row__avatar');
+    const avatarWrapperIndex = html.indexOf('class="gui-row__avatar-wrapper"');
+    const avatarIndex = html.indexOf('class="gui-row__avatar gui-row__avatar--circle"');
+    const platformIconIndex = html.indexOf('class="gui-row__platform-icon"');
     const textIndex = html.indexOf('class="gui-row__text');
+    expect(avatarWrapperIndex).toBeGreaterThan(-1);
     expect(avatarIndex).toBeGreaterThan(-1);
+    expect(platformIconIndex).toBeGreaterThan(avatarIndex);
     expect(textIndex).toBeGreaterThan(-1);
-    expect(avatarIndex).toBeLessThan(textIndex);
+    expect(avatarWrapperIndex).toBeLessThan(avatarIndex);
+    expect(platformIconIndex).toBeLessThan(textIndex);
     expect(html).toContain("gui-row__avatar--circle");
+    expect(html).toContain('role="article"');
   });
 
-  it("renders platform icon before username for known platforms", () => {
+  it("renders the chat platform icon inside the avatar wrapper", () => {
     const html = renderToStaticMarkup(
       React.createElement(GuiRow, {
         mode: "dock",
@@ -45,12 +51,46 @@ describe("GuiRow rendering behavior", () => {
       }),
     );
 
+    const avatarWrapperIndex = html.indexOf('class="gui-row__avatar-wrapper"');
+    const avatarWrapperEndIndex = html.indexOf("</span>", avatarWrapperIndex);
     const platformIconIndex = html.indexOf('class="gui-row__platform-icon"');
-    const usernameIndex = html.indexOf('class="gui-row__username"');
+    const usernameIndex = html.indexOf("gui-row__username");
+    expect(avatarWrapperIndex).toBeGreaterThan(-1);
     expect(platformIconIndex).toBeGreaterThan(-1);
+    expect(platformIconIndex).toBeLessThan(avatarWrapperEndIndex);
     expect(usernameIndex).toBeGreaterThan(-1);
     expect(platformIconIndex).toBeLessThan(usernameIndex);
     expect(html).toContain('src="/gui/assets/platform-icons/youtube-icon.png"');
+  });
+
+  it("renders notification badges before username and the platform icon on the avatar", () => {
+    const html = renderToStaticMarkup(
+      React.createElement(GuiRow, {
+        mode: "dock",
+        row: {
+          type: "platform:follow",
+          kind: "notification",
+          platform: "youtube",
+          username: "test-follower",
+          text: "followed",
+          badgeImages: [{ imageUrl: "https://example.invalid/badge.png", source: "youtube", label: "member" }],
+          avatarUrl: "https://example.invalid/test-avatar.png",
+          timestamp: "2024-01-01T00:00:00.000Z",
+        },
+      }),
+    );
+
+    const badgeIndex = html.indexOf('class="gui-row__badges"');
+    const usernameIndex = html.indexOf("gui-row__username");
+    const avatarWrapperIndex = html.indexOf('class="gui-row__avatar-wrapper"');
+    const avatarWrapperEndIndex = html.indexOf("</span>", avatarWrapperIndex);
+    const iconIndex = html.indexOf('class="gui-row__platform-icon"');
+    const messageIndex = html.indexOf('gui-row__text--notification');
+    expect(badgeIndex).toBeLessThan(usernameIndex);
+    expect(iconIndex).toBeGreaterThan(avatarWrapperIndex);
+    expect(iconIndex).toBeLessThan(avatarWrapperEndIndex);
+    expect(iconIndex).toBeLessThan(messageIndex);
+    expect(html.slice(messageIndex)).not.toContain('class="gui-row__platform-icon"');
   });
 
   it("renders platform icon for trimmed mixed-case platform identifiers", () => {
@@ -169,7 +209,7 @@ describe("GuiRow rendering behavior", () => {
     expect(html).toContain("gui-row--paypiggy");
   });
 
-  it("renders member label after username for paypiggy chat rows", () => {
+  it("renders member label before username for paypiggy chat rows", () => {
     const html = renderToStaticMarkup(
       React.createElement(GuiRow, {
         mode: "dock",
@@ -186,14 +226,14 @@ describe("GuiRow rendering behavior", () => {
       }),
     );
 
-    const usernameIndex = html.indexOf('class="gui-row__username"');
+    const usernameIndex = html.indexOf("gui-row__username");
     const memberLabelIndex = html.indexOf('class="gui-row__member-tag"');
     expect(memberLabelIndex).toBeGreaterThan(-1);
-    expect(memberLabelIndex).toBeGreaterThan(usernameIndex);
+    expect(memberLabelIndex).toBeLessThan(usernameIndex);
     expect(html).toContain(">MEMBER<");
   });
 
-  it("renders badges between username and member label for chat rows", () => {
+  it("renders the member label before badges and username for chat rows", () => {
     const html = renderToStaticMarkup(
       React.createElement(GuiRow, {
         mode: "dock",
@@ -222,11 +262,11 @@ describe("GuiRow rendering behavior", () => {
       }),
     );
 
-    const usernameIndex = html.indexOf('class="gui-row__username"');
+    const usernameIndex = html.indexOf("gui-row__username");
     const badgesIndex = html.indexOf('class="gui-row__badges"');
     const memberLabelIndex = html.indexOf('class="gui-row__member-tag"');
-    expect(badgesIndex).toBeGreaterThan(usernameIndex);
-    expect(memberLabelIndex).toBeGreaterThan(badgesIndex);
+    expect(memberLabelIndex).toBeLessThan(badgesIndex);
+    expect(badgesIndex).toBeLessThan(usernameIndex);
     expect(html).toContain('class="gui-row__badge"');
     expect(html).toContain('src="https://example.invalid/badge-1.png"');
     expect(html).toContain('src="https://example.invalid/badge-2.png"');
@@ -508,51 +548,62 @@ describe("GuiRow rendering behavior", () => {
     expect(html).toContain("gui-row__text--member-chat");
   });
 
-  it("renders baseline and experiment cards in dock compare mode for all row types", () => {
-    const html = renderToStaticMarkup(
-      React.createElement(GuiRow, {
-        mode: "dock",
-        uiCompareMode: true,
-        row: {
-          type: "platform:follow",
-          kind: "notification",
-          platform: "youtube",
-          username: "test-compare-user",
-          text: "test-compare-user followed",
-          avatarUrl: "https://example.invalid/test-avatar.png",
-          timestamp: "2024-01-01T00:00:00.000Z",
-        },
-      }),
-    );
+  it.each([
+    "platform:gift",
+    "platform:paypiggy",
+    "platform:giftpaypiggy",
+    "platform:envelope",
+  ])("renders one permanent monetization row for %s in dock and overlay", (type) => {
+    for (const mode of ["dock", "overlay"] as const) {
+      const html = renderToStaticMarkup(
+        React.createElement(GuiRow, {
+          mode,
+          row: {
+            type,
+            kind: "notification",
+            platform: "youtube",
+            username: "test-monetization-user",
+            text: "sent a test monetization event",
+            avatarUrl: "https://example.invalid/test-avatar.png",
+            timestamp: "2024-01-01T00:00:00.000Z",
+          },
+        }),
+      );
 
-    expect(html).toContain('class="gui-row-compare-shell"');
-    expect(html).toContain('data-compare-label="baseline"');
-    expect(html).toContain('data-compare-label="experiment"');
-    expect(html).toContain("gui-row--compare-before");
-    expect(html).toContain("gui-row--compare-after");
-    expect(html.split("test-compare-user").length - 1).toBeGreaterThanOrEqual(
-      2,
-    );
+      expect(html).toContain("gui-row--monetization");
+      expect(html.split('class="gui-row__monetization-image"').length - 1).toBe(1);
+      expect(html.split('class="gui-row__avatar-wrapper"').length - 1).toBe(1);
+      expect(html.split('class="gui-row__platform-icon"').length - 1).toBe(1);
+      expect(html).toContain(
+        'src="https://img.pokemondb.net/sprites/black-white/anim/normal/arceus.gif"',
+      );
+    }
   });
 
-  it("does not render compare shell in overlay mode when compare mode is enabled", () => {
-    const html = renderToStaticMarkup(
-      React.createElement(GuiRow, {
-        mode: "overlay",
-        uiCompareMode: true,
-        row: {
-          type: "chat",
-          kind: "chat",
-          platform: "twitch",
-          username: "test-overlay-user",
-          text: "test overlay",
-          avatarUrl: "https://example.invalid/test-avatar.png",
-          timestamp: "2024-01-01T00:00:00.000Z",
-        },
-      }),
-    );
+  it.each([
+    { kind: "notification" as const, type: "platform:follow" },
+    { kind: "chat" as const, type: "chat" },
+  ])(
+    "does not render monetization styling for $kind/$type",
+    ({ kind, type }) => {
+      const html = renderToStaticMarkup(
+        React.createElement(GuiRow, {
+          mode: "dock",
+          row: {
+            type,
+            kind,
+            platform: "youtube",
+            username: "test-notification-user",
+            text: "test notification",
+            avatarUrl: "https://example.invalid/test-avatar.png",
+            timestamp: "2024-01-01T00:00:00.000Z",
+          },
+        }),
+      );
 
-    expect(html).not.toContain("gui-row-compare-shell");
-    expect(html).toContain("gui-row--overlay-enter");
-  });
+      expect(html).not.toContain("gui-row--monetization");
+      expect(html).not.toContain("gui-row__monetization-image");
+      expect(html).not.toContain("arceus.gif");
+    },
+  );
 });

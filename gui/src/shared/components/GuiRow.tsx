@@ -4,6 +4,13 @@ import type { GuiRowDto } from '../types'
 import { getPlatformIconUrl } from '../platform-icon-map'
 
 const RAYQUAZA_IMAGE_URL = 'https://img.pokemondb.net/sprites/black-white/anim/normal/rayquaza.gif'
+const ARCEUS_IMAGE_URL = 'https://img.pokemondb.net/sprites/black-white/anim/normal/arceus.gif'
+const MONETIZATION_NOTIFICATION_TYPES = new Set([
+  'platform:gift',
+  'platform:paypiggy',
+  'platform:giftpaypiggy',
+  'platform:envelope'
+])
 
 function normalizePlatform(value: unknown): string {
   return typeof value === 'string' ? value.trim().toLowerCase() : ''
@@ -12,21 +19,21 @@ function normalizePlatform(value: unknown): string {
 interface GuiRowProps {
   row: GuiRowDto
   mode: 'dock' | 'overlay'
-  uiCompareMode?: boolean
   rowRef?: (element: HTMLDivElement | null) => void
   className?: string
   style?: React.CSSProperties
   onAnimationEnd?: React.AnimationEventHandler<HTMLDivElement>
+  ariaHidden?: boolean
 }
 
-export function GuiRow({ row, mode, uiCompareMode = false, rowRef, className, style, onAnimationEnd }: GuiRowProps) {
+export function GuiRow({ row, mode, rowRef, className, style, onAnimationEnd, ariaHidden = false }: GuiRowProps) {
   const normalizedPlatform = normalizePlatform(row.platform)
   const platformIconUrl = getPlatformIconUrl(normalizedPlatform)
   const hasParts = Array.isArray(row.parts) && row.parts.length > 0
   const badgeImages = Array.isArray(row.badgeImages) ? row.badgeImages : []
   const isPaypiggyChatRow = row.kind === 'chat' && row.isPaypiggy === true
   const isMemberChatRow = isPaypiggyChatRow
-  const shouldRenderUiComparison = mode === 'dock' && uiCompareMode
+  const isMonetizationNotification = row.kind === 'notification' && MONETIZATION_NOTIFICATION_TYPES.has(row.type)
   const textClass = [
     'gui-row__text',
     isMemberChatRow ? 'gui-row__text--member-chat' : '',
@@ -42,6 +49,7 @@ export function GuiRow({ row, mode, uiCompareMode = false, rowRef, className, st
       `gui-row--${row.kind}`,
       isPaypiggyChatRow ? 'gui-row--paypiggy' : '',
       isMemberChatRow ? 'gui-row--member-chat' : '',
+      isMonetizationNotification ? 'gui-row--monetization' : '',
       mode === 'overlay' ? 'gui-row--overlay-enter' : '',
       ...additionalClasses
     ]
@@ -54,8 +62,25 @@ export function GuiRow({ row, mode, uiCompareMode = false, rowRef, className, st
   const renderRowContent = () => {
     return (
       <>
-        <img className="gui-row__avatar gui-row__avatar--circle" src={row.avatarUrl} alt="" />
-        <div className={["gui-row__content", isMemberChatRow ? 'gui-row__content--member-chat' : ''].filter(Boolean).join(' ')}>
+        <span className="gui-row__avatar-wrapper" aria-hidden="true">
+          <img className="gui-row__avatar gui-row__avatar--circle" src={row.avatarUrl} alt="" />
+          {platformIconUrl ? <img className="gui-row__platform-icon" src={platformIconUrl} alt="" /> : null}
+        </span>
+        <div className={[
+          "gui-row__content",
+          isMemberChatRow ? 'gui-row__content--member-chat' : '',
+          isMonetizationNotification ? 'gui-row__content--monetization' : ''
+        ].filter(Boolean).join(' ')}>
+          {isMonetizationNotification ? (
+            <span className="gui-row__monetization-image-clip" aria-hidden="true">
+              <img
+                className="gui-row__monetization-image"
+                src={ARCEUS_IMAGE_URL}
+                alt=""
+                decoding="async"
+              />
+            </span>
+          ) : null}
           {isMemberChatRow ? (
             <span className="gui-row__member-image-clip">
               <img
@@ -68,8 +93,7 @@ export function GuiRow({ row, mode, uiCompareMode = false, rowRef, className, st
             </span>
           ) : null}
           <div className={["gui-row__header", isMemberChatRow ? 'gui-row__header--member-chat' : ''].filter(Boolean).join(' ')}>
-            {platformIconUrl ? <img className="gui-row__platform-icon" src={platformIconUrl} alt="" /> : null}
-            <span className={["gui-row__username", isMemberChatRow ? 'gui-row__username--member-chat' : ''].filter(Boolean).join(' ')}>{row.username}</span>
+            {isPaypiggyChatRow ? <span className="gui-row__member-tag">MEMBER</span> : null}
             {badgeImages.length > 0 ? (
               <span className="gui-row__badges" aria-hidden="true">
                 {badgeImages.map((badge, index) => (
@@ -84,7 +108,7 @@ export function GuiRow({ row, mode, uiCompareMode = false, rowRef, className, st
                 ))}
               </span>
             ) : null}
-            {isPaypiggyChatRow ? <span className="gui-row__member-tag">MEMBER</span> : null}
+            <span className={["gui-row__username", isMemberChatRow ? 'gui-row__username--member-chat' : ''].filter(Boolean).join(' ')}>{row.username}</span>
           </div>
           <span className={textClass}>
             {hasParts
@@ -111,41 +135,8 @@ export function GuiRow({ row, mode, uiCompareMode = false, rowRef, className, st
     )
   }
 
-  if (shouldRenderUiComparison) {
-    const compareShellClass = ['gui-row-compare-shell', className || '']
-      .filter(Boolean)
-      .join(' ')
-    const baselineCardClass = createRowClass(['gui-row--compare-card', 'gui-row--compare-before'])
-    const experimentCardClass = createRowClass(['gui-row--compare-card', 'gui-row--compare-after'])
-
-    return (
-      <div
-        className={compareShellClass}
-        style={style}
-        onAnimationEnd={onAnimationEnd}
-        data-row-type={row.type}
-        ref={rowRef}
-      >
-        <div
-          className={baselineCardClass}
-          data-row-type={row.type}
-          data-compare-label="baseline"
-        >
-          {renderRowContent()}
-        </div>
-        <div
-          className={experimentCardClass}
-          data-row-type={row.type}
-          data-compare-label="experiment"
-        >
-          {renderRowContent()}
-        </div>
-      </div>
-    )
-  }
-
   return (
-    <div className={rowClass} style={style} onAnimationEnd={onAnimationEnd} data-row-type={row.type} ref={rowRef}>
+    <div className={rowClass} style={style} onAnimationEnd={onAnimationEnd} data-row-type={row.type} role="article" aria-hidden={ariaHidden || undefined} ref={rowRef}>
       {renderRowContent()}
     </div>
   )

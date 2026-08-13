@@ -3,7 +3,6 @@ type TransportRecord = Record<string, unknown>;
 type GuiRuntimeConfig = {
     overlayMaxMessages: number;
     overlayMaxLinesPerMessage: number;
-    uiCompareMode: boolean;
 };
 
 const DEFAULT_OVERLAY_MAX_MESSAGES = 3;
@@ -27,8 +26,7 @@ function buildGuiRuntimeConfig(guiConfig: TransportRecord): GuiRuntimeConfig {
         overlayMaxLinesPerMessage: parsePositiveInteger(
             guiConfig.overlayMaxLinesPerMessage,
             DEFAULT_OVERLAY_MAX_LINES_PER_MESSAGE
-        ),
-        uiCompareMode: guiConfig.uiCompareMode === true
+        )
     };
 }
 

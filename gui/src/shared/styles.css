@@ -5,7 +5,6 @@ html, body {
 
 :root {
   --gui-row-background-opacity: 0.95;
-  --gui-monetization-notification-background: rgba(204, 170, 0, var(--gui-row-background-opacity));
   --gui-member-background-gradient-top: rgba(28, 138, 83, var(--gui-row-background-opacity));
   --gui-member-background-gradient-mid: rgba(34, 165, 99, var(--gui-row-background-opacity));
   --gui-member-background-gradient-bottom: rgba(44, 197, 114, var(--gui-row-background-opacity));
@@ -25,14 +24,27 @@ html, body {
   --gui-member-sheen-cycle-duration: 5s;
   --gui-member-avatar-halo-glow: rgba(122, 255, 189, 0.92);
   --gui-member-avatar-halo-deep: rgba(22, 140, 84, 0.9);
+  --gui-monetization-background-top: rgba(142, 88, 0, var(--gui-row-background-opacity));
+  --gui-monetization-background-mid: rgba(218, 151, 5, var(--gui-row-background-opacity));
+  --gui-monetization-background-bottom: rgba(255, 199, 42, var(--gui-row-background-opacity));
+  --gui-monetization-border-color: rgba(255, 239, 166, 0.76);
+  --gui-monetization-inner-highlight: rgba(255, 249, 210, 0.34);
+  --gui-monetization-glow-ring: rgba(255, 226, 105, 0.58);
+  --gui-monetization-glow-soft: rgba(255, 190, 39, 0.62);
+  --gui-monetization-glow-deep: rgba(135, 73, 0, 0.82);
+  --gui-monetization-sheen-highlight: #fff4a8;
+  --gui-monetization-sheen-peak-opacity: 0.54;
+  --gui-monetization-sheen-cycle-duration: 5s;
+  --gui-monetization-avatar-halo-glow: rgba(255, 231, 128, 0.96);
+  --gui-monetization-avatar-halo-deep: rgba(217, 135, 0, 0.94);
   --gui-overlay-avatar-size: 75px;
-  --gui-overlay-platform-icon-size: 30px;
+  --gui-overlay-platform-icon-size: 28.05px;
   --gui-overlay-badge-size: 27px;
   --gui-overlay-row-header-font-size: 20px;
   --gui-overlay-row-body-font-size: 23px;
   --gui-overlay-emote-size: 50px;
   --gui-dock-avatar-size: 48px;
-  --gui-dock-platform-icon-size: 24px;
+  --gui-dock-platform-icon-size: 22.44px;
   --gui-dock-badge-size: 21px;
   --gui-dock-row-header-font-size: 16px;
   --gui-dock-row-body-font-size: 18px;
@@ -132,35 +144,7 @@ html, body {
   background: rgba(0, 0, 0, var(--gui-row-background-opacity));
 }
 
-.gui-row-compare-shell {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.gui-row--compare-card {
-  position: relative;
-  min-width: 0;
-}
-
-.gui-row--compare-card::after {
-  content: attr(data-compare-label);
-  position: absolute;
-  top: 6px;
-  right: 8px;
-  padding: 2px 7px;
-  border-radius: 999px;
-  border: 1px solid rgba(198, 220, 235, 0.36);
-  background: rgba(8, 13, 18, 0.9);
-  color: #e6eef5;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.gui-row--paypiggy,
-.gui-row[data-row-type="platform:paypiggy"] {
+.gui-row--paypiggy {
   border: 1px solid var(--gui-member-border-color);
   box-shadow:
     inset 0 1px 0 var(--gui-member-inner-highlight),
@@ -176,19 +160,52 @@ html, body {
     );
 }
 
-.gui-row[data-row-type="platform:gift"],
-.gui-row[data-row-type="platform:giftpaypiggy"],
-.gui-row[data-row-type="platform:envelope"] {
-  background: var(--gui-monetization-notification-background);
+.gui-row--monetization {
+  position: relative;
+  overflow: visible;
+  border: 1px solid var(--gui-monetization-border-color);
+  box-shadow:
+    inset 0 1px 0 var(--gui-monetization-inner-highlight),
+    0 0 16px -4px var(--gui-monetization-glow-ring),
+    0 0 28px -7px var(--gui-monetization-glow-soft),
+    0 0 48px -16px var(--gui-monetization-glow-deep);
+  background:
+    linear-gradient(
+      180deg,
+      var(--gui-monetization-background-top) 0%,
+      var(--gui-monetization-background-mid) 58%,
+      var(--gui-monetization-background-bottom) 100%
+    );
 }
 
-.gui-row--paypiggy .gui-row__username,
-.gui-row[data-row-type="platform:paypiggy"] .gui-row__username {
+.gui-row--monetization > .gui-row__avatar-wrapper,
+.gui-row--monetization > .gui-row__content {
+  position: relative;
+  z-index: 2;
+}
+
+.gui-row--monetization .gui-row__content {
+  min-width: 0;
+  padding-right: 78px;
+}
+
+.gui-row--monetization .gui-row__username {
+  color: #fff7cf;
+  text-shadow: 0 0 8px rgba(255, 239, 164, 0.56);
+}
+
+.gui-row--monetization .gui-row__text {
+  color: #fffdf0;
+  text-shadow:
+    0 0 7px rgba(255, 245, 187, 0.5),
+    0 1px 2px rgba(83, 42, 0, 0.72);
+}
+
+.gui-row--paypiggy .gui-row__username {
   color: #ffffff;
 }
 
-.gui-row--paypiggy .gui-row__text,
-.gui-row[data-row-type="platform:paypiggy"] .gui-row__text {
+.gui-row--paypiggy .gui-row__text {
   color: #ffffff;
 }
 
@@ -200,14 +217,21 @@ html, body {
   animation: gui-overlay-row-exit 1000ms ease-out forwards;
 }
 
+.gui-row__avatar-wrapper {
+  position: relative;
+  width: var(--gui-avatar-size-current);
+  height: var(--gui-avatar-size-current);
+  flex-shrink: 0;
+}
+
 .gui-row__avatar {
+  display: block;
   width: var(--gui-avatar-size-current);
   height: var(--gui-avatar-size-current);
   object-fit: cover;
 }
 
-.gui-row--paypiggy .gui-row__avatar,
-.gui-row[data-row-type="platform:paypiggy"] .gui-row__avatar {
+.gui-row--paypiggy .gui-row__avatar {
   outline: 1px solid color-mix(in srgb, var(--gui-member-avatar-halo-glow) 78%, transparent);
   outline-offset: 0;
   box-shadow:
@@ -215,6 +239,16 @@ html, body {
     0 0 14px 1px color-mix(in srgb, var(--gui-member-avatar-halo-glow) 74%, transparent),
     0 0 24px 3px color-mix(in srgb, var(--gui-member-avatar-halo-deep) 71%, transparent);
   filter: drop-shadow(0 0 6px color-mix(in srgb, var(--gui-member-avatar-halo-glow) 74%, transparent));
+}
+
+.gui-row--monetization .gui-row__avatar {
+  outline: 1px solid color-mix(in srgb, var(--gui-monetization-avatar-halo-glow) 80%, transparent);
+  outline-offset: 0;
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--gui-monetization-avatar-halo-glow) 80%, transparent),
+    0 0 14px 1px color-mix(in srgb, var(--gui-monetization-avatar-halo-glow) 76%, transparent),
+    0 0 24px 3px color-mix(in srgb, var(--gui-monetization-avatar-halo-deep) 74%, transparent);
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--gui-monetization-avatar-halo-glow) 76%, transparent));
 }
 
 .gui-row__avatar--circle {
@@ -231,6 +265,10 @@ html, body {
   display: flow-root;
 }
 
+.gui-row__content--monetization {
+  position: relative;
+}
+
 .gui-row__header {
   display: flex;
   align-items: center;
@@ -244,9 +282,14 @@ html, body {
 .gui-row__platform-icon {
   width: var(--gui-platform-icon-size-current);
   height: var(--gui-platform-icon-size-current);
-  transform: translateY(1px);
   object-fit: contain;
-  flex-shrink: 0;
+}
+
+.gui-row__avatar-wrapper .gui-row__platform-icon {
+  position: absolute;
+  left: -4px;
+  bottom: -4px;
+  z-index: 2;
 }
 
 .gui-row__username {
@@ -298,13 +341,11 @@ html, body {
   align-items: center;
 }
 
-.gui-row--paypiggy,
-.gui-row[data-row-type="platform:paypiggy"] {
+.gui-row--paypiggy {
   position: relative;
 }
 
-.gui-row--paypiggy::before,
-.gui-row[data-row-type="platform:paypiggy"]::before {
+.gui-row--paypiggy::before {
   content: '';
   position: absolute;
   inset: 0;
@@ -345,11 +386,66 @@ html, body {
   }
 }
 
+.gui-row--monetization::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background-image: linear-gradient(
+    120deg,
+    transparent 42%,
+    color-mix(in srgb, var(--gui-monetization-sheen-highlight) 58%, white) 49%,
+    color-mix(in srgb, white 86%, var(--gui-monetization-sheen-highlight)) 50%,
+    color-mix(in srgb, var(--gui-monetization-sheen-highlight) 58%, white) 51%,
+    transparent 58%
+  );
+  background-size: 240% 100%;
+  background-position-x: -170%;
+  opacity: var(--gui-monetization-sheen-peak-opacity);
+  pointer-events: none;
+  z-index: 1;
+  animation: gui-monetization-sheen-sweep var(--gui-monetization-sheen-cycle-duration) ease-out infinite;
+}
+
+@keyframes gui-monetization-sheen-sweep {
+  0% {
+    background-position-x: -170%;
+    opacity: 0;
+  }
+
+  12% {
+    opacity: var(--gui-monetization-sheen-peak-opacity);
+  }
+
+  35% {
+    background-position-x: 170%;
+    opacity: 0;
+  }
+
+  100% {
+    background-position-x: 170%;
+    opacity: 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .gui-row--paypiggy::before,
-  .gui-row[data-row-type="platform:paypiggy"]::before {
+  .gui-row--overlay-enter.gui-row--overlay-exit {
+    animation: none;
+  }
+
+  .gui-row--paypiggy::before {
     animation: none;
     opacity: 0;
+  }
+
+  .gui-row--monetization::before {
+    animation: none;
+    opacity: 0;
+  }
+
+  .gui-row--monetization .gui-row__monetization-image-clip,
+  .gui-row--member-chat .gui-row__member-image-clip {
+    display: none;
   }
 }
 
@@ -387,6 +483,26 @@ html, body {
   width: 120px;
   height: 120px;
   object-fit: contain;
+}
+
+.gui-row__monetization-image-clip {
+  width: 102px;
+  height: 94px;
+  position: absolute;
+  top: -20px;
+  right: -37px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.gui-row__monetization-image {
+  width: 102px;
+  height: 102px;
+  object-fit: contain;
+  opacity: 0.92;
+  filter:
+    drop-shadow(0 0 5px rgba(255, 250, 214, 0.84))
+    drop-shadow(0 0 12px rgba(255, 203, 59, 0.76));
 }
 
 .gui-row__text--overlay-clamp {

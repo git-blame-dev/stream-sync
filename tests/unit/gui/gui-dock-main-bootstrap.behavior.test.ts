@@ -26,43 +26,32 @@ function isElementWithProps(
 }
 
 describe("Dock main bootstrap behavior", () => {
-  it("reads compare mode from runtime config using explicit true value only", () => {
+  it("reads the dock runtime kind", () => {
     expect(
       readDockRuntimeConfig({
         __STREAM_SYNC_GUI_CONFIG__: {
-          uiCompareMode: true,
         },
       }),
-    ).toEqual({ uiCompareMode: true, mode: "dock" });
-
-    expect(
-      readDockRuntimeConfig({
-        __STREAM_SYNC_GUI_CONFIG__: {
-          uiCompareMode: "true",
-        },
-      }),
-    ).toEqual({ uiCompareMode: false, mode: "dock" });
+    ).toEqual({ mode: "dock" });
 
     expect(
       readDockRuntimeConfig({
         __STREAM_SYNC_GUI_KIND__: "tiktok-animations",
       }),
-    ).toEqual({ uiCompareMode: false, mode: "tiktok-animations" });
+    ).toEqual({ mode: "tiktok-animations" });
 
     expect(readDockRuntimeConfig({})).toEqual({
-      uiCompareMode: false,
       mode: "dock",
     });
   });
 
-  it("renders dock app with runtime compare mode config", () => {
+  it("renders dock app with dock mode", () => {
     const target = createTarget();
     let renderedElement: { props: Record<string, unknown> } | null = null;
 
     const result = bootstrapDockApp({
       target,
       readDockRuntimeConfigImpl: () => ({
-        uiCompareMode: true,
         mode: "dock",
       }),
       createRootImpl: () => ({
@@ -76,7 +65,6 @@ describe("Dock main bootstrap behavior", () => {
 
     expect(result).toBe(true);
     expect(renderedElement!.props.mode).toBe("dock");
-    expect(renderedElement!.props.uiCompareMode).toBe(true);
   });
 
   it("renders tiktok animations mode when runtime kind requests it", () => {
@@ -86,7 +74,6 @@ describe("Dock main bootstrap behavior", () => {
     const result = bootstrapDockApp({
       target,
       readDockRuntimeConfigImpl: () => ({
-        uiCompareMode: false,
         mode: "tiktok-animations",
       }),
       createRootImpl: () => ({

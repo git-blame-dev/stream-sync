@@ -23,7 +23,6 @@ interface GuiShellProps {
   rows: GuiRowDto[]
   mode: 'dock' | 'overlay' | 'tiktok-animations'
   overlayMaxLinesPerMessage: number
-  uiCompareMode?: boolean
   activeEffect?: GuiGiftAnimationEffectEnvelope | null
   onEffectComplete?: (playbackId: string) => void
 }
@@ -181,7 +180,6 @@ export function GuiShell({
   rows,
   mode,
   overlayMaxLinesPerMessage,
-  uiCompareMode = false,
   activeEffect = null,
   onEffectComplete
 }: GuiShellProps) {
@@ -499,7 +497,6 @@ export function GuiShell({
                 key={exitRow.exitId}
                 row={exitRow.row}
                 mode={mode}
-                uiCompareMode={uiCompareMode}
                 className="gui-row--overlay-exit"
                 style={createOverlayExitStyle(exitRow.topPx, exitRow.travelPx)}
                 onAnimationEnd={(event) => {
@@ -525,7 +522,6 @@ export function GuiShell({
             key={entry.key}
             row={entry.row}
             mode={rowMode}
-            uiCompareMode={uiCompareMode}
             rowRef={(element) => {
               if (element) {
                 rowElementsByKeyRef.current.set(entry.key, element)

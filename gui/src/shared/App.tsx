@@ -10,7 +10,6 @@ interface AppProps {
   eventsPath?: string
   overlayMaxMessages?: number
   overlayMaxLinesPerMessage?: number
-  uiCompareMode?: boolean
   createEventFeedImpl?: typeof createEventFeed
 }
 
@@ -89,7 +88,6 @@ export function App({
   eventsPath = '/gui/events',
   overlayMaxMessages,
   overlayMaxLinesPerMessage,
-  uiCompareMode = false,
   createEventFeedImpl = createEventFeed
 }: AppProps) {
   const overlayLimits = useMemo(
@@ -103,7 +101,7 @@ export function App({
   )
   const [rows, setRows] = useState<GuiRowDto[]>([])
   const [effectQueue, setEffectQueue] = useState<GuiGiftAnimationEffectEnvelope[]>([])
-const activeEffect = effectQueue[0] ?? null
+  const activeEffect = effectQueue[0] ?? null
 
   useEffect(() => {
     const dispose = createEventFeedImpl({
@@ -135,7 +133,6 @@ const activeEffect = effectQueue[0] ?? null
       rows={rows}
       mode={mode}
       overlayMaxLinesPerMessage={overlayLimits.maxLinesPerMessage}
-      uiCompareMode={uiCompareMode}
       activeEffect={activeEffect}
       onEffectComplete={(playbackId: string) => {
         setEffectQueue((currentQueue) => {
@@ -143,8 +140,8 @@ const activeEffect = effectQueue[0] ?? null
             return currentQueue
           }
 
-const nextEffect = currentQueue[0]
-if (!nextEffect || nextEffect.playbackId !== playbackId) {
+          const nextEffect = currentQueue[0]
+          if (!nextEffect || nextEffect.playbackId !== playbackId) {
             return currentQueue
           }
 

@@ -24,13 +24,11 @@ function coerceMessage(error: unknown): string {
   return error instanceof Error && error.message ? error.message : 'Unknown bootstrap error'
 }
 
-export function readDockRuntimeConfig(scope: DockRuntimeConfigSource = globalThis as DockRuntimeConfigSource): { uiCompareMode: boolean, mode: 'dock' | 'tiktok-animations' } {
-  const runtimeConfig = scope.__STREAM_SYNC_GUI_CONFIG__
+export function readDockRuntimeConfig(scope: DockRuntimeConfigSource = globalThis as DockRuntimeConfigSource): { mode: 'dock' | 'tiktok-animations' } {
   const runtimeKind = typeof scope.__STREAM_SYNC_GUI_KIND__ === 'string'
     ? scope.__STREAM_SYNC_GUI_KIND__.trim().toLowerCase()
     : ''
   return {
-    uiCompareMode: runtimeConfig?.uiCompareMode === true,
     mode: runtimeKind === 'tiktok-animations' ? 'tiktok-animations' : 'dock'
   }
 }
@@ -50,10 +48,7 @@ export function bootstrapDockApp(dependencies: DockBootstrapDependencies = {}): 
     const runtimeConfig = readDockRuntimeConfigImpl()
     const root = createRootImpl(target)
     root.render(
-      <App
-        mode={runtimeConfig.mode}
-        uiCompareMode={runtimeConfig.uiCompareMode}
-      />
+      <App mode={runtimeConfig.mode} />
     )
     return true
   } catch (error) {

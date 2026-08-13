@@ -38,7 +38,15 @@ describe("GUI shared styles behavior", () => {
       ".gui-shell__gift-animation",
     );
     const avatarBlock = readCssBlock(cssText, ".gui-row__avatar");
+    const avatarWrapperBlock = readCssBlock(
+      cssText,
+      ".gui-row__avatar-wrapper",
+    );
     const platformIconBlock = readCssBlock(cssText, ".gui-row__platform-icon");
+    const avatarPlatformIconBlock = readCssBlock(
+      cssText,
+      ".gui-row__avatar-wrapper .gui-row__platform-icon",
+    );
     const usernameBlock = readCssBlock(cssText, ".gui-row__username");
     const memberTagBlock = readCssBlock(cssText, ".gui-row__member-tag");
     const badgesBlock = readCssBlock(cssText, ".gui-row__badges");
@@ -47,6 +55,10 @@ describe("GUI shared styles behavior", () => {
     const memberContentBlock = readCssBlock(
       cssText,
       ".gui-row__content--member-chat",
+    );
+    const monetizationContentBlock = readCssBlock(
+      cssText,
+      ".gui-row__content--monetization",
     );
     const memberHeaderBlock = readCssBlock(
       cssText,
@@ -65,26 +77,36 @@ describe("GUI shared styles behavior", () => {
       ".gui-row__member-image-clip",
     );
     const memberImageBlock = readCssBlock(cssText, ".gui-row__member-image");
+    const monetizationBlock = readCssBlock(
+      cssText,
+      ".gui-row--monetization",
+    );
+    const monetizationAvatarBlock = readCssBlock(
+      cssText,
+      ".gui-row--monetization .gui-row__avatar",
+    );
+    const monetizationImageClipBlock = readCssBlock(
+      cssText,
+      ".gui-row__monetization-image-clip",
+    );
+    const monetizationImageBlock = readCssBlock(cssText, ".gui-row__monetization-image");
     const emoteBlock = readCssBlock(cssText, ".gui-row__emote");
 
     expect(pageBlock).toContain("margin: 0;");
     expect(pageBlock).toContain("padding: 0;");
     expect(rootBlock).toContain("--gui-row-background-opacity: 0.95;");
     expect(rootBlock).toContain("--gui-overlay-avatar-size: 75px;");
-    expect(rootBlock).toContain("--gui-overlay-platform-icon-size: 30px;");
+    expect(rootBlock).toContain("--gui-overlay-platform-icon-size: 28.05px;");
     expect(rootBlock).toContain("--gui-overlay-badge-size: 27px;");
     expect(rootBlock).toContain("--gui-overlay-row-header-font-size: 20px;");
     expect(rootBlock).toContain("--gui-overlay-row-body-font-size: 23px;");
     expect(rootBlock).toContain("--gui-overlay-emote-size: 50px;");
     expect(rootBlock).toContain("--gui-dock-avatar-size: 48px;");
-    expect(rootBlock).toContain("--gui-dock-platform-icon-size: 24px;");
+    expect(rootBlock).toContain("--gui-dock-platform-icon-size: 22.44px;");
     expect(rootBlock).toContain("--gui-dock-badge-size: 21px;");
     expect(rootBlock).toContain("--gui-dock-row-header-font-size: 16px;");
     expect(rootBlock).toContain("--gui-dock-row-body-font-size: 18px;");
     expect(rootBlock).toContain("--gui-dock-emote-size: 36px;");
-    expect(rootBlock).toContain(
-      "--gui-monetization-notification-background: rgba(204, 170, 0, var(--gui-row-background-opacity));",
-    );
     expect(rootBlock).toContain(
       "--gui-member-background-gradient-top: rgba(28, 138, 83, var(--gui-row-background-opacity));",
     );
@@ -157,14 +179,7 @@ describe("GUI shared styles behavior", () => {
     expect(rowBlock).toContain(
       "background: rgba(0, 0, 0, var(--gui-row-background-opacity));",
     );
-    expect(cssText).toContain(".gui-row-compare-shell {");
-    expect(cssText).toContain(
-      "grid-template-columns: repeat(2, minmax(0, 1fr));",
-    );
-    expect(cssText).toContain(".gui-row--compare-card::after {");
-    expect(cssText).toContain("content: attr(data-compare-label);");
-    expect(cssText).toContain(".gui-row--paypiggy,");
-    expect(cssText).toContain('.gui-row[data-row-type="platform:paypiggy"] {');
+    expect(cssText).toContain(".gui-row--paypiggy {");
     expect(cssText).toContain(
       "border: 1px solid var(--gui-member-border-color);",
     );
@@ -173,28 +188,12 @@ describe("GUI shared styles behavior", () => {
     expect(cssText).toContain(
       "var(--gui-member-background-gradient-bottom) 100%",
     );
-    expect(cssText).toContain('.gui-row[data-row-type="platform:gift"],');
-    expect(cssText).toContain(
-      '.gui-row[data-row-type="platform:giftpaypiggy"],',
-    );
-    expect(cssText).toContain('.gui-row[data-row-type="platform:envelope"] {');
-    expect(cssText).toContain(
-      "background: var(--gui-monetization-notification-background);",
-    );
+    expect(cssText).toContain(".gui-row--monetization {");
     expect(cssText).toContain("var(--gui-member-background-gradient-mid) 58%");
-    expect(cssText).toContain(".gui-row--paypiggy .gui-row__username,");
-    expect(cssText).toContain(
-      '.gui-row[data-row-type="platform:paypiggy"] .gui-row__username {',
-    );
-    expect(cssText).toContain(".gui-row--paypiggy .gui-row__text,");
-    expect(cssText).toContain(
-      '.gui-row[data-row-type="platform:paypiggy"] .gui-row__text {',
-    );
+    expect(cssText).toContain(".gui-row--paypiggy .gui-row__username {");
+    expect(cssText).toContain(".gui-row--paypiggy .gui-row__text {");
     expect(cssText).toContain("color: #ffffff;");
-    expect(cssText).toContain(".gui-row--paypiggy .gui-row__avatar,");
-    expect(cssText).toContain(
-      '.gui-row[data-row-type="platform:paypiggy"] .gui-row__avatar {',
-    );
+    expect(cssText).toContain(".gui-row--paypiggy .gui-row__avatar {");
     expect(cssText).toContain(
       "outline: 1px solid color-mix(in srgb, var(--gui-member-avatar-halo-glow) 78%, transparent);",
     );
@@ -208,13 +207,19 @@ describe("GUI shared styles behavior", () => {
     expect(overlayEnterBlock).toContain("animation: none;");
     expect(avatarBlock).toContain("width: var(--gui-avatar-size-current);");
     expect(avatarBlock).toContain("height: var(--gui-avatar-size-current);");
+    expect(avatarWrapperBlock).toContain("position: relative;");
+    expect(avatarWrapperBlock).toContain("width: var(--gui-avatar-size-current);");
+    expect(avatarWrapperBlock).toContain("height: var(--gui-avatar-size-current);");
     expect(platformIconBlock).toContain(
       "width: var(--gui-platform-icon-size-current);",
     );
     expect(platformIconBlock).toContain(
       "height: var(--gui-platform-icon-size-current);",
     );
-    expect(platformIconBlock).toContain("transform: translateY(1px);");
+    expect(avatarPlatformIconBlock).toContain("position: absolute;");
+    expect(avatarPlatformIconBlock).toContain("left: -4px;");
+    expect(avatarPlatformIconBlock).toContain("bottom: -4px;");
+    expect(avatarPlatformIconBlock).toContain("z-index: 2;");
     expect(usernameBlock).toContain(
       "font-size: var(--gui-row-header-font-size-current);",
     );
@@ -226,14 +231,14 @@ describe("GUI shared styles behavior", () => {
     expect(memberTagBlock).toContain("text-transform: uppercase;");
     expect(memberTagBlock).toContain("display: inline-flex;");
     expect(memberTagBlock).toContain("align-items: center;");
-    expect(cssText).toContain(".gui-row--paypiggy::before,");
-    expect(cssText).toContain(
-      '.gui-row[data-row-type="platform:paypiggy"]::before {',
-    );
+    expect(cssText).toContain(".gui-row--paypiggy::before {");
     expect(cssText).toContain(
       "animation: gui-member-sheen-sweep var(--gui-member-sheen-cycle-duration) ease-out infinite;",
     );
     expect(cssText).toContain("@media (prefers-reduced-motion: reduce)");
+    expect(cssText).toContain(
+      ".gui-row--overlay-enter.gui-row--overlay-exit {\n    animation: none;",
+    );
     expect(cssText).toContain("opacity: 0;");
     expect(badgesBlock).toContain("display: inline-flex;");
     expect(badgesBlock).toContain("align-items: center;");
@@ -243,6 +248,7 @@ describe("GUI shared styles behavior", () => {
       "font-size: var(--gui-row-body-font-size-current);",
     );
     expect(memberContentBlock).toContain("display: flow-root;");
+    expect(monetizationContentBlock).toContain("position: relative;");
     expect(memberHeaderBlock).toContain("min-width: 0;");
     expect(memberUsernameBlock).toContain("min-width: 0;");
     expect(memberUsernameBlock).toContain("overflow: hidden;");
@@ -263,6 +269,37 @@ describe("GUI shared styles behavior", () => {
     expect(memberImageBlock).toContain("width: 120px;");
     expect(memberImageBlock).toContain("height: 120px;");
     expect(memberImageBlock).toContain("object-fit: contain;");
+    expect(rootBlock).toContain("--gui-monetization-background-top:");
+    expect(rootBlock).toContain("--gui-monetization-background-mid:");
+    expect(rootBlock).toContain("--gui-monetization-background-bottom:");
+    expect(rootBlock).toContain("--gui-monetization-sheen-cycle-duration: 5s;");
+    expect(monetizationBlock).toContain("position: relative;");
+    expect(monetizationBlock).toContain("overflow: visible;");
+    expect(monetizationBlock).toContain("border: 1px solid var(--gui-monetization-border-color);");
+    expect(monetizationBlock).toContain("var(--gui-monetization-background-top) 0%");
+    expect(monetizationBlock).toContain("var(--gui-monetization-background-bottom) 100%");
+    expect(monetizationBlock).toContain("var(--gui-monetization-glow-soft)");
+    expect(monetizationAvatarBlock).toContain("var(--gui-monetization-avatar-halo-glow)");
+    expect(monetizationImageClipBlock).toContain("width: 102px;");
+    expect(monetizationImageClipBlock).toContain("height: 94px;");
+    expect(monetizationImageClipBlock).toContain("position: absolute;");
+    expect(monetizationImageClipBlock).toContain("top: -20px;");
+    expect(monetizationImageClipBlock).toContain("right: -37px;");
+    expect(monetizationImageClipBlock).toContain("pointer-events: none;");
+    expect(monetizationImageBlock).toContain("width: 102px;");
+    expect(monetizationImageBlock).toContain("height: 102px;");
+    expect(monetizationImageBlock).toContain("object-fit: contain;");
+    expect(cssText).toContain(".gui-row--monetization::before {");
+    expect(cssText).toContain(
+      "animation: gui-monetization-sheen-sweep var(--gui-monetization-sheen-cycle-duration) ease-out infinite;",
+    );
+    expect(cssText).toContain("@keyframes gui-monetization-sheen-sweep");
+    expect(cssText).toContain(
+      ".gui-row--monetization::before {\n    animation: none;",
+    );
+    expect(cssText).toContain(
+      ".gui-row--monetization .gui-row__monetization-image-clip,\n  .gui-row--member-chat .gui-row__member-image-clip {\n    display: none;",
+    );
     expect(emoteBlock).toContain("width: var(--gui-emote-size-current);");
     expect(emoteBlock).toContain("height: var(--gui-emote-size-current);");
   });

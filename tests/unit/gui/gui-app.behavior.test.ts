@@ -65,7 +65,7 @@ describe("GUI app behavior", () => {
     expect(html).toContain("gui-shell--dock");
   });
 
-  it("propagates compare mode to rendered dock rows", async () => {
+  it("renders monetization styling for dock monetization rows", async () => {
     let onEventHandler: EventHandler | null = null;
     const createEventFeedImpl = ({ onEvent }: EventFeedArgs) => {
       onEventHandler = onEvent;
@@ -78,7 +78,6 @@ describe("GUI app behavior", () => {
         React.createElement(App, {
           mode: "dock",
           eventsPath: "/gui/events",
-          uiCompareMode: true,
           createEventFeedImpl,
         }),
       );
@@ -86,19 +85,20 @@ describe("GUI app behavior", () => {
 
     await TestRenderer.act(async () => {
       onEventHandler!({
-        type: "chat",
-        kind: "chat",
-        platform: "twitch",
-        username: "test-user",
-        text: "hello",
+        type: "platform:gift",
+        kind: "notification",
+        platform: "youtube",
+        username: "test-gift-user",
+        text: "sent a test gift",
         avatarUrl: "https://example.invalid/test-avatar.png",
         timestamp: "2024-01-01T00:00:00.000Z",
       });
     });
 
     const text = JSON.stringify(renderer!.toJSON());
-    expect(text).toContain("gui-row-compare-shell");
-    expect(text).toContain("test-user");
+    expect(text).toContain("gui-row--monetization");
+    expect(text).toContain("gui-row__monetization-image");
+    expect(text).toContain("test-gift-user");
   });
 
   it("wires event feed through useEffect in app component", async () => {
