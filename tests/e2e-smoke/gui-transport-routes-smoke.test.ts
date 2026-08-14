@@ -71,34 +71,51 @@ function createSseReader(response: any) {
 }
 
 describe("gui transport smoke", () => {
-  it("serves dock and overlay routes correctly across enabled and disabled combinations", async () => {
+  it("serves display routes correctly across enabled and disabled combinations", async () => {
     const cases = [
       {
         enableDock: true,
         enableOverlay: false,
+        enableNotifications: false,
         expectDockEnabled: true,
         expectOverlayEnabled: false,
+        expectNotificationsEnabled: false,
         expectServiceActive: true,
       },
       {
         enableDock: false,
         enableOverlay: true,
+        enableNotifications: false,
         expectDockEnabled: false,
         expectOverlayEnabled: true,
+        expectNotificationsEnabled: false,
         expectServiceActive: true,
       },
       {
         enableDock: true,
         enableOverlay: true,
+        enableNotifications: true,
         expectDockEnabled: true,
         expectOverlayEnabled: true,
+        expectNotificationsEnabled: true,
         expectServiceActive: true,
       },
       {
         enableDock: false,
         enableOverlay: false,
+        enableNotifications: true,
         expectDockEnabled: false,
         expectOverlayEnabled: false,
+        expectNotificationsEnabled: true,
+        expectServiceActive: true,
+      },
+      {
+        enableDock: false,
+        enableOverlay: false,
+        enableNotifications: false,
+        expectDockEnabled: false,
+        expectOverlayEnabled: false,
+        expectNotificationsEnabled: false,
         expectServiceActive: false,
       },
     ];
@@ -108,6 +125,7 @@ describe("gui transport smoke", () => {
         gui: {
           enableDock: testCase.enableDock,
           enableOverlay: testCase.enableOverlay,
+          enableNotifications: testCase.enableNotifications,
           host: "127.0.0.1",
           port: 0,
         },
@@ -149,6 +167,17 @@ describe("gui transport smoke", () => {
         } else {
           expect(overlayBody).toContain('data-gui-disabled="true"');
           expect(overlayBody).not.toContain("/gui/events");
+        }
+
+        const notificationsResponse = await fetch(`${baseUrl}/notifications`);
+        const notificationsBody = await notificationsResponse.text();
+        expect(notificationsResponse.status).toBe(200);
+        if (testCase.expectNotificationsEnabled) {
+          expect(notificationsBody).toContain('data-kind="notifications"');
+          expect(notificationsBody).toContain("/gui/events");
+        } else {
+          expect(notificationsBody).toContain('data-gui-disabled="true"');
+          expect(notificationsBody).not.toContain("/gui/events");
         }
       } finally {
         await service.stop();

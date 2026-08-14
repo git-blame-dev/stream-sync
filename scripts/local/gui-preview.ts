@@ -226,6 +226,7 @@ interface CreatePreviewPipelineOptions {
         getPlatformConnectionTime?: (platform?: string) => unknown;
     };
     delay?: (ms: number) => Promise<unknown>;
+    notificationDelay?: (ms: number) => Promise<void>;
     giftAnimationResolver?: {
         resolveFromNotificationData?: (payload: unknown) => Promise<unknown>;
     };
@@ -593,7 +594,13 @@ function buildPreviewConfig(baseConfig: UnknownRecord = {}): UnknownRecord {
     merged.gui = mergeSection(getPreviewRecord(sourceConfig, 'gui'), getPreviewRecord(overrideConfig, 'gui'), {
         enableDock: true,
         enableOverlay: true,
+        enableNotifications: true,
         enableOperator: false,
+        dockFeedMode: 'all',
+        overlayFeedMode: 'chat',
+        notificationIdleHoldMs: 5000,
+        monetizationIdleHoldMs: 30000,
+        notificationTransitionMs: 1000,
         showMessages: true,
         showCommands: true,
         showGreetings: true,
@@ -651,11 +658,7 @@ function buildPreviewConfig(baseConfig: UnknownRecord = {}): UnknownRecord {
         rowIntervalMs: 0
     });
 
-    merged.timing = mergeSection(getPreviewRecord(sourceConfig, 'timing'), getPreviewRecord(overrideConfig, 'timing'), {
-        transitionDelay: 120,
-        notificationClearDelay: 0,
-        commentDuration: 1500
-    });
+    merged.timing = mergeSection(getPreviewRecord(sourceConfig, 'timing'), getPreviewRecord(overrideConfig, 'timing'));
 
     merged.commands = {
         ...sourceCommands,
@@ -1400,7 +1403,10 @@ function createPreviewPipeline(options: CreatePreviewPipelineOptions = {}): Prev
             obs: config.obs,
             chat: getPreviewRecord(config, 'chat'),
             notification: getPreviewRecord(config, 'notification'),
-            gui: getPreviewRecord(config, 'gui'),
+             gui: getPreviewRecord(config, 'gui'),
+             notificationIdleHoldMs: getPreviewRecord(config, 'gui').notificationIdleHoldMs,
+             monetizationIdleHoldMs: getPreviewRecord(config, 'gui').monetizationIdleHoldMs,
+             notificationTransitionMs: getPreviewRecord(config, 'gui').notificationTransitionMs,
             gifts: getPreviewRecord(config, 'gifts'),
             twitch: getPreviewRecord(config, 'twitch'),
             youtube: getPreviewRecord(config, 'youtube'),
@@ -1415,6 +1421,9 @@ function createPreviewPipeline(options: CreatePreviewPipelineOptions = {}): Prev
             sourcesManager: previewSourcesManager,
             goalsManager: previewGoalsManager,
             delay: typeof options.delay === 'function' ? options.delay : async () => {},
+            ...((typeof options.notificationDelay === 'function' || typeof options.delay !== 'function')
+                ? { notificationDelay: typeof options.notificationDelay === 'function' ? options.notificationDelay : async () => {} }
+                : {}),
             giftAnimationResolver: options.giftAnimationResolver || {
                 resolveFromNotificationData: async () => null
             }
@@ -1659,6 +1668,7 @@ async function runGuiPreview(options: RunGuiPreviewOptions = {}): Promise<void> 
         const port = typeof guiConfig.port === 'number' || typeof guiConfig.port === 'string' ? guiConfig.port : 3000;
         stdout.write(`GUI preview running for ${Math.floor(durationMs / 1000)}s\n`);
         stdout.write(`Dock URL: http://${host}:${port}/dock\n`);
+        stdout.write(`Notifications URL: http://${host}:${port}/notifications\n`);
         stdout.write('For TikTok gift animation preview, run: bun run gui:preview:gift-animation\n');
         stdout.write(`Overlay URL: http://${host}:${port}/overlay\n`);
 

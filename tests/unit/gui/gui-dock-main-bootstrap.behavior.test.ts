@@ -32,17 +32,32 @@ describe("Dock main bootstrap behavior", () => {
         __STREAM_SYNC_GUI_CONFIG__: {
         },
       }),
-    ).toEqual({ mode: "dock" });
+    ).toEqual({ mode: "dock", feedMode: "all", notificationTransitionMs: 1000 });
 
     expect(
       readDockRuntimeConfig({
         __STREAM_SYNC_GUI_KIND__: "tiktok-animations",
       }),
-    ).toEqual({ mode: "tiktok-animations" });
+    ).toEqual({ mode: "tiktok-animations", feedMode: "all", notificationTransitionMs: 1000 });
 
     expect(readDockRuntimeConfig({})).toEqual({
       mode: "dock",
+      feedMode: "all",
+      notificationTransitionMs: 1000,
     });
+  });
+
+  it("reads configured dock feeds and fixes notifications to non-chat", () => {
+    expect(readDockRuntimeConfig({
+      __STREAM_SYNC_GUI_CONFIG__: { dockFeedMode: "chat" },
+    })).toEqual({ mode: "dock", feedMode: "chat", notificationTransitionMs: 1000 });
+    expect(readDockRuntimeConfig({
+      __STREAM_SYNC_GUI_KIND__: "notifications",
+      __STREAM_SYNC_GUI_CONFIG__: { dockFeedMode: "all" },
+    })).toEqual({ mode: "notifications", feedMode: "non-chat", notificationTransitionMs: 1000 });
+    expect(readDockRuntimeConfig({
+      __STREAM_SYNC_GUI_CONFIG__: { dockFeedMode: "invalid" },
+    })).toEqual({ mode: "dock", feedMode: "all", notificationTransitionMs: 1000 });
   });
 
   it("renders dock app with dock mode", () => {
@@ -53,6 +68,8 @@ describe("Dock main bootstrap behavior", () => {
       target,
       readDockRuntimeConfigImpl: () => ({
         mode: "dock",
+        feedMode: "all",
+        notificationTransitionMs: 1000,
       }),
       createRootImpl: () => ({
         render: (element: ReactNode) => {
@@ -65,6 +82,7 @@ describe("Dock main bootstrap behavior", () => {
 
     expect(result).toBe(true);
     expect(renderedElement!.props.mode).toBe("dock");
+    expect(renderedElement!.props.feedMode).toBe("all");
   });
 
   it("renders tiktok animations mode when runtime kind requests it", () => {
@@ -75,6 +93,8 @@ describe("Dock main bootstrap behavior", () => {
       target,
       readDockRuntimeConfigImpl: () => ({
         mode: "tiktok-animations",
+        feedMode: "all",
+        notificationTransitionMs: 1000,
       }),
       createRootImpl: () => ({
         render: (element: ReactNode) => {

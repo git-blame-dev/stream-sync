@@ -127,8 +127,11 @@ const CONFIG_SCHEMA: ConfigSchema = {
     gui: {
         enableDock: { type: 'boolean', default: false },
         enableOverlay: { type: 'boolean', default: false },
+        enableNotifications: { type: 'boolean', default: false },
         enableOperator: { type: 'boolean', default: false },
         enableChatFeed: { type: 'boolean', default: false },
+        dockFeedMode: { type: 'string', default: 'all', enum: ['all', 'chat', 'non-chat'] },
+        overlayFeedMode: { type: 'string', default: 'all', enum: ['all', 'chat', 'non-chat'] },
         host: { type: 'string', default: '127.0.0.1' },
         port: { type: 'number', default: 3399, min: 0, max: 65535, integer: true },
         messageCharacterLimit: { type: 'number', default: 0, min: 0, integer: true },
@@ -144,7 +147,10 @@ const CONFIG_SCHEMA: ConfigSchema = {
         showGifts: { type: 'boolean', default: true },
         showPaypiggies: { type: 'boolean', default: true },
         showGiftPaypiggies: { type: 'boolean', default: true },
-        showEnvelopes: { type: 'boolean', default: true }
+        showEnvelopes: { type: 'boolean', default: true },
+        notificationIdleHoldMs: { type: 'number', default: 5000, min: 0, integer: true },
+        monetizationIdleHoldMs: { type: 'number', default: 30000, min: 0, integer: true },
+        notificationTransitionMs: { type: 'number', default: 1000, min: 0, integer: true }
     },
 
     logging: {

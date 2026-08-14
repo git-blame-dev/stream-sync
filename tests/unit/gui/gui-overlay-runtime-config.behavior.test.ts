@@ -8,12 +8,14 @@ describe("Overlay runtime config behavior", () => {
       __STREAM_SYNC_GUI_CONFIG__: {
         overlayMaxMessages: 7,
         overlayMaxLinesPerMessage: 4,
+        overlayFeedMode: "chat",
       },
     });
 
     expect(runtimeConfig).toEqual({
       overlayMaxMessages: 7,
       overlayMaxLinesPerMessage: 4,
+      overlayFeedMode: "chat",
     });
   });
 
@@ -35,4 +37,14 @@ describe("Overlay runtime config behavior", () => {
       "Overlay runtime config requires positive integer overlayMaxMessages",
     );
   });
+
+  it("falls back to all for an invalid feed mode", () => {
+    expect(readOverlayRuntimeConfig({
+      __STREAM_SYNC_GUI_CONFIG__: {
+        overlayMaxMessages: 1,
+        overlayMaxLinesPerMessage: 1,
+        overlayFeedMode: "invalid",
+      },
+    }).overlayFeedMode).toBe("all")
+  })
 });

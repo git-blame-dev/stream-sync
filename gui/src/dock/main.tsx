@@ -2,6 +2,8 @@ import React from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 
 import { App } from '../shared/App'
+import { isGuiFeedMode } from '../shared/feed-mode'
+import type { GuiAppMode, GuiFeedMode } from '../shared/types'
 import '../shared/styles.css'
 
 interface DockRuntimeConfigSource {
@@ -24,12 +26,18 @@ function coerceMessage(error: unknown): string {
   return error instanceof Error && error.message ? error.message : 'Unknown bootstrap error'
 }
 
-export function readDockRuntimeConfig(scope: DockRuntimeConfigSource = globalThis as DockRuntimeConfigSource): { mode: 'dock' | 'tiktok-animations' } {
+export function readDockRuntimeConfig(scope: DockRuntimeConfigSource = globalThis as DockRuntimeConfigSource): { mode: GuiAppMode, feedMode: GuiFeedMode, notificationTransitionMs: number } {
   const runtimeKind = typeof scope.__STREAM_SYNC_GUI_KIND__ === 'string'
     ? scope.__STREAM_SYNC_GUI_KIND__.trim().toLowerCase()
     : ''
   return {
-    mode: runtimeKind === 'tiktok-animations' ? 'tiktok-animations' : 'dock'
+    mode: runtimeKind === 'tiktok-animations' || runtimeKind === 'notifications' ? runtimeKind : 'dock',
+    feedMode: runtimeKind === 'notifications'
+      ? 'non-chat'
+      : (isGuiFeedMode(scope.__STREAM_SYNC_GUI_CONFIG__?.dockFeedMode) ? scope.__STREAM_SYNC_GUI_CONFIG__?.dockFeedMode as GuiFeedMode : 'all'),
+    notificationTransitionMs: Number.isInteger(scope.__STREAM_SYNC_GUI_CONFIG__?.notificationTransitionMs) && Number(scope.__STREAM_SYNC_GUI_CONFIG__?.notificationTransitionMs) >= 0
+      ? Number(scope.__STREAM_SYNC_GUI_CONFIG__?.notificationTransitionMs)
+      : 1000
   }
 }
 
@@ -48,7 +56,11 @@ export function bootstrapDockApp(dependencies: DockBootstrapDependencies = {}): 
     const runtimeConfig = readDockRuntimeConfigImpl()
     const root = createRootImpl(target)
     root.render(
-      <App mode={runtimeConfig.mode} />
+      <App
+        mode={runtimeConfig.mode}
+        feedMode={runtimeConfig.feedMode}
+        notificationTransitionMs={runtimeConfig.notificationTransitionMs}
+      />
     )
     return true
   } catch (error) {

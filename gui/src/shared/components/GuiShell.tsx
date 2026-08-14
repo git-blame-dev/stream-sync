@@ -2,7 +2,7 @@ import React, { useCallback, useLayoutEffect, useMemo, useRef, useState } from '
 
 import { GuiRow } from './GuiRow'
 import { GiftAnimationLayer } from './GiftAnimationLayer'
-import type { GuiGiftAnimationEffectEnvelope, GuiRowDto } from '../types'
+import type { GuiGiftAnimationCompletionReason, GuiGiftAnimationEffectEnvelope, GuiRowDto } from '../types'
 import { applyOverlayRowShiftMotion } from '../overlay-row-motion'
 
 const ROW_SLIDE_ANIMATION_MS = 1000
@@ -25,7 +25,7 @@ interface GuiShellProps {
   mode: 'dock' | 'overlay' | 'tiktok-animations'
   overlayMaxLinesPerMessage: number
   activeEffect?: GuiGiftAnimationEffectEnvelope | null
-  onEffectComplete?: (playbackId: string) => void
+  onEffectComplete?: (playbackId: string, reason: GuiGiftAnimationCompletionReason) => void
 }
 
 interface GuiShellRowEntry {
@@ -201,7 +201,7 @@ export function GuiShell({
   const rowMode = mode === 'overlay' ? 'overlay' : 'dock'
   const handleEffectComplete = typeof onEffectComplete === 'function'
     ? onEffectComplete
-    : (_playbackId: string) => undefined
+    : (_playbackId: string, _reason: GuiGiftAnimationCompletionReason) => undefined
   const shellStyle = mode === 'overlay'
     ? ({ '--overlay-line-clamp': String(overlayMaxLinesPerMessage) } as React.CSSProperties)
     : mode === 'dock'

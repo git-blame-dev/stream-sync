@@ -360,7 +360,7 @@ describe("DisplayQueueEffects", () => {
     expect(emittedVfx).toHaveLength(0);
   });
 
-  it("emits tiktok gift animation effect and sets hold duration", async () => {
+  it("emits and awaits the tiktok gift animation effect", async () => {
     const emittedEvents: EmittedEvent[] = [];
     const effects = new DisplayQueueEffects({
       config: {
@@ -422,7 +422,6 @@ describe("DisplayQueueEffects", () => {
     );
     expect(animationEvent).toBeDefined();
     expect(animationEvent?.payload.durationMs).toBe(4500);
-    expect(item.holdDurationMs).toBe(4500);
   });
 
   it("does not resolve animation for non-tiktok gifts", async () => {
@@ -655,7 +654,6 @@ describe("DisplayQueueEffects", () => {
     });
 
     await handlePromise;
-    expect(item.holdDurationMs).toBe(4200);
   });
 
   it("waits for exact tuple completion when correlation id is absent", async () => {

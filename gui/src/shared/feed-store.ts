@@ -140,6 +140,7 @@ function normalizeRow(input: unknown): GuiRowDto {
 
 export interface GuiFeedStoreOptions {
   maxRows?: number
+  inclusionPredicate?: (row: GuiRowDto) => boolean
 }
 
 function normalizeMaxRows(value: unknown): number {
@@ -152,14 +153,17 @@ export function createGuiFeedStore(options: GuiFeedStoreOptions = {}) {
   const maxRows = normalizeMaxRows(options.maxRows)
   const seenEventIds = new Set<string>()
 
-  const pushEvent = (event: unknown): void => {
+  const pushEvent = (event: unknown): GuiRowDto | null => {
     const row = normalizeRow(event)
     if (!row.type || !row.avatarUrl) {
-      return
+      return null
+    }
+    if (options.inclusionPredicate && !options.inclusionPredicate(row)) {
+      return null
     }
 
     if (row.eventId) {
-      if (seenEventIds.has(row.eventId)) return
+      if (seenEventIds.has(row.eventId)) return null
       seenEventIds.add(row.eventId)
       if (seenEventIds.size > Math.max(EVENT_ID_DEDUP_LIMIT, maxRows)) {
         const oldest = seenEventIds.values().next().value
@@ -172,6 +176,7 @@ export function createGuiFeedStore(options: GuiFeedStoreOptions = {}) {
     if (maxRows > 0 && rows.length > maxRows) {
       rows = rows.slice(rows.length - maxRows)
     }
+    return row
   }
 
   const getRows = (): GuiRowDto[] => rows

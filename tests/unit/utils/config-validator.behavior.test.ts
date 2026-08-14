@@ -585,6 +585,9 @@ describe("ConfigValidator._normalizeGuiSection()", () => {
     expect(result.messageCharacterLimit).toBe(0);
     expect(result.overlayMaxMessages).toBe(3);
     expect(result.overlayMaxLinesPerMessage).toBe(3);
+    expect(result.notificationIdleHoldMs).toBe(5000);
+    expect(result.monetizationIdleHoldMs).toBe(30000);
+    expect(result.notificationTransitionMs).toBe(1000);
     expect(result.showMessages).toBe(true);
     expect(result.showCommands).toBe(true);
     expect(result.showGreetings).toBe(true);
@@ -602,11 +605,17 @@ describe("ConfigValidator._normalizeGuiSection()", () => {
     const result = ConfigValidator._normalizeGuiSection({
       enableDock: "true",
       enableOverlay: "true",
+      enableNotifications: "true",
+      dockFeedMode: "chat",
+      overlayFeedMode: "non-chat",
       host: "0.0.0.0",
       port: "3400",
       messageCharacterLimit: "120",
       overlayMaxMessages: "5",
       overlayMaxLinesPerMessage: "4",
+      notificationIdleHoldMs: "6000",
+      monetizationIdleHoldMs: "31000",
+      notificationTransitionMs: "750",
       showMessages: "false",
       showCommands: "false",
       showGreetings: "false",
@@ -622,11 +631,17 @@ describe("ConfigValidator._normalizeGuiSection()", () => {
 
     expect(result.enableDock).toBe(true);
     expect(result.enableOverlay).toBe(true);
+    expect(result.enableNotifications).toBe(true);
+    expect(result.dockFeedMode).toBe("chat");
+    expect(result.overlayFeedMode).toBe("non-chat");
     expect(result.host).toBe("0.0.0.0");
     expect(result.port).toBe(3400);
     expect(result.messageCharacterLimit).toBe(120);
     expect(result.overlayMaxMessages).toBe(5);
     expect(result.overlayMaxLinesPerMessage).toBe(4);
+    expect(result.notificationIdleHoldMs).toBe(6000);
+    expect(result.monetizationIdleHoldMs).toBe(31000);
+    expect(result.notificationTransitionMs).toBe(750);
     expect(result.showMessages).toBe(false);
     expect(result.showCommands).toBe(false);
     expect(result.showGreetings).toBe(false);
@@ -638,6 +653,16 @@ describe("ConfigValidator._normalizeGuiSection()", () => {
     expect(result.showPaypiggies).toBe(false);
     expect(result.showGiftPaypiggies).toBe(false);
     expect(result.showEnvelopes).toBe(false);
+  });
+
+  it("falls back to all for invalid GUI feed modes", () => {
+    const result = ConfigValidator._normalizeGuiSection({
+      dockFeedMode: "invalid",
+      overlayFeedMode: "invalid",
+    });
+
+    expect(result.dockFeedMode).toBe("all");
+    expect(result.overlayFeedMode).toBe("all");
   });
 
   it("falls back to defaults for invalid gui values", () => {
@@ -662,12 +687,18 @@ describe("ConfigValidator._normalizeGuiSection()", () => {
       messageCharacterLimit: "1.2",
       overlayMaxMessages: "3.5",
       overlayMaxLinesPerMessage: "2.1",
+      notificationIdleHoldMs: "5000.5",
+      monetizationIdleHoldMs: "30000.5",
+      notificationTransitionMs: "1000.5",
     });
 
     expect(result.port).toBe(3399);
     expect(result.messageCharacterLimit).toBe(0);
     expect(result.overlayMaxMessages).toBe(3);
     expect(result.overlayMaxLinesPerMessage).toBe(3);
+    expect(result.notificationIdleHoldMs).toBe(5000);
+    expect(result.monetizationIdleHoldMs).toBe(30000);
+    expect(result.notificationTransitionMs).toBe(1000);
   });
 });
 

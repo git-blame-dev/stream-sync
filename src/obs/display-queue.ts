@@ -15,6 +15,7 @@ import { DisplayQueueEffects } from './display-queue-effects';
 import { DisplayQueueState } from './display-queue-state';
 import { getDefaultGoalsManager } from './goals';
 import { getDefaultSourcesManager } from './sources';
+import { NotificationDisplayCoordinator } from './notification-display-coordinator';
 import type { OperatorControlService } from '../services/operator/operator-control-service';
 
 type QueueItem = DisplayQueueItem;
@@ -44,6 +45,7 @@ type DisplayQueueDependencies = {
     sourcesManager?: DisplayQueueSourcesManager;
     goalsManager?: ReturnType<typeof getDefaultGoalsManager>;
     delay?: (ms: number) => Promise<void>;
+    notificationDelay?: (ms: number) => Promise<void>;
     giftAnimationResolver?: {
         resolveFromNotificationData: (data: unknown) => Promise<{
             durationMs: number;
@@ -140,6 +142,7 @@ class DisplayQueue {
     config: DisplayQueueConfig;
     state: DisplayQueueState;
     effects: DisplayQueueEffects;
+    notificationCoordinator: NotificationDisplayCoordinator;
     effectChain: Promise<void> = Promise.resolve();
     operatorControls?: DisplayQueueDependencies['operatorControls'];
     unsubscribeOperatorControls?: () => void;
@@ -182,6 +185,14 @@ class DisplayQueue {
             ...(dependencies.giftAnimationResolver === undefined
                 ? {}
                 : { giftAnimationResolver: dependencies.giftAnimationResolver })
+        });
+        const timing = this.config as Record<string, unknown>;
+        this.notificationCoordinator = new NotificationDisplayCoordinator({
+            ...(Number.isFinite(Number(timing.notificationIdleHoldMs)) ? { notificationIdleHoldMs: Number(timing.notificationIdleHoldMs) } : {}),
+            ...(Number.isFinite(Number(timing.monetizationIdleHoldMs)) ? { monetizationIdleHoldMs: Number(timing.monetizationIdleHoldMs) } : {}),
+            ...(Number.isFinite(Number(timing.notificationTransitionMs)) ? { notificationTransitionMs: Number(timing.notificationTransitionMs) } : {}),
+            ...(dependencies.notificationDelay ? { delay: dependencies.notificationDelay } : {}),
+            emit: (event, payload) => this.eventBus?.emit?.(event, payload as Record<string, unknown>)
         });
         if (this.operatorControls) {
             this.unsubscribeOperatorControls = this.operatorControls.subscribe((snapshot) => {
@@ -248,8 +259,7 @@ class DisplayQueue {
             return;
         }
 
-        const eventId = item.eventId || crypto.randomUUID();
-        item.eventId = eventId;
+        const eventId = this.ensureEventId(item);
         this.eventBus.emit('display:row', {
             eventId,
             type: item.type,
@@ -329,16 +339,29 @@ class DisplayQueue {
     }
 
     async displayNotificationItem(item: QueueItem) {
-        this.emitDisplayRow(item);
+        if (!this.isNotificationCoordinationEnabled()) {
+            this.emitDisplayRow(item);
+        }
         this.enqueueEffects(item);
         return true;
     }
 
     enqueueEffects(item: QueueItem) {
+        this.ensureEventId(item);
+        const notificationRegistration = isChatType(item.type) || !this.isNotificationCoordinationEnabled()
+            ? null
+            : this.notificationCoordinator.register(item);
         this.effectChain = this.effectChain
             .then(async () => {
                 if (isChatType(item.type)) {
                     await this.effects.handleChatTTSEffects(item, resolveChatMessageText(item.data.message));
+                    return;
+                }
+                if (notificationRegistration) {
+                    await notificationRegistration.run(
+                        () => this.emitDisplayRow(item),
+                        () => this.effects.handleNotificationEffects(item)
+                    );
                     return;
                 }
                 await this.effects.handleNotificationEffects(item);
@@ -350,6 +373,16 @@ class DisplayQueue {
 
     handleNotificationEffects(item: QueueItem) {
         return this.effects.handleNotificationEffects(item);
+    }
+
+    private ensureEventId(item: QueueItem) {
+        if (!item.eventId) item.eventId = crypto.randomUUID();
+        return item.eventId;
+    }
+
+    private isNotificationCoordinationEnabled() {
+        const gui = this.config.gui;
+        return !!gui && typeof gui === 'object' && (gui as Record<string, unknown>).enableNotifications === true;
     }
 
     buildVfxMatch(config: Record<string, unknown>) {
@@ -390,6 +423,7 @@ class DisplayQueue {
         this.unsubscribeOperatorControls?.();
         delete this.unsubscribeOperatorControls;
         this.clearQueue();
+        this.notificationCoordinator.stop();
         await this.effectChain;
         logger.info('[Display Queue] Processing stopped and queue cleared.');
     }

@@ -4,6 +4,7 @@ html, body {
 }
 
 :root {
+  --notification-transition-ms: 1000ms;
   --gui-row-background-opacity: 0.95;
   --gui-row-content-gap: 2px;
   --gui-member-background-gradient-top: rgba(28, 138, 83, var(--gui-row-background-opacity));
@@ -113,6 +114,63 @@ html, body {
   --gui-row-body-font-size-current: var(--gui-dock-row-body-font-size);
   --gui-member-pill-font-size-current: var(--gui-dock-member-pill-font-size);
   --gui-emote-size-current: var(--gui-dock-emote-size);
+}
+
+.gui-shell--notifications {
+  position: relative;
+  justify-content: flex-start;
+  width: 100%;
+  max-width: 960px;
+  height: 100vh;
+  padding: 12px;
+  background: transparent;
+  overflow: hidden;
+  --gui-avatar-size-current: var(--gui-overlay-avatar-size);
+  --gui-platform-icon-size-current: var(--gui-overlay-platform-icon-size);
+  --gui-badge-size-current: var(--gui-overlay-badge-size);
+  --gui-row-header-font-size-current: var(--gui-overlay-row-header-font-size);
+  --gui-row-body-font-size-current: var(--gui-overlay-row-body-font-size);
+  --gui-member-pill-font-size-current: var(--gui-overlay-member-pill-font-size);
+  --gui-emote-size-current: var(--gui-overlay-emote-size);
+}
+
+.gui-shell--notifications .gui-row {
+  min-width: 0;
+}
+
+.gui-row--overlay-enter.gui-row--notification-enter {
+  animation: gui-notification-row-enter var(--notification-transition-ms) ease-out both;
+}
+
+.gui-row--overlay-enter.gui-row--notification-exit {
+  animation: gui-notification-row-exit var(--notification-transition-ms) ease-out forwards;
+}
+
+@keyframes gui-notification-row-enter {
+  from {
+    transform: translateY(-100%);
+  }
+
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes gui-notification-row-exit {
+  from {
+    transform: translateY(0);
+  }
+
+  to {
+    transform: translateY(-100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gui-row--overlay-enter.gui-row--notification-enter,
+  .gui-row--overlay-enter.gui-row--notification-exit {
+    animation: none;
+  }
 }
 
 .gui-shell__effect-layer {

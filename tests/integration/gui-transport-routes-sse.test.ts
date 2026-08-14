@@ -197,11 +197,11 @@ describe("GUI transport routes and SSE integration", () => {
 
     await Promise.all([service.start(), service.start()]);
     expect(createServerCalls).toBe(1);
-    expect(subscribeCalls).toBe(2);
+    expect(subscribeCalls).toBe(3);
     expect(service.isActive()).toBe(true);
 
     await service.stop();
-    expect(unsubscribeCalls).toBe(2);
+    expect(unsubscribeCalls).toBe(3);
   });
 
   it("marks transport inactive when server emits runtime error after start", async () => {
@@ -1270,6 +1270,7 @@ describe("GUI transport routes and SSE integration", () => {
         "/health",
         "/dock",
         "/overlay",
+        "/notifications",
         "/tiktok-animations",
         "/gui/assets/dock.js",
         "/gui/events",
@@ -1314,6 +1315,7 @@ describe("GUI transport routes and SSE integration", () => {
         "/health",
         "/dock",
         "/overlay",
+        "/notifications",
         "/tiktok-animations",
         "/gui/assets/dock.js",
         "/gui/events",
@@ -1352,6 +1354,7 @@ describe("GUI transport routes and SSE integration", () => {
       const tiktokAnimations = await fetch(
         `${baseUrl}/health?route=/tiktok-animations`,
       );
+      const notifications = await fetch(`${baseUrl}/health?route=/notifications`);
       const demo = await fetch(`${baseUrl}/health?route=/demo`);
 
       expect(await overlay.json()).toEqual({
@@ -1368,6 +1371,11 @@ describe("GUI transport routes and SSE integration", () => {
         ok: true,
         service: "stream-sync-gui",
         route: "/tiktok-animations",
+      });
+      expect(await notifications.json()).toEqual({
+        ok: false,
+        service: "stream-sync-gui",
+        route: "/notifications",
       });
       expect(await demo.json()).toEqual({
         ok: false,
@@ -1412,6 +1420,38 @@ describe("GUI transport routes and SSE integration", () => {
       });
     } finally {
       await demoService.stop();
+    }
+  });
+
+  it("reports disabled GUI routes as unavailable to OBS wrappers", async () => {
+    const eventBus = new TestEventBus();
+    const config = buildConfig({
+      enableDock: true,
+      enableOverlay: false,
+      enableNotifications: false,
+      enableOperator: false,
+      port: 0,
+    });
+    const service = createGuiTransportService({
+      config,
+      eventBus,
+      logger: null,
+    });
+    await service.start();
+
+    try {
+      const baseUrl = getBaseUrl(service);
+      const readiness = async (route: string) => {
+        return (await (await fetch(`${baseUrl}/health?route=${route}`)).json()).ok;
+      };
+
+      expect(await readiness("/dock")).toBe(true);
+      expect(await readiness("/overlay")).toBe(false);
+      expect(await readiness("/notifications")).toBe(false);
+      expect(await readiness("/operator")).toBe(false);
+      expect(await readiness("/tiktok-animations")).toBe(true);
+    } finally {
+      await service.stop();
     }
   });
 
@@ -2092,6 +2132,171 @@ describe("GUI transport routes and SSE integration", () => {
       guiAbort.abort();
       chatAbort.abort();
       await service.stop();
+    }
+  });
+  it("serves independently gated notification runtime and health route", async () => {
+    const service = createGuiTransportService({
+      config: buildConfig({ enableNotifications: true, port: 0 }),
+      eventBus: new TestEventBus(),
+      logger: null,
+    });
+    await service.start();
+    try {
+      const baseUrl = getBaseUrl(service);
+      const response = await fetch(`${baseUrl}/notifications`);
+      const html = await response.text();
+      expect(response.status).toBe(200);
+      expect(html).toContain('data-kind="notifications"');
+      expect(html).toContain('/gui/assets/dock.js');
+      expect(html).toContain('/gui/events');
+      expect(html).toContain('dockFeedMode');
+      expect(html).toContain('background:transparent');
+      expect((await (await fetch(`${baseUrl}/health?route=/notifications`)).json()).ok).toBe(true);
+    } finally {
+      await service.stop();
+    }
+  });
+
+
+  it("returns a disabled notification shell when notifications are off", async () => {
+    const service = createGuiTransportService({
+      config: buildConfig({ enableNotifications: false, enableDock: true, port: 0 }),
+      eventBus: new TestEventBus(),
+      logger: null,
+    });
+    await service.start();
+    try {
+      const baseUrl = getBaseUrl(service);
+      const response = await fetch(`${baseUrl}/notifications`);
+      const html = await response.text();
+      expect(response.status).toBe(200);
+      expect(html).toContain('data-gui-disabled="true"');
+      expect(html).not.toContain('/gui/events');
+      expect((await (await fetch(`${baseUrl}/health?route=/notifications`)).json()).ok).toBe(false);
+    } finally {
+      await service.stop();
+    }
+  });
+
+  it("delivers validated notification lifecycle envelopes in SSE order", async () => {
+    const eventBus = new TestEventBus();
+    const service = createGuiTransportService({
+      config: buildConfig({ enableNotifications: true, port: 0 }),
+      eventBus,
+      logger: null,
+    });
+    await service.start();
+    const abort = new AbortController();
+    try {
+      const response = await fetch(`${getBaseUrl(service)}/gui/events`, { signal: abort.signal });
+      const reader = createSseReader(response);
+      eventBus.emit("display:notification-lifecycle", {
+        eventId: "notification-event-1",
+        phase: "exit-started",
+        type: "platform:follow",
+        platform: "twitch",
+        timestamp: 1_723_650_000_000,
+      });
+
+      await expect(reader.readEvent()).resolves.toEqual({
+        __guiEvent: "notification-lifecycle",
+        eventId: "notification-event-1",
+        phase: "exit-started",
+      });
+    } finally {
+      abort.abort();
+      await service.stop();
+    }
+  });
+
+  it("accepts the first valid gift animation acknowledgement and rejects invalid requests", async () => {
+    const eventBus = new TestEventBus();
+    const playbackId = "550e8400-e29b-41d4-a716-446655440000";
+    const settled: unknown[] = [];
+    eventBus.on("display:gift-animation-settled", (payload) => settled.push(payload));
+    const tempDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "gui-gift-ack-"));
+    const mediaPath = path.join(tempDirectory, "gift.mp4");
+    fs.writeFileSync(mediaPath, Buffer.from("test-mp4-content"));
+    const service = createGuiTransportService({
+      config: buildConfig({ enableDock: true, showGifts: true, port: 0 }),
+      eventBus,
+      logger: null,
+      runtimeAssetRoots: [tempDirectory],
+    });
+    await service.start();
+    const abort = new AbortController();
+    try {
+      const baseUrl = getBaseUrl(service);
+      const response = await fetch(`${baseUrl}/gui/events`, { signal: abort.signal });
+      const reader = createSseReader(response);
+      eventBus.emit("display:gift-animation", {
+        playbackId,
+        durationMs: 1000,
+        mediaFilePath: mediaPath,
+        mediaContentType: "video/mp4",
+        animationConfig: {
+          profileName: "portrait",
+          sourceWidth: 960,
+          sourceHeight: 864,
+          renderWidth: 480,
+          renderHeight: 854,
+          rgbFrame: [0, 0, 480, 854],
+          aFrame: [480, 0, 480, 854],
+        },
+      });
+      expect((await reader.readEvent()).playbackId).toBe(playbackId);
+
+      const headers = {
+        Origin: baseUrl,
+        "Content-Type": "application/json",
+        "X-Stream-Sync-Request": "1",
+      };
+      const first = await fetch(`${baseUrl}/api/v1/gui/gift-animations/ack`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ playbackId, reason: "ended" }),
+      });
+      expect(first.status).toBe(200);
+      expect(first.headers.get("access-control-allow-origin")).toBeNull();
+      expect(await first.json()).toEqual({ first: true });
+      expect(settled).toEqual([{ playbackId, reason: "ended" }]);
+
+      const duplicate = await fetch(`${baseUrl}/api/v1/gui/gift-animations/ack`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ playbackId, reason: "timeout" }),
+      });
+      expect(await duplicate.json()).toEqual({ first: false });
+      expect(settled).toHaveLength(1);
+
+      const unknown = await fetch(`${baseUrl}/api/v1/gui/gift-animations/ack`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ playbackId: "a8098c1a-f86e-11da-bd1a-00112444be1e", reason: "ended" }),
+      });
+      expect(unknown.status).toBe(404);
+
+      const wrongMethod = await fetch(`${baseUrl}/api/v1/gui/gift-animations/ack`, { method: "GET" });
+      expect(wrongMethod.status).toBe(405);
+      expect(wrongMethod.headers.get("allow")).toBe("POST");
+
+      const malformed = await fetch(`${baseUrl}/api/v1/gui/gift-animations/ack`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ playbackId, reason: "invalid" }),
+      });
+      expect(malformed.status).toBe(400);
+
+      const oversized = await fetch(`${baseUrl}/api/v1/gui/gift-animations/ack`, {
+        method: "POST",
+        headers,
+        body: "x".repeat(2049),
+      });
+      expect(oversized.status).toBe(413);
+    } finally {
+      abort.abort();
+      await service.stop();
+      fs.rmSync(tempDirectory, { recursive: true, force: true });
     }
   });
 });

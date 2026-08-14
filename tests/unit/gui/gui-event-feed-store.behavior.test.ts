@@ -251,6 +251,40 @@ describe("GUI feed store behavior", () => {
     ]);
   });
 
+  it("filters normalized rows before reserving event IDs", () => {
+    let shouldInclude = false;
+    const store = createGuiFeedStore({
+      inclusionPredicate: () => shouldInclude,
+    });
+    const event = { ...createRow(1), eventId: "event-filtered-first" };
+
+    store.pushEvent(event);
+    shouldInclude = true;
+    store.pushEvent(event);
+
+    expect(store.getRows().map((entry) => entry.eventId)).toEqual([
+      "event-filtered-first",
+    ]);
+  });
+
+  it("does not let filtered rows consume the visible row limit", () => {
+    const store = createGuiFeedStore({
+      maxRows: 1,
+      inclusionPredicate: (row) => row.kind === "chat",
+    });
+
+    store.pushEvent({ ...createRow(1), eventId: "event-visible" });
+    store.pushEvent({
+      ...createRow(2),
+      eventId: "event-hidden",
+      kind: "notification",
+    });
+
+    expect(store.getRows().map((entry) => entry.eventId)).toEqual([
+      "event-visible",
+    ]);
+  });
+
   it("bounds event ID history and admits an evicted ID again", () => {
     const store = createGuiFeedStore();
 

@@ -183,6 +183,9 @@ type MainConfig = Record<string, Record<string, unknown>> & BuiltConfig & {
         enableOverlay?: boolean;
         enableOperator?: boolean;
         showGifts?: boolean;
+        notificationIdleHoldMs?: number;
+        monetizationIdleHoldMs?: number;
+        notificationTransitionMs?: number;
     };
     spam: Record<string, unknown>;
     commands: Record<string, string>;
@@ -696,6 +699,9 @@ async function main(overrides: MainOverrides = {}) {
             twitch: config.twitch,
             tiktok: config.tiktok,
             gui: config.gui,
+            notificationIdleHoldMs: config.gui?.notificationIdleHoldMs,
+            monetizationIdleHoldMs: config.gui?.monetizationIdleHoldMs,
+            notificationTransitionMs: config.gui?.notificationTransitionMs,
             ttsChatEnabled: config.obs.ttsChatEnabled,
             ttsNotificationsEnabled: config.obs.ttsNotificationsEnabled
         };

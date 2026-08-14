@@ -9,6 +9,17 @@ function expectConfigSection<K extends ConfigDefaultSectionName>(
     expect(defaults[sectionName]).toBeDefined();
 }
 
+describe('GUI notification and feed mode schema', () => {
+    it('defines activation and backward-compatible feed mode defaults', () => {
+        const guiSchema = CONFIG_SCHEMA.gui;
+        if (!guiSchema) throw new Error('expected GUI config schema');
+
+        expect(guiSchema.enableNotifications).toEqual({ type: 'boolean', default: false });
+        expect(guiSchema.dockFeedMode).toEqual({ type: 'string', default: 'all', enum: ['all', 'chat', 'non-chat'] });
+        expect(guiSchema.overlayFeedMode).toEqual({ type: 'string', default: 'all', enum: ['all', 'chat', 'non-chat'] });
+    });
+});
+
 describe('buildDefaultsFromSchema()', () => {
     it('returns object with all sections from schema except dynamic', () => {
         const defaults = buildDefaultsFromSchema();
@@ -75,13 +86,19 @@ describe('buildDefaultsFromSchema()', () => {
         expect(defaults.gui).toEqual({
             enableChatFeed: false,
             enableDock: false,
+            enableNotifications: false,
             enableOperator: false,
             enableOverlay: false,
+            dockFeedMode: 'all',
             host: '127.0.0.1',
             port: 3399,
             messageCharacterLimit: 0,
+            notificationIdleHoldMs: 5000,
+            monetizationIdleHoldMs: 30000,
+            notificationTransitionMs: 1000,
             overlayMaxMessages: 3,
             overlayMaxLinesPerMessage: 3,
+            overlayFeedMode: 'all',
             showMessages: true,
             showCommands: true,
             showGreetings: true,

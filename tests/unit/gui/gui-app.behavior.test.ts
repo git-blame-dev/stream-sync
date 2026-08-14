@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import TestRenderer, { type ReactTestRenderer } from "react-test-renderer";
 
 import { App } from "../../../gui/src/shared/App";
+import { ActivityBar } from "../../../gui/src/shared/components/ActivityBar";
 import { GuiShell } from "../../../gui/src/shared/components/GuiShell";
 
 type EventPayload = Record<string, unknown>;
@@ -12,7 +13,7 @@ type EventFeedArgs = { url: string; onEvent: EventHandler };
 type AppRenderer = ReactTestRenderer;
 type EffectShellProps = {
   activeEffect: { playbackId: string };
-  onEffectComplete: (playbackId: string) => void;
+  onEffectComplete: (playbackId: string, reason: "ended") => void;
 };
 
 function getEffectShellProps(renderer: AppRenderer): EffectShellProps {
@@ -31,7 +32,7 @@ function getEffectShellProps(renderer: AppRenderer): EffectShellProps {
 
   return {
     activeEffect: { playbackId: activeEffect.playbackId },
-    onEffectComplete: (playbackId: string) => onEffectComplete(playbackId),
+    onEffectComplete: (playbackId: string, reason: "ended") => onEffectComplete(playbackId, reason),
   };
 }
 
@@ -389,6 +390,7 @@ describe("GUI app behavior", () => {
       onEventHandler = onEvent;
       return () => {};
     };
+    const acknowledgements: Array<{ playbackId: string; reason: string }> = [];
 
     let renderer: AppRenderer | null = null;
     await TestRenderer.act(async () => {
@@ -397,6 +399,10 @@ describe("GUI app behavior", () => {
           mode: "dock",
           eventsPath: "/gui/events",
           createEventFeedImpl,
+          sendGiftAnimationAckImpl: async (playbackId: string, reason: string) => {
+            acknowledgements.push({ playbackId, reason });
+            throw new Error("test acknowledgement failure");
+          },
         }),
       );
     });
@@ -440,11 +446,12 @@ describe("GUI app behavior", () => {
     expect(shellProps.activeEffect.playbackId).toBe("effect-1");
 
     await TestRenderer.act(async () => {
-      shellProps.onEffectComplete("effect-1");
+      shellProps.onEffectComplete("effect-1", "ended");
     });
 
     shellProps = getEffectShellProps(renderer!);
     expect(shellProps.activeEffect.playbackId).toBe("effect-2");
+    expect(acknowledgements).toEqual([{ playbackId: "effect-1", reason: "ended" }]);
   });
 
   it("ignores gift animation effects in overlay mode", async () => {
@@ -539,5 +546,229 @@ describe("GUI app behavior", () => {
     const text = JSON.stringify(renderer!.toJSON());
     expect(text).toContain("gui-shell__effect-layer");
     expect(text).not.toContain("hidden-row");
+  });
+
+  it("applies the configured feed mode before rows reach the overlay", async () => {
+    let onEventHandler: EventHandler | null = null;
+    const createEventFeedImpl = ({ onEvent }: EventFeedArgs) => {
+      onEventHandler = onEvent;
+      return () => {};
+    };
+    let renderer: AppRenderer | null = null;
+
+    await TestRenderer.act(async () => {
+      renderer = TestRenderer.create(
+        React.createElement(App, {
+          mode: "overlay",
+          feedMode: "chat",
+          overlayMaxMessages: 3,
+          overlayMaxLinesPerMessage: 3,
+          createEventFeedImpl,
+        }),
+      );
+    });
+    await TestRenderer.act(async () => {
+      onEventHandler!({
+        type: "platform:follow",
+        kind: "notification",
+        platform: "twitch",
+        username: "test-hidden-follower",
+        text: "followed",
+        avatarUrl: "https://example.invalid/hidden.png",
+        timestamp: "2024-01-01T00:00:00.000Z",
+      });
+      onEventHandler!({
+        type: "chat",
+        kind: "chat",
+        platform: "twitch",
+        username: "test-visible-chatter",
+        text: "visible chat",
+        avatarUrl: "https://example.invalid/visible.png",
+        timestamp: "2024-01-01T00:00:01.000Z",
+      });
+    });
+
+    const shellRows = renderer!.root.findByType(GuiShell).props.rows as EventPayload[];
+    expect(shellRows.map((row) => row.username)).toEqual([
+      "test-visible-chatter",
+    ]);
+    await TestRenderer.act(async () => renderer!.unmount());
+  });
+
+  it("keeps every non-chat notification queued until its lifecycle exit completes", async () => {
+    let onEventHandler: EventHandler | null = null;
+    const createEventFeedImpl = ({ onEvent }: EventFeedArgs) => {
+      onEventHandler = onEvent;
+      return () => {};
+    };
+    let renderer: AppRenderer | null = null;
+
+    await TestRenderer.act(async () => {
+      renderer = TestRenderer.create(
+        React.createElement(App, {
+          mode: "notifications",
+          feedMode: "all",
+          createEventFeedImpl,
+        }),
+      );
+    });
+    await TestRenderer.act(async () => {
+      onEventHandler!({
+        type: "chat",
+        kind: "chat",
+        platform: "twitch",
+        username: "test-hidden-chatter",
+        text: "hidden chat",
+        avatarUrl: "https://example.invalid/chat.png",
+        timestamp: "2024-01-01T00:00:00.000Z",
+      });
+    });
+    expect(renderer!.root.findByType(ActivityBar).props.row).toBeNull();
+
+    await TestRenderer.act(async () => {
+      onEventHandler!({
+        __guiEvent: "notification-lifecycle",
+        eventId: "activity-2",
+        phase: "exit-started",
+      });
+    });
+    await TestRenderer.act(async () => {
+      onEventHandler!({
+        eventId: "activity-1",
+        type: "greeting",
+        kind: "greeting",
+        platform: "twitch",
+        username: "test-greeting-user",
+        text: "first activity",
+        avatarUrl: "https://example.invalid/greeting.png",
+        timestamp: "2024-01-01T00:00:01.000Z",
+      });
+      onEventHandler!({
+        eventId: "activity-2",
+        type: "platform:raid",
+        kind: "notification",
+        platform: "twitch",
+        username: "test-raid-user",
+        text: "latest activity",
+        avatarUrl: "https://example.invalid/raid.png",
+        timestamp: "2024-01-01T00:00:02.000Z",
+      });
+      onEventHandler!({
+        type: "chat",
+        kind: "chat",
+        platform: "twitch",
+        username: "test-later-chatter",
+        text: "does not evict activity",
+        avatarUrl: "https://example.invalid/later-chat.png",
+        timestamp: "2024-01-01T00:00:03.000Z",
+      });
+      onEventHandler!({
+        __guiEvent: "effect",
+        effectType: "tiktok-gift-animation",
+        playbackId: "effect-ignored-notifications",
+        durationMs: 2500,
+        assetUrl: "/gui/runtime/test.mp4",
+        config: {
+          profileName: "portrait",
+          sourceWidth: 960,
+          sourceHeight: 864,
+          renderWidth: 480,
+          renderHeight: 854,
+          rgbFrame: [0, 0, 480, 854],
+          aFrame: [480, 0, 480, 854],
+        },
+      });
+    });
+
+    const currentRow = renderer!.root.findByType(ActivityBar).props.row as EventPayload;
+    expect(currentRow.username).toBe("test-greeting-user");
+    await TestRenderer.act(async () => {
+      onEventHandler!({
+        __guiEvent: "notification-lifecycle",
+        eventId: "activity-1",
+        phase: "exit-started",
+      });
+    });
+    const activityProps = renderer!.root.findByType(ActivityBar).props;
+    expect(activityProps.exitRequested).toBe(true);
+    await TestRenderer.act(async () => {
+      activityProps.onExitComplete("activity-1");
+    });
+    expect((renderer!.root.findByType(ActivityBar).props.row as EventPayload).username).toBe("test-raid-user");
+    expect(renderer!.root.findByType(ActivityBar).props.exitRequested).toBe(false);
+    expect(JSON.stringify(renderer!.toJSON())).not.toContain("gui-shell__effect-layer");
+    await TestRenderer.act(async () => renderer!.unmount());
+  });
+
+  it("drops malformed notification rows without a backend event ID", async () => {
+    let onEventHandler: EventHandler | null = null;
+    const createEventFeedImpl = ({ onEvent }: EventFeedArgs) => {
+      onEventHandler = onEvent;
+      return () => {};
+    };
+    let renderer: AppRenderer | null = null;
+    await TestRenderer.act(async () => {
+      renderer = TestRenderer.create(React.createElement(App, {
+        mode: "notifications",
+        createEventFeedImpl,
+      }));
+    });
+    await TestRenderer.act(async () => {
+      onEventHandler!({
+        type: "platform:follow",
+        kind: "notification",
+        platform: "twitch",
+        username: "missing-id-user",
+        text: "followed",
+        avatarUrl: "https://example.invalid/avatar.png",
+        timestamp: "2024-01-01T00:00:00.000Z",
+      });
+    });
+    expect(renderer!.root.findByType(ActivityBar).props.row).toBeNull();
+    await TestRenderer.act(async () => renderer!.unmount());
+  });
+
+  it("clears rows when the configured feed changes", async () => {
+    let onEventHandler: EventHandler | null = null;
+    const createEventFeedImpl = ({ onEvent }: EventFeedArgs) => {
+      onEventHandler = onEvent;
+      return () => {};
+    };
+    let renderer: AppRenderer | null = null;
+
+    await TestRenderer.act(async () => {
+      renderer = TestRenderer.create(
+        React.createElement(App, {
+          mode: "dock",
+          feedMode: "all",
+          createEventFeedImpl,
+        }),
+      );
+    });
+    await TestRenderer.act(async () => {
+      onEventHandler!({
+        type: "platform:follow",
+        kind: "notification",
+        platform: "twitch",
+        username: "test-previous-feed-user",
+        text: "previous feed activity",
+        avatarUrl: "https://example.invalid/previous-feed.png",
+        timestamp: "2024-01-01T00:00:00.000Z",
+      });
+    });
+    expect(JSON.stringify(renderer!.toJSON())).toContain("test-previous-feed-user");
+
+    await TestRenderer.act(async () => {
+      renderer!.update(
+        React.createElement(App, {
+          mode: "dock",
+          feedMode: "chat",
+          createEventFeedImpl,
+        }),
+      );
+    });
+
+    expect(JSON.stringify(renderer!.toJSON())).not.toContain("test-previous-feed-user");
+    await TestRenderer.act(async () => renderer!.unmount());
   });
 });

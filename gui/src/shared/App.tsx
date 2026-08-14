@@ -3,14 +3,63 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { createEventFeed } from './create-event-feed'
 import { createGuiFeedStore } from './feed-store'
 import { GuiShell } from './components/GuiShell'
-import type { GuiGiftAnimationEffectEnvelope, GuiRowDto } from './types'
+import { ActivityBar } from './components/ActivityBar'
+import { matchesGuiFeedMode } from './feed-mode'
+import type {
+  GuiAppMode,
+  GuiFeedMode,
+  GuiGiftAnimationCompletionReason,
+  GuiGiftAnimationEffectEnvelope,
+  GuiNotificationLifecycleEnvelope,
+  GuiRowDto
+} from './types'
 
 interface AppProps {
-  mode: 'dock' | 'overlay' | 'tiktok-animations'
+  mode: GuiAppMode
+  feedMode?: GuiFeedMode | undefined
   eventsPath?: string
   overlayMaxMessages?: number
   overlayMaxLinesPerMessage?: number
+  notificationTransitionMs?: number
   createEventFeedImpl?: typeof createEventFeed
+  sendGiftAnimationAckImpl?: typeof sendGiftAnimationAck
+}
+
+type GuiFeedStore = ReturnType<typeof createGuiFeedStore>
+
+interface RowState {
+  store: GuiFeedStore
+  rows: GuiRowDto[]
+}
+
+interface EffectState {
+  store: GuiFeedStore
+  queue: GuiGiftAnimationEffectEnvelope[]
+}
+
+interface NotificationState {
+  store: GuiFeedStore
+  queue: GuiRowDto[]
+  exitingEventIds: Set<string>
+}
+
+export async function sendGiftAnimationAck(
+  playbackId: string,
+  reason: GuiGiftAnimationCompletionReason,
+  fetchImpl: typeof fetch = fetch
+): Promise<void> {
+  const response = await fetchImpl('/api/v1/gui/gift-animations/ack', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Stream-Sync-Request': '1'
+    },
+    body: JSON.stringify({ playbackId, reason })
+  })
+  if (!response.ok) {
+    throw new Error(`Gift animation acknowledgement failed with status ${response.status}`)
+  }
 }
 
 function readPositiveInteger(value: unknown): number | null {
@@ -19,7 +68,7 @@ function readPositiveInteger(value: unknown): number | null {
 }
 
 function resolveOverlayLimits(
-  mode: 'dock' | 'overlay' | 'tiktok-animations',
+  mode: GuiAppMode,
   overlayMaxMessages: unknown,
   overlayMaxLinesPerMessage: unknown
 ): { maxRows: number, maxLinesPerMessage: number } {
@@ -83,33 +132,83 @@ function isGuiEffectEnvelope(payload: unknown): boolean {
     (payload as { __guiEvent?: string }).__guiEvent === 'effect'
 }
 
+function isNotificationLifecycleEnvelope(payload: unknown): payload is GuiNotificationLifecycleEnvelope {
+  const lifecycle = payload as GuiNotificationLifecycleEnvelope
+  return !!lifecycle &&
+    lifecycle.__guiEvent === 'notification-lifecycle' &&
+    typeof lifecycle.eventId === 'string' &&
+    lifecycle.eventId.length > 0 &&
+    (lifecycle.phase === 'started' || lifecycle.phase === 'exit-started')
+}
+
 export function App({
   mode,
   eventsPath = '/gui/events',
   overlayMaxMessages,
   overlayMaxLinesPerMessage,
-  createEventFeedImpl = createEventFeed
+  notificationTransitionMs = 1000,
+  createEventFeedImpl = createEventFeed,
+  sendGiftAnimationAckImpl = sendGiftAnimationAck,
+  feedMode = 'all'
 }: AppProps) {
+  const effectiveFeedMode = mode === 'notifications' ? 'non-chat' : feedMode
   const overlayLimits = useMemo(
     () => resolveOverlayLimits(mode, overlayMaxMessages, overlayMaxLinesPerMessage),
     [mode, overlayMaxMessages, overlayMaxLinesPerMessage]
   )
 
   const store = useMemo(
-    () => createGuiFeedStore({ maxRows: overlayLimits.maxRows }),
-    [overlayLimits.maxRows]
+    () => createGuiFeedStore({
+      maxRows: mode === 'notifications' ? 0 : overlayLimits.maxRows,
+      inclusionPredicate: (row) =>
+        matchesGuiFeedMode(row, effectiveFeedMode) &&
+        (mode !== 'notifications' || !!row.eventId)
+    }),
+    [createEventFeedImpl, effectiveFeedMode, eventsPath, mode, overlayLimits.maxRows]
   )
-  const [rows, setRows] = useState<GuiRowDto[]>([])
-  const [effectQueue, setEffectQueue] = useState<GuiGiftAnimationEffectEnvelope[]>([])
+  const [rowState, setRowState] = useState<RowState>(() => ({ store, rows: [] }))
+  const [effectState, setEffectState] = useState<EffectState>(() => ({ store, queue: [] }))
+  const [notificationState, setNotificationState] = useState<NotificationState>(() => ({
+    store,
+    queue: [],
+    exitingEventIds: new Set()
+  }))
+  const rows = rowState.store === store ? rowState.rows : []
+  const effectQueue = effectState.store === store ? effectState.queue : []
   const activeEffect = effectQueue[0] ?? null
+  const notificationQueue = notificationState.store === store ? notificationState.queue : []
+  const activeNotification = notificationQueue[0] ?? null
+  const notificationExitRequested = !!activeNotification?.eventId &&
+    notificationState.store === store &&
+    notificationState.exitingEventIds.has(activeNotification.eventId)
 
   useEffect(() => {
     const dispose = createEventFeedImpl({
       url: eventsPath,
       onEvent: (payload) => {
         if (isGuiEffectEnvelope(payload)) {
-          if (mode !== 'overlay' && isGiftAnimationEffectEnvelope(payload)) {
-            setEffectQueue((currentQueue) => [...currentQueue, payload])
+          if ((mode === 'dock' || mode === 'tiktok-animations') && isGiftAnimationEffectEnvelope(payload)) {
+            setEffectState((current) => ({
+              store,
+              queue: [...(current.store === store ? current.queue : []), payload]
+            }))
+          }
+          return
+        }
+
+        if (isNotificationLifecycleEnvelope(payload)) {
+          if (mode === 'notifications' && payload.phase === 'exit-started') {
+            setNotificationState((current) => {
+              const currentState = current.store === store
+                ? current
+                : { store, queue: [], exitingEventIds: new Set<string>() }
+              if (!currentState.queue.some((row) => row.eventId === payload.eventId)) {
+                return currentState
+              }
+              const exitingEventIds = new Set(currentState.exitingEventIds)
+              exitingEventIds.add(payload.eventId)
+              return { ...currentState, exitingEventIds }
+            })
           }
           return
         }
@@ -118,8 +217,17 @@ export function App({
           return
         }
 
-        store.pushEvent(payload)
-        setRows(store.getRows())
+        const accepted = store.pushEvent(payload)
+        if (!accepted) return
+        if (mode === 'notifications') {
+          setNotificationState((current) => ({
+            store,
+            queue: [...(current.store === store ? current.queue : []), accepted],
+            exitingEventIds: current.store === store ? current.exitingEventIds : new Set()
+          }))
+          return
+        }
+        setRowState({ store, rows: store.getRows() })
       }
     })
 
@@ -128,25 +236,47 @@ export function App({
     }
   }, [createEventFeedImpl, eventsPath, mode, store])
 
+  if (mode === 'notifications') {
+    return (
+      <ActivityBar
+        row={activeNotification}
+        exitRequested={notificationExitRequested}
+        transitionMs={notificationTransitionMs}
+        onExitComplete={(eventId) => {
+          setNotificationState((current) => {
+            if (current.store !== store) return current
+            const first = current.queue[0]
+            if (!first || first.eventId !== eventId) return current
+            const exitingEventIds = new Set(current.exitingEventIds)
+            exitingEventIds.delete(eventId)
+            return { store, queue: current.queue.slice(1), exitingEventIds }
+          })
+        }}
+      />
+    )
+  }
+
   return (
     <GuiShell
       rows={rows}
       mode={mode}
       overlayMaxLinesPerMessage={overlayLimits.maxLinesPerMessage}
       activeEffect={activeEffect}
-      onEffectComplete={(playbackId: string) => {
-        setEffectQueue((currentQueue) => {
+      onEffectComplete={(playbackId, reason) => {
+        setEffectState((current) => {
+          const currentQueue = current.store === store ? current.queue : []
           if (currentQueue.length === 0) {
-            return currentQueue
+            return current.store === store ? current : { store, queue: [] }
           }
 
           const nextEffect = currentQueue[0]
           if (!nextEffect || nextEffect.playbackId !== playbackId) {
-            return currentQueue
+            return current
           }
 
-          return currentQueue.slice(1)
+          return { store, queue: currentQueue.slice(1) }
         })
+        void sendGiftAnimationAckImpl(playbackId, reason).catch(() => undefined)
       }}
     />
   )

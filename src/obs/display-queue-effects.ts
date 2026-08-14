@@ -44,6 +44,8 @@ type VfxCompletionWaiter = {
 type DisplayQueueEffectsDependencies = {
     obsManager: {
         call: (requestType: string, payload: Record<string, unknown>) => Promise<unknown>;
+        addEventListener?: (eventName: string, handler: (payload?: Record<string, unknown>) => void) => void;
+        removeEventListener?: (eventName: string, handler: (payload?: Record<string, unknown>) => void) => void;
     };
     sourcesManager: {
         clearTextSource: (sourceName: string) => Promise<void>;
@@ -185,6 +187,7 @@ class DisplayQueueEffects {
         }
 
         const playbackId = crypto.randomUUID();
+        const settledWaiter = this.createGiftAnimationCompletionWaiter(playbackId, durationMs);
         this.eventBus.emit('display:gift-animation', {
             playbackId,
             type: item.type,
@@ -202,7 +205,44 @@ class DisplayQueueEffects {
             durationMs
         });
 
+        await settledWaiter.promise;
         return durationMs;
+    }
+
+    createGiftAnimationCompletionWaiter(playbackId: string, durationMs: number) {
+        const eventBus = this.eventBus;
+        if (!eventBus || (!eventBus.subscribe && !eventBus.on)) {
+            return { promise: Promise.resolve(), cancel: () => {} };
+        }
+        const timeoutMs = Math.min(Math.max(durationMs + 1000, 1000), 60000);
+        let unsubscribe = () => {};
+        let timeoutHandle: ReturnType<typeof safeSetTimeout> | undefined;
+        let cancelWait = () => {};
+        const promise = new Promise<void>((resolve) => {
+            let settled = false;
+            const cleanup = () => {
+                if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
+                unsubscribe();
+            };
+            const settle = () => {
+                if (settled) return;
+                settled = true;
+                cleanup();
+                resolve();
+            };
+            const handler = (payload?: Record<string, unknown>) => {
+                if (payload?.playbackId === playbackId) settle();
+            };
+            if (typeof eventBus.subscribe === 'function') {
+                unsubscribe = eventBus.subscribe('display:gift-animation-settled', handler);
+            } else {
+                eventBus.on?.('display:gift-animation-settled', handler);
+                unsubscribe = () => eventBus.off?.('display:gift-animation-settled', handler);
+            }
+            timeoutHandle = safeSetTimeout(settle, timeoutMs);
+            cancelWait = settle;
+        });
+        return { promise, cancel: () => cancelWait() };
     }
 
     isChatTTSEnabled() {
@@ -340,17 +380,6 @@ class DisplayQueueEffects {
         logger.debug(`[Display Queue] Gift notification - concurrent execution for ${username}`, 'display-queue');
         const allPromises: Array<Promise<unknown>> = [];
         const animationPromise = this.resolveAndEmitGiftAnimation(item)
-            .then((animationDurationMs) => {
-                if (!(animationDurationMs > 0)) {
-                    return;
-                }
-
-                const previousHold = Number(item?.holdDurationMs);
-                const nextHold = Number.isFinite(previousHold) && previousHold > 0
-                    ? Math.max(previousHold, animationDurationMs)
-                    : animationDurationMs;
-                item.holdDurationMs = nextHold;
-            })
             .catch((error) => {
                 this.handleDisplayQueueError('[Gift] Gift animation resolution failed', error, {
                     platform: item?.platform,
@@ -471,30 +500,67 @@ class DisplayQueueEffects {
                 return false;
             }
 
-            const promises: Array<Promise<unknown>> = [];
-
-            promises.push(this.obsManager.call('TriggerMediaInputAction', {
-                inputName: giftVideoSource,
+            const sources = [...new Set([giftVideoSource, giftAudioSource])];
+            const completionWaiters = sources.map((source) => this.waitForGiftMediaCompletion(source));
+            const completionPromises = completionWaiters.map((waiter) => waiter.promise);
+            const promises = sources.map((source) => this.obsManager.call('TriggerMediaInputAction', {
+                inputName: source,
                 mediaAction: 'OBS_WEBSOCKET_MEDIA_INPUT_ACTION_RESTART'
             }).catch(err => {
-                this.handleDisplayQueueError(`[Gift] Error starting gift video source "${giftVideoSource}"`, err);
+                this.handleDisplayQueueError(`[Gift] Error starting gift media source "${source}"`, err);
                 throw err;
             }));
 
-            promises.push(this.obsManager.call('TriggerMediaInputAction', {
-                inputName: giftAudioSource,
-                mediaAction: 'OBS_WEBSOCKET_MEDIA_INPUT_ACTION_RESTART'
-            }).catch(err => {
-                this.handleDisplayQueueError(`[Gift] Error starting gift audio source "${giftAudioSource}"`, err);
-                throw err;
-            }));
-
-            await Promise.all(promises);
+            try {
+                await Promise.all(promises);
+                await Promise.all(completionPromises);
+            } catch (error) {
+                completionWaiters.forEach((waiter) => waiter.cancel());
+                throw error;
+            }
             return true;
         } catch (error) {
             this.handleDisplayQueueError('[Display Queue] Error playing gift video/audio', error);
             return false;
         }
+    }
+
+    waitForGiftMediaCompletion(sourceName: string, timeoutMs = 10000) {
+        const obs = this.obsManager;
+        if (typeof obs.addEventListener !== 'function' || typeof obs.removeEventListener !== 'function') {
+            return { promise: Promise.resolve(), cancel: () => {} };
+        }
+        const addEventListener = obs.addEventListener;
+        const removeEventListener = obs.removeEventListener;
+        let cancelWait = () => {};
+        const promise = new Promise<void>((resolve) => {
+            let settled = false;
+            let timeoutHandle: ReturnType<typeof safeSetTimeout> | undefined;
+            const handler = (payload?: Record<string, unknown>) => {
+                if (payload?.inputName !== sourceName || settled) return;
+                settled = true;
+                cleanup();
+                resolve();
+            };
+            const cleanup = () => {
+                removeEventListener.call(obs, 'MediaInputPlaybackEnded', handler);
+                if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
+            };
+            cancelWait = () => {
+                if (settled) return;
+                settled = true;
+                cleanup();
+                resolve();
+            };
+            addEventListener.call(obs, 'MediaInputPlaybackEnded', handler);
+            timeoutHandle = safeSetTimeout(() => {
+                if (settled) return;
+                settled = true;
+                cleanup();
+                resolve();
+            }, timeoutMs);
+        });
+        return { promise, cancel: () => cancelWait() };
     }
 
     buildVfxMatch(config: Record<string, unknown>): VfxMatch {

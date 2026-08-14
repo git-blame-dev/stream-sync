@@ -21,6 +21,26 @@ function readCssBlock(cssText: string, selector: string): string {
 }
 
 describe("GUI shared styles behavior", () => {
+  it("reuses canonical overlay presentation in the serialized top notification slot", () => {
+    const cssText = readSharedStyles();
+    const notificationShellBlock = readCssBlock(cssText, ".gui-shell--notifications");
+    expect(cssText).toContain(".gui-shell--notifications {");
+    expect(cssText).toContain("@keyframes gui-notification-row-enter");
+    expect(cssText).toContain("@keyframes gui-notification-row-exit");
+    expect(cssText).toContain(".gui-row--overlay-enter.gui-row--notification-enter {");
+    expect(cssText).toContain(".gui-row--overlay-enter.gui-row--notification-exit {");
+    expect(cssText).toContain("animation: gui-notification-row-enter var(--notification-transition-ms) ease-out both;");
+    expect(cssText).toContain("animation: gui-notification-row-exit var(--notification-transition-ms) ease-out forwards;");
+    expect(cssText).toContain("transform: translateY(-100%);");
+    expect(notificationShellBlock).toContain("--gui-avatar-size-current: var(--gui-overlay-avatar-size);");
+    expect(notificationShellBlock).toContain("--gui-platform-icon-size-current: var(--gui-overlay-platform-icon-size);");
+    expect(notificationShellBlock).toContain("--gui-row-body-font-size-current: var(--gui-overlay-row-body-font-size);");
+    expect(notificationShellBlock).toContain("justify-content: flex-start;");
+    expect(cssText).not.toContain(".gui-shell--notifications .gui-row__monetization-image-clip");
+    expect(cssText).not.toContain(".gui-shell--notifications .gui-row--monetization .gui-row__content");
+    expect(cssText).toContain("@media (prefers-reduced-motion: reduce)");
+  });
+
   it("uses mode-specific gui size tokens for row visuals and typography", () => {
     const cssText = readSharedStyles();
     const pageBlock = readCssBlock(cssText, "html, body");

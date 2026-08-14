@@ -1,10 +1,10 @@
 import React, { useEffect, useRef } from 'react'
 
-import type { GuiGiftAnimationEffectEnvelope } from '../types'
+import type { GuiGiftAnimationCompletionReason, GuiGiftAnimationEffectEnvelope } from '../types'
 
 interface GiftAnimationLayerProps {
   effect: GuiGiftAnimationEffectEnvelope | null
-  onComplete: (playbackId: string) => void
+  onComplete: (playbackId: string, reason: GuiGiftAnimationCompletionReason) => void
 }
 
 function clampFrame(frame: [number, number, number, number], sourceWidth: number, sourceHeight: number): [number, number, number, number] {
@@ -56,12 +56,12 @@ export function GiftAnimationLayer({ effect, onComplete }: GiftAnimationLayerPro
 
     const activePlaybackId = effect.playbackId
     let playbackCompleted = false
-    const finishPlayback = () => {
+    const finishPlayback = (reason: GuiGiftAnimationCompletionReason) => {
       if (playbackCompleted || currentPlaybackIdRef.current !== activePlaybackId) {
         return
       }
       playbackCompleted = true
-      onCompleteRef.current(activePlaybackId)
+      onCompleteRef.current(activePlaybackId, reason)
     }
     const { config } = effect
     const rgbFrame = clampFrame(config.rgbFrame, config.sourceWidth, config.sourceHeight)
@@ -124,7 +124,7 @@ export function GiftAnimationLayer({ effect, onComplete }: GiftAnimationLayerPro
     const rgbContext = rgbBuffer.getContext('2d', { willReadFrequently: true })
     const alphaContext = alphaBuffer?.getContext('2d', { willReadFrequently: true }) || null
     if (!canvasContext || !rgbContext) {
-      finishPlayback()
+      finishPlayback('canvas-unavailable')
       return
     }
 
@@ -139,7 +139,7 @@ export function GiftAnimationLayer({ effect, onComplete }: GiftAnimationLayerPro
       }
 
       void video.play().catch(() => {
-        finishPlayback()
+        finishPlayback('play-rejected')
       })
     }
 
@@ -232,8 +232,8 @@ mergedData.data[offset + 3] = alpha
     video.playsInline = true
     video.preload = 'auto'
     video.src = effect.assetUrl
-    video.onended = finishPlayback
-    video.onerror = finishPlayback
+    video.onended = () => finishPlayback('ended')
+    video.onerror = () => finishPlayback('media-error')
     video.onpause = tryResumePlayback
     video.onloadeddata = () => {
       if (currentPlaybackIdRef.current !== activePlaybackId) {
@@ -245,7 +245,7 @@ mergedData.data[offset + 3] = alpha
     }
 
     timeoutRef.current = window.setTimeout(() => {
-      finishPlayback()
+      finishPlayback('timeout')
     }, Math.max(1000, effect.durationMs + 500))
 
     return () => {

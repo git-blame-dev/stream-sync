@@ -32,6 +32,7 @@ describe("Overlay main bootstrap behavior", () => {
       readOverlayRuntimeConfigImpl: () => ({
         overlayMaxMessages: 5,
         overlayMaxLinesPerMessage: 4,
+        overlayFeedMode: "chat",
       }),
       createRootImpl: () => ({
         render: (element: ReactNode) => {
@@ -46,6 +47,7 @@ describe("Overlay main bootstrap behavior", () => {
     expect(renderedElement!.props.mode).toBe("overlay");
     expect(renderedElement!.props.overlayMaxMessages).toBe(5);
     expect(renderedElement!.props.overlayMaxLinesPerMessage).toBe(4);
+    expect(renderedElement!.props.feedMode).toBe("chat");
   });
 
   it("returns false when no target is available", () => {

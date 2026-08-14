@@ -21,11 +21,13 @@ const notificationItem = (username: string): DisplayQueueItem => ({
   data: { username },
 });
 
-function createQueue(options: { rowIntervalMs?: number; readyError?: Error } = {}) {
+function createQueue(options: { rowIntervalMs?: number; readyError?: Error; notificationsEnabled?: boolean } = {}) {
   const rows: Array<Record<string, unknown>> = [];
+  const lifecycle: Array<Record<string, unknown>> = [];
   const delays: number[] = [];
   const eventBus = new EventEmitter();
   eventBus.on("display:row", (row) => rows.push(row as Record<string, unknown>));
+  eventBus.on("display:notification-lifecycle", (event) => lifecycle.push(event as Record<string, unknown>));
 
   const queue = new DisplayQueue(
     {
@@ -39,6 +41,7 @@ function createQueue(options: { rowIntervalMs?: number; readyError?: Error } = {
     },
     {
       autoProcess: false,
+      gui: { enableNotifications: options.notificationsEnabled === true },
       ...(options.rowIntervalMs === undefined ? {} : { rowIntervalMs: options.rowIntervalMs }),
     },
     { PRIORITY_LEVELS },
@@ -47,6 +50,9 @@ function createQueue(options: { rowIntervalMs?: number; readyError?: Error } = {
       delay: async (ms) => {
         delays.push(ms);
       },
+      ...(options.notificationsEnabled
+        ? { notificationDelay: async (ms: number) => { delays.push(ms); } }
+        : {}),
       sourcesManager: {
         updateTextSource: async () => {},
         clearTextSource: async () => {},
@@ -57,7 +63,7 @@ function createQueue(options: { rowIntervalMs?: number; readyError?: Error } = {
   queue.effects.handleChatTTSEffects = async () => {};
   queue.effects.handleNotificationEffects = async () => {};
 
-  return { delays, queue, rows };
+  return { delays, lifecycle, queue, rows };
 }
 
 describe("DisplayQueue GUI-primary control", () => {
@@ -97,6 +103,22 @@ describe("DisplayQueue GUI-primary control", () => {
 
     expect(item.eventId).toBeString();
     expect(rows[0]?.eventId).toBe(item.eventId);
+  });
+
+  it("emits coordinated notification rows and lifecycle with the same event ID", async () => {
+    const { lifecycle, queue, rows } = createQueue({ notificationsEnabled: true });
+    const item = notificationItem("coordinated-user");
+    queue.addItem(item);
+
+    await queue.processQueue();
+    await queue.effectChain;
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.eventId).toBe(item.eventId);
+    expect(lifecycle.map((event) => ({ eventId: event.eventId, phase: event.phase }))).toEqual([
+      { eventId: item.eventId, phase: "started" },
+      { eventId: item.eventId, phase: "exit-started" },
+    ]);
   });
 
   it("uses the configured interval for every presented row", async () => {

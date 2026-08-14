@@ -23,6 +23,11 @@ import type { AppLogger } from '../../core/logger/types';
 import type { OperatorControlService } from '../operator/operator-control-service';
 import type { OperatorLogSource } from '../operator/operator-log-source';
 import { createOperatorApi, isOperatorRoute } from './operator-api';
+import {
+    DISPLAY_EVENT_TYPES,
+    type GiftAnimationSettledPayload,
+    type GiftAnimationSettledReason
+} from '../../interfaces/DisplayEvents';
 
 type GuiTransportLogger = Partial<AppLogger> & {
     debug?: (message: string, scope: string, data?: unknown) => void;
@@ -31,6 +36,7 @@ type GuiTransportLogger = Partial<AppLogger> & {
 
 type GuiTransportEventBus = {
     subscribe: (eventName: string, handler: (payload: unknown) => void | Promise<void>) => (() => void) | void;
+    emit?: (eventName: string, payload: unknown) => void;
 };
 
 type DisplayRowMapperInput = Parameters<ReturnType<typeof createEventToGuiContractMapper>['mapDisplayRow']>[0];
@@ -148,6 +154,7 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
     let serverRuntimeErrorHandler: ((error: Error) => void) | null = null;
     let unsubscribeDisplayRows: (() => void) | null = null;
     let unsubscribeDisplayEffects: (() => void) | null = null;
+    let unsubscribeDisplayLifecycle: (() => void) | null = null;
     const clients = new Set<ServerResponse<IncomingMessage>>();
     const chatClients = new Set<ServerResponse<IncomingMessage>>();
     const chatFeedEnabled = guiConfig.enableChatFeed === true;
@@ -165,11 +172,41 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
     const CHAT_MAX_PACKET_BYTES = 16 * 1024;
     const CHAT_MAX_BUFFERED_BYTES = 64 * 1024;
     const runtimeAssetRegistry = new Map<string, RuntimeAssetRecord>();
+    const giftPlaybackRegistry = new Map<string, { expiresAt: number; settled: boolean }>();
     let dispatchChain = Promise.resolve();
     let dispatchEpoch = 0;
 
     const RUNTIME_ASSET_MAX_ENTRIES = 64;
     const RUNTIME_ASSET_TTL_MS = 5 * 60 * 1000;
+    const GIFT_PLAYBACK_MAX_ENTRIES = 128;
+    const GIFT_PLAYBACK_TTL_MS = 10 * 60 * 1000;
+    const GIFT_ANIMATION_SETTLED_REASONS = new Set<GiftAnimationSettledReason>([
+        'ended',
+        'media-error',
+        'play-rejected',
+        'canvas-unavailable',
+        'timeout'
+    ]);
+
+    const pruneGiftPlaybackRegistry = () => {
+        const now = Date.now();
+        for (const [id, record] of giftPlaybackRegistry) {
+            if (record.expiresAt <= now) giftPlaybackRegistry.delete(id);
+        }
+        while (giftPlaybackRegistry.size > GIFT_PLAYBACK_MAX_ENTRIES) {
+            const oldest = giftPlaybackRegistry.keys().next().value;
+            if (typeof oldest !== 'string') break;
+            giftPlaybackRegistry.delete(oldest);
+        }
+    };
+
+    const registerGiftPlayback = (playbackId: unknown) => {
+        if (typeof playbackId !== 'string' || !crypto.randomUUID) return;
+        if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(playbackId)) return;
+        pruneGiftPlaybackRegistry();
+        giftPlaybackRegistry.set(playbackId, { expiresAt: Date.now() + GIFT_PLAYBACK_TTL_MS, settled: false });
+        pruneGiftPlaybackRegistry();
+    };
 
     const normalizeRuntimeAssetRecord = (record: unknown): RuntimeAssetRecord | null => {
         if (!record || typeof record !== 'object') {
@@ -309,6 +346,27 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
         }
     };
 
+    const subscribeToDisplayLifecycle = () => {
+        if (!eventBus || typeof eventBus.subscribe !== 'function') return;
+        const unsubscribe = eventBus.subscribe(DISPLAY_EVENT_TYPES.NOTIFICATION_LIFECYCLE, (payload: unknown) => {
+            enqueueDispatch(() => {
+                const record = toTransportRecord(payload);
+                const eventId = typeof record.eventId === 'string' ? record.eventId : '';
+                const phase = record.phase;
+                const timestamp = Number(record.timestamp);
+                if (!eventId || eventId.length > 256 ||
+                    (phase !== 'started' && phase !== 'exit-started') ||
+                    !Number.isFinite(timestamp)) return;
+                sendSse({
+                    __guiEvent: 'notification-lifecycle',
+                    eventId,
+                    phase
+                });
+            });
+        });
+        unsubscribeDisplayLifecycle = typeof unsubscribe === 'function' ? unsubscribe : null;
+    };
+
     const publishChatMessage = (platform: string, payload: Record<string, unknown>) => {
         if (!chatFeedEnabled) {
             return;
@@ -410,6 +468,8 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
                     config: payloadRecord.animationConfig
                 };
 
+                registerGiftPlayback(effectPayload.playbackId);
+
                 logDebug('Dispatching gift animation effect packet', {
                     playbackId: effectPayload.playbackId || null,
                     durationMs: effectPayload.durationMs || null,
@@ -437,6 +497,10 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
         }
         unsubscribeDisplayEffects = null;
     };
+    const unsubscribeFromDisplayLifecycle = () => {
+        unsubscribeDisplayLifecycle?.();
+        unsubscribeDisplayLifecycle = null;
+    };
 
     const isRouteAvailable = (route: string): boolean => {
         if (route === '/health') {
@@ -447,10 +511,15 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
             return route === '/demo';
         }
 
-        return route === '/dock'
-            || route === '/overlay'
-            || route === '/operator'
-            || route === '/tiktok-animations';
+        if (route === '/dock') return guiConfig.enableDock === true;
+        if (route === '/overlay') return guiConfig.enableOverlay === true;
+        if (route === '/notifications') return guiConfig.enableNotifications === true;
+        if (route === '/operator') return operatorEnabled && !!operatorApi;
+        if (route === '/tiktok-animations') {
+            return guiConfig.enableDock === true || guiConfig.enableOverlay === true;
+        }
+
+        return false;
     };
 
     const requestHandler = (req: IncomingMessage, res: ServerResponse<IncomingMessage>) => {
@@ -506,6 +575,69 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
                     clientCount: clients.size
                 });
             });
+            return;
+        }
+
+        if (url === '/api/v1/gui/gift-animations/ack') {
+            if (demoOnly) {
+                sendNotFound(res);
+                return;
+            }
+            if (req.method !== 'POST') {
+                res.writeHead(405, { Allow: 'POST' }); res.end(); return;
+            }
+            const origin = req.headers.origin;
+            const host = req.headers.host;
+            let sameOrigin = false;
+            try {
+                const parsed = typeof origin === 'string' ? new URL(origin) : null;
+                sameOrigin = !!parsed && parsed.protocol === 'http:' && parsed.host === host &&
+                    ['127.0.0.1', 'localhost', '[::1]', '::1'].includes(parsed.hostname);
+            } catch { /* invalid origin */ }
+            if (!sameOrigin || req.headers['x-stream-sync-request'] !== '1' ||
+                typeof req.headers['content-type'] !== 'string' ||
+                !req.headers['content-type'].toLowerCase().startsWith('application/json')) {
+                res.writeHead(403); res.end(); return;
+            }
+            void (async () => {
+                try {
+                    const length = Number(req.headers['content-length']);
+                    if (Number.isFinite(length) && length > 2048) throw new RangeError('Request body too large');
+                    const chunks: Buffer[] = []; let size = 0;
+                    for await (const chunk of req) {
+                        const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+                        size += buffer.length;
+                        if (size > 2048) throw new RangeError('Request body too large');
+                        chunks.push(buffer);
+                    }
+                    const body = JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;
+                    const record = toTransportRecord(body);
+                    const keys = Object.keys(record).sort().join(',');
+                    const playbackId = record.playbackId;
+                    const reason = record.reason;
+                    if (keys !== 'playbackId,reason' || typeof playbackId !== 'string' ||
+                        !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(playbackId) ||
+                        typeof reason !== 'string' ||
+                        !GIFT_ANIMATION_SETTLED_REASONS.has(reason as GiftAnimationSettledReason)) {
+                        throw new TypeError('Invalid gift animation acknowledgement');
+                    }
+                    pruneGiftPlaybackRegistry();
+                    const playback = giftPlaybackRegistry.get(playbackId);
+                    if (!playback) { res.writeHead(404); res.end(); return; }
+                    if (playback.settled) { res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ first: false })); return; }
+                    playback.settled = true;
+                    eventBus?.emit?.(
+                        DISPLAY_EVENT_TYPES.GIFT_ANIMATION_SETTLED,
+                        { playbackId, reason: reason as GiftAnimationSettledReason } satisfies GiftAnimationSettledPayload
+                    );
+                    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+                    res.end(JSON.stringify({ first: true }));
+                } catch (error) {
+                    const status = error instanceof RangeError ? 413 : 400;
+                    res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
+                    res.end(JSON.stringify({ error: error instanceof Error ? error.message : 'Invalid request' }));
+                }
+            })();
             return;
         }
 
@@ -774,6 +906,24 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
             return;
         }
 
+        if (url === '/notifications') {
+            if (!requireGetRequest(req, res)) {
+                return;
+            }
+            if (guiConfig.enableNotifications === true) {
+                sendNoCacheHtml(res, renderActivePage({
+                    title: 'Stream Sync Notifications',
+                    runtimeKind: 'notifications',
+                    scriptKind: 'dock',
+                    transparent: true,
+                    guiConfig
+                }), sendBody);
+                return;
+            }
+            sendNoCacheHtml(res, renderDisabledPage('Stream Sync Notifications', 'Notifications disabled', true), sendBody);
+            return;
+        }
+
         if (url === '/dock') {
             if (!requireGetRequest(req, res)) {
                 return;
@@ -871,6 +1021,7 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
             operatorApi?.start();
             subscribeToDisplayRows();
             subscribeToDisplayEffects();
+            subscribeToDisplayLifecycle();
 
             serverRuntimeErrorHandler = (error: Error) => {
                 active = false;
@@ -903,6 +1054,7 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
             } catch (error) {
                 unsubscribeFromDisplayRows();
                 unsubscribeFromDisplayEffects();
+                unsubscribeFromDisplayLifecycle();
                 operatorApi?.stop();
                 if (server) {
                     if (serverRuntimeErrorHandler && typeof server.removeListener === 'function') {
@@ -931,8 +1083,10 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
         dispatchEpoch += 1;
         unsubscribeFromDisplayRows();
         unsubscribeFromDisplayEffects();
+        unsubscribeFromDisplayLifecycle();
         await dispatchChain;
         runtimeAssetRegistry.clear();
+        giftPlaybackRegistry.clear();
         operatorApi?.stop();
         for (const client of clients) {
             try {

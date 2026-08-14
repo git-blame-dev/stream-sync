@@ -1,4 +1,6 @@
 export type GuiRowKind = 'chat' | 'command' | 'greeting' | 'farewell' | 'notification'
+export type GuiAppMode = 'dock' | 'overlay' | 'tiktok-animations' | 'notifications'
+export type GuiFeedMode = 'all' | 'chat' | 'non-chat'
 export type GuiMemberTheme = 'red'
 
 export type GuiMessagePart =
@@ -44,4 +46,12 @@ export interface GuiGiftAnimationEffectEnvelope {
   durationMs: number
   assetUrl: string
   config: GuiGiftAnimationConfig
+}
+
+export type GuiGiftAnimationCompletionReason = 'ended' | 'media-error' | 'play-rejected' | 'canvas-unavailable' | 'timeout'
+export type GuiNotificationLifecyclePhase = 'started' | 'exit-started'
+export interface GuiNotificationLifecycleEnvelope {
+  __guiEvent: 'notification-lifecycle'
+  eventId: string
+  phase: GuiNotificationLifecyclePhase
 }
