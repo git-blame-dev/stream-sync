@@ -64,6 +64,7 @@ type GreetingProfile = {
     profileId?: string;
     command?: string;
     memberSpriteUrl?: string;
+    memberTheme?: 'red';
 } & RouterRecord;
 
 type FirstMessageState = {
@@ -548,6 +549,9 @@ class ChatNotificationRouter {
         }
         if (normalizedData.isPaypiggy === true && typeof greetingProfile?.memberSpriteUrl === 'string') {
             chatData.memberSpriteUrl = greetingProfile.memberSpriteUrl;
+        }
+        if (normalizedData.isPaypiggy === true && greetingProfile?.memberTheme === 'red') {
+            chatData.memberTheme = greetingProfile.memberTheme;
         }
 
         return {

@@ -102,6 +102,20 @@ describe("GUI feed store behavior", () => {
     expect(store.getRows()[3]?.memberSpriteUrl).toBeUndefined();
   });
 
+  it("retains allowlisted member themes only on member chat rows", () => {
+    const store = createGuiFeedStore();
+
+    store.pushEvent({ ...createRow(1), isPaypiggy: true, memberTheme: "red" });
+    store.pushEvent({ ...createRow(2), isPaypiggy: true, memberTheme: "blue" });
+    store.pushEvent({ ...createRow(3), isPaypiggy: false, memberTheme: "red" });
+    store.pushEvent({ ...createRow(4), kind: "notification", memberTheme: "red" });
+
+    expect(store.getRows()[0]?.memberTheme).toBe("red");
+    expect(store.getRows()[1]?.memberTheme).toBeUndefined();
+    expect(store.getRows()[2]?.memberTheme).toBeUndefined();
+    expect(store.getRows()[3]?.memberTheme).toBeUndefined();
+  });
+
   it("preserves parts arrays emitted by GUI mapper", () => {
     const store = createGuiFeedStore();
 

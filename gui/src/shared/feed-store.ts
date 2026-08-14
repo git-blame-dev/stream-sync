@@ -1,4 +1,4 @@
-import type { GuiRowDto } from './types'
+import type { GuiMemberTheme, GuiRowDto } from './types'
 
 const EMPTY_ROW: GuiRowDto = {
   type: '',
@@ -26,6 +26,10 @@ function normalizeMemberSpriteUrl(value: unknown): string | undefined {
   } catch {
     return undefined
   }
+}
+
+function normalizeMemberTheme(value: unknown): GuiMemberTheme | undefined {
+  return normalizeString(value).toLowerCase() === 'red' ? 'red' : undefined
 }
 
 function normalizeParts(value: unknown): GuiRowDto['parts'] {
@@ -113,6 +117,9 @@ function normalizeRow(input: unknown): GuiRowDto {
   const memberSpriteUrl = kind === 'chat' && isPaypiggy === true
     ? normalizeMemberSpriteUrl(row.memberSpriteUrl)
     : undefined
+  const memberTheme = kind === 'chat' && isPaypiggy === true
+    ? normalizeMemberTheme(row.memberTheme)
+    : undefined
 
   return {
     ...(normalizeString(row.eventId) ? { eventId: normalizeString(row.eventId) } : {}),
@@ -125,6 +132,7 @@ function normalizeRow(input: unknown): GuiRowDto {
     ...(badgeImages ? { badgeImages } : {}),
     ...(isPaypiggy === null ? {} : { isPaypiggy }),
     ...(memberSpriteUrl ? { memberSpriteUrl } : {}),
+    ...(memberTheme ? { memberTheme } : {}),
     avatarUrl: normalizeString(row.avatarUrl),
     timestamp: row.timestamp === null ? null : normalizeString(row.timestamp)
   }

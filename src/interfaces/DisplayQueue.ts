@@ -28,6 +28,7 @@ type DisplayQueueItemData = Record<string, unknown> & {
     badgeImages?: unknown;
     isPaypiggy?: boolean;
     memberSpriteUrl?: string;
+    memberTheme?: 'red';
 };
 
 type NotificationQueueItemData = DisplayQueueItemData & {

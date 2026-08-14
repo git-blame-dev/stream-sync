@@ -746,6 +746,28 @@ describe("ConfigValidator simple command sections", () => {
     expect(normalized).not.toHaveProperty("memberSprites");
   });
 
+  it("merges validated member themes into every profile identity", () => {
+    const normalized = ConfigValidator.normalize({
+      greetings: { profileMain: "twitch:viewer|youtube:@viewer, !water" },
+      memberThemes: { profileMain: " red " },
+    });
+
+    expect(normalized.greetings.customVfxProfiles).toEqual({
+      "twitch:viewer": { profileId: "profileMain", command: "!water", memberTheme: "red" },
+      "youtube:viewer": { profileId: "profileMain", command: "!water", memberTheme: "red" },
+    });
+    expect(normalized).not.toHaveProperty("memberThemes");
+  });
+
+  it("rejects unsupported or orphaned member themes", () => {
+    expect(() => ConfigValidator.normalize({ greetings: { profile: "twitch:viewer, !water" }, memberThemes: { other: "red" } })).toThrow(
+      "memberThemes.other does not match a greetings profile",
+    );
+    expect(() => ConfigValidator.normalize({ greetings: { profile: "twitch:viewer, !water" }, memberThemes: { profile: "blue" } })).toThrow(
+      "memberThemes.profile must be one of: red",
+    );
+  });
+
   it("rejects unsafe or orphaned member sprite entries", () => {
     expect(() => ConfigValidator.normalize({ greetings: { profile: "twitch:viewer, !water" }, memberSprites: { other: "https://cdn.example/a" } })).toThrow();
     expect(() => ConfigValidator.normalize({ greetings: { profile: "twitch:viewer, !water" }, memberSprites: { profile: "http://cdn.example/a" } })).toThrow();

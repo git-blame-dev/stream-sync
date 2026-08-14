@@ -328,6 +328,34 @@ describe("ChatNotificationRouter", () => {
     expect(direct.data.memberSpriteUrl).toBeUndefined();
   });
 
+  it("attaches the resolved member theme only to paypiggy chat rows", async () => {
+    const { router, runtime } = createRouter();
+    runtime.config.greetings = {
+      customVfxProfiles: {
+        "twitch:test-user-gamma": {
+          profileId: "profile",
+          command: "!water",
+          memberTheme: "red",
+        },
+      },
+    };
+    await router.handleChatMessage("twitch", {
+      ...baseMessage,
+      isPaypiggy: true,
+    });
+
+    const paypiggy = getQueuedItems(runtime).find((item) => item.type === "chat");
+    expect(paypiggy?.data.memberTheme).toBe("red");
+    const direct = router.buildChatMessageItem(
+      "twitch",
+      { ...baseMessage, isPaypiggy: false },
+      "hello",
+      [],
+      { memberTheme: "red" },
+    );
+    expect(direct.data.memberTheme).toBeUndefined();
+  });
+
   it("resolves member profiles with normalized platform casing", () => {
     const { router, runtime } = createRouter();
     runtime.config.greetings = {

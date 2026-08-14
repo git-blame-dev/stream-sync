@@ -1,4 +1,5 @@
 export type GuiRowKind = 'chat' | 'command' | 'greeting' | 'farewell' | 'notification'
+export type GuiMemberTheme = 'red'
 
 export type GuiMessagePart =
   | { type: 'text'; text: string }
@@ -21,6 +22,7 @@ export interface GuiRowDto {
   badgeImages?: GuiBadgeImage[]
   isPaypiggy?: boolean
   memberSpriteUrl?: string
+  memberTheme?: GuiMemberTheme
   avatarUrl: string
   timestamp: string | null
 }

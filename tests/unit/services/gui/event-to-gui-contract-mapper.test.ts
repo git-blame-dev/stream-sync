@@ -255,6 +255,26 @@ describe("Event-to-GUI contract mapper behavior", () => {
     expect(nonMember?.memberSpriteUrl).toBeUndefined();
   });
 
+  it("maps only allowlisted member themes onto member chat DTOs", async () => {
+    const mapper = createMapper();
+    const valid = await mapper.mapDisplayRow({
+      type: "chat",
+      data: { message: "hello", isPaypiggy: true, memberTheme: "red" },
+    });
+    const invalid = await mapper.mapDisplayRow({
+      type: "chat",
+      data: { message: "hello", isPaypiggy: true, memberTheme: "blue" },
+    });
+    const nonMember = await mapper.mapDisplayRow({
+      type: "chat",
+      data: { message: "hello", isPaypiggy: false, memberTheme: "red" },
+    });
+
+    expect(valid?.memberTheme).toBe("red");
+    expect(invalid?.memberTheme).toBeUndefined();
+    expect(nonMember?.memberTheme).toBeUndefined();
+  });
+
   it("maps canonical message.parts for chat rows", async () => {
     const mapper = createMapper({ messageCharacterLimit: 0 });
 

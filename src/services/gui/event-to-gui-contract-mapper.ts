@@ -1,4 +1,4 @@
-import type { GuiBadgeImage, GuiMessagePart, GuiRowDto, GuiRowKind } from '../../../gui/src/shared/types';
+import type { GuiBadgeImage, GuiMemberTheme, GuiMessagePart, GuiRowDto, GuiRowKind } from '../../../gui/src/shared/types';
 import { DEFAULT_AVATAR_URL } from '../../constants/avatar';
 import { getValidMessageParts, normalizeBadgeImages } from '../../utils/message-parts';
 
@@ -94,6 +94,10 @@ function normalizeMemberSpriteUrl(value: unknown): string | undefined {
     } catch {
         return undefined;
     }
+}
+
+function normalizeMemberTheme(value: unknown): GuiMemberTheme | undefined {
+    return normalizeString(value).toLowerCase() === 'red' ? 'red' : undefined;
 }
 
 function toFiniteNumber(value: unknown, fallback: number): number {
@@ -292,6 +296,10 @@ return cachedAvatar;
                 ? normalizeMemberSpriteUrl(data.memberSpriteUrl)
                 : undefined;
             if (memberSpriteUrl) mapped.memberSpriteUrl = memberSpriteUrl;
+            const memberTheme = mapped.isPaypiggy
+                ? normalizeMemberTheme(data.memberTheme)
+                : undefined;
+            if (memberTheme) mapped.memberTheme = memberTheme;
             if (badgeImages.length > 0) {
                 mapped.badgeImages = badgeImages;
             }

@@ -215,7 +215,7 @@ class ConfigValidator {
             follows: ConfigValidator._normalizeFollowsSection(rawConfig.follows || {}),
             raids: ConfigValidator._normalizeRaidsSection(rawConfig.raids || {}),
             paypiggies: ConfigValidator._normalizePaypiggiesSection(rawConfig.paypiggies || {}),
-            greetings: ConfigValidator._normalizeGreetingsSection(rawConfig.greetings || {}, rawConfig.memberSprites),
+            greetings: ConfigValidator._normalizeGreetingsSection(rawConfig.greetings || {}, rawConfig.memberSprites, rawConfig.memberThemes),
             shares: ConfigValidator._normalizeSharesSection(rawConfig.shares || {})
         };
     }
@@ -478,8 +478,8 @@ class ConfigValidator {
         };
     }
 
-    static _normalizeGreetingsSection(raw: RawConfigSection, rawMemberSprites?: RawConfigSection): NormalizedConfigSection {
-        const customVfxProfiles: Record<string, { profileId: string; command: string; memberSpriteUrl?: string }> = {};
+    static _normalizeGreetingsSection(raw: RawConfigSection, rawMemberSprites?: RawConfigSection, rawMemberThemes?: RawConfigSection): NormalizedConfigSection {
+        const customVfxProfiles: Record<string, { profileId: string; command: string; memberSpriteUrl?: string; memberTheme?: 'red' }> = {};
         const profileIds = new Set<string>();
         for (const [key, value] of Object.entries(raw)) {
             if (key === 'command') {
@@ -531,6 +531,24 @@ class ConfigValidator {
                 for (const profile of Object.values(customVfxProfiles)) {
                     if (profile.profileId === normalizedProfileId) {
                         profile.memberSpriteUrl = canonicalUrl;
+                    }
+                }
+            }
+        }
+
+        if (rawMemberThemes !== undefined) {
+            for (const [profileId, value] of Object.entries(rawMemberThemes)) {
+                const normalizedProfileId = profileId.trim();
+                if (!profileIds.has(normalizedProfileId)) {
+                    throw new Error(`memberThemes.${profileId} does not match a greetings profile`);
+                }
+                const memberTheme = typeof value === 'string' ? value.trim().toLowerCase() : '';
+                if (memberTheme !== 'red') {
+                    throw new Error(`memberThemes.${profileId} must be one of: red`);
+                }
+                for (const profile of Object.values(customVfxProfiles)) {
+                    if (profile.profileId === normalizedProfileId) {
+                        profile.memberTheme = memberTheme;
                     }
                 }
             }
