@@ -109,9 +109,41 @@ Use one of these local files in OBS:
 <repo>\obs\dock.html
 <repo>\obs\demo.html
 <repo>\obs\tiktok-animations.html
+<repo>\obs\notifications.html
 ```
 
 The default GUI origin is `http://127.0.0.1:3399`.
+
+The `/notifications` route is enabled with `enableNotifications = true` in the
+`[gui]` section. `dockFeedMode` and `overlayFeedMode` accept `all`, `chat`, or
+`non-chat`. The `/notifications` OBS launcher is fixed to the `non-chat` feed:
+commands, greetings, farewells, follows, shares, raids, gifts,
+Paypiggies/memberships, gift-Paypiggies, and envelopes. Global `show*` settings
+remain the master gates for their corresponding notification types.
+
+```ini
+[gui]
+enableNotifications = true
+dockFeedMode = all
+overlayFeedMode = chat
+```
+
+### Local GUI preview
+
+Run `bun run gui:preview` to start the local GUI transport and feed a deterministic
+scenario through the production ingest, notification, and display-queue pipeline.
+It prints Dock, Overlay, and Notifications URLs and visibly exercises ordinary
+chat rows plus monetization rows. The canonical preview uses the same overlay
+appearance as production: chat is shown on the overlay, while the dock receives
+all rows and the notifications route receives non-chat rows.
+
+Rows play serially without overlap. While no successor is waiting, ordinary
+notifications remain for at least 5 seconds and monetization notifications remain
+for at least 30 seconds. A waiting successor bypasses the remaining idle hold only
+after tracked effects finish; the current row then gets its full 1-second exit
+before the next row starts. Tracked effects and the TTS handoff remain in the
+production pipeline, but preview TTS is disabled so the command is safe to run
+locally.
 
 ### Local operator console
 
