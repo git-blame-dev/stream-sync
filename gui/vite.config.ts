@@ -8,6 +8,16 @@ export default defineConfig({
     outDir: resolve(__dirname, 'dist'),
     emptyOutDir: true,
     rollupOptions: {
+      onwarn(warning, warn) {
+        const isIgnoredDependencyDirective = warning.code === 'MODULE_LEVEL_DIRECTIVE'
+          && typeof warning.id === 'string'
+          && warning.id.split(/[\\/]/).includes('node_modules')
+          && /["']use client["']/.test(warning.message)
+
+        if (!isIgnoredDependencyDirective) {
+          warn(warning)
+        }
+      },
       input: {
         dock: resolve(__dirname, 'src/dock/main.tsx'),
         demo: resolve(__dirname, 'src/demo/main.tsx'),
