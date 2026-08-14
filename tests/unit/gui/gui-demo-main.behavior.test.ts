@@ -10,6 +10,8 @@ import {
   advanceDemoFeed,
   createDemoRows,
   createInitialDemoFeedState,
+  RED_MEMBER_DEMO_SPRITE_URL,
+  TWITCH_MEMBER_DEMO_BADGES,
 } from "../../../gui/src/demo/demo-feed";
 import { bootstrapChatDemo } from "../../../gui/src/demo/main";
 
@@ -26,6 +28,24 @@ function getDemoRowByType(rows: GuiRowDto[], type: string): GuiRowDto {
   const row = rows.find((candidate) => candidate.type === type);
   if (!row) {
     throw new Error(`Missing ${type} demo row`);
+  }
+
+  return row;
+}
+
+function getMemberDemoRowByPlatformAndUsername(
+  rows: GuiRowDto[],
+  platform: string,
+  username: string,
+): GuiRowDto {
+  const row = rows.find(
+    (candidate) =>
+      candidate.platform === platform &&
+      candidate.username === username &&
+      candidate.isPaypiggy === true,
+  );
+  if (!row) {
+    throw new Error(`Missing ${platform}:${username} demo row`);
   }
 
   return row;
@@ -53,7 +73,7 @@ describe("Chat demo main behavior", () => {
       {
         type: "chat",
         kind: "chat",
-        platform: "tiktok",
+        platform: "twitch",
         username: "Goku",
         text: "Naruto, I heard your wallet has a power level over 9000.",
         avatarUrl: "https://myanimelist.net/images/characters/2/344142.jpg",
@@ -62,7 +82,7 @@ describe("Chat demo main behavior", () => {
       {
         type: "chat",
         kind: "chat",
-        platform: "youtube",
+        platform: "tiktok",
         username: "Ichigo",
         text: "Before Naruto answers, remember: substitute soul reaper energy is not tax deductible.",
         avatarUrl: "https://myanimelist.net/images/characters/13/473588.jpg",
@@ -71,17 +91,19 @@ describe("Chat demo main behavior", () => {
       {
         type: "chat",
         kind: "chat",
-        platform: "twitch",
+        platform: "youtube",
         username: "Naruto",
         text: "Believe it! I’m the Hokage of paypiggies today!",
         isPaypiggy: true,
+        memberTheme: "red",
+        memberSpriteUrl: RED_MEMBER_DEMO_SPRITE_URL,
         avatarUrl: "https://myanimelist.net/images/characters/15/570333.jpg",
         timestamp: null,
       },
       {
         type: "platform:gift",
         kind: "notification",
-        platform: "youtube",
+        platform: "tiktok",
         username: "Ichigo",
         text: "Ichigo sent a $10 Super Chat: Save some spiritual pressure for the rest of us.",
         avatarUrl: "https://myanimelist.net/images/characters/13/473588.jpg",
@@ -90,7 +112,7 @@ describe("Chat demo main behavior", () => {
       {
         type: "chat",
         kind: "chat",
-        platform: "tiktok",
+        platform: "twitch",
         username: "Goku",
         text: "That donation hit harder than a Kamehameha!",
         avatarUrl: "https://myanimelist.net/images/characters/2/344142.jpg",
@@ -100,16 +122,17 @@ describe("Chat demo main behavior", () => {
         type: "chat",
         kind: "chat",
         platform: "twitch",
-        username: "Naruto",
-        text: "My ninja way is supporting the stream!",
+        username: "Goku",
+        text: "My Saiyan pride is supporting the stream!",
         isPaypiggy: true,
-        avatarUrl: "https://myanimelist.net/images/characters/15/570333.jpg",
+        badgeImages: [...TWITCH_MEMBER_DEMO_BADGES],
+        avatarUrl: "https://myanimelist.net/images/characters/2/344142.jpg",
         timestamp: null,
       },
       {
         type: "chat",
         kind: "chat",
-        platform: "tiktok",
+        platform: "twitch",
         username: "Goku",
         text: "One more warm-up before Ichigo closes the loop.",
         avatarUrl: "https://myanimelist.net/images/characters/2/344142.jpg",
@@ -118,7 +141,7 @@ describe("Chat demo main behavior", () => {
       {
         type: "chat",
         kind: "chat",
-        platform: "youtube",
+        platform: "tiktok",
         username: "Ichigo",
         text: "Demo complete. Bankai: clean replay.",
         avatarUrl: "https://myanimelist.net/images/characters/13/473588.jpg",
@@ -133,8 +156,10 @@ describe("Chat demo main behavior", () => {
     expect(narutoRow).toMatchObject({
       type: "chat",
       kind: "chat",
-      platform: "twitch",
+      platform: "youtube",
       isPaypiggy: true,
+      memberTheme: "red",
+      memberSpriteUrl: RED_MEMBER_DEMO_SPRITE_URL,
       text: "Believe it! I’m the Hokage of paypiggies today!",
     });
 
@@ -147,7 +172,9 @@ describe("Chat demo main behavior", () => {
     );
 
     expect(html).toContain("gui-row--paypiggy");
+    expect(html).toContain("gui-row--member-theme-red");
     expect(html).toContain("gui-row__member-tag");
+    expect(html).toContain(RED_MEMBER_DEMO_SPRITE_URL.replaceAll("&", "&amp;"));
     expect(html).toContain("Naruto");
   });
 
@@ -157,7 +184,7 @@ describe("Chat demo main behavior", () => {
     expect(ichigoRow).toMatchObject({
       type: "platform:gift",
       kind: "notification",
-      platform: "youtube",
+      platform: "tiktok",
       username: "Ichigo",
       text: "Ichigo sent a $10 Super Chat: Save some spiritual pressure for the rest of us.",
       avatarUrl: "https://myanimelist.net/images/characters/13/473588.jpg",
@@ -183,12 +210,39 @@ describe("Chat demo main behavior", () => {
       "Naruto",
       "Ichigo",
       "Goku",
-      "Naruto",
+      "Goku",
       "Goku",
       "Ichigo",
     ]);
     expect(clearedFeed.rows.map((row) => row.username)).toEqual([]);
     expect(restartedFeed.rows.map((row) => row.username)).toEqual(["Goku"]);
+  });
+
+  it("renders three badges on the Twitch member demo row", () => {
+    const twitchMemberRow = getMemberDemoRowByPlatformAndUsername(
+      createDemoRows(),
+      "twitch",
+      "Goku",
+    );
+
+    expect(twitchMemberRow).toMatchObject({
+      platform: "twitch",
+      isPaypiggy: true,
+    });
+    expect(twitchMemberRow.badgeImages?.map((badge) => badge.label)).toEqual([
+      "Moderator",
+      "Founder",
+      "Prime Gaming",
+    ]);
+
+    const html = renderToStaticMarkup(
+      React.createElement(GuiShell, {
+        mode: "dock",
+        overlayMaxLinesPerMessage: 3,
+        rows: [twitchMemberRow],
+      }),
+    );
+    expect(html.split('class="gui-row__badge"').length - 1).toBe(3);
   });
 
   it("renders the demo shell with the first selected character row", () => {
