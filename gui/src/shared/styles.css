@@ -589,19 +589,19 @@ html, body {
 /* Minimal is opt-in on the shell so standard presentation remains untouched. */
 .gui-shell--overlay.gui-shell--minimal {
   --gui-avatar-size-current: 30px;
-  --gui-platform-icon-size-current: 12.905px;
+  --gui-platform-icon-size-current: 14.84075px;
   --gui-badge-size-current: var(--gui-overlay-badge-size);
 }
 
 .gui-shell--dock.gui-shell--minimal {
   --gui-avatar-size-current: 24px;
-  --gui-platform-icon-size-current: 11.22px;
+  --gui-platform-icon-size-current: 12.903px;
   --gui-badge-size-current: var(--gui-dock-badge-size);
 }
 
 .gui-shell--notifications.gui-shell--minimal {
   --gui-avatar-size-current: 24px;
-  --gui-platform-icon-size-current: 11.22px;
+  --gui-platform-icon-size-current: 12.903px;
   --gui-badge-size-current: var(--gui-dock-badge-size);
 }
 

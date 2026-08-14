@@ -384,7 +384,7 @@ describe("GUI shared styles behavior", () => {
       "--gui-avatar-size-current: 30px;",
     );
     expect(minimalOverlayBlock).toContain(
-      "--gui-platform-icon-size-current: 12.905px;",
+      "--gui-platform-icon-size-current: 14.84075px;",
     );
     expect(minimalOverlayBlock).toContain(
       "--gui-badge-size-current: var(--gui-overlay-badge-size);",
@@ -393,7 +393,7 @@ describe("GUI shared styles behavior", () => {
       "--gui-avatar-size-current: 24px;",
     );
     expect(minimalDockBlock).toContain(
-      "--gui-platform-icon-size-current: 11.22px;",
+      "--gui-platform-icon-size-current: 12.903px;",
     );
     expect(minimalDockBlock).toContain(
       "--gui-badge-size-current: var(--gui-dock-badge-size);",
@@ -402,7 +402,7 @@ describe("GUI shared styles behavior", () => {
       "--gui-avatar-size-current: 24px;",
     );
     expect(minimalNotificationsBlock).toContain(
-      "--gui-platform-icon-size-current: 11.22px;",
+      "--gui-platform-icon-size-current: 12.903px;",
     );
     expect(minimalNotificationsBlock).toContain(
       "--gui-badge-size-current: var(--gui-dock-badge-size);",
