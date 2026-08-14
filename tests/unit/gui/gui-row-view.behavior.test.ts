@@ -451,6 +451,43 @@ describe("GuiRow rendering behavior", () => {
     expect(html).not.toContain("rayquaza.gif");
   });
 
+  it("adds the red theme class only to themed member chat rows", () => {
+    const themedHtml = renderToStaticMarkup(
+      React.createElement(GuiRow, {
+        mode: "dock",
+        row: {
+          type: "chat",
+          kind: "chat",
+          platform: "youtube",
+          username: "themed-member",
+          text: "hello",
+          isPaypiggy: true,
+          memberTheme: "red",
+          avatarUrl: "https://example.invalid/avatar.png",
+          timestamp: null,
+        },
+      }),
+    );
+    const defaultHtml = renderToStaticMarkup(
+      React.createElement(GuiRow, {
+        mode: "dock",
+        row: {
+          type: "chat",
+          kind: "chat",
+          platform: "youtube",
+          username: "default-member",
+          text: "hello",
+          isPaypiggy: true,
+          avatarUrl: "https://example.invalid/avatar.png",
+          timestamp: null,
+        },
+      }),
+    );
+
+    expect(themedHtml).toContain("gui-row--member-theme-red");
+    expect(defaultHtml).not.toContain("gui-row--member-theme-red");
+  });
+
   it("renders Rayquaza image for trimmed mixed-case YouTube member rows", () => {
     const html = renderToStaticMarkup(
       React.createElement(GuiRow, {

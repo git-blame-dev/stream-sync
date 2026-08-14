@@ -5,6 +5,7 @@ html, body {
 
 :root {
   --gui-row-background-opacity: 0.95;
+  --gui-row-content-gap: 2px;
   --gui-member-background-gradient-top: rgba(28, 138, 83, var(--gui-row-background-opacity));
   --gui-member-background-gradient-mid: rgba(34, 165, 99, var(--gui-row-background-opacity));
   --gui-member-background-gradient-bottom: rgba(44, 197, 114, var(--gui-row-background-opacity));
@@ -19,9 +20,9 @@ html, body {
   --gui-member-pill-bottom: #ffb300;
   --gui-member-pill-text: #0f5d33;
   --gui-member-pill-shine: #fff8a8;
-  --gui-member-pill-font-scale: 0.62;
   --gui-member-sheen-peak-opacity: 0.46;
   --gui-member-sheen-cycle-duration: 5s;
+  --gui-member-sheen-highlight: var(--gui-member-pill-top);
   --gui-member-avatar-halo-glow: rgba(122, 255, 189, 0.92);
   --gui-member-avatar-halo-deep: rgba(22, 140, 84, 0.9);
   --gui-monetization-background-top: rgba(142, 88, 0, var(--gui-row-background-opacity));
@@ -37,17 +38,19 @@ html, body {
   --gui-monetization-sheen-cycle-duration: 5s;
   --gui-monetization-avatar-halo-glow: rgba(255, 231, 128, 0.96);
   --gui-monetization-avatar-halo-deep: rgba(217, 135, 0, 0.94);
-  --gui-overlay-avatar-size: 75px;
-  --gui-overlay-platform-icon-size: 28.05px;
+  --gui-overlay-avatar-size: 60px;
+  --gui-overlay-platform-icon-size: 25.81px;
   --gui-overlay-badge-size: 27px;
   --gui-overlay-row-header-font-size: 20px;
   --gui-overlay-row-body-font-size: 23px;
+  --gui-overlay-member-pill-font-size: 11.2px;
   --gui-overlay-emote-size: 50px;
   --gui-dock-avatar-size: 48px;
   --gui-dock-platform-icon-size: 22.44px;
   --gui-dock-badge-size: 21px;
   --gui-dock-row-header-font-size: 16px;
   --gui-dock-row-body-font-size: 18px;
+  --gui-dock-member-pill-font-size: 8.96px;
   --gui-dock-emote-size: 36px;
 }
 
@@ -75,6 +78,7 @@ html, body {
   --gui-badge-size-current: var(--gui-overlay-badge-size);
   --gui-row-header-font-size-current: var(--gui-overlay-row-header-font-size);
   --gui-row-body-font-size-current: var(--gui-overlay-row-body-font-size);
+  --gui-member-pill-font-size-current: var(--gui-overlay-member-pill-font-size);
   --gui-emote-size-current: var(--gui-overlay-emote-size);
 }
 
@@ -107,6 +111,7 @@ html, body {
   --gui-badge-size-current: var(--gui-dock-badge-size);
   --gui-row-header-font-size-current: var(--gui-dock-row-header-font-size);
   --gui-row-body-font-size-current: var(--gui-dock-row-body-font-size);
+  --gui-member-pill-font-size-current: var(--gui-dock-member-pill-font-size);
   --gui-emote-size-current: var(--gui-dock-emote-size);
 }
 
@@ -158,6 +163,20 @@ html, body {
       var(--gui-member-background-gradient-mid) 58%,
       var(--gui-member-background-gradient-bottom) 100%
     );
+}
+
+.gui-row--member-theme-red {
+  --gui-member-background-gradient-top: rgba(86, 0, 10, var(--gui-row-background-opacity));
+  --gui-member-background-gradient-mid: rgba(126, 3, 16, var(--gui-row-background-opacity));
+  --gui-member-background-gradient-bottom: rgba(164, 10, 28, var(--gui-row-background-opacity));
+  --gui-member-border-color: rgba(232, 112, 122, 0.58);
+  --gui-member-inner-highlight: rgba(255, 198, 203, 0.18);
+  --gui-member-glow-ring: rgba(198, 36, 51, 0.48);
+  --gui-member-glow-soft: rgba(156, 0, 18, 0.58);
+  --gui-member-glow-deep: rgba(45, 0, 6, 0.84);
+  --gui-member-sheen-highlight: #d94a56;
+  --gui-member-avatar-halo-glow: rgba(216, 58, 72, 0.9);
+  --gui-member-avatar-halo-deep: rgba(92, 0, 11, 0.94);
 }
 
 .gui-row--monetization {
@@ -258,7 +277,7 @@ html, body {
 .gui-row__content {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--gui-row-content-gap);
 }
 
 .gui-row__content--member-chat {
@@ -295,6 +314,7 @@ html, body {
 .gui-row__username {
   font-weight: 600;
   font-size: var(--gui-row-header-font-size-current);
+  line-height: 1;
   color: #d9e0e8;
 }
 
@@ -320,7 +340,7 @@ html, body {
 }
 
 .gui-row__member-tag {
-  padding: 1px 5px;
+  padding: 0 4.5px;
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--gui-member-pill-border) 88%, transparent);
   background: linear-gradient(
@@ -330,15 +350,16 @@ html, body {
     color-mix(in srgb, var(--gui-member-pill-bottom) 96%, transparent) 100%
   );
   color: var(--gui-member-pill-text);
-  font-weight: 700;
-  font-size: calc(var(--gui-row-header-font-size-current) * var(--gui-member-pill-font-scale));
-  letter-spacing: 0.01em;
+  font-weight: 800;
+  font-size: var(--gui-member-pill-font-size-current);
+  letter-spacing: -0.03em;
   text-transform: uppercase;
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, var(--gui-member-pill-shine) 92%, transparent),
     0 0 10px -2px color-mix(in srgb, var(--gui-member-pill-border) 56%, transparent);
   display: inline-flex;
   align-items: center;
+  transform: translateY(1px);
 }
 
 .gui-row--paypiggy {
@@ -353,9 +374,9 @@ html, body {
   background-image: linear-gradient(
     120deg,
     transparent 42%,
-    color-mix(in srgb, var(--gui-member-pill-top) 58%, white) 49%,
-    color-mix(in srgb, white 82%, var(--gui-member-pill-top)) 50%,
-    color-mix(in srgb, var(--gui-member-pill-top) 58%, white) 51%,
+    color-mix(in srgb, var(--gui-member-sheen-highlight) 58%, white) 49%,
+    color-mix(in srgb, white 82%, var(--gui-member-sheen-highlight)) 50%,
+    color-mix(in srgb, var(--gui-member-sheen-highlight) 58%, white) 51%,
     transparent 58%
   );
   background-size: 240% 100%;
@@ -452,7 +473,7 @@ html, body {
 .gui-row__text {
   font-size: var(--gui-row-body-font-size-current);
   line-height: 1.08;
-  margin-top: 5px;
+  margin-top: 0;
   color: #c7d0d9;
   display: inline-flex;
   align-items: center;
@@ -462,6 +483,7 @@ html, body {
 
 .gui-row__text--member-chat {
   display: block;
+  margin-top: var(--gui-row-content-gap);
   overflow-wrap: anywhere;
   word-break: break-word;
 }

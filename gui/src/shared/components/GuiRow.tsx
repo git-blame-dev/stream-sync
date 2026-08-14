@@ -49,6 +49,7 @@ export function GuiRow({ row, mode, rowRef, className, style, onAnimationEnd, ar
       `gui-row--${row.kind}`,
       isPaypiggyChatRow ? 'gui-row--paypiggy' : '',
       isMemberChatRow ? 'gui-row--member-chat' : '',
+      isMemberChatRow && row.memberTheme === 'red' ? 'gui-row--member-theme-red' : '',
       isMonetizationNotification ? 'gui-row--monetization' : '',
       mode === 'overlay' ? 'gui-row--overlay-enter' : '',
       ...additionalClasses

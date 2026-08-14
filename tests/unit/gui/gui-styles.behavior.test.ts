@@ -29,7 +29,9 @@ describe("GUI shared styles behavior", () => {
     const dockShellBlock = readCssBlock(cssText, ".gui-shell--dock");
     const overlayExitBlock = readCssBlock(cssText, ".gui-row--overlay-exit");
     const rowBlock = readCssBlock(cssText, ".gui-row");
+    const contentBlock = readCssBlock(cssText, ".gui-row__content");
     const memberChatRowBlock = readCssBlock(cssText, ".gui-row--member-chat");
+    const redMemberThemeBlock = readCssBlock(cssText, ".gui-row--member-theme-red");
     const overlayEnterBlock = readCssBlock(cssText, ".gui-row--overlay-enter");
     const effectLayerBlock = readCssBlock(cssText, ".gui-shell__effect-layer");
     const effectVideoBlock = readCssBlock(cssText, ".gui-shell__effect-video");
@@ -95,8 +97,9 @@ describe("GUI shared styles behavior", () => {
     expect(pageBlock).toContain("margin: 0;");
     expect(pageBlock).toContain("padding: 0;");
     expect(rootBlock).toContain("--gui-row-background-opacity: 0.95;");
-    expect(rootBlock).toContain("--gui-overlay-avatar-size: 75px;");
-    expect(rootBlock).toContain("--gui-overlay-platform-icon-size: 28.05px;");
+    expect(rootBlock).toContain("--gui-row-content-gap: 2px;");
+    expect(rootBlock).toContain("--gui-overlay-avatar-size: 60px;");
+    expect(rootBlock).toContain("--gui-overlay-platform-icon-size: 25.81px;");
     expect(rootBlock).toContain("--gui-overlay-badge-size: 27px;");
     expect(rootBlock).toContain("--gui-overlay-row-header-font-size: 20px;");
     expect(rootBlock).toContain("--gui-overlay-row-body-font-size: 23px;");
@@ -114,9 +117,11 @@ describe("GUI shared styles behavior", () => {
       "--gui-member-background-gradient-bottom: rgba(44, 197, 114, var(--gui-row-background-opacity));",
     );
     expect(rootBlock).toContain("--gui-member-pill-border: #ffc400;");
-    expect(rootBlock).toContain("--gui-member-pill-font-scale: 0.62;");
+    expect(rootBlock).toContain("--gui-overlay-member-pill-font-size: 11.2px;");
+    expect(rootBlock).toContain("--gui-dock-member-pill-font-size: 8.96px;");
     expect(rootBlock).toContain("--gui-member-sheen-peak-opacity: 0.46;");
     expect(rootBlock).toContain("--gui-member-sheen-cycle-duration: 5s;");
+    expect(rootBlock).toContain("--gui-member-sheen-highlight: var(--gui-member-pill-top);");
     expect(overlayShellBlock).toContain("height: 100vh;");
     expect(overlayShellBlock).toContain("overflow: hidden;");
     expect(overlayShellBlock).toContain(
@@ -133,6 +138,9 @@ describe("GUI shared styles behavior", () => {
     );
     expect(overlayShellBlock).toContain(
       "--gui-row-body-font-size-current: var(--gui-overlay-row-body-font-size);",
+    );
+    expect(overlayShellBlock).toContain(
+      "--gui-member-pill-font-size-current: var(--gui-overlay-member-pill-font-size);",
     );
     expect(overlayShellBlock).toContain(
       "--gui-emote-size-current: var(--gui-overlay-emote-size);",
@@ -154,6 +162,9 @@ describe("GUI shared styles behavior", () => {
     );
     expect(dockShellBlock).toContain(
       "--gui-row-body-font-size-current: var(--gui-dock-row-body-font-size);",
+    );
+    expect(dockShellBlock).toContain(
+      "--gui-member-pill-font-size-current: var(--gui-dock-member-pill-font-size);",
     );
     expect(dockShellBlock).toContain(
       "--gui-emote-size-current: var(--gui-dock-emote-size);",
@@ -194,6 +205,14 @@ describe("GUI shared styles behavior", () => {
     expect(cssText).toContain(".gui-row--paypiggy .gui-row__text {");
     expect(cssText).toContain("color: #ffffff;");
     expect(cssText).toContain(".gui-row--paypiggy .gui-row__avatar {");
+    expect(redMemberThemeBlock).toContain("--gui-member-background-gradient-top:");
+    expect(redMemberThemeBlock).toContain("--gui-member-background-gradient-mid:");
+    expect(redMemberThemeBlock).toContain("--gui-member-background-gradient-bottom:");
+    expect(redMemberThemeBlock).toContain("--gui-member-border-color:");
+    expect(redMemberThemeBlock).toContain("--gui-member-glow-soft:");
+    expect(redMemberThemeBlock).toContain("--gui-member-sheen-highlight:");
+    expect(redMemberThemeBlock).toContain("--gui-member-avatar-halo-glow:");
+    expect(redMemberThemeBlock).not.toContain("--gui-member-pill-");
     expect(cssText).toContain(
       "outline: 1px solid color-mix(in srgb, var(--gui-member-avatar-halo-glow) 78%, transparent);",
     );
@@ -223,14 +242,18 @@ describe("GUI shared styles behavior", () => {
     expect(usernameBlock).toContain(
       "font-size: var(--gui-row-header-font-size-current);",
     );
-    expect(memberTagBlock).toContain("padding: 1px 5px;");
+    expect(usernameBlock).toContain("line-height: 1;");
+    expect(memberTagBlock).toContain("padding: 0 4.5px;");
     expect(memberTagBlock).toContain(
-      "font-size: calc(var(--gui-row-header-font-size-current) * var(--gui-member-pill-font-scale));",
+      "font-size: var(--gui-member-pill-font-size-current);",
     );
     expect(memberTagBlock).toContain("color: var(--gui-member-pill-text);");
+    expect(memberTagBlock).toContain("font-weight: 800;");
+    expect(memberTagBlock).toContain("letter-spacing: -0.03em;");
     expect(memberTagBlock).toContain("text-transform: uppercase;");
     expect(memberTagBlock).toContain("display: inline-flex;");
     expect(memberTagBlock).toContain("align-items: center;");
+    expect(memberTagBlock).toContain("transform: translateY(1px);");
     expect(cssText).toContain(".gui-row--paypiggy::before {");
     expect(cssText).toContain(
       "animation: gui-member-sheen-sweep var(--gui-member-sheen-cycle-duration) ease-out infinite;",
@@ -248,6 +271,8 @@ describe("GUI shared styles behavior", () => {
       "font-size: var(--gui-row-body-font-size-current);",
     );
     expect(textBlock).toContain("line-height: 1.08;");
+    expect(textBlock).toContain("margin-top: 0;");
+    expect(contentBlock).toContain("gap: var(--gui-row-content-gap);");
     expect(memberContentBlock).toContain("display: flow-root;");
     expect(monetizationContentBlock).toContain("position: relative;");
     expect(memberHeaderBlock).toContain("min-width: 0;");
@@ -256,7 +281,9 @@ describe("GUI shared styles behavior", () => {
     expect(memberUsernameBlock).toContain("text-overflow: ellipsis;");
     expect(memberUsernameBlock).toContain("white-space: nowrap;");
     expect(memberUsernameBlock).toContain("flex: 0 1 auto;");
+    expect(memberUsernameBlock).not.toContain("line-height:");
     expect(memberTextBlock).toContain("display: block;");
+    expect(memberTextBlock).toContain("margin-top: var(--gui-row-content-gap);");
     expect(memberTextBlock).toContain("overflow-wrap: anywhere;");
     expect(memberTextBlock).toContain("word-break: break-word;");
     expect(memberImageClipBlock).toContain("width: 120px;");
