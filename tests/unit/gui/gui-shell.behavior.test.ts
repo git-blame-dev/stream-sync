@@ -3,16 +3,10 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import TestRenderer, { type ReactTestRenderer } from "react-test-renderer";
 
-import {
-  GuiShell,
-  OVERLAY_EXIT_CLEANUP_MS,
-  resolveGuiRowRenderKey,
-} from "../../../gui/src/shared/components/GuiShell";
+import { GuiShell, resolveGuiRowRenderKey } from "../../../gui/src/shared/components/GuiShell";
 import type { GuiRowDto } from "../../../gui/src/shared/types";
-import { waitForDelay } from "../../helpers/time-utils";
 
 type ScrollListener = () => void;
-type OverlayLayout = { offsetTop: number; offsetHeight: number };
 type OverlayNode = { type?: unknown; props?: Record<string, unknown> };
 type ShellRenderer = ReactTestRenderer;
 
@@ -60,74 +54,18 @@ function createGuiRow(index: number): GuiRowDto {
   };
 }
 
-function createOverlayNodeMocks(
-  layoutByAvatarUrl: Record<string, OverlayLayout>,
-  shellClientHeight = 220,
-) {
-  function extractAvatarUrl(element: unknown): string {
-    if (!isOverlayNode(element) || !element.props) {
-      return "";
-    }
-
-    if (
-      typeof element.type === "string" &&
-      element.type === "img" &&
-      typeof element.props.className === "string" &&
-      element.props.className.includes("gui-row__avatar") &&
-      typeof element.props.src === "string"
-    ) {
-      return element.props.src;
-    }
-
-    const children = Array.isArray(element.props.children)
-      ? element.props.children
-      : [element.props.children];
-    for (const child of children) {
-      const childAvatarUrl = extractAvatarUrl(child);
-      if (childAvatarUrl) {
-        return childAvatarUrl;
-      }
-    }
-
-    return "";
+function createMotionNodeMock(element: unknown) {
+  if (!isOverlayNode(element)) {
+    return {};
   }
 
-  const shell = {
-    clientHeight: shellClientHeight,
-    getBoundingClientRect: () => ({ top: 0 }),
-  };
-
   return {
-    shell,
-    createNodeMock: (element: unknown) => {
-      if (!isOverlayNode(element)) {
-        return {};
-      }
-
-      if (element.type === "main") {
-        return shell;
-      }
-
-      const avatarUrl = extractAvatarUrl(element);
-      const layout = layoutByAvatarUrl[avatarUrl] || {
-        offsetTop: 0,
-        offsetHeight: 24,
-      };
-
-      return {
-        style: {
-          transition: "",
-          transform: "",
-        },
-        get offsetTop() {
-          return layout.offsetTop;
-        },
-        get offsetHeight() {
-          return layout.offsetHeight;
-        },
-        getBoundingClientRect: () => ({ top: layout.offsetTop }),
-      };
-    },
+    style: {},
+    offsetHeight: 50,
+    offsetLeft: 0,
+    offsetTop: 0,
+    offsetWidth: 100,
+    getBoundingClientRect: () => ({ height: 50, left: 0, top: 0, width: 100 }),
   };
 }
 
@@ -233,32 +171,15 @@ describe("GuiShell behavior", () => {
     expect(html).toContain("gui-row__text--overlay-clamp");
   });
 
-  it("renders overlay rows with transition class for upward motion", () => {
-    const html = renderToStaticMarkup(
-      React.createElement(GuiShell, {
-        mode: "overlay",
-        overlayMaxLinesPerMessage: 3,
-        rows: [
-          {
-            type: "chat",
-            kind: "chat",
-            platform: "twitch",
-            username: "test-user",
-            text: "hello",
-            avatarUrl: "https://example.invalid/test-avatar.png",
-            timestamp: "2024-01-01T00:00:00.000Z",
-          },
-        ],
-      }),
-    );
-
-    expect(html).toContain("gui-row--overlay-enter");
-  });
-
-  it("handles overlay row refs across mount and unmount lifecycle", async () => {
-    const previousTimeStamp = console.timeStamp;
-    console.timeStamp = previousTimeStamp || (() => {});
+  it("renders capacity updates without overlay exit clones", async () => {
+    const rows = [createGuiRow(1), createGuiRow(2), createGuiRow(3), createGuiRow(4)];
     let renderer: ShellRenderer | null = null;
+    const previousGetComputedStyle = globalThis.getComputedStyle;
+    globalThis.getComputedStyle = (() => ({
+      height: "",
+      width: "",
+      direction: "ltr",
+    })) as unknown as typeof globalThis.getComputedStyle;
 
     try {
       await TestRenderer.act(async () => {
@@ -266,566 +187,34 @@ describe("GuiShell behavior", () => {
           React.createElement(GuiShell, {
             mode: "overlay",
             overlayMaxLinesPerMessage: 3,
-            rows: [
-              {
-                type: "chat",
-                kind: "chat",
-                platform: "twitch",
-                username: "test-user",
-                text: "hello",
-                avatarUrl: "https://example.invalid/test-avatar.png",
-                timestamp: "2024-01-01T00:00:00.000Z",
-              },
-            ],
+            rows: rows.slice(0, 3),
           }),
-          {
-            createNodeMock: () => ({
-              style: {
-                transition: "",
-                transform: "",
-              },
-              offsetHeight: 24,
-              getBoundingClientRect: () => ({ top: 100 }),
-            }),
-          },
+          { createNodeMock: createMotionNodeMock },
         );
       });
 
-      expect(renderer!.toJSON()).not.toBeNull();
-
       await TestRenderer.act(async () => {
-        renderer!.unmount();
-      });
-    } finally {
-      if (previousTimeStamp) {
-        console.timeStamp = previousTimeStamp;
-      } else {
-        Reflect.deleteProperty(console, "timeStamp");
-      }
-    }
-  });
-
-  it("keeps clipped top overlay row rendered in an exit layer until exit animation ends", async () => {
-    const previousTimeStamp = console.timeStamp;
-    console.timeStamp = previousTimeStamp || (() => {});
-
-    let renderer: ShellRenderer | null = null;
-    const layoutByAvatarUrl = {
-      "https://example.invalid/test-avatar-1.png": {
-        offsetTop: -18,
-        offsetHeight: 60,
-      },
-      "https://example.invalid/test-avatar-2.png": {
-        offsetTop: 52,
-        offsetHeight: 60,
-      },
-      "https://example.invalid/test-avatar-3.png": {
-        offsetTop: 122,
-        offsetHeight: 60,
-      },
-    };
-    const overlayNodeMocks = createOverlayNodeMocks(layoutByAvatarUrl, 220);
-
-    try {
-      await TestRenderer.act(async () => {
-        renderer = TestRenderer.create(
+        renderer!.update(
           React.createElement(GuiShell, {
             mode: "overlay",
             overlayMaxLinesPerMessage: 3,
-            rows: [createGuiRow(1), createGuiRow(2), createGuiRow(3)],
+            rows: rows.slice(1),
           }),
-          {
-            createNodeMock: overlayNodeMocks.createNodeMock,
-          },
         );
       });
 
-      let rendered = JSON.stringify(renderer!.toJSON());
+      const rendered = JSON.stringify(renderer!.toJSON());
       expect(rendered).toContain("test-user-1");
       expect(rendered).toContain("test-user-2");
       expect(rendered).toContain("test-user-3");
-
-      const exitNodes = findOverlayExitNodes(renderer!);
-      expect(exitNodes.length).toBe(1);
-      const [exitNode] = exitNodes;
-      if (!exitNode) {
-        throw new Error("expected an overlay exit node");
-      }
-      expect(exitNode.props["aria-hidden"]).toBe(true);
-
-      await TestRenderer.act(async () => {
-        exitNode.props.onAnimationEnd({
-          animationName: "gui-overlay-row-exit",
-        });
-      });
-
-      rendered = JSON.stringify(renderer!.toJSON());
-      expect(rendered).not.toContain("test-user-1");
-      expect(rendered).toContain("test-user-2");
-      expect(rendered).toContain("test-user-3");
-    } finally {
-      if (renderer) {
-        await TestRenderer.act(async () => {
-          renderer!.unmount();
-        });
-      }
-
-      if (previousTimeStamp) {
-        console.timeStamp = previousTimeStamp;
-      } else {
-        Reflect.deleteProperty(console, "timeStamp");
-      }
-    }
-  });
-
-  it("removes an exit row after the cleanup fallback", async () => {
-    const previousTimeStamp = console.timeStamp;
-    console.timeStamp = previousTimeStamp || (() => {});
-    const overlayNodeMocks = createOverlayNodeMocks(
-      {
-        "https://example.invalid/test-avatar-1.png": {
-          offsetTop: -18,
-          offsetHeight: 60,
-        },
-        "https://example.invalid/test-avatar-2.png": {
-          offsetTop: 52,
-          offsetHeight: 60,
-        },
-      },
-      140,
-    );
-    let renderer: ShellRenderer | null = null;
-
-    try {
-      await TestRenderer.act(async () => {
-        renderer = TestRenderer.create(
-          React.createElement(GuiShell, {
-            mode: "overlay",
-            overlayMaxLinesPerMessage: 3,
-            rows: [createGuiRow(1), createGuiRow(2)],
-          }),
-          { createNodeMock: overlayNodeMocks.createNodeMock },
-        );
-      });
-
-      expect(findOverlayExitNodes(renderer!)).toHaveLength(1);
-      await TestRenderer.act(async () => {
-        await waitForDelay(OVERLAY_EXIT_CLEANUP_MS + 25);
-      });
+      expect(rendered).toContain("test-user-4");
       expect(findOverlayExitNodes(renderer!)).toHaveLength(0);
     } finally {
-      if (renderer) {
-        await TestRenderer.act(async () => renderer!.unmount());
-      }
-      if (previousTimeStamp) console.timeStamp = previousTimeStamp;
-      else Reflect.deleteProperty(console, "timeStamp");
-    }
-  });
-
-  it("keeps all overlay rows when every row fully fits the shell height", async () => {
-    const previousTimeStamp = console.timeStamp;
-    console.timeStamp = previousTimeStamp || (() => {});
-
-    let renderer: ShellRenderer | null = null;
-    const layoutByAvatarUrl = {
-      "https://example.invalid/test-avatar-1.png": {
-        offsetTop: 20,
-        offsetHeight: 50,
-      },
-      "https://example.invalid/test-avatar-2.png": {
-        offsetTop: 80,
-        offsetHeight: 50,
-      },
-      "https://example.invalid/test-avatar-3.png": {
-        offsetTop: 140,
-        offsetHeight: 50,
-      },
-    };
-    const overlayNodeMocks = createOverlayNodeMocks(layoutByAvatarUrl, 220);
-
-    try {
-      await TestRenderer.act(async () => {
-        renderer = TestRenderer.create(
-          React.createElement(GuiShell, {
-            mode: "overlay",
-            overlayMaxLinesPerMessage: 3,
-            rows: [createGuiRow(1), createGuiRow(2), createGuiRow(3)],
-          }),
-          {
-            createNodeMock: overlayNodeMocks.createNodeMock,
-          },
-        );
-      });
-
-      const rendered = JSON.stringify(renderer!.toJSON());
-      expect(rendered).toContain("test-user-1");
-      expect(rendered).toContain("test-user-2");
-      expect(rendered).toContain("test-user-3");
-    } finally {
-      if (renderer) {
-        await TestRenderer.act(async () => {
-          renderer!.unmount();
-        });
-      }
-
-      if (previousTimeStamp) {
-        console.timeStamp = previousTimeStamp;
-      } else {
-        Reflect.deleteProperty(console, "timeStamp");
-      }
-    }
-  });
-
-  it("recomputes overlay row visibility after window resize", async () => {
-    const previousTimeStamp = console.timeStamp;
-    const previousWindow = global.window;
-    console.timeStamp = previousTimeStamp || (() => {});
-
-    let renderer: ShellRenderer | null = null;
-    const resizeListeners = new Set<ScrollListener>();
-    global.window = {
-      addEventListener: (eventName: string, handler: ScrollListener) => {
-        if (eventName === "resize") {
-          resizeListeners.add(handler);
-        }
-      },
-      removeEventListener: (eventName: string, handler: ScrollListener) => {
-        if (eventName === "resize") {
-          resizeListeners.delete(handler);
-        }
-      },
-    } as unknown as Window & typeof globalThis;
-
-    const layoutByAvatarUrl = {
-      "https://example.invalid/test-avatar-1.png": {
-        offsetTop: 20,
-        offsetHeight: 50,
-      },
-      "https://example.invalid/test-avatar-2.png": {
-        offsetTop: 80,
-        offsetHeight: 50,
-      },
-      "https://example.invalid/test-avatar-3.png": {
-        offsetTop: 140,
-        offsetHeight: 50,
-      },
-    };
-    const overlayNodeMocks = createOverlayNodeMocks(layoutByAvatarUrl, 220);
-
-    try {
-      await TestRenderer.act(async () => {
-        renderer = TestRenderer.create(
-          React.createElement(GuiShell, {
-            mode: "overlay",
-            overlayMaxLinesPerMessage: 3,
-            rows: [createGuiRow(1), createGuiRow(2), createGuiRow(3)],
-          }),
-          {
-            createNodeMock: overlayNodeMocks.createNodeMock,
-          },
-        );
-      });
-
-      let rendered = JSON.stringify(renderer!.toJSON());
-      expect(rendered).toContain("test-user-1");
-
-      layoutByAvatarUrl["https://example.invalid/test-avatar-1.png"].offsetTop =
-        -16;
-
-      await TestRenderer.act(async () => {
-        for (const listener of resizeListeners) {
-          listener();
-        }
-      });
-
-      rendered = JSON.stringify(renderer!.toJSON());
-      expect(rendered).toContain("test-user-1");
-      expect(rendered).toContain("test-user-2");
-      expect(rendered).toContain("test-user-3");
-      expect(findOverlayExitNodes(renderer!).length).toBeGreaterThanOrEqual(1);
-    } finally {
-      if (renderer) {
-        await TestRenderer.act(async () => {
-          renderer!.unmount();
-        });
-      }
-
-      if (previousWindow !== undefined) {
-        global.window = previousWindow;
-      } else {
-        Reflect.deleteProperty(global, "window");
-      }
-
-      if (previousTimeStamp) {
-        console.timeStamp = previousTimeStamp;
-      } else {
-        Reflect.deleteProperty(console, "timeStamp");
-      }
-    }
-  });
-
-  it("observes overlay geometry changes and disconnects the observer", async () => {
-    const previousResizeObserver = global.ResizeObserver;
-    const previousTimeStamp = console.timeStamp;
-    console.timeStamp = previousTimeStamp || (() => {});
-    const observed = new Set<Element>();
-    let disconnectCalls = 0;
-    class TestResizeObserver {
-      constructor(_callback: ResizeObserverCallback) {}
-      observe(target: Element) { observed.add(target); }
-      unobserve(target: Element) { observed.delete(target); }
-      disconnect() { disconnectCalls += 1; observed.clear(); }
-    }
-    global.ResizeObserver = TestResizeObserver as unknown as typeof ResizeObserver;
-    const overlayNodeMocks = createOverlayNodeMocks({
-      "https://example.invalid/test-avatar-1.png": { offsetTop: 20, offsetHeight: 50 },
-    });
-    let renderer: ShellRenderer | null = null;
-
-    try {
-      await TestRenderer.act(async () => {
-        renderer = TestRenderer.create(React.createElement(GuiShell, {
-          mode: "overlay",
-          overlayMaxLinesPerMessage: 3,
-          rows: [createGuiRow(1)],
-        }), { createNodeMock: overlayNodeMocks.createNodeMock });
-      });
-      expect(observed.size).toBeGreaterThanOrEqual(2);
-
-      await TestRenderer.act(async () => renderer!.unmount());
-      renderer = null;
-      expect(disconnectCalls).toBe(1);
-      expect(observed.size).toBe(0);
-    } finally {
       if (renderer) await TestRenderer.act(async () => renderer!.unmount());
-      if (previousResizeObserver) global.ResizeObserver = previousResizeObserver;
-      else Reflect.deleteProperty(global, "ResizeObserver");
-      if (previousTimeStamp) console.timeStamp = previousTimeStamp;
-      else Reflect.deleteProperty(console, "timeStamp");
-    }
-  });
-
-  it("keeps an evicted top row in overlay exit layer until animation ends", async () => {
-    const previousTimeStamp = console.timeStamp;
-    console.timeStamp = previousTimeStamp || (() => {});
-
-    let renderer: ShellRenderer | null = null;
-    const layoutByAvatarUrl = {
-      "https://example.invalid/test-avatar-1.png": {
-        offsetTop: 18,
-        offsetHeight: 50,
-      },
-      "https://example.invalid/test-avatar-2.png": {
-        offsetTop: 78,
-        offsetHeight: 50,
-      },
-      "https://example.invalid/test-avatar-3.png": {
-        offsetTop: 138,
-        offsetHeight: 50,
-      },
-      "https://example.invalid/test-avatar-4.png": {
-        offsetTop: 138,
-        offsetHeight: 50,
-      },
-    };
-    const overlayNodeMocks = createOverlayNodeMocks(layoutByAvatarUrl, 220);
-
-    try {
-      await TestRenderer.act(async () => {
-        renderer = TestRenderer.create(
-          React.createElement(GuiShell, {
-            mode: "overlay",
-            overlayMaxLinesPerMessage: 3,
-            rows: [createGuiRow(1), createGuiRow(2), createGuiRow(3)],
-          }),
-          {
-            createNodeMock: overlayNodeMocks.createNodeMock,
-          },
-        );
-      });
-
-      let rendered = JSON.stringify(renderer!.toJSON());
-      expect(rendered).toContain("test-user-1");
-      expect(rendered).toContain("test-user-2");
-      expect(rendered).toContain("test-user-3");
-
-      await TestRenderer.act(async () => {
-        renderer!.update(
-          React.createElement(GuiShell, {
-            mode: "overlay",
-            overlayMaxLinesPerMessage: 3,
-            rows: [createGuiRow(2), createGuiRow(3), createGuiRow(4)],
-          }),
-        );
-      });
-
-      rendered = JSON.stringify(renderer!.toJSON());
-      expect(rendered).toContain("test-user-1");
-      expect(rendered).toContain("test-user-2");
-      expect(rendered).toContain("test-user-3");
-      expect(rendered).toContain("test-user-4");
-      expect(findOverlayExitNodes(renderer!).length).toBeGreaterThanOrEqual(1);
-
-      const exitNodes = findOverlayExitNodes(renderer!);
-      await TestRenderer.act(async () => {
-        for (const exitNode of exitNodes) {
-          exitNode.props.onAnimationEnd({
-            animationName: "gui-overlay-row-exit",
-          });
-        }
-      });
-
-      rendered = JSON.stringify(renderer!.toJSON());
-      expect(rendered).not.toContain("test-user-1");
-      expect(rendered).toContain("test-user-2");
-      expect(rendered).toContain("test-user-3");
-      expect(rendered).toContain("test-user-4");
-    } finally {
-      if (renderer) {
-        await TestRenderer.act(async () => {
-          renderer!.unmount();
-        });
-      }
-
-      if (previousTimeStamp) {
-        console.timeStamp = previousTimeStamp;
+      if (previousGetComputedStyle) {
+        globalThis.getComputedStyle = previousGetComputedStyle;
       } else {
-        Reflect.deleteProperty(console, "timeStamp");
-      }
-    }
-  });
-
-  it("keeps both evicted and clipped top rows in exit layer for restricted overlay height", async () => {
-    const previousTimeStamp = console.timeStamp;
-    console.timeStamp = previousTimeStamp || (() => {});
-
-    let renderer: ShellRenderer | null = null;
-    const layoutByAvatarUrl = {
-      "https://example.invalid/test-avatar-1.png": {
-        offsetTop: 4,
-        offsetHeight: 40,
-      },
-      "https://example.invalid/test-avatar-2.png": {
-        offsetTop: 52,
-        offsetHeight: 40,
-      },
-      "https://example.invalid/test-avatar-3.png": {
-        offsetTop: 100,
-        offsetHeight: 80,
-      },
-      "https://example.invalid/test-avatar-4.png": {
-        offsetTop: 132,
-        offsetHeight: 80,
-      },
-    };
-    const overlayNodeMocks = createOverlayNodeMocks(layoutByAvatarUrl, 220);
-
-    try {
-      await TestRenderer.act(async () => {
-        renderer = TestRenderer.create(
-          React.createElement(GuiShell, {
-            mode: "overlay",
-            overlayMaxLinesPerMessage: 3,
-            rows: [createGuiRow(1), createGuiRow(2), createGuiRow(3)],
-          }),
-          {
-            createNodeMock: overlayNodeMocks.createNodeMock,
-          },
-        );
-      });
-
-      layoutByAvatarUrl["https://example.invalid/test-avatar-2.png"].offsetTop =
-        -8;
-
-      await TestRenderer.act(async () => {
-        renderer!.update(
-          React.createElement(GuiShell, {
-            mode: "overlay",
-            overlayMaxLinesPerMessage: 3,
-            rows: [createGuiRow(2), createGuiRow(3), createGuiRow(4)],
-          }),
-        );
-      });
-
-      const exitNodes = findOverlayExitNodes(renderer!);
-      expect(exitNodes.length).toBeGreaterThanOrEqual(2);
-
-      await TestRenderer.act(async () => {
-        for (const exitNode of exitNodes) {
-          exitNode.props.onAnimationEnd({
-            animationName: "gui-overlay-row-exit",
-          });
-        }
-      });
-
-      const rendered = JSON.stringify(renderer!.toJSON());
-      expect(rendered).not.toContain("test-user-1");
-      expect(rendered).not.toContain("test-user-2");
-      expect(rendered).toContain("test-user-3");
-      expect(rendered).toContain("test-user-4");
-    } finally {
-      if (renderer) {
-        await TestRenderer.act(async () => {
-          renderer!.unmount();
-        });
-      }
-
-      if (previousTimeStamp) {
-        console.timeStamp = previousTimeStamp;
-      } else {
-        Reflect.deleteProperty(console, "timeStamp");
-      }
-    }
-  });
-
-  it("does not render overlay exit rows in dock mode", async () => {
-    const previousTimeStamp = console.timeStamp;
-    console.timeStamp = previousTimeStamp || (() => {});
-    let renderer: ShellRenderer | null = null;
-
-    try {
-      await TestRenderer.act(async () => {
-        renderer = TestRenderer.create(
-          React.createElement(GuiShell, {
-            mode: "dock",
-            overlayMaxLinesPerMessage: 3,
-            rows: [createGuiRow(1), createGuiRow(2), createGuiRow(3)],
-          }),
-          {
-            createNodeMock: (element: unknown) => {
-              if (!isOverlayNode(element)) {
-                return {};
-              }
-
-              if (element.type === "main") {
-                return createDockShellMock();
-              }
-
-              return {
-                style: {
-                  transition: "",
-                  transform: "",
-                },
-                offsetHeight: 24,
-                getBoundingClientRect: () => ({ top: 100 }),
-              };
-            },
-          },
-        );
-      });
-
-      expect(findOverlayExitNodes(renderer!).length).toBe(0);
-    } finally {
-      if (renderer) {
-        await TestRenderer.act(async () => {
-          renderer!.unmount();
-        });
-      }
-
-      if (previousTimeStamp) {
-        console.timeStamp = previousTimeStamp;
-      } else {
-        Reflect.deleteProperty(console, "timeStamp");
+        Reflect.deleteProperty(globalThis, "getComputedStyle");
       }
     }
   });

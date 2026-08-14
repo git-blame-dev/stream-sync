@@ -1,16 +1,13 @@
-import React, { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import React, { useLayoutEffect, useMemo, useRef } from 'react'
+import { AnimatePresence, motion, MotionConfig } from 'motion/react'
 
-import { GuiRow } from './GuiRow'
-import { GiftAnimationLayer } from './GiftAnimationLayer'
-import type { GuiGiftAnimationCompletionReason, GuiGiftAnimationEffectEnvelope, GuiRowDto } from '../types'
 import { DEFAULT_GUI_APPEARANCE, type GuiAppearance } from '../appearance'
-import { applyOverlayRowShiftMotion } from '../overlay-row-motion'
+import type { GuiGiftAnimationCompletionReason, GuiGiftAnimationEffectEnvelope, GuiRowDto } from '../types'
+import { GiftAnimationLayer } from './GiftAnimationLayer'
+import { GuiRow } from './GuiRow'
 
-const ROW_SLIDE_ANIMATION_MS = 1000
-export const OVERLAY_EXIT_CLEANUP_MS = ROW_SLIDE_ANIMATION_MS + 100
 const DOCK_PINNED_BOTTOM_THRESHOLD_PX = 8
-const OVERLAY_EXIT_BUFFER_PX = 2
-const OVERLAY_ROW_GAP_PX = 10
+const OVERLAY_ROW_TRANSITION = { duration: 0.25, ease: 'easeOut' } as const
 
 function isDockNearBottom(
   scrollTop: number,
@@ -35,162 +32,12 @@ interface GuiShellRowEntry {
   key: string
 }
 
-interface OverlayRowGeometry {
-  top: number
-  height: number
-  visualTop: number
-}
-
-interface OverlayVisibilityResult {
-  visibleKeys: string[]
-  exitCandidateKeys: string[]
-}
-
-interface OverlayExitingRow {
-  exitId: string
-  rowKey: string
-  row: GuiRowDto
-  topPx: number
-  travelPx: number
-  entryShiftPx: number
-}
-
-function areOrderedStringArraysEqual(left: string[], right: string[]): boolean {
-  if (left.length !== right.length) {
-    return false
-  }
-
-  for (let index = 0; index < left.length; index += 1) {
-    if (left[index] !== right[index]) {
-      return false
-    }
-  }
-
-  return true
-}
-
-function collectOverlayVisibility(
-  rowEntries: GuiShellRowEntry[],
-  geometryByKey: Map<string, OverlayRowGeometry>,
-  shellHeight: number,
-  suppressedRowKeys: Set<string>
-): OverlayVisibilityResult {
-  const visibleKeys: string[] = []
-
-  const fallbackVisibleKeys = rowEntries
-    .map((entry) => entry.key)
-    .filter((key) => !suppressedRowKeys.has(key))
-
-  for (let index = rowEntries.length - 1; index >= 0; index -= 1) {
-const rowEntry = rowEntries[index]
-if (!rowEntry) {
-continue
-}
-const key = rowEntry.key
-    if (suppressedRowKeys.has(key)) {
-      continue
-    }
-
-    const geometry = geometryByKey.get(key)
-    if (!geometry) {
-      return {
-        visibleKeys: fallbackVisibleKeys,
-        exitCandidateKeys: []
-      }
-    }
-
-    const top = geometry.top
-    const bottom = top + geometry.height
-    const visualTop = geometry.visualTop
-    const visualBottom = visualTop + geometry.height
-    const isFullyVisible = top >= 0 && bottom <= shellHeight
-    if (isFullyVisible) {
-      visibleKeys.push(key)
-      continue
-    }
-
-    const intersectsViewport = bottom > 0 && top < shellHeight
-    const visualIntersectsViewport = visualBottom > 0 && visualTop < shellHeight
-    if (intersectsViewport || visualIntersectsViewport) {
-      const exitCandidateKeys: string[] = [key]
-
-      for (let olderIndex = index - 1; olderIndex >= 0; olderIndex -= 1) {
-const olderEntry = rowEntries[olderIndex]
-if (!olderEntry) {
-continue
-}
-const olderKey = olderEntry.key
-        if (suppressedRowKeys.has(olderKey)) {
-          continue
-        }
-
-        const olderGeometry = geometryByKey.get(olderKey)
-        if (!olderGeometry) {
-          return {
-            visibleKeys: fallbackVisibleKeys,
-            exitCandidateKeys: []
-          }
-        }
-
-        const olderLayoutTop = olderGeometry.top
-        const olderLayoutBottom = olderLayoutTop + olderGeometry.height
-        const olderLayoutIntersectsViewport = olderLayoutBottom > 0 && olderLayoutTop < shellHeight
-        const olderVisualTop = olderGeometry.visualTop
-        const olderVisualBottom = olderVisualTop + olderGeometry.height
-        const olderVisualIntersectsViewport = olderVisualBottom > 0 && olderVisualTop < shellHeight
-        const olderIntersectsViewport = olderLayoutIntersectsViewport || olderVisualIntersectsViewport
-        if (!olderIntersectsViewport) {
-          if (olderLayoutBottom <= 0 && olderVisualBottom <= 0) {
-            break
-          }
-
-          continue
-        }
-
-        exitCandidateKeys.push(olderKey)
-      }
-
-      visibleKeys.reverse()
-      return {
-        visibleKeys,
-        exitCandidateKeys
-      }
-    }
-
-    break
-  }
-
-  visibleKeys.reverse()
-  return {
-    visibleKeys,
-    exitCandidateKeys: []
-  }
-}
-
-function createOverlayExitTravel(top: number, height: number): number {
-  return Math.max(0, top + height + OVERLAY_EXIT_BUFFER_PX)
-}
-
-function createOverlayExitStyle(topPx: number, travelPx: number): React.CSSProperties {
-  const style: React.CSSProperties & { [key: string]: string } = {
-    top: `${topPx}px`,
-    '--overlay-exit-travel': `${travelPx}px`
-  }
-  return style
-}
-
 export function resolveGuiRowRenderKey(
   row: GuiRowDto,
   getFallbackKey: (row: GuiRowDto) => string
 ): string {
   const eventId = typeof row.eventId === 'string' ? row.eventId.trim() : ''
   return eventId ? `event:${eventId}` : getFallbackKey(row)
-}
-
-function readsReducedMotionPreference(): boolean {
-  return typeof window !== 'undefined' &&
-    typeof window.matchMedia === 'function' &&
-    window.matchMedia('(prefers-reduced-motion: reduce)').matches
 }
 
 export function GuiShell({
@@ -219,281 +66,24 @@ export function GuiShell({
         } as React.CSSProperties)
   const shellRef = useRef<HTMLElement | null>(null)
   const isDockPinnedToBottomRef = useRef(true)
-  const rowElementsByKeyRef = useRef(new Map<string, HTMLDivElement>())
   const rowRenderKeyByRef = useRef(new WeakMap<GuiRowDto, string>())
   const rowRenderKeyCounterRef = useRef(0)
-  const previousTopByKeyRef = useRef(new Map<string, number>())
-  const overlayPreviousRowsByKeyRef = useRef(new Map<string, GuiRowDto>())
-  const overlayPreviousGeometryByKeyRef = useRef(new Map<string, OverlayRowGeometry>())
-  const overlaySuppressedRowKeysRef = useRef(new Set<string>())
-  const overlayExitSequenceRef = useRef(0)
-  const overlayExitCleanupTimersRef = useRef(new Map<string, ReturnType<typeof globalThis.setTimeout>>())
-  const [overlayVisibleRowKeys, setOverlayVisibleRowKeys] = useState<string[]>([])
-  const [overlayExitingRows, setOverlayExitingRows] = useState<OverlayExitingRow[]>([])
-  const [overlayVisibilityInputSignature, setOverlayVisibilityInputSignature] = useState('')
-  const [overlayMeasurementToken, setOverlayMeasurementToken] = useState(0)
 
-  const getFallbackRowRenderKey = (row: GuiRowDto): string => {
-    const existingKey = rowRenderKeyByRef.current.get(row)
-    if (existingKey) {
-      return existingKey
-    }
-
-    rowRenderKeyCounterRef.current += 1
-    const nextKey = `row:${rowRenderKeyCounterRef.current}`
-    rowRenderKeyByRef.current.set(row, nextKey)
-    return nextKey
-  }
-
-  const rowEntries = useMemo(() => {
+  const rowEntries = useMemo<GuiShellRowEntry[]>(() => {
     return rows.map((row) => {
+      let key = rowRenderKeyByRef.current.get(row)
+      if (!key) {
+        rowRenderKeyCounterRef.current += 1
+        key = `row:${rowRenderKeyCounterRef.current}`
+        rowRenderKeyByRef.current.set(row, key)
+      }
+
       return {
         row,
-        key: resolveGuiRowRenderKey(row, getFallbackRowRenderKey)
+        key: resolveGuiRowRenderKey(row, () => key)
       }
     })
   }, [rows])
-  const rowKeysSignature = useMemo(() => rowEntries.map((entry) => entry.key).join('|'), [rowEntries])
-  const appearanceSignature = `${appearance.profile}:${appearance.revision}:${appearance.settings.compactRows}:${appearance.settings.rowBackgroundsEnabled}:${appearance.settings.maxDisplayableBadges}`
-  const overlayInputSignature = `${overlayMeasurementToken}:${appearanceSignature}:${rowKeysSignature}`
-  const isOverlayVisibilityReady = mode === 'overlay' && overlayVisibilityInputSignature === overlayInputSignature
-  const overlayVisibleRowKeySet = useMemo(() => new Set(overlayVisibleRowKeys), [overlayVisibleRowKeys])
-  const reducedMotion = mode === 'overlay' && readsReducedMotionPreference()
-  const removeOverlayExitRow = useCallback((exitId: string) => {
-    const timer = overlayExitCleanupTimersRef.current.get(exitId)
-    if (timer !== undefined) {
-      globalThis.clearTimeout(timer)
-      overlayExitCleanupTimersRef.current.delete(exitId)
-    }
-    setOverlayExitingRows((currentRows) => currentRows.filter((row) => row.exitId !== exitId))
-  }, [])
-  const renderedRowEntries = useMemo(() => {
-    if (mode !== 'overlay') {
-      return rowEntries
-    }
-
-    if (!isOverlayVisibilityReady) {
-      return rowEntries.filter((entry) => {
-        return !overlaySuppressedRowKeysRef.current.has(entry.key)
-      })
-    }
-
-    return rowEntries.filter((entry) => overlayVisibleRowKeySet.has(entry.key))
-  }, [isOverlayVisibilityReady, mode, overlayVisibilityInputSignature, overlayVisibleRowKeySet, rowEntries])
-
-  useLayoutEffect(() => {
-    if (mode !== 'overlay') {
-      return
-    }
-
-    if (overlayVisibilityInputSignature === overlayInputSignature) {
-      return
-    }
-
-    if (!shellRef.current) {
-      return
-    }
-
-    const currentRowsByKey = new Map<string, GuiRowDto>()
-    for (const entry of rowEntries) {
-      currentRowsByKey.set(entry.key, entry.row)
-    }
-
-    for (const suppressedKey of Array.from(overlaySuppressedRowKeysRef.current)) {
-      if (currentRowsByKey.has(suppressedKey)) {
-        continue
-      }
-
-      overlaySuppressedRowKeysRef.current.delete(suppressedKey)
-    }
-
-    const currentGeometryByKey = new Map<string, OverlayRowGeometry>()
-    const shellRect = shellRef.current.getBoundingClientRect()
-    for (const entry of rowEntries) {
-      const element = rowElementsByKeyRef.current.get(entry.key)
-      if (element) {
-        const rect = element.getBoundingClientRect()
-        currentGeometryByKey.set(entry.key, {
-          top: element.offsetTop,
-          height: rect.height || element.offsetHeight,
-          visualTop: rect.top - shellRect.top
-        })
-      }
-    }
-
-    const shellHeight = shellRef.current.clientHeight
-    const visibility = collectOverlayVisibility(
-      rowEntries,
-      currentGeometryByKey,
-      shellHeight,
-      overlaySuppressedRowKeysRef.current
-    )
-    const existingExitRowKeys = new Set(overlayExitingRows.map((entry) => entry.rowKey))
-    const nextExitingRows: OverlayExitingRow[] = []
-
-    for (const exitKey of visibility.exitCandidateKeys) {
-      if (existingExitRowKeys.has(exitKey)) {
-        continue
-      }
-
-      const row = currentRowsByKey.get(exitKey)
-      const geometry = currentGeometryByKey.get(exitKey)
-      if (!row || !geometry) {
-        continue
-      }
-
-      const travelPx = createOverlayExitTravel(geometry.visualTop, geometry.height)
-      if (travelPx <= 0) {
-        continue
-      }
-
-      overlayExitSequenceRef.current += 1
-      nextExitingRows.push({
-        exitId: `${exitKey}:exit:${overlayExitSequenceRef.current}`,
-        rowKey: exitKey,
-        row,
-        topPx: geometry.visualTop,
-        travelPx,
-        entryShiftPx: geometry.height + OVERLAY_ROW_GAP_PX
-      })
-      overlaySuppressedRowKeysRef.current.add(exitKey)
-    }
-
-    for (const [previousKey, previousRow] of overlayPreviousRowsByKeyRef.current) {
-      if (currentRowsByKey.has(previousKey)) {
-        continue
-      }
-
-      if (existingExitRowKeys.has(previousKey)) {
-        continue
-      }
-
-      const previousGeometry = overlayPreviousGeometryByKeyRef.current.get(previousKey)
-      if (!previousGeometry) {
-        continue
-      }
-
-      const intersectsViewport =
-        previousGeometry.visualTop + previousGeometry.height > 0 &&
-        previousGeometry.visualTop < shellHeight
-      if (!intersectsViewport) {
-        continue
-      }
-
-      const travelPx = createOverlayExitTravel(previousGeometry.visualTop, previousGeometry.height)
-      if (travelPx <= 0) {
-        continue
-      }
-
-      overlayExitSequenceRef.current += 1
-      nextExitingRows.push({
-        exitId: `${previousKey}:exit:${overlayExitSequenceRef.current}`,
-        rowKey: previousKey,
-        row: previousRow,
-        topPx: previousGeometry.visualTop,
-        travelPx,
-        entryShiftPx: previousGeometry.height + OVERLAY_ROW_GAP_PX
-      })
-    }
-
-    overlayPreviousRowsByKeyRef.current = currentRowsByKey
-    overlayPreviousGeometryByKeyRef.current = currentGeometryByKey
-
-    setOverlayVisibilityInputSignature(overlayInputSignature)
-    if (!areOrderedStringArraysEqual(overlayVisibleRowKeys, visibility.visibleKeys)) {
-      setOverlayVisibleRowKeys(visibility.visibleKeys)
-    }
-
-    if (nextExitingRows.length > 0) {
-      setOverlayExitingRows((currentRows) => [...currentRows, ...nextExitingRows])
-    }
-  }, [mode, overlayExitingRows, overlayInputSignature, overlayVisibilityInputSignature, overlayVisibleRowKeys, rowEntries])
-
-  useLayoutEffect(() => {
-    if (mode === 'overlay') {
-      return
-    }
-
-    overlayPreviousRowsByKeyRef.current = new Map()
-    overlayPreviousGeometryByKeyRef.current = new Map()
-    overlaySuppressedRowKeysRef.current.clear()
-    if (overlayExitingRows.length > 0) {
-      setOverlayExitingRows([])
-    }
-  }, [mode, overlayExitingRows.length])
-
-  useLayoutEffect(() => {
-    const activeExitIds = new Set(overlayExitingRows.map((row) => row.exitId))
-    for (const [exitId, timer] of overlayExitCleanupTimersRef.current) {
-      if (activeExitIds.has(exitId) && mode === 'overlay') {
-        continue
-      }
-      globalThis.clearTimeout(timer)
-      overlayExitCleanupTimersRef.current.delete(exitId)
-    }
-
-    if (mode !== 'overlay') {
-      return
-    }
-
-    for (const exitRow of overlayExitingRows) {
-      if (overlayExitCleanupTimersRef.current.has(exitRow.exitId)) {
-        continue
-      }
-      const timer = globalThis.setTimeout(
-        () => removeOverlayExitRow(exitRow.exitId),
-        reducedMotion ? 0 : OVERLAY_EXIT_CLEANUP_MS
-      )
-      overlayExitCleanupTimersRef.current.set(exitRow.exitId, timer)
-    }
-  }, [mode, overlayExitingRows, reducedMotion, removeOverlayExitRow])
-
-  useLayoutEffect(() => {
-    return () => {
-      for (const timer of overlayExitCleanupTimersRef.current.values()) {
-        globalThis.clearTimeout(timer)
-      }
-      overlayExitCleanupTimersRef.current.clear()
-    }
-  }, [])
-
-  useLayoutEffect(() => {
-    if (mode !== 'overlay') {
-      return
-    }
-
-    if (
-      typeof window === 'undefined' ||
-      typeof window.addEventListener !== 'function' ||
-      typeof window.removeEventListener !== 'function'
-    ) {
-      return
-    }
-
-    const handleResize = () => {
-      setOverlayMeasurementToken((currentValue) => currentValue + 1)
-    }
-
-    window.addEventListener('resize', handleResize)
-
-    return () => {
-      window.removeEventListener('resize', handleResize)
-    }
-  }, [mode])
-
-  useLayoutEffect(() => {
-    if (mode !== 'overlay' || typeof ResizeObserver !== 'function' || !shellRef.current) {
-      return
-    }
-
-    const observer = new ResizeObserver(() => {
-      setOverlayMeasurementToken((currentValue) => currentValue + 1)
-    })
-    observer.observe(shellRef.current)
-    for (const element of rowElementsByKeyRef.current.values()) observer.observe(element)
-
-    return () => observer.disconnect()
-  }, [mode, rowKeysSignature])
 
   useLayoutEffect(() => {
     if (mode !== 'dock') {
@@ -501,11 +91,11 @@ export function GuiShell({
       return
     }
 
-    if (!shellRef.current) {
+    const shellElement = shellRef.current
+    if (!shellElement) {
       return
     }
 
-    const shellElement = shellRef.current
     const updatePinnedState = () => {
       isDockPinnedToBottomRef.current = isDockNearBottom(
         shellElement.scrollTop,
@@ -515,37 +105,13 @@ export function GuiShell({
     }
 
     shellElement.addEventListener('scroll', updatePinnedState)
-
-    return () => {
-      shellElement.removeEventListener('scroll', updatePinnedState)
-    }
+    return () => shellElement.removeEventListener('scroll', updatePinnedState)
   }, [mode])
 
   useLayoutEffect(() => {
-    if (mode === 'overlay' && !isOverlayVisibilityReady) {
+    if (mode !== 'dock' || !isDockPinnedToBottomRef.current) {
       return
     }
-
-    previousTopByKeyRef.current = applyOverlayRowShiftMotion({
-      rowKeys: renderedRowEntries.map((entry) => entry.key),
-      rowElementsByKey: rowElementsByKeyRef.current,
-      previousTopByKey: previousTopByKeyRef.current,
-      durationMs: ROW_SLIDE_ANIMATION_MS,
-      fallbackEntryShiftPx: overlayExitingRows.reduce((maxShift, row) => {
-        return row.entryShiftPx > maxShift ? row.entryShiftPx : maxShift
-      }, 0),
-      reducedMotion
-    })
-
-    if (mode !== 'dock') {
-      return
-    }
-
-    if (!shellRef.current) {
-      return
-    }
-
-    const shouldPinDockToBottom = isDockPinnedToBottomRef.current
 
     const scrollDockToBottom = () => {
       if (!shellRef.current) {
@@ -556,62 +122,56 @@ export function GuiShell({
       isDockPinnedToBottomRef.current = true
     }
 
-    if (!shouldPinDockToBottom) {
-      return
-    }
-
     scrollDockToBottom()
-
     if (typeof requestAnimationFrame === 'function') {
       requestAnimationFrame(scrollDockToBottom)
     }
-  }, [isOverlayVisibilityReady, mode, overlayExitingRows, reducedMotion, renderedRowEntries])
+  }, [mode, rowEntries])
+
+  const renderedRows = mode === 'overlay'
+    ? (
+        <AnimatePresence initial={false} mode="popLayout">
+          {rowEntries.map((entry) => (
+            <motion.div
+              key={entry.key}
+              layout="position"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={OVERLAY_ROW_TRANSITION}
+            >
+              <GuiRow
+                row={entry.row}
+                mode="overlay"
+                appearance={appearance}
+              />
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      )
+    : rowEntries.map((entry) => (
+        <GuiRow
+          key={entry.key}
+          row={entry.row}
+          mode={rowMode}
+          appearance={appearance}
+        />
+      ))
 
   return (
-    <main className={`gui-shell gui-shell--${mode}${appearance.profile === 'minimal' ? ' gui-shell--minimal' : ''}${appearance.profile === 'minimal' && appearance.settings.compactRows ? ' gui-shell--compact' : ''}`} style={shellStyle} ref={shellRef} aria-label="Livestream activity">
-      {mode === 'overlay'
-        ? overlayExitingRows.map((exitRow) => {
-            return (
-              <GuiRow
-                key={exitRow.exitId}
-                row={exitRow.row}
-                mode={mode}
-                className="gui-row--overlay-exit"
-                ariaHidden
-                appearance={appearance}
-                style={createOverlayExitStyle(exitRow.topPx, exitRow.travelPx)}
-                onAnimationEnd={(event) => {
-                  if (event.target !== event.currentTarget) {
-                    return
-                  }
-
-                  removeOverlayExitRow(exitRow.exitId)
-                }}
-              />
-            )
-          })
-        : null}
-      <GiftAnimationLayer
-        effect={activeEffect}
-        onComplete={handleEffectComplete}
-      />
-      {mode === 'tiktok-animations' ? null : renderedRowEntries.map((entry) => {
-        return (
-          <GuiRow
-            key={entry.key}
-            row={entry.row}
-            mode={rowMode}
-            appearance={appearance}
-            rowRef={(element) => {
-              if (element) {
-                rowElementsByKeyRef.current.set(entry.key, element)
-                return
-              }
-              rowElementsByKeyRef.current.delete(entry.key)
-            }}
-          />
-        )
-      })}
-    </main>
+    <MotionConfig reducedMotion="user">
+      <main
+        className={`gui-shell gui-shell--${mode}${appearance.profile === 'minimal' ? ' gui-shell--minimal' : ''}${appearance.profile === 'minimal' && appearance.settings.compactRows ? ' gui-shell--compact' : ''}`}
+        style={shellStyle}
+        ref={shellRef}
+        aria-label="Livestream activity"
+      >
+        <GiftAnimationLayer
+          effect={activeEffect}
+          onComplete={handleEffectComplete}
+        />
+        {mode === 'tiktok-animations' ? null : renderedRows}
+      </main>
+    </MotionConfig>
   )
 }

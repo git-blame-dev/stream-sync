@@ -57,7 +57,6 @@ describe("GUI shared styles behavior", () => {
     const rootBlock = readCssBlock(cssText, ":root");
     const overlayShellBlock = readCssBlock(cssText, ".gui-shell--overlay");
     const dockShellBlock = readCssBlock(cssText, ".gui-shell--dock");
-    const overlayExitBlock = readCssBlock(cssText, ".gui-row--overlay-exit");
     const rowBlock = readCssBlock(cssText, ".gui-row");
     const contentBlock = readCssBlock(cssText, ".gui-row__content");
     const copyBlock = readCssBlock(cssText, ".gui-row__copy");
@@ -75,7 +74,6 @@ describe("GUI shared styles behavior", () => {
     );
     const memberChatRowBlock = readCssBlock(cssText, ".gui-row--member-chat");
     const redMemberThemeBlock = readCssBlock(cssText, ".gui-row--member-theme-red");
-    const overlayEnterBlock = readCssBlock(cssText, ".gui-row--overlay-enter");
     const effectLayerBlock = readCssBlock(cssText, ".gui-shell__effect-layer");
     const effectVideoBlock = readCssBlock(cssText, ".gui-shell__effect-video");
     const effectCanvasBlock = readCssBlock(
@@ -161,10 +159,6 @@ describe("GUI shared styles behavior", () => {
     const minimalMemberCopyBlock = readCssBlock(
       cssText,
       ".gui-shell--minimal .gui-row__content--member-chat .gui-row__copy",
-    );
-    const minimalOverlayEnterBlock = readCssBlock(
-      cssText,
-      ".gui-shell--overlay.gui-shell--minimal .gui-row--overlay-enter:not(.gui-row--overlay-exit)",
     );
     const minimalHeaderBlock = readCssBlock(
       cssText,
@@ -291,10 +285,9 @@ describe("GUI shared styles behavior", () => {
     expect(dockShellBlock).toContain(
       "--gui-emote-size-current: var(--gui-dock-emote-size);",
     );
-    expect(overlayExitBlock).toContain("position: absolute;");
-    expect(overlayExitBlock).toContain(
-      "animation: gui-overlay-row-exit 1000ms ease-out forwards;",
-    );
+    expect(cssText).not.toContain("gui-overlay-row-exit");
+    expect(cssText).not.toContain("gui-minimal-overlay-row-enter");
+    expect(cssText).not.toContain(".gui-row--overlay-exit");
     expect(effectLayerBlock).toContain("position: absolute;");
     expect(effectLayerBlock).toContain("inset: 0;");
     expect(effectLayerBlock).toContain("z-index: 3;");
@@ -304,10 +297,6 @@ describe("GUI shared styles behavior", () => {
     expect(effectCanvasBlock).toContain("position: absolute;");
     expect(effectCanvasBlock).toContain("width: 100%;");
     expect(effectCanvasBlock).toContain("height: 100%;");
-    expect(cssText).toContain("@keyframes gui-overlay-row-exit");
-    expect(cssText).toContain(
-      "translateY(calc(-1 * var(--overlay-exit-travel, 0px)))",
-    );
     expect(rowBlock).toContain("grid-template-columns: auto 1fr;");
     expect(rowBlock).toContain(
       "background: rgba(0, 0, 0, var(--gui-row-background-opacity));",
@@ -376,10 +365,6 @@ describe("GUI shared styles behavior", () => {
       "filter: drop-shadow(0 0 6px color-mix(in srgb, var(--gui-member-avatar-halo-glow) 74%, transparent));",
     );
     expect(memberChatRowBlock).not.toContain("padding-bottom: 0;");
-    expect(overlayEnterBlock).toContain("animation: none;");
-    expect(minimalOverlayEnterBlock).toContain(
-      "animation: gui-minimal-overlay-row-enter 220ms ease-out both;",
-    );
     expect(avatarBlock).toContain("width: var(--gui-avatar-size-current);");
     expect(avatarBlock).toContain("height: var(--gui-avatar-size-current);");
     expect(avatarWrapperBlock).toContain("position: relative;");
@@ -444,9 +429,6 @@ describe("GUI shared styles behavior", () => {
       "animation: gui-member-sheen-sweep var(--gui-member-sheen-cycle-duration) ease-out infinite;",
     );
     expect(cssText).toContain("@media (prefers-reduced-motion: reduce)");
-    expect(cssText).toContain(
-      ".gui-row--overlay-enter.gui-row--overlay-exit {\n    animation: none;",
-    );
     expect(cssText).toContain("opacity: 0;");
     expect(badgesBlock).toContain("display: inline-flex;");
     expect(badgesBlock).toContain("align-items: center;");
@@ -543,9 +525,6 @@ describe("GUI shared styles behavior", () => {
     expect(cssText).not.toContain("text-shadow: none;");
     expect(cssText).toContain(
       ".gui-row--monetization .gui-row__monetization-image-clip,\n  .gui-row--member-chat .gui-row__member-image-clip {\n    display: none;",
-    );
-    expect(cssText).toContain(
-      ".gui-shell--overlay.gui-shell--minimal .gui-row--overlay-enter:not(.gui-row--overlay-exit) {\n    animation: none;",
     );
     expect(emoteBlock).toContain("width: var(--gui-emote-size-current);");
     expect(emoteBlock).toContain("height: var(--gui-emote-size-current);");

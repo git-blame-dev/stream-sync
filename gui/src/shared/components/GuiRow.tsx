@@ -20,15 +20,12 @@ function normalizePlatform(value: unknown): string {
 interface GuiRowProps {
   row: GuiRowDto
   mode: 'dock' | 'overlay'
-  rowRef?: (element: HTMLDivElement | null) => void
   className?: string
-  style?: React.CSSProperties
   onAnimationEnd?: React.AnimationEventHandler<HTMLDivElement>
-  ariaHidden?: boolean
   appearance?: GuiAppearance
 }
 
-export function GuiRow({ row, mode, rowRef, className, style, onAnimationEnd, ariaHidden = false, appearance = DEFAULT_GUI_APPEARANCE }: GuiRowProps) {
+export function GuiRow({ row, mode, className, onAnimationEnd, appearance = DEFAULT_GUI_APPEARANCE }: GuiRowProps) {
   const isMinimal = appearance.profile === 'minimal'
   const isCompact = isMinimal && appearance.settings.compactRows
   const appearanceSettings = appearance.settings
@@ -152,7 +149,7 @@ export function GuiRow({ row, mode, rowRef, className, style, onAnimationEnd, ar
   }
 
   return (
-    <div className={rowClass} style={style} onAnimationEnd={onAnimationEnd} data-row-type={row.type} role="article" aria-hidden={ariaHidden || undefined} ref={rowRef}>
+    <div className={rowClass} onAnimationEnd={onAnimationEnd} data-row-type={row.type} role="article">
       {renderRowContent()}
     </div>
   )
