@@ -123,8 +123,8 @@ export function GuiRow({ row, mode, rowRef, className, style, onAnimationEnd, ar
                   ))}
                 </span>
               ) : null}
+              {isCompact ? <span className="gui-row__minimal-separator" aria-hidden="true">:</span> : null}
             </div>
-            {isCompact ? <span className="gui-row__minimal-separator" aria-hidden="true">:</span> : null}
             <span className={[...textClass.split(' '), isCompact ? 'gui-row__text--minimal' : ''].filter(Boolean).join(' ')}>
               {hasParts
                 ? row.parts?.map((part, index) => {

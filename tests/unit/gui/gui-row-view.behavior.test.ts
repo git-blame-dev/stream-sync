@@ -52,6 +52,9 @@ describe("GuiRow rendering behavior", () => {
     expect(html.indexOf("MEMBER")).toBeLessThan(html.indexOf("gui-row__username"));
     expect(html.indexOf("gui-row__username")).toBeLessThan(html.indexOf("gui-row__badges"));
     expect(html.indexOf("gui-row__badges")).toBeLessThan(html.indexOf("gui-row__minimal-separator"));
+    const headerIndex = html.indexOf('class="gui-row__header');
+    const headerEndIndex = html.indexOf("</div>", headerIndex);
+    expect(html.indexOf("gui-row__minimal-separator")).toBeLessThan(headerEndIndex);
     expect(html).toContain("gui-row__minimal-separator");
     expect(html.split('class="gui-row__badge"').length - 1).toBe(1);
   });

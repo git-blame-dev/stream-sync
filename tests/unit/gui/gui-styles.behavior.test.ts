@@ -319,11 +319,11 @@ describe("GUI shared styles behavior", () => {
     );
     expect(minimalTextColorBlock).toContain("color: #ffffff;");
     expect(minimalBadgesBlock).toContain("height: 1em;");
-    expect(minimalBadgesBlock).toContain("transform: translateY(2px);");
+    expect(minimalBadgesBlock).toContain("transform: translateY(5px);");
     expect(minimalBadgeBlock).toContain("width: 1em;");
     expect(minimalBadgeBlock).toContain("height: 1em;");
     expect(minimalEmoteBlock).toContain("width: auto;");
-    expect(minimalEmoteBlock).toContain("height: 1em;");
+    expect(minimalEmoteBlock).toContain("height: 1.15em;");
     expect(minimalEmoteBlock).toContain("vertical-align: text-bottom;");
     expect(minimalMemberTagBlock).toContain("transform: none;");
     expect(minimalHeaderBlock).toContain("display: inline-flex;");

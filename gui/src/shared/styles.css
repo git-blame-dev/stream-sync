@@ -665,7 +665,7 @@ html, body {
 
 .gui-shell--minimal .gui-row--minimal .gui-row__badges {
   height: 1em;
-  transform: translateY(2px);
+  transform: translateY(5px);
 }
 
 .gui-shell--minimal .gui-row--minimal .gui-row__badge {
@@ -675,7 +675,7 @@ html, body {
 
 .gui-shell--minimal .gui-row--minimal .gui-row__emote {
   width: auto;
-  height: 1em;
+  height: 1.15em;
   vertical-align: text-bottom;
 }
 
