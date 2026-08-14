@@ -451,7 +451,7 @@ html, body {
 
 .gui-row__text {
   font-size: var(--gui-row-body-font-size-current);
-  line-height: 1;
+  line-height: 1.08;
   margin-top: 5px;
   color: #c7d0d9;
   display: inline-flex;

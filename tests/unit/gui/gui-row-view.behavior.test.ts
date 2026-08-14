@@ -63,7 +63,7 @@ describe("GuiRow rendering behavior", () => {
     expect(html).toContain('src="/gui/assets/platform-icons/youtube-icon.png"');
   });
 
-  it("renders notification badges before username and the platform icon on the avatar", () => {
+  it("renders notification badges after username and the platform icon on the avatar", () => {
     const html = renderToStaticMarkup(
       React.createElement(GuiRow, {
         mode: "dock",
@@ -86,7 +86,7 @@ describe("GuiRow rendering behavior", () => {
     const avatarWrapperEndIndex = html.indexOf("</span>", avatarWrapperIndex);
     const iconIndex = html.indexOf('class="gui-row__platform-icon"');
     const messageIndex = html.indexOf('gui-row__text--notification');
-    expect(badgeIndex).toBeLessThan(usernameIndex);
+    expect(usernameIndex).toBeLessThan(badgeIndex);
     expect(iconIndex).toBeGreaterThan(avatarWrapperIndex);
     expect(iconIndex).toBeLessThan(avatarWrapperEndIndex);
     expect(iconIndex).toBeLessThan(messageIndex);
@@ -265,8 +265,8 @@ describe("GuiRow rendering behavior", () => {
     const usernameIndex = html.indexOf("gui-row__username");
     const badgesIndex = html.indexOf('class="gui-row__badges"');
     const memberLabelIndex = html.indexOf('class="gui-row__member-tag"');
-    expect(memberLabelIndex).toBeLessThan(badgesIndex);
-    expect(badgesIndex).toBeLessThan(usernameIndex);
+    expect(memberLabelIndex).toBeLessThan(usernameIndex);
+    expect(usernameIndex).toBeLessThan(badgesIndex);
     expect(html).toContain('class="gui-row__badge"');
     expect(html).toContain('src="https://example.invalid/badge-1.png"');
     expect(html).toContain('src="https://example.invalid/badge-2.png"');

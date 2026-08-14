@@ -217,7 +217,7 @@ describe("GUI shared styles behavior", () => {
       "height: var(--gui-platform-icon-size-current);",
     );
     expect(avatarPlatformIconBlock).toContain("position: absolute;");
-    expect(avatarPlatformIconBlock).toContain("left: -4px;");
+    expect(avatarPlatformIconBlock).toContain("left: -9px;");
     expect(avatarPlatformIconBlock).toContain("bottom: -4px;");
     expect(avatarPlatformIconBlock).toContain("z-index: 2;");
     expect(usernameBlock).toContain(
@@ -247,6 +247,7 @@ describe("GUI shared styles behavior", () => {
     expect(textBlock).toContain(
       "font-size: var(--gui-row-body-font-size-current);",
     );
+    expect(textBlock).toContain("line-height: 1.08;");
     expect(memberContentBlock).toContain("display: flow-root;");
     expect(monetizationContentBlock).toContain("position: relative;");
     expect(memberHeaderBlock).toContain("min-width: 0;");
