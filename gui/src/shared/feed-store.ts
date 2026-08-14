@@ -16,6 +16,18 @@ function normalizeString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
 }
 
+function normalizeMemberSpriteUrl(value: unknown): string | undefined {
+  const candidate = normalizeString(value)
+  if (!candidate || candidate.length > 2048) return undefined
+  try {
+    const url = new URL(candidate)
+    if (url.protocol !== 'https:' || url.username || url.password || url.hash) return undefined
+    return candidate
+  } catch {
+    return undefined
+  }
+}
+
 function normalizeParts(value: unknown): GuiRowDto['parts'] {
   if (!Array.isArray(value) || value.length === 0) {
     return undefined
@@ -98,6 +110,9 @@ function normalizeRow(input: unknown): GuiRowDto {
   const parts = normalizeParts(row.parts)
   const badgeImages = normalizeBadgeImages(row.badgeImages)
   const isPaypiggy = typeof row.isPaypiggy === 'boolean' ? row.isPaypiggy : null
+  const memberSpriteUrl = kind === 'chat' && isPaypiggy === true
+    ? normalizeMemberSpriteUrl(row.memberSpriteUrl)
+    : undefined
 
   return {
     ...(normalizeString(row.eventId) ? { eventId: normalizeString(row.eventId) } : {}),
@@ -109,6 +124,7 @@ function normalizeRow(input: unknown): GuiRowDto {
     ...(parts ? { parts } : {}),
     ...(badgeImages ? { badgeImages } : {}),
     ...(isPaypiggy === null ? {} : { isPaypiggy }),
+    ...(memberSpriteUrl ? { memberSpriteUrl } : {}),
     avatarUrl: normalizeString(row.avatarUrl),
     timestamp: row.timestamp === null ? null : normalizeString(row.timestamp)
   }

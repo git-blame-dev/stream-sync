@@ -71,6 +71,37 @@ describe("GUI feed store behavior", () => {
     expect(expectFirstRow(rows).isPaypiggy).toBe(true);
   });
 
+  it("retains safe member sprites only on chat rows", () => {
+    const store = createGuiFeedStore();
+
+    store.pushEvent({
+      ...createRow(1),
+      isPaypiggy: true,
+      memberSpriteUrl: "https://cdn.example/member.gif",
+    });
+    store.pushEvent({
+      ...createRow(2),
+      kind: "notification",
+      memberSpriteUrl: "https://cdn.example/ignored.gif",
+    });
+    store.pushEvent({
+      ...createRow(3),
+      isPaypiggy: true,
+      memberSpriteUrl:
+        "https://user:pass@example.invalid/member.gif#fragment",
+    });
+    store.pushEvent({
+      ...createRow(4),
+      isPaypiggy: false,
+      memberSpriteUrl: "https://cdn.example/ignored-non-member.gif",
+    });
+
+    expect(store.getRows()[0]?.memberSpriteUrl).toBe("https://cdn.example/member.gif");
+    expect(store.getRows()[1]?.memberSpriteUrl).toBeUndefined();
+    expect(store.getRows()[2]?.memberSpriteUrl).toBeUndefined();
+    expect(store.getRows()[3]?.memberSpriteUrl).toBeUndefined();
+  });
+
   it("preserves parts arrays emitted by GUI mapper", () => {
     const store = createGuiFeedStore();
 

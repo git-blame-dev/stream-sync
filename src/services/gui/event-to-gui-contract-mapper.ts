@@ -84,6 +84,18 @@ function normalizeString(value: unknown): string {
     return typeof value === 'string' ? value.trim() : '';
 }
 
+function normalizeMemberSpriteUrl(value: unknown): string | undefined {
+    const candidate = normalizeString(value);
+    if (!candidate || candidate.length > 2048) return undefined;
+    try {
+        const url = new URL(candidate);
+        if (url.protocol !== 'https:' || url.username || url.password || url.hash) return undefined;
+        return candidate;
+    } catch {
+        return undefined;
+    }
+}
+
 function toFiniteNumber(value: unknown, fallback: number): number {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : fallback;
@@ -276,6 +288,10 @@ return cachedAvatar;
 
         if (rule.kind === 'chat') {
             mapped.isPaypiggy = data.isPaypiggy === true;
+            const memberSpriteUrl = mapped.isPaypiggy
+                ? normalizeMemberSpriteUrl(data.memberSpriteUrl)
+                : undefined;
+            if (memberSpriteUrl) mapped.memberSpriteUrl = memberSpriteUrl;
             if (badgeImages.length > 0) {
                 mapped.badgeImages = badgeImages;
             }

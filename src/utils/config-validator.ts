@@ -215,7 +215,7 @@ class ConfigValidator {
             follows: ConfigValidator._normalizeFollowsSection(rawConfig.follows || {}),
             raids: ConfigValidator._normalizeRaidsSection(rawConfig.raids || {}),
             paypiggies: ConfigValidator._normalizePaypiggiesSection(rawConfig.paypiggies || {}),
-            greetings: ConfigValidator._normalizeGreetingsSection(rawConfig.greetings || {}),
+            greetings: ConfigValidator._normalizeGreetingsSection(rawConfig.greetings || {}, rawConfig.memberSprites),
             shares: ConfigValidator._normalizeSharesSection(rawConfig.shares || {})
         };
     }
@@ -478,8 +478,9 @@ class ConfigValidator {
         };
     }
 
-    static _normalizeGreetingsSection(raw: RawConfigSection): NormalizedConfigSection {
-        const customVfxProfiles: Record<string, { profileId: string; command: string }> = {};
+    static _normalizeGreetingsSection(raw: RawConfigSection, rawMemberSprites?: RawConfigSection): NormalizedConfigSection {
+        const customVfxProfiles: Record<string, { profileId: string; command: string; memberSpriteUrl?: string }> = {};
+        const profileIds = new Set<string>();
         for (const [key, value] of Object.entries(raw)) {
             if (key === 'command') {
                 continue;
@@ -491,6 +492,7 @@ class ConfigValidator {
             }
 
             const parsedProfile = ConfigValidator._parseGreetingCustomProfileLine(profileId, value);
+            profileIds.add(profileId);
             for (const identityKey of parsedProfile.identities) {
                 if (Object.prototype.hasOwnProperty.call(customVfxProfiles, identityKey)) {
                     throw new Error(`greetings custom VFX identity mapped more than once: ${identityKey}`);
@@ -500,6 +502,37 @@ class ConfigValidator {
                     profileId: parsedProfile.profileId,
                     command: parsedProfile.command
                 };
+            }
+        }
+
+        if (rawMemberSprites !== undefined) {
+            for (const [profileId, value] of Object.entries(rawMemberSprites)) {
+                const normalizedProfileId = profileId.trim();
+                if (!profileIds.has(normalizedProfileId)) {
+                    throw new Error(`memberSprites.${profileId} does not match a greetings profile`);
+                }
+                if (typeof value !== 'string') {
+                    throw new Error(`memberSprites.${profileId} must be a valid HTTPS URL`);
+                }
+                const candidate = value.trim();
+                if (!candidate || candidate.length > 2048) {
+                    throw new Error(`memberSprites.${profileId} must be a valid HTTPS URL`);
+                }
+                let url: URL;
+                try {
+                    url = new URL(candidate);
+                } catch {
+                    throw new Error(`memberSprites.${profileId} must be a valid HTTPS URL`);
+                }
+                const canonicalUrl = url.toString();
+                if (canonicalUrl.length > 2048 || url.protocol !== 'https:' || url.username || url.password || url.hash) {
+                    throw new Error(`memberSprites.${profileId} must be a valid HTTPS URL`);
+                }
+                for (const profile of Object.values(customVfxProfiles)) {
+                    if (profile.profileId === normalizedProfileId) {
+                        profile.memberSpriteUrl = canonicalUrl;
+                    }
+                }
             }
         }
 

@@ -429,6 +429,28 @@ describe("GuiRow rendering behavior", () => {
     expect(imageIndex).toBeLessThan(textIndex);
   });
 
+  it("renders a valid member sprite for member chat rows", () => {
+    const html = renderToStaticMarkup(
+      React.createElement(GuiRow, {
+        mode: "dock",
+        row: {
+          type: "chat",
+          kind: "chat",
+          platform: "youtube",
+          username: "member",
+          text: "hello",
+          isPaypiggy: true,
+          memberSpriteUrl: "https://cdn.example/member.gif",
+          avatarUrl: "https://example.invalid/avatar.png",
+          timestamp: null,
+        },
+      }),
+    );
+    expect(html).toContain('class="gui-row__member-image"');
+    expect(html).toContain('src="https://cdn.example/member.gif"');
+    expect(html).not.toContain("rayquaza.gif");
+  });
+
   it("renders Rayquaza image for trimmed mixed-case YouTube member rows", () => {
     const html = renderToStaticMarkup(
       React.createElement(GuiRow, {

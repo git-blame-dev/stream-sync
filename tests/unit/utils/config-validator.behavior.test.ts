@@ -733,6 +733,29 @@ describe("ConfigValidator simple command sections", () => {
     });
   });
 
+  it("merges validated member sprite URLs into every profile identity", () => {
+    const normalized = ConfigValidator.normalize({
+      greetings: { profileMain: "twitch:viewer|youtube:@viewer, !water" },
+      memberSprites: { profileMain: "  https://cdn.example/sprite.png  " },
+    });
+
+    expect(normalized.greetings.customVfxProfiles).toEqual({
+      "twitch:viewer": { profileId: "profileMain", command: "!water", memberSpriteUrl: "https://cdn.example/sprite.png" },
+      "youtube:viewer": { profileId: "profileMain", command: "!water", memberSpriteUrl: "https://cdn.example/sprite.png" },
+    });
+    expect(normalized).not.toHaveProperty("memberSprites");
+  });
+
+  it("rejects unsafe or orphaned member sprite entries", () => {
+    expect(() => ConfigValidator.normalize({ greetings: { profile: "twitch:viewer, !water" }, memberSprites: { other: "https://cdn.example/a" } })).toThrow();
+    expect(() => ConfigValidator.normalize({ greetings: { profile: "twitch:viewer, !water" }, memberSprites: { profile: "http://cdn.example/a" } })).toThrow();
+    expect(() => ConfigValidator.normalize({ greetings: { profile: "twitch:viewer, !water" }, memberSprites: { profile: "https://user:pass@cdn.example/a#x" } })).toThrow();
+    expect(() => ConfigValidator.normalize({
+      greetings: { profile: "twitch:viewer, !water" },
+      memberSprites: { profile: `https://cdn.example/${"é".repeat(700)}` },
+    })).toThrow("memberSprites.profile must be a valid HTTPS URL");
+  });
+
   it("throws when greetings custom profile row is malformed", () => {
     expect(() =>
       ConfigValidator._normalizeGreetingsSection({

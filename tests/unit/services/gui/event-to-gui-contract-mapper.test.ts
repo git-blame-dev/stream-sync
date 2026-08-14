@@ -216,6 +216,45 @@ describe("Event-to-GUI contract mapper behavior", () => {
     expect(mapped.isPaypiggy).toBe(true);
   });
 
+  it("maps only safe member sprite URLs onto chat DTOs", async () => {
+    const mapper = createMapper();
+    const valid = await mapper.mapDisplayRow({
+      type: "chat",
+      data: {
+        message: "hello",
+        isPaypiggy: true,
+        memberSpriteUrl: " https://cdn.example/member.gif ",
+      },
+    });
+    const notification = await mapper.mapDisplayRow({
+      type: "platform:follow",
+      data: {
+        displayMessage: "followed",
+        memberSpriteUrl: "https://cdn.example/member.gif",
+      },
+    });
+    const invalid = await mapper.mapDisplayRow({
+      type: "chat",
+      data: {
+        message: "hello",
+        isPaypiggy: true,
+        memberSpriteUrl: "http://user:pass@example/member.gif#x",
+      },
+    });
+    const nonMember = await mapper.mapDisplayRow({
+      type: "chat",
+      data: {
+        message: "hello",
+        isPaypiggy: false,
+        memberSpriteUrl: "https://cdn.example/member.gif",
+      },
+    });
+    expect(valid?.memberSpriteUrl).toBe("https://cdn.example/member.gif");
+    expect(notification?.memberSpriteUrl).toBeUndefined();
+    expect(invalid?.memberSpriteUrl).toBeUndefined();
+    expect(nonMember?.memberSpriteUrl).toBeUndefined();
+  });
+
   it("maps canonical message.parts for chat rows", async () => {
     const mapper = createMapper({ messageCharacterLimit: 0 });
 

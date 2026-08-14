@@ -85,7 +85,7 @@ export function GuiRow({ row, mode, rowRef, className, style, onAnimationEnd, ar
             <span className="gui-row__member-image-clip">
               <img
                 className="gui-row__member-image"
-                src={RAYQUAZA_IMAGE_URL}
+                src={row.memberSpriteUrl || RAYQUAZA_IMAGE_URL}
                 alt=""
                 loading="lazy"
                 decoding="async"

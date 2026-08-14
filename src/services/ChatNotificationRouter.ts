@@ -63,6 +63,7 @@ type CommandConfig = {
 type GreetingProfile = {
     profileId?: string;
     command?: string;
+    memberSpriteUrl?: string;
 } & RouterRecord;
 
 type FirstMessageState = {
@@ -249,7 +250,7 @@ class ChatNotificationRouter {
             const greetingsEnabled = this.isGreetingEnabled(platform);
 
             if (chatEnabled) {
-                sourceChatItem = this.buildChatMessageItem(platform, safeNormalizedData, sanitizedMessage.message, messageParts);
+                sourceChatItem = this.buildChatMessageItem(platform, safeNormalizedData, sanitizedMessage.message, messageParts, greetingProfile);
             }
 
             const farewellTrigger = this.detectFarewell(sanitizedMessage.message);
@@ -512,7 +513,7 @@ class ChatNotificationRouter {
         );
     }
 
-    buildChatMessageItem(platform: string, normalizedData: NormalizedChatData, sanitizedMessage: string, messageParts: Array<Record<string, unknown>> = []): DisplayQueueItem {
+    buildChatMessageItem(platform: string, normalizedData: NormalizedChatData, sanitizedMessage: string, messageParts: Array<Record<string, unknown>> = [], greetingProfile?: GreetingProfile | null): DisplayQueueItem {
 
         const baseChatData = {
             type: 'chat',
@@ -544,6 +545,9 @@ class ChatNotificationRouter {
         const badgeImages = normalizeBadgeImages(normalizedData.badgeImages);
         if (badgeImages.length > 0) {
             chatData.badgeImages = badgeImages;
+        }
+        if (normalizedData.isPaypiggy === true && typeof greetingProfile?.memberSpriteUrl === 'string') {
+            chatData.memberSpriteUrl = greetingProfile.memberSpriteUrl;
         }
 
         return {
@@ -804,12 +808,13 @@ class ChatNotificationRouter {
             return null;
         }
 
-        const normalizedIdentity = normalizeGreetingIdentityKey(platform, identityValue);
-        if (!normalizedIdentity) {
+        const normalizedPlatform = platform.trim().toLowerCase();
+        const normalizedIdentity = normalizeGreetingIdentityKey(normalizedPlatform, identityValue);
+        if (!normalizedPlatform || !normalizedIdentity) {
             return null;
         }
 
-        const identityKey = `${platform}:${normalizedIdentity}`;
+        const identityKey = `${normalizedPlatform}:${normalizedIdentity}`;
         return profiles[identityKey] || null;
     }
 

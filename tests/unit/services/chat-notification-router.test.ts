@@ -300,6 +300,51 @@ describe("ChatNotificationRouter", () => {
     expect(chatItem?.data?.isPaypiggy).toBe(true);
   });
 
+  it("attaches the resolved member sprite only to paypiggy chat rows", async () => {
+    const { router, runtime } = createRouter();
+    runtime.config.greetings = {
+      customVfxProfiles: {
+        "twitch:test-user-gamma": {
+          profileId: "profile",
+          command: "!water",
+          memberSpriteUrl: "https://cdn.example/sprite.png",
+        },
+      },
+    };
+    await router.handleChatMessage("twitch", {
+      ...baseMessage,
+      isPaypiggy: true,
+    });
+
+    const paypiggy = getQueuedItems(runtime).find((item) => item.type === "chat");
+    expect(paypiggy?.data.memberSpriteUrl).toBe(
+      "https://cdn.example/sprite.png",
+    );
+    const direct = router.buildChatMessageItem(
+      "twitch",
+      { ...baseMessage, isPaypiggy: false },
+      "hello",
+    );
+    expect(direct.data.memberSpriteUrl).toBeUndefined();
+  });
+
+  it("resolves member profiles with normalized platform casing", () => {
+    const { router, runtime } = createRouter();
+    runtime.config.greetings = {
+      customVfxProfiles: {
+        "youtube:test-user": {
+          profileId: "profile",
+          command: "!water",
+          memberSpriteUrl: "https://cdn.example/sprite.png",
+        },
+      },
+    };
+
+    expect(router.resolveGreetingProfile("  YouTube  ", "@@Test-User")).toEqual(
+      expect.objectContaining({ profileId: "profile" }),
+    );
+  });
+
   it("queues greeting before command for first-time command messages", async () => {
     const commandConfig = { command: "!testboom" };
     const { router, runtime } = createRouter({
