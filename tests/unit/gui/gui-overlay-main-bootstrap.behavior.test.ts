@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import type { ReactNode } from "react";
 
 import { bootstrapOverlayApp } from "../../../gui/src/overlay/main";
+import { DEFAULT_GUI_APPEARANCE } from "../../../gui/src/shared/appearance";
 
 function createTarget() {
   const attributes: Record<string, string> = {};
@@ -33,6 +34,8 @@ describe("Overlay main bootstrap behavior", () => {
         overlayMaxMessages: 5,
         overlayMaxLinesPerMessage: 4,
         overlayFeedMode: "chat",
+        feedMode: "all",
+        appearance: DEFAULT_GUI_APPEARANCE,
       }),
       createRootImpl: () => ({
         render: (element: ReactNode) => {

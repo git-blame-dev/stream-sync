@@ -2,12 +2,14 @@ import { describe, it, expect } from "bun:test";
 import fs from "fs";
 import os from "os";
 import path from "path";
+import { EventEmitter } from "node:events";
 
 import { createGuiTransportService } from "../../src/services/gui/gui-transport-service";
 import { DEFAULT_AVATAR_URL } from "../../src/constants/avatar";
 import { safeSetTimeout } from "../../src/utils/timeout-validator";
 import { TestEventBus } from "../helpers/gui-transport-test-utils";
 import { createConfigFixture } from "../helpers/config-fixture";
+import { createOperatorAppearanceService } from "../../src/services/operator/operator-appearance-service";
 
 function buildConfig(guiOverrides = {}) {
   return createConfigFixture({
@@ -44,8 +46,7 @@ function createSseReader(response: any) {
     });
   };
 
-  return {
-    async readEvent(timeoutMs = 2000) {
+  const readPayload = async (timeoutMs = 2000) => {
       while (true) {
         const separatorIndex = buffer.indexOf("\n\n");
         if (separatorIndex === -1) {
@@ -71,6 +72,20 @@ function createSseReader(response: any) {
 
         const dataText = dataLine.slice("data:".length).trim();
         return JSON.parse(dataText);
+      }
+  };
+
+  return {
+    async readEvent(timeoutMs = 2000) {
+      while (true) {
+        const payload = await readPayload(timeoutMs);
+        if (payload.__guiEvent !== "appearance") return payload;
+      }
+    },
+    async readAppearance(timeoutMs = 2000) {
+      while (true) {
+        const payload = await readPayload(timeoutMs);
+        if (payload.__guiEvent === "appearance") return payload;
       }
     },
   };
@@ -99,6 +114,67 @@ function requireRuntimeErrorListener(
 }
 
 describe("GUI transport routes and SSE integration", () => {
+  it("sends the current minimal appearance snapshot when a GUI client connects", async () => {
+    const service = createGuiTransportService({
+      config: buildConfig({ enableOverlay: true, port: 0 }),
+      eventBus: new TestEventBus(),
+      logger: null,
+    });
+    await service.start();
+
+    const controller = new AbortController();
+    try {
+      const response = await fetch(`${getBaseUrl(service)}/gui/events`, { signal: controller.signal });
+      const appearance = await createSseReader(response).readAppearance();
+
+      expect(appearance).toMatchObject({
+        __guiEvent: "appearance",
+        profile: "minimal",
+        revision: 0,
+        settings: {
+          compactRows: true,
+          rowBackgroundsEnabled: false,
+          maxDisplayableBadges: 1,
+        },
+      });
+    } finally {
+      controller.abort();
+      await service.stop();
+    }
+  });
+
+  it("broadcasts persisted appearance revisions to connected GUI clients", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "gui-appearance-"));
+    const appearance = await createOperatorAppearanceService({
+      defaults: { compactRows: true, rowBackgroundsEnabled: false, maxDisplayableBadges: 1 },
+      filePath: path.join(root, "appearance.json"),
+    });
+    const service = createGuiTransportService({
+      config: buildConfig({ enableOverlay: true, port: 0 }),
+      eventBus: new TestEventBus(),
+      logger: null,
+      operatorAppearance: appearance,
+    });
+    await service.start();
+    const controller = new AbortController();
+
+    try {
+      const response = await fetch(`${getBaseUrl(service)}/gui/events`, { signal: controller.signal });
+      const reader = createSseReader(response);
+      expect((await reader.readAppearance()).revision).toBe(0);
+
+      await appearance.set("maxDisplayableBadges", 0);
+      expect(await reader.readAppearance()).toMatchObject({
+        revision: 1,
+        settings: { maxDisplayableBadges: 0 },
+      });
+    } finally {
+      controller.abort();
+      await service.stop();
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("fails to start when host is missing", async () => {
     const config = buildConfig({
       enableDock: true,
@@ -202,6 +278,65 @@ describe("GUI transport routes and SSE integration", () => {
 
     await service.stop();
     expect(unsubscribeCalls).toBe(3);
+  });
+
+  it("releases GUI SSE capacity when only the response closes", async () => {
+    let requestListener: ((req: any, res: any) => void) | null = null;
+    const fakeCreateServer = (listener: (req: any, res: any) => void) => {
+      requestListener = listener;
+      return {
+        once: () => undefined,
+        on: () => undefined,
+        removeListener: () => undefined,
+        listen: (_port: number, _host: string, callback?: () => void) => callback?.(),
+        address: () => ({ address: "127.0.0.1", family: "IPv4", port: 45681 }),
+        close: (callback?: (error?: Error) => void) => callback?.(),
+      };
+    };
+    const service = createGuiTransportService({
+      config: buildConfig({ enableOverlay: true, port: 0 }),
+      eventBus: new TestEventBus(),
+      logger: null,
+      createServer: fakeCreateServer,
+    });
+    await service.start();
+
+    const createRequest = () => Object.assign(new EventEmitter(), {
+      destroyed: false,
+      headers: {},
+      method: "GET",
+      url: "/gui/events",
+    });
+    const createResponse = () => Object.assign(new EventEmitter(), {
+      destroyed: false,
+      statusCode: 0,
+      writableEnded: false,
+      writableLength: 0,
+      destroy() {
+        this.destroyed = true;
+      },
+      end() {
+        this.writableEnded = true;
+      },
+      write() {
+        return true;
+      },
+      writeHead(statusCode: number) {
+        this.statusCode = statusCode;
+      },
+    });
+    const responses = Array.from({ length: 16 }, () => createResponse());
+    for (const response of responses) {
+      requestListener!(createRequest(), response);
+      expect(response.statusCode).toBe(200);
+    }
+
+    responses[0]!.emit("close");
+    const replacement = createResponse();
+    requestListener!(createRequest(), replacement);
+    expect(replacement.statusCode).toBe(200);
+
+    await service.stop();
   });
 
   it("marks transport inactive when server emits runtime error after start", async () => {
@@ -1530,6 +1665,62 @@ describe("GUI transport routes and SSE integration", () => {
       expect(response.status).toBe(200);
       expect(html).toContain('"overlayMaxMessages":7');
       expect(html).toContain('"overlayMaxLinesPerMessage":4');
+    } finally {
+      await service.stop();
+    }
+  });
+
+  it("resolves minimal appearance and maxMessages independently for each overlay URL", async () => {
+    const service = createGuiTransportService({
+      config: buildConfig({
+        enableOverlay: true,
+        overlayMaxMessages: 3,
+        minimalOverlayMaxMessages: 6,
+        port: 0,
+      }),
+      eventBus: new TestEventBus(),
+      logger: null,
+    });
+    await service.start();
+
+    try {
+      const baseUrl = getBaseUrl(service);
+      const standardHtml = await (await fetch(`${baseUrl}/overlay`)).text();
+      const minimalHtml = await (await fetch(`${baseUrl}/overlay?appearance=minimal`)).text();
+      const overriddenHtml = await (await fetch(`${baseUrl}/overlay?appearance=minimal&maxMessages=12`)).text();
+
+      expect(standardHtml).toContain('"profile":"standard"');
+      expect(standardHtml).toContain('"overlayMaxMessages":3');
+      expect(minimalHtml).toContain('"profile":"minimal"');
+      expect(minimalHtml).toContain('"overlayMaxMessages":6');
+      expect(overriddenHtml).toContain('"overlayMaxMessages":12');
+    } finally {
+      await service.stop();
+    }
+  });
+
+  it("serves the independently enabled notifications route through the dock bundle", async () => {
+    const service = createGuiTransportService({
+      config: buildConfig({
+        enableNotifications: true,
+        port: 0,
+      }),
+      eventBus: new TestEventBus(),
+      logger: null,
+    });
+    await service.start();
+
+    try {
+      const baseUrl = getBaseUrl(service);
+      const response = await fetch(`${baseUrl}/notifications?appearance=minimal`);
+      const html = await response.text();
+      const health = await (await fetch(`${baseUrl}/health?route=/notifications`)).json() as { ok: boolean };
+
+      expect(response.status).toBe(200);
+      expect(html).toContain('data-kind="notifications"');
+      expect(html).toContain('/gui/assets/dock.js');
+      expect(html).toContain('"profile":"minimal"');
+      expect(health.ok).toBe(true);
     } finally {
       await service.stop();
     }

@@ -40,6 +40,7 @@ export function bootstrapOverlayApp(dependencies: OverlayBootstrapDependencies =
         overlayMaxMessages={runtimeConfig.overlayMaxMessages}
         overlayMaxLinesPerMessage={runtimeConfig.overlayMaxLinesPerMessage}
         feedMode={runtimeConfig.overlayFeedMode}
+        initialAppearance={runtimeConfig.appearance}
       />
     )
     return true

@@ -5,6 +5,7 @@ import { createGuiFeedStore } from './feed-store'
 import { GuiShell } from './components/GuiShell'
 import { ActivityBar } from './components/ActivityBar'
 import { matchesGuiFeedMode } from './feed-mode'
+import { DEFAULT_GUI_APPEARANCE, parseGuiAppearanceEvent, type GuiAppearance } from './appearance'
 import type {
   GuiAppMode,
   GuiFeedMode,
@@ -17,6 +18,7 @@ import type {
 interface AppProps {
   mode: GuiAppMode
   feedMode?: GuiFeedMode | undefined
+  initialAppearance?: GuiAppearance
   eventsPath?: string
   overlayMaxMessages?: number
   overlayMaxLinesPerMessage?: number
@@ -141,6 +143,10 @@ function isNotificationLifecycleEnvelope(payload: unknown): payload is GuiNotifi
     (lifecycle.phase === 'started' || lifecycle.phase === 'exit-started')
 }
 
+function parseAppearanceEvent(payload: unknown): GuiAppearance | null {
+  return parseGuiAppearanceEvent(payload)
+}
+
 export function App({
   mode,
   eventsPath = '/gui/events',
@@ -149,8 +155,10 @@ export function App({
   notificationTransitionMs = 1000,
   createEventFeedImpl = createEventFeed,
   sendGiftAnimationAckImpl = sendGiftAnimationAck,
-  feedMode = 'all'
+  feedMode = 'all',
+  initialAppearance = DEFAULT_GUI_APPEARANCE
 }: AppProps) {
+  const [appearance, setAppearance] = useState(initialAppearance)
   const effectiveFeedMode = mode === 'notifications' ? 'non-chat' : feedMode
   const overlayLimits = useMemo(
     () => resolveOverlayLimits(mode, overlayMaxMessages, overlayMaxLinesPerMessage),
@@ -181,13 +189,23 @@ export function App({
   const notificationExitRequested = !!activeNotification?.eventId &&
     notificationState.store === store &&
     notificationState.exitingEventIds.has(activeNotification.eventId)
+  const showsGiftAnimationEffects = mode === 'dock'
+    || mode === 'tiktok-animations'
+    || (mode === 'overlay' && initialAppearance.profile === 'minimal')
 
   useEffect(() => {
     const dispose = createEventFeedImpl({
       url: eventsPath,
       onEvent: (payload) => {
+        const nextAppearance = parseAppearanceEvent(payload)
+        if (nextAppearance) {
+          setAppearance((current) => current.profile === 'minimal' && nextAppearance.revision > current.revision
+            ? nextAppearance
+            : current)
+          return
+        }
         if (isGuiEffectEnvelope(payload)) {
-          if ((mode === 'dock' || mode === 'tiktok-animations') && isGiftAnimationEffectEnvelope(payload)) {
+          if (showsGiftAnimationEffects && isGiftAnimationEffectEnvelope(payload)) {
             setEffectState((current) => ({
               store,
               queue: [...(current.store === store ? current.queue : []), payload]
@@ -234,7 +252,7 @@ export function App({
     return () => {
       dispose()
     }
-  }, [createEventFeedImpl, eventsPath, mode, store])
+  }, [createEventFeedImpl, eventsPath, mode, showsGiftAnimationEffects, store])
 
   if (mode === 'notifications') {
     return (
@@ -242,6 +260,7 @@ export function App({
         row={activeNotification}
         exitRequested={notificationExitRequested}
         transitionMs={notificationTransitionMs}
+        appearance={appearance}
         onExitComplete={(eventId) => {
           setNotificationState((current) => {
             if (current.store !== store) return current
@@ -262,6 +281,7 @@ export function App({
       mode={mode}
       overlayMaxLinesPerMessage={overlayLimits.maxLinesPerMessage}
       activeEffect={activeEffect}
+      appearance={appearance}
       onEffectComplete={(playbackId, reason) => {
         setEffectState((current) => {
           const currentQueue = current.store === store ? current.queue : []

@@ -161,7 +161,6 @@ export function createGuiFeedStore(options: GuiFeedStoreOptions = {}) {
     if (options.inclusionPredicate && !options.inclusionPredicate(row)) {
       return null
     }
-
     if (row.eventId) {
       if (seenEventIds.has(row.eventId)) return null
       seenEventIds.add(row.eventId)

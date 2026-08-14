@@ -564,6 +564,47 @@ describe("GuiShell behavior", () => {
     }
   });
 
+  it("observes overlay geometry changes and disconnects the observer", async () => {
+    const previousResizeObserver = global.ResizeObserver;
+    const previousTimeStamp = console.timeStamp;
+    console.timeStamp = previousTimeStamp || (() => {});
+    const observed = new Set<Element>();
+    let disconnectCalls = 0;
+    class TestResizeObserver {
+      constructor(_callback: ResizeObserverCallback) {}
+      observe(target: Element) { observed.add(target); }
+      unobserve(target: Element) { observed.delete(target); }
+      disconnect() { disconnectCalls += 1; observed.clear(); }
+    }
+    global.ResizeObserver = TestResizeObserver as unknown as typeof ResizeObserver;
+    const overlayNodeMocks = createOverlayNodeMocks({
+      "https://example.invalid/test-avatar-1.png": { offsetTop: 20, offsetHeight: 50 },
+    });
+    let renderer: ShellRenderer | null = null;
+
+    try {
+      await TestRenderer.act(async () => {
+        renderer = TestRenderer.create(React.createElement(GuiShell, {
+          mode: "overlay",
+          overlayMaxLinesPerMessage: 3,
+          rows: [createGuiRow(1)],
+        }), { createNodeMock: overlayNodeMocks.createNodeMock });
+      });
+      expect(observed.size).toBeGreaterThanOrEqual(2);
+
+      await TestRenderer.act(async () => renderer!.unmount());
+      renderer = null;
+      expect(disconnectCalls).toBe(1);
+      expect(observed.size).toBe(0);
+    } finally {
+      if (renderer) await TestRenderer.act(async () => renderer!.unmount());
+      if (previousResizeObserver) global.ResizeObserver = previousResizeObserver;
+      else Reflect.deleteProperty(global, "ResizeObserver");
+      if (previousTimeStamp) console.timeStamp = previousTimeStamp;
+      else Reflect.deleteProperty(console, "timeStamp");
+    }
+  });
+
   it("keeps an evicted top row in overlay exit layer until animation ends", async () => {
     const previousTimeStamp = console.timeStamp;
     console.timeStamp = previousTimeStamp || (() => {});

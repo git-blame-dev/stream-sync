@@ -6,6 +6,8 @@ export type Control = {
 }
 
 export type OperatorState = { revision: number; controls: Control[] }
+export type AppearanceSettings = { compactRows: boolean; rowBackgroundsEnabled: boolean; maxDisplayableBadges: number }
+export type AppearanceState = { revision: number; settings: AppearanceSettings; overriddenKeys: string[] }
 export type LogEntry = { id: number; timestamp: string; level: string; message: string; source: string; data?: unknown }
 export const CONTROL_KEYS = [
   'messagesEnabled',
@@ -20,9 +22,11 @@ export const CONTROL_KEYS = [
 ] as const
 export const LOG_LEVELS = ['debug', 'info', 'console', 'warn', 'error', 'emergency'] as const
 export const MAX_LOG_ROWS = 200
+export const APPEARANCE_KEYS = ['compactRows', 'rowBackgroundsEnabled', 'maxDisplayableBadges'] as const
 
 const controlKeys = new Set<string>(CONTROL_KEYS)
 const logLevels = new Set<string>(LOG_LEVELS)
+const appearanceKeys = new Set<string>(APPEARANCE_KEYS)
 
 export function parseOperatorState(value: unknown): OperatorState | null {
   if (!value || typeof value !== 'object') return null
@@ -44,6 +48,40 @@ export function parseOperatorState(value: unknown): OperatorState | null {
     : null
 }
 
+export function parseAppearanceState(value: unknown): AppearanceState | null {
+  if (!value || typeof value !== 'object') return null
+  const candidate = value as Record<string, unknown>
+  const settings = candidate.settings
+  if (
+    typeof candidate.revision !== 'number'
+    || !Number.isFinite(candidate.revision)
+    || !settings
+    || typeof settings !== 'object'
+    || !Array.isArray(candidate.overriddenKeys)
+  ) return null
+  const item = settings as Record<string, unknown>
+  const compactRows = item.compactRows
+  const rowBackgroundsEnabled = item.rowBackgroundsEnabled
+  const maxDisplayableBadges = item.maxDisplayableBadges
+  const isValid = typeof compactRows === 'boolean'
+    && typeof rowBackgroundsEnabled === 'boolean'
+    && typeof maxDisplayableBadges === 'number'
+    && Number.isSafeInteger(maxDisplayableBadges)
+    && maxDisplayableBadges >= 0
+    && candidate.overriddenKeys.every((key) => typeof key === 'string' && appearanceKeys.has(key))
+    && new Set(candidate.overriddenKeys).size === candidate.overriddenKeys.length
+  if (!isValid || typeof compactRows !== 'boolean' || typeof rowBackgroundsEnabled !== 'boolean' || typeof maxDisplayableBadges !== 'number') return null
+  return {
+    revision: candidate.revision,
+    settings: {
+      compactRows,
+      rowBackgroundsEnabled,
+      maxDisplayableBadges,
+    },
+    overriddenKeys: [...candidate.overriddenKeys],
+  }
+}
+
 export function parseLogEntry(value: unknown): LogEntry | null {
   if (!value || typeof value !== 'object') return null
   const item = value as Record<string, unknown>
@@ -63,6 +101,10 @@ export function appendLogRow(rows: LogEntry[], entry: LogEntry): LogEntry[] {
 }
 
 export function selectNewestState(current: OperatorState | null, next: OperatorState): OperatorState {
+  return !current || next.revision >= current.revision ? next : current
+}
+
+export function selectNewestAppearance(current: AppearanceState | null, next: AppearanceState): AppearanceState {
   return !current || next.revision >= current.revision ? next : current
 }
 

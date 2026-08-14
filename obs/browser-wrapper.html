@@ -77,7 +77,7 @@
           if (url.origin !== DEFAULT_ORIGIN || url.pathname.includes('..')) {
             return DEFAULT_ROUTE;
           }
-          return url.pathname;
+          return `${url.pathname}${url.search}`;
         } catch {
           return DEFAULT_ROUTE;
         }
@@ -130,7 +130,8 @@
         const config = parseHashConfig();
         const route = normalizeRoute(config.route);
         const origin = normalizeOrigin(config.origin);
-        const healthUrl = `${origin}/health?route=${encodeURIComponent(route)}`;
+        const routePath = new URL(route, DEFAULT_ORIGIN).pathname;
+        const healthUrl = `${origin}/health?route=${encodeURIComponent(routePath)}`;
         const targetUrl = `${origin}${route}`;
         let retryMs = INITIAL_RETRY_MS;
 

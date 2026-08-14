@@ -41,14 +41,13 @@ function createSseReader(response: any) {
   return {
     async readEvent() {
       while (true) {
-        const { value, done } = await readWithTimeout();
-        if (done) {
-          throw new Error("SSE stream ended before receiving an event");
-        }
-
-        buffer += decoder.decode(value, { stream: true });
         const separatorIndex = buffer.indexOf("\n\n");
         if (separatorIndex === -1) {
+          const { value, done } = await readWithTimeout();
+          if (done) {
+            throw new Error("SSE stream ended before receiving an event");
+          }
+          buffer += decoder.decode(value, { stream: true });
           continue;
         }
 
@@ -64,7 +63,11 @@ function createSseReader(response: any) {
         }
 
         const dataText = dataLine.slice("data:".length).trim();
-        return JSON.parse(dataText);
+        const payload = JSON.parse(dataText);
+        if (payload?.__guiEvent === "appearance") {
+          continue;
+        }
+        return payload;
       }
     },
   };
@@ -182,6 +185,35 @@ describe("gui transport smoke", () => {
       } finally {
         await service.stop();
       }
+    }
+  });
+
+  it("serves an enabled minimal notifications source", async () => {
+    const service = createGuiTransportService({
+      config: createConfigFixture({
+        gui: {
+          enableDock: false,
+          enableOverlay: false,
+          enableNotifications: true,
+          host: "127.0.0.1",
+          port: 0,
+        },
+      }),
+      eventBus: new TestEventBus(),
+      logger: null,
+    });
+
+    await service.start();
+    try {
+      const response = await fetch(`${getBaseUrl(service)}/notifications?appearance=minimal`);
+      const body = await response.text();
+
+      expect(response.status).toBe(200);
+      expect(body).toContain('data-kind="notifications"');
+      expect(body).toContain('/gui/assets/dock.js');
+      expect(body).toContain('"profile":"minimal"');
+    } finally {
+      await service.stop();
     }
   });
 

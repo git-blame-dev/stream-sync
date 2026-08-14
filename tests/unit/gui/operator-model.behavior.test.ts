@@ -5,6 +5,8 @@ import {
   formatLogData,
   MAX_LOG_ROWS,
   parseLogEntry,
+  parseAppearanceState,
+  selectNewestAppearance,
   parseOperatorState,
   selectNewestState,
   toggleLevel,
@@ -47,6 +49,16 @@ describe('operator model behavior', () => {
     expect(parseOperatorState({ revision: 1, controls: [...controls, controls[0]] })).toBeNull()
     const current = { revision: 2, controls }
     expect(selectNewestState(current, { revision: 1, controls })).toBe(current)
+  })
+
+  test('strictly parses appearance and selects revisions independently', () => {
+    const current = { revision: 3, settings: { compactRows: false, rowBackgroundsEnabled: true, maxDisplayableBadges: 2 }, overriddenKeys: [] }
+    const older = { ...current, revision: 2 }
+    const newer = { ...current, revision: 4, settings: { ...current.settings, maxDisplayableBadges: 0 }, overriddenKeys: ['maxDisplayableBadges'] }
+    expect(parseAppearanceState(newer)).toEqual(newer)
+    expect(parseAppearanceState({ ...newer, settings: { ...newer.settings, maxDisplayableBadges: -1 } })).toBeNull()
+    expect(selectNewestAppearance(current, older)).toBe(current)
+    expect(selectNewestAppearance(current, newer)).toEqual(newer)
   })
 
   test('formats unusual log data without throwing', () => {

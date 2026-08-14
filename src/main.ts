@@ -27,6 +27,11 @@ import {
     type OperatorControlService,
     type OperatorControls
 } from './services/operator/operator-control-service';
+import {
+    createOperatorAppearanceService,
+    type OperatorAppearanceService,
+    type OperatorAppearanceSettings
+} from './services/operator/operator-appearance-service';
 import { TwitchAuth } from './auth/TwitchAuth';
 import dependencyFactoryModule from './utils/dependency-factory';
 import { validateLoggerInterface } from './utils/dependency-validator';
@@ -129,6 +134,7 @@ type MainOverrides = Record<string, unknown> & {
     createProductionDependencies?: typeof createProductionDependencies;
     createSingleInstanceGuard?: typeof acquireSingleInstanceGuard;
     createOperatorControlService?: typeof createOperatorControlService;
+    createOperatorAppearanceService?: typeof createOperatorAppearanceService;
 };
 
 type CooldownsConfig = {
@@ -181,7 +187,11 @@ type MainConfig = Record<string, Record<string, unknown>> & BuiltConfig & {
     gui?: {
         enableDock?: boolean;
         enableOverlay?: boolean;
+        enableNotifications?: boolean;
         enableOperator?: boolean;
+        minimalCompactRows?: boolean;
+        minimalRowBackgroundsEnabled?: boolean;
+        minimalMaxDisplayableBadges?: number;
         showGifts?: boolean;
         notificationIdleHoldMs?: number;
         monetizationIdleHoldMs?: number;
@@ -198,6 +208,19 @@ type MainConfig = Record<string, Record<string, unknown>> & BuiltConfig & {
 function buildOperatorControlDefaults(config: MainConfig): OperatorControls {
     const general = config.general as Record<string, unknown>;
     return Object.fromEntries(OPERATOR_CONTROL_KEYS.map((key) => [key, general[key] !== false])) as OperatorControls;
+}
+
+function buildOperatorAppearanceDefaults(config: MainConfig): OperatorAppearanceSettings {
+    const gui = config.gui as Record<string, unknown> | undefined;
+    return {
+        compactRows: gui?.minimalCompactRows !== false,
+        rowBackgroundsEnabled: gui?.minimalRowBackgroundsEnabled === true,
+        maxDisplayableBadges: typeof gui?.minimalMaxDisplayableBadges === 'number'
+            && Number.isSafeInteger(gui.minimalMaxDisplayableBadges)
+            && gui.minimalMaxDisplayableBadges >= 0
+            ? gui.minimalMaxDisplayableBadges
+            : 1
+    };
 }
 
 function enableOperatorNotificationPreparation(config: MainConfig): MainConfig {
@@ -480,7 +503,8 @@ const MAIN_FUNCTION_OVERRIDE_KEYS = [
     'createGracefulExitService',
     'createProductionDependencies',
     'createSingleInstanceGuard',
-    'createOperatorControlService'
+    'createOperatorControlService',
+    'createOperatorAppearanceService'
 ];
 
 async function releaseSingleInstanceGuard(singleInstanceGuard: SingleInstanceGuard | null) {
@@ -684,6 +708,16 @@ async function main(overrides: MainOverrides = {}) {
                 warn: (message) => logger.warn(message, 'operator-controls')
             })
             : undefined;
+        const guiEnabled = config.gui?.enableDock === true
+            || config.gui?.enableOverlay === true
+            || config.gui?.enableNotifications === true
+            || config.gui?.enableOperator === true;
+        const operatorAppearance: OperatorAppearanceService | undefined = guiEnabled
+            ? await (runtimeOverrides.createOperatorAppearanceService || createOperatorAppearanceService)({
+                defaults: buildOperatorAppearanceDefaults(config),
+                warn: (message) => logger.warn(message, 'operator-appearance')
+            })
+            : undefined;
         const runtimeProcessingConfig = operatorControls
             ? enableOperatorNotificationPreparation(config)
             : config;
@@ -844,6 +878,9 @@ async function main(overrides: MainOverrides = {}) {
             const operatorLogs = getOperatorLogSource();
             if (!operatorLogs) throw new Error('Operator console requires structured log capture');
             dependencies.operatorLogs = operatorLogs;
+        }
+        if (operatorAppearance) {
+            dependencies.operatorAppearance = operatorAppearance;
         }
 
         const sharedPlatformDependencies: Record<string, unknown> = {

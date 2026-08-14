@@ -41,6 +41,16 @@ describe("GUI shared styles behavior", () => {
     expect(cssText).toContain("@media (prefers-reduced-motion: reduce)");
   });
 
+  it("scopes minimal compact and background-off presentation to the minimal shell", () => {
+    const cssText = readSharedStyles();
+    expect(cssText).toContain(".gui-shell--minimal .gui-row--minimal.gui-row--compact");
+    expect(cssText).toContain("--gui-avatar-size-current: 30px;");
+    expect(cssText).toContain("--gui-avatar-size-current: 24px;");
+    expect(cssText).toContain(".gui-shell--minimal .gui-row--minimal.gui-row--background-off");
+    expect(cssText).toContain("background: transparent;");
+    expect(cssText).toContain("padding-right: 96px;");
+    expect(cssText).toContain("prefers-reduced-motion: reduce");
+  });
   it("uses mode-specific gui size tokens for row visuals and typography", () => {
     const cssText = readSharedStyles();
     const pageBlock = readCssBlock(cssText, "html, body");
@@ -50,6 +60,19 @@ describe("GUI shared styles behavior", () => {
     const overlayExitBlock = readCssBlock(cssText, ".gui-row--overlay-exit");
     const rowBlock = readCssBlock(cssText, ".gui-row");
     const contentBlock = readCssBlock(cssText, ".gui-row__content");
+    const copyBlock = readCssBlock(cssText, ".gui-row__copy");
+    const minimalAvatarWrapperBlock = readCssBlock(
+      cssText,
+      ".gui-shell--minimal .gui-row--minimal .gui-row__avatar-wrapper",
+    );
+    const minimalTextColorBlock = readCssBlock(
+      cssText,
+      ".gui-shell--minimal .gui-row--minimal .gui-row__username,\n.gui-shell--minimal .gui-row--minimal .gui-row__text",
+    );
+    const minimalUsernameBlock = readCssBlock(
+      cssText,
+      ".gui-shell--minimal .gui-row--minimal .gui-row__username",
+    );
     const memberChatRowBlock = readCssBlock(cssText, ".gui-row--member-chat");
     const redMemberThemeBlock = readCssBlock(cssText, ".gui-row--member-theme-red");
     const overlayEnterBlock = readCssBlock(cssText, ".gui-row--overlay-enter");
@@ -70,6 +93,10 @@ describe("GUI shared styles behavior", () => {
       ".gui-row__avatar-wrapper .gui-row__platform-icon",
     );
     const usernameBlock = readCssBlock(cssText, ".gui-row__username");
+    const sharedTextShadowBlock = readCssBlock(
+      cssText,
+      ".gui-row__username,\n.gui-row__text",
+    );
     const memberTagBlock = readCssBlock(cssText, ".gui-row__member-tag");
     const badgesBlock = readCssBlock(cssText, ".gui-row__badges");
     const badgeBlock = readCssBlock(cssText, ".gui-row__badge");
@@ -77,6 +104,10 @@ describe("GUI shared styles behavior", () => {
     const memberContentBlock = readCssBlock(
       cssText,
       ".gui-row__content--member-chat",
+    );
+    const memberCopyBlock = readCssBlock(
+      cssText,
+      ".gui-row__content--member-chat .gui-row__copy",
     );
     const monetizationContentBlock = readCssBlock(
       cssText,
@@ -99,6 +130,74 @@ describe("GUI shared styles behavior", () => {
       ".gui-row__member-image-clip",
     );
     const memberImageBlock = readCssBlock(cssText, ".gui-row__member-image");
+    const minimalOverlayBlock = readCssBlock(
+      cssText,
+      ".gui-shell--overlay.gui-shell--minimal",
+    );
+    const minimalDockBlock = readCssBlock(
+      cssText,
+      ".gui-shell--dock.gui-shell--minimal",
+    );
+    const minimalNotificationsBlock = readCssBlock(
+      cssText,
+      ".gui-shell--notifications.gui-shell--minimal",
+    );
+    const minimalPlatformIconBlock = readCssBlock(
+      cssText,
+      ".gui-shell--minimal .gui-row__avatar-wrapper .gui-row__platform-icon",
+    );
+    const minimalMemberImageClipBlock = readCssBlock(
+      cssText,
+      ".gui-shell--minimal .gui-row__member-image-clip",
+    );
+    const minimalMemberImageBlock = readCssBlock(
+      cssText,
+      ".gui-shell--minimal .gui-row__member-image",
+    );
+    const minimalMemberContentBlock = readCssBlock(
+      cssText,
+      ".gui-shell--minimal .gui-row__content--member-chat",
+    );
+    const minimalMemberCopyBlock = readCssBlock(
+      cssText,
+      ".gui-shell--minimal .gui-row__content--member-chat .gui-row__copy",
+    );
+    const minimalOverlayEnterBlock = readCssBlock(
+      cssText,
+      ".gui-shell--overlay.gui-shell--minimal .gui-row--overlay-enter:not(.gui-row--overlay-exit)",
+    );
+    const minimalHeaderBlock = readCssBlock(
+      cssText,
+      ".gui-shell--minimal .gui-row--minimal.gui-row--compact .gui-row__header",
+    );
+    const minimalOverlayCopyBlock = readCssBlock(
+      cssText,
+      ".gui-shell--overlay.gui-shell--minimal .gui-row--minimal.gui-row--compact .gui-row__copy",
+    );
+    const minimalTextBlock = readCssBlock(
+      cssText,
+      ".gui-shell--minimal .gui-row--minimal .gui-row__text--minimal",
+    );
+    const minimalSeparatorBlock = readCssBlock(
+      cssText,
+      ".gui-shell--minimal .gui-row--minimal .gui-row__minimal-separator",
+    );
+    const minimalMemberTagBlock = readCssBlock(
+      cssText,
+      ".gui-shell--minimal .gui-row--minimal .gui-row__member-tag",
+    );
+    const minimalBadgesBlock = readCssBlock(
+      cssText,
+      ".gui-shell--minimal .gui-row--minimal .gui-row__badges",
+    );
+    const minimalBadgeBlock = readCssBlock(
+      cssText,
+      ".gui-shell--minimal .gui-row--minimal .gui-row__badge",
+    );
+    const minimalEmoteBlock = readCssBlock(
+      cssText,
+      ".gui-shell--minimal .gui-row--minimal .gui-row__emote",
+    );
     const monetizationBlock = readCssBlock(
       cssText,
       ".gui-row--monetization",
@@ -118,6 +217,9 @@ describe("GUI shared styles behavior", () => {
     expect(pageBlock).toContain("padding: 0;");
     expect(rootBlock).toContain("--gui-row-background-opacity: 0.95;");
     expect(rootBlock).toContain("--gui-row-content-gap: 2px;");
+    expect(rootBlock).toContain(
+      "--gui-row-text-shadow: 0 1px 2px rgba(0, 0, 0, 0.72);",
+    );
     expect(rootBlock).toContain("--gui-overlay-avatar-size: 60px;");
     expect(rootBlock).toContain("--gui-overlay-platform-icon-size: 25.81px;");
     expect(rootBlock).toContain("--gui-overlay-badge-size: 27px;");
@@ -210,6 +312,35 @@ describe("GUI shared styles behavior", () => {
     expect(rowBlock).toContain(
       "background: rgba(0, 0, 0, var(--gui-row-background-opacity));",
     );
+    expect(minimalAvatarWrapperBlock).toContain("align-self: start;");
+    expect(minimalAvatarWrapperBlock).toContain("margin-top: 1px;");
+    expect(cssText).not.toContain(
+      ".gui-shell--minimal .gui-row--member-chat .gui-row__avatar-wrapper",
+    );
+    expect(minimalTextColorBlock).toContain("color: #ffffff;");
+    expect(minimalBadgesBlock).toContain("height: 1em;");
+    expect(minimalBadgesBlock).toContain("transform: translateY(2px);");
+    expect(minimalBadgeBlock).toContain("width: 1em;");
+    expect(minimalBadgeBlock).toContain("height: 1em;");
+    expect(minimalEmoteBlock).toContain("width: auto;");
+    expect(minimalEmoteBlock).toContain("height: 1em;");
+    expect(minimalEmoteBlock).toContain("vertical-align: text-bottom;");
+    expect(minimalMemberTagBlock).toContain("transform: none;");
+    expect(minimalHeaderBlock).toContain("display: inline-flex;");
+    expect(minimalHeaderBlock).toContain("align-items: baseline;");
+    expect(minimalHeaderBlock).toContain("max-width: 100%;");
+    expect(minimalHeaderBlock).toContain("line-height: 1.08;");
+    expect(minimalUsernameBlock).toContain("min-width: 0;");
+    expect(minimalUsernameBlock).toContain("overflow: hidden;");
+    expect(minimalUsernameBlock).toContain("text-overflow: ellipsis;");
+    expect(minimalUsernameBlock).toContain("white-space: nowrap;");
+    expect(minimalTextBlock).toContain(
+      "font-size: var(--gui-row-header-font-size-current);",
+    );
+    expect(minimalTextBlock).toContain("line-height: 1.08;");
+    expect(sharedTextShadowBlock).toContain(
+      "text-shadow: var(--gui-row-text-shadow);",
+    );
     expect(cssText).toContain(".gui-row--paypiggy {");
     expect(cssText).toContain(
       "border: 1px solid var(--gui-member-border-color);",
@@ -231,7 +362,9 @@ describe("GUI shared styles behavior", () => {
     expect(redMemberThemeBlock).toContain("--gui-member-border-color:");
     expect(redMemberThemeBlock).toContain("--gui-member-glow-soft:");
     expect(redMemberThemeBlock).toContain("--gui-member-sheen-highlight:");
-    expect(redMemberThemeBlock).toContain("--gui-member-avatar-halo-glow:");
+    expect(redMemberThemeBlock).toContain(
+      "--gui-member-avatar-halo-glow: rgba(255, 104, 118, 0.98);",
+    );
     expect(redMemberThemeBlock).not.toContain("--gui-member-pill-");
     expect(cssText).toContain(
       "outline: 1px solid color-mix(in srgb, var(--gui-member-avatar-halo-glow) 78%, transparent);",
@@ -244,6 +377,9 @@ describe("GUI shared styles behavior", () => {
     );
     expect(memberChatRowBlock).not.toContain("padding-bottom: 0;");
     expect(overlayEnterBlock).toContain("animation: none;");
+    expect(minimalOverlayEnterBlock).toContain(
+      "animation: gui-minimal-overlay-row-enter 220ms ease-out both;",
+    );
     expect(avatarBlock).toContain("width: var(--gui-avatar-size-current);");
     expect(avatarBlock).toContain("height: var(--gui-avatar-size-current);");
     expect(avatarWrapperBlock).toContain("position: relative;");
@@ -259,6 +395,35 @@ describe("GUI shared styles behavior", () => {
     expect(avatarPlatformIconBlock).toContain("left: -9px;");
     expect(avatarPlatformIconBlock).toContain("bottom: -4px;");
     expect(avatarPlatformIconBlock).toContain("z-index: 2;");
+    expect(minimalOverlayBlock).toContain(
+      "--gui-avatar-size-current: 30px;",
+    );
+    expect(minimalOverlayBlock).toContain(
+      "--gui-platform-icon-size-current: 12.905px;",
+    );
+    expect(minimalOverlayBlock).toContain(
+      "--gui-badge-size-current: var(--gui-overlay-badge-size);",
+    );
+    expect(minimalDockBlock).toContain(
+      "--gui-avatar-size-current: 24px;",
+    );
+    expect(minimalDockBlock).toContain(
+      "--gui-platform-icon-size-current: 11.22px;",
+    );
+    expect(minimalDockBlock).toContain(
+      "--gui-badge-size-current: var(--gui-dock-badge-size);",
+    );
+    expect(minimalNotificationsBlock).toContain(
+      "--gui-avatar-size-current: 24px;",
+    );
+    expect(minimalNotificationsBlock).toContain(
+      "--gui-platform-icon-size-current: 11.22px;",
+    );
+    expect(minimalNotificationsBlock).toContain(
+      "--gui-badge-size-current: var(--gui-dock-badge-size);",
+    );
+    expect(minimalPlatformIconBlock).toContain("left: -4.5px;");
+    expect(minimalPlatformIconBlock).toContain("bottom: -2px;");
     expect(usernameBlock).toContain(
       "font-size: var(--gui-row-header-font-size-current);",
     );
@@ -292,8 +457,12 @@ describe("GUI shared styles behavior", () => {
     );
     expect(textBlock).toContain("line-height: 1.08;");
     expect(textBlock).toContain("margin-top: 0;");
-    expect(contentBlock).toContain("gap: var(--gui-row-content-gap);");
+    expect(contentBlock).toContain("min-width: 0;");
+    expect(copyBlock).toContain("display: flex;");
+    expect(copyBlock).toContain("flex-direction: column;");
+    expect(copyBlock).toContain("gap: var(--gui-row-content-gap);");
     expect(memberContentBlock).toContain("display: flow-root;");
+    expect(memberCopyBlock).toContain("display: block;");
     expect(monetizationContentBlock).toContain("position: relative;");
     expect(memberHeaderBlock).toContain("min-width: 0;");
     expect(memberUsernameBlock).toContain("min-width: 0;");
@@ -317,6 +486,32 @@ describe("GUI shared styles behavior", () => {
     expect(memberImageBlock).toContain("width: 120px;");
     expect(memberImageBlock).toContain("height: 120px;");
     expect(memberImageBlock).toContain("object-fit: contain;");
+    expect(minimalMemberImageClipBlock).toContain("width: 60px;");
+    expect(minimalMemberImageClipBlock).toContain("height: 60px;");
+    expect(minimalMemberImageClipBlock).toContain("float: none;");
+    expect(minimalMemberImageClipBlock).toContain("position: absolute;");
+    expect(minimalMemberImageClipBlock).toContain("top: -20px;");
+    expect(minimalMemberImageClipBlock).toContain("right: -8px;");
+    expect(minimalMemberImageClipBlock).toContain("margin: 0;");
+    expect(minimalMemberImageClipBlock).toContain("overflow: visible;");
+    expect(minimalMemberImageClipBlock).toContain("z-index: 1;");
+    expect(minimalMemberImageClipBlock).toContain("pointer-events: none;");
+    expect(minimalMemberImageBlock).toContain("width: 60px;");
+    expect(minimalMemberImageBlock).toContain("height: 60px;");
+    expect(minimalMemberContentBlock).toContain("position: relative;");
+    expect(minimalMemberContentBlock).toContain("min-height: 60px;");
+    expect(minimalMemberContentBlock).not.toContain("padding-right:");
+    expect(minimalMemberCopyBlock).toContain("padding-right: 44px;");
+    expect(minimalTextBlock).not.toContain("position:");
+    expect(minimalTextBlock).not.toContain("\n  top:");
+    expect(minimalSeparatorBlock).not.toContain("position:");
+    expect(minimalSeparatorBlock).not.toContain("\n  top:");
+    expect(minimalOverlayCopyBlock).toContain(
+      "max-block-size: calc(var(--overlay-line-clamp, 3) * 1lh);",
+    );
+    expect(minimalOverlayCopyBlock).toContain("overflow: hidden;");
+    expect(minimalOverlayCopyBlock).not.toContain("-webkit-");
+    expect(minimalMemberTagBlock).toContain("border-radius: 999px;");
     expect(rootBlock).toContain("--gui-monetization-background-top:");
     expect(rootBlock).toContain("--gui-monetization-background-mid:");
     expect(rootBlock).toContain("--gui-monetization-background-bottom:");
@@ -345,8 +540,12 @@ describe("GUI shared styles behavior", () => {
     expect(cssText).toContain(
       ".gui-row--monetization::before {\n    animation: none;",
     );
+    expect(cssText).not.toContain("text-shadow: none;");
     expect(cssText).toContain(
       ".gui-row--monetization .gui-row__monetization-image-clip,\n  .gui-row--member-chat .gui-row__member-image-clip {\n    display: none;",
+    );
+    expect(cssText).toContain(
+      ".gui-shell--overlay.gui-shell--minimal .gui-row--overlay-enter:not(.gui-row--overlay-exit) {\n    animation: none;",
     );
     expect(emoteBlock).toContain("width: var(--gui-emote-size-current);");
     expect(emoteBlock).toContain("height: var(--gui-emote-size-current);");

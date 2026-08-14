@@ -6,11 +6,14 @@ import {
   formatLogData,
   LOG_LEVELS,
   parseLogEntry,
+  parseAppearanceState,
   parseOperatorState,
   selectNewestState,
   toggleLevel,
   type LogEntry,
   type OperatorState,
+  selectNewestAppearance,
+  type AppearanceState,
 } from './model'
 import './operator.css'
 
@@ -67,14 +70,16 @@ async function request(url: string, init?: RequestInit): Promise<unknown> {
 
 function OperatorApp() {
   const [state, setState] = useState<OperatorState | null>(null)
+  const [appearance, setAppearance] = useState<AppearanceState | null>(null)
+  const [badgeLimitDraft, setBadgeLimitDraft] = useState('')
   const [pending, setPending] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [logs, setLogs] = useState<LogEntry[]>([])
   const [pausedLogs, setPausedLogs] = useState<LogEntry[] | null>(null)
   const [follow, setFollow] = useState(true)
   const [visible, setVisible] = useState(() => new Set<string>(LOG_LEVELS))
-  const [, setStateStreamStatus] = useState<StreamStatus>('Connecting')
-  const [, setLogStreamStatus] = useState<StreamStatus>('Connecting')
+  const [stateStreamStatus, setStateStreamStatus] = useState<StreamStatus>('Connecting')
+  const [logStreamStatus, setLogStreamStatus] = useState<StreamStatus>('Connecting')
   const viewportRef = useRef<HTMLDivElement>(null)
 
   const receiveState = (value: unknown) => {
@@ -93,11 +98,16 @@ function OperatorApp() {
       setLogs((rows) => appendLogRow(rows, next))
     }
   }
+  const receiveAppearance = (value: unknown) => {
+    const next = parseAppearanceState(value)
+    if (next) setAppearance((current) => selectNewestAppearance(current, next))
+    else setStateStreamStatus('Invalid data')
+  }
   const resetLogs = () => {
     setLogs([])
   }
 
-  useEventStream('/api/v1/operator/events', { state: receiveState }, setStateStreamStatus)
+  useEventStream('/api/v1/operator/events', { state: receiveState, appearance: receiveAppearance }, setStateStreamStatus)
   useEventStream('/api/v1/logs/events', { log: receiveLog, 'log.history': resetLogs }, setLogStreamStatus)
 
   useEffect(() => {
@@ -111,6 +121,22 @@ function OperatorApp() {
         setError(requestError instanceof Error ? requestError.message : 'Unable to load operator state')
       })
   }, [])
+
+  useEffect(() => {
+    request('/api/v1/operator/appearance')
+      .then((value) => {
+        const next = parseAppearanceState(value)
+        if (!next) throw new Error('Invalid appearance response')
+        setAppearance((current) => selectNewestAppearance(current, next))
+      })
+      .catch((requestError: unknown) => {
+        setError(requestError instanceof Error ? requestError.message : 'Unable to load appearance')
+      })
+  }, [])
+
+  useEffect(() => {
+    if (appearance) setBadgeLimitDraft(String(appearance.settings.maxDisplayableBadges))
+  }, [appearance])
 
   useEffect(() => {
     if (follow && pausedLogs === null && viewportRef.current) {
@@ -150,12 +176,65 @@ function OperatorApp() {
     setPending(null)
   }
 
+  async function changeAppearance(key: keyof AppearanceState['settings'], value: boolean | number) {
+    setPending(`appearance:${key}`)
+    setError('')
+    try {
+      const next = parseAppearanceState(await request('/api/v1/operator/appearance', {
+        method: 'PATCH',
+        headers: mutationHeaders,
+        body: JSON.stringify({ key, value }),
+      }))
+      if (!next) throw new Error('Invalid appearance response')
+      setAppearance((current) => selectNewestAppearance(current, next))
+    } catch (mutationError: unknown) {
+      setError(mutationError instanceof Error ? mutationError.message : 'Unable to save appearance')
+    }
+    setPending(null)
+  }
+
+  async function resetAppearance() {
+    setPending('appearance:reset')
+    setError('')
+    try {
+      const next = parseAppearanceState(await request('/api/v1/operator/appearance/reset', {
+        method: 'POST',
+        headers: mutationHeaders,
+        body: '{}',
+      }))
+      if (!next) throw new Error('Invalid appearance response')
+      setAppearance((current) => selectNewestAppearance(current, next))
+    } catch (mutationError: unknown) {
+      setError(mutationError instanceof Error ? mutationError.message : 'Unable to restore appearance')
+    }
+    setPending(null)
+  }
+
   const paused = pausedLogs !== null
   const visibleLogs = (pausedLogs ?? logs).filter((log) => visible.has(log.level))
+  const parsedBadgeLimit = Number(badgeLimitDraft)
+  const isBadgeLimitValid = /^\d+$/.test(badgeLimitDraft)
+    && Number.isSafeInteger(parsedBadgeLimit)
+    && parsedBadgeLimit >= 0
+
+  const saveBadgeLimit = () => {
+    if (!appearance) return
+    if (!isBadgeLimitValid) {
+      setError('Maximum displayable badges must be a non-negative integer')
+      setBadgeLimitDraft(String(appearance.settings.maxDisplayableBadges))
+      return
+    }
+    if (parsedBadgeLimit !== appearance.settings.maxDisplayableBadges) {
+      void changeAppearance('maxDisplayableBadges', parsedBadgeLimit)
+    }
+  }
 
   return (
     <main className="operator-console">
       {error && <p className="error" role="alert">{error}</p>}
+      <p className="stream-status" role="status" aria-live="polite">
+        Controls: {stateStreamStatus}. Logs: {logStreamStatus}.
+      </p>
 
       <div className="workspace">
         <section className="controls" aria-labelledby="controls-title">
@@ -184,6 +263,63 @@ function OperatorApp() {
                 <span className="switch-track" aria-hidden="true" />
               </label>
             ))}
+          </div>
+          <div className="appearance-panel" aria-labelledby="appearance-title">
+            <div className="section-heading">
+              <div>
+                <span className="eyebrow">DISPLAY</span>
+                <h2 id="appearance-title">Minimal appearance</h2>
+              </div>
+              <button className="quiet" onClick={() => void resetAppearance()} disabled={pending !== null}>
+                Reset appearance
+              </button>
+            </div>
+            <label className="control">
+              <span>
+                <strong>Compact rows</strong>
+                {appearance?.overriddenKeys.includes('compactRows') && <em>Persisted override</em>}
+              </span>
+              <input
+                type="checkbox"
+                checked={appearance?.settings.compactRows ?? false}
+                disabled={!appearance || pending !== null}
+                onChange={(event) => void changeAppearance('compactRows', event.target.checked)}
+              />
+              <span className="switch-track" aria-hidden="true" />
+            </label>
+            <label className="control">
+              <span>
+                <strong>Row backgrounds</strong>
+                {appearance?.overriddenKeys.includes('rowBackgroundsEnabled') && <em>Persisted override</em>}
+              </span>
+              <input
+                type="checkbox"
+                checked={appearance?.settings.rowBackgroundsEnabled ?? true}
+                disabled={!appearance || pending !== null}
+                onChange={(event) => void changeAppearance('rowBackgroundsEnabled', event.target.checked)}
+              />
+              <span className="switch-track" aria-hidden="true" />
+            </label>
+            <label className="appearance-number">
+              <span>
+                <strong>Maximum displayable badges</strong>
+                {appearance?.overriddenKeys.includes('maxDisplayableBadges') && <em>Persisted override</em>}
+              </span>
+              <input
+                type="number"
+                min="0"
+                step="1"
+                value={badgeLimitDraft}
+                disabled={!appearance || pending !== null}
+                aria-invalid={appearance ? !isBadgeLimitValid : undefined}
+                onChange={(event) => setBadgeLimitDraft(event.target.value)}
+                onBlur={saveBadgeLimit}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') event.currentTarget.blur()
+                }}
+              />
+            </label>
+            <p className="source-examples">Source URL examples: <code>?appearance=minimal</code> and <code>&amp;maxMessages=6</code></p>
           </div>
         </section>
 

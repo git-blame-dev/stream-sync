@@ -7,6 +7,7 @@ html, body {
   --notification-transition-ms: 1000ms;
   --gui-row-background-opacity: 0.95;
   --gui-row-content-gap: 2px;
+  --gui-row-text-shadow: 0 1px 2px rgba(0, 0, 0, 0.72);
   --gui-member-background-gradient-top: rgba(28, 138, 83, var(--gui-row-background-opacity));
   --gui-member-background-gradient-mid: rgba(34, 165, 99, var(--gui-row-background-opacity));
   --gui-member-background-gradient-bottom: rgba(44, 197, 114, var(--gui-row-background-opacity));
@@ -233,7 +234,7 @@ html, body {
   --gui-member-glow-soft: rgba(156, 0, 18, 0.58);
   --gui-member-glow-deep: rgba(45, 0, 6, 0.84);
   --gui-member-sheen-highlight: #d94a56;
-  --gui-member-avatar-halo-glow: rgba(216, 58, 72, 0.9);
+  --gui-member-avatar-halo-glow: rgba(255, 104, 118, 0.98);
   --gui-member-avatar-halo-deep: rgba(92, 0, 11, 0.94);
 }
 
@@ -333,6 +334,10 @@ html, body {
 }
 
 .gui-row__content {
+  min-width: 0;
+}
+
+.gui-row__copy {
   display: flex;
   flex-direction: column;
   gap: var(--gui-row-content-gap);
@@ -340,6 +345,10 @@ html, body {
 
 .gui-row__content--member-chat {
   display: flow-root;
+}
+
+.gui-row__content--member-chat .gui-row__copy {
+  display: block;
 }
 
 .gui-row__content--monetization {
@@ -539,6 +548,11 @@ html, body {
   gap: 2px;
 }
 
+.gui-row__username,
+.gui-row__text {
+  text-shadow: var(--gui-row-text-shadow);
+}
+
 .gui-row__text--member-chat {
   display: block;
   margin-top: var(--gui-row-content-gap);
@@ -602,4 +616,210 @@ html, body {
   height: var(--gui-emote-size-current);
   object-fit: contain;
   vertical-align: middle;
+}
+
+/* Minimal is opt-in on the shell so standard presentation remains untouched. */
+.gui-shell--overlay.gui-shell--minimal {
+  --gui-avatar-size-current: 30px;
+  --gui-platform-icon-size-current: 12.905px;
+  --gui-badge-size-current: var(--gui-overlay-badge-size);
+}
+
+.gui-shell--dock.gui-shell--minimal {
+  --gui-avatar-size-current: 24px;
+  --gui-platform-icon-size-current: 11.22px;
+  --gui-badge-size-current: var(--gui-dock-badge-size);
+}
+
+.gui-shell--notifications.gui-shell--minimal {
+  --gui-avatar-size-current: 24px;
+  --gui-platform-icon-size-current: 11.22px;
+  --gui-badge-size-current: var(--gui-dock-badge-size);
+}
+
+.gui-shell--notifications.gui-shell--minimal.gui-shell--compact {
+  min-height: 48.4px;
+}
+
+.gui-shell--minimal .gui-row__avatar-wrapper .gui-row__platform-icon {
+  left: -4.5px;
+  bottom: -2px;
+}
+
+.gui-shell--minimal .gui-row--minimal .gui-row__avatar-wrapper {
+  align-self: start;
+  margin-top: 1px;
+}
+
+.gui-shell--minimal .gui-row--minimal .gui-row__username,
+.gui-shell--minimal .gui-row--minimal .gui-row__text {
+  color: #ffffff;
+}
+
+.gui-shell--minimal .gui-row--minimal .gui-row__username {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gui-shell--minimal .gui-row--minimal .gui-row__badges {
+  height: 1em;
+  transform: translateY(2px);
+}
+
+.gui-shell--minimal .gui-row--minimal .gui-row__badge {
+  width: 1em;
+  height: 1em;
+}
+
+.gui-shell--minimal .gui-row--minimal .gui-row__emote {
+  width: auto;
+  height: 1em;
+  vertical-align: text-bottom;
+}
+
+.gui-shell--minimal .gui-row__member-image-clip {
+  width: 60px;
+  height: 60px;
+  float: none;
+  position: absolute;
+  top: -20px;
+  right: -8px;
+  margin: 0;
+  overflow: visible;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.gui-shell--minimal .gui-row__member-image {
+  width: 60px;
+  height: 60px;
+}
+
+.gui-shell--minimal .gui-row__content--member-chat {
+  position: relative;
+  min-height: 60px;
+}
+
+.gui-shell--minimal .gui-row__content--member-chat .gui-row__copy {
+  padding-right: 44px;
+}
+
+.gui-shell--minimal .gui-row--minimal.gui-row--compact {
+  padding: 5px 7px;
+  gap: 7px;
+}
+
+.gui-shell--overlay.gui-shell--minimal .gui-row--overlay-enter:not(.gui-row--overlay-exit) {
+  animation: gui-minimal-overlay-row-enter 220ms ease-out both;
+}
+
+@keyframes gui-minimal-overlay-row-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.gui-shell--minimal .gui-row--minimal.gui-row--compact .gui-row__content {
+  display: block;
+  min-width: 0;
+}
+
+.gui-shell--minimal .gui-row--minimal.gui-row--compact .gui-row__copy {
+  display: block;
+  min-width: 0;
+  font-size: var(--gui-row-header-font-size-current);
+  line-height: 1.08;
+}
+
+.gui-shell--overlay.gui-shell--minimal .gui-row--minimal.gui-row--compact .gui-row__copy {
+  max-block-size: calc(var(--overlay-line-clamp, 3) * 1lh);
+  overflow: hidden;
+}
+
+.gui-shell--minimal .gui-row--minimal.gui-row--compact .gui-row__header {
+  display: inline-flex;
+  align-items: baseline;
+  max-width: 100%;
+  vertical-align: baseline;
+  gap: 4px;
+  line-height: 1.08;
+}
+
+.gui-shell--minimal .gui-row--minimal .gui-row__text--minimal {
+  display: inline;
+  font-size: var(--gui-row-header-font-size-current);
+  line-height: 1.08;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  margin-top: 0;
+}
+
+.gui-shell--minimal .gui-row--minimal .gui-row__minimal-separator {
+  display: inline;
+  margin: 0 3px 0 1px;
+  font-weight: 700;
+}
+
+.gui-shell--minimal .gui-row--minimal .gui-row__member-tag {
+  border: 0;
+  border-radius: 999px;
+  box-shadow: none;
+  background: var(--gui-member-pill-mid);
+  transform: none;
+}
+
+.gui-shell--minimal .gui-row--minimal.gui-row--background-off {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.gui-shell--minimal .gui-row--minimal.gui-row--background-off::before {
+  display: none;
+}
+
+.gui-shell--minimal .gui-row--minimal.gui-row--background-off .gui-row__member-tag {
+  border: 0;
+  box-shadow: none;
+}
+
+.gui-shell--minimal .gui-row--minimal.gui-row--monetization .gui-row__content {
+  padding-right: 96px;
+}
+
+.gui-shell--minimal .gui-row--minimal.gui-row--monetization .gui-row__monetization-image-clip {
+  right: -24px;
+}
+
+.gui-shell--notifications:not(.gui-shell--minimal) .gui-row__monetization-image-clip {
+  display: none;
+}
+
+.gui-shell--notifications.gui-shell--minimal .gui-row__content {
+  min-width: 0;
+}
+
+.gui-shell--notifications.gui-shell--minimal .gui-row__text {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gui-shell--overlay.gui-shell--minimal .gui-row--overlay-enter:not(.gui-row--overlay-exit) {
+    animation: none;
+  }
+
+  .gui-row--activity-enter,
+  .gui-row--activity-exit {
+    animation: none;
+  }
 }

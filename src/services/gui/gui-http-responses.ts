@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
-import { buildGuiRuntimeConfig, type TransportRecord } from './gui-runtime-config';
+import { buildGuiRuntimeConfig, type GuiRuntimeConfig, type TransportRecord } from './gui-runtime-config';
 
 type GuiPageOptions = {
     title: string;
@@ -11,6 +11,7 @@ type GuiPageOptions = {
     transparent?: boolean;
     includeEventGlobals?: boolean;
     guiConfig: TransportRecord;
+    runtimeGuiConfig?: GuiRuntimeConfig;
 };
 
 function getAssetContentType(filePath: string): string {
@@ -70,13 +71,13 @@ function renderActivePage(options: GuiPageOptions): string {
         scriptKind = runtimeKind,
         transparent = false,
         includeEventGlobals = true,
-        guiConfig
+        guiConfig,
+        runtimeGuiConfig = buildGuiRuntimeConfig(guiConfig)
     } = options;
     const assetVersion = Date.now().toString(36);
     const bodyStyle = transparent
         ? 'margin:0;background:transparent;color:#ffffff;font-family:Georgia,serif;'
         : 'margin:0;background:#101317;color:#ffffff;font-family:Georgia,serif;';
-    const runtimeGuiConfig = buildGuiRuntimeConfig(guiConfig);
     const runtimeGlobals = includeEventGlobals
         ? `window.__STREAM_SYNC_GUI_KIND__=${JSON.stringify(runtimeKind)};window.__STREAM_SYNC_GUI_EVENTS__='/gui/events';window.__STREAM_SYNC_GUI_CONFIG__=${JSON.stringify(runtimeGuiConfig)};`
         : `window.__STREAM_SYNC_GUI_KIND__=${JSON.stringify(runtimeKind)};`;

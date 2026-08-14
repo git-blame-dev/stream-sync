@@ -5,6 +5,12 @@ import {
   bootstrapDockApp,
   readDockRuntimeConfig,
 } from "../../../gui/src/dock/main";
+import { DEFAULT_GUI_APPEARANCE } from "../../../gui/src/shared/appearance";
+
+const defaultRuntimeConfig = {
+  feedMode: "all" as const,
+  appearance: DEFAULT_GUI_APPEARANCE,
+};
 
 function createTarget() {
   const attributes: Record<string, string> = {};
@@ -32,15 +38,15 @@ describe("Dock main bootstrap behavior", () => {
         __STREAM_SYNC_GUI_CONFIG__: {
         },
       }),
-    ).toEqual({ mode: "dock", feedMode: "all", notificationTransitionMs: 1000 });
+    ).toMatchObject({ mode: "dock", feedMode: "all", notificationTransitionMs: 1000 });
 
     expect(
       readDockRuntimeConfig({
         __STREAM_SYNC_GUI_KIND__: "tiktok-animations",
       }),
-    ).toEqual({ mode: "tiktok-animations", feedMode: "all", notificationTransitionMs: 1000 });
+    ).toMatchObject({ mode: "tiktok-animations", feedMode: "all", notificationTransitionMs: 1000 });
 
-    expect(readDockRuntimeConfig({})).toEqual({
+    expect(readDockRuntimeConfig({})).toMatchObject({
       mode: "dock",
       feedMode: "all",
       notificationTransitionMs: 1000,
@@ -50,14 +56,14 @@ describe("Dock main bootstrap behavior", () => {
   it("reads configured dock feeds and fixes notifications to non-chat", () => {
     expect(readDockRuntimeConfig({
       __STREAM_SYNC_GUI_CONFIG__: { dockFeedMode: "chat" },
-    })).toEqual({ mode: "dock", feedMode: "chat", notificationTransitionMs: 1000 });
+    })).toMatchObject({ mode: "dock", feedMode: "chat", notificationTransitionMs: 1000 });
     expect(readDockRuntimeConfig({
       __STREAM_SYNC_GUI_KIND__: "notifications",
       __STREAM_SYNC_GUI_CONFIG__: { dockFeedMode: "all" },
-    })).toEqual({ mode: "notifications", feedMode: "non-chat", notificationTransitionMs: 1000 });
+    })).toMatchObject({ mode: "notifications", feedMode: "non-chat", notificationTransitionMs: 1000 });
     expect(readDockRuntimeConfig({
       __STREAM_SYNC_GUI_CONFIG__: { dockFeedMode: "invalid" },
-    })).toEqual({ mode: "dock", feedMode: "all", notificationTransitionMs: 1000 });
+    })).toMatchObject({ mode: "dock", feedMode: "all", notificationTransitionMs: 1000 });
   });
 
   it("renders dock app with dock mode", () => {
@@ -68,8 +74,8 @@ describe("Dock main bootstrap behavior", () => {
       target,
       readDockRuntimeConfigImpl: () => ({
         mode: "dock",
-        feedMode: "all",
         notificationTransitionMs: 1000,
+        ...defaultRuntimeConfig,
       }),
       createRootImpl: () => ({
         render: (element: ReactNode) => {
@@ -93,8 +99,8 @@ describe("Dock main bootstrap behavior", () => {
       target,
       readDockRuntimeConfigImpl: () => ({
         mode: "tiktok-animations",
-        feedMode: "all",
         notificationTransitionMs: 1000,
+        ...defaultRuntimeConfig,
       }),
       createRootImpl: () => ({
         render: (element: ReactNode) => {

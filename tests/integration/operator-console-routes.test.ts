@@ -11,6 +11,7 @@ import {
   OPERATOR_CONTROL_KEYS,
   type OperatorControls,
 } from "../../src/services/operator/operator-control-service";
+import { createOperatorAppearanceService } from "../../src/services/operator/operator-appearance-service";
 import { TestEventBus } from "../helpers/gui-transport-test-utils";
 
 const temporaryDirectories: string[] = [];
@@ -55,6 +56,14 @@ async function createFixture(logSourceOptions?: { maxEntries?: number }) {
     defaults: createDefaults(),
     filePath: join(root, "operator-control-overrides.json"),
   });
+  const appearance = await createOperatorAppearanceService({
+    defaults: {
+      compactRows: true,
+      rowBackgroundsEnabled: false,
+      maxDisplayableBadges: 1,
+    },
+    filePath: join(root, "operator-appearance-overrides.json"),
+  });
   const { logger, source } = createLogSource(logSourceOptions);
   const service = createGuiTransportService({
     config: {
@@ -71,13 +80,14 @@ async function createFixture(logSourceOptions?: { maxEntries?: number }) {
     logger,
     operatorLogs: source,
     operatorControls: controls,
+    operatorAppearance: appearance,
   });
   await service.start();
   const address = service.getAddress();
   if (!address || typeof address === "string") {
     throw new Error("Expected operator transport address");
   }
-  return { baseUrl: `http://127.0.0.1:${address.port}`, controls, root, service, source };
+  return { appearance, baseUrl: `http://127.0.0.1:${address.port}`, controls, root, service, source };
 }
 
 function createSseReader(reader: ReadableStreamDefaultReader<Uint8Array>) {
@@ -105,6 +115,58 @@ afterEach(async () => {
 });
 
 describe("operator console routes", () => {
+  test("persists appearance changes through the secured operator API", async () => {
+    const { appearance, baseUrl, root, service } = await createFixture();
+    try {
+      const initial = await fetch(`${baseUrl}/api/v1/operator/appearance`);
+      expect(await initial.json()).toMatchObject({
+        revision: 0,
+        settings: { compactRows: true, rowBackgroundsEnabled: false, maxDisplayableBadges: 1 },
+      });
+
+      const changed = await fetch(`${baseUrl}/api/v1/operator/appearance`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "Origin": baseUrl,
+          "X-Stream-Sync-Request": "1",
+        },
+        body: JSON.stringify({ key: "maxDisplayableBadges", value: 0 }),
+      });
+
+      expect(changed.status).toBe(200);
+      expect(appearance.settings.maxDisplayableBadges).toBe(0);
+      expect(JSON.parse(await readFile(join(root, "operator-appearance-overrides.json"), "utf8"))).toEqual({
+        maxDisplayableBadges: 0,
+      });
+
+      const invalid = await fetch(`${baseUrl}/api/v1/operator/appearance`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "Origin": baseUrl,
+          "X-Stream-Sync-Request": "1",
+        },
+        body: JSON.stringify({ key: "unknown", value: true }),
+      });
+      expect(invalid.status).toBe(400);
+
+      const reset = await fetch(`${baseUrl}/api/v1/operator/appearance/reset`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Origin": baseUrl,
+          "X-Stream-Sync-Request": "1",
+        },
+        body: "{}",
+      });
+      expect(reset.status).toBe(200);
+      expect(appearance.settings.maxDisplayableBadges).toBe(1);
+    } finally {
+      await service.stop();
+    }
+  });
+
   test("starts in operator-only mode and serves the secured operator page", async () => {
     const { baseUrl, service } = await createFixture();
     try {
@@ -245,7 +307,7 @@ describe("operator console routes", () => {
   });
 
   test("publishes authoritative state changes over SSE", async () => {
-    const { baseUrl, controls, service } = await createFixture();
+    const { appearance, baseUrl, controls, service } = await createFixture();
     const controller = new AbortController();
     try {
       const response = await fetch(`${baseUrl}/api/v1/operator/events`, { signal: controller.signal });
@@ -255,12 +317,20 @@ describe("operator console routes", () => {
       const initial = await sse.next();
       expect(initial).toContain("event: state");
       expect(initial).toContain('"revision":0');
+      const initialAppearance = await sse.next();
+      expect(initialAppearance).toContain("event: appearance");
+      expect(initialAppearance).toContain('"maxDisplayableBadges":1');
 
       await controls.setEnabled("sharesEnabled", false);
       const changed = await sse.next();
       expect(changed).toContain('"revision":1');
       expect(changed).toContain('"key":"sharesEnabled"');
       expect(changed).toContain('"enabled":false');
+
+      await appearance.set("compactRows", false);
+      const changedAppearance = await sse.next();
+      expect(changedAppearance).toContain("event: appearance");
+      expect(changedAppearance).toContain('"compactRows":false');
     } finally {
       controller.abort();
       await service.stop();

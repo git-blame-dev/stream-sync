@@ -3,6 +3,7 @@ import React, { useCallback, useLayoutEffect, useMemo, useRef, useState } from '
 import { GuiRow } from './GuiRow'
 import { GiftAnimationLayer } from './GiftAnimationLayer'
 import type { GuiGiftAnimationCompletionReason, GuiGiftAnimationEffectEnvelope, GuiRowDto } from '../types'
+import { DEFAULT_GUI_APPEARANCE, type GuiAppearance } from '../appearance'
 import { applyOverlayRowShiftMotion } from '../overlay-row-motion'
 
 const ROW_SLIDE_ANIMATION_MS = 1000
@@ -26,6 +27,7 @@ interface GuiShellProps {
   overlayMaxLinesPerMessage: number
   activeEffect?: GuiGiftAnimationEffectEnvelope | null
   onEffectComplete?: (playbackId: string, reason: GuiGiftAnimationCompletionReason) => void
+  appearance?: GuiAppearance
 }
 
 interface GuiShellRowEntry {
@@ -196,7 +198,8 @@ export function GuiShell({
   mode,
   overlayMaxLinesPerMessage,
   activeEffect = null,
-  onEffectComplete
+  onEffectComplete,
+  appearance = DEFAULT_GUI_APPEARANCE
 }: GuiShellProps) {
   const rowMode = mode === 'overlay' ? 'overlay' : 'dock'
   const handleEffectComplete = typeof onEffectComplete === 'function'
@@ -251,7 +254,8 @@ export function GuiShell({
     })
   }, [rows])
   const rowKeysSignature = useMemo(() => rowEntries.map((entry) => entry.key).join('|'), [rowEntries])
-  const overlayInputSignature = `${overlayMeasurementToken}:${rowKeysSignature}`
+  const appearanceSignature = `${appearance.profile}:${appearance.revision}:${appearance.settings.compactRows}:${appearance.settings.rowBackgroundsEnabled}:${appearance.settings.maxDisplayableBadges}`
+  const overlayInputSignature = `${overlayMeasurementToken}:${appearanceSignature}:${rowKeysSignature}`
   const isOverlayVisibilityReady = mode === 'overlay' && overlayVisibilityInputSignature === overlayInputSignature
   const overlayVisibleRowKeySet = useMemo(() => new Set(overlayVisibleRowKeys), [overlayVisibleRowKeys])
   const reducedMotion = mode === 'overlay' && readsReducedMotionPreference()
@@ -478,6 +482,20 @@ export function GuiShell({
   }, [mode])
 
   useLayoutEffect(() => {
+    if (mode !== 'overlay' || typeof ResizeObserver !== 'function' || !shellRef.current) {
+      return
+    }
+
+    const observer = new ResizeObserver(() => {
+      setOverlayMeasurementToken((currentValue) => currentValue + 1)
+    })
+    observer.observe(shellRef.current)
+    for (const element of rowElementsByKeyRef.current.values()) observer.observe(element)
+
+    return () => observer.disconnect()
+  }, [mode, rowKeysSignature])
+
+  useLayoutEffect(() => {
     if (mode !== 'dock') {
       isDockPinnedToBottomRef.current = true
       return
@@ -550,7 +568,7 @@ export function GuiShell({
   }, [isOverlayVisibilityReady, mode, overlayExitingRows, reducedMotion, renderedRowEntries])
 
   return (
-    <main className={`gui-shell gui-shell--${mode}`} style={shellStyle} ref={shellRef} aria-label="Livestream activity">
+    <main className={`gui-shell gui-shell--${mode}${appearance.profile === 'minimal' ? ' gui-shell--minimal' : ''}${appearance.profile === 'minimal' && appearance.settings.compactRows ? ' gui-shell--compact' : ''}`} style={shellStyle} ref={shellRef} aria-label="Livestream activity">
       {mode === 'overlay'
         ? overlayExitingRows.map((exitRow) => {
             return (
@@ -560,6 +578,7 @@ export function GuiShell({
                 mode={mode}
                 className="gui-row--overlay-exit"
                 ariaHidden
+                appearance={appearance}
                 style={createOverlayExitStyle(exitRow.topPx, exitRow.travelPx)}
                 onAnimationEnd={(event) => {
                   if (event.target !== event.currentTarget) {
@@ -582,6 +601,7 @@ export function GuiShell({
             key={entry.key}
             row={entry.row}
             mode={rowMode}
+            appearance={appearance}
             rowRef={(element) => {
               if (element) {
                 rowElementsByKeyRef.current.set(entry.key, element)

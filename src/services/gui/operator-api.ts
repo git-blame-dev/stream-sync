@@ -4,6 +4,11 @@ import type { AppLogger } from '../../core/logger/types';
 import { createPlatformErrorHandler } from '../../utils/platform-error-handler';
 import type { OperatorLogEntry, OperatorLogSource } from '../operator/operator-log-source';
 import {
+    type OperatorAppearanceKey,
+    type OperatorAppearanceService,
+    type OperatorAppearanceSnapshot
+} from '../operator/operator-appearance-service';
+import {
     OPERATOR_CONTROL_KEYS,
     type OperatorControlKey,
     type OperatorControlService,
@@ -12,6 +17,7 @@ import {
 
 type OperatorApiOptions = {
     controls: Pick<OperatorControlService, 'controls' | 'overriddenKeys' | 'revision' | 'reset' | 'setEnabled' | 'subscribe'>;
+    appearance: Pick<OperatorAppearanceService, 'snapshot' | 'reset' | 'set' | 'subscribe'>;
     logger?: Pick<AppLogger, 'warn' | 'error'> | null;
     logs: OperatorLogSource;
 };
@@ -27,6 +33,7 @@ type OperatorStateView = {
     revision: number;
     controls: OperatorControlView[];
 };
+type OperatorAppearanceView = OperatorAppearanceSnapshot;
 
 type SseClient = {
     response: ServerResponse<IncomingMessage>;
@@ -50,6 +57,8 @@ const OPERATOR_ROUTES = new Set([
     '/api/v1/operator/events',
     '/api/v1/operator/controls',
     '/api/v1/operator/controls/reset',
+    '/api/v1/operator/appearance',
+    '/api/v1/operator/appearance/reset',
     '/api/v1/logs/events'
 ]);
 const MAX_CLIENTS = 4;
@@ -74,6 +83,14 @@ function buildOperatorState(
             enabled: controls.controls[key],
             overridden: overriddenKeys.has(key)
         }))
+    };
+}
+
+function buildOperatorAppearance(snapshot: OperatorAppearanceSnapshot): OperatorAppearanceView {
+    return {
+        revision: snapshot.revision,
+        settings: { ...snapshot.settings },
+        overriddenKeys: [...snapshot.overriddenKeys]
     };
 }
 
@@ -112,10 +129,12 @@ function parseRequestOrigin(req: IncomingMessage): URL | null {
 }
 
 function isAuthorizedMutation(req: IncomingMessage): boolean {
+    const contentType = typeof req.headers['content-type'] === 'string'
+        ? req.headers['content-type'].split(';', 1)[0]?.trim().toLowerCase()
+        : null;
     return parseRequestOrigin(req) !== null &&
         req.headers['x-stream-sync-request'] === '1' &&
-        typeof req.headers['content-type'] === 'string' &&
-        req.headers['content-type'].toLowerCase().startsWith('application/json');
+        contentType === 'application/json';
 }
 
 async function readJsonBody(req: IncomingMessage): Promise<unknown> {
@@ -148,17 +167,25 @@ function writeSse(
     payload: unknown,
     id?: string | number
 ): boolean {
-    const packet = `${id === undefined ? '' : `id: ${id}\n`}event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`;
+    let serializedPayload: string | undefined;
+    try {
+        serializedPayload = JSON.stringify(payload);
+    } catch {
+        client.response.destroy();
+        return false;
+    }
+    if (typeof serializedPayload !== 'string') {
+        client.response.destroy();
+        return false;
+    }
+    const packet = `${id === undefined ? '' : `id: ${id}\n`}event: ${event}\ndata: ${serializedPayload}\n\n`;
     const packetBytes = Buffer.byteLength(packet, 'utf8');
     if (packetBytes > MAX_PACKET_BYTES || client.response.writableLength + packetBytes > MAX_BUFFERED_BYTES) {
         client.response.destroy();
         return false;
     }
     try {
-        if (!client.response.write(packet)) {
-            client.response.destroy();
-            return false;
-        }
+        client.response.write(packet);
         return true;
     } catch {
         client.response.destroy();
@@ -182,7 +209,7 @@ function prepareSse(res: ServerResponse<IncomingMessage>): void {
 }
 
 function createOperatorApi(options: OperatorApiOptions) {
-    const { controls, logger, logs } = options;
+    const { appearance, controls, logger, logs } = options;
     const errorHandler = typeof logger?.warn === 'function' && typeof logger.error === 'function'
         ? createPlatformErrorHandler(logger, 'operator-api')
         : null;
@@ -204,10 +231,19 @@ function createOperatorApi(options: OperatorApiOptions) {
         return !client.cleanedUp;
     };
     let unsubscribeControls: (() => void) | null = null;
+    let unsubscribeAppearance: (() => void) | null = null;
     const broadcastState = (snapshot: OperatorControlSnapshot) => {
         const state = buildOperatorState(snapshot);
         for (const client of stateClients) {
             if (!writeSse(client, 'state', state)) {
+                removeClient(stateClients, client);
+            }
+        }
+    };
+    const broadcastAppearance = (snapshot: OperatorAppearanceSnapshot) => {
+        const state = buildOperatorAppearance(snapshot);
+        for (const client of stateClients) {
+            if (!writeSse(client, 'appearance', state)) {
                 removeClient(stateClients, client);
             }
         }
@@ -225,6 +261,18 @@ function createOperatorApi(options: OperatorApiOptions) {
         sendJson(res, 200, buildOperatorState(controls));
     };
 
+    const handleAppearance = (req: IncomingMessage, res: ServerResponse<IncomingMessage>) => {
+        if (req.method !== 'GET' && req.method !== 'HEAD') {
+            sendMethodNotAllowed(res, 'GET, HEAD');
+            return;
+        }
+        if (req.method === 'HEAD') {
+            sendJson(res, 200, null);
+            return;
+        }
+        sendJson(res, 200, buildOperatorAppearance(appearance.snapshot));
+    };
+
     const handleStateEvents = (req: IncomingMessage, res: ServerResponse<IncomingMessage>) => {
         if (req.method !== 'GET') {
             sendMethodNotAllowed(res, 'GET');
@@ -238,7 +286,13 @@ function createOperatorApi(options: OperatorApiOptions) {
         stateClients.add(client);
         if (!attachCleanup(req, stateClients, client)) return;
         prepareSse(res);
-        if (!writeSse(client, 'state', buildOperatorState(controls))) removeClient(stateClients, client);
+        if (!writeSse(client, 'state', buildOperatorState(controls))) {
+            removeClient(stateClients, client);
+            return;
+        }
+        if (!writeSse(client, 'appearance', buildOperatorAppearance(appearance.snapshot))) {
+            removeClient(stateClients, client);
+        }
     };
 
     const handleLogEvents = (req: IncomingMessage, res: ServerResponse<IncomingMessage>) => {
@@ -329,6 +383,53 @@ function createOperatorApi(options: OperatorApiOptions) {
         }
     };
 
+    const handleAppearanceMutation = async (
+        req: IncomingMessage,
+        res: ServerResponse<IncomingMessage>,
+        reset: boolean
+    ) => {
+        const expectedMethod = reset ? 'POST' : 'PATCH';
+        if (req.method !== expectedMethod) {
+            sendMethodNotAllowed(res, expectedMethod);
+            return;
+        }
+        if (!isAuthorizedMutation(req)) {
+            sendJson(res, 403, { error: 'Forbidden' });
+            return;
+        }
+        try {
+            const body = await readJsonBody(req);
+            if (!isRecord(body)) throw new TypeError('Expected JSON object');
+            if (reset) {
+                if (Object.keys(body).length !== 0) {
+                    throw new TypeError('Reset request must be an empty object');
+                }
+                await appearance.reset();
+            } else {
+                if (Object.keys(body).sort().join(',') !== 'key,value') {
+                    throw new TypeError('Appearance request must contain only key and value');
+                }
+                if (typeof body.key !== 'string') throw new TypeError('Expected appearance key');
+                await appearance.set(body.key as OperatorAppearanceKey, body.value as boolean | number);
+            }
+            sendJson(res, 200, buildOperatorAppearance(appearance.snapshot));
+        } catch (error) {
+            if (error instanceof RangeError || error instanceof TypeError || error instanceof SyntaxError) {
+                sendJson(res, error instanceof RangeError && error.message.includes('large') ? 413 : 400, {
+                    error: error.message
+                });
+                return;
+            }
+            errorHandler?.handleEventProcessingError(
+                error,
+                'appearance-mutation',
+                null,
+                'Failed updating operator appearance'
+            );
+            sendJson(res, 500, { error: 'Unable to persist operator appearance' });
+        }
+    };
+
     const handle = async (req: IncomingMessage, res: ServerResponse<IncomingMessage>, route: string): Promise<void> => {
         if (route === '/api/v1/operator/state') {
             handleState(req, res);
@@ -340,6 +441,11 @@ function createOperatorApi(options: OperatorApiOptions) {
             await handleMutation(req, res, false);
         } else if (route === '/api/v1/operator/controls/reset') {
             await handleMutation(req, res, true);
+        } else if (route === '/api/v1/operator/appearance') {
+            if (req.method === 'GET' || req.method === 'HEAD') handleAppearance(req, res);
+            else await handleAppearanceMutation(req, res, false);
+        } else if (route === '/api/v1/operator/appearance/reset') {
+            await handleAppearanceMutation(req, res, true);
         } else {
             sendJson(res, 404, { error: 'Not found' });
         }
@@ -347,22 +453,24 @@ function createOperatorApi(options: OperatorApiOptions) {
 
     const start = () => {
         unsubscribeControls ??= controls.subscribe(broadcastState);
+        unsubscribeAppearance ??= appearance.subscribe(broadcastAppearance);
     };
 
     const stop = () => {
         unsubscribeControls?.();
         unsubscribeControls = null;
+        unsubscribeAppearance?.();
+        unsubscribeAppearance = null;
         for (const clients of [stateClients, logClients]) {
-            for (const client of clients) {
-                client.unsubscribe?.();
+            for (const client of [...clients]) {
+                removeClient(clients, client);
                 client.response.end();
             }
-            clients.clear();
         }
     };
 
     return { handle, start, stop };
 }
 
-export { buildOperatorState, createOperatorApi, isOperatorRoute };
-export type { OperatorStateView };
+export { buildOperatorAppearance, buildOperatorState, createOperatorApi, isOperatorRoute };
+export type { OperatorAppearanceView, OperatorStateView };

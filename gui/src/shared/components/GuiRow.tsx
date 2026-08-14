@@ -2,6 +2,7 @@ import React from 'react'
 
 import type { GuiRowDto } from '../types'
 import { getPlatformIconUrl } from '../platform-icon-map'
+import { DEFAULT_GUI_APPEARANCE, selectDisplayableBadges, type GuiAppearance } from '../appearance'
 
 const RAYQUAZA_IMAGE_URL = 'https://img.pokemondb.net/sprites/black-white/anim/normal/rayquaza.gif'
 const ARCEUS_IMAGE_URL = 'https://img.pokemondb.net/sprites/black-white/anim/normal/arceus.gif'
@@ -24,16 +25,24 @@ interface GuiRowProps {
   style?: React.CSSProperties
   onAnimationEnd?: React.AnimationEventHandler<HTMLDivElement>
   ariaHidden?: boolean
+  appearance?: GuiAppearance
 }
 
-export function GuiRow({ row, mode, rowRef, className, style, onAnimationEnd, ariaHidden = false }: GuiRowProps) {
+export function GuiRow({ row, mode, rowRef, className, style, onAnimationEnd, ariaHidden = false, appearance = DEFAULT_GUI_APPEARANCE }: GuiRowProps) {
+  const isMinimal = appearance.profile === 'minimal'
+  const isCompact = isMinimal && appearance.settings.compactRows
+  const appearanceSettings = appearance.settings
   const normalizedPlatform = normalizePlatform(row.platform)
   const platformIconUrl = getPlatformIconUrl(normalizedPlatform)
   const hasParts = Array.isArray(row.parts) && row.parts.length > 0
-  const badgeImages = Array.isArray(row.badgeImages) ? row.badgeImages : []
+  const allBadgeImages = Array.isArray(row.badgeImages) ? row.badgeImages : []
+  const badgeImages = isMinimal
+    ? selectDisplayableBadges(allBadgeImages, appearanceSettings.maxDisplayableBadges)
+    : allBadgeImages
   const isPaypiggyChatRow = row.kind === 'chat' && row.isPaypiggy === true
   const isMemberChatRow = isPaypiggyChatRow
   const isMonetizationNotification = row.kind === 'notification' && MONETIZATION_NOTIFICATION_TYPES.has(row.type)
+  const badgeSummary = badgeImages.map((badge) => badge.label).filter(Boolean).join(', ')
   const textClass = [
     'gui-row__text',
     isMemberChatRow ? 'gui-row__text--member-chat' : '',
@@ -51,6 +60,9 @@ export function GuiRow({ row, mode, rowRef, className, style, onAnimationEnd, ar
       isMemberChatRow ? 'gui-row--member-chat' : '',
       isMemberChatRow && row.memberTheme === 'red' ? 'gui-row--member-theme-red' : '',
       isMonetizationNotification ? 'gui-row--monetization' : '',
+      isMinimal ? 'gui-row--minimal' : '',
+      isMinimal && !appearanceSettings.rowBackgroundsEnabled ? 'gui-row--background-off' : '',
+      isCompact ? 'gui-row--compact' : '',
       mode === 'overlay' ? 'gui-row--overlay-enter' : '',
       ...additionalClasses
     ]
@@ -83,7 +95,7 @@ export function GuiRow({ row, mode, rowRef, className, style, onAnimationEnd, ar
             </span>
           ) : null}
           {isMemberChatRow ? (
-            <span className="gui-row__member-image-clip">
+            <span className="gui-row__member-image-clip" aria-hidden="true">
               <img
                 className="gui-row__member-image"
                 src={row.memberSpriteUrl || RAYQUAZA_IMAGE_URL}
@@ -93,44 +105,47 @@ export function GuiRow({ row, mode, rowRef, className, style, onAnimationEnd, ar
               />
             </span>
           ) : null}
-          <div className={["gui-row__header", isMemberChatRow ? 'gui-row__header--member-chat' : ''].filter(Boolean).join(' ')}>
-            {isPaypiggyChatRow ? <span className="gui-row__member-tag">MEMBER</span> : null}
-            <span className={["gui-row__username", isMemberChatRow ? 'gui-row__username--member-chat' : ''].filter(Boolean).join(' ')}>{row.username}</span>
-            {badgeImages.length > 0 ? (
-              <span className="gui-row__badges" aria-hidden="true">
-                {badgeImages.map((badge, index) => (
-                  <img
-                    key={`${badge.imageUrl}-${index}`}
-                    className="gui-row__badge"
-                    src={badge.imageUrl}
-                    alt=""
-                    loading="lazy"
-                    decoding="async"
-                  />
-                ))}
-              </span>
-            ) : null}
-          </div>
-          <span className={textClass}>
-            {hasParts
-              ? row.parts?.map((part, index) => {
-                  if (part.type === 'emote') {
-                    return (
-                      <img
-                        key={`emote-${part.emoteId}-${index}`}
-                        className="gui-row__emote"
-                        src={part.imageUrl}
-                        alt={part.emoteId}
-                        loading="lazy"
-                        decoding="async"
-                      />
-                    )
-                  }
+          <div className="gui-row__copy">
+            <div className={["gui-row__header", isMemberChatRow ? 'gui-row__header--member-chat' : ''].filter(Boolean).join(' ')}>
+              {isPaypiggyChatRow ? <span className="gui-row__member-tag">MEMBER</span> : null}
+              <span className={["gui-row__username", isMemberChatRow ? 'gui-row__username--member-chat' : ''].filter(Boolean).join(' ')}>{row.username}</span>
+              {badgeImages.length > 0 ? (
+                <span className="gui-row__badges" aria-label={badgeSummary || undefined}>
+                  {badgeImages.map((badge, index) => (
+                    <img
+                      key={`${badge.imageUrl}-${index}`}
+                      className="gui-row__badge"
+                      src={badge.imageUrl}
+                      alt=""
+                      loading="lazy"
+                      decoding="async"
+                    />
+                  ))}
+                </span>
+              ) : null}
+            </div>
+            {isCompact ? <span className="gui-row__minimal-separator" aria-hidden="true">:</span> : null}
+            <span className={[...textClass.split(' '), isCompact ? 'gui-row__text--minimal' : ''].filter(Boolean).join(' ')}>
+              {hasParts
+                ? row.parts?.map((part, index) => {
+                    if (part.type === 'emote') {
+                      return (
+                        <img
+                          key={`emote-${part.emoteId}-${index}`}
+                          className="gui-row__emote"
+                          src={part.imageUrl}
+                          alt={part.emoteId}
+                          loading="lazy"
+                          decoding="async"
+                        />
+                      )
+                    }
 
-                  return <React.Fragment key={`text-${index}`}>{part.text}</React.Fragment>
-                })
-              : row.text}
-          </span>
+                    return <React.Fragment key={`text-${index}`}>{part.text}</React.Fragment>
+                  })
+                : row.text}
+            </span>
+          </div>
         </div>
       </>
     )

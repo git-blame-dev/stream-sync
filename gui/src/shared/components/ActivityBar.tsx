@@ -1,5 +1,6 @@
 import React from 'react'
 
+import { DEFAULT_GUI_APPEARANCE, type GuiAppearance } from '../appearance'
 import type { GuiRowDto } from '../types'
 import { GuiRow } from './GuiRow'
 
@@ -15,6 +16,7 @@ export interface ActivityBarProps {
   reducedMotion?: boolean
   scheduler?: ActivityBarScheduler
   onExitComplete?: (eventId: string) => void
+  appearance?: GuiAppearance
 }
 
 const defaultScheduler: ActivityBarScheduler = {
@@ -34,7 +36,8 @@ export function ActivityBar({
   transitionMs = 1000,
   reducedMotion = readsReducedMotionPreference(),
   scheduler = defaultScheduler,
-  onExitComplete
+  onExitComplete,
+  appearance = DEFAULT_GUI_APPEARANCE
 }: ActivityBarProps) {
   const [active, setActive] = React.useState<GuiRowDto | null>(null)
   const [phase, setPhase] = React.useState<'enter' | 'visible' | 'exit'>('visible')
@@ -91,13 +94,19 @@ export function ActivityBar({
 
   const style = { '--notification-transition-ms': `${transitionMs}ms` } as React.CSSProperties
   return (
-    <main className="gui-shell gui-shell--notifications" style={style} aria-live="polite">
+    <main className={[
+      'gui-shell',
+      'gui-shell--notifications',
+      appearance.profile === 'minimal' ? 'gui-shell--minimal' : '',
+      appearance.profile === 'minimal' && appearance.settings.compactRows ? 'gui-shell--compact' : ''
+    ].filter(Boolean).join(' ')} style={style} aria-live="polite">
       {active
         ? <GuiRow
             row={active}
             mode="overlay"
             className={phase === 'visible' ? '' : `gui-row--notification-${phase}`}
             onAnimationEnd={handleAnimationEnd}
+            appearance={appearance}
           />
         : null}
     </main>

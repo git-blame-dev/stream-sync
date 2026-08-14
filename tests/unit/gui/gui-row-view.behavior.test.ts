@@ -24,15 +24,60 @@ describe("GuiRow rendering behavior", () => {
     const avatarWrapperIndex = html.indexOf('class="gui-row__avatar-wrapper"');
     const avatarIndex = html.indexOf('class="gui-row__avatar gui-row__avatar--circle"');
     const platformIconIndex = html.indexOf('class="gui-row__platform-icon"');
+    const copyIndex = html.indexOf('class="gui-row__copy"');
     const textIndex = html.indexOf('class="gui-row__text');
     expect(avatarWrapperIndex).toBeGreaterThan(-1);
     expect(avatarIndex).toBeGreaterThan(-1);
     expect(platformIconIndex).toBeGreaterThan(avatarIndex);
+    expect(copyIndex).toBeGreaterThan(platformIconIndex);
     expect(textIndex).toBeGreaterThan(-1);
     expect(avatarWrapperIndex).toBeLessThan(avatarIndex);
     expect(platformIconIndex).toBeLessThan(textIndex);
     expect(html).toContain("gui-row__avatar--circle");
     expect(html).toContain('role="article"');
+  });
+
+  it("renders minimal rows in member, username, badges, separator, message order", () => {
+    const html = renderToStaticMarkup(React.createElement(GuiRow, {
+      mode: "dock",
+      appearance: { profile: "minimal", revision: 0, settings: { compactRows: true, rowBackgroundsEnabled: true, maxDisplayableBadges: 1 } },
+      row: { type: "chat", kind: "chat", platform: "twitch", username: "user", text: "hello", isPaypiggy: true,
+        badgeImages: [{ imageUrl: "badge-1", source: "twitch", label: "mod" }, { imageUrl: "badge-2", source: "twitch", label: "vip" }],
+        avatarUrl: "avatar", timestamp: null },
+    }));
+    expect(html).toContain("gui-row--minimal");
+    expect(html).toContain("gui-row--compact");
+    expect(html.indexOf("gui-row__member-image-clip")).toBeLessThan(html.indexOf("gui-row__copy"));
+    expect(html.indexOf("gui-row__copy")).toBeLessThan(html.indexOf("MEMBER"));
+    expect(html.indexOf("MEMBER")).toBeLessThan(html.indexOf("gui-row__username"));
+    expect(html.indexOf("gui-row__username")).toBeLessThan(html.indexOf("gui-row__badges"));
+    expect(html.indexOf("gui-row__badges")).toBeLessThan(html.indexOf("gui-row__minimal-separator"));
+    expect(html).toContain("gui-row__minimal-separator");
+    expect(html.split('class="gui-row__badge"').length - 1).toBe(1);
+  });
+
+  it("renders minimal command rows with the ordinary compact row contract", () => {
+    const html = renderToStaticMarkup(React.createElement(GuiRow, {
+      mode: "overlay",
+      appearance: { profile: "minimal", revision: 0, settings: { compactRows: true, rowBackgroundsEnabled: false, maxDisplayableBadges: 1 } },
+      row: {
+        type: "command",
+        kind: "command",
+        platform: "youtube",
+        username: "test-youtube-account-8",
+        text: "!preview",
+        avatarUrl: "https://example.invalid/command-avatar.png",
+        timestamp: null,
+      },
+    }));
+
+    expect(html).toContain("gui-row--command");
+    expect(html).toContain("gui-row--minimal");
+    expect(html).toContain("gui-row--compact");
+    expect(html).not.toContain("gui-row--paypiggy");
+    expect(html).not.toContain("gui-row__member-tag");
+    expect(html.indexOf("test-youtube-account-8")).toBeLessThan(html.indexOf("gui-row__minimal-separator"));
+    expect(html.indexOf("gui-row__minimal-separator")).toBeLessThan(html.indexOf("!preview"));
   });
 
   it("renders the chat platform icon inside the avatar wrapper", () => {

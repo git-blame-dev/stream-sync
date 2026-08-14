@@ -23,6 +23,14 @@ function createRow(index: number) {
 }
 
 describe("GUI feed store behavior", () => {
+  it("filters normalized rows before deduplication and retention", () => {
+    const store = createGuiFeedStore({ inclusionPredicate: (row) => row.kind !== "chat", maxRows: 1 });
+    store.pushEvent({ ...createRow(1), eventId: "chat-1" });
+    store.pushEvent({ ...createRow(1), kind: "notification", eventId: "notification-1" });
+    expect(store.getRows()).toHaveLength(1);
+    expect(store.getRows()[0]?.kind).toBe("notification");
+  });
+
   it("consumes mapper DTO fields and appends display rows", () => {
     const store = createGuiFeedStore();
 

@@ -17,7 +17,13 @@ import {
     sendNotFound,
     sendStaticAsset
 } from './gui-http-responses';
-import { isGuiActive, toTransportRecord, type TransportRecord } from './gui-runtime-config';
+import {
+    buildGuiRuntimeConfig,
+    isGuiActive,
+    resolveGuiPageRuntimeConfig,
+    toTransportRecord,
+    type TransportRecord
+} from './gui-runtime-config';
 import { getSystemTimestampISO, isIsoTimestamp } from '../../utils/timestamp';
 import type { AppLogger } from '../../core/logger/types';
 import type { OperatorControlService } from '../operator/operator-control-service';
@@ -28,6 +34,10 @@ import {
     type GiftAnimationSettledPayload,
     type GiftAnimationSettledReason
 } from '../../interfaces/DisplayEvents';
+import type {
+    OperatorAppearanceService,
+    OperatorAppearanceSnapshot
+} from '../operator/operator-appearance-service';
 
 type GuiTransportLogger = Partial<AppLogger> & {
     debug?: (message: string, scope: string, data?: unknown) => void;
@@ -68,6 +78,7 @@ type GuiTransportOptions = {
     runtimeAssetRoots?: readonly string[];
     demoOnly?: boolean;
     operatorControls?: OperatorControlService;
+    operatorAppearance?: OperatorAppearanceService;
     operatorLogs?: OperatorLogSource;
 };
 
@@ -155,13 +166,15 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
     let unsubscribeDisplayRows: (() => void) | null = null;
     let unsubscribeDisplayEffects: (() => void) | null = null;
     let unsubscribeDisplayLifecycle: (() => void) | null = null;
+    let unsubscribeAppearance: (() => void) | null = null;
     const clients = new Set<ServerResponse<IncomingMessage>>();
     const chatClients = new Set<ServerResponse<IncomingMessage>>();
     const chatFeedEnabled = guiConfig.enableChatFeed === true;
     const operatorEnabled = guiConfig.enableOperator === true;
-    const operatorApi = operatorEnabled && options.operatorControls && options.operatorLogs
+    const operatorApi = operatorEnabled && options.operatorControls && options.operatorLogs && options.operatorAppearance
         ? createOperatorApi({
             controls: options.operatorControls,
+            appearance: options.operatorAppearance,
             logs: options.operatorLogs,
             ...(logger && typeof logger.warn === 'function' && typeof logger.error === 'function'
                 ? { logger: { warn: logger.warn, error: logger.error } }
@@ -171,10 +184,14 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
     const CHAT_MAX_CLIENTS = 4;
     const CHAT_MAX_PACKET_BYTES = 16 * 1024;
     const CHAT_MAX_BUFFERED_BYTES = 64 * 1024;
+    const GUI_MAX_CLIENTS = 16;
+    const GUI_MAX_PACKET_BYTES = 256 * 1024;
+    const GUI_MAX_BUFFERED_BYTES = 512 * 1024;
     const runtimeAssetRegistry = new Map<string, RuntimeAssetRecord>();
     const giftPlaybackRegistry = new Map<string, { expiresAt: number; settled: boolean }>();
     let dispatchChain = Promise.resolve();
     let dispatchEpoch = 0;
+    const guiAppearanceSnapshot = () => options.operatorAppearance?.snapshot ?? buildGuiRuntimeConfig(guiConfig).appearance;
 
     const RUNTIME_ASSET_MAX_ENTRIES = 64;
     const RUNTIME_ASSET_TTL_MS = 5 * 60 * 1000;
@@ -322,9 +339,29 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
     };
 
     const sendSse = (payload: unknown) => {
-        const packet = `data: ${JSON.stringify(payload)}\n\n`;
+        let packet: string;
+        try {
+            packet = `data: ${JSON.stringify(payload)}\n\n`;
+        } catch (error) {
+            errorHandler.handleEventProcessingError(
+                error,
+                'sse-serialize',
+                null,
+                'Failed serializing GUI SSE event'
+            );
+            return;
+        }
+        const packetBytes = Buffer.byteLength(packet, 'utf8');
+        if (packetBytes > GUI_MAX_PACKET_BYTES) {
+            return;
+        }
         for (const client of clients) {
             try {
+                if (client.writableLength + packetBytes > GUI_MAX_BUFFERED_BYTES) {
+                    clients.delete(client);
+                    client.destroy();
+                    continue;
+                }
                 client.write(packet);
             } catch (error) {
                 clients.delete(client);
@@ -365,6 +402,25 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
             });
         });
         unsubscribeDisplayLifecycle = typeof unsubscribe === 'function' ? unsubscribe : null;
+    };
+
+    const createAppearanceEnvelope = (snapshot: OperatorAppearanceSnapshot | ReturnType<typeof guiAppearanceSnapshot>) => ({
+        __guiEvent: 'appearance' as const,
+        profile: 'minimal' as const,
+        revision: snapshot.revision,
+        settings: { ...snapshot.settings }
+    });
+
+    const subscribeToAppearance = () => {
+        if (!options.operatorAppearance) return;
+        unsubscribeAppearance = options.operatorAppearance.subscribe((snapshot) => {
+            enqueueDispatch(() => sendSse(createAppearanceEnvelope(snapshot)));
+        });
+    };
+
+    const unsubscribeFromAppearance = () => {
+        unsubscribeAppearance?.();
+        unsubscribeAppearance = null;
     };
 
     const publishChatMessage = (platform: string, payload: Record<string, unknown>) => {
@@ -526,11 +582,12 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
         const rawUrl = typeof req.url === 'string' ? req.url : '/';
         const sendBody = !isHeadRequest(req);
         let url = rawUrl;
+        let parsedRequestUrl: URL | null = null;
         let routeProbe: string | null = null;
         try {
-            const parsedUrl = new URL(rawUrl, 'http://localhost');
-            url = parsedUrl.pathname;
-            routeProbe = parsedUrl.searchParams.get('route');
+            parsedRequestUrl = new URL(rawUrl, 'http://localhost');
+            url = parsedRequestUrl.pathname;
+            routeProbe = parsedRequestUrl.searchParams.get('route');
         } catch {
             url = rawUrl;
         }
@@ -552,6 +609,11 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
             if (!requireGetRequest(req, res)) {
                 return;
             }
+            if (clients.size >= GUI_MAX_CLIENTS) {
+                res.writeHead(503);
+                res.end('GUI event feed full');
+                return;
+            }
 
             res.writeHead(200, {
                 'Content-Type': 'text/event-stream; charset=utf-8',
@@ -565,16 +627,23 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
             }
             res.write('retry: 3000\n: connected\n\n');
             clients.add(res);
+            res.write(`data: ${JSON.stringify(createAppearanceEnvelope(guiAppearanceSnapshot()))}\n\n`);
             logDebug('GUI SSE client connected', {
                 clientCount: clients.size
             });
 
-            req.on('close', () => {
+            let cleanedUp = false;
+            const cleanup = () => {
+                if (cleanedUp) return;
+                cleanedUp = true;
                 clients.delete(res);
                 logDebug('GUI SSE client disconnected', {
                     clientCount: clients.size
                 });
-            });
+            };
+            req.once('close', cleanup);
+            res.once('close', cleanup);
+            res.once('error', cleanup);
             return;
         }
 
@@ -906,24 +975,6 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
             return;
         }
 
-        if (url === '/notifications') {
-            if (!requireGetRequest(req, res)) {
-                return;
-            }
-            if (guiConfig.enableNotifications === true) {
-                sendNoCacheHtml(res, renderActivePage({
-                    title: 'Stream Sync Notifications',
-                    runtimeKind: 'notifications',
-                    scriptKind: 'dock',
-                    transparent: true,
-                    guiConfig
-                }), sendBody);
-                return;
-            }
-            sendNoCacheHtml(res, renderDisabledPage('Stream Sync Notifications', 'Notifications disabled', true), sendBody);
-            return;
-        }
-
         if (url === '/dock') {
             if (!requireGetRequest(req, res)) {
                 return;
@@ -934,11 +985,39 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
                     runtimeKind: 'dock',
                     scriptKind: 'dock',
                     transparent: true,
-                    guiConfig
+                    guiConfig,
+                    runtimeGuiConfig: resolveGuiPageRuntimeConfig(
+                        guiConfig,
+                        'dock',
+                        parsedRequestUrl?.searchParams ?? new URLSearchParams(),
+                        guiAppearanceSnapshot()
+                    )
                 }), sendBody);
                 return;
             }
             sendNoCacheHtml(res, renderDisabledPage('Stream Sync Dock', 'Dock disabled', true), sendBody);
+            return;
+        }
+
+        if (url === '/notifications') {
+            if (!requireGetRequest(req, res)) return;
+            if (guiConfig.enableNotifications === true) {
+                sendNoCacheHtml(res, renderActivePage({
+                    title: 'Stream Sync Notifications',
+                    runtimeKind: 'notifications',
+                    scriptKind: 'dock',
+                    transparent: true,
+                    guiConfig,
+                    runtimeGuiConfig: resolveGuiPageRuntimeConfig(
+                        guiConfig,
+                        'notifications',
+                        parsedRequestUrl?.searchParams ?? new URLSearchParams(),
+                        guiAppearanceSnapshot()
+                    )
+                }), sendBody);
+                return;
+            }
+            sendNoCacheHtml(res, renderDisabledPage('Stream Sync Notifications', 'Notifications disabled', true), sendBody);
             return;
         }
 
@@ -952,7 +1031,13 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
                     runtimeKind: 'tiktok-animations',
                     scriptKind: 'dock',
                     transparent: true,
-                    guiConfig
+                    guiConfig,
+                    runtimeGuiConfig: resolveGuiPageRuntimeConfig(
+                        guiConfig,
+                        'tiktok-animations',
+                        parsedRequestUrl?.searchParams ?? new URLSearchParams(),
+                        guiAppearanceSnapshot()
+                    )
                 }), sendBody);
                 return;
             }
@@ -970,7 +1055,13 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
                     runtimeKind: 'overlay',
                     scriptKind: 'overlay',
                     transparent: true,
-                    guiConfig
+                    guiConfig,
+                    runtimeGuiConfig: resolveGuiPageRuntimeConfig(
+                        guiConfig,
+                        'overlay',
+                        parsedRequestUrl?.searchParams ?? new URLSearchParams(),
+                        guiAppearanceSnapshot()
+                    )
                 }), sendBody);
                 return;
             }
@@ -1011,7 +1102,7 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
                 throw new Error('Operator console requires loopback host');
             }
             if (operatorEnabled && !operatorApi) {
-                throw new Error('Operator console requires runtime controls and logs');
+                throw new Error('Operator console requires runtime controls, appearance, and logs');
             }
             const port = Number(guiConfig.port);
             if (!Number.isInteger(port) || port < 0 || port > 65535) {
@@ -1019,6 +1110,7 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
             }
 
             operatorApi?.start();
+            subscribeToAppearance();
             subscribeToDisplayRows();
             subscribeToDisplayEffects();
             subscribeToDisplayLifecycle();
@@ -1055,6 +1147,7 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
                 unsubscribeFromDisplayRows();
                 unsubscribeFromDisplayEffects();
                 unsubscribeFromDisplayLifecycle();
+                unsubscribeFromAppearance();
                 operatorApi?.stop();
                 if (server) {
                     if (serverRuntimeErrorHandler && typeof server.removeListener === 'function') {
@@ -1084,6 +1177,7 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
         unsubscribeFromDisplayRows();
         unsubscribeFromDisplayEffects();
         unsubscribeFromDisplayLifecycle();
+        unsubscribeFromAppearance();
         await dispatchChain;
         runtimeAssetRegistry.clear();
         giftPlaybackRegistry.clear();

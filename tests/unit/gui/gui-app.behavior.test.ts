@@ -497,6 +497,136 @@ describe("GUI app behavior", () => {
     expect(text).not.toContain("gui-shell__effect-layer");
   });
 
+  it("exposes valid gift animation effects to minimal overlay GuiShell", async () => {
+    let onEventHandler: EventHandler | null = null;
+    const createEventFeedImpl = ({ onEvent }: EventFeedArgs) => {
+      onEventHandler = onEvent;
+      return () => {};
+    };
+
+    let renderer: AppRenderer | null = null;
+    await TestRenderer.act(async () => {
+      renderer = TestRenderer.create(
+        React.createElement(App, {
+          mode: "overlay",
+          eventsPath: "/gui/events",
+          createEventFeedImpl,
+          overlayMaxMessages: 3,
+          overlayMaxLinesPerMessage: 3,
+          initialAppearance: {
+            profile: "minimal",
+            revision: 0,
+            settings: { compactRows: true, rowBackgroundsEnabled: true, maxDisplayableBadges: 1 },
+          },
+        }),
+      );
+    });
+
+    await TestRenderer.act(async () => {
+      onEventHandler!({
+        __guiEvent: "effect",
+        effectType: "tiktok-gift-animation",
+        playbackId: "effect-minimal-overlay",
+        durationMs: 2500,
+        assetUrl: "/gui/runtime/test.mp4",
+        config: {
+          profileName: "portrait",
+          sourceWidth: 960,
+          sourceHeight: 864,
+          renderWidth: 480,
+          renderHeight: 854,
+          rgbFrame: [0, 0, 480, 854],
+          aFrame: [480, 0, 480, 854],
+        },
+      });
+    });
+
+    expect(getEffectShellProps(renderer!).activeEffect.playbackId).toBe("effect-minimal-overlay");
+  });
+
+  it("keeps valid gift animation effects out of standard overlay GuiShell", async () => {
+    let onEventHandler: EventHandler | null = null;
+    const createEventFeedImpl = ({ onEvent }: EventFeedArgs) => {
+      onEventHandler = onEvent;
+      return () => {};
+    };
+
+    let renderer: AppRenderer | null = null;
+    await TestRenderer.act(async () => {
+      renderer = TestRenderer.create(
+        React.createElement(App, {
+          mode: "overlay",
+          eventsPath: "/gui/events",
+          createEventFeedImpl,
+          overlayMaxMessages: 3,
+          overlayMaxLinesPerMessage: 3,
+        }),
+      );
+    });
+
+    await TestRenderer.act(async () => {
+      onEventHandler!({
+        __guiEvent: "effect",
+        effectType: "tiktok-gift-animation",
+        playbackId: "effect-standard-overlay",
+        durationMs: 2500,
+        assetUrl: "/gui/runtime/test.mp4",
+        config: {
+          profileName: "portrait",
+          sourceWidth: 960,
+          sourceHeight: 864,
+          renderWidth: 480,
+          renderHeight: 854,
+          rgbFrame: [0, 0, 480, 854],
+          aFrame: [480, 0, 480, 854],
+        },
+      });
+    });
+
+    expect(renderer!.root.findByType(GuiShell).props.activeEffect).toBeNull();
+  });
+
+  it("keeps the minimal overlay feed connected across appearance revisions", async () => {
+    let onEventHandler: EventHandler | null = null;
+    let connectionCount = 0;
+    let disposalCount = 0;
+    const createEventFeedImpl = ({ onEvent }: EventFeedArgs) => {
+      connectionCount += 1;
+      onEventHandler = onEvent;
+      return () => {
+        disposalCount += 1;
+      };
+    };
+
+    let renderer: AppRenderer | null = null;
+    await TestRenderer.act(async () => {
+      renderer = TestRenderer.create(React.createElement(App, {
+        mode: "overlay",
+        createEventFeedImpl,
+        overlayMaxMessages: 3,
+        overlayMaxLinesPerMessage: 3,
+        initialAppearance: {
+          profile: "minimal",
+          revision: 0,
+          settings: { compactRows: true, rowBackgroundsEnabled: true, maxDisplayableBadges: 1 },
+        },
+      }));
+    });
+    await TestRenderer.act(async () => {
+      onEventHandler!({
+        __guiEvent: "appearance",
+        profile: "minimal",
+        revision: 1,
+        settings: { compactRows: true, rowBackgroundsEnabled: false, maxDisplayableBadges: 0 },
+      });
+    });
+
+    expect(connectionCount).toBe(1);
+    expect(disposalCount).toBe(0);
+    await TestRenderer.act(async () => renderer!.unmount());
+    expect(disposalCount).toBe(1);
+  });
+
   it("renders only gift animation effects in tiktok-animations mode", async () => {
     let onEventHandler: EventHandler | null = null;
     const createEventFeedImpl = ({ onEvent }: EventFeedArgs) => {
@@ -725,6 +855,97 @@ describe("GUI app behavior", () => {
       });
     });
     expect(renderer!.root.findByType(ActivityBar).props.row).toBeNull();
+    await TestRenderer.act(async () => renderer!.unmount());
+  });
+
+  it("applies newer appearance snapshots only to minimal clients", async () => {
+    let onEventHandler: EventHandler | null = null;
+    const createEventFeedImpl = ({ onEvent }: EventFeedArgs) => {
+      onEventHandler = onEvent;
+      return () => {};
+    };
+    let renderer: AppRenderer | null = null;
+    await TestRenderer.act(async () => {
+      renderer = TestRenderer.create(React.createElement(App, {
+        mode: "dock",
+        createEventFeedImpl,
+        initialAppearance: {
+          profile: "minimal",
+          revision: 0,
+          settings: { compactRows: true, rowBackgroundsEnabled: true, maxDisplayableBadges: 1 },
+        },
+      }));
+    });
+    await TestRenderer.act(async () => {
+      onEventHandler!({ type: "chat", kind: "chat", platform: "twitch", username: "test-minimal-user", text: "hello", avatarUrl: "https://example.invalid/avatar.png", timestamp: null });
+      onEventHandler!({
+        __guiEvent: "appearance",
+        profile: "minimal",
+        revision: 1,
+        settings: { compactRows: true, rowBackgroundsEnabled: false, maxDisplayableBadges: 0 },
+      });
+    });
+
+    const text = JSON.stringify(renderer!.toJSON());
+    expect(text).toContain("gui-shell--minimal");
+    expect(text).toContain("gui-row--background-off");
+    expect(text).toContain("test-minimal-user");
+    await TestRenderer.act(async () => renderer!.unmount());
+  });
+
+  it("ignores malformed live appearance snapshots", async () => {
+    let onEventHandler: EventHandler | null = null;
+    const createEventFeedImpl = ({ onEvent }: EventFeedArgs) => {
+      onEventHandler = onEvent;
+      return () => {};
+    };
+    let renderer: AppRenderer | null = null;
+    await TestRenderer.act(async () => {
+      renderer = TestRenderer.create(React.createElement(App, {
+        mode: "dock",
+        createEventFeedImpl,
+        initialAppearance: {
+          profile: "minimal",
+          revision: 1,
+          settings: { compactRows: true, rowBackgroundsEnabled: true, maxDisplayableBadges: 1 },
+        },
+      }));
+    });
+    await TestRenderer.act(async () => {
+      onEventHandler!({
+        __guiEvent: "appearance",
+        profile: "minimal",
+        revision: 2,
+        settings: { compactRows: true, rowBackgroundsEnabled: "no", maxDisplayableBadges: 0 },
+      });
+    });
+
+    const text = JSON.stringify(renderer!.toJSON());
+    expect(text).not.toContain("gui-row--background-off");
+    await TestRenderer.act(async () => renderer!.unmount());
+  });
+
+  it("keeps ordinary chat out of the notifications activity bar", async () => {
+    let onEventHandler: EventHandler | null = null;
+    const createEventFeedImpl = ({ onEvent }: EventFeedArgs) => {
+      onEventHandler = onEvent;
+      return () => {};
+    };
+    let renderer: AppRenderer | null = null;
+    await TestRenderer.act(async () => {
+      renderer = TestRenderer.create(React.createElement(App, {
+        mode: "notifications",
+        createEventFeedImpl,
+      }));
+    });
+    await TestRenderer.act(async () => {
+      onEventHandler!({ type: "chat", kind: "chat", platform: "twitch", username: "hidden-chat", text: "hidden", avatarUrl: "https://example.invalid/chat.png", timestamp: null });
+      onEventHandler!({ eventId: "visible-follow-1", type: "platform:follow", kind: "notification", platform: "twitch", username: "visible-follow", text: "followed", avatarUrl: "https://example.invalid/follow.png", timestamp: null });
+    });
+
+    const activity = renderer!.root.findByType(ActivityBar);
+    expect(activity.props.row.username).toBe("visible-follow");
+    expect(JSON.stringify(renderer!.toJSON())).not.toContain("hidden-chat");
     await TestRenderer.act(async () => renderer!.unmount());
   });
 

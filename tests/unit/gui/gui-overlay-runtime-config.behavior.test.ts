@@ -12,10 +12,11 @@ describe("Overlay runtime config behavior", () => {
       },
     });
 
-    expect(runtimeConfig).toEqual({
+    expect(runtimeConfig).toMatchObject({
       overlayMaxMessages: 7,
       overlayMaxLinesPerMessage: 4,
       overlayFeedMode: "chat",
+      appearance: { profile: "standard", revision: 0 },
     });
   });
 

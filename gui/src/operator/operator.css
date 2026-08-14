@@ -99,6 +99,33 @@ h2 {
   margin-top: 1.125rem;
 }
 
+.appearance-panel {
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid #26313a;
+}
+
+.appearance-number {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: .9rem .2rem;
+  border-bottom: 1px solid #26313a;
+}
+.appearance-number span { min-width: 0; }
+.appearance-number strong, .appearance-number em { display: block; }
+.appearance-number em { margin-top: .25rem; color: #e3a65c; font-size: .69rem; font-style: normal; }
+.appearance-number input { width: 5rem; padding: .35rem; color: inherit; background: #182127; border: 1px solid #465762; }
+.source-examples { color: #8796a1; font-size: .75rem; line-height: 1.5; }
+.source-examples code { color: #cbd5dc; }
+
+.stream-status {
+  margin: 0 0 0.65rem;
+  color: #8796a1;
+  font-size: 0.75rem;
+}
+
 .control {
   display: flex;
   align-items: center;

@@ -22,6 +22,7 @@ import type { DisplayQueueSequenceWriter } from '../interfaces/DisplayQueue';
 import { NotificationInputValidator } from '../notifications/notification-input-validator';
 import type { OperatorControlService } from '../services/operator/operator-control-service';
 import type { OperatorLogSource } from '../services/operator/operator-log-source';
+import type { OperatorAppearanceService } from '../services/operator/operator-appearance-service';
 
 type RuntimeRecord = Record<string, unknown>;
 
@@ -178,6 +179,7 @@ type RuntimeDependencies = RuntimeRecord & {
     platformLifecycleService: RuntimePlatformLifecycleService;
     gracefulExitService?: RuntimeGracefulExitService;
     operatorControls?: OperatorControlService;
+    operatorAppearance?: OperatorAppearanceService;
     operatorLogs?: OperatorLogSource;
     obs?: {
         connectionManager?: RuntimeObsManager;
@@ -418,6 +420,7 @@ class AppRuntime {
             eventBus: this.eventBus,
             logger: this.logger,
             ...(this.dependencies.operatorControls ? { operatorControls: this.dependencies.operatorControls } : {}),
+            ...(this.dependencies.operatorAppearance ? { operatorAppearance: this.dependencies.operatorAppearance } : {}),
             ...(this.dependencies.operatorLogs ? { operatorLogs: this.dependencies.operatorLogs } : {})
         });
         this.obsEventService = this.dependencies.obsEventService;
