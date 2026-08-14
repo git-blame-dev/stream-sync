@@ -107,9 +107,9 @@ Use one of these local files in OBS:
 ```text
 <repo>\obs\overlay.html
 <repo>\obs\dock.html
+<repo>\obs\notifications.html
 <repo>\obs\demo.html
 <repo>\obs\tiktok-animations.html
-<repo>\obs\notifications.html
 ```
 
 The default GUI origin is `http://127.0.0.1:3399`.
@@ -144,6 +144,16 @@ after tracked effects finish; the current row then gets its full 1-second exit
 before the next row starts. Tracked effects and the TTS handoff remain in the
 production pipeline, but preview TTS is disabled so the command is safe to run
 locally.
+Enable each route you use with its `[gui]` flag: `enableOverlay`, `enableDock`, or `enableNotifications`.
+
+Append `?appearance=minimal` to an overlay, dock, or notifications launcher URL to use the operator-managed compact presentation. Each overlay source can also retain a different number of rows with `maxMessages`, for example:
+
+```text
+http://127.0.0.1:3399/overlay?appearance=minimal&maxMessages=8
+<repo>\obs\overlay.html?appearance=minimal&maxMessages=8
+```
+
+The row count is an upper bound; the overlay still shows only rows that physically fit its browser-source height. The dock remains a scrolling feed, and notifications remains a single latest non-chat activity row, so `maxMessages` applies only to `/overlay`.
 
 ### Local operator console
 
@@ -156,9 +166,11 @@ host = 127.0.0.1
 port = 3399
 ```
 
-Start Stream Sync, then open `http://127.0.0.1:3399/operator` on the same computer. The page shows the structured application output written to the console and provides live global controls for chat messages, commands, greetings, farewells, follows, gifts, Paypiggies, raids, and shares.
+Start Stream Sync, then open `http://127.0.0.1:3399/operator` on the same computer. The page shows the structured application output written to the console, provides live global controls for chat messages, commands, greetings, farewells, follows, gifts, Paypiggies, raids, and shares, and configures the minimal appearance used by opted-in browser sources.
 
 Controls suppress viewer-facing rows, TTS, VFX, media, and animations while preserving platform ingestion, raw logging, tracking, and monetization goal accounting. Turning a control off removes matching items still waiting in the display queue; the active item or sequence finishes. Changes are saved atomically in `data/operator-control-overrides.json`, survive restarts, and never rewrite `config.ini`. Use **Restore config defaults** to clear those overrides.
+
+Minimal appearance overrides are saved separately in `data/operator-appearance-overrides.json`. They update open minimal sources live and control compact rows, row backgrounds, and the maximum number of displayed username badges. A badge limit of zero hides all badges. Standard sources are unchanged.
 
 Operator routes require a loopback GUI host and reject cross-origin mutations. The console is intentionally local-only; do not expose the GUI port through a proxy or port-forward.
 
