@@ -75,6 +75,7 @@ type GuiTransportService = {
 start: () => Promise<void>;
 stop: () => Promise<void>;
 getAddress: () => ReturnType<Server['address']> | null;
+    getSseClientCount: () => number;
     isActive: () => boolean;
     publishChatMessage: (platform: string, payload: Record<string, unknown>) => void;
 };
@@ -981,11 +982,13 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
     };
 
     const isActive = (): boolean => active;
+    const getSseClientCount = (): number => clients.size;
 
     return {
         start,
         stop,
         getAddress,
+        getSseClientCount,
         isActive,
         publishChatMessage
     };

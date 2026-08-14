@@ -41,6 +41,13 @@ type PreviewModule = {
   PREVIEW_DURATION_MS: number;
   PREVIEW_INTERVAL_MS: number;
   PREVIEW_MEDIA_CATALOG: UnknownRecord;
+  createPreviewDelay: (
+    delayImpl?: (
+      delay: unknown,
+      fallback?: number,
+      context?: string,
+    ) => Promise<void>,
+  ) => (ms: number) => Promise<void>;
   buildPreviewConfig: (baseConfig?: UnknownRecord) => UnknownRecord;
   buildPreviewScenarioEvents: (
     durationMs?: number,
@@ -101,6 +108,7 @@ const {
   PREVIEW_DURATION_MS,
   PREVIEW_INTERVAL_MS,
   PREVIEW_MEDIA_CATALOG,
+  createPreviewDelay,
   buildPreviewConfig,
   buildPreviewScenarioEvents,
   createPreviewPipeline,
@@ -110,6 +118,19 @@ const {
 } = previewModule as PreviewModule;
 
 describe("GUI local preview command behavior", () => {
+  it("preserves zero-delay preview queue processing", async () => {
+    const calls: unknown[][] = [];
+    const delay = createPreviewDelay(async (...args: unknown[]) => {
+      calls.push(args);
+    });
+
+    await delay(0);
+    expect(calls).toEqual([]);
+
+    await delay(25);
+    expect(calls).toEqual([[25, 25, "gui-preview delay"]]);
+  });
+
   it("uses 32s duration and 2s message cadence constants", () => {
     expect(PREVIEW_DURATION_MS).toBe(32000);
     expect(PREVIEW_INTERVAL_MS).toBe(2000);
@@ -121,12 +142,12 @@ describe("GUI local preview command behavior", () => {
     expect(events.length).toBe(16);
     expect(events[0]).toEqual(
       expect.objectContaining({
-        platform: "twitch",
+        platform: "youtube",
       }),
     );
     expect(events[1]).toEqual(
       expect.objectContaining({
-        platform: "tiktok",
+        platform: "twitch",
       }),
     );
     expect(events[2]).toEqual(
@@ -137,10 +158,22 @@ describe("GUI local preview command behavior", () => {
     const firstEvent = requireValue(events[0], "first preview event");
     const secondEvent = requireValue(events[1], "second preview event");
     const thirdEvent = requireValue(events[2], "third preview event");
-    expect(firstEvent.adapter).toBe("twitch");
-    expect(secondEvent.adapter).toBe("tiktok");
+    expect(firstEvent.adapter).toBe("youtube");
+    expect(secondEvent.adapter).toBe("twitch");
     expect(thirdEvent.adapter).toBe("youtube");
     expect(firstEvent.rawEvent).toBeDefined();
+    expect(firstEvent.rawEvent.eventType).toBe("LiveChatTextMessage");
+    expect(firstEvent.rawEvent.chatItem.testData.isPaypiggy).toBe(true);
+    expect(firstEvent.rawEvent.chatItem.testData.username).toBe(
+      "test-youtube-account",
+    );
+    expect(secondEvent.rawEvent.subscriptionType).toBe("channel.chat.message");
+    expect(secondEvent.rawEvent.event.isPaypiggy).toBe(true);
+    expect(
+      secondEvent.rawEvent.event.badgeImages.map(
+        (badge: UnknownRecord) => badge.label,
+      ),
+    ).toEqual(["Moderator", "Founder", "Prime Gaming"]);
   });
 
   it("inserts youtube member hi chat immediately after raid notification", () => {
@@ -161,6 +194,9 @@ describe("GUI local preview command behavior", () => {
     expect(memberHiEvent.rawEvent.eventType).toBe("LiveChatTextMessage");
     expect(memberHiEvent.rawEvent.chatItem.testData.message).toBe("Hi!");
     expect(memberHiEvent.rawEvent.chatItem.testData.isPaypiggy).toBe(true);
+    expect(memberHiEvent.rawEvent.chatItem.testData.username).toBe(
+      "test-youtube-account",
+    );
   });
 
   it("builds scenario steps that include all adapter families", () => {
@@ -207,8 +243,8 @@ describe("GUI local preview command behavior", () => {
     )!;
 
     expect(tiktokGiftStep).toBeDefined();
-    expect(events[1]?.rawEvent?.eventType).toBe("GIFT");
-    expect(events[1]?.adapter).toBe("tiktok");
+    expect(events[3]?.rawEvent?.eventType).toBe("GIFT");
+    expect(events[3]?.adapter).toBe("tiktok");
     expect(tiktokGiftStep.rawEvent.data.repeatCount).toBe(1);
     expect(tiktokGiftStep.rawEvent.data.giftName).toBe("Corgi");
     expect(tiktokGiftStep.rawEvent.data.gift.giftPictureUrl).toBe(
@@ -220,6 +256,41 @@ describe("GUI local preview command behavior", () => {
     expect(
       tiktokGiftStep.rawEvent.data.asset.videoResourceList.length,
     ).toBeGreaterThan(0);
+  });
+
+  it("routes the generated TikTok no-message fixture as canonical chat", async () => {
+    const chatNoEvent = requireValue(
+      buildPreviewScenarioEvents().find(
+        (event) =>
+          event.adapter === "tiktok" &&
+          String(event.rawEvent?.data?.comment).startsWith("test no no"),
+      ),
+      "TikTok no-message preview event",
+    );
+    const emitted: UnknownRecord[] = [];
+    const adapters = createPreviewIngestAdapters({
+      config: buildPreviewConfig(),
+      logger: {
+        debug: () => {},
+        info: () => {},
+        warn: () => {},
+        error: () => {},
+      },
+      emitPlatformEvent: (event: UnknownRecord) => emitted.push(event),
+    });
+
+    expect(typeof chatNoEvent.rawEvent.data.common?.createTime).toBe("number");
+    await adapters.tiktok.ingest(chatNoEvent.rawEvent);
+    await waitForDelay(1);
+
+    const emittedChat = emitted.find(
+      (event) =>
+        event.type === "platform:chat-message" && event.platform === "tiktok",
+    );
+    expect(emittedChat?.data?.timestamp).toBe(
+      chatNoEvent.rawEvent.data.timestamp,
+    );
+    expect(JSON.stringify(emittedChat?.data?.message)).toContain("test no no");
   });
 
   it("uses explicit stable media catalog values without test-only URLs", () => {
@@ -312,12 +383,39 @@ describe("GUI local preview command behavior", () => {
     expect(config.cooldowns.heavyCommandCooldownMs).toBe(0);
   });
 
+  it("aliases a configured red member profile to the YouTube preview account", () => {
+    const memberSpriteUrl = "https://example.invalid/shiny-rayquaza.gif";
+    const config = buildPreviewConfig({
+      greetings: {
+        customVfxProfiles: {
+          "youtube:configured-member": {
+            profileId: "configured-member",
+            command: "!preview",
+            memberTheme: "red",
+            memberSpriteUrl,
+          },
+        },
+      },
+    });
+
+    expect(
+      config.greetings.customVfxProfiles["youtube:test-youtube-account"],
+    ).toEqual({
+      profileId: "configured-member",
+      command: "!preview",
+      memberTheme: "red",
+      memberSpriteUrl,
+    });
+  });
+
   it("runs preview via ingest pipeline and stops cleanly", async () => {
     const writes: string[] = [];
     const emittedEvents: UnknownRecord[] = [];
     let started = false;
     let stopped = false;
     let disposed = false;
+    let clientCount = 0;
+    let firstIngestSawConnectedClient = false;
     let intervalTick: null | (() => void) = null;
     const createdPipelineArgs: UnknownRecord[] = [];
     const createdTransportArgs: UnknownRecord[] = [];
@@ -334,6 +432,9 @@ describe("GUI local preview command behavior", () => {
     const fakePipeline = {
       eventBus: fakeEventBus,
       emitIngestEvent(event: UnknownRecord) {
+        if (emittedEvents.length === 0) {
+          firstIngestSawConnectedClient = clientCount > 0;
+        }
         fakeEventBus.emit("platform:event", event);
       },
       async dispose() {
@@ -347,6 +448,9 @@ describe("GUI local preview command behavior", () => {
       },
       async stop() {
         stopped = true;
+      },
+      getSseClientCount() {
+        return clientCount;
       },
     };
 
@@ -380,6 +484,9 @@ describe("GUI local preview command behavior", () => {
         intervalTick?.();
         resolve();
       },
+      delay: async () => {
+        clientCount = 1;
+      },
       stdout: {
         write: (text: string) => writes.push(text),
       },
@@ -388,6 +495,7 @@ describe("GUI local preview command behavior", () => {
     expect(started).toBe(true);
     expect(stopped).toBe(true);
     expect(disposed).toBe(true);
+    expect(firstIngestSawConnectedClient).toBe(true);
     expect(createdPipelineArgs.length).toBe(1);
     expect(createdTransportArgs.length).toBe(1);
     const createdPipelineArg = requireValue(
@@ -1230,15 +1338,15 @@ describe("GUI local preview command behavior", () => {
       createPreviewIngestAdaptersImpl: () => ({
         twitch: {
           async ingest() {
-            if (!failedOnce) {
-              failedOnce = true;
-              throw new Error("ingest failed");
-            }
             routed.push({ type: "platform:follow", platform: "twitch" });
           },
         },
         youtube: {
           async ingest() {
+            if (!failedOnce) {
+              failedOnce = true;
+              throw new Error("ingest failed");
+            }
             routed.push({ type: "platform:chat-message", platform: "youtube" });
           },
         },

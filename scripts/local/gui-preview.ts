@@ -192,6 +192,7 @@ interface PreviewPipeline {
 interface PreviewService {
     start: () => Promise<void>;
     stop: () => Promise<void>;
+    getSseClientCount?: () => number;
 }
 
 interface PreviewErrorHandler {
@@ -320,6 +321,19 @@ interface RunGuiPreviewOptions {
 const PREVIEW_DURATION_MS = 32000;
 const PREVIEW_INTERVAL_MS = 2000;
 
+function createPreviewDelay(
+    delayImpl: (delay: unknown, fallback?: number, context?: string) => Promise<void> = safeDelay
+): (ms: number) => Promise<void> {
+    return (ms: number) => {
+        const parsed = Number(ms);
+        if (parsed === 0) {
+            return Promise.resolve();
+        }
+        const resolved = Number.isFinite(parsed) && parsed > 0 ? parsed : 5000;
+        return delayImpl(resolved, resolved, 'gui-preview delay');
+    };
+}
+
 const PREVIEW_AVATAR_URL = DEFAULT_AVATAR_URL;
 const PREVIEW_MESSAGE_TEXT = 'test message hello world this is a message to everyone how are we today?';
 const PREVIEW_MEDIA_CATALOG: Record<PreviewAdapter, PreviewMedia> = {
@@ -419,10 +433,10 @@ const PREVIEW_MEDIA_CATALOG: Record<PreviewAdapter, PreviewMedia> = {
 };
 
 const PREVIEW_SCENARIO_TEMPLATE: readonly PreviewScenarioStep[] = [
-    { type: 'chat-hi', adapter: 'twitch' },
-    { type: 'gift', adapter: 'tiktok' },
-    { type: 'chat-hello', adapter: 'youtube' },
+    { type: 'chat-member-hi', adapter: 'youtube' },
     { type: 'chat', adapter: 'twitch' },
+    { type: 'chat-hello', adapter: 'youtube' },
+    { type: 'gift', adapter: 'tiktok' },
     { type: 'chat', adapter: 'youtube' },
     { type: 'chat', adapter: 'tiktok' },
     { type: 'chat-no', adapter: 'tiktok' },
@@ -454,6 +468,7 @@ const PREVIEW_PLATFORM_ACCOUNTS: readonly [PreviewPlatformAccount, ...PreviewPla
         userId: 'test-tiktok-account-id'
     }
 ];
+const PREVIEW_YOUTUBE_MEMBER_IDENTITY = 'youtube:test-youtube-account';
 
 const NOOP_LOGGER = {
     debug: () => {},
@@ -522,6 +537,21 @@ function buildPreviewConfig(baseConfig: UnknownRecord = {}): UnknownRecord {
     const overrideFarewell = getPreviewRecord(overrideConfig, 'farewell');
     const sourceCommands = getPreviewRecord(sourceConfig, 'commands');
     const overrideCommands = getPreviewRecord(overrideConfig, 'commands');
+    const sourceGreetings = getPreviewRecord(sourceConfig, 'greetings');
+    const overrideGreetings = getPreviewRecord(overrideConfig, 'greetings');
+    const customVfxProfiles = {
+        ...getPreviewRecord(sourceGreetings, 'customVfxProfiles'),
+        ...getPreviewRecord(overrideGreetings, 'customVfxProfiles')
+    };
+    const redMemberProfile = Object.values(customVfxProfiles)
+        .map(toPreviewRecord)
+        .find((profile) => profile.memberTheme === 'red' && typeof profile.memberSpriteUrl === 'string');
+
+    merged.greetings = mergeSection(sourceGreetings, overrideGreetings, {
+        customVfxProfiles: redMemberProfile
+            ? { ...customVfxProfiles, [PREVIEW_YOUTUBE_MEMBER_IDENTITY]: redMemberProfile }
+            : customVfxProfiles
+    });
 
     merged.general = mergeSection(sourceGeneral, overrideGeneral, {
         messagesEnabled: true,
@@ -617,7 +647,8 @@ function buildPreviewConfig(baseConfig: UnknownRecord = {}): UnknownRecord {
     });
 
     merged.displayQueue = mergeSection(getPreviewRecord(sourceConfig, 'displayQueue'), getPreviewRecord(overrideConfig, 'displayQueue'), {
-        autoProcess: true
+        autoProcess: true,
+        rowIntervalMs: 0
     });
 
     merged.timing = mergeSection(getPreviewRecord(sourceConfig, 'timing'), getPreviewRecord(overrideConfig, 'timing'), {
@@ -657,7 +688,8 @@ function buildPreviewScenarioEvents(
         const media = PREVIEW_MEDIA_CATALOG[adapter];
         const gift = media.gift;
         const timestamp = new Date(Date.UTC(2024, 0, 1, 0, 0, index)).toISOString();
-        const username = `${account.username}-${index}`;
+        const isYouTubeMemberChat = adapter === 'youtube' && (scenarioType === 'chat' || scenarioType === 'chat-member-hi');
+        const username = isYouTubeMemberChat ? account.username : `${account.username}-${index}`;
         const userId = `${account.userId}-${index}`;
         const base = {
             username,
@@ -943,7 +975,10 @@ function buildPreviewScenarioEvents(
                         }
                         : {}),
                     msgId: `test-${scenarioType}-${index}`,
-                    createTime: Math.floor(Date.parse(timestamp) / 1000)
+                    timestamp,
+                    common: {
+                        createTime: Math.floor(Date.parse(timestamp) / 1000)
+                    }
                 }
             }
         });
@@ -1583,10 +1618,7 @@ async function runGuiPreview(options: RunGuiPreviewOptions = {}): Promise<void> 
     const safeSetIntervalImpl = options.safeSetIntervalImpl || safeSetInterval;
     const safeSetTimeoutImpl = options.safeSetTimeoutImpl || safeSetTimeout;
     const stdout = options.stdout || process.stdout;
-    const delay = options.delay || ((ms: number) => {
-        const parsed = Number(ms);
-        return safeDelay(parsed, Number.isFinite(parsed) ? parsed : 5000, 'gui-preview delay');
-    });
+    const delay = options.delay || createPreviewDelay();
 
     let pipeline: PreviewPipeline | null = null;
     let service: PreviewService | null = null;
@@ -1629,6 +1661,13 @@ async function runGuiPreview(options: RunGuiPreviewOptions = {}): Promise<void> 
         stdout.write(`Dock URL: http://${host}:${port}/dock\n`);
         stdout.write('For TikTok gift animation preview, run: bun run gui:preview:gift-animation\n');
         stdout.write(`Overlay URL: http://${host}:${port}/overlay\n`);
+
+        if (typeof activeService.getSseClientCount === 'function' && activeService.getSseClientCount() === 0) {
+            stdout.write('Waiting for a GUI page to connect before starting the scenario...\n');
+            while (activeService.getSseClientCount() === 0) {
+                await delay(100);
+            }
+        }
 
         const scenarioEvents = buildPreviewScenarioEvents(durationMs, intervalMs);
         const adapters = createPreviewIngestAdaptersImpl({
@@ -1674,6 +1713,7 @@ export {
     PREVIEW_DURATION_MS,
     PREVIEW_INTERVAL_MS,
     PREVIEW_MEDIA_CATALOG,
+    createPreviewDelay,
     buildPreviewConfig,
     buildPreviewScenarioEvents,
     createPreviewPipeline,
