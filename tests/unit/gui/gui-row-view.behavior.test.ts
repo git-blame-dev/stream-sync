@@ -104,6 +104,35 @@ describe("GuiRow rendering behavior", () => {
     expect(html.split('class="gui-row__badge"').length - 1).toBe(1);
   });
 
+  it("renders no more than the configured number of minimal row badges", () => {
+    const html = renderToStaticMarkup(React.createElement(GuiRow, {
+      mode: "dock",
+      appearance: { profile: "minimal", revision: 0, settings: { compactRows: true, rowBackgroundsEnabled: true, maxDisplayableBadges: 3 } },
+      row: {
+        type: "chat",
+        kind: "chat",
+        platform: "twitch",
+        username: "test-badge-user",
+        text: "test badge message",
+        badgeImages: [
+          { imageUrl: "https://example.invalid/test-badge-1.png", source: "twitch", label: "test-badge-1" },
+          { imageUrl: "https://example.invalid/test-badge-2.png", source: "twitch", label: "test-badge-2" },
+          { imageUrl: "https://example.invalid/test-badge-3.png", source: "twitch", label: "test-badge-3" },
+          { imageUrl: "https://example.invalid/test-badge-4.png", source: "twitch", label: "test-badge-4" },
+        ],
+        avatarUrl: "https://example.invalid/test-badge-avatar.png",
+        timestamp: null,
+      },
+    }));
+
+    expect(html.split('class="gui-row__badge"').length - 1).toBe(3);
+    expect(html).toContain("https://example.invalid/test-badge-1.png");
+    expect(html).toContain("https://example.invalid/test-badge-2.png");
+    expect(html).toContain("https://example.invalid/test-badge-3.png");
+    expect(html).not.toContain("https://example.invalid/test-badge-4.png");
+    expect(html).not.toContain("test-badge-4");
+  });
+
   it("renders minimal command rows with the ordinary compact row contract", () => {
     const html = renderToStaticMarkup(React.createElement(GuiRow, {
       mode: "overlay",

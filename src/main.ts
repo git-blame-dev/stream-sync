@@ -219,7 +219,7 @@ function buildOperatorAppearanceDefaults(config: MainConfig): OperatorAppearance
             && Number.isSafeInteger(gui.minimalMaxDisplayableBadges)
             && gui.minimalMaxDisplayableBadges >= 0
             ? gui.minimalMaxDisplayableBadges
-            : 1
+            : 3
     };
 }
 

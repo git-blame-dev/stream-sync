@@ -140,7 +140,7 @@ const CONFIG_SCHEMA: ConfigSchema = {
         minimalOverlayMaxMessages: { type: 'number', default: 6, min: 1, max: 100, integer: true },
         minimalCompactRows: { type: 'boolean', default: true },
         minimalRowBackgroundsEnabled: { type: 'boolean', default: false },
-        minimalMaxDisplayableBadges: { type: 'number', default: 1, min: 0, integer: true },
+        minimalMaxDisplayableBadges: { type: 'number', default: 3, min: 0, integer: true },
         showMessages: { type: 'boolean', default: true },
         showCommands: { type: 'boolean', default: true },
         showGreetings: { type: 'boolean', default: true },

@@ -60,7 +60,7 @@ async function createFixture(logSourceOptions?: { maxEntries?: number }) {
     defaults: {
       compactRows: true,
       rowBackgroundsEnabled: false,
-      maxDisplayableBadges: 1,
+      maxDisplayableBadges: 3,
     },
     filePath: join(root, "operator-appearance-overrides.json"),
   });
@@ -121,7 +121,7 @@ describe("operator console routes", () => {
       const initial = await fetch(`${baseUrl}/api/v1/operator/appearance`);
       expect(await initial.json()).toMatchObject({
         revision: 0,
-        settings: { compactRows: true, rowBackgroundsEnabled: false, maxDisplayableBadges: 1 },
+        settings: { compactRows: true, rowBackgroundsEnabled: false, maxDisplayableBadges: 3 },
       });
 
       const changed = await fetch(`${baseUrl}/api/v1/operator/appearance`, {
@@ -161,7 +161,7 @@ describe("operator console routes", () => {
         body: "{}",
       });
       expect(reset.status).toBe(200);
-      expect(appearance.settings.maxDisplayableBadges).toBe(1);
+      expect(appearance.settings.maxDisplayableBadges).toBe(3);
     } finally {
       await service.stop();
     }
@@ -319,7 +319,7 @@ describe("operator console routes", () => {
       expect(initial).toContain('"revision":0');
       const initialAppearance = await sse.next();
       expect(initialAppearance).toContain("event: appearance");
-      expect(initialAppearance).toContain('"maxDisplayableBadges":1');
+      expect(initialAppearance).toContain('"maxDisplayableBadges":3');
 
       await controls.setEnabled("sharesEnabled", false);
       const changed = await sse.next();

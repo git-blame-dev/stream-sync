@@ -134,7 +134,7 @@ describe("GUI transport routes and SSE integration", () => {
         settings: {
           compactRows: true,
           rowBackgroundsEnabled: false,
-          maxDisplayableBadges: 1,
+          maxDisplayableBadges: 3,
         },
       });
     } finally {

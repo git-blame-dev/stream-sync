@@ -37,4 +37,9 @@ describe('GUI runtime config', () => {
             notificationTransitionMs: 1000
         });
     });
+
+    it('defaults displayable badges to three while honoring an explicit lower value', () => {
+        expect(buildGuiRuntimeConfig({}).appearance.settings.maxDisplayableBadges).toBe(3);
+        expect(buildGuiRuntimeConfig({ minimalMaxDisplayableBadges: 1 }).appearance.settings.maxDisplayableBadges).toBe(1);
+    });
 });

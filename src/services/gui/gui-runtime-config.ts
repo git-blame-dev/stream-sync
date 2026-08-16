@@ -60,7 +60,7 @@ function buildAppearanceSettings(guiConfig: TransportRecord): GuiAppearanceSetti
     return {
         compactRows: guiConfig.minimalCompactRows !== false,
         rowBackgroundsEnabled: guiConfig.minimalRowBackgroundsEnabled === true,
-        maxDisplayableBadges: parseNonNegativeInteger(guiConfig.minimalMaxDisplayableBadges, 1)
+        maxDisplayableBadges: parseNonNegativeInteger(guiConfig.minimalMaxDisplayableBadges, 3)
     };
 }
 

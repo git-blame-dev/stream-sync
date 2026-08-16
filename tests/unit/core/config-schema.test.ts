@@ -102,7 +102,7 @@ describe('buildDefaultsFromSchema()', () => {
             minimalOverlayMaxMessages: 6,
             minimalCompactRows: true,
             minimalRowBackgroundsEnabled: false,
-            minimalMaxDisplayableBadges: 1,
+            minimalMaxDisplayableBadges: 3,
             showMessages: true,
             showCommands: true,
             showGreetings: true,
