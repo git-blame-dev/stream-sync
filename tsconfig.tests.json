@@ -14,7 +14,8 @@
     "jsx": "react-jsx"
   },
   "include": [
-    "tests/**/*.ts"
+    "tests/**/*.ts",
+    "gui/src/vite-env.d.ts"
   ],
   "exclude": ["node_modules", "gui/dist"]
 }

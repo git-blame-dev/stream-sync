@@ -1,20 +1,18 @@
-const PLATFORM_ICON_BASE_PATH = '/gui/assets/platform-icons'
-const PLATFORM_ICON_CACHE_VERSION = '2'
+import tiktokIconUrl from '../assets/platform-icons/tiktok-icon.png?inline'
+import twitchIconUrl from '../assets/platform-icons/twitch-icon.png?inline'
+import youtubeIconUrl from '../assets/platform-icons/youtube-icon.png?inline'
 
-const PLATFORM_ICON_FILE_NAMES: Readonly<Record<string, string>> = Object.freeze({
-  youtube: 'youtube-icon.png',
-  twitch: 'twitch-icon.png',
-  tiktok: 'tiktok-icon.png'
+const PLATFORM_ICON_URLS = Object.freeze({
+  youtube: youtubeIconUrl,
+  twitch: twitchIconUrl,
+  tiktok: tiktokIconUrl
 })
 
-function normalizePlatform(value: unknown): string {
-  return typeof value === 'string' ? value.trim().toLowerCase() : ''
-}
+type PlatformIconId = keyof typeof PLATFORM_ICON_URLS
 
 export function getPlatformIconUrl(platform: unknown): string | null {
-  const normalizedPlatform = normalizePlatform(platform)
-  const fileName = PLATFORM_ICON_FILE_NAMES[normalizedPlatform]
-  return fileName
-    ? `${PLATFORM_ICON_BASE_PATH}/${fileName}?v=${PLATFORM_ICON_CACHE_VERSION}`
+  const normalizedPlatform = typeof platform === 'string' ? platform.trim().toLowerCase() : ''
+  return Object.hasOwn(PLATFORM_ICON_URLS, normalizedPlatform)
+    ? PLATFORM_ICON_URLS[normalizedPlatform as PlatformIconId]
     : null
 }

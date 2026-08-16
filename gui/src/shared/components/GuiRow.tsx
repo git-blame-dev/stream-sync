@@ -14,10 +14,6 @@ const MONETIZATION_NOTIFICATION_TYPES = new Set([
   'platform:envelope'
 ])
 
-function normalizePlatform(value: unknown): string {
-  return typeof value === 'string' ? value.trim().toLowerCase() : ''
-}
-
 interface GuiRowProps {
   row: GuiRowDto
   mode: 'dock' | 'overlay'
@@ -35,8 +31,7 @@ export function GuiRow({ row, mode, className, onAnimationEnd, appearance = DEFA
   const isMinimal = appearance.profile === 'minimal'
   const isCompact = isMinimal && appearance.settings.compactRows
   const appearanceSettings = appearance.settings
-  const normalizedPlatform = normalizePlatform(row.platform)
-  const platformIconUrl = getPlatformIconUrl(normalizedPlatform)
+  const platformIconUrl = getPlatformIconUrl(row.platform)
   const hasParts = Array.isArray(row.parts) && row.parts.length > 0
   const allBadgeImages = Array.isArray(row.badgeImages) ? row.badgeImages : []
   const badgeImages = isMinimal

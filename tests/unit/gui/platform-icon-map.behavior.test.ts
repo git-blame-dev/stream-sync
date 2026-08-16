@@ -3,16 +3,11 @@ import { describe, expect, it } from "bun:test";
 import { getPlatformIconUrl } from "../../../gui/src/shared/platform-icon-map";
 
 describe("platform icon map behavior", () => {
-  it("returns cache-versioned local asset URLs for each supported platform id", () => {
-    expect(getPlatformIconUrl("youtube")).toBe(
-      "/gui/assets/platform-icons/youtube-icon.png?v=2",
-    );
-    expect(getPlatformIconUrl("twitch")).toBe(
-      "/gui/assets/platform-icons/twitch-icon.png?v=2",
-    );
-    expect(getPlatformIconUrl("tiktok")).toBe(
-      "/gui/assets/platform-icons/tiktok-icon.png?v=2",
-    );
+  it("returns the imported original artwork for each supported platform", () => {
+    const iconUrls = ["youtube", "twitch", "tiktok"].map(getPlatformIconUrl);
+
+    expect(iconUrls.every((iconUrl) => typeof iconUrl === "string" && iconUrl.length > 0)).toBe(true);
+    expect(new Set(iconUrls).size).toBe(3);
   });
 
   it("normalizes case and whitespace when resolving platform ids", () => {

@@ -26,7 +26,8 @@
     "tests/e2e-smoke/gui-*.js",
     "tests/e2e-smoke/gui-*.ts",
     "tests/helpers/gui-transport-test-utils.js",
-    "tests/helpers/gui-transport-test-utils.ts"
+    "tests/helpers/gui-transport-test-utils.ts",
+    "gui/src/vite-env.d.ts"
   ],
   "exclude": ["node_modules", "gui/dist"]
 }

@@ -4,6 +4,7 @@ import TestRenderer, { act } from "react-test-renderer";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { GuiRow, GUI_AVATAR_FALLBACK_URL } from "../../../gui/src/shared/components/GuiRow";
+import { getPlatformIconUrl } from "../../../gui/src/shared/platform-icon-map";
 
 describe("GuiRow rendering behavior", () => {
   it("replaces a failed avatar with the local neutral fallback without retrying the remote URL", () => {
@@ -79,6 +80,7 @@ describe("GuiRow rendering behavior", () => {
     expect(avatarWrapperIndex).toBeLessThan(avatarIndex);
     expect(platformIconIndex).toBeLessThan(textIndex);
     expect(html).toContain("gui-row__avatar--circle");
+    expect(html).toContain(`src="${getPlatformIconUrl("twitch")}"`);
     expect(html).toContain('role="article"');
   });
 
@@ -157,34 +159,6 @@ describe("GuiRow rendering behavior", () => {
     expect(html.indexOf("gui-row__minimal-separator")).toBeLessThan(html.indexOf("!preview"));
   });
 
-  it("renders the chat platform icon inside the avatar wrapper", () => {
-    const html = renderToStaticMarkup(
-      React.createElement(GuiRow, {
-        mode: "dock",
-        row: {
-          type: "chat",
-          kind: "chat",
-          platform: "youtube",
-          username: "test-youtube-user",
-          text: "hello",
-          avatarUrl: "https://example.invalid/test-avatar.png",
-          timestamp: "2024-01-01T00:00:00.000Z",
-        },
-      }),
-    );
-
-    const avatarWrapperIndex = html.indexOf('class="gui-row__avatar-wrapper"');
-    const avatarWrapperEndIndex = html.indexOf("</span>", avatarWrapperIndex);
-    const platformIconIndex = html.indexOf('class="gui-row__platform-icon"');
-    const usernameIndex = html.indexOf("gui-row__username");
-    expect(avatarWrapperIndex).toBeGreaterThan(-1);
-    expect(platformIconIndex).toBeGreaterThan(-1);
-    expect(platformIconIndex).toBeLessThan(avatarWrapperEndIndex);
-    expect(usernameIndex).toBeGreaterThan(-1);
-    expect(platformIconIndex).toBeLessThan(usernameIndex);
-    expect(html).toContain('src="/gui/assets/platform-icons/youtube-icon.png?v=2"');
-  });
-
   it("renders notification badges after username and the platform icon on the avatar", () => {
     const html = renderToStaticMarkup(
       React.createElement(GuiRow, {
@@ -232,7 +206,7 @@ describe("GuiRow rendering behavior", () => {
     );
 
     expect(html).toContain('class="gui-row__platform-icon"');
-    expect(html).toContain('src="/gui/assets/platform-icons/youtube-icon.png?v=2"');
+    expect(html).toContain(`src="${getPlatformIconUrl("youtube")}"`);
   });
 
   it("does not render platform icon for unknown platform ids", () => {

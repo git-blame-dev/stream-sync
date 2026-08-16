@@ -1,10 +1,8 @@
 import { describe, it, expect } from "bun:test";
-import { resolve } from "node:path";
 import { TestEventBus } from "../helpers/gui-transport-test-utils";
 import { createConfigFixture } from "../helpers/config-fixture";
 import { createGuiTransportService } from "../../src/services/gui/gui-transport-service";
 import { safeSetTimeout } from "../../src/utils/timeout-validator";
-import { getPlatformIconUrl } from "../../gui/src/shared/platform-icon-map";
 
 function getBaseUrl(service: any) {
   const address = service.getAddress();
@@ -76,64 +74,6 @@ function createSseReader(response: any) {
 }
 
 describe("gui transport smoke", () => {
-  it("serves mapped platform icons as PNG assets", async () => {
-    const service = createGuiTransportService({
-      config: createConfigFixture({
-        gui: {
-          enableDock: true,
-          enableOverlay: false,
-          host: "127.0.0.1",
-          port: 0,
-        },
-      }),
-      eventBus: new TestEventBus(),
-      logger: null,
-    });
-
-    await service.start();
-    try {
-      const iconBodies: Uint8Array[] = [];
-      for (const platform of ["twitch", "youtube", "tiktok"]) {
-        const iconUrl = getPlatformIconUrl(platform);
-        if (!iconUrl) throw new Error(`Missing platform icon URL for ${platform}`);
-        const response = await fetch(`${getBaseUrl(service)}${iconUrl}`);
-        const bytes = new Uint8Array(await response.arrayBuffer());
-        const checkedInBytes = new Uint8Array(
-          await Bun.file(
-            resolve(
-              process.cwd(),
-              "gui/public/assets/platform-icons",
-              `${platform}-icon.png`,
-            ),
-          ).arrayBuffer(),
-        );
-        expect(response.status).toBe(200);
-        expect(response.headers.get("content-type")).toBe("image/png");
-        expect(bytes).toEqual(checkedInBytes);
-        iconBodies.push(bytes);
-      }
-      const [twitchIcon, youtubeIcon, tiktokIcon] = iconBodies;
-      if (!twitchIcon || !youtubeIcon || !tiktokIcon) {
-        throw new Error("Expected all platform icon response bodies");
-      }
-      expect(Buffer.from(twitchIcon).equals(Buffer.from(youtubeIcon))).toBe(false);
-      expect(Buffer.from(twitchIcon).equals(Buffer.from(tiktokIcon))).toBe(false);
-      expect(Buffer.from(youtubeIcon).equals(Buffer.from(tiktokIcon))).toBe(false);
-
-      const unknownResponse = await fetch(
-        `${getBaseUrl(service)}/gui/assets/platform-icons/unknown-icon.png`,
-      );
-      expect(unknownResponse.status).toBe(404);
-
-      const traversalResponse = await fetch(
-        `${getBaseUrl(service)}/gui/assets/platform-icons/%2e%2e/%2e%2e/package.json`,
-      );
-      expect(traversalResponse.status).toBe(404);
-    } finally {
-      await service.stop();
-    }
-  });
-
   it("serves display routes correctly across enabled and disabled combinations", async () => {
     const cases = [
       {
