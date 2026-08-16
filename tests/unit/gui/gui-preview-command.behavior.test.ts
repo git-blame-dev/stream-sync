@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import * as previewModule from "../../../scripts/local/gui-preview.ts";
+import { DEMO_CHARACTER_CATALOG } from "../../../gui/src/demo/demo-catalog.ts";
 import { waitForDelay } from "../../helpers/time-utils";
 
 type UnknownRecord = Record<string, any>;
@@ -12,11 +13,44 @@ function requireValue<T>(value: T | undefined, description: string): T {
   return value;
 }
 
+function createYouTubeChatItem(options: {
+  username: string;
+  userId: string;
+  message: string;
+  timestamp: string;
+  avatarUrl?: string;
+  isMember?: boolean;
+}): UnknownRecord {
+  return {
+    type: "AddChatItemAction",
+    item: {
+      type: "LiveChatTextMessage",
+      id: `test-${options.userId}`,
+      author: {
+        id: options.userId,
+        name: options.username,
+        thumbnails: options.avatarUrl ? [{ url: options.avatarUrl }] : [],
+        badges: options.isMember
+          ? [{ tooltip: "Member", custom_thumbnail: [] }]
+          : [],
+        is_moderator: false,
+      },
+      message: {
+        text: options.message,
+        runs: [{ text: options.message }],
+      },
+      timestamp: options.timestamp,
+    },
+  };
+}
+
 type PreviewAdapter = "twitch" | "youtube" | "tiktok";
 
 type ScenarioEvent = {
   platform: PreviewAdapter;
   adapter: PreviewAdapter;
+  scenarioType?: string;
+  notificationType?: string;
   rawEvent: UnknownRecord;
 };
 
@@ -52,7 +86,11 @@ type PreviewModule = {
   buildPreviewScenarioEvents: (
     durationMs?: number,
     intervalMs?: number,
+    scenario?: "all" | "chat" | "notifications",
   ) => ScenarioEvent[];
+  parsePreviewScenario: (
+    args: readonly string[],
+  ) => "all" | "chat" | "notifications";
   createPreviewPipeline: (options?: UnknownRecord) => PreviewPipeline;
   createPreviewIngestAdapters: (options: {
     config?: UnknownRecord;
@@ -78,7 +116,10 @@ type PreviewModule = {
         message: string,
       ) => void;
     };
-  }) => Promise<number | ReturnType<typeof setInterval>>;
+  }) => Promise<{
+    intervalHandle: number | ReturnType<typeof setInterval>;
+    dispatchedEvents: ScenarioEvent[];
+  }>;
   runGuiPreview: (options?: {
     logger?: UnknownRecord;
     baseConfig?: UnknownRecord;
@@ -100,6 +141,12 @@ type PreviewModule = {
     stdout?: {
       write: (text: string) => void;
     };
+    scenario?: "all" | "chat" | "notifications";
+    createNotificationExitWaiterImpl?: (
+      eventBus: PreviewPipeline["eventBus"],
+      notificationType: string,
+      timeoutMs: number,
+    ) => { promise: Promise<void>; cancel: () => void };
     [key: string]: unknown;
   }) => Promise<void>;
 };
@@ -111,6 +158,7 @@ const {
   createPreviewDelay,
   buildPreviewConfig,
   buildPreviewScenarioEvents,
+  parsePreviewScenario,
   createPreviewPipeline,
   createPreviewIngestAdapters,
   runPreviewScenario,
@@ -163,17 +211,22 @@ describe("GUI local preview command behavior", () => {
     expect(thirdEvent.adapter).toBe("youtube");
     expect(firstEvent.rawEvent).toBeDefined();
     expect(firstEvent.rawEvent.eventType).toBe("LiveChatTextMessage");
-    expect(firstEvent.rawEvent.chatItem.testData.isPaypiggy).toBe(true);
-    expect(firstEvent.rawEvent.chatItem.testData.username).toBe(
+    expect(firstEvent.rawEvent.chatItem.item.author.badges[0].tooltip).toBe(
+      "Member",
+    );
+    expect(firstEvent.rawEvent.chatItem.item.author.name).toBe(
       "test-youtube-account",
     );
     expect(secondEvent.rawEvent.subscriptionType).toBe("channel.chat.message");
-    expect(secondEvent.rawEvent.event.isPaypiggy).toBe(true);
-    expect(
-      secondEvent.rawEvent.event.badgeImages.map(
-        (badge: UnknownRecord) => badge.label,
-      ),
-    ).toEqual(["Moderator", "Founder", "Prime Gaming"]);
+    expect(secondEvent.rawEvent.event.chatter_user_name).toBe(
+      "test-twitch-account-1",
+    );
+    expect(secondEvent.rawEvent.event.badges).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ set_id: "moderator" }),
+        expect.objectContaining({ set_id: "founder" }),
+      ]),
+    );
   });
 
   it("inserts youtube member hi chat immediately after raid notification", () => {
@@ -192,9 +245,11 @@ describe("GUI local preview command behavior", () => {
     );
     expect(memberHiEvent.adapter).toBe("youtube");
     expect(memberHiEvent.rawEvent.eventType).toBe("LiveChatTextMessage");
-    expect(memberHiEvent.rawEvent.chatItem.testData.message).toBe("Hi!");
-    expect(memberHiEvent.rawEvent.chatItem.testData.isPaypiggy).toBe(true);
-    expect(memberHiEvent.rawEvent.chatItem.testData.username).toBe(
+    expect(memberHiEvent.rawEvent.chatItem.item.message.text).toBe("Hi!");
+    expect(memberHiEvent.rawEvent.chatItem.item.author.badges[0].tooltip).toBe(
+      "Member",
+    );
+    expect(memberHiEvent.rawEvent.chatItem.item.author.name).toBe(
       "test-youtube-account",
     );
   });
@@ -206,6 +261,35 @@ describe("GUI local preview command behavior", () => {
     expect(adapters.has("twitch")).toBe(true);
     expect(adapters.has("youtube")).toBe(true);
     expect(adapters.has("tiktok")).toBe(true);
+  });
+
+  it("selects focused preview scenarios and rejects unknown values", () => {
+    expect(parsePreviewScenario([])).toBe("all");
+    expect(parsePreviewScenario(["--scenario=chat"])).toBe("chat");
+    expect(parsePreviewScenario(["--scenario", "notifications"])).toBe(
+      "notifications",
+    );
+    expect(() => parsePreviewScenario(["--scenario=unknown"])).toThrow(
+      "Unknown GUI preview scenario",
+    );
+
+    const chatEvents = buildPreviewScenarioEvents(32000, 2000, "chat");
+    const notificationEvents = buildPreviewScenarioEvents(
+      32000,
+      2000,
+      "notifications",
+    );
+    expect(chatEvents.length).toBeGreaterThan(0);
+    expect(chatEvents.every((event) => event.notificationType === undefined)).toBe(
+      true,
+    );
+    expect(notificationEvents.length).toBeGreaterThan(0);
+    expect(
+      notificationEvents.every((event) => typeof event.notificationType === "string"),
+    ).toBe(true);
+    expect(notificationEvents.at(-1)?.notificationType).toBe(
+      "platform:envelope",
+    );
   });
 
   it("injects deterministic media URLs into raw ingest payloads", () => {
@@ -227,12 +311,56 @@ describe("GUI local preview command behavior", () => {
     expect(
       requiredTwitchChat.rawEvent.event.message.fragments[0].emote.id,
     ).toContain(PREVIEW_MEDIA_CATALOG.twitch.emote.id);
-    expect(youtubeStep.rawEvent.chatItem.testData.avatarUrl).toBe(
+    expect(youtubeStep.rawEvent.chatItem.item.author.thumbnails[0].url).toBe(
       PREVIEW_MEDIA_CATALOG.youtube.avatarUrl,
     );
     expect(tiktokStep.rawEvent.data.user.profilePictureUrl).toBe(
       PREVIEW_MEDIA_CATALOG.tiktok.avatarUrl,
     );
+    expect(PREVIEW_MEDIA_CATALOG.twitch.avatarUrl).toBe(
+      DEMO_CHARACTER_CATALOG.Goku,
+    );
+    expect(PREVIEW_MEDIA_CATALOG.youtube.avatarUrl).toBe(
+      DEMO_CHARACTER_CATALOG.Ichigo,
+    );
+    expect(PREVIEW_MEDIA_CATALOG.tiktok.avatarUrl).toBe(
+      DEMO_CHARACTER_CATALOG.Naruto,
+    );
+    expect(new Set([
+      PREVIEW_MEDIA_CATALOG.twitch.avatarUrl,
+      PREVIEW_MEDIA_CATALOG.youtube.avatarUrl,
+      PREVIEW_MEDIA_CATALOG.tiktok.avatarUrl,
+    ]).size).toBe(3);
+  });
+
+  it("enriches native twitch chat with the deterministic Helix avatar", async () => {
+    const emitted: UnknownRecord[] = [];
+    const adapters = createPreviewIngestAdapters({
+      config: buildPreviewConfig(),
+      logger: {
+        debug: () => {},
+        info: () => {},
+        warn: () => {},
+        error: () => {},
+      },
+      emitPlatformEvent: (event: UnknownRecord) => emitted.push(event),
+    });
+    const twitchChat = requireValue(
+      buildPreviewScenarioEvents().find(
+        (event) =>
+          event.adapter === "twitch" &&
+          event.rawEvent.subscriptionType === "channel.chat.message",
+      ),
+      "Twitch chat fixture",
+    );
+
+    await adapters.twitch.ingest(twitchChat.rawEvent);
+
+    const chatEvent = emitted.find(
+      (event) =>
+        event.type === "platform:chat-message" && event.platform === "twitch",
+    );
+    expect(chatEvent?.data?.avatarUrl).toBe(DEMO_CHARACTER_CATALOG.Goku);
   });
 
   it("includes tiktok corgi gift payload with animation resources for preview", () => {
@@ -281,7 +409,6 @@ describe("GUI local preview command behavior", () => {
 
     expect(typeof chatNoEvent.rawEvent.data.common?.createTime).toBe("number");
     await adapters.tiktok.ingest(chatNoEvent.rawEvent);
-    await waitForDelay(1);
 
     const emittedChat = emitted.find(
       (event) =>
@@ -339,6 +466,9 @@ describe("GUI local preview command behavior", () => {
     expect(config.gui.showPaypiggies).toBe(true);
     expect(config.gui.showGiftPaypiggies).toBe(true);
     expect(config.gui.showEnvelopes).toBe(true);
+    expect(config.gui.notificationIdleHoldMs).toBe(5000);
+    expect(config.gui.monetizationIdleHoldMs).toBe(30000);
+    expect(config.gui.notificationTransitionMs).toBe(1000);
     expect(config.obs.ttsChatEnabled).toBe(false);
     expect(config.obs.ttsNotificationsEnabled).toBe(false);
 
@@ -534,6 +664,87 @@ describe("GUI local preview command behavior", () => {
     );
   });
 
+  it("waits for the final production-timed notification lifecycle exit", async () => {
+    const writes: string[] = [];
+    const waitedFor: UnknownRecord[] = [];
+    let intervalTick: null | (() => void) = null;
+    let firstTickObserved = false;
+    let waiterCreatedBeforeFirstTick = false;
+    const eventBus = {
+      subscribe() {
+        return () => {};
+      },
+      emit() {},
+    };
+
+    await runGuiPreview({
+      scenario: "notifications",
+      durationMs: 14000,
+      intervalMs: 2,
+      createPreviewPipelineImpl: () => ({
+        eventBus,
+        emitIngestEvent() {},
+        async dispose() {},
+      }),
+      createPreviewIngestAdaptersImpl: () => ({
+        twitch: { async ingest() {} },
+        youtube: { async ingest() {} },
+        tiktok: { async ingest() {} },
+      }),
+      createGuiTransportServiceImpl: () => ({
+        async start() {},
+        async stop() {},
+      }),
+      safeSetIntervalImpl: (callback: () => void) => {
+        intervalTick = () => {
+          firstTickObserved = true;
+          callback();
+        };
+        return 1;
+      },
+      safeSetTimeoutImpl: (resolve: () => void) => {
+        for (let index = 0; index < 8; index += 1) intervalTick?.();
+        resolve();
+      },
+      createNotificationExitWaiterImpl: (
+        receivedEventBus,
+        notificationType,
+        timeoutMs,
+      ) => {
+        waiterCreatedBeforeFirstTick = !firstTickObserved;
+        waitedFor.push({ receivedEventBus, notificationType, timeoutMs });
+        return { promise: Promise.resolve(), cancel() {} };
+      },
+      stdout: { write: (text: string) => writes.push(text) },
+    });
+
+    expect(waitedFor).toEqual([
+      {
+        receivedEventBus: eventBus,
+        notificationType: "platform:envelope",
+        timeoutMs: 55000,
+      },
+    ]);
+    expect(writes.some((line) => line.includes("Scenario: notifications"))).toBe(
+      true,
+    );
+    expect(waiterCreatedBeforeFirstTick).toBe(true);
+    expect(
+      writes.some((line) => line.includes("Notifications minimal URL")),
+    ).toBe(true);
+  });
+
+  it("rejects an explicit scenario duration that cannot dispatch every fixture", async () => {
+    await expect(
+      runGuiPreview({
+        scenario: "notifications",
+        durationMs: 4000,
+        intervalMs: 2000,
+        stdout: { write() {} },
+      }),
+    ).rejects.toThrow("requires at least 14000ms");
+  });
+
   it("ingests all default scenario events and ends on envelope within preview duration", async () => {
     const scenarioEvents = buildPreviewScenarioEvents(32000, 2000);
     const ingested: UnknownRecord[] = [];
@@ -557,7 +768,7 @@ describe("GUI local preview command behavior", () => {
       },
     };
 
-    await runPreviewScenario({
+    const result = await runPreviewScenario({
       adapters,
       scenarioEvents,
       intervalMs: 2000,
@@ -579,6 +790,7 @@ describe("GUI local preview command behavior", () => {
     });
 
     expect(ingested).toHaveLength(16);
+    expect(result.dispatchedEvents).toHaveLength(16);
     const finalIngestedEvent = requireValue(
       ingested[15],
       "final ingested preview event",
@@ -805,14 +1017,13 @@ describe("GUI local preview command behavior", () => {
 
     await adapters.youtube.ingest({
       eventType: "LiveChatTextMessage",
-      chatItem: {
-        testData: {
-          username: "test-youtube-user",
-          userId: "test-youtube-user-id",
-          timestamp: new Date(Date.UTC(2024, 0, 1, 0, 0, 1)).toISOString(),
-          message: "hello",
-        },
-      },
+      chatItem: createYouTubeChatItem({
+        username: "test-youtube-user",
+        userId: "test-youtube-user-id",
+        timestamp: new Date(Date.UTC(2024, 0, 1, 0, 0, 1)).toISOString(),
+        message: "hello",
+        avatarUrl: DEMO_CHARACTER_CATALOG.Ichigo,
+      }),
     });
 
     await adapters.tiktok.ingest({
@@ -838,6 +1049,11 @@ describe("GUI local preview command behavior", () => {
           event.type === "platform:follow" && event.platform === "twitch",
       ),
     ).toBe(true);
+    const youtubeChat = emitted.find(
+      (event) =>
+        event.type === "platform:chat-message" && event.platform === "youtube",
+    );
+    expect(youtubeChat?.data?.avatarUrl).toBe(DEMO_CHARACTER_CATALOG.Ichigo);
     expect(
       emitted.some(
         (event) =>
@@ -917,14 +1133,12 @@ describe("GUI local preview command behavior", () => {
 
     await adapters.youtube.ingest({
       eventType: "LiveChatTextMessage",
-      chatItem: {
-        testData: {
-          username: "test-youtube-user",
-          userId: "test-youtube-user-id",
-          timestamp: new Date(Date.UTC(2024, 0, 1, 0, 0, 1)).toISOString(),
-          message: "hello",
-        },
-      },
+      chatItem: createYouTubeChatItem({
+        username: "test-youtube-user",
+        userId: "test-youtube-user-id",
+        timestamp: new Date(Date.UTC(2024, 0, 1, 0, 0, 1)).toISOString(),
+        message: "hello",
+      }),
     });
 
     const chatEvent = emitted.find(
@@ -984,12 +1198,21 @@ describe("GUI local preview command behavior", () => {
     await adapters.youtube.ingest({
       eventType: "LiveChatSponsorshipsGiftPurchaseAnnouncement",
       chatItem: {
-        testData: {
-          username: "test-youtube-user",
-          userId: "test-youtube-user-id",
+        type: "AddChatItemAction",
+        item: {
+          type: "LiveChatSponsorshipsGiftPurchaseAnnouncement",
+          id: "test-youtube-gift-membership",
           timestamp,
-          giftCount: 4,
-          tier: "1",
+          author: {
+            id: "test-youtube-user-id",
+            name: "test-youtube-user",
+          },
+          header: {
+            author_name: { text: "test-youtube-user" },
+            author_photo: [{ url: DEMO_CHARACTER_CATALOG.Ichigo }],
+          },
+          primary_text: { text: "Sent 4 gift memberships" },
+          giftMembershipsCount: 4,
         },
       },
     });
@@ -1049,6 +1272,12 @@ describe("GUI local preview command behavior", () => {
         gift: {
           giftPictureUrl: "https://example.com/tiktok/gift-rose.png",
         },
+        giftDetails: {
+          giftName: "Rose",
+          diamondCount: 20,
+          giftType: 0,
+        },
+        repeatEnd: 1,
       },
     });
 
@@ -1068,6 +1297,8 @@ describe("GUI local preview command behavior", () => {
         giftName: "Rose",
         repeatCount: 1,
         diamondCount: 10,
+        giftCoins: 10,
+        currency: "coins",
       },
     });
 

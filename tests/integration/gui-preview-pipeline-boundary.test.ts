@@ -1,5 +1,6 @@
 import { describe, it, expect } from "bun:test";
 import * as previewModule from "../../scripts/local/gui-preview.ts";
+import { DEMO_CHARACTER_CATALOG } from "../../gui/src/demo/demo-catalog.ts";
 import { waitForDelay } from "../helpers/time-utils";
 
 type UnknownRecord = Record<string, any>;
@@ -112,6 +113,15 @@ describe("GUI preview pipeline boundary integration", () => {
     expect(emittedTypes.has("platform:share")).toBe(true);
     expect(emittedTypes.has("platform:paypiggy")).toBe(true);
     expect(emittedTypes.has("platform:giftpaypiggy")).toBe(true);
+
+    const chatAvatars = new Map(
+      rows
+        .filter((row) => row.type === "chat")
+        .map((row) => [row.platform, row.data?.avatarUrl]),
+    );
+    expect(chatAvatars.get("twitch")).toBe(DEMO_CHARACTER_CATALOG.Goku);
+    expect(chatAvatars.get("youtube")).toBe(DEMO_CHARACTER_CATALOG.Ichigo);
+    expect(chatAvatars.get("tiktok")).toBe(DEMO_CHARACTER_CATALOG.Naruto);
 
     unsubscribe();
     await pipeline.dispose();

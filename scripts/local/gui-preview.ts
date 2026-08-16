@@ -4,8 +4,16 @@ import * as TwitchEventRouterModule from '../../src/platforms/twitch/events/even
 import * as CommandCooldownServiceModule from '../../src/services/CommandCooldownService.ts';
 import * as UserTrackingServiceModule from '../../src/services/UserTrackingService.ts';
 import * as VFXCommandServiceModule from '../../src/services/VFXCommandService.ts';
+import { DEMO_CHARACTER_CATALOG } from '../../gui/src/demo/demo-catalog.ts';
 
 type UnknownRecord = Record<string, unknown>;
+
+class PreviewAsyncEventEmitter extends EventEmitter {
+    async emitAsync(eventName: string | symbol, payload: unknown): Promise<void> {
+        const listeners = this.listeners(eventName);
+        await Promise.all(listeners.map((listener) => Promise.resolve(listener(payload))));
+    }
+}
 
 function isPreviewRecord(value: unknown): value is UnknownRecord {
     return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -45,6 +53,28 @@ type PreviewEventBus = {
 type TwitchEventRouterFactory = (options: UnknownRecord) => {
     handleNotificationEvent: (subscriptionType: string, event: UnknownRecord, metadata: UnknownRecord) => void;
 };
+
+interface PreviewTwitchPlatform {
+    handlers: Record<string, (payload: UnknownRecord) => void>;
+    apiClient: UnknownRecord | null;
+    onMessageHandler: (event: UnknownRecord) => Promise<void>;
+    handleFollowEvent: (payload: UnknownRecord) => Promise<void>;
+    handleGiftEvent: (payload: UnknownRecord) => Promise<void>;
+    handleRaidEvent: (payload: UnknownRecord) => Promise<void>;
+    handlePaypiggyEvent: (payload: UnknownRecord) => Promise<void>;
+    handlePaypiggyGiftEvent: (payload: UnknownRecord) => Promise<void>;
+}
+
+type PreviewTwitchPlatformCtor = new (config: UnknownRecord, dependencies: UnknownRecord) => PreviewTwitchPlatform;
+
+interface PreviewYouTubePlatform {
+    handlers: Record<string, (payload: UnknownRecord) => void>;
+    eventRouter: {
+        routeEvent: (chatItem: unknown, eventType: unknown) => Promise<boolean>;
+    };
+}
+
+type PreviewYouTubePlatformCtor = new (config: UnknownRecord, dependencies: UnknownRecord) => PreviewYouTubePlatform;
 
 type CreateUserTrackingService = () => {
     isFirstMessage: (userId: unknown, context: unknown) => unknown;
@@ -97,6 +127,7 @@ const configModule = load('../../src/core/config');
 const { logger: defaultLogger } = load('../../src/core/logging');
 const { createEventBus } = load('../../src/core/EventBus');
 const { PlatformEvents } = load('../../src/interfaces/PlatformEvents');
+const { DISPLAY_EVENT_TYPES } = load('../../src/interfaces/DisplayEvents');
 const { PRIORITY_LEVELS, NOTIFICATION_CONFIGS } = load('../../src/core/constants');
 const { createPlatformErrorHandler } = load('../../src/utils/platform-error-handler');
 const { safeSetInterval, safeSetTimeout, safeDelay } = load('../../src/utils/timeout-validator');
@@ -120,11 +151,20 @@ if (typeof NotificationManager !== 'function') {
 }
 const NotificationManagerClass: NotificationManagerCtor = NotificationManager;
 const { DisplayQueue } = load('../../src/obs/display-queue');
-const { createYouTubeEventRouter } = load('../../src/platforms/youtube/events/event-router');
 const { setupTikTokEventListeners } = load('../../src/platforms/tiktok/events/event-router.ts');
-const { DEFAULT_AVATAR_URL } = load('../../src/constants/avatar');
+const { createTikTokEventFactory } = load('../../src/platforms/tiktok/events/event-factory.ts');
+const { normalizeTikTokGiftEvent } = load('../../src/platforms/tiktok/events/event-normalizer.ts');
+const { extractTikTokUserData, extractTikTokAvatarUrl } = load('../../src/utils/tiktok-data-extraction.ts');
+const { resolveTikTokTimestampISO } = load('../../src/utils/platform-timestamp.ts');
+const { TwitchPlatform: TwitchPlatformClass } = load('../../src/platforms/twitch.ts') as {
+    TwitchPlatform: PreviewTwitchPlatformCtor;
+};
+const { YouTubePlatform: YouTubePlatformClass } = load('../../src/platforms/youtube.ts') as {
+    YouTubePlatform: PreviewYouTubePlatformCtor;
+};
 
 type PreviewAdapter = 'twitch' | 'youtube' | 'tiktok';
+type PreviewScenario = 'all' | 'chat' | 'notifications';
 
 interface PreviewScenarioStep {
     type: string;
@@ -170,6 +210,8 @@ interface PreviewMedia {
 interface PreviewScenarioEvent {
     platform: PreviewAdapter;
     adapter: PreviewAdapter;
+    scenarioType: string;
+    notificationType?: string;
     rawEvent: UnknownRecord;
 }
 
@@ -197,6 +239,11 @@ interface PreviewService {
 
 interface PreviewErrorHandler {
     handleEventProcessingError: (error: unknown, context: string, payload: unknown, message: string) => void;
+}
+
+interface PreviewNotificationExitWaiter {
+    promise: Promise<void>;
+    cancel: () => void;
 }
 
 interface CreatePreviewIngestAdaptersOptions {
@@ -288,6 +335,11 @@ interface RunPreviewScenarioOptions {
     errorHandler: PreviewErrorHandler;
 }
 
+interface PreviewScenarioRunResult {
+    intervalHandle: ReturnType<typeof setInterval> | number;
+    dispatchedEvents: PreviewScenarioEvent[];
+}
+
 interface DisposePreviewPipelineOptions {
     intervalHandle?: ReturnType<typeof setInterval> | number | null;
     service?: PreviewService | null;
@@ -299,6 +351,7 @@ interface RunGuiPreviewOptions {
     baseConfig?: UnknownRecord;
     durationMs?: number;
     intervalMs?: number;
+    scenario?: PreviewScenario;
     logger?: PreviewLogger | UnknownRecord;
     createPreviewPipelineImpl?: (options: CreatePreviewPipelineOptions) => PreviewPipeline;
     createPreviewIngestAdaptersImpl?: (options: CreatePreviewIngestAdaptersOptions) => PreviewIngestAdapters;
@@ -317,10 +370,16 @@ interface RunGuiPreviewOptions {
         resolveFromNotificationData: (payload: unknown) => Promise<unknown>;
     };
     eventBus?: PreviewEventBus;
+    createNotificationExitWaiterImpl?: (
+        eventBus: PreviewEventBus,
+        notificationType: string,
+        timeoutMs: number
+    ) => PreviewNotificationExitWaiter;
 }
 
 const PREVIEW_DURATION_MS = 32000;
 const PREVIEW_INTERVAL_MS = 2000;
+const PREVIEW_NOTIFICATION_EXIT_TIMEOUT_MS = 41000;
 
 function createPreviewDelay(
     delayImpl: (delay: unknown, fallback?: number, context?: string) => Promise<void> = safeDelay
@@ -335,11 +394,10 @@ function createPreviewDelay(
     };
 }
 
-const PREVIEW_AVATAR_URL = DEFAULT_AVATAR_URL;
 const PREVIEW_MESSAGE_TEXT = 'test message hello world this is a message to everyone how are we today?';
 const PREVIEW_MEDIA_CATALOG: Record<PreviewAdapter, PreviewMedia> = {
     twitch: {
-        avatarUrl: PREVIEW_AVATAR_URL,
+        avatarUrl: DEMO_CHARACTER_CATALOG.Goku,
         badges: [
             {
                 imageUrl: 'https://static-cdn.jtvnw.net/badges/v1/3267646d-33f0-4b17-b3df-f923a41db1d0/3',
@@ -363,7 +421,7 @@ const PREVIEW_MEDIA_CATALOG: Record<PreviewAdapter, PreviewMedia> = {
         }
     },
     youtube: {
-        avatarUrl: PREVIEW_AVATAR_URL,
+        avatarUrl: DEMO_CHARACTER_CATALOG.Ichigo,
         badges: [
             {
                 imageUrl: 'https://yt3.ggpht.com/qh4HyXNMbx5x0_HtQ53rpdtMdEv7OTq6hsebWwybYRlKtdYH5m6bq8kviuVZMvxAbGHWH86FV15Opfs=s32-c-k',
@@ -377,7 +435,7 @@ const PREVIEW_MEDIA_CATALOG: Record<PreviewAdapter, PreviewMedia> = {
         }
     },
     tiktok: {
-        avatarUrl: PREVIEW_AVATAR_URL,
+        avatarUrl: DEMO_CHARACTER_CATALOG.Naruto,
         badges: [
             {
                 imageUrl: 'https://p16-webcast.tiktokcdn.com/webcast-sg/webcast_admin_badge_tiktok.png~tplv-obj.image',
@@ -470,6 +528,30 @@ const PREVIEW_PLATFORM_ACCOUNTS: readonly [PreviewPlatformAccount, ...PreviewPla
     }
 ];
 const PREVIEW_YOUTUBE_MEMBER_IDENTITY = 'youtube:test-youtube-account';
+
+function parsePreviewScenario(args: readonly string[]): PreviewScenario {
+    const inlineValue = args.find((argument) => argument.startsWith('--scenario='))?.slice('--scenario='.length);
+    const separateIndex = args.indexOf('--scenario');
+    const separateValue = separateIndex >= 0 ? args[separateIndex + 1] : undefined;
+    const value = inlineValue || separateValue || 'all';
+    if (value === 'all' || value === 'chat' || value === 'notifications') {
+        return value;
+    }
+    throw new Error(`Unknown GUI preview scenario: ${value}. Expected all, chat, or notifications.`);
+}
+
+function getPreviewNotificationType(scenarioType: string): string | undefined {
+    const notificationTypes: Record<string, string> = {
+        follow: PlatformEvents.FOLLOW,
+        gift: PlatformEvents.GIFT,
+        raid: PlatformEvents.RAID,
+        share: PlatformEvents.SHARE,
+        paypiggy: PlatformEvents.PAYPIGGY,
+        giftpaypiggy: PlatformEvents.GIFTPAYPIGGY,
+        envelope: PlatformEvents.ENVELOPE
+    };
+    return notificationTypes[scenarioType];
+}
 
 const NOOP_LOGGER = {
     debug: () => {},
@@ -670,22 +752,170 @@ function buildPreviewConfig(baseConfig: UnknownRecord = {}): UnknownRecord {
     return merged;
 }
 
+function createYouTubePreviewAuthor(options: {
+    username: string;
+    userId: string;
+    media: PreviewMedia;
+    includeBadges: boolean;
+    isMember: boolean;
+}): UnknownRecord {
+    const { username, userId, media, includeBadges, isMember } = options;
+    const badges = (includeBadges ? media.badges : []).map((badge) => ({
+        tooltip: isMember ? `Member: ${badge.label}` : badge.label,
+        custom_thumbnail: [{ url: badge.imageUrl, width: 32, height: 32 }]
+    }));
+    if (isMember && badges.length === 0) {
+        badges.push({ tooltip: 'Member', custom_thumbnail: [] });
+    }
+    return {
+        id: userId,
+        name: username,
+        thumbnails: [{ url: media.avatarUrl, width: 64, height: 64 }],
+        badges,
+        is_moderator: false,
+        is_verified: false,
+        is_verified_artist: false
+    };
+}
+
+function createYouTubePreviewChatItem(options: {
+    username: string;
+    userId: string;
+    timestamp: string;
+    text: string;
+    media: PreviewMedia;
+    includeBadges: boolean;
+    isMember: boolean;
+    includeEmotes: boolean;
+    index: number;
+}): UnknownRecord {
+    const { username, userId, timestamp, text, media, includeBadges, isMember, includeEmotes, index } = options;
+    const emoteRun = (suffix: number) => ({
+        emoji: {
+            emoji_id: `${media.emote.id}-${suffix}`,
+            is_custom: true,
+            image: [{ url: media.emote.imageUrl, width: 48, height: 48 }]
+        }
+    });
+    return {
+        type: 'AddChatItemAction',
+        item: {
+            type: 'LiveChatTextMessage',
+            id: `test-youtube-chat-${index}`,
+            author: createYouTubePreviewAuthor({ username, userId, media, includeBadges, isMember }),
+            message: {
+                text,
+                runs: includeEmotes
+                    ? [
+                        emoteRun(1),
+                        { text: ' test message ' },
+                        emoteRun(2),
+                        { text: ' hello world this is a message to everyone ' },
+                        emoteRun(3),
+                        { text: ' how are we today?' }
+                    ]
+                    : [{ text }]
+            },
+            timestamp
+        }
+    };
+}
+
+function createYouTubePreviewMonetizationItem(options: {
+    scenarioType: string;
+    username: string;
+    userId: string;
+    timestamp: string;
+    media: PreviewMedia;
+    index: number;
+}): UnknownRecord {
+    const { scenarioType, username, userId, timestamp, media, index } = options;
+    const author = createYouTubePreviewAuthor({
+        username,
+        userId,
+        media,
+        includeBadges: true,
+        isMember: true
+    });
+    const baseItem = {
+        id: `test-youtube-${scenarioType}-${index}`,
+        author,
+        timestamp,
+        message: { text: '' }
+    };
+
+    if (scenarioType === 'giftpaypiggy') {
+        return {
+            type: 'AddChatItemAction',
+            item: {
+                ...baseItem,
+                type: 'LiveChatSponsorshipsGiftPurchaseAnnouncement',
+                header: {
+                    author_name: { text: username },
+                    author_photo: [{ url: media.avatarUrl, width: 64, height: 64 }]
+                },
+                primary_text: { text: 'Sent 3 gift memberships' },
+                giftMembershipsCount: 3,
+                membershipGiftCount: 3
+            }
+        };
+    }
+
+    if (scenarioType === 'gift') {
+        return {
+            type: 'AddChatItemAction',
+            item: {
+                ...baseItem,
+                type: 'LiveChatPaidSticker',
+                purchase_amount: '$5.00',
+                sticker_accessibility_label: 'Preview sticker',
+                sticker: [{ url: media.emote.imageUrl, width: 88, height: 88 }]
+            }
+        };
+    }
+
+    return {
+        type: 'AddChatItemAction',
+        item: {
+            ...baseItem,
+            type: 'LiveChatMembershipItem',
+            headerPrimaryText: { text: 'Member for 2 months' },
+            headerSubtext: { text: 'Member' },
+            memberMilestoneDurationInMonths: 2,
+            message: { text: 'Glad to be here!' }
+        }
+    };
+}
+
 function buildPreviewScenarioEvents(
     durationMs: number = PREVIEW_DURATION_MS,
-    intervalMs: number = PREVIEW_INTERVAL_MS
+    intervalMs: number = PREVIEW_INTERVAL_MS,
+    scenario: PreviewScenario = 'all'
 ): PreviewScenarioEvent[] {
-    const eventCount = Math.floor(durationMs / intervalMs);
+    const scenarioTemplate = scenario === 'all'
+        ? PREVIEW_SCENARIO_TEMPLATE
+        : PREVIEW_SCENARIO_TEMPLATE.filter((step) => scenario === 'chat'
+            ? step.type.startsWith('chat')
+            : !step.type.startsWith('chat'));
+    const eventCount = scenario === 'all'
+        ? Math.floor(durationMs / intervalMs)
+        : scenarioTemplate.length;
     const events: PreviewScenarioEvent[] = [];
 
     const getAccount = (platform: PreviewAdapter): PreviewPlatformAccount => PREVIEW_PLATFORM_ACCOUNTS.find((entry) => entry.platform === platform) || PREVIEW_PLATFORM_ACCOUNTS[0];
     const firstPrimaryChatByPlatform = new Set();
 
     for (let index = 0; index < eventCount; index += 1) {
-        const scenarioStep = PREVIEW_SCENARIO_TEMPLATE[index % PREVIEW_SCENARIO_TEMPLATE.length];
+        const scenarioStep = scenarioTemplate[index % scenarioTemplate.length];
         if (!scenarioStep) {
             throw new Error(`Missing preview scenario step for index ${index}`);
         }
         const scenarioType = scenarioStep.type;
+        const notificationType = getPreviewNotificationType(scenarioType);
+        const scenarioMetadata = {
+            scenarioType,
+            ...(notificationType ? { notificationType } : {})
+        };
         const adapter = scenarioStep.adapter;
         const account = getAccount(adapter);
         const media = PREVIEW_MEDIA_CATALOG[adapter];
@@ -715,23 +945,30 @@ function buildPreviewScenarioEvents(
                             ? 'hello'
                             : (scenarioType === 'chat-farewell' ? '!bye' : PREVIEW_MESSAGE_TEXT)));
                 events.push({
+                    ...scenarioMetadata,
                     platform: 'twitch',
                     adapter: 'twitch',
                     rawEvent: {
                         subscriptionType: 'channel.chat.message',
                         metadata: {
-                            message_timestamp: timestamp,
-                            previewPaypiggy: scenarioType === 'chat'
+                            message_timestamp: timestamp
                         },
                         event: {
                             ...base,
-                            user_name: username,
-                            user_id: userId,
-                            user_login: userId,
-                            isPaypiggy: scenarioType === 'chat',
-                            badgeImages: includePreviewBadges ? media.badges : undefined,
-                            is_mod: false,
-                            is_broadcaster: false,
+                            chatter_user_name: username,
+                            chatter_user_id: userId,
+                            chatter_user_login: userId,
+                            broadcaster_user_name: 'test-preview-broadcaster',
+                            broadcaster_user_id: 'test-preview-broadcaster-id',
+                            broadcaster_user_login: 'test-preview-broadcaster',
+                            badges: includePreviewBadges
+                                ? [
+                                    { set_id: 'moderator', id: '1', info: '' },
+                                    { set_id: 'founder', id: '0', info: '1' },
+                                    { set_id: 'premium', id: '1', info: '' }
+                                ]
+                                : [],
+                            color: '#9146ff',
                             message: {
                                 text,
                                 fragments: scenarioType === 'chat'
@@ -741,7 +978,9 @@ function buildPreviewScenarioEvents(
                                             text: ':preview1:',
                                             emote: {
                                                 id: media.emote.id || 'emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7',
-                                                emote_set_id: 'preview'
+                                                emote_set_id: 'preview',
+                                                format: ['animated', 'static'],
+                                                scale: ['1.0', '2.0', '3.0']
                                             }
                                         },
                                         { type: 'text', text: ' test message ' },
@@ -750,7 +989,9 @@ function buildPreviewScenarioEvents(
                                             text: ':preview2:',
                                             emote: {
                                                 id: media.emote.id || 'emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7',
-                                                emote_set_id: 'preview'
+                                                emote_set_id: 'preview',
+                                                format: ['animated', 'static'],
+                                                scale: ['1.0', '2.0', '3.0']
                                             }
                                         },
                                         { type: 'text', text: ' hello world this is a message to everyone ' },
@@ -759,7 +1000,9 @@ function buildPreviewScenarioEvents(
                                             text: ':preview3:',
                                             emote: {
                                                 id: media.emote.id || 'emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7',
-                                                emote_set_id: 'preview'
+                                                emote_set_id: 'preview',
+                                                format: ['animated', 'static'],
+                                                scale: ['1.0', '2.0', '3.0']
                                             }
                                         },
                                         { type: 'text', text: ' how are we today?' }
@@ -781,6 +1024,7 @@ function buildPreviewScenarioEvents(
             };
             const subscriptionType = twitchMap[scenarioType] || 'channel.follow';
             events.push({
+                ...scenarioMetadata,
                 platform: 'twitch',
                 adapter: 'twitch',
                 rawEvent: {
@@ -826,56 +1070,31 @@ function buildPreviewScenarioEvents(
                         ? 'hello'
                         : (scenarioType === 'chat-farewell' ? '!bye' : `preview message ${index}`))));
             events.push({
+                ...scenarioMetadata,
                 platform: 'youtube',
                 adapter: 'youtube',
                 rawEvent: {
                     eventType,
-                    chatItem: {
-                        testData: {
-                            ...base,
+                    chatItem: eventType === 'LiveChatTextMessage'
+                        ? createYouTubePreviewChatItem({
                             username,
                             userId,
-                            message: text,
-                            isPaypiggy: isPreviewPaypiggyChat || isMemberHiChat,
-                            badgeImages: includePreviewBadges ? media.badges : undefined,
-                            avatarUrl: media.avatarUrl,
-                            messageParts: isPreviewPaypiggyChat
-                                ? [
-                                    {
-                                        type: 'emote',
-                                        imageUrl: media.emote.imageUrl,
-                                        emoteId: `${media.emote.id || 'yt-preview-emote'}-1`
-                                    },
-                                    {
-                                        type: 'text',
-                                        text: ' test message '
-                                    },
-                                    {
-                                        type: 'emote',
-                                        imageUrl: media.emote.imageUrl,
-                                        emoteId: `${media.emote.id || 'yt-preview-emote'}-2`
-                                    },
-                                    {
-                                        type: 'text',
-                                        text: ' hello world this is a message to everyone '
-                                    },
-                                    {
-                                        type: 'emote',
-                                        imageUrl: media.emote.imageUrl,
-                                        emoteId: `${media.emote.id || 'yt-preview-emote'}-3`
-                                    },
-                                    {
-                                        type: 'text',
-                                        text: ' how are we today?'
-                                    }
-                                ]
-                                : undefined,
-                            amount: 5,
-                            currency: 'USD',
-                            giftCount: 3,
-                            tier: '1'
-                        }
-                    }
+                            timestamp,
+                            text,
+                            media,
+                            includeBadges: includePreviewBadges,
+                            isMember: isPreviewPaypiggyChat || isMemberHiChat,
+                            includeEmotes: isPreviewPaypiggyChat,
+                            index
+                        })
+                        : createYouTubePreviewMonetizationItem({
+                            scenarioType,
+                            username,
+                            userId,
+                            timestamp,
+                            media,
+                            index
+                        })
                 }
             });
             continue;
@@ -927,6 +1146,7 @@ function buildPreviewScenarioEvents(
             ]
             : undefined;
         events.push({
+            ...scenarioMetadata,
             platform: 'tiktok',
             adapter: 'tiktok',
             rawEvent: {
@@ -955,6 +1175,7 @@ function buildPreviewScenarioEvents(
                     diamondCount: scenarioType === 'gift'
                         ? Number(gift?.unitAmount || 10)
                         : 10,
+                    ...(scenarioType === 'envelope' ? { giftCoins: 10, currency: 'coins' } : {}),
                     ...(scenarioType === 'gift' && gift?.imageUrl
                         ? {
                             gift: {
@@ -964,6 +1185,7 @@ function buildPreviewScenarioEvents(
                                 id: gift.giftId,
                                 giftName: gift.name,
                                 diamondCount: Number(gift.unitAmount || 10),
+                                giftType: 0,
                                 primaryEffectId: gift.primaryEffectId,
                                 giftImage: {
                                     url: [gift.imageUrl]
@@ -974,7 +1196,8 @@ function buildPreviewScenarioEvents(
                                     urlList: [gift.animation.resourceModelUrl]
                                 },
                                 videoResourceList: gift.animation.videoResources
-                            }
+                            },
+                            repeatEnd: 1
                         }
                         : {}),
                     msgId: `test-${scenarioType}-${index}`,
@@ -996,156 +1219,80 @@ function createPreviewIngestAdapters(
     const { config = {}, logger, emitPlatformEvent } = options;
     const resolvedLogger = resolveLogger(logger);
 
-    const emitChatEvent = (platform: PreviewAdapter, payload: UnknownRecord): void => {
-        emitPlatformEvent({
-            type: PlatformEvents.CHAT_MESSAGE,
-            platform,
-            data: {
-                username: payload.username,
-                userId: payload.userId,
-                timestamp: payload.timestamp,
-                avatarUrl: payload.avatarUrl || PREVIEW_AVATAR_URL,
-                isPaypiggy: payload.isPaypiggy === true,
-                isMod: payload.isMod === true,
-                isBroadcaster: payload.isBroadcaster === true,
-                metadata: payload.metadata || {},
-                badgeImages: Array.isArray(payload.badgeImages) ? payload.badgeImages : [],
-                message: payload.message
-            }
-        });
-    };
+    class PreviewRawPlatformDataLoggingService {
+        async logRawPlatformData(): Promise<void> {}
+    }
 
+    const twitchPlatform = new TwitchPlatformClass(getPreviewRecord(config, 'twitch'), {
+        logger: resolvedLogger,
+        twitchAuth: {
+            isReady: () => true,
+            refreshTokens: async () => true
+        },
+        RawPlatformDataLoggingService: PreviewRawPlatformDataLoggingService,
+        retrySystem: null
+    });
+    const twitchBadgeSetIds = ['moderator', 'founder', 'premium'];
+    twitchPlatform.apiClient = {
+        getUserById: async () => ({ profile_image_url: PREVIEW_MEDIA_CATALOG.twitch.avatarUrl }),
+        getGlobalChatBadges: async () => PREVIEW_MEDIA_CATALOG.twitch.badges.map((badge, index) => ({
+            set_id: twitchBadgeSetIds[index],
+            versions: [{ id: index === 1 ? '0' : '1', image_url_4x: badge.imageUrl, title: badge.label }]
+        })),
+        getChannelChatBadges: async () => [],
+        getCheermotes: async () => []
+    };
+    const emitTwitchPayload = (type: string) => (payload: UnknownRecord) => {
+        emitPlatformEvent({ type, platform: 'twitch', data: payload });
+    };
+    twitchPlatform.handlers = {
+        onChat: emitTwitchPayload(PlatformEvents.CHAT_MESSAGE),
+        onFollow: emitTwitchPayload(PlatformEvents.FOLLOW),
+        onGift: emitTwitchPayload(PlatformEvents.GIFT),
+        onRaid: emitTwitchPayload(PlatformEvents.RAID),
+        onPaypiggy: emitTwitchPayload(PlatformEvents.PAYPIGGY),
+        onGiftPaypiggy: emitTwitchPayload(PlatformEvents.GIFTPAYPIGGY)
+    };
+    const pendingTwitchEvents: Promise<void>[] = [];
     const twitchRouter = createTwitchEventSubEventRouter({
         config,
         logger: resolvedLogger,
         emit(eventName: string, payload: UnknownRecord) {
-            if (eventName === 'chatMessage') {
-                const message = payload.message;
-                const messageRecord = toPreviewRecord(message);
-                const metadataRecord = getPreviewRecord(payload, 'metadata');
-                const messageText = getPreviewString(messageRecord.text) || getPreviewString(message);
-                const messageParts = Array.isArray(messageRecord.fragments)
-                    ? messageRecord.fragments
-                        .map((fragment: unknown) => {
-                            if (!isPreviewRecord(fragment)) {
-                                return null;
-                            }
-                            const fragmentRecord = fragment;
-                            const emoteRecord = getPreviewRecord(fragmentRecord, 'emote');
-                            const emoteId = getPreviewString(emoteRecord.id);
-                            if (fragmentRecord.type === 'emote' && emoteId) {
-                                return {
-                                    type: 'emote',
-                                    platform: 'twitch',
-                                    emoteId,
-                                    imageUrl: `https://static-cdn.jtvnw.net/emoticons/v2/${emoteId}/animated/dark/3.0`
-                                };
-                            }
-                            if (fragmentRecord.type === 'text' && typeof fragmentRecord.text === 'string') {
-                                return {
-                                    type: 'text',
-                                    text: fragmentRecord.text
-                                };
-                            }
-                            return null;
-                        })
-                        .filter(Boolean)
-                    : [];
-                emitChatEvent('twitch', {
-                    username: payload?.username || payload?.user_name,
-                    userId: payload?.userId || payload?.user_id,
-                    timestamp: payload?.timestamp,
-                    isPaypiggy: payload?.isPaypiggy === true || metadataRecord.previewPaypiggy === true,
-                    isMod: payload?.isMod === true || payload?.is_mod === true,
-                    isBroadcaster: payload?.isBroadcaster === true || payload?.is_broadcaster === true,
-                    metadata: metadataRecord,
-                    badgeImages: Array.isArray(payload?.badgeImages) ? payload.badgeImages : [],
-                    message: messageParts.length > 0
-                        ? {
-                            text: messageText,
-                            parts: messageParts
-                        }
-                        : { text: messageText }
-                });
-                return;
-            }
-
-            const map: Record<string, string> = {
-                follow: PlatformEvents.FOLLOW,
-                gift: PlatformEvents.GIFT,
-                raid: PlatformEvents.RAID,
-                paypiggy: PlatformEvents.PAYPIGGY,
-                paypiggyGift: PlatformEvents.GIFTPAYPIGGY
+            const handlers: Record<string, (event: UnknownRecord) => Promise<void>> = {
+                chatMessage: (event) => twitchPlatform.onMessageHandler(event),
+                follow: (event) => twitchPlatform.handleFollowEvent(event),
+                gift: (event) => twitchPlatform.handleGiftEvent(event),
+                raid: (event) => twitchPlatform.handleRaidEvent(event),
+                paypiggy: (event) => twitchPlatform.handlePaypiggyEvent(event),
+                paypiggyGift: (event) => twitchPlatform.handlePaypiggyGiftEvent(event)
             };
-            const mappedType = map[eventName];
-            if (!mappedType) {
-                return;
+            const handler = handlers[eventName];
+            if (handler) {
+                pendingTwitchEvents.push(handler(payload));
             }
-            emitPlatformEvent({ type: mappedType, platform: 'twitch', data: payload });
         }
     });
 
-    const youtubePlatform = {
+    const youtubePlatform = new YouTubePlatformClass(getPreviewRecord(config, 'youtube'), {
         logger: resolvedLogger,
-        handleLowPriorityEvent() {},
-        handleChatTextMessage(chatItem: UnknownRecord) {
-            const source = getPreviewRecord(chatItem, 'testData');
-            const messageParts = Array.isArray(source.messageParts)
-                ? source.messageParts.filter((part: unknown) => part && typeof part === 'object')
-                : [];
-            emitChatEvent('youtube', {
-                username: source.username,
-                userId: source.userId,
-                timestamp: source.timestamp,
-                isPaypiggy: source.isPaypiggy === true,
-                badgeImages: Array.isArray(source.badgeImages) ? source.badgeImages : [],
-                message: messageParts.length > 0
-                    ? {
-                        text: source.message || '',
-                        parts: messageParts
-                    }
-                    : { text: source.message || '' }
-            });
+        streamDetectionService: {
+            detectLiveStreams: async () => []
         },
-        handleSuperChat(chatItem: UnknownRecord) {
-            const source = getPreviewRecord(chatItem, 'testData');
-            emitPlatformEvent({ type: PlatformEvents.PAYPIGGY, platform: 'youtube', data: source });
-        },
-        handleSuperSticker(chatItem: UnknownRecord) {
-            const source = getPreviewRecord(chatItem, 'testData');
-            emitPlatformEvent({
-                type: PlatformEvents.GIFT,
-                platform: 'youtube',
-                data: {
-                    ...source,
-                    id: source.id,
-                    giftType: 'SuperSticker',
-                    giftCount: 1,
-                    amount: source.amount,
-                    currency: source.currency
-                }
-            });
-        },
-        handleMembership(chatItem: UnknownRecord) {
-            const source = getPreviewRecord(chatItem, 'testData');
-            emitPlatformEvent({ type: PlatformEvents.PAYPIGGY, platform: 'youtube', data: source });
-        },
-        handleGiftMembershipPurchase(chatItem: UnknownRecord) {
-            const source = getPreviewRecord(chatItem, 'testData');
-            emitPlatformEvent({
-                type: PlatformEvents.GIFTPAYPIGGY,
-                platform: 'youtube',
-                data: {
-                    ...source,
-                    giftCount: source.giftCount,
-                    tier: source.tier
-                }
-            });
-        }
+        RawPlatformDataLoggingService: PreviewRawPlatformDataLoggingService,
+        rawPlatformDataLoggingService: new PreviewRawPlatformDataLoggingService()
+    });
+    const emitYouTubePayload = (type: string) => (payload: UnknownRecord) => {
+        emitPlatformEvent({ type, platform: 'youtube', data: payload });
     };
-    const youtubeRouter = createYouTubeEventRouter({ platform: youtubePlatform });
+    youtubePlatform.handlers = {
+        onChat: emitYouTubePayload(PlatformEvents.CHAT_MESSAGE),
+        onGift: emitYouTubePayload(PlatformEvents.GIFT),
+        onPaypiggy: emitYouTubePayload(PlatformEvents.PAYPIGGY),
+        onGiftPaypiggy: emitYouTubePayload(PlatformEvents.GIFTPAYPIGGY)
+    };
 
-    const tiktokConnection = new EventEmitter();
+    const tiktokConnection = new PreviewAsyncEventEmitter();
+    const tiktokEventFactory = createTikTokEventFactory({ platformName: 'tiktok' });
     const tiktokPlatform = {
         logger: resolvedLogger,
         config,
@@ -1178,101 +1325,78 @@ function createPreviewIngestAdapters(
         _getPlatformMessageId(data: UnknownRecord) {
             return data.msgId || null;
         },
-        _handleChatMessage(_raw: UnknownRecord, normalizedData: UnknownRecord) {
-            const payload = {
-                ...normalizedData,
-                badgeImages: Array.isArray(normalizedData?.badgeImages)
-                    ? normalizedData.badgeImages
-                    : (Array.isArray(_raw?.badgeImages) ? _raw.badgeImages : [])
-            };
-            emitChatEvent('tiktok', payload);
+        async _handleChatMessage(_raw: UnknownRecord, normalizedData: UnknownRecord) {
+            const payload = tiktokEventFactory.createChatMessage(_raw, {
+                normalizedData: {
+                    ...normalizedData,
+                    badgeImages: Array.isArray(normalizedData?.badgeImages)
+                        ? normalizedData.badgeImages
+                        : (Array.isArray(_raw?.badgeImages) ? _raw.badgeImages : [])
+                }
+            });
+            emitPlatformEvent({ type: PlatformEvents.CHAT_MESSAGE, platform: 'tiktok', data: payload });
         },
-        handleTikTokGift(data: UnknownRecord) {
-            const sourceUser = getPreviewRecord(data, 'user');
-            const giftRecord = getPreviewRecord(data, 'gift');
-            const giftDetails = getPreviewRecord(data, 'giftDetails');
-            const giftImageUrl = typeof giftRecord.giftPictureUrl === 'string'
-                ? giftRecord.giftPictureUrl
-                : '';
-            const giftName = data.giftName || giftDetails.giftName || 'Rose';
-            const repeatCount = Number(data?.repeatCount) || 1;
-            const unitAmount = Number(data?.diamondCount) || 10;
-            emitPlatformEvent({
-                type: PlatformEvents.GIFT,
-                platform: 'tiktok',
-                data: {
-                    username: sourceUser.nickname || sourceUser.uniqueId,
-                    userId: sourceUser.uniqueId || sourceUser.userId,
-                    timestamp: data.timestamp,
-                    id: data.msgId,
-                    giftType: giftName,
-                    ...(giftImageUrl ? { giftImageUrl } : {}),
-                    giftCount: repeatCount,
-                    repeatCount,
-                    unitAmount,
-                    amount: unitAmount,
-                    currency: 'coins',
-                    enhancedGiftData: {
-                        username: sourceUser.nickname || sourceUser.uniqueId,
-                        userId: sourceUser.uniqueId || sourceUser.userId,
-                        giftType: giftName,
-                        giftCount: repeatCount,
-                        amount: unitAmount,
-                        currency: 'coins',
-                        isAggregated: false,
-                        isStreakCompleted: true,
-                        originalData: {
-                            asset: data.asset,
-                            giftDetails: data.giftDetails,
-                            gift: data.gift
-                        }
+        async handleTikTokGift(data: UnknownRecord) {
+            const normalizedGift = normalizeTikTokGiftEvent(data, {
+                platformName: 'tiktok',
+                getTimestamp: (payload: UnknownRecord) => resolveTikTokTimestampISO(payload),
+                getPlatformMessageId: (payload: UnknownRecord) => getPreviewString(payload.msgId)
+            });
+            const eventData = tiktokEventFactory.createGift({
+                ...normalizedGift,
+                enhancedGiftData: {
+                    username: normalizedGift.username,
+                    userId: normalizedGift.userId,
+                    giftType: normalizedGift.giftType,
+                    giftCount: normalizedGift.giftCount,
+                    amount: normalizedGift.amount,
+                    currency: normalizedGift.currency,
+                    isAggregated: false,
+                    isStreakCompleted: normalizedGift.repeatEnd === true,
+                    originalData: {
+                        asset: data.asset,
+                        giftDetails: data.giftDetails,
+                        gift: data.gift
                     }
                 }
             });
+            emitPlatformEvent({ type: PlatformEvents.GIFT, platform: 'tiktok', data: eventData });
         },
-        handleTikTokFollow(data: UnknownRecord) {
-            const sourceUser = getPreviewRecord(data, 'user');
-            emitPlatformEvent({
-                type: PlatformEvents.FOLLOW,
-                platform: 'tiktok',
-                data: {
-                    username: sourceUser.nickname || sourceUser.uniqueId,
-                    userId: sourceUser.uniqueId || sourceUser.userId,
-                    timestamp: data.timestamp
-                }
+        async handleTikTokFollow(data: UnknownRecord) {
+            const identity = extractTikTokUserData(data);
+            const eventData = tiktokEventFactory.createFollow({
+                ...identity,
+                avatarUrl: extractTikTokAvatarUrl(data),
+                timestamp: resolveTikTokTimestampISO(data),
+                metadata: { platform: 'tiktok' }
             });
+            emitPlatformEvent({ type: PlatformEvents.FOLLOW, platform: 'tiktok', data: eventData });
         },
-        handleTikTokSocial(data: UnknownRecord) {
+        async handleTikTokShare(data: UnknownRecord) {
+            const identity = extractTikTokUserData(data);
+            const eventData = tiktokEventFactory.createShare({
+                ...identity,
+                avatarUrl: extractTikTokAvatarUrl(data),
+                timestamp: resolveTikTokTimestampISO(data),
+                metadata: { platform: 'tiktok' }
+            });
+            emitPlatformEvent({ type: PlatformEvents.SHARE, platform: 'tiktok', data: eventData });
+        },
+        async handleTikTokSocial(data: UnknownRecord) {
             if (String(data.displayType || '').toLowerCase() !== 'share') {
                 return;
             }
-            const sourceUser = getPreviewRecord(data, 'user');
-            emitPlatformEvent({
-                type: PlatformEvents.SHARE,
-                platform: 'tiktok',
-                data: {
-                    username: sourceUser.nickname || sourceUser.uniqueId,
-                    userId: sourceUser.uniqueId || sourceUser.userId,
-                    timestamp: data.timestamp
-                }
-            });
+            await this.handleTikTokShare(data);
         },
-        _handleStandardEvent(_eventType: string, data: UnknownRecord, options: UnknownRecord) {
-            const sourceUser = getPreviewRecord(data, 'user');
-            emitPlatformEvent({
-                type: options.emitType,
-                platform: 'tiktok',
-                data: {
-                    username: sourceUser.nickname || sourceUser.uniqueId,
-                    userId: sourceUser.uniqueId || sourceUser.userId,
-                    timestamp: data.timestamp,
-                    id: data.msgId,
-                    giftType: data.giftName || 'Rose',
-                    giftCount: Number(data.repeatCount) || 1,
-                    amount: Number(data.diamondCount) || 10,
-                    currency: 'coins'
-                }
+        async _handleStandardEvent(_eventType: string, data: UnknownRecord, options: UnknownRecord) {
+            if (options.factoryMethod !== 'createEnvelope') {
+                throw new Error(`Unsupported preview TikTok factory: ${String(options.factoryMethod)}`);
+            }
+            const eventData = tiktokEventFactory.createEnvelope({
+                ...data,
+                avatarUrl: extractTikTokAvatarUrl(data)
             });
+            emitPlatformEvent({ type: String(options.emitType), platform: 'tiktok', data: eventData });
         }
     };
     setupTikTokEventListeners(tiktokPlatform);
@@ -1281,16 +1405,18 @@ function createPreviewIngestAdapters(
         twitch: {
             async ingest(rawEvent: UnknownRecord) {
                 twitchRouter.handleNotificationEvent(getPreviewString(rawEvent.subscriptionType), toPreviewRecord(rawEvent.event), toPreviewRecord(rawEvent.metadata));
+                const pending = pendingTwitchEvents.splice(0, pendingTwitchEvents.length);
+                await Promise.all(pending);
             }
         },
         youtube: {
             async ingest(rawEvent: UnknownRecord) {
-                await youtubeRouter.routeEvent(rawEvent.chatItem, getPreviewString(rawEvent.eventType));
+                await youtubePlatform.eventRouter.routeEvent(rawEvent.chatItem, getPreviewString(rawEvent.eventType));
             }
         },
         tiktok: {
             async ingest(rawEvent: UnknownRecord) {
-                tiktokConnection.emit(getPreviewEventName(rawEvent.eventType), rawEvent.data);
+                await tiktokConnection.emitAsync(getPreviewEventName(rawEvent.eventType), rawEvent.data);
             }
         }
     };
@@ -1536,7 +1662,7 @@ function createPreviewPipeline(options: CreatePreviewPipelineOptions = {}): Prev
     };
 }
 
-async function runPreviewScenario(options: RunPreviewScenarioOptions): Promise<ReturnType<typeof setInterval> | number> {
+async function runPreviewScenario(options: RunPreviewScenarioOptions): Promise<PreviewScenarioRunResult> {
     const {
         adapters,
         scenarioEvents,
@@ -1548,6 +1674,8 @@ async function runPreviewScenario(options: RunPreviewScenarioOptions): Promise<R
     } = options;
 
     let eventIndex = 0;
+    const dispatchedEvents: PreviewScenarioEvent[] = [];
+    const inFlight = new Set<Promise<void>>();
     const dispatchNextEvent = () => {
         if (eventIndex >= scenarioEvents.length) {
             return;
@@ -1559,9 +1687,12 @@ async function runPreviewScenario(options: RunPreviewScenarioOptions): Promise<R
         }
         const adapter = adapters[event.adapter];
         if (adapter && typeof adapter.ingest === 'function') {
-            Promise.resolve(adapter.ingest(event.rawEvent)).catch((error: unknown) => {
+            dispatchedEvents.push(event);
+            const pending = Promise.resolve(adapter.ingest(event.rawEvent)).catch((error: unknown) => {
                 errorHandler.handleEventProcessingError(error, 'preview-ingest', event.rawEvent, 'Failed processing preview ingest event');
             });
+            inFlight.add(pending);
+            void pending.finally(() => inFlight.delete(pending));
         }
         eventIndex += 1;
     };
@@ -1575,8 +1706,43 @@ async function runPreviewScenario(options: RunPreviewScenarioOptions): Promise<R
     await new Promise<void>((resolve) => {
         safeSetTimeoutImpl(() => resolve(), durationMs);
     });
+    clearInterval(intervalHandle);
+    await Promise.all([...inFlight]);
 
-    return intervalHandle;
+    return { intervalHandle, dispatchedEvents };
+}
+
+function createNotificationExitWaiter(
+    eventBus: PreviewEventBus,
+    notificationType: string,
+    timeoutMs: number
+): PreviewNotificationExitWaiter {
+    let cancel = () => {};
+    const promise = new Promise<void>((resolve, reject) => {
+        let settled = false;
+        let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
+        let unsubscribe = () => {};
+        const settle = (callback: () => void) => {
+            if (settled) return;
+            settled = true;
+            unsubscribe();
+            if (timeoutHandle !== null) {
+                clearTimeout(timeoutHandle);
+            }
+            callback();
+        };
+        unsubscribe = eventBus.subscribe(DISPLAY_EVENT_TYPES.NOTIFICATION_LIFECYCLE, (payload: unknown) => {
+            const lifecycle = toPreviewRecord(payload);
+            if (lifecycle.phase === 'exit-started' && lifecycle.type === notificationType) {
+                settle(resolve);
+            }
+        });
+        timeoutHandle = safeSetTimeout(() => {
+            settle(() => reject(new Error(`Timed out waiting for ${notificationType} preview notification to exit`)));
+        }, timeoutMs);
+        cancel = () => settle(resolve);
+    });
+    return { promise, cancel: () => cancel() };
 }
 
 async function disposePreviewPipeline(options: DisposePreviewPipelineOptions): Promise<void> {
@@ -1610,14 +1776,20 @@ async function disposePreviewPipeline(options: DisposePreviewPipelineOptions): P
 
 async function runGuiPreview(options: RunGuiPreviewOptions = {}): Promise<void> {
     const config = buildPreviewConfig(options.baseConfig);
+    const scenario = options.scenario || 'all';
     const requestedDurationMs = options.durationMs;
-    const durationMs = typeof requestedDurationMs === 'number' && Number.isInteger(requestedDurationMs) && requestedDurationMs > 0
-        ? requestedDurationMs
-        : PREVIEW_DURATION_MS;
     const requestedIntervalMs = options.intervalMs;
     const intervalMs = typeof requestedIntervalMs === 'number' && Number.isInteger(requestedIntervalMs) && requestedIntervalMs > 0
         ? requestedIntervalMs
         : PREVIEW_INTERVAL_MS;
+    const scenarioEvents = buildPreviewScenarioEvents(PREVIEW_DURATION_MS, intervalMs, scenario);
+    const minimumScenarioDurationMs = scenarioEvents.length * intervalMs;
+    const durationMs = typeof requestedDurationMs === 'number' && Number.isInteger(requestedDurationMs) && requestedDurationMs > 0
+        ? requestedDurationMs
+        : (options.scenario ? scenarioEvents.length * intervalMs : PREVIEW_DURATION_MS);
+    if (options.scenario && durationMs < minimumScenarioDurationMs) {
+        throw new Error(`GUI preview scenario ${scenario} requires at least ${minimumScenarioDurationMs}ms to dispatch every fixture`);
+    }
 
     const logger = resolveLogger(options.logger);
     const errorHandler = createGuiPreviewErrorHandler(logger);
@@ -1626,12 +1798,14 @@ async function runGuiPreview(options: RunGuiPreviewOptions = {}): Promise<void> 
     const createGuiTransportServiceImpl = options.createGuiTransportServiceImpl || createGuiTransportService;
     const safeSetIntervalImpl = options.safeSetIntervalImpl || safeSetInterval;
     const safeSetTimeoutImpl = options.safeSetTimeoutImpl || safeSetTimeout;
+    const createNotificationExitWaiterImpl = options.createNotificationExitWaiterImpl || createNotificationExitWaiter;
     const stdout = options.stdout || process.stdout;
     const delay = options.delay || createPreviewDelay();
 
     let pipeline: PreviewPipeline | null = null;
     let service: PreviewService | null = null;
     let intervalHandle: ReturnType<typeof setInterval> | number | null = null;
+    let notificationExitWaiter: PreviewNotificationExitWaiter | null = null;
     const giftAnimationResolver = options.giftAnimationResolver || {
         resolveFromNotificationData: async () => null
     };
@@ -1666,11 +1840,14 @@ async function runGuiPreview(options: RunGuiPreviewOptions = {}): Promise<void> 
         const guiConfig = getPreviewRecord(config, 'gui');
         const host = typeof guiConfig.host === 'string' ? guiConfig.host : '127.0.0.1';
         const port = typeof guiConfig.port === 'number' || typeof guiConfig.port === 'string' ? guiConfig.port : 3000;
-        stdout.write(`GUI preview running for ${Math.floor(durationMs / 1000)}s\n`);
+        stdout.write(`GUI preview running with ${Math.floor(durationMs / 1000)}s dispatch window\n`);
+        stdout.write(`Scenario: ${scenario}\n`);
         stdout.write(`Dock URL: http://${host}:${port}/dock\n`);
         stdout.write(`Notifications URL: http://${host}:${port}/notifications\n`);
+        stdout.write(`Notifications minimal URL: http://${host}:${port}/notifications?appearance=minimal\n`);
         stdout.write('For TikTok gift animation preview, run: bun run gui:preview:gift-animation\n');
         stdout.write(`Overlay URL: http://${host}:${port}/overlay\n`);
+        stdout.write(`Overlay minimal URL: http://${host}:${port}/overlay?appearance=minimal\n`);
 
         if (typeof activeService.getSseClientCount === 'function' && activeService.getSseClientCount() === 0) {
             stdout.write('Waiting for a GUI page to connect before starting the scenario...\n');
@@ -1679,13 +1856,22 @@ async function runGuiPreview(options: RunGuiPreviewOptions = {}): Promise<void> 
             }
         }
 
-        const scenarioEvents = buildPreviewScenarioEvents(durationMs, intervalMs);
         const adapters = createPreviewIngestAdaptersImpl({
             config,
             logger,
             emitPlatformEvent: (event: UnknownRecord) => activePipeline.emitIngestEvent(event)
         });
-        intervalHandle = await runPreviewScenario({
+        const finalNotificationType = options.scenario
+            ? [...scenarioEvents].reverse().find((event) => event.notificationType)?.notificationType
+            : undefined;
+        if (finalNotificationType) {
+            notificationExitWaiter = createNotificationExitWaiterImpl(
+                activePipeline.eventBus,
+                finalNotificationType,
+                durationMs + PREVIEW_NOTIFICATION_EXIT_TIMEOUT_MS
+            );
+        }
+        const scenarioResult = await runPreviewScenario({
             adapters,
             scenarioEvents,
             intervalMs,
@@ -1694,12 +1880,19 @@ async function runGuiPreview(options: RunGuiPreviewOptions = {}): Promise<void> 
             safeSetTimeoutImpl,
             errorHandler
         });
+        intervalHandle = scenarioResult.intervalHandle;
+
+        if (finalNotificationType && notificationExitWaiter) {
+            stdout.write(`Waiting for ${finalNotificationType} notification lifecycle to finish...\n`);
+            await notificationExitWaiter.promise;
+        }
 
         stdout.write('GUI preview finished\n');
     } catch (error) {
         errorHandler.handleEventProcessingError(error, 'preview-run', null, 'GUI preview failed');
         throw error;
     } finally {
+        notificationExitWaiter?.cancel();
         await disposePreviewPipeline({
             intervalHandle,
             service,
@@ -1710,7 +1903,7 @@ async function runGuiPreview(options: RunGuiPreviewOptions = {}): Promise<void> 
 }
 
 if (require.main === module) {
-    runGuiPreview().catch((error: unknown) => {
+    runGuiPreview({ scenario: parsePreviewScenario(process.argv.slice(2)) }).catch((error: unknown) => {
         const errorMessage = error && typeof error === 'object' && 'message' in error
             ? String((error as { message?: unknown }).message)
             : String(error);
@@ -1723,6 +1916,7 @@ export {
     PREVIEW_DURATION_MS,
     PREVIEW_INTERVAL_MS,
     PREVIEW_MEDIA_CATALOG,
+    parsePreviewScenario,
     createPreviewDelay,
     buildPreviewConfig,
     buildPreviewScenarioEvents,
