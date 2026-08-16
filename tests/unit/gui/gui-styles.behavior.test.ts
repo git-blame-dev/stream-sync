@@ -370,6 +370,9 @@ describe("GUI shared styles behavior", () => {
     expect(avatarWrapperBlock).toContain("position: relative;");
     expect(avatarWrapperBlock).toContain("width: var(--gui-avatar-size-current);");
     expect(avatarWrapperBlock).toContain("height: var(--gui-avatar-size-current);");
+    expect(avatarWrapperBlock).toContain("overflow: visible;");
+    expect(avatarWrapperBlock).toContain("isolation: isolate;");
+    expect(platformIconBlock).toContain("display: block;");
     expect(platformIconBlock).toContain(
       "width: var(--gui-platform-icon-size-current);",
     );
@@ -379,7 +382,7 @@ describe("GUI shared styles behavior", () => {
     expect(avatarPlatformIconBlock).toContain("position: absolute;");
     expect(avatarPlatformIconBlock).toContain("left: -9px;");
     expect(avatarPlatformIconBlock).toContain("bottom: -4px;");
-    expect(avatarPlatformIconBlock).toContain("z-index: 2;");
+    expect(avatarPlatformIconBlock).toContain("z-index: 3;");
     expect(minimalOverlayBlock).toContain(
       "--gui-avatar-size-current: 30px;",
     );
@@ -399,13 +402,13 @@ describe("GUI shared styles behavior", () => {
       "--gui-badge-size-current: var(--gui-dock-badge-size);",
     );
     expect(minimalNotificationsBlock).toContain(
-      "--gui-avatar-size-current: 24px;",
+      "--gui-avatar-size-current: 30px;",
     );
     expect(minimalNotificationsBlock).toContain(
-      "--gui-platform-icon-size-current: 12.903px;",
+      "--gui-platform-icon-size-current: 14.84075px;",
     );
     expect(minimalNotificationsBlock).toContain(
-      "--gui-badge-size-current: var(--gui-dock-badge-size);",
+      "--gui-badge-size-current: var(--gui-overlay-badge-size);",
     );
     expect(minimalPlatformIconBlock).toContain("left: -4.5px;");
     expect(minimalPlatformIconBlock).toContain("bottom: -2px;");

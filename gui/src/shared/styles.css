@@ -272,6 +272,8 @@ html, body {
   width: var(--gui-avatar-size-current);
   height: var(--gui-avatar-size-current);
   flex-shrink: 0;
+  overflow: visible;
+  isolation: isolate;
 }
 
 .gui-row__avatar {
@@ -338,16 +340,19 @@ html, body {
 }
 
 .gui-row__platform-icon {
+  display: block;
   width: var(--gui-platform-icon-size-current);
   height: var(--gui-platform-icon-size-current);
   object-fit: contain;
+  pointer-events: none;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.8));
 }
 
 .gui-row__avatar-wrapper .gui-row__platform-icon {
   position: absolute;
   left: -9px;
   bottom: -4px;
-  z-index: 2;
+  z-index: 3;
 }
 
 .gui-row__username {
@@ -600,9 +605,9 @@ html, body {
 }
 
 .gui-shell--notifications.gui-shell--minimal {
-  --gui-avatar-size-current: 24px;
-  --gui-platform-icon-size-current: 12.903px;
-  --gui-badge-size-current: var(--gui-dock-badge-size);
+  --gui-avatar-size-current: 30px;
+  --gui-platform-icon-size-current: 14.84075px;
+  --gui-badge-size-current: var(--gui-overlay-badge-size);
 }
 
 .gui-shell--notifications.gui-shell--minimal.gui-shell--compact {
@@ -750,10 +755,6 @@ html, body {
 
 .gui-shell--minimal .gui-row--minimal.gui-row--monetization .gui-row__monetization-image-clip {
   right: -24px;
-}
-
-.gui-shell--notifications:not(.gui-shell--minimal) .gui-row__monetization-image-clip {
-  display: none;
 }
 
 .gui-shell--notifications.gui-shell--minimal .gui-row__content {

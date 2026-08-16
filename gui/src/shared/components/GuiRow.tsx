@@ -4,6 +4,7 @@ import type { GuiRowDto } from '../types'
 import { getPlatformIconUrl } from '../platform-icon-map'
 import { DEFAULT_GUI_APPEARANCE, selectDisplayableBadges, type GuiAppearance } from '../appearance'
 
+export const GUI_AVATAR_FALLBACK_URL = '/gui/assets/preview/avatar-fallback.svg'
 const RAYQUAZA_IMAGE_URL = 'https://img.pokemondb.net/sprites/black-white/anim/normal/rayquaza.gif'
 const ARCEUS_IMAGE_URL = 'https://img.pokemondb.net/sprites/black-white/anim/normal/arceus.gif'
 const MONETIZATION_NOTIFICATION_TYPES = new Set([
@@ -26,6 +27,11 @@ interface GuiRowProps {
 }
 
 export function GuiRow({ row, mode, className, onAnimationEnd, appearance = DEFAULT_GUI_APPEARANCE }: GuiRowProps) {
+  const [failedAvatarUrl, setFailedAvatarUrl] = React.useState<string | null>(null)
+  const handleAvatarError = () => {
+    setFailedAvatarUrl((currentUrl) => currentUrl === row.avatarUrl ? currentUrl : row.avatarUrl)
+  }
+  const avatarUrl = failedAvatarUrl === row.avatarUrl ? GUI_AVATAR_FALLBACK_URL : row.avatarUrl
   const isMinimal = appearance.profile === 'minimal'
   const isCompact = isMinimal && appearance.settings.compactRows
   const appearanceSettings = appearance.settings
@@ -73,7 +79,7 @@ export function GuiRow({ row, mode, className, onAnimationEnd, appearance = DEFA
     return (
       <>
         <span className="gui-row__avatar-wrapper" aria-hidden="true">
-          <img className="gui-row__avatar gui-row__avatar--circle" src={row.avatarUrl} alt="" />
+          <img className="gui-row__avatar gui-row__avatar--circle" src={avatarUrl} alt="" onError={handleAvatarError} />
           {platformIconUrl ? <img className="gui-row__platform-icon" src={platformIconUrl} alt="" /> : null}
         </span>
         <div className={[

@@ -1,4 +1,5 @@
 import type { GuiBadgeImage, GuiRowDto } from '../shared/types'
+import { DEMO_CHARACTER_CATALOG } from './demo-catalog'
 
 export interface DemoFeedState {
   rows: GuiRowDto[]
@@ -31,7 +32,7 @@ const SELECTED_DEMO_ROWS: readonly GuiRowDto[] = [
     platform: 'twitch',
     username: 'Goku',
     text: 'Naruto, I heard your wallet has a power level over 9000.',
-    avatarUrl: 'https://myanimelist.net/images/characters/2/344142.jpg',
+    avatarUrl: DEMO_CHARACTER_CATALOG.Goku,
     timestamp: null
   },
   {
@@ -40,7 +41,7 @@ const SELECTED_DEMO_ROWS: readonly GuiRowDto[] = [
     platform: 'tiktok',
     username: 'Ichigo',
     text: 'Before Naruto answers, remember: substitute soul reaper energy is not tax deductible.',
-    avatarUrl: 'https://myanimelist.net/images/characters/13/473588.jpg',
+    avatarUrl: DEMO_CHARACTER_CATALOG.Ichigo,
     timestamp: null
   },
   {
@@ -52,7 +53,7 @@ const SELECTED_DEMO_ROWS: readonly GuiRowDto[] = [
     isPaypiggy: true,
     memberTheme: 'red',
     memberSpriteUrl: RED_MEMBER_DEMO_SPRITE_URL,
-    avatarUrl: 'https://myanimelist.net/images/characters/15/570333.jpg',
+    avatarUrl: DEMO_CHARACTER_CATALOG.Naruto,
     timestamp: null
   },
   {
@@ -61,7 +62,7 @@ const SELECTED_DEMO_ROWS: readonly GuiRowDto[] = [
     platform: 'tiktok',
     username: 'Ichigo',
     text: 'Ichigo sent a $10 Super Chat: Save some spiritual pressure for the rest of us.',
-    avatarUrl: 'https://myanimelist.net/images/characters/13/473588.jpg',
+    avatarUrl: DEMO_CHARACTER_CATALOG.Ichigo,
     timestamp: null
   },
   {
@@ -70,7 +71,7 @@ const SELECTED_DEMO_ROWS: readonly GuiRowDto[] = [
     platform: 'twitch',
     username: 'Goku',
     text: 'That donation hit harder than a Kamehameha!',
-    avatarUrl: 'https://myanimelist.net/images/characters/2/344142.jpg',
+    avatarUrl: DEMO_CHARACTER_CATALOG.Goku,
     timestamp: null
   },
   {
@@ -81,7 +82,7 @@ const SELECTED_DEMO_ROWS: readonly GuiRowDto[] = [
     text: 'My Saiyan pride is supporting the stream!',
     isPaypiggy: true,
     badgeImages: [...TWITCH_MEMBER_DEMO_BADGES],
-    avatarUrl: 'https://myanimelist.net/images/characters/2/344142.jpg',
+    avatarUrl: DEMO_CHARACTER_CATALOG.Goku,
     timestamp: null
   },
   {
@@ -90,7 +91,7 @@ const SELECTED_DEMO_ROWS: readonly GuiRowDto[] = [
     platform: 'twitch',
     username: 'Goku',
     text: 'One more warm-up before Ichigo closes the loop.',
-    avatarUrl: 'https://myanimelist.net/images/characters/2/344142.jpg',
+    avatarUrl: DEMO_CHARACTER_CATALOG.Goku,
     timestamp: null
   },
   {
@@ -99,7 +100,7 @@ const SELECTED_DEMO_ROWS: readonly GuiRowDto[] = [
     platform: 'tiktok',
     username: 'Ichigo',
     text: 'Demo complete. Bankai: clean replay.',
-    avatarUrl: 'https://myanimelist.net/images/characters/13/473588.jpg',
+    avatarUrl: DEMO_CHARACTER_CATALOG.Ichigo,
     timestamp: null
   }
 ]

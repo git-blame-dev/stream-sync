@@ -1,10 +1,55 @@
 import { describe, expect, it } from "bun:test";
 import React from "react";
+import TestRenderer, { act } from "react-test-renderer";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { GuiRow } from "../../../gui/src/shared/components/GuiRow";
+import { GuiRow, GUI_AVATAR_FALLBACK_URL } from "../../../gui/src/shared/components/GuiRow";
 
 describe("GuiRow rendering behavior", () => {
+  it("replaces a failed avatar with the local neutral fallback without retrying the remote URL", () => {
+    let renderer!: TestRenderer.ReactTestRenderer;
+    act(() => {
+      renderer = TestRenderer.create(React.createElement(GuiRow, {
+        mode: "dock",
+        row: { type: "chat", kind: "chat", platform: "twitch", username: "user", text: "hello", avatarUrl: "https://example.invalid/avatar.png", timestamp: null },
+      }));
+    });
+    const avatar = renderer.root.findByProps({ className: "gui-row__avatar gui-row__avatar--circle" });
+
+    act(() => avatar.props.onError());
+    expect(renderer.root.findByProps({ className: "gui-row__avatar gui-row__avatar--circle" }).props.src).toBe(GUI_AVATAR_FALLBACK_URL);
+    expect(renderer.root.findByProps({ className: "gui-row__avatar gui-row__avatar--circle" }).props.onError).toBeDefined();
+  });
+  it("uses the next row avatar after a previous avatar has failed", () => {
+    let renderer!: TestRenderer.ReactTestRenderer;
+    const row = (avatarUrl: string, username: string) => ({
+      type: "chat" as const,
+      kind: "chat" as const,
+      platform: "twitch",
+      username,
+      text: "hello",
+      avatarUrl,
+      timestamp: null,
+    });
+
+    act(() => {
+      renderer = TestRenderer.create(React.createElement(GuiRow, {
+        mode: "dock",
+        row: row("https://example.invalid/avatar-a.png", "user-a"),
+      }));
+    });
+    const avatar = renderer.root.findByProps({ className: "gui-row__avatar gui-row__avatar--circle" });
+    act(() => avatar.props.onError());
+    expect(avatar.props.src).toBe(GUI_AVATAR_FALLBACK_URL);
+
+    act(() => renderer.update(React.createElement(GuiRow, {
+      mode: "dock",
+      row: row("https://example.invalid/avatar-b.png", "user-b"),
+    })));
+
+    expect(renderer.root.findByProps({ className: "gui-row__avatar gui-row__avatar--circle" }).props.src)
+      .toBe("https://example.invalid/avatar-b.png");
+  });
   it("renders the avatar and platform icon together before row content", () => {
     const html = renderToStaticMarkup(
       React.createElement(GuiRow, {
@@ -108,7 +153,7 @@ describe("GuiRow rendering behavior", () => {
     expect(platformIconIndex).toBeLessThan(avatarWrapperEndIndex);
     expect(usernameIndex).toBeGreaterThan(-1);
     expect(platformIconIndex).toBeLessThan(usernameIndex);
-    expect(html).toContain('src="/gui/assets/platform-icons/youtube-icon.png"');
+    expect(html).toContain('src="/gui/assets/platform-icons/youtube-icon.png?v=2"');
   });
 
   it("renders notification badges after username and the platform icon on the avatar", () => {
@@ -158,7 +203,7 @@ describe("GuiRow rendering behavior", () => {
     );
 
     expect(html).toContain('class="gui-row__platform-icon"');
-    expect(html).toContain('src="/gui/assets/platform-icons/youtube-icon.png"');
+    expect(html).toContain('src="/gui/assets/platform-icons/youtube-icon.png?v=2"');
   });
 
   it("does not render platform icon for unknown platform ids", () => {
