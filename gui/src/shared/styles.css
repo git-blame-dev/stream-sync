@@ -40,20 +40,20 @@ html, body {
   --gui-monetization-sheen-cycle-duration: 5s;
   --gui-monetization-avatar-halo-glow: rgba(255, 231, 128, 0.96);
   --gui-monetization-avatar-halo-deep: rgba(217, 135, 0, 0.94);
-  --gui-overlay-avatar-size: 60px;
+  --gui-overlay-avatar-size: 51px;
   --gui-overlay-platform-icon-size: 25.81px;
   --gui-overlay-badge-size: 27px;
   --gui-overlay-row-header-font-size: 20px;
   --gui-overlay-row-body-font-size: 23px;
   --gui-overlay-member-pill-font-size: 11.2px;
-  --gui-overlay-emote-size: 50px;
-  --gui-dock-avatar-size: 48px;
+  --gui-overlay-emote-size: 45px;
+  --gui-dock-avatar-size: 40.8px;
   --gui-dock-platform-icon-size: 22.44px;
   --gui-dock-badge-size: 21px;
   --gui-dock-row-header-font-size: 16px;
   --gui-dock-row-body-font-size: 18px;
   --gui-dock-member-pill-font-size: 8.96px;
-  --gui-dock-emote-size: 36px;
+  --gui-dock-emote-size: 32.4px;
 }
 
 .gui-shell {
@@ -188,6 +188,10 @@ html, body {
   background: rgba(0, 0, 0, var(--gui-row-background-opacity));
 }
 
+.gui-shell--overlay .gui-row {
+  padding-block: 4px;
+}
+
 .gui-row--paypiggy {
   border: 1px solid var(--gui-member-border-color);
   box-shadow:
@@ -314,15 +318,17 @@ html, body {
 .gui-row__copy {
   display: flex;
   flex-direction: column;
+  min-block-size: var(--gui-avatar-size-current);
+  justify-content: space-between;
   gap: var(--gui-row-content-gap);
 }
 
 .gui-row__content--member-chat {
-  display: flow-root;
+  position: relative;
 }
 
 .gui-row__content--member-chat .gui-row__copy {
-  display: block;
+  padding-right: 50px;
 }
 
 .gui-row__content--monetization {
@@ -528,27 +534,26 @@ html, body {
 
 .gui-row__text--member-chat {
   display: block;
-  margin-top: var(--gui-row-content-gap);
+  margin-top: 0;
   overflow-wrap: anywhere;
   word-break: break-word;
 }
 
 .gui-row__member-image-clip {
   width: 120px;
-  height: 110px;
-  float: right;
-  position: relative;
-  right: 40px;
-  margin-left: 10px;
-  margin-right: -80px;
-  margin-top: -40px;
-  margin-bottom: 0;
-  overflow: hidden;
+  height: 120px;
+  position: absolute;
+  top: -40px;
+  right: -40px;
+  margin: 0;
+  overflow: visible;
+  pointer-events: none;
 }
 
 .gui-row__member-image {
-  width: 120px;
-  height: 120px;
+  display: block;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
 }
 
@@ -593,19 +598,19 @@ html, body {
 
 /* Minimal is opt-in on the shell so standard presentation remains untouched. */
 .gui-shell--overlay.gui-shell--minimal {
-  --gui-avatar-size-current: 30px;
+  --gui-avatar-size-current: 25.5px;
   --gui-platform-icon-size-current: 14.84075px;
   --gui-badge-size-current: var(--gui-overlay-badge-size);
 }
 
 .gui-shell--dock.gui-shell--minimal {
-  --gui-avatar-size-current: 24px;
+  --gui-avatar-size-current: 20.4px;
   --gui-platform-icon-size-current: 12.903px;
   --gui-badge-size-current: var(--gui-dock-badge-size);
 }
 
 .gui-shell--notifications.gui-shell--minimal {
-  --gui-avatar-size-current: 30px;
+  --gui-avatar-size-current: 25.5px;
   --gui-platform-icon-size-current: 14.84075px;
   --gui-badge-size-current: var(--gui-overlay-badge-size);
 }
@@ -648,31 +653,15 @@ html, body {
 
 .gui-shell--minimal .gui-row--minimal .gui-row__emote {
   width: auto;
-  height: 1.15em;
+  height: 1.035em;
   vertical-align: text-bottom;
 }
 
 .gui-shell--minimal .gui-row__member-image-clip {
   width: 60px;
   height: 60px;
-  float: none;
-  position: absolute;
   top: -20px;
   right: -8px;
-  margin: 0;
-  overflow: visible;
-  z-index: 1;
-  pointer-events: none;
-}
-
-.gui-shell--minimal .gui-row__member-image {
-  width: 60px;
-  height: 60px;
-}
-
-.gui-shell--minimal .gui-row__content--member-chat {
-  position: relative;
-  min-height: 60px;
 }
 
 .gui-shell--minimal .gui-row__content--member-chat .gui-row__copy {
