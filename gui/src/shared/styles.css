@@ -45,14 +45,14 @@ html, body {
   --gui-overlay-badge-size: 27px;
   --gui-overlay-row-header-font-size: 20px;
   --gui-overlay-row-body-font-size: 23px;
-  --gui-overlay-member-pill-font-size: 11.2px;
+  --gui-overlay-member-pill-font-size: 8.4px;
   --gui-overlay-emote-size: 45px;
   --gui-dock-avatar-size: 40.8px;
   --gui-dock-platform-icon-size: 22.44px;
   --gui-dock-badge-size: 21px;
   --gui-dock-row-header-font-size: 16px;
   --gui-dock-row-body-font-size: 18px;
-  --gui-dock-member-pill-font-size: 8.96px;
+  --gui-dock-member-pill-font-size: 6.72px;
   --gui-dock-emote-size: 32.4px;
 }
 
@@ -390,7 +390,7 @@ html, body {
 }
 
 .gui-row__member-tag {
-  padding: 0 4.5px;
+  padding: 0 3.375px;
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--gui-member-pill-border) 88%, transparent);
   background: linear-gradient(

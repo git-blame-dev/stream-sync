@@ -226,8 +226,8 @@ describe("GUI shared styles behavior", () => {
       "--gui-member-background-gradient-bottom: rgba(44, 197, 114, var(--gui-row-background-opacity));",
     );
     expect(rootBlock).toContain("--gui-member-pill-border: #ffc400;");
-    expect(rootBlock).toContain("--gui-overlay-member-pill-font-size: 11.2px;");
-    expect(rootBlock).toContain("--gui-dock-member-pill-font-size: 8.96px;");
+    expect(rootBlock).toContain("--gui-overlay-member-pill-font-size: 8.4px;");
+    expect(rootBlock).toContain("--gui-dock-member-pill-font-size: 6.72px;");
     expect(rootBlock).toContain("--gui-member-sheen-peak-opacity: 0.46;");
     expect(rootBlock).toContain("--gui-member-sheen-cycle-duration: 5s;");
     expect(rootBlock).toContain("--gui-member-sheen-highlight: var(--gui-member-pill-top);");
@@ -411,7 +411,7 @@ describe("GUI shared styles behavior", () => {
       "font-size: var(--gui-row-header-font-size-current);",
     );
     expect(usernameBlock).toContain("line-height: 1;");
-    expect(memberTagBlock).toContain("padding: 0 4.5px;");
+    expect(memberTagBlock).toContain("padding: 0 3.375px;");
     expect(memberTagBlock).toContain(
       "font-size: var(--gui-member-pill-font-size-current);",
     );
