@@ -209,6 +209,8 @@ html, body {
 }
 
 .gui-row--member-theme-red {
+  position: relative;
+  isolation: isolate;
   --gui-member-background-gradient-top: rgba(86, 0, 10, var(--gui-row-background-opacity));
   --gui-member-background-gradient-mid: rgba(126, 3, 16, var(--gui-row-background-opacity));
   --gui-member-background-gradient-bottom: rgba(164, 10, 28, var(--gui-row-background-opacity));
@@ -220,6 +222,23 @@ html, body {
   --gui-member-sheen-highlight: #d94a56;
   --gui-member-avatar-halo-glow: rgba(255, 104, 118, 0.98);
   --gui-member-avatar-halo-deep: rgba(92, 0, 11, 0.94);
+}
+
+.gui-row--member-theme-red > .gui-row__avatar-wrapper,
+.gui-row--member-theme-red > .gui-row__content {
+  position: relative;
+  z-index: 2;
+}
+
+.gui-row__member-particles {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  pointer-events: none;
 }
 
 .gui-row--monetization {
@@ -436,6 +455,10 @@ html, body {
   animation: gui-member-sheen-sweep var(--gui-member-sheen-cycle-duration) ease-out infinite;
 }
 
+.gui-row--member-theme-red::before {
+  display: none;
+}
+
 @keyframes gui-member-sheen-sweep {
   0% {
     background-position-x: -170%;
@@ -500,6 +523,8 @@ html, body {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .gui-row__member-particles { display: none; }
+
   .gui-row--paypiggy::before {
     animation: none;
     opacity: 0;

@@ -3,6 +3,7 @@ import React from 'react'
 import type { GuiRowDto } from '../types'
 import { getPlatformIconUrl } from '../platform-icon-map'
 import { DEFAULT_GUI_APPEARANCE, selectDisplayableBadges, type GuiAppearance } from '../appearance'
+import { MemberParticleCanvas } from './MemberParticleCanvas'
 
 export const GUI_AVATAR_FALLBACK_URL = '/gui/assets/preview/avatar-fallback.svg'
 const RAYQUAZA_IMAGE_URL = 'https://img.pokemondb.net/sprites/black-white/anim/normal/rayquaza.gif'
@@ -39,6 +40,7 @@ export function GuiRow({ row, mode, className, onAnimationEnd, appearance = DEFA
     : allBadgeImages
   const isPaypiggyChatRow = row.kind === 'chat' && row.isPaypiggy === true
   const isMemberChatRow = isPaypiggyChatRow
+  const hasRedMemberParticles = isMemberChatRow && row.memberTheme === 'red'
   const isMonetizationNotification = row.kind === 'notification' && MONETIZATION_NOTIFICATION_TYPES.has(row.type)
   const badgeSummary = badgeImages.map((badge) => badge.label).filter(Boolean).join(', ')
   const textClass = [
@@ -151,6 +153,11 @@ export function GuiRow({ row, mode, className, onAnimationEnd, appearance = DEFA
 
   return (
     <div className={rowClass} onAnimationEnd={onAnimationEnd} data-row-type={row.type} role="article">
+      {hasRedMemberParticles ? (
+        <MemberParticleCanvas
+          seed={row.eventId || `${row.platform.trim().toLowerCase()}:${row.username}:${row.timestamp || ''}:${row.text}`}
+        />
+      ) : null}
       {renderRowContent()}
     </div>
   )

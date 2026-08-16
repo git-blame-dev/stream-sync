@@ -41,6 +41,27 @@ describe("GUI shared styles behavior", () => {
     expect(cssText).toContain("@media (prefers-reduced-motion: reduce)");
   });
 
+  it("keeps member sheen boundaries and isolates the red particle canvas", () => {
+    const cssText = readSharedStyles();
+    const redSheenBlock = readCssBlock(cssText, ".gui-row--member-theme-red::before");
+    const canvasBlock = readCssBlock(cssText, ".gui-row__member-particles");
+
+    expect(cssText).toContain(".gui-row--paypiggy::before {");
+    expect(cssText).toContain("animation: gui-member-sheen-sweep var(--gui-member-sheen-cycle-duration) ease-out infinite;");
+    expect(redSheenBlock).toContain("display: none;");
+    expect(canvasBlock).toContain("position: absolute;");
+    expect(canvasBlock).toContain("inset: 0;");
+    expect(canvasBlock).toContain("z-index: 1;");
+    expect(canvasBlock).toContain("pointer-events: none;");
+    expect(canvasBlock).toContain("border-radius: inherit;");
+    expect(cssText).toContain(".gui-row--member-theme-red > .gui-row__avatar-wrapper");
+    expect(cssText).toContain(".gui-row--member-theme-red > .gui-row__content");
+    expect(cssText).toContain("z-index: 2;");
+    expect(cssText).toContain(".gui-row__member-particles");
+    expect(cssText).toContain(".gui-row__member-particles { display: none; }");
+    expect(cssText).toContain(".gui-row--monetization::before {");
+  });
+
   it("scopes minimal compact and background-off presentation to the minimal shell", () => {
     const cssText = readSharedStyles();
     expect(cssText).toContain(".gui-shell--minimal .gui-row--minimal.gui-row--compact");

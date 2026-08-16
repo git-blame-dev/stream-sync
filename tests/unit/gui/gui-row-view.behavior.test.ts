@@ -4,6 +4,7 @@ import TestRenderer, { act } from "react-test-renderer";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { GuiRow, GUI_AVATAR_FALLBACK_URL } from "../../../gui/src/shared/components/GuiRow";
+import type { GuiRowDto } from "../../../gui/src/shared/types";
 import { getPlatformIconUrl } from "../../../gui/src/shared/platform-icon-map";
 
 describe("GuiRow rendering behavior", () => {
@@ -582,6 +583,26 @@ describe("GuiRow rendering behavior", () => {
 
     expect(themedHtml).toContain("gui-row--member-theme-red");
     expect(defaultHtml).not.toContain("gui-row--member-theme-red");
+  });
+
+  it("renders particles only for red member rows with an event-stable seed", () => {
+    const row = (overrides: Partial<GuiRowDto> = {}, redTheme = true): GuiRowDto => ({
+      type: "chat", kind: "chat", platform: "youtube",
+      username: "fixture-member-particles", text: "test-only member row",
+      isPaypiggy: true, ...(redTheme ? { memberTheme: "red" as const } : {}), avatarUrl: "fixture-avatar", timestamp: null,
+      ...overrides,
+    });
+    const redHtml = renderToStaticMarkup(React.createElement(GuiRow, { mode: "dock", row: row() }));
+    const defaultHtml = renderToStaticMarkup(React.createElement(GuiRow, { mode: "dock", row: row({}, false) }));
+    const nonMemberHtml = renderToStaticMarkup(React.createElement(GuiRow, { mode: "dock", row: row({ isPaypiggy: false }, false) }));
+
+    expect(redHtml).toContain("gui-row--paypiggy");
+    expect(redHtml).toContain("gui-row--member-theme-red");
+    expect(redHtml).toMatch(/<canvas[^>]*class="gui-row__member-particles"[^>]*aria-hidden="true"/);
+    expect(redHtml).toMatch(/data-member-particles-seed="[^"]+"/);
+    expect(defaultHtml).toContain("gui-row--paypiggy");
+    expect(defaultHtml).not.toContain("gui-row__member-particles");
+    expect(nonMemberHtml).not.toContain("gui-row__member-particles");
   });
 
   it("renders Rayquaza image for trimmed mixed-case YouTube member rows", () => {
