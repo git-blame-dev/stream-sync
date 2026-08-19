@@ -3,6 +3,12 @@ import { createEventBus } from './core/EventBus';
 import { buildLoggingConfig } from './core/config-builders';
 import { PRIORITY_LEVELS, NOTIFICATION_CONFIGS } from './core/constants';
 import { config as defaultConfig, loadConfig } from './core/config';
+import {
+    normalizeRowEffects,
+    normalizeRowTheme,
+    type RowTheme,
+    type RowVisualEffectId
+} from './core/row-presentation';
 import { getOperatorLogSource, getUnifiedLogger, initializeLoggingConfig, setDebugMode } from './core/logging';
 import { InnertubeFactory } from './factories/innertube-factory';
 import NotificationManagerModule from './notifications/NotificationManager';
@@ -193,6 +199,8 @@ type MainConfig = Record<string, Record<string, unknown>> & BuiltConfig & {
         minimalRowBackgroundsEnabled?: boolean;
         minimalMaxDisplayableBadges?: number;
         streamSupporterChatEffectsEnabled?: boolean;
+        memberRowTheme?: RowTheme;
+        memberRowEffects?: readonly RowVisualEffectId[];
         showGifts?: boolean;
         notificationIdleHoldMs?: number;
         monetizationIdleHoldMs?: number;
@@ -221,7 +229,9 @@ function buildOperatorAppearanceDefaults(config: MainConfig): OperatorAppearance
             && gui.minimalMaxDisplayableBadges >= 0
             ? gui.minimalMaxDisplayableBadges
             : 3,
-        streamSupporterChatEffectsEnabled: gui?.streamSupporterChatEffectsEnabled !== false
+        streamSupporterChatEffectsEnabled: gui?.streamSupporterChatEffectsEnabled !== false,
+        memberRowTheme: normalizeRowTheme(gui?.memberRowTheme) ?? 'green',
+        memberRowEffects: normalizeRowEffects(gui?.memberRowEffects) ?? ['sheen']
     };
 }
 

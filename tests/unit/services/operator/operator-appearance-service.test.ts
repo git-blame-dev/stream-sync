@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createOperatorAppearanceService } from "../../../../src/services/operator/operator-appearance-service";
 
-const defaults = { compactRows: false, rowBackgroundsEnabled: true, maxDisplayableBadges: 0, streamSupporterChatEffectsEnabled: true };
+const defaults = { compactRows: false, rowBackgroundsEnabled: true, maxDisplayableBadges: 0, streamSupporterChatEffectsEnabled: true, memberRowTheme: "green" as const, memberRowEffects: ["sheen"] as const };
 
 function memoryFs(initial?: string) {
   let value = initial;
@@ -44,6 +44,48 @@ describe("operator appearance", () => {
     await service.set("streamSupporterChatEffectsEnabled", false);
     expect(service.snapshot.settings.streamSupporterChatEffectsEnabled).toBe(false);
     expect(service.snapshot.overriddenKeys).toContain("streamSupporterChatEffectsEnabled");
+  });
+
+  test("normalizes and persists ordered member appearance", async () => {
+    const service = await createOperatorAppearanceService({ defaults, filePath: "/tmp/operator-appearance.json", fs: memoryFs() });
+    await service.set("memberRowTheme", "red");
+    await service.set("memberRowEffects", ["particles"]);
+    expect(service.snapshot.settings.memberRowTheme).toBe("red");
+    expect(service.snapshot.settings.memberRowEffects).toEqual(["particles"]);
+    expect(service.snapshot.overriddenKeys).toEqual(["memberRowTheme", "memberRowEffects"]);
+    await expect(service.set("memberRowTheme", "blue" as never)).rejects.toThrow();
+    await expect(service.set("memberRowEffects", ["sheen", "sheen"] as never)).rejects.toThrow();
+  });
+
+  test("compares effect defaults by value and owns persisted arrays", async () => {
+    const service = await createOperatorAppearanceService({ defaults, filePath: "/tmp/operator-appearance.json", fs: memoryFs(JSON.stringify({ memberRowEffects: ["sheen"] })) });
+    expect(service.snapshot.overriddenKeys).toEqual([]);
+
+    const effects: ("sheen" | "particles")[] = ["particles"];
+    await service.set("memberRowEffects", effects);
+    effects[0] = "sheen";
+    expect(service.snapshot.settings.memberRowEffects).toEqual(["particles"]);
+
+    await service.set("memberRowEffects", ["sheen"]);
+    expect(service.snapshot.overriddenKeys).toEqual([]);
+  });
+
+  test("reloads persisted member appearance in configured order", async () => {
+    const fs = memoryFs();
+    const first = await createOperatorAppearanceService({ defaults, filePath: "/tmp/operator-appearance.json", fs });
+    await first.set("memberRowTheme", "gold");
+    await first.set("memberRowEffects", ["particles", "sheen"]);
+
+    const reloaded = await createOperatorAppearanceService({ defaults, filePath: "/tmp/operator-appearance.json", fs });
+    expect(reloaded.snapshot.settings.memberRowTheme).toBe("gold");
+    expect(reloaded.snapshot.settings.memberRowEffects).toEqual(["particles", "sheen"]);
+    expect(reloaded.snapshot.overriddenKeys).toEqual(["memberRowTheme", "memberRowEffects"]);
+  });
+
+  test("merges missing member fields from current config defaults", async () => {
+    const service = await createOperatorAppearanceService({ defaults, filePath: "/tmp/operator-appearance.json", fs: memoryFs(JSON.stringify({ compactRows: true })) });
+    expect(service.snapshot.settings.memberRowTheme).toBe("green");
+    expect(service.snapshot.settings.memberRowEffects).toEqual(["sheen"]);
   });
 
   test("malformed state falls back and reset persists defaults", async () => {

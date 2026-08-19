@@ -1,3 +1,10 @@
+import {
+  isRowTheme,
+  isRowVisualEffectId,
+  type RowTheme,
+  type RowVisualEffectId,
+} from '../../../src/core/row-presentation'
+
 export type Control = {
   key: string
   label: string
@@ -6,7 +13,15 @@ export type Control = {
 }
 
 export type OperatorState = { revision: number; controls: Control[] }
-export type AppearanceSettings = { compactRows: boolean; rowBackgroundsEnabled: boolean; maxDisplayableBadges: number; streamSupporterChatEffectsEnabled: boolean }
+export type AppearanceSettings = {
+  compactRows: boolean
+  rowBackgroundsEnabled: boolean
+  maxDisplayableBadges: number
+  streamSupporterChatEffectsEnabled: boolean
+  memberRowTheme: RowTheme
+  memberRowEffects: readonly RowVisualEffectId[]
+}
+export type AppearanceValue = AppearanceSettings[keyof AppearanceSettings]
 export type AppearanceState = { revision: number; settings: AppearanceSettings; overriddenKeys: string[] }
 export type LogEntry = { id: number; timestamp: string; level: string; message: string; source: string; data?: unknown }
 export const CONTROL_KEYS = [
@@ -22,7 +37,7 @@ export const CONTROL_KEYS = [
 ] as const
 export const LOG_LEVELS = ['debug', 'info', 'console', 'warn', 'error', 'emergency'] as const
 export const MAX_LOG_ROWS = 200
-export const APPEARANCE_KEYS = ['compactRows', 'rowBackgroundsEnabled', 'maxDisplayableBadges', 'streamSupporterChatEffectsEnabled'] as const
+export const APPEARANCE_KEYS = ['compactRows', 'rowBackgroundsEnabled', 'maxDisplayableBadges', 'streamSupporterChatEffectsEnabled', 'memberRowTheme', 'memberRowEffects'] as const
 
 const controlKeys = new Set<string>(CONTROL_KEYS)
 const logLevels = new Set<string>(LOG_LEVELS)
@@ -64,12 +79,19 @@ export function parseAppearanceState(value: unknown): AppearanceState | null {
   const rowBackgroundsEnabled = item.rowBackgroundsEnabled
   const maxDisplayableBadges = item.maxDisplayableBadges
   const streamSupporterChatEffectsEnabled = item.streamSupporterChatEffectsEnabled
+  const memberRowTheme = item.memberRowTheme
+  const memberRowEffects = item.memberRowEffects
   const isValid = typeof compactRows === 'boolean'
     && typeof rowBackgroundsEnabled === 'boolean'
     && typeof maxDisplayableBadges === 'number'
     && Number.isSafeInteger(maxDisplayableBadges)
     && maxDisplayableBadges >= 0
     && typeof streamSupporterChatEffectsEnabled === 'boolean'
+    && isRowTheme(memberRowTheme)
+    && Array.isArray(memberRowEffects)
+    && memberRowEffects.length <= 2
+    && new Set(memberRowEffects).size === memberRowEffects.length
+    && memberRowEffects.every(isRowVisualEffectId)
     && candidate.overriddenKeys.every((key) => typeof key === 'string' && appearanceKeys.has(key))
     && new Set(candidate.overriddenKeys).size === candidate.overriddenKeys.length
   if (!isValid || typeof compactRows !== 'boolean' || typeof rowBackgroundsEnabled !== 'boolean' || typeof maxDisplayableBadges !== 'number') return null
@@ -80,6 +102,8 @@ export function parseAppearanceState(value: unknown): AppearanceState | null {
       rowBackgroundsEnabled,
       maxDisplayableBadges,
       streamSupporterChatEffectsEnabled,
+      memberRowTheme,
+      memberRowEffects: [...memberRowEffects] as RowVisualEffectId[],
     },
     overriddenKeys: [...candidate.overriddenKeys],
   }

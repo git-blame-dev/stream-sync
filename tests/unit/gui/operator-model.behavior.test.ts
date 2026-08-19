@@ -52,7 +52,7 @@ describe('operator model behavior', () => {
   })
 
   test('strictly parses appearance and selects revisions independently', () => {
-    const current = { revision: 3, settings: { compactRows: false, rowBackgroundsEnabled: true, maxDisplayableBadges: 2, streamSupporterChatEffectsEnabled: true }, overriddenKeys: [] }
+    const current = { revision: 3, settings: { compactRows: false, rowBackgroundsEnabled: true, maxDisplayableBadges: 2, streamSupporterChatEffectsEnabled: true, memberRowTheme: 'green' as const, memberRowEffects: ['sheen'] as const }, overriddenKeys: [] }
     const older = { ...current, revision: 2 }
     const newer = { ...current, revision: 4, settings: { ...current.settings, maxDisplayableBadges: 0 }, overriddenKeys: ['maxDisplayableBadges'] }
     expect(parseAppearanceState(newer)).toEqual(newer)
@@ -63,7 +63,7 @@ describe('operator model behavior', () => {
 
   test('parses transport appearance events for either profile', async () => {
     const { parseGuiAppearanceEvent } = await import('../../../gui/src/shared/appearance')
-    const settings = { compactRows: false, rowBackgroundsEnabled: true, maxDisplayableBadges: 3, streamSupporterChatEffectsEnabled: false }
+    const settings = { compactRows: false, rowBackgroundsEnabled: true, maxDisplayableBadges: 3, streamSupporterChatEffectsEnabled: false, memberRowTheme: 'green', memberRowEffects: ['sheen'] } as const
     expect(parseGuiAppearanceEvent({ __guiEvent: 'appearance', profile: 'standard', revision: 2, settings })).toEqual({ profile: 'standard', revision: 2, settings })
     expect(parseGuiAppearanceEvent({ __guiEvent: 'appearance', profile: 'minimal', revision: 2, settings })?.profile).toBe('minimal')
   })

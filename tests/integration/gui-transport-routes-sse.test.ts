@@ -135,6 +135,8 @@ describe("GUI transport routes and SSE integration", () => {
           compactRows: true,
           rowBackgroundsEnabled: false,
           maxDisplayableBadges: 3,
+          memberRowTheme: "green",
+          memberRowEffects: ["sheen"],
         },
       });
     } finally {
@@ -146,7 +148,13 @@ describe("GUI transport routes and SSE integration", () => {
   it("broadcasts persisted appearance revisions to connected GUI clients", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "gui-appearance-"));
     const appearance = await createOperatorAppearanceService({
-      defaults: { compactRows: true, rowBackgroundsEnabled: false, maxDisplayableBadges: 1 },
+      defaults: {
+        compactRows: true,
+        rowBackgroundsEnabled: false,
+        maxDisplayableBadges: 1,
+        memberRowTheme: "green",
+        memberRowEffects: ["sheen"],
+      },
       filePath: path.join(root, "appearance.json"),
     });
     const service = createGuiTransportService({
@@ -163,10 +171,16 @@ describe("GUI transport routes and SSE integration", () => {
       const reader = createSseReader(response);
       expect((await reader.readAppearance()).revision).toBe(0);
 
-      await appearance.set("maxDisplayableBadges", 0);
+      await appearance.set("memberRowTheme", "red");
       expect(await reader.readAppearance()).toMatchObject({
         revision: 1,
-        settings: { maxDisplayableBadges: 0 },
+        settings: { memberRowTheme: "red", memberRowEffects: ["sheen"] },
+      });
+
+      await appearance.set("memberRowEffects", ["particles", "sheen"]);
+      expect(await reader.readAppearance()).toMatchObject({
+        revision: 2,
+        settings: { memberRowTheme: "red", memberRowEffects: ["particles", "sheen"] },
       });
     } finally {
       controller.abort();

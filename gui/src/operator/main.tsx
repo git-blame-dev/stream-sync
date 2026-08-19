@@ -14,6 +14,7 @@ import {
   type OperatorState,
   selectNewestAppearance,
   type AppearanceState,
+  type AppearanceValue,
 } from './model'
 import './operator.css'
 
@@ -176,7 +177,7 @@ function OperatorApp() {
     setPending(null)
   }
 
-  async function changeAppearance(key: keyof AppearanceState['settings'], value: boolean | number) {
+  async function changeAppearance(key: keyof AppearanceState['settings'], value: AppearanceValue) {
     setPending(`appearance:${key}`)
     setError('')
     try {
@@ -271,7 +272,7 @@ function OperatorApp() {
                 <h2 id="appearance-title">Appearance</h2>
               </div>
               <button className="quiet" onClick={() => void resetAppearance()} disabled={pending !== null}>
-                Reset appearance
+                Restore config defaults
               </button>
             </div>
             <label className="control">
@@ -287,6 +288,41 @@ function OperatorApp() {
               />
               <span className="switch-track" aria-hidden="true" />
             </label>
+            <label className="appearance-number">
+              <span>
+                <strong>Member theme</strong>
+                {appearance?.overriddenKeys.includes('memberRowTheme') && <em>Persisted override</em>}
+              </span>
+              <select
+                value={appearance?.settings.memberRowTheme ?? 'green'}
+                disabled={!appearance || pending !== null}
+                onChange={(event) => void changeAppearance('memberRowTheme', event.target.value as 'green' | 'red' | 'gold')}
+              >
+                <option value="green">Green</option>
+                <option value="red">Red</option>
+                <option value="gold">Gold</option>
+              </select>
+            </label>
+            {(['sheen', 'particles'] as const).map((effect) => (
+              <label className="control" key={effect}>
+                <span>
+                  <strong>Member {effect}</strong>
+                  {appearance?.overriddenKeys.includes('memberRowEffects') && <em>Persisted override</em>}
+                </span>
+                <input
+                  type="checkbox"
+                  checked={appearance?.settings.memberRowEffects.includes(effect) ?? false}
+                  disabled={!appearance || pending !== null}
+                  onChange={(event) => {
+                    if (!appearance) return
+                    const effects = appearance.settings.memberRowEffects.filter((item) => item !== effect)
+                    if (event.target.checked) effects.push(effect)
+                    void changeAppearance('memberRowEffects', effects)
+                  }}
+                />
+                <span className="switch-track" aria-hidden="true" />
+              </label>
+            ))}
             <label className="control">
               <span>
                 <strong>Stream supporter chat effects</strong>

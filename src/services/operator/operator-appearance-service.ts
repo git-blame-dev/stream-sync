@@ -1,11 +1,19 @@
 import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
+import {
+    isRowTheme,
+    isRowVisualEffectId,
+    type RowTheme,
+    type RowVisualEffectId
+} from '../../core/row-presentation';
 
 const OPERATOR_APPEARANCE_KEYS = [
     'compactRows',
     'rowBackgroundsEnabled',
     'maxDisplayableBadges',
-    'streamSupporterChatEffectsEnabled'
+    'streamSupporterChatEffectsEnabled',
+    'memberRowTheme',
+    'memberRowEffects'
 ] as const;
 const operatorAppearanceKeys = new Set<string>(OPERATOR_APPEARANCE_KEYS);
 
@@ -14,7 +22,9 @@ type OperatorAppearanceSettings = Readonly<{
     compactRows: boolean;
     rowBackgroundsEnabled: boolean;
     maxDisplayableBadges: number;
-    streamSupporterChatEffectsEnabled?: boolean;
+    streamSupporterChatEffectsEnabled: boolean;
+    memberRowTheme: RowTheme;
+    memberRowEffects: readonly RowVisualEffectId[];
 }>;
 type OperatorAppearanceSnapshot = Readonly<{
     revision: number;
@@ -29,7 +39,8 @@ type FileSystem = {
     unlink: (path: string) => Promise<void>;
 };
 type OperatorAppearanceOptions = {
-    defaults: OperatorAppearanceSettings;
+    defaults: Omit<OperatorAppearanceSettings, 'streamSupporterChatEffectsEnabled' | 'memberRowTheme' | 'memberRowEffects'>
+        & Partial<Pick<OperatorAppearanceSettings, 'streamSupporterChatEffectsEnabled' | 'memberRowTheme' | 'memberRowEffects'>>;
     filePath?: string;
     fs?: FileSystem;
     warn?: (message: string) => void;
@@ -52,9 +63,24 @@ function assertAppearanceValue(key: OperatorAppearanceKey, value: unknown): void
         }
         return;
     }
+    if (key === 'memberRowTheme') {
+        if (!isRowTheme(value)) throw new TypeError('memberRowTheme must be green, red, or gold');
+        return;
+    }
+    if (key === 'memberRowEffects') {
+        if (!Array.isArray(value) || value.length > 2 || new Set(value).size !== value.length || value.some((effect) => !isRowVisualEffectId(effect))) {
+            throw new TypeError('memberRowEffects must contain unique known effects');
+        }
+        return;
+    }
     if (typeof value !== 'boolean') {
         throw new TypeError(`${key} must be a boolean`);
     }
+}
+
+function sameEffects(left: unknown, right: unknown): boolean {
+    return Array.isArray(left) && Array.isArray(right)
+        && left.length === right.length && left.every((effect, index) => effect === right[index]);
 }
 
 class OperatorAppearanceService {
@@ -62,7 +88,7 @@ class OperatorAppearanceService {
     private readonly filePath: string;
     private readonly fs: FileSystem;
     private readonly warn: (message: string) => void;
-    private overrides = new Map<OperatorAppearanceKey, boolean | number>();
+    private overrides = new Map<OperatorAppearanceKey, boolean | number | RowTheme | readonly RowVisualEffectId[]>();
     private values: OperatorAppearanceSettings;
     private listeners = new Set<(snapshot: OperatorAppearanceSnapshot) => void>();
     private currentRevision = 0;
@@ -70,7 +96,12 @@ class OperatorAppearanceService {
     private operation: Promise<void> = Promise.resolve();
 
     private constructor(options: OperatorAppearanceOptions) {
-        this.defaults = { ...options.defaults };
+        this.defaults = {
+            ...options.defaults,
+            streamSupporterChatEffectsEnabled: options.defaults.streamSupporterChatEffectsEnabled ?? true,
+            memberRowTheme: options.defaults.memberRowTheme ?? 'green',
+            memberRowEffects: [...options.defaults.memberRowEffects ?? ['sheen']]
+        };
         this.values = { ...this.defaults };
         this.filePath = options.filePath ?? './data/operator-appearance-overrides.json';
         this.fs = options.fs ?? { readFile, mkdir, writeFile, rename, unlink };
@@ -84,7 +115,7 @@ class OperatorAppearanceService {
     }
 
     get settings(): OperatorAppearanceSettings {
-        return { ...this.values };
+        return { ...this.values, memberRowEffects: [...this.values.memberRowEffects] };
     }
 
     get overriddenKeys(): OperatorAppearanceKey[] {
@@ -104,15 +135,15 @@ class OperatorAppearanceService {
         return () => this.listeners.delete(listener);
     }
 
-    async set(key: OperatorAppearanceKey, value: boolean | number): Promise<void> {
+    async set(key: OperatorAppearanceKey, value: boolean | number | RowTheme | readonly RowVisualEffectId[]): Promise<void> {
         assertAppearanceKey(key);
         assertAppearanceValue(key, value);
         return this.enqueue(async () => {
             const next = new Map(this.overrides);
-            if (value === this.defaults[key]) {
+            if (key === 'memberRowEffects' ? sameEffects(value, this.defaults.memberRowEffects) : value === this.defaults[key]) {
                 next.delete(key);
             } else {
-                next.set(key, value);
+                next.set(key, key === 'memberRowEffects' ? [...value as readonly RowVisualEffectId[]] : value);
             }
             await this.persist(next);
             this.overrides = next;
@@ -123,7 +154,7 @@ class OperatorAppearanceService {
 
     async reset(): Promise<void> {
         return this.enqueue(async () => {
-            const next = new Map<OperatorAppearanceKey, boolean | number>();
+            const next = new Map<OperatorAppearanceKey, boolean | number | RowTheme | readonly RowVisualEffectId[]>();
             await this.persist(next);
             this.overrides = next;
             this.values = { ...this.defaults };
@@ -147,11 +178,18 @@ class OperatorAppearanceService {
             if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
                 throw new TypeError('Expected an object');
             }
-            const next = new Map<OperatorAppearanceKey, boolean | number>();
+            const next = new Map<OperatorAppearanceKey, boolean | number | RowTheme | readonly RowVisualEffectId[]>();
             for (const [key, value] of Object.entries(parsed)) {
                 assertAppearanceKey(key);
                 assertAppearanceValue(key, value);
-                if (value !== this.defaults[key]) next.set(key, value as boolean | number);
+                const matchesDefault = key === 'memberRowEffects'
+                    ? sameEffects(value, this.defaults.memberRowEffects)
+                    : value === this.defaults[key];
+                if (!matchesDefault) {
+                    next.set(key, key === 'memberRowEffects'
+                        ? [...value as readonly RowVisualEffectId[]]
+                        : value as boolean | number | RowTheme);
+                }
             }
             this.overrides = next;
             this.values = this.withOverrides(next);
@@ -160,16 +198,18 @@ class OperatorAppearanceService {
         }
     }
 
-    private withOverrides(overrides: Map<OperatorAppearanceKey, boolean | number>): OperatorAppearanceSettings {
+    private withOverrides(overrides: Map<OperatorAppearanceKey, boolean | number | RowTheme | readonly RowVisualEffectId[]>): OperatorAppearanceSettings {
         const values = { ...this.defaults };
         for (const [key, value] of overrides) {
             if (key === 'maxDisplayableBadges') values.maxDisplayableBadges = value as number;
+            else if (key === 'memberRowTheme') values.memberRowTheme = value as RowTheme;
+            else if (key === 'memberRowEffects') values.memberRowEffects = [...value as readonly RowVisualEffectId[]];
             else values[key] = value as boolean;
         }
         return values;
     }
 
-    private async persist(overrides: Map<OperatorAppearanceKey, boolean | number>): Promise<void> {
+    private async persist(overrides: Map<OperatorAppearanceKey, boolean | number | RowTheme | readonly RowVisualEffectId[]>): Promise<void> {
         const tempPath = `${this.filePath}.tmp-${process.pid}-${++this.tempSequence}`;
         try {
             await this.fs.mkdir(dirname(this.filePath), { recursive: true, mode: 0o700 });
@@ -196,9 +236,11 @@ class OperatorAppearanceService {
     }
 
     private createSnapshot(): OperatorAppearanceSnapshot {
+        const settings = this.settings;
+        Object.freeze(settings.memberRowEffects);
         return Object.freeze({
             revision: this.revision,
-            settings: Object.freeze(this.settings),
+            settings: Object.freeze(settings),
             overriddenKeys: Object.freeze(this.overriddenKeys)
         });
     }
