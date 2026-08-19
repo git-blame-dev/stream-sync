@@ -333,7 +333,7 @@ function OperatorApp() {
                 </button>
               </div>
               <p role="status" aria-live="polite">
-                {fundingGoal.completed ? 'Goal complete' : 'Goal in progress'}
+                {fundingDisplay?.isComplete ? 'Goal complete' : 'Goal in progress'}
                 {fundingDisplay?.isOverTarget ? ' · Over goal' : ''}
               </p>
             </section>

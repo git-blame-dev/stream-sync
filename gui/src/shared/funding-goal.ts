@@ -15,6 +15,7 @@ export interface FundingGoalDisplayState {
   progressRatio: number
   progressValue: number
   progressValueText: string
+  isComplete: boolean
   isOverTarget: boolean
 }
 
@@ -53,12 +54,14 @@ export function deriveFundingGoalDisplayState(goal: FundingGoalSnapshot): Fundin
   const progressValue = Math.min(goal.currentUsd, goal.targetUsd)
   const currentText = formatFundingUsd(goal.currentUsd)
   const targetText = formatFundingUsd(goal.targetUsd)
+  const isComplete = goal.currentUsd >= goal.targetUsd
   return {
     currentText,
     targetText,
     progressRatio: progressValue / goal.targetUsd,
     progressValue,
-    progressValueText: `${currentText} of ${targetText}${goal.completed ? ', goal reached' : ''}`,
+    progressValueText: `${currentText} of ${targetText}${isComplete ? ', goal reached' : ''}`,
+    isComplete,
     isOverTarget: goal.currentUsd > goal.targetUsd,
   }
 }

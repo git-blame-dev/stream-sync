@@ -12,7 +12,6 @@ export function FundingGoal({ goal, profile = 'standard' }: FundingGoalProps) {
     return null
   }
   const display = deriveFundingGoalDisplayState(goal)
-  const funded = goal.currentUsd >= goal.targetUsd
   const emojiLabel = /^(\p{Extended_Pictographic}(?:\p{Emoji_Modifier})?(?:\uFE0E|\uFE0F)?(?:\u200D\p{Extended_Pictographic}(?:\p{Emoji_Modifier})?(?:\uFE0E|\uFE0F)?)*)(?:\s+)?(.*)$/u.exec(goal.label)
   const label = (
     <span className="funding-goal__label" aria-label={goal.label}>
@@ -39,7 +38,7 @@ export function FundingGoal({ goal, profile = 'standard' }: FundingGoalProps) {
         <>
           <div className="funding-goal__summary">
             <span className="funding-goal__label-group">
-              <span className="funding-goal__badge">{funded ? 'FUNDED' : 'GOAL'}</span>
+              <span className="funding-goal__badge">{display.isComplete ? 'FUNDED' : 'GOAL'}</span>
               {label}
             </span>
             <span className="funding-goal__amount">{display.currentText} / {display.targetText}</span>
@@ -53,13 +52,13 @@ export function FundingGoal({ goal, profile = 'standard' }: FundingGoalProps) {
             {rail}
           </div>
           <span className="funding-goal__raised-copy">
-            {funded ? (
+            {display.isComplete ? (
               <span className="funding-goal__raised-status">FUNDED</span>
             ) : (
               <span className="funding-goal__raised-value">{display.currentText} raised</span>
             )}
             <span className="funding-goal__raised-caption">
-              {funded ? `${display.currentText} raised` : `of ${display.targetText} goal`}
+              {display.isComplete ? `${display.currentText} raised` : `of ${display.targetText} goal`}
             </span>
           </span>
         </div>

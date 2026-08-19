@@ -61,6 +61,7 @@ describe("FundingGoal", () => {
     });
 
     expect(renderer?.root.findByProps({ className: "funding-goal__raised-status" }).children.join("")).toBe("FUNDED");
+    expect(renderer?.root.findByProps({ role: "progressbar" }).props["aria-valuetext"]).toBe("$100.00 of $100.00, goal reached");
   });
 
   test("renders the minimal goal badge with compact amount copy", () => {
