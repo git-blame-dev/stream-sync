@@ -1,5 +1,6 @@
-import type { GuiBadgeImage, GuiMemberTheme, GuiMessagePart, GuiRowDto, GuiRowKind } from '../../../gui/src/shared/types';
+import type { GuiBadgeImage, GuiMessagePart, GuiRowDto, GuiRowKind, RowPresentationOverride } from '../../../gui/src/shared/types';
 import { DEFAULT_AVATAR_URL } from '../../constants/avatar';
+import { normalizeRowEffects, normalizeRowSpriteUrl, normalizeRowTheme } from '../../core/row-presentation';
 import { getValidMessageParts, normalizeBadgeImages } from '../../utils/message-parts';
 
 type MapperRecord = Record<string, unknown>;
@@ -24,6 +25,7 @@ type GuiMapperConfig = {
 type EventRule = {
     kind: GuiRowKind;
     toggleKey: GuiToggleKey;
+    presentationRole?: 'monetization';
 };
 
 type MapperOptions = {
@@ -70,10 +72,10 @@ const EVENT_RULES: Record<string, EventRule> = {
     'platform:follow': { kind: 'notification', toggleKey: 'showFollows' },
     'platform:share': { kind: 'notification', toggleKey: 'showShares' },
     'platform:raid': { kind: 'notification', toggleKey: 'showRaids' },
-    'platform:gift': { kind: 'notification', toggleKey: 'showGifts' },
-    'platform:paypiggy': { kind: 'notification', toggleKey: 'showPaypiggies' },
-    'platform:giftpaypiggy': { kind: 'notification', toggleKey: 'showGiftPaypiggies' },
-    'platform:envelope': { kind: 'notification', toggleKey: 'showEnvelopes' }
+    'platform:gift': { kind: 'notification', toggleKey: 'showGifts', presentationRole: 'monetization' },
+    'platform:paypiggy': { kind: 'notification', toggleKey: 'showPaypiggies', presentationRole: 'monetization' },
+    'platform:giftpaypiggy': { kind: 'notification', toggleKey: 'showGiftPaypiggies', presentationRole: 'monetization' },
+    'platform:envelope': { kind: 'notification', toggleKey: 'showEnvelopes', presentationRole: 'monetization' }
 };
 
 function toRecord(value: unknown): MapperRecord {
@@ -84,20 +86,22 @@ function normalizeString(value: unknown): string {
     return typeof value === 'string' ? value.trim() : '';
 }
 
-function normalizeMemberSpriteUrl(value: unknown): string | undefined {
-    const candidate = normalizeString(value);
-    if (!candidate || candidate.length > 2048) return undefined;
-    try {
-        const url = new URL(candidate);
-        if (url.protocol !== 'https:' || url.username || url.password || url.hash) return undefined;
-        return candidate;
-    } catch {
-        return undefined;
-    }
+function normalizePresentationOverride(value: unknown): RowPresentationOverride | undefined {
+    if (!value || typeof value !== 'object') return undefined;
+    const candidate = value as MapperRecord;
+    const theme = normalizeRowTheme(candidate.theme);
+    const effects = normalizeRowEffects(candidate.effects);
+    const spriteUrl = normalizeRowSpriteUrl(candidate.spriteUrl);
+    if (!theme && !effects && !spriteUrl) return undefined;
+    return { ...(theme ? { theme } : {}), ...(effects ? { effects } : {}), ...(spriteUrl ? { spriteUrl } : {}) };
 }
 
-function normalizeMemberTheme(value: unknown): GuiMemberTheme | undefined {
-    return normalizeString(value).toLowerCase() === 'red' ? 'red' : undefined;
+function resolvePresentationRole(rule: EventRule, data: MapperRecord): NonNullable<GuiRowDto['presentationRole']> {
+    if (rule.kind === 'chat') {
+        if (data.isPaypiggy === true) return 'member';
+        if (data.isStreamSupporter === true) return 'supporter';
+    }
+    return rule.presentationRole ?? 'ordinary';
 }
 
 function toFiniteNumber(value: unknown, fallback: number): number {
@@ -279,6 +283,7 @@ return cachedAvatar;
         const badgeImages = normalizeBadgeImages(data.badgeImages) as GuiBadgeImage[];
         const avatarUrl = await resolveAvatarUrl({ platform, data });
 
+        const presentationRole = resolvePresentationRole(rule, data);
         const mapped: GuiRowDto = {
             ...(eventId ? { eventId } : {}),
             type,
@@ -286,6 +291,7 @@ return cachedAvatar;
             platform,
             username,
             text,
+            presentationRole,
             avatarUrl,
             timestamp: normalizeTimestamp(data.timestamp || row.timestamp)
         };
@@ -293,14 +299,10 @@ return cachedAvatar;
         if (rule.kind === 'chat') {
             mapped.isPaypiggy = data.isPaypiggy === true;
             mapped.isStreamSupporter = data.isStreamSupporter === true;
-            const memberSpriteUrl = mapped.isPaypiggy
-                ? normalizeMemberSpriteUrl(data.memberSpriteUrl)
+            const override = presentationRole === 'member'
+                ? normalizePresentationOverride(data.presentationOverride)
                 : undefined;
-            if (memberSpriteUrl) mapped.memberSpriteUrl = memberSpriteUrl;
-            const memberTheme = mapped.isPaypiggy
-                ? normalizeMemberTheme(data.memberTheme)
-                : undefined;
-            if (memberTheme) mapped.memberTheme = memberTheme;
+            if (override) mapped.presentationOverride = override;
             if (badgeImages.length > 0) {
                 mapped.badgeImages = badgeImages;
             }

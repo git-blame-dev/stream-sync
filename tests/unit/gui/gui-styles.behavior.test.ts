@@ -21,6 +21,32 @@ function readCssBlock(cssText: string, selector: string): string {
 }
 
 describe("GUI shared styles behavior", () => {
+  it("keeps theme contracts aligned and background-off policy explicit", () => {
+    const cssText = readSharedStyles();
+    const slots = [
+      "background-top", "background-mid", "background-bottom", "border",
+      "inner-highlight", "glow-ring", "glow-soft", "glow-deep", "sheen-edge",
+      "sheen-peak", "sheen-opacity", "avatar-halo", "avatar-deep",
+      "avatar-ring-strength", "avatar-soft-strength", "avatar-deep-strength",
+    ];
+    for (const theme of ["green", "red", "gold"]) {
+      const block = readCssBlock(cssText, `.gui-row--theme-${theme}`);
+      const definedSlots = [...block.matchAll(/--gui-row-theme-([\w-]+):/g)].map((match) => match[1]);
+      expect(definedSlots).toEqual(slots);
+    }
+    expect(readCssBlock(cssText, ".gui-row--theme-green"))
+      .toContain("--gui-row-theme-avatar-ring-strength: 78%;");
+    expect(readCssBlock(cssText, ".gui-row--theme-gold"))
+      .toContain("--gui-row-theme-avatar-ring-strength: 80%;");
+    expect(cssText).not.toContain("background-off::before");
+    expect(readCssBlock(cssText, ".gui-shell--minimal .gui-row--minimal.gui-row--background-off"))
+      .toContain("background: transparent;");
+    expect(readCssBlock(cssText, ".gui-shell--minimal .gui-row--minimal.gui-row--background-off .gui-row__effect--sheen"))
+      .toContain("display: none;");
+    expect(cssText).not.toContain("background-off .gui-row__member-particles");
+    expect(cssText).not.toMatch(/gui-member-pill|gui-monetization-(background|border|inner|glow|sheen|avatar)/);
+  });
+
   it("reuses canonical overlay presentation in the serialized top notification slot", () => {
     const cssText = readSharedStyles();
     const notificationShellBlock = readCssBlock(cssText, ".gui-shell--notifications");
@@ -41,25 +67,30 @@ describe("GUI shared styles behavior", () => {
     expect(cssText).toContain("@media (prefers-reduced-motion: reduce)");
   });
 
-  it("keeps member sheen boundaries and isolates the red particle canvas", () => {
+  it("uses generic decorated effects and isolates the member particle canvas", () => {
     const cssText = readSharedStyles();
-    const redSheenBlock = readCssBlock(cssText, ".gui-row--member-theme-red::before");
+    const sheenBlock = readCssBlock(cssText, ".gui-row__effect--sheen");
+    const decoratedBlock = readCssBlock(cssText, ".gui-row--decorated");
     const canvasBlock = readCssBlock(cssText, ".gui-row__member-particles");
 
-    expect(cssText).toContain(".gui-row--paypiggy::before {");
-    expect(cssText).toContain("animation: gui-member-sheen-sweep var(--gui-member-sheen-cycle-duration) ease-out infinite;");
-    expect(redSheenBlock).toContain("display: none;");
+    expect(cssText.match(/^\.gui-row__effect--sheen \{/gm)?.length).toBe(1);
+    expect(cssText.match(/@keyframes gui-row-sheen-sweep\s*\{/g)?.length).toBe(1);
+    expect(sheenBlock).toContain("animation: gui-row-sheen-sweep 5s ease-out infinite;");
+    expect(cssText).toContain(".gui-row--theme-green {");
+    expect(cssText).toContain(".gui-row--theme-red {");
+    expect(cssText).toContain(".gui-row--theme-gold {");
+    expect(decoratedBlock).toContain("border: 1px solid var(--gui-row-theme-border);");
+    expect(decoratedBlock).toContain("var(--gui-row-theme-glow-ring)");
+    expect(cssText).toContain(".gui-row--decorated .gui-row__avatar {");
     expect(canvasBlock).toContain("position: absolute;");
     expect(canvasBlock).toContain("inset: 0;");
-    expect(canvasBlock).toContain("z-index: 1;");
     expect(canvasBlock).toContain("pointer-events: none;");
     expect(canvasBlock).toContain("border-radius: inherit;");
-    expect(cssText).toContain(".gui-row--member-theme-red > .gui-row__avatar-wrapper");
-    expect(cssText).toContain(".gui-row--member-theme-red > .gui-row__content");
+    expect(cssText).toContain(".gui-row--decorated > .gui-row__avatar-wrapper");
+    expect(cssText).toContain(".gui-row--decorated > .gui-row__content");
     expect(cssText).toContain("z-index: 2;");
     expect(cssText).toContain(".gui-row__member-particles");
-    expect(cssText).toContain(".gui-row__member-particles { display: none; }");
-    expect(cssText).toContain(".gui-row--monetization::before {");
+    expect(cssText).toContain(".gui-row__member-particles {\n    display: none;");
   });
 
   it("scopes minimal compact and background-off presentation to the minimal shell", () => {
@@ -95,7 +126,6 @@ describe("GUI shared styles behavior", () => {
       ".gui-shell--minimal .gui-row--minimal .gui-row__username",
     );
     const memberChatRowBlock = readCssBlock(cssText, ".gui-row--member-chat");
-    const redMemberThemeBlock = readCssBlock(cssText, ".gui-row--member-theme-red");
     const effectLayerBlock = readCssBlock(cssText, ".gui-shell__effect-layer");
     const effectVideoBlock = readCssBlock(cssText, ".gui-shell__effect-video");
     const effectCanvasBlock = readCssBlock(
@@ -210,10 +240,6 @@ describe("GUI shared styles behavior", () => {
       cssText,
       ".gui-row--monetization",
     );
-    const monetizationAvatarBlock = readCssBlock(
-      cssText,
-      ".gui-row--monetization .gui-row__avatar",
-    );
     const monetizationImageClipBlock = readCssBlock(
       cssText,
       ".gui-row__monetization-image-clip",
@@ -241,17 +267,14 @@ describe("GUI shared styles behavior", () => {
     expect(rootBlock).toContain("--gui-dock-row-body-font-size: 18px;");
     expect(rootBlock).toContain("--gui-dock-emote-size: 32.4px;");
     expect(rootBlock).toContain(
-      "--gui-member-background-gradient-top: rgba(28, 138, 83, var(--gui-row-background-opacity));",
+      "--gui-member-tag-top: #fff35a;",
     );
     expect(rootBlock).toContain(
-      "--gui-member-background-gradient-bottom: rgba(44, 197, 114, var(--gui-row-background-opacity));",
+      "--gui-member-tag-bottom: #ffb300;",
     );
-    expect(rootBlock).toContain("--gui-member-pill-border: #ffc400;");
-    expect(rootBlock).toContain("--gui-overlay-member-pill-font-size: 8.4px;");
-    expect(rootBlock).toContain("--gui-dock-member-pill-font-size: 6.72px;");
-    expect(rootBlock).toContain("--gui-member-sheen-peak-opacity: 0.46;");
-    expect(rootBlock).toContain("--gui-member-sheen-cycle-duration: 5s;");
-    expect(rootBlock).toContain("--gui-member-sheen-highlight: var(--gui-member-pill-top);");
+    expect(rootBlock).toContain("--gui-member-tag-border: #ffc400;");
+    expect(rootBlock).toContain("--gui-overlay-member-tag-font-size: 8.4px;");
+    expect(rootBlock).toContain("--gui-dock-member-tag-font-size: 6.72px;");
     expect(overlayShellBlock).toContain("height: 100vh;");
     expect(overlayShellBlock).toContain("overflow: hidden;");
     expect(overlayShellBlock).toContain(
@@ -270,7 +293,7 @@ describe("GUI shared styles behavior", () => {
       "--gui-row-body-font-size-current: var(--gui-overlay-row-body-font-size);",
     );
     expect(overlayShellBlock).toContain(
-      "--gui-member-pill-font-size-current: var(--gui-overlay-member-pill-font-size);",
+      "--gui-member-tag-font-size-current: var(--gui-overlay-member-tag-font-size);",
     );
     expect(overlayShellBlock).toContain(
       "--gui-emote-size-current: var(--gui-overlay-emote-size);",
@@ -294,7 +317,7 @@ describe("GUI shared styles behavior", () => {
       "--gui-row-body-font-size-current: var(--gui-dock-row-body-font-size);",
     );
     expect(dockShellBlock).toContain(
-      "--gui-member-pill-font-size-current: var(--gui-dock-member-pill-font-size);",
+      "--gui-member-tag-font-size-current: var(--gui-dock-member-tag-font-size);",
     );
     expect(dockShellBlock).toContain(
       "--gui-emote-size-current: var(--gui-dock-emote-size);",
@@ -346,39 +369,32 @@ describe("GUI shared styles behavior", () => {
     expect(sharedTextShadowBlock).toContain(
       "text-shadow: var(--gui-row-text-shadow);",
     );
-    expect(cssText).toContain(".gui-row--paypiggy {");
+    expect(cssText).toContain(".gui-row--decorated {");
     expect(cssText).toContain(
-      "border: 1px solid var(--gui-member-border-color);",
+      "border: 1px solid var(--gui-row-theme-border);",
     );
     expect(cssText).toContain("linear-gradient(");
-    expect(cssText).toContain("var(--gui-member-background-gradient-top) 0%");
+    expect(cssText).toContain("var(--gui-row-theme-background-top) 0%");
     expect(cssText).toContain(
-      "var(--gui-member-background-gradient-bottom) 100%",
+      "var(--gui-row-theme-background-bottom) 100%",
     );
     expect(cssText).toContain(".gui-row--monetization {");
-    expect(cssText).toContain("var(--gui-member-background-gradient-mid) 58%");
+    expect(cssText).toContain("var(--gui-row-theme-background-mid) 58%");
     expect(cssText).toContain(".gui-row--paypiggy .gui-row__username {");
     expect(cssText).toContain(".gui-row--paypiggy .gui-row__text {");
     expect(cssText).toContain("color: #ffffff;");
-    expect(cssText).toContain(".gui-row--paypiggy .gui-row__avatar {");
-    expect(redMemberThemeBlock).toContain("--gui-member-background-gradient-top:");
-    expect(redMemberThemeBlock).toContain("--gui-member-background-gradient-mid:");
-    expect(redMemberThemeBlock).toContain("--gui-member-background-gradient-bottom:");
-    expect(redMemberThemeBlock).toContain("--gui-member-border-color:");
-    expect(redMemberThemeBlock).toContain("--gui-member-glow-soft:");
-    expect(redMemberThemeBlock).toContain("--gui-member-sheen-highlight:");
-    expect(redMemberThemeBlock).toContain(
-      "--gui-member-avatar-halo-glow: rgba(255, 104, 118, 0.98);",
-    );
-    expect(redMemberThemeBlock).not.toContain("--gui-member-pill-");
+    expect(cssText).toContain(".gui-row--decorated .gui-row__avatar {");
+    expect(cssText).toContain(".gui-row--theme-green {");
+    expect(cssText).toContain(".gui-row--theme-red {");
+    expect(cssText).toContain(".gui-row--theme-gold {");
     expect(cssText).toContain(
-      "outline: 1px solid color-mix(in srgb, var(--gui-member-avatar-halo-glow) 78%, transparent);",
+      "outline: 1px solid color-mix(in srgb, var(--gui-row-theme-avatar-halo) var(--gui-row-theme-avatar-ring-strength), transparent);",
     );
     expect(cssText).toContain(
-      "0 0 14px 1px color-mix(in srgb, var(--gui-member-avatar-halo-glow) 74%, transparent)",
+      "0 0 14px 1px color-mix(in srgb, var(--gui-row-theme-avatar-halo) var(--gui-row-theme-avatar-soft-strength), transparent)",
     );
     expect(cssText).toContain(
-      "filter: drop-shadow(0 0 6px color-mix(in srgb, var(--gui-member-avatar-halo-glow) 74%, transparent));",
+      "filter: drop-shadow(0 0 6px color-mix(in srgb, var(--gui-row-theme-avatar-halo) var(--gui-row-theme-avatar-soft-strength), transparent));",
     );
     expect(memberChatRowBlock).not.toContain("padding-bottom: 0;");
     expect(avatarBlock).toContain("width: var(--gui-avatar-size-current);");
@@ -434,18 +450,18 @@ describe("GUI shared styles behavior", () => {
     expect(usernameBlock).toContain("line-height: 1;");
     expect(memberTagBlock).toContain("padding: 0 3.375px;");
     expect(memberTagBlock).toContain(
-      "font-size: var(--gui-member-pill-font-size-current);",
+      "font-size: var(--gui-member-tag-font-size-current);",
     );
-    expect(memberTagBlock).toContain("color: var(--gui-member-pill-text);");
+    expect(memberTagBlock).toContain("color: var(--gui-member-tag-text);");
     expect(memberTagBlock).toContain("font-weight: 800;");
     expect(memberTagBlock).toContain("letter-spacing: -0.03em;");
     expect(memberTagBlock).toContain("text-transform: uppercase;");
     expect(memberTagBlock).toContain("display: inline-flex;");
     expect(memberTagBlock).toContain("align-items: center;");
     expect(memberTagBlock).toContain("transform: translateY(1px);");
-    expect(cssText).toContain(".gui-row--paypiggy::before {");
+    expect(cssText).toContain(".gui-row__effect--sheen {");
     expect(cssText).toContain(
-      "animation: gui-member-sheen-sweep var(--gui-member-sheen-cycle-duration) ease-out infinite;",
+      "animation: gui-row-sheen-sweep 5s ease-out infinite;",
     );
     expect(cssText).toContain("@media (prefers-reduced-motion: reduce)");
     expect(cssText).toContain("opacity: 0;");
@@ -511,17 +527,8 @@ describe("GUI shared styles behavior", () => {
     expect(minimalOverlayCopyBlock).toContain("overflow: hidden;");
     expect(minimalOverlayCopyBlock).not.toContain("-webkit-");
     expect(minimalMemberTagBlock).toContain("border-radius: 999px;");
-    expect(rootBlock).toContain("--gui-monetization-background-top:");
-    expect(rootBlock).toContain("--gui-monetization-background-mid:");
-    expect(rootBlock).toContain("--gui-monetization-background-bottom:");
-    expect(rootBlock).toContain("--gui-monetization-sheen-cycle-duration: 5s;");
-    expect(monetizationBlock).toContain("position: relative;");
+    expect(rootBlock).not.toMatch(/--gui-(member-(background|sheen|avatar)|monetization)-/);
     expect(monetizationBlock).toContain("overflow: visible;");
-    expect(monetizationBlock).toContain("border: 1px solid var(--gui-monetization-border-color);");
-    expect(monetizationBlock).toContain("var(--gui-monetization-background-top) 0%");
-    expect(monetizationBlock).toContain("var(--gui-monetization-background-bottom) 100%");
-    expect(monetizationBlock).toContain("var(--gui-monetization-glow-soft)");
-    expect(monetizationAvatarBlock).toContain("var(--gui-monetization-avatar-halo-glow)");
     expect(monetizationImageClipBlock).toContain("width: 102px;");
     expect(monetizationImageClipBlock).toContain("height: 94px;");
     expect(monetizationImageClipBlock).toContain("position: absolute;");
@@ -531,14 +538,6 @@ describe("GUI shared styles behavior", () => {
     expect(monetizationImageBlock).toContain("width: 102px;");
     expect(monetizationImageBlock).toContain("height: 102px;");
     expect(monetizationImageBlock).toContain("object-fit: contain;");
-    expect(cssText).toContain(".gui-row--monetization::before {");
-    expect(cssText).toContain(
-      "animation: gui-monetization-sheen-sweep var(--gui-monetization-sheen-cycle-duration) ease-out infinite;",
-    );
-    expect(cssText).toContain("@keyframes gui-monetization-sheen-sweep");
-    expect(cssText).toContain(
-      ".gui-row--monetization::before {\n    animation: none;",
-    );
     expect(cssText).not.toContain("text-shadow: none;");
     expect(cssText).toContain(
       ".gui-row--monetization .gui-row__monetization-image-clip,\n  .gui-row--member-chat .gui-row__member-image-clip {\n    display: none;",

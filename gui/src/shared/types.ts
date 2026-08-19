@@ -1,7 +1,9 @@
+import type { RowPresentationOverride } from '../../../src/core/row-presentation'
+
 export type GuiRowKind = 'chat' | 'command' | 'greeting' | 'farewell' | 'notification'
 export type GuiAppMode = 'dock' | 'overlay' | 'tiktok-animations' | 'notifications'
 export type GuiFeedMode = 'all' | 'chat' | 'non-chat'
-export type GuiMemberTheme = 'red'
+export type { RowPresentationOverride, RowTheme, RowVisualEffectId } from '../../../src/core/row-presentation'
 
 export type GuiMessagePart =
   | { type: 'text'; text: string }
@@ -24,8 +26,8 @@ export interface GuiRowDto {
   badgeImages?: GuiBadgeImage[]
   isPaypiggy?: boolean
   isStreamSupporter?: boolean
-  memberSpriteUrl?: string
-  memberTheme?: GuiMemberTheme
+  presentationRole?: 'ordinary' | 'member' | 'supporter' | 'monetization'
+  presentationOverride?: RowPresentationOverride
   avatarUrl: string
   timestamp: string | null
 }

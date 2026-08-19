@@ -3,17 +3,10 @@ import React from 'react'
 import type { GuiRowDto } from '../types'
 import { getPlatformIconUrl } from '../platform-icon-map'
 import { DEFAULT_GUI_APPEARANCE, selectDisplayableBadges, type GuiAppearance } from '../appearance'
-import { MemberParticleCanvas } from './MemberParticleCanvas'
+import { RAYQUAZA_IMAGE_URL, resolveRowPresentation } from '../row-presentation'
+import { RowVisualEffects } from './RowVisualEffects'
 
 export const GUI_AVATAR_FALLBACK_URL = '/gui/assets/preview/avatar-fallback.svg'
-const RAYQUAZA_IMAGE_URL = 'https://img.pokemondb.net/sprites/black-white/anim/normal/rayquaza.gif'
-const ARCEUS_IMAGE_URL = 'https://img.pokemondb.net/sprites/black-white/anim/normal/arceus.gif'
-const MONETIZATION_NOTIFICATION_TYPES = new Set([
-  'platform:gift',
-  'platform:paypiggy',
-  'platform:giftpaypiggy',
-  'platform:envelope'
-])
 
 interface GuiRowProps {
   row: GuiRowDto
@@ -38,20 +31,14 @@ export function GuiRow({ row, mode, className, onAnimationEnd, appearance = DEFA
   const badgeImages = isMinimal
     ? selectDisplayableBadges(allBadgeImages, appearanceSettings.maxDisplayableBadges)
     : allBadgeImages
-  const isMemberChatRow = row.kind === 'chat' && row.isPaypiggy === true
-  const hasRedMemberTheme = isMemberChatRow && row.memberTheme === 'red'
-  const hasStreamSupporterEffects = row.kind === 'chat'
-    && row.isStreamSupporter === true
-    && appearanceSettings.streamSupporterChatEffectsEnabled !== false
-    && !hasRedMemberTheme
-  const hasMemberEffects = isMemberChatRow && !hasStreamSupporterEffects
-  const hasChatParticles = hasRedMemberTheme || hasStreamSupporterEffects
-  const isMonetizationNotification = row.kind === 'notification' && MONETIZATION_NOTIFICATION_TYPES.has(row.type)
-  const usesMonetizationTreatment = isMonetizationNotification || hasStreamSupporterEffects
+  const presentation = resolveRowPresentation(row, appearanceSettings)
+  const isMemberChatRow = presentation.role === 'member'
+  const usesGoldTreatment = presentation.theme === 'gold'
+    && (presentation.role === 'supporter' || presentation.role === 'monetization')
   const badgeSummary = badgeImages.map((badge) => badge.label).filter(Boolean).join(', ')
   const textClass = [
     'gui-row__text',
-    hasMemberEffects ? 'gui-row__text--member-chat' : '',
+    isMemberChatRow ? 'gui-row__text--member-chat' : '',
     row.kind === 'notification' ? 'gui-row__text--notification' : '',
     mode === 'overlay' ? 'gui-row__text--overlay-clamp' : ''
   ]
@@ -63,9 +50,10 @@ export function GuiRow({ row, mode, className, onAnimationEnd, appearance = DEFA
       'gui-row',
       `gui-row--${row.kind}`,
       isMemberChatRow ? 'gui-row--paypiggy' : '',
-      hasMemberEffects ? 'gui-row--member-chat' : '',
-      hasRedMemberTheme ? 'gui-row--member-theme-red' : '',
-      usesMonetizationTreatment ? 'gui-row--monetization' : '',
+      isMemberChatRow ? 'gui-row--member-chat' : '',
+      presentation.theme ? 'gui-row--decorated' : '',
+      presentation.theme ? `gui-row--theme-${presentation.theme}` : '',
+      usesGoldTreatment ? 'gui-row--monetization' : '',
       isMinimal ? 'gui-row--minimal' : '',
       isMinimal && !appearanceSettings.rowBackgroundsEnabled ? 'gui-row--background-off' : '',
       isCompact ? 'gui-row--compact' : '',
@@ -86,25 +74,25 @@ export function GuiRow({ row, mode, className, onAnimationEnd, appearance = DEFA
           {platformIconUrl ? <img className="gui-row__platform-icon" src={platformIconUrl} alt="" /> : null}
         </span>
         <div className={[
-          "gui-row__content",
-          hasMemberEffects ? 'gui-row__content--member-chat' : '',
-          usesMonetizationTreatment ? 'gui-row__content--monetization' : ''
+          'gui-row__content',
+          isMemberChatRow ? 'gui-row__content--member-chat' : '',
+          usesGoldTreatment ? 'gui-row__content--monetization' : ''
         ].filter(Boolean).join(' ')}>
-          {usesMonetizationTreatment ? (
+          {usesGoldTreatment && presentation.spriteUrl ? (
             <span className="gui-row__monetization-image-clip" aria-hidden="true">
               <img
                 className="gui-row__monetization-image"
-                src={ARCEUS_IMAGE_URL}
+                src={presentation.spriteUrl}
                 alt=""
                 decoding="async"
               />
             </span>
           ) : null}
-          {hasMemberEffects ? (
+          {isMemberChatRow ? (
             <span className="gui-row__member-image-clip" aria-hidden="true">
               <img
                 className="gui-row__member-image"
-                src={row.memberSpriteUrl || RAYQUAZA_IMAGE_URL}
+                src={presentation.spriteUrl || RAYQUAZA_IMAGE_URL}
                 alt=""
                 loading="lazy"
                 decoding="async"
@@ -112,9 +100,9 @@ export function GuiRow({ row, mode, className, onAnimationEnd, appearance = DEFA
             </span>
           ) : null}
           <div className="gui-row__copy">
-            <div className={["gui-row__header", hasMemberEffects ? 'gui-row__header--member-chat' : ''].filter(Boolean).join(' ')}>
+            <div className={['gui-row__header', isMemberChatRow ? 'gui-row__header--member-chat' : ''].filter(Boolean).join(' ')}>
               {isMemberChatRow ? <span className="gui-row__member-tag">MEMBER</span> : null}
-              <span className={["gui-row__username", hasMemberEffects ? 'gui-row__username--member-chat' : ''].filter(Boolean).join(' ')}>{row.username}</span>
+              <span className={['gui-row__username', isMemberChatRow ? 'gui-row__username--member-chat' : ''].filter(Boolean).join(' ')}>{row.username}</span>
               {badgeImages.length > 0 ? (
                 <span className="gui-row__badges" aria-label={badgeSummary || undefined}>
                   {badgeImages.map((badge, index) => (
@@ -159,11 +147,7 @@ export function GuiRow({ row, mode, className, onAnimationEnd, appearance = DEFA
 
   return (
     <div className={rowClass} onAnimationEnd={onAnimationEnd} data-row-type={row.type} role="article">
-      {hasChatParticles ? (
-        <MemberParticleCanvas
-          seed={row.eventId || `${row.platform.trim().toLowerCase()}:${row.username}:${row.timestamp || ''}:${row.text}`}
-        />
-      ) : null}
+      <RowVisualEffects presentation={presentation} seed={row.eventId || `${row.platform.trim().toLowerCase()}:${row.username}:${row.timestamp || ''}:${row.text}`} />
       {renderRowContent()}
     </div>
   )

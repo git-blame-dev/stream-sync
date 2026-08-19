@@ -234,21 +234,23 @@ describe("Event-to-GUI contract mapper behavior", () => {
     expect(notification?.isStreamSupporter).toBeUndefined();
   });
 
-  it("maps only safe member sprite URLs onto chat DTOs", async () => {
+  it("maps member presentation roles and strict overrides", async () => {
     const mapper = createMapper();
     const valid = await mapper.mapDisplayRow({
       type: "chat",
       data: {
         message: "hello",
         isPaypiggy: true,
-        memberSpriteUrl: " https://cdn.example/member.gif ",
+        isStreamSupporter: true,
+        presentationOverride: { theme: "red", effects: ["particles", "sheen", "particles"], spriteUrl: " https://cdn.example/member.gif " },
       },
     });
     const notification = await mapper.mapDisplayRow({
       type: "platform:follow",
       data: {
         displayMessage: "followed",
-        memberSpriteUrl: "https://cdn.example/member.gif",
+        isPaypiggy: false,
+        presentationOverride: { spriteUrl: "https://cdn.example/member.gif" },
       },
     });
     const invalid = await mapper.mapDisplayRow({
@@ -256,7 +258,7 @@ describe("Event-to-GUI contract mapper behavior", () => {
       data: {
         message: "hello",
         isPaypiggy: true,
-        memberSpriteUrl: "http://user:pass@example/member.gif#x",
+        presentationOverride: { spriteUrl: "http://user:pass@example/member.gif#x" },
       },
     });
     const nonMember = await mapper.mapDisplayRow({
@@ -264,33 +266,52 @@ describe("Event-to-GUI contract mapper behavior", () => {
       data: {
         message: "hello",
         isPaypiggy: false,
-        memberSpriteUrl: "https://cdn.example/member.gif",
+        presentationOverride: { spriteUrl: "https://cdn.example/member.gif" },
       },
     });
-    expect(valid?.memberSpriteUrl).toBe("https://cdn.example/member.gif");
-    expect(notification?.memberSpriteUrl).toBeUndefined();
-    expect(invalid?.memberSpriteUrl).toBeUndefined();
-    expect(nonMember?.memberSpriteUrl).toBeUndefined();
+    const malformedEffects = await mapper.mapDisplayRow({
+      type: "chat",
+      data: {
+        message: "hello",
+        isPaypiggy: true,
+        presentationOverride: { effects: ["glow"] },
+      },
+    });
+    const emptyEffects = await mapper.mapDisplayRow({
+      type: "chat",
+      data: {
+        message: "hello",
+        isPaypiggy: true,
+        presentationOverride: { effects: [] },
+      },
+    });
+    expect(valid?.presentationRole).toBe("member");
+    expect(valid?.presentationOverride).toEqual({ theme: "red", effects: ["particles", "sheen"], spriteUrl: "https://cdn.example/member.gif" });
+    expect(notification?.presentationRole).toBe("ordinary");
+    expect(invalid?.presentationOverride?.spriteUrl).toBeUndefined();
+    expect(nonMember?.presentationOverride).toBeUndefined();
+    expect(malformedEffects?.presentationOverride).toBeUndefined();
+    expect(emptyEffects?.presentationOverride).toEqual({ effects: [] });
   });
 
-  it("maps only allowlisted member themes onto member chat DTOs", async () => {
+  it("assigns ordinary and monetization roles", async () => {
     const mapper = createMapper();
     const valid = await mapper.mapDisplayRow({
       type: "chat",
-      data: { message: "hello", isPaypiggy: true, memberTheme: "red" },
+      data: { message: "hello", isPaypiggy: true, isStreamSupporter: true },
     });
     const invalid = await mapper.mapDisplayRow({
       type: "chat",
-      data: { message: "hello", isPaypiggy: true, memberTheme: "blue" },
+      data: { message: "hello", isPaypiggy: false, isStreamSupporter: true },
     });
     const nonMember = await mapper.mapDisplayRow({
       type: "chat",
-      data: { message: "hello", isPaypiggy: false, memberTheme: "red" },
+      data: { message: "hello", isPaypiggy: false },
     });
 
-    expect(valid?.memberTheme).toBe("red");
-    expect(invalid?.memberTheme).toBeUndefined();
-    expect(nonMember?.memberTheme).toBeUndefined();
+    expect(valid?.presentationRole).toBe("member");
+    expect(invalid?.presentationRole).toBe("supporter");
+    expect(nonMember?.presentationRole).toBe("ordinary");
   });
 
   it("maps canonical message.parts for chat rows", async () => {

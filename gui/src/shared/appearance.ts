@@ -1,3 +1,12 @@
+import {
+  isRowTheme,
+  isRowVisualEffectId,
+  normalizeRowEffects,
+  normalizeRowTheme,
+  type RowTheme,
+  type RowVisualEffectId,
+} from '../../../src/core/row-presentation'
+
 export type GuiAppearanceProfile = 'standard' | 'minimal'
 
 export interface GuiAppearanceSettings {
@@ -5,6 +14,8 @@ export interface GuiAppearanceSettings {
   rowBackgroundsEnabled: boolean
   maxDisplayableBadges: number
   streamSupporterChatEffectsEnabled?: boolean
+  memberRowTheme?: RowTheme
+  memberRowEffects?: readonly RowVisualEffectId[]
 }
 
 export interface GuiAppearance {
@@ -21,11 +32,17 @@ export const DEFAULT_GUI_APPEARANCE: GuiAppearance = {
     rowBackgroundsEnabled: true,
     maxDisplayableBadges: 3,
     streamSupporterChatEffectsEnabled: true,
+    memberRowTheme: 'green',
+    memberRowEffects: ['sheen'],
   },
 }
 
 export function selectDisplayableBadges<T>(badges: readonly T[] | undefined, limit: number): T[] {
   return Number.isSafeInteger(limit) && limit > 0 ? [...(badges ?? [])].slice(0, limit) : []
+}
+
+function parseEffects(value: unknown, fallback: readonly RowVisualEffectId[]): RowVisualEffectId[] {
+  return normalizeRowEffects(value) ?? [...fallback]
 }
 
 export function parseGuiAppearanceSnapshot(value: unknown): GuiAppearance {
@@ -47,6 +64,8 @@ export function parseGuiAppearanceSnapshot(value: unknown): GuiAppearance {
         ? max
         : DEFAULT_GUI_APPEARANCE.settings.maxDisplayableBadges,
       streamSupporterChatEffectsEnabled: settings.streamSupporterChatEffectsEnabled !== false,
+      memberRowTheme: normalizeRowTheme(settings.memberRowTheme) ?? 'green',
+      memberRowEffects: parseEffects(settings.memberRowEffects, ['sheen']),
     },
   }
 }
@@ -72,6 +91,11 @@ export function parseGuiAppearanceEvent(value: unknown): GuiAppearance | null {
     || !Number.isSafeInteger(appearanceSettings.maxDisplayableBadges)
     || appearanceSettings.maxDisplayableBadges < 0
     || typeof appearanceSettings.streamSupporterChatEffectsEnabled !== 'boolean'
+    || !isRowTheme(appearanceSettings.memberRowTheme)
+    || !Array.isArray(appearanceSettings.memberRowEffects)
+    || appearanceSettings.memberRowEffects.length > 2
+    || new Set(appearanceSettings.memberRowEffects).size !== appearanceSettings.memberRowEffects.length
+    || appearanceSettings.memberRowEffects.some((effect) => !isRowVisualEffectId(effect))
   ) return null
   return {
     profile: candidate.profile as GuiAppearanceProfile,
@@ -81,6 +105,8 @@ export function parseGuiAppearanceEvent(value: unknown): GuiAppearance | null {
       rowBackgroundsEnabled: appearanceSettings.rowBackgroundsEnabled,
       maxDisplayableBadges: appearanceSettings.maxDisplayableBadges,
       streamSupporterChatEffectsEnabled: appearanceSettings.streamSupporterChatEffectsEnabled,
+      memberRowTheme: appearanceSettings.memberRowTheme,
+      memberRowEffects: [...appearanceSettings.memberRowEffects] as RowVisualEffectId[],
     },
   }
 }

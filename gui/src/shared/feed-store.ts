@@ -1,6 +1,8 @@
-import type { GuiMemberTheme, GuiRowDto } from './types'
+import { normalizeRowEffects, normalizeRowSpriteUrl, normalizeRowTheme } from '../../../src/core/row-presentation'
+import type { GuiRowDto, RowPresentationOverride } from './types'
 
 const EMPTY_ROW: GuiRowDto = {
+  presentationRole: 'ordinary',
   type: '',
   kind: 'chat',
   platform: '',
@@ -16,20 +18,14 @@ function normalizeString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
 }
 
-function normalizeMemberSpriteUrl(value: unknown): string | undefined {
-  const candidate = normalizeString(value)
-  if (!candidate || candidate.length > 2048) return undefined
-  try {
-    const url = new URL(candidate)
-    if (url.protocol !== 'https:' || url.username || url.password || url.hash) return undefined
-    return candidate
-  } catch {
-    return undefined
-  }
-}
-
-function normalizeMemberTheme(value: unknown): GuiMemberTheme | undefined {
-  return normalizeString(value).toLowerCase() === 'red' ? 'red' : undefined
+function normalizePresentationOverride(value: unknown): RowPresentationOverride | undefined {
+  if (!value || typeof value !== 'object') return undefined
+  const candidate = value as Record<string, unknown>
+  const theme = normalizeRowTheme(candidate.theme)
+  const effects = normalizeRowEffects(candidate.effects)
+  const spriteUrl = normalizeRowSpriteUrl(candidate.spriteUrl)
+  if (!theme && !effects && !spriteUrl) return undefined
+  return { ...(theme ? { theme } : {}), ...(effects ? { effects } : {}), ...(spriteUrl ? { spriteUrl } : {}) }
 }
 
 function normalizeParts(value: unknown): GuiRowDto['parts'] {
@@ -117,11 +113,10 @@ function normalizeRow(input: unknown): GuiRowDto {
   const isStreamSupporter = kind === 'chat' && typeof row.isStreamSupporter === 'boolean'
     ? row.isStreamSupporter
     : null
-  const memberSpriteUrl = kind === 'chat' && isPaypiggy === true
-    ? normalizeMemberSpriteUrl(row.memberSpriteUrl)
-    : undefined
-  const memberTheme = kind === 'chat' && isPaypiggy === true
-    ? normalizeMemberTheme(row.memberTheme)
+  const presentationRole = row.presentationRole === 'member' || row.presentationRole === 'supporter' || row.presentationRole === 'monetization' || row.presentationRole === 'ordinary'
+    ? row.presentationRole : 'ordinary'
+  const presentationOverride = presentationRole === 'member'
+    ? normalizePresentationOverride(row.presentationOverride)
     : undefined
 
   return {
@@ -135,8 +130,8 @@ function normalizeRow(input: unknown): GuiRowDto {
     ...(badgeImages ? { badgeImages } : {}),
     ...(isPaypiggy === null ? {} : { isPaypiggy }),
     ...(isStreamSupporter === null ? {} : { isStreamSupporter }),
-    ...(memberSpriteUrl ? { memberSpriteUrl } : {}),
-    ...(memberTheme ? { memberTheme } : {}),
+    presentationRole,
+    ...(presentationOverride ? { presentationOverride } : {}),
     avatarUrl: normalizeString(row.avatarUrl),
     timestamp: row.timestamp === null ? null : normalizeString(row.timestamp)
   }

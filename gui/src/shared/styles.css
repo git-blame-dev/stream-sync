@@ -8,51 +8,25 @@ html, body {
   --gui-row-background-opacity: 0.95;
   --gui-row-content-gap: 2px;
   --gui-row-text-shadow: 0 1px 2px rgba(0, 0, 0, 0.72);
-  --gui-member-background-gradient-top: rgba(28, 138, 83, var(--gui-row-background-opacity));
-  --gui-member-background-gradient-mid: rgba(34, 165, 99, var(--gui-row-background-opacity));
-  --gui-member-background-gradient-bottom: rgba(44, 197, 114, var(--gui-row-background-opacity));
-  --gui-member-border-color: rgba(184, 255, 214, 0.56);
-  --gui-member-inner-highlight: rgba(220, 255, 236, 0.2);
-  --gui-member-glow-ring: rgba(152, 255, 201, 0.42);
-  --gui-member-glow-soft: rgba(84, 255, 154, 0.5);
-  --gui-member-glow-deep: rgba(10, 95, 54, 0.72);
-  --gui-member-pill-border: #ffc400;
-  --gui-member-pill-top: #fff35a;
-  --gui-member-pill-mid: #ffd000;
-  --gui-member-pill-bottom: #ffb300;
-  --gui-member-pill-text: #0f5d33;
-  --gui-member-pill-shine: #fff8a8;
-  --gui-member-sheen-peak-opacity: 0.46;
-  --gui-member-sheen-cycle-duration: 5s;
-  --gui-member-sheen-highlight: var(--gui-member-pill-top);
-  --gui-member-avatar-halo-glow: rgba(122, 255, 189, 0.92);
-  --gui-member-avatar-halo-deep: rgba(22, 140, 84, 0.9);
-  --gui-monetization-background-top: rgba(142, 88, 0, var(--gui-row-background-opacity));
-  --gui-monetization-background-mid: rgba(218, 151, 5, var(--gui-row-background-opacity));
-  --gui-monetization-background-bottom: rgba(255, 199, 42, var(--gui-row-background-opacity));
-  --gui-monetization-border-color: rgba(255, 239, 166, 0.76);
-  --gui-monetization-inner-highlight: rgba(255, 249, 210, 0.34);
-  --gui-monetization-glow-ring: rgba(255, 226, 105, 0.58);
-  --gui-monetization-glow-soft: rgba(255, 190, 39, 0.62);
-  --gui-monetization-glow-deep: rgba(135, 73, 0, 0.82);
-  --gui-monetization-sheen-highlight: #fff4a8;
-  --gui-monetization-sheen-peak-opacity: 0.54;
-  --gui-monetization-sheen-cycle-duration: 5s;
-  --gui-monetization-avatar-halo-glow: rgba(255, 231, 128, 0.96);
-  --gui-monetization-avatar-halo-deep: rgba(217, 135, 0, 0.94);
+  --gui-member-tag-border: #ffc400;
+  --gui-member-tag-top: #fff35a;
+  --gui-member-tag-mid: #ffd000;
+  --gui-member-tag-bottom: #ffb300;
+  --gui-member-tag-text: #0f5d33;
+  --gui-member-tag-shine: #fff8a8;
   --gui-overlay-avatar-size: 51px;
   --gui-overlay-platform-icon-size: 25.81px;
   --gui-overlay-badge-size: 27px;
   --gui-overlay-row-header-font-size: 20px;
   --gui-overlay-row-body-font-size: 23px;
-  --gui-overlay-member-pill-font-size: 8.4px;
+  --gui-overlay-member-tag-font-size: 8.4px;
   --gui-overlay-emote-size: 45px;
   --gui-dock-avatar-size: 40.8px;
   --gui-dock-platform-icon-size: 22.44px;
   --gui-dock-badge-size: 21px;
   --gui-dock-row-header-font-size: 16px;
   --gui-dock-row-body-font-size: 18px;
-  --gui-dock-member-pill-font-size: 6.72px;
+  --gui-dock-member-tag-font-size: 6.72px;
   --gui-dock-emote-size: 32.4px;
 }
 
@@ -80,7 +54,7 @@ html, body {
   --gui-badge-size-current: var(--gui-overlay-badge-size);
   --gui-row-header-font-size-current: var(--gui-overlay-row-header-font-size);
   --gui-row-body-font-size-current: var(--gui-overlay-row-body-font-size);
-  --gui-member-pill-font-size-current: var(--gui-overlay-member-pill-font-size);
+  --gui-member-tag-font-size-current: var(--gui-overlay-member-tag-font-size);
   --gui-emote-size-current: var(--gui-overlay-emote-size);
 }
 
@@ -93,7 +67,7 @@ html, body {
   --gui-badge-size-current: var(--gui-dock-badge-size);
   --gui-row-header-font-size-current: var(--gui-dock-row-header-font-size);
   --gui-row-body-font-size-current: var(--gui-dock-row-body-font-size);
-  --gui-member-pill-font-size-current: var(--gui-dock-member-pill-font-size);
+  --gui-member-tag-font-size-current: var(--gui-dock-member-tag-font-size);
   --gui-emote-size-current: var(--gui-dock-emote-size);
 }
 
@@ -120,7 +94,7 @@ html, body {
   --gui-badge-size-current: var(--gui-overlay-badge-size);
   --gui-row-header-font-size-current: var(--gui-overlay-row-header-font-size);
   --gui-row-body-font-size-current: var(--gui-overlay-row-body-font-size);
-  --gui-member-pill-font-size-current: var(--gui-overlay-member-pill-font-size);
+  --gui-member-tag-font-size-current: var(--gui-overlay-member-tag-font-size);
   --gui-emote-size-current: var(--gui-overlay-emote-size);
 }
 
@@ -197,52 +171,143 @@ html, body {
   background: rgba(0, 0, 0, var(--gui-row-background-opacity));
 }
 
+.gui-row--theme-green {
+  --gui-row-theme-background-top: rgba(28, 138, 83, var(--gui-row-background-opacity));
+  --gui-row-theme-background-mid: rgba(34, 165, 99, var(--gui-row-background-opacity));
+  --gui-row-theme-background-bottom: rgba(44, 197, 114, var(--gui-row-background-opacity));
+  --gui-row-theme-border: rgba(184, 255, 214, 0.56);
+  --gui-row-theme-inner-highlight: rgba(220, 255, 236, 0.2);
+  --gui-row-theme-glow-ring: rgba(152, 255, 201, 0.42);
+  --gui-row-theme-glow-soft: rgba(84, 255, 154, 0.5);
+  --gui-row-theme-glow-deep: rgba(10, 95, 54, 0.72);
+  --gui-row-theme-sheen-edge: #fff35a;
+  --gui-row-theme-sheen-peak: color-mix(in srgb, white 82%, var(--gui-row-theme-sheen-edge));
+  --gui-row-theme-sheen-opacity: 0.46;
+  --gui-row-theme-avatar-halo: rgba(122, 255, 189, 0.92);
+  --gui-row-theme-avatar-deep: rgba(22, 140, 84, 0.9);
+  --gui-row-theme-avatar-ring-strength: 78%;
+  --gui-row-theme-avatar-soft-strength: 74%;
+  --gui-row-theme-avatar-deep-strength: 71%;
+}
+
+.gui-row--theme-red {
+  --gui-row-theme-background-top: rgba(86, 0, 10, var(--gui-row-background-opacity));
+  --gui-row-theme-background-mid: rgba(126, 3, 16, var(--gui-row-background-opacity));
+  --gui-row-theme-background-bottom: rgba(164, 10, 28, var(--gui-row-background-opacity));
+  --gui-row-theme-border: rgba(232, 112, 122, 0.58);
+  --gui-row-theme-inner-highlight: rgba(255, 198, 203, 0.18);
+  --gui-row-theme-glow-ring: rgba(198, 36, 51, 0.48);
+  --gui-row-theme-glow-soft: rgba(156, 0, 18, 0.58);
+  --gui-row-theme-glow-deep: rgba(45, 0, 6, 0.84);
+  --gui-row-theme-sheen-edge: #d94a56;
+  --gui-row-theme-sheen-peak: color-mix(in srgb, white 82%, var(--gui-row-theme-sheen-edge));
+  --gui-row-theme-sheen-opacity: 0.46;
+  --gui-row-theme-avatar-halo: rgba(255, 104, 118, 0.98);
+  --gui-row-theme-avatar-deep: rgba(92, 0, 11, 0.94);
+  --gui-row-theme-avatar-ring-strength: 78%;
+  --gui-row-theme-avatar-soft-strength: 74%;
+  --gui-row-theme-avatar-deep-strength: 71%;
+}
+
+.gui-row--theme-gold {
+  --gui-row-theme-background-top: rgba(142, 88, 0, var(--gui-row-background-opacity));
+  --gui-row-theme-background-mid: rgba(218, 151, 5, var(--gui-row-background-opacity));
+  --gui-row-theme-background-bottom: rgba(255, 199, 42, var(--gui-row-background-opacity));
+  --gui-row-theme-border: rgba(255, 239, 166, 0.76);
+  --gui-row-theme-inner-highlight: rgba(255, 249, 210, 0.34);
+  --gui-row-theme-glow-ring: rgba(255, 226, 105, 0.58);
+  --gui-row-theme-glow-soft: rgba(255, 190, 39, 0.62);
+  --gui-row-theme-glow-deep: rgba(135, 73, 0, 0.82);
+  --gui-row-theme-sheen-edge: #fff4a8;
+  --gui-row-theme-sheen-peak: color-mix(in srgb, white 86%, var(--gui-row-theme-sheen-edge));
+  --gui-row-theme-sheen-opacity: 0.54;
+  --gui-row-theme-avatar-halo: rgba(255, 231, 128, 0.96);
+  --gui-row-theme-avatar-deep: rgba(217, 135, 0, 0.94);
+  --gui-row-theme-avatar-ring-strength: 80%;
+  --gui-row-theme-avatar-soft-strength: 76%;
+  --gui-row-theme-avatar-deep-strength: 74%;
+}
+
+.gui-row--decorated {
+  position: relative;
+  isolation: isolate;
+  border: 1px solid var(--gui-row-theme-border);
+  box-shadow:
+    inset 0 1px 0 var(--gui-row-theme-inner-highlight),
+    0 0 16px -4px var(--gui-row-theme-glow-ring),
+    0 0 28px -7px var(--gui-row-theme-glow-soft),
+    0 0 48px -16px var(--gui-row-theme-glow-deep);
+  background: linear-gradient(
+    180deg,
+    var(--gui-row-theme-background-top) 0%,
+    var(--gui-row-theme-background-mid) 58%,
+    var(--gui-row-theme-background-bottom) 100%
+  );
+}
+
+.gui-row--decorated > .gui-row__avatar-wrapper,
+.gui-row--decorated > .gui-row__content {
+  position: relative;
+  z-index: 2;
+}
+
+.gui-row__effect-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.gui-row__effect {
+  display: block;
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.gui-row__effect--sheen {
+  background: linear-gradient(
+    120deg,
+    transparent 42%,
+    color-mix(in srgb, var(--gui-row-theme-sheen-edge) 58%, white) 49%,
+    var(--gui-row-theme-sheen-peak) 50%,
+    color-mix(in srgb, var(--gui-row-theme-sheen-edge) 58%, white) 51%,
+    transparent 58%
+  );
+  background-size: 240% 100%;
+  background-position-x: -170%;
+  animation: gui-row-sheen-sweep 5s ease-out infinite;
+}
+
+@keyframes gui-row-sheen-sweep {
+  0%, 100% {
+    background-position-x: -170%;
+    opacity: 0;
+  }
+
+  12% {
+    opacity: var(--gui-row-theme-sheen-opacity);
+  }
+
+  35% {
+    background-position-x: 170%;
+    opacity: 0;
+  }
+}
+
 .gui-shell--overlay .gui-row {
   padding-block: 4px;
 }
 
 .gui-row--paypiggy {
-  border: 1px solid var(--gui-member-border-color);
-  box-shadow:
-    inset 0 1px 0 var(--gui-member-inner-highlight),
-    0 0 16px -4px var(--gui-member-glow-ring),
-    0 0 28px -7px var(--gui-member-glow-soft),
-    0 0 48px -16px var(--gui-member-glow-deep);
-  background:
-    linear-gradient(
-      180deg,
-      var(--gui-member-background-gradient-top) 0%,
-      var(--gui-member-background-gradient-mid) 58%,
-      var(--gui-member-background-gradient-bottom) 100%
-    );
-}
-
-.gui-row--member-theme-red {
-  position: relative;
-  isolation: isolate;
-  --gui-member-background-gradient-top: rgba(86, 0, 10, var(--gui-row-background-opacity));
-  --gui-member-background-gradient-mid: rgba(126, 3, 16, var(--gui-row-background-opacity));
-  --gui-member-background-gradient-bottom: rgba(164, 10, 28, var(--gui-row-background-opacity));
-  --gui-member-border-color: rgba(232, 112, 122, 0.58);
-  --gui-member-inner-highlight: rgba(255, 198, 203, 0.18);
-  --gui-member-glow-ring: rgba(198, 36, 51, 0.48);
-  --gui-member-glow-soft: rgba(156, 0, 18, 0.58);
-  --gui-member-glow-deep: rgba(45, 0, 6, 0.84);
-  --gui-member-sheen-highlight: #d94a56;
-  --gui-member-avatar-halo-glow: rgba(255, 104, 118, 0.98);
-  --gui-member-avatar-halo-deep: rgba(92, 0, 11, 0.94);
-}
-
-.gui-row--member-theme-red > .gui-row__avatar-wrapper,
-.gui-row--member-theme-red > .gui-row__content {
-  position: relative;
-  z-index: 2;
+  overflow: visible;
 }
 
 .gui-row__member-particles {
   position: absolute;
   inset: 0;
-  z-index: 1;
   display: block;
   width: 100%;
   height: 100%;
@@ -251,27 +316,7 @@ html, body {
 }
 
 .gui-row--monetization {
-  position: relative;
   overflow: visible;
-  border: 1px solid var(--gui-monetization-border-color);
-  box-shadow:
-    inset 0 1px 0 var(--gui-monetization-inner-highlight),
-    0 0 16px -4px var(--gui-monetization-glow-ring),
-    0 0 28px -7px var(--gui-monetization-glow-soft),
-    0 0 48px -16px var(--gui-monetization-glow-deep);
-  background:
-    linear-gradient(
-      180deg,
-      var(--gui-monetization-background-top) 0%,
-      var(--gui-monetization-background-mid) 58%,
-      var(--gui-monetization-background-bottom) 100%
-    );
-}
-
-.gui-row--monetization > .gui-row__avatar-wrapper,
-.gui-row--monetization > .gui-row__content {
-  position: relative;
-  z-index: 2;
 }
 
 .gui-row--monetization .gui-row__content {
@@ -315,24 +360,14 @@ html, body {
   object-fit: cover;
 }
 
-.gui-row--paypiggy .gui-row__avatar {
-  outline: 1px solid color-mix(in srgb, var(--gui-member-avatar-halo-glow) 78%, transparent);
+.gui-row--decorated .gui-row__avatar {
+  outline: 1px solid color-mix(in srgb, var(--gui-row-theme-avatar-halo) var(--gui-row-theme-avatar-ring-strength), transparent);
   outline-offset: 0;
   box-shadow:
-    0 0 0 2px color-mix(in srgb, var(--gui-member-avatar-halo-glow) 78%, transparent),
-    0 0 14px 1px color-mix(in srgb, var(--gui-member-avatar-halo-glow) 74%, transparent),
-    0 0 24px 3px color-mix(in srgb, var(--gui-member-avatar-halo-deep) 71%, transparent);
-  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--gui-member-avatar-halo-glow) 74%, transparent));
-}
-
-.gui-row--monetization .gui-row__avatar {
-  outline: 1px solid color-mix(in srgb, var(--gui-monetization-avatar-halo-glow) 80%, transparent);
-  outline-offset: 0;
-  box-shadow:
-    0 0 0 2px color-mix(in srgb, var(--gui-monetization-avatar-halo-glow) 80%, transparent),
-    0 0 14px 1px color-mix(in srgb, var(--gui-monetization-avatar-halo-glow) 76%, transparent),
-    0 0 24px 3px color-mix(in srgb, var(--gui-monetization-avatar-halo-deep) 74%, transparent);
-  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--gui-monetization-avatar-halo-glow) 76%, transparent));
+    0 0 0 2px color-mix(in srgb, var(--gui-row-theme-avatar-halo) var(--gui-row-theme-avatar-ring-strength), transparent),
+    0 0 14px 1px color-mix(in srgb, var(--gui-row-theme-avatar-halo) var(--gui-row-theme-avatar-soft-strength), transparent),
+    0 0 24px 3px color-mix(in srgb, var(--gui-row-theme-avatar-deep) var(--gui-row-theme-avatar-deep-strength), transparent);
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--gui-row-theme-avatar-halo) var(--gui-row-theme-avatar-soft-strength), transparent));
 }
 
 .gui-row__avatar--circle {
@@ -420,128 +455,34 @@ html, body {
 .gui-row__member-tag {
   padding: 0 3.375px;
   border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--gui-member-pill-border) 88%, transparent);
+  border: 1px solid color-mix(in srgb, var(--gui-member-tag-border) 88%, transparent);
   background: linear-gradient(
     180deg,
-    color-mix(in srgb, var(--gui-member-pill-top) 96%, transparent) 0%,
-    color-mix(in srgb, var(--gui-member-pill-mid) 96%, transparent) 55%,
-    color-mix(in srgb, var(--gui-member-pill-bottom) 96%, transparent) 100%
+    color-mix(in srgb, var(--gui-member-tag-top) 96%, transparent) 0%,
+    color-mix(in srgb, var(--gui-member-tag-mid) 96%, transparent) 55%,
+    color-mix(in srgb, var(--gui-member-tag-bottom) 96%, transparent) 100%
   );
-  color: var(--gui-member-pill-text);
+  color: var(--gui-member-tag-text);
   font-weight: 800;
-  font-size: var(--gui-member-pill-font-size-current);
+  font-size: var(--gui-member-tag-font-size-current);
   letter-spacing: -0.03em;
   text-transform: uppercase;
   box-shadow:
-    inset 0 1px 0 color-mix(in srgb, var(--gui-member-pill-shine) 92%, transparent),
-    0 0 10px -2px color-mix(in srgb, var(--gui-member-pill-border) 56%, transparent);
+    inset 0 1px 0 color-mix(in srgb, var(--gui-member-tag-shine) 92%, transparent),
+    0 0 10px -2px color-mix(in srgb, var(--gui-member-tag-border) 56%, transparent);
   display: inline-flex;
   align-items: center;
   transform: translateY(1px);
 }
 
-.gui-row--paypiggy {
-  position: relative;
-}
-
-.gui-row--paypiggy::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background-image: linear-gradient(
-    120deg,
-    transparent 42%,
-    color-mix(in srgb, var(--gui-member-sheen-highlight) 58%, white) 49%,
-    color-mix(in srgb, white 82%, var(--gui-member-sheen-highlight)) 50%,
-    color-mix(in srgb, var(--gui-member-sheen-highlight) 58%, white) 51%,
-    transparent 58%
-  );
-  background-size: 240% 100%;
-  background-position-x: -170%;
-  opacity: var(--gui-member-sheen-peak-opacity);
-  pointer-events: none;
-  animation: gui-member-sheen-sweep var(--gui-member-sheen-cycle-duration) ease-out infinite;
-}
-
-.gui-row--member-theme-red::before {
-  display: none;
-}
-
-@keyframes gui-member-sheen-sweep {
-  0% {
-    background-position-x: -170%;
-    opacity: 0;
-  }
-
-  12% {
-    opacity: var(--gui-member-sheen-peak-opacity);
-  }
-
-  35% {
-    background-position-x: 170%;
-    opacity: 0;
-  }
-
-  100% {
-    background-position-x: 170%;
-    opacity: 0;
-  }
-}
-
-.gui-row--monetization::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background-image: linear-gradient(
-    120deg,
-    transparent 42%,
-    color-mix(in srgb, var(--gui-monetization-sheen-highlight) 58%, white) 49%,
-    color-mix(in srgb, white 86%, var(--gui-monetization-sheen-highlight)) 50%,
-    color-mix(in srgb, var(--gui-monetization-sheen-highlight) 58%, white) 51%,
-    transparent 58%
-  );
-  background-size: 240% 100%;
-  background-position-x: -170%;
-  opacity: var(--gui-monetization-sheen-peak-opacity);
-  pointer-events: none;
-  z-index: 1;
-  animation: gui-monetization-sheen-sweep var(--gui-monetization-sheen-cycle-duration) ease-out infinite;
-}
-
-@keyframes gui-monetization-sheen-sweep {
-  0% {
-    background-position-x: -170%;
-    opacity: 0;
-  }
-
-  12% {
-    opacity: var(--gui-monetization-sheen-peak-opacity);
-  }
-
-  35% {
-    background-position-x: 170%;
-    opacity: 0;
-  }
-
-  100% {
-    background-position-x: 170%;
-    opacity: 0;
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .gui-row__member-particles { display: none; }
-
-  .gui-row--paypiggy::before {
+  .gui-row__effect--sheen {
     animation: none;
     opacity: 0;
   }
 
-  .gui-row--monetization::before {
-    animation: none;
-    opacity: 0;
+  .gui-row__member-particles {
+    display: none;
   }
 
   .gui-row--monetization .gui-row__monetization-image-clip,
@@ -752,7 +693,7 @@ html, body {
   border: 0;
   border-radius: 999px;
   box-shadow: none;
-  background: var(--gui-member-pill-mid);
+  background: var(--gui-member-tag-mid);
   transform: none;
 }
 
@@ -763,7 +704,7 @@ html, body {
   box-shadow: none;
 }
 
-.gui-shell--minimal .gui-row--minimal.gui-row--background-off::before {
+.gui-shell--minimal .gui-row--minimal.gui-row--background-off .gui-row__effect--sheen {
   display: none;
 }
 

@@ -19,6 +19,7 @@ function createRow(index: number) {
     text: `message-${index}`,
     avatarUrl: `https://example.invalid/avatar-${index}.png`,
     timestamp: `2024-01-01T00:00:0${index}.000Z`,
+    presentationRole: "ordinary" as const,
   };
 }
 
@@ -92,49 +93,40 @@ describe("GUI feed store behavior", () => {
     expect(store.getRows()[2]?.isStreamSupporter).toBeUndefined();
   });
 
-  it("retains safe member sprites only on chat rows", () => {
+  it("normalizes presentation roles and overrides without dropping rows", () => {
     const store = createGuiFeedStore();
 
     store.pushEvent({
       ...createRow(1),
-      isPaypiggy: true,
-      memberSpriteUrl: "https://cdn.example/member.gif",
+      presentationRole: "member",
+      presentationOverride: { theme: "red", effects: ["particles", "sheen", "particles"], spriteUrl: "https://cdn.example/member.gif" },
     });
     store.pushEvent({
       ...createRow(2),
-      kind: "notification",
-      memberSpriteUrl: "https://cdn.example/ignored.gif",
+      presentationRole: "member",
+      presentationOverride: { theme: "invalid", effects: ["bad"], spriteUrl: "javascript:bad" },
     });
     store.pushEvent({
       ...createRow(3),
-      isPaypiggy: true,
-      memberSpriteUrl:
-        "https://user:pass@example.invalid/member.gif#fragment",
+      presentationRole: "member",
+      presentationOverride: { spriteUrl: "https://user:pass@example.invalid/member.gif#fragment" },
     });
     store.pushEvent({
       ...createRow(4),
-      isPaypiggy: false,
-      memberSpriteUrl: "https://cdn.example/ignored-non-member.gif",
+      presentationRole: "supporter",
+      presentationOverride: { effects: ["sheen", "sheen"] },
+    });
+    store.pushEvent({
+      ...createRow(5),
+      presentationRole: "member",
+      presentationOverride: { effects: [] },
     });
 
-    expect(store.getRows()[0]?.memberSpriteUrl).toBe("https://cdn.example/member.gif");
-    expect(store.getRows()[1]?.memberSpriteUrl).toBeUndefined();
-    expect(store.getRows()[2]?.memberSpriteUrl).toBeUndefined();
-    expect(store.getRows()[3]?.memberSpriteUrl).toBeUndefined();
-  });
-
-  it("retains allowlisted member themes only on member chat rows", () => {
-    const store = createGuiFeedStore();
-
-    store.pushEvent({ ...createRow(1), isPaypiggy: true, memberTheme: "red" });
-    store.pushEvent({ ...createRow(2), isPaypiggy: true, memberTheme: "blue" });
-    store.pushEvent({ ...createRow(3), isPaypiggy: false, memberTheme: "red" });
-    store.pushEvent({ ...createRow(4), kind: "notification", memberTheme: "red" });
-
-    expect(store.getRows()[0]?.memberTheme).toBe("red");
-    expect(store.getRows()[1]?.memberTheme).toBeUndefined();
-    expect(store.getRows()[2]?.memberTheme).toBeUndefined();
-    expect(store.getRows()[3]?.memberTheme).toBeUndefined();
+    expect(store.getRows()[0]?.presentationOverride).toEqual({ theme: "red", effects: ["particles", "sheen"], spriteUrl: "https://cdn.example/member.gif" });
+    expect(store.getRows()[1]?.presentationOverride).toBeUndefined();
+    expect(store.getRows()[2]?.presentationOverride?.spriteUrl).toBeUndefined();
+    expect(store.getRows()[3]?.presentationOverride).toBeUndefined();
+    expect(store.getRows()[4]?.presentationOverride).toEqual({ effects: [] });
   });
 
   it("preserves parts arrays emitted by GUI mapper", () => {

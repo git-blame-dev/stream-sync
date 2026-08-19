@@ -1,3 +1,10 @@
+import {
+    normalizeRowEffects,
+    normalizeRowTheme,
+    type RowTheme,
+    type RowVisualEffectId
+} from '../../core/row-presentation';
+
 type TransportRecord = Record<string, unknown>;
 
 type GuiFeedMode = 'all' | 'chat' | 'non-chat';
@@ -7,7 +14,9 @@ type GuiAppearanceSettings = {
     compactRows: boolean;
     rowBackgroundsEnabled: boolean;
     maxDisplayableBadges: number;
-    streamSupporterChatEffectsEnabled?: boolean;
+    streamSupporterChatEffectsEnabled: boolean;
+    memberRowTheme: RowTheme;
+    memberRowEffects: readonly RowVisualEffectId[];
 };
 type GuiAppearanceSnapshot = {
     revision: number;
@@ -70,7 +79,9 @@ function buildAppearanceSettings(guiConfig: TransportRecord): GuiAppearanceSetti
         compactRows: guiConfig.minimalCompactRows !== false,
         rowBackgroundsEnabled: guiConfig.minimalRowBackgroundsEnabled === true,
         maxDisplayableBadges: parseNonNegativeInteger(guiConfig.minimalMaxDisplayableBadges, 3),
-        streamSupporterChatEffectsEnabled: guiConfig.streamSupporterChatEffectsEnabled !== false
+        streamSupporterChatEffectsEnabled: guiConfig.streamSupporterChatEffectsEnabled !== false,
+        memberRowTheme: normalizeRowTheme(guiConfig.memberRowTheme) ?? 'green',
+        memberRowEffects: normalizeRowEffects(guiConfig.memberRowEffects) ?? ['sheen']
     };
 }
 
@@ -98,7 +109,9 @@ function normalizeAppearanceSnapshot(
             ),
             streamSupporterChatEffectsEnabled: typeof settings.streamSupporterChatEffectsEnabled === 'boolean'
                 ? settings.streamSupporterChatEffectsEnabled
-                : defaults.streamSupporterChatEffectsEnabled !== false
+                : defaults.streamSupporterChatEffectsEnabled,
+            memberRowTheme: normalizeRowTheme(settings.memberRowTheme) ?? defaults.memberRowTheme,
+            memberRowEffects: normalizeRowEffects(settings.memberRowEffects) ?? defaults.memberRowEffects
         }
     };
 }

@@ -164,6 +164,7 @@ describe("GUI app behavior", () => {
         platform: "youtube",
         username: "test-gift-user",
         text: "sent a test gift",
+        presentationRole: "monetization",
         avatarUrl: "https://example.invalid/test-avatar.png",
         timestamp: "2024-01-01T00:00:00.000Z",
       });

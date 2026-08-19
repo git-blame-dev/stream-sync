@@ -89,7 +89,7 @@ describe("GuiRow rendering behavior", () => {
     const html = renderToStaticMarkup(React.createElement(GuiRow, {
       mode: "dock",
       appearance: { profile: "minimal", revision: 0, settings: { compactRows: true, rowBackgroundsEnabled: true, maxDisplayableBadges: 1 } },
-      row: { type: "chat", kind: "chat", platform: "twitch", username: "user", text: "hello", isPaypiggy: true,
+      row: { type: "chat", kind: "chat", platform: "twitch", username: "user", text: "hello", isPaypiggy: true, presentationRole: "member",
         badgeImages: [{ imageUrl: "badge-1", source: "twitch", label: "mod" }, { imageUrl: "badge-2", source: "twitch", label: "vip" }],
         avatarUrl: "avatar", timestamp: null },
     }));
@@ -297,6 +297,7 @@ describe("GuiRow rendering behavior", () => {
           username: "test-paypiggy-user",
           text: "paypiggy chat",
           isPaypiggy: true,
+          presentationRole: "member",
           avatarUrl: "https://example.invalid/test-avatar.png",
           timestamp: "2024-01-01T00:00:00.000Z",
         },
@@ -317,6 +318,7 @@ describe("GuiRow rendering behavior", () => {
           username: "test-paypiggy-user",
           text: "paypiggy chat",
           isPaypiggy: true,
+          presentationRole: "member",
           avatarUrl: "https://example.invalid/test-avatar.png",
           timestamp: "2024-01-01T00:00:00.000Z",
         },
@@ -341,6 +343,7 @@ describe("GuiRow rendering behavior", () => {
           username: "test-paypiggy-user",
           text: "paypiggy chat",
           isPaypiggy: true,
+          presentationRole: "member",
           badgeImages: [
             {
               imageUrl: "https://example.invalid/badge-1.png",
@@ -481,6 +484,7 @@ describe("GuiRow rendering behavior", () => {
           username: "test-overlay-paypiggy-user",
           text: "overlay paypiggy chat",
           isPaypiggy: true,
+          presentationRole: "member",
           avatarUrl: "https://example.invalid/test-avatar.png",
           timestamp: "2024-01-01T00:00:00.000Z",
         },
@@ -502,6 +506,7 @@ describe("GuiRow rendering behavior", () => {
           username: "test-youtube-member",
           text: "hello from member",
           isPaypiggy: true,
+          presentationRole: "member",
           avatarUrl: "https://example.invalid/test-avatar.png",
           timestamp: "2024-01-01T00:00:00.000Z",
         },
@@ -537,7 +542,8 @@ describe("GuiRow rendering behavior", () => {
           username: "member",
           text: "hello",
           isPaypiggy: true,
-          memberSpriteUrl: "https://cdn.example/member.gif",
+          presentationRole: "member",
+          presentationOverride: { spriteUrl: "https://cdn.example/member.gif" },
           avatarUrl: "https://example.invalid/avatar.png",
           timestamp: null,
         },
@@ -559,7 +565,8 @@ describe("GuiRow rendering behavior", () => {
           username: "themed-member",
           text: "hello",
           isPaypiggy: true,
-          memberTheme: "red",
+          presentationRole: "member",
+          presentationOverride: { theme: "red" },
           avatarUrl: "https://example.invalid/avatar.png",
           timestamp: null,
         },
@@ -575,29 +582,62 @@ describe("GuiRow rendering behavior", () => {
           username: "default-member",
           text: "hello",
           isPaypiggy: true,
+          presentationRole: "member",
           avatarUrl: "https://example.invalid/avatar.png",
           timestamp: null,
         },
       }),
     );
 
-    expect(themedHtml).toContain("gui-row--member-theme-red");
-    expect(defaultHtml).not.toContain("gui-row--member-theme-red");
+    expect(themedHtml).toContain("gui-row--theme-red");
+    expect(defaultHtml).toContain("gui-row--theme-green");
+  });
+
+  it("keeps gold profile presentation within member semantics", () => {
+    const html = renderToStaticMarkup(
+      React.createElement(GuiRow, {
+        mode: "dock",
+        row: {
+          type: "chat",
+          kind: "chat",
+          platform: "youtube",
+          username: "test-gold-member",
+          text: "gold member chat",
+          isPaypiggy: true,
+          presentationRole: "member",
+          presentationOverride: {
+            theme: "gold",
+            effects: ["particles"],
+            spriteUrl: "https://example.invalid/gold-member.gif",
+          },
+          avatarUrl: "https://example.invalid/avatar.png",
+          timestamp: null,
+        },
+      }),
+    );
+
+    expect(html).toContain("gui-row--theme-gold");
+    expect(html).toContain("gui-row--paypiggy");
+    expect(html).toContain(">MEMBER<");
+    expect(html).toContain("https://example.invalid/gold-member.gif");
+    expect(html).toContain("gui-row__member-particles");
+    expect(html).not.toContain("gui-row--monetization");
+    expect(html).not.toContain("arceus.gif");
   });
 
   it("renders particles only for red member rows with an event-stable seed", () => {
     const row = (overrides: Partial<GuiRowDto> = {}, redTheme = true): GuiRowDto => ({
       type: "chat", kind: "chat", platform: "youtube",
       username: "fixture-member-particles", text: "test-only member row",
-      isPaypiggy: true, ...(redTheme ? { memberTheme: "red" as const } : {}), avatarUrl: "fixture-avatar", timestamp: null,
+       isPaypiggy: true, presentationRole: "member", ...(redTheme ? { presentationOverride: { theme: "red" as const, effects: ["particles"] as const } } : {}), avatarUrl: "fixture-avatar", timestamp: null,
       ...overrides,
     });
     const redHtml = renderToStaticMarkup(React.createElement(GuiRow, { mode: "dock", row: row() }));
     const defaultHtml = renderToStaticMarkup(React.createElement(GuiRow, { mode: "dock", row: row({}, false) }));
-    const nonMemberHtml = renderToStaticMarkup(React.createElement(GuiRow, { mode: "dock", row: row({ isPaypiggy: false }, false) }));
+    const nonMemberHtml = renderToStaticMarkup(React.createElement(GuiRow, { mode: "dock", row: row({ isPaypiggy: false, presentationRole: "ordinary" }, false) }));
 
     expect(redHtml).toContain("gui-row--paypiggy");
-    expect(redHtml).toContain("gui-row--member-theme-red");
+    expect(redHtml).toContain("gui-row--theme-red");
     expect(redHtml).toMatch(/<canvas[^>]*class="gui-row__member-particles"[^>]*aria-hidden="true"/);
     expect(redHtml).toMatch(/data-member-particles-seed="[^"]+"/);
     expect(defaultHtml).toContain("gui-row--paypiggy");
@@ -617,13 +657,14 @@ describe("GuiRow rendering behavior", () => {
           text: "supporter chat",
           isPaypiggy: false,
           isStreamSupporter: true,
+          presentationRole: "supporter",
           avatarUrl: "https://example.invalid/avatar.png",
           timestamp: null,
         },
       }),
     );
 
-    expect(html).toContain("gui-row--monetization");
+    expect(html).toContain("gui-row--theme-gold");
     expect(html).toContain("arceus.gif");
     expect(html).toContain("gui-row__member-particles");
     expect(html).not.toContain("gui-row__member-tag");
@@ -652,6 +693,7 @@ describe("GuiRow rendering behavior", () => {
           text: "supporter chat",
           isPaypiggy: false,
           isStreamSupporter: true,
+          presentationRole: "supporter",
           avatarUrl: "https://example.invalid/avatar.png",
           timestamp: null,
         },
@@ -675,16 +717,17 @@ describe("GuiRow rendering behavior", () => {
           text: "member supporter chat",
           isPaypiggy: true,
           isStreamSupporter: true,
+          presentationRole: "member",
           avatarUrl: "https://example.invalid/avatar.png",
           timestamp: null,
         },
       }),
     );
 
-    expect(html).toContain("gui-row--monetization");
-    expect(html).toContain("arceus.gif");
+    expect(html).toContain("gui-row--theme-green");
+    expect(html).toContain("rayquaza.gif");
     expect(html).toContain(">MEMBER<");
-    expect(html).not.toContain("gui-row__member-image");
+    expect(html).toContain("gui-row__member-image");
   });
 
   it("keeps red member presentation ahead of supporter gold", () => {
@@ -699,15 +742,15 @@ describe("GuiRow rendering behavior", () => {
           text: "red member supporter chat",
           isPaypiggy: true,
           isStreamSupporter: true,
-          memberTheme: "red",
-          memberSpriteUrl: "https://example.invalid/red-member.gif",
+          presentationRole: "member",
+          presentationOverride: { theme: "red", effects: ["particles"], spriteUrl: "https://example.invalid/red-member.gif" },
           avatarUrl: "https://example.invalid/avatar.png",
           timestamp: null,
         },
       }),
     );
 
-    expect(html).toContain("gui-row--member-theme-red");
+    expect(html).toContain("gui-row--theme-red");
     expect(html).toContain("gui-row__member-image");
     expect(html).toContain("gui-row__member-particles");
     expect(html).not.toContain("gui-row--monetization");
@@ -725,6 +768,7 @@ describe("GuiRow rendering behavior", () => {
           username: "test-youtube-member",
           text: "hello from member",
           isPaypiggy: true,
+          presentationRole: "member",
           avatarUrl: "https://example.invalid/test-avatar.png",
           timestamp: "2024-01-01T00:00:00.000Z",
         },
@@ -766,6 +810,7 @@ describe("GuiRow rendering behavior", () => {
           username: "test-twitch-member",
           text: "hello from twitch member",
           isPaypiggy: true,
+          presentationRole: "member",
           avatarUrl: "https://example.invalid/test-avatar.png",
           timestamp: "2024-01-01T00:00:00.000Z",
         },
@@ -782,6 +827,7 @@ describe("GuiRow rendering behavior", () => {
           username: "test-tiktok-member",
           text: "hello from tiktok member",
           isPaypiggy: true,
+          presentationRole: "member",
           avatarUrl: "https://example.invalid/test-avatar.png",
           timestamp: "2024-01-01T00:00:00.000Z",
         },
@@ -823,6 +869,7 @@ describe("GuiRow rendering behavior", () => {
           username: "test-twitch-member",
           text: "hello from member",
           isPaypiggy: true,
+          presentationRole: "member",
           avatarUrl: "https://example.invalid/test-avatar.png",
           timestamp: "2024-01-01T00:00:00.000Z",
         },
@@ -849,6 +896,7 @@ describe("GuiRow rendering behavior", () => {
             platform: "youtube",
             username: "test-monetization-user",
             text: "sent a test monetization event",
+            presentationRole: "monetization",
             avatarUrl: "https://example.invalid/test-avatar.png",
             timestamp: "2024-01-01T00:00:00.000Z",
           },
