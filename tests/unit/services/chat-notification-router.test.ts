@@ -314,76 +314,72 @@ describe("ChatNotificationRouter", () => {
     expect(chatItem?.data.isStreamSupporter).toBe(true);
   });
 
-  it("attaches the resolved member sprite only to paypiggy chat rows", async () => {
-    const { router, runtime } = createRouter();
-    runtime.config.greetings = {
-      customVfxProfiles: {
-        "twitch:test-user-gamma": {
-          profileId: "profile",
-          command: "!water",
-          memberSpriteUrl: "https://cdn.example/sprite.png",
+  it("applies presentation only to an exactly-owned member profile", () => {
+    const { router } = createRouter({
+      runtime: {
+        config: {
+          profiles: {
+            synthetic: { id: "synthetic", identities: ["youtube:test-user"], greetingCommand: "!greeting", spriteUrl: "https://example.invalid/member.gif", rowTheme: "red", rowEffects: ["sheen"] },
+          },
         },
       },
-    };
+    });
+
+    const item = router.buildChatMessageItem("youtube", { ...baseMessage, username: "test-user", isPaypiggy: true }, "hello", [], router.resolveProfile("youtube", "test-user"));
+    expect(item.data.presentationOverride).toEqual({ theme: "red", effects: ["sheen"], spriteUrl: "https://example.invalid/member.gif" });
+
+    const nonMember = router.buildChatMessageItem(
+      "youtube",
+      { ...baseMessage, isPaypiggy: false },
+      "hello",
+    );
+    expect(nonMember.data.presentationOverride).toBeUndefined();
+  });
+
+  it("attaches the resolved member sprite only to paypiggy chat rows", async () => {
+    const { router, runtime } = createRouter();
+    runtime.config.profiles = { profile: { id: "profile", identities: ["twitch:test-user-gamma"], greetingCommand: "!water", spriteUrl: "https://cdn.example/sprite.png" } };
     await router.handleChatMessage("twitch", {
       ...baseMessage,
       isPaypiggy: true,
     });
 
     const paypiggy = getQueuedItems(runtime).find((item) => item.type === "chat");
-    expect(paypiggy?.data.memberSpriteUrl).toBe(
-      "https://cdn.example/sprite.png",
-    );
+    expect(paypiggy?.data.presentationOverride).toEqual({ spriteUrl: "https://cdn.example/sprite.png" });
     const direct = router.buildChatMessageItem(
       "twitch",
       { ...baseMessage, isPaypiggy: false },
       "hello",
     );
-    expect(direct.data.memberSpriteUrl).toBeUndefined();
+    expect(direct.data.presentationOverride).toBeUndefined();
   });
 
   it("attaches the resolved member theme only to paypiggy chat rows", async () => {
     const { router, runtime } = createRouter();
-    runtime.config.greetings = {
-      customVfxProfiles: {
-        "twitch:test-user-gamma": {
-          profileId: "profile",
-          command: "!water",
-          memberTheme: "red",
-        },
-      },
-    };
+    runtime.config.profiles = { profile: { id: "profile", identities: ["twitch:test-user-gamma"], greetingCommand: "!water", rowTheme: "red" } };
     await router.handleChatMessage("twitch", {
       ...baseMessage,
       isPaypiggy: true,
     });
 
     const paypiggy = getQueuedItems(runtime).find((item) => item.type === "chat");
-    expect(paypiggy?.data.memberTheme).toBe("red");
+    expect(paypiggy?.data.presentationOverride).toEqual({ theme: "red" });
     const direct = router.buildChatMessageItem(
       "twitch",
       { ...baseMessage, isPaypiggy: false },
       "hello",
       [],
-      { memberTheme: "red" },
+      { id: "profile", identities: [], greetingCommand: "!water", rowTheme: "red" },
     );
-    expect(direct.data.memberTheme).toBeUndefined();
+    expect(direct.data.presentationOverride).toBeUndefined();
   });
 
   it("resolves member profiles with normalized platform casing", () => {
     const { router, runtime } = createRouter();
-    runtime.config.greetings = {
-      customVfxProfiles: {
-        "youtube:test-user": {
-          profileId: "profile",
-          command: "!water",
-          memberSpriteUrl: "https://cdn.example/sprite.png",
-        },
-      },
-    };
+    runtime.config.profiles = { profile: { id: "profile", identities: ["youtube:test-user"], greetingCommand: "!water", spriteUrl: "https://cdn.example/sprite.png" } };
 
-    expect(router.resolveGreetingProfile("  YouTube  ", "@@Test-User")).toEqual(
-      expect.objectContaining({ profileId: "profile" }),
+    expect(router.resolveProfile("  YouTube  ", "@@Test-User")).toEqual(
+      expect.objectContaining({ id: "profile" }),
     );
   });
 
@@ -947,15 +943,8 @@ it("marks first-message state only after greeting enqueue succeeds", async () =>
             messagesEnabled: true,
             farewellsEnabled: true,
           },
-          greetings: {
-            command: "!hello",
-            customVfxProfiles: {
-              "twitch:test-user-gamma": {
-                profileId: "profileMain",
-                command: "!bye",
-              },
-            },
-          },
+          greetings: { command: "!hello" },
+          profiles: { main: { id: "main", identities: ["twitch:test-user-gamma"], greetingCommand: "!bye" } },
         },
         isFirstMessage: createMockFn().mockReturnValue(true),
         vfxCommandService: {
@@ -1015,15 +1004,8 @@ it("marks first-message state only after greeting enqueue succeeds", async () =>
             messagesEnabled: true,
             farewellsEnabled: true,
           },
-          greetings: {
-            command: "!hello",
-            customVfxProfiles: {
-              "youtube:test-user-yt-gamma": {
-                profileId: "profileMain",
-                command: "!bye",
-              },
-            },
-          },
+          greetings: { command: "!hello" },
+          profiles: { main: { id: "main", identities: ["youtube:test-user-yt-gamma"], greetingCommand: "!bye" } },
         },
         isFirstMessage: createMockFn().mockReturnValue(true),
         vfxCommandService: {
@@ -1083,15 +1065,8 @@ it("marks first-message state only after greeting enqueue succeeds", async () =>
             messagesEnabled: true,
             farewellsEnabled: true,
           },
-          greetings: {
-            command: "!hello",
-            customVfxProfiles: {
-              "tiktok:test-unique-id-alpha": {
-                profileId: "profileMain",
-                command: "!bye",
-              },
-            },
-          },
+          greetings: { command: "!hello" },
+          profiles: { main: { id: "main", identities: ["tiktok:test-unique-id-alpha"], greetingCommand: "!bye" } },
         },
         isFirstMessage: createMockFn().mockReturnValue(true),
         vfxCommandService: {
@@ -1141,19 +1116,8 @@ it("marks first-message state only after greeting enqueue succeeds", async () =>
             messagesEnabled: true,
             farewellsEnabled: true,
           },
-          greetings: {
-            command: "!hello",
-            customVfxProfiles: {
-              "twitch:test-user-alpha": {
-                profileId: "profileMain",
-                command: "!bye",
-              },
-              "tiktok:test-user-beta": {
-                profileId: "profileMain",
-                command: "!bye",
-              },
-            },
-          },
+          greetings: { command: "!hello" },
+          profiles: { main: { id: "main", identities: ["twitch:test-user-alpha", "tiktok:test-user-beta"], greetingCommand: "!bye" } },
         },
         isFirstMessage: createMockFn<[unknown, Record<string, unknown>], boolean>().mockImplementation((trackingKey) => {
           if (trackedFirstMessageKeys.has(trackingKey)) {
@@ -1214,15 +1178,8 @@ it("marks first-message state only after greeting enqueue succeeds", async () =>
             messagesEnabled: true,
             farewellsEnabled: true,
           },
-          greetings: {
-            command: "!hello",
-            customVfxProfiles: {
-              "twitch:test-user-gamma": {
-                profileId: "profileMain",
-                command: "!bye",
-              },
-            },
-          },
+          greetings: { command: "!hello" },
+          profiles: { main: { id: "main", identities: ["twitch:test-user-gamma"], greetingCommand: "!bye" } },
         },
         isFirstMessage: createMockFn().mockReturnValue(true),
         vfxCommandService: {

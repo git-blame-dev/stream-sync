@@ -475,26 +475,35 @@ describe('config-builders', () => {
             expect(result.gui).toEqual(normalized.gui);
         });
 
-        it('includes greetings custom VFX profile mapping from normalized config', () => {
+        it('clones cohesive profiles and keeps greetings command-only', () => {
             const normalized = ConfigValidator.normalize({
                 ...getRawTestConfig(),
                 greetings: {
                     command: '!hello',
-                    profileMain: 'tiktok:test-user-alpha|youtube:@test-user-yt-alpha, !water'
+                },
+                profile: {
+                    'profile-main': {
+                        identities: 'tiktok:test-user-alpha|youtube:@test-user-yt-alpha',
+                        greetingCommand: '!water',
+                        rowTheme: 'gold',
+                        rowEffects: 'sheen,particles',
+                        rowSpriteUrl: 'https://example.invalid/member.gif'
+                    }
                 }
             });
 
             const result = buildConfig(normalized);
 
             expect(result.greetings.command).toBe('!hello');
-            expect(result.greetings.customVfxProfiles).toEqual({
-                'tiktok:test-user-alpha': {
-                    profileId: 'profileMain',
-                    command: '!water'
-                },
-                'youtube:test-user-yt-alpha': {
-                    profileId: 'profileMain',
-                    command: '!water'
+            expect(result.greetings).not.toHaveProperty('profiles');
+            expect(result.profiles).toEqual({
+                'profile-main': {
+                    id: 'profile-main',
+                    identities: ['tiktok:test-user-alpha', 'youtube:test-user-yt-alpha'],
+                    greetingCommand: '!water',
+                    rowTheme: 'gold',
+                    rowEffects: ['sheen', 'particles'],
+                    spriteUrl: 'https://example.invalid/member.gif'
                 }
             });
         });

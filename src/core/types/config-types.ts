@@ -1,4 +1,15 @@
+import type { RowTheme, RowVisualEffectId } from '../row-presentation';
+
 export type ConfigScalarType = 'string' | 'number' | 'boolean' | 'stringArray';
+export type { RowTheme, RowVisualEffectId } from '../row-presentation';
+export type MemberProfile = {
+    id: string;
+    identities: string[];
+    greetingCommand: string;
+    rowTheme?: RowTheme;
+    rowEffects?: readonly RowVisualEffectId[];
+    spriteUrl?: string;
+};
 
 export type ConfigScalarValue = string | number | boolean | readonly string[] | null;
 
@@ -61,7 +72,7 @@ export type ConfigDefaults = Record<ConfigDefaultSectionName, ConfigDefaultsSect
 
 export type NormalizedConfigSection = Record<string, unknown>;
 
-export type NormalizedConfig = Record<ConfigSectionName, NormalizedConfigSection>;
+export type NormalizedConfig = Record<ConfigSectionName, NormalizedConfigSection> & { profiles: Record<string, MemberProfile> };
 
 export interface ParseNumberOptions {
     defaultValue?: unknown;

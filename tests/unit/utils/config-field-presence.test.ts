@@ -522,7 +522,7 @@ describe("Config field presence - all normalizers return expected fields", () =>
   });
 
   describe("_normalizeGreetingsSection", () => {
-    const EXPECTED_FIELDS = ["command", "customVfxProfiles"];
+    const EXPECTED_FIELDS = ["command"];
 
     it("returns all expected fields", () => {
       const result = ConfigValidator._normalizeGreetingsSection({});

@@ -80,9 +80,15 @@ type TestConfigKnownSections = {
     farewell: Record<string, string> & {
         timeout: number;
     };
-    greetings?: ConfigSectionFixture & {
-        customVfxProfiles?: Record<string, ConfigSectionFixture>;
-    };
+    greetings?: ConfigSectionFixture;
+    profiles: Record<string, ConfigSectionFixture & {
+        id: string;
+        identities: string[];
+        greetingCommand: string;
+        rowTheme?: 'green' | 'red' | 'gold';
+        rowEffects?: ('sheen' | 'particles')[];
+        spriteUrl?: string;
+    }>;
     vfx: {
         filePath: string;
     };
@@ -172,7 +178,8 @@ const RAW_TEST_CONFIG = {
         showPaypiggies: 'true',
         showGiftPaypiggies: 'true',
         showEnvelopes: 'true'
-    }
+    },
+    profiles: {}
 };
 
 function getRawTestConfig(): RawTestConfig {

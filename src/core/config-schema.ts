@@ -156,7 +156,9 @@ const CONFIG_SCHEMA: ConfigSchema = {
         showEnvelopes: { type: 'boolean', default: true },
         notificationIdleHoldMs: { type: 'number', default: 5000, min: 0, integer: true },
         monetizationIdleHoldMs: { type: 'number', default: 30000, min: 0, integer: true },
-        notificationTransitionMs: { type: 'number', default: 1000, min: 0, integer: true }
+        notificationTransitionMs: { type: 'number', default: 1000, min: 0, integer: true },
+        memberRowTheme: { type: 'string', default: 'green', enum: ['green', 'red', 'gold'] },
+        memberRowEffects: { type: 'stringArray', default: ['sheen'] }
     },
 
     logging: {

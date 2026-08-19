@@ -4,12 +4,13 @@ import { checkGlobalCommandCooldown, updateGlobalCommandCooldown } from '../util
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 import { sanitizeForDisplay } from '../utils/validation';
 import { getValidMessageParts, normalizeBadgeImages } from '../utils/message-parts';
-import { normalizeGreetingIdentityKey } from '../utils/greeting-identity-key-normalizer';
+import { normalizeProfileIdentityKey } from '../utils/profile-identity-key-normalizer';
 import type {
     DisplayQueueItem,
     DisplayQueueSequenceWriter,
     DisplayQueueVfxConfig
 } from '../interfaces/DisplayQueue';
+import type { MemberProfile } from '../core/types/config-types';
 
 const LOG_TRUNCATION_LENGTH = 200;
 type RouterRecord = Record<string, unknown>;
@@ -35,9 +36,8 @@ type RouterConfig = {
     farewell: {
         timeout: number;
     };
-    greetings?: {
-        customVfxProfiles?: Record<string, GreetingProfile>;
-    };
+    greetings?: RouterRecord;
+    profiles?: Record<string, ViewerProfile>;
 } & Record<string, RouterRecord>;
 
 type NormalizedChatData = {
@@ -61,12 +61,7 @@ type CommandConfig = {
     commandKey?: unknown;
 };
 
-type GreetingProfile = {
-    profileId?: string;
-    command?: string;
-    memberSpriteUrl?: string;
-    memberTheme?: 'red';
-} & RouterRecord;
+type ViewerProfile = MemberProfile & RouterRecord;
 
 type FirstMessageState = {
     isFirstMessage: boolean;
@@ -76,7 +71,7 @@ type FirstMessageState = {
 type ProcessCommandOptions = {
     firstMessageState?: FirstMessageState;
     greetingsEnabled?: boolean;
-    greetingProfile?: GreetingProfile | null | undefined;
+    greetingProfile?: ViewerProfile | null | undefined;
     sourceChatItem?: DisplayQueueItem | null;
 };
 
@@ -244,9 +239,9 @@ class ChatNotificationRouter {
             const greetingIdentity = platform === 'tiktok'
                 ? safeNormalizedData.userId
                 : safeNormalizedData.username;
-            const greetingProfile = this.resolveGreetingProfile(platform, greetingIdentity);
+            const greetingProfile = this.resolveProfile(platform, greetingIdentity);
             const firstMessageTrackingId = greetingProfile
-                ? `greeting-profile:${greetingProfile.profileId}`
+                ? `viewer-profile:${greetingProfile.id}`
                 : safeNormalizedData.userId;
             const firstMessageState = this.getFirstMessageState(safeNormalizedData, platform, firstMessageTrackingId);
             const greetingsEnabled = this.isGreetingEnabled(platform);
@@ -515,7 +510,7 @@ class ChatNotificationRouter {
         );
     }
 
-    buildChatMessageItem(platform: string, normalizedData: NormalizedChatData, sanitizedMessage: string, messageParts: Array<Record<string, unknown>> = [], greetingProfile?: GreetingProfile | null): DisplayQueueItem {
+    buildChatMessageItem(platform: string, normalizedData: NormalizedChatData, sanitizedMessage: string, messageParts: Array<Record<string, unknown>> = [], greetingProfile?: ViewerProfile | null): DisplayQueueItem {
 
         const baseChatData = {
             type: 'chat',
@@ -549,11 +544,12 @@ class ChatNotificationRouter {
         if (badgeImages.length > 0) {
             chatData.badgeImages = badgeImages;
         }
-        if (normalizedData.isPaypiggy === true && typeof greetingProfile?.memberSpriteUrl === 'string') {
-            chatData.memberSpriteUrl = greetingProfile.memberSpriteUrl;
-        }
-        if (normalizedData.isPaypiggy === true && greetingProfile?.memberTheme === 'red') {
-            chatData.memberTheme = greetingProfile.memberTheme;
+        if (normalizedData.isPaypiggy === true && greetingProfile) {
+            const presentationOverride: Record<string, unknown> = {};
+            if (greetingProfile.rowTheme) presentationOverride.theme = greetingProfile.rowTheme;
+            if (greetingProfile.rowEffects) presentationOverride.effects = greetingProfile.rowEffects;
+            if (typeof greetingProfile.spriteUrl === 'string') presentationOverride.spriteUrl = greetingProfile.spriteUrl;
+            if (Object.keys(presentationOverride).length > 0) chatData.presentationOverride = presentationOverride;
         }
 
         return {
@@ -808,23 +804,21 @@ class ChatNotificationRouter {
         };
     }
 
-    resolveGreetingProfile(platform: string, identityValue: unknown) {
-        const profiles = this.runtime?.config?.greetings?.customVfxProfiles;
+    resolveProfile(platform: string, identityValue: unknown): ViewerProfile | null {
+        const profiles = this.runtime?.config?.profiles;
         if (!profiles || typeof profiles !== 'object') {
             return null;
         }
 
-        const normalizedPlatform = platform.trim().toLowerCase();
-        const normalizedIdentity = normalizeGreetingIdentityKey(normalizedPlatform, identityValue);
-        if (!normalizedPlatform || !normalizedIdentity) {
+        const identityKey = normalizeProfileIdentityKey(platform, identityValue);
+        if (!identityKey) {
             return null;
         }
 
-        const identityKey = `${normalizedPlatform}:${normalizedIdentity}`;
-        return profiles[identityKey] || null;
+        return Object.values(profiles).find((profile) => profile.identities.includes(identityKey)) ?? null;
     }
 
-    async queueGreeting(platform: string, username: string | undefined, options: { userId?: unknown; avatarUrl?: unknown; priority?: number; greetingProfile?: GreetingProfile | null | undefined }) {
+    async queueGreeting(platform: string, username: string | undefined, options: { userId?: unknown; avatarUrl?: unknown; priority?: number; greetingProfile?: ViewerProfile | null | undefined }) {
         const safeOptions = options || {};
         if (!this.runtime.displayQueue) {
             return;
@@ -833,7 +827,7 @@ class ChatNotificationRouter {
         this.runtime.displayQueue.addItem(await this.buildGreetingItem(platform, username, safeOptions));
     }
 
-    async buildGreetingItem(platform: string, username: string | undefined, options: { userId?: unknown; avatarUrl?: unknown; priority?: number; greetingProfile?: GreetingProfile | null | undefined }): Promise<DisplayQueueItem> {
+    async buildGreetingItem(platform: string, username: string | undefined, options: { userId?: unknown; avatarUrl?: unknown; priority?: number; greetingProfile?: ViewerProfile | null | undefined }): Promise<DisplayQueueItem> {
         const safeOptions = options || {};
 
         const greetingData = NotificationBuilder.build({
@@ -901,18 +895,18 @@ class ChatNotificationRouter {
         return null;
     }
 
-    async resolveSecondaryGreetingVFX(greetingProfile: GreetingProfile | null | undefined) {
+    async resolveSecondaryGreetingVFX(greetingProfile: ViewerProfile | null | undefined) {
         if (!isRecord(greetingProfile)) {
             return null;
         }
-        if (typeof greetingProfile.command !== 'string' || greetingProfile.command.trim().length === 0) {
+        if (typeof greetingProfile.greetingCommand !== 'string' || greetingProfile.greetingCommand.trim().length === 0) {
             return null;
         }
         if (!this.runtime.vfxCommandService?.selectVFXCommand) {
             return null;
         }
 
-        const trigger = greetingProfile.command.trim();
+        const trigger = greetingProfile.greetingCommand.trim();
         try {
             const vfxResult = await this.runtime.vfxCommandService.selectVFXCommand(trigger, trigger);
             if (!vfxResult) {

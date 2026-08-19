@@ -216,10 +216,7 @@ function buildConfig(normalized: NormalizedConfig, options: { debugMode?: boolea
     const follows = normalized.follows as { command: unknown };
     const raids = normalized.raids as { command: unknown };
     const paypiggies = normalized.paypiggies as { command: unknown };
-    const greetings = normalized.greetings as GenericRecord & {
-        command: unknown;
-        customVfxProfiles?: Record<string, unknown>;
-    };
+    const greetings = normalized.greetings as GenericRecord & { command: unknown };
     const shares = normalized.shares as { command: unknown };
 
     return {
@@ -242,9 +239,9 @@ function buildConfig(normalized: NormalizedConfig, options: { debugMode?: boolea
         raids: { command: raids.command },
         paypiggies: { command: paypiggies.command },
         greetings: {
-            command: greetings.command,
-            customVfxProfiles: { ...(greetings.customVfxProfiles || {}) }
+            command: greetings.command
         },
+        profiles: structuredClone(normalized.profiles || {}),
         shares: { command: shares.command },
         farewell: { ...normalized.farewell },
         streamelements: buildStreamElementsConfig(normalized),

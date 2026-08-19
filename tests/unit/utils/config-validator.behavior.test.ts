@@ -67,7 +67,7 @@ describe("config-validator (utility) behavior", () => {
 });
 
 describe("ConfigValidator.normalize()", () => {
-  const ALL_SECTIONS: readonly ConfigSectionName[] = [
+  const ALL_SECTIONS: readonly (ConfigSectionName | "profiles")[] = [
     "general",
     "http",
     "obs",
@@ -92,6 +92,7 @@ describe("ConfigValidator.normalize()", () => {
     "paypiggies",
     "greetings",
     "shares",
+    "profiles",
   ];
 
   it("returns object with all config sections", () => {
@@ -748,109 +749,87 @@ describe("ConfigValidator simple command sections", () => {
   it("normalizes greetings section", () => {
     const result = ConfigValidator._normalizeGreetingsSection({});
     expect(result.command).toBe("");
-    expect(result.customVfxProfiles).toEqual({});
+    expect(result).toEqual({ command: "" });
   });
 
-  it("normalizes greetings custom VFX profile entries", () => {
-    const result = ConfigValidator._normalizeGreetingsSection({
-      command: "!hello",
-      profileMain: "tiktok:test-user-alpha|youtube:@test-user-yt-alpha, !water",
-    });
-
-    expect(result.command).toBe("!hello");
-    expect(result.customVfxProfiles).toEqual({
-      "tiktok:test-user-alpha": {
-        profileId: "profileMain",
-        command: "!water",
-      },
-      "youtube:test-user-yt-alpha": {
-        profileId: "profileMain",
-        command: "!water",
+  it("normalizes cohesive profiles from nested INI sections", () => {
+    const result = ConfigValidator.normalize({
+      general: {},
+      gui: { memberRowTheme: "RED", memberRowEffects: "particles, sheen, particles" },
+      greetings: { command: "!hello" },
+      profile: {
+        "test-profile": {
+          identities: "TikTok:test-user|youtube:@test-channel",
+          greetingCommand: "!water",
+          rowTheme: "gold",
+          rowEffects: "particles, sheen, particles",
+          rowSpriteUrl: " https://example.invalid/member-sprite.gif ",
+        },
       },
     });
+    expect(result.gui.memberRowTheme).toBe("red");
+    expect(result.gui.memberRowEffects).toEqual(["particles", "sheen"]);
+    expect(result.profiles).toEqual({
+      "test-profile": {
+        id: "test-profile",
+        identities: ["tiktok:test-user", "youtube:test-channel"],
+        greetingCommand: "!water",
+        rowTheme: "gold",
+        rowEffects: ["particles", "sheen"],
+        spriteUrl: "https://example.invalid/member-sprite.gif",
+      },
+    });
   });
 
-  it("merges validated member sprite URLs into every profile identity", () => {
-    const normalized = ConfigValidator.normalize({
-      greetings: { profileMain: "twitch:viewer|youtube:@viewer, !water" },
-      memberSprites: { profileMain: "  https://cdn.example/sprite.png  " },
-    });
-
-    expect(normalized.greetings.customVfxProfiles).toEqual({
-      "twitch:viewer": { profileId: "profileMain", command: "!water", memberSpriteUrl: "https://cdn.example/sprite.png" },
-      "youtube:viewer": { profileId: "profileMain", command: "!water", memberSpriteUrl: "https://cdn.example/sprite.png" },
-    });
-    expect(normalized).not.toHaveProperty("memberSprites");
+  it("allows empty effects and rejects invalid profile contracts", () => {
+    expect(ConfigValidator.normalize({ general: {}, profile: { empty: {
+      identities: "twitch:test-user", greetingCommand: "!x", rowEffects: "",
+    }}}).profiles.empty?.rowEffects).toEqual([]);
+    const invalid = [
+      { profile: { "bad id": { identities: "twitch:user", greetingCommand: "!x" } } },
+      { profile: { Bad: { identities: "twitch:user", greetingCommand: "!x" } } },
+      { profile: { bad: { identities: "kick:user", greetingCommand: "!x" } } },
+      { profile: { bad: { identities: "twitch:user", greetingCommand: "x" } } },
+      { profile: { bad: { identities: "twitch:user", greetingCommand: "!x", rowEffects: "glow" } } },
+      { profile: { bad: { identities: "twitch:user", greetingCommand: "!x", rowTheme: "blue" } } },
+      { profile: { bad: { identities: "twitch:user", greetingCommand: "!x", rowSpriteUrl: "http://example.invalid/a" } } },
+      { profile: { bad: { identities: "twitch:user", greetingCommand: "!x", rowSpriteUrl: `https://example.invalid/${"é".repeat(700)}` } } },
+      { profile: { bad: { identities: "twitch:user", greetingCommand: "!x", extra: "nope" } } },
+    ];
+    for (const candidate of invalid) expect(() => ConfigValidator.normalize({ general: {}, ...candidate })).toThrow();
   });
 
-  it("merges validated member themes into every profile identity", () => {
-    const normalized = ConfigValidator.normalize({
-      greetings: { profileMain: "twitch:viewer|youtube:@viewer, !water" },
-      memberThemes: { profileMain: " red " },
-    });
-
-    expect(normalized.greetings.customVfxProfiles).toEqual({
-      "twitch:viewer": { profileId: "profileMain", command: "!water", memberTheme: "red" },
-      "youtube:viewer": { profileId: "profileMain", command: "!water", memberTheme: "red" },
-    });
-    expect(normalized).not.toHaveProperty("memberThemes");
-  });
-
-  it("rejects unsupported or orphaned member themes", () => {
-    expect(() => ConfigValidator.normalize({ greetings: { profile: "twitch:viewer, !water" }, memberThemes: { other: "red" } })).toThrow(
-      "memberThemes.other does not match a greetings profile",
-    );
-    expect(() => ConfigValidator.normalize({ greetings: { profile: "twitch:viewer, !water" }, memberThemes: { profile: "blue" } })).toThrow(
-      "memberThemes.profile must be one of: red",
-    );
-  });
-
-  it("rejects unsafe or orphaned member sprite entries", () => {
-    expect(() => ConfigValidator.normalize({ greetings: { profile: "twitch:viewer, !water" }, memberSprites: { other: "https://cdn.example/a" } })).toThrow();
-    expect(() => ConfigValidator.normalize({ greetings: { profile: "twitch:viewer, !water" }, memberSprites: { profile: "http://cdn.example/a" } })).toThrow();
-    expect(() => ConfigValidator.normalize({ greetings: { profile: "twitch:viewer, !water" }, memberSprites: { profile: "https://user:pass@cdn.example/a#x" } })).toThrow();
+  it("rejects unknown global member presentation values", () => {
     expect(() => ConfigValidator.normalize({
-      greetings: { profile: "twitch:viewer, !water" },
-      memberSprites: { profile: `https://cdn.example/${"é".repeat(700)}` },
-    })).toThrow("memberSprites.profile must be a valid HTTPS URL");
+      general: {},
+      gui: { memberRowTheme: "blue" },
+    })).toThrow("Unknown member row theme: blue");
+    expect(() => ConfigValidator.normalize({
+      general: {},
+      gui: { memberRowEffects: "sheen, glow" },
+    })).toThrow("Unknown row effect: glow");
   });
 
-  it("throws when greetings custom profile row is malformed", () => {
-    expect(() =>
-      ConfigValidator._normalizeGreetingsSection({
-        profileMain: "tiktok:test-user-alpha|youtube:test-user-yt-alpha",
-      }),
-    ).toThrow("greetings.profileMain must include a comma separator");
+  it("rejects required identity omissions and normalized collisions across profiles", () => {
+    expect(() => ConfigValidator.normalize({ general: {}, profile: { bad: { greetingCommand: "!x" } } })).toThrow();
+    expect(() => ConfigValidator.normalize({ general: {}, profile: {
+      one: { identities: "youtube:@test-channel", greetingCommand: "!x" },
+      two: { identities: "youtube:test-channel", greetingCommand: "!y" },
+    }})).toThrow();
   });
 
-  it("throws when greetings custom profile uses unsupported platform", () => {
-    expect(() =>
-      ConfigValidator._normalizeGreetingsSection({
-        profileMain: "kick:test-user-alpha, !water",
-      }),
-    ).toThrow("greetings.profileMain has unsupported platform: kick");
-  });
-
-  it("throws when greetings custom profile maps same identity twice", () => {
-    expect(() =>
-      ConfigValidator._normalizeGreetingsSection({
-        profileMain: "tiktok:test-user-alpha, !water",
-        profileAlt: "tiktok:test-user-alpha, !run",
-      }),
-    ).toThrow(
-      "greetings custom VFX identity mapped more than once: tiktok:test-user-alpha",
-    );
-  });
-
-  it("throws when greetings custom profile identities collide after normalization", () => {
-    expect(() =>
-      ConfigValidator._normalizeGreetingsSection({
-        profileMain: "youtube:@Test-User-YT-Alpha, !water",
-        profileAlt: "youtube:test-user-yt-alpha, !run",
-      }),
-    ).toThrow(
-      "greetings custom VFX identity mapped more than once: youtube:test-user-yt-alpha",
-    );
+  it("normalizes identity key whitespace and keeps platforms distinct", () => {
+    expect(ConfigValidator.normalize({ general: {}, profile: {
+      main: { identities: "  Twitch :  User  | YouTube : @Channel ", greetingCommand: "!x" },
+      other: { identities: "tiktok:user", greetingCommand: "!y" },
+    }}).profiles).toEqual({
+      main: { id: "main", identities: ["twitch:user", "youtube:channel"], greetingCommand: "!x" },
+      other: { id: "other", identities: ["tiktok:user"], greetingCommand: "!y" },
+    });
+    expect(() => ConfigValidator.normalize({ general: {}, profile: {
+      one: { identities: " Twitch : USER ", greetingCommand: "!x" },
+      two: { identities: "twitch:user", greetingCommand: "!y" },
+    }})).toThrow();
   });
 
   it("normalizes shares section", () => {

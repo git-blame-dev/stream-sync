@@ -1,4 +1,5 @@
 import { DEFAULT_AVATAR_URL } from '../constants/avatar';
+import type { MemberProfile } from '../core/types/config-types';
 import { InnertubeFactory } from '../factories/innertube-factory';
 import { PlatformEvents } from '../interfaces/PlatformEvents';
 import { OBSViewerCountObserver } from '../observers/obs-viewer-count-observer';
@@ -78,9 +79,8 @@ type RuntimeConfig = Record<string, RuntimeRecord> & {
     farewell: RuntimeRecord & {
         timeout: number;
     };
-    greetings?: RuntimeRecord & {
-        customVfxProfiles?: Record<string, RuntimeRecord>;
-    };
+    greetings?: RuntimeRecord;
+    profiles?: Record<string, MemberProfile>;
     youtube?: RuntimeRecord;
 };
 

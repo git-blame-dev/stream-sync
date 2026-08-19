@@ -34,7 +34,7 @@ type ChatNotificationRouterLike = {
       avatarUrl?: unknown;
       priority?: number;
       greetingProfile?:
-        | ({ profileId?: string; command?: string } & Record<string, unknown>)
+        | ({ id: string; identities: string[]; greetingCommand: string } & Record<string, unknown>)
         | null
         | undefined;
     },

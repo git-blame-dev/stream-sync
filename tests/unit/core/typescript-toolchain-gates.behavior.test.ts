@@ -355,9 +355,9 @@ describe('TypeScript toolchain gates behavior', () => {
         }
     });
 
-    it('migrates missing-fields and greeting utility cohort to typescript source files', () => {
+    it('migrates missing-fields and profile utility cohort to typescript source files', () => {
         const migratedModules = [
-            'src/utils/greeting-identity-key-normalizer',
+            'src/utils/profile-identity-key-normalizer',
             'src/utils/missing-fields',
             'src/notifications/aggregated-donation-transformer'
         ];
@@ -702,9 +702,9 @@ describe('TypeScript toolchain gates behavior', () => {
         expect(existsSync(join(repoRoot, 'tests/unit/utils/env-file-parser.test.js'))).toBe(false);
     });
 
-    it('keeps greeting identity key normalizer unit test on TypeScript path', () => {
-        expect(existsSync(join(repoRoot, 'tests/unit/utils/greeting-identity-key-normalizer.test.ts'))).toBe(true);
-        expect(existsSync(join(repoRoot, 'tests/unit/utils/greeting-identity-key-normalizer.test.js'))).toBe(false);
+    it('keeps profile identity key normalizer unit test on TypeScript path', () => {
+        expect(existsSync(join(repoRoot, 'tests/unit/utils/profile-identity-key-normalizer.test.ts'))).toBe(true);
+        expect(existsSync(join(repoRoot, 'tests/unit/utils/profile-identity-key-normalizer.test.js'))).toBe(false);
     });
 
     it('keeps config field presence unit test on TypeScript path', () => {

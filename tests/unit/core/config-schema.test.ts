@@ -106,6 +106,8 @@ describe('buildDefaultsFromSchema()', () => {
             minimalRowBackgroundsEnabled: false,
             minimalMaxDisplayableBadges: 3,
             streamSupporterChatEffectsEnabled: true,
+            memberRowTheme: 'green',
+            memberRowEffects: ['sheen'],
             showMessages: true,
             showCommands: true,
             showGreetings: true,

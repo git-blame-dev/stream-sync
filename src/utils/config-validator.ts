@@ -4,74 +4,21 @@ import type {
     ConfigDefaultSectionName,
     ConfigSectionName,
     ConfigValidationResult,
+    MemberProfile,
     NormalizedConfig,
     NormalizedConfigSection,
     ParseNumberOptions,
     RawConfig,
-    RawConfigSection
+    RawConfigSection,
+    RowVisualEffectId
 } from '../core/types/config-types';
 import { DEFAULT_HTTP_USER_AGENTS, parseUserAgentList } from '../core/http-config';
-import { normalizeGreetingIdentityKey } from './greeting-identity-key-normalizer';
+import { isRowVisualEffectId, normalizeRowSpriteUrl, normalizeRowTheme } from '../core/row-presentation';
+import { normalizeProfileIdentityKey } from './profile-identity-key-normalizer';
+
+const PROFILE_FIELDS = new Set(['identities', 'greetingCommand', 'rowTheme', 'rowEffects', 'rowSpriteUrl']);
 
 class ConfigValidator {
-    static _parseGreetingCustomProfileLine(profileId: string, rawValue: unknown): { profileId: string; command: string; identities: string[] } {
-        if (typeof rawValue !== 'string' || rawValue.trim().length === 0) {
-            throw new Error(`greetings.${profileId} must be a non-empty string`);
-        }
-
-        const commaIndex = rawValue.indexOf(',');
-        if (commaIndex === -1) {
-            throw new Error(`greetings.${profileId} must include a comma separator`);
-        }
-
-        const identityPart = rawValue.slice(0, commaIndex).trim();
-        const commandPart = rawValue.slice(commaIndex + 1).trim();
-
-        if (!commandPart.startsWith('!')) {
-            throw new Error(`greetings.${profileId} command must start with !`);
-        }
-
-        if (!identityPart) {
-            throw new Error(`greetings.${profileId} requires at least one platform:username identity`);
-        }
-
-        const identityTokens = identityPart
-            .split('|')
-            .map((token: string) => token.trim())
-            .filter((token: string) => token.length > 0);
-
-        if (identityTokens.length === 0) {
-            throw new Error(`greetings.${profileId} requires at least one platform:username identity`);
-        }
-
-        const identities = identityTokens.map((token: string) => {
-            const separatorIndex = token.indexOf(':');
-            if (separatorIndex === -1) {
-                throw new Error(`greetings.${profileId} has invalid identity token: ${token}`);
-            }
-
-            const platform = token.slice(0, separatorIndex).trim().toLowerCase();
-            const identityValueRaw = token.slice(separatorIndex + 1).trim();
-
-            if (!['tiktok', 'youtube', 'twitch'].includes(platform)) {
-                throw new Error(`greetings.${profileId} has unsupported platform: ${platform}`);
-            }
-
-            const normalizedIdentity = normalizeGreetingIdentityKey(platform, identityValueRaw);
-            if (!normalizedIdentity) {
-                throw new Error(`greetings.${profileId} has empty username for platform ${platform}`);
-            }
-
-            return `${platform}:${normalizedIdentity}`;
-        });
-
-        return {
-            profileId,
-            command: commandPart,
-            identities
-        };
-    }
-
     static _readEnvString(envKey: string): string {
         const value = process.env[envKey];
         if (value === undefined || value === null) return '';
@@ -215,8 +162,9 @@ class ConfigValidator {
             follows: ConfigValidator._normalizeFollowsSection(rawConfig.follows || {}),
             raids: ConfigValidator._normalizeRaidsSection(rawConfig.raids || {}),
             paypiggies: ConfigValidator._normalizePaypiggiesSection(rawConfig.paypiggies || {}),
-            greetings: ConfigValidator._normalizeGreetingsSection(rawConfig.greetings || {}, rawConfig.memberSprites, rawConfig.memberThemes),
-            shares: ConfigValidator._normalizeSharesSection(rawConfig.shares || {})
+            greetings: ConfigValidator._normalizeGreetingsSection(rawConfig.greetings || {}),
+            shares: ConfigValidator._normalizeSharesSection(rawConfig.shares || {}),
+            profiles: ConfigValidator._normalizeProfiles(rawConfig.profile || {})
         };
     }
 
@@ -416,7 +364,13 @@ class ConfigValidator {
     }
 
     static _normalizeGuiSection(raw: RawConfigSection): NormalizedConfigSection {
+        const configuredTheme = normalizeRowTheme(raw.memberRowTheme);
+        if (raw.memberRowTheme !== undefined && configuredTheme === undefined) {
+            throw new Error(`Unknown member row theme: ${String(raw.memberRowTheme)}`);
+        }
+
         const normalized = ConfigValidator.normalizeFromSchema('gui', raw);
+        normalized.memberRowEffects = ConfigValidator._parseEffects(raw.memberRowEffects, ['sheen']);
 
         if (normalized.host === '') {
             normalized.host = DEFAULTS.gui.host;
@@ -478,86 +432,86 @@ class ConfigValidator {
         };
     }
 
-    static _normalizeGreetingsSection(raw: RawConfigSection, rawMemberSprites?: RawConfigSection, rawMemberThemes?: RawConfigSection): NormalizedConfigSection {
-        const customVfxProfiles: Record<string, { profileId: string; command: string; memberSpriteUrl?: string; memberTheme?: 'red' }> = {};
-        const profileIds = new Set<string>();
-        for (const [key, value] of Object.entries(raw)) {
-            if (key === 'command') {
-                continue;
+    static _normalizeGreetingsSection(raw: RawConfigSection): NormalizedConfigSection {
+        return { command: ConfigValidator.parseString(raw.command, '') };
+    }
+
+    static _parseEffects(value: unknown, fallback: readonly RowVisualEffectId[]): RowVisualEffectId[] {
+        const values = Array.isArray(value) ? value : String(value ?? fallback.join(',')).split(',');
+        const result: RowVisualEffectId[] = [];
+        for (const item of values) {
+            const effect = String(item).trim().toLowerCase();
+            if (!effect) continue;
+            if (!isRowVisualEffectId(effect)) throw new Error(`Unknown row effect: ${effect}`);
+            if (!result.includes(effect)) result.push(effect);
+        }
+        return result;
+    }
+
+    static _normalizeProfiles(raw: RawConfigSection): Record<string, MemberProfile> {
+        const profiles: Record<string, MemberProfile> = {};
+        const identities = new Set<string>();
+
+        for (const [id, value] of Object.entries(raw)) {
+            if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(id)) {
+                throw new Error(`Invalid profile id: ${id}`);
+            }
+            if (!value || typeof value !== 'object') {
+                throw new Error(`profile.${id} must be a section`);
             }
 
-            const profileId = String(key).trim();
-            if (!profileId) {
-                throw new Error('greetings profile key must be non-empty');
+            const section = value as RawConfigSection;
+            for (const key of Object.keys(section)) {
+                if (!PROFILE_FIELDS.has(key)) throw new Error(`Unknown profile.${id}.${key}`);
             }
 
-            const parsedProfile = ConfigValidator._parseGreetingCustomProfileLine(profileId, value);
-            profileIds.add(profileId);
-            for (const identityKey of parsedProfile.identities) {
-                if (Object.prototype.hasOwnProperty.call(customVfxProfiles, identityKey)) {
-                    throw new Error(`greetings custom VFX identity mapped more than once: ${identityKey}`);
+            const identityTokens = String(section.identities ?? '')
+                .split('|')
+                .map(token => token.trim())
+                .filter(Boolean);
+            if (identityTokens.length === 0) {
+                throw new Error(`profile.${id}.identities is required`);
+            }
+
+            const normalizedIdentities = identityTokens.map(token => {
+                const match = /^([^:]+):(.+)$/.exec(token);
+                if (!match) {
+                    throw new Error(`Invalid profile identity: ${token}`);
                 }
 
-                customVfxProfiles[identityKey] = {
-                    profileId: parsedProfile.profileId,
-                    command: parsedProfile.command
-                };
+                const key = normalizeProfileIdentityKey(match[1], match[2]);
+                if (!key) throw new Error(`Invalid profile identity: ${token}`);
+                if (identities.has(key)) throw new Error(`Duplicate profile identity: ${key}`);
+                identities.add(key);
+                return key;
+            });
+
+            const greetingCommand = ConfigValidator.parseString(section.greetingCommand, null);
+            if (!greetingCommand?.startsWith('!')) {
+                throw new Error(`profile.${id}.greetingCommand must start with !`);
             }
+
+            const rowTheme = normalizeRowTheme(section.rowTheme);
+            if (section.rowTheme !== undefined && rowTheme === undefined) {
+                throw new Error(`Invalid profile theme: ${String(section.rowTheme).trim().toLowerCase()}`);
+            }
+
+            const spriteUrl = normalizeRowSpriteUrl(section.rowSpriteUrl);
+            if (section.rowSpriteUrl !== undefined && spriteUrl === undefined) {
+                throw new Error(`Invalid profile sprite URL: ${id}`);
+            }
+
+            profiles[id] = {
+                id,
+                identities: normalizedIdentities,
+                greetingCommand,
+                ...(rowTheme ? { rowTheme } : {}),
+                ...(section.rowEffects === undefined ? {} : { rowEffects: ConfigValidator._parseEffects(section.rowEffects, []) }),
+                ...(spriteUrl ? { spriteUrl } : {})
+            };
         }
 
-        if (rawMemberSprites !== undefined) {
-            for (const [profileId, value] of Object.entries(rawMemberSprites)) {
-                const normalizedProfileId = profileId.trim();
-                if (!profileIds.has(normalizedProfileId)) {
-                    throw new Error(`memberSprites.${profileId} does not match a greetings profile`);
-                }
-                if (typeof value !== 'string') {
-                    throw new Error(`memberSprites.${profileId} must be a valid HTTPS URL`);
-                }
-                const candidate = value.trim();
-                if (!candidate || candidate.length > 2048) {
-                    throw new Error(`memberSprites.${profileId} must be a valid HTTPS URL`);
-                }
-                let url: URL;
-                try {
-                    url = new URL(candidate);
-                } catch {
-                    throw new Error(`memberSprites.${profileId} must be a valid HTTPS URL`);
-                }
-                const canonicalUrl = url.toString();
-                if (canonicalUrl.length > 2048 || url.protocol !== 'https:' || url.username || url.password || url.hash) {
-                    throw new Error(`memberSprites.${profileId} must be a valid HTTPS URL`);
-                }
-                for (const profile of Object.values(customVfxProfiles)) {
-                    if (profile.profileId === normalizedProfileId) {
-                        profile.memberSpriteUrl = canonicalUrl;
-                    }
-                }
-            }
-        }
-
-        if (rawMemberThemes !== undefined) {
-            for (const [profileId, value] of Object.entries(rawMemberThemes)) {
-                const normalizedProfileId = profileId.trim();
-                if (!profileIds.has(normalizedProfileId)) {
-                    throw new Error(`memberThemes.${profileId} does not match a greetings profile`);
-                }
-                const memberTheme = typeof value === 'string' ? value.trim().toLowerCase() : '';
-                if (memberTheme !== 'red') {
-                    throw new Error(`memberThemes.${profileId} must be one of: red`);
-                }
-                for (const profile of Object.values(customVfxProfiles)) {
-                    if (profile.profileId === normalizedProfileId) {
-                        profile.memberTheme = memberTheme;
-                    }
-                }
-            }
-        }
-
-        return {
-            command: ConfigValidator.parseString(raw.command, ''),
-            customVfxProfiles
-        };
+        return profiles;
     }
 
     static _normalizeSharesSection(raw: RawConfigSection): NormalizedConfigSection {

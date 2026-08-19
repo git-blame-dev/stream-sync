@@ -1,3 +1,5 @@
+import type { RowPresentationOverride } from '../core/row-presentation';
+
 type DisplayQueueMessagePart = Record<string, unknown> & {
     text?: unknown;
 };
@@ -28,8 +30,7 @@ type DisplayQueueItemData = Record<string, unknown> & {
     badgeImages?: unknown;
     isPaypiggy?: boolean;
     isStreamSupporter?: boolean;
-    memberSpriteUrl?: string;
-    memberTheme?: 'red';
+    presentationOverride?: RowPresentationOverride;
 };
 
 type NotificationQueueItemData = DisplayQueueItemData & {
