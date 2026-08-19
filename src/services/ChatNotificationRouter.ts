@@ -49,6 +49,7 @@ type NormalizedChatData = {
     timestamp?: unknown;
     message?: unknown;
     isPaypiggy?: boolean;
+    isStreamSupporter?: boolean;
     badgeImages?: unknown;
 } & RouterRecord;
 
@@ -524,7 +525,8 @@ class ChatNotificationRouter {
             avatarUrl: normalizedData.avatarUrl,
             timestamp: normalizedData.timestamp,
             message: sanitizedMessage,
-            isPaypiggy: normalizedData.isPaypiggy === true
+            isPaypiggy: normalizedData.isPaypiggy === true,
+            isStreamSupporter: normalizedData.isStreamSupporter === true
         };
 
         const builtChatData = NotificationBuilder.build(baseChatData);

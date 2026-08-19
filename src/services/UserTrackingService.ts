@@ -2,6 +2,7 @@ import { logger } from '../core/logging';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 
 const errorHandler = createPlatformErrorHandler(logger, 'user-tracking');
+const TRACKED_PLATFORMS = new Set(['twitch', 'youtube', 'tiktok']);
 
 type TrackingContext = {
     platform?: string;
@@ -21,13 +22,88 @@ function handleServiceError(message: string, error: unknown, context: TrackingCo
 }
 
 class UserTrackingService {
-seenUsers: Set<string>;
+    seenUsers: Set<string>;
+    private readonly streamSupportersByPlatform: Map<string, Set<string>>;
+    private readonly pendingStreamSupportersByUsername: Map<string, Set<string>>;
 
     constructor() {
         this.seenUsers = new Set();
+        this.streamSupportersByPlatform = new Map();
+        this.pendingStreamSupportersByUsername = new Map();
         logger.debug('[UserTrackingService] Initialized', 'user-tracking', {
             trackedUsers: 0
         });
+    }
+
+    private canonicalizePlatform(platform: unknown): string | null {
+        if (typeof platform !== 'string') return null;
+        const canonical = platform.trim().toLowerCase();
+        return TRACKED_PLATFORMS.has(canonical) ? canonical : null;
+    }
+
+    private canonicalizeUserId(userId: unknown): string | null {
+        if (typeof userId !== 'string') return null;
+        const canonical = userId.trim();
+        return canonical || null;
+    }
+
+    private canonicalizeUsername(username: unknown): string | null {
+        if (typeof username !== 'string') return null;
+        const canonical = username.trim().replace(/^@/, '').toLowerCase();
+        return canonical || null;
+    }
+
+    markStreamSupporter(platform: unknown, userId: unknown): boolean {
+        const canonicalPlatform = this.canonicalizePlatform(platform);
+        const canonicalUserId = this.canonicalizeUserId(userId);
+        if (!canonicalPlatform || !canonicalUserId) return false;
+        let supporters = this.streamSupportersByPlatform.get(canonicalPlatform);
+        if (!supporters) {
+            supporters = new Set();
+            this.streamSupportersByPlatform.set(canonicalPlatform, supporters);
+        }
+        supporters.add(canonicalUserId);
+        return true;
+    }
+
+    isStreamSupporter(platform: unknown, userId: unknown): boolean {
+        const canonicalPlatform = this.canonicalizePlatform(platform);
+        const canonicalUserId = this.canonicalizeUserId(userId);
+        if (!canonicalPlatform || !canonicalUserId) return false;
+        return this.streamSupportersByPlatform.get(canonicalPlatform)?.has(canonicalUserId) === true;
+    }
+
+    markPendingStreamSupporter(platform: unknown, username: unknown): boolean {
+        const canonicalPlatform = this.canonicalizePlatform(platform);
+        const canonicalUsername = this.canonicalizeUsername(username);
+        if (!canonicalPlatform || !canonicalUsername) return false;
+        let pendingSupporters = this.pendingStreamSupportersByUsername.get(canonicalPlatform);
+        if (!pendingSupporters) {
+            pendingSupporters = new Set();
+            this.pendingStreamSupportersByUsername.set(canonicalPlatform, pendingSupporters);
+        }
+        pendingSupporters.add(canonicalUsername);
+        return true;
+    }
+
+    promotePendingStreamSupporter(platform: unknown, userId: unknown, username: unknown): boolean {
+        const canonicalPlatform = this.canonicalizePlatform(platform);
+        const canonicalUserId = this.canonicalizeUserId(userId);
+        const canonicalUsername = this.canonicalizeUsername(username);
+        if (!canonicalPlatform || !canonicalUserId || !canonicalUsername) return false;
+        const pendingSupporters = this.pendingStreamSupportersByUsername.get(canonicalPlatform);
+        if (!pendingSupporters?.delete(canonicalUsername)) return false;
+        if (pendingSupporters.size === 0) {
+            this.pendingStreamSupportersByUsername.delete(canonicalPlatform);
+        }
+        return this.markStreamSupporter(canonicalPlatform, canonicalUserId);
+    }
+
+    clearStreamSupporters(platform: unknown): void {
+        const canonicalPlatform = this.canonicalizePlatform(platform);
+        if (!canonicalPlatform) return;
+        this.streamSupportersByPlatform.delete(canonicalPlatform);
+        this.pendingStreamSupportersByUsername.delete(canonicalPlatform);
     }
 
 hasSeenUser(userId: string | null | undefined, context: TrackingContext = {}): boolean {

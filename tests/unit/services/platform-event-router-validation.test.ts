@@ -4,6 +4,7 @@ import { noOpLogger } from "../../helpers/mock-factories";
 import { createConfigFixture } from "../../helpers/config-fixture";
 
 import { PlatformEventRouter } from "../../../src/services/PlatformEventRouter.ts";
+import { UserTrackingService } from "../../../src/services/UserTrackingService.ts";
 
 type RouterOptions = ConstructorParameters<typeof PlatformEventRouter>[0];
 type ChatMessageHandlerMock = TestMockFn<[string, Record<string, unknown>], unknown>;
@@ -30,6 +31,7 @@ type BuildRouterOverrides = {
   runtime?: Partial<RuntimeFake>;
   config?: RouterOptions["config"];
   notificationManager?: Partial<NotificationManagerFake>;
+  userTrackingService?: UserTrackingService;
 };
 
 const firstMockCall = <Args extends unknown[]>(calls: Args[]): Args => {
@@ -67,6 +69,7 @@ describe("PlatformEventRouter validation", () => {
     const eventBus = {
       subscribe: createMockFn(() => createMockFn()),
     };
+    const userTrackingService = overrides.userTrackingService || new UserTrackingService();
 
     return {
       router: new PlatformEventRouter({
@@ -75,9 +78,11 @@ describe("PlatformEventRouter validation", () => {
         notificationManager,
         config,
         logger: noOpLogger,
+        userTrackingService,
       }),
       runtime,
       notificationManager,
+      userTrackingService,
     };
   };
 
@@ -119,6 +124,232 @@ describe("PlatformEventRouter validation", () => {
     expect(calledPlatform).toBe("twitch");
     expect(calledPayload.message).toEqual({ text: "hello" });
     expect(calledPayload.timestamp).toBe(timestamp);
+    expect(calledPayload.isStreamSupporter).toBe(false);
+  });
+
+  it("qualifies all canonical identified monetization senders as stream supporters", async () => {
+    const { router, userTrackingService } = buildRouter();
+    const timestamp = new Date().toISOString();
+    const cases = [
+      {
+        platform: "tiktok",
+        type: "platform:gift",
+        data: { id: "gift-1", giftType: "rose", giftCount: 1, amount: 1, currency: "coins" },
+      },
+      { platform: "youtube", type: "platform:paypiggy", data: {} },
+      { platform: "twitch", type: "platform:giftpaypiggy", data: { giftCount: 1 } },
+      {
+        platform: "tiktok",
+        type: "platform:envelope",
+        data: { id: "envelope-1", giftType: "envelope", giftCount: 1, amount: 1, currency: "coins" },
+      },
+    ];
+
+    for (const [index, event] of cases.entries()) {
+      const userId = `supporter-${index}`;
+      await router.routeEvent({
+        platform: event.platform,
+        type: event.type,
+        data: { ...event.data, username: `test-supporter-${index}`, userId, timestamp },
+      });
+      expect(userTrackingService.isStreamSupporter(event.platform, userId)).toBe(true);
+    }
+  });
+
+  it("qualifies supporters even when their notification category is hidden", async () => {
+    const config = createConfigFixture();
+    config.twitch.giftsEnabled = false;
+    const { router, runtime, userTrackingService } = buildRouter({ config });
+
+    await router.routeEvent({
+      platform: "twitch",
+      type: "platform:gift",
+      data: {
+        id: "hidden-gift-1",
+        giftType: "bits",
+        giftCount: 1,
+        amount: 1,
+        currency: "bits",
+        username: "hidden-supporter",
+        userId: "hidden-supporter-id",
+        timestamp: new Date().toISOString(),
+      },
+    });
+
+    expect(runtime.handleGiftNotification).not.toHaveBeenCalled();
+    expect(userTrackingService.isStreamSupporter("twitch", "hidden-supporter-id")).toBe(true);
+  });
+
+  it("annotates only later same-platform chat without changing membership", async () => {
+    const { router, runtime } = buildRouter();
+    const timestamp = new Date().toISOString();
+    const chat = {
+      username: "test-supporter",
+      userId: "supporter-id",
+      message: { text: "hello" },
+      timestamp,
+      isPaypiggy: false,
+    };
+
+    await router.routeEvent({ platform: "twitch", type: "platform:chat-message", data: chat });
+    await router.routeEvent({
+      platform: "twitch",
+      type: "platform:paypiggy",
+      data: { username: chat.username, userId: chat.userId, timestamp },
+    });
+    await router.routeEvent({ platform: "twitch", type: "platform:chat-message", data: chat });
+    await router.routeEvent({ platform: "youtube", type: "platform:chat-message", data: chat });
+
+    const chatCalls = runtime.handleChatMessage.mock.calls;
+    expect(chatCalls[0]?.[1]).toEqual(expect.objectContaining({ isPaypiggy: false, isStreamSupporter: false }));
+    expect(chatCalls[1]?.[1]).toEqual(expect.objectContaining({ isPaypiggy: false, isStreamSupporter: true }));
+    expect(chatCalls[2]?.[1]).toEqual(expect.objectContaining({ isPaypiggy: false, isStreamSupporter: false }));
+  });
+
+  it("promotes a missing-ID YouTube gift handle when the sender next chats", async () => {
+    const { router, runtime } = buildRouter();
+    const timestamp = new Date().toISOString();
+
+    await router.routeEvent({
+      platform: "youtube",
+      type: "platform:gift",
+      data: {
+        id: "test-supporter-gift-1",
+        giftType: "Hiding",
+        giftCount: 1,
+        amount: 1,
+        currency: "jewels",
+        username: " @TestSupporterHandle ",
+        timestamp,
+        metadata: { missingFields: ["userId"] },
+      },
+    });
+    await router.routeEvent({
+      platform: "youtube",
+      type: "platform:chat-message",
+      data: {
+        username: "TestOtherUser",
+        userId: "test-other-channel-id",
+        message: { text: "hello" },
+        timestamp,
+      },
+    });
+    await router.routeEvent({
+      platform: "youtube",
+      type: "platform:chat-message",
+      data: {
+        username: "TestSupporterHandle",
+        userId: "test-youtube-channel-id",
+        message: { text: "thank you" },
+        timestamp,
+        isPaypiggy: false,
+      },
+    });
+
+    expect(runtime.handleChatMessage.mock.calls[0]?.[1]).toEqual(expect.objectContaining({
+      userId: "test-other-channel-id",
+      isStreamSupporter: false,
+    }));
+    expect(runtime.handleChatMessage.mock.calls[1]?.[1]).toEqual(expect.objectContaining({
+      userId: "test-youtube-channel-id",
+      isPaypiggy: false,
+      isStreamSupporter: true,
+    }));
+  });
+
+  it("does not qualify anonymous, error, or identity-less monetization", async () => {
+    const { router, userTrackingService } = buildRouter();
+    const timestamp = new Date().toISOString();
+
+    await router.routeEvent({
+      platform: "twitch",
+      type: "platform:gift",
+      data: { id: "anon", giftType: "bits", giftCount: 1, amount: 1, currency: "bits", isAnonymous: true, timestamp },
+    });
+    await router.routeEvent({
+      platform: "tiktok",
+      type: "platform:gift",
+      data: { username: "error-user", userId: "error-id", isError: true, timestamp },
+    });
+    await router.routeEvent({
+      platform: "youtube",
+      type: "platform:gift",
+      data: {
+        id: "missing-id",
+        giftType: "Girl power",
+        giftCount: 1,
+        amount: 1,
+        currency: "jewels",
+        username: "missing-id-user",
+        timestamp,
+        metadata: { missingFields: ["userId"] },
+      },
+    });
+
+    expect(userTrackingService.isStreamSupporter("tiktok", "error-id")).toBe(false);
+    expect(userTrackingService.isStreamSupporter("twitch", "anon")).toBe(false);
+    expect(userTrackingService.isStreamSupporter("youtube", "missing-id")).toBe(false);
+  });
+
+  it("clears one platform only for an exact terminal stream status", async () => {
+    const { router, userTrackingService } = buildRouter();
+    userTrackingService.markStreamSupporter("twitch", "supporter-id");
+    userTrackingService.markStreamSupporter("youtube", "supporter-id");
+
+    await router.routeEvent({
+      platform: "twitch",
+      type: "platform:stream-status",
+      data: { isLive: false, status: "reconnecting", timestamp: new Date().toISOString() },
+    });
+    expect(userTrackingService.isStreamSupporter("twitch", "supporter-id")).toBe(true);
+
+    await router.routeEvent({
+      platform: "twitch",
+      type: "platform:stream-status",
+      data: { isLive: false, status: "stream-ended", timestamp: new Date().toISOString() },
+    });
+
+    expect(userTrackingService.isStreamSupporter("twitch", "supporter-id")).toBe(false);
+    expect(userTrackingService.isStreamSupporter("youtube", "supporter-id")).toBe(true);
+  });
+
+  it("clears a pending YouTube gift handle at authoritative stream end", async () => {
+    const { router, runtime } = buildRouter();
+    const timestamp = new Date().toISOString();
+
+    await router.routeEvent({
+      platform: "youtube",
+      type: "platform:gift",
+      data: {
+        id: "pending-gift",
+        giftType: "Hiding",
+        giftCount: 1,
+        amount: 1,
+        currency: "jewels",
+        username: "TestSupporterHandle",
+        timestamp,
+        metadata: { missingFields: ["userId"] },
+      },
+    });
+    await router.routeEvent({
+      platform: "youtube",
+      type: "platform:stream-status",
+      data: { isLive: false, status: "stream-ended", timestamp },
+    });
+    await router.routeEvent({
+      platform: "youtube",
+      type: "platform:chat-message",
+      data: {
+        username: "TestSupporterHandle",
+        userId: "test-youtube-channel-id",
+        message: { text: "new stream" },
+        timestamp,
+      },
+    });
+
+    expect(runtime.handleChatMessage.mock.calls[0]?.[1]).toEqual(expect.objectContaining({
+      isStreamSupporter: false,
+    }));
   });
 
   it("rejects monetization payloads missing required fields when not marked isError", async () => {

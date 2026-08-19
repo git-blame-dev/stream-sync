@@ -300,6 +300,20 @@ describe("ChatNotificationRouter", () => {
     expect(chatItem?.data?.isPaypiggy).toBe(true);
   });
 
+  it("preserves stream supporter state independently from membership", async () => {
+    const { router, runtime } = createRouter();
+
+    await router.handleChatMessage("twitch", {
+      ...baseMessage,
+      isPaypiggy: false,
+      isStreamSupporter: true,
+    });
+
+    const chatItem = getQueuedItems(runtime).find((item) => item.type === "chat");
+    expect(chatItem?.data.isPaypiggy).toBe(false);
+    expect(chatItem?.data.isStreamSupporter).toBe(true);
+  });
+
   it("attaches the resolved member sprite only to paypiggy chat rows", async () => {
     const { router, runtime } = createRouter();
     runtime.config.greetings = {

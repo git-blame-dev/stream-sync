@@ -3,8 +3,16 @@ import { NOTIFICATION_CONFIGS } from '../core/constants';
 import { isIsoTimestamp } from '../utils/timestamp';
 import { getValidMessageParts, normalizeBadgeImages } from '../utils/message-parts';
 import { UNKNOWN_CHAT_MESSAGE, UNKNOWN_CHAT_USERNAME } from '../constants/degraded-chat';
-import { getMissingFields } from '../utils/missing-fields';
+import { allowsYouTubeJewelsMissingUserId, getMissingFields } from '../utils/missing-fields';
 import { NotificationInputValidator } from '../notifications/notification-input-validator';
+
+type RouterUserTrackingService = {
+    markStreamSupporter?: (platform: unknown, userId: unknown) => boolean;
+    markPendingStreamSupporter?: (platform: unknown, username: unknown) => boolean;
+    promotePendingStreamSupporter?: (platform: unknown, userId: unknown, username: unknown) => boolean;
+    isStreamSupporter?: (platform: unknown, userId: unknown) => boolean;
+    clearStreamSupporters?: (platform: unknown) => void;
+};
 
 const PlatformEvents = {
     CHAT_MESSAGE: 'platform:chat-message',
@@ -19,6 +27,13 @@ const PlatformEvents = {
     STREAM_DETECTED: 'platform:stream-detected',
     ENVELOPE: 'platform:envelope'
 } as const;
+
+const STREAM_SUPPORTER_EVENT_TYPES = new Set<string>([
+    PlatformEvents.GIFT,
+    PlatformEvents.PAYPIGGY,
+    PlatformEvents.GIFTPAYPIGGY,
+    PlatformEvents.ENVELOPE
+]);
 
 const ALIAS_PAID_TYPES = [
     'subscription',
@@ -69,6 +84,7 @@ type RouterOptions = {
     notificationManager: RouterNotificationManager;
     config: Record<string, RouterRecord>;
     logger: RouterLogger;
+    userTrackingService?: RouterUserTrackingService | undefined;
 };
 
 type NotificationType = keyof typeof NOTIFICATION_CONFIGS;
@@ -84,6 +100,7 @@ type NormalizedChatPayload = {
     timestamp?: string;
     isMod: unknown;
     isPaypiggy: boolean;
+    isStreamSupporter: boolean;
     isBroadcaster: unknown;
     avatarUrl?: string;
     metadata?: RouterRecord;
@@ -131,6 +148,7 @@ class PlatformEventRouter {
     notificationManager: RouterNotificationManager;
     config: Record<string, RouterRecord>;
     logger: RouterLogger;
+    userTrackingService?: RouterUserTrackingService | undefined;
     errorHandler: ReturnType<typeof createPlatformErrorHandler>;
     inputValidator: NotificationInputValidator;
     subscription: (() => void) | null;
@@ -144,6 +162,7 @@ class PlatformEventRouter {
         this.notificationManager = options.notificationManager;
         this.config = options.config;
         this.logger = options.logger;
+        this.userTrackingService = options.userTrackingService;
         if (!this.eventBus || !this.runtime || !this.notificationManager || !this.config || !this.logger) {
             throw new Error('PlatformEventRouter requires eventBus, runtime, notificationManager, config, and logger');
         }
@@ -189,6 +208,8 @@ class PlatformEventRouter {
         if (ALIAS_PAID_TYPES.includes(type)) {
             throw new Error(`Unsupported paid alias event type: ${type}`);
         }
+
+        this._trackStreamSupporter(type, platform, payload);
 
         if (type !== PlatformEvents.CHAT_MESSAGE && isNotificationType(type) && NOTIFICATION_CONFIGS[type]?.settingKey) {
             if (this._isNotificationEnabled(type, platform) === false) {
@@ -255,6 +276,9 @@ class PlatformEventRouter {
                 return;
             }
             case PlatformEvents.STREAM_STATUS:
+                if (payload.isLive === false && payload.status === 'stream-ended') {
+                    this.userTrackingService?.clearStreamSupporters?.(platform);
+                }
                 return;
             case PlatformEvents.STREAM_DETECTED:
                 if (this.runtime?.handleStreamDetected) {
@@ -365,6 +389,12 @@ class PlatformEventRouter {
             throw new Error('Chat event requires ISO timestamp');
         }
 
+        this.userTrackingService?.promotePendingStreamSupporter?.(
+            platform,
+            normalizedUserId,
+            normalizedUsername
+        );
+
         const normalized: NormalizedChatPayload = {
             platform,
             ...(normalizedUserId ? { userId: normalizedUserId } : {}),
@@ -375,6 +405,7 @@ class PlatformEventRouter {
             ...(normalizedTimestamp ? { timestamp: normalizedTimestamp } : {}),
             isMod: payload.isMod,
             isPaypiggy: payload.isPaypiggy === true,
+            isStreamSupporter: this.userTrackingService?.isStreamSupporter?.(platform, normalizedUserId) === true,
             isBroadcaster: payload.isBroadcaster
         };
         if (messageParts.length > 0) {
@@ -397,6 +428,30 @@ class PlatformEventRouter {
         }
 
         return normalized;
+    }
+
+    _trackStreamSupporter(type: string, platform: string, payload: RouterRecord): void {
+        if (!STREAM_SUPPORTER_EVENT_TYPES.has(type)) return;
+        const validation = this.inputValidator.validateNotificationPayload(payload, {
+            notificationType: type,
+            platform,
+            requireTimestamp: true
+        });
+        if (!validation.success) return;
+        const userId = typeof validation.payload.userId === 'string' ? validation.payload.userId.trim() : '';
+        if (validation.payload.isAnonymous === true || validation.payload.isError === true) return;
+        if (userId) {
+            this.userTrackingService?.markStreamSupporter?.(platform, userId);
+            return;
+        }
+        if (allowsYouTubeJewelsMissingUserId({
+            type,
+            platform,
+            currency: validation.payload.currency,
+            metadata: validation.payload.metadata
+        })) {
+            this.userTrackingService?.markPendingStreamSupporter?.(platform, validation.payload.username);
+        }
     }
 
     async _routeRuntimeNotification(handlerName: string, type: string, platform: string, data: RouterRecord, payloadBuilder: ((sanitized: RouterRecord) => RouterRecord) | null = null): Promise<void> {

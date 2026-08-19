@@ -122,6 +122,9 @@ type RuntimeVfxCommandService = RuntimeRecord & {
 
 type RuntimeUserTrackingService = {
     isFirstMessage?: (userId: unknown, context?: RuntimeRecord) => boolean;
+    markStreamSupporter?: (platform: unknown, userId: unknown) => boolean;
+    isStreamSupporter?: (platform: unknown, userId: unknown) => boolean;
+    clearStreamSupporters?: (platform: unknown) => void;
 };
 
 type RuntimePlatformLifecycleService = {
@@ -485,7 +488,8 @@ class AppRuntime {
             runtime: routerRuntime,
             notificationManager: this.notificationManager,
             config: this.config,
-            logger: this.logger
+            logger: this.logger,
+            userTrackingService: this.userTrackingService
         });
         this.chatNotificationRouter = new ChatNotificationRouter({
             runtime: this,

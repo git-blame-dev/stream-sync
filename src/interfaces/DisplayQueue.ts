@@ -27,6 +27,7 @@ type DisplayQueueItemData = Record<string, unknown> & {
     goalProcessed?: boolean;
     badgeImages?: unknown;
     isPaypiggy?: boolean;
+    isStreamSupporter?: boolean;
     memberSpriteUrl?: string;
     memberTheme?: 'red';
 };
