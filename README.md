@@ -186,7 +186,26 @@ Start Stream Sync, then open `http://127.0.0.1:3399/operator` on the same comput
 
 Controls suppress viewer-facing rows, TTS, VFX, media, and animations while preserving platform ingestion, raw logging, tracking, and monetization goal accounting. Turning a control off removes matching items still waiting in the display queue; the active item or sequence finishes. Changes are saved atomically in `data/operator-control-overrides.json`, survive restarts, and never rewrite `config.ini`. Use **Restore config defaults** to clear those overrides.
 
-Minimal appearance overrides are saved separately in `data/operator-appearance-overrides.json`. They update open minimal sources live and control compact rows, row backgrounds, and the maximum number of displayed username badges. A badge limit of zero hides all badges. Standard sources are unchanged.
+Appearance overrides are saved separately in `data/operator-appearance-overrides.json` and update open GUI sources live. Compact rows, row backgrounds, and badge limits apply to minimal sources; member theme and effect controls apply to decorated member rows in both appearance profiles. A badge limit of zero hides all badges.
+
+### Member presentation
+
+Configure the default member-row presentation in `[gui]`. Themes are `green`, `red`, or `gold`; effects are ordered and comma-separated, with an empty value meaning none:
+
+```ini
+[gui]
+memberRowTheme = green
+memberRowEffects = sheen, particles
+
+[profile.example-user]
+identities = tiktok:example-user|youtube:example-user-channel|twitch:example-user
+greetingCommand = !example-user
+rowTheme = red
+rowEffects = particles
+rowSpriteUrl = https://example.invalid/example-user-sprite.gif
+```
+
+Each `[profile.<id>]` value overrides the corresponding global member value only for matching member chat identities. Profile identities use TikTok `uniqueId`/handle, Twitch login/username, and YouTube normalized author name/handle; opaque Twitch/YouTube provider IDs are not accepted by this schema. Supporter and monetization/gift notifications use an internal gold presentation and are not separately configurable here. Gift video playback remains separate. The operator console can change the global member theme and effect selection live; persisted operator overrides reset to the config defaults with **Restore config defaults**.
 
 Operator routes require a loopback GUI host and reject cross-origin mutations. The console is intentionally local-only; do not expose the GUI port through a proxy or port-forward.
 
