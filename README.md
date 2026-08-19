@@ -98,9 +98,21 @@ bun run build
 bun run verify
 ```
 
-### OBS browser sources
+### OBS launchers and browser sources
 
-Stream Sync includes small local HTML launchers for OBS Browser Sources under `obs/`. They load from disk, wait for the local GUI health check, then open the selected overlay route. This avoids manually reloading OBS browser sources when OBS starts before the Stream Sync app or GUI server.
+Stream Sync includes small local HTML launchers under `obs/`. The viewer-facing
+Browser Sources are `obs/overlay.html`, `obs/notifications.html`,
+`obs/tiktok-animations.html`, and the related animation/demo launchers. They
+load from disk, wait for the local GUI health check, then open their selected
+route. This avoids manually reloading sources when OBS starts before Stream Sync
+or the GUI server.
+
+`obs/dock.html` is different: it is the private OBS Custom Browser Dock for the
+operator, not a viewer-facing source. The launchers use unique files so the dock
+can keep its own OBS zoom isolation without changing the viewer-facing sources.
+The dock shows chat received after it connects; it does not replay earlier chat.
+Use the launcher files rather than direct HTTP URLs when independent OBS zoom is
+required.
 
 Use one of these local files in OBS:
 
@@ -125,6 +137,7 @@ remain the master gates for their corresponding notification types.
 [gui]
 enableNotifications = true
 dockFeedMode = all
+dockMaxMessages = 200
 overlayFeedMode = chat
 ```
 
@@ -132,6 +145,9 @@ overlayFeedMode = chat
 
 Run `bun run gui:preview` to start the local GUI transport and feed a deterministic
 scenario through the production ingest, notification, and display-queue pipeline.
+After the scenario finishes, the transport remains available for inspection until
+you press Ctrl+C (SIGINT) or stop the process (SIGTERM). Use `bun run gui:preview:once`
+for the finite scenario-only command.
 It prints Dock, Overlay, and Notifications URLs and visibly exercises ordinary
 chat rows plus monetization rows. The canonical preview uses the same overlay
 appearance as production: chat is shown on the overlay, while the dock receives
@@ -153,7 +169,7 @@ http://127.0.0.1:3399/overlay?appearance=minimal&maxMessages=8
 <repo>\obs\overlay.html?appearance=minimal&maxMessages=8
 ```
 
-The row count is an upper bound; the overlay still shows only rows that physically fit its browser-source height. The dock remains a scrolling feed, and notifications remains a single latest non-chat activity row, so `maxMessages` applies only to `/overlay`.
+The row count is an upper bound; the overlay still shows only rows that physically fit its browser-source height. The dock remains a scrolling feed bounded by `dockMaxMessages`, while notifications remains a single latest non-chat activity row. The `maxMessages` URL parameter applies only to `/overlay`.
 
 ### Local operator console
 
@@ -174,9 +190,11 @@ Minimal appearance overrides are saved separately in `data/operator-appearance-o
 
 Operator routes require a loopback GUI host and reject cross-origin mutations. The console is intentionally local-only; do not expose the GUI port through a proxy or port-forward.
 
-### Read-only chat event feed
+### Read-only integration feed
 
-Enable the opt-in normalized chat feed in `config.ini`:
+Stream Sync can publish a separate normalized chat stream for local applications.
+This integration feed is independent from the built-in dock and overlay, which use
+`/gui/events`. Enable the opt-in feed in `config.ini`:
 
 ```ini
 [gui]
