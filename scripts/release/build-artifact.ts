@@ -62,6 +62,7 @@ async function copyReleaseSupportFiles(packageRoot: string): Promise<void> {
   await cp(repoPath('config.example.ini'), path.join(packageRoot, 'config.example.ini'));
   await cp(repoPath('.env.example'), path.join(packageRoot, '.env.example'));
   await cp(repoPath('README.md'), path.join(packageRoot, 'README.md'));
+  await cp(repoPath('obs'), path.join(packageRoot, 'obs'), { recursive: true });
   await cp(repoPath('gui', 'dist'), path.join(packageRoot, 'gui', 'dist'), { recursive: true });
   await mkdir(path.join(packageRoot, 'logs'), { recursive: true });
   await mkdir(path.join(packageRoot, 'data'), { recursive: true });

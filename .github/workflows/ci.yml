@@ -78,7 +78,7 @@ jobs:
             [ -n "$path" ] || continue
 
             case "$path" in
-              .env.example|config.example.ini|bun.lock|bunfig.toml|package.json|src/*|gui/*|scripts/release/*|tsconfig*.json)
+              .env.example|config.example.ini|bun.lock|bunfig.toml|package.json|src/*|gui/*|obs/*|scripts/release/*|tsconfig*.json)
                 has_release_artifact_input_change=true
                 ;;
             esac
