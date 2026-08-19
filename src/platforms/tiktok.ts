@@ -370,6 +370,8 @@ class TikTokPlatform extends EventEmitter {
     declare connectingPromise: Promise<unknown> | null;
     declare retryLock: boolean;
     declare _disconnectionInProgress: boolean;
+    declare _terminalStreamEndEmitted: boolean;
+    declare _connectionGeneration: number;
     declare giftAggregation: Record<string, TikTokGiftAggregationState>;
     declare giftAggregationDelay: number;
     declare giftAggregator: TikTokGiftAggregator;
@@ -484,6 +486,8 @@ class TikTokPlatform extends EventEmitter {
         this.connectingPromise = null;
         this.retryLock = false;
         this._disconnectionInProgress = false;
+        this._terminalStreamEndEmitted = false;
+        this._connectionGeneration = 0;
 
         this.giftAggregation = {};
         this.giftAggregationDelay = 2000;
@@ -541,6 +545,7 @@ class TikTokPlatform extends EventEmitter {
             get connection() { return platform.connection; },
             set connection(connection: TikTokConnection | null) { platform.connection = connection; },
             get WebcastEvent() { return platform.WebcastEvent; },
+            get connectionGeneration() { return platform._connectionGeneration; },
             get ControlEvent() { return platform.ControlEvent; },
             get platformName() { return platform.platformName; },
             get selfMessageDetectionService() { return platform.selfMessageDetectionService; },
@@ -553,7 +558,7 @@ class TikTokPlatform extends EventEmitter {
             _logIncomingEvent: (eventType: string, data: unknown) => platform._logIncomingEvent(eventType, data),
             _emitPlatformEvent: (type: string, payload: TikTokPayload) => platform._emitPlatformEvent(type, payload),
             _handleStandardEvent: (eventType: string, data: TikTokRawEvent, options?: Record<string, unknown>) => platform._handleStandardEvent(eventType, data, options),
-            _handleStreamEnd: (data?: TikTokRawEvent) => platform._handleStreamEnd(data),
+            _handleStreamEnd: (data?: TikTokRawEvent, connectionGeneration?: number) => platform._handleStreamEnd(data, connectionGeneration),
             handleConnectionIssue: (issue: unknown, isError?: boolean) => platform.handleConnectionIssue(issue, isError),
             handleConnectionError: (error: unknown) => platform.handleConnectionError(error),
             handleRetry: (error: unknown) => platform.handleRetry(error),
@@ -776,6 +781,8 @@ class TikTokPlatform extends EventEmitter {
     }
 
     setupEventListeners() {
+        this._connectionGeneration += 1;
+        this._terminalStreamEndEmitted = false;
         setupTikTokEventListeners(this._createEventRouterPlatformAdapter());
     }
 
@@ -1989,6 +1996,7 @@ class TikTokPlatform extends EventEmitter {
 
     async _handleConnection() {
         try {
+            this._terminalStreamEndEmitted = false;
             const eventData = this.eventFactory.createConnection();
             const eventPlatform = eventData.platform;
             this.emit('platform:event', {
@@ -2043,7 +2051,31 @@ class TikTokPlatform extends EventEmitter {
         }
     }
 
-  async _handleStreamEnd(payload: unknown = null) {
+  async _handleStreamEnd(payload: unknown = null, connectionGeneration = this._connectionGeneration) {
+        if (connectionGeneration !== this._connectionGeneration) {
+            this.logger.debug('Skipping stale stream-end callback from an earlier connection', 'tiktok');
+            return;
+        }
+
+        const normalizedPayload = this._normalizeConnectionIssue(payload);
+        const decision = this._classifyReconnectPolicy({
+            message: normalizedPayload.message,
+            code: normalizedPayload.code,
+            source: 'stream-end'
+        });
+        const disconnectionReason = decision.isStreamNotLive ? 'Stream is not live' : 'stream-end';
+        if (!this._terminalStreamEndEmitted) {
+            this._terminalStreamEndEmitted = true;
+            this._emitPlatformEvent(PlatformEvents.STREAM_STATUS, {
+                platform: 'tiktok',
+                isLive: false,
+                status: 'stream-ended',
+                reason: disconnectionReason,
+                willReconnect: decision.willReconnect,
+                timestamp: getSystemTimestampISO()
+            });
+        }
+
         // Prevent double-handling when both DISCONNECTED and STREAM_END fire (e.g., 4404)
         if (this._disconnectionInProgress) {
             this.logger.debug('Skipping stream-end handling: disconnection already in progress', 'tiktok');
@@ -2052,12 +2084,6 @@ class TikTokPlatform extends EventEmitter {
         this._disconnectionInProgress = true;
 
     try {
-      const normalizedPayload = this._normalizeConnectionIssue(payload);
-      const decision = this._classifyReconnectPolicy({
-        message: normalizedPayload.message,
-        code: normalizedPayload.code,
-        source: 'stream-end',
-      });
       const deferredContext = decision.isStreamNotLive ? 'stream-not-live-end' : 'stream-end';
 
       if (decision.shouldDeferReconnect) {
@@ -2065,7 +2091,6 @@ class TikTokPlatform extends EventEmitter {
         const deferredReconnect = this._ensureDeferredReconnectChecks(deferredContext);
         if (decision.isStreamNotLive && !deferredReconnect.scheduled && deferredReconnect.reason === 'already-active') {
           this.logger.debug('Deferred reconnect checks remain active after offline disconnect cycle', 'tiktok');
-          return;
         }
       }
 
@@ -2081,7 +2106,6 @@ class TikTokPlatform extends EventEmitter {
       this.connectionStateManager.markDisconnected();
       this.cleanupEventListeners();
       this.connection = null;
-      const disconnectionReason = decision.isStreamNotLive ? 'Stream is not live' : 'stream-end';
       await this._handleDisconnection(disconnectionReason, decision.willReconnect);
         } finally {
             this._disconnectionInProgress = false;
@@ -2116,6 +2140,7 @@ class TikTokPlatform extends EventEmitter {
                     metadata: eventData.metadata
                 });
             }
+
         } catch (emitError) {
             this.errorHandler.handleEventProcessingError(
                 emitError,

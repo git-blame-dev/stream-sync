@@ -332,7 +332,7 @@ const requestImmediateRefresh = async (context: UnknownRecord = {}): Promise<voi
                 }
             }
 
-            await checkMultiStream();
+            await checkMultiStream({ throwOnError: true });
         })();
 
         try {

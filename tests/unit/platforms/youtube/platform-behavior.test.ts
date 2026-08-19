@@ -743,6 +743,89 @@ describe("YouTubePlatform modern architecture", () => {
     );
   });
 
+  it("emits terminal status after successful livechat refresh confirms zero connections", async () => {
+    const platform = createStandalonePlatform();
+    platform.connectionManager = {
+      disconnectFromStream: createMockFn().mockResolvedValue(true),
+      getConnectionCount: createMockFn().mockReturnValueOnce(1).mockReturnValue(0),
+    };
+    platform._youtubeMultiStreamManager.requestImmediateRefresh = createMockFn().mockResolvedValue(undefined);
+    const events: PlatformEvent[] = [];
+    platform.on("platform:event", (payload: PlatformEvent) => events.push(payload));
+
+    await platform.disconnectFromYouTubeStream("abc123", "stream ended", {
+      requestImmediateRefresh: true,
+      source: "livechat-end",
+    });
+
+    expect(platform._youtubeMultiStreamManager.requestImmediateRefresh).toHaveBeenCalledTimes(1);
+    expect(events.filter((event) => event.data?.status === "stream-ended")).toHaveLength(1);
+  });
+
+  it("does not emit terminal status when refresh fails", async () => {
+    const platform = createStandalonePlatform();
+    const refresh = createMockFn().mockRejectedValue(new Error("refresh failed"));
+    platform.connectionManager = {
+      disconnectFromStream: createMockFn().mockResolvedValue(true),
+      getConnectionCount: createMockFn().mockReturnValueOnce(1).mockReturnValue(1),
+    };
+    platform._youtubeMultiStreamManager.requestImmediateRefresh = refresh;
+    const events: PlatformEvent[] = [];
+    platform.on("platform:event", (payload: PlatformEvent) => events.push(payload));
+
+    await platform.disconnectFromYouTubeStream("abc123", "stream ended", {
+      requestImmediateRefresh: true,
+      source: "livechat-end",
+    });
+
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(events.filter((event) => event.data?.status === "stream-ended")).toHaveLength(0);
+  });
+
+  it("does not emit terminal status when a successful refresh leaves a replacement connection", async () => {
+    const platform = createStandalonePlatform();
+    platform.connectionManager = {
+      disconnectFromStream: createMockFn().mockResolvedValue(true),
+      getConnectionCount: createMockFn().mockReturnValueOnce(1).mockReturnValue(1),
+    };
+    platform._youtubeMultiStreamManager.requestImmediateRefresh = createMockFn().mockResolvedValue(undefined);
+    const events: PlatformEvent[] = [];
+    platform.on("platform:event", (payload: PlatformEvent) => events.push(payload));
+
+    await platform.disconnectFromYouTubeStream("abc123", "stream ended", {
+      requestImmediateRefresh: true,
+      source: "livechat-end",
+    });
+
+    expect(events.filter((event) => event.data?.status === "stream-ended")).toHaveLength(0);
+  });
+
+  it("emits terminal status once for repeated zero-connection livechat ends", async () => {
+    const platform = createStandalonePlatform();
+    platform.connectionManager = {
+      disconnectFromStream: createMockFn().mockResolvedValue(true),
+      getConnectionCount: createMockFn()
+        .mockReturnValueOnce(2)
+        .mockReturnValueOnce(0)
+        .mockReturnValueOnce(0)
+        .mockReturnValue(0),
+    };
+    platform._youtubeMultiStreamManager.requestImmediateRefresh = createMockFn().mockResolvedValue(undefined);
+    const events: PlatformEvent[] = [];
+    platform.on("platform:event", (payload: PlatformEvent) => events.push(payload));
+
+    await platform.disconnectFromYouTubeStream("abc123", "stream ended", {
+      requestImmediateRefresh: true,
+      source: "livechat-end",
+    });
+    await platform.disconnectFromYouTubeStream("def456", "stream ended", {
+      requestImmediateRefresh: true,
+      source: "livechat-end",
+    });
+
+    expect(events.filter((event) => event.data?.status === "stream-ended")).toHaveLength(1);
+  });
+
   it("removeYouTubeConnection clears active stream in viewer service when matching", () => {
     const { platform } = createPlatform();
     const clearCalled: string[] = [];

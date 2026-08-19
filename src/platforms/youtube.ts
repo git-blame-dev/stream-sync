@@ -241,6 +241,7 @@ class YouTubePlatform extends EventEmitter {
   streamViewerCounts?: Map<string, number>;
   lastRecoveryTime?: number;
   currentVideoId?: string;
+  terminalStreamEndEmitted = false;
 
   constructor(config: UnknownMap = {}, dependencyInput: unknown = {}) {
         super();
@@ -546,7 +547,10 @@ class YouTubePlatform extends EventEmitter {
 
         const previousCount = this.connectionManager.getConnectionCount();
         const result = await this.connectionManager.disconnectFromStream(videoId, reason);
-        this._emitStreamStatusIfNeeded(previousCount, { videoId, reason });
+        const isLiveChatEnd = options.source === 'livechat-end';
+        if (!isLiveChatEnd) {
+            this._emitStreamStatusIfNeeded(previousCount, { videoId, reason });
+        }
 
         if (result && options.requestImmediateRefresh === true) {
             const refreshContext = {
@@ -558,8 +562,7 @@ class YouTubePlatform extends EventEmitter {
             const checkInProgress = this._youtubeMultiStreamManager &&
                 typeof this._youtubeMultiStreamManager.isCheckInProgress === 'function' &&
                 this._youtubeMultiStreamManager.isCheckInProgress() === true;
-
-            if (checkInProgress) {
+            if (checkInProgress && !isLiveChatEnd) {
                 this.requestImmediateYouTubeStreamRefresh(refreshContext).catch((error) => {
                     this._handleConnectionErrorLogging(
                         `Immediate stream refresh failed after disconnect: ${getErrorMessage(error)}`,
@@ -567,8 +570,28 @@ class YouTubePlatform extends EventEmitter {
                         'stream-refresh'
                     );
                 });
-            } else {
+                return result;
+            }
+
+            try {
                 await this.requestImmediateYouTubeStreamRefresh(refreshContext);
+            } catch (error: unknown) {
+                this._handleConnectionErrorLogging(
+                    `Immediate stream refresh failed after disconnect: ${getErrorMessage(error)}`,
+                    error,
+                    'stream-refresh'
+                );
+                return result;
+            }
+
+            if (isLiveChatEnd && this.connectionManager.getConnectionCount() === 0 && !this.terminalStreamEndEmitted) {
+                this.terminalStreamEndEmitted = true;
+                this._emitPlatformEvent(PlatformEvents.STREAM_STATUS, {
+                    platform: 'youtube',
+                    isLive: false,
+                    status: 'stream-ended',
+                    timestamp: getSystemTimestampISO()
+                });
             }
         }
 
@@ -1610,6 +1633,9 @@ class YouTubePlatform extends EventEmitter {
         }
 
         const isLive = becameLive;
+        if (becameLive) {
+            this.terminalStreamEndEmitted = false;
+        }
         this._emitPlatformEvent(PlatformEvents.STREAM_STATUS, {
             platform: 'youtube',
             isLive,

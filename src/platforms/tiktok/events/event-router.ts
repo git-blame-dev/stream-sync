@@ -76,6 +76,7 @@ type TikTokControlEventMap = {
 
 type TikTokPlatformRouterContract = {
     listenersConfigured: boolean;
+    connectionGeneration: number;
     connection: {
         on: (eventName: string, handler: (payload: unknown) => void | Promise<void>) => void;
         removeAllListeners?: (eventName?: string) => void;
@@ -108,7 +109,7 @@ type TikTokPlatformRouterContract = {
     _logIncomingEvent: (eventType: string, data: unknown) => Promise<void> | void;
     _emitPlatformEvent: (type: string, payload: Record<string, unknown>) => void;
     _handleStandardEvent: (eventType: string, data: TikTokRawEvent, options?: Record<string, unknown>) => Promise<unknown>;
-    _handleStreamEnd: (data?: TikTokRawEvent) => Promise<void>;
+    _handleStreamEnd: (data?: TikTokRawEvent, connectionGeneration?: number) => Promise<void>;
     handleConnectionIssue: (issue: unknown, isError?: boolean) => Promise<unknown>;
     handleConnectionError: (error: unknown) => void;
     handleRetry: (error: unknown) => unknown;
@@ -688,10 +689,12 @@ function setupTikTokEventListeners(platform: TikTokPlatformRouterContract) {
     });
 
     if (typeof platform.WebcastEvent.STREAM_END !== 'undefined') {
+        const connectionGeneration = platform.connectionGeneration;
         platform.connection.on(platform.WebcastEvent.STREAM_END, async (payload: unknown) => {
             const data = asTikTokRawEvent(payload);
+            const streamEndPromise = platform._handleStreamEnd(data, connectionGeneration);
             await platform._logIncomingEvent('streamEnd', data);
-            await platform._handleStreamEnd(data);
+            await streamEndPromise;
         });
     }
 

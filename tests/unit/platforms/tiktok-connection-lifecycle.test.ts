@@ -8,7 +8,7 @@ import { TikTokPlatform } from "../../../src/platforms/tiktok";
 
 type EmittedPlatformEvent = {
   event: string;
-  data: { type?: string; data?: { isLive?: boolean; willReconnect?: boolean } };
+  data: { type?: string; data?: { isLive?: boolean; willReconnect?: boolean; status?: string } };
 };
 type TikTokPlatformConfig = ConstructorParameters<typeof TikTokPlatform>[0];
 type TikTokPlatformDependencies = NonNullable<ConstructorParameters<typeof TikTokPlatform>[1]>;
@@ -199,7 +199,15 @@ describe("TikTokPlatform connection lifecycle", () => {
             e.data?.type === "platform:stream-status"),
       );
 
-      expect(disconnectionEvents.length).toBe(2);
+      expect(disconnectionEvents.filter((event) =>
+        event.data?.type === "platform:chat-disconnected"
+      )).toHaveLength(1);
+      expect(disconnectionEvents.filter((event) =>
+        event.data?.type === "platform:stream-status" && event.data?.data?.status === "stream-ended"
+      )).toHaveLength(1);
+      expect(disconnectionEvents.filter((event) =>
+        event.data?.type === "platform:stream-status" && event.data?.data?.status !== "stream-ended"
+      )).toHaveLength(1);
     });
   });
 });

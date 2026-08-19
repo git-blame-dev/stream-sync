@@ -751,5 +751,47 @@ describe("TikTokPlatform connection lifecycle", () => {
       expect(expectDefined(disconnectEvent.data).willReconnect).toBe(true);
       expect(createInterval).toHaveBeenCalledTimes(1);
     });
+
+    it("emits terminal stream status only once", async () => {
+      const platform = createPlatform();
+      platform.intervalManager.hasInterval = createMockFn().mockReturnValue(false);
+      const emittedEvents: PlatformEventPayload[] = [];
+      platform.on("platform:event", capturePlatformEvent(emittedEvents));
+      await platform._handleDisconnection("network", true);
+      await platform._handleStreamEnd({});
+      await platform._handleStreamEnd({});
+      const terminalEvents = emittedEvents.filter((event) =>
+        event.type === PlatformEvents.STREAM_STATUS && expectDefined(event.data).status === "stream-ended"
+      );
+      expect(terminalEvents).toHaveLength(1);
+    });
+
+    it("records terminal status even while disconnect cleanup is in progress", async () => {
+      const platform = createPlatform();
+      platform._connectionGeneration = 4;
+      platform._disconnectionInProgress = true;
+      const emittedEvents: PlatformEventPayload[] = [];
+      platform.on("platform:event", capturePlatformEvent(emittedEvents));
+
+      await platform._handleStreamEnd({}, 4);
+
+      const terminalEvents = emittedEvents.filter((event) =>
+        event.type === PlatformEvents.STREAM_STATUS && expectDefined(event.data).status === "stream-ended"
+      );
+      expect(terminalEvents).toHaveLength(1);
+    });
+
+    it("ignores delayed stream-end callbacks from an earlier connection", async () => {
+      const platform = createPlatform();
+      platform._connectionGeneration = 5;
+      const emittedEvents: PlatformEventPayload[] = [];
+      platform.on("platform:event", capturePlatformEvent(emittedEvents));
+
+      await platform._handleStreamEnd({}, 4);
+
+      expect(emittedEvents.filter((event) =>
+        event.type === PlatformEvents.STREAM_STATUS && expectDefined(event.data).status === "stream-ended"
+      )).toHaveLength(0);
+    });
   });
 });

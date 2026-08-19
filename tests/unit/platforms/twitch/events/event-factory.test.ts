@@ -244,6 +244,7 @@ describe("Twitch event factory", () => {
         type: PlatformEvents.STREAM_STATUS,
         platform: "twitch",
         isLive: false,
+        status: 'stream-ended',
         timestamp: fixedNow,
       }),
     );

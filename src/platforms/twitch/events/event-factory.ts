@@ -313,6 +313,7 @@ function createTwitchEventFactory(options: EventFactoryOptions = {}) {
             type: PlatformEvents.STREAM_STATUS,
             platform: platformName,
             isLive: false,
+            status: 'stream-ended',
             timestamp: getTimestamp(data),
             metadata: buildEventMetadata()
         })
