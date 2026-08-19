@@ -277,7 +277,7 @@ describe("GUI shared styles behavior", () => {
     );
     expect(dockShellBlock).toContain("min-height: 100vh;");
     expect(dockShellBlock).toContain("position: relative;");
-    expect(dockShellBlock).toContain("background: transparent;");
+    expect(dockShellBlock).toContain("background: #111827;");
     expect(dockShellBlock).toContain(
       "--gui-avatar-size-current: var(--gui-dock-avatar-size);",
     );

@@ -419,6 +419,7 @@ describe("Config field presence - all normalizers return expected fields", () =>
       "host",
       "port",
       "messageCharacterLimit",
+      "dockMaxMessages",
       "overlayMaxMessages",
       "overlayMaxLinesPerMessage",
       "showMessages",

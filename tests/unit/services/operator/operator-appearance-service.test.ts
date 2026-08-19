@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createOperatorAppearanceService } from "../../../../src/services/operator/operator-appearance-service";
 
-const defaults = { compactRows: false, rowBackgroundsEnabled: true, maxDisplayableBadges: 0 };
+const defaults = { compactRows: false, rowBackgroundsEnabled: true, maxDisplayableBadges: 0, streamSupporterChatEffectsEnabled: true };
 
 function memoryFs(initial?: string) {
   let value = initial;
@@ -37,6 +37,13 @@ describe("operator appearance", () => {
     expect(service.snapshot.overriddenKeys).toEqual([]);
     await expect(service.set("maxDisplayableBadges", -1)).rejects.toThrow();
     await expect(service.set("maxDisplayableBadges", 1.5)).rejects.toThrow();
+  });
+
+  test("persists stream supporter chat effects", async () => {
+    const service = await createOperatorAppearanceService({ defaults, filePath: "/tmp/operator-appearance.json", fs: memoryFs() });
+    await service.set("streamSupporterChatEffectsEnabled", false);
+    expect(service.snapshot.settings.streamSupporterChatEffectsEnabled).toBe(false);
+    expect(service.snapshot.overriddenKeys).toContain("streamSupporterChatEffectsEnabled");
   });
 
   test("malformed state falls back and reset persists defaults", async () => {

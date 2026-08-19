@@ -4,6 +4,7 @@ export interface GuiAppearanceSettings {
   compactRows: boolean
   rowBackgroundsEnabled: boolean
   maxDisplayableBadges: number
+  streamSupporterChatEffectsEnabled?: boolean
 }
 
 export interface GuiAppearance {
@@ -19,6 +20,7 @@ export const DEFAULT_GUI_APPEARANCE: GuiAppearance = {
     compactRows: false,
     rowBackgroundsEnabled: true,
     maxDisplayableBadges: 3,
+    streamSupporterChatEffectsEnabled: true,
   },
 }
 
@@ -44,6 +46,7 @@ export function parseGuiAppearanceSnapshot(value: unknown): GuiAppearance {
       maxDisplayableBadges: typeof max === 'number' && Number.isSafeInteger(max) && max >= 0
         ? max
         : DEFAULT_GUI_APPEARANCE.settings.maxDisplayableBadges,
+      streamSupporterChatEffectsEnabled: settings.streamSupporterChatEffectsEnabled !== false,
     },
   }
 }
@@ -54,7 +57,7 @@ export function parseGuiAppearanceEvent(value: unknown): GuiAppearance | null {
   const settings = candidate.settings
   if (
     candidate.__guiEvent !== 'appearance'
-    || candidate.profile !== 'minimal'
+    || (candidate.profile !== 'minimal' && candidate.profile !== 'standard')
     || typeof candidate.revision !== 'number'
     || !Number.isSafeInteger(candidate.revision)
     || candidate.revision < 0
@@ -68,14 +71,16 @@ export function parseGuiAppearanceEvent(value: unknown): GuiAppearance | null {
     || typeof appearanceSettings.maxDisplayableBadges !== 'number'
     || !Number.isSafeInteger(appearanceSettings.maxDisplayableBadges)
     || appearanceSettings.maxDisplayableBadges < 0
+    || typeof appearanceSettings.streamSupporterChatEffectsEnabled !== 'boolean'
   ) return null
   return {
-    profile: 'minimal',
+    profile: candidate.profile as GuiAppearanceProfile,
     revision: candidate.revision,
     settings: {
       compactRows: appearanceSettings.compactRows,
       rowBackgroundsEnabled: appearanceSettings.rowBackgroundsEnabled,
       maxDisplayableBadges: appearanceSettings.maxDisplayableBadges,
+      streamSupporterChatEffectsEnabled: appearanceSettings.streamSupporterChatEffectsEnabled,
     },
   }
 }

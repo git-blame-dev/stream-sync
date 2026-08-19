@@ -9,6 +9,7 @@ import { DEFAULT_GUI_APPEARANCE } from "../../../gui/src/shared/appearance";
 
 const defaultRuntimeConfig = {
   feedMode: "all" as const,
+  dockMaxMessages: 200,
   appearance: DEFAULT_GUI_APPEARANCE,
 };
 
@@ -38,17 +39,18 @@ describe("Dock main bootstrap behavior", () => {
         __STREAM_SYNC_GUI_CONFIG__: {
         },
       }),
-    ).toMatchObject({ mode: "dock", feedMode: "all", notificationTransitionMs: 1000 });
+    ).toMatchObject({ mode: "dock", feedMode: "all", dockMaxMessages: 200, notificationTransitionMs: 1000 });
 
     expect(
       readDockRuntimeConfig({
         __STREAM_SYNC_GUI_KIND__: "tiktok-animations",
       }),
-    ).toMatchObject({ mode: "tiktok-animations", feedMode: "all", notificationTransitionMs: 1000 });
+    ).toMatchObject({ mode: "tiktok-animations", feedMode: "all", dockMaxMessages: 200, notificationTransitionMs: 1000 });
 
     expect(readDockRuntimeConfig({})).toMatchObject({
       mode: "dock",
       feedMode: "all",
+      dockMaxMessages: 200,
       notificationTransitionMs: 1000,
     });
   });
@@ -56,14 +58,23 @@ describe("Dock main bootstrap behavior", () => {
   it("reads configured dock feeds and fixes notifications to non-chat", () => {
     expect(readDockRuntimeConfig({
       __STREAM_SYNC_GUI_CONFIG__: { dockFeedMode: "chat" },
-    })).toMatchObject({ mode: "dock", feedMode: "chat", notificationTransitionMs: 1000 });
+    })).toMatchObject({ mode: "dock", feedMode: "chat", dockMaxMessages: 200, notificationTransitionMs: 1000 });
     expect(readDockRuntimeConfig({
       __STREAM_SYNC_GUI_KIND__: "notifications",
       __STREAM_SYNC_GUI_CONFIG__: { dockFeedMode: "all" },
-    })).toMatchObject({ mode: "notifications", feedMode: "non-chat", notificationTransitionMs: 1000 });
+    })).toMatchObject({ mode: "notifications", feedMode: "non-chat", dockMaxMessages: 200, notificationTransitionMs: 1000 });
     expect(readDockRuntimeConfig({
       __STREAM_SYNC_GUI_CONFIG__: { dockFeedMode: "invalid" },
-    })).toMatchObject({ mode: "dock", feedMode: "all", notificationTransitionMs: 1000 });
+    })).toMatchObject({ mode: "dock", feedMode: "all", dockMaxMessages: 200, notificationTransitionMs: 1000 });
+  });
+
+  it("accepts only bounded dock message limits", () => {
+    expect(readDockRuntimeConfig({
+      __STREAM_SYNC_GUI_CONFIG__: { dockMaxMessages: 350 },
+    }).dockMaxMessages).toBe(350);
+    expect(readDockRuntimeConfig({
+      __STREAM_SYNC_GUI_CONFIG__: { dockMaxMessages: 2001 },
+    }).dockMaxMessages).toBe(200);
   });
 
   it("renders dock app with dock mode", () => {
@@ -89,6 +100,7 @@ describe("Dock main bootstrap behavior", () => {
     expect(result).toBe(true);
     expect(renderedElement!.props.mode).toBe("dock");
     expect(renderedElement!.props.feedMode).toBe("all");
+    expect(renderedElement!.props.dockMaxMessages).toBe(200);
   });
 
   it("renders tiktok animations mode when runtime kind requests it", () => {

@@ -192,6 +192,7 @@ type MainConfig = Record<string, Record<string, unknown>> & BuiltConfig & {
         minimalCompactRows?: boolean;
         minimalRowBackgroundsEnabled?: boolean;
         minimalMaxDisplayableBadges?: number;
+        streamSupporterChatEffectsEnabled?: boolean;
         showGifts?: boolean;
         notificationIdleHoldMs?: number;
         monetizationIdleHoldMs?: number;
@@ -219,7 +220,8 @@ function buildOperatorAppearanceDefaults(config: MainConfig): OperatorAppearance
             && Number.isSafeInteger(gui.minimalMaxDisplayableBadges)
             && gui.minimalMaxDisplayableBadges >= 0
             ? gui.minimalMaxDisplayableBadges
-            : 3
+            : 3,
+        streamSupporterChatEffectsEnabled: gui?.streamSupporterChatEffectsEnabled !== false
     };
 }
 

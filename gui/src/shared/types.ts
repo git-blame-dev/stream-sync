@@ -23,6 +23,7 @@ export interface GuiRowDto {
   parts?: GuiMessagePart[]
   badgeImages?: GuiBadgeImage[]
   isPaypiggy?: boolean
+  isStreamSupporter?: boolean
   memberSpriteUrl?: string
   memberTheme?: GuiMemberTheme
   avatarUrl: string

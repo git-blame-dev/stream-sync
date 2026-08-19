@@ -16,6 +16,7 @@ describe('GUI notification and feed mode schema', () => {
 
         expect(guiSchema.enableNotifications).toEqual({ type: 'boolean', default: false });
         expect(guiSchema.dockFeedMode).toEqual({ type: 'string', default: 'all', enum: ['all', 'chat', 'non-chat'] });
+        expect(guiSchema.dockMaxMessages).toEqual({ type: 'number', default: 200, min: 1, max: 2000, integer: true });
         expect(guiSchema.overlayFeedMode).toEqual({ type: 'string', default: 'all', enum: ['all', 'chat', 'non-chat'] });
     });
 });
@@ -90,6 +91,7 @@ describe('buildDefaultsFromSchema()', () => {
             enableOperator: false,
             enableOverlay: false,
             dockFeedMode: 'all',
+            dockMaxMessages: 200,
             overlayFeedMode: 'all',
             host: '127.0.0.1',
             port: 3399,
@@ -97,12 +99,13 @@ describe('buildDefaultsFromSchema()', () => {
             notificationIdleHoldMs: 5000,
             monetizationIdleHoldMs: 30000,
             notificationTransitionMs: 1000,
-            overlayMaxMessages: 3,
+            overlayMaxMessages: 6,
             overlayMaxLinesPerMessage: 3,
             minimalOverlayMaxMessages: 6,
             minimalCompactRows: true,
             minimalRowBackgroundsEnabled: false,
             minimalMaxDisplayableBadges: 3,
+            streamSupporterChatEffectsEnabled: true,
             showMessages: true,
             showCommands: true,
             showGreetings: true,

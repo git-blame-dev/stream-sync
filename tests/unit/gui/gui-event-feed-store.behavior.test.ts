@@ -79,6 +79,19 @@ describe("GUI feed store behavior", () => {
     expect(expectFirstRow(rows).isPaypiggy).toBe(true);
   });
 
+  it("retains strict stream supporter state only for chat rows", () => {
+    const store = createGuiFeedStore();
+
+    store.pushEvent({ ...createRow(1), isPaypiggy: false, isStreamSupporter: true });
+    store.pushEvent({ ...createRow(2), isStreamSupporter: "true" });
+    store.pushEvent({ ...createRow(3), kind: "notification", isStreamSupporter: true });
+
+    expect(store.getRows()[0]?.isStreamSupporter).toBe(true);
+    expect(store.getRows()[0]?.isPaypiggy).toBe(false);
+    expect(store.getRows()[1]?.isStreamSupporter).toBeUndefined();
+    expect(store.getRows()[2]?.isStreamSupporter).toBeUndefined();
+  });
+
   it("retains safe member sprites only on chat rows", () => {
     const store = createGuiFeedStore();
 

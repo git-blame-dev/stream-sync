@@ -38,14 +38,20 @@ export function GuiRow({ row, mode, className, onAnimationEnd, appearance = DEFA
   const badgeImages = isMinimal
     ? selectDisplayableBadges(allBadgeImages, appearanceSettings.maxDisplayableBadges)
     : allBadgeImages
-  const isPaypiggyChatRow = row.kind === 'chat' && row.isPaypiggy === true
-  const isMemberChatRow = isPaypiggyChatRow
-  const hasRedMemberParticles = isMemberChatRow && row.memberTheme === 'red'
+  const isMemberChatRow = row.kind === 'chat' && row.isPaypiggy === true
+  const hasRedMemberTheme = isMemberChatRow && row.memberTheme === 'red'
+  const hasStreamSupporterEffects = row.kind === 'chat'
+    && row.isStreamSupporter === true
+    && appearanceSettings.streamSupporterChatEffectsEnabled !== false
+    && !hasRedMemberTheme
+  const hasMemberEffects = isMemberChatRow && !hasStreamSupporterEffects
+  const hasChatParticles = hasRedMemberTheme || hasStreamSupporterEffects
   const isMonetizationNotification = row.kind === 'notification' && MONETIZATION_NOTIFICATION_TYPES.has(row.type)
+  const usesMonetizationTreatment = isMonetizationNotification || hasStreamSupporterEffects
   const badgeSummary = badgeImages.map((badge) => badge.label).filter(Boolean).join(', ')
   const textClass = [
     'gui-row__text',
-    isMemberChatRow ? 'gui-row__text--member-chat' : '',
+    hasMemberEffects ? 'gui-row__text--member-chat' : '',
     row.kind === 'notification' ? 'gui-row__text--notification' : '',
     mode === 'overlay' ? 'gui-row__text--overlay-clamp' : ''
   ]
@@ -56,10 +62,10 @@ export function GuiRow({ row, mode, className, onAnimationEnd, appearance = DEFA
     return [
       'gui-row',
       `gui-row--${row.kind}`,
-      isPaypiggyChatRow ? 'gui-row--paypiggy' : '',
-      isMemberChatRow ? 'gui-row--member-chat' : '',
-      isMemberChatRow && row.memberTheme === 'red' ? 'gui-row--member-theme-red' : '',
-      isMonetizationNotification ? 'gui-row--monetization' : '',
+      isMemberChatRow ? 'gui-row--paypiggy' : '',
+      hasMemberEffects ? 'gui-row--member-chat' : '',
+      hasRedMemberTheme ? 'gui-row--member-theme-red' : '',
+      usesMonetizationTreatment ? 'gui-row--monetization' : '',
       isMinimal ? 'gui-row--minimal' : '',
       isMinimal && !appearanceSettings.rowBackgroundsEnabled ? 'gui-row--background-off' : '',
       isCompact ? 'gui-row--compact' : '',
@@ -81,10 +87,10 @@ export function GuiRow({ row, mode, className, onAnimationEnd, appearance = DEFA
         </span>
         <div className={[
           "gui-row__content",
-          isMemberChatRow ? 'gui-row__content--member-chat' : '',
-          isMonetizationNotification ? 'gui-row__content--monetization' : ''
+          hasMemberEffects ? 'gui-row__content--member-chat' : '',
+          usesMonetizationTreatment ? 'gui-row__content--monetization' : ''
         ].filter(Boolean).join(' ')}>
-          {isMonetizationNotification ? (
+          {usesMonetizationTreatment ? (
             <span className="gui-row__monetization-image-clip" aria-hidden="true">
               <img
                 className="gui-row__monetization-image"
@@ -94,7 +100,7 @@ export function GuiRow({ row, mode, className, onAnimationEnd, appearance = DEFA
               />
             </span>
           ) : null}
-          {isMemberChatRow ? (
+          {hasMemberEffects ? (
             <span className="gui-row__member-image-clip" aria-hidden="true">
               <img
                 className="gui-row__member-image"
@@ -106,9 +112,9 @@ export function GuiRow({ row, mode, className, onAnimationEnd, appearance = DEFA
             </span>
           ) : null}
           <div className="gui-row__copy">
-            <div className={["gui-row__header", isMemberChatRow ? 'gui-row__header--member-chat' : ''].filter(Boolean).join(' ')}>
-              {isPaypiggyChatRow ? <span className="gui-row__member-tag">MEMBER</span> : null}
-              <span className={["gui-row__username", isMemberChatRow ? 'gui-row__username--member-chat' : ''].filter(Boolean).join(' ')}>{row.username}</span>
+            <div className={["gui-row__header", hasMemberEffects ? 'gui-row__header--member-chat' : ''].filter(Boolean).join(' ')}>
+              {isMemberChatRow ? <span className="gui-row__member-tag">MEMBER</span> : null}
+              <span className={["gui-row__username", hasMemberEffects ? 'gui-row__username--member-chat' : ''].filter(Boolean).join(' ')}>{row.username}</span>
               {badgeImages.length > 0 ? (
                 <span className="gui-row__badges" aria-label={badgeSummary || undefined}>
                   {badgeImages.map((badge, index) => (
@@ -153,7 +159,7 @@ export function GuiRow({ row, mode, className, onAnimationEnd, appearance = DEFA
 
   return (
     <div className={rowClass} onAnimationEnd={onAnimationEnd} data-row-type={row.type} role="article">
-      {hasRedMemberParticles ? (
+      {hasChatParticles ? (
         <MemberParticleCanvas
           seed={row.eventId || `${row.platform.trim().toLowerCase()}:${row.username}:${row.timestamp || ''}:${row.text}`}
         />

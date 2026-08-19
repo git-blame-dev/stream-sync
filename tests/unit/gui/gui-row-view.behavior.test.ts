@@ -605,6 +605,115 @@ describe("GuiRow rendering behavior", () => {
     expect(nonMemberHtml).not.toContain("gui-row__member-particles");
   });
 
+  it("renders enabled stream supporter chats with gold Arceus particles but no member semantics", () => {
+    const html = renderToStaticMarkup(
+      React.createElement(GuiRow, {
+        mode: "dock",
+        row: {
+          type: "chat",
+          kind: "chat",
+          platform: "twitch",
+          username: "test-stream-supporter",
+          text: "supporter chat",
+          isPaypiggy: false,
+          isStreamSupporter: true,
+          avatarUrl: "https://example.invalid/avatar.png",
+          timestamp: null,
+        },
+      }),
+    );
+
+    expect(html).toContain("gui-row--monetization");
+    expect(html).toContain("arceus.gif");
+    expect(html).toContain("gui-row__member-particles");
+    expect(html).not.toContain("gui-row__member-tag");
+    expect(html).not.toContain("gui-row__member-image");
+  });
+
+  it("removes only stream supporter effects when the appearance toggle is disabled", () => {
+    const html = renderToStaticMarkup(
+      React.createElement(GuiRow, {
+        mode: "dock",
+        appearance: {
+          profile: "standard",
+          revision: 1,
+          settings: {
+            compactRows: false,
+            rowBackgroundsEnabled: true,
+            maxDisplayableBadges: 3,
+            streamSupporterChatEffectsEnabled: false,
+          },
+        },
+        row: {
+          type: "chat",
+          kind: "chat",
+          platform: "twitch",
+          username: "test-stream-supporter",
+          text: "supporter chat",
+          isPaypiggy: false,
+          isStreamSupporter: true,
+          avatarUrl: "https://example.invalid/avatar.png",
+          timestamp: null,
+        },
+      }),
+    );
+
+    expect(html).not.toContain("gui-row--monetization");
+    expect(html).not.toContain("arceus.gif");
+    expect(html).not.toContain("gui-row__member-particles");
+  });
+
+  it("keeps the MEMBER label when an ordinary member receives supporter effects", () => {
+    const html = renderToStaticMarkup(
+      React.createElement(GuiRow, {
+        mode: "dock",
+        row: {
+          type: "chat",
+          kind: "chat",
+          platform: "youtube",
+          username: "test-member-supporter",
+          text: "member supporter chat",
+          isPaypiggy: true,
+          isStreamSupporter: true,
+          avatarUrl: "https://example.invalid/avatar.png",
+          timestamp: null,
+        },
+      }),
+    );
+
+    expect(html).toContain("gui-row--monetization");
+    expect(html).toContain("arceus.gif");
+    expect(html).toContain(">MEMBER<");
+    expect(html).not.toContain("gui-row__member-image");
+  });
+
+  it("keeps red member presentation ahead of supporter gold", () => {
+    const html = renderToStaticMarkup(
+      React.createElement(GuiRow, {
+        mode: "dock",
+        row: {
+          type: "chat",
+          kind: "chat",
+          platform: "youtube",
+          username: "test-red-member-supporter",
+          text: "red member supporter chat",
+          isPaypiggy: true,
+          isStreamSupporter: true,
+          memberTheme: "red",
+          memberSpriteUrl: "https://example.invalid/red-member.gif",
+          avatarUrl: "https://example.invalid/avatar.png",
+          timestamp: null,
+        },
+      }),
+    );
+
+    expect(html).toContain("gui-row--member-theme-red");
+    expect(html).toContain("gui-row__member-image");
+    expect(html).toContain("gui-row__member-particles");
+    expect(html).not.toContain("gui-row--monetization");
+    expect(html).not.toContain("arceus.gif");
+  });
+
   it("renders Rayquaza image for trimmed mixed-case YouTube member rows", () => {
     const html = renderToStaticMarkup(
       React.createElement(GuiRow, {

@@ -67,4 +67,27 @@ describe("GUI event feed connector behavior", () => {
     dispose();
     expect(source.closeCalled).toBe(1);
   });
+
+  it("reports connection and reconnection lifecycle events", () => {
+    const statuses: string[] = [];
+    const source = {
+      onmessage: null as null | ((event: MessageEvent<string>) => void),
+      onopen: null as null | ((event: Event) => void),
+      onerror: null as null | ((event: Event) => void),
+      close() {},
+    };
+
+    createEventFeed({
+      url: "/gui/events",
+      onEvent: () => {},
+      onOpen: () => statuses.push("connected"),
+      onError: () => statuses.push("reconnecting"),
+      eventSourceFactory: () => source,
+    });
+
+    source.onopen?.(new Event("open"));
+    source.onerror?.(new Event("error"));
+
+    expect(statuses).toEqual(["connected", "reconnecting"]);
+  });
 });

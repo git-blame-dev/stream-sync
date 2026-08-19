@@ -25,6 +25,7 @@ interface GuiShellProps {
   activeEffect?: GuiGiftAnimationEffectEnvelope | null
   onEffectComplete?: (playbackId: string, reason: GuiGiftAnimationCompletionReason) => void
   appearance?: GuiAppearance
+  status?: string | null
 }
 
 interface GuiShellRowEntry {
@@ -46,7 +47,8 @@ export function GuiShell({
   overlayMaxLinesPerMessage,
   activeEffect = null,
   onEffectComplete,
-  appearance = DEFAULT_GUI_APPEARANCE
+  appearance = DEFAULT_GUI_APPEARANCE,
+  status = null
 }: GuiShellProps) {
   const rowMode = mode === 'overlay' ? 'overlay' : 'dock'
   const handleEffectComplete = typeof onEffectComplete === 'function'
@@ -166,6 +168,7 @@ export function GuiShell({
         ref={shellRef}
         aria-label="Livestream activity"
       >
+        {mode === 'dock' && status ? <div className="gui-shell__status" role="status">{status}</div> : null}
         <GiftAnimationLayer
           effect={activeEffect}
           onComplete={handleEffectComplete}

@@ -325,11 +325,15 @@ describe("GUI transport routes and SSE integration", () => {
         this.statusCode = statusCode;
       },
     });
-    const responses = Array.from({ length: 16 }, () => createResponse());
+    const responses = Array.from({ length: 48 }, () => createResponse());
     for (const response of responses) {
       requestListener!(createRequest(), response);
       expect(response.statusCode).toBe(200);
     }
+
+    const rejected = createResponse();
+    requestListener!(createRequest(), rejected);
+    expect(rejected.statusCode).toBe(503);
 
     responses[0]!.emit("close");
     const replacement = createResponse();
@@ -1749,7 +1753,7 @@ describe("GUI transport routes and SSE integration", () => {
       const html = await response.text();
 
       expect(response.status).toBe(200);
-      expect(html).toContain('"overlayMaxMessages":3');
+      expect(html).toContain('"overlayMaxMessages":6');
       expect(html).toContain('"overlayMaxLinesPerMessage":3');
       expect(html).not.toContain('"overlayMaxMessages":"7"');
       expect(html).not.toContain('"overlayMaxLinesPerMessage":"4"');
@@ -2217,9 +2221,19 @@ describe("GUI transport routes and SSE integration", () => {
       const event = await reader.readEvent();
       expect(event.type).toBe("chat.message");
       expect(event.schemaVersion).toBe(1);
+      expect(Object.keys(event).sort()).toEqual([
+        "eventId",
+        "message",
+        "occurredAt",
+        "platform",
+        "receivedAt",
+        "schemaVersion",
+        "type",
+        "user",
+      ]);
       expect(event.platform).toBe("twitch");
       expect(event.user).toEqual({ displayName: "viewer", isModerator: false, isBroadcaster: false, id: "user-1" });
-      expect(event.message.text).toBe("<b>a</b>\u200b");
+      expect(event.message).toEqual({ text: "<b>a</b>\u200b" });
       expect(response.url).toContain("/api/v1/chat/events");
 
       service.publishChatMessage("twitch", {

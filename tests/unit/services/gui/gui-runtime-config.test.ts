@@ -13,6 +13,12 @@ describe('GUI runtime config', () => {
         });
     });
 
+    it('bounds dock message retention', () => {
+        expect(buildGuiRuntimeConfig({}).dockMaxMessages).toBe(200);
+        expect(buildGuiRuntimeConfig({ dockMaxMessages: 350 }).dockMaxMessages).toBe(350);
+        expect(buildGuiRuntimeConfig({ dockMaxMessages: 2001 }).dockMaxMessages).toBe(200);
+    });
+
     it('treats notifications as GUI activation', () => {
         expect(isGuiActive({ gui: { enableNotifications: true } })).toBe(true);
     });
@@ -41,5 +47,10 @@ describe('GUI runtime config', () => {
     it('defaults displayable badges to three while honoring an explicit lower value', () => {
         expect(buildGuiRuntimeConfig({}).appearance.settings.maxDisplayableBadges).toBe(3);
         expect(buildGuiRuntimeConfig({ minimalMaxDisplayableBadges: 1 }).appearance.settings.maxDisplayableBadges).toBe(1);
+    });
+
+    it('defaults stream supporter chat effects to enabled', () => {
+        expect(buildGuiRuntimeConfig({}).appearance.settings.streamSupporterChatEffectsEnabled).toBe(true);
+        expect(buildGuiRuntimeConfig({ streamSupporterChatEffectsEnabled: false }).appearance.settings.streamSupporterChatEffectsEnabled).toBe(false);
     });
 });

@@ -87,7 +87,7 @@ html, body {
 .gui-shell--dock {
   position: relative;
   min-height: 100vh;
-  background: transparent;
+  background: #111827;
   --gui-avatar-size-current: var(--gui-dock-avatar-size);
   --gui-platform-icon-size-current: var(--gui-dock-platform-icon-size);
   --gui-badge-size-current: var(--gui-dock-badge-size);
@@ -95,6 +95,15 @@ html, body {
   --gui-row-body-font-size-current: var(--gui-dock-row-body-font-size);
   --gui-member-pill-font-size-current: var(--gui-dock-member-pill-font-size);
   --gui-emote-size-current: var(--gui-dock-emote-size);
+}
+
+.gui-shell__status {
+  color: #cbd5e1;
+  background: #1f2937;
+  border: 1px solid #374151;
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 14px;
 }
 
 .gui-shell--notifications {

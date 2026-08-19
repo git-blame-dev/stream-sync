@@ -7,6 +7,7 @@ type GuiAppearanceSettings = {
     compactRows: boolean;
     rowBackgroundsEnabled: boolean;
     maxDisplayableBadges: number;
+    streamSupporterChatEffectsEnabled?: boolean;
 };
 type GuiAppearanceSnapshot = {
     revision: number;
@@ -14,6 +15,7 @@ type GuiAppearanceSnapshot = {
     overriddenKeys?: readonly string[];
 };
 type GuiRuntimeConfig = {
+    dockMaxMessages: number;
     overlayMaxMessages: number;
     overlayMaxLinesPerMessage: number;
     dockFeedMode: 'all' | 'chat' | 'non-chat';
@@ -28,7 +30,8 @@ type GuiRuntimeConfig = {
     };
 };
 
-const DEFAULT_OVERLAY_MAX_MESSAGES = 3;
+const DEFAULT_OVERLAY_MAX_MESSAGES = 6;
+const DEFAULT_DOCK_MAX_MESSAGES = 200;
 const DEFAULT_MINIMAL_OVERLAY_MAX_MESSAGES = 6;
 const DEFAULT_OVERLAY_MAX_LINES_PER_MESSAGE = 3;
 const DEFAULT_NOTIFICATION_IDLE_HOLD_MS = 5000;
@@ -37,6 +40,7 @@ const DEFAULT_NOTIFICATION_TRANSITION_MS = 1000;
 const FEED_MODES = ['all', 'chat', 'non-chat'] as const;
 type FeedMode = typeof FEED_MODES[number];
 const MAX_OVERLAY_MESSAGES = 100;
+const MAX_DOCK_MESSAGES = 2000;
 
 function toTransportRecord(value: unknown): TransportRecord {
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -50,17 +54,23 @@ function parsePositiveInteger(value: unknown, fallback: number): number {
     return typeof value === 'number' && Number.isInteger(value) && value >= 1 ? value : fallback;
 }
 
-function parseFeedMode(value: unknown): FeedMode {
+function parseBoundedPositiveInteger(value: unknown, fallback: number, maximum: number): number {
+    const parsed = parsePositiveInteger(value, fallback);
+    return parsed <= maximum ? parsed : fallback;
+}
+
+function parseFeedMode(value: unknown, fallback: FeedMode): FeedMode {
     return typeof value === 'string' && (FEED_MODES as readonly string[]).includes(value)
         ? value as FeedMode
-        : 'all';
+        : fallback;
 }
 
 function buildAppearanceSettings(guiConfig: TransportRecord): GuiAppearanceSettings {
     return {
         compactRows: guiConfig.minimalCompactRows !== false,
         rowBackgroundsEnabled: guiConfig.minimalRowBackgroundsEnabled === true,
-        maxDisplayableBadges: parseNonNegativeInteger(guiConfig.minimalMaxDisplayableBadges, 3)
+        maxDisplayableBadges: parseNonNegativeInteger(guiConfig.minimalMaxDisplayableBadges, 3),
+        streamSupporterChatEffectsEnabled: guiConfig.streamSupporterChatEffectsEnabled !== false
     };
 }
 
@@ -85,7 +95,10 @@ function normalizeAppearanceSnapshot(
             maxDisplayableBadges: parseNonNegativeInteger(
                 settings.maxDisplayableBadges,
                 defaults.maxDisplayableBadges
-            )
+            ),
+            streamSupporterChatEffectsEnabled: typeof settings.streamSupporterChatEffectsEnabled === 'boolean'
+                ? settings.streamSupporterChatEffectsEnabled
+                : defaults.streamSupporterChatEffectsEnabled !== false
         }
     };
 }
@@ -96,13 +109,14 @@ function buildGuiRuntimeConfig(
 ): GuiRuntimeConfig {
     const appearanceSnapshot = normalizeAppearanceSnapshot(guiConfig, appearance);
     return {
+        dockMaxMessages: parseBoundedPositiveInteger(guiConfig.dockMaxMessages, DEFAULT_DOCK_MAX_MESSAGES, MAX_DOCK_MESSAGES),
         overlayMaxMessages: parsePositiveInteger(guiConfig.overlayMaxMessages, DEFAULT_OVERLAY_MAX_MESSAGES),
         overlayMaxLinesPerMessage: parsePositiveInteger(
             guiConfig.overlayMaxLinesPerMessage,
             DEFAULT_OVERLAY_MAX_LINES_PER_MESSAGE
         ),
-        dockFeedMode: parseFeedMode(guiConfig.dockFeedMode),
-        overlayFeedMode: parseFeedMode(guiConfig.overlayFeedMode),
+        dockFeedMode: parseFeedMode(guiConfig.dockFeedMode, 'all'),
+        overlayFeedMode: parseFeedMode(guiConfig.overlayFeedMode, 'all'),
         notificationIdleHoldMs: parseNonNegativeInteger(guiConfig.notificationIdleHoldMs, DEFAULT_NOTIFICATION_IDLE_HOLD_MS),
         monetizationIdleHoldMs: parseNonNegativeInteger(guiConfig.monetizationIdleHoldMs, DEFAULT_MONETIZATION_IDLE_HOLD_MS),
         notificationTransitionMs: parseNonNegativeInteger(guiConfig.notificationTransitionMs, DEFAULT_NOTIFICATION_TRANSITION_MS),

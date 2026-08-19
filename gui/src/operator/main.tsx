@@ -268,7 +268,7 @@ function OperatorApp() {
             <div className="section-heading">
               <div>
                 <span className="eyebrow">DISPLAY</span>
-                <h2 id="appearance-title">Minimal appearance</h2>
+                <h2 id="appearance-title">Appearance</h2>
               </div>
               <button className="quiet" onClick={() => void resetAppearance()} disabled={pending !== null}>
                 Reset appearance
@@ -284,6 +284,19 @@ function OperatorApp() {
                 checked={appearance?.settings.compactRows ?? false}
                 disabled={!appearance || pending !== null}
                 onChange={(event) => void changeAppearance('compactRows', event.target.checked)}
+              />
+              <span className="switch-track" aria-hidden="true" />
+            </label>
+            <label className="control">
+              <span>
+                <strong>Stream supporter chat effects</strong>
+                {appearance?.overriddenKeys.includes('streamSupporterChatEffectsEnabled') && <em>Persisted override</em>}
+              </span>
+              <input
+                type="checkbox"
+                checked={appearance?.settings.streamSupporterChatEffectsEnabled ?? true}
+                disabled={!appearance || pending !== null}
+                onChange={(event) => void changeAppearance('streamSupporterChatEffectsEnabled', event.target.checked)}
               />
               <span className="switch-track" aria-hidden="true" />
             </label>

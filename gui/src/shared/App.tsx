@@ -21,6 +21,7 @@ interface AppProps {
   initialAppearance?: GuiAppearance
   eventsPath?: string
   overlayMaxMessages?: number
+  dockMaxMessages?: number
   overlayMaxLinesPerMessage?: number
   notificationTransitionMs?: number
   createEventFeedImpl?: typeof createEventFeed
@@ -28,6 +29,7 @@ interface AppProps {
 }
 
 type GuiFeedStore = ReturnType<typeof createGuiFeedStore>
+type GuiConnectionStatus = 'connecting' | 'connected' | 'reconnecting'
 
 interface RowState {
   store: GuiFeedStore
@@ -152,6 +154,7 @@ export function App({
   eventsPath = '/gui/events',
   overlayMaxMessages,
   overlayMaxLinesPerMessage,
+  dockMaxMessages = 200,
   notificationTransitionMs = 1000,
   createEventFeedImpl = createEventFeed,
   sendGiftAnimationAckImpl = sendGiftAnimationAck,
@@ -164,16 +167,18 @@ export function App({
     () => resolveOverlayLimits(mode, overlayMaxMessages, overlayMaxLinesPerMessage),
     [mode, overlayMaxMessages, overlayMaxLinesPerMessage]
   )
+  const maxRows = mode === 'dock' ? dockMaxMessages : mode === 'overlay' ? overlayLimits.maxRows : 0
 
   const store = useMemo(
     () => createGuiFeedStore({
-      maxRows: mode === 'notifications' ? 0 : overlayLimits.maxRows,
+      maxRows,
       inclusionPredicate: (row) =>
         matchesGuiFeedMode(row, effectiveFeedMode) &&
         (mode !== 'notifications' || !!row.eventId)
     }),
-    [createEventFeedImpl, effectiveFeedMode, eventsPath, mode, overlayLimits.maxRows]
+    [createEventFeedImpl, effectiveFeedMode, eventsPath, mode, maxRows]
   )
+  const [connectionStatus, setConnectionStatus] = useState<GuiConnectionStatus>('connecting')
   const [rowState, setRowState] = useState<RowState>(() => ({ store, rows: [] }))
   const [effectState, setEffectState] = useState<EffectState>(() => ({ store, queue: [] }))
   const [notificationState, setNotificationState] = useState<NotificationState>(() => ({
@@ -191,16 +196,18 @@ export function App({
     notificationState.exitingEventIds.has(activeNotification.eventId)
   const showsGiftAnimationEffects = mode === 'dock'
     || mode === 'tiktok-animations'
-    || (mode === 'overlay' && initialAppearance.profile === 'minimal')
+    || (mode === 'overlay' && appearance.profile === 'minimal')
 
   useEffect(() => {
     const dispose = createEventFeedImpl({
       url: eventsPath,
+      onOpen: () => setConnectionStatus('connected'),
+      onError: () => setConnectionStatus('reconnecting'),
       onEvent: (payload) => {
         const nextAppearance = parseAppearanceEvent(payload)
         if (nextAppearance) {
-          setAppearance((current) => current.profile === 'minimal' && nextAppearance.revision > current.revision
-            ? nextAppearance
+          setAppearance((current) => nextAppearance.revision > current.revision
+            ? { ...nextAppearance, profile: current.profile }
             : current)
           return
         }
@@ -275,10 +282,21 @@ export function App({
     )
   }
 
+  const dockStatus = mode !== 'dock'
+    ? null
+    : connectionStatus === 'reconnecting'
+      ? 'Reconnecting...'
+      : connectionStatus === 'connecting'
+        ? 'Connecting...'
+        : rows.length === 0
+          ? 'Connected - waiting for chat'
+          : null
+
   return (
     <GuiShell
       rows={rows}
       mode={mode}
+      status={dockStatus}
       overlayMaxLinesPerMessage={overlayLimits.maxLinesPerMessage}
       activeEffect={activeEffect}
       appearance={appearance}

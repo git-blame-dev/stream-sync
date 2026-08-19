@@ -27,7 +27,7 @@ function coerceMessage(error: unknown): string {
   return error instanceof Error && error.message ? error.message : 'Unknown bootstrap error'
 }
 
-export function readDockRuntimeConfig(scope: DockRuntimeConfigSource = globalThis as DockRuntimeConfigSource): { mode: Extract<GuiAppMode, 'dock' | 'notifications' | 'tiktok-animations'>, feedMode: GuiFeedMode, notificationTransitionMs: number, appearance: GuiAppearance } {
+export function readDockRuntimeConfig(scope: DockRuntimeConfigSource = globalThis as DockRuntimeConfigSource): { mode: Extract<GuiAppMode, 'dock' | 'notifications' | 'tiktok-animations'>, feedMode: GuiFeedMode, dockMaxMessages: number, notificationTransitionMs: number, appearance: GuiAppearance } {
   const runtimeKind = typeof scope.__STREAM_SYNC_GUI_KIND__ === 'string'
     ? scope.__STREAM_SYNC_GUI_KIND__.trim().toLowerCase()
     : ''
@@ -37,6 +37,7 @@ export function readDockRuntimeConfig(scope: DockRuntimeConfigSource = globalThi
     feedMode: runtimeKind === 'notifications'
       ? 'non-chat'
       : (isGuiFeedMode(scope.__STREAM_SYNC_GUI_CONFIG__?.dockFeedMode) ? scope.__STREAM_SYNC_GUI_CONFIG__?.dockFeedMode as GuiFeedMode : 'all'),
+    dockMaxMessages: Number.isInteger(rawConfig.dockMaxMessages) && Number(rawConfig.dockMaxMessages) >= 1 && Number(rawConfig.dockMaxMessages) <= 2000 ? Number(rawConfig.dockMaxMessages) : 200,
     notificationTransitionMs: Number.isInteger(scope.__STREAM_SYNC_GUI_CONFIG__?.notificationTransitionMs) && Number(scope.__STREAM_SYNC_GUI_CONFIG__?.notificationTransitionMs) >= 0
       ? Number(scope.__STREAM_SYNC_GUI_CONFIG__?.notificationTransitionMs)
       : 1000,
@@ -62,6 +63,7 @@ export function bootstrapDockApp(dependencies: DockBootstrapDependencies = {}): 
       <App
         mode={runtimeConfig.mode}
         feedMode={runtimeConfig.feedMode}
+        dockMaxMessages={runtimeConfig.dockMaxMessages}
         notificationTransitionMs={runtimeConfig.notificationTransitionMs}
         initialAppearance={runtimeConfig.appearance}
       />

@@ -292,6 +292,7 @@ return cachedAvatar;
 
         if (rule.kind === 'chat') {
             mapped.isPaypiggy = data.isPaypiggy === true;
+            mapped.isStreamSupporter = data.isStreamSupporter === true;
             const memberSpriteUrl = mapped.isPaypiggy
                 ? normalizeMemberSpriteUrl(data.memberSpriteUrl)
                 : undefined;

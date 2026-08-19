@@ -9,7 +9,12 @@ import { GuiShell } from "../../../gui/src/shared/components/GuiShell";
 
 type EventPayload = Record<string, unknown>;
 type EventHandler = (payload: EventPayload) => void;
-type EventFeedArgs = { url: string; onEvent: EventHandler };
+type EventFeedArgs = {
+  url: string;
+  onEvent: EventHandler;
+  onOpen?: () => void;
+  onError?: () => void;
+};
 type AppRenderer = ReactTestRenderer;
 type EffectShellProps = {
   activeEffect: { playbackId: string };
@@ -64,6 +69,74 @@ describe("GUI app behavior", () => {
 
     expect(html).toContain("gui-shell");
     expect(html).toContain("gui-shell--dock");
+    expect(html).toContain("Connecting...");
+  });
+
+  it("reports dock connection state without adding status to overlays", async () => {
+    let onOpen: (() => void) | undefined;
+    let onError: (() => void) | undefined;
+    const createEventFeedImpl = (options: EventFeedArgs) => {
+      onOpen = options.onOpen;
+      onError = options.onError;
+      return () => {};
+    };
+    let dockRenderer: AppRenderer | null = null;
+
+    await TestRenderer.act(async () => {
+      dockRenderer = TestRenderer.create(React.createElement(App, {
+        mode: "dock",
+        createEventFeedImpl,
+      }));
+    });
+    await TestRenderer.act(async () => onOpen?.());
+    expect(JSON.stringify(dockRenderer!.toJSON())).toContain("Connected - waiting for chat");
+    await TestRenderer.act(async () => onError?.());
+    expect(JSON.stringify(dockRenderer!.toJSON())).toContain("Reconnecting...");
+
+    const overlayHtml = renderToStaticMarkup(React.createElement(App, {
+      mode: "overlay",
+      overlayMaxMessages: 4,
+      overlayMaxLinesPerMessage: 3,
+    }));
+    expect(overlayHtml).not.toContain("Connecting");
+    await TestRenderer.act(async () => dockRenderer!.unmount());
+  });
+
+  it("bounds dock rows independently from overlay limits", async () => {
+    let onEventHandler: EventHandler | null = null;
+    const createEventFeedImpl = ({ onEvent }: EventFeedArgs) => {
+      onEventHandler = onEvent;
+      return () => {};
+    };
+    let renderer: AppRenderer | null = null;
+
+    await TestRenderer.act(async () => {
+      renderer = TestRenderer.create(React.createElement(App, {
+        mode: "dock",
+        dockMaxMessages: 2,
+        createEventFeedImpl,
+      }));
+    });
+    await TestRenderer.act(async () => {
+      for (let index = 1; index <= 3; index += 1) {
+        onEventHandler!({
+          eventId: `dock-${index}`,
+          type: "chat",
+          kind: "chat",
+          platform: "twitch",
+          username: `dock-user-${index}`,
+          text: `message-${index}`,
+          avatarUrl: `https://example.invalid/avatar-${index}.png`,
+          timestamp: null,
+        });
+      }
+    });
+
+    const text = JSON.stringify(renderer!.toJSON());
+    expect(text).not.toContain("dock-user-1");
+    expect(text).toContain("dock-user-2");
+    expect(text).toContain("dock-user-3");
+    await TestRenderer.act(async () => renderer!.unmount());
   });
 
   it("renders monetization styling for dock monetization rows", async () => {
@@ -516,7 +589,7 @@ describe("GUI app behavior", () => {
           initialAppearance: {
             profile: "minimal",
             revision: 0,
-            settings: { compactRows: true, rowBackgroundsEnabled: true, maxDisplayableBadges: 1 },
+            settings: { compactRows: true, rowBackgroundsEnabled: true, maxDisplayableBadges: 1, streamSupporterChatEffectsEnabled: true },
           },
         }),
       );
@@ -608,7 +681,7 @@ describe("GUI app behavior", () => {
         initialAppearance: {
           profile: "minimal",
           revision: 0,
-          settings: { compactRows: true, rowBackgroundsEnabled: true, maxDisplayableBadges: 1 },
+          settings: { compactRows: true, rowBackgroundsEnabled: true, maxDisplayableBadges: 1, streamSupporterChatEffectsEnabled: true },
         },
       }));
     });
@@ -617,7 +690,7 @@ describe("GUI app behavior", () => {
         __guiEvent: "appearance",
         profile: "minimal",
         revision: 1,
-        settings: { compactRows: true, rowBackgroundsEnabled: false, maxDisplayableBadges: 0 },
+        settings: { compactRows: true, rowBackgroundsEnabled: false, maxDisplayableBadges: 0, streamSupporterChatEffectsEnabled: true },
       });
     });
 
@@ -858,7 +931,7 @@ describe("GUI app behavior", () => {
     await TestRenderer.act(async () => renderer!.unmount());
   });
 
-  it("applies newer appearance snapshots only to minimal clients", async () => {
+  it("applies newer appearance snapshots while preserving the client profile", async () => {
     let onEventHandler: EventHandler | null = null;
     const createEventFeedImpl = ({ onEvent }: EventFeedArgs) => {
       onEventHandler = onEvent;
@@ -870,9 +943,9 @@ describe("GUI app behavior", () => {
         mode: "dock",
         createEventFeedImpl,
         initialAppearance: {
-          profile: "minimal",
+          profile: "standard",
           revision: 0,
-          settings: { compactRows: true, rowBackgroundsEnabled: true, maxDisplayableBadges: 1 },
+          settings: { compactRows: true, rowBackgroundsEnabled: true, maxDisplayableBadges: 1, streamSupporterChatEffectsEnabled: true },
         },
       }));
     });
@@ -882,13 +955,13 @@ describe("GUI app behavior", () => {
         __guiEvent: "appearance",
         profile: "minimal",
         revision: 1,
-        settings: { compactRows: true, rowBackgroundsEnabled: false, maxDisplayableBadges: 0 },
+        settings: { compactRows: true, rowBackgroundsEnabled: false, maxDisplayableBadges: 0, streamSupporterChatEffectsEnabled: false },
       });
     });
 
     const text = JSON.stringify(renderer!.toJSON());
-    expect(text).toContain("gui-shell--minimal");
-    expect(text).toContain("gui-row--background-off");
+    expect(text).not.toContain("gui-shell--minimal");
+    expect(text).not.toContain("gui-row--background-off");
     expect(text).toContain("test-minimal-user");
     await TestRenderer.act(async () => renderer!.unmount());
   });

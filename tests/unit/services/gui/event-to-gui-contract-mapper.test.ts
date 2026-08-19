@@ -216,6 +216,24 @@ describe("Event-to-GUI contract mapper behavior", () => {
     expect(mapped.isPaypiggy).toBe(true);
   });
 
+  it("maps stream supporter state only onto chat rows", async () => {
+    const mapper = createMapper({ messageCharacterLimit: 0 });
+    const chat = await mapper.mapDisplayRow({
+      type: "platform:chat-message",
+      platform: "twitch",
+      data: { message: { text: "hello" }, isPaypiggy: false, isStreamSupporter: true },
+    });
+    const notification = await mapper.mapDisplayRow({
+      type: "platform:follow",
+      platform: "twitch",
+      data: { displayMessage: "followed", isStreamSupporter: true },
+    });
+
+    expect(chat?.isStreamSupporter).toBe(true);
+    expect(chat?.isPaypiggy).toBe(false);
+    expect(notification?.isStreamSupporter).toBeUndefined();
+  });
+
   it("maps only safe member sprite URLs onto chat DTOs", async () => {
     const mapper = createMapper();
     const valid = await mapper.mapDisplayRow({

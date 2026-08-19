@@ -114,6 +114,9 @@ function normalizeRow(input: unknown): GuiRowDto {
   const parts = normalizeParts(row.parts)
   const badgeImages = normalizeBadgeImages(row.badgeImages)
   const isPaypiggy = typeof row.isPaypiggy === 'boolean' ? row.isPaypiggy : null
+  const isStreamSupporter = kind === 'chat' && typeof row.isStreamSupporter === 'boolean'
+    ? row.isStreamSupporter
+    : null
   const memberSpriteUrl = kind === 'chat' && isPaypiggy === true
     ? normalizeMemberSpriteUrl(row.memberSpriteUrl)
     : undefined
@@ -131,6 +134,7 @@ function normalizeRow(input: unknown): GuiRowDto {
     ...(parts ? { parts } : {}),
     ...(badgeImages ? { badgeImages } : {}),
     ...(isPaypiggy === null ? {} : { isPaypiggy }),
+    ...(isStreamSupporter === null ? {} : { isStreamSupporter }),
     ...(memberSpriteUrl ? { memberSpriteUrl } : {}),
     ...(memberTheme ? { memberTheme } : {}),
     avatarUrl: normalizeString(row.avatarUrl),

@@ -4,7 +4,8 @@ import { dirname } from 'node:path';
 const OPERATOR_APPEARANCE_KEYS = [
     'compactRows',
     'rowBackgroundsEnabled',
-    'maxDisplayableBadges'
+    'maxDisplayableBadges',
+    'streamSupporterChatEffectsEnabled'
 ] as const;
 const operatorAppearanceKeys = new Set<string>(OPERATOR_APPEARANCE_KEYS);
 
@@ -13,6 +14,7 @@ type OperatorAppearanceSettings = Readonly<{
     compactRows: boolean;
     rowBackgroundsEnabled: boolean;
     maxDisplayableBadges: number;
+    streamSupporterChatEffectsEnabled?: boolean;
 }>;
 type OperatorAppearanceSnapshot = Readonly<{
     revision: number;
