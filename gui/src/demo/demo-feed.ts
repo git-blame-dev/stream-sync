@@ -6,7 +6,6 @@ export interface DemoFeedState {
   nextRowIndex: number
 }
 
-export const RED_MEMBER_DEMO_SPRITE_URL = 'https://images-wixmp-ed30a86b8c4ca887773594c2.wixmp.com/f/fff66c2b-2718-44ef-8f83-3cd2763d6838/dfnkphg-eef02296-d5ef-4283-88ca-497d781906af.gif?token=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1cm46YXBwOjdlMGQxODg5ODIyNjQzNzNhNWYwZDQxNWVhMGQyNmUwIiwiaXNzIjoidXJuOmFwcDo3ZTBkMTg4OTgyMjY0MzczYTVmMGQ0MTVlYTBkMjZlMCIsIm9iaiI6W1t7InBhdGgiOiIvZi9mZmY2NmMyYi0yNzE4LTQ0ZWYtOGY4My0zY2QyNzYzZDY4MzgvZGZua3BoZy1lZWYwMjI5Ni1kNWVmLTQyODMtODhjYS00OTdkNzgxOTA2YWYuZ2lmIn1dXSwiYXVkIjpbInVybjpzZXJ2aWNlOmZpbGUuZG93bmxvYWQiXX0.7AkJyzeLDX9pMiyz4BOnJlvKqZQFby9IN8LNkyEwr7I'
 export const TWITCH_MEMBER_DEMO_BADGES: readonly GuiBadgeImage[] = [
   {
     imageUrl: 'https://static-cdn.jtvnw.net/badges/v1/3267646d-33f0-4b17-b3df-f923a41db1d0/3',
@@ -27,6 +26,7 @@ export const TWITCH_MEMBER_DEMO_BADGES: readonly GuiBadgeImage[] = [
 
 const SELECTED_DEMO_ROWS: readonly GuiRowDto[] = [
   {
+    presentationRole: 'ordinary',
     type: 'chat',
     kind: 'chat',
     platform: 'twitch',
@@ -36,6 +36,7 @@ const SELECTED_DEMO_ROWS: readonly GuiRowDto[] = [
     timestamp: null
   },
   {
+    presentationRole: 'ordinary',
     type: 'chat',
     kind: 'chat',
     platform: 'tiktok',
@@ -51,12 +52,13 @@ const SELECTED_DEMO_ROWS: readonly GuiRowDto[] = [
     username: 'Naruto',
     text: 'Believe it! I’m the Hokage of paypiggies today!',
     isPaypiggy: true,
-    memberTheme: 'red',
-    memberSpriteUrl: RED_MEMBER_DEMO_SPRITE_URL,
+    presentationRole: 'member',
+    presentationOverride: { theme: 'red', effects: ['particles'] },
     avatarUrl: DEMO_CHARACTER_CATALOG.Naruto,
     timestamp: null
   },
   {
+    presentationRole: 'monetization',
     type: 'platform:gift',
     kind: 'notification',
     platform: 'tiktok',
@@ -66,6 +68,7 @@ const SELECTED_DEMO_ROWS: readonly GuiRowDto[] = [
     timestamp: null
   },
   {
+    presentationRole: 'ordinary',
     type: 'chat',
     kind: 'chat',
     platform: 'twitch',
@@ -81,11 +84,13 @@ const SELECTED_DEMO_ROWS: readonly GuiRowDto[] = [
     username: 'Goku',
     text: 'My Saiyan pride is supporting the stream!',
     isPaypiggy: true,
+    presentationRole: 'member',
     badgeImages: [...TWITCH_MEMBER_DEMO_BADGES],
     avatarUrl: DEMO_CHARACTER_CATALOG.Goku,
     timestamp: null
   },
   {
+    presentationRole: 'ordinary',
     type: 'chat',
     kind: 'chat',
     platform: 'twitch',
@@ -95,6 +100,7 @@ const SELECTED_DEMO_ROWS: readonly GuiRowDto[] = [
     timestamp: null
   },
   {
+    presentationRole: 'ordinary',
     type: 'chat',
     kind: 'chat',
     platform: 'tiktok',

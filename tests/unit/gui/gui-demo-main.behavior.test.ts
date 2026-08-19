@@ -10,7 +10,6 @@ import {
   advanceDemoFeed,
   createDemoRows,
   createInitialDemoFeedState,
-  RED_MEMBER_DEMO_SPRITE_URL,
   TWITCH_MEMBER_DEMO_BADGES,
 } from "../../../gui/src/demo/demo-feed";
 import { bootstrapChatDemo } from "../../../gui/src/demo/main";
@@ -69,7 +68,7 @@ describe("Chat demo main behavior", () => {
     const rows = createDemoRows();
 
     expect(rows).toHaveLength(8);
-    expect(rows).toEqual([
+    expect(rows.map(({ presentationRole: _presentationRole, ...row }) => row)).toEqual([
       {
         type: "chat",
         kind: "chat",
@@ -95,8 +94,7 @@ describe("Chat demo main behavior", () => {
         username: "Naruto",
         text: "Believe it! I’m the Hokage of paypiggies today!",
         isPaypiggy: true,
-        memberTheme: "red",
-        memberSpriteUrl: RED_MEMBER_DEMO_SPRITE_URL,
+        presentationOverride: { theme: "red", effects: ["particles"] },
         avatarUrl: "https://myanimelist.net/images/characters/15/570333.jpg",
         timestamp: null,
       },
@@ -158,8 +156,8 @@ describe("Chat demo main behavior", () => {
       kind: "chat",
       platform: "youtube",
       isPaypiggy: true,
-      memberTheme: "red",
-      memberSpriteUrl: RED_MEMBER_DEMO_SPRITE_URL,
+      presentationRole: "member",
+      presentationOverride: { theme: "red", effects: ["particles"] },
       text: "Believe it! I’m the Hokage of paypiggies today!",
     });
 
@@ -172,9 +170,10 @@ describe("Chat demo main behavior", () => {
     );
 
     expect(html).toContain("gui-row--paypiggy");
-    expect(html).toContain("gui-row--member-theme-red");
+    expect(html).toContain("gui-row--theme-red");
     expect(html).toContain("gui-row__member-tag");
-    expect(html).toContain(RED_MEMBER_DEMO_SPRITE_URL.replaceAll("&", "&amp;"));
+    expect(html).toContain("rayquaza.gif");
+    expect(html).toContain("gui-row__member-particles");
     expect(html).toContain("Naruto");
   });
 

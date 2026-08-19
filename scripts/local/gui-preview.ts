@@ -541,7 +541,7 @@ const PREVIEW_PLATFORM_ACCOUNTS: readonly [PreviewPlatformAccount, ...PreviewPla
         userId: 'test-tiktok-account-id'
     }
 ];
-const PREVIEW_YOUTUBE_MEMBER_IDENTITY = 'youtube:test-youtube-account';
+const PREVIEW_SYNTHETIC_MEMBER_IDENTITY = 'youtube:test-youtube-account';
 
 function parsePreviewScenario(args: readonly string[]): PreviewScenario {
     const inlineValue = args.find((argument) => argument.startsWith('--scenario='))?.slice('--scenario='.length);
@@ -636,19 +636,17 @@ function buildPreviewConfig(baseConfig: UnknownRecord = {}): UnknownRecord {
     const overrideCommands = getPreviewRecord(overrideConfig, 'commands');
     const sourceGreetings = getPreviewRecord(sourceConfig, 'greetings');
     const overrideGreetings = getPreviewRecord(overrideConfig, 'greetings');
-    const customVfxProfiles = {
-        ...getPreviewRecord(sourceGreetings, 'customVfxProfiles'),
-        ...getPreviewRecord(overrideGreetings, 'customVfxProfiles')
+    merged.greetings = mergeSection(sourceGreetings, overrideGreetings);
+    merged.profiles = {
+        ...getPreviewRecord(overrideConfig, 'profiles'),
+        'synthetic-member': {
+            id: 'synthetic-member',
+            identities: [PREVIEW_SYNTHETIC_MEMBER_IDENTITY],
+            greetingCommand: '!preview',
+            rowTheme: 'red',
+            rowEffects: ['particles']
+        }
     };
-    const redMemberProfile = Object.values(customVfxProfiles)
-        .map(toPreviewRecord)
-        .find((profile) => profile.memberTheme === 'red' && typeof profile.memberSpriteUrl === 'string');
-
-    merged.greetings = mergeSection(sourceGreetings, overrideGreetings, {
-        customVfxProfiles: redMemberProfile
-            ? { ...customVfxProfiles, [PREVIEW_YOUTUBE_MEMBER_IDENTITY]: redMemberProfile }
-            : customVfxProfiles
-    });
 
     merged.general = mergeSection(sourceGeneral, overrideGeneral, {
         messagesEnabled: true,

@@ -538,29 +538,31 @@ describe("GUI local preview command behavior", () => {
     expect(config.cooldowns.heavyCommandCooldownMs).toBe(0);
   });
 
-  it("aliases a configured red member profile to the YouTube preview account", () => {
-    const memberSpriteUrl = "https://example.invalid/shiny-rayquaza.gif";
+  it("merges explicit root preview profiles without reading local profiles", () => {
+    const syntheticSpriteUrl = "https://example.invalid/synthetic-preview-member.gif";
     const config = buildPreviewConfig({
-      greetings: {
-        customVfxProfiles: {
-          "youtube:configured-member": {
-            profileId: "configured-member",
-            command: "!preview",
-            memberTheme: "red",
-            memberSpriteUrl,
-          },
+      profiles: {
+        "configured-preview": {
+          id: "configured-preview",
+          identities: ["youtube:configured-preview-member"],
+          greetingCommand: "!preview",
+          rowTheme: "red",
+          rowEffects: ["particles"],
+          spriteUrl: syntheticSpriteUrl,
         },
       },
     });
 
-    expect(
-      config.greetings.customVfxProfiles["youtube:test-youtube-account"],
-    ).toEqual({
-      profileId: "configured-member",
-      command: "!preview",
-      memberTheme: "red",
-      memberSpriteUrl,
-    });
+    expect(config.profiles["configured-preview"]).toEqual(expect.objectContaining({ spriteUrl: syntheticSpriteUrl }));
+    expect(config.profiles).not.toHaveProperty("ordinaryMember");
+    expect(config.profiles["synthetic-member"]).toEqual(expect.objectContaining({
+      identities: ["youtube:test-youtube-account"],
+      rowTheme: "red",
+      rowEffects: ["particles"],
+    }));
+    expect(config.profiles["synthetic-member"]).not.toHaveProperty("spriteUrl");
+    expect(config.profiles).not.toHaveProperty("previewSupporter");
+    expect(config.profiles).not.toHaveProperty("previewMonetization");
   });
 
   it("runs preview via ingest pipeline and stops cleanly", async () => {
