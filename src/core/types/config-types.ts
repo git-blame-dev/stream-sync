@@ -47,6 +47,7 @@ export type ConfigSectionName =
     | 'cooldowns'
     | 'obs'
     | 'goals'
+    | 'fundingGoal'
     | 'gifts'
     | 'envelopes'
     | 'farewell'

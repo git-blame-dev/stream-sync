@@ -22,7 +22,8 @@ export default defineConfig({
         dock: resolve(__dirname, 'src/dock/main.tsx'),
         demo: resolve(__dirname, 'src/demo/main.tsx'),
         overlay: resolve(__dirname, 'src/overlay/main.tsx'),
-        operator: resolve(__dirname, 'src/operator/main.tsx')
+        operator: resolve(__dirname, 'src/operator/main.tsx'),
+        goal: resolve(__dirname, 'src/goal/main.tsx')
       },
       output: {
         entryFileNames: 'assets/[name].js',

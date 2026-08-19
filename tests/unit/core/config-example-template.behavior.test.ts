@@ -48,4 +48,17 @@ describe("config example template behavior", () => {
     });
     expect(normalized.displayQueue).toEqual(DEFAULTS.displayQueue);
   });
+
+  it("loads the complete example through production normalization and validation", () => {
+    const normalized = ConfigValidator.normalize(readConfigExample());
+
+    expect(normalized.fundingGoal).toMatchObject({
+      enabled: false,
+      id: "support",
+      label: "Support Goal",
+      targetUsd: 100,
+      youtubeJewelsUsd: 0,
+    });
+    expect(ConfigValidator.validate(normalized)).toEqual({ isValid: true, errors: [] });
+  });
 });

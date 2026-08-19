@@ -14,6 +14,27 @@ html, body {
   --gui-member-tag-bottom: #ffb300;
   --gui-member-tag-text: #0f5d33;
   --gui-member-tag-shine: #fff8a8;
+  --gui-gold-background-top: rgba(142, 88, 0, var(--gui-row-background-opacity));
+  --gui-gold-background-mid: rgba(218, 151, 5, var(--gui-row-background-opacity));
+  --gui-gold-background-bottom: rgba(255, 199, 42, var(--gui-row-background-opacity));
+  --gui-gold-border: rgba(255, 239, 166, 0.76);
+  --gui-gold-inner-highlight: rgba(255, 249, 210, 0.34);
+  --gui-gold-glow-ring: rgba(255, 226, 105, 0.58);
+  --gui-gold-glow-soft: rgba(255, 190, 39, 0.62);
+  --gui-gold-glow-deep: rgba(135, 73, 0, 0.82);
+  --gui-gold-sheen-edge: #fff4a8;
+  --gui-gold-avatar-halo: rgba(255, 231, 128, 0.96);
+  --gui-gold-avatar-deep: rgba(217, 135, 0, 0.94);
+  --gui-gold-text-accent: #fff7cf;
+  --gui-gold-text-accent-shadow: 0 0 8px rgba(255, 239, 164, 0.56);
+  --gui-gold-progress-track: rgba(255, 239, 166, 0.2);
+  --gui-funding-goal-fill-start: var(--gui-gold-sheen-edge);
+  --gui-funding-goal-fill-end: var(--gui-gold-background-top);
+  --gui-funding-goal-badge-background: var(--gui-gold-sheen-edge);
+  --gui-funding-goal-track: var(--gui-gold-progress-track);
+  --gui-funding-goal-glow: var(--gui-gold-glow-ring);
+  --gui-funding-goal-text-accent: var(--gui-gold-text-accent);
+  --gui-funding-goal-text-accent-shadow: var(--gui-gold-text-accent-shadow);
   --gui-overlay-avatar-size: 51px;
   --gui-overlay-platform-icon-size: 25.81px;
   --gui-overlay-badge-size: 27px;
@@ -28,6 +49,9 @@ html, body {
   --gui-dock-row-body-font-size: 18px;
   --gui-dock-member-tag-font-size: 6.72px;
   --gui-dock-emote-size: 32.4px;
+  --gui-funding-goal-label-size: var(--gui-overlay-row-header-font-size);
+  --gui-funding-goal-amount-size: var(--gui-overlay-row-body-font-size);
+  --gui-funding-goal-caption-size: calc(var(--gui-overlay-row-header-font-size) * .62);
 }
 
 .gui-shell {
@@ -41,6 +65,152 @@ html, body {
   box-sizing: border-box;
   color: #f4f6f8;
   font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+}
+
+.goal-page {
+  width: 100%;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 12px;
+  box-sizing: border-box;
+  color: #f4f6f8;
+  font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+}
+
+.funding-goal {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 7px 10px 8px;
+  color: inherit;
+  background: rgba(0, 0, 0, var(--gui-row-background-opacity));
+  border: 0;
+  border-radius: 10px;
+  box-shadow: none;
+}
+.funding-goal__summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  line-height: 1;
+}
+
+.funding-goal__identity {
+  display: grid;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.funding-goal__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 700;
+  font-size: var(--gui-funding-goal-label-size);
+  overflow-wrap: anywhere;
+}
+
+.funding-goal__emoji {
+  font-size: 1.445em;
+  line-height: .5;
+}
+
+.funding-goal__amount {
+  font-size: var(--gui-funding-goal-amount-size);
+  font-weight: 700;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.funding-goal__label-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.funding-goal__badge {
+  flex: 0 0 auto;
+  padding: 4px 7px 3px;
+  color: #1b1403;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: .01em;
+  background: var(--gui-funding-goal-badge-background);
+  border-radius: 4px;
+  box-shadow: 0 0 12px -3px var(--gui-funding-goal-glow);
+}
+
+.funding-goal__raised-copy {
+  display: grid;
+  flex: 0 0 auto;
+  gap: 2px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.funding-goal__raised-value {
+  color: var(--gui-funding-goal-text-accent);
+  font-size: var(--gui-funding-goal-amount-size);
+  font-weight: 700;
+  line-height: 1;
+  text-shadow: var(--gui-funding-goal-text-accent-shadow);
+  white-space: nowrap;
+}
+
+.funding-goal__raised-status {
+  color: var(--gui-funding-goal-text-accent);
+  font-size: var(--gui-funding-goal-label-size);
+  font-weight: 800;
+  line-height: 1;
+  text-shadow: var(--gui-funding-goal-text-accent-shadow);
+  white-space: nowrap;
+}
+
+.funding-goal__raised-caption {
+  color: rgba(244, 246, 248, .72);
+  font-size: var(--gui-funding-goal-caption-size);
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.funding-goal__rail {
+  margin-top: 6px;
+  overflow: hidden;
+  border-radius: 0;
+  background: var(--gui-funding-goal-track);
+  box-shadow: 0 0 10px -5px var(--gui-funding-goal-glow);
+}
+
+.funding-goal--standard .funding-goal__rail {
+  height: 10px;
+}
+
+.funding-goal--minimal .funding-goal__rail {
+  height: 8px;
+}
+
+.funding-goal__fill {
+  height: 100%;
+  transform-origin: left center;
+  background: linear-gradient(90deg, var(--gui-funding-goal-fill-start), var(--gui-funding-goal-fill-end));
+  transition: transform 320ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .funding-goal__fill {
+    transition: none;
+  }
+}
+
+@media (max-width: 420px) {
+  .funding-goal {
+    padding-inline: 7px;
+  }
 }
 
 .gui-shell--overlay {
@@ -210,19 +380,19 @@ html, body {
 }
 
 .gui-row--theme-gold {
-  --gui-row-theme-background-top: rgba(142, 88, 0, var(--gui-row-background-opacity));
-  --gui-row-theme-background-mid: rgba(218, 151, 5, var(--gui-row-background-opacity));
-  --gui-row-theme-background-bottom: rgba(255, 199, 42, var(--gui-row-background-opacity));
-  --gui-row-theme-border: rgba(255, 239, 166, 0.76);
-  --gui-row-theme-inner-highlight: rgba(255, 249, 210, 0.34);
-  --gui-row-theme-glow-ring: rgba(255, 226, 105, 0.58);
-  --gui-row-theme-glow-soft: rgba(255, 190, 39, 0.62);
-  --gui-row-theme-glow-deep: rgba(135, 73, 0, 0.82);
-  --gui-row-theme-sheen-edge: #fff4a8;
+  --gui-row-theme-background-top: var(--gui-gold-background-top);
+  --gui-row-theme-background-mid: var(--gui-gold-background-mid);
+  --gui-row-theme-background-bottom: var(--gui-gold-background-bottom);
+  --gui-row-theme-border: var(--gui-gold-border);
+  --gui-row-theme-inner-highlight: var(--gui-gold-inner-highlight);
+  --gui-row-theme-glow-ring: var(--gui-gold-glow-ring);
+  --gui-row-theme-glow-soft: var(--gui-gold-glow-soft);
+  --gui-row-theme-glow-deep: var(--gui-gold-glow-deep);
+  --gui-row-theme-sheen-edge: var(--gui-gold-sheen-edge);
   --gui-row-theme-sheen-peak: color-mix(in srgb, white 86%, var(--gui-row-theme-sheen-edge));
   --gui-row-theme-sheen-opacity: 0.54;
-  --gui-row-theme-avatar-halo: rgba(255, 231, 128, 0.96);
-  --gui-row-theme-avatar-deep: rgba(217, 135, 0, 0.94);
+  --gui-row-theme-avatar-halo: var(--gui-gold-avatar-halo);
+  --gui-row-theme-avatar-deep: var(--gui-gold-avatar-deep);
   --gui-row-theme-avatar-ring-strength: 80%;
   --gui-row-theme-avatar-soft-strength: 76%;
   --gui-row-theme-avatar-deep-strength: 74%;
@@ -325,8 +495,8 @@ html, body {
 }
 
 .gui-row--monetization .gui-row__username {
-  color: #fff7cf;
-  text-shadow: 0 0 8px rgba(255, 239, 164, 0.56);
+  color: var(--gui-gold-text-accent);
+  text-shadow: var(--gui-gold-text-accent-shadow);
 }
 
 .gui-row--monetization .gui-row__text {

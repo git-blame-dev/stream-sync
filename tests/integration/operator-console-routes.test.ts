@@ -12,6 +12,7 @@ import {
   type OperatorControls,
 } from "../../src/services/operator/operator-control-service";
 import { createOperatorAppearanceService } from "../../src/services/operator/operator-appearance-service";
+import { createFundingGoalService } from "../../src/services/funding-goal-service";
 import { TestEventBus } from "../helpers/gui-transport-test-utils";
 
 const temporaryDirectories: string[] = [];
@@ -65,6 +66,19 @@ async function createFixture(logSourceOptions?: { maxEntries?: number }) {
     filePath: join(root, "operator-appearance-overrides.json"),
   });
   const { logger, source } = createLogSource(logSourceOptions);
+  const fundingGoal = await createFundingGoalService({
+    config: {
+      enabled: true,
+      id: "controller",
+      label: "🎮 New Controller",
+      targetUsd: 100,
+      tiktokUsdPerCoin: 0.0127,
+      twitchUsdPerBit: 0.01,
+      youtubeJewelsUsd: 0,
+    },
+    goalsConfig: {},
+    filePath: join(root, "funding-goal.json"),
+  });
   const service = createGuiTransportService({
     config: {
       gui: {
@@ -81,13 +95,14 @@ async function createFixture(logSourceOptions?: { maxEntries?: number }) {
     operatorLogs: source,
     operatorControls: controls,
     operatorAppearance: appearance,
+    fundingGoal,
   });
   await service.start();
   const address = service.getAddress();
   if (!address || typeof address === "string") {
     throw new Error("Expected operator transport address");
   }
-  return { appearance, baseUrl: `http://127.0.0.1:${address.port}`, controls, root, service, source };
+  return { appearance, baseUrl: `http://127.0.0.1:${address.port}`, controls, fundingGoal, root, service, source };
 }
 
 function createSseReader(reader: ReadableStreamDefaultReader<Uint8Array>) {
@@ -115,6 +130,65 @@ afterEach(async () => {
 });
 
 describe("operator console routes", () => {
+  test("returns and securely mutates the persistent funding goal", async () => {
+    const { baseUrl, fundingGoal, service } = await createFixture();
+    try {
+      const initial = await fetch(`${baseUrl}/api/v1/operator/funding-goal`);
+      expect(await initial.json()).toMatchObject({
+        id: "controller",
+        label: "🎮 New Controller",
+        currentUsd: 0,
+        targetUsd: 100,
+      });
+
+      const forbidden = await fetch(`${baseUrl}/api/v1/operator/funding-goal`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ operation: "adjust", amountUsd: 5 }),
+      });
+      expect(forbidden.status).toBe(403);
+
+      const incremented = await fetch(`${baseUrl}/api/v1/operator/funding-goal`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "Origin": baseUrl,
+          "X-Stream-Sync-Request": "1",
+        },
+        body: JSON.stringify({ operation: "adjust", amountUsd: 5 }),
+      });
+      expect(incremented.status).toBe(200);
+      expect(fundingGoal.snapshot.currentUsd).toBe(5);
+
+      const decremented = await fetch(`${baseUrl}/api/v1/operator/funding-goal`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "Origin": baseUrl,
+          "X-Stream-Sync-Request": "1",
+        },
+        body: JSON.stringify({ operation: "adjust", amountUsd: -1 }),
+      });
+      expect(decremented.status).toBe(200);
+      expect(fundingGoal.snapshot.currentUsd).toBe(4);
+
+      const set = await fetch(`${baseUrl}/api/v1/operator/funding-goal`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "Origin": baseUrl,
+          "X-Stream-Sync-Request": "1",
+        },
+        body: JSON.stringify({ operation: "set", amountUsd: 108.25 }),
+      });
+      expect(set.status).toBe(200);
+      expect(await set.json()).toMatchObject({ currentUsd: 108.25, completed: true });
+    } finally {
+      await service.stop();
+      fundingGoal.dispose();
+    }
+  });
+
   test("persists appearance changes through the secured operator API", async () => {
     const { appearance, baseUrl, root, service } = await createFixture();
     try {
@@ -320,6 +394,9 @@ describe("operator console routes", () => {
       const initialAppearance = await sse.next();
       expect(initialAppearance).toContain("event: appearance");
       expect(initialAppearance).toContain('"maxDisplayableBadges":3');
+      const initialFundingGoal = await sse.next();
+      expect(initialFundingGoal).toContain("event: funding-goal");
+      expect(initialFundingGoal).toContain('"label":"🎮 New Controller"');
 
       await controls.setEnabled("sharesEnabled", false);
       const changed = await sse.next();

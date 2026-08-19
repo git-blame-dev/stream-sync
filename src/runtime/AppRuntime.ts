@@ -24,6 +24,7 @@ import { NotificationInputValidator } from '../notifications/notification-input-
 import type { OperatorControlService } from '../services/operator/operator-control-service';
 import type { OperatorLogSource } from '../services/operator/operator-log-source';
 import type { OperatorAppearanceService } from '../services/operator/operator-appearance-service';
+import type { FundingGoalService } from '../services/funding-goal-service';
 
 type RuntimeRecord = Record<string, unknown>;
 
@@ -184,6 +185,7 @@ type RuntimeDependencies = RuntimeRecord & {
     operatorControls?: OperatorControlService;
     operatorAppearance?: OperatorAppearanceService;
     operatorLogs?: OperatorLogSource;
+    fundingGoal?: FundingGoalService;
     obs?: {
         connectionManager?: RuntimeObsManager;
         goalsManager?: { initializeGoalDisplay: () => Promise<unknown> | unknown };
@@ -288,7 +290,9 @@ class AppRuntime {
     isShuttingDown: boolean;
     platformEventRouter: PlatformEventRouter;
     chatNotificationRouter: ChatNotificationRouter;
+    fundingGoal: FundingGoalService | undefined;
     youtube?: { initialize?: (handlers?: RuntimeRecord, reconnect?: boolean) => Promise<unknown> | unknown };
+    private shutdownPromise: Promise<void> | null = null;
 
     async _runUnifiedNotification(type: string, platform: string, username: unknown, options: NotificationOptions, process: RuntimeNotificationManager['handleNotification'] | undefined) {
         if (!options || typeof options !== 'object') {
@@ -418,13 +422,15 @@ class AppRuntime {
         this.eventBus = this.dependencies.eventBus;
         this.vfxCommandService = this.dependencies.vfxCommandService;
         this.userTrackingService = this.dependencies.userTrackingService;
+        this.fundingGoal = this.dependencies.fundingGoal;
         this.guiTransportService = this.dependencies.guiTransportService || createGuiTransportService({
             config: this.config,
             eventBus: this.eventBus,
             logger: this.logger,
             ...(this.dependencies.operatorControls ? { operatorControls: this.dependencies.operatorControls } : {}),
             ...(this.dependencies.operatorAppearance ? { operatorAppearance: this.dependencies.operatorAppearance } : {}),
-            ...(this.dependencies.operatorLogs ? { operatorLogs: this.dependencies.operatorLogs } : {})
+            ...(this.dependencies.operatorLogs ? { operatorLogs: this.dependencies.operatorLogs } : {}),
+            ...(this.fundingGoal ? { fundingGoal: this.fundingGoal } : {})
         });
         this.obsEventService = this.dependencies.obsEventService;
 
@@ -715,6 +721,12 @@ class AppRuntime {
     }
 
     async shutdown() {
+        if (this.shutdownPromise) return this.shutdownPromise;
+        this.shutdownPromise = this._shutdown();
+        return this.shutdownPromise;
+    }
+
+    private async _shutdown() {
         if (this.isShuttingDown) {
             return;
         }
@@ -802,6 +814,7 @@ class AppRuntime {
         if (this.platformEventRouter && typeof this.platformEventRouter.dispose === 'function') {
             this.platformEventRouter.dispose();
         }
+        await this.fundingGoal?.dispose();
 
         try {
             if (this.viewerCountSystem) {
@@ -1030,6 +1043,10 @@ class AppRuntime {
     async rollbackStartup() {
         await this._runStartupRollbackStep('stop GUI transport', async () => {
             await this._stopGuiTransport();
+        });
+
+        await this._runStartupRollbackStep('dispose funding goal', async () => {
+            await this.fundingGoal?.dispose();
         });
 
         await this._runStartupRollbackStep('stop display queue', async () => {

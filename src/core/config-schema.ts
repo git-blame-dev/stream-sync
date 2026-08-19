@@ -217,6 +217,16 @@ const CONFIG_SCHEMA: ConfigSchema = {
         twitchPaypiggyEquivalent: { type: 'number', default: 350 }
     },
 
+    fundingGoal: {
+        enabled: { type: 'boolean', default: false },
+        id: { type: 'string', default: 'support' },
+        label: { type: 'string', default: 'Support Goal' },
+        targetUsd: { type: 'number', default: 100, min: 0, allowZero: false },
+        tiktokUsdPerCoin: { type: 'number', default: 0, min: 0 },
+        twitchUsdPerBit: { type: 'number', default: 0.01, min: 0 },
+        youtubeJewelsUsd: { type: 'number', default: 0, min: 0 }
+    },
+
     gifts: {
         command: { type: 'string', userDefined: true },
         giftVideoSource: { type: 'string', default: 'gift-video' },

@@ -1609,6 +1609,23 @@ describe("AppRuntime behavior", () => {
     }
   });
 
+  it("disposes funding goal subscriptions on runtime shutdown", async () => {
+    const dispose = createMockFn();
+    const runtime = createRuntime();
+    setRuntimeProperty(runtime, "fundingGoal", { dispose });
+    setRuntimeProperty(runtime, "viewerCountSystem", { stopPolling: createMockFn() });
+    setRuntimeProperty(runtime, "viewerCountStatusCleanup", createMockFn());
+    const originalExit = process.exit;
+    Reflect.set(process, "exit", createMockFn());
+
+    try {
+      await runtime.shutdown();
+      expect(dispose.mock.calls.length).toBe(1);
+    } finally {
+      Reflect.set(process, "exit", originalExit);
+    }
+  });
+
   it("requires options when emitting system ready", () => {
     const runtime = createRuntime();
 

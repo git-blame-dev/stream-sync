@@ -4,6 +4,13 @@ import {
   type RowTheme,
   type RowVisualEffectId,
 } from '../../../src/core/row-presentation'
+import {
+  parseFundingGoalSnapshot,
+  selectNewestFundingGoal,
+  type FundingGoalSnapshot,
+} from '../shared/funding-goal'
+
+export { parseFundingGoalSnapshot, selectNewestFundingGoal, type FundingGoalSnapshot }
 
 export type Control = {
   key: string
@@ -38,6 +45,7 @@ export const CONTROL_KEYS = [
 export const LOG_LEVELS = ['debug', 'info', 'console', 'warn', 'error', 'emergency'] as const
 export const MAX_LOG_ROWS = 200
 export const APPEARANCE_KEYS = ['compactRows', 'rowBackgroundsEnabled', 'maxDisplayableBadges', 'streamSupporterChatEffectsEnabled', 'memberRowTheme', 'memberRowEffects'] as const
+export const FUNDING_ADJUSTMENTS_USD = [1, 10, -1] as const
 
 const controlKeys = new Set<string>(CONTROL_KEYS)
 const logLevels = new Set<string>(LOG_LEVELS)
@@ -46,7 +54,7 @@ const appearanceKeys = new Set<string>(APPEARANCE_KEYS)
 export function parseOperatorState(value: unknown): OperatorState | null {
   if (!value || typeof value !== 'object') return null
   const candidate = value as { revision?: unknown; controls?: unknown }
-  if (typeof candidate.revision !== 'number' || !Number.isFinite(candidate.revision) || !Array.isArray(candidate.controls)) return null
+  if (typeof candidate.revision !== 'number' || !Number.isSafeInteger(candidate.revision) || candidate.revision < 0 || !Array.isArray(candidate.controls)) return null
   const controls = candidate.controls.filter((control): control is Control => {
     if (!control || typeof control !== 'object') return false
     const item = control as Record<string, unknown>
@@ -69,7 +77,8 @@ export function parseAppearanceState(value: unknown): AppearanceState | null {
   const settings = candidate.settings
   if (
     typeof candidate.revision !== 'number'
-    || !Number.isFinite(candidate.revision)
+    || !Number.isSafeInteger(candidate.revision)
+    || candidate.revision < 0
     || !settings
     || typeof settings !== 'object'
     || !Array.isArray(candidate.overriddenKeys)

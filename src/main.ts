@@ -49,6 +49,11 @@ import { ensureSecrets } from './utils/secret-manager';
 import { createTextProcessingManager } from './utils/text-processing';
 import { safeSetInterval } from './utils/timeout-validator';
 import { createOBSSubsystem } from './obs/subsystem';
+import {
+    createFundingGoalService,
+    type FundingGoalConfig,
+    type FundingGoalValuesConfig
+} from './services/funding-goal-service';
 
 type YouTubeModuleLike = {
     Innertube: {
@@ -141,6 +146,7 @@ type MainOverrides = Record<string, unknown> & {
     createSingleInstanceGuard?: typeof acquireSingleInstanceGuard;
     createOperatorControlService?: typeof createOperatorControlService;
     createOperatorAppearanceService?: typeof createOperatorAppearanceService;
+    createFundingGoalService?: typeof createFundingGoalService;
 };
 
 type CooldownsConfig = {
@@ -516,7 +522,8 @@ const MAIN_FUNCTION_OVERRIDE_KEYS = [
     'createProductionDependencies',
     'createSingleInstanceGuard',
     'createOperatorControlService',
-    'createOperatorAppearanceService'
+    'createOperatorAppearanceService',
+    'createFundingGoalService'
 ];
 
 async function releaseSingleInstanceGuard(singleInstanceGuard: SingleInstanceGuard | null) {
@@ -661,7 +668,10 @@ async function main(overrides: MainOverrides = {}) {
     const createGracefulExitServiceFn = runtimeOverrides.createGracefulExitService || createGracefulExitService;
     const createProductionDependenciesFn = runtimeOverrides.createProductionDependencies || createProductionDependencies;
     const createSingleInstanceGuardFn = runtimeOverrides.createSingleInstanceGuard || acquireSingleInstanceGuard;
+    const createFundingGoalServiceFn = runtimeOverrides.createFundingGoalService || createFundingGoalService;
     let singleInstanceGuard: SingleInstanceGuard | null = null;
+    let fundingGoal: Awaited<ReturnType<typeof createFundingGoalService>> | undefined;
+    let fundingGoalOwned = false;
     try {
         logger.info('Starting main application...', 'main');
         logger.info('Main application started, beginning initialization...', 'Main');
@@ -791,6 +801,13 @@ async function main(overrides: MainOverrides = {}) {
             maxListeners: 100
         });
         logger.debug('EventBus created', 'Main');
+        fundingGoal = await createFundingGoalServiceFn({
+            config: config.fundingGoal as unknown as FundingGoalConfig,
+            goalsConfig: config.goals as unknown as FundingGoalValuesConfig,
+            eventBus,
+            warn: (message) => logger.warn(message, 'funding-goal'),
+            debug: (message) => logger.debug(message, 'funding-goal')
+        });
 
         const obsSubsystem = createOBSSubsystem({
             config,
@@ -885,6 +902,7 @@ async function main(overrides: MainOverrides = {}) {
         dependencies.vfxCommandService = vfxCommandService;
         dependencies.userTrackingService = userTrackingService;
         dependencies.obsEventService = obsEventService;
+        dependencies.fundingGoal = fundingGoal;
         if (operatorControls) {
             dependencies.operatorControls = operatorControls;
             const operatorLogs = getOperatorLogSource();
@@ -926,6 +944,7 @@ async function main(overrides: MainOverrides = {}) {
         
         assertRuntimeDependencies(dependencies);
         app = createAppRuntime(toAppRuntimeConfig(runtimeProcessingConfig), dependencies);
+        fundingGoalOwned = true;
 
         const gracefulExitService = createGracefulExitServiceFn(
             app,
@@ -983,6 +1002,16 @@ async function main(overrides: MainOverrides = {}) {
         };
 
     } catch (error) {
+        if (!fundingGoalOwned) {
+            try {
+                await fundingGoal?.dispose();
+            } catch (disposeError) {
+                logMainError('Failed to dispose funding goal during startup rollback', disposeError, null, {
+                    eventType: 'startup-rollback',
+                    logContext: 'main'
+                });
+            }
+        }
         if (app && typeof app.rollbackStartup === 'function') {
             try {
                 await app.rollbackStartup();

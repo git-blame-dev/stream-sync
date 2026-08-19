@@ -86,11 +86,11 @@ type PreviewModule = {
   buildPreviewScenarioEvents: (
     durationMs?: number,
     intervalMs?: number,
-    scenario?: "all" | "chat" | "notifications",
+    scenario?: "all" | "chat" | "notifications" | "funding",
   ) => ScenarioEvent[];
   parsePreviewScenario: (
     args: readonly string[],
-  ) => "all" | "chat" | "notifications";
+  ) => "all" | "chat" | "notifications" | "funding";
   createPreviewPipeline: (options?: UnknownRecord) => PreviewPipeline;
   createPreviewIngestAdapters: (options: {
     config?: UnknownRecord;
@@ -108,6 +108,7 @@ type PreviewModule = {
       durationMs: number,
     ) => number | ReturnType<typeof setInterval>;
     safeSetTimeoutImpl: (resolve: () => void, durationMs: number) => unknown;
+    dispatchImmediately?: boolean;
     errorHandler: {
       handleEventProcessingError: (
         error: unknown,
@@ -294,6 +295,7 @@ describe("GUI local preview command behavior", () => {
     expect(parsePreviewScenario(["--scenario", "notifications"])).toBe(
       "notifications",
     );
+    expect(parsePreviewScenario(["--scenario=funding"])).toBe("funding");
     expect(() => parsePreviewScenario(["--scenario=unknown"])).toThrow(
       "Unknown GUI preview scenario",
     );
@@ -304,6 +306,7 @@ describe("GUI local preview command behavior", () => {
       2000,
       "notifications",
     );
+    const fundingEvents = buildPreviewScenarioEvents(32000, 2000, "funding");
     expect(chatEvents.length).toBeGreaterThan(0);
     expect(chatEvents.every((event) => event.notificationType === undefined)).toBe(
       true,
@@ -315,6 +318,13 @@ describe("GUI local preview command behavior", () => {
     expect(notificationEvents.at(-1)?.notificationType).toBe(
       "platform:envelope",
     );
+    expect(fundingEvents.map((event) => event.notificationType)).toEqual([
+      "platform:gift",
+      "platform:paypiggy",
+      "platform:giftpaypiggy",
+      "platform:gift",
+      "platform:paypiggy",
+    ]);
   });
 
   it("injects deterministic media URLs into raw ingest payloads", () => {
@@ -479,7 +489,8 @@ describe("GUI local preview command behavior", () => {
 
     expect(config.gui.enableDock).toBe(true);
     expect(config.gui.enableOverlay).toBe(true);
-    expect(config.gui.enableOperator).toBe(false);
+    expect(config.gui.enableOperator).toBe(true);
+    expect(config.fundingGoal).toEqual(expect.objectContaining({ enabled: true, label: '🎮 New Controller', targetUsd: 100 }));
     expect(config.gui.showMessages).toBe(true);
     expect(config.gui.showCommands).toBe(true);
     expect(config.gui.showGreetings).toBe(true);
@@ -670,6 +681,18 @@ describe("GUI local preview command behavior", () => {
     expect(
       requireValue(createdTransportArgs[0], "created transport args").eventBus,
     ).toBe(fakeEventBus);
+    const transportArgs = requireValue(createdTransportArgs[0], "created transport args");
+    expect(transportArgs.fundingGoal).toBeDefined();
+    const fundingGoal = transportArgs.fundingGoal as {
+      adjust(amountUsd: number): Promise<void>;
+      snapshot: { currentUsd: number };
+    };
+    await expect(fundingGoal.adjust(-1)).rejects.toThrow("cannot be negative");
+    expect(fundingGoal.snapshot.currentUsd).toBe(0);
+    expect(transportArgs.operatorControls).toBeDefined();
+    expect(transportArgs.operatorAppearance).toBeDefined();
+    expect(transportArgs.operatorLogs).toBeDefined();
+    expect(transportArgs.assetsRoot).toContain("gui/dist");
     expect(emittedEvents.length).toBeGreaterThanOrEqual(1);
     expect(requireValue(emittedEvents[0], "first emitted event").eventName).toBe(
       "platform:event",
@@ -678,6 +701,8 @@ describe("GUI local preview command behavior", () => {
       emittedEvents.some((entry) => entry.eventName === "display:row"),
     ).toBe(false);
     expect(writes.some((line) => line.includes("Dock URL"))).toBe(true);
+    expect(writes.some((line) => line.includes("Goal URL") && !line.includes("Goal minimal URL"))).toBe(true);
+    expect(writes.some((line) => line.includes("Goal minimal URL"))).toBe(true);
     expect(
       writes.some((line) =>
         line.includes("For TikTok gift animation preview, run: bun run gui:preview:gift-animation"),

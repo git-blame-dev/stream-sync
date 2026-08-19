@@ -3,6 +3,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { AppLogger } from '../../core/logger/types';
 import { createPlatformErrorHandler } from '../../utils/platform-error-handler';
 import type { OperatorLogEntry, OperatorLogSource } from '../operator/operator-log-source';
+import type { FundingGoalService, FundingGoalSnapshot } from '../funding-goal-service';
 import {
     type OperatorAppearanceKey,
     type OperatorAppearanceService,
@@ -20,6 +21,7 @@ type OperatorApiOptions = {
     appearance: Pick<OperatorAppearanceService, 'snapshot' | 'reset' | 'set' | 'subscribe'>;
     logger?: Pick<AppLogger, 'warn' | 'error'> | null;
     logs: OperatorLogSource;
+    fundingGoal?: Pick<FundingGoalService, 'snapshot' | 'adjust' | 'setTotal' | 'subscribe'>;
 };
 
 type OperatorControlView = {
@@ -59,6 +61,7 @@ const OPERATOR_ROUTES = new Set([
     '/api/v1/operator/controls/reset',
     '/api/v1/operator/appearance',
     '/api/v1/operator/appearance/reset',
+    '/api/v1/operator/funding-goal',
     '/api/v1/logs/events'
 ]);
 const MAX_CLIENTS = 4;
@@ -92,6 +95,10 @@ function buildOperatorAppearance(snapshot: OperatorAppearanceSnapshot): Operator
         settings: { ...snapshot.settings },
         overriddenKeys: [...snapshot.overriddenKeys]
     };
+}
+
+function buildFundingGoal(snapshot: FundingGoalSnapshot): FundingGoalSnapshot {
+    return { ...snapshot };
 }
 
 function sendJson(res: ServerResponse<IncomingMessage>, status: number, payload: unknown): void {
@@ -209,7 +216,7 @@ function prepareSse(res: ServerResponse<IncomingMessage>): void {
 }
 
 function createOperatorApi(options: OperatorApiOptions) {
-    const { appearance, controls, logger, logs } = options;
+    const { appearance, controls, fundingGoal, logger, logs } = options;
     const errorHandler = typeof logger?.warn === 'function' && typeof logger.error === 'function'
         ? createPlatformErrorHandler(logger, 'operator-api')
         : null;
@@ -232,6 +239,7 @@ function createOperatorApi(options: OperatorApiOptions) {
     };
     let unsubscribeControls: (() => void) | null = null;
     let unsubscribeAppearance: (() => void) | null = null;
+    let unsubscribeFundingGoal: (() => void) | null = null;
     const broadcastState = (snapshot: OperatorControlSnapshot) => {
         const state = buildOperatorState(snapshot);
         for (const client of stateClients) {
@@ -244,6 +252,14 @@ function createOperatorApi(options: OperatorApiOptions) {
         const state = buildOperatorAppearance(snapshot);
         for (const client of stateClients) {
             if (!writeSse(client, 'appearance', state)) {
+                removeClient(stateClients, client);
+            }
+        }
+    };
+    const broadcastFundingGoal = (snapshot: FundingGoalSnapshot) => {
+        const state = buildFundingGoal(snapshot);
+        for (const client of stateClients) {
+            if (!writeSse(client, 'funding-goal', state, snapshot.revision)) {
                 removeClient(stateClients, client);
             }
         }
@@ -292,6 +308,59 @@ function createOperatorApi(options: OperatorApiOptions) {
         }
         if (!writeSse(client, 'appearance', buildOperatorAppearance(appearance.snapshot))) {
             removeClient(stateClients, client);
+            return;
+        }
+        if (fundingGoal && !writeSse(client, 'funding-goal', buildFundingGoal(fundingGoal.snapshot), fundingGoal.snapshot.revision)) {
+            removeClient(stateClients, client);
+        }
+    };
+
+    const handleFundingGoal = async (req: IncomingMessage, res: ServerResponse<IncomingMessage>) => {
+        if (!fundingGoal) {
+            sendJson(res, 404, { error: 'Funding goal unavailable' });
+            return;
+        }
+        if (req.method === 'GET' || req.method === 'HEAD') {
+            sendJson(res, 200, req.method === 'HEAD' ? null : buildFundingGoal(fundingGoal.snapshot));
+            return;
+        }
+        if (req.method !== 'PATCH') {
+            sendMethodNotAllowed(res, 'GET, HEAD, PATCH');
+            return;
+        }
+        if (!isAuthorizedMutation(req)) {
+            sendJson(res, 403, { error: 'Forbidden' });
+            return;
+        }
+        try {
+            const body = await readJsonBody(req);
+            if (!isRecord(body) || Object.keys(body).sort().join(',') !== 'amountUsd,operation') {
+                throw new TypeError('Funding goal request must contain only operation and amountUsd');
+            }
+            if ((body.operation !== 'adjust' && body.operation !== 'set') ||
+                typeof body.amountUsd !== 'number' || !Number.isFinite(body.amountUsd)) {
+                throw new TypeError('Expected adjust or set operation with numeric amountUsd');
+            }
+            if (body.operation === 'adjust') {
+                await fundingGoal.adjust(body.amountUsd);
+            } else {
+                await fundingGoal.setTotal(body.amountUsd);
+            }
+            sendJson(res, 200, buildFundingGoal(fundingGoal.snapshot));
+        } catch (error) {
+            if (error instanceof RangeError || error instanceof TypeError || error instanceof SyntaxError) {
+                sendJson(res, error instanceof RangeError && error.message.includes('large') ? 413 : 400, {
+                    error: error.message
+                });
+                return;
+            }
+            errorHandler?.handleEventProcessingError(
+                error,
+                'funding-goal-mutation',
+                null,
+                'Failed updating funding goal'
+            );
+            sendJson(res, 500, { error: 'Unable to persist funding goal' });
         }
     };
 
@@ -446,6 +515,8 @@ function createOperatorApi(options: OperatorApiOptions) {
             else await handleAppearanceMutation(req, res, false);
         } else if (route === '/api/v1/operator/appearance/reset') {
             await handleAppearanceMutation(req, res, true);
+        } else if (route === '/api/v1/operator/funding-goal') {
+            await handleFundingGoal(req, res);
         } else {
             sendJson(res, 404, { error: 'Not found' });
         }
@@ -454,6 +525,7 @@ function createOperatorApi(options: OperatorApiOptions) {
     const start = () => {
         unsubscribeControls ??= controls.subscribe(broadcastState);
         unsubscribeAppearance ??= appearance.subscribe(broadcastAppearance);
+        if (fundingGoal) unsubscribeFundingGoal ??= fundingGoal.subscribe(broadcastFundingGoal);
     };
 
     const stop = () => {
@@ -461,6 +533,8 @@ function createOperatorApi(options: OperatorApiOptions) {
         unsubscribeControls = null;
         unsubscribeAppearance?.();
         unsubscribeAppearance = null;
+        unsubscribeFundingGoal?.();
+        unsubscribeFundingGoal = null;
         for (const clients of [stateClients, logClients]) {
             for (const client of [...clients]) {
                 removeClient(clients, client);
@@ -472,5 +546,5 @@ function createOperatorApi(options: OperatorApiOptions) {
     return { handle, start, stop };
 }
 
-export { buildOperatorAppearance, buildOperatorState, createOperatorApi, isOperatorRoute };
+export { buildFundingGoal, buildOperatorAppearance, buildOperatorState, createOperatorApi, isOperatorRoute };
 export type { OperatorAppearanceView, OperatorStateView };

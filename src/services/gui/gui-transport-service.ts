@@ -28,6 +28,7 @@ import { getSystemTimestampISO, isIsoTimestamp } from '../../utils/timestamp';
 import type { AppLogger } from '../../core/logger/types';
 import type { OperatorControlService } from '../operator/operator-control-service';
 import type { OperatorLogSource } from '../operator/operator-log-source';
+import type { FundingGoalService, FundingGoalSnapshot } from '../funding-goal-service';
 import { createOperatorApi, isOperatorRoute } from './operator-api';
 import {
     DISPLAY_EVENT_TYPES,
@@ -80,6 +81,7 @@ type GuiTransportOptions = {
     operatorControls?: OperatorControlService;
     operatorAppearance?: OperatorAppearanceService;
     operatorLogs?: OperatorLogSource;
+    fundingGoal?: Pick<FundingGoalService, 'snapshot' | 'adjust' | 'setTotal' | 'subscribe'>;
 };
 
 type RuntimeAssetRecord = {
@@ -167,6 +169,7 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
     let unsubscribeDisplayEffects: (() => void) | null = null;
     let unsubscribeDisplayLifecycle: (() => void) | null = null;
     let unsubscribeAppearance: (() => void) | null = null;
+    let unsubscribeFundingGoal: (() => void) | null = null;
     const clients = new Set<ServerResponse<IncomingMessage>>();
     const chatClients = new Set<ServerResponse<IncomingMessage>>();
     const chatFeedEnabled = guiConfig.enableChatFeed === true;
@@ -176,6 +179,7 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
             controls: options.operatorControls,
             appearance: options.operatorAppearance,
             logs: options.operatorLogs,
+            ...(options.fundingGoal ? { fundingGoal: options.fundingGoal } : {}),
             ...(logger && typeof logger.warn === 'function' && typeof logger.error === 'function'
                 ? { logger: { warn: logger.warn, error: logger.error } }
                 : {})
@@ -192,6 +196,10 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
     let dispatchChain = Promise.resolve();
     let dispatchEpoch = 0;
     const guiAppearanceSnapshot = () => options.operatorAppearance?.snapshot ?? buildGuiRuntimeConfig(guiConfig).appearance;
+    const createFundingGoalEnvelope = (snapshot: FundingGoalSnapshot) => ({
+        __guiEvent: 'funding-goal' as const,
+        ...snapshot
+    });
 
     const RUNTIME_ASSET_MAX_ENTRIES = 64;
     const RUNTIME_ASSET_TTL_MS = 5 * 60 * 1000;
@@ -338,7 +346,7 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
             });
     };
 
-    const sendSse = (payload: unknown) => {
+    const writeSseToClient = (client: ServerResponse<IncomingMessage>, payload: unknown): boolean => {
         let packet: string;
         try {
             packet = `data: ${JSON.stringify(payload)}\n\n`;
@@ -349,21 +357,14 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
                 null,
                 'Failed serializing GUI SSE event'
             );
-            return;
+            return false;
         }
         const packetBytes = Buffer.byteLength(packet, 'utf8');
         if (packetBytes > GUI_MAX_PACKET_BYTES) {
-            return;
+            return false;
         }
-        for (const client of clients) {
-            try {
-                if (client.writableLength + packetBytes > GUI_MAX_BUFFERED_BYTES) {
-                    clients.delete(client);
-                    client.destroy();
-                    continue;
-                }
-                client.write(packet);
-            } catch (error) {
+        try {
+            if (client.writableLength + packetBytes > GUI_MAX_BUFFERED_BYTES) {
                 clients.delete(client);
                 try {
                     client.destroy();
@@ -372,14 +373,33 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
                         error: destroyError instanceof Error ? destroyError.message : String(destroyError)
                     });
                 }
-                const payloadRecord = toTransportRecord(payload);
-                errorHandler.handleEventProcessingError(
-                    error,
-                    'sse-write',
-                    { payloadType: payloadRecord.type },
-                    'Failed writing GUI SSE event'
-                );
+                return false;
             }
+            client.write(packet);
+            return true;
+        } catch (error) {
+            clients.delete(client);
+            try {
+                client.destroy();
+            } catch (destroyError) {
+                errorHandler.logOperationalError('Failed destroying stale GUI SSE client', 'sse-write', {
+                    error: destroyError instanceof Error ? destroyError.message : String(destroyError)
+                });
+            }
+            const payloadRecord = toTransportRecord(payload);
+            errorHandler.handleEventProcessingError(
+                error,
+                'sse-write',
+                { payloadType: payloadRecord.type },
+                'Failed writing GUI SSE event'
+            );
+            return false;
+        }
+    };
+
+    const sendSse = (payload: unknown) => {
+        for (const client of clients) {
+            writeSseToClient(client, payload);
         }
     };
 
@@ -418,9 +438,21 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
         });
     };
 
+    const subscribeToFundingGoal = () => {
+        if (!options.fundingGoal) return;
+        unsubscribeFundingGoal = options.fundingGoal.subscribe((snapshot) => {
+            enqueueDispatch(() => sendSse(createFundingGoalEnvelope(snapshot)));
+        });
+    };
+
     const unsubscribeFromAppearance = () => {
         unsubscribeAppearance?.();
         unsubscribeAppearance = null;
+    };
+
+    const unsubscribeFromFundingGoal = () => {
+        unsubscribeFundingGoal?.();
+        unsubscribeFundingGoal = null;
     };
 
     const publishChatMessage = (platform: string, payload: Record<string, unknown>) => {
@@ -570,6 +602,7 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
         if (route === '/dock') return guiConfig.enableDock === true;
         if (route === '/overlay') return guiConfig.enableOverlay === true;
         if (route === '/notifications') return guiConfig.enableNotifications === true;
+        if (route === '/goal') return options.fundingGoal?.snapshot.enabled === true;
         if (route === '/operator') return operatorEnabled && !!operatorApi;
         if (route === '/tiktok-animations') {
             return guiConfig.enableDock === true || guiConfig.enableOverlay === true;
@@ -627,7 +660,10 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
             }
             res.write('retry: 3000\n: connected\n\n');
             clients.add(res);
-            res.write(`data: ${JSON.stringify(createAppearanceEnvelope(guiAppearanceSnapshot()))}\n\n`);
+            writeSseToClient(res, createAppearanceEnvelope(guiAppearanceSnapshot()));
+            if (options.fundingGoal) {
+                writeSseToClient(res, createFundingGoalEnvelope(options.fundingGoal.snapshot));
+            }
             logDebug('GUI SSE client connected', {
                 clientCount: clients.size
             });
@@ -1069,6 +1105,30 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
             return;
         }
 
+        if (url === '/goal') {
+            if (!requireGetRequest(req, res)) {
+                return;
+            }
+            if (options.fundingGoal?.snapshot.enabled === true) {
+                sendNoCacheHtml(res, renderActivePage({
+                    title: 'Stream Sync Goal',
+                    runtimeKind: 'goal',
+                    scriptKind: 'goal',
+                    transparent: true,
+                    guiConfig,
+                    runtimeGuiConfig: resolveGuiPageRuntimeConfig(
+                        guiConfig,
+                        'goal',
+                        parsedRequestUrl?.searchParams ?? new URLSearchParams(),
+                        guiAppearanceSnapshot()
+                    )
+                }), sendBody);
+                return;
+            }
+            sendNoCacheHtml(res, renderDisabledPage('Stream Sync Goal', 'Funding goal disabled', true), sendBody);
+            return;
+        }
+
         sendNotFound(res);
     };
 
@@ -1111,6 +1171,7 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
 
             operatorApi?.start();
             subscribeToAppearance();
+            subscribeToFundingGoal();
             subscribeToDisplayRows();
             subscribeToDisplayEffects();
             subscribeToDisplayLifecycle();
@@ -1148,6 +1209,7 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
                 unsubscribeFromDisplayEffects();
                 unsubscribeFromDisplayLifecycle();
                 unsubscribeFromAppearance();
+                unsubscribeFromFundingGoal();
                 operatorApi?.stop();
                 if (server) {
                     if (serverRuntimeErrorHandler && typeof server.removeListener === 'function') {
@@ -1178,6 +1240,7 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
         unsubscribeFromDisplayEffects();
         unsubscribeFromDisplayLifecycle();
         unsubscribeFromAppearance();
+        unsubscribeFromFundingGoal();
         await dispatchChain;
         runtimeAssetRegistry.clear();
         giftPlaybackRegistry.clear();

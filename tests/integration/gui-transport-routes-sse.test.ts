@@ -10,6 +10,7 @@ import { safeSetTimeout } from "../../src/utils/timeout-validator";
 import { TestEventBus } from "../helpers/gui-transport-test-utils";
 import { createConfigFixture } from "../helpers/config-fixture";
 import { createOperatorAppearanceService } from "../../src/services/operator/operator-appearance-service";
+import { createFundingGoalService } from "../../src/services/funding-goal-service";
 
 function buildConfig(guiOverrides = {}) {
   return createConfigFixture({
@@ -114,6 +115,96 @@ function requireRuntimeErrorListener(
 }
 
 describe("GUI transport routes and SSE integration", () => {
+  it("sends the current funding goal on connect and broadcasts later revisions", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "gui-funding-goal-"));
+    const fundingGoal = await createFundingGoalService({
+      config: {
+        enabled: true,
+        id: "controller",
+        label: "🎮 New Controller",
+        targetUsd: 100,
+        tiktokUsdPerCoin: 0.0127,
+        twitchUsdPerBit: 0.01,
+        youtubeJewelsUsd: 0,
+      },
+      goalsConfig: {},
+      filePath: path.join(root, "funding-goal.json"),
+    });
+    await fundingGoal.setTotal(25);
+    const service = createGuiTransportService({
+      config: buildConfig({ enableOverlay: true, port: 0 }),
+      eventBus: new TestEventBus(),
+      fundingGoal,
+      logger: null,
+    });
+    await service.start();
+    const controller = new AbortController();
+
+    try {
+      const response = await fetch(`${getBaseUrl(service)}/gui/events`, { signal: controller.signal });
+      const reader = createSseReader(response);
+      expect(await reader.readEvent()).toMatchObject({
+        __guiEvent: "funding-goal",
+        currentUsd: 25,
+        targetUsd: 100,
+        revision: 1,
+      });
+
+      await fundingGoal.adjust(5);
+      expect(await reader.readEvent()).toMatchObject({
+        __guiEvent: "funding-goal",
+        currentUsd: 30,
+        revision: 2,
+      });
+    } finally {
+      controller.abort();
+      await service.stop();
+      fundingGoal.dispose();
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("skips an oversized initial funding packet without bypassing client safeguards", async () => {
+    const fundingGoal = {
+      snapshot: {
+        currentUsd: 25,
+        targetUsd: 100,
+        revision: 1,
+        enabled: true,
+        id: "controller",
+        completed: false,
+        sessionId: "test-session",
+        label: "x".repeat(300_000),
+      },
+      subscribe: (listener: (snapshot: any) => void) => {
+        return () => undefined;
+      },
+      adjust: async () => undefined,
+      setTotal: async () => undefined,
+    };
+    const service = createGuiTransportService({
+      config: buildConfig({ enableOverlay: true, port: 0 }),
+      eventBus: new TestEventBus(),
+      fundingGoal,
+      logger: null,
+    });
+    await service.start();
+    const controller = new AbortController();
+
+    try {
+      const response = await fetch(`${getBaseUrl(service)}/gui/events`, { signal: controller.signal });
+      const reader = createSseReader(response);
+      await reader.readAppearance();
+      const noInitialFunding = reader.readEvent().then(() => false).catch(() => true);
+      await new Promise((resolve) => safeSetTimeout(resolve, 100));
+      controller.abort();
+      expect(await noInitialFunding).toBe(true);
+    } finally {
+      controller.abort();
+      await service.stop();
+    }
+  });
+
   it("sends the current minimal appearance snapshot when a GUI client connects", async () => {
     const service = createGuiTransportService({
       config: buildConfig({ enableOverlay: true, port: 0 }),
@@ -1355,6 +1446,50 @@ describe("GUI transport routes and SSE integration", () => {
       expect(tiktokAnimationsHtml).toContain("/gui/assets/dock.js");
       expect(tiktokAnimationsHtml).toContain('data-kind="tiktok-animations"');
       expect(tiktokAnimationsHtml).toContain("background:transparent");
+    } finally {
+      await service.stop();
+    }
+  });
+
+  it("serves the active goal page for GET and HEAD with standard and minimal variants", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "gui-goal-route-"));
+    const fundingGoal = await createFundingGoalService({
+      config: { enabled: true, id: "controller", label: "Goal", targetUsd: 100, tiktokUsdPerCoin: 0.01, twitchUsdPerBit: 0.01, youtubeJewelsUsd: 0 },
+      goalsConfig: {}, filePath: path.join(root, "funding-goal.json")
+    });
+    const service = createGuiTransportService({ config: buildConfig({ enableOverlay: true, port: 0 }), eventBus: new TestEventBus(), fundingGoal, logger: null });
+    await service.start();
+    try {
+      const baseUrl = getBaseUrl(service);
+      for (const query of ["", "?appearance=minimal", "?appearance=invalid", "?appearance=minimal&appearance=minimal"]) {
+        const response = await fetch(`${baseUrl}/goal${query}`);
+        const html = await response.text();
+        expect(response.status).toBe(200);
+        expect(html).toContain('/gui/assets/goal.js');
+        expect(html).toContain(`"profile":"${query === "?appearance=minimal" ? "minimal" : "standard"}`);
+      }
+      const head = await fetch(`${baseUrl}/goal`, { method: 'HEAD' });
+      expect(head.status).toBe(200);
+      expect(await head.text()).toBe('');
+      const overlay = await (await fetch(`${baseUrl}/overlay`)).text();
+      expect(overlay).not.toContain('/gui/assets/goal.js');
+    } finally {
+      await service.stop();
+      fundingGoal.dispose();
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("reports goal readiness only for an enabled funding snapshot and keeps disabled route conventions", async () => {
+    const fundingGoal = { snapshot: { enabled: false }, subscribe: () => () => {}, adjust: async () => {}, setTotal: async () => {} } as any;
+    const service = createGuiTransportService({ config: buildConfig({ enableDock: true, port: 0 }), eventBus: new TestEventBus(), fundingGoal, logger: null });
+    await service.start();
+    try {
+      const baseUrl = getBaseUrl(service);
+      expect((await (await fetch(`${baseUrl}/health?route=/goal`)).json()).ok).toBe(false);
+      const response = await fetch(`${baseUrl}/goal`);
+      expect(response.status).toBe(200);
+      expect(await response.text()).toContain('Funding goal disabled');
     } finally {
       await service.stop();
     }

@@ -104,6 +104,47 @@ h2 {
   padding-top: 1rem;
   border-top: 1px solid #26313a;
 }
+.operator-funding-goal {
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  border: 1px solid #34454f;
+  background: #182127;
+}
+
+.operator-funding-goal progress {
+  width: 100%;
+  margin: 1rem 0 .75rem;
+  accent-color: #59cf9b;
+}
+
+.funding-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .45rem;
+  align-items: center;
+}
+
+.funding-actions label {
+  display: flex;
+  gap: .4rem;
+  align-items: center;
+  margin-left: auto;
+  font-size: .75rem;
+}
+
+.funding-actions input {
+  width: 6rem;
+  padding: .4rem;
+  color: inherit;
+  background: #11161b;
+  border: 1px solid #465762;
+}
+
+.operator-funding-goal p {
+  margin: .75rem 0 0;
+  color: #a8d8b4;
+  font-size: .75rem;
+}
 
 .appearance-number {
   display: flex;

@@ -93,6 +93,35 @@ describe("GUI shared styles behavior", () => {
     expect(cssText).toContain(".gui-row__member-particles {\n    display: none;");
   });
 
+  it("uses the standard chat-row surface for the funding goal", () => {
+    const cssText = readSharedStyles();
+    const rootBlock = readCssBlock(cssText, ":root");
+    const fundingGoalBlock = readCssBlock(cssText, ".funding-goal");
+
+    expect(fundingGoalBlock).toContain("background: rgba(0, 0, 0, var(--gui-row-background-opacity));");
+    expect(fundingGoalBlock).toContain("border-radius: 10px;");
+    expect(fundingGoalBlock).toContain("border: 0;");
+    expect(fundingGoalBlock).toContain("box-shadow: none;");
+    expect(readCssBlock(cssText, ".funding-goal__label")).toContain("font-size: var(--gui-funding-goal-label-size);");
+    const fundingAmountBlock = readCssBlock(cssText, ".funding-goal__amount");
+    expect(fundingAmountBlock).toContain("font-size: var(--gui-funding-goal-amount-size);");
+    expect(fundingAmountBlock).toContain("font-weight: 700;");
+    expect(readCssBlock(cssText, ".funding-goal__emoji")).toContain("font-size: 1.445em;");
+    expect(rootBlock).toContain("--gui-funding-goal-fill-start: var(--gui-gold-sheen-edge);");
+    expect(rootBlock).toContain("--gui-funding-goal-fill-end: var(--gui-gold-background-top);");
+    expect(rootBlock).toContain("--gui-funding-goal-badge-background: var(--gui-gold-sheen-edge);");
+    expect(rootBlock).toContain("--gui-funding-goal-glow: var(--gui-gold-glow-ring);");
+    expect(readCssBlock(cssText, ".goal-page")).toContain("max-width: 960px;");
+    expect(readCssBlock(cssText, ".goal-page")).toContain('font-family: "IBM Plex Sans", "Segoe UI", sans-serif;');
+    expect(readCssBlock(cssText, ".funding-goal--standard .funding-goal__rail")).toContain("height: 10px;");
+    expect(readCssBlock(cssText, ".funding-goal__identity")).toContain("flex: 1 1 auto;");
+    expect(readCssBlock(cssText, ".funding-goal__identity")).toContain("min-width: 0;");
+    expect(readCssBlock(cssText, ".funding-goal__identity")).not.toContain("width: fit-content;");
+    expect(readCssBlock(cssText, ".funding-goal__rail")).toContain("border-radius: 0;");
+    expect(readCssBlock(cssText, ".funding-goal--minimal .funding-goal__rail")).toContain("height: 8px;");
+    expect(readCssBlock(cssText, ".funding-goal__badge")).toContain("letter-spacing: .01em;");
+  });
+
   it("scopes minimal compact and background-off presentation to the minimal shell", () => {
     const cssText = readSharedStyles();
     expect(cssText).toContain(".gui-shell--minimal .gui-row--minimal.gui-row--compact");

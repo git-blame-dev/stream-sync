@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { buildGuiRuntimeConfig, isGuiActive } from '../../../../src/services/gui/gui-runtime-config';
+import { buildGuiRuntimeConfig, isGuiActive, resolveGuiPageRuntimeConfig } from '../../../../src/services/gui/gui-runtime-config';
 
 describe('GUI runtime config', () => {
     it('serializes validated feed modes and falls back for invalid values', () => {
@@ -21,6 +21,10 @@ describe('GUI runtime config', () => {
 
     it('treats notifications as GUI activation', () => {
         expect(isGuiActive({ gui: { enableNotifications: true } })).toBe(true);
+    });
+
+    it('treats an enabled funding goal as GUI activation', () => {
+        expect(isGuiActive({ gui: {}, fundingGoal: { enabled: true } })).toBe(true);
     });
 
     it('serializes lifecycle timings and falls back for invalid browser input', () => {
@@ -52,5 +56,14 @@ describe('GUI runtime config', () => {
     it('defaults stream supporter chat effects to enabled', () => {
         expect(buildGuiRuntimeConfig({}).appearance.settings.streamSupporterChatEffectsEnabled).toBe(true);
         expect(buildGuiRuntimeConfig({ streamSupporterChatEffectsEnabled: false }).appearance.settings.streamSupporterChatEffectsEnabled).toBe(false);
+    });
+
+    it('accepts exactly one minimal appearance query and falls back to standard otherwise', () => {
+        const gui = {};
+        expect(resolveGuiPageRuntimeConfig(gui, 'goal', new URLSearchParams()).appearance.profile).toBe('standard');
+        expect(resolveGuiPageRuntimeConfig(gui, 'goal', new URLSearchParams('appearance=minimal')).appearance.profile).toBe('minimal');
+        for (const query of ['appearance=invalid', 'appearance=minimal&appearance=minimal', 'appearance=minimal&appearance=standard']) {
+            expect(resolveGuiPageRuntimeConfig(gui, 'goal', new URLSearchParams(query)).appearance.profile).toBe('standard');
+        }
     });
 });

@@ -1,5 +1,6 @@
 import EventEmitter from 'node:events';
 import { createRequire } from 'node:module';
+import path from 'node:path';
 import * as TwitchEventRouterModule from '../../src/platforms/twitch/events/event-router.ts';
 import * as CommandCooldownServiceModule from '../../src/services/CommandCooldownService.ts';
 import * as UserTrackingServiceModule from '../../src/services/UserTrackingService.ts';
@@ -132,6 +133,9 @@ const { PRIORITY_LEVELS, NOTIFICATION_CONFIGS } = load('../../src/core/constants
 const { createPlatformErrorHandler } = load('../../src/utils/platform-error-handler');
 const { safeSetInterval, safeSetTimeout, safeDelay } = load('../../src/utils/timeout-validator');
 const { createGuiTransportService } = load('../../src/services/gui/gui-transport-service');
+const { createOperatorControlService, OPERATOR_CONTROL_KEYS } = load('../../src/services/operator/operator-control-service');
+const { createOperatorAppearanceService } = load('../../src/services/operator/operator-appearance-service');
+const { createOperatorLogSource } = load('../../src/services/operator/operator-log-source');
 const { PlatformEventRouter } = load('../../src/services/PlatformEventRouter.ts');
 const { ChatNotificationRouter } = load('../../src/services/ChatNotificationRouter.ts');
 type PreviewNotificationManager = {
@@ -164,7 +168,7 @@ const { YouTubePlatform: YouTubePlatformClass } = load('../../src/platforms/yout
 };
 
 type PreviewAdapter = 'twitch' | 'youtube' | 'tiktok';
-type PreviewScenario = 'all' | 'chat' | 'notifications';
+type PreviewScenario = 'all' | 'chat' | 'notifications' | 'funding';
 
 interface PreviewScenarioStep {
     type: string;
@@ -333,6 +337,7 @@ interface RunPreviewScenarioOptions {
     safeSetIntervalImpl: (handler: () => void, delayMs: number) => ReturnType<typeof setInterval> | number;
     safeSetTimeoutImpl: (handler: () => void, delayMs: number) => unknown;
     errorHandler: PreviewErrorHandler;
+    dispatchImmediately?: boolean;
 }
 
 interface PreviewScenarioRunResult {
@@ -359,6 +364,11 @@ interface RunGuiPreviewOptions {
         config: UnknownRecord;
         eventBus: PreviewEventBus;
         logger: PreviewLogger;
+        fundingGoal?: UnknownRecord;
+        operatorControls?: UnknownRecord;
+        operatorAppearance?: UnknownRecord;
+        operatorLogs?: UnknownRecord;
+        assetsRoot?: string;
     }) => PreviewService;
     safeSetIntervalImpl?: (handler: () => void, delayMs: number) => ReturnType<typeof setInterval> | number;
     safeSetTimeoutImpl?: (handler: () => void, delayMs: number) => unknown;
@@ -380,6 +390,7 @@ interface RunGuiPreviewOptions {
 }
 
 const PREVIEW_DURATION_MS = 32000;
+const FUNDING_PREVIEW_DURATION_MS = 120000;
 const PREVIEW_INTERVAL_MS = 2000;
 const PREVIEW_NOTIFICATION_EXIT_TIMEOUT_MS = 41000;
 
@@ -523,6 +534,14 @@ const PREVIEW_SCENARIO_TEMPLATE: readonly PreviewScenarioStep[] = [
     { type: 'giftpaypiggy', adapter: 'youtube' },
     { type: 'envelope', adapter: 'tiktok' }
 ];
+const FUNDING_PREVIEW_SCENARIO_TEMPLATE: readonly PreviewScenarioStep[] = [
+    { type: 'gift', adapter: 'tiktok' },
+    { type: 'paypiggy', adapter: 'youtube' },
+    { type: 'giftpaypiggy', adapter: 'youtube' },
+    { type: 'gift', adapter: 'tiktok' },
+    { type: 'paypiggy', adapter: 'youtube' }
+];
+const FUNDING_PREVIEW_AMOUNTS_USD = [25, 25, 25, 25, 50] as const;
 
 const PREVIEW_PLATFORM_ACCOUNTS: readonly [PreviewPlatformAccount, ...PreviewPlatformAccount[]] = [
     {
@@ -548,10 +567,10 @@ function parsePreviewScenario(args: readonly string[]): PreviewScenario {
     const separateIndex = args.indexOf('--scenario');
     const separateValue = separateIndex >= 0 ? args[separateIndex + 1] : undefined;
     const value = inlineValue || separateValue || 'all';
-    if (value === 'all' || value === 'chat' || value === 'notifications') {
+    if (value === 'all' || value === 'chat' || value === 'notifications' || value === 'funding') {
         return value;
     }
-    throw new Error(`Unknown GUI preview scenario: ${value}. Expected all, chat, or notifications.`);
+    throw new Error(`Unknown GUI preview scenario: ${value}. Expected all, chat, notifications, or funding.`);
 }
 
 function getPreviewNotificationType(scenarioType: string): string | undefined {
@@ -689,7 +708,8 @@ function buildPreviewConfig(baseConfig: UnknownRecord = {}): UnknownRecord {
         enableDock: true,
         enableOverlay: true,
         enableNotifications: true,
-        enableOperator: false,
+        enableOperator: true,
+        port: 3400,
         dockFeedMode: 'all',
         overlayFeedMode: 'chat',
         notificationIdleHoldMs: 5000,
@@ -714,6 +734,14 @@ function buildPreviewConfig(baseConfig: UnknownRecord = {}): UnknownRecord {
         groupName: null,
         platformLogos: {}
     });
+
+    merged.fundingGoal = {
+        ...getPreviewRecord(sourceConfig, 'fundingGoal'),
+        ...getPreviewRecord(overrideConfig, 'fundingGoal'),
+        enabled: true,
+        label: '🎮 New Controller',
+        targetUsd: 100
+    };
 
     merged.notification = mergeSection(getPreviewRecord(sourceConfig, 'notification'), getPreviewRecord(overrideConfig, 'notification'), {
         sourceName: 'preview-notification-source',
@@ -762,6 +790,71 @@ function buildPreviewConfig(baseConfig: UnknownRecord = {}): UnknownRecord {
     };
 
     return merged;
+}
+
+function createPreviewFundingGoalService() {
+    let snapshot = {
+        enabled: true,
+        id: 'preview-funding-goal',
+        label: '🎮 New Controller',
+        currentUsd: 0,
+        targetUsd: 100,
+        completed: false,
+        revision: 0,
+        sessionId: 'preview-session'
+    };
+    const listeners = new Set<(value: typeof snapshot) => void>();
+    const publish = () => listeners.forEach((listener) => listener(snapshot));
+    return {
+        get snapshot() { return snapshot; },
+        async adjust(amountUsd: number) {
+            const amountMicros = Math.round(amountUsd * 1_000_000);
+            if (!Number.isFinite(amountUsd) || !Number.isSafeInteger(amountMicros) || amountMicros === 0) {
+                throw new RangeError('Funding goal adjustment must be a finite nonzero amount');
+            }
+            const currentMicros = Math.round(snapshot.currentUsd * 1_000_000) + amountMicros;
+            if (!Number.isSafeInteger(currentMicros) || currentMicros < 0) {
+                throw new RangeError('Funding goal total cannot be negative or exceed the supported range');
+            }
+            const currentUsd = currentMicros / 1_000_000;
+            snapshot = {
+                ...snapshot,
+                currentUsd,
+                completed: currentUsd >= snapshot.targetUsd,
+                revision: snapshot.revision + 1
+            };
+            publish();
+        },
+        async setTotal(amountUsd: number) {
+            const amountMicros = Math.round(amountUsd * 1_000_000);
+            if (!Number.isFinite(amountUsd) || !Number.isSafeInteger(amountMicros) || amountMicros < 0) {
+                throw new RangeError('Funding goal total must be a non-negative amount');
+            }
+            const currentUsd = amountMicros / 1_000_000;
+            snapshot = {
+                ...snapshot,
+                currentUsd,
+                completed: currentUsd >= snapshot.targetUsd,
+                revision: snapshot.revision + 1
+            };
+            publish();
+        },
+        async advance(amountUsd: number) { return this.adjust(amountUsd); },
+        subscribe(listener: (value: typeof snapshot) => void) { listeners.add(listener); return () => listeners.delete(listener); },
+        dispose() { listeners.clear(); }
+    };
+}
+
+function createPreviewMemoryFileSystem() {
+    return {
+        readFile: async () => {
+            throw Object.assign(new Error('missing'), { code: 'ENOENT' });
+        },
+        mkdir: async () => undefined,
+        writeFile: async () => undefined,
+        rename: async () => undefined,
+        unlink: async () => undefined
+    };
 }
 
 function createYouTubePreviewAuthor(options: {
@@ -906,9 +999,11 @@ function buildPreviewScenarioEvents(
 ): PreviewScenarioEvent[] {
     const scenarioTemplate = scenario === 'all'
         ? PREVIEW_SCENARIO_TEMPLATE
-        : PREVIEW_SCENARIO_TEMPLATE.filter((step) => scenario === 'chat'
-            ? step.type.startsWith('chat')
-            : !step.type.startsWith('chat'));
+        : scenario === 'funding'
+            ? FUNDING_PREVIEW_SCENARIO_TEMPLATE
+            : PREVIEW_SCENARIO_TEMPLATE.filter((step) => scenario === 'chat'
+                ? step.type.startsWith('chat')
+                : !step.type.startsWith('chat'));
     const eventCount = scenario === 'all'
         ? Math.floor(durationMs / intervalMs)
         : scenarioTemplate.length;
@@ -1682,7 +1777,8 @@ async function runPreviewScenario(options: RunPreviewScenarioOptions): Promise<P
         durationMs,
         safeSetIntervalImpl,
         safeSetTimeoutImpl,
-        errorHandler
+        errorHandler,
+        dispatchImmediately = true
     } = options;
 
     let eventIndex = 0;
@@ -1709,7 +1805,9 @@ async function runPreviewScenario(options: RunPreviewScenarioOptions): Promise<P
         eventIndex += 1;
     };
 
-    dispatchNextEvent();
+    if (dispatchImmediately) {
+        dispatchNextEvent();
+    }
 
     const intervalHandle = safeSetIntervalImpl(() => {
         dispatchNextEvent();
@@ -1796,9 +1894,12 @@ async function runGuiPreview(options: RunGuiPreviewOptions = {}): Promise<void> 
         : PREVIEW_INTERVAL_MS;
     const scenarioEvents = buildPreviewScenarioEvents(PREVIEW_DURATION_MS, intervalMs, scenario);
     const minimumScenarioDurationMs = scenarioEvents.length * intervalMs;
+    const defaultDurationMs = scenario === 'funding'
+        ? FUNDING_PREVIEW_DURATION_MS
+        : options.scenario ? minimumScenarioDurationMs : PREVIEW_DURATION_MS;
     const durationMs = typeof requestedDurationMs === 'number' && Number.isInteger(requestedDurationMs) && requestedDurationMs > 0
         ? requestedDurationMs
-        : (options.scenario ? scenarioEvents.length * intervalMs : PREVIEW_DURATION_MS);
+        : defaultDurationMs;
     if (options.scenario && durationMs < minimumScenarioDurationMs) {
         throw new Error(`GUI preview scenario ${scenario} requires at least ${minimumScenarioDurationMs}ms to dispatch every fixture`);
     }
@@ -1818,6 +1919,7 @@ async function runGuiPreview(options: RunGuiPreviewOptions = {}): Promise<void> 
     let service: PreviewService | null = null;
     let intervalHandle: ReturnType<typeof setInterval> | number | null = null;
     let notificationExitWaiter: PreviewNotificationExitWaiter | null = null;
+    let unsubscribeFundingPreview: (() => void) | null = null;
     const giftAnimationResolver = options.giftAnimationResolver || {
         resolveFromNotificationData: async () => null
     };
@@ -1840,10 +1942,42 @@ async function runGuiPreview(options: RunGuiPreviewOptions = {}): Promise<void> 
         }
         const activePipeline = pipeline;
 
+        const previewFundingGoal = createPreviewFundingGoalService();
+        const previewFileSystem = createPreviewMemoryFileSystem();
+        const previewControls = await createOperatorControlService({
+            defaults: Object.fromEntries(OPERATOR_CONTROL_KEYS.map((key: string) => [key, true])),
+            filePath: '/preview/operator-controls.json',
+            fs: previewFileSystem
+        });
+        const previewAppearance = await createOperatorAppearanceService({
+            defaults: {
+                compactRows: true,
+                rowBackgroundsEnabled: false,
+                maxDisplayableBadges: 3
+            },
+            filePath: '/preview/operator-appearance.json',
+            fs: previewFileSystem
+        });
+        const previewLogs = createOperatorLogSource();
+        let fundingStep = 0;
+        unsubscribeFundingPreview = activePipeline.eventBus.subscribe('platform:event', (payload) => {
+            const type = getPreviewString(toPreviewRecord(payload).type);
+            if (fundingStep < FUNDING_PREVIEW_AMOUNTS_USD.length &&
+                (type === 'platform:gift' || type === 'platform:paypiggy' || type === 'platform:giftpaypiggy')) {
+                const amountUsd = FUNDING_PREVIEW_AMOUNTS_USD[fundingStep];
+                fundingStep += 1;
+                if (amountUsd !== undefined) void previewFundingGoal.advance(amountUsd);
+            }
+        });
         const activeService = createGuiTransportServiceImpl({
             config,
             eventBus: activePipeline.eventBus,
-            logger
+            logger,
+            fundingGoal: previewFundingGoal,
+            operatorControls: previewControls,
+            operatorAppearance: previewAppearance,
+            operatorLogs: previewLogs,
+            assetsRoot: path.resolve(__dirname, '../../gui/dist')
         });
         service = activeService;
 
@@ -1859,7 +1993,13 @@ async function runGuiPreview(options: RunGuiPreviewOptions = {}): Promise<void> 
         stdout.write(`Notifications minimal URL: http://${host}:${port}/notifications?appearance=minimal\n`);
         stdout.write('For TikTok gift animation preview, run: bun run gui:preview:gift-animation\n');
         stdout.write(`Overlay URL: http://${host}:${port}/overlay\n`);
+        stdout.write(`Operator URL: http://${host}:${port}/operator\n`);
         stdout.write(`Overlay minimal URL: http://${host}:${port}/overlay?appearance=minimal\n`);
+        stdout.write(`Goal URL: http://${host}:${port}/goal\n`);
+        stdout.write(`Goal minimal URL: http://${host}:${port}/goal?appearance=minimal\n`);
+        if (scenario === 'funding') {
+            stdout.write('Funding progression: $0 → $25 → $50 → $75 → $100 → $150\n');
+        }
 
         if (typeof activeService.getSseClientCount === 'function' && activeService.getSseClientCount() === 0) {
             stdout.write('Waiting for a GUI page to connect before starting the scenario...\n');
@@ -1890,7 +2030,8 @@ async function runGuiPreview(options: RunGuiPreviewOptions = {}): Promise<void> 
             durationMs,
             safeSetIntervalImpl,
             safeSetTimeoutImpl,
-            errorHandler
+            errorHandler,
+            dispatchImmediately: scenario !== 'funding'
         });
         intervalHandle = scenarioResult.intervalHandle;
 
@@ -1910,6 +2051,7 @@ async function runGuiPreview(options: RunGuiPreviewOptions = {}): Promise<void> 
         throw error;
     } finally {
         notificationExitWaiter?.cancel();
+        unsubscribeFundingPreview?.();
         await disposePreviewPipeline({
             intervalHandle,
             service,

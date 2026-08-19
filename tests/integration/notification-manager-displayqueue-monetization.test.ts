@@ -15,6 +15,10 @@ import { PlatformEvents } from "../../src/interfaces/PlatformEvents";
 import { createConfigFixture } from "../helpers/config-fixture";
 import { waitFor } from "../helpers/event-driven-testing";
 import type { DisplayQueueDependency, DisplayQueueItem } from "../../src/interfaces/DisplayQueue";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { createFundingGoalService } from "../../src/services/funding-goal-service";
 
 type EventBusHandler = (payload: unknown) => void | Promise<void>;
 type EventBus = {
@@ -474,30 +478,52 @@ describe("Monetisation pipeline integration", () => {
     expect(recordedEvents).toHaveLength(0);
   });
 
-  test("respects giftsEnabled gating for all gift-like monetisation", async () => {
+  test("keeps funding progress independent from giftsEnabled notification gating", async () => {
+    const root = await mkdtemp(join(tmpdir(), "funding-notification-gate-"));
+    const fundingGoal = await createFundingGoalService({
+      config: {
+        enabled: true,
+        id: "controller",
+        label: "🎮 New Controller",
+        targetUsd: 100,
+        tiktokUsdPerCoin: 0.0127,
+        twitchUsdPerBit: 0.01,
+        youtubeJewelsUsd: 0,
+      },
+      goalsConfig: {},
+      eventBus,
+      filePath: join(root, "funding-goal.json"),
+    });
     config.general.giftsEnabled = false;
     config.twitch.giftsEnabled = false;
 
-    eventBus.emit("platform:event", {
-      platform: "twitch",
-      type: "platform:gift",
-      data: {
-        username: "GatedGifter",
-        userId: "gifter-1",
-        id: "gift-1",
-        timestamp: fixedTimestamp,
-        bits: 100,
-        giftType: "bits",
-        giftCount: 1,
-        amount: 100,
-        currency: "bits",
-      },
-    });
+    try {
+      eventBus.emit("platform:event", {
+        platform: "twitch",
+        type: "platform:gift",
+        data: {
+          username: "GatedGifter",
+          userId: "gifter-1",
+          id: "gift-1",
+          timestamp: fixedTimestamp,
+          bits: 100,
+          giftType: "bits",
+          giftCount: 1,
+          amount: 100,
+          currency: "bits",
+        },
+      });
 
-    await displayQueue.processQueue();
+      await waitFor(() => fundingGoal.snapshot.currentUsd === 1);
+      await displayQueue.processQueue();
 
-    expect(displayQueue.queue).toHaveLength(0);
-    expect(recordedEvents).toHaveLength(0);
+      expect(fundingGoal.snapshot.currentUsd).toBe(1);
+      expect(displayQueue.queue).toHaveLength(0);
+      expect(recordedEvents).toHaveLength(0);
+    } finally {
+      await fundingGoal.dispose();
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   test("normalizes paypiggy months/levels and builds copy/TTS/log without placeholders", async () => {

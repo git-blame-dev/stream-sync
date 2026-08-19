@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
+import { deriveFundingGoalDisplayState } from '../shared/funding-goal'
 
 import {
   appendLogRow,
@@ -15,6 +16,10 @@ import {
   selectNewestAppearance,
   type AppearanceState,
   type AppearanceValue,
+  FUNDING_ADJUSTMENTS_USD,
+  parseFundingGoalSnapshot,
+  selectNewestFundingGoal,
+  type FundingGoalSnapshot,
 } from './model'
 import './operator.css'
 
@@ -72,6 +77,8 @@ async function request(url: string, init?: RequestInit): Promise<unknown> {
 function OperatorApp() {
   const [state, setState] = useState<OperatorState | null>(null)
   const [appearance, setAppearance] = useState<AppearanceState | null>(null)
+  const [fundingGoal, setFundingGoal] = useState<FundingGoalSnapshot | null>(null)
+  const [setTotalDraft, setSetTotalDraft] = useState('')
   const [badgeLimitDraft, setBadgeLimitDraft] = useState('')
   const [pending, setPending] = useState<string | null>(null)
   const [error, setError] = useState('')
@@ -104,11 +111,16 @@ function OperatorApp() {
     if (next) setAppearance((current) => selectNewestAppearance(current, next))
     else setStateStreamStatus('Invalid data')
   }
+  const receiveFundingGoal = (value: unknown) => {
+    const next = parseFundingGoalSnapshot(value)
+    if (next) setFundingGoal((current) => selectNewestFundingGoal(current, next))
+    else setStateStreamStatus('Invalid data')
+  }
   const resetLogs = () => {
     setLogs([])
   }
 
-  useEventStream('/api/v1/operator/events', { state: receiveState, appearance: receiveAppearance }, setStateStreamStatus)
+  useEventStream('/api/v1/operator/events', { state: receiveState, appearance: receiveAppearance, 'funding-goal': receiveFundingGoal }, setStateStreamStatus)
   useEventStream('/api/v1/logs/events', { log: receiveLog, 'log.history': resetLogs }, setLogStreamStatus)
 
   useEffect(() => {
@@ -121,6 +133,14 @@ function OperatorApp() {
       .catch((requestError: unknown) => {
         setError(requestError instanceof Error ? requestError.message : 'Unable to load operator state')
       })
+  }, [])
+
+  useEffect(() => {
+    request('/api/v1/operator/funding-goal').then((value) => {
+      const next = parseFundingGoalSnapshot(value)
+      if (!next) throw new Error('Invalid funding goal response')
+      setFundingGoal((current) => selectNewestFundingGoal(current, next))
+    }).catch((requestError: unknown) => setError(requestError instanceof Error ? requestError.message : 'Unable to load funding goal'))
   }, [])
 
   useEffect(() => {
@@ -211,12 +231,34 @@ function OperatorApp() {
     setPending(null)
   }
 
+  async function mutateFunding(operation: 'adjust' | 'set', amountUsd: number) {
+    setPending(`funding:${operation}`)
+    setError('')
+    try {
+      const next = parseFundingGoalSnapshot(await request('/api/v1/operator/funding-goal', {
+        method: 'PATCH',
+        headers: mutationHeaders,
+        body: JSON.stringify({ operation, amountUsd }),
+      }))
+      if (!next) throw new Error('Invalid funding goal response')
+      setFundingGoal((current) => selectNewestFundingGoal(current, next))
+      setSetTotalDraft('')
+    } catch (mutationError: unknown) {
+      setError(mutationError instanceof Error ? mutationError.message : 'Unable to save funding goal')
+    }
+    setPending(null)
+  }
+
   const paused = pausedLogs !== null
   const visibleLogs = (pausedLogs ?? logs).filter((log) => visible.has(log.level))
   const parsedBadgeLimit = Number(badgeLimitDraft)
   const isBadgeLimitValid = /^\d+$/.test(badgeLimitDraft)
     && Number.isSafeInteger(parsedBadgeLimit)
     && parsedBadgeLimit >= 0
+  const parsedFundingTotal = Number(setTotalDraft)
+  const isFundingTotalValid = /^(?:\d+)(?:\.\d{1,2})?$/.test(setTotalDraft)
+    && Number.isFinite(parsedFundingTotal)
+  const fundingDisplay = fundingGoal ? deriveFundingGoalDisplayState(fundingGoal) : null
 
   const saveBadgeLimit = () => {
     if (!appearance) return
@@ -239,6 +281,63 @@ function OperatorApp() {
 
       <div className="workspace">
         <section className="controls" aria-labelledby="controls-title">
+          {fundingGoal?.enabled && (
+            <section className="operator-funding-goal" aria-labelledby="funding-goal-title">
+              <div className="section-heading">
+                <div>
+                  <span className="eyebrow">PROGRESS</span>
+                  <h2 id="funding-goal-title">{fundingGoal.label}</h2>
+                </div>
+                <strong>{fundingDisplay?.currentText} / {fundingDisplay?.targetText}</strong>
+              </div>
+              <progress
+                max={fundingGoal.targetUsd}
+                value={fundingDisplay?.progressValue}
+                aria-label="Funding goal progress"
+              />
+              <div className="funding-actions">
+                {FUNDING_ADJUSTMENTS_USD.map((amount) => (
+                  <button
+                    className="quiet"
+                    key={amount}
+                    disabled={pending !== null || (amount < 0 && fundingGoal.currentUsd + amount < 0)}
+                    onClick={() => void mutateFunding('adjust', amount)}
+                  >
+                    {amount > 0 ? `+$${amount}` : `-$${Math.abs(amount)}`}
+                  </button>
+                ))}
+                <label>
+                  Set total
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    inputMode="decimal"
+                    value={setTotalDraft}
+                    disabled={pending !== null}
+                    aria-invalid={setTotalDraft.length > 0 && !isFundingTotalValid}
+                    onChange={(event) => setSetTotalDraft(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' && isFundingTotalValid) {
+                        void mutateFunding('set', parsedFundingTotal)
+                      }
+                    }}
+                  />
+                </label>
+                <button
+                  className="quiet"
+                  disabled={pending !== null || !isFundingTotalValid}
+                  onClick={() => void mutateFunding('set', parsedFundingTotal)}
+                >
+                  Apply total
+                </button>
+              </div>
+              <p role="status" aria-live="polite">
+                {fundingGoal.completed ? 'Goal complete' : 'Goal in progress'}
+                {fundingDisplay?.isOverTarget ? ' · Over goal' : ''}
+              </p>
+            </section>
+          )}
           <div className="section-heading">
             <div>
               <span className="eyebrow">RUNTIME GATES</span>

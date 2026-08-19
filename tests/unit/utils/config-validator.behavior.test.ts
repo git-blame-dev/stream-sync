@@ -76,6 +76,7 @@ describe("ConfigValidator.normalize()", () => {
     "youtube",
     "handcam",
     "goals",
+    "fundingGoal",
     "gifts",
     "envelopes",
     "cooldowns",
@@ -121,6 +122,27 @@ describe("ConfigValidator.normalize()", () => {
     expect(normalized.twitch.enabled).toBe(false);
     expect(normalized.youtube.enabled).toBe(false);
     expect(normalized.tiktok.enabled).toBe(false);
+  });
+
+  it("normalizes a Unicode funding label and valuation settings", () => {
+    const normalized = ConfigValidator.normalize({
+      fundingGoal: {
+        enabled: "true",
+        id: "controller",
+        label: "🎮 New Controller",
+        targetUsd: "100",
+      },
+    });
+
+    expect(normalized.fundingGoal).toEqual({
+      enabled: true,
+      id: "controller",
+      label: "🎮 New Controller",
+      targetUsd: 100,
+      tiktokUsdPerCoin: 0,
+      twitchUsdPerBit: 0.01,
+      youtubeJewelsUsd: 0,
+    });
   });
 });
 

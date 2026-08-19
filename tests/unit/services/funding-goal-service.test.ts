@@ -1,0 +1,244 @@
+import { describe, expect, test } from "bun:test";
+
+import {
+  createFundingGoalService,
+  type FundingGoalFileSystem,
+  type FundingGoalServiceOptions,
+} from "../../../src/services/funding-goal-service";
+
+function memoryFileSystem(initial?: string, failWrites = 0): FundingGoalFileSystem & { value: string | undefined } {
+  let value = initial;
+  let remainingFailures = failWrites;
+  const temporaryFiles = new Map<string, string>();
+  return {
+    readFile: async () => {
+      if (value === undefined) throw Object.assign(new Error("missing"), { code: "ENOENT" });
+      return value;
+    },
+    mkdir: async () => undefined,
+    writeFile: async (path, content) => {
+      if (remainingFailures > 0) {
+        remainingFailures -= 1;
+        throw new Error("write failed");
+      }
+      temporaryFiles.set(path, content);
+    },
+    rename: async (from, to) => {
+      value = temporaryFiles.get(from);
+      temporaryFiles.delete(from);
+      if (value !== undefined) temporaryFiles.set(to, value);
+    },
+    unlink: async (path) => {
+      temporaryFiles.delete(path);
+    },
+    get value() {
+      return value;
+    },
+  };
+}
+
+function options(overrides: Partial<FundingGoalServiceOptions> = {}): FundingGoalServiceOptions {
+  return {
+    config: {
+      enabled: true,
+      id: "controller",
+      label: "🎮 New Controller",
+      targetUsd: 100,
+      tiktokUsdPerCoin: 0.0127,
+      twitchUsdPerBit: 0.01,
+      youtubeJewelsUsd: 0,
+    },
+    goalsConfig: {
+      tiktokPaypiggyEquivalent: 420,
+      twitchPaypiggyEquivalent: 350,
+      youtubePaypiggyPrice: 3.89,
+    },
+    filePath: "/tmp/funding-goal.json",
+    fs: memoryFileSystem(),
+    ...overrides,
+  };
+}
+
+function event(platform: string, type: string, data: Record<string, unknown>) {
+  return { platform, type, data };
+}
+
+describe("FundingGoalService", () => {
+  test("values canonical gifts in configured USD units and ignores unsupported values", async () => {
+    const service = await createFundingGoalService(options());
+
+    await service.processPlatformEvent(event("youtube", "platform:gift", { id: "yt-1", amount: 5, currency: "USD" }));
+    await service.processPlatformEvent(event("twitch", "platform:gift", { id: "tw-1", amount: 100, currency: "bits" }));
+    await service.processPlatformEvent(event("tiktok", "platform:gift", { id: "tt-1", amount: 100, currency: "coins" }));
+    await service.processPlatformEvent(event("youtube", "platform:gift", { id: "yt-jewel", amount: 20, currency: "jewels" }));
+    await service.processPlatformEvent(event("youtube", "platform:gift", { id: "yt-cad", amount: 5, currency: "CAD" }));
+
+    expect(service.snapshot.currentUsd).toBe(7.27);
+  });
+
+  test("values ordinary and gifted memberships with existing platform equivalents", async () => {
+    const service = await createFundingGoalService(options());
+
+    await service.processPlatformEvent(event("tiktok", "platform:paypiggy", { id: "tt-sub", timestamp: "2026-08-18T00:00:00.000Z" }));
+    await service.processPlatformEvent(event("twitch", "platform:giftpaypiggy", { id: "tw-gift-sub", giftCount: 2, timestamp: "2026-08-18T00:00:01.000Z" }));
+    await service.processPlatformEvent(event("youtube", "platform:paypiggy", { id: "yt-member", timestamp: "2026-08-18T00:00:02.000Z" }));
+
+    expect(service.snapshot.currentUsd).toBe(16.224);
+  });
+
+  test("deduplicates event IDs and fallback membership fingerprints across restarts", async () => {
+    const fs = memoryFileSystem();
+    const first = await createFundingGoalService(options({ fs }));
+    const gift = event("youtube", "platform:gift", { id: "same-gift", amount: 5, currency: "USD" });
+    const membership = event("twitch", "platform:paypiggy", {
+      userId: "test-user",
+      tier: "1000",
+      timestamp: "2026-08-18T00:00:00.000Z",
+    });
+
+    await first.processPlatformEvent(gift);
+    await first.processPlatformEvent(gift);
+    await first.processPlatformEvent(membership);
+    const second = await createFundingGoalService(options({ fs }));
+    await second.processPlatformEvent(gift);
+    await second.processPlatformEvent(membership);
+
+    expect(second.snapshot.currentUsd).toBe(8.5);
+    const persisted = JSON.parse(fs.value ?? "null") as Record<string, unknown>;
+    expect(JSON.stringify(persisted)).not.toContain("test-user");
+    expect(JSON.stringify(persisted)).not.toContain("same-gift");
+  });
+
+  test("rejects fractional gifted membership counts", async () => {
+    const service = await createFundingGoalService(options());
+
+    await service.processPlatformEvent(event("youtube", "platform:giftpaypiggy", {
+      id: "fractional-memberships",
+      giftCount: 1.5,
+      timestamp: "2026-08-18T00:00:00.000Z",
+    }));
+
+    expect(service.snapshot.currentUsd).toBe(0);
+  });
+
+  test("keeps numeric provider IDs distinct and bounds the persisted replay horizon", async () => {
+    const fs = memoryFileSystem();
+    const service = await createFundingGoalService(options({ fs, maxProcessedEventKeys: 2 }));
+    const shared = { amount: 1, currency: "USD", timestamp: "2026-08-18T00:00:00.000Z" };
+
+    await service.processPlatformEvent(event("youtube", "platform:gift", { ...shared, id: 1 }));
+    await service.processPlatformEvent(event("youtube", "platform:gift", { ...shared, id: 2 }));
+    await service.processPlatformEvent(event("youtube", "platform:gift", { ...shared, id: 3 }));
+
+    expect(service.snapshot.currentUsd).toBe(3);
+    const persisted = JSON.parse(fs.value ?? "null") as { processedEventKeys: string[] };
+    expect(persisted.processedEventKeys).toHaveLength(2);
+  });
+
+  test("does not count TikTok envelopes because they are viewer redistribution events", async () => {
+    const service = await createFundingGoalService(options());
+
+    await service.processPlatformEvent(event("tiktok", "platform:envelope", {
+      id: "envelope-1",
+      amount: 100,
+      currency: "coins",
+      timestamp: "2026-08-18T00:00:00.000Z",
+    }));
+
+    expect(service.snapshot.currentUsd).toBe(0);
+  });
+
+  test("serializes manual updates, shows over-goal totals, and preserves state after write failure", async () => {
+    const fs = memoryFileSystem(undefined, 1);
+    const service = await createFundingGoalService(options({ fs }));
+
+    await expect(service.adjust(1)).rejects.toThrow("write failed");
+    expect(service.snapshot.currentUsd).toBe(0);
+    await Promise.all([service.adjust(60), service.adjust(50)]);
+
+    expect(service.snapshot.currentUsd).toBe(110);
+    expect(service.snapshot.completed).toBe(true);
+    await service.setTotal(12.34);
+    expect(service.snapshot.currentUsd).toBe(12.34);
+  });
+
+  test("supports signed adjustments without allowing a negative total", async () => {
+    const service = await createFundingGoalService(options());
+
+    await expect(service.adjust(-1)).rejects.toThrow("cannot be negative");
+    expect(service.snapshot.currentUsd).toBe(0);
+    expect(service.snapshot.revision).toBe(0);
+    await service.adjust(10);
+    await service.adjust(1);
+    await service.adjust(-1);
+
+    expect(service.snapshot.currentUsd).toBe(10);
+    await expect(service.adjust(0)).rejects.toThrow("finite nonzero amount");
+  });
+
+  test("resets persisted progress when the configured goal ID changes", async () => {
+    const fs = memoryFileSystem();
+    const first = await createFundingGoalService(options({ fs }));
+    await first.adjust(25);
+
+    const second = await createFundingGoalService(options({
+      fs,
+      config: { ...options().config, id: "microphone", label: "🎙️ New Microphone" },
+    }));
+
+    expect(second.snapshot.currentUsd).toBe(0);
+    expect(second.snapshot.label).toBe("🎙️ New Microphone");
+  });
+
+  test("publishes immutable revisioned snapshots and unsubscribes from the event bus", async () => {
+    let handler: ((payload: unknown) => unknown) | undefined;
+    let unsubscribed = false;
+    const service = await createFundingGoalService(options({
+      eventBus: {
+        subscribe: (_name, nextHandler) => {
+          handler = nextHandler;
+          return () => { unsubscribed = true; };
+        },
+      },
+    }));
+    const revisions: number[] = [];
+    service.subscribe((snapshot) => revisions.push(snapshot.revision));
+
+    await handler?.(event("youtube", "platform:gift", { id: "yt-1", amount: 5, currency: "USD" }));
+    service.dispose();
+
+    expect(revisions).toEqual([1]);
+    expect(Object.isFrozen(service.snapshot)).toBe(true);
+    expect(unsubscribed).toBe(true);
+  });
+
+  test("dispose stops new work and waits for an in-flight persistence", async () => {
+    let releaseWrite!: () => void;
+    let writeStarted!: () => void;
+    const started = new Promise<void>((resolve) => { writeStarted = resolve; });
+    const fs = memoryFileSystem();
+    const blockedFs: FundingGoalFileSystem = {
+      ...fs,
+      writeFile: async (...args) => {
+        writeStarted();
+        await new Promise<void>((resolve) => { releaseWrite = resolve; });
+        return fs.writeFile(...args);
+      },
+    };
+    const service = await createFundingGoalService(options({ fs: blockedFs }));
+    const accepted = service.adjust(5);
+    await started;
+
+    let disposed = false;
+    const disposing = service.dispose().then(() => { disposed = true; });
+    await Promise.resolve();
+    expect(disposed).toBe(false);
+    await expect(service.adjust(1)).rejects.toThrow("disposed");
+
+    releaseWrite();
+    await accepted;
+    await disposing;
+    expect(disposed).toBe(true);
+    expect(service.snapshot.currentUsd).toBe(5);
+  });
+});

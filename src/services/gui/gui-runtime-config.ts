@@ -8,7 +8,7 @@ import {
 type TransportRecord = Record<string, unknown>;
 
 type GuiFeedMode = 'all' | 'chat' | 'non-chat';
-type GuiPageKind = 'dock' | 'notifications' | 'overlay' | 'tiktok-animations';
+type GuiPageKind = 'dock' | 'notifications' | 'overlay' | 'goal' | 'tiktok-animations';
 type GuiAppearanceProfile = 'standard' | 'minimal';
 type GuiAppearanceSettings = {
     compactRows: boolean;
@@ -191,8 +191,11 @@ function parseNonNegativeInteger(value: unknown, fallback: number): number {
 }
 
 function isGuiActive(config: unknown = {}): boolean {
-    const gui = toTransportRecord(toTransportRecord(config).gui);
-    return gui.enableDock === true || gui.enableOverlay === true || gui.enableNotifications === true || gui.enableOperator === true;
+    const root = toTransportRecord(config);
+    const gui = toTransportRecord(root.gui);
+    const fundingGoal = toTransportRecord(root.fundingGoal);
+    return gui.enableDock === true || gui.enableOverlay === true || gui.enableNotifications === true ||
+        gui.enableOperator === true || fundingGoal.enabled === true;
 }
 
 export {

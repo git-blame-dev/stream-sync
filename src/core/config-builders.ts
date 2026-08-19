@@ -228,6 +228,7 @@ function buildConfig(normalized: NormalizedConfig, options: { debugMode?: boolea
         obs: buildObsConfig(normalized),
         handcam: buildHandcamConfig(normalized),
         goals: { ...normalized.goals },
+        fundingGoal: { ...normalized.fundingGoal },
         vfx: buildVfxConfig(normalized),
         gifts: buildGiftConfig(normalized),
         envelopes: buildEnvelopeConfig(normalized),

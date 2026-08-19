@@ -148,6 +148,7 @@ class ConfigValidator {
             youtube: ConfigValidator._normalizeYoutubeSection(rawConfig.youtube || {}),
             handcam: ConfigValidator._normalizeHandcamSection(rawConfig.handcam || {}),
             goals: ConfigValidator._normalizeGoalsSection(rawConfig.goals || {}),
+            fundingGoal: ConfigValidator._normalizeFundingGoalSection(rawConfig.fundingGoal || {}),
             gifts: ConfigValidator._normalizeGiftsSection(rawConfig.gifts || {}),
             envelopes: ConfigValidator._normalizeEnvelopesSection(rawConfig.envelopes || {}),
             cooldowns: ConfigValidator._normalizeCooldownsSection(rawConfig.cooldowns || {}),
@@ -302,6 +303,18 @@ class ConfigValidator {
             twitchGoalTarget: ConfigValidator.parseNumber(raw.twitchGoalTarget, { defaultValue: DEFAULTS.goals.twitchGoalTarget }),
             twitchGoalCurrency: ConfigValidator.parseString(raw.twitchGoalCurrency, DEFAULTS.goals.twitchGoalCurrency),
             twitchPaypiggyEquivalent: ConfigValidator.parseNumber(raw.twitchPaypiggyEquivalent, { defaultValue: DEFAULTS.goals.twitchPaypiggyEquivalent })
+        };
+    }
+
+    static _normalizeFundingGoalSection(raw: RawConfigSection): NormalizedConfigSection {
+        return {
+            enabled: ConfigValidator.parseBoolean(raw.enabled, DEFAULTS.fundingGoal.enabled),
+            id: ConfigValidator.parseString(raw.id, DEFAULTS.fundingGoal.id) || DEFAULTS.fundingGoal.id,
+            label: ConfigValidator.parseString(raw.label, DEFAULTS.fundingGoal.label) || DEFAULTS.fundingGoal.label,
+            targetUsd: ConfigValidator._parseNumberFromSchema('fundingGoal', 'targetUsd', raw.targetUsd),
+            tiktokUsdPerCoin: ConfigValidator._parseNumberFromSchema('fundingGoal', 'tiktokUsdPerCoin', raw.tiktokUsdPerCoin),
+            twitchUsdPerBit: ConfigValidator._parseNumberFromSchema('fundingGoal', 'twitchUsdPerBit', raw.twitchUsdPerBit),
+            youtubeJewelsUsd: ConfigValidator._parseNumberFromSchema('fundingGoal', 'youtubeJewelsUsd', raw.youtubeJewelsUsd)
         };
     }
 

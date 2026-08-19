@@ -18,6 +18,7 @@ describe("OBS browser wrappers", () => {
 
   test.each([
     ["overlay.html", "/overlay"],
+    ["goal.html", "/goal"],
     ["dock.html", "/dock"],
     ["notifications.html", "/notifications"],
     ["tiktok-animations.html", "/tiktok-animations"],

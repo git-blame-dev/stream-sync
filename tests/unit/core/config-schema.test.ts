@@ -21,6 +21,18 @@ describe('GUI notification and feed mode schema', () => {
     });
 });
 
+describe('funding goal schema', () => {
+    it('defines a disabled generic goal with safe valuation defaults', () => {
+        const fundingGoal = CONFIG_SCHEMA.fundingGoal;
+        if (!fundingGoal) throw new Error('expected funding goal config schema');
+
+        expect(fundingGoal.enabled).toEqual({ type: 'boolean', default: false });
+        expect(fundingGoal.label).toEqual({ type: 'string', default: 'Support Goal' });
+        expect(fundingGoal.targetUsd).toEqual({ type: 'number', default: 100, min: 0, allowZero: false });
+        expect(fundingGoal.youtubeJewelsUsd).toEqual({ type: 'number', default: 0, min: 0 });
+    });
+});
+
 describe('buildDefaultsFromSchema()', () => {
     it('returns object with all sections from schema except dynamic', () => {
         const defaults = buildDefaultsFromSchema();
