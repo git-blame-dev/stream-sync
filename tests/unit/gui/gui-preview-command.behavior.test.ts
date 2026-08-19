@@ -142,6 +142,8 @@ type PreviewModule = {
       write: (text: string) => void;
     };
     scenario?: "all" | "chat" | "notifications";
+    keepOpen?: boolean;
+    waitForShutdownImpl?: () => Promise<void>;
     createNotificationExitWaiterImpl?: (
       eventBus: PreviewPipeline["eventBus"],
       notificationType: string,
@@ -177,6 +179,29 @@ describe("GUI local preview command behavior", () => {
 
     await delay(25);
     expect(calls).toEqual([[25, 25, "gui-preview delay"]]);
+  });
+
+  it("waits for an injected shutdown signal when keep-open is enabled", async () => {
+    const writes: string[] = [];
+    let shutdownWaited = false;
+    let stopped = false;
+    const eventBus = { subscribe() { return () => {}; }, emit() {} };
+    await runGuiPreview({
+      durationMs: 1,
+      intervalMs: 1,
+      keepOpen: true,
+      waitForShutdownImpl: async () => { shutdownWaited = true; },
+      createPreviewPipelineImpl: () => ({ eventBus, emitIngestEvent() {}, async dispose() {} }),
+      createPreviewIngestAdaptersImpl: () => ({ twitch: { async ingest() {} }, youtube: { async ingest() {} }, tiktok: { async ingest() {} } }),
+      createGuiTransportServiceImpl: () => ({ async start() {}, async stop() { stopped = true; } }),
+      safeSetIntervalImpl: (callback) => { callback(); return 1; },
+      safeSetTimeoutImpl: (resolve) => resolve(),
+      stdout: { write: (text: string) => writes.push(text) },
+    });
+    expect(shutdownWaited).toBe(true);
+    expect(stopped).toBe(true);
+    expect(writes.some((line) => line.includes("server remains running until Ctrl+C"))).toBe(true);
+    expect(writes.some((line) => line === "GUI preview finished\n")).toBe(false);
   });
 
   it("uses 32s duration and 2s message cadence constants", () => {

@@ -370,6 +370,8 @@ interface RunGuiPreviewOptions {
         resolveFromNotificationData: (payload: unknown) => Promise<unknown>;
     };
     eventBus?: PreviewEventBus;
+    keepOpen?: boolean;
+    waitForShutdownImpl?: () => Promise<void>;
     createNotificationExitWaiterImpl?: (
         eventBus: PreviewEventBus,
         notificationType: string,
@@ -380,6 +382,18 @@ interface RunGuiPreviewOptions {
 const PREVIEW_DURATION_MS = 32000;
 const PREVIEW_INTERVAL_MS = 2000;
 const PREVIEW_NOTIFICATION_EXIT_TIMEOUT_MS = 41000;
+
+function waitForPreviewShutdown(): Promise<void> {
+    return new Promise((resolve) => {
+        const finish = () => {
+            process.removeListener('SIGINT', finish);
+            process.removeListener('SIGTERM', finish);
+            resolve();
+        };
+        process.once('SIGINT', finish);
+        process.once('SIGTERM', finish);
+    });
+}
 
 function createPreviewDelay(
     delayImpl: (delay: unknown, fallback?: number, context?: string) => Promise<void> = safeDelay
@@ -1887,7 +1901,12 @@ async function runGuiPreview(options: RunGuiPreviewOptions = {}): Promise<void> 
             await notificationExitWaiter.promise;
         }
 
-        stdout.write('GUI preview finished\n');
+        if (options.keepOpen) {
+            stdout.write('GUI preview scenario finished; server remains running until Ctrl+C\n');
+            await (options.waitForShutdownImpl || waitForPreviewShutdown)();
+        } else {
+            stdout.write('GUI preview finished\n');
+        }
     } catch (error) {
         errorHandler.handleEventProcessingError(error, 'preview-run', null, 'GUI preview failed');
         throw error;
@@ -1903,7 +1922,9 @@ async function runGuiPreview(options: RunGuiPreviewOptions = {}): Promise<void> 
 }
 
 if (require.main === module) {
-    runGuiPreview({ scenario: parsePreviewScenario(process.argv.slice(2)) }).catch((error: unknown) => {
+    const cliArgs = process.argv.slice(2);
+    const keepOpen = !cliArgs.includes('--once');
+    runGuiPreview({ scenario: parsePreviewScenario(cliArgs), keepOpen }).catch((error: unknown) => {
         const errorMessage = error && typeof error === 'object' && 'message' in error
             ? String((error as { message?: unknown }).message)
             : String(error);

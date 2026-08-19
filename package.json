@@ -19,6 +19,7 @@
     "dev": "vite --config gui/vite.config.ts",
     "gui:demo": "bun run build && tsx scripts/local/gui-demo.ts",
     "gui:preview": "bun run build && tsx scripts/local/gui-preview.ts",
+    "gui:preview:once": "bun run build && tsx scripts/local/gui-preview.ts --once",
     "gui:preview:gift-animation": "bun run build && bun scripts/local/gui-gift-animation-preview.ts",
     "start": "tsx src/bootstrap.ts",
     "start:debug": "tsx src/bootstrap.ts --debug",

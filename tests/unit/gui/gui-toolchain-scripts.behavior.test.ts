@@ -14,6 +14,9 @@ describe("GUI toolchain scripts behavior", () => {
     expect(packageJson.scripts["gui:preview"]).toBe(
       "bun run build && tsx scripts/local/gui-preview.ts",
     );
+    expect(packageJson.scripts["gui:preview:once"]).toBe(
+      "bun run build && tsx scripts/local/gui-preview.ts --once",
+    );
     expect(packageJson.scripts["gui:preview:gift-animation"]).toBe(
       "bun run build && bun scripts/local/gui-gift-animation-preview.ts",
     );
