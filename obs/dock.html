@@ -1,4 +1,14 @@
 <!doctype html>
-<meta charset="utf-8">
-<title>Stream Sync Dock Wrapper</title>
-<script>window.location.replace(`browser-wrapper.html#/dock${window.location.search}`);</script>
+<html lang="en" data-route="/dock" data-status-visible="true">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Stream Sync Dock</title>
+  <link rel="stylesheet" href="browser-wrapper.css?v=2">
+</head>
+<body>
+  <div id="status" role="status" aria-live="polite"></div>
+  <iframe id="stream-sync-frame" title="Stream Sync Dock"></iframe>
+  <script src="browser-wrapper.js?v=2"></script>
+</body>
+</html>
