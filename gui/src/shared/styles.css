@@ -28,9 +28,11 @@ html, body {
   --gui-gold-text-accent: #fff7cf;
   --gui-gold-text-accent-shadow: 0 0 8px rgba(255, 239, 164, 0.56);
   --gui-gold-progress-track: rgba(255, 239, 166, 0.2);
-  --gui-funding-goal-fill-start: var(--gui-gold-sheen-edge);
-  --gui-funding-goal-fill-end: var(--gui-gold-background-top);
-  --gui-funding-goal-badge-background: var(--gui-gold-sheen-edge);
+  --gui-funding-goal-fill-start: var(--gui-gold-background-top);
+  --gui-funding-goal-fill-mid: var(--gui-gold-background-mid);
+  --gui-funding-goal-fill-end: var(--gui-gold-background-bottom);
+  --gui-funding-goal-badge-background: var(--gui-gold-background-bottom);
+  --gui-funding-goal-current-amount: var(--gui-funding-goal-badge-background);
   --gui-funding-goal-track: var(--gui-gold-progress-track);
   --gui-funding-goal-glow: var(--gui-gold-glow-ring);
   --gui-funding-goal-text-accent: var(--gui-gold-text-accent);
@@ -113,8 +115,9 @@ html, body {
 }
 
 .funding-goal__emoji {
+  display: inline-block;
   font-size: 1.445em;
-  line-height: .5;
+  line-height: 1;
 }
 
 .funding-goal__amount {
@@ -126,14 +129,18 @@ html, body {
 
 .funding-goal__label-group {
   display: inline-flex;
+  flex: 0 1 auto;
   align-items: center;
   gap: 7px;
   min-width: 0;
 }
 
 .funding-goal__badge {
+  display: inline-flex;
   flex: 0 0 auto;
-  padding: 4px 7px 3px;
+  align-items: center;
+  justify-content: center;
+  padding: .35em .7em;
   color: #1b1403;
   font-size: 10px;
   font-weight: 800;
@@ -161,15 +168,6 @@ html, body {
   white-space: nowrap;
 }
 
-.funding-goal__raised-status {
-  color: var(--gui-funding-goal-text-accent);
-  font-size: var(--gui-funding-goal-label-size);
-  font-weight: 800;
-  line-height: 1;
-  text-shadow: var(--gui-funding-goal-text-accent-shadow);
-  white-space: nowrap;
-}
-
 .funding-goal__raised-caption {
   color: rgba(244, 246, 248, .72);
   font-size: var(--gui-funding-goal-caption-size);
@@ -178,8 +176,12 @@ html, body {
   white-space: nowrap;
 }
 
+.funding-goal__current-amount {
+  color: var(--gui-funding-goal-current-amount);
+}
+
 .funding-goal__rail {
-  margin-top: 6px;
+  margin-top: 0;
   overflow: hidden;
   border-radius: 0;
   background: var(--gui-funding-goal-track);
@@ -187,17 +189,29 @@ html, body {
 }
 
 .funding-goal--standard .funding-goal__rail {
-  height: 10px;
+  height: 15px;
+  margin-top: 9px;
+}
+
+.funding-goal--minimal .funding-goal__summary {
+  flex-wrap: nowrap;
 }
 
 .funding-goal--minimal .funding-goal__rail {
-  height: 8px;
+  flex: 1 1 0;
+  min-width: 0;
+  height: 12px;
 }
 
 .funding-goal__fill {
   height: 100%;
   transform-origin: left center;
-  background: linear-gradient(90deg, var(--gui-funding-goal-fill-start), var(--gui-funding-goal-fill-end));
+  background: linear-gradient(
+    90deg,
+    var(--gui-funding-goal-fill-start),
+    var(--gui-funding-goal-fill-mid),
+    var(--gui-funding-goal-fill-end)
+  );
   transition: transform 320ms ease-out;
 }
 

@@ -175,6 +175,7 @@ describe("GUI transport routes and SSE integration", () => {
         completed: false,
         sessionId: "test-session",
         label: "x".repeat(300_000),
+        labelOverridden: false,
       },
       subscribe: (listener: (snapshot: any) => void) => {
         return () => undefined;

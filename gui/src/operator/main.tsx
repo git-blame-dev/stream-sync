@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { deriveFundingGoalDisplayState } from '../shared/funding-goal'
+import { FundingLabelEditor } from './FundingLabelEditor'
 
 import {
   appendLogRow,
@@ -249,6 +250,26 @@ function OperatorApp() {
     setPending(null)
   }
 
+  async function mutateFundingLabel(operation: 'set-label' | 'reset-label', label?: string): Promise<boolean> {
+    setPending(`funding:${operation}`)
+    setError('')
+    try {
+      const next = parseFundingGoalSnapshot(await request('/api/v1/operator/funding-goal', {
+        method: 'PATCH',
+        headers: mutationHeaders,
+        body: JSON.stringify(operation === 'set-label' ? { operation, label } : { operation }),
+      }))
+      if (!next) throw new Error('Invalid funding goal response')
+      setFundingGoal((current) => selectNewestFundingGoal(current, next))
+      return true
+    } catch (mutationError: unknown) {
+      setError(mutationError instanceof Error ? mutationError.message : 'Unable to save funding goal label')
+      return false
+    } finally {
+      setPending(null)
+    }
+  }
+
   const paused = pausedLogs !== null
   const visibleLogs = (pausedLogs ?? logs).filter((log) => visible.has(log.level))
   const parsedBadgeLimit = Number(badgeLimitDraft)
@@ -286,10 +307,16 @@ function OperatorApp() {
               <div className="section-heading">
                 <div>
                   <span className="eyebrow">PROGRESS</span>
-                  <h2 id="funding-goal-title">{fundingGoal.label}</h2>
+                  <h2 id="funding-goal-title">Funding goal</h2>
                 </div>
                 <strong>{fundingDisplay?.currentText} / {fundingDisplay?.targetText}</strong>
               </div>
+              <FundingLabelEditor
+                goal={fundingGoal}
+                pending={pending !== null}
+                onSave={(label) => mutateFundingLabel('set-label', label)}
+                onReset={() => void mutateFundingLabel('reset-label')}
+              />
               <progress
                 max={fundingGoal.targetUsd}
                 value={fundingDisplay?.progressValue}

@@ -19,6 +19,12 @@ export function FundingGoal({ goal, profile = 'standard' }: FundingGoalProps) {
       {emojiLabel ? emojiLabel[2] : goal.label}
     </span>
   )
+  const labelGroup = (
+    <span className="funding-goal__label-group">
+      <span className="funding-goal__badge">{display.isComplete ? 'FUNDED' : 'GOAL'}</span>
+      {label}
+    </span>
+  )
   const rail = (
     <div
       className="funding-goal__rail"
@@ -35,31 +41,24 @@ export function FundingGoal({ goal, profile = 'standard' }: FundingGoalProps) {
   return (
     <section className={`funding-goal funding-goal--${profile}`} aria-label={goal.label}>
       {profile === 'minimal' ? (
-        <>
-          <div className="funding-goal__summary">
-            <span className="funding-goal__label-group">
-              <span className="funding-goal__badge">{display.isComplete ? 'FUNDED' : 'GOAL'}</span>
-              {label}
-            </span>
-            <span className="funding-goal__amount">{display.currentText} / {display.targetText}</span>
-          </div>
+        <div className="funding-goal__summary">
+          {labelGroup}
           {rail}
-        </>
+          <span className="funding-goal__amount">
+            <span className="funding-goal__current-amount">{display.currentText}</span>
+            <span> / </span>
+            <span>{display.targetText}</span>
+          </span>
+        </div>
       ) : (
         <div className="funding-goal__summary">
           <div className="funding-goal__identity">
-            {label}
+            {labelGroup}
             {rail}
           </div>
           <span className="funding-goal__raised-copy">
-            {display.isComplete ? (
-              <span className="funding-goal__raised-status">FUNDED</span>
-            ) : (
-              <span className="funding-goal__raised-value">{display.currentText} raised</span>
-            )}
-            <span className="funding-goal__raised-caption">
-              {display.isComplete ? `${display.currentText} raised` : `of ${display.targetText} goal`}
-            </span>
+            <span className="funding-goal__raised-value">{display.currentText} raised</span>
+            <span className="funding-goal__raised-caption">of {display.targetText} goal</span>
           </span>
         </div>
       )}

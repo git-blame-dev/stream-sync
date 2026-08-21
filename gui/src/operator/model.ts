@@ -4,6 +4,7 @@ import {
   type RowTheme,
   type RowVisualEffectId,
 } from '../../../src/core/row-presentation'
+import { validateFundingGoalLabel } from '../../../src/core/funding-goal-label'
 import {
   parseFundingGoalSnapshot,
   selectNewestFundingGoal,
@@ -46,6 +47,14 @@ export const LOG_LEVELS = ['debug', 'info', 'console', 'warn', 'error', 'emergen
 export const MAX_LOG_ROWS = 200
 export const APPEARANCE_KEYS = ['compactRows', 'rowBackgroundsEnabled', 'maxDisplayableBadges', 'streamSupporterChatEffectsEnabled', 'memberRowTheme', 'memberRowEffects'] as const
 export const FUNDING_ADJUSTMENTS_USD = [1, 10, -1] as const
+
+export function parseFundingGoalLabelDraft(value: string): string | null {
+  try {
+    return validateFundingGoalLabel(value)
+  } catch {
+    return null
+  }
+}
 
 const controlKeys = new Set<string>(CONTROL_KEYS)
 const logLevels = new Set<string>(LOG_LEVELS)

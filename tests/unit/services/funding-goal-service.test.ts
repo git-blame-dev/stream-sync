@@ -190,6 +190,40 @@ describe("FundingGoalService", () => {
     expect(second.snapshot.label).toBe("🎙️ New Microphone");
   });
 
+  test("validates Unicode labels, persists overrides, and restores them after restart", async () => {
+    const fs = memoryFileSystem();
+    const first = await createFundingGoalService(options({ fs }));
+    await expect(first.setLabel("   ")).rejects.toThrow("must not be empty");
+    await expect(first.setLabel("bad\nlabel")).rejects.toThrow("control characters");
+    await expect(first.setLabel("hidden\u200Blabel")).rejects.toThrow("format characters");
+    await expect(first.setLabel("spoofed\u202Elabel")).rejects.toThrow("format characters");
+    await expect(first.setLabel("x".repeat(81))).rejects.toThrow("at most 80");
+    const label = "  🚀 family‍👩‍👧‍👦  ";
+    await first.setLabel(label);
+    expect(first.snapshot).toMatchObject({ label: label.trim(), labelOverridden: true, revision: 1 });
+    const second = await createFundingGoalService(options({ fs }));
+    expect(second.snapshot).toMatchObject({ label: label.trim(), labelOverridden: true, revision: 1 });
+    await second.resetLabel();
+    expect(second.snapshot).toMatchObject({ label: "🎮 New Controller", labelOverridden: false, revision: 2 });
+  });
+
+  test("loads old state without a label override and avoids no-op revisions", async () => {
+    const fs = memoryFileSystem(JSON.stringify({ version: 1, goalId: "controller", currentMicros: 0, processedEventKeys: [], revision: 4 }));
+    const service = await createFundingGoalService(options({ fs }));
+    const revisions: number[] = [];
+    service.subscribe(snapshot => revisions.push(snapshot.revision));
+    await service.resetLabel();
+    await service.setLabel("🎮 New Controller");
+    expect(service.snapshot).toMatchObject({ label: "🎮 New Controller", labelOverridden: false, revision: 4 });
+    expect(revisions).toEqual([]);
+  });
+
+  test("does not partially apply state when the persisted label is malformed", async () => {
+    const fs = memoryFileSystem(JSON.stringify({ version: 1, goalId: "controller", currentMicros: 5000000, processedEventKeys: ["x"], revision: 9, labelOverride: "bad\nlabel" }));
+    const service = await createFundingGoalService(options({ fs }));
+    expect(service.snapshot).toMatchObject({ currentUsd: 0, revision: 0, label: "🎮 New Controller", labelOverridden: false });
+  });
+
   test("publishes immutable revisioned snapshots and unsubscribes from the event bus", async () => {
     let handler: ((payload: unknown) => unknown) | undefined;
     let unsubscribed = false;

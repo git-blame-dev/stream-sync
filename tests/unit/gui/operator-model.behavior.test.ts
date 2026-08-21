@@ -9,6 +9,7 @@ import {
   parseAppearanceState,
   selectNewestAppearance,
   parseOperatorState,
+  parseFundingGoalLabelDraft,
   selectNewestState,
   parseFundingGoalSnapshot, selectNewestFundingGoal,
   toggleLevel,
@@ -84,10 +85,18 @@ describe('operator model behavior', () => {
   })
 
   test('defensively parses funding snapshots and ignores stale revisions', () => {
-    const snapshot = { enabled: true, id: 'goal', label: 'Goal', currentUsd: 25, targetUsd: 100, completed: false, revision: 2, sessionId: 'session-1' }
+    const snapshot = { enabled: true, id: 'goal', label: 'Goal', labelOverridden: false, currentUsd: 25, targetUsd: 100, completed: false, revision: 2, sessionId: 'session-1' }
     expect(parseFundingGoalSnapshot(snapshot)).toEqual(snapshot)
     expect(parseFundingGoalSnapshot({ ...snapshot, currentUsd: -1 })).toBeNull()
     expect(selectNewestFundingGoal(snapshot, { ...snapshot, revision: 1, currentUsd: 99 })).toBe(snapshot)
     expect(selectNewestFundingGoal(snapshot, { ...snapshot, revision: 0, sessionId: 'session-2', currentUsd: 0 })).toEqual(expect.objectContaining({ sessionId: 'session-2' }))
+  })
+
+  test('normalizes safe Unicode funding labels for operator mutations', () => {
+    expect(parseFundingGoalLabelDraft('  🎮 New Controller  ')).toBe('🎮 New Controller')
+    expect(parseFundingGoalLabelDraft('')).toBeNull()
+    expect(parseFundingGoalLabelDraft('bad\nlabel')).toBeNull()
+    expect(parseFundingGoalLabelDraft('hidden\u200Blabel')).toBeNull()
+    expect(parseFundingGoalLabelDraft('x'.repeat(81))).toBeNull()
   })
 })

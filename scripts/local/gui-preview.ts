@@ -5,6 +5,7 @@ import * as TwitchEventRouterModule from '../../src/platforms/twitch/events/even
 import * as CommandCooldownServiceModule from '../../src/services/CommandCooldownService.ts';
 import * as UserTrackingServiceModule from '../../src/services/UserTrackingService.ts';
 import * as VFXCommandServiceModule from '../../src/services/VFXCommandService.ts';
+import { validateFundingGoalLabel } from '../../src/core/funding-goal-label.ts';
 import { DEMO_CHARACTER_CATALOG } from '../../gui/src/demo/demo-catalog.ts';
 
 type UnknownRecord = Record<string, unknown>;
@@ -793,10 +794,12 @@ function buildPreviewConfig(baseConfig: UnknownRecord = {}): UnknownRecord {
 }
 
 function createPreviewFundingGoalService() {
+    const configuredLabel = '🎮 New Controller';
     let snapshot = {
         enabled: true,
         id: 'preview-funding-goal',
-        label: '🎮 New Controller',
+        label: configuredLabel,
+        labelOverridden: false,
         currentUsd: 0,
         targetUsd: 100,
         completed: false,
@@ -835,6 +838,27 @@ function createPreviewFundingGoalService() {
                 ...snapshot,
                 currentUsd,
                 completed: currentUsd >= snapshot.targetUsd,
+                revision: snapshot.revision + 1
+            };
+            publish();
+        },
+        async setLabel(label: string) {
+            const validated = validateFundingGoalLabel(label);
+            if (snapshot.label === validated) return;
+            snapshot = {
+                ...snapshot,
+                label: validated,
+                labelOverridden: true,
+                revision: snapshot.revision + 1
+            };
+            publish();
+        },
+        async resetLabel() {
+            if (!snapshot.labelOverridden) return;
+            snapshot = {
+                ...snapshot,
+                label: configuredLabel,
+                labelOverridden: false,
                 revision: snapshot.revision + 1
             };
             publish();

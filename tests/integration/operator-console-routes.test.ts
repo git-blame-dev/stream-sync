@@ -139,6 +139,7 @@ describe("operator console routes", () => {
         label: "🎮 New Controller",
         currentUsd: 0,
         targetUsd: 100,
+        labelOverridden: false,
       });
 
       const forbidden = await fetch(`${baseUrl}/api/v1/operator/funding-goal`, {
@@ -183,6 +184,29 @@ describe("operator console routes", () => {
       });
       expect(set.status).toBe(200);
       expect(await set.json()).toMatchObject({ currentUsd: 108.25, completed: true });
+
+      const label = await fetch(`${baseUrl}/api/v1/operator/funding-goal`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", "Origin": baseUrl, "X-Stream-Sync-Request": "1" },
+        body: JSON.stringify({ operation: "set-label", label: "  🚀 Goal‍👩‍👧‍👦  " }),
+      });
+      expect(label.status).toBe(200);
+      expect(await label.json()).toMatchObject({ label: "🚀 Goal‍👩‍👧‍👦", labelOverridden: true, revision: 4 });
+
+      const invalidLabel = await fetch(`${baseUrl}/api/v1/operator/funding-goal`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", "Origin": baseUrl, "X-Stream-Sync-Request": "1" },
+        body: JSON.stringify({ operation: "set-label", label: "\n" }),
+      });
+      expect(invalidLabel.status).toBe(400);
+
+      const reset = await fetch(`${baseUrl}/api/v1/operator/funding-goal`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", "Origin": baseUrl, "X-Stream-Sync-Request": "1" },
+        body: JSON.stringify({ operation: "reset-label" }),
+      });
+      expect(reset.status).toBe(200);
+      expect(await reset.json()).toMatchObject({ label: "🎮 New Controller", labelOverridden: false, revision: 5 });
     } finally {
       await service.stop();
       fundingGoal.dispose();

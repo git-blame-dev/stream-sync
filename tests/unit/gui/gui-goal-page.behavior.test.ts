@@ -15,6 +15,7 @@ function goal(overrides: Partial<FundingGoalSnapshot> = {}): FundingGoalSnapshot
     enabled: true,
     id: "controller",
     label: "🎮 New Controller",
+    labelOverridden: false,
     currentUsd: 25,
     targetUsd: 100,
     completed: false,

@@ -21,7 +21,8 @@ type OperatorApiOptions = {
     appearance: Pick<OperatorAppearanceService, 'snapshot' | 'reset' | 'set' | 'subscribe'>;
     logger?: Pick<AppLogger, 'warn' | 'error'> | null;
     logs: OperatorLogSource;
-    fundingGoal?: Pick<FundingGoalService, 'snapshot' | 'adjust' | 'setTotal' | 'subscribe'>;
+    fundingGoal?: Pick<FundingGoalService, 'snapshot' | 'adjust' | 'setTotal' | 'subscribe'> &
+        Partial<Pick<FundingGoalService, 'setLabel' | 'resetLabel'>>;
 };
 
 type OperatorControlView = {
@@ -334,17 +335,31 @@ function createOperatorApi(options: OperatorApiOptions) {
         }
         try {
             const body = await readJsonBody(req);
-            if (!isRecord(body) || Object.keys(body).sort().join(',') !== 'amountUsd,operation') {
-                throw new TypeError('Funding goal request must contain only operation and amountUsd');
-            }
-            if ((body.operation !== 'adjust' && body.operation !== 'set') ||
-                typeof body.amountUsd !== 'number' || !Number.isFinite(body.amountUsd)) {
-                throw new TypeError('Expected adjust or set operation with numeric amountUsd');
-            }
-            if (body.operation === 'adjust') {
-                await fundingGoal.adjust(body.amountUsd);
+            if (!isRecord(body)) throw new TypeError('Expected JSON object');
+            if (body.operation === 'set-label' || body.operation === 'reset-label') {
+                const expectedKeys = body.operation === 'set-label' ? 'label,operation' : 'operation';
+                if (Object.keys(body).sort().join(',') !== expectedKeys) throw new TypeError('Invalid funding goal label request');
+                if (body.operation === 'set-label') {
+                    if (typeof body.label !== 'string') throw new TypeError('Expected string label');
+                    if (!fundingGoal.setLabel) throw new TypeError('Funding goal labels are unavailable');
+                    await fundingGoal.setLabel(body.label);
+                } else {
+                    if (!fundingGoal.resetLabel) throw new TypeError('Funding goal labels are unavailable');
+                    await fundingGoal.resetLabel();
+                }
             } else {
-                await fundingGoal.setTotal(body.amountUsd);
+                if (Object.keys(body).sort().join(',') !== 'amountUsd,operation') {
+                    throw new TypeError('Funding goal request must contain only operation and amountUsd');
+                }
+                if ((body.operation !== 'adjust' && body.operation !== 'set') ||
+                    typeof body.amountUsd !== 'number' || !Number.isFinite(body.amountUsd)) {
+                    throw new TypeError('Expected adjust or set operation with numeric amountUsd');
+                }
+                if (body.operation === 'adjust') {
+                    await fundingGoal.adjust(body.amountUsd);
+                } else {
+                    await fundingGoal.setTotal(body.amountUsd);
+                }
             }
             sendJson(res, 200, buildFundingGoal(fundingGoal.snapshot));
         } catch (error) {

@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
+import { validateFundingGoalLabel } from '../core/funding-goal-label';
 
 const MICROS_PER_USD = 1_000_000;
 const STATE_VERSION = 1;
@@ -43,6 +44,7 @@ interface FundingGoalSnapshot {
     readonly enabled: boolean;
     readonly id: string;
     readonly label: string;
+    readonly labelOverridden: boolean;
     readonly currentUsd: number;
     readonly targetUsd: number;
     readonly completed: boolean;
@@ -67,6 +69,7 @@ interface FundingGoalPersistedState {
     readonly currentMicros: number;
     readonly processedEventKeys: readonly string[];
     readonly revision: number;
+    readonly labelOverride?: string;
 }
 
 type UnknownRecord = Record<string, unknown>;
@@ -173,6 +176,7 @@ class FundingGoalService {
     private readonly sessionId = randomUUID();
     private currentMicros = 0;
     private currentRevision = 0;
+    private labelOverride: string | undefined;
     private processedEventKeys = new Set<string>();
     private listeners = new Set<(snapshot: FundingGoalSnapshot) => void>();
     private operation: Promise<void> = Promise.resolve();
@@ -205,7 +209,8 @@ class FundingGoalService {
         return Object.freeze({
             enabled: this.config.enabled,
             id: this.config.id,
-            label: this.config.label,
+            label: this.labelOverride ?? this.config.label,
+            labelOverridden: this.labelOverride !== undefined,
             currentUsd: this.currentMicros / MICROS_PER_USD,
             targetUsd: this.config.targetUsd,
             completed: this.currentMicros >= usdToMicros(this.config.targetUsd),
@@ -284,6 +289,32 @@ class FundingGoalService {
         });
     }
 
+    setLabel(label: string): Promise<void> {
+        let validated: string;
+        try {
+            validated = validateFundingGoalLabel(label);
+        } catch (error) {
+            return Promise.reject(error);
+        }
+        return this.enqueue(async () => {
+            if ((this.labelOverride ?? this.config.label) === validated) return;
+            await this.persist(this.currentMicros, this.processedEventKeys, this.currentRevision + 1, validated);
+            this.labelOverride = validated;
+            this.currentRevision += 1;
+            this.notify();
+        });
+    }
+
+    resetLabel(): Promise<void> {
+        return this.enqueue(async () => {
+            if (this.labelOverride === undefined) return;
+            await this.persist(this.currentMicros, this.processedEventKeys, this.currentRevision + 1, undefined);
+            this.labelOverride = undefined;
+            this.currentRevision += 1;
+            this.notify();
+        });
+    }
+
     async dispose(): Promise<void> {
         if (this.disposePromise) return this.disposePromise;
         this.disposed = true;
@@ -312,30 +343,37 @@ class FundingGoalService {
         try {
             const parsed = asRecord(JSON.parse(text));
             if (!parsed || parsed.version !== STATE_VERSION || parsed.goalId !== this.config.id) return;
-            if (!Number.isSafeInteger(parsed.currentMicros) || Number(parsed.currentMicros) < 0) {
+            const currentMicros = parsed.currentMicros;
+            const revision = parsed.revision;
+            const processedEventKeys = parsed.processedEventKeys;
+            const labelOverride = parsed.labelOverride;
+            if (!Number.isSafeInteger(currentMicros) || Number(currentMicros) < 0) {
                 throw new TypeError('Invalid funding goal total');
             }
-            if (!Number.isSafeInteger(parsed.revision) || Number(parsed.revision) < 0) {
+            if (!Number.isSafeInteger(revision) || Number(revision) < 0) {
                 throw new TypeError('Invalid funding goal revision');
             }
-            if (!Array.isArray(parsed.processedEventKeys) || !parsed.processedEventKeys.every(key => typeof key === 'string')) {
+            if (!Array.isArray(processedEventKeys) || !processedEventKeys.every(key => typeof key === 'string')) {
                 throw new TypeError('Invalid funding goal event keys');
             }
-            this.currentMicros = Number(parsed.currentMicros);
-            this.currentRevision = Number(parsed.revision);
-            this.processedEventKeys = new Set(parsed.processedEventKeys.slice(-this.maxProcessedEventKeys));
+            const validatedLabel = labelOverride === undefined ? undefined : validateFundingGoalLabel(labelOverride);
+            this.currentMicros = Number(currentMicros);
+            this.currentRevision = Number(revision);
+            this.processedEventKeys = new Set(processedEventKeys.slice(-this.maxProcessedEventKeys));
+            this.labelOverride = validatedLabel;
         } catch {
             this.warn('Malformed funding goal state; starting from zero');
         }
     }
 
-    private async persist(currentMicros: number, processedEventKeys: Set<string>, revision: number): Promise<void> {
+    private async persist(currentMicros: number, processedEventKeys: Set<string>, revision: number, labelOverride = this.labelOverride): Promise<void> {
         const state: FundingGoalPersistedState = {
             version: STATE_VERSION,
             goalId: this.config.id,
             currentMicros,
             processedEventKeys: [...processedEventKeys],
-            revision
+            revision,
+            ...(labelOverride === undefined ? {} : { labelOverride })
         };
         const tempPath = `${this.filePath}.tmp-${process.pid}-${++this.tempSequence}`;
         try {

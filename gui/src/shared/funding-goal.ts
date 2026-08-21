@@ -2,6 +2,7 @@ export interface FundingGoalSnapshot {
   enabled: boolean
   id: string
   label: string
+  labelOverridden: boolean
   currentUsd: number
   targetUsd: number
   completed: boolean
@@ -24,6 +25,7 @@ export function parseFundingGoalSnapshot(value: unknown): FundingGoalSnapshot | 
   const item = value as Record<string, unknown>
   if (typeof item.enabled !== 'boolean' || typeof item.id !== 'string' || item.id.trim().length === 0
     || typeof item.label !== 'string' || item.label.trim().length === 0
+    || typeof item.labelOverridden !== 'boolean'
     || typeof item.currentUsd !== 'number' || !Number.isFinite(item.currentUsd) || item.currentUsd < 0
     || typeof item.targetUsd !== 'number' || !Number.isFinite(item.targetUsd) || item.targetUsd <= 0
     || typeof item.completed !== 'boolean' || typeof item.revision !== 'number' || !Number.isSafeInteger(item.revision) || item.revision < 0
@@ -32,6 +34,7 @@ export function parseFundingGoalSnapshot(value: unknown): FundingGoalSnapshot | 
     enabled: item.enabled,
     id: item.id,
     label: item.label,
+    labelOverridden: item.labelOverridden,
     currentUsd: item.currentUsd,
     targetUsd: item.targetUsd,
     completed: item.completed,

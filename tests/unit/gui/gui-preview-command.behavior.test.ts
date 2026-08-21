@@ -685,10 +685,16 @@ describe("GUI local preview command behavior", () => {
     expect(transportArgs.fundingGoal).toBeDefined();
     const fundingGoal = transportArgs.fundingGoal as {
       adjust(amountUsd: number): Promise<void>;
-      snapshot: { currentUsd: number };
+      setLabel(label: string): Promise<void>;
+      resetLabel(): Promise<void>;
+      snapshot: { currentUsd: number; label: string; labelOverridden: boolean };
     };
     await expect(fundingGoal.adjust(-1)).rejects.toThrow("cannot be negative");
     expect(fundingGoal.snapshot.currentUsd).toBe(0);
+    await fundingGoal.setLabel("  🎙️ New Microphone  ");
+    expect(fundingGoal.snapshot).toMatchObject({ label: "🎙️ New Microphone", labelOverridden: true });
+    await fundingGoal.resetLabel();
+    expect(fundingGoal.snapshot).toMatchObject({ label: "🎮 New Controller", labelOverridden: false });
     expect(transportArgs.operatorControls).toBeDefined();
     expect(transportArgs.operatorAppearance).toBeDefined();
     expect(transportArgs.operatorLogs).toBeDefined();
