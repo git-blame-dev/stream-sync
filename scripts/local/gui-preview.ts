@@ -710,7 +710,7 @@ function buildPreviewConfig(baseConfig: UnknownRecord = {}): UnknownRecord {
         enableOverlay: true,
         enableNotifications: true,
         enableOperator: true,
-        port: 3400,
+        port: 3399,
         dockFeedMode: 'all',
         overlayFeedMode: 'chat',
         notificationIdleHoldMs: 5000,

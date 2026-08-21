@@ -483,13 +483,14 @@ describe("GUI local preview command behavior", () => {
         enableOverlay: false,
         enableOperator: true,
         host: "127.0.0.1",
-        port: 3399,
+        port: 4400,
       },
     });
 
     expect(config.gui.enableDock).toBe(true);
     expect(config.gui.enableOverlay).toBe(true);
     expect(config.gui.enableOperator).toBe(true);
+    expect(config.gui.port).toBe(3399);
     expect(config.fundingGoal).toEqual(expect.objectContaining({ enabled: true, label: '🎮 New Controller', targetUsd: 100 }));
     expect(config.gui.showMessages).toBe(true);
     expect(config.gui.showCommands).toBe(true);
