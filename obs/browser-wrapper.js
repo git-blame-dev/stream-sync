@@ -52,7 +52,7 @@
     }
   }
 
-  async function isHealthy(healthUrl) {
+  async function getHealthState(healthUrl) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), HEALTH_TIMEOUT_MS);
     try {
@@ -61,9 +61,12 @@
         credentials: 'omit',
         signal: controller.signal
       });
-      return response.ok && (await response.json())?.ok === true;
+      if (!response.ok) return 'indeterminate';
+      const payload = await response.json();
+      if (payload?.ok === true) return 'healthy';
+      return payload?.ok === false ? 'unavailable' : 'indeterminate';
     } catch {
-      return false;
+      return 'indeterminate';
     } finally {
       clearTimeout(timeout);
     }
@@ -83,13 +86,13 @@
     let frameAttached = true;
 
     const monitor = async () => {
-      const healthy = await isHealthy(healthUrl);
-      if (!healthy && frameAttached) {
+      const healthState = await getHealthState(healthUrl);
+      if (healthState === 'unavailable' && frameAttached) {
         frame.removeAttribute('src');
         frame.style.display = 'none';
         frameAttached = false;
         setWaiting(healthUrl);
-      } else if (healthy && !frameAttached) {
+      } else if (healthState === 'healthy' && !frameAttached) {
         loadFrame();
         frameAttached = true;
       }
@@ -125,7 +128,7 @@
 
     while (true) {
       setWaiting(healthUrl);
-      if (await isHealthy(healthUrl)) {
+      if (await getHealthState(healthUrl) === 'healthy') {
         loadFrame();
         setHealthMonitoring(healthUrl, loadFrame);
         return;
