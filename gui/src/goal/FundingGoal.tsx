@@ -58,7 +58,6 @@ export function FundingGoal({ goal, profile = 'standard' }: FundingGoalProps) {
           </div>
           <span className="funding-goal__raised-copy">
             <span className="funding-goal__raised-value">{display.currentText} raised</span>
-            <span className="funding-goal__raised-caption">of {display.targetText} goal</span>
           </span>
         </div>
       )}

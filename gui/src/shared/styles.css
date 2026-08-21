@@ -28,15 +28,15 @@ html, body {
   --gui-gold-text-accent: #fff7cf;
   --gui-gold-text-accent-shadow: 0 0 8px rgba(255, 239, 164, 0.56);
   --gui-gold-progress-track: rgba(255, 239, 166, 0.2);
-  --gui-funding-goal-fill-start: var(--gui-gold-background-top);
-  --gui-funding-goal-fill-mid: var(--gui-gold-background-mid);
-  --gui-funding-goal-fill-end: var(--gui-gold-background-bottom);
-  --gui-funding-goal-badge-background: var(--gui-gold-background-bottom);
-  --gui-funding-goal-current-amount: var(--gui-funding-goal-badge-background);
+  --gui-funding-goal-fill-start: var(--gui-gold-background-bottom);
+  --gui-funding-goal-fill-mid: var(--gui-gold-sheen-edge);
+  --gui-funding-goal-fill-end: var(--gui-gold-text-accent);
+  --gui-funding-goal-accent: var(--gui-gold-text-accent);
+  --gui-funding-goal-accent-shadow: var(--gui-gold-text-accent-shadow);
+  --gui-funding-goal-badge-surface-start: var(--gui-gold-text-accent);
+  --gui-funding-goal-badge-surface-end: var(--gui-gold-sheen-edge);
+  --gui-funding-goal-badge-text: #1b1403;
   --gui-funding-goal-track: var(--gui-gold-progress-track);
-  --gui-funding-goal-glow: var(--gui-gold-glow-ring);
-  --gui-funding-goal-text-accent: var(--gui-gold-text-accent);
-  --gui-funding-goal-text-accent-shadow: var(--gui-gold-text-accent-shadow);
   --gui-overlay-avatar-size: 51px;
   --gui-overlay-platform-icon-size: 25.81px;
   --gui-overlay-badge-size: 27px;
@@ -53,7 +53,6 @@ html, body {
   --gui-dock-emote-size: 32.4px;
   --gui-funding-goal-label-size: var(--gui-overlay-row-header-font-size);
   --gui-funding-goal-amount-size: var(--gui-overlay-row-body-font-size);
-  --gui-funding-goal-caption-size: calc(var(--gui-overlay-row-header-font-size) * .62);
 }
 
 .gui-shell {
@@ -118,6 +117,7 @@ html, body {
   display: inline-block;
   font-size: 1.445em;
   line-height: 1;
+  transform: translateY(-.08em);
 }
 
 .funding-goal__amount {
@@ -141,14 +141,20 @@ html, body {
   align-items: center;
   justify-content: center;
   padding: .35em .7em;
-  color: #1b1403;
+  color: var(--gui-funding-goal-badge-text);
   font-size: 10px;
   font-weight: 800;
   line-height: 1;
   letter-spacing: .01em;
-  background: var(--gui-funding-goal-badge-background);
+  background: linear-gradient(
+    180deg,
+    var(--gui-funding-goal-badge-surface-start),
+    var(--gui-funding-goal-badge-surface-end)
+  );
   border-radius: 4px;
-  box-shadow: 0 0 12px -3px var(--gui-funding-goal-glow);
+  box-shadow:
+    inset 0 0 0 1px var(--gui-gold-border),
+    var(--gui-funding-goal-accent-shadow);
 }
 
 .funding-goal__raised-copy {
@@ -160,24 +166,17 @@ html, body {
 }
 
 .funding-goal__raised-value {
-  color: var(--gui-funding-goal-text-accent);
+  color: var(--gui-funding-goal-accent);
   font-size: var(--gui-funding-goal-amount-size);
   font-weight: 700;
   line-height: 1;
-  text-shadow: var(--gui-funding-goal-text-accent-shadow);
-  white-space: nowrap;
-}
-
-.funding-goal__raised-caption {
-  color: rgba(244, 246, 248, .72);
-  font-size: var(--gui-funding-goal-caption-size);
-  font-weight: 600;
-  line-height: 1;
+  text-shadow: var(--gui-funding-goal-accent-shadow);
   white-space: nowrap;
 }
 
 .funding-goal__current-amount {
-  color: var(--gui-funding-goal-current-amount);
+  color: var(--gui-funding-goal-accent);
+  text-shadow: var(--gui-funding-goal-accent-shadow);
 }
 
 .funding-goal__rail {
@@ -185,7 +184,7 @@ html, body {
   overflow: hidden;
   border-radius: 0;
   background: var(--gui-funding-goal-track);
-  box-shadow: 0 0 10px -5px var(--gui-funding-goal-glow);
+  box-shadow: var(--gui-funding-goal-accent-shadow);
 }
 
 .funding-goal--standard .funding-goal__rail {

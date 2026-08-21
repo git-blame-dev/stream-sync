@@ -36,7 +36,7 @@ describe("FundingGoal", () => {
     expect(renderer?.root.findByProps({ className: "funding-goal__label" }).props["aria-label"]).toBe("🎮 New Controller");
     expect(renderer?.root.findByProps({ className: "funding-goal__badge" }).children.join("")).toBe("FUNDED");
     expect(renderer?.root.findByProps({ className: "funding-goal__raised-value" }).children.join("")).toBe("$108.25 raised");
-    expect(renderer?.root.findByProps({ className: "funding-goal__raised-caption" }).children.join("")).toBe("of $100.00 goal");
+    expect(() => renderer?.root.findByProps({ className: "funding-goal__raised-caption" })).toThrow();
     expect(renderer?.root.findByProps({ className: "funding-goal__fill" }).props.style.transform).toBe("scaleX(1)");
   });
 
@@ -50,7 +50,7 @@ describe("FundingGoal", () => {
 
     expect(renderer?.root.findByProps({ className: "funding-goal__raised-value" }).children.join("")).toBe("$25.00 raised");
     expect(renderer?.root.findByProps({ className: "funding-goal__badge" }).children.join("")).toBe("GOAL");
-    expect(renderer?.root.findByProps({ className: "funding-goal__raised-caption" }).children.join("")).toBe("of $100.00 goal");
+    expect(() => renderer?.root.findByProps({ className: "funding-goal__raised-caption" })).toThrow();
   });
 
   test("marks standard copy funded when the amount reaches the target", () => {

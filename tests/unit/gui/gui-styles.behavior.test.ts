@@ -110,13 +110,16 @@ describe("GUI shared styles behavior", () => {
     expect(fundingEmojiBlock).toContain("display: inline-block;");
     expect(fundingEmojiBlock).toContain("font-size: 1.445em;");
     expect(fundingEmojiBlock).toContain("line-height: 1;");
-    expect(fundingEmojiBlock).not.toContain("transform:");
-    expect(rootBlock).toContain("--gui-funding-goal-fill-start: var(--gui-gold-background-top);");
-    expect(rootBlock).toContain("--gui-funding-goal-fill-mid: var(--gui-gold-background-mid);");
-    expect(rootBlock).toContain("--gui-funding-goal-fill-end: var(--gui-gold-background-bottom);");
-    expect(rootBlock).toContain("--gui-funding-goal-badge-background: var(--gui-gold-background-bottom);");
-    expect(rootBlock).toContain("--gui-funding-goal-current-amount: var(--gui-funding-goal-badge-background);");
-    expect(rootBlock).toContain("--gui-funding-goal-glow: var(--gui-gold-glow-ring);");
+    expect(fundingEmojiBlock).toContain("transform: translateY(-.08em);");
+    expect(rootBlock).toContain("--gui-funding-goal-fill-start: var(--gui-gold-background-bottom);");
+    expect(rootBlock).toContain("--gui-funding-goal-fill-mid: var(--gui-gold-sheen-edge);");
+    expect(rootBlock).toContain("--gui-funding-goal-fill-end: var(--gui-gold-text-accent);");
+    expect(rootBlock).toContain("--gui-funding-goal-accent: var(--gui-gold-text-accent);");
+    expect(rootBlock).toContain("--gui-funding-goal-accent-shadow: var(--gui-gold-text-accent-shadow);");
+    expect(rootBlock).toContain("--gui-funding-goal-badge-surface-start: var(--gui-gold-text-accent);");
+    expect(rootBlock).toContain("--gui-funding-goal-badge-surface-end: var(--gui-gold-sheen-edge);");
+    expect(rootBlock).toContain("--gui-funding-goal-badge-text: #1b1403;");
+    expect(rootBlock).toContain("--gui-gold-text-accent-shadow: 0 0 8px rgba(255, 239, 164, 0.56);");
     expect(readCssBlock(cssText, ".goal-page")).toContain("max-width: 960px;");
     expect(readCssBlock(cssText, ".goal-page")).toContain('font-family: "IBM Plex Sans", "Segoe UI", sans-serif;');
     const standardRailBlock = readCssBlock(cssText, ".funding-goal--standard .funding-goal__rail");
@@ -125,19 +128,36 @@ describe("GUI shared styles behavior", () => {
     expect(readCssBlock(cssText, ".funding-goal__identity")).toContain("flex: 1 1 auto;");
     expect(readCssBlock(cssText, ".funding-goal__identity")).toContain("min-width: 0;");
     expect(readCssBlock(cssText, ".funding-goal__identity")).not.toContain("width: fit-content;");
-    expect(readCssBlock(cssText, ".funding-goal__rail")).toContain("border-radius: 0;");
-    expect(readCssBlock(cssText, ".funding-goal__fill")).toContain("var(--gui-funding-goal-fill-mid)");
+    const fundingRailBlock = readCssBlock(cssText, ".funding-goal__rail");
+    expect(fundingRailBlock).toContain("border-radius: 0;");
+    expect(fundingRailBlock).toContain("box-shadow: var(--gui-funding-goal-accent-shadow);");
+    const fundingFillBlock = readCssBlock(cssText, ".funding-goal__fill");
+    expect(fundingFillBlock.replace(/\s+/g, " ")).toContain(
+      "linear-gradient( 90deg, var(--gui-funding-goal-fill-start), var(--gui-funding-goal-fill-mid), var(--gui-funding-goal-fill-end) )",
+    );
     const minimalRailBlock = readCssBlock(cssText, ".funding-goal--minimal .funding-goal__rail");
     expect(minimalRailBlock).toContain("flex: 1 1 0;");
     expect(minimalRailBlock).toContain("min-width: 0;");
     expect(minimalRailBlock).toContain("height: 12px;");
     expect(readCssBlock(cssText, ".funding-goal--minimal .funding-goal__summary")).toContain("flex-wrap: nowrap;");
-    expect(readCssBlock(cssText, ".funding-goal__current-amount")).toContain("color: var(--gui-funding-goal-current-amount);");
+    const currentAmountBlock = readCssBlock(cssText, ".funding-goal__current-amount");
+    expect(currentAmountBlock).toContain("color: var(--gui-funding-goal-accent);");
+    expect(currentAmountBlock).toContain("text-shadow: var(--gui-funding-goal-accent-shadow);");
+    const raisedValueBlock = readCssBlock(cssText, ".funding-goal__raised-value");
+    expect(raisedValueBlock).toContain("color: var(--gui-funding-goal-accent);");
+    expect(raisedValueBlock).toContain("text-shadow: var(--gui-funding-goal-accent-shadow);");
     const fundingBadgeBlock = readCssBlock(cssText, ".funding-goal__badge");
     expect(fundingBadgeBlock).toContain("display: inline-flex;");
     expect(fundingBadgeBlock).toContain("align-items: center;");
     expect(fundingBadgeBlock).toContain("padding: .35em .7em;");
     expect(fundingBadgeBlock).toContain("letter-spacing: .01em;");
+    expect(fundingBadgeBlock).toContain("color: var(--gui-funding-goal-badge-text);");
+    expect(fundingBadgeBlock.replace(/\s+/g, " ")).toContain(
+      "linear-gradient( 180deg, var(--gui-funding-goal-badge-surface-start), var(--gui-funding-goal-badge-surface-end) )",
+    );
+    expect(fundingBadgeBlock).not.toContain("text-shadow:");
+    expect(fundingBadgeBlock).toContain("inset 0 0 0 1px var(--gui-gold-border)");
+    expect(fundingBadgeBlock).toContain("var(--gui-funding-goal-accent-shadow)");
   });
 
   it("scopes minimal compact and background-off presentation to the minimal shell", () => {
