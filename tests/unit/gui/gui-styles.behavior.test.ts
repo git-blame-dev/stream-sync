@@ -129,8 +129,12 @@ describe("GUI shared styles behavior", () => {
     expect(readCssBlock(cssText, ".funding-goal__identity")).toContain("min-width: 0;");
     expect(readCssBlock(cssText, ".funding-goal__identity")).not.toContain("width: fit-content;");
     const fundingRailBlock = readCssBlock(cssText, ".funding-goal__rail");
+    expect(fundingRailBlock).toContain("position: relative;");
+    expect(fundingRailBlock).toContain("overflow: hidden;");
     expect(fundingRailBlock).toContain("border-radius: 0;");
     expect(fundingRailBlock).toContain("box-shadow: var(--gui-funding-goal-accent-shadow);");
+    expect(readCssBlock(cssText, ".funding-goal__rail .gui-row__member-particles"))
+      .toContain("z-index: 1;");
     const fundingFillBlock = readCssBlock(cssText, ".funding-goal__fill");
     expect(fundingFillBlock.replace(/\s+/g, " ")).toContain(
       "linear-gradient( 90deg, var(--gui-funding-goal-fill-start), var(--gui-funding-goal-fill-mid), var(--gui-funding-goal-fill-end) )",

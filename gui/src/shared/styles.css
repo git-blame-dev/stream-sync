@@ -180,11 +180,16 @@ html, body {
 }
 
 .funding-goal__rail {
+  position: relative;
   margin-top: 0;
   overflow: hidden;
   border-radius: 0;
   background: var(--gui-funding-goal-track);
   box-shadow: var(--gui-funding-goal-accent-shadow);
+}
+
+.funding-goal__rail .gui-row__member-particles {
+  z-index: 1;
 }
 
 .funding-goal--standard .funding-goal__rail {

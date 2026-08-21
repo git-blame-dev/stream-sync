@@ -3,8 +3,10 @@ import React from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 
 import { FundingGoal } from "../../../gui/src/goal/FundingGoal";
+import { MemberParticleCanvas } from "../../../gui/src/shared/components/MemberParticleCanvas";
 import type { FundingGoalSnapshot } from "../../../gui/src/shared/funding-goal";
 import { parseFundingGoalSnapshot, selectNewestFundingGoal } from "../../../gui/src/shared/funding-goal";
+import { memberParticleSeedId } from "../../../gui/src/shared/member-particles";
 
 function goal(overrides: Partial<FundingGoalSnapshot> = {}): FundingGoalSnapshot {
   return {
@@ -53,6 +55,20 @@ describe("FundingGoal", () => {
     expect(() => renderer?.root.findByProps({ className: "funding-goal__raised-caption" })).toThrow();
   });
 
+  test("renders stable left-to-right particles inside the standard progress rail", () => {
+    let renderer: ReactTestRenderer | undefined;
+    act(() => {
+      renderer = create(React.createElement(FundingGoal, { goal: goal() }));
+    });
+
+    const rail = renderer?.root.findByProps({ className: "funding-goal__rail" });
+    const particles = rail?.findByType(MemberParticleCanvas);
+    expect(particles?.props.seed).toBe("funding-goal:controller");
+    expect(particles?.props.direction).toBe("left-to-right");
+    expect(particles?.findByType("canvas").props["data-member-particles-seed"])
+      .toBe(memberParticleSeedId("funding-goal:controller"));
+  });
+
   test("marks standard copy funded when the amount reaches the target", () => {
     let renderer: ReactTestRenderer | undefined;
     act(() => {
@@ -92,6 +108,21 @@ describe("FundingGoal", () => {
 
     expect(renderer?.root.findByProps({ className: "funding-goal__badge" }).children.join("")).toBe("FUNDED");
     expect(renderer?.root.findByProps({ className: "funding-goal__current-amount" }).children.join("")).toBe("$100.00");
+  });
+
+  test("renders the left-to-right particle canvas inside the minimal progress rail", () => {
+    let renderer: ReactTestRenderer | undefined;
+    act(() => {
+      renderer = create(React.createElement(FundingGoal, {
+        goal: goal({ currentUsd: 25, completed: false }),
+        profile: "minimal",
+      }));
+    });
+
+    const rail = renderer?.root.findByProps({ className: "funding-goal__rail" });
+    const particles = rail?.findByType(MemberParticleCanvas);
+    expect(particles?.props.seed).toBe("funding-goal:controller");
+    expect(particles?.props.direction).toBe("left-to-right");
   });
 
   test("keeps a joined Unicode emoji together in the visible label", () => {

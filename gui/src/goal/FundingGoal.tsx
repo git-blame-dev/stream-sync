@@ -1,5 +1,6 @@
 import React from 'react'
 import type { GuiAppearanceProfile } from '../shared/appearance'
+import { MemberParticleCanvas } from '../shared/components/MemberParticleCanvas'
 import { deriveFundingGoalDisplayState, type FundingGoalSnapshot } from '../shared/funding-goal'
 
 interface FundingGoalProps {
@@ -36,6 +37,7 @@ export function FundingGoal({ goal, profile = 'standard' }: FundingGoalProps) {
       aria-valuetext={display.progressValueText}
     >
       <div className="funding-goal__fill" style={{ transform: `scaleX(${display.progressRatio})` }} />
+      <MemberParticleCanvas seed={`funding-goal:${goal.id}`} direction="left-to-right" />
     </div>
   )
   return (

@@ -3,6 +3,7 @@ import { describe, expect, it } from "bun:test";
 import {
   evaluateMemberParticle,
   generateMemberParticleSet,
+  memberParticleHorizontalPosition,
 } from "../../../gui/src/shared/member-particles";
 
 describe("member particle behavior", () => {
@@ -55,5 +56,14 @@ describe("member particle behavior", () => {
     expect(evaluateMemberParticle(particle, 1000)).toMatchObject({ x: 100, y: 40, size: 2 });
     expect(evaluateMemberParticle(particle, 2850)?.x).toBeCloseTo(50, 5);
     expect(evaluateMemberParticle(particle, 4700)).toBeNull();
+  });
+
+  it("mirrors left-to-right travel across the canvas while keeping the sprite in bounds at exit", () => {
+    expect(memberParticleHorizontalPosition("left-to-right", 0, 120, 8)).toBe(-8);
+    expect(memberParticleHorizontalPosition("left-to-right", 0.5, 120, 8)).toBe(52);
+    expect(memberParticleHorizontalPosition("left-to-right", 1, 120, 8)).toBe(112);
+    expect(memberParticleHorizontalPosition("right-to-left", 0, 120, 8)).toBe(120);
+    expect(memberParticleHorizontalPosition("right-to-left", 0.5, 120, 8)).toBe(60);
+    expect(memberParticleHorizontalPosition("right-to-left", 1, 120, 8)).toBe(0);
   });
 });

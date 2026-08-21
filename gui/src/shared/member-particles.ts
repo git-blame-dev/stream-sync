@@ -28,6 +28,8 @@ export interface MemberParticleSet {
   readonly cycleMs: number
 }
 
+export type MemberParticleDirection = 'left-to-right' | 'right-to-left'
+
 export interface EvaluatedMemberParticle {
   readonly x: number
   readonly y: number
@@ -68,6 +70,17 @@ function tailScaleFor(index: number): MemberParticle['tailScale'] {
 
 export function memberParticleSeedId(seed: string): string {
   return hashString(`${DESIGN_SEED}:${seed}`).toString(36)
+}
+
+export function memberParticleHorizontalPosition(
+  direction: MemberParticleDirection,
+  progress: number,
+  width: number,
+  spriteWidth: number
+): number {
+  return direction === 'left-to-right'
+    ? width * progress - spriteWidth
+    : width * (1 - progress)
 }
 
 export function generateMemberParticleSet(seed: string): MemberParticleSet {

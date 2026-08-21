@@ -12,6 +12,7 @@ let rafCallbacks: Callback[];
 let cancelledFrames: number[];
 let contexts: Array<Record<string, unknown>>;
 let drawCalls: unknown[][];
+let contextOperations: Array<{ type: string; args: number[] }>;
 let canvas: Record<string, unknown>;
 let motion: { matches: boolean; listener: ((event: unknown) => void) | undefined };
 let intersectionCallback: (entries: Array<{ isIntersecting: boolean }>) => void;
@@ -23,8 +24,11 @@ function contextMock(): Record<string, unknown> {
   return {
     clearRect: () => undefined,
     drawImage: (...args: unknown[]) => { drawCalls.push(args); },
+    restore: () => { contextOperations.push({ type: "restore", args: [] }); },
+    save: () => { contextOperations.push({ type: "save", args: [] }); },
     setTransform: () => undefined,
-    scale: () => undefined,
+    scale: (...args: number[]) => { contextOperations.push({ type: "scale", args }); },
+    translate: (...args: number[]) => { contextOperations.push({ type: "translate", args }); },
     createRadialGradient: () => ({ addColorStop: () => undefined }),
     createLinearGradient: () => ({ addColorStop: () => undefined }),
     fillRect: () => undefined,
@@ -32,10 +36,13 @@ function contextMock(): Record<string, unknown> {
   };
 }
 
-function renderCanvas(seed = "fixture-member-42") {
+function renderCanvas(seed = "fixture-member-42", direction?: "left-to-right" | "right-to-left") {
   let renderer: TestRenderer.ReactTestRenderer;
   act(() => {
-    renderer = TestRenderer.create(React.createElement(MemberParticleCanvas, { seed }), {
+    renderer = TestRenderer.create(React.createElement(MemberParticleCanvas, {
+      seed,
+      ...(direction === undefined ? {} : { direction }),
+    }), {
       createNodeMock: () => canvas,
     });
   });
@@ -47,6 +54,7 @@ beforeEach(() => {
   cancelledFrames = [];
   contexts = [];
   drawCalls = [];
+  contextOperations = [];
   motion = { matches: false, listener: undefined };
   intersectionDisconnect = () => undefined;
   resizeDisconnect = () => undefined;
@@ -122,6 +130,25 @@ describe("MemberParticleCanvas behavior", () => {
 
     expect(tailCalls.length).toBeGreaterThan(0);
     expect(tailCalls.every((args) => args[4] === 1)).toBe(true);
+    renderer.unmount();
+  });
+
+  it("keeps right-to-left particles unmirrored by default", () => {
+    const renderer = renderCanvas();
+    act(() => rafCallbacks.shift()!(1_000_000_000));
+
+    expect(contextOperations).not.toContainEqual({ type: "scale", args: [-1, 1] });
+    renderer.unmount();
+  });
+
+  it("mirrors particle sprites and tails for left-to-right flow", () => {
+    const renderer = renderCanvas("fixture-goal-controller", "left-to-right");
+    act(() => rafCallbacks.shift()!(1_000_000_000));
+
+    expect(contextOperations).toContainEqual({ type: "scale", args: [-1, 1] });
+    expect(contextOperations.some(({ type }) => type === "save")).toBe(true);
+    expect(contextOperations.some(({ type }) => type === "translate")).toBe(true);
+    expect(contextOperations.some(({ type }) => type === "restore")).toBe(true);
     renderer.unmount();
   });
 

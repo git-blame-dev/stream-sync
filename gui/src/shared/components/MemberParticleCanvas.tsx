@@ -2,14 +2,17 @@ import React from 'react'
 
 import {
   generateMemberParticleSet,
+  memberParticleHorizontalPosition,
   memberParticleOpacity,
   memberParticleProgress,
   memberParticleSeedId,
-  type MemberParticle
+  type MemberParticle,
+  type MemberParticleDirection
 } from '../member-particles'
 
 interface MemberParticleCanvasProps {
   readonly seed: string
+  readonly direction?: MemberParticleDirection
 }
 
 interface ParticleSprite {
@@ -64,18 +67,27 @@ function drawParticle(
   particle: MemberParticle,
   progress: number,
   width: number,
-  height: number
+  height: number,
+  direction: MemberParticleDirection
 ): void {
   const opacity = memberParticleOpacity(particle, progress)
   if (opacity <= 0) return
   const sprite = createParticleSprite(particle.size * PARTICLE_VISUAL_SCALE, particle.tailScale)
-  const x = width * (1 - progress)
+  const x = memberParticleHorizontalPosition(direction, progress, width, sprite.width)
   const y = height * (particle.y / 100) + particle.drift * progress
   context.globalAlpha = opacity
+  if (direction === 'left-to-right') {
+    context.save()
+    context.translate(x + sprite.width, 0)
+    context.scale(-1, 1)
+    context.drawImage(sprite.canvas, 0, y - sprite.height / 2, sprite.width, sprite.height)
+    context.restore()
+    return
+  }
   context.drawImage(sprite.canvas, x, y - sprite.height / 2, sprite.width, sprite.height)
 }
 
-export function MemberParticleCanvas({ seed }: MemberParticleCanvasProps): React.JSX.Element {
+export function MemberParticleCanvas({ seed, direction = 'right-to-left' }: MemberParticleCanvasProps): React.JSX.Element {
   const canvasRef = React.useRef<HTMLCanvasElement>(null)
 
   React.useEffect(() => {
@@ -134,12 +146,12 @@ export function MemberParticleCanvas({ seed }: MemberParticleCanvasProps): React
       const burstTime = elapsed % particles.cycleMs
       for (const particle of particles.burst) {
         const progress = memberParticleProgress(particle, burstTime)
-        if (progress !== null) drawParticle(context, particle, progress, width, height)
+        if (progress !== null) drawParticle(context, particle, progress, width, height, direction)
       }
       for (const particle of particles.continuous) {
         if (elapsed < particle.startMs) continue
         const progress = ((elapsed - particle.startMs) % particle.durationMs) / particle.durationMs
-        drawParticle(context, particle, progress, width, height)
+        drawParticle(context, particle, progress, width, height, direction)
       }
       context.globalAlpha = 1
       animationFrame = requestAnimationFrame(draw)
@@ -191,7 +203,7 @@ export function MemberParticleCanvas({ seed }: MemberParticleCanvasProps): React
       motionQuery.removeEventListener('change', handleMotionChange)
       releaseBackingStore()
     }
-  }, [seed])
+  }, [direction, seed])
 
   return (
     <canvas
