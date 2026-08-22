@@ -239,6 +239,7 @@ interface PreviewPipeline {
 interface PreviewService {
     start: () => Promise<void>;
     stop: () => Promise<void>;
+    getAddress: () => { port: number } | string | null;
     getSseClientCount?: () => number;
 }
 
@@ -2009,7 +2010,11 @@ async function runGuiPreview(options: RunGuiPreviewOptions = {}): Promise<void> 
 
         const guiConfig = getPreviewRecord(config, 'gui');
         const host = typeof guiConfig.host === 'string' ? guiConfig.host : '127.0.0.1';
-        const port = typeof guiConfig.port === 'number' || typeof guiConfig.port === 'string' ? guiConfig.port : 3000;
+        const address = activeService.getAddress();
+        if (!address || typeof address === 'string') {
+            throw new Error('GUI preview transport did not report a bound TCP address');
+        }
+        const port = address.port;
         stdout.write(`GUI preview running with ${Math.floor(durationMs / 1000)}s dispatch window\n`);
         stdout.write(`Scenario: ${scenario}\n`);
         stdout.write(`Dock URL: http://${host}:${port}/dock\n`);

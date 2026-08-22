@@ -131,6 +131,7 @@ type PreviewModule = {
     createGuiTransportServiceImpl?: (args: UnknownRecord) => {
       start: () => Promise<void>;
       stop: () => Promise<void>;
+      getAddress: () => { port: number } | string | null;
     };
     safeSetIntervalImpl?: (
       callback: () => void,
@@ -194,7 +195,11 @@ describe("GUI local preview command behavior", () => {
       waitForShutdownImpl: async () => { shutdownWaited = true; },
       createPreviewPipelineImpl: () => ({ eventBus, emitIngestEvent() {}, async dispose() {} }),
       createPreviewIngestAdaptersImpl: () => ({ twitch: { async ingest() {} }, youtube: { async ingest() {} }, tiktok: { async ingest() {} } }),
-      createGuiTransportServiceImpl: () => ({ async start() {}, async stop() { stopped = true; } }),
+      createGuiTransportServiceImpl: () => ({
+        async start() {},
+        async stop() { stopped = true; },
+        getAddress: () => ({ port: 3399 }),
+      }),
       safeSetIntervalImpl: (callback) => { callback(); return 1; },
       safeSetTimeoutImpl: (resolve) => resolve(),
       stdout: { write: (text: string) => writes.push(text) },
@@ -618,6 +623,9 @@ describe("GUI local preview command behavior", () => {
       async stop() {
         stopped = true;
       },
+      getAddress() {
+        return { port: 43123 };
+      },
       getSseClientCount() {
         return clientCount;
       },
@@ -707,7 +715,7 @@ describe("GUI local preview command behavior", () => {
     expect(
       emittedEvents.some((entry) => entry.eventName === "display:row"),
     ).toBe(false);
-    expect(writes.some((line) => line.includes("Dock URL"))).toBe(true);
+    expect(writes).toContain("Dock URL: http://127.0.0.1:43123/dock\n");
     expect(writes.some((line) => line.includes("Goal URL") && !line.includes("Goal minimal URL"))).toBe(true);
     expect(writes.some((line) => line.includes("Goal minimal URL"))).toBe(true);
     expect(
@@ -753,6 +761,7 @@ describe("GUI local preview command behavior", () => {
       createGuiTransportServiceImpl: () => ({
         async start() {},
         async stop() {},
+        getAddress: () => ({ port: 3399 }),
       }),
       safeSetIntervalImpl: (callback: () => void) => {
         intervalTick = () => {
@@ -1386,6 +1395,7 @@ describe("GUI local preview command behavior", () => {
         createGuiTransportServiceImpl: () => ({
           async start() {},
           async stop() {},
+          getAddress: () => ({ port: 3399 }),
         }),
       }),
     ).rejects.toThrow("Preview pipeline requires eventBus and emitIngestEvent");
@@ -1425,6 +1435,7 @@ describe("GUI local preview command behavior", () => {
         async stop() {
           throw new Error("stop failed");
         },
+        getAddress: () => ({ port: 3399 }),
       }),
       safeSetIntervalImpl: (callback: () => void) => {
         intervalTick = callback;
@@ -1474,6 +1485,7 @@ describe("GUI local preview command behavior", () => {
             throw new Error("start failed");
           },
           async stop() {},
+          getAddress: () => ({ port: 3399 }),
         }),
         stdout: {
           write() {},
@@ -1524,6 +1536,7 @@ describe("GUI local preview command behavior", () => {
         createGuiTransportServiceImpl: () => ({
           async start() {},
           async stop() {},
+          getAddress: () => ({ port: 3399 }),
         }),
         safeSetIntervalImpl: (callback: () => void) => {
           intervalTick = callback;
@@ -1573,6 +1586,7 @@ describe("GUI local preview command behavior", () => {
       createGuiTransportServiceImpl: () => ({
         async start() {},
         async stop() {},
+        getAddress: () => ({ port: 3399 }),
       }),
       safeSetIntervalImpl: (callback: () => void) => {
         intervalTick = callback;
@@ -1649,6 +1663,7 @@ describe("GUI local preview command behavior", () => {
       createGuiTransportServiceImpl: () => ({
         async start() {},
         async stop() {},
+        getAddress: () => ({ port: 3399 }),
       }),
       safeSetIntervalImpl: (callback: () => void) => {
         intervalTick = callback;
