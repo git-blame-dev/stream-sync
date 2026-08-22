@@ -68,6 +68,8 @@ describe("config example template behavior", () => {
     });
     expect(normalized.monetizationValues).not.toHaveProperty("paypiggyUsd");
     expect(normalized.monetizationValues).not.toHaveProperty("fundingValuationUsd");
+    expect(normalized.http.enhancedTimeoutMs).toBe(6000);
+    expect(normalized.http.enhancedTimeoutMs).toBe(DEFAULTS.http.enhancedTimeoutMs);
     expect(ConfigValidator.validate(normalized)).toEqual({ isValid: true, errors: [] });
   });
 

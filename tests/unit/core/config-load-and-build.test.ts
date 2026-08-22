@@ -8,6 +8,7 @@ import { captureStdout } from '../../helpers/output-capture';
 import * as configModuleRef from '../../../src/core/config.ts';
 import { buildLoggingConfig } from '../../../src/core/config-builders.ts';
 import { ConfigValidator } from '../../../src/utils/config-validator';
+import { createEnhancedHttpClient } from '../../../src/utils/enhanced-http-client';
 
 type LoadedConfigModule = typeof configModuleRef;
 
@@ -56,7 +57,7 @@ describe('config load and build behavior', () => {
         configModule = configModuleRef;
     });
 
-    it('loads and builds configuration from ini file with debug enabled', () => {
+    it('loads and builds configuration from ini file with debug enabled', async () => {
         const stdoutCapture = captureStdout();
         try {
 configModule = configModuleRef;
@@ -96,7 +97,7 @@ configModule = configModuleRef;
                 userAgents: 'test-agent',
                 defaultTimeoutMs: '10000',
                 reachabilityTimeoutMs: '5000',
-                enhancedTimeoutMs: '3000',
+                enhancedTimeoutMs: '6000',
                 enhancedReachabilityTimeoutMs: '3000'
             };
 
@@ -108,6 +109,21 @@ configModule = configModuleRef;
             const built = getBuiltConfig(configModule);
 
             expect(normalized.general.debugEnabled).toBe(true);
+            expect(normalized.http.enhancedTimeoutMs).toBe(6000);
+            let requestConfig: Record<string, unknown> | undefined;
+            const enhancedHttpClient = createEnhancedHttpClient({
+                axios: {
+                    get: async (_url, config) => {
+                        requestConfig = config;
+                        return { data: {}, status: 200 };
+                    },
+                    post: async () => ({ data: {}, status: 200 }),
+                    put: async () => ({ data: {}, status: 200 }),
+                    delete: async () => ({ data: {}, status: 200 })
+                }
+            });
+            await enhancedHttpClient.get('https://api.twitch.tv/helix/test');
+            expect(requestConfig?.timeout).toBe(6000);
             expect(built.general.viewerCountPollingIntervalMs).toBe(60000);
             expect(built.obs.enabled).toBe(true);
             expect(built.obs.address).toBe('ws://localhost:4455');

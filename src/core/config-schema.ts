@@ -1,5 +1,7 @@
 import type { ConfigDefaults, ConfigFieldSpec, ConfigSchema, ConfigSectionSpec } from './types/config-types';
 
+const DEFAULT_ENHANCED_TIMEOUT_MS = 6_000;
+
 const CONFIG_SCHEMA: ConfigSchema = {
     general: {
         debugEnabled: { type: 'boolean', default: false },
@@ -29,7 +31,7 @@ const CONFIG_SCHEMA: ConfigSchema = {
         userAgents: { type: 'stringArray', default: null },
         defaultTimeoutMs: { type: 'number', default: 10000 },
         reachabilityTimeoutMs: { type: 'number', default: 5000 },
-        enhancedTimeoutMs: { type: 'number', default: 3000 },
+        enhancedTimeoutMs: { type: 'number', default: DEFAULT_ENHANCED_TIMEOUT_MS },
         enhancedReachabilityTimeoutMs: { type: 'number', default: 3000 }
     },
 
@@ -313,5 +315,6 @@ export {
     isConfigFieldSpec,
     getFieldsRequiredWhenEnabled,
     buildDefaultsFromSchema,
+    DEFAULT_ENHANCED_TIMEOUT_MS,
     DEFAULTS
 };

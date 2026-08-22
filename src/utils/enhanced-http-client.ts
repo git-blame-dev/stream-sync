@@ -4,6 +4,7 @@ import { AuthConstants } from './auth-constants';
 import { createHttpRetryExecutor, type RetryExecutor } from './http-retry-executor';
 import { resolveLogger } from './logger-resolver';
 import { config as appConfig } from '../core/config';
+import { DEFAULT_ENHANCED_TIMEOUT_MS } from '../core/config-schema';
 
 type HttpClientAdapter = {
     get: (url: string, config: Record<string, unknown>) => Promise<Record<string, unknown>>;
@@ -105,7 +106,7 @@ class EnhancedHttpClient {
         this.axios = config.axios || axiosClient;
         this.logger = resolveLogger(config.logger, 'EnhancedHttpClient');
         const httpConfig = getHttpRuntimeConfig();
-        this.defaultTimeout = resolveTimeout(config.timeout, resolveTimeout(httpConfig.enhancedTimeoutMs, 10_000));
+        this.defaultTimeout = resolveTimeout(config.timeout, resolveTimeout(httpConfig.enhancedTimeoutMs, DEFAULT_ENHANCED_TIMEOUT_MS));
         this.reachabilityTimeoutMs = resolveTimeout(config.reachabilityTimeoutMs, resolveTimeout(httpConfig.enhancedReachabilityTimeoutMs, 5_000));
         this.retryExecutor = config.retryExecutor || createHttpRetryExecutor({ logger: this.logger });
         this.userAgents = Array.isArray(config.userAgents)
