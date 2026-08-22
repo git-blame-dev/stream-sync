@@ -29,7 +29,22 @@ describe('funding goal schema', () => {
         expect(fundingGoal.enabled).toEqual({ type: 'boolean', default: false });
         expect(fundingGoal.label).toEqual({ type: 'string', default: 'Support Goal' });
         expect(fundingGoal.targetUsd).toEqual({ type: 'number', default: 100, min: 0, allowZero: false });
-        expect(fundingGoal.youtubeJewelsUsd).toEqual({ type: 'number', default: 0, min: 0 });
+        expect(CONFIG_SCHEMA.monetizationValues?.youtubeJewelUsd).toEqual({ type: 'number', default: 0.005, min: 0 });
+    });
+});
+
+describe('monetization values schema', () => {
+    it('contains exactly the approved nonnegative fields and defaults', () => {
+        expect(CONFIG_SCHEMA.monetizationValues).toEqual({
+            tiktokGiftUnitUsd: { type: 'number', default: 0.005, min: 0 },
+            twitchBitUsd: { type: 'number', default: 0.01, min: 0 },
+            youtubeJewelUsd: { type: 'number', default: 0.005, min: 0 },
+            tiktokMembershipUsd: { type: 'number', default: 2.10, min: 0 },
+            twitchMembershipUsd: { type: 'number', default: 3.50, min: 0 },
+            youtubeMembershipUsd: { type: 'number', default: 3.89, min: 0 },
+        });
+        expect(CONFIG_SCHEMA.monetizationValues).not.toHaveProperty('paypiggyUsd');
+        expect(CONFIG_SCHEMA.monetizationValues).not.toHaveProperty('fundingValuationUsd');
     });
 });
 

@@ -32,21 +32,28 @@ describe("Goal Tracker - Core Functionality", () => {
       tiktokGoalSource: "tiktok goal txt",
       tiktokGoalTarget: 1000,
       tiktokGoalCurrency: "coins",
-      tiktokPaypiggyEquivalent: 50,
       youtubeGoalEnabled: true,
       youtubeGoalSource: "youtube goal txt",
       youtubeGoalTarget: 1.0,
       youtubeGoalCurrency: "dollars",
-      youtubePaypiggyPrice: 4.99,
       twitchGoalEnabled: true,
       twitchGoalSource: "twitch goal txt",
       twitchGoalTarget: 100,
       twitchGoalCurrency: "bits",
-      twitchPaypiggyEquivalent: 350,
     };
 
     goalTracker = new GoalTracker({
-      config: { goals: configFixture },
+      config: {
+        goals: configFixture,
+        monetizationValues: {
+          tiktokGiftUnitUsd: 0.005,
+          twitchBitUsd: 0.01,
+          youtubeJewelUsd: 0.01,
+          tiktokMembershipUsd: 2.10,
+          twitchMembershipUsd: 3.50,
+          youtubeMembershipUsd: 3.89,
+        },
+      },
     });
   });
 
@@ -237,16 +244,16 @@ describe("Goal Tracker - Core Functionality", () => {
         const result = await goalTracker.addPaypiggyToGoal("tiktok");
 
         expect(result.success).toBe(true);
-        expect(result.newTotal).toBe(50);
+        expect(result.newTotal).toBe(420);
         if (!("paypiggyValue" in result)) {
           throw new Error("Expected TikTok paypiggy result value");
         }
-        expect(result.paypiggyValue).toBe(50);
+        expect(result.paypiggyValue).toBe(420);
         if (!("paypiggyCount" in result)) {
           throw new Error("Expected TikTok paypiggy result count");
         }
         expect(result.paypiggyCount).toBe(1);
-        expect(result.formatted).toBe("0050/1000 coins");
+        expect(result.formatted).toBe("0420/1000 coins");
       },
       TEST_TIMEOUTS.FAST,
     );
@@ -288,6 +295,14 @@ describe("Goal Tracker - Core Functionality", () => {
               youtubeGoalTarget: 500,
               youtubeGoalCurrency: "jewels",
             },
+            monetizationValues: {
+              tiktokGiftUnitUsd: 0.005,
+              twitchBitUsd: 0.01,
+              youtubeJewelUsd: 0.01,
+              tiktokMembershipUsd: 2.10,
+              twitchMembershipUsd: 3.50,
+              youtubeMembershipUsd: 3.89,
+            },
           },
         });
         await goalTracker.initializeGoalTracker();
@@ -307,11 +322,11 @@ describe("Goal Tracker - Core Functionality", () => {
         const result = await goalTracker.addPaypiggyToGoal("youtube");
 
         expect(result.success).toBe(true);
-        expect(result.newTotal).toBe(4.99);
+        expect(result.newTotal).toBe(3.89);
         if (!("paypiggyValue" in result)) {
           throw new Error("Expected YouTube paypiggy result value");
         }
-        expect(result.paypiggyValue).toBe(4.99);
+        expect(result.paypiggyValue).toBe(3.89);
         expect(result.goalCompleted).toBe(true);
       },
       TEST_TIMEOUTS.FAST,
@@ -329,6 +344,84 @@ describe("Goal Tracker - Core Functionality", () => {
         }
         expect(result.paypiggyValue).toBe(350);
         expect(result.goalCompleted).toBe(true);
+      },
+      TEST_TIMEOUTS.FAST,
+    );
+
+    test(
+      "should skip paypiggy when a unit value is zero without mutation",
+      async () => {
+        goalTracker = new GoalTracker({
+          config: {
+            goals: configFixture,
+            monetizationValues: {
+              tiktokGiftUnitUsd: 0,
+              twitchBitUsd: 0.01,
+              youtubeJewelUsd: 0.01,
+              tiktokMembershipUsd: 2.10,
+              twitchMembershipUsd: 3.50,
+              youtubeMembershipUsd: 3.89,
+            },
+          },
+        });
+        await goalTracker.initializeGoalTracker();
+
+        const result = await goalTracker.addPaypiggyToGoal("tiktok");
+
+        expect(result.success).toBe(false);
+        expect(requireGoalState(goalTracker.getGoalState("tiktok"), "tiktok").current).toBe(0);
+      },
+      TEST_TIMEOUTS.FAST,
+    );
+
+    test(
+      "should convert foreign YouTube fiat through the injected converter",
+      async () => {
+        const converterCalls: Array<[number, string]> = [];
+        goalTracker = new GoalTracker({
+          config: { goals: configFixture },
+          usdConverter: (amount, currency) => {
+            converterCalls.push([amount, currency]);
+            return 3.89;
+          },
+        });
+        await goalTracker.initializeGoalTracker();
+
+        const result = await goalTracker.addDonationToGoal("youtube", 4, "EUR");
+
+        expect(result.success).toBe(true);
+        expect(result.newTotal).toBe(3.89);
+        expect(converterCalls).toEqual([[4, "EUR"]]);
+      },
+      TEST_TIMEOUTS.FAST,
+    );
+
+    test(
+      "should skip unsupported YouTube currency without mutation",
+      async () => {
+        const converter = () => 3.89;
+        goalTracker = new GoalTracker({
+          config: { goals: configFixture },
+          usdConverter: converter,
+        });
+        await goalTracker.initializeGoalTracker();
+
+        const result = await goalTracker.addDonationToGoal("youtube", 4, "not-a-currency");
+
+        expect(result.success).toBe(false);
+        expect(result.skipped).toBe(true);
+        expect(requireGoalState(goalTracker.getGoalState("youtube"), "youtube").current).toBe(0);
+      },
+      TEST_TIMEOUTS.FAST,
+    );
+
+    test(
+      "should keep native donations unchanged",
+      async () => {
+        const result = await goalTracker.addDonationToGoal("youtube", 1.25);
+
+        expect(result.success).toBe(true);
+        expect(result.newTotal).toBe(1.25);
       },
       TEST_TIMEOUTS.FAST,
     );

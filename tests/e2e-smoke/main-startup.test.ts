@@ -9,12 +9,19 @@ import {
 } from "../helpers/bun-timers";
 import { main } from "../../src/main.ts";
 import type { SingleInstanceMetadata } from "../../src/services/SingleInstanceGuard.ts";
+import type { UsdRateService } from "../../src/services/usd-rate-service";
 import { createDonationSpamDetection } from "../../src/utils/spam-detection";
 
 type OutputCapture = ReturnType<typeof captureStdout>;
 type StartupOnlyEnv = NodeJS.ProcessEnv["CHAT_BOT_STARTUP_ONLY"];
 type MainOverridesArg = NonNullable<Parameters<typeof main>[0]>;
 type DonationSpamFactory = NonNullable<MainOverridesArg["createDonationSpamDetection"]>;
+
+const TEST_USD_RATE_SERVICE: UsdRateService = Object.freeze({
+  rates: Object.freeze({ USD: 1 }),
+  convertToUsd: (amount: number, currency: string) =>
+    currency.trim().toUpperCase() === "USD" ? amount : null,
+});
 
 const createSuccessfulSecretSetupResult = () => ({
   applied: {},
@@ -116,6 +123,7 @@ describe("main startup smoke", () => {
       createOBSEventService: () => ({ disconnect: async () => {} }),
       createSceneManagementService: () => ({}),
       createDonationSpamDetection: createDonationSpamDetectionNoCleanup,
+      createUsdRateService: async () => TEST_USD_RATE_SERVICE,
     };
 
     const result = await main({

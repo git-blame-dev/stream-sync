@@ -2,6 +2,7 @@ import { OBSEffectsManager } from './effects';
 import { createOBSGoalsManager } from './goals';
 import { createOBSSourcesManager } from './sources';
 import { logger as defaultLogger } from '../core/logging';
+import type { SynchronousUsdConverter } from '../core/monetization-values';
 
 type ObsManagerLike = {
     ensureConnected: () => Promise<void>;
@@ -39,6 +40,7 @@ type ObsSubsystemDeps = {
         obsSources: unknown;
         logger: LoggerLike;
     }) => unknown;
+    usdConverter?: SynchronousUsdConverter;
 };
 
 function createOBSSubsystem(deps: ObsSubsystemDeps) {
@@ -89,17 +91,18 @@ function createOBSSubsystem(deps: ObsSubsystemDeps) {
         throw new Error('createOBSSubsystem requires goals configuration');
     }
 
-    const goalsConfig: ObsSubsystemConfig & { goals: Record<string, unknown> } = {
+    const goalTrackerConfig: ObsSubsystemConfig & { goals: Record<string, unknown> } = {
         ...deps.config,
         goals: deps.config.goals
     };
 
     const goalsManager = createOBSGoalsManager(connectionManager, {
         logger: deps.logger,
-        config: goalsConfig,
+        config: goalTrackerConfig,
         updateTextSource: async (sourceName: string, text?: string) => {
             await sourcesManager.updateTextSource(sourceName, text);
-        }
+        },
+        ...(deps.usdConverter ? { usdConverter: deps.usdConverter } : {})
     });
     const obsEventService = deps.createOBSEventService({
         eventBus: deps.eventBus,

@@ -77,6 +77,7 @@ describe("ConfigValidator.normalize()", () => {
     "handcam",
     "goals",
     "fundingGoal",
+    "monetizationValues",
     "gifts",
     "envelopes",
     "cooldowns",
@@ -124,6 +125,21 @@ describe("ConfigValidator.normalize()", () => {
     expect(normalized.tiktok.enabled).toBe(false);
   });
 
+  it("normalizes all monetization overrides, including explicit zero", () => {
+    const normalized = ConfigValidator.normalize({ monetizationValues: {
+      tiktokGiftUnitUsd: "0", twitchBitUsd: "0", youtubeJewelUsd: "0",
+      tiktokMembershipUsd: "0", twitchMembershipUsd: "0", youtubeMembershipUsd: "0",
+      paypiggyUsd: "99", fundingValuationUsd: "88",
+    } });
+
+    expect(normalized.monetizationValues).toEqual({
+      tiktokGiftUnitUsd: 0, twitchBitUsd: 0, youtubeJewelUsd: 0,
+      tiktokMembershipUsd: 0, twitchMembershipUsd: 0, youtubeMembershipUsd: 0,
+    });
+    expect(normalized.monetizationValues).not.toHaveProperty("paypiggyUsd");
+    expect(normalized.monetizationValues).not.toHaveProperty("fundingValuationUsd");
+  });
+
   it("normalizes a Unicode funding label and valuation settings", () => {
     const normalized = ConfigValidator.normalize({
       fundingGoal: {
@@ -139,9 +155,6 @@ describe("ConfigValidator.normalize()", () => {
       id: "controller",
       label: "🎮 New Controller",
       targetUsd: 100,
-      tiktokUsdPerCoin: 0,
-      twitchUsdPerBit: 0.01,
-      youtubeJewelsUsd: 0,
     });
   });
 });

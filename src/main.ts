@@ -49,10 +49,11 @@ import { ensureSecrets } from './utils/secret-manager';
 import { createTextProcessingManager } from './utils/text-processing';
 import { safeSetInterval } from './utils/timeout-validator';
 import { createOBSSubsystem } from './obs/subsystem';
+import type { MonetizationValuesConfig } from './core/monetization-values';
+import { createUsdRateService, type UsdRateService } from './services/usd-rate-service';
 import {
     createFundingGoalService,
-    type FundingGoalConfig,
-    type FundingGoalValuesConfig
+    type FundingGoalConfig
 } from './services/funding-goal-service';
 
 type YouTubeModuleLike = {
@@ -147,6 +148,7 @@ type MainOverrides = Record<string, unknown> & {
     createOperatorControlService?: typeof createOperatorControlService;
     createOperatorAppearanceService?: typeof createOperatorAppearanceService;
     createFundingGoalService?: typeof createFundingGoalService;
+    createUsdRateService?: typeof createUsdRateService;
 };
 
 type CooldownsConfig = {
@@ -669,6 +671,7 @@ async function main(overrides: MainOverrides = {}) {
     const createProductionDependenciesFn = runtimeOverrides.createProductionDependencies || createProductionDependencies;
     const createSingleInstanceGuardFn = runtimeOverrides.createSingleInstanceGuard || acquireSingleInstanceGuard;
     const createFundingGoalServiceFn = runtimeOverrides.createFundingGoalService || createFundingGoalService;
+    const createUsdRateServiceFn = runtimeOverrides.createUsdRateService || createUsdRateService;
     let singleInstanceGuard: SingleInstanceGuard | null = null;
     let fundingGoal: Awaited<ReturnType<typeof createFundingGoalService>> | undefined;
     let fundingGoalOwned = false;
@@ -695,6 +698,16 @@ async function main(overrides: MainOverrides = {}) {
                 logContext: 'Main'
             });
             throw error;
+        }
+
+        let usdRateService: UsdRateService = {
+            rates: { USD: 1 },
+            convertToUsd: (amount, currency) => currency.trim().toUpperCase() === 'USD' ? amount : null
+        };
+        try {
+            usdRateService = await createUsdRateServiceFn({ warn: (message) => logger.warn(message, 'usd-rates') });
+        } catch (error) {
+            logger.warn(`USD rate service unavailable; foreign YouTube gifts will be skipped: ${error instanceof Error ? error.message : String(error)}`, 'usd-rates');
         }
 
         let twitchAuth = null;
@@ -803,7 +816,8 @@ async function main(overrides: MainOverrides = {}) {
         logger.debug('EventBus created', 'Main');
         fundingGoal = await createFundingGoalServiceFn({
             config: config.fundingGoal as unknown as FundingGoalConfig,
-            goalsConfig: config.goals as unknown as FundingGoalValuesConfig,
+            monetizationValuesConfig: config.monetizationValues as unknown as MonetizationValuesConfig,
+            fiatToUsd: usdRateService.convertToUsd,
             eventBus,
             warn: (message) => logger.warn(message, 'funding-goal'),
             debug: (message) => logger.debug(message, 'funding-goal')
@@ -814,7 +828,8 @@ async function main(overrides: MainOverrides = {}) {
             logger,
             eventBus,
             getOBSConnectionManager: getOBSConnectionManagerFn,
-            createOBSEventService: (deps) => createOBSEventServiceFn(deps as unknown as Parameters<typeof createOBSEventService>[0])
+            createOBSEventService: (deps) => createOBSEventServiceFn(deps as unknown as Parameters<typeof createOBSEventService>[0]),
+            usdConverter: usdRateService.convertToUsd
         });
 
         logger.debug('About to initialize display queue...', 'Main');

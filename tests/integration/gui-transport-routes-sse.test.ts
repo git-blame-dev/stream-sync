@@ -123,11 +123,15 @@ describe("GUI transport routes and SSE integration", () => {
         id: "controller",
         label: "🎮 New Controller",
         targetUsd: 100,
-        tiktokUsdPerCoin: 0.0127,
-        twitchUsdPerBit: 0.01,
-        youtubeJewelsUsd: 0,
       },
-      goalsConfig: {},
+      monetizationValuesConfig: {
+        tiktokGiftUnitUsd: 0.005,
+        twitchBitUsd: 0.01,
+        youtubeJewelUsd: 0.005,
+        tiktokMembershipUsd: 2.10,
+        twitchMembershipUsd: 3.50,
+        youtubeMembershipUsd: 3.89,
+      },
       filePath: path.join(root, "funding-goal.json"),
     });
     await fundingGoal.setTotal(25);
@@ -1455,8 +1459,8 @@ describe("GUI transport routes and SSE integration", () => {
   it("serves the active goal page for GET and HEAD with standard and minimal variants", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "gui-goal-route-"));
     const fundingGoal = await createFundingGoalService({
-      config: { enabled: true, id: "controller", label: "Goal", targetUsd: 100, tiktokUsdPerCoin: 0.01, twitchUsdPerBit: 0.01, youtubeJewelsUsd: 0 },
-      goalsConfig: {}, filePath: path.join(root, "funding-goal.json")
+      config: { enabled: true, id: "controller", label: "Goal", targetUsd: 100 },
+      monetizationValuesConfig: { tiktokGiftUnitUsd: 0.005, twitchBitUsd: 0.01, youtubeJewelUsd: 0.005, tiktokMembershipUsd: 2.10, twitchMembershipUsd: 3.50, youtubeMembershipUsd: 3.89 }, filePath: path.join(root, "funding-goal.json")
     });
     const service = createGuiTransportService({ config: buildConfig({ enableOverlay: true, port: 0 }), eventBus: new TestEventBus(), fundingGoal, logger: null });
     await service.start();

@@ -204,27 +204,30 @@ const CONFIG_SCHEMA: ConfigSchema = {
         tiktokGoalSource: { type: 'string', userDefined: true },
         tiktokGoalTarget: { type: 'number', default: 1000 },
         tiktokGoalCurrency: { type: 'string', default: 'coins' },
-        tiktokPaypiggyEquivalent: { type: 'number', default: 50 },
         youtubeGoalEnabled: { type: 'boolean', default: true },
         youtubeGoalSource: { type: 'string', userDefined: true },
         youtubeGoalTarget: { type: 'number', default: 1.00 },
         youtubeGoalCurrency: { type: 'string', default: 'dollars' },
-        youtubePaypiggyPrice: { type: 'number', default: 4.99 },
         twitchGoalEnabled: { type: 'boolean', default: true },
         twitchGoalSource: { type: 'string', userDefined: true },
         twitchGoalTarget: { type: 'number', default: 100 },
-        twitchGoalCurrency: { type: 'string', default: 'bits' },
-        twitchPaypiggyEquivalent: { type: 'number', default: 350 }
+        twitchGoalCurrency: { type: 'string', default: 'bits' }
     },
 
     fundingGoal: {
         enabled: { type: 'boolean', default: false },
         id: { type: 'string', default: 'support' },
         label: { type: 'string', default: 'Support Goal' },
-        targetUsd: { type: 'number', default: 100, min: 0, allowZero: false },
-        tiktokUsdPerCoin: { type: 'number', default: 0, min: 0 },
-        twitchUsdPerBit: { type: 'number', default: 0.01, min: 0 },
-        youtubeJewelsUsd: { type: 'number', default: 0, min: 0 }
+        targetUsd: { type: 'number', default: 100, min: 0, allowZero: false }
+    },
+
+    monetizationValues: {
+        tiktokGiftUnitUsd: { type: 'number', default: 0.005, min: 0 },
+        twitchBitUsd: { type: 'number', default: 0.01, min: 0 },
+        youtubeJewelUsd: { type: 'number', default: 0.005, min: 0 },
+        tiktokMembershipUsd: { type: 'number', default: 2.10, min: 0 },
+        twitchMembershipUsd: { type: 'number', default: 3.50, min: 0 },
+        youtubeMembershipUsd: { type: 'number', default: 3.89, min: 0 }
     },
 
     gifts: {

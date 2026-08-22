@@ -57,8 +57,25 @@ describe("config example template behavior", () => {
       id: "support",
       label: "Support Goal",
       targetUsd: 100,
-      youtubeJewelsUsd: 0,
     });
+    expect(normalized.monetizationValues).toEqual({
+      tiktokGiftUnitUsd: 0.005,
+      twitchBitUsd: 0.01,
+      youtubeJewelUsd: 0.005,
+      tiktokMembershipUsd: 2.10,
+      twitchMembershipUsd: 3.50,
+      youtubeMembershipUsd: 3.89,
+    });
+    expect(normalized.monetizationValues).not.toHaveProperty("paypiggyUsd");
+    expect(normalized.monetizationValues).not.toHaveProperty("fundingValuationUsd");
     expect(ConfigValidator.validate(normalized)).toEqual({ isValid: true, errors: [] });
+  });
+
+  it("defines exactly the approved monetization values in the example", () => {
+    const parsed = readConfigExample();
+    expect(Object.keys(parsed.monetizationValues).sort()).toEqual([
+      "tiktokGiftUnitUsd", "tiktokMembershipUsd", "twitchBitUsd",
+      "twitchMembershipUsd", "youtubeJewelUsd", "youtubeMembershipUsd",
+    ].sort());
   });
 });

@@ -149,6 +149,7 @@ class ConfigValidator {
             handcam: ConfigValidator._normalizeHandcamSection(rawConfig.handcam || {}),
             goals: ConfigValidator._normalizeGoalsSection(rawConfig.goals || {}),
             fundingGoal: ConfigValidator._normalizeFundingGoalSection(rawConfig.fundingGoal || {}),
+            monetizationValues: ConfigValidator.normalizeFromSchema('monetizationValues', rawConfig.monetizationValues || {}),
             gifts: ConfigValidator._normalizeGiftsSection(rawConfig.gifts || {}),
             envelopes: ConfigValidator._normalizeEnvelopesSection(rawConfig.envelopes || {}),
             cooldowns: ConfigValidator._normalizeCooldownsSection(rawConfig.cooldowns || {}),
@@ -292,17 +293,14 @@ class ConfigValidator {
             tiktokGoalSource: ConfigValidator.parseString(raw.tiktokGoalSource, ''),
             tiktokGoalTarget: ConfigValidator.parseNumber(raw.tiktokGoalTarget, { defaultValue: DEFAULTS.goals.tiktokGoalTarget }),
             tiktokGoalCurrency: ConfigValidator.parseString(raw.tiktokGoalCurrency, DEFAULTS.goals.tiktokGoalCurrency),
-            tiktokPaypiggyEquivalent: ConfigValidator.parseNumber(raw.tiktokPaypiggyEquivalent, { defaultValue: DEFAULTS.goals.tiktokPaypiggyEquivalent }),
             youtubeGoalEnabled: ConfigValidator.parseBoolean(raw.youtubeGoalEnabled, DEFAULTS.goals.youtubeGoalEnabled),
             youtubeGoalSource: ConfigValidator.parseString(raw.youtubeGoalSource, ''),
             youtubeGoalTarget: ConfigValidator.parseNumber(raw.youtubeGoalTarget, { defaultValue: DEFAULTS.goals.youtubeGoalTarget }),
             youtubeGoalCurrency: ConfigValidator.parseString(raw.youtubeGoalCurrency, DEFAULTS.goals.youtubeGoalCurrency),
-            youtubePaypiggyPrice: ConfigValidator.parseNumber(raw.youtubePaypiggyPrice, { defaultValue: DEFAULTS.goals.youtubePaypiggyPrice }),
             twitchGoalEnabled: ConfigValidator.parseBoolean(raw.twitchGoalEnabled, DEFAULTS.goals.twitchGoalEnabled),
             twitchGoalSource: ConfigValidator.parseString(raw.twitchGoalSource, ''),
             twitchGoalTarget: ConfigValidator.parseNumber(raw.twitchGoalTarget, { defaultValue: DEFAULTS.goals.twitchGoalTarget }),
-            twitchGoalCurrency: ConfigValidator.parseString(raw.twitchGoalCurrency, DEFAULTS.goals.twitchGoalCurrency),
-            twitchPaypiggyEquivalent: ConfigValidator.parseNumber(raw.twitchPaypiggyEquivalent, { defaultValue: DEFAULTS.goals.twitchPaypiggyEquivalent })
+            twitchGoalCurrency: ConfigValidator.parseString(raw.twitchGoalCurrency, DEFAULTS.goals.twitchGoalCurrency)
         };
     }
 
@@ -311,10 +309,7 @@ class ConfigValidator {
             enabled: ConfigValidator.parseBoolean(raw.enabled, DEFAULTS.fundingGoal.enabled),
             id: ConfigValidator.parseString(raw.id, DEFAULTS.fundingGoal.id) || DEFAULTS.fundingGoal.id,
             label: ConfigValidator.parseString(raw.label, DEFAULTS.fundingGoal.label) || DEFAULTS.fundingGoal.label,
-            targetUsd: ConfigValidator._parseNumberFromSchema('fundingGoal', 'targetUsd', raw.targetUsd),
-            tiktokUsdPerCoin: ConfigValidator._parseNumberFromSchema('fundingGoal', 'tiktokUsdPerCoin', raw.tiktokUsdPerCoin),
-            twitchUsdPerBit: ConfigValidator._parseNumberFromSchema('fundingGoal', 'twitchUsdPerBit', raw.twitchUsdPerBit),
-            youtubeJewelsUsd: ConfigValidator._parseNumberFromSchema('fundingGoal', 'youtubeJewelsUsd', raw.youtubeJewelsUsd)
+            targetUsd: ConfigValidator._parseNumberFromSchema('fundingGoal', 'targetUsd', raw.targetUsd)
         };
     }
 

@@ -3,6 +3,7 @@ import { config as defaultConfig } from '../core/config';
 import { logger as defaultLogger } from '../core/logging';
 import { createPlatformErrorHandler } from './platform-error-handler';
 import { normalizeCurrency } from './currency-utils';
+import { membershipNativeUnits, type MonetizationValuesConfig, type SynchronousUsdConverter } from '../core/monetization-values';
 
 type GoalPlatform = 'tiktok' | 'youtube' | 'twitch';
 
@@ -23,22 +24,21 @@ type GoalTrackerConfig = {
         tiktokGoalEnabled?: boolean;
         tiktokGoalTarget?: number;
         tiktokGoalCurrency?: string;
-        tiktokPaypiggyEquivalent?: number;
         youtubeGoalEnabled?: boolean;
         youtubeGoalTarget?: number;
         youtubeGoalCurrency?: string;
-        youtubePaypiggyPrice?: number;
         twitchGoalEnabled?: boolean;
         twitchGoalTarget?: number;
         twitchGoalCurrency?: string;
-        twitchPaypiggyEquivalent?: number;
     };
+    monetizationValues?: MonetizationValuesConfig;
 };
 
 type GoalTrackerDependencies = {
     logger?: typeof defaultLogger;
     config?: GoalTrackerConfig;
     fileSystem?: typeof fs;
+    usdConverter?: SynchronousUsdConverter;
 };
 
 function createDefaultGoalState(): GoalStateRecord {
@@ -69,6 +69,7 @@ class GoalTracker {
     logger: typeof defaultLogger;
     config: GoalTrackerConfig;
     fileSystem: typeof fs;
+    usdConverter: SynchronousUsdConverter | undefined;
     errorHandler: ReturnType<typeof createPlatformErrorHandler>;
     goalState: GoalStateRecord;
 
@@ -76,6 +77,7 @@ class GoalTracker {
         this.logger = dependencies.logger || defaultLogger;
         this.config = (dependencies.config || defaultConfig) as GoalTrackerConfig;
         this.fileSystem = dependencies.fileSystem || fs;
+        this.usdConverter = dependencies.usdConverter;
         this.errorHandler = createPlatformErrorHandler(this.logger, 'goal-tracker');
         this.goalState = createDefaultGoalState();
     }
@@ -132,8 +134,8 @@ class GoalTracker {
                 };
             }
 
-            const numAmount = Number(amount);
-            if (!Number.isFinite(numAmount) || numAmount <= 0) {
+            let contributionAmount = Number(amount);
+            if (!Number.isFinite(contributionAmount) || contributionAmount <= 0) {
                 return {
                     success: false,
                     error: `Donation amount must be positive number, received: ${amount}`
@@ -142,7 +144,16 @@ class GoalTracker {
 
             const goalCurrency = this.goalState[platformKey].currency;
             if (contributionCurrencyInput !== undefined && contributionCurrencyInput !== null) {
-                const contributionCurrency = normalizeGoalCurrency(contributionCurrencyInput);
+                let contributionCurrency = normalizeGoalCurrency(contributionCurrencyInput);
+                if (platformKey === 'youtube' && goalCurrency === 'USD' && contributionCurrency !== goalCurrency) {
+                    const converted = contributionCurrency !== 'XXX'
+                        ? this.usdConverter?.(contributionAmount, contributionCurrency)
+                        : undefined;
+                    if (converted !== null && converted !== undefined && Number.isFinite(converted) && converted > 0) {
+                        contributionAmount = converted;
+                        contributionCurrency = goalCurrency;
+                    }
+                }
                 if (contributionCurrency !== goalCurrency) {
                     return {
                         success: false,
@@ -155,7 +166,7 @@ class GoalTracker {
             }
 
             const oldCurrent = this.goalState[platformKey].current;
-            this.goalState[platformKey].current += numAmount;
+            this.goalState[platformKey].current += contributionAmount;
 
             const newCurrent = this.goalState[platformKey].current;
             const target = this.goalState[platformKey].target;
@@ -211,17 +222,17 @@ class GoalTracker {
 
             switch (platformKey) {
                 case 'tiktok':
-                    paypiggyAmount = Number(this.config.goals.tiktokPaypiggyEquivalent);
+                    paypiggyAmount = membershipNativeUnits(this.config.monetizationValues?.tiktokMembershipUsd, this.config.monetizationValues?.tiktokGiftUnitUsd);
                     paypiggyCurrency = 'coins';
                     this.logger.debug(`Converting TikTok paypiggy to ${paypiggyAmount} coins`, 'goal-tracker');
                     break;
                 case 'youtube':
-                    paypiggyAmount = Number(this.config.goals.youtubePaypiggyPrice);
+                    paypiggyAmount = Number(this.config.monetizationValues?.youtubeMembershipUsd);
                     paypiggyCurrency = 'USD';
                     this.logger.debug(`Converting YouTube paypiggy to $${paypiggyAmount}`, 'goal-tracker');
                     break;
                 case 'twitch':
-                    paypiggyAmount = Number(this.config.goals.twitchPaypiggyEquivalent);
+                    paypiggyAmount = membershipNativeUnits(this.config.monetizationValues?.twitchMembershipUsd, this.config.monetizationValues?.twitchBitUsd);
                     paypiggyCurrency = 'bits';
                     this.logger.debug(`Converting Twitch paypiggy to ${paypiggyAmount} bits`, 'goal-tracker');
                     break;

@@ -48,6 +48,7 @@ export type ConfigSectionName =
     | 'obs'
     | 'goals'
     | 'fundingGoal'
+    | 'monetizationValues'
     | 'gifts'
     | 'envelopes'
     | 'farewell'

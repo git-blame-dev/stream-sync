@@ -2,6 +2,7 @@ import { logger as defaultLogger } from '../core/logging';
 import { config as defaultConfig } from '../core/config';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 import { createGoalTracker } from '../utils/goal-tracker';
+import type { SynchronousUsdConverter } from '../core/monetization-values';
 import { getOBSConnectionManager } from './connection';
 import { getDefaultSourcesManager as getDefaultSourcesManagerFromSources } from './sources';
 
@@ -66,6 +67,7 @@ type GoalsDependencies = {
     sourcesManager?: {
         updateTextSource: (sourceName: string, text?: string) => Promise<void>;
     };
+    usdConverter?: SynchronousUsdConverter;
 };
 
 type GoalsManager = {
@@ -91,7 +93,7 @@ function buildGoalsManager(obsManager: ObsManagerLike, dependencies: GoalsDepend
     const config = dependencies.config;
 
     const updateTextSource = dependencies.updateTextSource || getDefaultSourcesManager().updateTextSource;
-    const goalTracker = dependencies.goalTracker || createGoalTracker({ logger, config });
+    const goalTracker = dependencies.goalTracker || createGoalTracker({ logger, config, ...(dependencies.usdConverter ? { usdConverter: dependencies.usdConverter } : {}) });
     const initializeGoalTracker = goalTracker.initializeGoalTracker.bind(goalTracker);
     const addDonationToGoal = goalTracker.addDonationToGoal.bind(goalTracker);
     const addPaypiggyToGoal = goalTracker.addPaypiggyToGoal.bind(goalTracker);

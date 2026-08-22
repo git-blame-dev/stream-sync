@@ -486,11 +486,15 @@ describe("Monetisation pipeline integration", () => {
         id: "controller",
         label: "🎮 New Controller",
         targetUsd: 100,
-        tiktokUsdPerCoin: 0.0127,
-        twitchUsdPerBit: 0.01,
-        youtubeJewelsUsd: 0,
       },
-      goalsConfig: {},
+      monetizationValuesConfig: {
+        tiktokGiftUnitUsd: 0.005,
+        twitchBitUsd: 0.01,
+        youtubeJewelUsd: 0.005,
+        tiktokMembershipUsd: 2.10,
+        twitchMembershipUsd: 3.50,
+        youtubeMembershipUsd: 3.89,
+      },
       eventBus,
       filePath: join(root, "funding-goal.json"),
     });
@@ -520,6 +524,55 @@ describe("Monetisation pipeline integration", () => {
       expect(fundingGoal.snapshot.currentUsd).toBe(1);
       expect(displayQueue.queue).toHaveLength(0);
       expect(recordedEvents).toHaveLength(0);
+    } finally {
+      await fundingGoal.dispose();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("publishes foreign YouTube fiat through the injected converter on the event bus", async () => {
+    const root = await mkdtemp(join(tmpdir(), "funding-foreign-youtube-"));
+    const converterCalls: Array<[number, string]> = [];
+    const fundingGoal = await createFundingGoalService({
+      config: {
+        enabled: true,
+        id: "controller",
+        label: "🎮 New Controller",
+        targetUsd: 100,
+      },
+      monetizationValuesConfig: {
+        tiktokGiftUnitUsd: 0.005,
+        twitchBitUsd: 0.01,
+        youtubeJewelUsd: 0.005,
+        tiktokMembershipUsd: 2.10,
+        twitchMembershipUsd: 3.50,
+        youtubeMembershipUsd: 3.89,
+      },
+      fiatToUsd: (amount, currency) => {
+        converterCalls.push([amount, currency]);
+        return currency === "cad" ? amount * 0.75 : null;
+      },
+      eventBus,
+      filePath: join(root, "funding-goal.json"),
+    });
+
+    try {
+      eventBus.emit("platform:event", {
+        platform: "youtube",
+        type: "platform:gift",
+        data: {
+          username: "ForeignSupporter",
+          userId: "yt-cad-1",
+          id: "foreign-gift-1",
+          timestamp: fixedTimestamp,
+          amount: 4,
+          currency: "CAD",
+        },
+      });
+
+      await waitFor(() => fundingGoal.snapshot.currentUsd === 3);
+      expect(converterCalls).toEqual([[4, "cad"]]);
+      expect(fundingGoal.snapshot.currentUsd).toBe(3);
     } finally {
       await fundingGoal.dispose();
       await rm(root, { recursive: true, force: true });

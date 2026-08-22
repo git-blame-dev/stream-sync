@@ -72,11 +72,15 @@ async function createFixture(logSourceOptions?: { maxEntries?: number }) {
       id: "controller",
       label: "🎮 New Controller",
       targetUsd: 100,
-      tiktokUsdPerCoin: 0.0127,
-      twitchUsdPerBit: 0.01,
-      youtubeJewelsUsd: 0,
     },
-    goalsConfig: {},
+    monetizationValuesConfig: {
+      tiktokGiftUnitUsd: 0.005,
+      twitchBitUsd: 0.01,
+      youtubeJewelUsd: 0.005,
+      tiktokMembershipUsd: 2.10,
+      twitchMembershipUsd: 3.50,
+      youtubeMembershipUsd: 3.89,
+    },
     filePath: join(root, "funding-goal.json"),
   });
   const service = createGuiTransportService({

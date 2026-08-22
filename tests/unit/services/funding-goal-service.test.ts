@@ -44,14 +44,14 @@ function options(overrides: Partial<FundingGoalServiceOptions> = {}): FundingGoa
       id: "controller",
       label: "🎮 New Controller",
       targetUsd: 100,
-      tiktokUsdPerCoin: 0.0127,
-      twitchUsdPerBit: 0.01,
-      youtubeJewelsUsd: 0,
     },
-    goalsConfig: {
-      tiktokPaypiggyEquivalent: 420,
-      twitchPaypiggyEquivalent: 350,
-      youtubePaypiggyPrice: 3.89,
+    monetizationValuesConfig: {
+      tiktokGiftUnitUsd: 0.005,
+      twitchBitUsd: 0.01,
+      youtubeJewelUsd: 0.005,
+      tiktokMembershipUsd: 2.10,
+      twitchMembershipUsd: 3.50,
+      youtubeMembershipUsd: 3.89,
     },
     filePath: "/tmp/funding-goal.json",
     fs: memoryFileSystem(),
@@ -71,9 +71,65 @@ describe("FundingGoalService", () => {
     await service.processPlatformEvent(event("twitch", "platform:gift", { id: "tw-1", amount: 100, currency: "bits" }));
     await service.processPlatformEvent(event("tiktok", "platform:gift", { id: "tt-1", amount: 100, currency: "coins" }));
     await service.processPlatformEvent(event("youtube", "platform:gift", { id: "yt-jewel", amount: 20, currency: "jewels" }));
-    await service.processPlatformEvent(event("youtube", "platform:gift", { id: "yt-cad", amount: 5, currency: "CAD" }));
 
-    expect(service.snapshot.currentUsd).toBe(7.27);
+    expect(service.snapshot.currentUsd).toBe(6.6);
+  });
+
+  test("accumulates TikTok gift units with exact micros-visible totals", async () => {
+    const service = await createFundingGoalService(options());
+
+    for (const [index, amount] of [1, 10, 100, 1000].entries()) {
+      await service.processPlatformEvent(event("tiktok", "platform:gift", {
+        id: `tt-${index}`, amount, currency: "coins",
+      }));
+    }
+
+    expect(service.snapshot.currentUsd).toBe(5.555);
+    expect(service.snapshot.currentUsd * 1_000_000).toBe(5_555_000);
+  });
+
+  test("uses canonical unit semantics, diagnostics, and injected fiat conversion", async () => {
+    const diagnostics: string[] = [];
+    const converter = (amount: number, currency: string) => {
+      return currency === "cad" ? amount * 0.75 : null;
+    };
+    const service = await createFundingGoalService(options({ fiatToUsd: converter, debug: message => diagnostics.push(message) }));
+
+    await service.processPlatformEvent(event("twitch", "platform:gift", {
+      id: "bits", amount: 100, currency: "bits", giftCount: 8,
+    }));
+    await service.processPlatformEvent(event("youtube", "platform:gift", {
+      id: "jewels", amount: 20, currency: "jewels",
+    }));
+    await service.processPlatformEvent(event("youtube", "platform:gift", {
+      id: "amountless", currency: "jewels",
+    }));
+    await service.processPlatformEvent(event("youtube", "platform:gift", {
+      id: "usd", amount: 2, currency: "USD",
+    }));
+    await service.processPlatformEvent(event("youtube", "platform:gift", {
+      id: "cad", amount: 4, currency: "CAD",
+    }));
+    await service.processPlatformEvent(event("youtube", "platform:gift", {
+      id: "eur", amount: 4, currency: "EUR",
+    }));
+
+    expect(service.snapshot.currentUsd).toBe(6.1);
+    expect(diagnostics).toContain("Skipped gift with missing or non-positive amount: youtube");
+  });
+
+  test("zero configured unit and membership values disable those contributions", async () => {
+    const service = await createFundingGoalService(options({ monetizationValuesConfig: {
+      tiktokGiftUnitUsd: 0, twitchBitUsd: 0, youtubeJewelUsd: 0,
+      tiktokMembershipUsd: 0, twitchMembershipUsd: 0, youtubeMembershipUsd: 0,
+    } }));
+
+    await service.processPlatformEvent(event("tiktok", "platform:gift", { id: "gift", amount: 100, currency: "coins" }));
+    await service.processPlatformEvent(event("twitch", "platform:gift", { id: "bits", amount: 100, currency: "bits" }));
+    await service.processPlatformEvent(event("youtube", "platform:gift", { id: "jewels", amount: 20, currency: "jewels" }));
+    await service.processPlatformEvent(event("youtube", "platform:paypiggy", { id: "member", timestamp: "2026-08-18T00:00:00.000Z" }));
+
+    expect(service.snapshot.currentUsd).toBe(0);
   });
 
   test("values ordinary and gifted memberships with existing platform equivalents", async () => {
@@ -83,7 +139,7 @@ describe("FundingGoalService", () => {
     await service.processPlatformEvent(event("twitch", "platform:giftpaypiggy", { id: "tw-gift-sub", giftCount: 2, timestamp: "2026-08-18T00:00:01.000Z" }));
     await service.processPlatformEvent(event("youtube", "platform:paypiggy", { id: "yt-member", timestamp: "2026-08-18T00:00:02.000Z" }));
 
-    expect(service.snapshot.currentUsd).toBe(16.224);
+    expect(service.snapshot.currentUsd).toBe(12.99);
   });
 
   test("deduplicates event IDs and fallback membership fingerprints across restarts", async () => {

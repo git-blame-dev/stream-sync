@@ -1,6 +1,7 @@
 import { describe, it, beforeEach, afterEach, expect } from "bun:test";
 
 import { main } from "../../src/main.ts";
+import type { UsdRateService } from "../../src/services/usd-rate-service";
 import type { SingleInstanceMetadata } from "../../src/services/SingleInstanceGuard.ts";
 import { createDonationSpamDetection } from "../../src/utils/spam-detection";
 import { createConfigFixture } from "../helpers/config-fixture";
@@ -18,6 +19,12 @@ type ConfigFixtureOverrides = Parameters<typeof createConfigFixture>[0];
 type MainOverridesArg = NonNullable<Parameters<typeof main>[0]>;
 type DonationSpamFactory = NonNullable<MainOverridesArg["createDonationSpamDetection"]>;
 type CreateDisplayQueue = NonNullable<MainOverridesArg["createDisplayQueue"]>;
+
+const TEST_USD_RATE_SERVICE: UsdRateService = Object.freeze({
+  rates: Object.freeze({ USD: 1 }),
+  convertToUsd: (amount: number, currency: string) =>
+    currency.trim().toUpperCase() === "USD" ? amount : null,
+});
 
 const createSuccessfulSecretSetupResult = () => ({
   applied: {},
@@ -165,6 +172,7 @@ const buildOverrides = (options: BuildOverridesOptions = {}) => {
     getOBSConnectionManager: () => obsManager,
     createOBSEventService: () => ({ disconnect: async () => {} }),
     createDonationSpamDetection: createDonationSpamDetectionNoCleanup,
+    createUsdRateService: async () => TEST_USD_RATE_SERVICE,
   };
 
   return {

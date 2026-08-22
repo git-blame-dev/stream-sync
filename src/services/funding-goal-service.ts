@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { validateFundingGoalLabel } from '../core/funding-goal-label';
+import type { MonetizationValuesConfig, SynchronousUsdConverter } from '../core/monetization-values';
 
 const MICROS_PER_USD = 1_000_000;
 const STATE_VERSION = 1;
@@ -17,15 +18,6 @@ interface FundingGoalConfig {
     readonly id: string;
     readonly label: string;
     readonly targetUsd: number;
-    readonly tiktokUsdPerCoin: number;
-    readonly twitchUsdPerBit: number;
-    readonly youtubeJewelsUsd: number;
-}
-
-interface FundingGoalValuesConfig {
-    readonly tiktokPaypiggyEquivalent?: number;
-    readonly twitchPaypiggyEquivalent?: number;
-    readonly youtubePaypiggyPrice?: number;
 }
 
 interface FundingGoalEventBus {
@@ -54,7 +46,8 @@ interface FundingGoalSnapshot {
 
 interface FundingGoalServiceOptions {
     readonly config: FundingGoalConfig;
-    readonly goalsConfig: FundingGoalValuesConfig;
+    readonly monetizationValuesConfig: MonetizationValuesConfig;
+    readonly fiatToUsd?: SynchronousUsdConverter;
     readonly eventBus?: FundingGoalEventBus;
     readonly filePath?: string;
     readonly fs?: FundingGoalFileSystem;
@@ -120,27 +113,43 @@ function contributionMicros(
     platform: string,
     type: string,
     data: UnknownRecord,
-    config: FundingGoalConfig,
-    goalsConfig: FundingGoalValuesConfig
+    values: MonetizationValuesConfig,
+    fiatToUsd?: SynchronousUsdConverter,
+    debug?: (message: string) => void
 ): number {
-    if (data.isError === true) return 0;
+    if (data.isError === true) {
+        debug?.(`Skipped errored monetization event: ${platform} ${type}`);
+        return 0;
+    }
 
     if (type === 'platform:gift') {
         const amount = positiveFinite(data.amount);
         const currency = typeof data.currency === 'string' ? data.currency.trim().toLowerCase() : '';
-        if (amount === null) return 0;
+        if (amount === null) {
+            debug?.(`Skipped gift with missing or non-positive amount: ${platform}`);
+            return 0;
+        }
         if (platform === 'tiktok' && currency === 'coins') {
-            return usdToMicros(amount, config.tiktokUsdPerCoin);
+            return usdToMicros(amount, values.tiktokGiftUnitUsd);
         }
         if (platform === 'twitch' && currency === 'bits') {
-            return usdToMicros(amount, config.twitchUsdPerBit);
+            return usdToMicros(amount, values.twitchBitUsd);
         }
         if (platform === 'youtube' && (currency === 'usd' || currency === 'dollars')) {
             return usdToMicros(amount);
         }
         if (platform === 'youtube' && currency === 'jewels') {
-            return usdToMicros(amount, config.youtubeJewelsUsd);
+            return usdToMicros(amount, values.youtubeJewelUsd);
         }
+        if (platform === 'youtube' && fiatToUsd) {
+            const converted = fiatToUsd(amount, currency);
+            if (converted !== null && Number.isFinite(converted) && converted > 0) {
+                return usdToMicros(converted);
+            }
+            debug?.(`Skipped YouTube gift with unavailable USD conversion: ${currency || 'missing currency'}`);
+            return 0;
+        }
+        debug?.(`Skipped gift with unsupported currency: ${platform} ${currency || 'missing currency'}`);
         return 0;
     }
 
@@ -148,25 +157,27 @@ function contributionMicros(
     const count = type === 'platform:giftpaypiggy'
         ? (Number.isSafeInteger(giftCount) && giftCount > 0 ? giftCount : null)
         : 1;
-    if (count === null) return 0;
+    if (count === null) {
+        debug?.(`Skipped membership with invalid gift count: ${platform}`);
+        return 0;
+    }
     if (platform === 'tiktok') {
-        const equivalent = positiveFinite(goalsConfig.tiktokPaypiggyEquivalent);
-        return equivalent === null ? 0 : usdToMicros(equivalent * count, config.tiktokUsdPerCoin);
+        return usdToMicros(values.tiktokMembershipUsd * count);
     }
     if (platform === 'twitch') {
-        const equivalent = positiveFinite(goalsConfig.twitchPaypiggyEquivalent);
-        return equivalent === null ? 0 : usdToMicros(equivalent * count, config.twitchUsdPerBit);
+        return usdToMicros(values.twitchMembershipUsd * count);
     }
     if (platform === 'youtube') {
-        const equivalent = positiveFinite(goalsConfig.youtubePaypiggyPrice);
-        return equivalent === null ? 0 : usdToMicros(equivalent * count);
+        return usdToMicros(values.youtubeMembershipUsd * count);
     }
+    debug?.(`Skipped membership from unsupported platform: ${platform}`);
     return 0;
 }
 
 class FundingGoalService {
     private readonly config: FundingGoalConfig;
-    private readonly goalsConfig: FundingGoalValuesConfig;
+    private readonly monetizationValuesConfig: MonetizationValuesConfig;
+    private readonly fiatToUsd: SynchronousUsdConverter | undefined;
     private readonly eventBus: FundingGoalEventBus | undefined;
     private readonly filePath: string;
     private readonly fs: FundingGoalFileSystem;
@@ -187,7 +198,8 @@ class FundingGoalService {
 
     private constructor(options: FundingGoalServiceOptions) {
         this.config = options.config;
-        this.goalsConfig = options.goalsConfig;
+        this.monetizationValuesConfig = options.monetizationValuesConfig;
+        this.fiatToUsd = options.fiatToUsd;
         this.eventBus = options.eventBus;
         this.filePath = options.filePath ?? './data/funding-goal.json';
         this.fs = options.fs ?? { readFile, mkdir, writeFile, rename, unlink };
@@ -232,7 +244,14 @@ class FundingGoalService {
         const data = asRecord(event?.data);
         if (!platform || !MONETIZATION_TYPES.has(type) || !data) return Promise.resolve();
 
-        const amountMicros = contributionMicros(platform, type, data, this.config, this.goalsConfig);
+        const amountMicros = contributionMicros(
+            platform,
+            type,
+            data,
+            this.monetizationValuesConfig,
+            this.fiatToUsd,
+            this.debug
+        );
         const key = eventKey(platform, type, data);
         if (!Number.isSafeInteger(amountMicros) || amountMicros <= 0 || !key) {
             this.debug(`Skipped unvalued or unidentifiable funding event: ${platform} ${type}`);
@@ -421,5 +440,5 @@ export type {
     FundingGoalFileSystem,
     FundingGoalServiceOptions,
     FundingGoalSnapshot,
-    FundingGoalValuesConfig
+    MonetizationValuesConfig
 };

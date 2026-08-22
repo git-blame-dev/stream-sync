@@ -75,6 +75,23 @@ describe("_parseShareFlag", () => {
 });
 
 describe("Config field presence - all normalizers return expected fields", () => {
+  describe("_normalizeMonetizationValuesSection", () => {
+    const EXPECTED_FIELDS = [
+      "tiktokGiftUnitUsd", "twitchBitUsd", "youtubeJewelUsd",
+      "tiktokMembershipUsd", "twitchMembershipUsd", "youtubeMembershipUsd",
+    ];
+
+    it("returns exactly the approved fields and excludes removed valuation keys", () => {
+      const result = ConfigValidator.normalize({
+        monetizationValues: { paypiggyUsd: "9", fundingValuationUsd: "8" },
+      }).monetizationValues;
+
+      expect(Object.keys(result).sort()).toEqual(EXPECTED_FIELDS.slice().sort());
+      expect(result).not.toHaveProperty("paypiggyUsd");
+      expect(result).not.toHaveProperty("fundingValuationUsd");
+    });
+  });
+
   describe("_normalizeGeneralSection", () => {
     const EXPECTED_FIELDS = [
       "debugEnabled",
@@ -301,17 +318,14 @@ describe("Config field presence - all normalizers return expected fields", () =>
       "tiktokGoalSource",
       "tiktokGoalTarget",
       "tiktokGoalCurrency",
-      "tiktokPaypiggyEquivalent",
       "youtubeGoalEnabled",
       "youtubeGoalSource",
       "youtubeGoalTarget",
       "youtubeGoalCurrency",
-      "youtubePaypiggyPrice",
       "twitchGoalEnabled",
       "twitchGoalSource",
       "twitchGoalTarget",
       "twitchGoalCurrency",
-      "twitchPaypiggyEquivalent",
     ];
 
     it("returns all expected fields", () => {
