@@ -64,6 +64,38 @@ function event(platform: string, type: string, data: Record<string, unknown>) {
 }
 
 describe("FundingGoalService", () => {
+  test("rejects missing monetization values before subscribing", async () => {
+    let subscribed = false;
+    const creation = createFundingGoalService(options({
+      monetizationValuesConfig: undefined as unknown as FundingGoalServiceOptions["monetizationValuesConfig"],
+      eventBus: {
+        subscribe: () => {
+          subscribed = true;
+          return () => undefined;
+        },
+      },
+    }));
+
+    await expect(creation).rejects.toThrow("monetizationValuesConfig");
+    expect(subscribed).toBe(false);
+  });
+
+  test("rejects a missing monetization value field before subscribing", async () => {
+    const config = { ...options().monetizationValuesConfig };
+    delete (config as Partial<typeof config>).youtubeJewelUsd;
+
+    await expect(createFundingGoalService(options({ monetizationValuesConfig: config })))
+      .rejects.toThrow("monetizationValuesConfig.youtubeJewelUsd");
+  });
+
+  test("rejects negative and non-finite monetization values", async () => {
+    for (const value of [-1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      await expect(createFundingGoalService(options({
+        monetizationValuesConfig: { ...options().monetizationValuesConfig, twitchBitUsd: value },
+      }))).rejects.toThrow("monetizationValuesConfig.twitchBitUsd");
+    }
+  });
+
   test("values canonical gifts in configured USD units and ignores unsupported values", async () => {
     const service = await createFundingGoalService(options());
 

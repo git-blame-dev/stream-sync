@@ -67,6 +67,31 @@ interface FundingGoalPersistedState {
 
 type UnknownRecord = Record<string, unknown>;
 
+const REQUIRED_MONETIZATION_VALUE_KEYS = [
+    'tiktokGiftUnitUsd',
+    'twitchBitUsd',
+    'youtubeJewelUsd',
+    'tiktokMembershipUsd',
+    'twitchMembershipUsd',
+    'youtubeMembershipUsd'
+] as const;
+
+function validateMonetizationValuesConfig(value: unknown): asserts value is MonetizationValuesConfig {
+    const config = asRecord(value);
+    if (!config) {
+        throw new TypeError('monetizationValuesConfig must be a non-null object');
+    }
+    for (const key of REQUIRED_MONETIZATION_VALUE_KEYS) {
+        if (!Object.prototype.hasOwnProperty.call(config, key)) {
+            throw new TypeError(`monetizationValuesConfig.${key} is required`);
+        }
+        const field = config[key];
+        if (typeof field !== 'number' || !Number.isFinite(field) || field < 0) {
+            throw new RangeError(`monetizationValuesConfig.${key} must be a finite number >= 0`);
+        }
+    }
+}
+
 function asRecord(value: unknown): UnknownRecord | null {
     return value !== null && typeof value === 'object' && !Array.isArray(value)
         ? value as UnknownRecord
@@ -197,6 +222,7 @@ class FundingGoalService {
     private disposePromise: Promise<void> | null = null;
 
     private constructor(options: FundingGoalServiceOptions) {
+        validateMonetizationValuesConfig(options.monetizationValuesConfig);
         this.config = options.config;
         this.monetizationValuesConfig = options.monetizationValuesConfig;
         this.fiatToUsd = options.fiatToUsd;
