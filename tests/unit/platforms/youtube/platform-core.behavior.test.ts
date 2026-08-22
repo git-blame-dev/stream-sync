@@ -575,6 +575,54 @@ describe("YouTubePlatform behavior", () => {
     expect(refreshSpy).toHaveBeenCalledTimes(0);
   });
 
+  it("ignores a stale terminal callback before disconnect or refresh side effects", async () => {
+    const platform = createPlatform();
+    platform.connectionManager.isCurrentAttempt = createMockFn().mockReturnValue(false);
+    const disconnect = createMockFn().mockResolvedValue(true);
+    platform.connectionManager.disconnectFromStream = disconnect;
+    const emitStatus = createMockFn();
+    platform._emitStreamStatusIfNeeded = emitStatus;
+    const refresh = createMockFn().mockResolvedValue(undefined);
+    platform._youtubeMultiStreamManager.requestImmediateRefresh = refresh;
+
+    const result = await platform.disconnectFromYouTubeStream(
+      "same-video",
+      "stale end",
+      {
+        requestImmediateRefresh: true,
+        source: "livechat-end",
+        expectedAttemptId: 4,
+      },
+    );
+
+    expect(result).toBe(false);
+    expect(disconnect).not.toHaveBeenCalled();
+    expect(emitStatus).not.toHaveBeenCalled();
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it("does not emit a normal status transition after failed shutdown", async () => {
+    const platform = createPlatform();
+    platform.connectionManager.getConnectionCount = createMockFn()
+      .mockReturnValueOnce(1)
+      .mockReturnValueOnce(0);
+    platform.connectionManager.disconnectFromStream = createMockFn().mockResolvedValue(false);
+    const emitStatus = createMockFn();
+    platform._emitStreamStatusIfNeeded = emitStatus;
+    const refresh = createMockFn().mockResolvedValue(undefined);
+    platform._youtubeMultiStreamManager.requestImmediateRefresh = refresh;
+
+    const result = await platform.disconnectFromYouTubeStream(
+      "shutdown-failure",
+      "reconciliation",
+      { requestImmediateRefresh: true, source: "stream-reconciler" },
+    );
+
+    expect(result).toBe(false);
+    expect(emitStatus).not.toHaveBeenCalled();
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
   it("does not block disconnect completion when refresh is requested during active check", async () => {
     const platform = createPlatform();
     let resolveRefresh: () => void = () => undefined;

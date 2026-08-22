@@ -46,6 +46,17 @@ const expectNoTechnicalArtifacts = (content: unknown) => {
   }
 };
 
+const setCurrentConnectionReady = (
+  connectionManager: YouTubeConnectionManager,
+  videoId: string,
+): void => {
+  const attemptId = connectionManager.getConnectionStatus(videoId)?.attemptId;
+  if (attemptId === undefined) {
+    throw new Error(`Expected connection attempt for ${videoId}`);
+  }
+  connectionManager.setConnectionReady(videoId, attemptId);
+};
+
 const connectWithRuntimeFactory = (
   manager: YouTubeConnectionManager,
   videoId: string,
@@ -94,7 +105,7 @@ describe("YouTube Premiere Connection Handling", () => {
         );
       }
 
-      connectionManager.setConnectionReady("premiere2");
+      setCurrentConnectionReady(connectionManager, "premiere2");
 
       const totalConnections = connectionManager.getConnectionCount();
       const readyConnections = connectionManager.getReadyConnectionCount();
@@ -126,7 +137,7 @@ describe("YouTube Premiere Connection Handling", () => {
         const connection = createMockConnection(id, ready);
         await connectionManager.connectToStream(id, async () => connection);
         if (ready) {
-          connectionManager.setConnectionReady(id);
+          setCurrentConnectionReady(connectionManager, id);
         }
       }
 
@@ -158,7 +169,7 @@ describe("YouTube Premiere Connection Handling", () => {
       expect(connectionManager.getConnectionCount()).toBe(1);
       expect(connectionManager.getReadyConnectionCount()).toBe(0);
 
-      connectionManager.setConnectionReady(premiereId);
+      setCurrentConnectionReady(connectionManager, premiereId);
 
       expect(connectionManager.isConnectionReady(premiereId)).toBe(true);
       expect(connectionManager.getConnectionCount()).toBe(1);
@@ -186,8 +197,8 @@ describe("YouTube Premiere Connection Handling", () => {
       expect(connectionManager.getConnectionCount()).toBe(3);
       expect(connectionManager.getReadyConnectionCount()).toBe(0);
 
-      connectionManager.setConnectionReady("premiere_stream1");
-      connectionManager.setConnectionReady("premiere_stream3");
+      setCurrentConnectionReady(connectionManager, "premiere_stream1");
+      setCurrentConnectionReady(connectionManager, "premiere_stream3");
 
       const finalState = connectionManager.getConnectionState();
       expect(finalState.totalConnections).toBe(3);

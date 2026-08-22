@@ -39,6 +39,17 @@ const expectManagedConnection = (
   return connection;
 };
 
+const setCurrentConnectionReady = (
+  connectionManager: YouTubeConnectionManager,
+  videoId: string,
+): void => {
+  const attemptId = connectionManager.getConnectionStatus(videoId)?.attemptId;
+  if (attemptId === undefined) {
+    throw new Error(`Expected connection attempt for ${videoId}`);
+  }
+  connectionManager.setConnectionReady(videoId, attemptId);
+};
+
 describe("YouTube Connection Manager - Lifecycle Behavior", () => {
   afterEach(() => {
     restoreAllMocks();
@@ -172,13 +183,13 @@ describe("YouTube Connection Manager - Lifecycle Behavior", () => {
       const connection = { ...mockConnection };
 
       await connectionManager.connectToStream(videoId, async () => connection);
-      connectionManager.setConnectionReady(videoId);
+      setCurrentConnectionReady(connectionManager, videoId);
 
       expect(connectionManager.isConnectionReady(videoId)).toBe(true);
     });
 
     it("should handle setting ready status for non-existent connection", () => {
-      connectionManager.setConnectionReady("non-existent-video");
+      connectionManager.setConnectionReady("non-existent-video", 1);
 
       expect(connectionManager.isConnectionReady("non-existent-video")).toBe(
         false,
@@ -206,7 +217,7 @@ describe("YouTube Connection Manager - Lifecycle Behavior", () => {
         async () => connection2,
       );
 
-      connectionManager.setConnectionReady("video-2");
+      setCurrentConnectionReady(connectionManager, "video-2");
 
       expect(connectionManager.isAnyConnectionReady()).toBe(true);
     });
@@ -327,7 +338,7 @@ describe("YouTube Connection Manager - Lifecycle Behavior", () => {
         "test-video",
         async () => connection,
       );
-      connectionManager.setConnectionReady("test-video");
+      setCurrentConnectionReady(connectionManager, "test-video");
 
       const state = connectionManager.getConnectionState();
 
@@ -360,7 +371,7 @@ describe("YouTube Connection Manager - Lifecycle Behavior", () => {
         async () => connection2,
       );
 
-      connectionManager.setConnectionReady("video-2");
+      setCurrentConnectionReady(connectionManager, "video-2");
 
       expect(connectionManager.getReadyConnectionCount()).toBe(1);
     });
@@ -386,7 +397,7 @@ describe("YouTube Connection Manager - Lifecycle Behavior", () => {
         async () => connection2,
       );
 
-      connectionManager.setConnectionReady("video-2");
+      setCurrentConnectionReady(connectionManager, "video-2");
 
       const stats = connectionManager.getStats();
 
@@ -421,7 +432,7 @@ describe("YouTube Connection Manager - Lifecycle Behavior", () => {
 
       await Promise.resolve();
 
-      expect(handleEventProcessingError).toHaveBeenCalled();
+      expect(handleEventProcessingError).toHaveBeenCalledTimes(1);
       const lastCallIndex =
         handleEventProcessingError.mock.calls.length - 1;
       const lastCall = handleEventProcessingError.mock.calls[lastCallIndex];
@@ -434,7 +445,7 @@ describe("YouTube Connection Manager - Lifecycle Behavior", () => {
       expect(String((errorArg as Error).message)).toContain("Disconnect failed");
       expect(eventTypeArg).toBe("connection");
       expect(payloadArg).toEqual(expect.objectContaining({ videoId: "test-video" }));
-      expect(messageArg).toBe("Error removing connection for video test-video");
+      expect(messageArg).toBe("Error disconnecting connection for test-video");
       expect(platformArg).toBe("youtube-connection");
     });
 

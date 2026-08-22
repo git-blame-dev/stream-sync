@@ -20,11 +20,12 @@ interface YouTubePlatform {
     viewerService?: {
         setActiveStream?: (videoId: string) => Promise<void>;
     };
-    setYouTubeConnectionReady: (videoId: string) => void;
+    isCurrentYouTubeConnection: (videoId: string, attemptId: number) => boolean;
+    setYouTubeConnectionReady: (videoId: string, attemptId: number) => void;
     disconnectFromYouTubeStream: (
         videoId: string,
         reason: string,
-        options?: { requestImmediateRefresh?: boolean; source?: string }
+        options?: { requestImmediateRefresh?: boolean; source?: string; expectedAttemptId?: number }
   ) => Promise<boolean>;
     handleChatMessage: (message: UnknownRecord) => void;
     logRawPlatformData: (channel: string, payload: unknown) => Promise<void>;
@@ -50,6 +51,8 @@ interface YouTubeConnectionFactoryOptions {
 interface YouTubeConnection {
     on: (event: string, handler: (payload?: unknown) => void) => void;
     start: () => void;
+    stop?: () => Promise<void>;
+    disconnect?: () => Promise<void>;
     applyFilter?: (filterName: string) => void;
 }
 
@@ -267,15 +270,42 @@ function createYouTubeConnectionFactory(options: YouTubeConnectionFactoryOptions
         );
     };
 
-    const setupConnectionEventListeners = async (connection: YouTubeConnection, videoId: string) => {
+    const cleanupUnownedConnection = async (connection: YouTubeConnection, videoId: string, attemptId: number) => {
+        for (const method of ['stop', 'disconnect'] as const) {
+            const cleanup = connection[method];
+            if (typeof cleanup !== 'function') {
+                continue;
+            }
+            try {
+                await cleanup.call(connection);
+            } catch (cleanupError) {
+                const cleanupErrorMessage = cleanupError instanceof Error ? cleanupError.message : String(cleanupError);
+                try {
+                    platform._handleProcessingError(
+                        `Failed to ${method} unowned YouTube connection for ${videoId}: ${cleanupErrorMessage}`,
+                        cleanupError,
+                        'connection-cleanup',
+                        { videoId, attemptId, method }
+                    );
+                } catch {
+                    // Preserve the setup failure even if cleanup reporting fails.
+                }
+            }
+        }
+    };
+
+    const registerConnectionEventListeners = async (connection: YouTubeConnection, videoId: string, attemptId: number) => {
         if (!connection || typeof connection.on !== 'function') {
-            throw new Error('YouTube connection missing event emitter interface (on/removeAllListeners)');
+            throw new Error('YouTube connection missing event emitter interface (on)');
         }
 
         connection.on('start', (data: unknown) => {
+            if (!platform.isCurrentYouTubeConnection(videoId, attemptId)) {
+                return;
+            }
             platform.logger.debug(`LiveChat 'start' event for: ${videoId}`, 'youtube');
             platform.logger.info(`Chat listener started for stream: ${videoId}`, 'youtube');
-            platform.setYouTubeConnectionReady(videoId);
+            platform.setYouTubeConnectionReady(videoId, attemptId);
             platform.logger.info(
                 'Viewer engagement message: Welcome to live chat! Remember to guard your privacy and abide by our community guidelines.',
                 'youtube'
@@ -293,6 +323,9 @@ function createYouTubeConnectionFactory(options: YouTubeConnectionFactoryOptions
         });
 
         connection.on('error', (error: unknown) => {
+            if (!platform.isCurrentYouTubeConnection(videoId, attemptId)) {
+                return;
+            }
             const debugErrorMessage = error instanceof Error ? error.message : String(error);
             platform.logger.debug(
                 `LiveChat 'error' event for: ${videoId} - ${debugErrorMessage}`,
@@ -315,18 +348,22 @@ function createYouTubeConnectionFactory(options: YouTubeConnectionFactoryOptions
             const isApiError = errorMessage.includes('400') || errorMessage.includes('403') || errorMessage.includes('429');
             if (isApiError) {
                 platform.logger.warn(`YouTube API error for stream ${videoId}: ${errorMessage}`, 'youtube');
-                platform.disconnectFromYouTubeStream(videoId, `API error: ${errorMessage}`);
+                platform.disconnectFromYouTubeStream(videoId, `API error: ${errorMessage}`, { expectedAttemptId: attemptId });
                 return;
             }
 
             platform._handleProcessingError(`Stream ${videoId} error: ${errorMessage}`, error, 'stream-error', { videoId });
             platform.disconnectFromYouTubeStream(videoId, `Error: ${errorMessage}`, {
                 requestImmediateRefresh: true,
-                source: 'livechat-error'
+                source: 'livechat-error',
+                expectedAttemptId: attemptId
             });
         });
 
         connection.on('chat-update', (chatItem: unknown) => {
+            if (!platform.isCurrentYouTubeConnection(videoId, attemptId)) {
+                return;
+            }
             if (platform.config.dataLoggingEnabled && chatItem !== undefined) {
                 platform.logRawPlatformData('chat', chatItem).catch((logError: unknown) => {
                     const logErrorMessage = logError instanceof Error ? logError.message : String(logError);
@@ -463,11 +500,15 @@ function createYouTubeConnectionFactory(options: YouTubeConnectionFactoryOptions
         });
 
         connection.on('end', () => {
+            if (!platform.isCurrentYouTubeConnection(videoId, attemptId)) {
+                return;
+            }
             platform.logger.debug(`LiveChat 'end' event for: ${videoId}`, 'youtube');
             platform.logger.info(`Stream ended: ${videoId}`, 'youtube');
             platform.disconnectFromYouTubeStream(videoId, 'stream ended', {
                 requestImmediateRefresh: true,
-                source: 'livechat-end'
+                source: 'livechat-end',
+                expectedAttemptId: attemptId
             });
         });
 
@@ -486,6 +527,15 @@ function createYouTubeConnectionFactory(options: YouTubeConnectionFactoryOptions
                 const serviceErrorMessage = serviceError instanceof Error ? serviceError.message : String(serviceError);
                 platform.logger.warn(`Failed to set active stream in viewer service: ${serviceErrorMessage}`, 'youtube');
             }
+        }
+    };
+
+    const setupConnectionEventListeners = async (connection: YouTubeConnection, videoId: string, attemptId: number) => {
+        try {
+            await registerConnectionEventListeners(connection, videoId, attemptId);
+        } catch (setupError) {
+            await cleanupUnownedConnection(connection, videoId, attemptId);
+            throw setupError;
         }
     };
 

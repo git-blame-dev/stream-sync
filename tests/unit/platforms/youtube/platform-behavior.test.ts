@@ -1129,14 +1129,14 @@ describe("YouTubePlatform modern architecture", () => {
 
   it("setYouTubeConnectionReady updates connection ready state", () => {
     const { platform } = createPlatform();
-    const readyVideoId: { value: string | null } = { value: null };
-    platform.connectionManager.setConnectionReady = (videoId: string) => {
-      readyVideoId.value = videoId;
+    const readyAttempt: { value: [string, number] | null } = { value: null };
+    platform.connectionManager.setConnectionReady = (videoId: string, attemptId: number) => {
+      readyAttempt.value = [videoId, attemptId];
     };
 
-    platform.setYouTubeConnectionReady("vid-123");
+    platform.setYouTubeConnectionReady("vid-123", 9);
 
-    expect(readyVideoId.value).toBe("vid-123");
+    expect(readyAttempt.value).toEqual(["vid-123", 9]);
   });
 
   it("isAnyYouTubeStreamReady delegates to connectionManager", () => {

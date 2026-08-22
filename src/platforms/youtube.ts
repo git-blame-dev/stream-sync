@@ -57,6 +57,7 @@ type StreamRefreshRequest = {
   requestImmediateRefresh?: boolean;
   source?: string;
   reason?: string;
+  expectedAttemptId?: number;
 };
 
 type LoggerLike = {
@@ -432,11 +433,16 @@ class YouTubePlatform extends EventEmitter {
             logger: this.logger,
             config: this.config,
             ...(this.viewerService ? { viewerService: this.viewerService } : {}),
-            setYouTubeConnectionReady: (videoId: string) => this.setYouTubeConnectionReady(videoId),
+            isCurrentYouTubeConnection: (videoId: string, attemptId: number) => {
+                return this.connectionManager.isCurrentAttempt(videoId, attemptId);
+            },
+            setYouTubeConnectionReady: (videoId: string, attemptId: number) => {
+                this.setYouTubeConnectionReady(videoId, attemptId);
+            },
             disconnectFromYouTubeStream: (
                 videoId: string,
                 reason: string,
-                options?: { requestImmediateRefresh?: boolean; source?: string }
+                options?: { requestImmediateRefresh?: boolean; source?: string; expectedAttemptId?: number }
             ) => this.disconnectFromYouTubeStream(videoId, reason, options),
             handleChatMessage: (message: UnknownMap) => {
                 void this.handleChatMessage(message);
@@ -545,8 +551,16 @@ class YouTubePlatform extends EventEmitter {
             return false;
         }
 
+        if (options.expectedAttemptId !== undefined
+            && !this.connectionManager.isCurrentAttempt(videoId, options.expectedAttemptId)) {
+            return false;
+        }
+
         const previousCount = this.connectionManager.getConnectionCount();
-        const result = await this.connectionManager.disconnectFromStream(videoId, reason);
+        const result = await this.connectionManager.disconnectFromStream(videoId, reason, options.expectedAttemptId);
+        if (!result) {
+            return false;
+        }
         const isLiveChatEnd = options.source === 'livechat-end';
         if (!isLiveChatEnd) {
             this._emitStreamStatusIfNeeded(previousCount, { videoId, reason });
@@ -606,8 +620,8 @@ class YouTubePlatform extends EventEmitter {
         await this._youtubeMultiStreamManager.requestImmediateRefresh(context);
     }
 
-    setYouTubeConnectionReady(videoId: string) {
-        this.connectionManager.setConnectionReady(videoId);
+    setYouTubeConnectionReady(videoId: string, attemptId: number) {
+        this.connectionManager.setConnectionReady(videoId, attemptId);
     }
 
     isAnyYouTubeStreamReady(): boolean {
@@ -735,7 +749,7 @@ class YouTubePlatform extends EventEmitter {
         try {
             const success = await this.connectionManager.connectToStream(
                 videoId, 
-                (videoId: string) => this._createYouTubeConnection(videoId),
+                (videoId: string, attemptId: number) => this._createYouTubeConnection(videoId, attemptId),
                 { reason: 'stream detected', ...options }
             );
             
@@ -766,13 +780,13 @@ class YouTubePlatform extends EventEmitter {
         }
     }
 
-    async _createYouTubeConnection(videoId: string): Promise<{ [key: string]: unknown }> {
+    async _createYouTubeConnection(videoId: string, attemptId: number): Promise<{ [key: string]: unknown }> {
         try {
             const connection = await this._youtubeConnectionFactory.createConnection(videoId);
             if (!isYouTubeConnectionLike(connection)) {
                 throw new Error('YouTube connection factory returned invalid connection');
             }
-            await this._setupConnectionEventListeners(connection, videoId);
+            await this._setupConnectionEventListeners(connection, videoId, attemptId);
             return connection;
         } catch (error) {
             this._handleConnectionErrorLogging(`Failed to create YouTube connection: ${getErrorMessage(error)}`, error, 'connection-create');
@@ -780,8 +794,8 @@ class YouTubePlatform extends EventEmitter {
         }
     }
     
-    async _setupConnectionEventListeners(connection: YouTubeConnectionLike, videoId: string): Promise<void> {
-        return await this._youtubeConnectionFactory.setupConnectionEventListeners(connection, videoId);
+    async _setupConnectionEventListeners(connection: YouTubeConnectionLike, videoId: string, attemptId: number): Promise<void> {
+        return await this._youtubeConnectionFactory.setupConnectionEventListeners(connection, videoId, attemptId);
 	    }
 
     async handleChatMessage(chatItem: unknown): Promise<void> {

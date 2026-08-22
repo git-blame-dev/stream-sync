@@ -26,7 +26,7 @@ type ProcessingErrorCall = [
 type DisconnectCall = {
   videoId: string;
   reason: string;
-  options?: { requestImmediateRefresh?: boolean; source?: string };
+  options?: { requestImmediateRefresh?: boolean; source?: string; expectedAttemptId?: number };
 };
 
 type ValidationResult = {
@@ -89,6 +89,7 @@ const createFactory = ({
     _validateVideoForConnection: () =>
       validationResult ?? { shouldConnect: true },
     config: {},
+    isCurrentYouTubeConnection: createMockFn().mockReturnValue(true),
     setYouTubeConnectionReady: createMockFn(),
     disconnectFromYouTubeStream: createMockFn().mockResolvedValue(false),
     handleChatMessage: createMockFn(),
@@ -248,6 +249,71 @@ describe("YouTube connection factory", () => {
     );
   });
 
+  test("ignores every callback from a detached connection attempt", async () => {
+    const handlers: HandlerMap = {};
+    const setReady = createMockFn();
+    const disconnect = createMockFn().mockResolvedValue(false);
+    const handleChatMessage = createMockFn();
+    const { factory } = createFactory({
+      platformOverrides: {
+        isCurrentYouTubeConnection: createMockFn().mockReturnValue(false),
+        setYouTubeConnectionReady: setReady,
+        disconnectFromYouTubeStream: disconnect,
+        handleChatMessage,
+      },
+    });
+    const connection = {
+      on: createMockFn((event: string, handler: ChatEventHandler) => {
+        handlers[event] = handler;
+      }),
+      start: createMockFn(),
+    };
+    await factory.setupConnectionEventListeners(connection, "stale-video", 7);
+
+    getHandler(handlers, "start")({ actions: [] });
+    getHandler(handlers, "chat-update")({
+      author: { id: "UC_STALE", name: "StaleUser" },
+      text: "stale chat",
+    });
+    getHandler(handlers, "error")(new Error("terminal stale error"));
+    getHandler(handlers, "end")();
+
+    expect(setReady).not.toHaveBeenCalled();
+    expect(handleChatMessage).not.toHaveBeenCalled();
+    expect(disconnect).not.toHaveBeenCalled();
+  });
+
+  test("cleans up an unowned connection when listener setup fails", async () => {
+    const processingError = createMockFn();
+    const stop = createMockFn().mockRejectedValue(new Error("stop cleanup failed"));
+    const disconnect = createMockFn().mockResolvedValue(undefined);
+    const { factory } = createFactory({
+      platformOverrides: {
+        _handleProcessingError: processingError,
+      },
+    });
+    const connection = {
+      on: createMockFn(),
+      start: createMockFn(() => {
+        throw new Error("start failed");
+      }),
+      stop,
+      disconnect,
+    };
+
+    await expect(factory.setupConnectionEventListeners(connection, "setup-failure", 3))
+      .rejects.toThrow("start failed");
+
+    expect(stop).toHaveBeenCalledTimes(1);
+    expect(disconnect).toHaveBeenCalledTimes(1);
+    expect(processingError).toHaveBeenCalledWith(
+      expect.stringContaining("stop cleanup failed"),
+      expect.any(Error),
+      "connection-cleanup",
+      { videoId: "setup-failure", attemptId: 3, method: "stop" },
+    );
+  });
+
   test("normalizes direct chat-update payloads before handleChatMessage", async () => {
     const handleChatMessageCalls: RecordedMessage[] = [];
     const processRegularChatMessageCalls: RecordedMessage[] = [];
@@ -278,7 +344,7 @@ describe("YouTube connection factory", () => {
       removeAllListeners: createMockFn(),
     };
 
-    await factory.setupConnectionEventListeners(connection, "video-1");
+    await factory.setupConnectionEventListeners(connection, "video-1", 7);
 
     const rawChatItem = {
       author: { id: "UC_TEST_1", name: "TestUser" },
@@ -329,7 +395,7 @@ describe("YouTube connection factory", () => {
       removeAllListeners: createMockFn(),
     };
 
-    await factory.setupConnectionEventListeners(connection, "video-1");
+    await factory.setupConnectionEventListeners(connection, "video-1", 1);
 
     getHandler(chatUpdateHandlers, "chat-update")({
       author: { id: "UC_TS_1", name: "TimestampUser" },
@@ -368,7 +434,7 @@ describe("YouTube connection factory", () => {
       removeAllListeners: createMockFn(),
     };
 
-    await factory.setupConnectionEventListeners(connection, "video-1");
+    await factory.setupConnectionEventListeners(connection, "video-1", 1);
 
     getHandler(chatUpdateHandlers, "chat-update")({
       author: { id: "UC_TS_2", name: "TimestampUser" },
@@ -410,7 +476,7 @@ describe("YouTube connection factory", () => {
       removeAllListeners: createMockFn(),
     };
 
-    await factory.setupConnectionEventListeners(connection, "video-1");
+    await factory.setupConnectionEventListeners(connection, "video-1", 1);
 
     const rawChatItem = {
       author: { name: "MissingIdUser" },
@@ -480,7 +546,7 @@ describe("YouTube connection factory", () => {
       removeAllListeners: createMockFn(),
     };
 
-    await factory.setupConnectionEventListeners(connection, "video-1");
+    await factory.setupConnectionEventListeners(connection, "video-1", 1);
 
     getHandler(chatUpdateHandlers, "chat-update")({
       type: "AddChatItemAction",
@@ -545,7 +611,7 @@ describe("YouTube connection factory", () => {
       removeAllListeners: createMockFn(),
     };
 
-    await factory.setupConnectionEventListeners(connection, "video-1");
+    await factory.setupConnectionEventListeners(connection, "video-1", 1);
     getHandler(chatUpdateHandlers, "chat-update")({ type: "AddChatItemAction" });
 
     expect(handleChatMessage).toHaveBeenCalledTimes(1);
@@ -592,7 +658,7 @@ describe("YouTube connection factory", () => {
       removeAllListeners: createMockFn(),
     };
 
-    await factory.setupConnectionEventListeners(connection, "video-1");
+    await factory.setupConnectionEventListeners(connection, "video-1", 1);
 
     getHandler(chatUpdateHandlers, "chat-update")({
       type: "AddChatItemAction",
@@ -636,7 +702,7 @@ describe("YouTube connection factory", () => {
       removeAllListeners: createMockFn(),
     };
 
-    await factory.setupConnectionEventListeners(connection, "video-1");
+    await factory.setupConnectionEventListeners(connection, "video-1", 1);
 
     getHandler(startHandlers, "start")({
       header: {
@@ -686,7 +752,7 @@ describe("YouTube connection factory", () => {
       removeAllListeners: createMockFn(),
     };
 
-    await factory.setupConnectionEventListeners(connection, "video-1");
+    await factory.setupConnectionEventListeners(connection, "video-1", 1);
 
     getHandler(startHandlers, "start")({
       header: {
@@ -734,7 +800,7 @@ describe("YouTube connection factory", () => {
       removeAllListeners: createMockFn(),
     };
 
-    await factory.setupConnectionEventListeners(connection, "video-1");
+    await factory.setupConnectionEventListeners(connection, "video-1", 1);
 
     getHandler(startHandlers, "start")({ actions: [] });
 
@@ -771,7 +837,7 @@ describe("YouTube connection factory", () => {
       removeAllListeners: createMockFn(),
     };
 
-    await factory.setupConnectionEventListeners(connection, "video-1");
+    await factory.setupConnectionEventListeners(connection, "video-1", 1);
 
     getHandler(startHandlers, "start")({
       header: {
@@ -818,7 +884,7 @@ describe("YouTube connection factory", () => {
       removeAllListeners: createMockFn(),
     };
 
-    await factory.setupConnectionEventListeners(connection, "video-1");
+    await factory.setupConnectionEventListeners(connection, "video-1", 1);
 
     getHandler(startHandlers, "start")({
       header: {
@@ -864,7 +930,7 @@ describe("YouTube connection factory", () => {
       removeAllListeners: createMockFn(),
     };
 
-    await factory.setupConnectionEventListeners(connection, "video-1");
+    await factory.setupConnectionEventListeners(connection, "video-1", 7);
 
     getHandler(errorHandlers, "error")(new Error("403 forbidden"));
 
@@ -872,7 +938,7 @@ describe("YouTube connection factory", () => {
     const disconnectCall = firstCall(disconnectCalls);
     expect(disconnectCall.videoId).toBe("video-1");
     expect(disconnectCall.reason).toBe("API error: 403 forbidden");
-    expect(disconnectCall.options).toBeUndefined();
+    expect(disconnectCall.options).toEqual({ expectedAttemptId: 7 });
   });
 
   test("does not disconnect on temporary live chat errors", async () => {
@@ -903,7 +969,7 @@ describe("YouTube connection factory", () => {
       removeAllListeners: createMockFn(),
     };
 
-    await factory.setupConnectionEventListeners(connection, "video-1");
+    await factory.setupConnectionEventListeners(connection, "video-1", 1);
 
     getHandler(errorHandlers, "error")(new Error("503 upstream unavailable"));
 
@@ -938,7 +1004,7 @@ describe("YouTube connection factory", () => {
       removeAllListeners: createMockFn(),
     };
 
-    await factory.setupConnectionEventListeners(connection, "video-1");
+    await factory.setupConnectionEventListeners(connection, "video-1", 1);
 
     getHandler(errorHandlers, "error")(
       new Error("Unexpected live chat incremental continuation response"),
@@ -948,7 +1014,7 @@ describe("YouTube connection factory", () => {
     expect(firstCall(disconnectCalls)).toEqual({
       videoId: "video-1",
       reason: "Error: Unexpected live chat incremental continuation response",
-      options: { requestImmediateRefresh: true, source: "livechat-error" },
+      options: { requestImmediateRefresh: true, source: "livechat-error", expectedAttemptId: 1 },
     });
   });
 
@@ -1009,7 +1075,7 @@ describe("YouTube connection factory", () => {
       removeAllListeners: createMockFn(),
     };
 
-    await factory.setupConnectionEventListeners(connection, "video-1");
+    await factory.setupConnectionEventListeners(connection, "video-1", 1);
 
     const rawChatItem = { type: "AddChatItemAction" };
     getHandler(chatUpdateHandlers, "chat-update")(rawChatItem);
@@ -1049,7 +1115,7 @@ describe("YouTube connection factory", () => {
       removeAllListeners: createMockFn(),
     };
 
-    await factory.setupConnectionEventListeners(connection, "video-1");
+    await factory.setupConnectionEventListeners(connection, "video-1", 1);
 
     getHandler(handlers, "end")();
 
@@ -1060,6 +1126,7 @@ describe("YouTube connection factory", () => {
     expect(disconnectCall.options).toEqual({
       requestImmediateRefresh: true,
       source: "livechat-end",
+      expectedAttemptId: 1,
     });
   });
 });

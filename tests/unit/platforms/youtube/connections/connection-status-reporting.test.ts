@@ -5,9 +5,9 @@ import { EventEmitter } from "events";
 
 type MockConnectionManager = {
   connections: Map<string, unknown>;
-  connectToStream: TestMockFn<[string, (videoId: string) => Promise<unknown>], Promise<boolean>>;
+  connectToStream: TestMockFn<[string, (videoId: string, attemptId: number) => Promise<unknown>], Promise<boolean>>;
   removeConnection: TestMockFn<[string], void>;
-  setConnectionReady: TestMockFn<[string], void>;
+  setConnectionReady: TestMockFn<[string, number], void>;
   isConnectionReady: TestMockFn<[string], boolean>;
   getActiveVideoIds: TestMockFn<[], string[]>;
   getConnectionCount: TestMockFn<[], number>;
@@ -28,9 +28,9 @@ const createMockPlatform = (): MockPlatform => {
   const platform = new EventEmitter();
   const connectionManager: MockConnectionManager = {
     connections: new Map(),
-    connectToStream: createMockFn<[string, (videoId: string) => Promise<unknown>], Promise<boolean>>().mockResolvedValue(true),
+    connectToStream: createMockFn<[string, (videoId: string, attemptId: number) => Promise<unknown>], Promise<boolean>>().mockResolvedValue(true),
     removeConnection: createMockFn<[string], void>(),
-    setConnectionReady: createMockFn<[string], void>(),
+    setConnectionReady: createMockFn<[string, number], void>(),
     isConnectionReady: createMockFn<[string], boolean>(),
     getActiveVideoIds: createMockFn<[], string[]>(),
     getConnectionCount: createMockFn<[], number>(),
@@ -125,7 +125,7 @@ describe("YouTube Connection Status Reporting", () => {
       expect(hasConnection).toBe(true);
       expect(isReady).toBe(false);
 
-      platform.connectionManager.setConnectionReady(premiereVideoId);
+      platform.connectionManager.setConnectionReady(premiereVideoId, 1);
       platform.connectionManager.isConnectionReady.mockReturnValue(true);
 
       const isReadyAfterStart =
@@ -204,7 +204,7 @@ describe("YouTube Connection Status Reporting", () => {
 
       expect(initialState).toBe(false);
 
-      platform.connectionManager.setConnectionReady(videoId);
+      platform.connectionManager.setConnectionReady(videoId, 1);
       const finalState = platform.connectionManager.isConnectionReady(videoId);
 
       expect(finalState).toBe(true);
@@ -236,7 +236,7 @@ describe("YouTube Connection Status Reporting", () => {
         false,
       );
 
-      platform.connectionManager.setConnectionReady("video1");
+      platform.connectionManager.setConnectionReady("video1", 1);
       platform.connectionManager.isConnectionReady.mockImplementation(
         (id: string) => id === "video1",
       );
@@ -246,7 +246,7 @@ describe("YouTube Connection Status Reporting", () => {
         false,
       );
 
-      platform.connectionManager.setConnectionReady("video2");
+      platform.connectionManager.setConnectionReady("video2", 1);
       platform.connectionManager.isConnectionReady.mockReturnValue(true);
 
       expect(platform.connectionManager.isConnectionReady("video1")).toBe(true);

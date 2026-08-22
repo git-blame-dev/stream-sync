@@ -119,11 +119,7 @@ describe("YouTube stream status + viewer count event bus (integration)", () => {
     });
     const platform = createPlatform();
     platform.handlers = lifecycle.createDefaultEventHandlers("youtube");
-    platform.connectionManager.connections.set("test-stream-1", {
-      connection: null,
-      state: "connected",
-      metadata: {},
-    });
+    await platform.connectionManager.connectToStream("test-stream-1", async () => ({}));
 
     const eventPromise = waitForPlatformEvent(eventBus);
 

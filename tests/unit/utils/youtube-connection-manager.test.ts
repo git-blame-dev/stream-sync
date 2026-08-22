@@ -25,6 +25,7 @@ type TestConnectionState =
   | "error";
 
 type TestConnectionData = {
+  attemptId: number;
   connection: TestConnection | null;
   state: TestConnectionState;
   metadata: Record<string, unknown>;
@@ -39,7 +40,6 @@ type TestErrorHandler = {
 };
 
 type TestYouTubeConnectionManager = YouTubeConnectionManager & {
-  connections: Map<string, TestConnectionData>;
   errorHandler: TestErrorHandler;
   getAllConnections: () => Array<TestConnection | null>;
   getConnection: (videoId: string) => TestConnection | null | undefined;
@@ -100,13 +100,26 @@ describe("YouTube Connection Manager - Behavior Excellence", () => {
 
   afterEach(() => {
     restoreAllMocks();
-    if (connectionManager && connectionManager.connections) {
-      connectionManager.connections.clear();
-    }
     clearAllMocks();
   });
 
   describe("Connection Lifecycle Management", () => {
+    it("preserves readiness reported before connection factory resolution", async () => {
+      const connection = { videoId: "early-ready" };
+      const result = await connectionManager.connectToStream(
+        "early-ready",
+        async (videoId, attemptId) => {
+          connectionManager.setConnectionReady(videoId, attemptId);
+          return connection;
+        },
+      );
+
+      expect(result).toBe(true);
+      expect(connectionManager.getConnection("early-ready")).toBe(connection);
+      expect(connectionManager.isConnectionReady("early-ready")).toBe(true);
+      expect(connectionManager.getConnectionStatus("early-ready")?.state).toBe("ready");
+    });
+
     it("should successfully establish new stream connection with proper state tracking", async () => {
       expect(connectionManager.getAllConnections()).toHaveLength(0);
 
@@ -172,6 +185,68 @@ describe("YouTube Connection Manager - Behavior Excellence", () => {
   });
 
   describe("Atomic Operations and Race Condition Prevention", () => {
+    it("allows replacement after removing a pending attempt and shuts down its late result", async () => {
+      let resolveFirst!: (connection: TestConnection) => void;
+      const firstStop = createMockFn<[], Promise<void>>().mockResolvedValue();
+      const firstDisconnect = createMockFn<[], Promise<void>>().mockResolvedValue();
+      const firstAttempt = connectionManager.connectToStream(
+        "replace-pending",
+        () => new Promise<TestConnection>((resolve) => {
+          resolveFirst = resolve;
+        }),
+      );
+      await Promise.resolve();
+
+      await connectionManager.removeConnection("replace-pending");
+      const replacement = { videoId: "replacement" };
+      const replacementResult = await connectionManager.connectToStream(
+        "replace-pending",
+        async () => replacement,
+      );
+      resolveFirst({ videoId: "superseded", stop: firstStop, disconnect: firstDisconnect });
+
+      await expect(firstAttempt).resolves.toBe(false);
+      expect(replacementResult).toBe(true);
+      expect(connectionManager.getConnection("replace-pending")).toBe(replacement);
+      expect(firstStop).toHaveBeenCalledTimes(1);
+      expect(firstDisconnect).toHaveBeenCalledTimes(1);
+    });
+
+    it("ignores a stale disconnect from an older attempt for the same video", async () => {
+      let firstAttemptId = 0;
+      await connectionManager.connectToStream("same-video", async (_videoId, attemptId) => {
+        firstAttemptId = attemptId;
+        return { videoId: "first" };
+      });
+      await connectionManager.removeConnection("same-video");
+      const replacement = { videoId: "replacement" };
+      await connectionManager.connectToStream("same-video", async () => replacement);
+
+      const result = await connectionManager.disconnectFromStream(
+        "same-video",
+        "stale terminal event",
+        firstAttemptId,
+      );
+
+      expect(result).toBe(false);
+      expect(connectionManager.getConnection("same-video")).toBe(replacement);
+    });
+
+    it("ignores stale readiness from an older attempt for the same video", async () => {
+      let firstAttemptId = 0;
+      await connectionManager.connectToStream("ready-replacement", async (_videoId, attemptId) => {
+        firstAttemptId = attemptId;
+        return { videoId: "first" };
+      });
+      await connectionManager.removeConnection("ready-replacement");
+      await connectionManager.connectToStream("ready-replacement", async () => ({ videoId: "replacement" }));
+
+      connectionManager.setConnectionReady("ready-replacement", firstAttemptId);
+
+      expect(connectionManager.isConnectionReady("ready-replacement")).toBe(false);
+      expect(connectionManager.getConnectionStatus("ready-replacement")?.state).toBe("connected");
+    });
+
     it("should prevent duplicate connections to same stream through atomic locking", async () => {
       const slowConnectionFactory: ConnectionFactory = createMockFn<
         [string],
@@ -332,6 +407,32 @@ describe("YouTube Connection Manager - Behavior Excellence", () => {
   });
 
   describe("Error Recovery and Resilience", () => {
+    it("detaches the exact connection after shutdown failure", async () => {
+      const stop = createMockFn<[], Promise<void>>().mockRejectedValue(new Error("stop failed"));
+      const disconnect = createMockFn<[], Promise<void>>().mockRejectedValue(new Error("disconnect failed"));
+      await connectionManager.connectToStream("shutdown-failure", async () => ({ stop, disconnect }));
+
+      const result = await connectionManager.disconnectFromStream("shutdown-failure", "terminal event");
+
+      expect(result).toBe(false);
+      expect(stop).toHaveBeenCalledTimes(1);
+      expect(disconnect).toHaveBeenCalledTimes(1);
+      expect(connectionManager.hasConnection("shutdown-failure")).toBe(false);
+    });
+
+    it("reports stop failure after still attempting disconnect", async () => {
+      const stop = createMockFn<[], Promise<void>>().mockRejectedValue(new Error("stop failed"));
+      const disconnect = createMockFn<[], Promise<void>>().mockResolvedValue();
+      await connectionManager.connectToStream("stop-failure", async () => ({ stop, disconnect }));
+
+      const result = await connectionManager.disconnectFromStream("stop-failure", "terminal event");
+
+      expect(result).toBe(false);
+      expect(stop).toHaveBeenCalledTimes(1);
+      expect(disconnect).toHaveBeenCalledTimes(1);
+      expect(connectionManager.hasConnection("stop-failure")).toBe(false);
+    });
+
     it("should handle connection factory failures gracefully without corrupting state", async () => {
       const failingFactory = createMockFn().mockRejectedValue(
         new Error("Connection failed"),
@@ -437,19 +538,12 @@ describe("YouTube Connection Manager - Behavior Excellence", () => {
     it("cleans up all connections without errors", async () => {
       await connectionManager.cleanupAllConnections();
 
-      await connectionManager.connectToStream(
-        "to-clean",
-        mockConnectionFactory,
-      );
       const stop = createMockFn<[], Promise<void>>().mockRejectedValue(
         new Error("stop failed"),
       );
       const disconnect = createMockFn<[], Promise<void>>().mockResolvedValue();
-      connectionManager.connections.set("to-clean", {
-        connection: { stop, disconnect },
-        state: "connected",
-        metadata: {},
-      });
+      connectionManager.startLifecycle();
+      await connectionManager.connectToStream("to-clean", async () => ({ stop, disconnect }));
 
       await connectionManager.cleanupAllConnections();
 
@@ -477,6 +571,34 @@ describe("YouTube Connection Manager - Behavior Excellence", () => {
       expect(connectionManager.hasConnection("late-stream")).toBe(false);
     });
 
+    it("allows a new lifecycle attempt while an old factory is still pending", async () => {
+      let resolveOldFactory!: (connection: TestConnection) => void;
+      const oldStop = createMockFn<[], Promise<void>>().mockResolvedValue();
+      const oldDisconnect = createMockFn<[], Promise<void>>().mockResolvedValue();
+      const oldAttempt = connectionManager.connectToStream(
+        "lifecycle-video",
+        () => new Promise<TestConnection>((resolve) => {
+          resolveOldFactory = resolve;
+        }),
+      );
+      await Promise.resolve();
+      await connectionManager.cleanupAllConnections();
+      connectionManager.startLifecycle();
+      const replacement = { videoId: "new-lifecycle" };
+
+      const replacementResult = await connectionManager.connectToStream(
+        "lifecycle-video",
+        async () => replacement,
+      );
+      resolveOldFactory({ videoId: "old-lifecycle", stop: oldStop, disconnect: oldDisconnect });
+
+      await expect(oldAttempt).resolves.toBe(false);
+      expect(replacementResult).toBe(true);
+      expect(connectionManager.getConnection("lifecycle-video")).toBe(replacement);
+      expect(oldStop).toHaveBeenCalledTimes(1);
+      expect(oldDisconnect).toHaveBeenCalledTimes(1);
+    });
+
     it("handles shutdown errors gracefully", async () => {
       const connection = {
         stop: createMockFn().mockRejectedValue(new Error("stop error")),
@@ -484,11 +606,7 @@ describe("YouTube Connection Manager - Behavior Excellence", () => {
           new Error("disconnect error"),
         ),
       };
-      connectionManager.connections.set("err-video", {
-        connection,
-        state: "connected",
-        metadata: {},
-      });
+      await connectionManager.connectToStream("err-video", async () => connection);
 
       await connectionManager.removeConnection("err-video");
 
@@ -586,7 +704,9 @@ describe("YouTube Connection Manager - Behavior Excellence", () => {
       await connectionManager.connectToStream("state-1", mockConnectionFactory);
       await connectionManager.connectToStream("state-2", mockConnectionFactory);
 
-      connectionManager.setConnectionReady("state-1");
+      const attemptId = connectionManager.getConnectionStatus("state-1")?.attemptId;
+      assertPresent(attemptId);
+      connectionManager.setConnectionReady("state-1", attemptId);
 
       const state = connectionManager.getConnectionState();
       const stats = connectionManager.getStats();
@@ -618,6 +738,27 @@ describe("YouTube Connection Manager - Behavior Excellence", () => {
       );
       expect(existingStatus.metadata.reason).toBe("status test");
       expect(missingStatus).toBeNull();
+    });
+
+    it("returns connection data snapshots that cannot mutate registry state", async () => {
+      await connectionManager.connectToStream(
+        "snapshot-video",
+        mockConnectionFactory,
+        { reason: "original" },
+      );
+      const [connectionData] = connectionManager.getAllConnectionData();
+      const status = connectionManager.getConnectionStatus("snapshot-video");
+      assertPresent(connectionData);
+      assertPresent(status);
+
+      connectionData.state = "error";
+      connectionData.metadata.reason = "changed through list";
+      status.metadata.reason = "changed through status";
+
+      expect(connectionManager.getConnectionStatus("snapshot-video")).toMatchObject({
+        state: "connected",
+        metadata: { reason: "original" },
+      });
     });
   });
 
@@ -703,14 +844,13 @@ describe("YouTube Connection Manager - Behavior Excellence", () => {
       >();
       connectionManager.errorHandler.handleEventProcessingError =
         handleEventProcessingError;
-      connectionManager.connections.set("vid", {
-        connection: {
+      await connectionManager.connectToStream(
+        "vid",
+        async () => ({
           stop: createMockFn<[], Promise<void>>().mockRejectedValue("stop fail"),
           disconnect: createMockFn<[], Promise<void>>().mockResolvedValue(),
-        },
-        state: connectionManager.CONNECTION_STATES.CONNECTED,
-        metadata: {},
-      });
+        }),
+      );
 
     await connectionManager.removeConnection("vid");
 

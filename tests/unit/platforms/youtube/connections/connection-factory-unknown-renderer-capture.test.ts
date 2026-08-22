@@ -28,6 +28,7 @@ type YouTubeClient = {
 const createFactoryPlatform = (): FactoryPlatform => ({
     logger: noOpLogger,
     config: {},
+    isCurrentYouTubeConnection: createMockFn().mockReturnValue(true),
     setYouTubeConnectionReady: createMockFn(),
     disconnectFromYouTubeStream: createMockFn().mockResolvedValue(true),
     handleChatMessage: createMockFn(),

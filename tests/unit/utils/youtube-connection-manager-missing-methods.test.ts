@@ -2,6 +2,18 @@ import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { restoreAllMocks } from "../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../helpers/mock-factories";
 import { YouTubeConnectionManager } from "../../../src/platforms/youtube/youtube-connection-manager";
+
+const setCurrentConnectionReady = (
+  connectionManager: YouTubeConnectionManager,
+  videoId: string,
+): void => {
+  const attemptId = connectionManager.getConnectionStatus(videoId)?.attemptId;
+  if (attemptId === undefined) {
+    throw new Error(`Expected connection attempt for ${videoId}`);
+  }
+  connectionManager.setConnectionReady(videoId, attemptId);
+};
+
 describe("YouTube Connection Manager - Missing Methods", () => {
   afterEach(() => {
     restoreAllMocks();
@@ -20,7 +32,7 @@ describe("YouTube Connection Manager - Missing Methods", () => {
         "test-video-id",
         async () => mockConnection,
       );
-      connectionManager.setConnectionReady("test-video-id");
+      setCurrentConnectionReady(connectionManager, "test-video-id");
 
       expect(typeof connectionManager.getConnectionStatus).toBe("function");
 
@@ -81,7 +93,7 @@ describe("YouTube Connection Manager - Missing Methods", () => {
         "test-video",
         async () => mockConnection,
       );
-      connectionManager.setConnectionReady("test-video");
+      setCurrentConnectionReady(connectionManager, "test-video");
 
       const status = connectionManager.getConnectionStatus("test-video");
       const isReady = connectionManager.isConnectionReady("test-video");
