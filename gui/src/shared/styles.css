@@ -127,6 +127,13 @@ html, body {
   font-variant-numeric: tabular-nums;
 }
 
+.funding-goal__unit {
+  color: inherit;
+  font-size: .72em;
+  font-weight: 600;
+  opacity: .78;
+}
+
 .funding-goal__label-group {
   display: inline-flex;
   flex: 0 1 auto;
@@ -174,6 +181,14 @@ html, body {
   white-space: nowrap;
 }
 
+.funding-goal__target-value {
+  color: #f4f6f8;
+  font-size: calc(var(--gui-funding-goal-amount-size) * .86);
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+
 .funding-goal__current-amount {
   color: var(--gui-funding-goal-accent);
   text-shadow: var(--gui-funding-goal-accent-shadow);
@@ -183,7 +198,7 @@ html, body {
   position: relative;
   margin-top: 0;
   overflow: hidden;
-  border-radius: 0;
+  border-radius: 10px;
   background: var(--gui-funding-goal-track);
   box-shadow: var(--gui-funding-goal-accent-shadow);
 }
@@ -199,6 +214,11 @@ html, body {
 
 .funding-goal--minimal .funding-goal__summary {
   flex-wrap: nowrap;
+  gap: 16px;
+}
+
+.funding-goal--standard .funding-goal__summary {
+  gap: 20px;
 }
 
 .funding-goal--minimal .funding-goal__rail {

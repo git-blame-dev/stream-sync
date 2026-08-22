@@ -23,6 +23,15 @@ function goal(overrides: Partial<FundingGoalSnapshot> = {}): FundingGoalSnapshot
   };
 }
 
+function renderedText(value: unknown): string {
+  if (typeof value === "string" || typeof value === "number") return String(value);
+  if (Array.isArray(value)) return value.map(renderedText).join("");
+  if (value && typeof value === "object" && "children" in value) {
+    return renderedText((value as { children?: unknown }).children);
+  }
+  return "";
+}
+
 describe("FundingGoal", () => {
   test("renders funded standard copy while preserving the over-goal raised amount", () => {
     let renderer: ReactTestRenderer | undefined;
@@ -37,7 +46,11 @@ describe("FundingGoal", () => {
     expect(renderer?.root.findByProps({ className: "funding-goal__emoji" }).children.join("")).toBe("🎮");
     expect(renderer?.root.findByProps({ className: "funding-goal__label" }).props["aria-label"]).toBe("🎮 New Controller");
     expect(renderer?.root.findByProps({ className: "funding-goal__badge" }).children.join("")).toBe("FUNDED");
-    expect(renderer?.root.findByProps({ className: "funding-goal__raised-value" }).children.join("")).toBe("$108.25 raised");
+    expect(renderedText(renderer?.root.findByProps({ className: "funding-goal__raised-value" }).children)).toBe("$108.25 raised");
+    expect(renderedText(renderer?.root.findByProps({ className: "funding-goal__target-value" }).children)).toBe("of $100.00 USD");
+    expect(renderer?.root.findByProps({ className: "funding-goal__raised-copy" }).props["aria-label"])
+      .toBe("$108.25 raised of $100.00 USD");
+    expect(renderer?.root.findAllByProps({ className: "funding-goal__unit" })).toHaveLength(1);
     expect(() => renderer?.root.findByProps({ className: "funding-goal__raised-caption" })).toThrow();
     expect(renderer?.root.findByProps({ className: "funding-goal__fill" }).props.style.transform).toBe("scaleX(1)");
   });
@@ -50,7 +63,8 @@ describe("FundingGoal", () => {
       }));
     });
 
-    expect(renderer?.root.findByProps({ className: "funding-goal__raised-value" }).children.join("")).toBe("$25.00 raised");
+    expect(renderedText(renderer?.root.findByProps({ className: "funding-goal__raised-value" }).children)).toBe("$25.00 raised");
+    expect(renderedText(renderer?.root.findByProps({ className: "funding-goal__target-value" }).children)).toBe("of $100.00 USD");
     expect(renderer?.root.findByProps({ className: "funding-goal__badge" }).children.join("")).toBe("GOAL");
     expect(() => renderer?.root.findByProps({ className: "funding-goal__raised-caption" })).toThrow();
   });
@@ -92,8 +106,8 @@ describe("FundingGoal", () => {
 
     expect(renderer?.root.findByProps({ className: "funding-goal funding-goal--minimal" })).toBeDefined();
     expect(renderer?.root.findByProps({ className: "funding-goal__badge" }).children.join("")).toBe("GOAL");
-    expect(renderer?.root.findByProps({ className: "funding-goal__current-amount" }).children.join("")).toBe("$25.00");
-    expect(renderer?.root.findByProps({ className: "funding-goal__amount" }).children).toHaveLength(3);
+    expect(renderedText(renderer?.root.findByProps({ className: "funding-goal__amount" }).children)).toBe("$25.00 / $100.00 USD");
+    expect(renderer?.root.findAllByProps({ className: "funding-goal__unit" })).toHaveLength(1);
     expect(renderer?.root.findByProps({ className: "funding-goal__summary" }).findByProps({ className: "funding-goal__rail" })).toBeDefined();
   });
 
@@ -107,7 +121,7 @@ describe("FundingGoal", () => {
     });
 
     expect(renderer?.root.findByProps({ className: "funding-goal__badge" }).children.join("")).toBe("FUNDED");
-    expect(renderer?.root.findByProps({ className: "funding-goal__current-amount" }).children.join("")).toBe("$100.00");
+    expect(renderedText(renderer?.root.findByProps({ className: "funding-goal__current-amount" }).children)).toBe("$100.00");
   });
 
   test("renders the left-to-right particle canvas inside the minimal progress rail", () => {

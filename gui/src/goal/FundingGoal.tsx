@@ -49,7 +49,7 @@ export function FundingGoal({ goal, profile = 'standard' }: FundingGoalProps) {
           <span className="funding-goal__amount">
             <span className="funding-goal__current-amount">{display.currentText}</span>
             <span> / </span>
-            <span>{display.targetText}</span>
+            <span>{display.targetText} <span className="funding-goal__unit">USD</span></span>
           </span>
         </div>
       ) : (
@@ -58,8 +58,9 @@ export function FundingGoal({ goal, profile = 'standard' }: FundingGoalProps) {
             {labelGroup}
             {rail}
           </div>
-          <span className="funding-goal__raised-copy">
+          <span className="funding-goal__raised-copy" aria-label={`${display.currentText} raised of ${display.targetText} USD`}>
             <span className="funding-goal__raised-value">{display.currentText} raised</span>
+            <span className="funding-goal__target-value">of {display.targetText} <span className="funding-goal__unit">USD</span></span>
           </span>
         </div>
       )}

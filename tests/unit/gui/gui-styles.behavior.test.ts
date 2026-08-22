@@ -131,7 +131,7 @@ describe("GUI shared styles behavior", () => {
     const fundingRailBlock = readCssBlock(cssText, ".funding-goal__rail");
     expect(fundingRailBlock).toContain("position: relative;");
     expect(fundingRailBlock).toContain("overflow: hidden;");
-    expect(fundingRailBlock).toContain("border-radius: 0;");
+    expect(fundingRailBlock).toContain("border-radius: 10px;");
     expect(fundingRailBlock).toContain("box-shadow: var(--gui-funding-goal-accent-shadow);");
     expect(readCssBlock(cssText, ".funding-goal__rail .gui-row__member-particles"))
       .toContain("z-index: 1;");
@@ -144,12 +144,18 @@ describe("GUI shared styles behavior", () => {
     expect(minimalRailBlock).toContain("min-width: 0;");
     expect(minimalRailBlock).toContain("height: 12px;");
     expect(readCssBlock(cssText, ".funding-goal--minimal .funding-goal__summary")).toContain("flex-wrap: nowrap;");
+    expect(readCssBlock(cssText, ".funding-goal--minimal .funding-goal__summary")).toContain("gap: 16px;");
+    expect(readCssBlock(cssText, ".funding-goal--standard .funding-goal__summary")).toContain("gap: 20px;");
+    expect(readCssBlock(cssText, ".funding-goal__unit")).toContain("font-size: .72em;");
     const currentAmountBlock = readCssBlock(cssText, ".funding-goal__current-amount");
     expect(currentAmountBlock).toContain("color: var(--gui-funding-goal-accent);");
     expect(currentAmountBlock).toContain("text-shadow: var(--gui-funding-goal-accent-shadow);");
     const raisedValueBlock = readCssBlock(cssText, ".funding-goal__raised-value");
     expect(raisedValueBlock).toContain("color: var(--gui-funding-goal-accent);");
     expect(raisedValueBlock).toContain("text-shadow: var(--gui-funding-goal-accent-shadow);");
+    const targetValueBlock = readCssBlock(cssText, ".funding-goal__target-value");
+    expect(targetValueBlock).toContain("color: #f4f6f8;");
+    expect(targetValueBlock).not.toContain("text-shadow:");
     const fundingBadgeBlock = readCssBlock(cssText, ".funding-goal__badge");
     expect(fundingBadgeBlock).toContain("display: inline-flex;");
     expect(fundingBadgeBlock).toContain("align-items: center;");
