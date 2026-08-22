@@ -124,6 +124,33 @@ describe("Config build pipeline integration", () => {
       expect(typeof built.displayQueue.rowIntervalMs).toBe("number");
       expect(built.displayQueue.rowIntervalMs).toBe(6000);
     });
+
+    it("preserves normalized monetization values through the pipeline", () => {
+      const rawConfig = {
+        ...getRawTestConfig(),
+        monetizationValues: {
+          tiktokGiftUnitUsd: "0.007",
+          twitchBitUsd: "0.013",
+          youtubeJewelUsd: "0.009",
+          tiktokMembershipUsd: "2.17",
+          twitchMembershipUsd: "3.67",
+          youtubeMembershipUsd: "4.11",
+        },
+      };
+      const normalized = ConfigValidator.normalize(rawConfig);
+      const built = _buildConfig(normalized);
+
+      expect(normalized.monetizationValues).toEqual({
+        tiktokGiftUnitUsd: 0.007,
+        twitchBitUsd: 0.013,
+        youtubeJewelUsd: 0.009,
+        tiktokMembershipUsd: 2.17,
+        twitchMembershipUsd: 3.67,
+        youtubeMembershipUsd: 4.11,
+      });
+      expect(built.monetizationValues).toEqual(normalized.monetizationValues);
+      expect(built.monetizationValues).not.toBe(normalized.monetizationValues);
+    });
   });
 
   describe("defaults applied correctly through pipeline", () => {
