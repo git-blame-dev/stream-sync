@@ -48,8 +48,8 @@ function providerRates(value: unknown): RateTable | null {
     for (const entry of value) {
         if (entry === null || typeof entry !== 'object') return null;
         const record = entry as Record<string, unknown>;
-        if (typeof record.currency !== 'string' || Object.hasOwn(table, record.currency)) return null;
-        table[record.currency] = record.rate;
+        if (record.base !== 'USD' || typeof record.quote !== 'string' || Object.hasOwn(table, record.quote)) return null;
+        table[record.quote] = record.rate;
     }
     return validRates(table);
 }

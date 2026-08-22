@@ -10,9 +10,10 @@ describe('USD rate service', () => {
     test('loads cache, refreshes once, and converts synchronously', async () => {
         const fs = memoryFs(JSON.stringify({ version: 1, base: 'USD', rates: { EUR: 0.8 } }));
         let calls = 0;
-        const service = await createUsdRateService({ cachePath: 'cache.json', fs, fetch: async url => { calls++; expect(url).toBe(PROVIDER_URL); return { ok: true, status: 200, json: async () => [{ currency: 'EUR', rate: 0.8 }, { currency: 'JPY', rate: 150 }] }; } });
+        const service = await createUsdRateService({ cachePath: 'cache.json', fs, fetch: async url => { calls++; expect(url).toBe(PROVIDER_URL); return { ok: true, status: 200, json: async () => [{ date: '2026-08-22', base: 'USD', quote: 'EUR', rate: 0.8 }, { date: '2026-08-22', base: 'USD', quote: 'JPY', rate: 150 }] }; } });
         expect(calls).toBe(1);
         expect(service.convertToUsd(15, 'eur')).toBe(18.75);
+        expect(service.convertToUsd(150, 'JPY')).toBe(1);
         expect(service.convertToUsd(10, 'USD')).toBe(10);
         expect(service.convertToUsd(1, 'GBP')).toBeNull();
         expect(service.rates.USD).toBe(1);
@@ -37,9 +38,10 @@ describe('USD rate service', () => {
 
     test('rejects duplicate and malformed provider rows without changing USD', async () => {
         for (const rows of [
-            [{ currency: 'EUR', rate: 0.8 }, { currency: 'EUR', rate: 0.9 }],
-            [{ currency: 'usd', rate: 2 }],
-            [{ currency: 'EURO', rate: 0.8 }],
+            [{ date: '2026-08-22', base: 'USD', quote: 'EUR', rate: 0.8 }, { date: '2026-08-22', base: 'USD', quote: 'EUR', rate: 0.9 }],
+            [{ date: '2026-08-22', base: 'USD', quote: 'usd', rate: 2 }],
+            [{ date: '2026-08-22', base: 'USD', quote: 'EURO', rate: 0.8 }],
+            [{ date: '2026-08-22', base: 'EUR', quote: 'JPY', rate: 150 }],
         ]) {
             const service = await createUsdRateService({ cachePath: 'missing.json', fs: memoryFs(), fetch: async () => ({ ok: true, status: 200, json: async () => rows }) });
             expect(service.rates.USD).toBe(1);
@@ -48,7 +50,7 @@ describe('USD rate service', () => {
     });
 
     test('uses USD-base rates for foreign-to-USD conversion', async () => {
-        const service = await createUsdRateService({ cachePath: 'missing.json', fs: memoryFs(), fetch: async () => ({ ok: true, status: 200, json: async () => [{ currency: 'EUR', rate: 0.8 }] }) });
+        const service = await createUsdRateService({ cachePath: 'missing.json', fs: memoryFs(), fetch: async () => ({ ok: true, status: 200, json: async () => [{ date: '2026-08-22', base: 'USD', quote: 'EUR', rate: 0.8 }] }) });
         expect(service.convertToUsd(8, 'EUR')).toBe(10);
     });
 });
