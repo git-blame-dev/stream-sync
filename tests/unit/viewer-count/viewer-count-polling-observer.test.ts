@@ -93,7 +93,7 @@ describe("ViewerCountSystem polling observer notifications", () => {
     await system.pollPlatform("youtube");
 
     expect(updates).toEqual([]);
-    expect(system.counts.youtube).toBe(0);
+    expect(system.getViewerCount("youtube")).toBe(0);
   });
 
   it("preserves count when polling unknown platform", async () => {
@@ -101,7 +101,7 @@ describe("ViewerCountSystem polling observer notifications", () => {
 
     await system.pollPlatform("unknown");
 
-    expect(system.counts.youtube).toBe(0);
+    expect(system.getViewerCount("youtube")).toBe(0);
   });
 
   it("preserves count when platform lacks getViewerCount", async () => {
@@ -115,7 +115,7 @@ describe("ViewerCountSystem polling observer notifications", () => {
 
     await system.pollPlatform("twitch");
 
-    expect(system.counts.twitch).toBe(0);
+    expect(system.getViewerCount("twitch")).toBe(0);
   });
 
   it("preserves count when platform returns null viewer count", async () => {
@@ -130,7 +130,7 @@ describe("ViewerCountSystem polling observer notifications", () => {
 
     await system.pollPlatform("youtube");
 
-    expect(system.counts.youtube).toBe(0);
+    expect(system.getViewerCount("youtube")).toBe(0);
   });
 
   it("continues when polling throws", async () => {
@@ -146,6 +146,6 @@ describe("ViewerCountSystem polling observer notifications", () => {
     system.streamStatus.youtube = true;
 
     await expect(system.pollPlatform("youtube")).resolves.toBeUndefined();
-    expect(system.counts.youtube).toBe(0);
+    expect(system.getViewerCount("youtube")).toBe(0);
   });
 });

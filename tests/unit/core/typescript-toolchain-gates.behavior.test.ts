@@ -1830,7 +1830,6 @@ describe('TypeScript toolchain gates behavior', () => {
             'tests/unit/tiktok-official-gift-pattern.test.ts',
             'tests/unit/tiktok-connection-refactor.test.ts',
             'tests/unit/tiktok-connection-fix-validation.test.ts',
-            'tests/unit/main-updateviewercount-obs-fix.test.ts',
             'tests/unit/main-supersticker-handler-missing.test.ts'
         ];
         const cohortJsPaths = [
@@ -1858,7 +1857,6 @@ describe('TypeScript toolchain gates behavior', () => {
             'tests/unit/tiktok-official-gift-pattern.test.ts',
             'tests/unit/tiktok-connection-refactor.test.ts',
             'tests/unit/tiktok-connection-fix-validation.test.ts',
-            'tests/unit/main-updateviewercount-obs-fix.test.ts',
             'tests/unit/main-supersticker-handler-missing.test.ts'
         ];
 
@@ -1876,7 +1874,6 @@ describe('TypeScript toolchain gates behavior', () => {
             'tests/unit/tiktok-official-gift-pattern.test.ts',
             'tests/unit/tiktok-connection-refactor.test.ts',
             'tests/unit/tiktok-connection-fix-validation.test.ts',
-            'tests/unit/main-updateviewercount-obs-fix.test.ts',
             'tests/unit/main-supersticker-handler-missing.test.ts'
         ];
 
@@ -1894,7 +1891,6 @@ describe('TypeScript toolchain gates behavior', () => {
             'tests/unit/tiktok-official-gift-pattern.test.ts',
             'tests/unit/tiktok-connection-refactor.test.ts',
             'tests/unit/tiktok-connection-fix-validation.test.ts',
-            'tests/unit/main-updateviewercount-obs-fix.test.ts',
             'tests/unit/main-supersticker-handler-missing.test.ts'
         ];
 

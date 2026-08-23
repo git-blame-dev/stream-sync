@@ -139,7 +139,7 @@ describe("YouTube Viewer Count System - End-to-End Integration", () => {
       viewerCountSystem.startPolling();
       await waitForDelay(100);
 
-      expect(viewerCountSystem.counts.youtube).toBe(1234);
+      expect(viewerCountSystem.getViewerCount("youtube")).toBe(1234);
       expect(viewerCountSystem.isStreamLive("youtube")).toBe(true);
       const obsUpdateCalls = obsManager.call.mock.calls.filter(
         isSetInputSettingsCall,
@@ -168,9 +168,9 @@ describe("YouTube Viewer Count System - End-to-End Integration", () => {
       viewerCountSystem.startPolling();
       await waitForDelay(100);
 
-      expect(viewerCountSystem.counts.youtube).toBe(1234);
-      expect(viewerCountSystem.counts.twitch).toBe(567);
-      expect(viewerCountSystem.counts.tiktok).toBe(890);
+      expect(viewerCountSystem.getViewerCount("youtube")).toBe(1234);
+      expect(viewerCountSystem.getViewerCount("twitch")).toBe(567);
+      expect(viewerCountSystem.getViewerCount("tiktok")).toBe(890);
       expect(viewerCountSystem.isStreamLive("youtube")).toBe(true);
       expect(viewerCountSystem.isStreamLive("twitch")).toBe(true);
       expect(viewerCountSystem.isStreamLive("tiktok")).toBe(true);
@@ -180,12 +180,12 @@ describe("YouTube Viewer Count System - End-to-End Integration", () => {
       await viewerCountSystem.updateStreamStatus("youtube", true);
       viewerCountSystem.startPolling();
       await waitForDelay(50);
-      const initialCount = viewerCountSystem.counts.youtube;
+      const initialCount = viewerCountSystem.getViewerCount("youtube");
       expect(initialCount).toBe(1234);
 
       await viewerCountSystem.updateStreamStatus("youtube", false);
 
-      expect(viewerCountSystem.counts.youtube).toBe(0);
+      expect(viewerCountSystem.getViewerCount("youtube")).toBe(0);
       expect(viewerCountSystem.isStreamLive("youtube")).toBe(false);
       expect(obsManager.call).toHaveBeenLastCalledWith(
         "SetInputSettings",
@@ -302,7 +302,7 @@ describe("YouTube Viewer Count System - End-to-End Integration", () => {
       viewerCountSystem.startPolling();
       await waitForDelay(50);
 
-      expect(viewerCountSystem.counts.youtube).toBe(1234);
+      expect(viewerCountSystem.getViewerCount("youtube")).toBe(1234);
     });
   });
 
@@ -344,7 +344,7 @@ describe("YouTube Viewer Count System - End-to-End Integration", () => {
       viewerCountSystem.startPolling();
       await waitForDelay(50);
 
-      expect(viewerCountSystem.counts.youtube).toBe(0);
+      expect(viewerCountSystem.getViewerCount("youtube")).toBe(0);
       const obsCall = obsManager.call.mock.calls.find(isSetInputSettingsCall);
       expect(obsCall?.[1]?.inputSettings?.text).toBe("0");
     });
@@ -361,7 +361,7 @@ describe("YouTube Viewer Count System - End-to-End Integration", () => {
 
       expect(viewerCountSystem.isPolling).toBe(true);
       expect(viewerCountSystem.isStreamLive("youtube")).toBe(true);
-      expect(viewerCountSystem.counts.youtube).toBe(0);
+      expect(viewerCountSystem.getViewerCount("youtube")).toBe(0);
     });
 
     test("should handle invalid viewer count responses", async () => {
@@ -374,7 +374,7 @@ describe("YouTube Viewer Count System - End-to-End Integration", () => {
 
       expect(viewerCountSystem.isPolling).toBe(true);
       expect(viewerCountSystem.isStreamLive("youtube")).toBe(true);
-      expect(typeof viewerCountSystem.counts.youtube).toBe("number");
+      expect(typeof viewerCountSystem.getViewerCount("youtube")).toBe("number");
     });
 
     test("preserves last known viewer count when provider returns unavailable", async () => {
@@ -385,10 +385,10 @@ describe("YouTube Viewer Count System - End-to-End Integration", () => {
         .mockResolvedValueOnce(null);
 
       await viewerCountSystem.pollPlatform("youtube");
-      expect(viewerCountSystem.counts.youtube).toBe(1234);
+      expect(viewerCountSystem.getViewerCount("youtube")).toBe(1234);
 
       await viewerCountSystem.pollPlatform("youtube");
-      expect(viewerCountSystem.counts.youtube).toBe(1234);
+      expect(viewerCountSystem.getViewerCount("youtube")).toBe(1234);
     });
 
     test("should maintain system stability during connection failures", async () => {
@@ -401,8 +401,8 @@ describe("YouTube Viewer Count System - End-to-End Integration", () => {
 
       expect(viewerCountSystem.isPolling).toBe(true);
       expect(viewerCountSystem.isStreamLive("youtube")).toBe(true);
-      expect(typeof viewerCountSystem.counts.youtube).toBe("number");
-      expect(viewerCountSystem.counts.youtube).toBeGreaterThanOrEqual(0);
+      expect(typeof viewerCountSystem.getViewerCount("youtube")).toBe("number");
+      expect(viewerCountSystem.getViewerCount("youtube")).toBeGreaterThanOrEqual(0);
     });
   });
 
@@ -417,7 +417,7 @@ describe("YouTube Viewer Count System - End-to-End Integration", () => {
       const endTime = testClock.now();
 
       expect(endTime - startTime).toBeLessThan(200);
-      expect(viewerCountSystem.counts.youtube).toBe(1234);
+      expect(viewerCountSystem.getViewerCount("youtube")).toBe(1234);
     });
 
     test("should handle concurrent viewer count requests efficiently", async () => {

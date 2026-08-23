@@ -62,7 +62,7 @@ type RuntimeNotificationHandler = (platform: string, username: unknown, payload:
 
 type RouterRuntime = {
     handleChatMessage?: (platform: string, payload: RouterRecord) => Promise<unknown> | unknown;
-    updateViewerCount?: (platform: string, count: number) => void;
+    updateViewerCount?: (platform: string, count: number) => Promise<unknown> | unknown;
     handleGiftNotification?: RuntimeNotificationHandler;
     handlePaypiggyNotification?: RuntimeNotificationHandler;
     handleGiftPaypiggyNotification?: RuntimeNotificationHandler;
@@ -242,7 +242,7 @@ class PlatformEventRouter {
                     if (!Number.isFinite(count)) {
                         throw new Error('Viewer-count event requires numeric count');
                     }
-                    this.runtime.updateViewerCount(platform, count);
+                    await this.runtime.updateViewerCount(platform, count);
                 }
                 return;
             case PlatformEvents.GIFT: {

@@ -102,7 +102,7 @@ describe("ViewerCountSystem stream status observer notifications", () => {
     expect(
       countEvents.some((evt) => evt.platform === "youtube" && evt.count === 0),
     ).toBe(true);
-    expect(system.counts.youtube).toBe(0);
+    expect(system.getViewerCount("youtube")).toBe(0);
   });
 
   test("ignores updates for unknown platform without mutating counts", async () => {
@@ -119,7 +119,7 @@ describe("ViewerCountSystem stream status observer notifications", () => {
 
     expect(observer.onStreamStatusChange).not.toHaveBeenCalled();
     expect(observer.onViewerCountUpdate).not.toHaveBeenCalled();
-    expect(system.counts).toEqual(
+    expect(system.getViewerCounts()).toEqual(
       expect.objectContaining({ youtube: 0, twitch: 0, tiktok: 0 }),
     );
   });

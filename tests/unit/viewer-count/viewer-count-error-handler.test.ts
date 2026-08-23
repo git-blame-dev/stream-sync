@@ -28,6 +28,6 @@ describe("ViewerCountSystem observer error handling", () => {
 
     await expect(system.pollPlatform("youtube")).resolves.toBeUndefined();
 
-    expect(system.counts.youtube).toBe(100);
+    expect(system.getViewerCount("youtube")).toBe(100);
   });
 });

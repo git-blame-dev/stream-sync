@@ -46,7 +46,7 @@ describe("ViewerCountSystem polling with malformed payloads", () => {
 
     await system.pollPlatform("youtube");
 
-    expect(system.counts.youtube).toBe(0);
+    expect(system.getViewerCount("youtube")).toBe(0);
     expect(observerUpdates).toHaveLength(0);
   });
 
@@ -62,7 +62,7 @@ describe("ViewerCountSystem polling with malformed payloads", () => {
 
     await system.pollPlatform("youtube");
 
-    expect(system.counts.youtube).toBe(0);
+    expect(system.getViewerCount("youtube")).toBe(0);
     expect(observerUpdates).toHaveLength(0);
   });
 });

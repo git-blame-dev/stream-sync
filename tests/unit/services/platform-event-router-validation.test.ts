@@ -779,6 +779,40 @@ describe("PlatformEventRouter validation", () => {
     expect(runtime.updateViewerCount).not.toHaveBeenCalled();
   });
 
+  it("awaits viewer-count transitions", async () => {
+    let releaseUpdate!: () => void;
+    let updateCompleted = false;
+    const updatePromise = new Promise<boolean>((resolve) => {
+      releaseUpdate = () => {
+        updateCompleted = true;
+        resolve(true);
+      };
+    });
+    const { router } = buildRouter({
+      runtime: {
+        updateViewerCount: createMockFn<[string, number], unknown>(() => updatePromise),
+      },
+    });
+
+    let routingCompleted = false;
+    const routingPromise = router.routeEvent({
+      platform: "tiktok",
+      type: "platform:viewer-count",
+      data: {
+        count: 42,
+        timestamp: new Date().toISOString(),
+      },
+    }).then(() => {
+      routingCompleted = true;
+    });
+
+    await Promise.resolve();
+    expect(routingCompleted).toBe(false);
+    releaseUpdate();
+    await routingPromise;
+    expect(updateCompleted).toBe(true);
+  });
+
   it("rejects viewer-count events missing timestamps", async () => {
     const { router, runtime } = buildRouter();
 

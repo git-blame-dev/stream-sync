@@ -33,7 +33,7 @@ describe("ViewerCountSystem polling resilience", () => {
 
     await system.pollPlatform("twitch");
 
-    expect(system.counts.twitch).toBe(0);
+    expect(system.getViewerCount("twitch")).toBe(0);
   });
 
   test("continues polling cycle when provider throws", async () => {
@@ -41,6 +41,6 @@ describe("ViewerCountSystem polling resilience", () => {
 
     await system.pollPlatform("twitch");
 
-    expect(system.counts.twitch).toBe(0);
+    expect(system.getViewerCount("twitch")).toBe(0);
   });
 });

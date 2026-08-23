@@ -18,7 +18,7 @@ const flushImmediatePoll = async () => {
 
 type ViewerCountSystemInstance = {
   streamStatus: Record<string, boolean>;
-  counts: Record<string, number>;
+  getViewerCount: (platform: string) => number | undefined;
   startPolling: () => void;
   stopPolling: () => void;
   pollPlatform: (platform: string) => Promise<void>;
@@ -91,7 +91,7 @@ describe("Twitch Viewer Count System Debug", () => {
     expect(viewerSystem.streamStatus.twitch).toBe(true);
     expect(viewerSystem.streamStatus.youtube).toBe(false);
     expect(viewerSystem.streamStatus.tiktok).toBe(false);
-    expect(viewerSystem.counts.twitch).toBe(0);
+    expect(viewerSystem.getViewerCount("twitch")).toBe(0);
   });
 
   test("starts polling live Twitch counts immediately", async () => {
@@ -102,9 +102,9 @@ describe("Twitch Viewer Count System Debug", () => {
 
     expect(viewerSystem.isPolling).toBe(true);
     expect(mockTwitchPlatform.getViewerCount).toHaveBeenCalledTimes(1);
-    expect(viewerSystem.counts.twitch).toBe(42);
-    expect(viewerSystem.counts.youtube).toBe(0);
-    expect(viewerSystem.counts.tiktok).toBe(0);
+    expect(viewerSystem.getViewerCount("twitch")).toBe(42);
+    expect(viewerSystem.getViewerCount("youtube")).toBe(0);
+    expect(viewerSystem.getViewerCount("tiktok")).toBe(0);
 
     viewerSystem.stopPolling();
   });
@@ -121,7 +121,7 @@ describe("Twitch Viewer Count System Debug", () => {
     await viewerSystem.pollPlatform("twitch");
 
     expect(mockTwitchPlatform.getViewerCount).toHaveBeenCalled();
-    expect(viewerSystem.counts.twitch).toBe(42);
+    expect(viewerSystem.getViewerCount("twitch")).toBe(42);
     expect(mockObserver.onViewerCountUpdate).toHaveBeenCalledTimes(1);
     const observerCall = mockObserver.onViewerCountUpdate.mock.calls[0];
     if (!observerCall) {
@@ -145,7 +145,7 @@ describe("Twitch Viewer Count System Debug", () => {
     await viewerSystem.pollPlatform("twitch");
 
     expect(mockTwitchPlatform.getViewerCount).toHaveBeenCalled();
-    expect(viewerSystem.counts.twitch).toBe(0);
+    expect(viewerSystem.getViewerCount("twitch")).toBe(0);
   });
 
   test("uses correct polling configuration", () => {

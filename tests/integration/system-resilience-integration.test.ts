@@ -123,7 +123,7 @@ describe("System Resilience and Error Recovery Integration", () => {
 
       expect(viewerCountSystem.isPolling).toBe(true);
       expect(viewerCountSystem.isStreamLive("youtube")).toBe(true);
-      expect(viewerCountSystem.counts.youtube).toBe(0);
+      expect(viewerCountSystem.getViewerCount("youtube")).toBe(0);
     });
 
     test("should handle malformed API responses gracefully", async () => {
@@ -159,7 +159,7 @@ describe("System Resilience and Error Recovery Integration", () => {
 
       expect(viewerCountSystem.isPolling).toBe(true);
       expect(viewerCountSystem.isStreamLive("youtube")).toBe(true);
-      expect(typeof viewerCountSystem.counts.youtube).toBe("number");
+      expect(typeof viewerCountSystem.getViewerCount("youtube")).toBe("number");
     });
   });
 
@@ -180,7 +180,7 @@ describe("System Resilience and Error Recovery Integration", () => {
       viewerCountSystem.startPolling();
       await waitForDelay(50);
 
-      expect(viewerCountSystem.counts.youtube).toBe(1000);
+      expect(viewerCountSystem.getViewerCount("youtube")).toBe(1000);
       expect(viewerCountSystem.isPolling).toBe(true);
       expect(faultyObserver.onViewerCountUpdate).toHaveBeenCalled();
       expect(obsManager.call).toHaveBeenCalled();
@@ -194,7 +194,7 @@ describe("System Resilience and Error Recovery Integration", () => {
       viewerCountSystem.startPolling();
       await waitForDelay(50);
 
-      expect(viewerCountSystem.counts.youtube).toBe(1000);
+      expect(viewerCountSystem.getViewerCount("youtube")).toBe(1000);
       expect(viewerCountSystem.isPolling).toBe(true);
     });
   });
@@ -219,7 +219,7 @@ describe("System Resilience and Error Recovery Integration", () => {
       viewerCountSystem.startPolling();
       await waitForDelay(50);
 
-      expect(viewerCountSystem.counts.youtube).toBe(1000);
+      expect(viewerCountSystem.getViewerCount("youtube")).toBe(1000);
       expect(viewerCountSystem.isPolling).toBe(true);
     });
   });
@@ -303,7 +303,7 @@ describe("System Resilience and Error Recovery Integration", () => {
       await Promise.all(promises);
 
       expect(typeof viewerCountSystem.isStreamLive("youtube")).toBe("boolean");
-      expect(typeof viewerCountSystem.counts.youtube).toBe("number");
+      expect(typeof viewerCountSystem.getViewerCount("youtube")).toBe("number");
     });
 
     test("should handle rapid polling operations", async () => {
@@ -331,8 +331,8 @@ describe("System Resilience and Error Recovery Integration", () => {
 
       expect(viewerCountSystem.isStreamLive("youtube")).toBe(true);
       expect(viewerCountSystem.isPolling).toBe(true);
-      expect(typeof viewerCountSystem.counts.youtube).toBe("number");
-      expect(viewerCountSystem.counts.youtube).toBeGreaterThanOrEqual(0);
+      expect(typeof viewerCountSystem.getViewerCount("youtube")).toBe("number");
+      expect(viewerCountSystem.getViewerCount("youtube")).toBeGreaterThanOrEqual(0);
     });
 
     test("should handle observer lifecycle during errors", async () => {
@@ -382,7 +382,7 @@ describe("System Resilience and Error Recovery Integration", () => {
       await waitForDelay(50);
 
       expect(viewerCountSystem.isStreamLive("youtube")).toBe(true);
-      expect(viewerCountSystem.counts.youtube).toBe(0);
+      expect(viewerCountSystem.getViewerCount("youtube")).toBe(0);
       expect(viewerCountSystem.isPolling).toBe(true);
     });
   });

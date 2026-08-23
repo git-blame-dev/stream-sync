@@ -291,7 +291,7 @@ describe("Observer Pattern Integration", () => {
         (call) => call[0] === "SetInputSettings",
       );
       expect(obsUpdateCalls.length).toBeGreaterThan(0);
-      expect(viewerCountSystem.counts.youtube).toBe(1000);
+      expect(viewerCountSystem.getViewerCount("youtube")).toBe(1000);
 
       const latestObsCall = obsUpdateCalls[obsUpdateCalls.length - 1];
       expect(latestObsCall).toBeDefined();
@@ -352,7 +352,7 @@ describe("Observer Pattern Integration", () => {
 
       expect(healthyObserver.onViewerCountUpdate).toHaveBeenCalled();
       expect(faultyObserver.onViewerCountUpdate).toHaveBeenCalled();
-      expect(viewerCountSystem.counts.youtube).toBe(1000);
+      expect(viewerCountSystem.getViewerCount("youtube")).toBe(1000);
     });
 
     test("should handle observers that throw during initialization", async () => {
@@ -509,7 +509,7 @@ describe("Observer Pattern Integration", () => {
       });
 
       expect(viewerCountSystem.observers.size).toBe(50);
-      expect(viewerCountSystem.counts.youtube).toBe(1000);
+      expect(viewerCountSystem.getViewerCount("youtube")).toBe(1000);
     });
 
     test("should handle concurrent observer notifications with all observers receiving updates", async () => {

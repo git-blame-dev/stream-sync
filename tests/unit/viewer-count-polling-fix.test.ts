@@ -26,7 +26,7 @@ type ViewerCountSystemInstance = {
   isPolling: boolean;
   pollingInterval: number | null;
   pollingHandles: Record<string, unknown>;
-  counts: Record<string, number>;
+  getViewerCount: (platform: string) => number | undefined;
   addObserver: (observer: {
     getObserverId: () => string;
     onViewerCountUpdate: (...args: unknown[]) => Promise<void>;
@@ -201,7 +201,7 @@ describe("Viewer Count Polling System Fix", () => {
       await viewerCountSystem.updateStreamStatus("youtube", false);
 
       expect(viewerCountSystem.pollingHandles["youtube"]).toBeUndefined();
-      expect(viewerCountSystem.counts.youtube).toBe(0);
+      expect(viewerCountSystem.getViewerCount("youtube")).toBe(0);
     });
 
     test("starts polling after YouTube marks stream live", async () => {

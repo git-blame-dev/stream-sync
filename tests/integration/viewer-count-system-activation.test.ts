@@ -200,7 +200,7 @@ describe("ViewerCount System Activation Integration", () => {
 
         expect(mockYouTubePlatform.getViewerCount).toHaveBeenCalled();
 
-        expect(app.viewerCountSystem.counts.youtube).toBe(150);
+        expect(app.viewerCountSystem.getViewerCount("youtube")).toBe(150);
       },
       TEST_TIMEOUTS.FAST,
     );
@@ -233,9 +233,9 @@ describe("ViewerCount System Activation Integration", () => {
         expect(mockTwitchPlatform.getViewerCount).toHaveBeenCalled();
         expect(mockTikTokPlatform.getViewerCount).toHaveBeenCalled();
 
-        expect(app.viewerCountSystem.counts.youtube).toBe(150);
-        expect(app.viewerCountSystem.counts.twitch).toBe(75);
-        expect(app.viewerCountSystem.counts.tiktok).toBe(200);
+        expect(app.viewerCountSystem.getViewerCount("youtube")).toBe(150);
+        expect(app.viewerCountSystem.getViewerCount("twitch")).toBe(75);
+        expect(app.viewerCountSystem.getViewerCount("tiktok")).toBe(200);
       },
       TEST_TIMEOUTS.FAST,
     );
@@ -268,9 +268,9 @@ describe("ViewerCount System Activation Integration", () => {
         expect(mockTwitchPlatform.getViewerCount).not.toHaveBeenCalled();
         expect(mockTikTokPlatform.getViewerCount).not.toHaveBeenCalled();
 
-        expect(app.viewerCountSystem.counts.youtube).toBe(150);
-        expect(app.viewerCountSystem.counts.twitch).toBe(0);
-        expect(app.viewerCountSystem.counts.tiktok).toBe(0);
+        expect(app.viewerCountSystem.getViewerCount("youtube")).toBe(150);
+        expect(app.viewerCountSystem.getViewerCount("twitch")).toBe(0);
+        expect(app.viewerCountSystem.getViewerCount("tiktok")).toBe(0);
       },
       TEST_TIMEOUTS.FAST,
     );
@@ -366,7 +366,7 @@ describe("ViewerCount System Activation Integration", () => {
         await safeDelay(100);
 
         expect(app.viewerCountSystem.isStreamLive("youtube")).toBe(false);
-        expect(app.viewerCountSystem.counts.youtube).toBe(0);
+        expect(app.viewerCountSystem.getViewerCount("youtube")).toBe(0);
       },
       TEST_TIMEOUTS.FAST,
     );

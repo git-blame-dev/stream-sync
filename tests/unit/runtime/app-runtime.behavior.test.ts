@@ -818,17 +818,18 @@ describe("AppRuntime behavior", () => {
     );
   });
 
-  it("updates viewer count and swallows observer errors", async () => {
+  it("delegates viewer-count transitions to ViewerCountSystem", async () => {
     const runtime = createRuntime();
+    const calls: Array<[string, unknown]> = [];
     setRuntimeProperty(runtime, "viewerCountSystem", {
-      counts: { twitch: 1 },
-      notifyObservers: () => Promise.reject(new Error("observer failed")),
+      updateViewerCount: async (platform: string, count: unknown) => {
+        calls.push([platform, count]);
+        return true;
+      },
     });
 
-    runtime.updateViewerCount("twitch", 5);
-    await Promise.resolve();
-
-    expect(runtime.viewerCountSystem.counts.twitch).toBe(5);
+    expect(await runtime.updateViewerCount("twitch", 5)).toBe(true);
+    expect(calls).toEqual([["twitch", 5]]);
   });
 
   it("routes chat messages through the chat router", async () => {

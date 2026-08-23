@@ -251,7 +251,7 @@ const createEdgeCaseObserver = (
 const expectSystemStability = (system: ViewerCountSystemUnderTest) => {
   expect(system).toBeDefined();
   expect(typeof system.isPolling).toBe("boolean");
-  expect(typeof system.counts).toBe("object");
+  expect(typeof system.getViewerCounts()).toBe("object");
   expect(system.observers).toBeInstanceOf(Map);
 };
 
@@ -404,7 +404,7 @@ describe("Viewer Count & OBS Observer Edge Case Tests", () => {
       await system.pollPlatform("youtube");
 
       expect(observer.receivedUpdates).toHaveLength(0);
-      expect(system.counts.youtube).toBe(0);
+      expect(system.getViewerCount("youtube")).toBe(0);
       expectSystemStability(system);
     });
 
@@ -1105,7 +1105,7 @@ describe("Viewer Count & OBS Observer Edge Case Tests", () => {
       expect(gcSpy).toHaveBeenCalledTimes(1);
     });
 
-    test("performs memory cleanup by resetting polling and observer state", () => {
+    test("performs memory cleanup by resetting polling and observer state", async () => {
       const { system } = createEdgeCaseTestEnvironment();
       system.addObserver(createEdgeCaseObserver("cleanup-observer"));
       system.statusChangeHistory.set("tiktok", [
@@ -1117,7 +1117,7 @@ describe("Viewer Count & OBS Observer Edge Case Tests", () => {
         youtube: safeSetInterval(() => {}, 1000),
       };
       system.memoryOptimizationInterval = safeSetInterval(() => {}, 1000);
-      system.counts.tiktok = 123;
+      await system.updateViewerCount("tiktok", 123);
       system.pollingStats.totalPolls = 100;
 
       system._performMemoryCleanup();
@@ -1126,7 +1126,7 @@ describe("Viewer Count & OBS Observer Edge Case Tests", () => {
       expect(system.observers.size).toBe(0);
       expect(system.statusChangeHistory.size).toBe(0);
       expect(system.lastStatusUpdate.size).toBe(0);
-      expect(system.counts.tiktok).toBe(0);
+      expect(system.getViewerCount("tiktok")).toBe(0);
       expect(system.memoryOptimizationInterval).toBeNull();
       expect(system.pollingStats.totalPolls).toBe(0);
     });

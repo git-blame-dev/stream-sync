@@ -704,20 +704,9 @@ class AppRuntime {
         }
     }
 
-    updateViewerCount(platform: string, count: number) {
+    async updateViewerCount(platform: string, count: number) {
         this.logger.debug(`[${platform}] Viewer count updated: ${count}`, 'system');
-
-        if (this.viewerCountSystem) {
-            const previousCount = this.viewerCountSystem.counts[platform.toLowerCase()] ?? 0;
-            this.viewerCountSystem.counts[platform.toLowerCase()] = count;
-
-            const notificationPromise = this.viewerCountSystem.notifyObservers(platform, count, previousCount);
-            if (notificationPromise && notificationPromise.catch) {
-                notificationPromise.catch((error: unknown) => {
-                    this.logger.warn(`Observer notification failed for ${platform}: ${getErrorMessage(error)}`, 'system');
-                });
-            }
-        }
+        return this.viewerCountSystem.updateViewerCount(platform, count);
     }
 
     async shutdown() {

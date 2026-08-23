@@ -90,7 +90,7 @@ describe("YouTube stream-status viewer count integration (smoke)", () => {
     });
 
     expect(platforms.youtube.getViewerCount).toHaveBeenCalled();
-    expect(activeViewerCountSystem.counts.youtube).toBe(42);
+    expect(activeViewerCountSystem.getViewerCount("youtube")).toBe(42);
     expect(activeViewerCountSystem.isStreamLive("youtube")).toBe(true);
     expect(activeViewerCountSystem.pollingHandles.youtube).toBeDefined();
   });
