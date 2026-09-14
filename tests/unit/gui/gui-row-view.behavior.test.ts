@@ -286,7 +286,7 @@ describe("GuiRow rendering behavior", () => {
     expect(html).toContain('src="https://example.invalid/tiktok-emote.webp"');
   });
 
-  it("adds paypiggy row class for chat rows with isPaypiggy true", () => {
+  it("adds the member row class for a member presentation role", () => {
     const html = renderToStaticMarkup(
       React.createElement(GuiRow, {
         mode: "dock",
@@ -296,7 +296,6 @@ describe("GuiRow rendering behavior", () => {
           platform: "twitch",
           username: "test-paypiggy-user",
           text: "paypiggy chat",
-          isPaypiggy: true,
           presentationRole: "member",
           avatarUrl: "https://example.invalid/test-avatar.png",
           timestamp: "2024-01-01T00:00:00.000Z",
@@ -305,26 +304,6 @@ describe("GuiRow rendering behavior", () => {
     );
 
     expect(html).toContain("gui-row--paypiggy");
-  });
-
-  it("renders member label before username for paypiggy chat rows", () => {
-    const html = renderToStaticMarkup(
-      React.createElement(GuiRow, {
-        mode: "dock",
-        row: {
-          type: "chat",
-          kind: "chat",
-          platform: "twitch",
-          username: "test-paypiggy-user",
-          text: "paypiggy chat",
-          isPaypiggy: true,
-          presentationRole: "member",
-          avatarUrl: "https://example.invalid/test-avatar.png",
-          timestamp: "2024-01-01T00:00:00.000Z",
-        },
-      }),
-    );
-
     const usernameIndex = html.indexOf("gui-row__username");
     const memberLabelIndex = html.indexOf('class="gui-row__member-tag"');
     expect(memberLabelIndex).toBeGreaterThan(-1);
@@ -342,7 +321,6 @@ describe("GuiRow rendering behavior", () => {
           platform: "twitch",
           username: "test-paypiggy-user",
           text: "paypiggy chat",
-          isPaypiggy: true,
           presentationRole: "member",
           badgeImages: [
             {
@@ -372,7 +350,7 @@ describe("GuiRow rendering behavior", () => {
     expect(html).toContain('src="https://example.invalid/badge-2.png"');
   });
 
-  it("does not add paypiggy row class for chat rows with isPaypiggy false", () => {
+  it("does not add member presentation for an ordinary chat role", () => {
     const html = renderToStaticMarkup(
       React.createElement(GuiRow, {
         mode: "dock",
@@ -382,7 +360,8 @@ describe("GuiRow rendering behavior", () => {
           platform: "twitch",
           username: "test-non-paypiggy-user",
           text: "non paypiggy chat",
-          isPaypiggy: false,
+          isPaypiggy: true,
+          presentationRole: "ordinary",
           avatarUrl: "https://example.invalid/test-avatar.png",
           timestamp: "2024-01-01T00:00:00.000Z",
         },
@@ -390,49 +369,10 @@ describe("GuiRow rendering behavior", () => {
     );
 
     expect(html).not.toContain("gui-row--paypiggy");
-  });
-
-  it("does not render member label for non-paypiggy chat rows", () => {
-    const html = renderToStaticMarkup(
-      React.createElement(GuiRow, {
-        mode: "dock",
-        row: {
-          type: "chat",
-          kind: "chat",
-          platform: "twitch",
-          username: "test-non-paypiggy-user",
-          text: "non paypiggy chat",
-          isPaypiggy: false,
-          avatarUrl: "https://example.invalid/test-avatar.png",
-          timestamp: "2024-01-01T00:00:00.000Z",
-        },
-      }),
-    );
-
     expect(html).not.toContain("gui-row__member-tag");
-    expect(html).not.toContain(">MEMBER<");
   });
 
-  it("does not add paypiggy row class when isPaypiggy is omitted", () => {
-    const html = renderToStaticMarkup(
-      React.createElement(GuiRow, {
-        mode: "dock",
-        row: {
-          type: "chat",
-          kind: "chat",
-          platform: "twitch",
-          username: "test-omitted-paypiggy-user",
-          text: "omitted paypiggy chat",
-          avatarUrl: "https://example.invalid/test-avatar.png",
-          timestamp: "2024-01-01T00:00:00.000Z",
-        },
-      }),
-    );
-
-    expect(html).not.toContain("gui-row--paypiggy");
-  });
-
-  it("does not add paypiggy row class for notification rows", () => {
+  it("does not derive member presentation from notification membership metadata", () => {
     const html = renderToStaticMarkup(
       React.createElement(GuiRow, {
         mode: "dock",
@@ -450,30 +390,11 @@ describe("GuiRow rendering behavior", () => {
     );
 
     expect(html).not.toContain("gui-row--paypiggy");
-  });
-
-  it("does not render member label for notification rows", () => {
-    const html = renderToStaticMarkup(
-      React.createElement(GuiRow, {
-        mode: "dock",
-        row: {
-          type: "platform:paypiggy",
-          kind: "notification",
-          platform: "twitch",
-          username: "test-notification-user",
-          text: "notification row",
-          isPaypiggy: true,
-          avatarUrl: "https://example.invalid/test-avatar.png",
-          timestamp: "2024-01-01T00:00:00.000Z",
-        },
-      }),
-    );
-
     expect(html).not.toContain("gui-row__member-tag");
     expect(html).not.toContain(">MEMBER<");
   });
 
-  it("keeps paypiggy class on overlay chat rows", () => {
+  it("keeps the member row class on overlay chat rows", () => {
     const html = renderToStaticMarkup(
       React.createElement(GuiRow, {
         mode: "overlay",
@@ -483,7 +404,6 @@ describe("GuiRow rendering behavior", () => {
           platform: "twitch",
           username: "test-overlay-paypiggy-user",
           text: "overlay paypiggy chat",
-          isPaypiggy: true,
           presentationRole: "member",
           avatarUrl: "https://example.invalid/test-avatar.png",
           timestamp: "2024-01-01T00:00:00.000Z",
@@ -939,4 +859,72 @@ describe("GuiRow rendering behavior", () => {
       expect(html).not.toContain("arceus.gif");
     },
   );
+
+  it("removes a failed configured member sprite and renders a later URL", () => {
+    let renderer!: TestRenderer.ReactTestRenderer;
+    const row = (spriteUrl: string): GuiRowDto => ({
+      type: "chat",
+      kind: "chat",
+      platform: "youtube",
+      username: "member",
+      text: "hello",
+      presentationRole: "member",
+      presentationOverride: { spriteUrl },
+      avatarUrl: "avatar",
+      timestamp: null,
+    });
+    act(() => {
+      renderer = TestRenderer.create(React.createElement(GuiRow, {
+        mode: "dock",
+        row: row("https://example.invalid/member-a.gif"),
+      }));
+    });
+    const image = renderer.root.findByProps({ className: "gui-row__member-image" });
+
+    act(() => image.props.onError());
+
+    expect(renderer.root.findAllByProps({ className: "gui-row__member-image" })).toHaveLength(0);
+    expect(renderer.root.findAllByProps({ className: "gui-row__member-image-clip" })).toHaveLength(0);
+    expect(renderer.root.findByProps({ role: "article" }).props.className).toContain("gui-row--member-chat");
+    expect(renderer.root.findByProps({ className: "gui-row__member-tag" })).toBeDefined();
+    expect(renderer.root.findByProps({ className: "gui-row__text gui-row__text--member-chat" })).toBeDefined();
+    expect(renderer.root.findByProps({ className: "gui-row__effect gui-row__effect--sheen" })).toBeDefined();
+    act(() => {
+      renderer.update(React.createElement(GuiRow, {
+        mode: "dock",
+        row: row("https://example.invalid/member-b.gif"),
+      }));
+    });
+    expect(renderer.root.findByProps({ className: "gui-row__member-image" }).props.src)
+      .toBe("https://example.invalid/member-b.gif");
+  });
+
+  it("removes a failed monetization sprite while preserving notification content", () => {
+    let renderer!: TestRenderer.ReactTestRenderer;
+    act(() => {
+      renderer = TestRenderer.create(React.createElement(GuiRow, {
+        mode: "dock",
+        row: {
+          type: "platform:gift",
+          kind: "notification",
+          platform: "youtube",
+          username: "sender",
+          text: "sent",
+          presentationRole: "monetization",
+          avatarUrl: "avatar",
+          timestamp: null,
+        },
+      }));
+    });
+    const image = renderer.root.findByProps({ className: "gui-row__monetization-image" });
+
+    act(() => image.props.onError());
+
+    expect(renderer.root.findAllByProps({ className: "gui-row__monetization-image" })).toHaveLength(0);
+    expect(renderer.root.findAllByProps({ className: "gui-row__monetization-image-clip" })).toHaveLength(0);
+    expect(renderer.root.findByProps({ role: "article" }).props.className).toContain("gui-row--monetization");
+    expect(renderer.root.findByProps({ className: "gui-row__username" })).toBeDefined();
+    expect(renderer.root.findByProps({ className: "gui-row__text gui-row__text--notification" })).toBeDefined();
+    expect(renderer.root.findByProps({ className: "gui-row__effect gui-row__effect--sheen" })).toBeDefined();
+  });
 });

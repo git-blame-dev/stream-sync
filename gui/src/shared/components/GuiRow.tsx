@@ -18,8 +18,12 @@ interface GuiRowProps {
 
 export function GuiRow({ row, mode, className, onAnimationEnd, appearance = DEFAULT_GUI_APPEARANCE }: GuiRowProps) {
   const [failedAvatarUrl, setFailedAvatarUrl] = React.useState<string | null>(null)
+  const [failedSpriteUrl, setFailedSpriteUrl] = React.useState<string | null>(null)
   const handleAvatarError = () => {
     setFailedAvatarUrl((currentUrl) => currentUrl === row.avatarUrl ? currentUrl : row.avatarUrl)
+  }
+  const handleSpriteError = (spriteUrl: string) => {
+    setFailedSpriteUrl((currentUrl) => currentUrl === spriteUrl ? currentUrl : spriteUrl)
   }
   const avatarUrl = failedAvatarUrl === row.avatarUrl ? GUI_AVATAR_FALLBACK_URL : row.avatarUrl
   const isMinimal = appearance.profile === 'minimal'
@@ -35,6 +39,8 @@ export function GuiRow({ row, mode, className, onAnimationEnd, appearance = DEFA
   const isMemberChatRow = presentation.role === 'member'
   const usesGoldTreatment = presentation.theme === 'gold'
     && (presentation.role === 'supporter' || presentation.role === 'monetization')
+  const memberSpriteUrl = presentation.spriteUrl || RAYQUAZA_IMAGE_URL
+  const monetizationSpriteUrl = presentation.spriteUrl
   const badgeSummary = badgeImages.map((badge) => badge.label).filter(Boolean).join(', ')
   const textClass = [
     'gui-row__text',
@@ -78,24 +84,26 @@ export function GuiRow({ row, mode, className, onAnimationEnd, appearance = DEFA
           isMemberChatRow ? 'gui-row__content--member-chat' : '',
           usesGoldTreatment ? 'gui-row__content--monetization' : ''
         ].filter(Boolean).join(' ')}>
-          {usesGoldTreatment && presentation.spriteUrl ? (
+          {usesGoldTreatment && monetizationSpriteUrl && failedSpriteUrl !== monetizationSpriteUrl ? (
             <span className="gui-row__monetization-image-clip" aria-hidden="true">
               <img
                 className="gui-row__monetization-image"
-                src={presentation.spriteUrl}
+                src={monetizationSpriteUrl}
                 alt=""
                 decoding="async"
+                onError={() => handleSpriteError(monetizationSpriteUrl)}
               />
             </span>
           ) : null}
-          {isMemberChatRow ? (
+          {isMemberChatRow && failedSpriteUrl !== memberSpriteUrl ? (
             <span className="gui-row__member-image-clip" aria-hidden="true">
               <img
                 className="gui-row__member-image"
-                src={presentation.spriteUrl || RAYQUAZA_IMAGE_URL}
+                src={memberSpriteUrl}
                 alt=""
                 loading="lazy"
                 decoding="async"
+                onError={() => handleSpriteError(memberSpriteUrl)}
               />
             </span>
           ) : null}
