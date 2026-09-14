@@ -277,9 +277,9 @@ describe("GUI shared styles behavior", () => {
       cssText,
       ".gui-shell--minimal .gui-row__member-image-clip",
     );
-    const minimalMemberCopyBlock = readCssBlock(
+    const minimalMemberContentBlock = readCssBlock(
       cssText,
-      ".gui-shell--minimal .gui-row__content--member-chat .gui-row__copy",
+      ".gui-shell--minimal .gui-row__content--member-chat",
     );
     const minimalHeaderBlock = readCssBlock(
       cssText,
@@ -558,7 +558,11 @@ describe("GUI shared styles behavior", () => {
     expect(copyBlock).toContain("justify-content: space-between;");
     expect(copyBlock).toContain("gap: var(--gui-row-content-gap);");
     expect(memberContentBlock).toContain("position: relative;");
-    expect(memberCopyBlock).toContain("padding-right: 50px;");
+    expect(memberContentBlock).toContain("--gui-member-artwork-size: 120px;");
+    expect(memberContentBlock).toContain("--gui-member-artwork-inline-outset: 40px;");
+    expect(memberCopyBlock).toContain(
+      "padding-inline-end: calc(var(--gui-member-artwork-size) - var(--gui-member-artwork-inline-outset));",
+    );
     expect(memberCopyBlock).not.toContain("display: block;");
     expect(monetizationContentBlock).toContain("position: relative;");
     expect(memberHeaderBlock).toContain("min-width: 0;");
@@ -571,11 +575,13 @@ describe("GUI shared styles behavior", () => {
     expect(memberTextBlock).toContain("margin-top: 0;");
     expect(memberTextBlock).toContain("overflow-wrap: anywhere;");
     expect(memberTextBlock).toContain("word-break: break-word;");
-    expect(memberImageClipBlock).toContain("width: 120px;");
-    expect(memberImageClipBlock).toContain("height: 120px;");
+    expect(memberImageClipBlock).toContain("width: var(--gui-member-artwork-size);");
+    expect(memberImageClipBlock).toContain("height: var(--gui-member-artwork-size);");
     expect(memberImageClipBlock).toContain("position: absolute;");
     expect(memberImageClipBlock).toContain("top: -40px;");
-    expect(memberImageClipBlock).toContain("right: -40px;");
+    expect(memberImageClipBlock).toContain(
+      "inset-inline-end: calc(0px - var(--gui-member-artwork-inline-outset));",
+    );
     expect(memberImageClipBlock).toContain("margin: 0;");
     expect(memberImageClipBlock).toContain("overflow: visible;");
     expect(memberImageClipBlock).not.toContain("bottom:");
@@ -586,14 +592,14 @@ describe("GUI shared styles behavior", () => {
     expect(memberImageBlock).toContain("object-fit: contain;");
     expect(memberImageBlock).not.toContain("position:");
     expect(memberImageBlock).not.toContain("top:");
-    expect(minimalMemberImageClipBlock).toContain("width: 60px;");
-    expect(minimalMemberImageClipBlock).toContain("height: 60px;");
     expect(minimalMemberImageClipBlock).toContain("top: -20px;");
-    expect(minimalMemberImageClipBlock).toContain("right: -8px;");
     expect(minimalMemberImageClipBlock).not.toContain("bottom:");
     expect(cssText).not.toContain(".gui-shell--minimal .gui-row__member-image {");
-    expect(cssText).not.toContain(".gui-shell--minimal .gui-row__content--member-chat {");
-    expect(minimalMemberCopyBlock).toContain("padding-right: 44px;");
+    expect(cssText).toContain(".gui-shell--minimal .gui-row__content--member-chat {");
+    expect(minimalMemberContentBlock).toContain("--gui-member-artwork-size: 60px;");
+    expect(minimalMemberContentBlock).toContain("--gui-member-artwork-inline-outset: 8px;");
+    expect(memberCopyBlock).not.toContain("padding-right: 50px;");
+    expect(cssText).not.toContain("padding-right: 44px;");
     expect(minimalTextBlock).not.toContain("position:");
     expect(minimalTextBlock).not.toContain("\n  top:");
     expect(minimalSeparatorBlock).not.toContain("position:");

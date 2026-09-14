@@ -596,10 +596,12 @@ html, body {
 
 .gui-row__content--member-chat {
   position: relative;
+  --gui-member-artwork-size: 120px;
+  --gui-member-artwork-inline-outset: 40px;
 }
 
 .gui-row__content--member-chat .gui-row__copy {
-  padding-right: 50px;
+  padding-inline-end: calc(var(--gui-member-artwork-size) - var(--gui-member-artwork-inline-outset));
 }
 
 .gui-row__content--monetization {
@@ -723,11 +725,11 @@ html, body {
 }
 
 .gui-row__member-image-clip {
-  width: 120px;
-  height: 120px;
+  width: var(--gui-member-artwork-size);
+  height: var(--gui-member-artwork-size);
   position: absolute;
   top: -40px;
-  right: -40px;
+  inset-inline-end: calc(0px - var(--gui-member-artwork-inline-outset));
   margin: 0;
   overflow: visible;
   pointer-events: none;
@@ -841,14 +843,12 @@ html, body {
 }
 
 .gui-shell--minimal .gui-row__member-image-clip {
-  width: 60px;
-  height: 60px;
   top: -20px;
-  right: -8px;
 }
 
-.gui-shell--minimal .gui-row__content--member-chat .gui-row__copy {
-  padding-right: 44px;
+.gui-shell--minimal .gui-row__content--member-chat {
+  --gui-member-artwork-size: 60px;
+  --gui-member-artwork-inline-outset: 8px;
 }
 
 .gui-shell--minimal .gui-row--minimal.gui-row--compact {
