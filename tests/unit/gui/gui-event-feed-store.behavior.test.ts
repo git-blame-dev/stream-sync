@@ -129,6 +129,48 @@ describe("GUI feed store behavior", () => {
     expect(store.getRows()[4]?.presentationOverride).toEqual({ effects: [] });
   });
 
+  it("enforces the presentation role matrix for every row kind", () => {
+    const cases = [
+      ["chat member", "chat", "member", "member"],
+      ["chat supporter", "chat", "supporter", "supporter"],
+      ["chat ordinary", "chat", "ordinary", "ordinary"],
+      ["chat missing", "chat", undefined, "ordinary"],
+      ["chat malformed", "chat", 42, "ordinary"],
+      ["notification ordinary", "notification", "ordinary", "ordinary"],
+      ["notification monetization", "notification", "monetization", "monetization"],
+      ["notification member", "notification", "member", "ordinary"],
+      ["notification missing", "notification", undefined, "ordinary"],
+      ["command supporter", "command", "supporter", "ordinary"],
+      ["greeting member", "greeting", "member", "ordinary"],
+      ["farewell monetization", "farewell", "monetization", "ordinary"],
+    ] as const;
+
+    for (const [label, kind, presentationRole, expectedRole] of cases) {
+      const store = createGuiFeedStore();
+      store.pushEvent({ ...createRow(1), kind, presentationRole });
+
+      expect(expectFirstRow(store.getRows()).presentationRole, label).toBe(expectedRole);
+    }
+  });
+
+  it("strips chat-only status and member overrides from non-chat rows", () => {
+    const store = createGuiFeedStore();
+    store.pushEvent({
+      ...createRow(1),
+      kind: "notification",
+      presentationRole: "member",
+      presentationOverride: { theme: "red" },
+      isPaypiggy: true,
+      isStreamSupporter: true,
+    });
+    const row = expectFirstRow(store.getRows());
+
+    expect(row.presentationRole).toBe("ordinary");
+    expect(row.presentationOverride).toBeUndefined();
+    expect(row.isPaypiggy).toBeUndefined();
+    expect(row.isStreamSupporter).toBeUndefined();
+  });
+
   it("preserves parts arrays emitted by GUI mapper", () => {
     const store = createGuiFeedStore();
 

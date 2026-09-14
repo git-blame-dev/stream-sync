@@ -93,6 +93,16 @@ function normalizeBadgeImages(value: unknown): GuiRowDto['badgeImages'] {
   return badges.length > 0 ? badges : undefined
 }
 
+function normalizePresentationRole(
+  kind: GuiRowDto['kind'],
+  value: unknown
+): NonNullable<GuiRowDto['presentationRole']> {
+  if (value === 'ordinary') return value
+  if (kind === 'notification' && value === 'monetization') return value
+  if (kind === 'chat' && (value === 'member' || value === 'supporter')) return value
+  return 'ordinary'
+}
+
 function normalizeRow(input: unknown): GuiRowDto {
   const row = input && typeof input === 'object' ? (input as Record<string, unknown>) : {}
   const kind = normalizeString(row.kind)
@@ -109,12 +119,11 @@ function normalizeRow(input: unknown): GuiRowDto {
 
   const parts = normalizeParts(row.parts)
   const badgeImages = normalizeBadgeImages(row.badgeImages)
-  const isPaypiggy = typeof row.isPaypiggy === 'boolean' ? row.isPaypiggy : null
+  const isPaypiggy = kind === 'chat' && typeof row.isPaypiggy === 'boolean' ? row.isPaypiggy : null
   const isStreamSupporter = kind === 'chat' && typeof row.isStreamSupporter === 'boolean'
     ? row.isStreamSupporter
     : null
-  const presentationRole = row.presentationRole === 'member' || row.presentationRole === 'supporter' || row.presentationRole === 'monetization' || row.presentationRole === 'ordinary'
-    ? row.presentationRole : 'ordinary'
+  const presentationRole = normalizePresentationRole(kind, row.presentationRole)
   const presentationOverride = presentationRole === 'member'
     ? normalizePresentationOverride(row.presentationOverride)
     : undefined
