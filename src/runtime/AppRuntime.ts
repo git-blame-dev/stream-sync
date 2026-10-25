@@ -6,6 +6,7 @@ import { OBSViewerCountObserver } from '../observers/obs-viewer-count-observer';
 import { getOBSConnectionManager, initializeOBSConnection } from '../obs/connection';
 import { clearStartupTTS } from '../obs/startup';
 import { getDefaultGoalsManager } from '../obs/goals';
+import { NeuralTtsProcessManager } from '../obs/neural-tts-process-manager';
 import { ChatNotificationRouter } from '../services/ChatNotificationRouter';
 import { PlatformEventRouter } from '../services/PlatformEventRouter';
 import { createGuiTransportService, isGuiActive } from '../services/gui/gui-transport-service';
@@ -49,6 +50,10 @@ type RuntimeObsConfig = RuntimeRecord & {
     enabled?: boolean;
     connectionTimeoutMs?: number;
     ttsTxt: string;
+    ttsMethod?: string;
+    neuralTtsEndpoint?: string;
+    neuralTtsVoice?: string;
+    neuralTtsCommand?: string;
 };
 
 type RuntimeHandcamConfig = RuntimeRecord & {
@@ -168,6 +173,11 @@ type RuntimeGracefulExitService = {
     triggerExit: () => Promise<unknown> | unknown;
 };
 
+type RuntimeNeuralTtsProcessManager = {
+    ensureStarted: () => Promise<void> | void;
+    stop?: () => Promise<void> | void;
+};
+
 type RuntimeDependencies = RuntimeRecord & {
     logging: AppLogger;
     twitchAuth?: unknown;
@@ -182,6 +192,7 @@ type RuntimeDependencies = RuntimeRecord & {
     commandCooldownService: RuntimeCommandCooldownService;
     platformLifecycleService: RuntimePlatformLifecycleService;
     gracefulExitService?: RuntimeGracefulExitService;
+    neuralTtsProcessManager?: RuntimeNeuralTtsProcessManager;
     operatorControls?: OperatorControlService;
     operatorAppearance?: OperatorAppearanceService;
     operatorLogs?: OperatorLogSource;
@@ -282,6 +293,7 @@ class AppRuntime {
     commandCooldownService: RuntimeCommandCooldownService;
     platformLifecycleService: RuntimePlatformLifecycleService;
     gracefulExitService?: RuntimeGracefulExitService;
+    neuralTtsProcessManager?: RuntimeNeuralTtsProcessManager;
     vfxCommandUnsubscribe: (() => void) | void | null;
     viewerCountStatusCleanup: (() => void) | void | null = null;
     keepAliveInterval?: ReturnType<typeof setInterval>;
@@ -443,6 +455,15 @@ class AppRuntime {
 
         if (!this.config) {
             throw new Error('AppRuntime requires config');
+        }
+
+        if (this.dependencies.neuralTtsProcessManager) {
+            this.neuralTtsProcessManager = this.dependencies.neuralTtsProcessManager;
+        } else if (this.config?.obs?.ttsMethod === 'neural-tts') {
+            this.neuralTtsProcessManager = new NeuralTtsProcessManager({
+                config: this.config,
+                logger: this.logger
+            });
         }
 
         this.commandCooldownService = this.dependencies.commandCooldownService;
@@ -745,6 +766,17 @@ class AppRuntime {
         }
 
         try {
+            await this._getNeuralTtsProcessManager()?.stop?.();
+        } catch (error) {
+            this._handleAppRuntimeError(
+                `Error stopping Neural TTS process manager: ${getErrorMessage(error)}`,
+                error,
+                null,
+                { eventType: 'shutdown', logContext: 'system' }
+            );
+        }
+
+        try {
             await this.platformLifecycleService.disconnectAll();
         } catch (error) {
             this._handleAppRuntimeError(
@@ -957,6 +989,22 @@ class AppRuntime {
                 this.logger.info('Continuing without OBS connection; VFX system remains available.', 'AppRuntime');
             }
 
+            if (this.config?.obs?.ttsMethod === 'neural-tts') {
+                this.logger.info('Ensuring Neural TTS service is started...', 'AppRuntime');
+                try {
+                    const neuralTtsProcessManager = this._getNeuralTtsProcessManager();
+                    await neuralTtsProcessManager?.ensureStarted();
+                } catch (neuralTtsError) {
+                    this._handleAppRuntimeError(
+                        `Neural TTS initialization failed: ${getErrorMessage(neuralTtsError)}`,
+                        neuralTtsError,
+                        null,
+                        { eventType: 'startup', logContext: 'AppRuntime' }
+                    );
+                    this.logger.warn('Neural TTS unavailable; continuing in degraded mode', 'AppRuntime');
+                }
+            }
+
             if (!this.vfxCommandService) {
                 throw new Error('VFXCommandService unavailable for runtime startup');
             }
@@ -1040,6 +1088,10 @@ class AppRuntime {
 
         await this._runStartupRollbackStep('stop display queue', async () => {
             await this.displayQueue.stop?.();
+        });
+
+        await this._runStartupRollbackStep('stop neural TTS process manager', async () => {
+            await this._getNeuralTtsProcessManager()?.stop?.();
         });
 
         await this._runStartupRollbackStep('disconnect platforms', async () => {
@@ -1565,6 +1617,24 @@ class AppRuntime {
     _getObsSourcesManager(): RuntimeSourcesManager | null {
         if (this.dependencies?.obs?.sourcesManager) {
             return this.dependencies.obs.sourcesManager;
+        }
+        return null;
+    }
+
+    _getNeuralTtsProcessManager(): RuntimeNeuralTtsProcessManager | null {
+        if (this.neuralTtsProcessManager) {
+            return this.neuralTtsProcessManager;
+        }
+        if (this.dependencies?.neuralTtsProcessManager) {
+            this.neuralTtsProcessManager = this.dependencies.neuralTtsProcessManager;
+            return this.neuralTtsProcessManager;
+        }
+        if (this.config?.obs?.ttsMethod === 'neural-tts') {
+            this.neuralTtsProcessManager = new NeuralTtsProcessManager({
+                config: this.config,
+                logger: this.logger
+            });
+            return this.neuralTtsProcessManager;
         }
         return null;
     }
