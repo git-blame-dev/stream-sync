@@ -197,7 +197,11 @@ const CONFIG_SCHEMA: ConfigSchema = {
         address: { type: 'string', default: 'ws://localhost:4455' },
         ttsChatEnabled: { type: 'boolean', default: false },
         ttsNotificationsEnabled: { type: 'boolean', default: true },
-        ttsTxt: { type: 'string', default: 'tts-text' }
+        ttsTxt: { type: 'string', default: 'tts-text' },
+        ttsMethod: { type: 'string', default: 'obs-text', enum: ['obs-text', 'neural-tts'] },
+        neuralTtsEndpoint: { type: 'string', default: 'http://127.0.0.1:8765' },
+        neuralTtsVoice: { type: 'string', userDefined: true },
+        neuralTtsCommand: { type: 'string', userDefined: true }
     },
 
     goals: {

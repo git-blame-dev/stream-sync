@@ -11,6 +11,9 @@ const VFX_EVENTS = {
     COMMAND_RECEIVED: 'vfx:command-received'
 } as const;
 
+const NEURAL_TTS_HEALTH_TIMEOUT_MS = 2_000;
+const NEURAL_TTS_SPEAK_TIMEOUT_MS = 120_000;
+
 type QueueItem = DisplayQueueItem;
 
 type TtsStage = {
@@ -41,6 +44,8 @@ type VfxCompletionWaiter = {
     cancel: () => void;
 };
 
+type SpeechFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+
 type DisplayQueueEffectsDependencies = {
     obsManager: {
         call: (requestType: string, payload: Record<string, unknown>) => Promise<unknown>;
@@ -68,6 +73,10 @@ type DisplayQueueEffectsDependencies = {
             ttsTxt: string;
             ttsChatEnabled?: boolean;
             ttsNotificationsEnabled?: boolean;
+            ttsMethod?: 'obs-text' | 'neural-tts';
+            neuralTtsEndpoint?: string;
+            neuralTtsVoice?: string;
+            neuralTtsCommand?: string;
         };
         handcam?: {
             enabled?: boolean;
@@ -94,6 +103,7 @@ type DisplayQueueEffectsDependencies = {
             animationConfig: Record<string, unknown>;
         } | null>;
     };
+    fetch?: SpeechFetch;
 };
 
 class DisplayQueueEffects {
@@ -107,6 +117,7 @@ class DisplayQueueEffects {
     triggerHandcamGlow: typeof triggerHandcamGlow;
     extractUsername: DisplayQueueEffectsDependencies['extractUsername'];
     giftAnimationResolver: NonNullable<DisplayQueueEffectsDependencies['giftAnimationResolver']>;
+    fetch: SpeechFetch;
 
     constructor({
         obsManager,
@@ -118,7 +129,8 @@ class DisplayQueueEffects {
         handleDisplayQueueError,
         triggerHandcamGlow: triggerHandcamGlowOverride,
         extractUsername,
-        giftAnimationResolver
+        giftAnimationResolver,
+        fetch: fetchOverride
     }: DisplayQueueEffectsDependencies) {
         this.obsManager = obsManager;
         this.sourcesManager = sourcesManager;
@@ -130,6 +142,7 @@ class DisplayQueueEffects {
         this.triggerHandcamGlow = triggerHandcamGlowOverride || triggerHandcamGlow;
         this.extractUsername = extractUsername;
         this.giftAnimationResolver = giftAnimationResolver || createTikTokGiftAnimationResolver({ logger });
+        this.fetch = fetchOverride || globalThis.fetch.bind(globalThis);
     }
 
     isGuiGiftAnimationEnabled() {
@@ -262,9 +275,51 @@ class DisplayQueueEffects {
     }
 
     async setTTSText(text: string) {
+        if (this.config.obs.ttsMethod === 'neural-tts') {
+            await this.speakWithNeuralTts(text);
+            return;
+        }
+
         await this.sourcesManager.clearTextSource(this.config.obs.ttsTxt);
         await this.delay(50);
         await this.sourcesManager.updateTextSource(this.config.obs.ttsTxt, text);
+    }
+
+    async speakWithNeuralTts(text: string) {
+        const endpoint = this.config.obs.neuralTtsEndpoint || 'http://127.0.0.1:8765';
+        let baseUrl: URL;
+        try {
+            baseUrl = new URL(endpoint);
+        } catch {
+            throw new Error(`Invalid neural TTS endpoint: ${endpoint}`);
+        }
+
+        const loopbackHosts = new Set(['127.0.0.1', 'localhost', '[::1]', '::1']);
+        if (baseUrl.protocol !== 'http:' || !loopbackHosts.has(baseUrl.hostname)) {
+            throw new Error('Neural TTS endpoint must use HTTP on loopback');
+        }
+
+        const root = baseUrl.toString().replace(/\/$/, '');
+        const health = await this.fetch(`${root}/health`, {
+            method: 'GET',
+            redirect: 'error',
+            signal: AbortSignal.timeout(NEURAL_TTS_HEALTH_TIMEOUT_MS)
+        });
+        if (!health.ok) {
+            throw new Error(`Neural TTS service is not ready (HTTP ${health.status})`);
+        }
+
+        const voice = this.config.obs.neuralTtsVoice?.trim();
+        const response = await this.fetch(`${root}/v1/speak`, {
+            method: 'POST',
+            redirect: 'error',
+            signal: AbortSignal.timeout(NEURAL_TTS_SPEAK_TIMEOUT_MS),
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ text, ...(voice ? { voice } : {}) })
+        });
+        if (!response.ok) {
+            throw new Error(`Neural TTS request failed (HTTP ${response.status})`);
+        }
     }
 
     async handleNotificationEffects(item: QueueItem) {
@@ -400,15 +455,26 @@ class DisplayQueueEffects {
         }
 
         if (this.isNotificationTTSEnabled()) {
-            for (const stage of ttsStages) {
+            if (this.config.obs.ttsMethod === 'neural-tts') {
                 const ttsPromise = (async () => {
-                    if (stage.delay > 0) {
-                        await this.delay(stage.delay);
+                    for (const stage of ttsStages) {
+                        if (stage.delay > 0) {
+                            await this.delay(stage.delay);
+                        }
+                        await this.setTTSText(stage.text);
                     }
-                    await this.setTTSText(stage.text);
                 })();
-
                 allPromises.push(ttsPromise);
+            } else {
+                for (const stage of ttsStages) {
+                    const ttsPromise = (async () => {
+                        if (stage.delay > 0) {
+                            await this.delay(stage.delay);
+                        }
+                        await this.setTTSText(stage.text);
+                    })();
+                    allPromises.push(ttsPromise);
+                }
             }
         }
 
