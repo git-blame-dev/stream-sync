@@ -293,6 +293,36 @@ describe("FundingGoalService", () => {
     expect(second.snapshot).toMatchObject({ label: label.trim(), labelOverridden: true, revision: 1 });
     await second.resetLabel();
     expect(second.snapshot).toMatchObject({ label: "🎮 New Controller", labelOverridden: false, revision: 2 });
+    const third = await createFundingGoalService(options({ fs }));
+    expect(third.snapshot).toMatchObject({ label: "🎮 New Controller", labelOverridden: false, revision: 2 });
+    expect(JSON.parse(fs.value ?? "null")).not.toHaveProperty("labelOverride");
+  });
+
+  test("failed label reset preserves the override and can be retried durably", async () => {
+    const fs = memoryFileSystem();
+    const writeFile = fs.writeFile;
+    let rejectWrites = false;
+    fs.writeFile = async (...args) => {
+      if (rejectWrites) throw new Error("synthetic reset write failure");
+      return writeFile(...args);
+    };
+    const service = await createFundingGoalService(options({ fs }));
+    await service.setLabel("Synthetic replacement goal");
+    const revisions: number[] = [];
+    service.subscribe(snapshot => revisions.push(snapshot.revision));
+
+    rejectWrites = true;
+    await expect(service.resetLabel()).rejects.toThrow("synthetic reset write failure");
+    expect(service.snapshot).toMatchObject({ label: "Synthetic replacement goal", labelOverridden: true, revision: 1 });
+    const unchanged = await createFundingGoalService(options({ fs }));
+    expect(unchanged.snapshot).toMatchObject({ label: "Synthetic replacement goal", labelOverridden: true, revision: 1 });
+    expect(revisions).toEqual([]);
+
+    rejectWrites = false;
+    await service.resetLabel();
+    const restarted = await createFundingGoalService(options({ fs }));
+    expect(restarted.snapshot).toMatchObject({ label: "🎮 New Controller", labelOverridden: false, revision: 2 });
+    expect(revisions).toEqual([2]);
   });
 
   test("loads old state without a label override and avoids no-op revisions", async () => {

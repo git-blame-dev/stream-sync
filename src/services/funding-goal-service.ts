@@ -296,7 +296,7 @@ class FundingGoalService {
                 if (typeof oldestKey !== 'string') break;
                 nextKeys.delete(oldestKey);
             }
-            await this.persist(nextMicros, nextKeys, this.currentRevision + 1);
+            await this.persist(nextMicros, nextKeys, this.currentRevision + 1, this.labelOverride);
             this.currentMicros = nextMicros;
             this.processedEventKeys = nextKeys;
             this.currentRevision += 1;
@@ -314,7 +314,7 @@ class FundingGoalService {
             if (!Number.isSafeInteger(nextMicros) || nextMicros < 0) {
                 throw new RangeError('Funding goal total cannot be negative or exceed the supported range');
             }
-            await this.persist(nextMicros, this.processedEventKeys, this.currentRevision + 1);
+            await this.persist(nextMicros, this.processedEventKeys, this.currentRevision + 1, this.labelOverride);
             this.currentMicros = nextMicros;
             this.currentRevision += 1;
             this.notify();
@@ -327,7 +327,7 @@ class FundingGoalService {
             return Promise.reject(new RangeError('Funding goal total must be a non-negative amount'));
         }
         return this.enqueue(async () => {
-            await this.persist(amountMicros, this.processedEventKeys, this.currentRevision + 1);
+            await this.persist(amountMicros, this.processedEventKeys, this.currentRevision + 1, this.labelOverride);
             this.currentMicros = amountMicros;
             this.currentRevision += 1;
             this.notify();
@@ -411,7 +411,7 @@ class FundingGoalService {
         }
     }
 
-    private async persist(currentMicros: number, processedEventKeys: Set<string>, revision: number, labelOverride = this.labelOverride): Promise<void> {
+    private async persist(currentMicros: number, processedEventKeys: Set<string>, revision: number, labelOverride: string | undefined): Promise<void> {
         const state: FundingGoalPersistedState = {
             version: STATE_VERSION,
             goalId: this.config.id,
