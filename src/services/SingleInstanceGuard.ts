@@ -102,10 +102,9 @@ const readHeartbeat = async (lockPath: string): Promise<number | null> => {
     }
 };
 
-const getLockDirectoryAgeMs = async (lockPath: string, now: () => number): Promise<number | null> => {
+const getLockDirectoryStats = async (lockPath: string) => {
     try {
-        const stats = await fsp.stat(lockPath);
-        return now() - stats.mtimeMs;
+        return await fsp.stat(lockPath);
     } catch {
         return null;
     }
@@ -138,26 +137,57 @@ async function isExistingLockActive({
     now: () => number;
     isProcessAlive: (pid: number) => boolean;
 }) {
+    const directory = await getLockDirectoryStats(lockPath);
     const owner = await readJsonFile<Partial<SingleInstanceMetadata>>(path.join(lockPath, METADATA_FILE));
     const heartbeat = await readHeartbeat(lockPath);
-    const directoryAgeMs = await getLockDirectoryAgeMs(lockPath, now);
+    const directoryAgeMs = directory ? now() - directory.mtimeMs : null;
     const pid = typeof owner?.pid === 'number' ? owner.pid : null;
     const heartbeatFresh = heartbeat !== null && now() - heartbeat <= staleMs;
     const ownerIsAlive = pid !== null && isProcessAlive(pid);
     const directoryIsFresh = directoryAgeMs === null || directoryAgeMs <= staleMs;
-    const isPendingLock = owner === null && heartbeat === null;
-    const ownerHasFreshIncompleteLock = ownerIsAlive && heartbeat === null && directoryIsFresh;
+    const isIncompleteLock = heartbeat === null;
 
     return {
-        active: heartbeatFresh || ownerHasFreshIncompleteLock || (isPendingLock && directoryIsFresh),
-        owner
+        active: ownerIsAlive || heartbeatFresh || (isIncompleteLock && directoryIsFresh),
+        owner,
+        heartbeat,
+        directory
     };
 }
 
-const removeStaleLock = async (lockPath: string, instanceId: string) => {
-    const stalePath = `${lockPath}.stale-${process.pid}-${instanceId}`;
-    await fsp.rename(lockPath, stalePath);
-    await fsp.rm(stalePath, { recursive: true, force: true });
+// These checks bound cooperating contenders; filesystem rename is not a compare-and-swap.
+// Validate again after moving so an unexpected replacement is never recursively deleted.
+const moveOwnedLock = (lockPath: string, destination: string, directory: fs.Stats | null, matchesOwner: (owner: Partial<SingleInstanceMetadata> | null) => boolean, heartbeat?: number | null): boolean => {
+    const matchesDirectory = (candidate: fs.Stats) => directory !== null
+        && candidate.dev === directory.dev && candidate.ino === directory.ino;
+    const readOwner = (directoryPath: string): Partial<SingleInstanceMetadata> | null => {
+        try {
+            return JSON.parse(fs.readFileSync(path.join(directoryPath, METADATA_FILE), 'utf8')) as Partial<SingleInstanceMetadata>;
+        } catch {
+            return null;
+        }
+    };
+    try {
+        if (!matchesDirectory(fs.statSync(lockPath)) || !matchesOwner(readOwner(lockPath))) return false;
+        if (heartbeat !== undefined) {
+            let currentHeartbeat: number | null = null;
+            try {
+                const value = Number.parseInt(fs.readFileSync(path.join(lockPath, HEARTBEAT_FILE), 'utf8'), 10);
+                if (Number.isFinite(value)) currentHeartbeat = value;
+            } catch {
+                // Missing/unreadable heartbeat is part of the observed stale state.
+            }
+            if (currentHeartbeat !== heartbeat) return false;
+        }
+        fs.renameSync(lockPath, destination);
+    } catch (error) {
+        if (getErrorCode(error) === 'ENOENT') return false;
+        throw error;
+    }
+    if (!matchesDirectory(fs.statSync(destination)) || !matchesOwner(readOwner(destination))) {
+        throw new Error(`Stream Sync lock changed during rename; preserved for recovery at ${destination}`);
+    }
+    return true;
 };
 
 async function acquireSingleInstanceGuard(options: SingleInstanceGuardOptions = {}): Promise<SingleInstanceGuard> {
@@ -171,8 +201,10 @@ async function acquireSingleInstanceGuard(options: SingleInstanceGuardOptions = 
     const metadata = createMetadata(instanceId);
     const registerProcessCleanup = options.registerProcessCleanup !== false;
 
+    let directory: fs.Stats | null = null;
     const tryAcquire = async () => {
         await fsp.mkdir(lockPath, { mode: 0o700 });
+        directory = fs.statSync(lockPath);
         await writeOwnerFiles(lockPath, metadata, now);
     };
 
@@ -196,7 +228,11 @@ async function acquireSingleInstanceGuard(options: SingleInstanceGuardOptions = 
                 ownerPid: existing.owner?.pid ?? null
             });
             try {
-                await removeStaleLock(lockPath, instanceId);
+                const stalePath = `${lockPath}.stale-${process.pid}-${instanceId}`;
+                if (moveOwnedLock(lockPath, stalePath, existing.directory,
+                    (owner) => JSON.stringify(owner) === JSON.stringify(existing.owner), existing.heartbeat)) {
+                    await fsp.rm(stalePath, { recursive: true, force: true });
+                }
             } catch (staleRemoveError) {
                 if (getErrorCode(staleRemoveError) !== 'ENOENT') {
                     throw staleRemoveError;
@@ -210,14 +246,20 @@ async function acquireSingleInstanceGuard(options: SingleInstanceGuardOptions = 
         throw new StreamSyncAlreadyRunningError(lockPath, existing.owner);
     }
 
+    // Keep the acquired file open: later ticks cannot follow a replacement lock path.
+    const heartbeatFd = fs.openSync(path.join(lockPath, HEARTBEAT_FILE), 'r+');
     let released = false;
     let heartbeatTimer: ReturnType<typeof safeSetInterval> | null = safeSetInterval(() => {
-        void fsp.writeFile(path.join(lockPath, HEARTBEAT_FILE), String(now()), 'utf8').catch((error) => {
+        try {
+            const value = String(now());
+            fs.writeSync(heartbeatFd, value, 0, 'utf8');
+            fs.ftruncateSync(heartbeatFd, Buffer.byteLength(value));
+        } catch (error) {
             logger?.warn?.('Failed to update Stream Sync instance heartbeat', 'single-instance', {
                 lockPath,
                 error: error instanceof Error ? error.message : String(error)
             });
-        });
+        }
     }, heartbeatMs);
     if (heartbeatTimer && typeof heartbeatTimer.unref === 'function') {
         heartbeatTimer.unref();
@@ -233,12 +275,11 @@ async function acquireSingleInstanceGuard(options: SingleInstanceGuardOptions = 
             heartbeatTimer = null;
         }
         try {
-            const rawOwner = fs.readFileSync(path.join(lockPath, METADATA_FILE), 'utf8');
-            const owner = JSON.parse(rawOwner) as Partial<SingleInstanceMetadata>;
-            if (owner.instanceId !== instanceId) {
-                return;
+            fs.closeSync(heartbeatFd);
+            const releasePath = `${lockPath}.release-${process.pid}-${instanceId}`;
+            if (moveOwnedLock(lockPath, releasePath, directory, (owner) => owner?.instanceId === instanceId)) {
+                fs.rmSync(releasePath, { recursive: true, force: true });
             }
-            fs.rmSync(lockPath, { recursive: true, force: true });
         } catch {
             // Best-effort process-exit cleanup. Stale lock recovery handles failures.
         }
@@ -249,19 +290,18 @@ async function acquireSingleInstanceGuard(options: SingleInstanceGuardOptions = 
     }
 
     const release = async () => {
-        if (released) {
-            return;
-        }
+        if (released) return;
         released = true;
         if (heartbeatTimer) {
             clearInterval(heartbeatTimer);
             heartbeatTimer = null;
         }
-        const owner = await readJsonFile<Partial<SingleInstanceMetadata>>(path.join(lockPath, METADATA_FILE));
-        if (owner?.instanceId !== instanceId) {
-            return;
+        if (registerProcessCleanup) process.removeListener('exit', releaseSync);
+        fs.closeSync(heartbeatFd);
+        const releasePath = `${lockPath}.release-${process.pid}-${instanceId}`;
+        if (moveOwnedLock(lockPath, releasePath, directory, (owner) => owner?.instanceId === instanceId)) {
+            await fsp.rm(releasePath, { recursive: true, force: true });
         }
-        await fsp.rm(lockPath, { recursive: true, force: true });
     };
 
     logger?.debug?.('Acquired Stream Sync single-instance lock', 'single-instance', {
