@@ -37,21 +37,21 @@
     "verify": "bun run lint && bun run typecheck:all && bun run test:coverage && bun run build"
   },
   "devDependencies": {
-    "@types/bun": "^1.3.11",
+    "@types/bun": "^1.4.4",
     "@types/ini": "4.1.1",
-    "@types/node": "^25.5.0",
-    "@types/react": "^19.2.14",
-    "@types/react-dom": "^19.2.3",
-    "@types/react-test-renderer": "19.1.0",
-    "@types/ws": "8.18.1",
-    "@typescript-eslint/eslint-plugin": "^8.58.0",
-    "@typescript-eslint/parser": "^8.58.0",
-    "eslint": "^9.39.1",
-    "knip": "^5.61.2",
-    "react-test-renderer": "^19.2.4",
-    "tsx": "^4.21.0",
+    "@types/node": "^25.9.9",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/react-test-renderer": "19.3.0",
+    "@types/ws": "8.18.2",
+    "@typescript-eslint/eslint-plugin": "^8.72.1",
+    "@typescript-eslint/parser": "^8.72.1",
+    "eslint": "^9.39.5",
+    "knip": "^6.43.0",
+    "react-test-renderer": "^19.3.1",
+    "tsx": "^4.23.15",
     "typescript": "^5.9.3",
-    "vite": "^7.3.1"
+    "vite": "^7.3.7"
   },
   "keywords": [
     "livestream",
@@ -66,14 +66,14 @@
   ],
   "license": "ISC",
   "dependencies": {
-    "axios": "^1.9.0",
-    "ini": "^5.0.0",
-    "motion": "13.1.0",
-    "obs-websocket-js": "^5.0.6",
-    "react": "^19.2.4",
-    "react-dom": "^19.2.4",
+    "axios": "^1.21.0",
+    "ini": "^6.0.0",
+    "motion": "14.6.0",
+    "obs-websocket-js": "^5.0.8",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "selfsigned": "^3.0.1",
-    "ws": "^8.18.0",
-    "youtubei.js": "17.2.0"
+    "ws": "^8.22.0",
+    "youtubei.js": "18.3.0"
   }
 }
