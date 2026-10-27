@@ -461,6 +461,55 @@ describe("OBSEventService", () => {
   });
 
   describe("Integration with EventBus", () => {
+    test("continues destroy after an unsubscribe throws and remains idempotent", async () => {
+      obsEventService.destroy();
+      mockOBSConnection.removeEventListener.mockClear();
+      const cleanupEvents: string[] = [];
+      obsEventService = createOBSEventService({
+        eventBus: {
+          ...serviceEventBus,
+          subscribe: (eventName, handler) => {
+            const unsubscribe = serviceEventBus.subscribe(eventName, handler);
+            return () => {
+              cleanupEvents.push(eventName);
+              unsubscribe();
+              if (eventName === "obs:update-text") {
+                throw new Error("Synthetic unsubscribe failure");
+              }
+            };
+          },
+        },
+        obsConnection: mockOBSConnection,
+        obsSources: mockObsSources,
+        logger: noOpLogger,
+      });
+
+      expect(() => obsEventService.destroy()).not.toThrow();
+      expect(cleanupEvents).toEqual([
+        "obs:update-text", "obs:clear-text", "obs:set-visibility", "obs:switch-scene",
+      ]);
+      expect(eventBus.getListenerSummary()).toEqual({});
+      expect(mockOBSConnection.removeEventListener).toHaveBeenCalledTimes(1);
+      eventBus.emit("obs:clear-text", { sourceName: "SyntheticSource" });
+      await Promise.resolve();
+      expect(mockObsSources.clearTextSource).not.toHaveBeenCalled();
+
+      obsEventService.destroy();
+      expect(cleanupEvents).toHaveLength(4);
+      expect(mockOBSConnection.removeEventListener).toHaveBeenCalledTimes(1);
+    });
+
+    test("retires destroy state when connection listener removal throws", () => {
+      mockOBSConnection.removeEventListener.mockImplementationOnce(() => {
+        throw new Error("Synthetic listener removal failure");
+      });
+
+      expect(() => obsEventService.destroy()).not.toThrow();
+      expect(eventBus.getListenerSummary()).toEqual({});
+      expect(() => obsEventService.destroy()).not.toThrow();
+      expect(mockOBSConnection.removeEventListener).toHaveBeenCalledTimes(1);
+    });
+
     test("subscribes to all required OBS command events", () => {
       const requiredEvents = [
         "obs:update-text",

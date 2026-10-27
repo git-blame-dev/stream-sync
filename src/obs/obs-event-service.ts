@@ -293,16 +293,29 @@ class OBSEventService {
     }
 
     destroy() {
-        this.unsubscribeFns.forEach(unsubscribe => unsubscribe());
+        const unsubscribeFns = this.unsubscribeFns;
+        const connectionEventHandlers = this.connectionEventHandlers;
         this.unsubscribeFns = [];
+        this.connectionEventHandlers = [];
         this.connectPromise = null;
+
+        unsubscribeFns.forEach(unsubscribe => {
+            try {
+                unsubscribe();
+            } catch (error) {
+                this._handleObsEventError('Failed to unsubscribe OBS event handler during destroy', error, { operation: 'destroy-unsubscribe' });
+            }
+        });
         const removeEventListener = this.obsConnection?.removeEventListener;
         if (typeof removeEventListener === 'function') {
-            this.connectionEventHandlers.forEach(({ event, handler }) => {
-                removeEventListener.call(this.obsConnection, event, handler);
+            connectionEventHandlers.forEach(({ event, handler }) => {
+                try {
+                    removeEventListener.call(this.obsConnection, event, handler);
+                } catch (error) {
+                    this._handleObsEventError('Failed to remove OBS connection listener during destroy', error, { operation: 'destroy-remove-listener', event });
+                }
             });
         }
-        this.connectionEventHandlers = [];
     }
 }
 
