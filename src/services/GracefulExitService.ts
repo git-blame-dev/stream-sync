@@ -130,6 +130,10 @@ class GracefulExitService {
         }
 
         this.isShuttingDown = true;
+        const forceExitTimeout = safeSetTimeout(() => {
+            handleGracefulExitError('[GRACEFUL EXIT] Forcing exit due to shutdown timeout', null, 'shutdown-timeout');
+            process.exit(1);
+        }, this.config.forceExitTimeoutMs);
 
         try {
             const exitMessage = `Graceful exit after processing ${this.processedMessageCount} actual messages (target: ${this.targetMessageCount})`;
@@ -143,11 +147,6 @@ class GracefulExitService {
             logger.console(`[GRACEFUL EXIT] Platforms: ${summary.platforms.join(', ')}`, 'graceful-exit');
             logger.console(`[GRACEFUL EXIT] Starting graceful shutdown...`, 'graceful-exit');
 
-            const forceExitTimeout = safeSetTimeout(() => {
-                handleGracefulExitError('[GRACEFUL EXIT] Forcing exit due to shutdown timeout', null, 'shutdown-timeout');
-                process.exit(1);
-            }, this.config.forceExitTimeoutMs);
-
             await this.runtime.shutdown();
 
             clearTimeout(forceExitTimeout);
@@ -157,13 +156,9 @@ class GracefulExitService {
             handleGracefulExitError(`Error during graceful exit: ${errorMessage}`, error, 'shutdown', 'system');
             handleGracefulExitError(`[GRACEFUL EXIT] Error during graceful exit: ${errorMessage}`, error, 'shutdown');
 
-            safeSetTimeout(() => {
-                handleGracefulExitError('[GRACEFUL EXIT] Forcing exit due to shutdown error', null, 'shutdown-error');
-                process.exit(1);
-            }, this.config.forceExitTimeoutMs);
-
             try {
                 await this.runtime.shutdown();
+                clearTimeout(forceExitTimeout);
             } catch (shutdownError: unknown) {
                 handleGracefulExitError(`Shutdown failed: ${resolveErrorMessage(shutdownError)}`, shutdownError, 'shutdown', 'system');
             }

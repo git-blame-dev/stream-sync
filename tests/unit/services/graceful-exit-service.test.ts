@@ -9,6 +9,7 @@ import {
   useFakeTimers,
   useRealTimers,
   advanceTimersByTime,
+  getTimerCount,
 } from "../../helpers/bun-timers";
 
 import { GracefulExitService } from "../../../src/services/GracefulExitService.ts";
@@ -141,6 +142,49 @@ describe("GracefulExitService", () => {
   });
 
   describe("Error Handling", () => {
+    it("clears the force-exit deadline after a successful shutdown retry", async () => {
+      const retry = Promise.withResolvers<void>();
+      mockAppRuntime.shutdown
+        .mockRejectedValueOnce(new Error("Synthetic first shutdown failure"))
+        .mockImplementationOnce(() => retry.promise);
+      gracefulExitService = new GracefulExitService(mockAppRuntime, 1);
+      const exitPromise = gracefulExitService.triggerExit();
+      await Promise.resolve();
+      expect(mockAppRuntime.shutdown).toHaveBeenCalledTimes(2);
+
+      retry.resolve();
+      await exitPromise;
+
+      expect(getTimerCount()).toBe(0);
+      advanceTimersByTime(20000);
+      expect(exitMock).not.toHaveBeenCalled();
+    });
+
+    it("retains only the original force-exit deadline after both shutdown attempts fail", async () => {
+      const firstAttempt = Promise.withResolvers<void>();
+      mockAppRuntime.shutdown
+        .mockImplementationOnce(() => firstAttempt.promise)
+        .mockRejectedValueOnce(new Error("Synthetic retry failure"));
+      gracefulExitService = new GracefulExitService(mockAppRuntime, 1);
+      const exitPromise = gracefulExitService.triggerExit();
+      advanceTimersByTime(4000);
+      firstAttempt.reject(new Error("Synthetic first shutdown failure"));
+      await exitPromise;
+
+      expect(mockAppRuntime.shutdown).toHaveBeenCalledTimes(2);
+      expect(getTimerCount()).toBe(1);
+      await gracefulExitService.triggerExit();
+      expect(mockAppRuntime.shutdown).toHaveBeenCalledTimes(2);
+      advanceTimersByTime(5999);
+      expect(exitMock).not.toHaveBeenCalled();
+      advanceTimersByTime(1);
+      expect(exitMock).toHaveBeenCalledTimes(1);
+      expect(exitMock.mock.calls[0]?.[0]).toBe(1);
+      expect(getTimerCount()).toBe(0);
+      advanceTimersByTime(10000);
+      expect(exitMock).toHaveBeenCalledTimes(1);
+    });
+
     it("should handle shutdown errors gracefully", async () => {
       mockAppRuntime.shutdown.mockRejectedValue(new Error("Shutdown failed"));
 
