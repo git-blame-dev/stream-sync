@@ -9,13 +9,28 @@
     "noEmit": true,
     "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
-    "types": ["node", "bun"],
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "jsx": "react-jsx"
+    "types": [
+      "node",
+      "bun"
+    ],
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "jsx": "react-jsx",
+    "paths": {
+      "tiktok-live-proto/v3": [
+        "./node_modules/tiktok-live-proto/dist/node/v3.d.ts"
+      ]
+    }
   },
   "include": [
     "tests/**/*.ts",
     "gui/src/vite-env.d.ts"
   ],
-  "exclude": ["node_modules", "gui/dist"]
+  "exclude": [
+    "node_modules",
+    "gui/dist"
+  ]
 }

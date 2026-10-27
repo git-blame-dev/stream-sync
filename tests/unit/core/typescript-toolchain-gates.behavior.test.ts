@@ -181,9 +181,9 @@ describe('TypeScript toolchain gates behavior', () => {
 
     it('uses TypeScript bootstrap entrypoints without javascript proxy wrappers', () => {
         expect(packageJson.main).toBe('src/bootstrap.ts');
-        expect(packageJson.scripts.start).toBe('tsx src/bootstrap.ts');
-        expect(packageJson.scripts['start:debug']).toBe('tsx src/bootstrap.ts --debug');
-        expect(packageJson.scripts['start:debug:build']).toBe('bun run build && tsx src/bootstrap.ts --debug');
+        expect(packageJson.scripts.start).toBe('bun src/bootstrap.ts');
+        expect(packageJson.scripts['start:debug']).toBe('bun src/bootstrap.ts --debug');
+        expect(packageJson.scripts['start:debug:build']).toBe('bun run build && bun src/bootstrap.ts --debug');
 
         expect(existsSync(join(repoRoot, 'src/bootstrap.ts'))).toBe(true);
         expect(existsSync(join(repoRoot, 'src/main.ts'))).toBe(true);

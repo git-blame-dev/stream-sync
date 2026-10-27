@@ -21,9 +21,9 @@
     "gui:preview": "bun run build && tsx scripts/local/gui-preview.ts",
     "gui:preview:once": "bun run build && tsx scripts/local/gui-preview.ts --once",
     "gui:preview:gift-animation": "bun run build && bun scripts/local/gui-gift-animation-preview.ts",
-    "start": "tsx src/bootstrap.ts",
-    "start:debug": "tsx src/bootstrap.ts --debug",
-    "start:debug:build": "bun run build && tsx src/bootstrap.ts --debug",
+    "start": "bun src/bootstrap.ts",
+    "start:debug": "bun src/bootstrap.ts --debug",
+    "start:debug:build": "bun run build && bun src/bootstrap.ts --debug",
     "lint": "bun scripts/lint/no-raw-timeouts.ts && bun scripts/lint/no-mock-timers-in-tests.ts && bun scripts/lint/no-implementation-test-patterns.ts && bun scripts/lint/no-implicit-test-defaults.ts && bun scripts/lint/no-nondeterministic-test-values.ts && bun scripts/lint/prefer-double-bang.ts && bun x eslint \"src/**/*.ts\" \"tests/**/*.ts\" \"scripts/**/*.ts\" \"tools/**/*.ts\" \"gui/**/*.{ts,tsx}\" && knip --config knip.json --include files,unlisted",
     "typecheck:gui": "tsc --noEmit -p gui/tsconfig.json",
     "typecheck:gui-node": "tsc --noEmit -p tsconfig.json",
@@ -49,6 +49,7 @@
     "eslint": "^9.39.5",
     "knip": "^6.43.0",
     "react-test-renderer": "^19.3.1",
+    "tiktok-live-proto": "0.2.4",
     "tsx": "^4.23.15",
     "typescript": "^5.9.3",
     "vite": "^7.3.7"
@@ -73,6 +74,8 @@
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "selfsigned": "^3.0.1",
+    "tiktok-live-api-sdk": "0.4.0-beta1",
+    "tiktok-live-connector": "2.5.0",
     "ws": "^8.22.0",
     "youtubei.js": "18.3.0"
   }

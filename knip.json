@@ -4,7 +4,8 @@
     "eslint.config.js",
     "gui/src/operator/main.tsx",
     "tests/**/*.test.ts",
-    "tests/setup/**/*.ts"
+    "tests/setup/**/*.ts",
+    "tests/fixtures/tiktok-sdk-contract.ts"
   ],
   "project": [
     "src/**/*.ts",

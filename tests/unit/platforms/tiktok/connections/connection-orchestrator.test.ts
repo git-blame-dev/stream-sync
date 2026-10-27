@@ -60,7 +60,7 @@ describe("TikTok connection orchestrator", () => {
         connect: async () => {},
         disconnect: async () => {},
         isConnecting: false,
-        isConnected: false,
+        isConnected: true,
       }),
     },
     errorHandler: {
@@ -141,7 +141,7 @@ describe("TikTok connection orchestrator", () => {
     const mockConnection = {
       connect: async () => {},
       isConnecting: false,
-      isConnected: false,
+      isConnected: true,
     };
     const platform = buildPlatform({
       connectionStateManager: {

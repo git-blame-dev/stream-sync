@@ -151,6 +151,7 @@ type TikTokDependencies = {
     initializationStats?: InitializationStatistics;
     deduplicationMaxCacheSize?: number;
     deduplicationTtlMs?: number;
+    monotonicNow?: () => number;
     TikTokWebSocketClient?: unknown;
     WebcastEvent?: TikTokWebcastEventMap;
     ControlEvent?: TikTokControlEventMap;
@@ -338,6 +339,8 @@ const getErrorMessage = (error: unknown): string => {
 };
 
 class TikTokPlatform extends EventEmitter {
+    private readonly monotonicNow: () => number;
+    private connectionEstablishedAt: number | null = null;
     declare logger: TikTokLogger;
     declare errorHandler: TikTokErrorHandler;
     declare eventBus: TikTokEventBus | null;
@@ -381,6 +384,7 @@ class TikTokPlatform extends EventEmitter {
 
     constructor(config: TikTokConfig = {}, dependencies: TikTokDependencies = {}) {
         super();
+        this.monotonicNow = dependencies.monotonicNow ?? (() => performance.now());
 
         this.logger = resolveAppLogger(dependencies.logger, 'TikTok');
         const platformErrorHandler = createPlatformErrorHandler(this.logger, 'tiktok');
@@ -809,6 +813,7 @@ class TikTokPlatform extends EventEmitter {
         const username = this.config.username;
         this.connectionActive = true;
         this.connectionTime = Date.now();
+        this.connectionEstablishedAt = this.monotonicNow();
         this.connectionStateManager.markConnected();
         this.intervalManager.clearInterval('tiktok-stream-reconnect');
         
@@ -816,9 +821,13 @@ class TikTokPlatform extends EventEmitter {
         this.logger.info(`Connection successful for TikTok user '${username}'`, 'tiktok');
         
         await this._handleConnection();
-        
-        if (this.retrySystem) {
-            this.retrySystem.resetRetryCount('tiktok');
+    }
+
+    private resetRetriesAfterStableConnection(): void {
+        if (this.connectionEstablishedAt !== null
+            && this.monotonicNow() - this.connectionEstablishedAt >= 60_000) {
+            this.retrySystem?.resetRetryCount('tiktok');
+            this.connectionEstablishedAt = null;
         }
     }
     
@@ -863,10 +872,13 @@ class TikTokPlatform extends EventEmitter {
     }
 
   handleRetry(err: unknown): { action: string; reason?: string } {
+    this.resetRetriesAfterStableConnection();
+    const normalized = this._normalizeConnectionIssue(err);
     const username = this.config.username;
     const errorMessage = getErrorMessage(err);
     const decision = this._classifyReconnectPolicy({
       message: errorMessage,
+      code: normalized.code,
       source: 'retry',
     });
 
@@ -882,6 +894,10 @@ class TikTokPlatform extends EventEmitter {
       }
 
       return { action: 'deferred-reconnect-active', reason: deferredReconnect.reason };
+    }
+
+    if (decision.skipReason === 'no-retry-needed') {
+      return { action: 'skipped', reason: 'no-retry-needed' };
     }
 
     if (decision.skipReason === 'terminal-error') {
@@ -955,7 +971,8 @@ class TikTokPlatform extends EventEmitter {
         }
 
         if (issue instanceof Error) {
-            return { message: issue.message || 'Unknown disconnect reason' };
+            const code = 'code' in issue && typeof issue.code === 'number' ? issue.code : undefined;
+            return { message: issue.message || 'Unknown disconnect reason', ...(code !== undefined ? { code } : {}) };
         }
 
         if (typeof issue === 'string') {
@@ -1037,7 +1054,8 @@ class TikTokPlatform extends EventEmitter {
 
   _classifyReconnectPolicy({ message = 'Unknown error', code, isError = false, source = 'connection-issue' }: ReconnectPolicyInput = {}): ReconnectDecision {
     const isStreamNotLive = this._isStreamNotLive({ message, code });
-    const isTerminalError = !isStreamNotLive && !this._isRecoverableError(message);
+    const isTerminalError = [4400, 4401, 4403].includes(Number(code))
+      || (!isStreamNotLive && !this._isRecoverableError(message));
     const reconnectAllowed = !!(!this.isPlannedDisconnection && this.config.enabled);
     const willReconnect = reconnectAllowed && !isTerminalError;
 
@@ -1057,7 +1075,7 @@ class TikTokPlatform extends EventEmitter {
       };
     }
 
-    if (isStreamNotLive || source === 'stream-end') {
+    if (isStreamNotLive || code === 4005 || source === 'stream-end') {
       return {
         issueType,
         isStreamNotLive,
@@ -1154,6 +1172,7 @@ class TikTokPlatform extends EventEmitter {
         this._disconnectionInProgress = true;
 
     try {
+      this.resetRetriesAfterStableConnection();
       const username = this.config.username;
       const normalizedIssue = this._normalizeConnectionIssue(issue);
       const message = normalizedIssue.message;
@@ -1171,11 +1190,12 @@ class TikTokPlatform extends EventEmitter {
       } else if (isError) {
         this.errorHandler.handleConnectionError(issue, 'connection issue', `Connection issue: ${message}`);
       } else {
-        this.logger.warn(`Connection issue: ${message}`, 'tiktok');
+        const codeSuffix = normalizedIssue.code !== undefined ? ` (code ${normalizedIssue.code})` : '';
+        this.logger.warn(`Connection issue: ${message}${codeSuffix}`, 'tiktok');
       }
 
       this.connectionActive = false;
-      await this.cleanup();
+      await this.cleanup(!decision.willReconnect);
       this.connection = null;
       this.listenersConfigured = false;
 
@@ -1193,7 +1213,7 @@ class TikTokPlatform extends EventEmitter {
             : 'deferred-reconnect-already-active',
         };
       } else if (decision.shouldImmediateRetry && this.retrySystem) {
-        const errorForRetry = isError ? issue : new Error(`TikTok disconnected: ${disconnectionMessage}`);
+        const errorForRetry = isError ? issue : Object.assign(new Error(`TikTok disconnected: ${disconnectionMessage}`), { code: normalizedIssue.code });
         retryResult = this.queueRetry(errorForRetry);
       } else if (decision.skipReason) {
         this.logger.debug(`Skipping retry: ${decision.skipReason}`, 'tiktok');
@@ -1536,8 +1556,8 @@ class TikTokPlatform extends EventEmitter {
     }
 
     async cleanup(cancelRecovery = true) {
-        this.isPlannedDisconnection = true;
         if (cancelRecovery) {
+            this.isPlannedDisconnection = true;
             this.retrySystem?.cancelConnectionRetry?.('tiktok');
         }
 
@@ -1584,7 +1604,8 @@ class TikTokPlatform extends EventEmitter {
         this.connection = null;
         this.connectionActive = false;
         this.connectionTime = 0;
-        this.retryLock = false;
+        this.connectionEstablishedAt = null;
+        if (cancelRecovery) this.retryLock = false;
         this.initializationManager?.reset();
         this.initializationStats?.reset();
     }

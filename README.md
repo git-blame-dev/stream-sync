@@ -28,7 +28,7 @@ The project emphasizes clear platform boundaries, config-driven runtime behavior
 - **Runtime / tooling:** Bun, TypeScript, and Vite.
 - **Frontend GUI:** React 19.
 - **YouTube integration:** `youtubei.js` plus optional YouTube API key support.
-- **TikTok integration:** custom `ws` WebSocket client connecting through EulerStream.
+- **TikTok integration:** `tiktok-live-connector` connects directly to TikTok using EulerStream signing; the platform adapter owns readiness and retries.
 - **Twitch integration:** direct EventSub WebSocket and Helix API integration.
 - **OBS integration:** `obs-websocket-js`.
 - **Quality / CI:** Bun test coverage, ESLint, TypeScript project checks, Knip, actionlint, and GitHub Actions.
@@ -280,7 +280,7 @@ Each archive includes the executable, bundled GUI assets, [`config.example.ini`]
 
 - This is a local stream-control project; platform APIs, chat availability, and event payloads can change outside the repo.
 - `.env`, `config.ini`, `logs/`, token stores, and generated `data/` files may contain sensitive or personal stream data and should stay out of commits and public screenshots.
-- TikTok connectivity depends on the EulerStream WebSocket path and any required API key configuration.
+- TikTok connectivity depends on TikTok availability and EulerStream signing with the configured API key. Start scripts use Bun; running the connector under Node requires Node 22 or newer.
 - OBS output requires matching source names in `config.ini`; mismatched scene/source names will prevent overlay updates.
 - Platform features are disabled by default in `config.example.ini`; only enable the services you have configured.
 

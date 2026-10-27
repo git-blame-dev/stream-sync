@@ -97,11 +97,13 @@ function createTikTokConnectionOrchestrator(options: { platform?: TikTokOrchestr
                 platform.connection = platform.connectionStateManager.ensureConnection();
                 platform.setupEventListeners();
 
-                await platform.connection.connect();
+                const connection = platform.connection;
+                await connection.connect();
 
-                if (!platform.connection) {
-                    platform.connection = platform.connectionStateManager.ensureConnection();
-                    platform.setupEventListeners();
+                if (platform.connection !== connection || connection.isConnected === false) {
+                    throw connection.lastConnectionError instanceof Error
+                        ? connection.lastConnectionError
+                        : new Error('TikTok upstream disconnected before initialization completed');
                 }
 
                 await platform.handleConnectionSuccess();

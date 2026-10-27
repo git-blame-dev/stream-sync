@@ -1,45 +1,7 @@
-import { describe, it, expect } from "bun:test";
-import { TikTokWebSocketClient } from "../../../src/platforms/tiktok-websocket-client.ts";
-
-describe("TikTokWebSocketClient social routing", () => {
-  it("emits social without follow for share actionType", () => {
-    const client = new TikTokWebSocketClient("share_tester");
-    const socialCalls: unknown[] = [];
-    const followCalls: unknown[] = [];
-
-    client.on("social", (data) => socialCalls.push(data));
-    client.on("follow", (data) => followCalls.push(data));
-
-    client.handleEvent({
-      type: "social",
-      data: {
-        actionType: "share",
-        displayType: "share",
-        user: { uniqueId: "sharer" },
-      },
-    });
-
-    expect(socialCalls).toHaveLength(1);
-    expect(followCalls).toHaveLength(0);
-  });
-
-  it("emits follow for social payloads with follow wording but no actionType", () => {
-    const client = new TikTokWebSocketClient("follow_tester");
-    const socialCalls: unknown[] = [];
-    const followCalls: unknown[] = [];
-
-    client.on("social", (data) => socialCalls.push(data));
-    client.on("follow", (data) => followCalls.push(data));
-
-    client.handleEvent({
-      type: "social",
-      data: {
-        displayText: { defaultPattern: "{0:user} followed the LIVE creator" },
-        user: { uniqueId: "example_user_1238" },
-      },
-    });
-
-    expect(socialCalls).toHaveLength(1);
-    expect(followCalls).toHaveLength(1);
-  });
+import { expect, test } from 'bun:test';
+import { TikTokWebSocketClient } from '../../../src/platforms/tiktok-websocket-client';
+import { SyntheticTikTokConnector, flushConnectorSetup } from '../../helpers/tiktok-connector-fixture';
+test.each([['follow','follow'],['share','share'],['social','social'],['subNotify','subscribe'],['superFanJoin','superfan']])('routes SDK %s to application %s once',async(source,target)=>{
+    const sdk=new SyntheticTikTokConnector();const client=new TikTokWebSocketClient('synthetic-streamer',{connectorFactory:async()=>sdk});const events:unknown[]=[];client.on(target!,data=>events.push(data));const pending=client.connect();await flushConnectorSetup();sdk.open();sdk.enter();await pending;
+    sdk.emit(source!,{user:{displayId:'synthetic-user',nickname:'Synthetic User'},common:{msgId:'synthetic-message'}});expect(events).toHaveLength(1);expect(events[0]).toMatchObject({user:{uniqueId:'synthetic-user'}});client.disconnect();
 });
