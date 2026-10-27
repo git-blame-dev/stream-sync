@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import readline from 'node:readline';
 
 import { createPlatformErrorHandler } from './platform-error-handler';
@@ -29,7 +30,6 @@ type SecretDefinition = {
     configPath: string[];
     requiredWhen?: (config: EnabledSectionsConfig) => boolean;
     promptText: string;
-    mask?: (value: string) => string;
     optional?: boolean;
 };
 
@@ -56,14 +56,6 @@ const normalize = (value: unknown): string | null => {
     if (value === null || value === undefined) return null;
     const trimmed = String(value).trim();
     return trimmed.length ? trimmed : null;
-};
-
-const maskValue = (value: string, prefix = 4, suffix = 4): string => {
-    if (!value) return '';
-    if (value.length <= prefix + suffix) {
-        return `${value.slice(0, 2)}...`;
-    }
-    return `${value.slice(0, prefix)}...${value.slice(-suffix)}`;
 };
 
 const applySecureFilePermissions = (filePath: string, mode: number, logger: LoggerLike, errorHandler: ReturnType<typeof createPlatformErrorHandler>) => {
@@ -151,20 +143,45 @@ const persistToEnv = (envFilePath: string | null, updates: Record<string, string
 
         const finalLines = existingLines.filter((line, idx, arr) => line.trim() !== '' || idx < arr.length - 1);
         const finalContent = finalLines.join('\n');
-        fs.writeFileSync(envFilePath, finalContent.endsWith('\n') ? finalContent : `${finalContent}\n`, {
-            encoding: 'utf8',
-            mode: 0o600
-        });
-        applySecureFilePermissions(envFilePath, 0o600, logger, errorHandler);
+        const tempPath = `${envFilePath}.${process.pid}.${randomUUID()}.tmp`;
+        let tempWritten = false;
+        try {
+            fs.writeFileSync(tempPath, finalContent.endsWith('\n') ? finalContent : `${finalContent}\n`, {
+                encoding: 'utf8',
+                mode: 0o600,
+                flag: 'wx'
+            });
+            tempWritten = true;
+            applySecureFilePermissions(tempPath, 0o600, logger, errorHandler);
+            fs.renameSync(tempPath, envFilePath);
+        } catch (error) {
+            try {
+                // An exclusive-create collision belongs to someone else.
+                if (tempWritten || (error as NodeJS.ErrnoException)?.code !== 'EEXIST') fs.unlinkSync(tempPath);
+            } catch (cleanupError) {
+                if ((cleanupError as NodeJS.ErrnoException)?.code !== 'ENOENT') {
+                    try {
+                        errorHandler.handleDataLoggingError(cleanupError, 'secret-manager', 'Failed to remove env file temp file');
+                    } catch {
+                        // Cleanup diagnostics must not replace the persistence failure.
+                    }
+                }
+            }
+            throw error;
+        }
 
         return Object.keys(updates);
     } catch (error) {
-        if (errorHandler && typeof errorHandler.handleDataLoggingError === 'function') {
-            errorHandler.handleDataLoggingError(error, 'secret-manager', 'Failed to persist secrets to environment file');
-        } else if (errorHandler && typeof errorHandler.logOperationalError === 'function') {
-            errorHandler.logOperationalError(`Failed to persist secrets: ${getErrorMessage(error)}`, 'secret-manager');
-        } else {
-            logger?.warn?.(`Failed to persist secrets: ${getErrorMessage(error)}`, 'secret-manager');
+        try {
+            if (errorHandler && typeof errorHandler.handleDataLoggingError === 'function') {
+                errorHandler.handleDataLoggingError(error, 'secret-manager', 'Failed to persist secrets to environment file');
+            } else if (errorHandler && typeof errorHandler.logOperationalError === 'function') {
+                errorHandler.logOperationalError(`Failed to persist secrets: ${getErrorMessage(error)}`, 'secret-manager');
+            } else {
+                logger?.warn?.(`Failed to persist secrets: ${getErrorMessage(error)}`, 'secret-manager');
+            }
+        } catch {
+            // Diagnostics must not change the failed-persistence result.
         }
         return [];
     }
@@ -182,32 +199,28 @@ const SECRET_DEFINITIONS: SecretDefinition[] = [
         envKey: 'TIKTOK_API_KEY',
         configPath: ['tiktok', 'apiKey'],
         requiredWhen: (config) => boolFromConfig(config?.tiktok?.enabled),
-        promptText: 'Paste TikTok WebSocket API key (EulerStream signing key): ',
-        mask: (value) => maskValue(value, 6, 4)
+        promptText: 'Paste TikTok WebSocket API key (EulerStream signing key): '
     },
     {
         id: 'TWITCH_CLIENT_SECRET',
         envKey: 'TWITCH_CLIENT_SECRET',
         configPath: ['twitch', 'clientSecret'],
         requiredWhen: (config) => boolFromConfig(config?.twitch?.enabled),
-        promptText: 'Paste Twitch Client Secret: ',
-        mask: (value) => maskValue(value, 6, 4)
+        promptText: 'Paste Twitch Client Secret: '
     },
     {
         id: 'OBS_PASSWORD',
         envKey: 'OBS_PASSWORD',
         configPath: ['obs', 'password'],
         requiredWhen: (config) => boolFromConfig(config?.obs?.enabled),
-        promptText: 'Paste OBS WebSocket password: ',
-        mask: (value) => maskValue(value, 2, 2)
+        promptText: 'Paste OBS WebSocket password: '
     },
     {
         id: 'STREAMELEMENTS_JWT_TOKEN',
         envKey: 'STREAMELEMENTS_JWT_TOKEN',
         configPath: ['streamelements', 'jwtToken'],
         requiredWhen: (config) => boolFromConfig(config?.streamelements?.enabled),
-        promptText: 'Paste StreamElements JWT token: ',
-        mask: (value) => maskValue(value, 4, 3)
+        promptText: 'Paste StreamElements JWT token: '
     },
     {
         id: 'YOUTUBE_API_KEY',
@@ -223,7 +236,6 @@ const SECRET_DEFINITIONS: SecretDefinition[] = [
             return enableApi || streamDetectionMethod === 'api' || viewerCountMethod === 'api';
         },
         promptText: 'Paste YouTube Data API key (optional unless API mode enabled): ',
-        mask: (value) => maskValue(value, 6, 4),
         optional: true
     }
 ];
@@ -273,7 +285,7 @@ async function ensureSecrets(options: EnsureSecretsOptions = {}) {
     };
 
     for (const secret of SECRET_DEFINITIONS) {
-        const { id, envKey, requiredWhen, promptText, mask, optional } = secret;
+        const { id, envKey, requiredWhen, promptText, optional } = secret;
         const enabledConfig = {
             tiktok: getConfigSection('tiktok'),
             twitch: getConfigSection('twitch'),
@@ -289,7 +301,7 @@ async function ensureSecrets(options: EnsureSecretsOptions = {}) {
         if (value) {
             process.env[envKey] = value;
             applied[id] = { source: 'env' };
-            safeLogger.debug?.(`Using ${id} (${mask ? mask(value) : maskValue(value)})`, 'secret-manager');
+            safeLogger.debug?.(`Using ${id}`, 'secret-manager');
             continue;
         }
 
@@ -300,7 +312,7 @@ async function ensureSecrets(options: EnsureSecretsOptions = {}) {
                 process.env[envKey] = value;
                 persistUpdates[envKey] = value;
                 applied[id] = { source: 'prompt' };
-                safeLogger.info?.(`Saved ${id} (${mask ? mask(value) : maskValue(value)})`, 'secret-manager');
+                safeLogger.info?.(`Saved ${id}`, 'secret-manager');
                 continue;
             }
         }

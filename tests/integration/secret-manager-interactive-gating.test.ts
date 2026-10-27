@@ -10,6 +10,9 @@ describe("secret-manager interactive gating integration", () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "test-secrets-"));
     const envFilePath = path.join(tempDir, ".env");
 
+    fs.writeFileSync(envFilePath, "SYNTHETIC_EXISTING=keep\n", { mode: 0o644 });
+    const originalInode = fs.statSync(envFilePath).ino;
+
     const originalIsTTY = process.stdin.isTTY;
     const originalCI = process.env.CI;
     const originalNodeEnv = process.env.NODE_ENV;
@@ -56,6 +59,10 @@ describe("secret-manager interactive gating integration", () => {
 
       const envContent = fs.readFileSync(envFilePath, "utf8");
       expect(envContent).toContain("TIKTOK_API_KEY=test-tiktok-api-key");
+      expect(envContent).toContain("SYNTHETIC_EXISTING=keep");
+      expect(fs.statSync(envFilePath).ino).not.toBe(originalInode);
+      if (process.platform !== "win32") expect(fs.statSync(envFilePath).mode & 0o777).toBe(0o600);
+      expect(fs.readdirSync(tempDir)).toEqual([".env"]);
       expect(promptCalls).toEqual(["TIKTOK_API_KEY"]);
       expect(result.missingRequired).toEqual([]);
       expect(result.persisted).toContain("TIKTOK_API_KEY");

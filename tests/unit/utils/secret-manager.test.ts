@@ -14,7 +14,7 @@ type TestConfig = {
   streamelements: Record<string, unknown>;
   youtube: Record<string, unknown>;
 };
-type WriteFileOptions = { mode?: number; encoding?: BufferEncoding };
+type WriteFileOptions = { mode?: number; encoding?: BufferEncoding; flag?: string };
 type MutableFs = {
   readFileSync: (path: string, encoding?: BufferEncoding) => string;
   writeFileSync: (
@@ -25,6 +25,8 @@ type MutableFs = {
   existsSync: (path: string) => boolean;
   chmodSync: (path: string, mode: number) => void;
   statSync: (path: string) => { mode: number };
+  renameSync: (from: string, to: string) => void;
+  unlinkSync: (path: string) => void;
 };
 
 const mutableFs = fs as unknown as MutableFs;
@@ -34,6 +36,8 @@ let originalWriteFileSync: MutableFs["writeFileSync"];
 let originalExistsSync: MutableFs["existsSync"];
 let originalChmodSync: MutableFs["chmodSync"];
 let originalStatSync: MutableFs["statSync"];
+let originalRenameSync: MutableFs["renameSync"];
+let originalUnlinkSync: MutableFs["unlinkSync"];
 
 const createCapturingLogger = () => {
   const entries: LoggerEntry[] = [];
@@ -75,6 +79,16 @@ describe("secret-manager", () => {
         filePermissions[path] = options.mode;
       }
     });
+    mutableFs.renameSync = createMockFn((from: string, to: string) => {
+      fileStore[to] = fileStore[from] ?? "";
+      filePermissions[to] = filePermissions[from] ?? 0;
+      delete fileStore[from];
+      delete filePermissions[from];
+    });
+    mutableFs.unlinkSync = createMockFn((path: string) => {
+      delete fileStore[path];
+      delete filePermissions[path];
+    });
     mutableFs.chmodSync = createMockFn((path: string, mode: number) => {
       filePermissions[path] = mode;
     });
@@ -94,6 +108,8 @@ describe("secret-manager", () => {
     originalExistsSync = mutableFs.existsSync;
     originalChmodSync = mutableFs.chmodSync;
     originalStatSync = mutableFs.statSync;
+    originalRenameSync = mutableFs.renameSync;
+    originalUnlinkSync = mutableFs.unlinkSync;
 
     setupFsMocks();
 
@@ -141,6 +157,8 @@ describe("secret-manager", () => {
     mutableFs.existsSync = originalExistsSync;
     mutableFs.chmodSync = originalChmodSync;
     mutableFs.statSync = originalStatSync;
+    mutableFs.renameSync = originalRenameSync;
+    mutableFs.unlinkSync = originalUnlinkSync;
     restoreAllMocks();
   });
 
@@ -165,6 +183,7 @@ describe("secret-manager", () => {
     });
 
     expect(result.missingRequired).toEqual([]);
+    expect(logger.entries.filter((entry) => entry.level === "debug").map((entry) => entry.message)).toEqual(["Using TIKTOK_API_KEY", "Using TWITCH_CLIENT_SECRET", "Using OBS_PASSWORD", "Using STREAMELEMENTS_JWT_TOKEN"]);
     expect(process.env.TIKTOK_API_KEY).toBe("env_tiktok_key");
     expect(process.env.OBS_PASSWORD).toBe("env_obs_password");
     expect(envFilePath in fileStore).toBe(false);
@@ -200,6 +219,7 @@ describe("secret-manager", () => {
       promptFor,
     });
 
+    expect(logger.entries.filter((entry) => entry.level === "info").map((entry) => entry.message)).toEqual(["Saved TIKTOK_API_KEY", "Saved TWITCH_CLIENT_SECRET", "Saved OBS_PASSWORD", "Saved STREAMELEMENTS_JWT_TOKEN"]);
     const envContent = fileStore[envFilePath];
     expect(envContent).toContain("EXISTING=keep");
     expect(envContent).toContain("TIKTOK_API_KEY=prompt_tiktok");
@@ -257,6 +277,93 @@ describe("secret-manager", () => {
       const mode = savedMode & 0o077;
       expect(mode).toBe(0);
     }
+  });
+
+  for (const failure of ["write", "rename"] as const) {
+    it(`preserves the original and cleans the adjacent temp on ${failure} failure`, async () => {
+      fileStore[envFilePath] = "EXISTING=synthetic-original\n";
+      const write = mutableFs.writeFileSync;
+      let tempPath = "";
+      mutableFs.writeFileSync = (target, content, options) => {
+        tempPath = target;
+        write(target, content, options);
+        if (failure === "write") throw new Error("synthetic write failure");
+      };
+      mutableFs.renameSync = () => { throw new Error("synthetic rename failure"); };
+      const result = await ensureSecrets({
+        config: { tiktok: { enabled: true } }, logger, interactive: true,
+        envFilePath, envFileWriteEnabled: true,
+        promptFor: async () => "synthetic-secret",
+      });
+      expect(result.persisted).toEqual([]);
+      expect(tempPath.startsWith(`${envFilePath}.`)).toBe(true);
+      expect(fileStore[envFilePath]).toBe("EXISTING=synthetic-original\n");
+      expect(Object.keys(fileStore)).toEqual([envFilePath]);
+    });
+  }
+
+  it("does not unlink a temp owned by another writer after an exclusive-create collision", async () => {
+    let foreignTemp = "";
+    mutableFs.writeFileSync = (target) => {
+      foreignTemp = target;
+      fileStore[target] = "synthetic-other-writer";
+      throw Object.assign(new Error("synthetic exclusive-create collision"), { code: "EEXIST" });
+    };
+    const result = await ensureSecrets({
+      config: { tiktok: { enabled: true } }, logger, interactive: true,
+      envFilePath, envFileWriteEnabled: true,
+      promptFor: async () => "synthetic-secret",
+    });
+    expect(result.persisted).toEqual([]);
+    expect(fileStore[foreignTemp]).toBe("synthetic-other-writer");
+  });
+
+  it("preserves the file and empty persistence result when cleanup and diagnostics throw", async () => {
+    fileStore[envFilePath] = "EXISTING=synthetic-original\n";
+    const original = new Error("synthetic rename failure");
+    const reported = new Error("synthetic persistence logger failure");
+    mutableFs.renameSync = () => { throw original; };
+    mutableFs.unlinkSync = () => { throw new Error("synthetic cleanup failure"); };
+    logger.error = (message: string) => {
+      if (message === "Failed to persist secrets to environment file") throw reported;
+      throw new Error("synthetic cleanup logger failure");
+    };
+    const result = await ensureSecrets({
+      config: { tiktok: { enabled: true } }, logger, interactive: true,
+      envFilePath, envFileWriteEnabled: true,
+      promptFor: async () => "synthetic-secret",
+    });
+    expect(result.persisted).toEqual([]);
+    expect(fileStore[envFilePath]).toBe("EXISTING=synthetic-original\n");
+  });
+
+  it("creates a unique exclusive 0600 adjacent temp before replacing an existing file", async () => {
+    fileStore[envFilePath] = "TIKTOK_API_KEY=synthetic-old\nEXISTING=keep\n";
+    filePermissions[envFilePath] = 0o644;
+    const write = mutableFs.writeFileSync;
+    const writes: Array<{ target: string; options: WriteFileOptions | BufferEncoding | undefined; original: string | undefined }> = [];
+    mutableFs.writeFileSync = (target, content, options) => {
+      writes.push({ target, options, original: fileStore[envFilePath] });
+      write(target, content, options);
+    };
+    for (let attempt = 0; attempt < 2; attempt++) {
+      delete process.env.TIKTOK_API_KEY;
+      await ensureSecrets({
+        config: { tiktok: { enabled: true } }, logger, interactive: true,
+        envFilePath, envFileWriteEnabled: true,
+        promptFor: async () => "synthetic-old-replacement",
+      });
+    }
+    expect(writes).toHaveLength(2);
+    expect(new Set(writes.map(({ target }) => target)).size).toBe(2);
+    for (const { target, options, original } of writes) {
+      expect(target.startsWith(`${envFilePath}.`)).toBe(true);
+      expect(options).toEqual({ encoding: "utf8", mode: 0o600, flag: "wx" });
+      expect(original).toContain("synthetic-old");
+    }
+    expect(filePermissions[envFilePath]).toBe(0o600);
+    expect(fileStore[envFilePath]).toBe("TIKTOK_API_KEY=synthetic-old-replacement\nEXISTING=keep\n");
+    expect(Object.keys(fileStore)).toEqual([envFilePath]);
   });
 
   it("requires a YouTube API key when API methods are selected", async () => {
