@@ -3,6 +3,7 @@ import * as axios from 'axios';
 import { AuthConstants } from './auth-constants';
 import { createHttpRetryExecutor, type RetryExecutor } from './http-retry-executor';
 import { resolveLogger } from './logger-resolver';
+import { withOperationDeadline } from './timeout-wrapper';
 import { config as appConfig } from '../core/config';
 import { DEFAULT_ENHANCED_TIMEOUT_MS } from '../core/config-schema';
 
@@ -47,6 +48,9 @@ type RequestOptions = Record<string, unknown> & {
     disableRetry?: boolean;
     maxAttempts?: number;
     idempotentRequest?: boolean;
+    overallBudgetMs?: number;
+    parentAbortSignal?: AbortSignal;
+    signal?: AbortSignal;
 };
 
 type OperationContextInput = {
@@ -138,7 +142,13 @@ class EnhancedHttpClient {
     }
 
     buildRequestConfig(options: RequestOptions = {}): Record<string, unknown> {
-        const { authToken, authType, headers, operationContext, ...axiosOptions } = options;
+        const {
+            authToken, authType, headers, operationContext,
+            overallBudgetMs: _overallBudgetMs, parentAbortSignal: _parentAbortSignal,
+            platform: _platform, retryScope: _retryScope, disableRetry: _disableRetry,
+            maxAttempts: _maxAttempts, idempotentRequest: _idempotentRequest,
+            userAgent, ...axiosOptions
+        } = options;
         const authHeaders = this.buildAuthHeaders(authToken, authType);
 
         let timeout = resolveTimeout(axiosOptions.timeout, this.defaultTimeout);
@@ -147,13 +157,13 @@ class EnhancedHttpClient {
         }
 
         return {
+            ...axiosOptions,
             timeout,
             headers: {
-                'User-Agent': typeof axiosOptions.userAgent === 'string' ? axiosOptions.userAgent : this.getNextUserAgent(),
+                'User-Agent': typeof userAgent === 'string' ? userAgent : this.getNextUserAgent(),
                 ...authHeaders,
                 ...(headers || {})
-            },
-            ...axiosOptions
+            }
         };
     }
 
@@ -182,6 +192,9 @@ class EnhancedHttpClient {
             maxAttempts,
             idempotentRequest = false,
             maxRetries,
+            overallBudgetMs,
+            parentAbortSignal,
+            signal: requestSignal,
             ...requestOptions
         } = options;
 
@@ -189,82 +202,92 @@ class EnhancedHttpClient {
             throw new Error('maxRetries is not supported; use maxAttempts');
         }
 
-        const config = this.buildRequestConfig(requestOptions);
+        const parentSignal = parentAbortSignal && requestSignal
+            ? AbortSignal.any([parentAbortSignal, requestSignal])
+            : parentAbortSignal ?? requestSignal;
+        parentSignal?.throwIfAborted();
+        if (requestOptions.responseType === 'stream') {
+            throw new Error("EnhancedHttpClient does not support responseType 'stream': its operation lifetime must include response body consumption");
+        }
+        return withOperationDeadline(async ({ signal, remainingBudgetMs }) => {
+            const config = this.buildRequestConfig({ ...requestOptions, signal });
 
-        const makeRequest = async (): Promise<Record<string, unknown>> => {
-            this.logger.debug(`HTTP ${method}: ${url}`, 'enhanced-http-client');
-            let response: Record<string, unknown>;
+            const makeRequest = async (): Promise<Record<string, unknown>> => {
+                signal.throwIfAborted();
+                this.logger.debug(`HTTP ${method}: ${url}`, 'enhanced-http-client');
+                let response: Record<string, unknown>;
 
-            switch (method) {
-                case 'GET':
-                    response = await this.axios.get(url, config);
-                    break;
-                case 'POST': {
-                    const headers = (config.headers || {}) as Record<string, string>;
-                    const hasContentType = Object.keys(headers).some((key) => key.toLowerCase() === 'content-type');
-                    if (!hasContentType) {
-                        headers['Content-Type'] = 'application/json';
+                switch (method) {
+                    case 'GET':
+                        response = await this.axios.get(url, config);
+                        break;
+                    case 'POST': {
+                        const headers = (config.headers || {}) as Record<string, string>;
+                        const hasContentType = Object.keys(headers).some((key) => key.toLowerCase() === 'content-type');
+                        if (!hasContentType) {
+                            headers['Content-Type'] = 'application/json';
+                        }
+
+                        let postData = data;
+                        const contentTypeHeaderKey = Object.keys(headers).find((key) => key.toLowerCase() === 'content-type');
+                        const contentTypeHeaderValue = contentTypeHeaderKey ? (headers[contentTypeHeaderKey] ?? '').trim().toLowerCase() : '';
+                        if (
+                            contentTypeHeaderValue.startsWith('application/x-www-form-urlencoded')
+                            && data
+                            && typeof data === 'object'
+                            && !(data instanceof URLSearchParams)
+                            && !Array.isArray(data)
+                        ) {
+                            const encodedParams = new URLSearchParams(
+                                Object.entries(data as Record<string, unknown>).map(([key, value]) => [key, String(value)])
+                            );
+                            postData = encodedParams.toString();
+                        }
+
+                        response = await this.axios.post(url, postData, config);
+                        break;
                     }
+                    case 'PUT': {
+                        const headers = (config.headers || {}) as Record<string, string>;
+                        const hasContentType = Object.keys(headers).some((key) => key.toLowerCase() === 'content-type');
+                        if (!hasContentType) {
+                            headers['Content-Type'] = 'application/json';
+                        }
 
-                    let postData = data;
-                    const contentTypeHeaderKey = Object.keys(headers).find((key) => key.toLowerCase() === 'content-type');
-                    const contentTypeHeaderValue = contentTypeHeaderKey ? (headers[contentTypeHeaderKey] ?? '').trim().toLowerCase() : '';
-                    if (
-                        contentTypeHeaderValue.startsWith('application/x-www-form-urlencoded')
-                        && data
-                        && typeof data === 'object'
-                        && !(data instanceof URLSearchParams)
-                        && !Array.isArray(data)
-                    ) {
-                        const encodedParams = new URLSearchParams(
-                            Object.entries(data as Record<string, unknown>).map(([key, value]) => [key, String(value)])
-                        );
-                        postData = encodedParams.toString();
+                        response = await this.axios.put(url, data, config);
+                        break;
                     }
-
-                    response = await this.axios.post(url, postData, config);
-                    break;
+                    case 'DELETE':
+                        response = await this.axios.delete(url, config);
+                        break;
                 }
-                case 'PUT': {
-                    const headers = (config.headers || {}) as Record<string, string>;
-                    const hasContentType = Object.keys(headers).some((key) => key.toLowerCase() === 'content-type');
-                    if (!hasContentType) {
-                        headers['Content-Type'] = 'application/json';
-                    }
 
-                    response = await this.axios.put(url, data, config);
-                    break;
+                if (response && typeof response === 'object' && typeof response.status !== 'number') {
+                    const statusCode = typeof response.statusCode === 'number' ? response.statusCode : 200;
+                    response.status = statusCode;
+                    response.statusText = typeof response.statusText === 'string' ? response.statusText : 'OK';
+                    response.headers = response.headers || {};
+                    response.config = response.config || {};
                 }
-                case 'DELETE':
-                    response = await this.axios.delete(url, config);
-                    break;
+
+                this.logger.debug(`HTTP ${method} Success: ${url} (${String(response.status)})`, 'enhanced-http-client');
+                return response;
+            };
+
+            const retryOwner = retryScope || platform;
+            const retryAllowed = method !== 'POST' || idempotentRequest;
+            if (retryOwner && !disableRetry && retryAllowed) {
+                return this.retryExecutor.executeWithRetry(retryOwner, makeRequest, maxAttempts, { signal, remainingBudgetMs });
             }
 
-            if (response && typeof response === 'object' && typeof response.status !== 'number') {
-                const statusCode = typeof response.statusCode === 'number' ? response.statusCode : 200;
-                response.status = statusCode;
-                response.statusText = typeof response.statusText === 'string' ? response.statusText : 'OK';
-                response.headers = response.headers || {};
-                response.config = response.config || {};
+            try {
+                return await makeRequest();
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.logger.debug(`HTTP ${method} Error: ${url} - ${message}`, 'enhanced-http-client');
+                throw error;
             }
-
-            this.logger.debug(`HTTP ${method} Success: ${url} (${String(response.status)})`, 'enhanced-http-client');
-            return response;
-        };
-
-        const retryOwner = retryScope || platform;
-        const retryAllowed = method !== 'POST' || idempotentRequest;
-        if (retryOwner && !disableRetry && retryAllowed) {
-            return this.retryExecutor.executeWithRetry(retryOwner, makeRequest, maxAttempts);
-        }
-
-        try {
-            return await makeRequest();
-        } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            this.logger.debug(`HTTP ${method} Error: ${url} - ${message}`, 'enhanced-http-client');
-            throw error;
-        }
+        }, { budgetMs: overallBudgetMs, parentAbortSignal: parentSignal, operationName: `HTTP ${method}` });
     }
 
     async get(url: string, options: RequestOptions = {}): Promise<Record<string, unknown>> {

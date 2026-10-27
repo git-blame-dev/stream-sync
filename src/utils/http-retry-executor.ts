@@ -30,8 +30,13 @@ type HttpRetryDependencies = {
     validateExponentialBackoff?: typeof validateExponentialBackoff;
 };
 
+type HttpRetryOptions = {
+    signal?: AbortSignal;
+    remainingBudgetMs?: () => number;
+};
+
 type RetryExecutor = {
-    executeWithRetry: <T>(scope: string, executeFunction: () => Promise<T>, maxAttempts?: number) => Promise<T>;
+    executeWithRetry: <T>(scope: string, executeFunction: () => Promise<T>, maxAttempts?: number, options?: HttpRetryOptions) => Promise<T>;
 };
 
 class HttpRetryExecutor implements RetryExecutor {
@@ -45,25 +50,39 @@ class HttpRetryExecutor implements RetryExecutor {
         this.validateExponentialBackoff = dependencies.validateExponentialBackoff || validateExponentialBackoff;
     }
 
-    async executeWithRetry<T>(scope: string, executeFunction: () => Promise<T>, maxAttempts?: number): Promise<T> {
+    async executeWithRetry<T>(scope: string, executeFunction: () => Promise<T>, maxAttempts?: number, options: HttpRetryOptions = {}): Promise<T> {
         const effectiveMaxAttempts = this.resolveMaxAttempts(maxAttempts);
 
         for (let attempt = 1; attempt <= effectiveMaxAttempts; attempt += 1) {
+            options.signal?.throwIfAborted();
+            if (options.remainingBudgetMs && options.remainingBudgetMs() <= 0) {
+                throw new Error(`${scope} operation budget exhausted`);
+            }
             try {
-                return await executeFunction();
+                const result = await executeFunction();
+                options.signal?.throwIfAborted();
+                if (options.remainingBudgetMs && options.remainingBudgetMs() <= 0) {
+                    throw new Error(`${scope} operation budget exhausted`);
+                }
+                return result;
             } catch (error) {
+                options.signal?.throwIfAborted();
                 if (!this.isRetryable(error) || attempt >= effectiveMaxAttempts) {
                     throw error;
                 }
 
-                const status = this.getHttpStatus(error);
-                const delay = status === 429
-                    ? this.getRateLimitDelay(error, attempt)
-                    : this.getRetryDelay(attempt);
+                const delay = this.getRateLimitDelay(error, attempt);
+                if (options.remainingBudgetMs && delay >= options.remainingBudgetMs()) {
+                    throw error;
+                }
+                if (!Number.isFinite(delay) || delay > 2_147_483_647) {
+                    throw new RangeError('HTTP retry delay exceeds the supported timer range', { cause: error });
+                }
                 this.logger.warn(`HTTP request failed (attempt ${attempt}): ${this.getErrorMessage(error)}`, scope);
                 this.logger.info(`Retrying in ${delay / 1000} seconds...`, scope);
                 if (delay > 0) {
-                    await this.safeDelay(delay, delay, 'HttpRetryExecutor delay');
+                    await this.safeDelay(delay, delay, 'HttpRetryExecutor delay', options.signal);
+                    options.signal?.throwIfAborted();
                 }
             }
         }
@@ -79,17 +98,16 @@ class HttpRetryExecutor implements RetryExecutor {
     }
 
     private isRetryable(error: unknown): boolean {
-        const status = this.getHttpStatus(error);
-        if (status !== undefined) {
-            return RETRYABLE_HTTP_STATUSES.has(status);
-        }
         if (!error || typeof error !== 'object') {
             return false;
         }
-
         const transportError = error as { code?: unknown; name?: unknown };
         if (transportError.name === 'AbortError' || transportError.code === 'ERR_CANCELED' || transportError.code === 'ABORT_ERR') {
             return false;
+        }
+        const status = this.getHttpStatus(error);
+        if (status !== undefined) {
+            return RETRYABLE_HTTP_STATUSES.has(status);
         }
         return typeof transportError.code === 'string'
             && RETRYABLE_TRANSPORT_CODES.has(transportError.code.toUpperCase());
@@ -113,14 +131,14 @@ class HttpRetryExecutor implements RetryExecutor {
             : typeof retryAfter === 'number'
                 ? retryAfter * 1000
                 : Date.parse(String(retryAfter)) - Date.now();
-        if (Number.isFinite(retryAfterDelay) && retryAfterDelay >= 0) {
-            return Math.min(retryAfterDelay, HTTP_RETRY_CONFIG.MAX_DELAY);
+        if (!Number.isNaN(retryAfterDelay) && retryAfterDelay >= 0) {
+            return retryAfterDelay;
         }
 
         const resetEpoch = Number(this.getHeader(headers, 'ratelimit-reset'));
         const resetDelay = (resetEpoch * 1000) - Date.now();
-        if (Number.isFinite(resetDelay) && resetDelay > 0) {
-            return Math.min(resetDelay, HTTP_RETRY_CONFIG.MAX_DELAY);
+        if (!Number.isNaN(resetDelay) && resetDelay > 0) {
+            return resetDelay;
         }
 
         return this.getRetryDelay(attempt);
@@ -156,5 +174,6 @@ function createHttpRetryExecutor(dependencies?: HttpRetryDependencies): HttpRetr
 export {
     HttpRetryExecutor,
     type RetryExecutor,
+    type HttpRetryOptions,
     createHttpRetryExecutor
 };

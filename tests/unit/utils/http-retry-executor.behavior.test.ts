@@ -87,7 +87,7 @@ describe("HttpRetryExecutor", () => {
     expect(delay).not.toHaveBeenCalled();
   });
 
-  test("honors and caps rate-limit delay headers", async () => {
+  test("honors rate-limit minimum delay headers", async () => {
     const delay = createMockFn().mockResolvedValue(undefined);
     const executor = new HttpRetryExecutor({ logger: noOpLogger, safeDelay: delay });
     const retryAfter = createMockFn<[], Promise<unknown>>()
@@ -101,7 +101,7 @@ describe("HttpRetryExecutor", () => {
     await expect(executor.executeWithRetry("capped", capped, 2)).resolves.toBe("capped");
 
     expect(delay.mock.calls.some(([milliseconds]) => milliseconds === 2000)).toBe(true);
-    expect(delay.mock.calls.some(([milliseconds]) => milliseconds === 60000)).toBe(true);
+    expect(delay.mock.calls.some(([milliseconds]) => milliseconds === 120000)).toBe(true);
   });
 
   test("honors Retry-After dates, reset epochs, and immediate retry", async () => {

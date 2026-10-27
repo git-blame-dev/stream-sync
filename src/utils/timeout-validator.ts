@@ -47,9 +47,24 @@ function safeSetTimeout(callback: SetTimeoutArguments[0], delay: unknown, ...arg
     return activeSetTimeout(callback, safeDelay, ...args);
 }
 
-function safeDelay(delay: unknown, fallback = 5000, context = 'delay'): Promise<void> {
+function safeDelay(delay: unknown, fallback = 5000, context = 'delay', signal?: AbortSignal): Promise<void> {
     const safeDelayValue = validateTimeout(delay, fallback, context);
-    return new Promise((resolve) => safeSetTimeout(resolve, safeDelayValue));
+    return new Promise((resolve, reject) => {
+        if (signal?.aborted) {
+            reject(signal.reason);
+            return;
+        }
+        const onAbort = () => {
+            globalThis.clearTimeout(timer);
+            signal?.removeEventListener('abort', onAbort);
+            reject(signal?.reason);
+        };
+        const timer = safeSetTimeout(() => {
+            signal?.removeEventListener('abort', onAbort);
+            resolve();
+        }, safeDelayValue);
+        signal?.addEventListener('abort', onAbort, { once: true });
+    });
 }
 
 function safeSetInterval(callback: SetIntervalArguments[0], interval: unknown, ...args: SetIntervalAdditionalArguments): SetIntervalReturn {
