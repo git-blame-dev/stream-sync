@@ -172,6 +172,7 @@ export function App({
   const store = useMemo(
     () => createGuiFeedStore({
       maxRows,
+      retainRows: mode !== 'notifications',
       inclusionPredicate: (row) =>
         matchesGuiFeedMode(row, effectiveFeedMode) &&
         (mode !== 'notifications' || !!row.eventId)

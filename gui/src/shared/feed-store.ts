@@ -148,6 +148,7 @@ function normalizeRow(input: unknown): GuiRowDto {
 
 export interface GuiFeedStoreOptions {
   maxRows?: number
+  retainRows?: boolean
   inclusionPredicate?: (row: GuiRowDto) => boolean
 }
 
@@ -178,10 +179,11 @@ export function createGuiFeedStore(options: GuiFeedStoreOptions = {}) {
       }
     }
 
-    rows = [...rows, row]
-
-    if (maxRows > 0 && rows.length > maxRows) {
-      rows = rows.slice(rows.length - maxRows)
+    if (options.retainRows !== false) {
+      rows = [...rows, row]
+      if (maxRows > 0 && rows.length > maxRows) {
+        rows = rows.slice(rows.length - maxRows)
+      }
     }
     return row
   }

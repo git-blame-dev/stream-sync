@@ -3,6 +3,7 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import TestRenderer, { type ReactTestRenderer } from "react-test-renderer";
 
+import { createEventFeed } from "../../../gui/src/shared/create-event-feed";
 import { App } from "../../../gui/src/shared/App";
 import { ActivityBar } from "../../../gui/src/shared/components/ActivityBar";
 import { GuiShell } from "../../../gui/src/shared/components/GuiShell";
@@ -59,6 +60,48 @@ afterAll(() => {
 });
 
 describe("GUI app behavior", () => {
+  it("ignores captured transport callbacks after replacing a feed", async () => {
+    const sources: Array<{
+      onmessage: ((event: MessageEvent<string>) => void) | null;
+      onopen: ((event: Event) => void) | null;
+      onerror: ((event: Event) => void) | null;
+      close: () => void;
+    }> = [];
+    const createEventFeedImpl: typeof createEventFeed = (options) => createEventFeed({
+      ...options,
+      eventSourceFactory: () => {
+        const source = { onmessage: null, onopen: null, onerror: null, close() {} };
+        sources.push(source);
+        return source;
+      },
+    });
+    let renderer: AppRenderer | null = null;
+    await TestRenderer.act(async () => {
+      renderer = TestRenderer.create(React.createElement(App, { mode: "dock", createEventFeedImpl }));
+    });
+    const retired = sources[0]!;
+    const message = retired.onmessage!;
+    const open = retired.onopen!;
+    const error = retired.onerror!;
+    await TestRenderer.act(async () => {
+      renderer!.update(React.createElement(App, {
+        mode: "dock", eventsPath: "/test/replacement-events", createEventFeedImpl,
+      }));
+    });
+    await TestRenderer.act(async () => {
+      sources[1]!.onopen!(new Event("open"));
+      message(new MessageEvent("message", { data: JSON.stringify({
+        type: "chat", kind: "chat", text: "test-retired-message",
+        avatarUrl: "https://example.invalid/test-avatar.png",
+      }) }));
+      open(new Event("open"));
+      error(new Event("error"));
+    });
+    expect(renderer!.root.findByType(GuiShell).props.rows).toEqual([]);
+    expect(JSON.stringify(renderer!.toJSON())).toContain("Connected - waiting for chat");
+    await TestRenderer.act(async () => renderer!.unmount());
+  });
+
   it("renders shell container for dock mode", () => {
     const html = renderToStaticMarkup(
       React.createElement(App, {
@@ -884,6 +927,12 @@ describe("GUI app behavior", () => {
       });
     });
 
+    await TestRenderer.act(async () => {
+      onEventHandler!({
+        eventId: "activity-1", type: "greeting", kind: "greeting",
+        avatarUrl: "https://example.invalid/duplicate.png", text: "test duplicate",
+      });
+    });
     const currentRow = renderer!.root.findByType(ActivityBar).props.row as EventPayload;
     expect(currentRow.username).toBe("test-greeting-user");
     await TestRenderer.act(async () => {
@@ -901,6 +950,10 @@ describe("GUI app behavior", () => {
     expect((renderer!.root.findByType(ActivityBar).props.row as EventPayload).username).toBe("test-raid-user");
     expect(renderer!.root.findByType(ActivityBar).props.exitRequested).toBe(false);
     expect(JSON.stringify(renderer!.toJSON())).not.toContain("gui-shell__effect-layer");
+    await TestRenderer.act(async () => {
+      renderer!.root.findByType(ActivityBar).props.onExitComplete("activity-2");
+    });
+    expect(renderer!.root.findByType(ActivityBar).props.row).toBeNull();
     await TestRenderer.act(async () => renderer!.unmount());
   });
 

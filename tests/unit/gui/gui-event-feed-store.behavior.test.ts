@@ -24,6 +24,30 @@ function createRow(index: number) {
 }
 
 describe("GUI feed store behavior", () => {
+  it("admits notifications without retaining history and keeps deduplication bounded", () => {
+    const store = createGuiFeedStore({
+      retainRows: false,
+      inclusionPredicate: (row) => row.kind === "notification",
+    });
+    const notification = (index: number) => ({
+      ...createRow(index),
+      eventId: `test-notification-${index}`,
+      kind: "notification",
+    });
+
+    expect(store.pushEvent({ ...notification(0), avatarUrl: "" })).toBeNull();
+    expect(store.pushEvent({ ...notification(0), kind: "chat" })).toBeNull();
+    for (let index = 0; index < 10000; index += 1) {
+      expect(store.pushEvent(notification(index))?.eventId).toBe(`test-notification-${index}`);
+      expect(store.pushEvent(notification(index))).toBeNull();
+      expect(store.getRows()).toEqual([]);
+    }
+    expect(store.pushEvent(notification(9000))).toBeNull();
+    expect(store.pushEvent(notification(9999))).toBeNull();
+    expect(store.pushEvent(notification(0))?.eventId).toBe("test-notification-0");
+    expect(store.getRows()).toEqual([]);
+  });
+
   it("filters normalized rows before deduplication and retention", () => {
     const store = createGuiFeedStore({ inclusionPredicate: (row) => row.kind !== "chat", maxRows: 1 });
     store.pushEvent({ ...createRow(1), eventId: "chat-1" });

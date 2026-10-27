@@ -7,6 +7,45 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 describe("GUI event feed connector behavior", () => {
+  it("retires captured message and lifecycle callbacks and closes only once", () => {
+    const received: unknown[] = [];
+    const statuses: string[] = [];
+    const source = {
+      closeCalled: 0,
+      onmessage: null as null | ((event: MessageEvent<string>) => void),
+      onopen: null as null | ((event: Event) => void),
+      onerror: null as null | ((event: Event) => void),
+      close() {
+        this.closeCalled += 1;
+        this.onmessage?.(new MessageEvent("message", { data: '{"test":"during-close"}' }));
+        this.onopen?.(new Event("open"));
+        this.onerror?.(new Event("error"));
+      },
+    };
+    const dispose = createEventFeed({
+      url: "/gui/events",
+      onEvent: (payload) => received.push(payload),
+      onOpen: () => statuses.push("connected"),
+      onError: () => statuses.push("reconnecting"),
+      eventSourceFactory: () => source,
+    });
+    const message = source.onmessage!;
+    const open = source.onopen!;
+    const error = source.onerror!;
+    dispose();
+    message(new MessageEvent("message", { data: '{"test":"late"}' }));
+    open(new Event("open"));
+    error(new Event("error"));
+    dispose();
+
+    expect(received).toEqual([]);
+    expect(statuses).toEqual([]);
+    expect(source.closeCalled).toBe(1);
+    expect(source.onmessage).toBeNull();
+    expect(source.onopen).toBeNull();
+    expect(source.onerror).toBeNull();
+  });
+
   it("opens the configured event stream URL and closes it on dispose", () => {
     const openedUrls: string[] = [];
     const source = {
@@ -87,7 +126,8 @@ describe("GUI event feed connector behavior", () => {
 
     source.onopen?.(new Event("open"));
     source.onerror?.(new Event("error"));
+    source.onopen?.(new Event("open"));
 
-    expect(statuses).toEqual(["connected", "reconnecting"]);
+    expect(statuses).toEqual(["connected", "reconnecting", "connected"]);
   });
 });
