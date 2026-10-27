@@ -2,6 +2,7 @@ import { spawn as defaultSpawn, type ChildProcess } from 'node:child_process';
 import crypto from 'node:crypto';
 import { logger as defaultLogger } from '../core/logging';
 import type { AppLogger } from '../core/logger/types';
+import { safeSetTimeout } from '../utils/timeout-validator';
 
 const DEFAULT_NEURAL_TTS_ENDPOINT = 'http://127.0.0.1:8765';
 const DEFAULT_PROBE_TIMEOUT_MS = 2_000;
@@ -61,7 +62,7 @@ function getErrorMessage(error: unknown): string {
 
 function defaultDelay(ms: number): Promise<void> {
     return new Promise((resolve) => {
-        setTimeout(resolve, ms);
+        safeSetTimeout(resolve, ms);
     });
 }
 

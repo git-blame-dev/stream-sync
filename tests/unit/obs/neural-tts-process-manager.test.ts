@@ -22,9 +22,9 @@ function createTestLogger() {
     return {
         logger: {
             ...noOpLogger,
-            info: (msg: string) => { infos.push(msg); },
-            warn: (msg: string) => { warnings.push(msg); },
-            error: (msg: string) => { errors.push(msg); },
+            info: (msg: unknown) => { infos.push(String(msg)); },
+            warn: (msg: unknown) => { warnings.push(String(msg)); },
+            error: (msg: unknown) => { errors.push(String(msg)); },
             debug: () => {}
         },
         warnings,
