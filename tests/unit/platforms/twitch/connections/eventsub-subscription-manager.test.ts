@@ -314,7 +314,7 @@ describe("Twitch EventSub subscription manager", () => {
       axios: { post },
       validateConnectionForSubscriptions: () => {
         validationCalls += 1;
-        return validationCalls <= 2;
+        return validationCalls <= 3;
       },
       now: (() => {
         const values = [0, 1000, 1000, 1000];
@@ -417,8 +417,7 @@ describe("Twitch EventSub subscription manager", () => {
       postCalls.push(payload.type);
       callCount += 1;
       if (callCount === 1) {
-        const error = new Error("socket hang up") as Error & { code?: string };
-        error.code = "ECONNRESET";
+        const error = Object.assign(new Error("test rate limit"), { response: { status: 429, data: { error: "Too Many Requests", message: "test rate limit" } } });
         throw error;
       }
 
@@ -655,7 +654,7 @@ describe("Twitch EventSub subscription manager", () => {
     expect(first(deleteCalls)).toContain("disconnected-sub");
   });
 
-  test("deletes only current session subscriptions and updates local state", async () => {
+  test("deletes only current session subscriptions without mutating lifecycle-owned local state", async () => {
     const deleteCalls: string[] = [];
     const errorLogs: string[] = [];
     const subscriptions = new Map<string, Record<string, unknown>>([
@@ -708,7 +707,7 @@ describe("Twitch EventSub subscription manager", () => {
     expect(deleteCalls).toHaveLength(2);
     expect(first(deleteCalls)).toContain("test-ours-ok");
     expect(deleteCalls.at(1)).toContain("test-ours-fail");
-    expect(subscriptions.has("test-ours-ok")).toBe(false);
+    expect(subscriptions.has("test-ours-ok")).toBe(true);
     expect(subscriptions.has("test-ours-fail")).toBe(true);
     expect(subscriptions.has("test-other")).toBe(true);
     expect(errorLogs.length).toBe(1);
@@ -732,6 +731,32 @@ describe("Twitch EventSub subscription manager", () => {
     expect(getCalls).toBe(0);
   });
 
+  test("throwing cleanup diagnostics cannot stop remaining deletes or reject retirement", async () => {
+    let deletes = 0;
+    let reports = 0;
+    const manager = createManager({
+      axios: {
+        get: async () => createHttpResponse({ data: Array.from({ length: 5 }, (_, index) => ({
+          id: `test-cleanup-${index}`, type: "test.subscription", status: "enabled",
+          transport: { method: "websocket", session_id: "test-session" },
+        })) }),
+        delete: async () => { deletes++; throw new Error("test delete failed"); },
+      },
+      logError: () => { reports++; throw new Error("test diagnostic failed"); },
+    });
+    await expect(manager.deleteAllSubscriptions({ sessionId: "test-session" })).resolves.toBeUndefined();
+    expect(deletes).toBe(5);
+    expect(reports).toBe(5);
+  });
+
+  test("throwing list-failure diagnostics do not reject cleanup", async () => {
+    const manager = createManager({
+      axios: { get: async () => { throw new Error("test list failed"); } },
+      logError: () => { throw new Error("test diagnostic failed"); },
+    });
+    await expect(manager.deleteAllSubscriptions({ sessionId: "test-session" })).resolves.toBeUndefined();
+  });
+
   test("reports top-level cleanup failure when listing subscriptions fails", async () => {
     const errorLogs: string[] = [];
     const manager = createManager({
@@ -747,6 +772,6 @@ describe("Twitch EventSub subscription manager", () => {
     await manager.deleteAllSubscriptions({ sessionId: "test-session-1" });
 
     expect(errorLogs.length).toBe(1);
-    expect(errorLogs[0]).toContain("Failed to cleanup EventSub subscriptions");
+    expect(errorLogs[0]).toContain("EventSub remote cleanup incomplete");
   });
 });

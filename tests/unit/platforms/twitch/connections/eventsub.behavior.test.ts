@@ -183,7 +183,7 @@ describe("TwitchEventSub behavior", () => {
     expect(followEvents.length).toBe(1);
   });
 
-  it("retries subscriptions when a revocation arrives", async () => {
+  it("stops subscription readiness for terminal authorization revocation", async () => {
     const instance = new TwitchEventSub(
       {
         channel: "testChannel",
@@ -223,9 +223,9 @@ describe("TwitchEventSub behavior", () => {
       },
     });
 
-    expect(resubscribeCalls.length).toBe(1);
-    expect(resubscribeCalls[0]?.sessionId).toBe("testSession123");
-    expect(resubscribeCalls[0]?.broadcasterId).toBe("testUser123");
+    expect(resubscribeCalls.length).toBe(0);
+    expect(instance.isActive()).toBe(false);
+    expect(instance.isInitialized).toBe(false);
   });
 
   it("validates configuration using centralized auth fallback", () => {
@@ -435,7 +435,7 @@ describe("TwitchEventSub behavior", () => {
 
     await instance._deleteAllSubscriptions();
 
-    expect(instance.subscriptions.has("sub-2")).toBe(false);
+    expect(instance.subscriptions.has("sub-2")).toBe(true);
     expect(instance.subscriptions.has("sub-3")).toBe(true);
     expect(
       logErrors.some((entry) => entry.eventType === "subscription-delete"),

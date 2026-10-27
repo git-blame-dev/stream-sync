@@ -116,6 +116,7 @@ const requireCloseCall = (call: CloseCall | undefined): CloseCall => {
 };
 
 class MockWebSocket extends EventEmitter {
+  static latest: MockWebSocket;
   url: string;
   readyState: number;
   pongCalls: unknown[];
@@ -123,6 +124,7 @@ class MockWebSocket extends EventEmitter {
 
   constructor(url: string) {
     super();
+    MockWebSocket.latest = this;
     this.url = url;
     this.readyState = 0;
     this.pongCalls = [];
@@ -470,7 +472,7 @@ describe("Twitch EventSub WS lifecycle", () => {
     ).toHaveLength(1);
     expect(
       state.emitCalls.some(({ event }) => event === "eventSubDisconnected"),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   test("scheduleReconnect disables initialization when max attempts exceeded", () => {
@@ -583,7 +585,7 @@ describe("Twitch EventSub WS lifecycle", () => {
     await expect(connectPromise).rejects.toThrow(
       "Connection timeout - no welcome message",
     );
-    expect(state.ws.closeCalls).toHaveLength(1);
+    expect(MockWebSocket.latest.closeCalls).toHaveLength(1);
   });
 
   test("connectWebSocket rejects with invalid session ID", async () => {
@@ -693,9 +695,9 @@ describe("Twitch EventSub WS lifecycle", () => {
     expect(state.logEventSubErrorCalls).toHaveLength(1);
     const parseErrorLog = requireEventSubErrorCall(state.logEventSubErrorCalls[0]);
     expect(parseErrorLog.msg).toBe(
-      "Error parsing WebSocket message",
+      "EventSub message/setup failed",
     );
-    expect(parseErrorLog.type).toBe("ws-parse");
+    expect(parseErrorLog.type).toBe("ws-message");
     expect(JSON.stringify(parseErrorLog.data)).not.toContain("not valid json");
   });
 
@@ -811,7 +813,7 @@ describe("Twitch EventSub WS lifecycle", () => {
       resolveMessage = resolve;
     });
     const state = createState({
-      handleWebSocketMessage: createMockFn(async () => messageHandlingPromise),
+      _setupEventSubscriptions: createMockFn(async () => { await messageHandlingPromise; return { failures: [] }; }),
     });
     const connectPromise = lifecycle.connectWebSocket(state);
 
@@ -961,7 +963,7 @@ describe("Twitch EventSub WS lifecycle", () => {
           eventHasPayload(emittedEvent) &&
           emittedEvent.payload.code === 1000 &&
           emittedEvent.payload.abnormal === false &&
-          emittedEvent.payload.willReconnect === false &&
+          emittedEvent.payload.willReconnect === true &&
           emittedEvent.payload.terminal === false,
       ),
     ).toBe(true);
@@ -1082,9 +1084,9 @@ describe("Twitch EventSub WS lifecycle", () => {
 
     await advanceTimersByTime(1100);
 
-    expect(state._deleteAllSubscriptions).toHaveBeenCalledWith({
+    expect(state._deleteAllSubscriptions).toHaveBeenCalledWith(expect.objectContaining({
       sessionId: "closed-session-for-cleanup",
-    });
+    }));
     expect(state.disconnectedSessionId).toBeNull();
   });
 
@@ -1141,7 +1143,7 @@ describe("Twitch EventSub WS lifecycle", () => {
     }
   });
 
-  test("scheduleReconnect replaces pending reconnect with new attempt", async () => {
+  test("scheduleReconnect coalesces duplicate requests without shortening backoff", async () => {
     const lifecycle = buildLifecycle();
 
     const state = createState({
@@ -1162,7 +1164,8 @@ describe("Twitch EventSub WS lifecycle", () => {
     lifecycle.scheduleReconnect(state);
 
     await advanceTimersByTime(2100);
-
+    expect(state._isConnected).toBe(false);
+    await advanceTimersByTime(2100);
     expect(state._isConnected).toBe(true);
   });
 
@@ -1213,43 +1216,31 @@ describe("Twitch EventSub WS lifecycle", () => {
     expect(existingWs.closeCalls).toHaveLength(1);
     expect(requireCloseCall(existingWs.closeCalls[0])).toEqual({
       code: 1000,
-      reason: "Reconnecting",
+      reason: "Session retired",
     });
   });
 
   test("session_reconnect handoff keeps old subscriptions until replacement connects", async () => {
     const lifecycle = buildLifecycle();
-
-    const existingWs = new MockWebSocket("wss://old-session");
-    existingWs.readyState = 1;
-    const deleteAllSubscriptions = createMockFn(async () => {});
-    const state = createState({
-      isInitialized: true,
-      ws: existingWs,
-      sessionId: "old-session-id",
-      reconnectUrl: "wss://reconnect-session",
-      subscriptionsReady: true,
-      _deleteAllSubscriptions: deleteAllSubscriptions,
-      _connectWebSocket: createMockFn(async () => {
-        expect(deleteAllSubscriptions).not.toHaveBeenCalled();
-        expect(existingWs.closeCalls).toHaveLength(0);
-        state.ws = new MockWebSocket("wss://new-session");
-        state.sessionId = "new-session-id";
-        state._isConnected = true;
-        state.subscriptionsReady = true;
-      }),
-    });
-
-    await lifecycle.reconnect(state);
-
-    expect(deleteAllSubscriptions).not.toHaveBeenCalled();
-    expect(existingWs.closeCalls).toHaveLength(1);
-    expect(requireCloseCall(existingWs.closeCalls[0])).toEqual({
-      code: 1000,
-      reason: "Reconnect handoff complete",
-    });
+    const state = createState();
+    state._connectWebSocket = () => lifecycle.connectWebSocket(state);
+    state._reconnect = () => lifecycle.reconnect(state);
+    const initial = lifecycle.connectWebSocket(state);
+    const old = MockWebSocket.latest;
+    old.readyState = 1;
+    old.emit('message', JSON.stringify({ metadata: { message_type: 'session_welcome' }, payload: { session: { id: 'test-old' } } }));
+    await initial;
+    lifecycle.handleReconnectRequest(state, { session: { reconnect_url: 'wss://test.invalid/handoff' } });
+    const replacement = MockWebSocket.latest;
+    expect(old.closeCalls).toHaveLength(0);
+    expect(state.sessionId).toBe('test-old');
+    replacement.readyState = 1;
+    replacement.emit('message', JSON.stringify({ metadata: { message_type: 'session_welcome' }, payload: { session: { id: 'test-new' } } }));
+    await Promise.resolve();
+    expect(old.closeCalls).toHaveLength(1);
+    expect(state.sessionId).toBe('test-new');
     expect(state.subscriptionsReady).toBe(true);
-    expect(state.sessionId).toBe("new-session-id");
+    lifecycle.dispose(state);
   });
 
   test("replacement session welcome preserves transferred subscriptions", async () => {
@@ -1261,9 +1252,10 @@ describe("Twitch EventSub WS lifecycle", () => {
     });
 
     const connectPromise = lifecycle.connectWebSocket(state);
-    state.ws.readyState = 1;
-    state.ws.emit("open");
-    state.ws.emit(
+    const replacement = MockWebSocket.latest;
+    replacement.readyState = 1;
+    replacement.emit("open");
+    replacement.emit(
       "message",
       Buffer.from(
         JSON.stringify({

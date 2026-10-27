@@ -1,6 +1,7 @@
 import * as axiosModule from 'axios';
+import { withOperationDeadline, type OperationDeadlineContext } from '../../../utils/timeout-wrapper';
 import type { AxiosResponse } from 'axios';
-import { safeDelay, validateTimeout } from '../../../utils/timeout-validator';
+import { safeDelay } from '../../../utils/timeout-validator';
 import { extractHttpErrorDetails } from '../../../utils/http-error-utils';
 import { validateLoggerInterface } from '../../../utils/dependency-validator';
 import { secrets } from '../../../core/secrets';
@@ -43,6 +44,7 @@ type SubscriptionManagerOptions = {
   validateConnectionForSubscriptions?: () => boolean;
   logError?: (message: string, error?: unknown, eventType?: string, payload?: Record<string, unknown>) => void;
   now?: () => number;
+  onSubscriptionCreated?: () => void;
 };
 
 type SubscriptionErrorDetails = {
@@ -139,8 +141,6 @@ const resolveAxiosClient = (candidate: unknown): AxiosClientLike => {
     throw new Error('TwitchEventSub subscription manager requires an axios-compatible HTTP client');
 };
 
-const getErrorMessage = (error: unknown): string => error instanceof Error ? error.message : String(error);
-
 const getAxiosErrorResponse = (error: unknown): { status?: number; data?: unknown } | null => {
     const response = getRecord(error)?.response;
     return response && typeof response === 'object' ? response as { status?: number; data?: unknown } : null;
@@ -160,12 +160,12 @@ function createTwitchEventSubSubscriptionManager(options: SubscriptionManagerOpt
     const {
         logger,
         twitchAuth,
-        config,
         subscriptions,
         axios: injectedAxios,
         getClientId,
         validateConnectionForSubscriptions,
         logError,
+        onSubscriptionCreated,
         now = () => Date.now()
     } = options;
 
@@ -178,7 +178,11 @@ function createTwitchEventSubSubscriptionManager(options: SubscriptionManagerOpt
         validateLoggerInterface(logger);
         return logger;
     })();
-    const safeLogError = typeof logError === 'function' ? logError : () => {};
+    const report = (diagnostic: () => void) => {
+        try { diagnostic(); }
+        catch { /* Diagnostics cannot replace subscription failures or interrupt remote cleanup. */ }
+    };
+    const safeLogError: NonNullable<SubscriptionManagerOptions['logError']> = (...args) => report(() => logError?.(...args));
     const safeGetClientId = typeof getClientId === 'function' ? getClientId : () => null;
     if (!twitchAuth) {
         throw new Error('TwitchEventSub subscription manager requires twitchAuth');
@@ -200,7 +204,7 @@ function createTwitchEventSubSubscriptionManager(options: SubscriptionManagerOpt
             const errorCode = typeof errorData.error === 'string' ? errorData.error : 'HTTP_ERROR';
             const errorMessage = typeof errorData.message === 'string' ? errorData.message : httpDetails.message;
 
-            const isCritical = ['Unauthorized', 'Forbidden'].includes(errorCode);
+            const isCritical = response?.status === 401 || response?.status === 403 || ['Unauthorized', 'Forbidden'].includes(errorCode);
             const isRetryable = ['Too Many Requests', 'Internal Server Error'].includes(errorCode);
 
             return {
@@ -214,11 +218,11 @@ function createTwitchEventSubSubscriptionManager(options: SubscriptionManagerOpt
         }
 
         return {
-            code: 'NETWORK_ERROR',
+            code: httpDetails.code || (/deadline|timeout/i.test(httpDetails.message) ? 'ETIMEDOUT' : 'NETWORK_ERROR'),
             message: httpDetails.message,
-            status: null,
-            isCritical: false,
-            isRetryable: true,
+            status: response?.status ?? null,
+            isCritical: response?.status === 401 || response?.status === 403,
+            isRetryable: httpDetails.code !== 'EVENTSUB_RETRY_AFTER_EXCEEDS_BUDGET',
             details: httpDetails
         };
     };
@@ -246,443 +250,140 @@ function createTwitchEventSubSubscriptionManager(options: SubscriptionManagerOpt
         return true;
     };
 
-  const requestWithAuthRetry = async <T>(requestFn: () => Promise<T>): Promise<T> => {
-        try {
-            return await requestFn();
-        } catch (error) {
-            if (getAxiosErrorResponse(error)?.status !== 401) {
-                throw error;
-            }
-            const refreshed = await twitchAuth.refreshTokens();
-            if (!refreshed || !secrets.twitch.accessToken) {
-                throw error;
-            }
-            return await requestFn();
-        }
-    };
-
-  const shouldRetrySubscription = (errorDetails: SubscriptionErrorDetails): boolean => !!errorDetails?.isRetryable && !errorDetails?.isCritical;
-
-  const isTerminalSessionLoss = (errorDetails: SubscriptionErrorDetails): boolean => {
-        const message = typeof errorDetails?.message === 'string' ? errorDetails.message.trim().toLowerCase() : '';
-        return message.includes('websocket session has already disconnected');
-    };
-
-  const retrySubscription = async ({
-    subscription,
-    payload,
-    retriesRemaining
-  }: {
-    subscription: SubscriptionDefinition;
-    payload: Record<string, unknown>;
-    retriesRemaining: number;
-  }): Promise<{ success: boolean; error?: string }> => {
-        if (retriesRemaining <= 0) {
-            return { success: false, error: 'retry-exhausted' };
-        }
-
-        if (!safeValidateConnection()) {
-            return { success: false, error: 'connection-lost' };
-        }
-
-        await safeDelay(
-            validateTimeout(1000 * retriesRemaining, 1000),
-            1000,
-            'twitchEventSub:subscription-retry'
-        );
-
-        if (!safeValidateConnection()) {
-            return { success: false, error: 'connection-lost' };
-        }
-
-        const response = await requestWithAuthRetry(async () => {
-            return await axios.post<EventSubSubscriptionResponse>('https://api.twitch.tv/helix/eventsub/subscriptions', payload, {
-                headers: await getAuthHeaders()
-            });
-        });
-
-        const subData = getFirstSubscription(response);
-        safeSubscriptions.set(subData.id, {
-            ...subscription,
-            id: subData.id,
-            status: subData.status
-        });
-
-        safeLogger.info(`EventSub subscription created after retry: ${subscription.name}`, 'twitch', {
-            id: subData.id,
-            type: subscription.type,
-            status: subData.status
-        });
-
-        return { success: true };
-    };
-
-  const setupEventSubscriptions = async ({
-    requiredSubscriptions,
-    userId,
-    broadcasterId,
-    sessionId,
-    subscriptionDelay,
-    validationAlreadyDone = false
-  }: {
-    requiredSubscriptions: SubscriptionDefinition[];
-    userId: string;
-    broadcasterId: string;
-    sessionId: string | null;
-    subscriptionDelay: number;
-    validationAlreadyDone?: boolean;
-  }): Promise<SubscriptionSetupResult> => {
-        if (!validationAlreadyDone && !safeValidateConnection()) {
-            return {
-                successful: 0,
-                total: requiredSubscriptions.length,
-                failures: [],
-                timestamp: now(),
-                aborted: true,
-                abortReason: 'connection-lost'
+  // Each request and the complete operation are bounded. No generic HTTP retry wraps POST.
+    const request = async <T>(method: AxiosMethodName, context: OperationDeadlineContext, payload?: unknown, id?: string): Promise<AxiosResponse<T>> => {
+        context.signal.throwIfAborted();
+        return withOperationDeadline(async ({ signal, remainingBudgetMs }) => {
+            const execute = async () => {
+                signal.throwIfAborted();
+                const headers = await getAuthHeaders();
+                signal.throwIfAborted();
+                const url = `https://api.twitch.tv/helix/eventsub/subscriptions${id ? `?id=${encodeURIComponent(id)}` : ''}`;
+                const config = { headers, signal, timeout: Math.max(1, Math.ceil(remainingBudgetMs())) };
+                if (method === 'post') return axios.post<T>(url, payload, config);
+                if (method === 'delete') return axios.delete<T>(url, config);
+                return axios.get<T>(url, config);
             };
-        }
+            try { return await execute(); }
+            catch (error) {
+                signal.throwIfAborted();
+                if (getAxiosErrorResponse(error)?.status !== 401) throw error;
+                // TwitchAuth remains the sole refresh owner/coordinator.
+                const refreshed = await twitchAuth.refreshTokens();
+                signal.throwIfAborted();
+                if (!refreshed || !secrets.twitch.accessToken) throw error;
+                return execute();
+            }
+        }, { parentAbortSignal: context.signal, budgetMs: Math.min(5000, context.remainingBudgetMs()), operationName: `Twitch EventSub ${method}` });
+    };
 
-        if (!(await ensureAuthReady())) {
-            return {
-                successful: 0,
-                total: requiredSubscriptions.length,
-                failures: requiredSubscriptions.map((subscription) => ({
-                    subscription: subscription.name,
-                    error: {
-                        code: 'AUTH_MISSING',
-                        message: 'Missing authentication tokens',
-                        status: null,
-                        isCritical: true,
-                        isRetryable: false,
-                        details: {}
-                    }
-                })),
-                timestamp: now(),
-                aborted: true,
-                abortReason: 'auth-missing'
-            };
-        }
-
-        safeLogger.info('Setting up EventSub subscriptions', 'twitch');
-
-        let successCount = 0;
-        const failedSubscriptions: Array<{ subscription: string; error: SubscriptionErrorDetails }> = [];
+    const setupEventSubscriptions = async ({ requiredSubscriptions, userId, broadcasterId, sessionId,
+        subscriptionDelay, validationAlreadyDone = false, operationContext }: {
+        requiredSubscriptions: SubscriptionDefinition[];
+        userId: string;
+        broadcasterId: string;
+        sessionId: string | null;
+        subscriptionDelay: number;
+        validationAlreadyDone?: boolean;
+        operationContext?: OperationDeadlineContext | undefined;
+    }): Promise<SubscriptionSetupResult> => withOperationDeadline(async (overall) => {
+        const context: OperationDeadlineContext = {
+            signal: overall.signal,
+            remainingBudgetMs: () => Math.min(overall.remainingBudgetMs(), operationContext?.remainingBudgetMs() ?? Infinity)
+        };
+        const valid = () => !context.signal.aborted && safeValidateConnection();
+        report(() => safeLogger.debug('Setting up EventSub subscriptions', 'twitch', { total: requiredSubscriptions.length }));
+        const failures: SubscriptionSetupResult['failures'] = [];
+        let successful = 0;
+        const result = (abortReason?: 'connection-lost' | 'auth-missing'): SubscriptionSetupResult => ({
+            successful, total: requiredSubscriptions.length, failures, timestamp: now(),
+            ...(abortReason ? { aborted: true, abortReason } : {})
+        });
+        if (!validationAlreadyDone && !valid()) return result('connection-lost');
+        if (!(await ensureAuthReady())) return result('auth-missing');
         for (const subscription of requiredSubscriptions) {
+            context.signal.throwIfAborted();
+            if (!valid()) return result('connection-lost');
+            const payload = { type: subscription.type, version: subscription.version,
+                condition: subscription.getCondition({ userId, broadcasterId }),
+                transport: { method: 'websocket', session_id: sessionId } };
             try {
-                if (!safeValidateConnection()) {
-                    safeLogger.warn('Stopping subscription setup - connection lost during process', 'twitch');
-                    return {
-                        successful: successCount,
-                        total: requiredSubscriptions.length,
-                        failures: failedSubscriptions,
-                        timestamp: now(),
-                        aborted: true,
-                        abortReason: 'connection-lost'
-                    };
-                }
-
-                safeLogger.debug(`Creating subscription: ${subscription.name}`, 'twitch');
-
-                const subscriptionPayload = {
-                    type: subscription.type,
-                    version: subscription.version,
-                    condition: subscription.getCondition({ userId, broadcasterId }),
-                    transport: {
-                        method: 'websocket',
-                        session_id: sessionId
+                let response: AxiosResponse<EventSubSubscriptionResponse>;
+                for (;;) {
+                    try { response = await request<EventSubSubscriptionResponse>('post', context, payload); break; }
+                    catch (error) {
+                        context.signal.throwIfAborted();
+                        const status = getAxiosErrorResponse(error)?.status;
+                        // Only an explicit rejection can be retried. A timeout/network failure has an ambiguous outcome.
+                        if (status !== 429) throw error;
+                        const headers = getRecord(getRecord(error)?.response)?.headers as Record<string, unknown> | undefined;
+                        const retryAfter = headers?.['retry-after'];
+                        const seconds = Number(retryAfter);
+                        const dateDelay = typeof retryAfter === 'string' ? Date.parse(retryAfter) - now() : 0;
+                        const delay = Math.max(1000, Number.isFinite(seconds) ? seconds * 1000 : (Number.isFinite(dateDelay) ? dateDelay : 0));
+                        if (delay >= context.remainingBudgetMs()) throw Object.assign(new Error('EventSub Retry-After exceeds remaining operation budget'), { code: 'EVENTSUB_RETRY_AFTER_EXCEEDS_BUDGET' });
+                        await safeDelay(delay, 1, 'twitchEventSub:subscription-retry', context.signal);
+                        if (!valid()) return result('connection-lost');
                     }
-                };
-
-                safeLogger.debug(`Subscription payload for ${subscription.name}`, 'twitch', {
-                    type: subscription.type,
-                    hasSessionId: !!sessionId,
-                    sessionId: sessionId?.substring(0, 8) + '...'
-                });
-
-                const response = await requestWithAuthRetry(async () => {
-                    return await axios.post<EventSubSubscriptionResponse>('https://api.twitch.tv/helix/eventsub/subscriptions', subscriptionPayload, {
-                        headers: await getAuthHeaders()
-                    });
-                });
-
+                }
+                context.signal.throwIfAborted();
+                if (!valid()) return result('connection-lost');
                 const subData = getFirstSubscription(response);
-                safeSubscriptions.set(subData.id, {
-                    ...subscription,
-                    id: subData.id,
-                    status: subData.status
-                });
-
-                safeLogger.info(`EventSub subscription created: ${subscription.name}`, 'twitch', {
-                    id: subData.id,
-                    type: subscription.type,
-                    status: subData.status
-                });
-
-                successCount++;
-
-                if (subscriptionDelay > 0) {
-                    await safeDelay(
-                        validateTimeout(subscriptionDelay, 1000),
-                        1000,
-                        'twitchEventSub:subscription-delay'
-                    );
+                safeSubscriptions.set(subData.id, { ...subscription, id: subData.id, status: subData.status, sessionId });
+                successful++;
+                onSubscriptionCreated?.();
+                if (subscriptionDelay > 0 && successful < requiredSubscriptions.length) {
+                    await safeDelay(subscriptionDelay, 1, 'twitchEventSub:subscription-delay', context.signal);
                 }
             } catch (error) {
-                const errorDetails = parseSubscriptionError(error, subscription);
-                let retryResult: { success: boolean; error?: string; errorDetails?: SubscriptionErrorDetails } | null = null;
-
-                if (shouldRetrySubscription(errorDetails)) {
-                    try {
-                        retryResult = await retrySubscription({
-                            subscription,
-                            payload: {
-                                type: subscription.type,
-                                version: subscription.version,
-                                condition: subscription.getCondition({ userId, broadcasterId }),
-                                transport: {
-                                    method: 'websocket',
-                                    session_id: sessionId
-                                }
-                            },
-                            retriesRemaining: 1
-                        });
-                    } catch (retryError) {
-                        const retryErrorDetails = parseSubscriptionError(retryError, subscription);
-                        retryResult = {
-                            success: false,
-                            error: isTerminalSessionLoss(retryErrorDetails) ? 'connection-lost' : getErrorMessage(retryError),
-                            errorDetails: retryErrorDetails
-                        };
-                    }
-                }
-
-                if (retryResult?.success) {
-                    successCount++;
-                    continue;
-                }
-
-                if (retryResult?.error === 'connection-lost') {
-                    failedSubscriptions.push({
-                        subscription: subscription.name,
-                        error: retryResult.errorDetails || errorDetails
-                    });
-                    return {
-                        successful: successCount,
-                        total: requiredSubscriptions.length,
-                        failures: failedSubscriptions,
-                        timestamp: now(),
-                        aborted: true,
-                        abortReason: 'connection-lost'
-                    };
-                }
-
-                failedSubscriptions.push({
-                    subscription: subscription.name,
-                    error: errorDetails
-                });
-
-                safeLogError(`Failed to create ${subscription.name} subscription`, null, 'subscription-create', {
-                    error: errorDetails,
-                    type: subscription.type,
-                    sessionId: sessionId ? 'present' : 'missing'
-                });
-
-                if (errorDetails.isCritical) {
-                    safeLogError('Critical error encountered, stopping subscription setup', null, 'subscription-critical');
-                    break;
-                }
-
-                if (isTerminalSessionLoss(errorDetails)) {
-                    safeLogError('Terminal session loss encountered, stopping subscription setup', null, 'subscription-terminal-session-loss');
-                    return {
-                        successful: successCount,
-                        total: requiredSubscriptions.length,
-                        failures: failedSubscriptions,
-                        timestamp: now(),
-                        aborted: true,
-                        abortReason: 'connection-lost'
-                    };
-                }
+                context.signal.throwIfAborted();
+                const details = parseSubscriptionError(error, subscription);
+                if (!valid()) { failures.push({ subscription: subscription.name, error: details }); return result('connection-lost'); }
+                failures.push({ subscription: subscription.name, error: details });
+                safeLogError('Failed to create EventSub subscription', null, 'subscription-create', { type: subscription.type, error: details });
+                if (details.message.toLowerCase().includes('websocket session has already disconnected')) return result('connection-lost');
+                if (details.isCritical || !details.isRetryable) break;
             }
         }
+        return result();
+    }, { budgetMs: 30000, parentAbortSignal: operationContext?.signal, operationName: 'Twitch EventSub subscription setup' });
 
-        if (failedSubscriptions.length > 0) {
-            safeLogger.warn('EventSub subscription setup completed with failures', 'twitch', {
-                successful: successCount,
-                total: requiredSubscriptions.length,
-                failures: failedSubscriptions
-            });
-        } else {
-            safeLogger.info(`EventSub subscription setup complete: ${successCount}/${requiredSubscriptions.length} successful`, 'twitch');
-        }
-
-        return {
-            successful: successCount,
-            total: requiredSubscriptions.length,
-            failures: failedSubscriptions,
-            timestamp: now()
-        };
-    };
-
-  const cleanupAllWebSocketSubscriptions = async ({ sessionId }: { sessionId?: string | null } = {}) => {
-        safeLogger.info('Starting cleanup method...', 'twitch');
-
-        if (!(await ensureAuthReady())) {
-            safeLogger.warn('Cannot cleanup WebSocket subscriptions - missing authentication tokens', 'twitch', {
-                hasAccessToken: !!config?.accessToken,
-                hasClientId: !!config?.clientId
-            });
-            return;
-        }
-
+    type CleanupOptions = { sessionId?: string | null; operationContext?: OperationDeadlineContext };
+    const cleanupRemote = async ({ sessionId, operationContext }: CleanupOptions, startup: boolean) => {
         try {
-            safeLogger.info('Cleaning up existing WebSocket subscriptions before connecting...', 'twitch');
-
-            const response = await requestWithAuthRetry(async () => {
-                return await axios.get<EventSubSubscriptionResponse>('https://api.twitch.tv/helix/eventsub/subscriptions', {
-                    headers: await getAuthHeaders(),
-                    timeout: 5000
-                });
-            });
-
-            const allSubscriptions = getSubscriptionResponseData(response);
-            const webSocketSubscriptions = allSubscriptions
-                .filter((sub) => sub.transport?.method === 'websocket')
-                .filter((sub) => {
-                    if (sessionId) {
-                        return sub.transport?.session_id === sessionId;
+            await withOperationDeadline(async (context) => {
+                if (!(await ensureAuthReady())) return;
+                // Never target every active session when the caller has no owned session ID.
+                if (!startup && !sessionId) return;
+                const response = await request<EventSubSubscriptionResponse>('get', context);
+                context.signal.throwIfAborted();
+                const subscriptions = getSubscriptionResponseData(response).filter(sub => sub.transport?.method === 'websocket'
+                    && (sessionId ? sub.transport.session_id === sessionId : sub.status === STARTUP_STALE_WEBSOCKET_STATUS));
+                let nextIndex = 0;
+                const worker = async () => {
+                    while (nextIndex < subscriptions.length) {
+                        context.signal.throwIfAborted();
+                        const subscription = subscriptions[nextIndex++];
+                        if (!subscription) return;
+                        try {
+                            await request('delete', context, undefined, subscription.id);
+                            context.signal.throwIfAborted();
+                            // Local release is owned by the session lifecycle, never by late DELETE results.
+                        } catch (error) {
+                            context.signal.throwIfAborted();
+                            safeLogError('Failed to delete EventSub subscription', error, 'subscription-delete');
+                        }
                     }
-
-                    return sub.status === STARTUP_STALE_WEBSOCKET_STATUS;
-                });
-
-            safeLogger.info(`Found ${webSocketSubscriptions.length} existing WebSocket subscriptions to clean up`, 'twitch');
-
-            if (webSocketSubscriptions.length === 0) {
-                safeLogger.info('No WebSocket subscriptions to clean up', 'twitch');
-                return;
-            }
-
-            safeLogger.debug('WebSocket subscriptions to delete:', 'twitch');
-            webSocketSubscriptions.forEach((sub, index) => {
-                safeLogger.debug(`   ${index + 1}. ${sub.type} (${sub.status}) - ID: ${sub.id}`, 'twitch');
-            });
-
-            safeLogger.info('Deleting all WebSocket subscriptions...', 'twitch');
-            let deleted = 0;
-            let nextIndex = 0;
-            const workerCount = Math.min(STARTUP_CLEANUP_DELETE_CONCURRENCY, webSocketSubscriptions.length);
-
-            const runDeleteWorker = async () => {
-                while (nextIndex < webSocketSubscriptions.length) {
-                    const subscription = webSocketSubscriptions[nextIndex++];
-                    if (!subscription) {
-                        break;
-                    }
-                    try {
-                        await requestWithAuthRetry(async () => {
-                            return await axios.delete(`https://api.twitch.tv/helix/eventsub/subscriptions?id=${subscription.id}`, {
-                                headers: await getAuthHeaders()
-                            });
-                        });
-
-                        safeLogger.debug(`   Deleted: ${subscription.type} (${subscription.id})`, 'twitch');
-                        deleted++;
-                    } catch (error) {
-                        safeLogError(`   Failed to delete ${subscription.type}`, error, 'subscription-delete', {
-                            id: subscription.id,
-                            error: extractHttpErrorDetails(error)
-                        });
-                    }
-                }
-            };
-
-            await Promise.all(Array.from({ length: workerCount }, () => runDeleteWorker()));
-
-            safeLogger.info(`WebSocket cleanup complete! Deleted ${deleted}/${webSocketSubscriptions.length} subscriptions`, 'twitch');
+                };
+                await Promise.all(Array.from({ length: Math.min(STARTUP_CLEANUP_DELETE_CONCURRENCY, subscriptions.length) }, worker));
+            }, { budgetMs: Math.min(5000, operationContext?.remainingBudgetMs() ?? 5000),
+                parentAbortSignal: operationContext?.signal, operationName: 'Twitch EventSub cleanup' });
         } catch (error) {
-            safeLogError('Failed to cleanup WebSocket subscriptions during initialization', error, 'websocket-cleanup', {
-                error: extractHttpErrorDetails(error),
-                willContinueAnyway: true
-            });
+            if (!operationContext?.signal.aborted) safeLogError('EventSub remote cleanup incomplete', error, 'eventsub-cleanup');
         }
     };
-
-  const deleteAllSubscriptions = async ({ sessionId }: { sessionId?: string | null } = {}) => {
-        if (!(await ensureAuthReady())) {
-            safeLogger.warn('Cannot delete subscriptions - missing authentication tokens', 'twitch');
-            return;
-        }
-
-        try {
-            safeLogger.info('Fetching existing EventSub subscriptions for cleanup...', 'twitch');
-
-            const response = await requestWithAuthRetry(async () => {
-                return await axios.get<EventSubSubscriptionResponse>('https://api.twitch.tv/helix/eventsub/subscriptions', {
-                    headers: await getAuthHeaders()
-                });
-            });
-
-            const allSubscriptions = getSubscriptionResponseData(response);
-            safeLogger.info(`Found ${allSubscriptions.length} total subscriptions`, 'twitch');
-
-            const ourSubscriptions = allSubscriptions.filter((sub) => {
-                return sub.transport?.method === 'websocket'
-                    && sub.transport?.session_id === sessionId;
-            });
-
-            safeLogger.info(`Found ${ourSubscriptions.length} subscriptions for our session`, 'twitch');
-
-            if (ourSubscriptions.length === 0) {
-                safeLogger.info('No subscriptions to clean up for this session', 'twitch');
-                return;
-            }
-
-            safeLogger.info('Deleting EventSub subscriptions...', 'twitch');
-            let deleted = 0;
-
-            for (const subscription of ourSubscriptions) {
-                try {
-                    await requestWithAuthRetry(async () => {
-                        return await axios.delete(`https://api.twitch.tv/helix/eventsub/subscriptions?id=${subscription.id}`, {
-                            headers: await getAuthHeaders()
-                        });
-                    });
-
-                    safeLogger.info(`   Deleted: ${subscription.type} (${subscription.id})`, 'twitch');
-                    deleted++;
-                    safeSubscriptions.delete(subscription.id);
-
-                    await safeDelay(
-                        validateTimeout(100, 100),
-                        100,
-                        'twitchEventSub:rapid-retry-delay'
-                    );
-                } catch (error) {
-                    safeLogError(`   Failed to delete ${subscription.type}`, error, 'subscription-delete', {
-                        id: subscription.id,
-                        error: extractHttpErrorDetails(error)
-                    });
-                }
-            }
-
-            safeLogger.info(`Subscription cleanup complete! Deleted ${deleted}/${ourSubscriptions.length} subscriptions`, 'twitch');
-        } catch (error) {
-            safeLogError('Failed to cleanup EventSub subscriptions', error, 'eventsub-cleanup', {
-                error: extractHttpErrorDetails(error),
-                hasAuth: !!config?.accessToken
-            });
-        }
-    };
-
-    return {
-        setupEventSubscriptions,
-        parseSubscriptionError,
-        cleanupAllWebSocketSubscriptions,
-        deleteAllSubscriptions,
-        getTimestamp
-    };
+    const cleanupAllWebSocketSubscriptions = (options: CleanupOptions = {}) => cleanupRemote(options, true);
+    const deleteAllSubscriptions = (options: CleanupOptions = {}) => cleanupRemote(options, false);
+    return { setupEventSubscriptions, parseSubscriptionError, cleanupAllWebSocketSubscriptions, deleteAllSubscriptions, getTimestamp };
 }
-
 export { createTwitchEventSubSubscriptionManager };

@@ -250,6 +250,7 @@ const isRetryableStartupError = (error: unknown): boolean => {
     const closeCode = typeof record.closeCode === 'number' ? record.closeCode : null;
     const message = getErrorMessage(error).toLowerCase();
 
+    if (code === 'EVENTSUB_RETRY_AFTER_EXCEEDS_BUDGET') return false;
     return status === 408
         || status === 429
         || (status !== null && status >= 500)
@@ -257,7 +258,7 @@ const isRetryableStartupError = (error: unknown): boolean => {
         || closeCode === 4005
         || closeCode === 4006
         || ['ECONNRESET', 'ETIMEDOUT', 'ECONNREFUSED', 'EPIPE', 'ENOTFOUND', 'EAI_AGAIN'].includes(code)
-        || /socket hang up|connection (?:timed out|timeout|failed|closed abnormally|is not active|not established)|connect failed|subscriptions are not active|websocket session has already disconnected|subscription setup aborted: connection-lost/.test(message);
+        || /socket hang up|connection (?:timed out|timeout|failed|closed abnormally|is not active|not established)|deadline exceeded|silence timeout|connect failed|subscriptions are not active|websocket session has already disconnected|subscription setup aborted: connection-lost/.test(message);
 };
 
 class TwitchPlatform extends EventEmitter {
@@ -384,6 +385,8 @@ class TwitchPlatform extends EventEmitter {
             throw new Error('Twitch authentication is not ready');
         }
 
+        let instance: TwitchEventSubLike | null = null;
+        const generation = this.initializationGeneration;
         try {
             this.logger.debug('Creating TwitchEventSub instance...', 'twitch');
             this.eventSub = new this.TwitchEventSub({ ...this.config, broadcasterId }, {
@@ -392,11 +395,39 @@ class TwitchPlatform extends EventEmitter {
                 axios: this.dependencies?.axios,
                 WebSocketCtor: this.dependencies?.WebSocketCtor
             });
+            instance = this.eventSub;
+            this.eventSubWiring = createTwitchEventSubWiring({
+                eventSub: this.eventSub,
+                eventSubListeners: this.eventSubListeners,
+                logger: this.logger
+            });
+            const callbacks: Record<string, (data: unknown) => unknown> = {
+                chatMessage: (data: unknown) => this.onMessageHandler(isRecord(data) ? data : {}),
+                follow: (data: unknown) => this.handleFollowEvent(isRecord(data) ? data : {}),
+                paypiggy: (data: unknown) => this.handlePaypiggyEvent(isRecord(data) ? data : {}),
+                paypiggyMessage: (data: unknown) => this.handlePaypiggyMessageEvent(isRecord(data) ? data : {}),
+                paypiggyGift: (data: unknown) => this.handlePaypiggyGiftEvent(isRecord(data) ? data : {}),
+                raid: (data: unknown) => this.handleRaidEvent(isRecord(data) ? data : {}),
+                gift: (data: unknown) => this.handleGiftEvent(isRecord(data) ? data : {}),
+                streamOnline: (data: unknown) => this.handleStreamOnlineEvent(isRecord(data) ? data : {}),
+                streamOffline: (data: unknown) => this.handleStreamOfflineEvent(isRecord(data) ? data : {}),
+                eventSubConnected: (details: unknown = {}) => { if (!this.isConnecting) this._handleEventSubConnectionChange(true, isRecord(details) ? details : {}); },
+                eventSubDisconnected: (details: unknown = {}) => { if (!this.isConnecting) this._handleEventSubConnectionChange(false, isRecord(details) ? details : {}); }
+            };
+            this.eventSubWiring.bindAll(Object.fromEntries(Object.entries(callbacks).map(([event, callback]) => [event, (data: unknown) => {
+                if (this.eventSub === instance && this.initializationGeneration === generation && !this.isPlannedDisconnection) return callback(data);
+                return undefined;
+            }])));
+
             this.logger.debug('TwitchEventSub instance created, calling initialize()...', 'twitch');
             await this.eventSub.initialize();
             this.logger.debug('TwitchEventSub initialize() completed', 'twitch');
         } catch (error) {
-            this.eventSub = null;
+            if (this.eventSub === instance && this.initializationGeneration === generation) {
+                this._clearEventSubWiringState();
+                this.eventSub = null;
+            }
+            await instance?.cleanup?.();
             this._logPlatformError('Failed to initialize EventSub', error, 'eventsub-init', {
                 stack: error instanceof Error ? error.stack : undefined
             });
@@ -445,18 +476,12 @@ class TwitchPlatform extends EventEmitter {
             this.logger.debug('Modular components initialized', 'twitch');
 
             const broadcasterId = await this.apiClient.getBroadcasterId(this.config.channel || '');
-            if (!initializationIsCurrent()) {
-                this.isConnecting = false;
-                return;
-            }
+            if (!initializationIsCurrent()) return;
             this.broadcasterId = broadcasterId;
 
             this.logger.debug('Initializing EventSub with centralized auth...', 'twitch');
             await this.initializeEventSub(broadcasterId);
-            if (!initializationIsCurrent()) {
-                this.isConnecting = false;
-                return;
-            }
+            if (!initializationIsCurrent()) return;
             this.logger.debug('EventSub initialization completed', 'twitch', {
                 eventSubExists: !!this.eventSub,
                 eventSubConnected: this.eventSub?.isConnected?.(),
@@ -499,25 +524,6 @@ class TwitchPlatform extends EventEmitter {
                 throw error;
             }
 
-            this.eventSubWiring = createTwitchEventSubWiring({
-                eventSub: this.eventSub,
-                eventSubListeners: this.eventSubListeners,
-                logger: this.logger
-            });
-            this.eventSubWiring.bindAll({
-                chatMessage: (data: unknown) => this.onMessageHandler(isRecord(data) ? data : {}),
-                follow: (data: unknown) => this.handleFollowEvent(isRecord(data) ? data : {}),
-                paypiggy: (data: unknown) => this.handlePaypiggyEvent(isRecord(data) ? data : {}),
-                paypiggyMessage: (data: unknown) => this.handlePaypiggyMessageEvent(isRecord(data) ? data : {}),
-                paypiggyGift: (data: unknown) => this.handlePaypiggyGiftEvent(isRecord(data) ? data : {}),
-                raid: (data: unknown) => this.handleRaidEvent(isRecord(data) ? data : {}),
-                gift: (data: unknown) => this.handleGiftEvent(isRecord(data) ? data : {}),
-                streamOnline: (data: unknown) => this.handleStreamOnlineEvent(isRecord(data) ? data : {}),
-                streamOffline: (data: unknown) => this.handleStreamOfflineEvent(isRecord(data) ? data : {}),
-                eventSubConnected: (details: unknown = {}) => this._handleEventSubConnectionChange(true, isRecord(details) ? details : {}),
-                eventSubDisconnected: (details: unknown = {}) => this._handleEventSubConnectionChange(false, isRecord(details) ? details : {})
-            });
-
             this.logger.debug('Using EventSub for chat messages', 'twitch', {
                 username: this.config.username,
                 channel: this.config.channel
@@ -529,16 +535,13 @@ class TwitchPlatform extends EventEmitter {
             if (this.recoveryInFlight) {
                 this._handleEventSubConnectionChange(true, { willReconnect: false });
             } else {
-                this.retrySystem?.handleConnectionSuccess?.(this.platformName, this.eventSub, 'Twitch EventSub');
+                this._reportConnectionSuccess();
             }
             this.recoveryInFlight = false;
             return { state: 'ready' };
 
         } catch (error) {
-            if (!initializationIsCurrent()) {
-                this.isConnecting = false;
-                return;
-            }
+            if (!initializationIsCurrent()) return;
             this._logPlatformError('Failed to initialize Twitch platform', error, 'platform-init');
             this._clearEventSubWiringState();
             this.eventSub = null;
@@ -1359,21 +1362,25 @@ class TwitchPlatform extends EventEmitter {
             this.recoveryInFlight = false;
         }
 
+        const cleanupGeneration = this.initializationGeneration;
         try {
             this._clearEventSubWiringState();
-
-            if (this.eventSub) {
-                if (typeof this.eventSub.removeAllListeners === 'function') {
-                    this.eventSub.removeAllListeners();
+            const retiringEventSub = this.eventSub;
+            this.eventSub = null;
+            this.isConnected = false;
+            this.isConnecting = false;
+            if (retiringEventSub) {
+                if (typeof retiringEventSub.removeAllListeners === 'function') {
+                    retiringEventSub.removeAllListeners();
                 }
-                if (this.eventSub.cleanup) {
-                    await this.eventSub.cleanup();
+                if (retiringEventSub.cleanup) {
+                    await retiringEventSub.cleanup();
                 }
-                if (this.eventSub.disconnect) {
-                    await this.eventSub.disconnect();
+                if (retiringEventSub.disconnect) {
+                    await retiringEventSub.disconnect();
                 }
-                this.eventSub = null;
             }
+            if (cleanupGeneration !== this.initializationGeneration) return;
             if (this.viewerCountProvider && typeof this.viewerCountProvider.stopPolling === 'function') {
                 try {
                     this.viewerCountProvider.stopPolling();
@@ -1591,6 +1598,14 @@ class TwitchPlatform extends EventEmitter {
         }
     }
 
+    private _reportConnectionSuccess(): void {
+        try { this.retrySystem?.handleConnectionSuccess?.(this.platformName, this.eventSub, 'Twitch EventSub'); }
+        catch (error) {
+            try { this._logPlatformError('Twitch connection success observer failed', error, 'connection-observer'); }
+            catch { /* Diagnostics cannot turn a ready transport into a startup failure. */ }
+        }
+    }
+
     _handleEventSubConnectionChange(isConnected: boolean, details: Record<string, unknown> = {}): void {
         const status = isConnected ? 'connected' : 'disconnected';
         const detailError = details.error;
@@ -1609,8 +1624,8 @@ class TwitchPlatform extends EventEmitter {
         if (isConnected) {
             this.isPlannedDisconnection = false;
             this.recoveryInFlight = false;
-            this.retrySystem?.handleConnectionSuccess?.(this.platformName, this.eventSub, 'Twitch EventSub');
-        } else if (!payload.willReconnect && !this.isPlannedDisconnection && this.config.enabled) {
+            this._reportConnectionSuccess();
+        } else if (!payload.willReconnect && !details.authorizationFailure && !details.recoveryBlocked && !this.isPlannedDisconnection && this.config.enabled) {
             const recoveryError = error instanceof Error
                 ? error
                 : new Error((error && typeof error.message === 'string' ? error.message : '') || detailReason || 'EventSub disconnected');
@@ -1618,7 +1633,11 @@ class TwitchPlatform extends EventEmitter {
             payload.willReconnect = true;
         }
 
-        this._emitPlatformEvent(PlatformEvents.PLATFORM_CONNECTION, payload);
+        try { this._emitPlatformEvent(PlatformEvents.PLATFORM_CONNECTION, payload); }
+        catch (error) {
+            try { this._logPlatformError('Twitch connection observer failed', error, 'connection-observer'); }
+            catch { /* Preserve the completed lifecycle transition. */ }
+        }
     }
 
     _logPlatformError(

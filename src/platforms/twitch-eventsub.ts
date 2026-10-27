@@ -7,6 +7,7 @@ import { RawPlatformDataLoggingService } from '../services/RawPlatformDataLoggin
 import { validateLoggerInterface } from '../utils/dependency-validator';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 import { getSystemTimestampISO } from '../utils/timestamp';
+import type { OperationDeadlineContext } from '../utils/timeout-wrapper';
 import { safeDelay, safeSetInterval, safeSetTimeout, validateTimeout } from '../utils/timeout-validator';
 import { createTwitchEventSubSubscriptionManager } from './twitch/connections/eventsub-subscription-manager';
 import { createTwitchEventSubSubscriptions } from './twitch/connections/eventsub-subscriptions';
@@ -40,7 +41,8 @@ type WebSocketLike = {
     readyState: number;
     on: (eventName: string, handler: (...args: unknown[]) => void) => void;
     close: (code?: number, reason?: string) => void;
-    removeAllListeners: () => void;
+    removeAllListeners: (eventName?: string) => void;
+    terminate?: () => void;
 };
 
 type WebSocketCtorLike = new (url: string) => WebSocketLike;
@@ -106,6 +108,7 @@ const isTransientStartupError = (error: unknown): boolean => {
     const closeCode = typeof record?.closeCode === 'number' ? record.closeCode : null;
     const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
 
+    if (code === 'EVENTSUB_RETRY_AFTER_EXCEEDS_BUDGET') return false;
     if (hasAxiosResponseStatus(error, 401) || hasAxiosResponseStatus(error, 403)) {
         return false;
     }
@@ -120,6 +123,8 @@ const isTransientStartupError = (error: unknown): boolean => {
         || ['ECONNRESET', 'ETIMEDOUT', 'ECONNREFUSED', 'EPIPE', 'ENOTFOUND', 'EAI_AGAIN'].includes(code)
         || message.includes('socket hang up')
         || message.includes('connection timeout')
+        || message.includes('deadline exceeded')
+        || message.includes('silence timeout')
         || message.includes('connection closed abnormally')
         || message.includes('websocket session has already disconnected')
         || message.includes('subscription setup aborted: connection-lost');
@@ -172,6 +177,8 @@ class TwitchEventSub extends EventEmitter {
     subscriptionManager: ReturnType<typeof createTwitchEventSubSubscriptionManager>;
     wsLifecycle: ReturnType<typeof createTwitchEventSubWsLifecycle>;
     subscriptionState?: SubscriptionState;
+    private initialization: Promise<void> | null = null;
+    private readonly lifetime = new AbortController();
 
     constructor(config: Record<string, unknown>, dependencies: Record<string, unknown> = {}) {
         super();
@@ -244,7 +251,8 @@ class TwitchEventSub extends EventEmitter {
             axios: this.axios,
             getClientId: () => this._getAvailableClientId(),
             validateConnectionForSubscriptions: () => this._validateConnectionForSubscriptions(),
-            logError: (...args) => this._logEventSubError(...args)
+            logError: (...args) => this._logEventSubError(...args),
+            onSubscriptionCreated: () => this.wsLifecycle.subscriptionCreated(this)
         });
 
         this.wsLifecycle = createTwitchEventSubWsLifecycle({
@@ -255,6 +263,24 @@ class TwitchEventSub extends EventEmitter {
         });
 
         this._startPeriodicCleanup();
+    }
+
+    // Platform listeners observe state; their failures must not retire the transport or skip other listeners.
+    override emit(eventName: string | symbol, ...args: unknown[]): boolean {
+        const listeners = this.rawListeners(eventName);
+        const report = (error: unknown) => {
+            try { this._logEventSubError('EventSub observer failed', error, 'eventsub-observer'); }
+            catch { /* An observer or reporting failure cannot change transport health. */ }
+        };
+        for (const listener of listeners) {
+            try {
+                const result: unknown = Reflect.apply(listener, this, args);
+                if (result && typeof (result as PromiseLike<unknown>).then === 'function') {
+                    void Promise.resolve(result).catch(report);
+                }
+            } catch (error) { report(error); }
+        }
+        return listeners.length > 0;
     }
 
   _startPeriodicCleanup(): void {
@@ -432,9 +458,16 @@ class TwitchEventSub extends EventEmitter {
     return typeof this.config.clientId === 'string' ? this.config.clientId : null;
   }
 
-    async initialize(): Promise<void> {
+    initialize(): Promise<void> {
+        if (!this.initialization) this.initialization = this.initializeSession().finally(() => { this.initialization = null; });
+        return this.initialization;
+    }
+
+    private async initializeSession(): Promise<void> {
         try {
+            this.lifetime.signal.throwIfAborted();
             const validation = await this._validateConfig();
+            this.lifetime.signal.throwIfAborted();
             if (!validation.valid) {
                 throw new Error(`EventSub validation failed: ${validation.issues.join(', ')}`);
             }
@@ -457,18 +490,21 @@ class TwitchEventSub extends EventEmitter {
             this.logger.debug(`Using user ID: ${this.userId}`, 'twitch');
 
             await this._cleanupAllWebSocketSubscriptions();
-
+            this.lifetime.signal.throwIfAborted();
             await this._connectWebSocketWithInitialRetry();
+            this.lifetime.signal.throwIfAborted();
 
             this.isInitialized = true;
             this.retryAttempts = 0;
             this.logger.info('Manual EventSub initialized successfully', 'twitch');
 
         } catch (error) {
-            this._logEventSubError('Manual EventSub initialization failed', error, 'manual-init', {
-                stage: 'initialization',
-                stack: error instanceof Error ? error.stack : undefined
-            });
+            try {
+                this._logEventSubError('Manual EventSub initialization failed', error, 'manual-init', {
+                    stage: 'initialization',
+                    stack: error instanceof Error ? error.stack : undefined
+                });
+            } catch { /* Preserve the initialization failure if diagnostics fail. */ }
             await this._cleanupAfterFailedInitialization(error);
             throw error;
         }
@@ -478,10 +514,14 @@ class TwitchEventSub extends EventEmitter {
         const maxAttempts = Math.max(1, Math.trunc(this.initialStartupMaxAttempts));
 
         for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+            this.lifetime.signal.throwIfAborted();
             try {
+                const generation = this.wsLifecycle.operationGeneration(this);
                 await this._connectWebSocket();
+                if (generation !== this.wsLifecycle.operationGeneration(this)) throw new Error('Subscription setup aborted: connection-lost');
                 return;
             } catch (error) {
+                this.lifetime.signal.throwIfAborted();
                 const willRetry = attempt < maxAttempts && isTransientStartupError(error);
                 if (!willRetry) {
                     throw error;
@@ -498,7 +538,8 @@ class TwitchEventSub extends EventEmitter {
                 await safeDelay(
                     validateTimeout(this.initialStartupRetryDelay, 1),
                     1,
-                    'twitchEventSub:initial-startup-retry'
+                    'twitchEventSub:initial-startup-retry',
+                    this.lifetime.signal
                 );
             }
         }
@@ -509,6 +550,7 @@ class TwitchEventSub extends EventEmitter {
     }
 
     async handleWebSocketMessage(message: Record<string, unknown>): Promise<void> {
+        if (this.lifetime.signal.aborted) return;
         const metadata = getRecord(message.metadata);
         const payload = getRecord(message.payload);
         if (!metadata || !payload) {
@@ -568,16 +610,19 @@ class TwitchEventSub extends EventEmitter {
         validationAlreadyDone = false,
         requiredSubscriptions: SubscriptionDefinition[] = this.requiredSubscriptions
     ): Promise<SubscriptionState | null> {
+        const operationContext = this.wsLifecycle.operationContext(this);
+        const targetSessionId = this.sessionId;
         const subscriptionState = await this.subscriptionManager.setupEventSubscriptions({
             requiredSubscriptions,
             userId: this.userId,
             broadcasterId: this.broadcasterId,
-            sessionId: this.sessionId,
+            sessionId: targetSessionId,
+            operationContext,
             subscriptionDelay: this.subscriptionDelay,
             validationAlreadyDone
         });
 
-        if (subscriptionState) {
+        if (subscriptionState && !operationContext?.signal.aborted && !this.lifetime.signal.aborted && this.sessionId === targetSessionId) {
             this.subscriptionState = subscriptionState;
         }
 
@@ -589,49 +634,29 @@ class TwitchEventSub extends EventEmitter {
     }
 
     async _handleSubscriptionRevocation(subscription: SubscriptionRevocation | Record<string, unknown> | null | undefined): Promise<void> {
-        if (!subscription?.type || !this.isInitialized) {
-            return;
+        if (!subscription?.type || this.lifetime.signal.aborted) return;
+        const terminal = ['authorization_revoked', 'user_removed', 'version_removed'].includes(String(subscription.status));
+        if (terminal) {
+            this.lifetime.abort(new Error('EventSub subscription authorization/status revoked'));
+            if (this.cleanupInterval) clearInterval(this.cleanupInterval);
+            this.cleanupInterval = null;
         }
-
-        const context = {
-            subscriptionType: subscription.type,
-            subscriptionId: subscription.id,
-            status: subscription.status,
-            sessionId: this.sessionId
-        };
-
-        this._logEventSubError('EventSub subscription revoked', null, 'subscription-revoked', context);
-
-        const replacementSubscriptions = this.requiredSubscriptions.filter((requiredSubscription) => requiredSubscription.type === subscription.type);
-        if (replacementSubscriptions.length === 0) {
-            this._logEventSubError('EventSub resubscribe skipped for unknown revoked subscription type', null, 'subscription-resubscribe-unknown-type', context);
-            return;
-        }
-
-        try {
-            const result = await this._setupEventSubscriptions(true, replacementSubscriptions);
-            if (result?.aborted) {
-                this.subscriptionsReady = false;
-                this._logEventSubError('EventSub resubscribe aborted after revocation', null, 'subscription-resubscribe-aborted', {
-                    ...context,
-                    abortReason: result.abortReason
-                });
-                return;
+        if (terminal) this.wsLifecycle.revokeSubscriptions(this, true, subscription.status);
+        else {
+            if (typeof subscription.id === 'string') this.subscriptions.delete(subscription.id);
+            await this.wsLifecycle.repairSubscriptions(this, subscription.status, async () => {
+                const replacement = this.requiredSubscriptions.filter(required => required.type === subscription.type);
+                if (!replacement.length) throw new Error('Unknown revoked subscription type');
+                const result = await this._setupEventSubscriptions(true, replacement);
+                if (result?.aborted || result?.failures?.length) {
+                    const failure = (result?.failures?.[0] as { error?: { code?: string; status?: number | null } })?.error;
+                    throw Object.assign(new Error('Revocation repair failed'), { code: failure?.code, response: { status: failure?.status } });
+                }
+            });
+            if (this.wsLifecycle.isDisposed(this) && this.cleanupInterval) {
+                clearInterval(this.cleanupInterval);
+                this.cleanupInterval = null;
             }
-            const failures = result?.failures || [];
-            if (failures.length > 0) {
-                this.subscriptionsReady = false;
-                this._logEventSubError('EventSub resubscribe failed after revocation', null, 'subscription-resubscribe-failed', {
-                    ...context,
-                    failures
-                });
-                return;
-            }
-
-            this.subscriptionsReady = true;
-        } catch (error) {
-            this.subscriptionsReady = false;
-            this._logEventSubError('EventSub resubscribe threw after revocation', error, 'subscription-resubscribe-error', context);
         }
     }
 
@@ -855,96 +880,50 @@ class TwitchEventSub extends EventEmitter {
         options: { clearCleanupInterval?: boolean } = {}
     ): Promise<void> {
         const failedSessionId = this.sessionId;
-
+        this.wsLifecycle.dispose(this, this.lifetime.signal.aborted);
         this._handleInitializationError(error);
-
-        if (this.welcomeTimer) {
-            clearTimeout(this.welcomeTimer);
-            this.welcomeTimer = null;
-        }
-
+        if (this.welcomeTimer) clearTimeout(this.welcomeTimer);
+        this.welcomeTimer = null;
         if (options.clearCleanupInterval !== false && this.cleanupInterval) {
             clearInterval(this.cleanupInterval);
             this.cleanupInterval = null;
         }
-
-        if (failedSessionId) {
-            try {
-                await this._deleteAllSubscriptions({ sessionId: failedSessionId });
-            } catch (cleanupError) {
-                this._logEventSubError('Failed to clean up subscriptions after EventSub initialization failure', cleanupError, 'initialization-cleanup', {
-                    sessionId: failedSessionId
-                });
-            }
-        }
-
-        if (this.ws) {
-            try {
-                this.ws.removeAllListeners();
-                this.ws.close(1000, 'Initialization failed');
-            } catch (closeError) {
-                this._logEventSubError('Error closing EventSub WebSocket after initialization failure', closeError, 'ws-close');
-            }
-            this.ws = null;
-        }
-
         this.sessionId = null;
         this.disconnectedSessionId = null;
         this.reconnectUrl = null;
         this.connectionStartTime = null;
         this.subscriptions.clear();
+        if (failedSessionId && !this.lifetime.signal.aborted) {
+            await this._deleteAllSubscriptions({ sessionId: failedSessionId });
+        }
     }
 
     async cleanup(): Promise<void> {
-        this.logger.info('Starting EventSub cleanup...', 'twitch');
-
-        if (this.reconnectTimeout) {
-            clearTimeout(this.reconnectTimeout);
-            this.reconnectTimeout = null;
-        }
-
-        if (this.welcomeTimer) {
-            clearTimeout(this.welcomeTimer);
-            this.welcomeTimer = null;
-        }
-
-        if (this.cleanupInterval) {
-            clearInterval(this.cleanupInterval);
-            this.cleanupInterval = null;
-        }
-
-        // Twitch recommends deleting EventSub subscriptions before closing the WebSocket session.
-        await this._deleteAllSubscriptions();
-
-        if (this.ws) {
-            try {
-                this.ws.removeAllListeners();
-                this.ws.close(1000, 'Normal cleanup');
-                this.logger.info('EventSub WebSocket closed normally', 'twitch');
-            } catch (error) {
-                this._logEventSubError('Error closing EventSub WebSocket', error, 'ws-close');
-            }
-            this.ws = null;
-        }
-
+        const sessionId = this.sessionId;
+        this.lifetime.abort(new Error('EventSub disposed'));
+        this.wsLifecycle.dispose(this);
         this.isInitialized = false;
-        this._isConnected = false;
-        this.subscriptionsReady = false;
-        this.sessionId = null;
+        if (this.cleanupInterval) clearInterval(this.cleanupInterval);
+        this.cleanupInterval = null;
+        if (this.welcomeTimer) clearTimeout(this.welcomeTimer);
+        this.welcomeTimer = null;
         this.disconnectedSessionId = null;
+        this.reconnectUrl = null;
         this.retryAttempts = 0;
         this.subscriptions.clear();
         this.connectionStartTime = null;
-
-        this.logger.info('EventSub cleanup completed', 'twitch');
+        // Local resources are already released; remote cleanup has an independent five-second cap.
+        if (sessionId) await this.subscriptionManager.deleteAllSubscriptions({ sessionId });
     }
 
     async _cleanupAllWebSocketSubscriptions(): Promise<void> {
-        await this.subscriptionManager.cleanupAllWebSocketSubscriptions({ sessionId: this.sessionId });
+        await this.subscriptionManager.cleanupAllWebSocketSubscriptions({ sessionId: this.sessionId,
+            operationContext: { signal: this.lifetime.signal, remainingBudgetMs: () => 5000 } });
     }
 
-    async _deleteAllSubscriptions(options?: { sessionId?: string | null }): Promise<void> {
-        await this.subscriptionManager.deleteAllSubscriptions({ sessionId: options?.sessionId ?? this.sessionId });
+    async _deleteAllSubscriptions(options?: { sessionId?: string | null; operationContext?: OperationDeadlineContext }): Promise<void> {
+        await this.subscriptionManager.deleteAllSubscriptions({ sessionId: options?.sessionId ?? this.sessionId,
+            operationContext: options?.operationContext ?? { signal: this.lifetime.signal, remainingBudgetMs: () => 5000 } });
     }
 
     async logRawPlatformData(eventType: string, data: unknown): Promise<void> {

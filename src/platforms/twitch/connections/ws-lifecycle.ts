@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import type { OperationDeadlineContext } from '../../../utils/timeout-wrapper';
 
 type LifecycleLogger = {
   debug?: (message: string, scope?: string, payload?: unknown) => void;
@@ -10,6 +11,8 @@ type LifecycleWebSocket = {
   readyState: number;
   on: (eventName: string, handler: (...args: unknown[]) => void) => void;
   close: (code?: number, reason?: string) => void;
+  terminate?: () => void;
+  removeAllListeners?: (eventName?: string) => void;
 };
 
 type LifecycleState = {
@@ -20,7 +23,7 @@ type LifecycleState = {
   _validateConnectionForSubscriptions?: () => boolean;
   _setupEventSubscriptions?: (validationAlreadyDone?: boolean) => Promise<{ failures?: unknown[]; aborted?: boolean; abortReason?: string } | null | void>;
   _scheduleReconnect?: () => void;
-  _deleteAllSubscriptions?: (options: { sessionId?: string | null }) => Promise<void>;
+  _deleteAllSubscriptions?: (options: { sessionId?: string | null; operationContext?: OperationDeadlineContext }) => Promise<void>;
   _connectWebSocket?: () => Promise<void>;
   _reconnect?: () => Promise<void>;
   connectionStartTime?: number | null;
@@ -45,586 +48,397 @@ type LifecycleState = {
 type WsLifecycleOptions = {
   WebSocketCtor?: new (url: string) => LifecycleWebSocket;
   safeSetTimeout?: (handler: () => void, timeoutMs: number) => ReturnType<typeof setTimeout>;
-  safeDelay?: (timeoutMs: number, minMs: number, tag?: string) => Promise<void>;
+  safeDelay?: (timeoutMs: number, minMs: number, tag?: string, signal?: AbortSignal) => Promise<void>;
   validateTimeout?: (timeoutMs: number, minMs: number) => number;
   now?: () => number;
   random?: () => number;
   setImmediateFn?: (handler: () => void | Promise<void>) => void;
 };
 
-const getErrorMessage = (error: unknown): string => error instanceof Error ? error.message : String(error);
-
-const getRecord = (value: unknown): Record<string, unknown> | null =>
-    value && typeof value === 'object' ? value as Record<string, unknown> : null;
-
-const getString = (record: Record<string, unknown> | null | undefined, key: string): string | null => {
-    const value = record?.[key];
-    return typeof value === 'string' ? value : null;
+type Session = {
+    socket: LifecycleWebSocket;
+    controller: AbortController;
+    sessionId: string | null;
+    firstSubscriptionAt: number;
+    firstSubscriptionCreated: boolean;
+    timer: ReturnType<typeof setTimeout> | null;
+    startupTimer: ReturnType<typeof setTimeout> | null;
+    reject: (error: unknown) => void;
+    settled: boolean;
+    handoff: boolean;
 };
-
-const getSession = (message: Record<string, unknown>): Record<string, unknown> | null => {
-    const payload = getRecord(message.payload);
-    return getRecord(payload?.session);
+type Owner = {
+    disposed: boolean;
+    generation: number;
+    active: Session | null;
+    pending: Session | null;
+    operation: { controller: AbortController; kind: 'reconnect' | 'repair' } | null;
 };
-
-const getByteLength = (value: unknown): number => {
-    if (typeof value === 'string') {
-        return value.length;
-    }
-    if (value instanceof Uint8Array || value instanceof ArrayBuffer) {
-        return value.byteLength;
-    }
-    const withLength = getRecord(value);
-    const length = withLength?.length;
-    return typeof length === 'number' ? length : 0;
-};
-
-function stripUrlQueryAndFragment(value: string): string {
-    try {
-        const parsed = new URL(value);
-        parsed.search = '';
-        parsed.hash = '';
-        return parsed.toString();
-    } catch {
-        return value;
-    }
-}
 
 function createTwitchEventSubWsLifecycle(options: WsLifecycleOptions = {}) {
-    const {
-        WebSocketCtor,
-        safeSetTimeout,
-        safeDelay,
-        validateTimeout,
-        now = () => Date.now(),
-        random = () => crypto.randomInt(0, 1000) / 1000,
-        setImmediateFn = setImmediate
-    } = options;
-
-    if (typeof WebSocketCtor !== 'function') {
-        throw new Error('WebSocketCtor is required');
-    }
-    if (typeof safeSetTimeout !== 'function' || typeof safeDelay !== 'function' || typeof validateTimeout !== 'function') {
-        throw new Error('timeout utilities are required');
-    }
-
-  const connectWebSocket = (state: LifecycleState): Promise<void> => {
-        return new Promise((resolve, reject) => {
-            state.logger?.debug?.('Connecting to EventSub WebSocket...', 'twitch');
-
-      const logError = typeof state._logEventSubError === 'function'
-        ? (message: string, error?: unknown, eventType?: string, payload?: Record<string, unknown>) => state._logEventSubError?.(message, error, eventType, payload)
-        : () => {};
-      const emit = typeof state.emit === 'function'
-        ? (eventName: string, payload?: unknown) => state.emit?.(eventName, payload)
-        : () => {};
-      const handleWebSocketMessage = typeof state.handleWebSocketMessage === 'function'
-        ? (message: Record<string, unknown>) => state.handleWebSocketMessage?.(message)
-        : async () => {};
-
-            let connectionResolved = false;
-            let connectionTimeout: ReturnType<typeof setTimeout> | null = null;
-            let receivedWelcome = false;
-
-            try {
-                state.connectionStartTime = now();
-
-                const websocketUrl = state.reconnectUrl || 'wss://eventsub.wss.twitch.tv/ws?keepalive_timeout_seconds=30';
-                const ws = new WebSocketCtor(websocketUrl);
-                state.ws = ws;
-
-                connectionTimeout = safeSetTimeout(() => {
-                    if (!connectionResolved && !state.sessionId) {
-                        connectionResolved = true;
-                        logError('EventSub connection timeout - no welcome message received', null, 'connection-timeout');
-                        if (state.ws && state.ws.readyState === 1) {
-                            state.ws.close();
-                        }
-                        reject(new Error('Connection timeout - no welcome message'));
-                    }
-                }, 15000);
-
-                ws.on('open', () => {
-                    state.logger?.info?.('EventSub WebSocket connection opened successfully.', 'twitch');
-                    state.logger?.info?.('Waiting for welcome message from Twitch...', 'twitch');
-
-                    state.logger?.info?.('WebSocket connection details', 'twitch', {
-                        url: 'wss://eventsub.wss.twitch.tv/ws',
-                        readyState: ws.readyState,
-                        hasTwitchAuth: !!state.twitchAuth,
-                        authReady: state.twitchAuth?.isReady?.(),
-                        userId: state.userId,
-                        clientId: state.config?.clientId
-                    });
-
-                    state.welcomeTimer = safeSetTimeout(() => {
-                        if (!state.sessionId) {
-                            state.logger?.warn?.(
-                                'No welcome message received after 5 seconds; connection may be rejected by Twitch.',
-                                'twitch'
-                            );
-                        }
-                    }, 5000);
-                });
-
-      ws.on('message', async (data: unknown) => {
+    const { WebSocketCtor, safeSetTimeout, safeDelay, validateTimeout,
+        now = () => performance.now(), random = () => crypto.randomInt(0, 1000) / 1000 } = options;
+    if (!WebSocketCtor) throw new Error('WebSocketCtor is required');
+    if (!safeSetTimeout || !safeDelay || !validateTimeout) throw new Error('timeout utilities are required');
+    const report = (state: LifecycleState, message: string, error?: unknown, eventType?: string, payload?: Record<string, unknown>) => {
+        try { state._logEventSubError?.(message, error, eventType, payload); }
+        catch { /* Reporting cannot own session progress or retirement. */ }
+    };
+    const notify = (state: LifecycleState, eventName: string, payload: unknown) => {
+        try { state.emit?.(eventName, payload); }
+        catch (error) { report(state, 'EventSub observer failed', error, 'eventsub-observer'); }
+    };
+    const owners = new WeakMap<LifecycleState, Owner>();
+    const owner = (state: LifecycleState): Owner => {
+        let value = owners.get(state);
+        if (!value) {
+            value = { disposed: false, generation: 0, active: null, pending: null, operation: null };
+            owners.set(state, value);
+        }
+        return value;
+    };
+    const current = (state: LifecycleState, session: Session) => {
+        const value = owner(state);
+        return !value.disposed && !session.controller.signal.aborted
+            && (value.active === session || value.pending === session);
+    };
+    const clearTimers = (session: Session) => {
+        if (session.timer) clearTimeout(session.timer);
+        if (session.startupTimer) clearTimeout(session.startupTimer);
+        session.timer = session.startupTimer = null;
+    };
+    const retire = (session: Session | null, reason: unknown = new Error('EventSub session retired')) => {
+        if (!session || session.controller.signal.aborted) return;
+        clearTimers(session);
+        session.controller.abort(reason);
+        if (!session.settled) { session.settled = true; session.reject(session.controller.signal.reason); }
+        closeTransport(session.socket);
+    };
+    const closeTransport = (socket: LifecycleWebSocket) => {
+        // ws emits an asynchronous error when terminated while CONNECTING. Keep a sink until close.
+        socket.removeAllListeners?.();
+        if (socket.readyState === 3) return;
+        socket.on('error', () => {});
+        socket.on('close', () => socket.removeAllListeners?.());
         try {
-          const rawData = String(data);
-          const parsedMessage: unknown = JSON.parse(rawData);
-          const message = getRecord(parsedMessage);
-          if (!message) {
-              throw new Error('WebSocket message payload must be an object');
-          }
-                        const metadata = getRecord(message.metadata);
-                        const session = getSession(message);
-                        if (metadata?.message_type === 'session_welcome') {
-                            receivedWelcome = true;
+            if (socket.terminate) socket.terminate();
+            else socket.close(1000, 'Session retired');
+        } catch { /* A retired transport cannot affect its replacement. */ }
+    };
+    const operationContext = (state: LifecycleState): OperationDeadlineContext | undefined => {
+        const session = owner(state).active;
+        if (!session) return undefined;
+        return {
+            signal: session.controller.signal,
+            remainingBudgetMs: () => session.firstSubscriptionCreated ? Infinity : Math.max(0, session.firstSubscriptionAt - now())
+        };
+    };
+    const subscriptionCreated = (state: LifecycleState) => {
+        const session = owner(state).active;
+        if (!session || !current(state, session)) return;
+        session.firstSubscriptionCreated = true;
+        if (session.startupTimer) clearTimeout(session.startupTimer);
+        session.startupTimer = null;
+    };
+    const lose = (state: LifecycleState, session: Session, error: unknown, code: number | null = null) => {
+        if (!current(state, session)) return;
+        const value = owner(state);
+        const wasActive = value.active === session;
+        if (wasActive) {
+            value.active = null;
+            state.disconnectedSessionId = session.sessionId;
+            state.ws = null;
+            state.sessionId = null;
+            state._isConnected = false;
+            state.subscriptionsReady = false;
+        } else {
+            value.pending = null;
+            if (state.ws === session.socket) state.ws = null;
+        }
+        retire(session, error);
+        if (!wasActive && value.active) return;
+        const failure = error as { code?: unknown; response?: { status?: number } };
+        const recoveryBlocked = failure?.code === 'EVENTSUB_RETRY_AFTER_EXCEEDS_BUDGET';
+        const authorizationFailure = failure?.response?.status === 401 || failure?.response?.status === 403;
+        if (recoveryBlocked || authorizationFailure) state.isInitialized = false;
+        const willReconnect = state.isInitialized && !value.disposed;
+        notify(state, 'eventSubDisconnected', { code, reason: error instanceof Error ? error.message : String(error),
+            abnormal: code !== 1000, willReconnect: willReconnect || !!value.pending, terminal: recoveryBlocked || authorizationFailure, recoveryBlocked, authorizationFailure });
+        // An old transport closing during a handoff does not invalidate the pending migrated session.
+        if (willReconnect && !value.pending && !value.operation) state._scheduleReconnect?.();
+    };
+    const connectWebSocket = (state: LifecycleState): Promise<void> => {
+        const value = owner(state);
+        if (value.disposed) return Promise.reject(new Error('EventSub disposed'));
+        if (value.pending) return Promise.reject(new Error('EventSub connection already pending'));
+        if (value.active && !state.reconnectUrl) return Promise.reject(new Error('EventSub session already active'));
+        const handoff = !!state.reconnectUrl;
+        return new Promise<void>((resolve, reject) => {
+            let socket: LifecycleWebSocket;
+            try { socket = new WebSocketCtor(state.reconnectUrl || 'wss://eventsub.wss.twitch.tv/ws?keepalive_timeout_seconds=30'); }
+            catch (error) { reject(error); return; }
+            const session: Session = { socket, controller: new AbortController(), sessionId: null,
+                firstSubscriptionAt: Infinity, firstSubscriptionCreated: false, timer: null, startupTimer: null,
+                settled: false, handoff, reject };
+            value.pending = session;
+            if (!handoff) state.ws = socket;
+            state.connectionStartTime = now();
+            session.startupTimer = safeSetTimeout(() => lose(state, session, new Error('Connection timeout - no welcome message')), 15000);
+            const ready = () => {
+                if (!current(state, session) || session.settled) return;
+                session.settled = true;
+                state.subscriptionsReady = true;
+                resolve();
+                notify(state, 'eventSubConnected', { sessionId: session.sessionId });
+            };
+            let silenceMs = 0;
+            const resetWatchdog = () => {
+                if (!silenceMs || !current(state, session)) return;
+                if (session.timer) clearTimeout(session.timer);
+                session.timer = safeSetTimeout(() => lose(state, session, new Error('EventSub keepalive silence timeout')), silenceMs);
+            };
+            socket.on('message', async (data: unknown) => {
+                if (!current(state, session)) return;
+                try {
+                    const message = JSON.parse(String(data)) as Record<string, unknown>;
+                    const metadata = message.metadata as Record<string, unknown> | undefined;
+                    const type = metadata?.message_type;
+                    if (type === 'session_welcome') {
+                        if (session.sessionId || value.pending !== session) return;
+                        const payload = message.payload as Record<string, unknown> | undefined;
+                        const welcome = payload?.session as Record<string, unknown> | undefined;
+                        const id = welcome?.id;
+                        if (typeof id !== 'string' || !id.trim()) throw new Error('Invalid session ID');
+                        if (session.startupTimer) clearTimeout(session.startupTimer);
+                        silenceMs = typeof welcome?.keepalive_timeout_seconds === 'number' && Number.isFinite(welcome.keepalive_timeout_seconds) && welcome.keepalive_timeout_seconds > 0 && welcome.keepalive_timeout_seconds <= 2147483
+                            ? welcome.keepalive_timeout_seconds * 1000 : 10000;
+                        session.sessionId = id;
+                        session.firstSubscriptionAt = now() + silenceMs;
+                        const previous = value.active;
+                        value.active = session;
+                        value.pending = null;
+                        state.ws = socket;
+                        state.sessionId = id;
+                        state._isConnected = true;
+                        try { state.logger?.info?.('EventSub session established', 'twitch', { hasSessionId: true, keepaliveTimeout: welcome?.keepalive_timeout_seconds ?? null }); }
+                        catch (error) { report(state, 'EventSub session reporting failed', error, 'eventsub-observer'); }
+                        state.reconnectUrl = null;
+                        resetWatchdog();
+                        if (handoff) {
+                            subscriptionCreated(state);
+                            retire(previous);
+                            ready();
+                            return;
                         }
-
-                        await handleWebSocketMessage(message);
-
-                        if (metadata?.message_type === 'session_welcome' && !state.sessionId && !connectionResolved) {
-                            if (connectionTimeout) {
-                                clearTimeout(connectionTimeout);
-                            }
-                            if (state.welcomeTimer) {
-                                clearTimeout(state.welcomeTimer);
-                            }
-
-                            const sessionId = getString(session, 'id');
-                            if (!sessionId || sessionId.trim() === '') {
-                                logError('Invalid session ID received', null, 'invalid-session');
-                                connectionResolved = true;
-                                reject(new Error('Invalid session ID'));
-                                return;
-                            }
-
-                            const isReconnectHandoff = !!state.reconnectUrl;
-                            state.sessionId = sessionId;
-                            state._isConnected = true;
-                            state.reconnectUrl = null;
-                            state.logger?.info?.('EventSub session established', 'twitch', {
-                                hasSessionId: true,
-                                keepaliveTimeout: session?.keepalive_timeout_seconds ?? null
-                            });
-
-                            if (isReconnectHandoff) {
-                                state.subscriptionsReady = true;
-                                emit('eventSubConnected', {
-                                    sessionId: state.sessionId
-                                });
-                                connectionResolved = true;
-                                resolve();
-                                return;
-                            }
-
-                            setImmediateFn(async () => {
-                                if (connectionResolved) {
-                                    return;
-                                }
-
-                                try {
-                                    const isConnectionValid = state._validateConnectionForSubscriptions?.();
-                                    if (!isConnectionValid) {
-                                        logError('Connection validation failed before subscription setup', null, 'connection-validation');
-                                        state.subscriptionsReady = false;
-                                        emit('eventSubSubscriptionFailed', {
-                                            sessionId: state.sessionId,
-                                            reason: 'connection-validation'
-                                        });
-                                        if (state._isConnected && state.isInitialized) {
-                                            state._scheduleReconnect?.();
-                                        }
-                                        connectionResolved = true;
-                                        reject(new Error('Connection validation failed before subscription setup'));
-                                        return;
-                                    }
-
-                                    const result = await state._setupEventSubscriptions?.(true);
-                                    if (connectionResolved || !state._isConnected || !state.sessionId) {
-                                        return;
-                                    }
-                                    if (result?.aborted) {
-                                        state.subscriptionsReady = false;
-                                        logError('Subscription setup aborted', null, 'subscription-setup-aborted', {
-                                            abortReason: result.abortReason
-                                        });
-                                        emit('eventSubSubscriptionFailed', {
-                                            sessionId: state.sessionId,
-                                            reason: result.abortReason
-                                        });
-                                        connectionResolved = true;
-                                        reject(new Error(`Subscription setup aborted: ${result.abortReason || 'unknown'}`));
-                                        return;
-                                    }
-                                    const failures = result?.failures || [];
-                                    if (failures.length > 0) {
-                                        state.subscriptionsReady = false;
-                                        logError('Subscription setup completed with failures', null, 'subscription-setup-failed', {
-                                            failures
-                                        });
-                                        emit('eventSubSubscriptionFailed', {
-                                            sessionId: state.sessionId,
-                                            failures
-                                        });
-                                        if (state._isConnected && state.isInitialized) {
-                                            state._scheduleReconnect?.();
-                                        }
-                                        connectionResolved = true;
-                                        reject(new Error('Subscription setup completed with failures'));
-                                        return;
-                                    }
-
-                                    state.subscriptionsReady = true;
-                                    emit('eventSubConnected', {
-                                        sessionId: state.sessionId
-                                    });
-                                    connectionResolved = true;
-                                    resolve();
-                                } catch (error) {
-                                    if (connectionResolved) {
-                                        return;
-                                    }
-                                    state.subscriptionsReady = false;
-                                    logError('Error during subscription setup', error, 'subscription-setup');
-                                    emit('eventSubSubscriptionFailed', {
-                                        sessionId: state.sessionId,
-                                        error: getErrorMessage(error)
-                                    });
-                                    if (state._isConnected && state.isInitialized) {
-                                        state._scheduleReconnect?.();
-                                    }
-                                    connectionResolved = true;
-                                    reject(error);
-                                }
+                        session.startupTimer = safeSetTimeout(() => lose(state, session, new Error('EventSub first subscription deadline exceeded')), silenceMs);
+                        if (state._validateConnectionForSubscriptions?.() === false) throw Object.assign(new Error('Connection validation failed before subscription setup'), { reason: 'connection-validation' });
+                        const result = await state._setupEventSubscriptions?.(true);
+                        if (!current(state, session)) return;
+                        if (result?.aborted) throw Object.assign(new Error(`Subscription setup aborted: ${result.abortReason || 'unknown'}`), { reason: result.abortReason });
+                        if (result?.failures?.length) {
+                            type SetupFailure = { error?: { code?: string; status?: number | null; message?: string; details?: { code?: string } } };
+                            const failures = result.failures as SetupFailure[];
+                            // A later terminal rejection governs recovery even after an earlier transient failure.
+                            const failure = (failures.find(({ error }) => error?.status === 401 || error?.status === 403
+                                || (error?.details?.code || error?.code) === 'EVENTSUB_RETRY_AFTER_EXCEEDS_BUDGET') ?? failures[0])?.error;
+                            throw Object.assign(new Error(`Subscription setup completed with failures${failure?.message ? `: ${failure.message}` : ''}`), {
+                                code: failure?.details?.code || failure?.code,
+                                response: failure?.status ? { status: failure.status } : undefined
                             });
                         }
-                    } catch (error) {
-                        if (!connectionResolved) {
-                            connectionResolved = true;
-                            if (connectionTimeout) {
-                                clearTimeout(connectionTimeout);
-                            }
-                        }
-                        logError('Error parsing WebSocket message', error, 'ws-parse', {
-                            rawDataLength: String(data).length
-                        });
-                        reject(error);
-                    }
-                });
-
-                ws.on('error', (error: unknown) => {
-                    if (!connectionResolved) {
-                        connectionResolved = true;
-                        if (connectionTimeout) {
-                            clearTimeout(connectionTimeout);
-                        }
-                        reject(error);
-                    }
-                    logError('EventSub WebSocket error', error, 'ws-error', {
-                        code: getRecord(error)?.code,
-                        errno: getRecord(error)?.errno
-                    });
-                });
-
-                ws.on('ping', (data: unknown) => {
-                    state.logger?.debug?.('EventSub ping received', 'twitch', {
-                        payloadLength: getByteLength(data)
-                    });
-                });
-
-                ws.on('pong', () => {
-                    state.logger?.debug?.('EventSub pong received', 'twitch');
-                });
-
-      ws.on('close', (code: unknown, reason: unknown) => {
-                    if (state.welcomeTimer) {
-                        clearTimeout(state.welcomeTimer);
-                    }
-
-                    if (!connectionResolved) {
-                        connectionResolved = true;
-                        if (connectionTimeout) {
-                            clearTimeout(connectionTimeout);
-                        }
-
-                        const closeCode = typeof code === 'number' ? code : 0;
-                        const startupPhase = state.sessionId || receivedWelcome
-                            ? 'EventSub subscription setup'
-                            : 'initial handshake';
-                        const startupError = closeCode === 1006
-                            ? new Error(`Connection closed abnormally during ${startupPhase}`)
-                            : new Error(state.sessionId || receivedWelcome
-                                ? 'Connection closed before EventSub subscription setup completed'
-                                : 'Connection closed before EventSub startup completed');
-                        (startupError as Error & { closeCode?: number }).closeCode = closeCode;
-                        reject(startupError);
-                    }
-
-                    const isCurrentSocket = state.ws === ws;
-                    const closedSessionId = isCurrentSocket ? state.sessionId : null;
-                    if (isCurrentSocket) {
-                        state._isConnected = false;
-                        state.subscriptionsReady = false;
-                        state.sessionId = null;
-                    }
-
-                    const connectionDuration = state.connectionStartTime ? now() - state.connectionStartTime : 'unknown';
-
-                    let closeReason = 'unknown';
-                    const closeCode = typeof code === 'number' ? code : 0;
-                    switch (closeCode) {
-                        case 1000:
-                            closeReason = 'normal closure';
-                            break;
-                        case 1001:
-                            closeReason = 'going away';
-                            break;
-                        case 1006:
-                            closeReason = 'abnormal closure (no close frame)';
-                            break;
-                        case 4000:
-                            closeReason = 'internal server error';
-                            break;
-                        case 4001:
-                            closeReason = 'client sent inbound traffic';
-                            break;
-                        case 4002:
-                            closeReason = 'client failed ping-pong';
-                            break;
-                        case 4003:
-                            closeReason = 'connection unused';
-                            break;
-                        case 4004:
-                            closeReason = 'reconnect grace time expired';
-                            break;
-                        case 4005:
-                            closeReason = 'network timeout';
-                            break;
-                        case 4006:
-                            closeReason = 'network error';
-                            break;
-                        default:
-                            closeReason = `code ${closeCode}`;
-                    }
-
-                    state.logger?.warn?.(
-                        `EventSub WebSocket closed after ${connectionDuration}ms: ${closeReason} - ${String(reason || 'no reason')}`,
-                        'twitch'
-                    );
-
-                    if (!isCurrentSocket) {
-                        state.logger?.debug?.('Ignoring stale EventSub WebSocket close after reconnect handoff', 'twitch');
+                        subscriptionCreated(state);
+                        ready();
                         return;
                     }
-
-                    state.subscriptions?.clear?.();
-
-                    const willReconnect = closeCode !== 1000 && !!state.isInitialized;
-                    if (willReconnect && closedSessionId) {
-                        state.disconnectedSessionId = closedSessionId;
-                    }
-
-                    emit('eventSubDisconnected', {
-                        code: closeCode,
-                        reason: String(reason || ''),
-                        abnormal: closeCode !== 1000,
-                        willReconnect,
-                        terminal: false
-                    });
-
-                    if (willReconnect) {
-                        if (closeCode === 1006) {
-                            state.logger?.warn?.('Abnormal closure detected, will retry with increased delay', 'twitch');
-                        }
-                        state._scheduleReconnect?.();
-                    }
-                });
-            } catch (error) {
-                if (!connectionResolved) {
-                    connectionResolved = true;
-                    if (connectionTimeout) {
-                        clearTimeout(connectionTimeout);
-                    }
+                    if (value.active !== session) return;
+                    if (type === 'session_keepalive' || type === 'notification') resetWatchdog();
+                    // Only notifications remain valid on the old session during a pending handoff.
+                    if (value.pending?.handoff && type !== 'notification' && type !== 'session_keepalive' && type !== 'revocation') return;
+                    await state.handleWebSocketMessage?.(message);
+                } catch (error) {
+                    if (!current(state, session)) return;
+                    lose(state, session, error);
+                    report(state, 'EventSub message/setup failed', error, 'ws-message', { rawDataLength: String(data).length });
+                    notify(state, 'eventSubSubscriptionFailed', { sessionId: session.sessionId, reason: (error as { reason?: unknown })?.reason, error: error instanceof Error ? error.message : String(error) });
                 }
-                logError('Failed to create WebSocket connection', error, 'ws-connect');
-                reject(error);
-            }
+            });
+            socket.on('error', (error: unknown) => lose(state, session, error));
+            socket.on('close', (code: unknown) => {
+                const closeCode = typeof code === 'number' ? code : 0;
+                const phase = session.settled ? 'EventSub session' : session.sessionId ? 'EventSub subscription setup' : 'initial handshake';
+                const error = new Error(closeCode === 1006 ? `Connection closed abnormally during ${phase}`
+                    : session.sessionId ? 'Connection closed before EventSub subscription setup completed' : 'Connection closed before EventSub startup completed') as Error & { closeCode: number };
+                error.closeCode = closeCode;
+                lose(state, session, error, error.closeCode);
+            });
         });
     };
-
-  const handleReconnectRequest = (state: LifecycleState, payload: Record<string, unknown> | null | undefined): void => {
-        const session = getRecord(payload?.session);
-        const reconnectUrl = getString(session, 'reconnect_url');
-        if (reconnectUrl) {
-            state.logger?.info?.('EventSub requesting reconnection to new URL', 'twitch', {
-                reconnectUrl: stripUrlQueryAndFragment(reconnectUrl),
-                hasReconnectUrl: true
-            });
-            state.reconnectUrl = reconnectUrl;
-            state._scheduleReconnect?.();
-        }
-    };
-
-  const scheduleReconnect = (state: LifecycleState): void => {
-        if (state.reconnectTimeout) {
-            clearTimeout(state.reconnectTimeout);
-        }
-
+    const scheduleReconnect = (state: LifecycleState): void => {
+        const value = owner(state);
+        if (value.disposed || !state.isInitialized || value.operation || value.pending || state.reconnectTimeout) return;
         if (state.retryAttempts >= state.maxRetryAttempts) {
-            state._logEventSubError?.(
-                `EventSub max reconnection attempts (${state.maxRetryAttempts}) exceeded`,
-                null,
-                'reconnect-max'
-            );
             state.isInitialized = false;
-            state.emit?.('eventSubDisconnected', {
-                code: null,
-                reason: 'max reconnect attempts exceeded',
-                abnormal: true,
-                willReconnect: false,
-                terminal: true
-            });
+            notify(state, 'eventSubDisconnected', { reason: 'max reconnect attempts exceeded', abnormal: true, willReconnect: false, terminal: true });
             return;
         }
-
-        const baseDelay = state.retryDelay * Math.pow(2, state.retryAttempts);
-        const jitter = random() * 1000;
-        const delay = Math.min(baseDelay + jitter, 30000);
-
-        state.logger?.info?.(
-            `Scheduling EventSub reconnection in ${Math.round(delay)}ms (attempt ${state.retryAttempts + 1}/${state.maxRetryAttempts})`,
-            'twitch'
-        );
-
+        const delay = Math.min(state.retryDelay * Math.pow(2, state.retryAttempts) + random() * 1000, 30000);
         state.reconnectTimeout = safeSetTimeout(() => {
-            state._reconnect?.();
-        }, validateTimeout(delay, 5000));
+            state.reconnectTimeout = null;
+            void state._reconnect?.();
+        }, validateTimeout(delay, 1));
     };
-
-  const reconnect = async (state: LifecycleState): Promise<void> => {
-        if (!state.isInitialized) {
-            state.logger?.debug?.('Skipping reconnect - EventSub not initialized', 'twitch');
-            return;
-        }
-
-        state.retryAttempts++;
-        const isReconnectHandoff = !!state.reconnectUrl && !!state.sessionId && state.ws?.readyState === 1;
-        const handoffWebSocket = isReconnectHandoff ? state.ws : null;
-        const previousSessionId = state.sessionId || state.disconnectedSessionId;
-
+    const reconnect = async (state: LifecycleState): Promise<void> => {
+        const value = owner(state);
+        if (value.disposed || !state.isInitialized || value.operation || value.pending) return;
+        if (state.reconnectTimeout) clearTimeout(state.reconnectTimeout);
+        state.reconnectTimeout = null;
+        const operation = { controller: new AbortController(), kind: 'reconnect' as const };
+        const generation = ++value.generation;
+        value.operation = operation;
+        const valid = () => !value.disposed && value.generation === generation && !operation.controller.signal.aborted;
+        const handoff = !!state.reconnectUrl;
+        if (!handoff) state.retryAttempts++;
         try {
-            state.logger?.info?.(
-                `Attempting EventSub reconnection (${state.retryAttempts}/${state.maxRetryAttempts})`,
-                'twitch'
-            );
-
-            if (!state.twitchAuth || !state.twitchAuth.isReady?.()) {
-                state._logEventSubError?.('Cannot reconnect - Twitch auth not ready', null, 'reconnect-auth');
+            if (!state.twitchAuth?.isReady?.()) {
+                report(state, 'Cannot reconnect - Twitch auth not ready', null, 'reconnect-auth');
                 throw new Error('Twitch auth not ready for reconnection');
             }
-
-            if (state.ws && !isReconnectHandoff) {
-                try {
-                    if (state.ws.readyState === 1) {
-                        state.ws.close(1000, 'Reconnecting');
-                    }
-                } catch (error) {
-                    state.logger?.debug?.('Error closing WebSocket during reconnect', 'twitch', {
-                        error: getErrorMessage(error)
-                    });
-                }
+            if (!handoff) {
+                const sessionId = state.sessionId || state.disconnectedSessionId;
+                const previous = value.active;
+                const transport = state.ws;
+                value.active = null;
                 state.ws = null;
-            }
-
-            if (!isReconnectHandoff && previousSessionId && typeof state._deleteAllSubscriptions === 'function') {
-                try {
-                    await state._deleteAllSubscriptions({ sessionId: previousSessionId });
-                    if (state.disconnectedSessionId === previousSessionId) {
-                        state.disconnectedSessionId = null;
-                    }
-                } catch (error) {
-                    state._logEventSubError?.(
-                        'Failed to clean up previous session subscriptions before reconnect',
-                        error,
-                        'reconnect-cleanup',
-                        { sessionId: previousSessionId }
-                    );
-                }
-            }
-
-            state.sessionId = null;
-            if (!isReconnectHandoff) {
-                state._isConnected = false;
+                state.sessionId = null;
+                state._isConnected = state.subscriptionsReady = false;
                 state.subscriptions?.clear?.();
+                retire(previous);
+                if (transport && transport !== previous?.socket) closeTransport(transport);
+                if (sessionId) {
+                    try { await state._deleteAllSubscriptions?.({ sessionId, operationContext: { signal: operation.controller.signal, remainingBudgetMs: () => 5000 } }); }
+                    catch (error) { if (valid()) report(state, 'Failed to clean up previous session subscriptions before reconnect', error, 'reconnect-cleanup'); }
+                }
+                if (!valid()) return;
+                await safeDelay(1000, 1, 'twitchEventSub:cleanup-delay', operation.controller.signal);
+                if (!valid()) return;
             }
-
-            if (!isReconnectHandoff) {
-                await safeDelay(
-                    validateTimeout(1000, 1000),
-                    1000,
-                    'twitchEventSub:cleanup-delay'
-                );
-            }
-
             await state._connectWebSocket?.();
-
-            if (handoffWebSocket?.readyState === 1) {
-                try {
-                    handoffWebSocket.close(1000, 'Reconnect handoff complete');
-                } catch (error) {
-                    state.logger?.debug?.('Error closing old WebSocket after reconnect handoff', 'twitch', {
-                        error: getErrorMessage(error)
-                    });
-                }
-            }
-
+            if (!valid()) return;
             state.retryAttempts = 0;
-            state.logger?.info?.('EventSub reconnection successful', 'twitch');
+            state.disconnectedSessionId = null;
         } catch (error) {
-            if (isReconnectHandoff && handoffWebSocket?.readyState === 1) {
-                state.ws = handoffWebSocket;
-                state.sessionId = previousSessionId || null;
-                state._isConnected = true;
-                state.subscriptionsReady = true;
+            if (!valid()) return;
+            state.reconnectUrl = null;
+            if (handoff && value.active) {
+                state.subscriptionsReady = false;
+                notify(state, 'eventSubDisconnected', { reason: 'EventSub planned handoff failed', abnormal: true, willReconnect: true, terminal: false });
             }
-
-            state._logEventSubError?.(
-                `EventSub reconnection failed (attempt ${state.retryAttempts}/${state.maxRetryAttempts})`,
-                null,
-                'reconnect-failed',
-                {
-                    message: getErrorMessage(error),
-                    willRetry: state.retryAttempts < state.maxRetryAttempts
-                }
-            );
-
-            if (state.retryAttempts < state.maxRetryAttempts) {
-                state._scheduleReconnect?.();
-            } else {
-                state._logEventSubError?.(
-                    'EventSub reconnection abandoned after maximum attempts',
-                    null,
-                    'reconnect-abandoned'
-                );
-                state.isInitialized = false;
-                state.emit?.('eventSubDisconnected', {
-                    code: null,
-                    reason: 'reconnect attempts exhausted',
-                    abnormal: true,
-                    willReconnect: false,
-                    terminal: true
-                });
+            report(state, 'EventSub reconnection failed', error, 'reconnect-failed');
+        } finally {
+            if (value.operation === operation) value.operation = null;
+            if (valid() && state.isInitialized && !state.subscriptionsReady) {
+                if (state.retryAttempts >= state.maxRetryAttempts) {
+                    report(state, 'EventSub reconnection abandoned after maximum attempts', null, 'reconnect-abandoned');
+                    scheduleReconnect(state);
+                } else state._scheduleReconnect?.();
             }
         }
     };
-
-    return {
-        connectWebSocket,
-        handleReconnectRequest,
-        scheduleReconnect,
-        reconnect
+    const handleReconnectRequest = (state: LifecycleState, payload: Record<string, unknown> | null | undefined): void => {
+        const value = owner(state);
+        const session = payload?.session as Record<string, unknown> | undefined;
+        const url = session?.reconnect_url;
+        if (value.disposed || value.pending || typeof url !== 'string' || !url) return;
+        if (value.operation?.kind === 'repair') {
+            revokeSubscriptions(state, false, 'handoff interrupted subscription repair');
+            return;
+        }
+        if (value.operation) return;
+        if (value.active && !value.active.settled) {
+            lose(state, value.active, new Error('Connection closed abnormally during EventSub subscription setup'));
+            return;
+        }
+        if (state.reconnectTimeout) clearTimeout(state.reconnectTimeout);
+        state.reconnectTimeout = null;
+        state.reconnectUrl = url;
+        try {
+            const publicUrl = new URL(url);
+            publicUrl.search = '';
+            publicUrl.hash = '';
+            state.logger?.info?.('EventSub requesting reconnection to new URL', 'twitch', { reconnectUrl: publicUrl.toString(), hasReconnectUrl: true });
+        } catch { /* Invalid URLs are rejected by the transport. */ }
+        // Planned migration is immediate and does not consume the failure allowance.
+        void state._reconnect?.();
     };
+    const dispose = (state: LifecycleState, permanent = true, reason = new Error('EventSub session retired')) => {
+        const value = owner(state);
+        value.disposed = permanent;
+        value.generation++;
+        value.operation?.controller.abort(new Error('EventSub operation retired'));
+        value.operation = null;
+        if (state.reconnectTimeout) clearTimeout(state.reconnectTimeout);
+        state.reconnectTimeout = null;
+        const active = value.active;
+        const pending = value.pending;
+        const transport = state.ws;
+        value.active = value.pending = null;
+        state.ws = null;
+        state.sessionId = null;
+        state._isConnected = state.subscriptionsReady = false;
+        retire(active, reason);
+        retire(pending, reason);
+        if (transport && transport !== active?.socket && transport !== pending?.socket) closeTransport(transport);
+    };
+    const revokeSubscriptions = (state: LifecycleState, terminal: boolean, status: unknown) => {
+        const sessionId = state.sessionId;
+        const initialized = state.isInitialized;
+        // Revocation invalidates the complete readiness claim, including any in-flight handoff.
+        dispose(state, terminal, new Error(terminal ? 'EventSub subscription authorization/status revoked' : 'Subscription setup aborted: connection-lost'));
+        state.subscriptions?.clear?.();
+        state.reconnectUrl = null;
+        state.disconnectedSessionId = sessionId ?? null;
+        state.isInitialized = initialized && !terminal;
+        notify(state, 'eventSubDisconnected', { reason: `subscription revoked: ${String(status)}`,
+            willReconnect: !terminal, terminal, authorizationFailure: terminal });
+        if (initialized && !terminal) scheduleReconnect(state);
+    };
+    const repairSubscriptions = async (state: LifecycleState, status: unknown, repair: () => Promise<void>) => {
+        const value = owner(state);
+        if (value.disposed) return;
+        if (!state.isInitialized || value.pending || value.operation) {
+            revokeSubscriptions(state, false, status);
+            return;
+        }
+        const operation = { controller: new AbortController(), kind: 'repair' as const };
+        const generation = ++value.generation;
+        const sessionId = state.sessionId;
+        value.operation = operation;
+        const valid = () => !value.disposed && value.generation === generation && !operation.controller.signal.aborted;
+        state.subscriptionsReady = false;
+        notify(state, 'eventSubDisconnected', { reason: `subscription revoked: ${String(status)}`, willReconnect: true, terminal: false });
+        try {
+            await repair();
+            if (!valid() || state.sessionId !== sessionId) return;
+            state.subscriptionsReady = true;
+            notify(state, 'eventSubConnected', { sessionId });
+        } catch (error) {
+            if (!valid()) return;
+            report(state, 'EventSub revocation repair failed', error, 'subscription-resubscribe');
+            const failure = error as { code?: unknown; response?: { status?: number } };
+            const recoveryBlocked = failure?.code === 'EVENTSUB_RETRY_AFTER_EXCEEDS_BUDGET';
+            const authorizationFailure = failure?.response?.status === 401 || failure?.response?.status === 403;
+            if (recoveryBlocked || authorizationFailure) {
+                dispose(state);
+                state.isInitialized = false;
+                notify(state, 'eventSubDisconnected', { reason: 'EventSub subscription repair failed', willReconnect: false, terminal: true, recoveryBlocked, authorizationFailure });
+            }
+        } finally {
+            if (value.operation === operation) value.operation = null;
+            if (valid() && !state.subscriptionsReady) scheduleReconnect(state);
+        }
+    };
+    const isDisposed = (state: LifecycleState) => owner(state).disposed;
+    const operationGeneration = (state: LifecycleState) => owner(state).generation;
+    return { isDisposed, repairSubscriptions, operationGeneration, revokeSubscriptions, connectWebSocket, handleReconnectRequest, scheduleReconnect, reconnect, dispose, operationContext, subscriptionCreated };
 }
-
 export { createTwitchEventSubWsLifecycle };
