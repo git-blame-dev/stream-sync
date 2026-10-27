@@ -47,6 +47,7 @@ type UserTrackingServiceLike = {
 };
 
 type DonationSpamDetectorLike = {
+    destroy?: () => void;
     handleDonationSpam: (
         userId: unknown,
         username: unknown,

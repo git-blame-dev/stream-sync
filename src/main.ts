@@ -505,8 +505,6 @@ const platforms = {
     StreamElementsPlatform
 };
 
-let app: MainApp | undefined;
-
 const MAIN_FUNCTION_OVERRIDE_KEYS = [
     'ensureSecrets',
     'TwitchAuth',
@@ -674,7 +672,9 @@ async function main(overrides: MainOverrides = {}) {
     const createUsdRateServiceFn = runtimeOverrides.createUsdRateService || createUsdRateService;
     let singleInstanceGuard: SingleInstanceGuard | null = null;
     let fundingGoal: Awaited<ReturnType<typeof createFundingGoalService>> | undefined;
-    let fundingGoalOwned = false;
+    let app: MainApp | undefined;
+    let runtimeOwnsResources = false;
+    const construction = new AsyncDisposableStack();
     try {
         logger.info('Starting main application...', 'main');
         logger.info('Main application started, beginning initialization...', 'Main');
@@ -823,6 +823,8 @@ async function main(overrides: MainOverrides = {}) {
             debug: (message) => logger.debug(message, 'funding-goal')
         });
 
+        construction.defer(() => fundingGoal?.dispose());
+
         const obsSubsystem = createOBSSubsystem({
             config,
             logger,
@@ -831,6 +833,10 @@ async function main(overrides: MainOverrides = {}) {
             createOBSEventService: (deps) => createOBSEventServiceFn(deps as unknown as Parameters<typeof createOBSEventService>[0]),
             usdConverter: usdRateService.convertToUsd
         });
+
+        const provisionalObsService = obsSubsystem.obsEventService as ReturnType<typeof createOBSEventService>;
+        construction.defer(() => provisionalObsService.destroy?.());
+        construction.defer(async () => { await provisionalObsService.disconnect?.(); });
 
         logger.debug('About to initialize display queue...', 'Main');
         const displayQueueDependencies = {
@@ -853,6 +859,7 @@ async function main(overrides: MainOverrides = {}) {
                 eventBus,
                 displayQueueDependencies
             );
+        construction.defer(() => displayQueue.stop?.());
         logger.debug('Display queue initialized', 'Main');
         
         logger.debug('Creating VFXCommandService...', 'Main');
@@ -891,6 +898,7 @@ async function main(overrides: MainOverrides = {}) {
             logger,
             onAggregatedDonation: (data: unknown) => notificationManager.handleAggregatedDonation(data)
         });
+        construction.defer(() => donationSpamDetector.destroy());
         notificationManager.donationSpamDetector = donationSpamDetector;
         logger.debug('Spam detection service created and wired', 'Main');
         
@@ -946,6 +954,8 @@ async function main(overrides: MainOverrides = {}) {
             config
         });
 
+        construction.defer(() => commandCooldownService.dispose());
+
         const platformLifecycleService = new PlatformLifecycleService({
             config,
             eventBus,
@@ -959,7 +969,7 @@ async function main(overrides: MainOverrides = {}) {
         
         assertRuntimeDependencies(dependencies);
         app = createAppRuntime(toAppRuntimeConfig(runtimeProcessingConfig), dependencies);
-        fundingGoalOwned = true;
+        runtimeOwnsResources = true;
 
         const gracefulExitService = createGracefulExitServiceFn(
             app,
@@ -1017,14 +1027,18 @@ async function main(overrides: MainOverrides = {}) {
         };
 
     } catch (error) {
-        if (!fundingGoalOwned) {
+        if (!runtimeOwnsResources) {
             try {
-                await fundingGoal?.dispose();
+                await construction.disposeAsync();
             } catch (disposeError) {
-                logMainError('Failed to dispose funding goal during startup rollback', disposeError, null, {
-                    eventType: 'startup-rollback',
-                    logContext: 'main'
-                });
+                try {
+                    logMainError('Failed to retire resources before runtime adoption', disposeError, null, {
+                        eventType: 'startup-rollback',
+                        logContext: 'main'
+                    });
+                } catch {
+                    // Preserve the startup failure after every provisional disposer ran.
+                }
             }
         }
         if (app && typeof app.rollbackStartup === 'function') {

@@ -357,6 +357,7 @@ describe('NeuralTtsProcessManager', () => {
                 disconnect: createMockFn().mockResolvedValue()
             },
             commandCooldownService: {
+                dispose: createMockFn<[], void>(),
                 checkUserCooldown: createMockFn().mockReturnValue(true),
                 updateUserCooldown: createMockFn(),
                 getStatus: createMockFn().mockReturnValue({ commands: {} })
@@ -430,6 +431,7 @@ describe('NeuralTtsProcessManager', () => {
             userTrackingService: { isFirstMessage: createMockFn() },
             obsEventService: { disconnect: createMockFn().mockResolvedValue() },
             commandCooldownService: {
+                dispose: createMockFn<[], void>(),
                 checkUserCooldown: createMockFn().mockReturnValue(true),
                 updateUserCooldown: createMockFn(),
                 getStatus: createMockFn().mockReturnValue({ commands: {} })

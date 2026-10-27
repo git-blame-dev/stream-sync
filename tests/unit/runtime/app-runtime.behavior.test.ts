@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { createMockFn } from "../../helpers/bun-mock-utils";
 import {
   runOnlyPendingTimers,
+  advanceTimersByTime,
+  getTimerCount,
   useFakeTimers,
   useRealTimers,
 } from "../../helpers/bun-timers";
@@ -14,6 +16,10 @@ import {
 import testClock from "../../helpers/test-clock";
 import { DEFAULT_AVATAR_URL } from "../../../src/constants/avatar";
 import { PlatformEvents } from "../../../src/interfaces/PlatformEvents";
+import { EventBus } from "../../../src/core/EventBus";
+import { createFundingGoalService } from "../../../src/services/funding-goal-service";
+import { CommandCooldownService } from "../../../src/services/CommandCooldownService";
+import { createDonationSpamDetection, createSpamDetectionConfig } from "../../../src/utils/spam-detection";
 import { AppRuntime } from "../../../src/runtime/AppRuntime";
 
 type RuntimeConfig = ConstructorParameters<typeof AppRuntime>[0];
@@ -102,6 +108,7 @@ const createDeps = (overrides: DependencyOverrides = {}) => {
       disconnect: createMockFn().mockResolvedValue(),
     },
     commandCooldownService: {
+      dispose: createMockFn(),
       checkUserCooldown: createMockFn().mockReturnValue(true),
       updateUserCooldown: createMockFn(),
       getStatus: createMockFn().mockReturnValue({ commands: {} }),
@@ -141,6 +148,110 @@ const createRecordingNotificationManager = (calls: NotificationCallLog) => ({
 });
 
 describe("AppRuntime behavior", () => {
+  for (const mode of ["shutdown", "rollback"] as const) {
+    it(`joins deferred early viewer acquisition before ${mode} releases observers`, async () => {
+      useFakeTimers();
+      const runtime = createRuntime({}, { general: { viewerCountPollingIntervalMs: 1000 } });
+      const release = Promise.withResolvers<void>();
+      let initialized = 0;
+      let cleaned = false;
+      runtime.viewerCountSystem.addObserver({
+        getObserverId: () => "test-deferred-observer",
+        initialize: () => { initialized++; return release.promise; },
+        cleanup: () => { cleaned = true; },
+      });
+      const early = runtime.startViewerCountSystemEarly();
+      const repeated = runtime.startViewerCountSystemEarly();
+      const teardown = mode === "shutdown" ? runtime.shutdown() : runtime.rollbackStartup();
+      try {
+        for (let i = 0; i < 30; i++) await Promise.resolve();
+        expect(cleaned).toBe(false);
+        expect(runtime.viewerCountSystem.observers.size).toBe(1);
+        expect(initialized).toBe(1);
+      } finally {
+        release.resolve();
+        await Promise.all([early, repeated, teardown]);
+      }
+      expect(cleaned).toBe(true);
+      expect(runtime.viewerCountSystem.isPolling).toBe(false);
+      expect(runtime.viewerCountSystem.memoryOptimizationInterval).toBeNull();
+      expect(runtime.viewerCountSystem.pollingHandles).toEqual({});
+      advanceTimersByTime(5000);
+      expect(getTimerCount()).toBe(0);
+    });
+
+    it(`retires real viewer timers and all observers despite throwing diagnostics during ${mode}`, async () => {
+      useFakeTimers();
+      const logging = { ...noOpLogger };
+      const runtime = createRuntime({ logging }, { general: { viewerCountPollingIntervalMs: 1000 } });
+      const viewer = runtime.viewerCountSystem;
+      const getViewerCount = createMockFn(async () => 7);
+      runtime.platformLifecycleService.getAllPlatforms = () => ({ twitch: { getViewerCount } });
+      const cleaned: string[] = [];
+      viewer.addObserver({ getObserverId: () => "test-failing", cleanup: () => { cleaned.push("first"); throw new Error("test cleanup failure"); } });
+      viewer.addObserver({ getObserverId: () => "test-rejecting", cleanup: async () => { cleaned.push("rejecting"); throw new Error("test async cleanup failure"); } });
+      viewer.addObserver({ getObserverId: () => "test-following", cleanup: () => { cleaned.push("second"); } });
+      await runtime.startViewerCountSystemEarly();
+      await viewer.updateStreamStatus("twitch", true);
+      for (let i = 0; i < 10; i++) await Promise.resolve();
+      expect(getViewerCount.mock.calls.length).toBeGreaterThan(0);
+      expect(viewer.getViewerCount("twitch")).toBe(7);
+      expect(viewer.memoryOptimizationInterval).not.toBeNull();
+      expect(Object.keys(viewer.pollingHandles)).toEqual(["twitch"]);
+      const failDiagnostic = () => { throw new Error("test diagnostic failure"); };
+      logging.info = failDiagnostic;
+      logging.debug = failDiagnostic;
+      logging.error = failDiagnostic;
+      logging.warn = failDiagnostic;
+      try {
+        const teardown = () => mode === "shutdown" ? runtime.shutdown() : runtime.rollbackStartup();
+        await teardown();
+        await teardown();
+        expect(viewer.isPolling).toBe(false);
+        expect(viewer.pollingHandles).toEqual({});
+        expect(viewer.memoryOptimizationInterval).toBeNull();
+        expect(viewer.observers.size).toBe(0);
+        expect(cleaned).toEqual(["first", "rejecting", "second"]);
+        advanceTimersByTime(5000);
+        expect(getTimerCount()).toBe(0);
+      } finally {
+        Object.assign(logging, noOpLogger);
+        await viewer.cleanup();
+      }
+    });
+  }
+
+  it("joins early acquisition during automatic startup rollback without joining startup itself", async () => {
+    useFakeTimers();
+    const runtime = createRuntime();
+    const release = Promise.withResolvers<void>();
+    let cleaned = false;
+    runtime.viewerCountSystem.addObserver({
+      getObserverId: () => "test-rollback-observer",
+      initialize: () => release.promise,
+      cleanup: () => { cleaned = true; },
+    });
+    const failure = new Error("test platform startup failure");
+    runtime.initializePlatforms = async () => { throw failure; };
+    const early = runtime.startViewerCountSystemEarly();
+    const startup = runtime.start().catch(error => error as unknown);
+    try {
+      for (let i = 0; i < 30; i++) await Promise.resolve();
+      expect(runtime.isShuttingDown).toBe(true);
+      expect(cleaned).toBe(false);
+    } finally {
+      release.resolve();
+      await early;
+      expect(await startup).toBe(failure);
+    }
+    expect(cleaned).toBe(true);
+    expect(runtime.viewerCountSystem.isPolling).toBe(false);
+    expect(runtime.viewerCountSystem.memoryOptimizationInterval).toBeNull();
+    await runtime.rollbackStartup();
+    advanceTimersByTime(5000);
+    expect(getTimerCount()).toBe(0);
+  });
+
   beforeEach(() => {
     testClock.reset();
   });
@@ -148,6 +259,503 @@ describe("AppRuntime behavior", () => {
   afterEach(() => {
     testClock.useRealTime();
     useRealTimers();
+  });
+
+  for (const mode of ["shutdown", "rollback"] as const) {
+    it(`releases real cooldown timers and owned EventBus listeners on ${mode}`, async () => {
+      useFakeTimers();
+      const eventBus = new EventBus();
+      const unrelated = createMockFn();
+      eventBus.subscribe("platform:event", unrelated);
+      const commandCooldownService = new CommandCooldownService({
+        logger: { ...noOpLogger, warn: () => { throw new Error("test cleanup warning failure"); } },
+        config: createConfigFixture(),
+        eventBus: {
+          subscribe: (name, handler) => {
+            const unsubscribe = eventBus.subscribe(name, payload =>
+              handler(payload as Parameters<typeof handler>[0]));
+            return () => {
+              unsubscribe();
+              if (name === "config:changed") throw new Error("test unsubscribe failure");
+            };
+          },
+        },
+      });
+      const runtime = createRuntime({ eventBus, commandCooldownService });
+      runtime.emitSystemShutdown = ({ reason } = {}) => eventBus.emit(PlatformEvents.SYSTEM_SHUTDOWN, { reason, mode: "exit" });
+      commandCooldownService.updateUserCooldown("test-cooldown-user");
+      commandCooldownService.updateGlobalCooldown("test-command");
+      const shutdownEvents: unknown[] = [];
+      eventBus.subscribe(PlatformEvents.SYSTEM_SHUTDOWN, payload => shutdownEvents.push(payload));
+      expect(commandCooldownService.cleanupInterval).not.toBeNull();
+      expect(eventBus.listenerCount("platform:event")).toBe(3);
+      try {
+        if (mode === "rollback") {
+          runtime.initializePlatforms = async () => { throw new Error("test startup failure"); };
+          await expect(runtime.start()).rejects.toThrow("test startup failure");
+        } else {
+          await runtime.shutdown();
+        }
+        expect(commandCooldownService.cleanupInterval).toBeNull();
+        expect(commandCooldownService.userLastCommand.size).toBe(0);
+        expect(commandCooldownService.userHeavyLimit.size).toBe(0);
+        expect(commandCooldownService.userCommandTimestamps.size).toBe(0);
+        expect(commandCooldownService.globalCommandCooldowns.size).toBe(0);
+        expect(eventBus.listenerCount("config:changed")).toBe(0);
+        expect(eventBus.listenerCount("config:reloaded")).toBe(0);
+        expect(eventBus.listenerCount(PlatformEvents.VFX_COMMAND_RECEIVED)).toBe(0);
+        expect(eventBus.listenerCount(PlatformEvents.STREAM_STATUS)).toBe(0);
+        expect(eventBus.listenerCount("platform:event")).toBe(1);
+        eventBus.emit("platform:event", { type: "test-unrelated" });
+        expect(unrelated.mock.calls.length).toBe(1);
+        expect(shutdownEvents).toEqual(mode === "shutdown"
+          ? [{ reason: "manual-shutdown", mode: "exit" }] : []);
+        await runtime.rollbackStartup();
+        await runtime.shutdown();
+        commandCooldownService.dispose();
+        advanceTimersByTime(60_000);
+        expect(getTimerCount()).toBe(0);
+        await expect(runtime.start()).rejects.toThrow(/stopped/i);
+      } finally {
+        commandCooldownService.dispose();
+        await runtime.rollbackStartup();
+      }
+    });
+  }
+
+  for (const mode of ["shutdown", "rollback"] as const) {
+    it(`joins real funding persistence and retires its subscription during ${mode}`, async () => {
+      const eventBus = new EventBus();
+      const writeEntered = Promise.withResolvers<void>();
+      const releaseWrite = Promise.withResolvers<void>();
+      let persisted = "";
+      const fundingGoal = await createFundingGoalService({
+        config: { enabled: true, id: "test-runtime-goal", label: "Test goal", targetUsd: 100 },
+        monetizationValuesConfig: {
+          tiktokGiftUnitUsd: 0.005,
+          twitchBitUsd: 0.01,
+          youtubeJewelUsd: 0.005,
+          tiktokMembershipUsd: 2,
+          twitchMembershipUsd: 3,
+          youtubeMembershipUsd: 4,
+        },
+        eventBus,
+        filePath: "/test-only/runtime-funding.json",
+        fs: {
+          readFile: async () => { throw Object.assign(new Error("test missing file"), { code: "ENOENT" }); },
+          mkdir: async () => {},
+          writeFile: async (_path, contents) => {
+            writeEntered.resolve();
+            await releaseWrite.promise;
+            persisted = contents;
+          },
+          rename: async () => {},
+          unlink: async () => {},
+        },
+      });
+      const runtime = createRuntime({ eventBus, fundingGoal });
+      const adjustment = fundingGoal.adjust(5);
+      await writeEntered.promise;
+      let finished = false;
+      const stopping = (mode === "shutdown" ? runtime.shutdown() : runtime.rollbackStartup())
+        .then(() => { finished = true; });
+      try {
+        expect(eventBus.listenerCount("platform:event")).toBe(0);
+        await Promise.resolve();
+        expect(finished).toBe(false);
+        await expect(fundingGoal.adjust(1)).rejects.toThrow(/disposed/i);
+      } finally {
+        releaseWrite.resolve();
+        await Promise.all([adjustment, stopping]);
+      }
+      expect(JSON.parse(persisted).currentMicros).toBe(5_000_000);
+      expect(fundingGoal.snapshot.currentUsd).toBe(5);
+      expect(fundingGoal.snapshot.revision).toBe(1);
+    });
+  }
+
+  for (const mode of ["shutdown", "rollback"] as const) {
+    for (const detectorDiagnosticFails of [false, true]) {
+      it(`retires the real donation detector before awaiting ${mode} output teardown with diagnostic failure ${detectorDiagnosticFails}`, async () => {
+        useFakeTimers();
+        const eventBus = new EventBus();
+        const aggregation = createMockFn();
+        eventBus.subscribe("test:aggregation", aggregation);
+        const detector = createDonationSpamDetection(createSpamDetectionConfig({
+          enabled: true,
+          lowValueThreshold: 10,
+          detectionWindow: 10,
+          maxIndividualNotifications: 1,
+        }, { logger: noOpLogger }), {
+          logger: { ...noOpLogger, debug: (message: string) => {
+            if (detectorDiagnosticFails && message === "Periodic cleanup interval cleared") {
+              throw new Error("test detector cleanup diagnostic failure");
+            }
+          } },
+          onAggregatedDonation: payload => eventBus.emit("test:aggregation", payload),
+        });
+        const pendingOutput = Promise.withResolvers<void>();
+        const runtime = createRuntime({
+          eventBus,
+          notificationManager: { ...createMockNotificationManager(), donationSpamDetector: detector },
+          guiTransportService: { stop: () => pendingOutput.promise },
+        });
+        expect(detector.handleDonationSpam("test-donor", "test-user", 1, "test-gift", 1, "tiktok").shouldShow).toBe(true);
+        expect(detector.handleDonationSpam("test-donor", "test-user", 1, "test-gift", 1, "tiktok").shouldShow).toBe(false);
+        expect(detector.cleanupInterval).not.toBeNull();
+        let finished = false;
+        const stopping = (mode === "shutdown" ? runtime.shutdown() : runtime.rollbackStartup())
+          .then(() => { finished = true; });
+        try {
+          expect(detector.cleanupInterval).toBeNull();
+          advanceTimersByTime(30_000);
+          expect(aggregation.mock.calls.length).toBe(0);
+          expect(detector.getStatistics().trackedUsers).toBe(0);
+          expect(finished).toBe(false);
+        } finally {
+          pendingOutput.resolve();
+          await stopping;
+          detector.destroy();
+        }
+      });
+    }
+  }
+
+  for (const failingDiagnostic of ["Registering event handlers...", "Event handlers registered successfully", "Constructor completed"]) {
+    it(`unwinds constructor subscriptions synchronously after ${failingDiagnostic}`, () => {
+      useFakeTimers();
+      const eventBus = new EventBus();
+      const unrelated = eventBus.subscribe("platform:event", () => {});
+      const listenerBaseline = eventBus.getListenerSummary();
+      const timerBaseline = getTimerCount();
+      const failure = new Error("test constructor diagnostic failure");
+      try {
+        expect(() => createRuntime({
+          eventBus,
+          logging: { ...noOpLogger, debug: (message: string) => {
+            if (message === failingDiagnostic) throw failure;
+          } },
+        })).toThrow(failure);
+        expect(eventBus.getListenerSummary()).toEqual(listenerBaseline);
+        expect(getTimerCount()).toBe(timerBaseline);
+      } finally {
+        unrelated();
+      }
+    });
+  }
+
+  for (const failureStage of ["subscription", "cleanup"] as const) {
+    it(`preserves the constructor error and unwinds other listeners after a ${failureStage} fault`, () => {
+      useFakeTimers();
+      const eventBus = new EventBus();
+      const unrelated = eventBus.subscribe("platform:event", () => {});
+      const listenerBaseline = eventBus.getListenerSummary();
+      const timerBaseline = getTimerCount();
+      const originalFailure = new Error("test original constructor failure");
+      const subscribe = eventBus.subscribe;
+      eventBus.subscribe = (name, handler, options) => {
+        if (name === PlatformEvents.VFX_COMMAND_RECEIVED && failureStage === "subscription") throw originalFailure;
+        const unsubscribe = subscribe(name, handler, options);
+        return () => {
+          const removed = unsubscribe();
+          if (name === PlatformEvents.VFX_COMMAND_RECEIVED && failureStage === "cleanup") {
+            throw new Error("test unsubscribe failure");
+          }
+          return removed;
+        };
+      };
+      let caught: unknown;
+      try {
+        try {
+          createRuntime({
+            eventBus,
+            logging: { ...noOpLogger, debug: (message: string) => {
+              if (message === "Constructor completed") throw originalFailure;
+            } },
+          });
+        } catch (error) {
+          caught = error;
+        }
+        expect(caught).toBe(originalFailure);
+        expect(eventBus.getListenerSummary()).toEqual(listenerBaseline);
+        expect(getTimerCount()).toBe(timerBaseline);
+      } finally {
+        unrelated();
+      }
+    });
+  }
+
+  it("starts real viewer maintenance early without initializing platform connections", async () => {
+    const runtime = createRuntime({}, { general: { viewerCountPollingIntervalMs: 0 } });
+    const initializePlatforms = createMockFn(async () => {});
+    runtime.platformLifecycleService.initializeAllPlatforms = initializePlatforms;
+    try {
+      expect(runtime.viewerCountSystem.memoryOptimizationInterval).toBeNull();
+      await runtime.startViewerCountSystemEarly();
+      expect(runtime.viewerCountSystem.memoryOptimizationInterval).not.toBeNull();
+      expect(initializePlatforms.mock.calls.length).toBe(0);
+    } finally {
+      await runtime.rollbackStartup();
+    }
+    expect(runtime.viewerCountSystem.memoryOptimizationInterval).toBeNull();
+  });
+
+  it("settles repeated shutdown and releases every owner when shutdown info logging throws", async () => {
+    const info = createMockFn(() => { throw new Error("test info logger failure"); });
+    const cooldownDispose = createMockFn();
+    const guiStop = createMockFn();
+    const displayStop = createMockFn();
+    const ttsStop = createMockFn();
+    const disconnectPlatforms = createMockFn(async () => {});
+    const disconnectObs = createMockFn();
+    const destroyObs = createMockFn();
+    const disposeFunding = createMockFn();
+    const stopPolling = createMockFn();
+    const cleanupViewerCount = createMockFn();
+    const eventBus = new EventBus();
+    const notification = createMockFn();
+    eventBus.subscribe(PlatformEvents.SYSTEM_SHUTDOWN, notification);
+    const runtime = createRuntime({
+      logging: { ...noOpLogger, info },
+      eventBus,
+      commandCooldownService: { dispose: cooldownDispose },
+      guiTransportService: { stop: guiStop },
+      displayQueue: { ...createMockDisplayQueue(), stop: displayStop },
+      neuralTtsProcessManager: { ensureStarted: async () => {}, stop: ttsStop },
+      obsEventService: { disconnect: disconnectObs, destroy: destroyObs },
+      fundingGoal: { dispose: disposeFunding },
+    });
+    runtime.platformLifecycleService.disconnectAll = disconnectPlatforms;
+    setRuntimeProperty(runtime, "viewerCountSystem", {
+      stopPolling,
+      cleanup: cleanupViewerCount,
+    });
+    runtime.isStarted = true;
+
+    const first = runtime.shutdown();
+    const second = runtime.shutdown();
+    expect(second).toBe(first);
+    expect(runtime.isStarted).toBe(false);
+    expect(eventBus.listenerCount("platform:event")).toBe(0);
+    expect(eventBus.listenerCount(PlatformEvents.VFX_COMMAND_RECEIVED)).toBe(0);
+    await Promise.all([first, second]);
+    await runtime.shutdown();
+    await expect(runtime.start()).rejects.toThrow(/stopped/i);
+    for (const cleanup of [cooldownDispose, guiStop, displayStop, ttsStop,
+      disconnectPlatforms, disconnectObs, destroyObs, disposeFunding,
+      stopPolling, cleanupViewerCount]) {
+      expect(cleanup.mock.calls.length).toBe(1);
+    }
+    expect(info.mock.calls.length).toBe(2);
+    expect(notification.mock.calls.length).toBe(1);
+    expect(runtime.isShuttingDown).toBe(false);
+  });
+
+  for (const diagnostic of ["debug", "error"] as const) {
+    it(`preserves forced shutdown exit when ${diagnostic} diagnostics throw`, () => {
+      const logging = { ...noOpLogger };
+      const runtime = createRuntime({ logging });
+      const diagnosticCall = createMockFn(() => { throw new Error("test shutdown logger failure"); });
+      logging[diagnostic] = diagnosticCall;
+      const originalExit = process.exit;
+      const originalExitCode = process.exitCode;
+      const exit = createMockFn();
+      Reflect.set(process, "exit", exit);
+      Reflect.set(process, "exitCode", undefined);
+      useFakeTimers();
+      try {
+        runtime.emitSystemShutdown({ reason: "test-diagnostic-fault" });
+        expect(process.exitCode).toBe(0);
+        expect(exit.mock.calls.length).toBe(0);
+        runOnlyPendingTimers();
+        expect(exit.mock.calls.length).toBe(1);
+        expect(diagnosticCall.mock.calls.length).toBe(1);
+      } finally {
+        Reflect.set(process, "exit", originalExit);
+        Reflect.set(process, "exitCode", originalExitCode);
+      }
+    });
+  }
+
+  it("coalesces shutdown reentered synchronously from an owned disposer", async () => {
+    const runtime = createRuntime();
+    let reentered: Promise<void> | undefined;
+    runtime.commandCooldownService.dispose = () => { reentered = runtime.shutdown(); };
+    const notification = createMockFn();
+    runtime.emitSystemShutdown = notification;
+    const stopping = runtime.shutdown();
+    await Promise.all([stopping, reentered]);
+    expect(reentered).toBe(stopping);
+    expect(notification.mock.calls.length).toBe(1);
+  });
+
+  it("retires admission before waiting and joins teardown including funding persistence", async () => {
+    const pendingGui = Promise.withResolvers<void>();
+    const pendingFunding = Promise.withResolvers<void>();
+    const stop = createMockFn(() => pendingGui.promise);
+    const dispose = createMockFn(() => pendingFunding.promise);
+    const eventBus = new EventBus();
+    const executeCommand = createMockFn();
+    const runtime = createRuntime({
+      eventBus,
+      guiTransportService: { stop },
+      vfxCommandService: { executeCommand },
+      fundingGoal: { dispose },
+    });
+    runtime.isStarted = true;
+    let finished = 0;
+    const first = runtime.shutdown().then(() => { finished += 1; });
+    const second = runtime.shutdown().then(() => { finished += 1; });
+    const rollback = runtime.rollbackStartup().then(() => { finished += 1; });
+    expect(runtime.isStarted).toBe(false);
+    expect(runtime.isShuttingDown).toBe(true);
+    expect(eventBus.listenerCount("platform:event")).toBe(0);
+    expect(eventBus.listenerCount(PlatformEvents.VFX_COMMAND_RECEIVED)).toBe(0);
+    await expect(runtime.start()).rejects.toThrow(/stopped/i);
+    pendingGui.resolve();
+    await Promise.resolve();
+    expect(finished).toBe(0);
+    pendingFunding.resolve();
+    await Promise.all([first, second, rollback]);
+    expect(stop.mock.calls.length).toBe(1);
+    expect(dispose.mock.calls.length).toBe(1);
+    await runtime.shutdown();
+    expect(dispose.mock.calls.length).toBe(1);
+  });
+
+  for (const mode of ["shutdown", "rollback"] as const) {
+    it(`continues every remaining cleanup after independent faults during ${mode}`, async () => {
+      const disconnect = createMockFn(() => { throw new Error("test OBS fault"); });
+      const destroy = createMockFn();
+      const dispose = createMockFn(() => { throw new Error("test funding fault"); });
+      const cooldownDispose = createMockFn();
+      const cleanup = createMockFn();
+      const runtime = createRuntime({
+        obsEventService: { disconnect, destroy },
+        commandCooldownService: { dispose: cooldownDispose },
+        fundingGoal: { dispose },
+      });
+      setRuntimeProperty(runtime, "viewerCountSystem", {
+        stopPolling: () => { throw new Error("test polling fault"); },
+        cleanup,
+      });
+      const notifications = createMockFn();
+      runtime.emitSystemShutdown = notifications;
+      if (mode === "rollback") await runtime.rollbackStartup();
+      else await runtime.shutdown();
+      expect(disconnect.mock.calls.length).toBe(1);
+      expect(destroy.mock.calls.length).toBe(1);
+      expect(dispose.mock.calls.length).toBe(1);
+      expect(cooldownDispose.mock.calls.length).toBe(1);
+      expect(cleanup.mock.calls.length).toBe(1);
+      expect(notifications.mock.calls.length).toBe(mode === "shutdown" ? 1 : 0);
+    });
+  }
+
+  for (const mode of ["shutdown", "rollback"] as const) {
+    for (const failingStage of ["retirement", "resource"] as const) {
+      for (const diagnosticFault of ["logger", "formatting"] as const) {
+        it(`contains teardown diagnostic failures during ${mode} ${failingStage} ${diagnosticFault}`, async () => {
+          const failure = diagnosticFault === "logger"
+            ? new Error("test disposer failure")
+            : { toString: () => { throw new Error("test formatting failure"); } };
+          const loggerError = createMockFn(() => { throw new Error("test logger failure"); });
+          const cooldownDispose = createMockFn(() => {
+            if (failingStage === "retirement") throw failure;
+          });
+          const guiStop = createMockFn(() => {
+            if (failingStage === "resource") throw failure;
+          });
+          const displayStop = createMockFn();
+          const ttsStop = createMockFn();
+          const disconnectPlatforms = createMockFn(async () => {});
+          const disconnectObs = createMockFn();
+          const destroyObs = createMockFn();
+          const disposeFunding = createMockFn();
+          const stopPolling = createMockFn();
+          const cleanupViewerCount = createMockFn();
+          const eventBus = new EventBus();
+          const notification = createMockFn();
+          eventBus.subscribe(PlatformEvents.SYSTEM_SHUTDOWN, notification);
+          const runtime = createRuntime({
+            logging: { ...noOpLogger, error: loggerError },
+            eventBus,
+            commandCooldownService: { dispose: cooldownDispose },
+            guiTransportService: { stop: guiStop },
+            displayQueue: { ...createMockDisplayQueue(), stop: displayStop },
+            neuralTtsProcessManager: { ensureStarted: async () => {}, stop: ttsStop },
+            obsEventService: { disconnect: disconnectObs, destroy: destroyObs },
+            fundingGoal: { dispose: disposeFunding },
+          });
+          runtime.platformLifecycleService.disconnectAll = disconnectPlatforms;
+          setRuntimeProperty(runtime, "viewerCountSystem", {
+            stopPolling,
+            cleanup: cleanupViewerCount,
+          });
+
+          if (mode === "shutdown") await runtime.shutdown();
+          else await runtime.rollbackStartup();
+          // Repeated requests must join the completed teardown without retrying owners.
+          if (mode === "shutdown") await runtime.shutdown();
+          else await runtime.rollbackStartup();
+
+          for (const cleanup of [cooldownDispose, guiStop, displayStop, ttsStop,
+            disconnectPlatforms, disconnectObs, destroyObs, disposeFunding,
+            stopPolling, cleanupViewerCount]) {
+            expect(cleanup.mock.calls.length).toBe(1);
+          }
+          expect(eventBus.listenerCount("platform:event")).toBe(0);
+          expect(eventBus.listenerCount(PlatformEvents.VFX_COMMAND_RECEIVED)).toBe(0);
+          expect(loggerError.mock.calls.length).toBe(diagnosticFault === "logger" ? 1 : 0);
+          expect(notification.mock.calls.length).toBe(mode === "shutdown" ? 1 : 0);
+          expect(runtime.isShuttingDown).toBe(false);
+          expect(runtime.isStarted).toBe(false);
+        });
+      }
+    }
+  }
+
+  it("joins a pending startup acquisition before cleanup without emitting readiness", async () => {
+    const acquisition = Promise.withResolvers<void>();
+    const entered = Promise.withResolvers<void>();
+    const disconnectAll = createMockFn(async () => {});
+    const runtime = createRuntime();
+    runtime.initializePlatforms = async () => {
+      entered.resolve();
+      await acquisition.promise;
+    };
+    runtime.platformLifecycleService.disconnectAll = disconnectAll;
+    const ready = createMockFn(runtime.emitSystemReady.bind(runtime));
+    runtime.emitSystemReady = ready;
+    const starting = runtime.start();
+    await entered.promise;
+    let stopped = false;
+    const stopping = runtime.shutdown().then(() => { stopped = true; });
+    const rejectedStart = starting.catch(error => error);
+    await Promise.resolve();
+    expect(stopped).toBe(false);
+    expect(disconnectAll.mock.calls.length).toBe(0);
+    acquisition.resolve();
+    expect(await rejectedStart).toEqual(expect.objectContaining({ message: "AppRuntime is stopped" }));
+    await stopping;
+    expect(disconnectAll.mock.calls.length).toBe(1);
+    expect(ready.mock.calls.length).toBe(0);
+  });
+
+  it("keeps the lifetime stopped when a readiness subscriber requests shutdown", async () => {
+    const eventBus = new EventBus();
+    const runtime = createRuntime({ eventBus });
+    setDependencyProperty(runtime, "obs", {
+      goalsManager: { initializeGoalDisplay: async () => {} },
+      connectionManager: { isConnected: () => false, call: async () => ({}) },
+    });
+    let stopping: Promise<void> | undefined;
+    eventBus.subscribe(PlatformEvents.SYSTEM_READY, () => { stopping = runtime.shutdown(); });
+    const result = await runtime.start().catch(error => error);
+    await stopping;
+    expect(result).toEqual(expect.objectContaining({ message: "AppRuntime is stopped" }));
+    expect(runtime.isStarted).toBe(false);
+    await expect(runtime.start()).rejects.toThrow(/stopped/i);
   });
 
   it("rejects construction when a required dependency is missing", () => {
@@ -1141,7 +1749,7 @@ describe("AppRuntime behavior", () => {
     try {
       await runtime.shutdown();
       expect(displayQueue.stop.mock.calls.length).toBe(1);
-      expect(logged.some((args) => args.some((value) => String(value).includes("Error stopping display queue")))).toBe(true);
+      expect(logged.some((args) => args.some((value) => String(value).includes("stop display queue")))).toBe(true);
       expect(obsEventService.disconnect.mock.calls.length).toBe(1);
       expect(viewerCountCleanup.mock.calls.length).toBe(1);
     } finally {

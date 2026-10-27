@@ -9,8 +9,73 @@ import { noOpLogger } from "../../helpers/mock-factories";
 import { CommandCooldownService } from "../../../src/services/CommandCooldownService.ts";
 import { createConfigFixture } from "../../helpers/config-fixture";
 import * as testClock from "../../helpers/test-clock";
+import { EventBus } from "../../../src/core/EventBus";
+import { useFakeTimers, useRealTimers, getTimerCount } from "../../helpers/bun-timers";
 
 type CommandCooldownTestService = InstanceType<typeof CommandCooldownService>;
+
+it("retires cooldown constructor timers and listeners after its final diagnostic fails", () => {
+  useFakeTimers();
+  const bus = new EventBus();
+  const unrelated = bus.subscribe("config:changed", () => undefined);
+  const baseline = bus.getListenerSummary();
+  const timers = getTimerCount();
+  const failure = new Error("test final cooldown diagnostic failure");
+  let result: unknown;
+  try {
+    try {
+      new CommandCooldownService({
+        config: createConfigFixture(),
+        eventBus: { subscribe: (name, handler) => bus.subscribe(name, payload => handler(payload as ConfigChangePayload)) },
+        logger: { ...noOpLogger, debug: (message) => {
+          if (message === "CommandCooldownService initialized") throw failure;
+          if (message === "CommandCooldownService disposed") throw new Error("test retirement diagnostic failure");
+        } },
+      });
+    } catch (error) {
+      result = error;
+    }
+    expect(result).toBe(failure);
+    expect(bus.getListenerSummary()).toEqual(baseline);
+    expect(getTimerCount()).toBe(timers);
+  } finally {
+    unrelated();
+    useRealTimers();
+  }
+});
+
+it("unwinds partial cooldown listener acquisition without masking the original failure", () => {
+  useFakeTimers();
+  const bus = new EventBus();
+  const unrelated = bus.subscribe("config:changed", () => undefined);
+  const baseline = bus.getListenerSummary();
+  const timers = getTimerCount();
+  const failure = new Error("test second subscription failure");
+  try {
+    let result: unknown;
+    try {
+      new CommandCooldownService({
+        config: createConfigFixture(),
+        logger: { ...noOpLogger, debug: (message) => {
+          if (message === "CommandCooldownService disposed") throw new Error("test cleanup diagnostic failure");
+        }, warn: () => { throw new Error("test warning failure"); } },
+        eventBus: { subscribe: (name, handler) => {
+          if (name === "config:reloaded") throw failure;
+          const unsubscribe = bus.subscribe(name, payload => handler(payload as ConfigChangePayload));
+          return () => { unsubscribe(); throw new Error("test unsubscribe failure"); };
+        } },
+      });
+    } catch (error) {
+      result = error;
+    }
+    expect(result).toBe(failure);
+    expect(bus.getListenerSummary()).toEqual(baseline);
+    expect(getTimerCount()).toBe(timers);
+  } finally {
+    unrelated();
+    useRealTimers();
+  }
+});
 type CooldownConfigOverrides = Partial<
   CommandCooldownTestService["cooldownConfig"]
 >;

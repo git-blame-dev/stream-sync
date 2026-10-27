@@ -182,6 +182,7 @@ class DonationSpamDetection {
     config: SpamDetectionConfig;
     cleanupInterval: ReturnType<typeof setInterval> | null;
     donationSpamTracker: Record<string, UserSpamTracker>;
+    private destroyed = false;
 
     constructor(config: SpamDetectionConfig, dependencies: DonationSpamDetectionDependencies = {}) {
         if (!dependencies.logger) {
@@ -195,13 +196,17 @@ class DonationSpamDetection {
         this.cleanupInterval = null;
         this.donationSpamTracker = {};
 
-        const autoCleanup = dependencies.autoCleanup !== false;
-        if (autoCleanup) {
-            this.setupPeriodicCleanup();
-            this.logger.debug('Periodic cleanup scheduled every 30 seconds', 'spam-detection');
+        try {
+            const autoCleanup = dependencies.autoCleanup !== false;
+            if (autoCleanup) {
+                this.setupPeriodicCleanup();
+                this.logger.debug('Periodic cleanup scheduled every 30 seconds', 'spam-detection');
+            }
+            this.logger.info('System initialized', 'spam-detection');
+        } catch (error) {
+            this.destroy();
+            throw error;
         }
-
-        this.logger.info('System initialized', 'spam-detection');
     }
 
     isLowValueDonation(unitAmount: number | null | undefined, platform = 'unknown'): boolean {
@@ -234,6 +239,9 @@ class DonationSpamDetection {
         giftCount: number,
         platform?: string | null
     ) {
+        if (this.destroyed) {
+            return { shouldShow: false, aggregatedMessage: null };
+        }
         const stableIdentity = resolveStableDonationTrackerIdentity({ userId, username, platform });
         const logUsername = trimNonEmptyString(username) ?? '<missing username>';
         const logPlatform = trimNonEmptyString(platform) ?? 'unknown';
@@ -433,6 +441,7 @@ class DonationSpamDetection {
     }
 
     setupPeriodicCleanup(): void {
+        if (this.destroyed) return;
         this.cleanupInterval = safeSetInterval(() => {
             this.cleanupSpamDetection();
         }, 30000);
@@ -464,10 +473,12 @@ class DonationSpamDetection {
     }
 
     destroy(): void {
+        if (this.destroyed) return;
+        this.destroyed = true;
+        const hadCleanupInterval = !!this.cleanupInterval;
         if (this.cleanupInterval) {
             clearInterval(this.cleanupInterval);
             this.cleanupInterval = null;
-            this.logger.debug('Periodic cleanup interval cleared', 'spam-detection');
         }
 
         for (const userId in this.donationSpamTracker) {
@@ -482,7 +493,14 @@ class DonationSpamDetection {
             delete this.donationSpamTracker[userId];
         }
 
-        this.logger.debug('All aggregation timers cleared and tracking data reset', 'spam-detection');
+        try {
+            if (hadCleanupInterval) {
+                this.logger.debug('Periodic cleanup interval cleared', 'spam-detection');
+            }
+            this.logger.debug('All aggregation timers cleared and tracking data reset', 'spam-detection');
+        } catch {
+            // Diagnostics must not interrupt detector retirement.
+        }
     }
 
     private handleSpamDetectionError(message: string, error: unknown = null, payload: Record<string, unknown> | null = null): void {

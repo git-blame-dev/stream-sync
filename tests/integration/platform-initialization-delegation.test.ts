@@ -153,6 +153,7 @@ describe("Platform Initialization Delegation", () => {
       obsEventService: {},
       sceneManagementService: {},
       commandCooldownService: {
+        dispose: createMockFn<[], void>(),
         checkUserCooldown: createMockFn(() => true),
         updateUserCooldown: createMockFn(),
       },

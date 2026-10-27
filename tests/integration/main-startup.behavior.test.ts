@@ -1,6 +1,7 @@
 import { describe, it, beforeEach, afterEach, expect } from "bun:test";
 
 import { main } from "../../src/main.ts";
+import { createEventBus } from "../../src/core/EventBus";
 import type { UsdRateService } from "../../src/services/usd-rate-service";
 import type { SingleInstanceMetadata } from "../../src/services/SingleInstanceGuard.ts";
 import { createDonationSpamDetection } from "../../src/utils/spam-detection";
@@ -9,8 +10,10 @@ import {
   useFakeTimers,
   useRealTimers,
   clearAllTimers,
+  getTimerCount,
 } from "../helpers/bun-timers";
-import { createMockDisplayQueue } from "../helpers/mock-factories";
+import { createFundingGoalService } from "../../src/services/funding-goal-service";
+import { noOpLogger, createMockDisplayQueue } from "../helpers/mock-factories";
 import { captureStdout, captureStderr } from "../helpers/output-capture";
 
 type OutputCapture = ReturnType<typeof captureStdout>;
@@ -173,6 +176,17 @@ const buildOverrides = (options: BuildOverridesOptions = {}) => {
     createOBSEventService: () => ({ disconnect: async () => {} }),
     createDonationSpamDetection: createDonationSpamDetectionNoCleanup,
     createUsdRateService: async () => TEST_USD_RATE_SERVICE,
+    createFundingGoalService: (options: Parameters<typeof createFundingGoalService>[0]) =>
+      createFundingGoalService({
+        ...options,
+        fs: {
+          readFile: async () => { throw Object.assign(new Error("test missing funding state"), { code: "ENOENT" }); },
+          mkdir: async () => {},
+          writeFile: async () => {},
+          rename: async () => {},
+          unlink: async () => {},
+        },
+      }),
   };
 
   return {
@@ -208,6 +222,105 @@ describe("main startup behavior", () => {
     stdoutCapture.restore();
     stderrCapture.restore();
   });
+
+  for (const failure of ["validation", "constructor", "cleanup"] as const) {
+  it(`retires provisional resources on ${failure} failure before runtime adoption`, async () => {
+    const { overrides, getSingleInstanceReleaseCalls } = buildOverrides({ cliArgs: { chat: 1 } });
+    const bus = createEventBus();
+    const unrelated = bus.subscribe("config:changed", () => undefined);
+    const cleaned: string[] = [];
+    const initialTimers = getTimerCount();
+    try {
+      await expect(main({
+        ...overrides,
+        config: buildMainConfig(),
+        createEventBus: () => bus,
+        createProductionDependencies: (() => ({ dependencyFactory: {}, ...(failure === "constructor" ? { logging: {} } : {}) })) as never,
+        initializeDisplayQueue: (() => ({ stop: async () => {
+          cleaned.push("display");
+          if (failure === "cleanup") throw new Error("synthetic display cleanup failure");
+        } })) as never,
+        createOBSEventService: (() => ({
+          disconnect: async () => { cleaned.push("obs-disconnect"); },
+          destroy: () => { cleaned.push("obs-destroy"); },
+        })) as never,
+        createDonationSpamDetection: ((...args: Parameters<DonationSpamFactory>) => {
+          const detector = createDonationSpamDetection(args[0], args[1]);
+          const destroy = detector.destroy.bind(detector);
+          detector.destroy = () => { cleaned.push("spam"); destroy(); };
+          return detector;
+        }) as DonationSpamFactory,
+      })).rejects.toThrow(failure === "constructor" ? "AppRuntime requires logger" : "Runtime dependencies missing required keys: logging");
+      expect(cleaned).toEqual(["spam", "display", "obs-disconnect", "obs-destroy"]);
+      expect(bus.listenerCount("config:changed")).toBe(1);
+      expect(bus.listenerCount("config:reloaded")).toBe(0);
+      expect(getTimerCount()).toBe(initialTimers);
+      expect(getSingleInstanceReleaseCalls()).toHaveLength(1);
+    } finally {
+      unrelated();
+    }
+  });
+  }
+
+  it("unwinds runtime construction when its final diagnostic throws through real main", async () => {
+    const { overrides, getSingleInstanceReleaseCalls } = buildOverrides({ cliArgs: { chat: 1 } });
+    const bus = createEventBus();
+    const unrelated = bus.subscribe("platform:event", () => undefined);
+    const listenerBaseline = bus.getListenerSummary();
+    const timerBaseline = getTimerCount();
+    const failure = new Error("test final runtime constructor diagnostic");
+    const logging = {
+      ...noOpLogger,
+      debug: (message: string) => {
+        if (message === "Constructor completed") throw failure;
+      },
+    };
+    try {
+      const result = await main({
+        ...overrides,
+        config: buildMainConfig(),
+        createEventBus: () => bus,
+        createProductionDependencies: (() => ({ logging, dependencyFactory: {} })) as never,
+        createDonationSpamDetection,
+      }).catch(error => error);
+      expect(result).toBe(failure);
+      expect(bus.getListenerSummary()).toEqual(listenerBaseline);
+      expect(getTimerCount()).toBe(timerBaseline);
+      expect(getSingleInstanceReleaseCalls()).toHaveLength(1);
+    } finally {
+      unrelated();
+    }
+  });
+
+  for (const stage of ["Periodic cleanup scheduled every 30 seconds", "System initialized"] as const) {
+    it(`unwinds real constructor acquisition when ${stage} throws`, async () => {
+      const { overrides, getSingleInstanceReleaseCalls } = buildOverrides({ cliArgs: { chat: 1 } });
+      const bus = createEventBus();
+      const unrelated = bus.subscribe("config:changed", () => undefined);
+      const baseline = bus.getListenerSummary();
+      const timers = getTimerCount();
+      const failure = new Error("test resource constructor diagnostic failure");
+      const failDiagnostic = (message: string) => {
+        if (message === stage) throw failure;
+      };
+      const logging = { ...noOpLogger, debug: failDiagnostic, info: failDiagnostic };
+      try {
+        const result = await main({
+          ...overrides,
+          config: buildMainConfig(),
+          createEventBus: () => bus,
+          createProductionDependencies: (() => ({ logging, dependencyFactory: {} })) as never,
+          createDonationSpamDetection: (config, dependencies) => createDonationSpamDetection(config, { ...dependencies, logger: logging }),
+        }).catch(error => error);
+        expect(result).toBe(failure);
+        expect(bus.getListenerSummary()).toEqual(baseline);
+        expect(getTimerCount()).toBe(timers);
+        expect(getSingleInstanceReleaseCalls()).toHaveLength(1);
+      } finally {
+        unrelated();
+      }
+    });
+  }
 
   it("starts runtime and returns startup status", async () => {
     const { overrides } = buildOverrides({ cliArgs: { chat: 1 } });

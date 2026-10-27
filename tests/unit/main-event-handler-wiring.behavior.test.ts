@@ -36,6 +36,7 @@ describe("main.js event handler wiring", () => {
     },
     commandParser: { getVFXConfig: createMockFn() },
     commandCooldownService: {
+      dispose: createMockFn<[], void>(),
       checkUserCooldown: createMockFn<[unknown, number, number], boolean>().mockReturnValue(true),
       updateUserCooldown: createMockFn<[unknown], void>(),
     },

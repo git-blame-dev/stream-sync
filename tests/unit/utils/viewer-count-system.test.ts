@@ -11,6 +11,7 @@ import {
   useFakeTimers,
   useRealTimers,
   advanceTimersByTime,
+  getTimerCount,
 } from "../../helpers/bun-timers";
 import { ViewerCountSystem } from "../../../src/utils/viewer-count";
 import {
@@ -279,6 +280,25 @@ describe("ViewerCountSystem - Comprehensive Behavior Tests", () => {
   });
 
   describe("System Initialization & Configuration", () => {
+    test("acquires memory maintenance only during initialization and keeps one timer", async () => {
+      const timerBaseline = getTimerCount();
+      const { system } = createViewerCountTestEnvironment();
+      try {
+        expect(system.memoryOptimizationInterval).toBeNull();
+        expect(getTimerCount()).toBe(timerBaseline);
+        await system.initialize();
+        const interval = system.memoryOptimizationInterval;
+        expect(interval).not.toBeNull();
+        expect(getTimerCount()).toBe(timerBaseline + 1);
+        await system.initialize();
+        expect(system.memoryOptimizationInterval).toBe(interval);
+        expect(getTimerCount()).toBe(timerBaseline + 1);
+      } finally {
+        await system.cleanup();
+      }
+      expect(system.memoryOptimizationInterval).toBeNull();
+    });
+
     test("should initialize with proper default viewer counts for all platforms", () => {
       const { system } = createViewerCountTestEnvironment();
       expect(system.getViewerCount("tiktok")).toBe(0);

@@ -165,8 +165,6 @@ class ViewerCountSystem {
             lastCleanup: this._now()
         };
 
-        this._startMemoryOptimization();
-
         this._errorHandler = null;
     }
 
@@ -387,6 +385,7 @@ class ViewerCountSystem {
 
     async initialize() {
         this.logger.info('Viewer count system initialized with counts: ' + JSON.stringify(this.counts), 'viewer-count');
+        this._startMemoryOptimization();
 
         this.hasUnifiedInitialization = true;
 
@@ -481,9 +480,9 @@ class ViewerCountSystem {
         this._invalidatePlatformPoll(platformKey);
         const handle = this.pollingHandles[platformKey];
         if (handle) {
-            this.logger.info(`Stopping viewer count polling for ${platformKey}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
             clearInterval(handle);
             delete this.pollingHandles[platformKey];
+            this._runCleanupDiagnostic(() => this.logger.info(`Stopping viewer count polling for ${platformKey}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT));
         }
     }
 
@@ -533,11 +532,8 @@ class ViewerCountSystem {
     }
 
     _startMemoryOptimization() {
-        if (this.memoryOptimizationInterval) {
-            clearInterval(this.memoryOptimizationInterval);
-            this.memoryOptimizationInterval = null;
-        }
-        
+        if (this.memoryOptimizationInterval) return;
+
         this.memoryOptimizationInterval = safeSetInterval(() => {
             this._performMemoryOptimization();
         }, this.memoryConfig.cleanupInterval);
@@ -618,7 +614,7 @@ class ViewerCountSystem {
             memoryOptimized: true
         };
         
-        this.logger.debug('Memory cleanup completed', VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
+        this._runCleanupDiagnostic(() => this.logger.debug('Memory cleanup completed', VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT));
         
     }
 
@@ -694,7 +690,7 @@ class ViewerCountSystem {
         this.pollingHandles = {};
         
         if (wasPolling) {
-            this.logger.info('Polling stopped.', VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
+            this._runCleanupDiagnostic(() => this.logger.info('Polling stopped.', VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT));
         }
     }
 
@@ -787,15 +783,22 @@ class ViewerCountSystem {
         }
     }
 
+    private _runCleanupDiagnostic(diagnostic: () => void) {
+        try {
+            diagnostic();
+        } catch {
+            // Diagnostics cannot prevent retiring polling or other observers.
+        }
+    }
+
     async cleanup() {
-        this.logger.info('Cleaning up viewer count system', VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
-        
         this.stopPolling();
         
         if (this.memoryOptimizationInterval) {
             clearInterval(this.memoryOptimizationInterval);
             this.memoryOptimizationInterval = null;
         }
+        this._runCleanupDiagnostic(() => this.logger.info('Cleaning up viewer count system', VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT));
         
         const cleanupPromises: Array<Promise<unknown>> = [];
         const observerEntries = Array.from(this.observers.entries()) as Array<[string, { cleanup?: () => Promise<unknown> | unknown }]>;
@@ -805,12 +808,12 @@ class ViewerCountSystem {
                 if (typeof observer.cleanup === 'function') {
                     cleanupPromises.push(
                         Promise.resolve(observer.cleanup()).catch(error => {
-                            this._handleViewerCountError(`Observer cleanup failed for ${observerId}: ${getErrorMessage(error)}`, error, 'observer-cleanup', { observerId });
+                            this._runCleanupDiagnostic(() => this._handleViewerCountError(`Observer cleanup failed for ${observerId}: ${getErrorMessage(error)}`, error, 'observer-cleanup', { observerId }));
                         })
                     );
                 }
             } catch (error) {
-                this._handleViewerCountError(`Error initiating cleanup for observer ${observerId}: ${getErrorMessage(error)}`, error, 'observer-cleanup', { observerId });
+                this._runCleanupDiagnostic(() => this._handleViewerCountError(`Error initiating cleanup for observer ${observerId}: ${getErrorMessage(error)}`, error, 'observer-cleanup', { observerId }));
             }
         }
         
@@ -823,12 +826,12 @@ class ViewerCountSystem {
                 })
             ]);
         } catch (error) {
-            this.logger.warn(`Observer cleanup timed out or failed: ${getErrorMessage(error)}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
+            this._runCleanupDiagnostic(() => this.logger.warn(`Observer cleanup timed out or failed: ${getErrorMessage(error)}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT));
         }
         
         this._performMemoryCleanup();
         
-        this.logger.info(`Viewer count system cleanup complete (cleaned ${observerEntries.length} observers)`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
+        this._runCleanupDiagnostic(() => this.logger.info(`Viewer count system cleanup complete (cleaned ${observerEntries.length} observers)`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT));
     }
 }
 

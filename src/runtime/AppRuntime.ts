@@ -114,6 +114,7 @@ type RuntimeEventBus = {
 };
 
 type RuntimeNotificationManager = {
+    donationSpamDetector?: { destroy?: () => void } | undefined;
     handleNotification: (type: string, platform: string, payload: RuntimeRecord) => Promise<unknown>;
     prepareNotification?: (type: string, platform: string, payload: RuntimeRecord) => Promise<unknown>;
 };
@@ -147,6 +148,7 @@ type RuntimePlatformLifecycleService = {
 };
 
 type RuntimeCommandCooldownService = {
+    dispose: () => void;
     getStatus?: () => unknown;
     checkUserCooldown: (userId: unknown, perUserCooldown: number, heavyCooldown: number) => boolean;
     updateUserCooldown: (userId: unknown) => void;
@@ -305,6 +307,10 @@ class AppRuntime {
     fundingGoal: FundingGoalService | undefined;
     youtube?: { initialize?: (handlers?: RuntimeRecord, reconnect?: boolean) => Promise<unknown> | unknown };
     private shutdownPromise: Promise<void> | null = null;
+    private teardownPromise: Promise<void> | null = null;
+    private startupPromise: Promise<void> | null = null;
+    private earlyViewerCountPromise: Promise<void> | null = null;
+    private stopped = false;
 
     async _runUnifiedNotification(type: string, platform: string, username: unknown, options: NotificationOptions, process: RuntimeNotificationManager['handleNotification'] | undefined) {
         if (!options || typeof options !== 'object') {
@@ -510,26 +516,48 @@ class AppRuntime {
             handleStreamDetected: this.handleStreamDetected.bind(this),
             handleEnvelopeNotification: this.handleEnvelopeNotification.bind(this)
         };
-        this.platformEventRouter = new PlatformEventRouter({
-            eventBus: this.eventBus,
-            runtime: routerRuntime,
-            notificationManager: this.notificationManager,
-            config: this.config,
-            logger: this.logger,
-            userTrackingService: this.userTrackingService
-        });
-        this.chatNotificationRouter = new ChatNotificationRouter({
-            runtime: this,
-            logger: this.logger,
-            config: this.config,
-            ...(this.guiTransportService.publishChatMessage
-                ? { publishChatMessage: this.guiTransportService.publishChatMessage }
-                : {})
-        });
+        const construction = new DisposableStack();
+        try {
+            this.platformEventRouter = new PlatformEventRouter({
+                eventBus: this.eventBus,
+                runtime: routerRuntime,
+                notificationManager: this.notificationManager,
+                config: this.config,
+                logger: this.logger,
+                userTrackingService: this.userTrackingService
+            });
+            construction.defer(() => this.platformEventRouter.dispose());
+            this.chatNotificationRouter = new ChatNotificationRouter({
+                runtime: this,
+                logger: this.logger,
+                config: this.config,
+                ...(this.guiTransportService.publishChatMessage
+                    ? { publishChatMessage: this.guiTransportService.publishChatMessage }
+                    : {})
+            });
 
-        this.registerEventHandlers();
+            construction.defer(() => {
+                const cleanup = this.viewerCountStatusCleanup;
+                this.viewerCountStatusCleanup = null;
+                cleanup?.();
+            });
+            construction.defer(() => {
+                const unsubscribe = this.vfxCommandUnsubscribe;
+                this.vfxCommandUnsubscribe = null;
+                unsubscribe?.();
+            });
+            this.registerEventHandlers();
 
-        this.logger.debug('Constructor completed', 'AppRuntime');
+            this.logger.debug('Constructor completed', 'AppRuntime');
+            construction.move();
+        } catch (error) {
+            try {
+                construction.dispose();
+            } catch {
+                // All synchronous releases were attempted; preserve the constructor failure.
+            }
+            throw error;
+        }
     }
 
     get platforms() {
@@ -730,168 +758,96 @@ class AppRuntime {
         return this.viewerCountSystem.updateViewerCount(platform, count);
     }
 
-    async shutdown() {
-        if (this.shutdownPromise) return this.shutdownPromise;
-        this.shutdownPromise = this._shutdown();
+    shutdown(): Promise<void> {
+        if (!this.shutdownPromise) {
+            const completion = Promise.withResolvers<void>();
+            this.shutdownPromise = completion.promise;
+            try {
+                this.logger.info('Shutting down application...', 'system');
+            } catch {
+                // Entry diagnostics must not prevent retiring this runtime lifetime.
+            }
+            this.beginTeardown('shutdown', true).then(() => {
+                this.emitSystemShutdown({ reason: 'manual-shutdown' });
+            }).then(completion.resolve, completion.reject);
+        }
         return this.shutdownPromise;
     }
 
-    private async _shutdown() {
-        if (this.isShuttingDown) {
-            return;
-        }
-        this.isShuttingDown = true;
-        this.logger.info('Shutting down application...', 'system');
+    private beginTeardown(mode: 'shutdown' | 'startup-rollback', joinStartup = false): Promise<void> {
+        if (this.teardownPromise) return this.teardownPromise;
 
-        try {
-            await this._stopGuiTransport();
-        } catch (error) {
-            this._handleAppRuntimeError(
-                `Error stopping GUI transport: ${getErrorMessage(error)}`,
-                error,
-                null,
-                { eventType: 'shutdown', logContext: 'system' }
-            );
-        }
-
-        try {
-            await this.displayQueue.stop?.();
-        } catch (error) {
-            this._handleAppRuntimeError(
-                `Error stopping display queue: ${getErrorMessage(error)}`,
-                error,
-                null,
-                { eventType: 'shutdown', logContext: 'system' }
-            );
-        }
-
-        try {
-            await this._getNeuralTtsProcessManager()?.stop?.();
-        } catch (error) {
-            this._handleAppRuntimeError(
-                `Error stopping Neural TTS process manager: ${getErrorMessage(error)}`,
-                error,
-                null,
-                { eventType: 'shutdown', logContext: 'system' }
-            );
-        }
-
-        try {
-            await this.platformLifecycleService.disconnectAll();
-        } catch (error) {
-            this._handleAppRuntimeError(
-                `Error disconnecting platforms: ${getErrorMessage(error)}`,
-                error,
-                null,
-                { eventType: 'shutdown', logContext: 'system' }
-            );
-        }
-
-        if (this.obsEventService) {
-            try {
-                if (typeof this.obsEventService.disconnect !== 'function') {
-                    throw new Error('OBSEventService missing disconnect function');
-                }
-                await this.obsEventService.disconnect();
-                this.logger.info('Disconnected from OBS via OBSEventService.', 'system');
-            } catch (error) {
-                this._handleAppRuntimeError(
-                    `Error disconnecting OBS via OBSEventService: ${getErrorMessage(error)}`,
-                    error,
-                    null,
-                    { eventType: 'shutdown', logContext: 'system' }
-                );
-            }
-
-            try {
-                if (typeof this.obsEventService.destroy === 'function') {
-                    this.obsEventService.destroy();
-                }
-            } catch (error) {
-                this._handleAppRuntimeError(
-                    `Error destroying OBSEventService: ${getErrorMessage(error)}`,
-                    error,
-                    null,
-                    { eventType: 'shutdown', logContext: 'system' }
-                );
-            }
-        } else {
-            try {
-                const obsManager = this._getObsConnectionManager();
-                if (obsManager && obsManager.isConnected() && typeof obsManager.disconnect === 'function') {
-                    await obsManager.disconnect();
-                    this.logger.info('Disconnected from OBS.', 'system');
-                }
-            } catch (error) {
-                this._handleAppRuntimeError(
-                    `Error disconnecting from OBS: ${getErrorMessage(error)}`,
-                    error,
-                    null,
-                    { eventType: 'shutdown', logContext: 'system' }
-                );
-            }
-        }
-
-        if (this.platformEventRouter && typeof this.platformEventRouter.dispose === 'function') {
-            this.platformEventRouter.dispose();
-        }
-        await this.fundingGoal?.dispose();
-
-        try {
-            if (this.viewerCountSystem) {
-                this.viewerCountSystem.stopPolling();
-                if (typeof this.viewerCountSystem.cleanup === 'function') {
-                    await this.viewerCountSystem.cleanup();
-                }
-                this.logger.debug('Stopped viewer count polling', 'system');
-            }
-        } catch (error) {
-            this._handleAppRuntimeError(
-                `Error stopping viewer count polling: ${getErrorMessage(error)}`,
-                error,
-                null,
-                { eventType: 'shutdown', logContext: 'system' }
-            );
-        }
-
-        try {
-            if (typeof this.vfxCommandUnsubscribe === 'function') {
-                this.vfxCommandUnsubscribe();
-                this.vfxCommandUnsubscribe = null;
-            }
-        } catch (error) {
-            this._handleAppRuntimeError(
-                `Error unsubscribing VFX command handler: ${getErrorMessage(error)}`,
-                error,
-                null,
-                { eventType: 'shutdown', logContext: 'system' }
-            );
-        }
-
-        try {
-            if (typeof this.viewerCountStatusCleanup === 'function') {
-                this.viewerCountStatusCleanup();
-                this.logger.debug('Stopped viewer count status listeners', 'system');
-            }
-        } catch (error) {
-            this._handleAppRuntimeError(
-                `Error cleaning up viewer count status listeners: ${getErrorMessage(error)}`,
-                error,
-                null,
-                { eventType: 'shutdown', logContext: 'system' }
-            );
-        }
-
-        if (this.keepAliveInterval) {
-            clearInterval(this.keepAliveInterval);
-            this.logger.debug('Cleared keep-alive interval', 'system');
-        }
-
+        // Dependencies and subscriptions belong to this single runtime lifetime.
+        this.stopped = true;
         this.isStarted = false;
         this.isStarting = false;
-        this.isShuttingDown = false;
+        this.isShuttingDown = true;
+        const retirement: Promise<void>[] = [];
+        this.teardownPromise = Promise.resolve().then(async () => {
+            await Promise.all(retirement);
+            // An acquisition already in flight must settle before its owner is released.
+            if (joinStartup) await this.startupPromise?.catch(() => {});
+            await this.earlyViewerCountPromise?.catch(() => {});
+            await this.teardownResources(mode);
+            await fundingCleanup;
+        }).finally(() => {
+            this.isShuttingDown = false;
+        });
 
-        this.emitSystemShutdown({ reason: 'manual-shutdown' });
+        // Retire admission before the first await, leaving other EventBus owners intact.
+        retirement.push(this.runTeardownStep(mode, 'dispose platform event router', () => this.platformEventRouter.dispose()));
+        const unsubscribeVfx = this.vfxCommandUnsubscribe;
+        this.vfxCommandUnsubscribe = null;
+        retirement.push(this.runTeardownStep(mode, 'unsubscribe VFX command handler', () => unsubscribeVfx?.()));
+        const cleanupStatus = this.viewerCountStatusCleanup;
+        this.viewerCountStatusCleanup = null;
+        retirement.push(this.runTeardownStep(mode, 'cleanup viewer count status listeners', () => cleanupStatus?.()));
+        retirement.push(this.runTeardownStep(mode, 'destroy donation spam detector', () => this.notificationManager.donationSpamDetector?.destroy?.()));
+        retirement.push(this.runTeardownStep(mode, 'dispose command cooldown service', () => this.commandCooldownService.dispose()));
+        const fundingCleanup = this.runTeardownStep(mode, 'dispose funding goal', () => this.fundingGoal?.dispose());
+        retirement.push(this.runTeardownStep(mode, 'clear keep-alive interval', () => {
+            if (this.keepAliveInterval) clearInterval(this.keepAliveInterval);
+            delete this.keepAliveInterval;
+        }));
+        return this.teardownPromise;
+    }
+
+    private async teardownResources(mode: 'shutdown' | 'startup-rollback') {
+        await this.runTeardownStep(mode, 'stop GUI transport', () => this._stopGuiTransport());
+        await this.runTeardownStep(mode, 'stop display queue', () => this.displayQueue.stop?.());
+        // Stop only the acquired manager; do not create a process owner during teardown.
+        await this.runTeardownStep(mode, 'stop neural TTS process manager', () => this.neuralTtsProcessManager?.stop?.());
+        await this.runTeardownStep(mode, 'disconnect platforms', () => this.platformLifecycleService.disconnectAll());
+        await this.runTeardownStep(mode, 'disconnect OBS', async () => {
+            if (this.obsEventService) {
+                await this.obsEventService.disconnect?.();
+            } else {
+                const manager = this._getObsConnectionManager();
+                if (manager.isConnected()) await manager.disconnect?.();
+            }
+        });
+        await this.runTeardownStep(mode, 'destroy OBS event service', () => this.obsEventService?.destroy?.());
+        await this.runTeardownStep(mode, 'stop viewer count polling', () => this.viewerCountSystem.stopPolling());
+        await this.runTeardownStep(mode, 'cleanup viewer count system', () => this.viewerCountSystem.cleanup?.());
+        this.viewerCountSystemStarted = false;
+    }
+
+    private async runTeardownStep(mode: 'shutdown' | 'startup-rollback', stepName: string, step: () => unknown) {
+        try {
+            await step();
+        } catch (error) {
+            try {
+                const message = mode === 'startup-rollback'
+                    ? `Startup rollback failed while attempting to ${stepName}: ${getErrorMessage(error)}`
+                    : `Error attempting to ${stepName}: ${getErrorMessage(error)}`;
+                this._handleAppRuntimeError(message, error, null, {
+                    eventType: mode,
+                    logContext: mode === 'startup-rollback' ? 'AppRuntime' : 'system'
+                });
+            } catch {
+                // Diagnostic formatting and logging must not interrupt resource teardown.
+            }
+        }
     }
 
     emitSystemShutdown({ reason, restartRequested = false }: { reason?: unknown; restartRequested?: boolean } = {}) {
@@ -903,11 +859,19 @@ class AppRuntime {
                 mode: shutdownMode
             });
         }
-        this.logger.info(`Shutdown complete (${shutdownReason}); ${shutdownMode} requested.`, 'system');
-        this.logger.debug('[Shutdown] Marking process exit code and scheduling forced-exit fallback', 'system');
+        try {
+            this.logger.info(`Shutdown complete (${shutdownReason}); ${shutdownMode} requested.`, 'system');
+            this.logger.debug('[Shutdown] Marking process exit code and scheduling forced-exit fallback', 'system');
+        } catch {
+            // Completion diagnostics must not prevent scheduling process termination.
+        }
         process.exitCode = 0;
         const forcedExitTimer = safeSetTimeout(() => {
-            this._handleAppRuntimeError('[Shutdown] Forced exit due to lingering handles', null, null, { eventType: 'shutdown', logContext: 'system' });
+            try {
+                this._handleAppRuntimeError('[Shutdown] Forced exit due to lingering handles', null, null, { eventType: 'shutdown', logContext: 'system' });
+            } catch {
+                // The termination fallback must survive a failed diagnostic.
+            }
             process.exit(0);
         }, 2000);
         if (forcedExitTimer && typeof forcedExitTimer.unref === 'function') {
@@ -915,13 +879,19 @@ class AppRuntime {
         }
     }
 
-    async start() {
-        if (this.isStarting) {
-            throw new Error('AppRuntime start in progress');
-        }
-        if (this.isStarted) {
-            throw new Error('AppRuntime already started');
-        }
+    start(): Promise<void> {
+        if (this.stopped) return Promise.reject(new Error('AppRuntime is stopped'));
+        if (this.isStarting) return Promise.reject(new Error('AppRuntime start in progress'));
+        if (this.isStarted) return Promise.reject(new Error('AppRuntime already started'));
+        this.startupPromise = this.startRuntime();
+        return this.startupPromise;
+    }
+
+    private assertActiveLifetime() {
+        if (this.stopped) throw new Error('AppRuntime is stopped');
+    }
+
+    private async startRuntime() {
         this.isStarting = true;
 
         this.logger.info('AppRuntime.start() method called', 'AppRuntime');
@@ -930,6 +900,7 @@ class AppRuntime {
         try {
             try {
                 await this._startGuiTransport();
+                this.assertActiveLifetime();
             } catch (error) {
                 this._handleAppRuntimeError(
                     `GUI transport initialization failed: ${getErrorMessage(error)}`,
@@ -943,6 +914,7 @@ class AppRuntime {
             this.logger.debug('Initializing platforms...', 'AppRuntime');
             try {
                 await this.initializePlatforms();
+                this.assertActiveLifetime();
                 const degradedPlatforms = this._getDegradedPlatformInitializations();
                 if (degradedPlatforms.length === 0) {
                     this.logger.info('Platform connections initialized', 'AppRuntime');
@@ -989,6 +961,7 @@ class AppRuntime {
                 this.logger.info('Continuing without OBS connection; VFX system remains available.', 'AppRuntime');
             }
 
+            this.assertActiveLifetime();
             if (this.config?.obs?.ttsMethod === 'neural-tts') {
                 this.logger.info('Ensuring Neural TTS service is started...', 'AppRuntime');
                 try {
@@ -1005,6 +978,7 @@ class AppRuntime {
                 }
             }
 
+            this.assertActiveLifetime();
             if (!this.vfxCommandService) {
                 throw new Error('VFXCommandService unavailable for runtime startup');
             }
@@ -1018,11 +992,13 @@ class AppRuntime {
                 obsManager,
                 ...(sourcesManager ? { sourcesManager } : {})
             });
+            this.assertActiveLifetime();
             this.logger.info('TTS cleared', 'AppRuntime');
 
             this.logger.info('Initializing goal display...', 'AppRuntime');
             const goalsManager = this._getDefaultGoalsManager();
             await goalsManager.initializeGoalDisplay();
+            this.assertActiveLifetime();
             this.logger.info('Goal display initialized', 'AppRuntime');
 
             const obsObserver = new OBSViewerCountObserver(obsManager, this.logger, { config: this.config });
@@ -1030,9 +1006,11 @@ class AppRuntime {
             this.logger.info('Initializing viewer count system...', 'AppRuntime');
             this.logger.debug('Starting viewerCountSystem.initialize()', 'AppRuntime');
             await this.viewerCountSystem.initialize();
+            this.assertActiveLifetime();
             this.logger.debug('viewerCountSystem.initialize() completed', 'AppRuntime');
 
             await this.viewerCountSystem.startPolling();
+            this.assertActiveLifetime();
 
             if (this.dependencies.gracefulExitService) {
                 this.gracefulExitService = this.dependencies.gracefulExitService;
@@ -1046,10 +1024,12 @@ class AppRuntime {
                 this.logger.info(`Graceful exit enabled: will exit after ${this.gracefulExitService.getTargetMessageCount()} messages`, 'AppRuntime');
             }
 
-            this.emitSystemReady({});
             this.isStarted = true;
+            this.emitSystemReady({});
+            this.assertActiveLifetime();
         } catch (error) {
-            await this.rollbackStartup();
+            // A concurrent shutdown joins this startup promise before teardown.
+            if (!this.teardownPromise) await this.beginTeardown('startup-rollback');
             throw error;
         } finally {
             this.isStarting = false;
@@ -1077,68 +1057,22 @@ class AppRuntime {
             .filter((name, index, names) => names.indexOf(name) === index);
     }
 
-    async rollbackStartup() {
-        await this._runStartupRollbackStep('stop GUI transport', async () => {
-            await this._stopGuiTransport();
-        });
-
-        await this._runStartupRollbackStep('dispose funding goal', async () => {
-            await this.fundingGoal?.dispose();
-        });
-
-        await this._runStartupRollbackStep('stop display queue', async () => {
-            await this.displayQueue.stop?.();
-        });
-
-        await this._runStartupRollbackStep('stop neural TTS process manager', async () => {
-            await this._getNeuralTtsProcessManager()?.stop?.();
-        });
-
-        await this._runStartupRollbackStep('disconnect platforms', async () => {
-            if (this.platformLifecycleService && typeof this.platformLifecycleService.disconnectAll === 'function') {
-                await this.platformLifecycleService.disconnectAll();
-            }
-        });
-
-        await this._runStartupRollbackStep('disconnect and destroy OBS event service', async () => {
-            if (this.obsEventService && typeof this.obsEventService.disconnect === 'function') {
-                await this.obsEventService.disconnect();
-            }
-            if (this.obsEventService && typeof this.obsEventService.destroy === 'function') {
-                this.obsEventService.destroy();
-            }
-        });
-
-        await this._runStartupRollbackStep('stop and cleanup viewer count system', async () => {
-            if (this.viewerCountSystem && typeof this.viewerCountSystem.stopPolling === 'function') {
-                this.viewerCountSystem.stopPolling();
-            }
-            if (this.viewerCountSystem && typeof this.viewerCountSystem.cleanup === 'function') {
-                await this.viewerCountSystem.cleanup();
-            }
-        });
-
-        this.isStarted = false;
+    rollbackStartup(): Promise<void> {
+        return this.beginTeardown('startup-rollback', true);
     }
 
-    async _runStartupRollbackStep(stepName: string, stepFn: () => Promise<unknown> | unknown) {
-        try {
-            await stepFn();
-        } catch (error) {
-            this._handleAppRuntimeError(
-                `Startup rollback failed while attempting to ${stepName}: ${getErrorMessage(error)}`,
-                error,
-                null,
-                { eventType: 'startup-rollback', logContext: 'AppRuntime' }
-            );
-        }
+    async startViewerCountSystemEarly(): Promise<void> {
+        this.assertActiveLifetime();
+        this.earlyViewerCountPromise ??= this.initializeViewerCountSystemEarly();
+        return this.earlyViewerCountPromise;
     }
 
-    async startViewerCountSystemEarly() {
+    private async initializeViewerCountSystemEarly() {
         try {
             this.logger.debug('ViewerCount system initialization starting', 'AppRuntime');
 
             await this.viewerCountSystem.initialize();
+            if (this.stopped) return;
             this.logger.debug('ViewerCount system initialization completed', 'AppRuntime');
             await this.viewerCountSystem.startPolling();
             this.logger.debug('ViewerCount system polling started successfully', 'AppRuntime');

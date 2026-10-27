@@ -95,12 +95,16 @@ class CommandCooldownService {
             maxEntries: this.cooldownsConfig.maxEntries
         };
 
-        this.loadCooldownConfig();
-        this.registerConfigListeners();
-
-        this.cleanupInterval = safeSetInterval(() => this.cleanupExpiredCooldowns(), 60000);
-
-        this.logger.debug('CommandCooldownService initialized', 'CommandCooldownService');
+        this.cleanupInterval = null;
+        try {
+            this.loadCooldownConfig();
+            this.registerConfigListeners();
+            this.cleanupInterval = safeSetInterval(() => this.cleanupExpiredCooldowns(), 60000);
+            this.logger.debug('CommandCooldownService initialized', 'CommandCooldownService');
+        } catch (error) {
+            this.dispose();
+            throw error;
+        }
     }
 
     checkUserCooldown(userId: string | null, platformCooldownMs: number, heavyCooldownMs: number): boolean {
@@ -290,29 +294,38 @@ class CommandCooldownService {
     }
 
     dispose(): void {
+        const subscriptions = this.configSubscriptions;
+        this.configSubscriptions = [];
         if (this.cleanupInterval) {
             clearInterval(this.cleanupInterval);
             this.cleanupInterval = null;
         }
 
-        this.configSubscriptions.forEach((unsubscribe) => {
+        subscriptions.forEach((unsubscribe) => {
             if (typeof unsubscribe === 'function') {
                 try {
                     unsubscribe();
                 } catch (error) {
-                    const unsubscribeError = error instanceof Error ? error : new Error(String(error));
-                    this.errorHandler.handleCleanupError(unsubscribeError, 'config-listener', `Error unsubscribing config listener: ${unsubscribeError.message}`);
+                    try {
+                        const unsubscribeError = error instanceof Error ? error : new Error(String(error));
+                        this.errorHandler.handleCleanupError(unsubscribeError, 'config-listener', `Error unsubscribing config listener: ${unsubscribeError.message}`);
+                    } catch {
+                        // A failed diagnostic must not strand the remaining subscriptions.
+                    }
                 }
             }
         });
-        this.configSubscriptions = [];
 
         this.userLastCommand.clear();
         this.userHeavyLimit.clear();
         this.userCommandTimestamps.clear();
         this.globalCommandCooldowns.clear();
 
-        this.logger.debug('CommandCooldownService disposed', 'CommandCooldownService');
+        try {
+            this.logger.debug('CommandCooldownService disposed', 'CommandCooldownService');
+        } catch {
+            // Resource retirement is complete even if its diagnostic fails.
+        }
     }
 
     loadCooldownConfig(overrides: Partial<CooldownConfig> | null = null): void {

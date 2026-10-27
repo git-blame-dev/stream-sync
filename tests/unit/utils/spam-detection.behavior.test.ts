@@ -15,6 +15,34 @@ type DonationSpamDetection = ReturnType<typeof createDonationSpamDetection>;
 describe("SpamDetection behavior", () => {
   let detection: DonationSpamDetection | null = null;
 
+  it("retires admission and timers idempotently despite failed cleanup diagnostics", () => {
+    useFakeTimers();
+    let retired = false;
+    let publications = 0;
+    const config = createSpamDetectionConfig({
+      enabled: true,
+      lowValueThreshold: 10,
+      detectionWindow: 1,
+      maxIndividualNotifications: 0,
+    }, { logger: noOpLogger });
+    detection = createDonationSpamDetection(config, {
+      logger: { ...noOpLogger, debug: () => {
+        if (retired) throw new Error("test cleanup diagnostic failure");
+      } },
+      onAggregatedDonation: () => { publications++; },
+    });
+    detection.handleDonationSpam("test-donor", "Test Donor", 1, "test-gift", 1, "tiktok");
+    retired = true;
+    expect(() => detection?.destroy()).not.toThrow();
+    expect(() => detection?.destroy()).not.toThrow();
+    expect(detection.handleDonationSpam("test-late-donor", "Test Late Donor", 1, "test-gift", 1, "tiktok").shouldShow).toBe(false);
+    detection.setupPeriodicCleanup();
+    advanceTimersByTime(60_000);
+    expect(publications).toBe(0);
+    expect(detection.cleanupInterval).toBeNull();
+    expect(detection.getStatistics().trackedUsers).toBe(0);
+  });
+
   afterEach(() => {
     restoreAllMocks();
     if (detection) {
