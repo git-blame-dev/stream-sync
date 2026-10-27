@@ -1,0 +1,213 @@
+diff --git a/dist/src/parser/youtube/LiveChat.js b/dist/src/parser/youtube/LiveChat.js
+index e2d7e16e7f718f2547cbfa280fa20128d6e7d7eb..d1d7d375616f2d8db80dad167c74b9f2dd7c8d56 100644
+--- a/dist/src/parser/youtube/LiveChat.js
++++ b/dist/src/parser/youtube/LiveChat.js
+@@ -20,6 +20,8 @@ export default class LiveChat extends EventEmitter {
+     #continuation;
+     #mcontinuation;
+     #retry_count = 0;
++    #generation = 0;
++    #waits = new Map();
+     smoothed_queue;
+     initial_info;
+     metadata;
+@@ -34,51 +36,69 @@ export default class LiveChat extends EventEmitter {
+         this.is_replay = video_info.livechat?.is_replay || false;
+         this.smoothed_queue = new SmoothedQueue();
+         this.smoothed_queue.callback = async (actions) => {
++            const generation = this.#generation;
++            if (!this.#isActive(generation))
++                return;
+             if (!actions.length) {
+                 // Wait 2 seconds before requesting an incremental continuation if the action group is empty.
+-                await this.#wait(2000);
++                await this.#wait(2000, generation);
+             }
+             else if (actions.length < 10) {
+                 // If there are less than 10 actions, wait until all of them are emitted.
+-                await this.#emitSmoothedActions(actions);
++                await this.#emitSmoothedActions(actions, generation);
+             }
+             else if (this.is_replay) {
+                 /**
+                  * NOTE: Live chat replays require data from the video player for actions to be emitted timely
+                  * and as we don't have that, this ends up being quite innacurate.
+                  */
+-                this.#emitSmoothedActions(actions);
+-                await this.#wait(2000);
++                this.#emitSmoothedActions(actions, generation);
++                await this.#wait(2000, generation);
+             }
+             else {
+                 // There are more than 10 actions, emit them asynchronously so we can request the next incremental continuation.
+-                this.#emitSmoothedActions(actions);
++                this.#emitSmoothedActions(actions, generation);
+             }
+-            if (this.running) {
+-                this.#pollLivechat();
++            if (this.#isActive(generation)) {
++                this.#pollLivechat(generation);
+             }
+         };
+     }
+     start() {
+         if (!this.running) {
+             this.running = true;
+-            this.#pollLivechat();
+-            this.#pollMetadata();
++            const generation = ++this.#generation;
++            this.#retry_count = 0;
++            this.#pollLivechat(generation);
++            this.#pollMetadata(generation);
+         }
+     }
+     stop() {
+-        this.smoothed_queue.clear();
+         this.running = false;
++        this.#generation++;
++        this.smoothed_queue.clear();
++        for (const [timer, resolve] of this.#waits) {
++            clearTimeout(timer);
++            resolve();
++        }
++        this.#waits.clear();
+     }
+-    #pollLivechat() {
++    #isActive(generation) {
++        return this.running && this.#generation === generation;
++    }
++    #pollLivechat(generation) {
++        if (!this.#isActive(generation))
++            return;
+         (async () => {
+             try {
+                 const response = await this.#actions.execute(this.is_replay ? 'live_chat/get_live_chat_replay' : 'live_chat/get_live_chat', { continuation: this.#continuation, parse: true });
++                if (!this.#isActive(generation))
++                    return;
+                 const contents = response.continuation_contents;
+                 if (!contents) {
+                     this.emit('error', new InnertubeError('Unexpected live chat incremental continuation response', response));
+-                    this.emit('end');
+-                    this.stop();
++                    if (!this.#isActive(generation))
++                        return;
+                 }
+                 if (!(contents instanceof LiveChatContinuation)) {
+                     this.stop();
+@@ -90,24 +110,31 @@ export default class LiveChat extends EventEmitter {
+                 if (contents.header) {
+                     this.initial_info = contents;
+                     this.emit('start', contents);
+-                    if (this.running)
+-                        this.#pollLivechat();
++                    if (this.#isActive(generation))
++                        this.#pollLivechat(generation);
+                 }
+                 else {
+                     this.smoothed_queue.enqueueActionGroup(contents.actions);
+                 }
+-                this.#retry_count = 0;
++                if (this.#isActive(generation))
++                    this.#retry_count = 0;
+             }
+             catch (err) {
++                if (!this.#isActive(generation))
++                    return;
+                 this.emit('error', err);
++                if (!this.#isActive(generation))
++                    return;
+                 if (this.#retry_count++ < 10) {
+-                    await this.#wait(2000);
+-                    this.#pollLivechat();
++                    await this.#wait(2000, generation);
++                    this.#pollLivechat(generation);
+                 }
+                 else {
+                     this.emit('error', new InnertubeError('Reached retry limit for incremental continuation requests', err));
+-                    this.emit('end');
++                    if (!this.#isActive(generation))
++                        return;
+                     this.stop();
++                    this.emit('end');
+                 }
+             }
+         })();
+@@ -116,7 +143,7 @@ export default class LiveChat extends EventEmitter {
+      * Ensures actions are emitted at the right speed.
+      * This and {@link SmoothedQueue} were based off of YouTube's own implementation.
+      */
+-    async #emitSmoothedActions(action_queue) {
++    async #emitSmoothedActions(action_queue, generation) {
+         const base = 1E4;
+         let delay = action_queue.length < base / 80 ? 1 : Math.ceil(action_queue.length / (base / 80));
+         const emit_delay_ms = delay == 1 ? (delay = base / action_queue.length,
+@@ -124,11 +151,17 @@ export default class LiveChat extends EventEmitter {
+             delay = Math.min(1E3, delay),
+             delay = Math.max(80, delay)) : delay = 80;
+         for (const action of action_queue) {
+-            await this.#wait(emit_delay_ms);
++            if (!this.#isActive(generation))
++                return;
++            await this.#wait(emit_delay_ms, generation);
++            if (!this.#isActive(generation))
++                return;
+             this.emit('chat-update', action);
+         }
+     }
+-    #pollMetadata() {
++    #pollMetadata(generation) {
++        if (!this.#isActive(generation))
++            return;
+         (async () => {
+             try {
+                 const payload = { videoId: this.#video_id };
+@@ -136,6 +169,8 @@ export default class LiveChat extends EventEmitter {
+                     payload.continuation = this.#mcontinuation;
+                 }
+                 const response = await this.#actions.execute('/updated_metadata', payload);
++                if (!this.#isActive(generation))
++                    return;
+                 const data = Parser.parseResponse(response.data);
+                 this.#mcontinuation = data.continuation?.token;
+                 this.metadata = {
+@@ -146,14 +181,14 @@ export default class LiveChat extends EventEmitter {
+                     date: data.actions?.array().firstOfType(UpdateDateTextAction) || this.metadata?.date
+                 };
+                 this.emit('metadata-update', this.metadata);
+-                await this.#wait(5000);
+-                if (this.running)
+-                    this.#pollMetadata();
++                await this.#wait(5000, generation);
++                if (this.#isActive(generation))
++                    this.#pollMetadata(generation);
+             }
+             catch {
+-                await this.#wait(2000);
+-                if (this.running)
+-                    this.#pollMetadata();
++                await this.#wait(2000, generation);
++                if (this.#isActive(generation))
++                    this.#pollMetadata(generation);
+             }
+         })();
+     }
+@@ -220,8 +255,16 @@ export default class LiveChat extends EventEmitter {
+     async selectButton(button) {
+         return await button.endpoint.call(this.#actions, { parse: true });
+     }
+-    async #wait(ms) {
+-        return new Promise((resolve) => setTimeout(() => resolve(), ms));
++    async #wait(ms, generation) {
++        if (!this.#isActive(generation))
++            return;
++        return new Promise((resolve) => {
++            const timer = setTimeout(() => {
++                this.#waits.delete(timer);
++                resolve();
++            }, ms);
++            this.#waits.set(timer, resolve);
++        });
+     }
+ }
+ //# sourceMappingURL=LiveChat.js.map
+\ No newline at end of file
