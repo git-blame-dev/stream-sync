@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { buildPreviewConfig, buildPreviewScenarioEvents } from './gui-preview';
 import { safeSetTimeout, safeDelay } from '../../src/utils/timeout-validator';
+import type { createTikTokGiftAnimationResolver as createGiftResolver } from '../../src/services/tiktok-gift-animation/resolver';
 
 const load = createRequire(__filename);
 
@@ -32,7 +33,11 @@ interface GiftAnimationPreviewOptions {
     stdout?: { write: (text: string) => void };
     delay?: (ms: number) => Promise<void>;
     eventBus?: unknown;
-    giftAnimationResolver?: { resolveFromNotificationData: (data: unknown) => Promise<unknown> };
+    giftAnimationResolver?: {
+        resolveFromNotificationData: (data: unknown) => Promise<unknown>;
+        dispose?: () => Promise<void> | void;
+    };
+    createGiftAnimationResolverImpl?: typeof createGiftResolver;
     giftEvent?: { adapter: string; rawEvent: unknown };
 }
 
@@ -161,6 +166,7 @@ async function runGuiGiftAnimationPreview(options: GiftAnimationPreviewOptions =
     let service: ReturnType<NonNullable<GiftAnimationPreviewOptions['createGuiTransportServiceImpl']>> | null = null;
     const scheduledEmitTimers: GiftAnimationPreviewTimerHandle[] = [];
     let closed = false;
+    let ownedResolver: ReturnType<typeof createGiftResolver> | null = null;
     const reportError = (error: unknown, context: string, message: string) => {
         try {
             errorHandler.handleEventProcessingError(error, context, null, message);
@@ -170,7 +176,8 @@ async function runGuiGiftAnimationPreview(options: GiftAnimationPreviewOptions =
     };
 
     try {
-        const giftAnimationResolver = options.giftAnimationResolver || createTikTokGiftAnimationResolver({ logger });
+        const giftAnimationResolver = options.giftAnimationResolver || (ownedResolver =
+            (options.createGiftAnimationResolverImpl || createTikTokGiftAnimationResolver)({ logger }));
 
         pipeline = createPreviewPipelineImpl({
             config,
@@ -282,6 +289,13 @@ async function runGuiGiftAnimationPreview(options: GiftAnimationPreviewOptions =
                 await pipeline.dispose();
             } catch (error) {
                 reportError(error, 'preview-cleanup', 'Failed disposing GUI gift animation preview pipeline');
+            }
+        }
+        if (ownedResolver) {
+            try {
+                await ownedResolver.dispose();
+            } catch (error) {
+                reportError(error, 'preview-cleanup', 'Failed disposing GUI gift animation preview resolver');
             }
         }
     }

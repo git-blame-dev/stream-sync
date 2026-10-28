@@ -68,6 +68,21 @@ const requireResolver = (
 };
 
 describe("DisplayQueueEffects", () => {
+  it("retires effects with a resolve-only borrowed resolver without requiring a cleanup method", async () => {
+    const resolver = { resolveFromNotificationData: async () => null };
+    const effects = new DisplayQueueEffects({
+      config: { obs: { ttsTxt: "synthetic-tts" } },
+      sourcesManager: { clearTextSource: async () => {}, updateTextSource: async () => {} },
+      obsManager: { call: async () => ({}) }, goalsManager: createNoopGoalsManager(),
+      delay: async () => {}, handleDisplayQueueError() {}, extractUsername,
+      giftAnimationResolver: resolver,
+    });
+    const first = effects.dispose();
+    expect(effects.dispose()).toBe(first);
+    await first;
+    expect(effects.giftAnimationResolver).toBe(resolver);
+  });
+
   it("runs TTS stages for non-gift notifications", async () => {
     const ttsUpdates: string[] = [];
     const sourcesManager = {

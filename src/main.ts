@@ -679,7 +679,7 @@ async function main(overrides: MainOverrides = {}) {
     let fundingGoal: Awaited<ReturnType<typeof createFundingGoalService>> | undefined;
     let app: MainApp | undefined;
     let runtimeOwnsResources = false;
-    const construction = new AsyncDisposableStack();
+    const construction: Array<() => void | Promise<unknown>> = [];
     try {
         logger.info('Starting main application...', 'main');
         logger.info('Main application started, beginning initialization...', 'Main');
@@ -828,7 +828,7 @@ async function main(overrides: MainOverrides = {}) {
             debug: (message) => logger.debug(message, 'funding-goal')
         });
 
-        construction.defer(() => fundingGoal?.dispose());
+        construction.push(() => fundingGoal?.dispose());
 
         const obsSubsystem = createOBSSubsystem({
             config,
@@ -840,8 +840,8 @@ async function main(overrides: MainOverrides = {}) {
         });
 
         const provisionalObsService = obsSubsystem.obsEventService as ReturnType<typeof createOBSEventService>;
-        construction.defer(() => provisionalObsService.destroy?.());
-        construction.defer(async () => { await provisionalObsService.disconnect?.(); });
+        construction.push(() => provisionalObsService.destroy?.());
+        construction.push(async () => { await provisionalObsService.disconnect?.(); });
 
         logger.debug('About to initialize display queue...', 'Main');
         const displayQueueDependencies = {
@@ -864,7 +864,7 @@ async function main(overrides: MainOverrides = {}) {
                 eventBus,
                 displayQueueDependencies
             );
-        construction.defer(() => displayQueue.stop?.());
+        construction.push(() => displayQueue.stop?.());
         logger.debug('Display queue initialized', 'Main');
         
         logger.debug('Creating VFXCommandService...', 'Main');
@@ -903,7 +903,7 @@ async function main(overrides: MainOverrides = {}) {
             logger,
             onAggregatedDonation: (data: unknown) => notificationManager.handleAggregatedDonation(data)
         });
-        construction.defer(() => donationSpamDetector.destroy());
+        construction.push(() => donationSpamDetector.destroy());
         notificationManager.donationSpamDetector = donationSpamDetector;
         logger.debug('Spam detection service created and wired', 'Main');
         
@@ -954,7 +954,7 @@ async function main(overrides: MainOverrides = {}) {
                 logger,
                 Innertube: dependencies.lazyInnertube as NonNullable<YoutubeOwnerOptions['Innertube']>
             });
-            construction.defer(() => owner.dispose());
+            construction.push(() => owner.dispose());
             innertubeService = owner;
             dependencies.innertubeService = innertubeService;
         }
@@ -978,7 +978,7 @@ async function main(overrides: MainOverrides = {}) {
             config
         });
 
-        construction.defer(() => commandCooldownService.dispose());
+        construction.push(() => commandCooldownService.dispose());
 
         const platformLifecycleService = new PlatformLifecycleService({
             config,
@@ -1053,7 +1053,17 @@ async function main(overrides: MainOverrides = {}) {
     } catch (error) {
         if (!runtimeOwnsResources) {
             try {
-                await construction.disposeAsync();
+                let failed = false;
+                let firstError: unknown;
+                while (construction.length > 0) {
+                    try {
+                        await construction.pop()!();
+                    } catch (cleanupError) {
+                        if (!failed) firstError = cleanupError;
+                        failed = true;
+                    }
+                }
+                if (failed) throw firstError;
             } catch (disposeError) {
                 try {
                     logMainError('Failed to retire resources before runtime adoption', disposeError, null, {

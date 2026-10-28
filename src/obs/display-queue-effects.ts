@@ -102,7 +102,9 @@ type DisplayQueueEffectsDependencies = {
             mediaContentType: string;
             animationConfig: Record<string, unknown>;
         } | null>;
+        dispose?: () => Promise<void> | void;
     };
+    createGiftAnimationResolver?: typeof createTikTokGiftAnimationResolver;
     fetch?: SpeechFetch;
 };
 
@@ -117,6 +119,8 @@ class DisplayQueueEffects {
     triggerHandcamGlow: typeof triggerHandcamGlow;
     extractUsername: DisplayQueueEffectsDependencies['extractUsername'];
     giftAnimationResolver: NonNullable<DisplayQueueEffectsDependencies['giftAnimationResolver']>;
+    private readonly ownsGiftAnimationResolver: boolean;
+    private disposalPromise: Promise<void> | null = null;
     fetch: SpeechFetch;
 
     constructor({
@@ -130,6 +134,7 @@ class DisplayQueueEffects {
         triggerHandcamGlow: triggerHandcamGlowOverride,
         extractUsername,
         giftAnimationResolver,
+        createGiftAnimationResolver = createTikTokGiftAnimationResolver,
         fetch: fetchOverride
     }: DisplayQueueEffectsDependencies) {
         this.obsManager = obsManager;
@@ -141,8 +146,26 @@ class DisplayQueueEffects {
         this.handleDisplayQueueError = handleDisplayQueueError;
         this.triggerHandcamGlow = triggerHandcamGlowOverride || triggerHandcamGlow;
         this.extractUsername = extractUsername;
-        this.giftAnimationResolver = giftAnimationResolver || createTikTokGiftAnimationResolver({ logger });
+        this.ownsGiftAnimationResolver = !giftAnimationResolver;
+        this.giftAnimationResolver = giftAnimationResolver || createGiftAnimationResolver({ logger });
         this.fetch = fetchOverride || globalThis.fetch.bind(globalThis);
+    }
+
+    dispose(): Promise<void> {
+        if (this.disposalPromise) return this.disposalPromise;
+        let resolve!: () => void;
+        let reject!: (reason: unknown) => void;
+        this.disposalPromise = new Promise<void>((resolvePromise, rejectPromise) => {
+            resolve = resolvePromise;
+            reject = rejectPromise;
+        });
+        try {
+            const disposal = this.ownsGiftAnimationResolver ? this.giftAnimationResolver.dispose?.() : undefined;
+            Promise.resolve(disposal).then(resolve, reject);
+        } catch (error) {
+            reject(error);
+        }
+        return this.disposalPromise;
     }
 
     isGuiGiftAnimationEnabled() {

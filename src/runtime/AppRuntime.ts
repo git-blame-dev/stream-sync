@@ -526,7 +526,7 @@ class AppRuntime {
             handleStreamDetected: this.handleStreamDetected.bind(this),
             handleEnvelopeNotification: this.handleEnvelopeNotification.bind(this)
         };
-        const construction = new DisposableStack();
+        const construction: Array<() => void> = [];
         try {
             this.platformEventRouter = new PlatformEventRouter({
                 eventBus: this.eventBus,
@@ -536,7 +536,7 @@ class AppRuntime {
                 logger: this.logger,
                 userTrackingService: this.userTrackingService
             });
-            construction.defer(() => this.platformEventRouter.dispose());
+            construction.push(() => this.platformEventRouter.dispose());
             this.chatNotificationRouter = new ChatNotificationRouter({
                 runtime: this,
                 logger: this.logger,
@@ -546,12 +546,12 @@ class AppRuntime {
                     : {})
             });
 
-            construction.defer(() => {
+            construction.push(() => {
                 const cleanup = this.viewerCountStatusCleanup;
                 this.viewerCountStatusCleanup = null;
                 cleanup?.();
             });
-            construction.defer(() => {
+            construction.push(() => {
                 const unsubscribe = this.vfxCommandUnsubscribe;
                 this.vfxCommandUnsubscribe = null;
                 unsubscribe?.();
@@ -559,12 +559,14 @@ class AppRuntime {
             this.registerEventHandlers();
 
             this.logger.debug('Constructor completed', 'AppRuntime');
-            construction.move();
+            construction.length = 0;
         } catch (error) {
-            try {
-                construction.dispose();
-            } catch {
-                // All synchronous releases were attempted; preserve the constructor failure.
+            while (construction.length > 0) {
+                try {
+                    construction.pop()!();
+                } catch {
+                    // Attempt every release and preserve the constructor failure.
+                }
             }
             throw error;
         }
@@ -770,8 +772,12 @@ class AppRuntime {
 
     shutdown(): Promise<void> {
         if (!this.shutdownPromise) {
-            const completion = Promise.withResolvers<void>();
-            this.shutdownPromise = completion.promise;
+            let resolve!: () => void;
+            let reject!: (reason: unknown) => void;
+            this.shutdownPromise = new Promise<void>((resolvePromise, rejectPromise) => {
+                resolve = resolvePromise;
+                reject = rejectPromise;
+            });
             try {
                 this.logger.info('Shutting down application...', 'system');
             } catch {
@@ -779,7 +785,7 @@ class AppRuntime {
             }
             this.beginTeardown('shutdown', true).then(() => {
                 this.emitSystemShutdown({ reason: 'manual-shutdown' });
-            }).then(completion.resolve, completion.reject);
+            }).then(resolve, reject);
         }
         return this.shutdownPromise;
     }

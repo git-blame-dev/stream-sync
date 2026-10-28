@@ -46,14 +46,8 @@ type DisplayQueueDependencies = {
     goalsManager?: ReturnType<typeof getDefaultGoalsManager>;
     delay?: (ms: number) => Promise<void>;
     notificationDelay?: (ms: number) => Promise<void>;
-    giftAnimationResolver?: {
-        resolveFromNotificationData: (data: unknown) => Promise<{
-            durationMs: number;
-            mediaFilePath: string;
-            mediaContentType: string;
-            animationConfig: Record<string, unknown>;
-        } | null>;
-    };
+    giftAnimationResolver?: ConstructorParameters<typeof DisplayQueueEffects>[0]['giftAnimationResolver'];
+    createGiftAnimationResolver?: ConstructorParameters<typeof DisplayQueueEffects>[0]['createGiftAnimationResolver'];
 };
 
 type DisplayQueueObsManager = {
@@ -182,6 +176,9 @@ class DisplayQueue {
             delay: this.delay,
             handleDisplayQueueError,
             extractUsername: (data) => this.extractUsername(data),
+            ...(dependencies.createGiftAnimationResolver === undefined
+                ? {}
+                : { createGiftAnimationResolver: dependencies.createGiftAnimationResolver }),
             ...(dependencies.giftAnimationResolver === undefined
                 ? {}
                 : { giftAnimationResolver: dependencies.giftAnimationResolver })
@@ -424,7 +421,11 @@ class DisplayQueue {
         delete this.unsubscribeOperatorControls;
         this.clearQueue();
         this.notificationCoordinator.stop();
-        await this.effectChain;
+        const disposal = this.effects.dispose();
+        const results = await Promise.allSettled([disposal, this.effectChain]);
+        for (const result of results) {
+            if (result.status === 'rejected') throw result.reason;
+        }
         logger.info('[Display Queue] Processing stopped and queue cleared.');
     }
 

@@ -1,4 +1,9 @@
 import { describe, expect, it } from "bun:test";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { createTikTokGiftAnimationResolver } from "../../../src/services/tiktok-gift-animation/resolver";
+import { zipFixture } from "../../helpers/bounded-zip-fixture";
 
 import {
   DEFAULT_DURATION_MS,
@@ -29,6 +34,101 @@ function requireValue<T>(value: T | undefined, description: string): T {
 }
 
 describe("GUI gift animation preview command behavior", () => {
+  for (const stage of ["pipeline", "start", "resolve", "scheduled", "normal", "cleanup"] as const) {
+    it(`retires its real default resolver after ${stage} while the pipeline borrows it`, async () => {
+      const directory = await mkdtemp(join(tmpdir(), "gift-preview-owner-"));
+      const failure = new Error(`synthetic ${stage} owner failure`);
+      const attempts: string[] = [];
+      const media = Buffer.from("000000186674797069736f6d0000000069736f6d", "hex");
+      const bytes = zipFixture([
+        { name: "config.json", body: Buffer.from(JSON.stringify({ portrait: {
+          path: "output.mp4", videoW: 960, videoH: 864, w: 480, h: 854,
+          rgbFrame: [0, 0, 480, 854], aFrame: [480, 0, 480, 854], f: 75,
+        } })) },
+        { name: "output.mp4", body: media, method: 8 },
+      ]);
+      const resolver = createTikTokGiftAnimationResolver({
+        cacheDirectory: directory, logger: { debug() {}, warn() {}, error() {} },
+        downloadArchive: async (_url, output) => {
+          if (stage === "resolve") throw failure;
+          await writeFile(output, bytes, { flag: "wx" });
+          return { bytes: bytes.length };
+        },
+      });
+      const nativeDispose = resolver.dispose.bind(resolver);
+      resolver.dispose = () => {
+        attempts.push("resolver");
+        return nativeDispose().then(() => {
+          if (stage === "start" || stage === "cleanup") throw new Error("synthetic resolver cleanup failure");
+        });
+      };
+      let mediaPath = "";
+      let emits = 0;
+      try {
+        const run = runGuiGiftAnimationPreview({
+          logger: { warn() {}, error() { throw new Error("synthetic reporting failure"); } },
+          createGiftAnimationResolverImpl: () => resolver,
+          createPreviewPipelineImpl: (args) => {
+            expect(args.giftAnimationResolver).toBe(resolver);
+            if (stage === "pipeline") throw failure;
+            return {
+              eventBus: { emit(_event, payload) {
+                mediaPath = (payload as { mediaFilePath: string }).mediaFilePath;
+                if (++emits === 2 && stage === "scheduled") throw failure;
+              } },
+              emitIngestEvent() {},
+              dispose() { attempts.push("pipeline"); throw new Error("synthetic pipeline cleanup failure"); },
+            };
+          },
+          createGuiTransportServiceImpl: () => ({
+            async start() { if (stage === "start") throw failure; },
+            async stop() { attempts.push("transport"); throw new Error("synthetic transport cleanup failure"); },
+          }),
+          giftEvent: { adapter: "tiktok", rawEvent: { data: { asset: { videoResourceList: [
+            { videoTypeName: "h264", videoUrl: { urlList: ["https://cdn.synthetic.invalid/preview.zip"] } },
+          ] } } } },
+          safeSetTimeoutImpl(callback) { callback(); return {}; },
+          clearTimeoutImpl() {}, stdout: { write() {} },
+        });
+        if (stage === "normal" || stage === "cleanup") await run;
+        else if (stage === "resolve") await expect(run).rejects.toThrow("failed to resolve animation payload");
+        else await expect(run).rejects.toBe(failure);
+        expect(attempts).toEqual(stage === "pipeline" ? ["resolver"] : ["transport", "pipeline", "resolver"]);
+        expect(await resolver.resolveFromNotificationData({ enhancedGiftData: { originalData: { asset: {
+          videoResourceList: [{ videoTypeName: "h264", videoUrl: { urlList: ["https://cdn.synthetic.invalid/preview.zip"] } }],
+        } } } })).toBeNull();
+        if (mediaPath) expect(await readFile(mediaPath)).toEqual(media);
+        else expect(await readdir(directory)).toEqual([]);
+      } finally {
+        await nativeDispose();
+        await rm(directory, { recursive: true, force: true });
+      }
+    });
+  }
+
+  it("never disposes a borrowed resolver, including when other cleanup owners fail", async () => {
+    let disposed = false;
+    const attempts: string[] = [];
+    const failure = new Error("synthetic borrowed preview start failure");
+    await expect(runGuiGiftAnimationPreview({
+      logger: { warn() {}, error() {} },
+      giftAnimationResolver: {
+        async resolveFromNotificationData() { return null; },
+        dispose() { disposed = true; throw new Error("Borrowed resolver must not be disposed"); },
+      },
+      createPreviewPipelineImpl: () => ({
+        eventBus: { emit() {} }, emitIngestEvent() {},
+        dispose() { attempts.push("pipeline"); throw new Error("synthetic cleanup failure"); },
+      }),
+      createGuiTransportServiceImpl: () => ({
+        async start() { throw failure; },
+        async stop() { attempts.push("transport"); throw new Error("synthetic cleanup failure"); },
+      }),
+    })).rejects.toBe(failure);
+    expect(attempts).toEqual(["transport", "pipeline"]);
+    expect(disposed).toBe(false);
+  });
+
   for (const stage of ["start", "initial", "synchronous"] as const) {
     it(`retires resources after ${stage} failure`, async () => {
       const failure = new Error(`synthetic ${stage} failure`);
