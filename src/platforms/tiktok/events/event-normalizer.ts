@@ -1,6 +1,7 @@
 import { normalizeTikTokMessage } from '../../../utils/message-normalization';
-import { extractTikTokUserData, extractTikTokGiftData, extractTikTokAvatarUrl } from '../../../utils/tiktok-data-extraction';
+import { extractTikTokUserData, extractTikTokGiftData, extractTikTokAvatarUrl, normalizeTikTokMessageId } from '../../../utils/tiktok-data-extraction';
 import { resolveTikTokTimestampISO } from '../../../utils/platform-timestamp';
+import { parseTimestampISO } from '../../../utils/timestamp';
 
 type TikTokChatEventPayload = Record<string, unknown>;
 
@@ -71,29 +72,24 @@ function normalizeTikTokGiftEvent(data: TikTokGiftEventPayload, options: TikTokE
         return resolveTikTokTimestampISO(data);
     };
 
-    const timestamp = resolveTimestamp();
+    const timestamp = parseTimestampISO(resolveTimestamp(), { allowDateString: true, requirePositive: true });
     if (!timestamp) {
-        throw new Error('Missing TikTok gift timestamp');
+        throw new Error('Missing or invalid TikTok gift timestamp');
     }
 
     const resolveMessageId = () => {
         if (typeof options.getPlatformMessageId === 'function') {
-            return options.getPlatformMessageId(data);
+            return normalizeTikTokMessageId(options.getPlatformMessageId(data))
+                ?? normalizeTikTokMessageId(data.msgId)
+                ?? normalizeTikTokMessageId(data.common?.msgId);
         }
-        if (data.msgId === undefined || data.msgId === null) {
-            return null;
-        }
-        return String(data.msgId).trim();
+        return normalizeTikTokMessageId(data.msgId) ?? normalizeTikTokMessageId(data.common?.msgId);
     };
 
     const messageId = resolveMessageId();
     if (!messageId) {
         throw new Error('TikTok gift requires msgId');
     }
-
-    const repeatCount = Number.isFinite(Number(data.repeatCount))
-        ? Number(data.repeatCount)
-        : giftData.giftCount;
 
     const normalized: NormalizedTikTokGiftEvent = {
         platform: platformName,
@@ -105,7 +101,7 @@ function normalizeTikTokGiftEvent(data: TikTokGiftEventPayload, options: TikTokE
             ? { giftImageUrl: giftData.giftImageUrl.trim() }
             : {}),
         giftCount: giftData.giftCount,
-        repeatCount,
+        repeatCount: giftData.giftCount,
         amount: giftData.amount,
         currency: giftData.currency,
         unitAmount: giftData.unitAmount,
@@ -117,8 +113,8 @@ function normalizeTikTokGiftEvent(data: TikTokGiftEventPayload, options: TikTokE
         rawData: data
     };
 
-    if (typeof data.sourceType === 'string') {
-        normalized.sourceType = data.sourceType;
+    if (typeof data.sourceType === 'string' && data.sourceType.trim()) {
+        normalized.sourceType = data.sourceType.trim();
     }
 
     return normalized;

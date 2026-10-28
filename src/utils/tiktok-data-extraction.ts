@@ -1,3 +1,5 @@
+import { parseNotificationCount } from './notification-count';
+
 type TikTokUserData = {
     userId: string;
     username: string;
@@ -15,6 +17,22 @@ type TikTokGiftData = {
     repeatEnd: boolean;
     giftImageUrl?: string;
 };
+
+function normalizeTikTokHttpUrl(value: unknown): string {
+    if (typeof value !== 'string' || !value.trim()) return '';
+    const trimmed = value.trim();
+    try {
+        const url = new URL(trimmed);
+        return url.protocol === 'http:' || url.protocol === 'https:' ? trimmed : '';
+    } catch {
+        return '';
+    }
+}
+
+function normalizeTikTokMessageId(value: unknown): string | null {
+    if (typeof value !== 'string' && (typeof value !== 'number' || !Number.isFinite(value))) return null;
+    return String(value).trim() || null;
+}
 
 function extractTikTokUserData(data: unknown): TikTokUserData {
     if (!data || typeof data !== 'object') {
@@ -46,58 +64,53 @@ function extractTikTokGiftData(data: unknown): TikTokGiftData {
     if (!data || typeof data !== 'object') {
         throw new Error('TikTok gift payload must be an object');
     }
-    // TikTok gift data is in giftDetails (verified: present in 100% of 639 production samples)
-    // giftDetails and extendedGiftInfo are both always present, but giftDetails has the
-    // localized user-facing name, so we use it as the single source of truth
+    // The SDK adapter supplies the localized gift name and numeric fields in giftDetails.
     const payload = data as Record<string, unknown>;
     const giftDetails = payload.giftDetails;
-    if (!giftDetails || typeof giftDetails !== 'object') {
+    if (!giftDetails || typeof giftDetails !== 'object' || Array.isArray(giftDetails)) {
         throw new Error('TikTok gift payload requires giftDetails');
     }
     const giftDetailsRecord = giftDetails as Record<string, unknown>;
     if (typeof giftDetailsRecord.giftName !== 'string' || !giftDetailsRecord.giftName.trim()) {
         throw new Error('TikTok gift payload requires giftDetails.giftName');
     }
-    if (typeof giftDetailsRecord.diamondCount !== 'number' || !Number.isFinite(giftDetailsRecord.diamondCount)) {
+    const unitAmount = parseNotificationCount(giftDetailsRecord.diamondCount);
+    if (unitAmount === null) {
         throw new Error('TikTok gift payload requires giftDetails.diamondCount');
     }
-    if (typeof giftDetailsRecord.giftType !== 'number' || !Number.isFinite(giftDetailsRecord.giftType)) {
+    const comboType = parseNotificationCount(giftDetailsRecord.giftType);
+    if (comboType === null) {
         throw new Error('TikTok gift payload requires giftDetails.giftType');
     }
-    if (typeof payload.repeatCount !== 'number' || !Number.isFinite(payload.repeatCount) || payload.repeatCount <= 0) {
+    const giftCount = parseNotificationCount(payload.repeatCount);
+    if (giftCount === null || giftCount === 0) {
         throw new Error('TikTok gift payload requires repeatCount');
     }
-    const comboType = giftDetailsRecord.giftType;
-    const giftCount = payload.repeatCount;
-    const unitAmount = giftDetailsRecord.diamondCount;
     const amount = unitAmount * giftCount;
+    if (!Number.isSafeInteger(amount)) {
+        throw new Error('TikTok gift payload requires safe integer amount');
+    }
     const giftData = typeof payload.gift === 'object' && payload.gift !== null
         ? payload.gift as Record<string, unknown>
         : null;
-    const giftImageUrl = giftData && typeof giftData.giftPictureUrl === 'string'
-        ? giftData.giftPictureUrl.trim()
-        : '';
+    const giftImageUrl = normalizeTikTokHttpUrl(giftData?.giftPictureUrl);
+    const repeatEnd = typeof payload.repeatEnd === 'string' ? payload.repeatEnd.trim().toLowerCase() : payload.repeatEnd;
 
     return {
-        // giftDetails.giftName is the user-facing localized name (e.g., "Popular Vote")
-        // extendedGiftInfo.name is the generic English name (e.g., "Go Popular")
-        // Use giftDetails as single source since it's always present (verified 639/639 samples)
-        giftType: giftDetailsRecord.giftName,
+        giftType: giftDetailsRecord.giftName.trim(),
 
-        // repeatCount is at root level, always present (verified 639/639 samples, never 0)
         giftCount,
         amount,
         currency: 'coins',
         unitAmount,
 
         // Combo detection: comboType === 1 means combo-enabled gift
-        // Use comboType as authoritative source, fallback to combo boolean if comboType missing
         combo: comboType === 1,
         comboType,
 
         // Combo metadata fields at root level
         groupId: payload.groupId,
-        repeatEnd: payload.repeatEnd === 1,
+        repeatEnd: repeatEnd === true || repeatEnd === 1 || repeatEnd === 'true' || repeatEnd === '1',
         ...(giftImageUrl ? { giftImageUrl } : {})
     };
 }
@@ -114,9 +127,7 @@ function extractTikTokAvatarUrl(data: unknown): string {
         return '';
     }
 
-    const profilePictureUrl = typeof userData.profilePictureUrl === 'string'
-        ? userData.profilePictureUrl.trim()
-        : '';
+    const profilePictureUrl = normalizeTikTokHttpUrl(userData.profilePictureUrl);
     if (profilePictureUrl) {
         return profilePictureUrl;
     }
@@ -128,9 +139,7 @@ function extractTikTokAvatarUrl(data: unknown): string {
     const profilePictureArray = Array.isArray(profilePictureRecord?.url)
         ? profilePictureRecord.url
         : [];
-    const firstProfilePictureUrl = typeof profilePictureArray[0] === 'string'
-        ? profilePictureArray[0].trim()
-        : '';
+    const firstProfilePictureUrl = normalizeTikTokHttpUrl(profilePictureArray[0]);
 
     return firstProfilePictureUrl || '';
 }
@@ -149,6 +158,8 @@ function formatCoinAmount(amount: unknown, currency: unknown = 'coins'): string 
 }
 
 export {
+    normalizeTikTokHttpUrl,
+    normalizeTikTokMessageId,
     extractTikTokUserData,
     extractTikTokAvatarUrl,
     extractTikTokGiftData,

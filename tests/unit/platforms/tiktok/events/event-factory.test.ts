@@ -7,6 +7,77 @@ import {
 import { DEFAULT_AVATAR_URL } from "../../../../../src/constants/avatar";
 
 describe("TikTok event factory behavior", () => {
+  const canonicalGift = (extra: Record<string, unknown> = {}) => ({
+    userId: " synthetic-viewer ", username: " Synthetic Viewer ", giftType: "Synthetic Rose",
+    giftCount: 2, amount: 6, unitAmount: 3, currency: "coins", timestamp: "2025-01-20T12:00:00Z", ...extra,
+  });
+
+  it("requires nonblank canonical gift identity even with injected identity normalization", () => {
+    const { createTikTokEventFactory } = require("../../../../../src/platforms/tiktok/events/event-factory.ts");
+    const factory = createTikTokEventFactory({ getPlatformMessageId: () => "synthetic-id" });
+    for (const field of ["username", "userId"]) {
+      for (const value of [" ", undefined, {}, true]) {
+        expect(() => factory.createGift(canonicalGift({ [field]: value }))).toThrow(field);
+      }
+    }
+    expect(factory.createGift(canonicalGift())).toMatchObject({ userId: "synthetic-viewer", username: "Synthetic Viewer" });
+    const malformedNormalizer = createTikTokEventFactory({ getPlatformMessageId: () => "synthetic-id",
+      normalizeUserData: () => ({ userId: " ", username: " " }) });
+    expect(() => malformedNormalizer.createGift(canonicalGift())).toThrow("identity");
+  });
+
+  it("validates all paid gift numeric fields while retaining numeric-string input", () => {
+    const { createTikTokEventFactory } = require("../../../../../src/platforms/tiktok/events/event-factory.ts");
+    const factory = createTikTokEventFactory({ getPlatformMessageId: () => "synthetic-id" });
+    for (const field of ["giftCount", "amount", "unitAmount", "repeatCount", "aggregatedCount"]) {
+      for (const value of [0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1, NaN, Infinity, true, [1], {}, " "]) {
+        expect(() => factory.createGift(canonicalGift({ [field]: value }))).toThrow(field);
+      }
+    }
+    expect(factory.createGift(canonicalGift({ giftCount: "2.0", amount: " 6 ", unitAmount: "3", repeatCount: "2" })))
+      .toMatchObject({ giftCount: 2, amount: 6, repeatCount: 2 });
+    expect(() => factory.createGift(canonicalGift({ enhancedGiftData: { giftCount: [2] } }))).toThrow("giftCount");
+  });
+
+  it("normalizes gift IDs, timestamp and sourceType without overriding injected ID ownership", () => {
+    const { createTikTokEventFactory } = require("../../../../../src/platforms/tiktok/events/event-factory.ts");
+    const factory = createTikTokEventFactory({ getPlatformMessageId: () => " injected-id " });
+    expect(factory.createGift(canonicalGift({ id: "payload-id", sourceType: " official ",
+      timestamp: Date.parse("2025-01-20T12:00:00.000Z") }))).toMatchObject({ id: "injected-id",
+      timestamp: "2025-01-20T12:00:00.000Z", sourceType: "official" });
+    const standalone = createTikTokEventFactory();
+    expect(standalone.createGift(canonicalGift({ common: { msgId: " common-id " }, sourceType: " " })))
+      .toMatchObject({ id: "common-id", timestamp: "2025-01-20T12:00:00.000Z" });
+    expect(standalone.createGift(canonicalGift({ common: { msgId: "common-id" }, sourceType: " " })).sourceType).toBeUndefined();
+    for (const timestamp of ["not a timestamp", " ", 0, null]) {
+      expect(() => factory.createGift(canonicalGift({ timestamp }))).toThrow("timestamp");
+    }
+    for (const id of [" ", {}, true]) {
+      expect(() => standalone.createGift(canonicalGift({ id }))).toThrow("msgId");
+    }
+  });
+
+  it("rejects unsafe gift and avatar image schemes without inventing asset data", () => {
+    const { createTikTokEventFactory } = require("../../../../../src/platforms/tiktok/events/event-factory.ts");
+    const factory = createTikTokEventFactory({ getPlatformMessageId: () => "synthetic-id" });
+    for (const url of ["javascript:alert(1)", "data:image/png;base64,synthetic", "file:///synthetic", "invalid"]) {
+      const event = factory.createGift(canonicalGift({ avatarUrl: url, giftImageUrl: url }));
+      expect(event.avatarUrl).toBe(DEFAULT_AVATAR_URL);
+      expect(event.giftImageUrl).toBeUndefined();
+    }
+  });
+
+  it("preserves authoritative aggregated amounts and asset enrichment without repricing", () => {
+    const { createTikTokEventFactory } = require("../../../../../src/platforms/tiktok/events/event-factory.ts");
+    const factory = createTikTokEventFactory({ getPlatformMessageId: () => "synthetic-aggregate-id" });
+    const enhancedGiftData = { giftCount: 3, amount: 12,
+      originalData: { asset: { resourceUri: "https://example.invalid/synthetic-asset.zip" } } };
+    const event = factory.createGift(canonicalGift({ giftCount: 3, amount: 12, unitAmount: 5,
+      isAggregated: true, enhancedGiftData }));
+    expect(event).toMatchObject({ giftCount: 3, amount: 12, aggregatedCount: 3 });
+    expect(event.enhancedGiftData).toBe(enhancedGiftData);
+  });
+
   it("includes boolean fields in chat message events", () => {
     const {
       createTikTokEventFactory,

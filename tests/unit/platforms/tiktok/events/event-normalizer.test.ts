@@ -54,6 +54,29 @@ const normalizerOptions: Parameters<typeof normalizeTikTokGiftEvent>[1] = {
 };
 
 describe("normalizeTikTokGiftEvent", () => {
+  test("normalizes provider and injected identity/time fields while preserving raw gift assets", () => {
+    const asset = { resourceUri: "https://example.invalid/synthetic-asset.zip" };
+    const payload = { ...baseGiftPayload, asset, sourceType: " official ", repeatCount: " 2.0 " };
+    const event = normalizeTikTokGiftEvent(payload);
+    expect(event).toMatchObject({ id: "test-msg-1", timestamp: "2025-01-20T12:00:00.000Z",
+      sourceType: "official", giftCount: 2, repeatCount: 2, amount: 2 });
+    expect(event.rawData).toBe(payload);
+    expect(event.rawData.asset).toBe(asset);
+    expect(normalizeTikTokGiftEvent(payload, { ...normalizerOptions, getPlatformMessageId: () => " injected-id " }).id)
+      .toBe("injected-id");
+    expect(normalizeTikTokGiftEvent(payload, { ...normalizerOptions, getPlatformMessageId: () => " " }).id).toBe("test-msg-1");
+    expect(normalizeTikTokGiftEvent({ ...payload, sourceType: " " }).sourceType).toBeUndefined();
+  });
+
+  test("rejects invalid injected timestamps instead of accepting or replacing them", () => {
+    for (const timestamp of ["not a timestamp", " ", "0"]) {
+      expect(() => normalizeTikTokGiftEvent(baseGiftPayload, { ...normalizerOptions, getTimestamp: () => timestamp }))
+        .toThrow("TikTok gift timestamp");
+    }
+    expect(normalizeTikTokGiftEvent(baseGiftPayload, { ...normalizerOptions,
+      getTimestamp: () => "2025-01-20T12:00:00Z" }).timestamp).toBe("2025-01-20T12:00:00.000Z");
+  });
+
   test("maps avatarUrl from user.profilePictureUrl", () => {
     const payload = {
       ...baseGiftPayload,

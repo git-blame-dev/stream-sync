@@ -26,6 +26,49 @@ describe("extractTikTokUserData", () => {
 });
 
 describe("extractTikTokGiftData", () => {
+  const gift = (overrides: Record<string, unknown> = {}) => ({
+    giftDetails: { giftName: "Synthetic Rose", diamondCount: 2, giftType: 0 }, repeatCount: 3, ...overrides,
+  });
+
+  it("rejects invalid integer domains and unsafe products without publishing totals", () => {
+    for (const value of [-1, 0.5, Number.MAX_SAFE_INTEGER + 1, Infinity, NaN, true, [1], {}, "", "invalid"]) {
+      for (const field of ["diamondCount", "giftType"]) {
+        expect(() => extractTikTokGiftData(gift({ giftDetails: {
+          giftName: "Synthetic Rose", diamondCount: 2, giftType: 0, [field]: value,
+        } }))).toThrow(`requires giftDetails.${field}`);
+      }
+      expect(() => extractTikTokGiftData(gift({ repeatCount: value }))).toThrow("requires repeatCount");
+    }
+    expect(() => extractTikTokGiftData(gift({ repeatCount: Number.MAX_SAFE_INTEGER }))).toThrow("safe integer amount");
+  });
+
+  it("preserves zero-diamond placeholders, native type zero/two and numeric strings", () => {
+    expect(extractTikTokGiftData(gift({ giftDetails: { giftName: "Synthetic Placeholder", diamondCount: 0, giftType: 0 } })))
+      .toMatchObject({ unitAmount: 0, amount: 0, comboType: 0, combo: false });
+    expect(extractTikTokGiftData(gift({ giftDetails: { giftName: "Synthetic Rose", diamondCount: "2.0", giftType: "2" }, repeatCount: " 3 " })))
+      .toMatchObject({ unitAmount: 2, amount: 6, giftCount: 3, comboType: 2, combo: false });
+    expect(() => extractTikTokGiftData(gift({ repeatCount: 0 }))).toThrow("requires repeatCount");
+  });
+
+  it("normalizes explicit completion flags and treats unknown flags as incomplete", () => {
+    for (const repeatEnd of [1, true, "1", "true", " TRUE "]) {
+      expect(extractTikTokGiftData(gift({ repeatEnd })).repeatEnd).toBe(true);
+    }
+    for (const repeatEnd of [0, false, "0", "false", " FALSE ", undefined, null, "", "yes", 2, {}, []]) {
+      expect(extractTikTokGiftData(gift({ repeatEnd })).repeatEnd).toBe(false);
+    }
+  });
+
+  it("allows only trimmed HTTP(S) image URLs and keeps safe avatar fallback", () => {
+    for (const url of ["javascript:alert(1)", "data:image/png;base64,synthetic", "file:///synthetic", "invalid"]) {
+      expect(extractTikTokGiftData(gift({ gift: { giftPictureUrl: url } })).giftImageUrl).toBeUndefined();
+      expect(extractTikTokAvatarUrl({ user: { profilePictureUrl: url,
+        profilePicture: { url: [" https://example.invalid/fallback.webp "] } } })).toBe("https://example.invalid/fallback.webp");
+    }
+    expect(extractTikTokGiftData(gift({ gift: { giftPictureUrl: " http://example.invalid/gift.webp " } })).giftImageUrl)
+      .toBe("http://example.invalid/gift.webp");
+  });
+
   it("throws on invalid payloads", () => {
     expect(() => extractTikTokGiftData(null)).toThrow("gift payload");
   });

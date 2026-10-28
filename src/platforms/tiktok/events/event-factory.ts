@@ -1,7 +1,8 @@
 import crypto from 'node:crypto';
 import { normalizeTikTokMessage } from '../../../utils/message-normalization';
-import { extractTikTokUserData, extractTikTokAvatarUrl } from '../../../utils/tiktok-data-extraction';
-import { getSystemTimestampISO } from '../../../utils/timestamp';
+import { extractTikTokUserData, extractTikTokAvatarUrl, normalizeTikTokHttpUrl, normalizeTikTokMessageId } from '../../../utils/tiktok-data-extraction';
+import { getSystemTimestampISO, parseTimestampISO } from '../../../utils/timestamp';
+import { parseNotificationCount } from '../../../utils/notification-count';
 import { DEFAULT_AVATAR_URL } from '../../../constants/avatar';
 import { UNKNOWN_CHAT_MESSAGE, UNKNOWN_CHAT_USERNAME } from '../../../constants/degraded-chat';
 import { getValidMessageParts, normalizeBadgeImages } from '../../../utils/message-parts';
@@ -90,6 +91,16 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     return value as Record<string, unknown>;
 }
 
+function requirePositiveGiftCount(value: unknown, field: string): number {
+    const count = parseNotificationCount(value);
+    if (count === null || count === 0) throw new Error(`TikTok gift requires ${field}`);
+    return count;
+}
+
+function optionalPositiveGiftCount(value: unknown, field: string): number | undefined {
+    return value === undefined || value === null ? undefined : requirePositiveGiftCount(value, field);
+}
+
 function createTikTokEventFactory(options: EventFactoryOptions = {}) {
     const platformName = options.platformName || 'tiktok';
 const getTimestamp = options.getTimestamp || ((data: Record<string, unknown>) => data.timestamp);
@@ -115,12 +126,18 @@ const normalizeRecoverable = (recoverable: unknown): boolean => (typeof recovera
         || ((data: Record<string, unknown>) => normalizeTikTokMessage(data, platformName) as Record<string, unknown>);
 
     const normalizeIdentityFromPayload = (data: Record<string, unknown>) => normalizeUserData(extractTikTokUserData(data));
-    const normalizeIdentityFromCanonical = (data: Record<string, unknown>) => normalizeUserData({
-        userId: typeof data.userId === 'string' ? data.userId : String(data.userId ?? ''),
-        username: typeof data.username === 'string' ? data.username : String(data.username ?? '')
-    });
+    const normalizeIdentityFromCanonical = (data: Record<string, unknown>) => {
+        if (typeof data.userId !== 'string' || !data.userId.trim()) throw new Error('TikTok gift requires userId');
+        if (typeof data.username !== 'string' || !data.username.trim()) throw new Error('TikTok gift requires username');
+        const identity = normalizeUserData({ userId: data.userId.trim(), username: data.username.trim() });
+        if (typeof identity.userId !== 'string' || !identity.userId.trim()
+            || typeof identity.username !== 'string' || !identity.username.trim()) {
+            throw new Error('TikTok gift requires non-empty identity');
+        }
+        return { userId: identity.userId.trim(), username: identity.username.trim() };
+    };
     const resolveAvatarUrl = (data: Record<string, unknown> = {}, fallbackData: Record<string, unknown> = {}) => {
-        const avatarFromData = typeof data.avatarUrl === 'string' ? data.avatarUrl.trim() : '';
+        const avatarFromData = normalizeTikTokHttpUrl(data.avatarUrl);
         if (avatarFromData) {
             return avatarFromData;
         }
@@ -130,7 +147,7 @@ const normalizeRecoverable = (recoverable: unknown): boolean => (typeof recovera
             return extractedAvatarFromData;
         }
 
-        const avatarFromFallback = typeof fallbackData.avatarUrl === 'string' ? fallbackData.avatarUrl.trim() : '';
+        const avatarFromFallback = normalizeTikTokHttpUrl(fallbackData.avatarUrl);
         if (avatarFromFallback) {
             return avatarFromFallback;
         }
@@ -142,8 +159,9 @@ const normalizeRecoverable = (recoverable: unknown): boolean => (typeof recovera
 
         const metadata = asRecord(fallbackData.metadata);
         const profilePicture = metadata?.profilePicture;
-        if (typeof profilePicture === 'string' && profilePicture.trim()) {
-            return profilePicture.trim();
+        const metadataAvatar = normalizeTikTokHttpUrl(profilePicture);
+        if (metadataAvatar) {
+            return metadataAvatar;
         }
 
         return DEFAULT_AVATAR_URL;
@@ -287,45 +305,32 @@ const isMissingField = (fieldName: string): boolean => missingFields.includes(fi
             if (typeof data.giftType !== 'string' || !data.giftType.trim()) {
                 throw new Error('TikTok gift requires giftType');
             }
-            if (typeof data.giftCount !== 'number' || !Number.isFinite(data.giftCount) || data.giftCount <= 0) {
-                throw new Error('TikTok gift requires giftCount');
-            }
-            if (typeof data.amount !== 'number' || !Number.isFinite(data.amount) || data.amount <= 0) {
-                throw new Error('TikTok gift requires amount');
-            }
+            const giftCount = requirePositiveGiftCount(data.giftCount, 'giftCount');
+            const resolvedAmount = requirePositiveGiftCount(data.amount, 'amount');
             if (typeof data.currency !== 'string' || !data.currency.trim()) {
                 throw new Error('TikTok gift requires currency');
             }
-            if (data.timestamp === undefined || data.timestamp === null) {
-                throw new Error('TikTok gift requires timestamp');
+            const timestamp = parseTimestampISO(data.timestamp ?? getTimestamp(data), { allowDateString: true, requirePositive: true });
+            if (!timestamp) {
+                throw new Error('TikTok gift requires valid timestamp');
             }
             const giftType = data.giftType.trim();
-            const giftImageUrl = typeof data.giftImageUrl === 'string' ? data.giftImageUrl.trim() : '';
-            const giftCount = data.giftCount;
-            const repeatCount = Number.isFinite(Number(data.repeatCount))
-                ? Number(data.repeatCount)
-                : undefined;
-            const unitAmountRaw = data.unitAmount;
-            if (typeof unitAmountRaw !== 'number' || !Number.isFinite(unitAmountRaw)) {
-                throw new Error('TikTok gift requires unitAmount');
-            }
-            const resolvedAmount = data.amount;
+            const giftImageUrl = normalizeTikTokHttpUrl(data.giftImageUrl);
+            const repeatCount = optionalPositiveGiftCount(data.repeatCount, 'repeatCount');
+            requirePositiveGiftCount(data.unitAmount, 'unitAmount');
             const currency = data.currency.trim();
-            const rawPlatformMessageId = data.id ?? getPlatformMessageId(data);
-            const platformMessageId = typeof rawPlatformMessageId === 'string' || typeof rawPlatformMessageId === 'number'
-                ? rawPlatformMessageId
-                : null;
+            const platformMessageId = normalizeTikTokMessageId(getPlatformMessageId(data))
+                ?? normalizeTikTokMessageId(data.id)
+                ?? normalizeTikTokMessageId(data.msgId)
+                ?? normalizeTikTokMessageId(asRecord(data.common)?.msgId);
             if (!platformMessageId) {
                 throw new Error('TikTok gift requires msgId');
             }
 
-            const isAggregated = data.isAggregated === true
-                || (Number.isFinite(Number(data.aggregatedCount)) && Number(data.aggregatedCount) > 0);
-            const aggregatedCountValue = Number.isFinite(Number(data.aggregatedCount))
-                ? Number(data.aggregatedCount)
-                : (hasEnhancedGiftData && Number.isFinite(Number(enhancedGiftData.giftCount))
-                    ? Number(enhancedGiftData.giftCount)
-                    : (isAggregated ? giftCount : undefined));
+            const directAggregatedCount = optionalPositiveGiftCount(data.aggregatedCount, 'aggregatedCount');
+            const enhancedAggregatedCount = optionalPositiveGiftCount(enhancedGiftData?.giftCount, 'enhancedGiftData.giftCount');
+            const isAggregated = data.isAggregated === true || directAggregatedCount !== undefined;
+            const aggregatedCountValue = directAggregatedCount ?? enhancedAggregatedCount ?? (isAggregated ? giftCount : undefined);
 
             const result: GiftEventPayload = {
                 type: PlatformEvents.GIFT,
@@ -340,17 +345,17 @@ const isMissingField = (fieldName: string): boolean => missingFields.includes(fi
                 currency,
                 ...(repeatCount !== undefined ? { repeatCount } : {}),
                 id: platformMessageId,
-                timestamp: data.timestamp,
+                timestamp,
                 isAggregated
             };
-            if (isAggregated && Number.isFinite(Number(aggregatedCountValue))) {
-                result.aggregatedCount = Number(aggregatedCountValue);
+            if (isAggregated && aggregatedCountValue !== undefined) {
+                result.aggregatedCount = aggregatedCountValue;
             }
             if (hasEnhancedGiftData) {
                 result.enhancedGiftData = enhancedGiftData;
             }
-            if (typeof data.sourceType === 'string') {
-                result.sourceType = data.sourceType;
+            if (typeof data.sourceType === 'string' && data.sourceType.trim()) {
+                result.sourceType = data.sourceType.trim();
             }
             return result;
         },

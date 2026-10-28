@@ -194,16 +194,14 @@ describe("TikTok Gift Count Field Normalization", () => {
   });
 
   describe("Performance and Data Types", () => {
-    it("throws when repeatCount is not numeric", () => {
+    it("normalizes numeric-string repeatCount without consulting other count fields", () => {
       const stringCountEvent = {
         giftDetails: { giftName: "Gift", diamondCount: 1, giftType: 0 },
         repeatCount: "5",
         repeatEnd: 1,
       };
 
-      const build = () => extractTikTokGiftData(stringCountEvent);
-
-      expect(build).toThrow("requires repeatCount");
+      expect(extractTikTokGiftData(stringCountEvent)).toMatchObject({ giftCount: 5, amount: 5 });
     });
 
     it("should complete extraction in under 5ms", () => {
