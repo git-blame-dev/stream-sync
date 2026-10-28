@@ -40,19 +40,10 @@ type InnertubeFactoryLike<TClient extends InnertubeInfoClient> = {
     createWithConfig?: (config?: Record<string, unknown>) => Promise<TClient>;
 };
 
-type TimeoutWrapper = <T>(promise: Promise<T>, timeoutMs: number, operationName: string) => Promise<T>;
-
-type CachedInnertubeInstance = {
-    instance: InnertubeInfoClient;
-    created: number;
-    lastUsed: number;
-};
-
 type ServiceStats = {
     instancesCreated: number;
-    cacheHits: number;
-    cacheMisses: number;
-    errors: number;
+    metadataReuses: number;
+    metadataInitializations: number;
     retirementTimeouts: number;
     startTime: number;
 };
@@ -60,11 +51,7 @@ type ServiceStats = {
 class InnertubeService<TClient extends InnertubeInfoClient = InnertubeInfoClient> {
     factory: InnertubeFactoryLike<TClient>;
     logger: LoggerLike;
-    withTimeout?: TimeoutWrapper;
     errorHandler: ReturnType<typeof createPlatformErrorHandler>;
-    instanceCache: Map<string, CachedInnertubeInstance>;
-    lastCleanup: number;
-    cleanupInterval: number;
     stats: ServiceStats;
     private scopes = new AsyncLocalStorage<AbortSignal>();
     private lifetime: Lifetime = { controller: new AbortController(), active: new Set() };
@@ -75,7 +62,7 @@ class InnertubeService<TClient extends InnertubeInfoClient = InnertubeInfoClient
     private requestTimeoutMs: number;
     private creationConfig: Record<string, unknown>;
 
-    constructor(factory: InnertubeFactoryLike<TClient>, dependencies: { logger: LoggerLike; withTimeout?: TimeoutWrapper; cleanupInterval?: number; fetch?: OwnedFetch; initializationTimeoutMs?: number; requestTimeoutMs?: number; creationConfig?: Record<string, unknown> }) {
+    constructor(factory: InnertubeFactoryLike<TClient>, dependencies: { logger: LoggerLike; fetch?: OwnedFetch; initializationTimeoutMs?: number; requestTimeoutMs?: number; creationConfig?: Record<string, unknown> }) {
         this.factory = factory;
         if (!dependencies.logger || typeof dependencies.logger.error !== 'function') {
             throw new Error('InnertubeService requires a logger');
@@ -86,20 +73,12 @@ class InnertubeService<TClient extends InnertubeInfoClient = InnertubeInfoClient
         this.initializationTimeoutMs = dependencies.initializationTimeoutMs ?? 10000;
         this.requestTimeoutMs = dependencies.requestTimeoutMs ?? 8000;
         this.creationConfig = dependencies.creationConfig ?? {};
-        if (dependencies.withTimeout !== undefined) {
-            this.withTimeout = dependencies.withTimeout;
-        }
         this.errorHandler = createPlatformErrorHandler(this.logger, 'innertube-service');
-
-        this.instanceCache = new Map();
-        this.lastCleanup = Date.now();
-        this.cleanupInterval = dependencies.cleanupInterval || 300000;
 
         this.stats = {
             instancesCreated: 0,
-            cacheHits: 0,
-            cacheMisses: 0,
-            errors: 0,
+            metadataReuses: 0,
+            metadataInitializations: 0,
             retirementTimeouts: 0,
             startTime: Date.now()
         };
@@ -175,10 +154,10 @@ class InnertubeService<TClient extends InnertubeInfoClient = InnertubeInfoClient
     private sharedClient(): Promise<TClient> {
         this.lifetime.controller.signal.throwIfAborted();
         if (this.metadata) {
-            this.stats.cacheHits += 1;
+            this.stats.metadataReuses += 1;
             return this.metadata.pending;
         }
-        this.stats.cacheMisses += 1;
+        this.stats.metadataInitializations += 1;
         const lifetime: Lifetime = { controller: new AbortController(), active: new Set() };
         this.owners.add(lifetime);
         const pending = this.scopes.exit(() => this.createOwnedClient(lifetime));
@@ -265,79 +244,11 @@ class InnertubeService<TClient extends InnertubeInfoClient = InnertubeInfoClient
         return { ready, dispose };
     }
 
-    async getSharedInstance(key = 'shared'): Promise<InnertubeInfoClient> {
-        try {
-            this._periodicCleanup();
-
-            const instance = await this.sharedClient();
-            this.lifetime.controller.signal.throwIfAborted();
-
-            this.instanceCache.set(key, {
-                instance,
-                created: Date.now(),
-                lastUsed: Date.now()
-            });
-
-            this.logger.debug?.(`[InnertubeService] Cached new instance: ${key}`, 'innertube-service');
-
-            return instance;
-        } catch (error) {
-            this.stats.errors += 1;
-            const errorMessage = error instanceof Error ? error.message : String(error);
-            this._logServiceError(`[InnertubeService] Failed to get instance: ${errorMessage}`, error);
-            throw new Error(`InnertubeService instance creation failed: ${errorMessage}`);
-        }
-    }
-
-    async getVideoInfo(videoId: string, options: { instanceKey?: string; timeout?: number; [key: string]: unknown } = {}): Promise<unknown> {
-        try {
-            return await this.withMetadataOperation(options.timeout === undefined ? {} : { timeoutMs: options.timeout }, async yt => {
-                // Transitional API: callers must migrate extraction and fallback into the callback.
-                this.instanceCache.set(options.instanceKey || 'shared', { instance: yt, created: Date.now(), lastUsed: Date.now() });
-                const { instanceKey: _instanceKey, timeout: _timeout, ...sdkOptions } = options;
-                const requestOptions: Record<string, unknown> = { client: 'WEB', ...sdkOptions };
-                const info = this.track(this.lifetime, yt.getInfo(videoId, requestOptions));
-                if (this.withTimeout) {
-                    return await this.withTimeout(
-                        info,
-                        options.timeout || 8000,
-                        'YouTube getInfo call'
-                    );
-                }
-                return await info;
-            });
-        } catch (error) {
-            this.stats.errors += 1;
-            const errorMessage = error instanceof Error ? error.message : String(error);
-            this.logger.debug?.(`[InnertubeService] getVideoInfo failed for ${videoId}: ${errorMessage}`, 'innertube-service');
-            throw error;
-        }
-    }
-
-    getStats(): ServiceStats & { cachedInstances: number; uptime: number } {
+    getStats(): ServiceStats & { uptime: number } {
         return {
             ...this.stats,
-            cachedInstances: this.instanceCache.size,
             uptime: Date.now() - this.stats.startTime
         };
-    }
-
-    cleanup(maxAge = 600000): void {
-        const now = Date.now();
-        let cleaned = 0;
-
-        for (const [key, cached] of this.instanceCache.entries()) {
-            if (now - cached.lastUsed > maxAge) {
-                this.instanceCache.delete(key);
-                cleaned += 1;
-            }
-        }
-
-        if (cleaned > 0) {
-            this.logger.debug?.(`[InnertubeService] Cleaned up ${cleaned} old instances`, 'innertube-service');
-        }
-
-        this.lastCleanup = now;
     }
 
     dispose(): Promise<void> {
@@ -345,26 +256,10 @@ class InnertubeService<TClient extends InnertubeInfoClient = InnertubeInfoClient
         let complete!: () => void;
         this.lifetime.disposal = new Promise<void>(resolve => { complete = resolve; });
         this.lifetime.controller.abort(new Error('Innertube service disposed'));
-        this.instanceCache.clear();
         this.metadata = undefined;
         const retiring = [...this.owners].map(owner => this.retire(owner));
         void Promise.allSettled([...retiring, this.join(this.lifetime)]).then(() => { complete(); });
         return this.lifetime.disposal;
-    }
-
-    _periodicCleanup(): void {
-        const now = Date.now();
-        if (now - this.lastCleanup > this.cleanupInterval) {
-            this.cleanup();
-        }
-    }
-
-    _logServiceError(message: string, error: unknown = null, payload: Record<string, unknown> | null = null): void {
-        if (this.errorHandler && error instanceof Error) {
-            this.errorHandler.handleEventProcessingError(error, 'innertube-service', payload, message);
-        } else if (this.errorHandler) {
-            this.errorHandler.logOperationalError(message, 'innertube-service', payload || error);
-        }
     }
 }
 

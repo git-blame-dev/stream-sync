@@ -138,7 +138,7 @@ describe("YouTubeViewerCountProvider", () => {
   });
 
   it("returns 0 when required dependencies are missing", async () => {
-    const provider = new YouTubeViewerCountProvider({}, {}, null, null, {
+    const provider = new YouTubeViewerCountProvider({}, null, {
       logger: noOpLogger,
     });
 
@@ -155,9 +155,7 @@ describe("YouTubeViewerCountProvider", () => {
     );
     const provider = new YouTubeViewerCountProvider(
       {},
-      {},
       () => ["testVideoId1"],
-      null,
       { viewerExtractionService, logger: noOpLogger },
     );
 
@@ -178,9 +176,7 @@ describe("YouTubeViewerCountProvider", () => {
     );
     const provider = new YouTubeViewerCountProvider(
       {},
-      {},
       () => ["testVideoId1"],
-      null,
       { viewerExtractionService, logger: noOpLogger },
     );
 
@@ -200,9 +196,7 @@ describe("YouTubeViewerCountProvider", () => {
     );
     const provider = new YouTubeViewerCountProvider(
       {},
-      {},
       () => ["testVideoId1", "testVideoId2"],
-      null,
       { viewerExtractionService, logger: noOpLogger },
     );
 
@@ -213,7 +207,7 @@ describe("YouTubeViewerCountProvider", () => {
   });
 
   it("returns 0 without incrementing errors when no active streams", async () => {
-    const provider = new YouTubeViewerCountProvider({}, {}, () => [], null, {
+    const provider = new YouTubeViewerCountProvider({}, () => [], {
       viewerExtractionService: createViewerExtractionService(),
       logger: noOpLogger,
     });
@@ -236,9 +230,7 @@ describe("YouTubeViewerCountProvider", () => {
     );
     const provider = new YouTubeViewerCountProvider(
       {},
-      {},
       () => ["testVideoId1"],
-      null,
       { viewerExtractionService, logger: noOpLogger },
     );
 

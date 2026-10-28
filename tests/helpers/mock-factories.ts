@@ -2386,12 +2386,7 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
             }),
             
             searchLiveStreams: createMockFn().mockResolvedValue(['testvideoid1', 'testvideoid2']),
-            connectToStream: createMockFn().mockResolvedValue(true),
-            getInnertubeInstanceCount: createMockFn().mockReturnValue(1),
-            innertubeInstanceManager: {
-                getInstance: createMockFn().mockResolvedValue({}),
-                cleanup: createMockFn().mockResolvedValue(true)
-            }
+            connectToStream: createMockFn().mockResolvedValue(true)
         };
     } else if (platformName === 'tiktok') {
         let cachedViewerCount = 100;

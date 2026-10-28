@@ -184,7 +184,6 @@ class YouTubeViewerCountProvider extends ViewerCountProvider {
     config: Record<string, unknown> | null;
     getActiveVideoIds: (() => string[]) | null;
     viewerExtractionService: YouTubeExtractionService | null;
-    innertubeService: unknown;
     stats: {
         totalRequests: number;
         successfulRequests: number;
@@ -192,17 +191,14 @@ class YouTubeViewerCountProvider extends ViewerCountProvider {
     };
 
     constructor(
-        innertubeManager: unknown,
         config: Record<string, unknown> | null,
         getActiveVideoIds: (() => string[]) | null,
-        Innertube: unknown,
-        dependencies: { viewerExtractionService?: YouTubeExtractionService; innertubeService?: unknown; logger?: ProviderLogger } = {}
+        dependencies: { viewerExtractionService?: YouTubeExtractionService; logger?: ProviderLogger } = {}
     ) {
         super('youtube', dependencies.logger);
         this.config = config;
         this.getActiveVideoIds = getActiveVideoIds;
         this.viewerExtractionService = dependencies.viewerExtractionService || null;
-        this.innertubeService = dependencies.innertubeService;
         this.stats = {
             totalRequests: 0,
             successfulRequests: 0,
@@ -323,13 +319,11 @@ class ViewerCountProviderFactory {
     }
 
     static createYouTubeProvider(
-        innertubeManager: unknown,
         config: Record<string, unknown> | null,
         getActiveVideoIds: (() => string[]) | null,
-        Innertube: unknown,
-        dependencies: { viewerExtractionService?: YouTubeExtractionService; innertubeService?: unknown; logger?: ProviderLogger } = {}
+        dependencies: { viewerExtractionService?: YouTubeExtractionService; logger?: ProviderLogger } = {}
     ) {
-        return new YouTubeViewerCountProvider(innertubeManager, config, getActiveVideoIds, Innertube, dependencies);
+        return new YouTubeViewerCountProvider(config, getActiveVideoIds, dependencies);
     }
 
     static createTikTokProvider(platform: TikTokPlatformLike | null, options: { logger?: ProviderLogger } = {}) {

@@ -1,18 +1,14 @@
 import { describe, beforeEach, afterEach, test, expect } from "bun:test";
 import { InnertubeFactory } from "../../src/factories/innertube-factory";
-import * as InnertubeInstanceManager from "../../src/services/innertube-instance-manager.ts";
 import testClock from "../helpers/test-clock";
 import { clearAllMocks, restoreAllMocks } from "../helpers/bun-mock-utils";
 
 describe("Factory Pattern Integration", () => {
   beforeEach(async () => {
     testClock.reset();
-    await InnertubeInstanceManager.cleanup();
-    InnertubeInstanceManager._resetInstance();
   });
 
   afterEach(async () => {
-    await InnertubeInstanceManager.cleanup();
     clearAllMocks();
     restoreAllMocks();
   });
@@ -121,40 +117,6 @@ describe("Factory Pattern Integration", () => {
     });
   });
 
-  describe("Instance Manager Integration", () => {
-    test("provides instance manager functionality", () => {
-      const manager = InnertubeInstanceManager.getInstance();
-      const stats = manager.getStats();
-
-      expect(stats).toHaveProperty("activeInstances");
-      expect(stats).toHaveProperty("maxInstances");
-      expect(stats).toHaveProperty("instanceDetails");
-      expect(typeof stats.activeInstances).toBe("number");
-      expect(typeof stats.maxInstances).toBe("number");
-      expect(Array.isArray(stats.instanceDetails)).toBe(true);
-    });
-
-    test("handles instance manager cleanup", async () => {
-      const manager = InnertubeInstanceManager.getInstance();
-
-      await manager.cleanup();
-
-      const stats = manager.getStats();
-      expect(stats.activeInstances).toBe(0);
-    });
-
-    test("supports instance manager reset", () => {
-      const manager1 = InnertubeInstanceManager.getInstance();
-
-      InnertubeInstanceManager._resetInstance();
-      const manager2 = InnertubeInstanceManager.getInstance();
-
-      expect(manager2).toBeDefined();
-      expect(typeof manager1.getStats).toBe("function");
-      expect(typeof manager2.getStats).toBe("function");
-    });
-  });
-
   describe("API Structure Validation", () => {
     test("provides all required factory methods", () => {
       expect(typeof InnertubeFactory.createInstance).toBe("function");
@@ -172,15 +134,6 @@ describe("Factory Pattern Integration", () => {
       expect(InnertubeFactory.getStats.length).toBe(0);
     });
 
-    test("provides instance manager API", () => {
-      const manager = InnertubeInstanceManager.getInstance();
-
-      expect(typeof manager.getInstance).toBe("function");
-      expect(typeof manager.markInstanceUnhealthy).toBe("function");
-      expect(typeof manager.disposeInstance).toBe("function");
-      expect(typeof manager.cleanup).toBe("function");
-      expect(typeof manager.getStats).toBe("function");
-    });
   });
 
   describe("Performance Characteristics", () => {
@@ -199,20 +152,5 @@ describe("Factory Pattern Integration", () => {
       expect(endTime - startTime).toBeLessThan(100);
     });
 
-    test("handles rapid instance manager calls", () => {
-      const manager = InnertubeInstanceManager.getInstance();
-      const startTime = testClock.now();
-      const iterations = 100;
-
-      for (let i = 0; i < iterations; i++) {
-        const stats = manager.getStats();
-        expect(stats).toBeDefined();
-      }
-
-      testClock.advance(iterations - 1);
-      const endTime = testClock.now();
-
-      expect(endTime - startTime).toBeLessThan(100);
-    });
   });
 });

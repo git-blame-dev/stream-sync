@@ -379,8 +379,7 @@ describe('TypeScript toolchain gates behavior', () => {
             'src/platforms/tiktok/events/event-router.js',
             'src/platforms/tiktok/monetization/gift-aggregator.js',
             'src/services/GracefulExitService.js',
-            'src/services/VFXCommandService.js',
-            'src/services/innertube-instance-manager.js'
+            'src/services/VFXCommandService.js'
         ];
 
         for (const wrapperPath of removedWrapperPaths) {
@@ -2423,7 +2422,6 @@ describe('TypeScript toolchain gates behavior', () => {
     it('keeps youtube and innertube service chain modules free of commonjs module syntax', () => {
         const modulePaths = [
             'src/factories/innertube-factory.ts',
-            'src/services/innertube-instance-manager.ts',
             'src/services/innertube-service.ts',
             'src/services/youtube-channel-resolver.ts',
             'src/services/youtube-live-stream-service.ts',

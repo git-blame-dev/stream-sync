@@ -52,7 +52,7 @@ describe("ViewerCountProvider error handling", () => {
 describe("YouTubeViewerCountProvider readiness and error routes", () => {
   it("returns 0 when active video ids missing", async () => {
     const viewerExtractionService = createViewerExtractionService();
-    const provider = new YouTubeViewerCountProvider({}, {}, () => [], null, {
+    const provider = new YouTubeViewerCountProvider({}, () => [], {
       viewerExtractionService,
       logger: noOpLogger,
     });
@@ -70,9 +70,7 @@ describe("YouTubeViewerCountProvider readiness and error routes", () => {
     );
     const provider = new YouTubeViewerCountProvider(
       {},
-      {},
       () => ["testVideoId1"],
-      null,
       { viewerExtractionService, logger: noOpLogger },
     );
 

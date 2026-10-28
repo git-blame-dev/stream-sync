@@ -10,7 +10,6 @@ import { ViewerCountExtractionService } from '../services/viewer-count-extractio
 import { YouTubeStreamDetectionService } from '../services/youtube-stream-detection-service';
 import { YouTubeViewerExtractor } from '../extractors/youtube-viewer-extractor';
 import { PlatformConnectionFactory } from './platform-connection-factory';
-import { withTimeout } from './timeout-wrapper';
 
 type PlatformDependencyConfig = Record<string, unknown> & {
     username?: unknown;
@@ -58,7 +57,6 @@ type DependencyFactoryOptions = Record<string, unknown> & {
     WebSocketCtor?: unknown;
     Innertube?: InnertubeDependency;
     innertubeService?: InnertubeService;
-    cleanupInterval?: number;
     timeout?: number;
     strategies?: string[];
     debug?: boolean;
@@ -567,9 +565,7 @@ class DependencyFactory {
         };
 
         return new InnertubeService(serviceFactory, {
-            logger,
-            withTimeout,
-            cleanupInterval: options.cleanupInterval || 300000
+            logger
         });
     }
     

@@ -94,7 +94,6 @@ describe("YouTube Multi-Stream Aggregation", () => {
     platform.getDetectedStreamIds = createMockFn().mockReturnValue(
       options.detectedIds || activeVideoIds,
     );
-    platform.Innertube = { create: createMockFn() };
     return platform;
   };
 

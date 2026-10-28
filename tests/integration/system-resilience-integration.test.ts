@@ -9,7 +9,6 @@ import {
 import { ViewerCountSystem } from "../../src/utils/viewer-count";
 import { YouTubeViewerExtractor } from "../../src/extractors/youtube-viewer-extractor";
 import { InnertubeFactory } from "../../src/factories/innertube-factory";
-import * as InnertubeInstanceManager from "../../src/services/innertube-instance-manager.ts";
 import { OBSViewerCountObserver } from "../../src/observers/obs-viewer-count-observer";
 import { createMockOBSManager } from "../helpers/mock-factories";
 import { expectNoTechnicalArtifacts } from "../helpers/behavior-validation";
@@ -106,7 +105,6 @@ describe("System Resilience and Error Recovery Integration", () => {
       viewerCountSystem.stopPolling();
       await viewerCountSystem.cleanup();
     }
-    await InnertubeInstanceManager.cleanup();
     clearAllMocks();
     restoreAllMocks();
   });
@@ -224,7 +222,7 @@ describe("System Resilience and Error Recovery Integration", () => {
     });
   });
 
-  describe("Factory and Instance Manager Resilience", () => {
+  describe("Factory Resilience", () => {
     test("creates Innertube instance successfully", async () => {
       const instance = await InnertubeFactory.createInstance();
 
@@ -232,15 +230,6 @@ describe("System Resilience and Error Recovery Integration", () => {
       expect(typeof instance).toBe("object");
     });
 
-    test("handles instance manager operations safely", async () => {
-      const manager = InnertubeInstanceManager.getInstance();
-      const stats = manager.getStats();
-
-      expect(stats).toHaveProperty("activeInstances");
-      expect(typeof stats.activeInstances).toBe("number");
-
-      await expect(manager.cleanup()).resolves.toBeUndefined();
-    });
   });
 
   describe("Extractor Resilience", () => {

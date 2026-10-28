@@ -3,7 +3,6 @@ import { EventEmitter } from 'node:events';
 import { UNKNOWN_CHAT_MESSAGE, UNKNOWN_CHAT_USERNAME } from '../constants/degraded-chat';
 import { PlatformEvents } from '../interfaces/PlatformEvents';
 import { YouTubeLiveStreamService } from '../services/youtube-live-stream-service';
-import * as innertubeInstanceManager from '../services/innertube-instance-manager';
 import { RawPlatformDataLoggingService } from '../services/RawPlatformDataLoggingService';
 import { collectMissingFields, getMissingFields, mergeMissingFieldsMetadata } from '../utils/missing-fields';
 import { normalizeYouTubeMessage } from '../utils/message-normalization';
@@ -147,7 +146,6 @@ type HandlerMap = Record<string, (payload: unknown) => unknown>;
 type YouTubeDependencies = UnknownMap & {
   logger: LoggerLike;
   USER_AGENTS?: string[] | undefined;
-  Innertube?: unknown;
   timestampService?: unknown;
   viewerService?: ViewerServiceLike;
   RawPlatformDataLoggingService?: RawPlatformDataLoggingServiceConstructor;
@@ -216,7 +214,6 @@ class YouTubePlatform extends EventEmitter {
   eventRouter: EventRouterLike;
   monetizationParser: MonetizationParserLike;
   USER_AGENTS?: string[] | undefined;
-  Innertube: unknown;
   timestampService: unknown;
   viewerService: ViewerServiceLike | null;
   rawPlatformDataLoggingService: RawPlatformDataLoggingServiceLike;
@@ -282,7 +279,6 @@ class YouTubePlatform extends EventEmitter {
         this._ensureDataLoggingPath();
 
         this.USER_AGENTS = dependencies.USER_AGENTS;
-        this.Innertube = dependencies.Innertube; // Lazy-loaded youtubei.js Innertube (null initially for startup performance)
         this.timestampService = dependencies.timestampService || null;
         this.viewerService = dependencies.viewerService || null;
 
@@ -355,10 +351,8 @@ class YouTubePlatform extends EventEmitter {
             try {
                 const providerDependencies: {
                     viewerExtractionService?: YouTubeProviderExtractionServiceLike;
-                    innertubeService?: unknown;
                     logger?: ProviderLoggerLike;
                 } = {
-                    innertubeService: dependencies.innertubeService,
                     logger: this._createProviderLoggerAdapter()
                 };
 
@@ -367,10 +361,8 @@ class YouTubePlatform extends EventEmitter {
                 }
 
                 this.viewerCountProvider = ViewerCountProviderFactory.createYouTubeProvider(
-                    innertubeInstanceManager,
                     this.config,
                     () => this.getDetectedStreamIds(),
-                    this.Innertube, // Can be null initially, service layer handles YouTube.js loading
                     providerDependencies
                 );
                 this.logger.debug('Created YouTube viewer count provider with service layer dependencies', 'youtube');

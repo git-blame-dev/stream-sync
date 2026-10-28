@@ -20,27 +20,6 @@ type InnertubeInfoClient = {
 type InnertubeFactory = {
   createWithTimeout: ReturnType<typeof createMockFn<[timeoutMs?: number], Promise<InnertubeInfoClient>>>;
 };
-type TimeoutCall = [Promise<unknown>, number, string];
-
-const expectFirstTimeoutCall = (calls: unknown[][]): TimeoutCall => {
-  const firstCall = calls[0];
-  if (!firstCall) {
-    throw new Error("Expected timeout call to be recorded");
-  }
-  expect(firstCall).toBeDefined();
-  expect(firstCall).toHaveLength(3);
-
-  const [promise, timeoutMs, operationName] = firstCall;
-  expect(promise).toBeInstanceOf(Promise);
-  expect(typeof timeoutMs).toBe("number");
-  expect(typeof operationName).toBe("string");
-  if (!(promise instanceof Promise) || typeof timeoutMs !== "number" || typeof operationName !== "string") {
-    throw new Error("Expected timeout call arguments to match the timeout contract");
-  }
-
-  return [promise, timeoutMs, operationName];
-};
-
 describe("InnertubeService behavior", () => {
   let factory: InnertubeFactory;
 
@@ -59,16 +38,19 @@ describe("InnertubeService behavior", () => {
     restoreAllMocks();
   });
 
-  test("reuses cached instances and tracks stats", async () => {
+  test("reuses the metadata owner and reports initialization and reuse separately", async () => {
     const service = new InnertubeService(factory, { logger: noOpLogger });
 
-    const first = await service.getSharedInstance("shared");
-    const second = await service.getSharedInstance("shared");
+    const first = await service.withMetadataOperation({}, client => client.getInfo("synthetic-first"));
+    const second = await service.withMetadataOperation({}, client => client.getInfo("synthetic-second"));
 
-    expect(first).toBe(second);
-    expect(service.stats.cacheMisses).toBe(1);
-    expect(service.stats.cacheHits).toBe(1);
-    expect(service.stats.instancesCreated).toBe(1);
+    expect(first).toEqual({ video: "info" });
+    expect(second).toEqual({ video: "info" });
+    expect(factory.createWithTimeout.mock.calls).toHaveLength(1);
+    const chat = await service.createChatClient();
+    expect(service.getStats()).toMatchObject({ metadataInitializations: 1, metadataReuses: 1, instancesCreated: 2 });
+    await chat.dispose();
+    await service.dispose();
   });
 
   test("coalesces initialization without letting one cancelled waiter cancel others", async () => {
@@ -88,53 +70,6 @@ describe("InnertubeService behavior", () => {
     expect(await c).toEqual({ video: "synthetic-c" });
     expect(factory.createWithTimeout.mock.calls).toHaveLength(1);
     await service.dispose();
-  });
-
-  test("passes timeout metadata when fetching video info", async () => {
-    const timeoutCalls: TimeoutCall[] = [];
-    const withTimeout = async <T>(
-      promise: Promise<T>,
-      timeoutMs: number,
-      operationName: string,
-    ): Promise<T> => {
-      timeoutCalls.push([promise, timeoutMs, operationName]);
-      return promise;
-    };
-    const service = new InnertubeService(factory, {
-      logger: noOpLogger,
-      withTimeout,
-    });
-
-    const result = await service.getVideoInfo("abc123", {
-      timeout: 5000,
-      instanceKey: "custom",
-    });
-    const cached = service.instanceCache.get("custom");
-
-    expect(result).toEqual({ video: "info" });
-    const [getInfoPromise, timeoutMs, operationName] = expectFirstTimeoutCall(timeoutCalls);
-    expect(timeoutMs).toBe(5000);
-    expect(operationName).toBe("YouTube getInfo call");
-    await expect(getInfoPromise).resolves.toEqual({ video: "info" });
-    expect(cached).toBeDefined();
-    if (!cached) {
-      throw new Error("Expected custom cached Innertube instance");
-    }
-    expect(cached.lastUsed).toBeGreaterThanOrEqual(cached.created);
-  });
-
-  test("cleans up stale instances", async () => {
-    const service = new InnertubeService(factory, { logger: noOpLogger });
-    await service.getSharedInstance("old");
-    service.instanceCache.set("old", {
-      instance: { getInfo: async () => ({ video: "stale" }) },
-      created: 0,
-      lastUsed: 0,
-    });
-
-    service.cleanup(1);
-
-    expect(service.instanceCache.has("old")).toBe(false);
   });
 
   test("failed shared initialization is evicted and retried", async () => {
@@ -187,7 +122,9 @@ describe("InnertubeService behavior", () => {
     let release!: (client: InnertubeInfoClient) => void;
     factory.createWithTimeout.mockImplementation(() => new Promise(resolve => { release = resolve; }));
     const service = new InnertubeService(factory, { logger: noOpLogger });
-    const pending = service.getSharedInstance().catch(error => error);
+    let callbacks = 0;
+    const operation = async () => { callbacks += 1; return true; };
+    const pending = service.withMetadataOperation({}, operation).catch(error => error);
     await Promise.resolve();
     const disposal = service.dispose();
     expect(service.dispose()).toBe(disposal);
@@ -195,9 +132,9 @@ describe("InnertubeService behavior", () => {
     await disposal;
     expect(await pending).toBeInstanceOf(Error);
     await Promise.resolve();
-    expect(service.getStats().cachedInstances).toBe(0);
+    expect(callbacks).toBe(0);
     expect(service.stats.instancesCreated).toBe(0);
-    await expect(service.getSharedInstance()).rejects.toThrow("disposed");
+    expect(() => service.withMetadataOperation({}, operation)).toThrow("disposed");
   });
 
   test("disposal while SDK import is pending prevents late fetch admission and publication", async () => {
@@ -229,7 +166,7 @@ describe("InnertubeService behavior", () => {
       expect(String(await pending)).toContain("disposed");
       expect(calls).toBe(0);
       expect(service.stats.instancesCreated).toBe(0);
-      expect(service.getStats().cachedInstances).toBe(0);
+      expect(() => service.withMetadataOperation({}, async () => true)).toThrow("disposed");
     } finally {
       await service.dispose();
       SDKFactory.configure();
@@ -298,15 +235,14 @@ describe("InnertubeService behavior", () => {
     await service.dispose();
   });
 
-  test("tracks error stats and throws on factory failure", async () => {
+  test("preserves the original factory failure without publishing a successful initialization", async () => {
     const error = new Error("boom");
     factory.createWithTimeout.mockRejectedValue(error);
     const service = new InnertubeService(factory, { logger: noOpLogger });
 
-    await expect(service.getSharedInstance("fail")).rejects.toThrow(
-      "InnertubeService instance creation failed",
-    );
-    expect(service.stats.errors).toBe(1);
+    await expect(service.withMetadataOperation({}, client => client.getInfo("synthetic"))).rejects.toBe(error);
+    expect(service.getStats()).toMatchObject({ metadataInitializations: 1, instancesCreated: 0 });
+    await service.dispose();
   });
 
   for (const kind of ["metadata", "chat"] as const) {
@@ -379,7 +315,7 @@ describe("InnertubeService behavior", () => {
       expect(getTimerCount()).toBe(nativeDeadlineTimers);
       advanceTimersByTime(5000); await flush();
       expect(getTimerCount()).toBe(0);
-      expect(service.getStats().cachedInstances).toBe(0);
+      expect(() => service.withMetadataOperation({}, async () => true)).toThrow("disposed");
     } finally { useRealTimers(); }
   });
 
@@ -423,7 +359,9 @@ describe("InnertubeService behavior", () => {
       createWithConfig: () => { started.resolve(); return new Promise<InnertubeInfoClient>(resolve => { release = resolve; }); }
     }, { logger: noOpLogger });
     try {
-      const caller = service.getSharedInstance().catch(error => error);
+      let callbacks = 0;
+      const operation = async () => { callbacks += 1; return true; };
+      const caller = service.withMetadataOperation({}, operation).catch(error => error);
       await started.promise;
       const disposal = service.dispose();
       expect(String(await caller)).toContain("disposed");
@@ -432,14 +370,14 @@ describe("InnertubeService behavior", () => {
       release({ getInfo: async () => ({ video: "synthetic-late" }) });
       await flush();
       expect(service.stats.instancesCreated).toBe(0);
-      expect(service.getStats().cachedInstances).toBe(0);
+      expect(callbacks).toBe(0);
       expect(factory.createWithTimeout.mock.calls).toHaveLength(0);
       advanceTimersByTime(5000); await flush();
       expect(getTimerCount()).toBe(0);
     } finally { useRealTimers(); }
   });
 
-  test("legacy timeout wrappers cannot hide underlying SDK getInfo cleanup", async () => {
+  test("metadata caller rejection cannot hide underlying SDK getInfo finally cleanup", async () => {
     const started = deferred(), cleaning = deferred(), finish = deferred();
     const service = new InnertubeService({ createWithTimeout: async (_timeout, config) => ({
       getInfo: async (_videoId: string) => {
@@ -447,15 +385,17 @@ describe("InnertubeService behavior", () => {
         finally { cleaning.resolve(); await finish.promise; }
       }
     }) }, { logger: noOpLogger,
-      withTimeout: async () => { throw new Error("synthetic legacy timeout"); },
       fetch: async (_input, init) => new Response(new ReadableStream({ start(controller) {
         init!.signal!.addEventListener("abort", () => controller.error(init!.signal!.reason), { once: true });
         started.resolve();
       } }))
     });
-    const caller = service.getVideoInfo("synthetic").catch(error => error);
+    const cancel = new AbortController();
+    const reason = new Error("synthetic metadata cancellation");
+    const caller = service.withMetadataOperation({ signal: cancel.signal }, client => client.getInfo("synthetic")).catch(error => error);
     await started.promise;
-    expect(String(await caller)).toContain("synthetic legacy timeout");
+    cancel.abort(reason);
+    expect(await caller).toBe(reason);
     const disposal = service.dispose();
     let disposed = false;
     void disposal.then(() => { disposed = true; });
@@ -478,6 +418,20 @@ describe("InnertubeService behavior", () => {
     } });
     return { service, signals };
   };
+
+  test("metadata operation timeout covers SDK response-body continuation without retiring the shared owner", async () => {
+    const { service, signals } = bodyService();
+    const caller = service.withMetadataOperation({ timeoutMs: 20 }, client => client.getInfo("metadata-timed")).catch(error => error);
+    try {
+      await flush();
+      expect(signals.get("metadata-timed")!.aborted).toBe(false);
+      await delay(50);
+      expect(signals.get("metadata-timed")!.aborted).toBe(true);
+      expect(await caller).toBeInstanceOf(Error);
+      expect(await service.withMetadataOperation({}, async () => "alive")).toBe("alive");
+      expect(service.getStats()).toMatchObject({ instancesCreated: 1, metadataInitializations: 1, metadataReuses: 1 });
+    } finally { await service.dispose(); await caller; }
+  });
 
   test("explicit chat scope aborts its response body without retiring polling, metadata or another owner", async () => {
     const { service, signals } = bodyService();

@@ -26,7 +26,6 @@ import type { SingleInstanceGuard } from './services/SingleInstanceGuard';
 import { createUserTrackingService } from './services/UserTrackingService';
 import { createVFXCommandService } from './services/VFXCommandService';
 import { getGiftAnimationDependencyStatus } from './services/tiktok-gift-animation/resolver';
-import * as innertubeInstanceManager from './services/innertube-instance-manager';
 import {
     createOperatorControlService,
     OPERATOR_CONTROL_KEYS,
@@ -575,6 +574,12 @@ function validateRuntimeCliArgs(cliArgsCandidate: Partial<MainCliArgs> & Record<
     }
 }
 
+function configureInnertubeImporter(overrides: MainOverrides) {
+    if (overrides.innertubeImporter) {
+        InnertubeFactory.configure({ importer: overrides.innertubeImporter });
+    }
+}
+
 function createProductionDependencies(
     overrides: MainOverrides = {},
     obsSubsystem: {
@@ -587,9 +592,7 @@ function createProductionDependencies(
     validateLoggerInterface(logger);
 
     const resolvedOverrides = overrides || {};
-    if (resolvedOverrides.innertubeImporter) {
-        InnertubeFactory.configure({ importer: resolvedOverrides.innertubeImporter });
-    }
+    configureInnertubeImporter(resolvedOverrides);
     
     return {
         obs: {
@@ -636,9 +639,7 @@ async function main(overrides: MainOverrides = {}) {
         throw new Error('main override innertubeImporter must be a function when provided');
     }
 
-    if (runtimeOverrides.innertubeImporter) {
-        innertubeInstanceManager.setInnertubeImporter(runtimeOverrides.innertubeImporter);
-    }
+    configureInnertubeImporter(runtimeOverrides);
     const runtimeCliArgs: MainCliArgs = { ...cliArgs, ...(runtimeOverrides.cliArgs || {}) };
     validateRuntimeCliArgs(runtimeCliArgs);
     const runtimeConfig = runtimeOverrides.config || config;
@@ -914,7 +915,11 @@ async function main(overrides: MainOverrides = {}) {
             }
         }
         
-        const dependencies = createProductionDependenciesFn(runtimeOverrides, obsSubsystem) as unknown as ProductionDependencies;
+        const { innertubeImporter: _configuredImporter, ...defaultDependencyOverrides } = runtimeOverrides;
+        const dependencies = createProductionDependenciesFn(
+            runtimeOverrides.createProductionDependencies ? runtimeOverrides : defaultDependencyOverrides,
+            obsSubsystem
+        ) as unknown as ProductionDependencies;
         dependencies.obs = {
             connectionManager: obsSubsystem.connectionManager,
             sourcesManager: obsSubsystem.sourcesManager,
@@ -1102,4 +1107,4 @@ if (require.main === module) {
     void runMainEntrypoint();
 }
 
-export { main, AppRuntime, runMainEntrypoint };
+export { main, AppRuntime, runMainEntrypoint, createProductionDependencies };

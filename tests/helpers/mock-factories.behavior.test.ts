@@ -92,11 +92,6 @@ type PlatformMock = {
     processSuperChat?: (superChatData: UnknownRecord) => UnknownRecord;
     searchLiveStreams?: () => Promise<unknown[]>;
     connectToStream?: () => Promise<boolean>;
-    getInnertubeInstanceCount?: () => number;
-    innertubeInstanceManager?: {
-        getInstance: () => Promise<UnknownRecord>;
-        cleanup: () => Promise<boolean>;
-    };
     getCachedViewerCount?: () => number;
     processRoomUser?: (roomUserData: UnknownRecord) => UnknownRecord;
     processMemberJoin?: (memberData: UnknownRecord) => UnknownRecord;
@@ -491,9 +486,6 @@ describe('mock-factories helper behavior', () => {
         expect(superChat.platform).toBe('youtube');
         await expect(youtube.searchLiveStreams!()).resolves.toHaveLength(2);
         await expect(youtube.connectToStream!()).resolves.toBe(true);
-        expect(youtube.getInnertubeInstanceCount!()).toBe(1);
-        await expect(youtube.innertubeInstanceManager!.getInstance()).resolves.toEqual({});
-        await expect(youtube.innertubeInstanceManager!.cleanup()).resolves.toBe(true);
 
         const tiktok = createPlatform('tiktok');
         expect(tiktok.getCachedViewerCount!()).toBe(100);

@@ -1,6 +1,6 @@
 import { describe, it, beforeEach, afterEach, expect } from "bun:test";
 
-import { main } from "../../src/main.ts";
+import { main, createProductionDependencies } from "../../src/main.ts";
 import { AppRuntime } from "../../src/runtime/AppRuntime";
 import { DependencyFactory } from "../../src/utils/dependency-factory";
 import { createGracefulExitService } from "../../src/services/GracefulExitService";
@@ -236,6 +236,75 @@ describe("main startup behavior", () => {
     useRealTimers();
     stdoutCapture.restore();
     stderrCapture.restore();
+  });
+
+  it("configures the real SDK factory before a custom dependency builder and preserves its override arguments", async () => {
+    const { overrides } = buildOverrides({ cliArgs: { chat: 1 } });
+    const client = { getInfo: async () => ({ synthetic: true }) };
+    let imports = 0;
+    const importer = async () => { imports += 1; return { Innertube: { create: async () => client } }; };
+    const sentinel = new Error("synthetic builder stop");
+    let pending: Promise<unknown> | undefined;
+    const options = {
+      ...overrides,
+      config: buildMainConfig(),
+      innertubeImporter: importer,
+      createProductionDependencies: ((received: MainOverridesArg) => {
+        expect(received).toBe(options);
+        expect(received.innertubeImporter).toBe(importer);
+        pending = InnertubeFactory.createInstance();
+        throw sentinel;
+      }) as never,
+    };
+    // Seed a different external SDK to expose misrouting without a real import/network call.
+    InnertubeFactory.configure({ importer: async () => ({ Innertube: { create: async () => ({ wrong: true }) } }) });
+    await expect(main(options)).rejects.toThrow(sentinel.message);
+    expect(await pending).toBe(client);
+    expect(imports).toBe(1);
+  });
+
+  it("honors a standalone production dependency builder importer without eagerly importing the SDK", async () => {
+    let imports = 0;
+    const sdk = { create: async () => ({ getInfo: async () => ({ synthetic: true }) }) };
+    const dependencies = createProductionDependencies({
+      innertubeImporter: async () => { imports += 1; return { Innertube: sdk }; },
+    }, { connectionManager: {}, sourcesManager: {}, effectsManager: {}, goalsManager: {} });
+    expect(imports).toBe(0);
+    expect(await dependencies.lazyInnertube()).toBe(sdk);
+    expect(imports).toBe(1);
+  });
+
+  it("default main dependency construction preserves an in-flight configured SDK import", async () => {
+    process.env.CHAT_BOT_STARTUP_ONLY = "true";
+    const { overrides } = buildOverrides({ cliArgs: { chat: 1 } });
+    let imports = 0;
+    const sdk = { create: async () => ({ getInfo: async () => ({ synthetic: true }) }) };
+    let release!: (value: { Innertube: typeof sdk }) => void;
+    const importing = new Promise<{ Innertube: typeof sdk }>(resolve => { release = resolve; });
+    const importer = () => { imports += 1; return importing; };
+    let early: Promise<unknown> | undefined;
+    let later: Promise<unknown> | undefined;
+    const result = await main({
+      ...overrides,
+      config: buildMainConfig({ youtube: { enabled: false } }),
+      innertubeImporter: importer,
+      ensureSecrets: async () => {
+        early = InnertubeFactory.getLazyInnertubeClass();
+        await Promise.resolve();
+        expect(imports).toBe(1);
+        return createSuccessfulSecretSetupResult();
+      },
+      createGracefulExitService: (runtime, ...args) => {
+        later = InnertubeFactory.getLazyInnertubeClass();
+        release({ Innertube: sdk });
+        return createGracefulExitService(runtime, ...args);
+      },
+    });
+    expect(result.success).toBe(true);
+    expect(await early).toBe(sdk);
+    expect(await later).toBe(sdk);
+    expect(await InnertubeFactory.getLazyInnertubeClass()).toBe(sdk);
+    expect(imports).toBe(1);
   });
 
   for (const enabled of [true, false]) {
