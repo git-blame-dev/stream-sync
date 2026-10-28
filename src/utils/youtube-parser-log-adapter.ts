@@ -1,4 +1,8 @@
+import { types } from 'node:util';
+
 import { createPlatformErrorHandler } from './platform-error-handler';
+import { sanitizeLogText } from '../core/logger/safe-log-serializer';
+import { asRecord } from './record-contracts';
 
 type LoggerLike = {
     debug?: (message: unknown, source?: string, data?: unknown) => void;
@@ -48,6 +52,8 @@ type WarningCollectorFrame = {
 
 const installedParserApis = new WeakSet<ParserApiLike>();
 const warningCollectorStack: WarningCollectorFrame[] = [];
+const MAX_WARNINGS = 100;
+const MAX_DIAGNOSTIC_LENGTH = 256;
 
 function createNoOpLogger(): Required<LoggerLike> {
     const noOp = () => {};
@@ -72,19 +78,26 @@ function resolveLogger(logger?: LoggerLike): Required<LoggerLike> {
     };
 }
 
-function toOneLine(value: unknown): string {
-    return String(value ?? '')
+function toOneLine(value: string): string {
+    return value
         .replace(/\s+/g, ' ')
         .trim();
 }
 
+function boundedDiagnostic(value: unknown, fallback = ''): string {
+    if (typeof value !== 'string') return fallback;
+    return toOneLine(sanitizeLogText(value)).slice(0, MAX_DIAGNOSTIC_LENGTH);
+}
+
 function formatExpected(expected: unknown): string {
     if (Array.isArray(expected)) {
-        return toOneLine(expected.join(' | '));
+        return boundedDiagnostic(expected.slice(0, 100)
+            .filter((entry): entry is string => typeof entry === 'string')
+            .map((entry) => boundedDiagnostic(entry)).join(' | '));
     }
 
     if (typeof expected === 'string') {
-        return toOneLine(expected);
+        return boundedDiagnostic(expected);
     }
 
     return '';
@@ -92,27 +105,28 @@ function formatExpected(expected: unknown): string {
 
 function formatContextDetail(context: ParserWarningContext): string {
     if (context.error instanceof Error) {
-        return toOneLine(context.error.message);
+        return `error=${boundedDiagnostic(context.error.name, 'Error')}`.slice(0, MAX_DIAGNOSTIC_LENGTH);
     }
 
     if (typeof context.error === 'string') {
-        return toOneLine(context.error);
+        return `errorMessageLength=${context.error.length}`;
     }
 
-    if (typeof context.failed === 'number' && typeof context.total === 'number') {
+    if (typeof context.failed === 'number' && Number.isFinite(context.failed)
+        && typeof context.total === 'number' && Number.isFinite(context.total)) {
         return `${context.failed}/${context.total} mutation items failed`;
     }
 
     if (Array.isArray(context.titles) && context.titles.length > 0) {
-        return `titles=${toOneLine(context.titles.join(', '))}`;
+        return `titleCount=${context.titles.length}`;
     }
 
     return '';
 }
 
 function buildParserWarningPayload(context: ParserWarningContext): ParserWarningPayload {
-    const errorType = toOneLine(context.error_type || 'unknown');
-    const className = toOneLine(context.classname || 'unknown');
+    const errorType = boundedDiagnostic(context.error_type, 'unknown') || 'unknown';
+    const className = boundedDiagnostic(context.classname, 'unknown') || 'unknown';
     const expected = formatExpected(context.expected);
     const detail = formatContextDetail(context);
 
@@ -143,7 +157,7 @@ function buildParserWarningMessage(payload: ParserWarningPayload): string {
 
 function appendWarningToActiveCollectors(payload: ParserWarningPayload): void {
     const currentFrame = warningCollectorStack[warningCollectorStack.length - 1];
-    if (currentFrame) {
+    if (currentFrame && currentFrame.warnings.length < MAX_WARNINGS) {
         currentFrame.warnings.push(payload);
     }
 }
@@ -154,18 +168,10 @@ function handleAdapterError(
     error: unknown,
     payload: Record<string, unknown>
 ): void {
-    if (error instanceof Error) {
-        errorHandler.handleEventProcessingError(
-            error,
-            'youtube-parser-adapter',
-            payload,
-            message,
-            'youtube-parser-log-adapter'
-        );
-        return;
-    }
-
-    errorHandler.logOperationalError(message, 'youtube-parser-log-adapter', payload);
+    errorHandler.logOperationalError(message, 'youtube-parser-log-adapter', {
+        ...payload,
+        errorType: error instanceof Error ? boundedDiagnostic(error.name, 'Error') : typeof error
+    });
 }
 
 function installYouTubeParserLogAdapter(
@@ -190,8 +196,9 @@ function installYouTubeParserLogAdapter(
 
     const errorHandler = createPlatformErrorHandler(logger, 'youtube-parser-log-adapter');
     const parserWarningHandler = (context: ParserWarningContext = {}) => {
+        const warningContext = asRecord(context) ?? {};
         try {
-            const payload = buildParserWarningPayload(context);
+            const payload = buildParserWarningPayload(warningContext);
             appendWarningToActiveCollectors(payload);
             const message = buildParserWarningMessage(payload);
             logger.warn(message, 'youtube-parser', payload);
@@ -200,7 +207,7 @@ function installYouTubeParserLogAdapter(
                 errorHandler,
                 'Failed to normalize YouTube parser warning',
                 error,
-                { contextType: typeof context.error_type === 'string' ? context.error_type : 'unknown' }
+                { errorType: boundedDiagnostic(warningContext.error_type, 'unknown') }
             );
         }
     };
@@ -230,11 +237,21 @@ function installYouTubeParserLogAdapter(
 }
 
 function collectParserWarningsDuring<T>(run: () => T): { result: T; warnings: ParserWarningPayload[] } {
+    if (types.isAsyncFunction(run)) {
+        throw new TypeError('collectParserWarningsDuring only supports synchronous callbacks');
+    }
     const frame: WarningCollectorFrame = { warnings: [] };
     warningCollectorStack.push(frame);
 
     try {
         const result = run();
+        if (result !== null && (typeof result === 'object' || typeof result === 'function')
+            && typeof (result as unknown as PromiseLike<unknown>).then === 'function') {
+            // A non-async callback may already have started work; retire its rejection,
+            // but do not claim that this synchronous collector observed its completion.
+            void Promise.resolve(result).catch(() => {});
+            throw new TypeError('collectParserWarningsDuring only supports synchronous callbacks');
+        }
         return {
             result,
             warnings: [...frame.warnings]

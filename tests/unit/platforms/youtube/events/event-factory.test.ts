@@ -7,6 +7,31 @@ import { createYouTubeEventFactory as createStaticYouTubeEventFactory } from "..
 const FALLBACK_AVATAR_URL = DEFAULT_AVATAR_URL;
 
 describe("YouTube event factory behavior", () => {
+  it("emits anonymous gift memberships without supplied source identity", () => {
+    const factory = createStaticYouTubeEventFactory();
+    for (const identity of [{}, { username: "test-source-viewer" }, { userId: "test-source-id" }, { username: "test-source-viewer", userId: "test-source-id" }]) {
+      const event = factory.createGiftPaypiggyEvent({
+        ...identity, isAnonymous: true, giftCount: 3, tier: "Test tier",
+        timestamp: "2024-01-01T00:00:00.000Z",
+      });
+      expect(event.isAnonymous).toBe(true);
+      expect(event).not.toHaveProperty("username");
+      expect(event).not.toHaveProperty("userId");
+      expect(event.giftCount).toBe(3);
+      expect(event.tier).toBe("Test tier");
+      expect(PlatformEvents.validateEvent(event)).toBe(true);
+    }
+  });
+
+  it("keeps nonanonymous identity and anonymous gift-count validation strict", () => {
+    const factory = createStaticYouTubeEventFactory();
+    const base = { giftCount: 3, timestamp: "2024-01-01T00:00:00.000Z" };
+    for (const identity of [{}, { username: "test-viewer" }, { userId: "test-id" }]) {
+      expect(() => factory.createGiftPaypiggyEvent({ ...base, ...identity, isAnonymous: false })).toThrow("requires userId and username");
+    }
+    expect(() => factory.createGiftPaypiggyEvent({ ...base, giftCount: 0, isAnonymous: true })).toThrow("requires giftCount");
+    expect(() => factory.createGiftPaypiggyEvent({ ...base, timestamp: "invalid", isAnonymous: true })).toThrow("ISO required");
+  });
   it("builds chat-connected events with deterministic timestamp", () => {
     const eventFactory = createStaticYouTubeEventFactory({
       generateCorrelationId: () => "corr-ignored",

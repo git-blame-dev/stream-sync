@@ -1,4 +1,5 @@
 import { describe, it, beforeEach, expect } from "bun:test";
+import { spawnSync } from "node:child_process";
 import {
   createMockFn,
   clearAllMocks,
@@ -118,6 +119,130 @@ function isParserWarningPayload(value: unknown): value is ParserWarningPayload {
 }
 
 describe("youtube parser log adapter", () => {
+  it("redacts complete quoted credentials before applying diagnostic output limits", () => {
+    const parserApi = createParserApiFixture();
+    const boundedLogger = createLoggerFixture();
+    installYouTubeParserLogAdapter({ logger: boundedLogger, youtubeModule: { Parser: parserApi } });
+    const handler = getInstalledParserHandler(parserApi);
+    const secret = `${"test-private-segment-".repeat(300)}\\nTEST_PRIVATE_SUFFIX`;
+    const fields = [
+      `TestRenderer password="${secret}";scope`,
+      `TestRenderer authorization: Bearer "${secret}";scope`,
+      `TestRenderer {"password":"${secret}"};scope`,
+    ];
+    const collection = collectParserWarningsDuring(() => {
+      for (const field of fields) handler({ error_type: field, classname: field, expected: [field] });
+      handler({ error_type: "typecheck", classname: "TestSafeRenderer", expected: "TestSafeExpected" });
+    });
+    expect(collection.warnings).toHaveLength(4);
+    const outputs = [JSON.stringify(boundedLogger.warn.mock.calls), JSON.stringify(collection.warnings)];
+    for (const output of outputs) {
+      expect(output).not.toContain("test-private-segment-");
+      expect(output).not.toContain("TEST_PRIVATE_SUFFIX");
+      expect(output).toContain("[REDACTED]");
+    }
+    for (const warning of collection.warnings) {
+      for (const value of Object.values(warning)) expect(value.length).toBeLessThanOrEqual(256);
+    }
+    expect(collection.warnings[3]).toEqual({ errorType: "typecheck", className: "TestSafeRenderer", expected: "TestSafeExpected", detail: "" });
+  });
+
+  it("bounds and redacts structural diagnostics in both logger and collected warnings", () => {
+    const parserApi = createParserApiFixture();
+    const boundedLogger = createLoggerFixture();
+    installYouTubeParserLogAdapter({ logger: boundedLogger, youtubeModule: { Parser: parserApi } });
+    const handler = getInstalledParserHandler(parserApi);
+    const secret = "test-parser-secret";
+    const field = `Bearer ${secret} ${"X".repeat(10000)}`;
+    const collection = collectParserWarningsDuring(() => {
+      for (let index = 0; index < 120; index += 1) handler({
+        error_type: field, classname: field, expected: Array.from({ length: 120 }, () => field),
+        error: new Error("synthetic private chat body"), titles: ["synthetic private stream title"],
+      });
+    });
+    expect(collection.warnings).toHaveLength(100);
+    for (const warning of collection.warnings) {
+      for (const value of Object.values(warning)) expect(value.length).toBeLessThanOrEqual(256);
+    }
+    for (const [message, , warning] of boundedLogger.warn.mock.calls) {
+      expect((message as string).length).toBeLessThanOrEqual(1100);
+      for (const value of Object.values(warning as ParserWarningPayload)) expect(value.length).toBeLessThanOrEqual(256);
+    }
+    const serialized = JSON.stringify({ logs: boundedLogger.warn.mock.calls, warnings: collection.warnings });
+    expect(serialized).not.toContain(secret);
+    expect(serialized).not.toContain("synthetic private chat body");
+    expect(serialized).not.toContain("synthetic private stream title");
+    expect(serialized).not.toContain("stack");
+  });
+
+  it("rejects async collectors without leaking an unhandled rejection in a child runtime", () => {
+    const modulePath = new URL("../../../src/utils/youtube-parser-log-adapter.ts", import.meta.url).href;
+    const script = `
+      import { collectParserWarningsDuring } from ${JSON.stringify(modulePath)};
+      let invoked = false;
+      let unhandled = false;
+      process.on('unhandledRejection', () => { unhandled = true; });
+      const rejectSync = (callback) => {
+        try { collectParserWarningsDuring(callback); throw new Error('accepted async callback'); }
+        catch (error) { if (!(error instanceof TypeError)) throw error; }
+      };
+      rejectSync(async () => { invoked = true; throw new Error('synthetic async failure'); });
+      if (invoked) throw new Error('invoked declared async callback');
+      rejectSync(() => Promise.reject(new Error('synthetic returned promise failure')));
+      rejectSync(() => ({ then(_resolve, reject) { reject(new Error('synthetic thenable failure')); } }));
+      await new Promise(resolve => setImmediate(resolve));
+      if (unhandled) throw new Error('unhandled rejection escaped');
+      if (collectParserWarningsDuring(() => 'test-sync-result').result !== 'test-sync-result') throw new Error('collector scope leaked');
+    `;
+    const child = spawnSync(process.execPath, ["--eval", script], { encoding: "utf8", timeout: 10000 });
+    expect(child.status).toBe(0);
+    expect(child.stderr).toBe("");
+  });
+
+  it("ignores malformed diagnostic shapes without stringifying payload objects", () => {
+    const parserApi = createParserApiFixture();
+    const boundedLogger = createLoggerFixture();
+    installYouTubeParserLogAdapter({ logger: boundedLogger, youtubeModule: { Parser: parserApi } });
+    const handler = getInstalledParserHandler(parserApi);
+    const rawObject = { toString() { throw new Error("synthetic private body must not be stringified"); } };
+    const collection = collectParserWarningsDuring(() => {
+      handler(null as unknown as ParserWarningContext);
+      handler({ error_type: rawObject, classname: rawObject, expected: [null, rawObject, "TestExpected"], error: rawObject } as unknown as ParserWarningContext);
+    });
+    expect(collection.warnings).toEqual([
+      { errorType: "unknown", className: "unknown", expected: "", detail: "" },
+      { errorType: "unknown", className: "unknown", expected: "TestExpected", detail: "" },
+    ]);
+    expect(boundedLogger.error).not.toHaveBeenCalled();
+  });
+
+  it("does not inspect expected entries beyond its bounded classification budget", () => {
+    const parserApi = createParserApiFixture();
+    const boundedLogger = createLoggerFixture();
+    installYouTubeParserLogAdapter({ logger: boundedLogger, youtubeModule: { Parser: parserApi } });
+    const expected = Array.from({ length: 101 }, () => "TestExpected");
+    Object.defineProperty(expected, 100, { get() { throw new Error("synthetic out-of-budget entry"); } });
+    getInstalledParserHandler(parserApi)({ expected, classname: "TestClass" });
+    expect(boundedLogger.warn).toHaveBeenCalledTimes(1);
+    expect(boundedLogger.error).not.toHaveBeenCalled();
+  });
+
+  it("retains only structural adapter-failure diagnostics without raw error messages", () => {
+    const parserApi = createParserApiFixture();
+    const failureLogger = createLoggerFixture();
+    failureLogger.warn.mockImplementationOnce(() => { throw new Error("synthetic private failure body"); });
+    installYouTubeParserLogAdapter({ logger: failureLogger, youtubeModule: { Parser: parserApi } });
+    getInstalledParserHandler(parserApi)({ error_type: "Bearer test-failure-secret", classname: "TestClass" });
+    expect(failureLogger.error).toHaveBeenCalledTimes(1);
+    const serialized = JSON.stringify(failureLogger.error.mock.calls);
+    expect(serialized).not.toContain("synthetic private failure body");
+    expect(serialized).not.toContain("test-failure-secret");
+  });
+
+  it("unwinds a throwing synchronous collector before subsequent scopes", () => {
+    expect(() => collectParserWarningsDuring(() => { throw new Error("synthetic sync failure"); })).toThrow("synthetic sync failure");
+    expect(collectParserWarningsDuring(() => "test-next-result")).toEqual({ result: "test-next-result", warnings: [] });
+  });
   let logger: LoggerFixture;
 
   beforeEach(() => {
@@ -239,7 +364,7 @@ describe("youtube parser log adapter", () => {
     }).not.toThrow();
   });
 
-  it("formats string expected and string error details as one line", () => {
+  it("formats expected classification and summarizes string error length without its body", () => {
     const parserApi = {
       setParserErrorHandler: createMockFn<[ParserWarningHandler], void>(),
     } satisfies ParserApiFixture;
@@ -260,11 +385,11 @@ describe("youtube parser log adapter", () => {
     const [message, context, metadata] = expectLoggerCall(logger.warn.mock.calls, 0);
     expect(context).toBe("youtube-parser");
     expect(message).toContain("expected=MenuServiceItem");
-    expect(message).toContain("detail=line1 line2");
-    expect(metadata.detail).toBe("line1 line2");
+    expect(message).toContain("detail=errorMessageLength=11");
+    expect(metadata.detail).toBe("errorMessageLength=11");
   });
 
-  it("formats mutation and title metadata into one line detail output", () => {
+  it("formats mutation counts and title counts without raw titles", () => {
     const parserApi = {
       setParserErrorHandler: createMockFn<[ParserWarningHandler], void>(),
     } satisfies ParserApiFixture;
@@ -290,7 +415,8 @@ describe("youtube parser log adapter", () => {
     const [firstMessage] = expectLoggerCall(logger.warn.mock.calls, 0);
     const [secondMessage] = expectLoggerCall(logger.warn.mock.calls, 1);
     expect(firstMessage).toContain("detail=2/4 mutation items failed");
-    expect(secondMessage).toContain("titles=Song A, Song B");
+    expect(secondMessage).toContain("titleCount=2");
+    expect(secondMessage).not.toContain("Song A");
   });
 
   it("reports adapter failures through platform error handler paths", () => {
@@ -384,7 +510,7 @@ describe("youtube parser log adapter", () => {
       expect.objectContaining({
         errorType: "parse",
         className: "MenuFlexibleItem",
-        detail: "failed to parse",
+        detail: "errorMessageLength=15",
       }),
     ]);
     expect(logger.warn).toHaveBeenCalledTimes(2);

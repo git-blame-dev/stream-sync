@@ -318,7 +318,8 @@ createGiftEvent: (data: UnknownRecord = {}): UnknownRecord => {
 
 createGiftPaypiggyEvent: (data: UnknownRecord = {}): UnknownRecord => {
             const isError = data.isError === true;
-            const identity = normalizeIdentity(data, { allowMissing: isError });
+            const isAnonymous = data.isAnonymous === true;
+            const identity = isAnonymous ? {} : normalizeIdentity(data, { allowMissing: isError });
             const avatarUrl = resolveAvatarUrl(data);
             const giftCount = isError
                 ? normalizeNonNegativeNumber(data.giftCount)
