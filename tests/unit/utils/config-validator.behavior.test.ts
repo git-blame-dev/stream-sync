@@ -1,6 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import { ConfigValidator } from "../../../src/utils/config-validator";
 import { CONFIG_SCHEMA } from "../../../src/core/config-schema";
+import ini from "ini";
+import { buildGeneralConfig, buildLoggingConfig } from "../../../src/core/config-builders";
 import type {
   ConfigFieldSpec,
   ConfigSectionName,
@@ -47,6 +49,46 @@ const normalizeRuntimeSection = (
   ]) as NormalizedConfigSection;
 
 describe("config-validator (utility) behavior", () => {
+  it("uses numeric fallbacks for missing or blank values without treating zero as missing", () => {
+    for (const value of [undefined, null, "", "  ", "\t\n"]) {
+      expect(ConfigValidator.parseNumber(value, { defaultValue: 3 })).toBe(3);
+      expect(ConfigValidator.parseNumber(value)).toBeNull();
+    }
+    for (const value of [0, "0", " 0 "]) {
+      expect(ConfigValidator.parseNumber(value, { defaultValue: 3 })).toBe(0);
+      expect(ConfigValidator.parseNumber(value, { defaultValue: 3, allowZero: false })).toBe(3);
+    }
+    for (const value of [-1, 11, 1.5]) {
+      expect(ConfigValidator.parseNumber(value, { defaultValue: 3, min: 0, max: 10, requireInteger: true })).toBe(3);
+    }
+  });
+
+  it("normalizes synthetic INI blanks and logging thresholds through runtime builders", () => {
+    const normalized = ConfigValidator.normalize(ini.parse(`
+[general]
+viewerCountPollingInterval =
+maxMessageLength =
+[http]
+defaultTimeoutMs =
+reachabilityTimeoutMs =
+enhancedTimeoutMs =
+enhancedReachabilityTimeoutMs =
+[logging]
+consoleLevel = WaRn
+fileLevel = DeBuG
+fileLoggingEnabled = false
+`));
+    const defaults = ConfigValidator.normalize({});
+    expect(normalized.general.viewerCountPollingInterval).toBe(defaults.general.viewerCountPollingInterval);
+    expect(normalized.general.maxMessageLength).toBe(defaults.general.maxMessageLength);
+    expect(normalized.http).toEqual(defaults.http);
+    expect(buildLoggingConfig(normalized)).toMatchObject({
+      console: { level: "warn" }, file: { level: "debug", enabled: false },
+    });
+    const zero = ConfigValidator.normalize(ini.parse("[general]\nviewerCountPollingInterval = 0"));
+    expect(buildGeneralConfig(zero).viewerCountPollingIntervalMs).toBe(0);
+  });
+
   it("parses booleans, strings, and numbers with defaults and bounds", () => {
     expect(ConfigValidator.parseBoolean("true", false)).toBe(true);
     expect(ConfigValidator.parseBoolean("invalid", true)).toBe(true);
@@ -605,6 +647,28 @@ describe("ConfigValidator._normalizeCooldownsSection()", () => {
 });
 
 describe("ConfigValidator._normalizeLoggingSection()", () => {
+  it("accepts trimmed case-insensitive shared thresholds", () => {
+    for (const level of ["debug", "info", "warn", "error"]) {
+      const normalized = ConfigValidator._normalizeLoggingSection({
+        consoleLevel: `  ${level.toUpperCase()}  `,
+        fileLevel: `  ${level.toUpperCase()}  `,
+      });
+      expect(normalized.consoleLevel).toBe(level);
+      expect(normalized.fileLevel).toBe(level);
+    }
+  });
+
+  it("leaves invalid and missing thresholds to downstream default selection", () => {
+    for (const level of [undefined, null, "", "  ", "invalid", "console", "emergency"]) {
+      const normalized = ConfigValidator.normalize({ logging: { consoleLevel: level, fileLevel: level } });
+      expect(normalized.logging.consoleLevel).toBeNull();
+      expect(normalized.logging.fileLevel).toBeNull();
+      expect(buildLoggingConfig(normalized)).toMatchObject({
+        console: { level: "warn" }, file: { level: "debug" },
+      });
+    }
+  });
+
   it("normalizes logging settings with null defaults when not specified", () => {
     const result = ConfigValidator._normalizeLoggingSection({});
 

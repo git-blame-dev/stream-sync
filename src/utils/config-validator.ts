@@ -13,6 +13,7 @@ import type {
     RowVisualEffectId
 } from '../core/types/config-types';
 import { DEFAULT_HTTP_USER_AGENTS, parseUserAgentList } from '../core/http-config';
+import { isLogThreshold } from '../core/logger/levels';
 import { isRowVisualEffectId, normalizeRowSpriteUrl, normalizeRowTheme } from '../core/row-presentation';
 import { normalizeProfileIdentityKey } from './profile-identity-key-normalizer';
 
@@ -49,6 +50,7 @@ class ConfigValidator {
         const { defaultValue, min, max, allowZero = true, requireInteger = false } = options;
         const fallback = typeof defaultValue === 'number' ? defaultValue : null;
         if (value === undefined || value === null) return fallback;
+        if (typeof value === 'string' && value.trim().length === 0) return fallback;
         const parsed = Number(value);
         if (!Number.isFinite(parsed)) return fallback;
         if (requireInteger && !Number.isInteger(parsed)) return fallback;
@@ -368,9 +370,14 @@ class ConfigValidator {
     }
 
     static _normalizeLoggingSection(raw: RawConfigSection): NormalizedConfigSection {
+        const normalizeLevel = (value: unknown): string | null => {
+            const level = ConfigValidator.parseString(value, null)?.toLowerCase() ?? null;
+            return isLogThreshold(level) ? level : null;
+        };
+
         return {
-            consoleLevel: ConfigValidator.parseString(raw.consoleLevel, null),
-            fileLevel: ConfigValidator.parseString(raw.fileLevel, null),
+            consoleLevel: normalizeLevel(raw.consoleLevel),
+            fileLevel: normalizeLevel(raw.fileLevel),
             fileLoggingEnabled: ConfigValidator.parseBoolean(raw.fileLoggingEnabled, null)
         };
     }
