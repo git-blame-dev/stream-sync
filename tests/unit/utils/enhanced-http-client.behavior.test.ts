@@ -62,6 +62,33 @@ describe("EnhancedHttpClient behavior", () => {
     expect(asRequestConfig(get.mock.calls[1]?.[1] ?? {}).headers).toEqual({ authorization: "Bearer synthetic-caller-token", "user-agent": "CallerAgent/1" });
   });
 
+  it("explicitly nulls Axios Basic auth only when generated credentials own the request", async () => {
+    const get = createMockFn<[string, Record<string, unknown>], Promise<Record<string, unknown>>>().mockResolvedValue({ status: 200 });
+    const client = new EnhancedHttpClient({ axios: createHttpAdapter({ get }), logger: noOpLogger });
+    const auth = { username: "synthetic-user", password: "synthetic-password" };
+    const options = { auth, authToken: "synthetic-owned-token" };
+    await client.get("https://synthetic.example.invalid/owned", options);
+    expect(get.mock.calls[0]?.[1].auth).toBeNull();
+    await client.get("https://synthetic.example.invalid/default-basic", { authToken: "synthetic-owned-token" });
+    expect(get.mock.calls[1]?.[1].auth).toBeNull();
+    await client.get("https://synthetic.example.invalid/caller-basic", { auth });
+    expect(get.mock.calls[2]?.[1].auth).toBe(auth);
+    await client.get("https://synthetic.example.invalid/default-auth");
+    expect(get.mock.calls[3]?.[1]).not.toHaveProperty("auth");
+    expect(options.auth).toBe(auth);
+    expect(auth).toEqual({ username: "synthetic-user", password: "synthetic-password" });
+  });
+
+  it("leaves malformed URL handling to the adapter instead of changing it during authentication checks", async () => {
+    const get = createMockFn<[string, Record<string, unknown>], Promise<Record<string, unknown>>>().mockResolvedValue({ status: 200 });
+    const client = new EnhancedHttpClient({ axios: createHttpAdapter({ get }), logger: noOpLogger });
+    const url = "https://%ZZ.invalid/synthetic";
+    await client.get(url, { authToken: "synthetic-owned-token", baseURL: "synthetic relative base" });
+    expect(get.mock.calls[0]?.[0]).toBe(url);
+    await client.get("synthetic-user:synthetic-password@%ZZ.invalid/synthetic", { authToken: "synthetic-owned-token", baseURL: "http://" });
+    expect(get.mock.calls[1]?.[0]).toBe("synthetic-user:synthetic-password@%ZZ.invalid/synthetic");
+  });
+
   it("trims direct UA pools, omits empty pools, and honors an explicitly blank UA", async () => {
     const get = createMockFn<[string, Record<string, unknown>], Promise<Record<string, unknown>>>().mockResolvedValue({ status: 200 });
     const client = new EnhancedHttpClient({ axios: createHttpAdapter({ get }), logger: noOpLogger, userAgents: [" ", " SyntheticAgent/1 ", "", "SyntheticAgent/2"] });

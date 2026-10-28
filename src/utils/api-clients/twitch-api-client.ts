@@ -95,6 +95,7 @@ class TwitchApiClient {
 
             const requestOptions = {
                 ...options,
+                auth: null,
                 headers: {
                     ...Object.fromEntries(Object.entries(options.headers ?? {}).filter(([name]) =>
                         !['authorization', 'client-id'].includes(name.toLowerCase()))),

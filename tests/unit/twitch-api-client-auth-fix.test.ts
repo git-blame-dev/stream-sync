@@ -74,17 +74,21 @@ describe("TwitchApiClient authentication", () => {
     it("keeps owner authentication authoritative while retaining transport options", async () => {
       mockHttpClient.get.mockResolvedValue({ status: 200, data: { data: [] } });
       const signal = new AbortController().signal;
+      const auth = { username: "synthetic-user", password: "synthetic-password" };
       await apiClient.makeRequest("/users", {
         authToken: "synthetic-caller-token", authType: "caller", clientId: "caller-id",
+        auth,
         headers: { authorization: "caller", AUTHORIZATION: "caller2", "CLIENT-ID": "caller", "X-Test": "retained" },
         signal, maxAttempts: 3, totalTimeout: 1234,
       });
       expect(mockHttpClient.get.mock.calls[0]?.[1]).toMatchObject({
         authToken: "test-access-token", authType: "app", clientId: "test-client-id",
+        auth: null,
         headers: { Authorization: "Bearer test-access-token", "Client-Id": "test-client-id", "X-Test": "retained" },
         signal, maxAttempts: 3, totalTimeout: 1234,
       });
       expect(Object.keys(mockHttpClient.get.mock.calls[0]?.[1]?.headers as object).sort()).toEqual(["Authorization", "Client-Id", "X-Test"]);
+      expect(auth).toEqual({ username: "synthetic-user", password: "synthetic-password" });
     });
 
     it("does not use caller client identity when owner identity is absent", async () => {
@@ -389,10 +393,13 @@ describe("TwitchApiClient authentication", () => {
         secrets.twitch.accessToken = "synthetic-rotated-token";
         return true;
       });
-      await expect(apiClient.makeRequest("/users", { authToken: "caller", headers: { authorization: "caller" } })).rejects.toBe(failure);
+      const options = { authToken: "caller", auth: { username: "synthetic-user", password: "synthetic-password" }, headers: { authorization: "caller" } };
+      await expect(apiClient.makeRequest("/users", options)).rejects.toBe(failure);
       expect(mockTwitchAuth.refreshTokens).toHaveBeenCalledTimes(1);
       expect(mockHttpClient.get).toHaveBeenCalledTimes(2);
-      expect(mockHttpClient.get.mock.calls[1]?.[1]).toMatchObject({ authToken: "synthetic-rotated-token", disableRetry: true, headers: { Authorization: "Bearer synthetic-rotated-token" } });
+      expect(mockHttpClient.get.mock.calls[0]?.[1]?.auth).toBeNull();
+      expect(mockHttpClient.get.mock.calls[1]?.[1]).toMatchObject({ auth: null, authToken: "synthetic-rotated-token", disableRetry: true, headers: { Authorization: "Bearer synthetic-rotated-token" } });
+      expect(options.auth).toEqual({ username: "synthetic-user", password: "synthetic-password" });
     });
 
     it("preserves the original 401 when refresh declines", async () => {

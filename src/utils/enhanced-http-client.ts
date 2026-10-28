@@ -193,9 +193,30 @@ class EnhancedHttpClient {
 
         return {
             ...axiosOptions,
+            ...(authHeaders.Authorization ? { auth: null } : {}),
             timeout,
             headers: requestHeaders
         };
+    }
+
+    private validateUrlAuthentication(url: string, options: RequestOptions): void {
+        if (!options.authToken) return;
+        const baseURL = options.baseURL;
+        // Match Axios buildFullPath/combineURLs before WHATWG URL normalization.
+        const effectiveUrl = typeof baseURL === 'string' && baseURL &&
+            (!/^([a-z][a-z\d+\-.]*:)?\/\//i.test(url) || options.allowAbsoluteUrls === false)
+            ? `${baseURL.replace(/\/+$/, '')}/${url.replace(/^\/+/, '')}`
+            : url;
+        for (const candidate of [url, baseURL, effectiveUrl]) {
+            if (typeof candidate !== 'string') continue;
+            let parsed: URL;
+            try {
+                parsed = new URL(candidate);
+            } catch {
+                continue;
+            }
+            if (parsed.username || parsed.password) throw new TypeError('Conflicting URL authentication');
+        }
     }
 
     getStreamingOptimizedTimeout(context: OperationContextInput | undefined, explicitTimeout: unknown): number {
@@ -242,6 +263,7 @@ class EnhancedHttpClient {
         }
         return withOperationDeadline(async ({ signal, remainingBudgetMs }) => {
             const config = this.buildRequestConfig({ ...requestOptions, signal });
+            this.validateUrlAuthentication(url, requestOptions);
 
             const makeRequest = async (): Promise<Record<string, unknown>> => {
                 signal.throwIfAborted();
