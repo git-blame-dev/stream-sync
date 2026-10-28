@@ -31,6 +31,67 @@ function metadataOwner(client: MockInnertube) {
 }
 
 describe("ViewerCountExtractionService", () => {
+  it("normalizes configuration without losing prior valid values", () => {
+    const owner = new InnertubeService({ createWithTimeout: async () => ({ getInfo: async () => ({}) }) }, { logger: noOpLogger });
+    const service = new ViewerCountExtractionService(owner, { timeout: Infinity, strategies: ["unknown"], retries: 2 });
+    expect(service.config.timeout).toBe(8000);
+    expect(service.config.strategies).toEqual(["view_text", "video_details", "basic_info"]);
+    service.updateConfig({ timeout: 4500, strategies: ["basic_info"], debug: true });
+    service.updateConfig({ timeout: 1.5, strategies: ["unknown"], debug: "false", unexpected: "synthetic-private" });
+    expect(service.config).toEqual({ timeout: 4500, strategies: ["basic_info"], debug: true, retries: 2 });
+    service.updateConfig({ timeout: 2147483648 });
+    expect(service.config.timeout).toBe(4500);
+  });
+
+  it("caps simultaneous external metadata jobs at five while preserving result order", async () => {
+    let active = 0;
+    let maximum = 0;
+    const owner = new InnertubeService({ createWithTimeout: async () => ({ getInfo: async () => {
+      active++;
+      maximum = Math.max(maximum, active);
+      await Promise.resolve();
+      active--;
+      return { video_details: { viewer_count: 12 } };
+    } }) }, { logger: noOpLogger });
+    const service = new ViewerCountExtractionService(owner);
+    const ids = Array.from({ length: 12 }, (_, index) => `synthetic-video-${index}`);
+    const results = await service.extractViewerCountsBatch(ids, { maxConcurrency: 999 });
+    expect(maximum).toBe(5);
+    expect(results.map(result => result.videoId)).toEqual(ids);
+    expect(results.every(result => result.success && result.count === 12)).toBe(true);
+  });
+
+  it("projects diagnostic metadata to bounded provenance without raw provider content", async () => {
+    const owner = new InnertubeService({ createWithTimeout: async () => ({ getInfo: async () => ({
+      video_details: { viewer_count: 10000001, private: "synthetic-private" },
+    }) }) }, { logger: noOpLogger });
+    const service = new ViewerCountExtractionService(owner);
+    const result = await service.extractViewerCount("synthetic-private-video", { debug: true });
+    expect(result.count).toBe(10000001);
+    expect(result.videoId).toBe("synthetic-private-video");
+    expect(result.metadata).toEqual({
+      strategiesAttempted: ["view_text", "video_details"],
+      rawData: { view_text: {}, video_details: { hasVideoDetails: true, sourceField: "viewer_count" } },
+    });
+    expect(JSON.stringify(result.metadata)).not.toContain("synthetic-private");
+    expect(JSON.stringify(result.metadata)).not.toContain("10000001");
+  });
+
+  it("does not coerce metadata enum objects or retain arbitrary provider payloads", async () => {
+    let coercions = 0;
+    const disguised = (value: string) => ({ body: "synthetic-private-body", toString: () => { coercions++; return value; } });
+    const owner = new InnertubeService({ createWithTimeout: async () => ({ getInfo: async () => ({}) }) }, { logger: noOpLogger });
+    const service = new ViewerCountExtractionService(owner, { YouTubeViewerExtractor: {
+      extractConcurrentViewers: () => ({ success: true, count: 12, metadata: {
+        strategiesAttempted: ["view_text"],
+        rawData: { view_text: { sourceField: disguised("viewer_count"), patternMatched: disguised("watching_now") } },
+      } }),
+    } });
+    const result = await service.extractViewerCount("synthetic-functional-id");
+    expect(coercions).toBe(0);
+    expect(result.metadata).toEqual({ strategiesAttempted: ["view_text"], rawData: { view_text: {} } });
+    expect(JSON.stringify(result.metadata)).not.toContain("synthetic-private-body");
+  });
   let mockInnertube: MockInnertube;
   let mockExtractor: MockExtractor;
 
@@ -100,7 +161,7 @@ describe("ViewerCountExtractionService", () => {
     const result = await service.extractViewerCount("vid1");
 
     expect(result.success).toBe(false);
-    expect(result.error).toBe("boom");
+    expect(result.error).toBe("Viewer count extraction failed");
     expect(service.stats.failedExtractions).toBe(1);
   });
 

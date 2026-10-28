@@ -39,7 +39,7 @@ describe("ViewerCountExtractionService error handler integration", () => {
 
   it("routes extraction error through error handler at visible log level", async () => {
     mockInnertube.getVideoInfo = createMockFn(async () => {
-      throw new Error("innertube failed");
+      throw new Error("innertube failed synthetic-private-video access_token=synthetic-secret");
     });
 
     const owner = new InnertubeService({
@@ -58,6 +58,10 @@ describe("ViewerCountExtractionService error handler integration", () => {
     if (errorCall === undefined) {
       throw new Error("Expected extraction error logger call");
     }
-    expect(errorCall[0]).toContain("test-vid-1");
+    expect(result.error).toBe("Viewer count extraction failed");
+    const diagnostics = JSON.stringify(mockLogger.error.mock.calls) + JSON.stringify(mockLogger.debug.mock.calls);
+    expect(diagnostics).not.toContain("test-vid-1");
+    expect(diagnostics).not.toContain("synthetic-private-video");
+    expect(diagnostics).not.toContain("synthetic-secret");
   });
 });

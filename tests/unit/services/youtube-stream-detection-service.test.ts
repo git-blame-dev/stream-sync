@@ -426,7 +426,7 @@ describe("YouTubeStreamDetectionService", () => {
         throw new Error("Expected debug information");
       }
       expect(debug.requestTime).toBeDefined();
-      expect(debug.channelHandle).toBe("@testchannel");
+      expect(debug.channelHandle).toBeUndefined();
       expect(debug.totalVideosFound).toBe(2);
       expectNoTechnicalArtifacts(result.message);
     });

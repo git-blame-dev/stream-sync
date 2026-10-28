@@ -27,7 +27,7 @@ describe('complete unique viewer aggregates through owned metadata and real extr
             expect(result).toMatchObject({ success: false, totalCount: 0, successfulStreams: 1, failedStreams: 1 });
             expect(result.streams).toEqual([
                 { videoId: 'test-a', count: 10, success: true, strategy: 'basic_info' },
-                { videoId: 'test-b', count: 0, success: false, error: 'synthetic SDK failure' }
+                { videoId: 'test-b', count: 0, success: false, error: 'Viewer count extraction failed' }
             ]);
         } finally {
             await owner.dispose();

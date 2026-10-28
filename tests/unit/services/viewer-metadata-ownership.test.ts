@@ -19,7 +19,7 @@ describe('viewer metadata ownership', () => {
         const service = new ViewerCountExtractionService(adapter, { logger: noOpLogger });
         try {
             expect(await service.extractViewerCount('test-cancelled', { signal: cancellation.signal })).toMatchObject({
-                success: false, count: 0, error: 'synthetic post-operation cancellation'
+                success: false, count: 0, error: 'Viewer count extraction failed', errorType: 'AbortError'
             });
             expect(service.stats.successfulExtractions).toBe(0);
             expect(service.stats.failedExtractions).toBe(1);
@@ -41,13 +41,13 @@ describe('viewer metadata ownership', () => {
             }
         }, { logger: noOpLogger });
         const service = new ViewerCountExtractionService(owner, { logger: noOpLogger });
-        expect(await service.extractViewerCount('first')).toMatchObject({ success: false, error: 'synthetic import failure' });
+        expect(await service.extractViewerCount('first')).toMatchObject({ success: false, error: 'Viewer count extraction failed', errorType: 'Error' });
         const controller = new AbortController();
         const cancelled = service.extractViewerCount('second', { signal: controller.signal });
         const healthy = service.extractViewerCount('third');
         controller.abort(new Error('cancel only this waiter'));
         release();
-        expect(await cancelled).toMatchObject({ success: false, error: 'cancel only this waiter' });
+        expect(await cancelled).toMatchObject({ success: false, error: 'Viewer count extraction failed', errorType: 'AbortError' });
         expect(await healthy).toMatchObject({ success: true, count: 7 });
         expect(attempts).toBe(2);
         await owner.dispose();
@@ -88,7 +88,7 @@ describe('viewer metadata ownership', () => {
         await reading;
         const other = service.extractViewerCount('healthy');
         cancellation.abort(new Error('synthetic cancellation'));
-        expect(await pending).toMatchObject({ success: false, error: 'synthetic cancellation' });
+        expect(await pending).toMatchObject({ success: false, error: 'Viewer count extraction failed', errorType: 'AbortError' });
         expect(await other).toMatchObject({ success: true, count: 42 });
         expect(creations).toBe(1);
         await owner.dispose();

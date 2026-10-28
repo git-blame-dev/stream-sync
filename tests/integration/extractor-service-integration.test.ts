@@ -418,7 +418,9 @@ describe("Extractor Service Integration", () => {
         { count: -1, expected: false },
         { count: NaN, expected: false },
         { count: "invalid", expected: false },
-        { count: 11000000, expected: false },
+        { count: 11000000, expected: true },
+        { count: 1.5, expected: false },
+        { count: Number.MAX_SAFE_INTEGER + 1, expected: false },
         { count: null, expected: false },
         { count: undefined, expected: false },
       ];

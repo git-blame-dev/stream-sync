@@ -110,7 +110,7 @@ describe('YouTube metadata detection ownership', () => {
             if (scenario !== 'deadline') cancellation.abort(new Error('synthetic body cancellation'));
             expect(await pending).toMatchObject(scenario === 'deadline'
                 ? { success: false, observationKind: 'unavailable', videoIds: [], message: 'Detection timeout - please try again', debug: { errorType: 'DOMException' } }
-                : { success: false, observationKind: 'unavailable', videoIds: [], debug: { errorMessage: 'synthetic body cancellation' } });
+                : { success: false, observationKind: 'unavailable', videoIds: [], debug: { errorMessage: 'Unable to detect streams', errorType: 'AbortError' } });
             await stopped;
             await owner.dispose();
             expect(calls).toEqual(stage === 'channel' ? ['channel'] : stage === 'live' ? ['channel', 'live'] : ['channel', 'search']);
@@ -186,7 +186,7 @@ describe('YouTube metadata detection ownership', () => {
         });
         const detection = deps.streamDetectionService as YouTubeStreamDetectionService;
         expect(await detection.detectLiveStreams(channel, { debug: true })).toMatchObject({
-            success: false, debug: { errorMessage: 'Innertube client requires getChannel for stream detection' }
+            success: false, debug: { errorMessage: 'Unable to detect streams', errorType: 'Error' }
         });
         await deps.innertubeService.dispose();
     });
@@ -235,7 +235,7 @@ describe('YouTube metadata detection ownership', () => {
         });
         const detection = deps.streamDetectionService as YouTubeStreamDetectionService;
         expect(await detection.detectLiveStreams(channel, { debug: true })).toMatchObject({
-            success: false, debug: { errorMessage: 'synthetic lazy import failure' }
+            success: false, debug: { errorMessage: 'Unable to detect streams', errorType: 'Error' }
         });
         expect(detection.client).toBe(deps.innertubeService);
         const cancellation = new AbortController();

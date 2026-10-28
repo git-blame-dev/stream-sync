@@ -1,5 +1,6 @@
 import { getSystemTimestampISO } from '../utils/timestamp';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
+import { validateTimeout } from '../utils/timeout-validator';
 import { isYouTubeVideoId, YouTubeLiveStreamService } from './youtube-live-stream-service';
 import type { DiscoveryObservationKind, DiscoveryQualityReason } from './youtube-live-stream-service';
 import type { InnertubeService } from './innertube-service';
@@ -95,6 +96,11 @@ function asError(error: unknown): ErrorWithStatus {
     return new Error(String(error));
 }
 
+function resolveTimeout(value: unknown, fallback: number): number {
+    return typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= 2147483647
+        ? validateTimeout(value, fallback) : fallback;
+}
+
 class YouTubeStreamDetectionService {
     client: MetadataOwner | null;
     private cancellation = new AbortController();
@@ -115,7 +121,7 @@ class YouTubeStreamDetectionService {
 
         this.logger = options.logger;
         this.errorHandler = createPlatformErrorHandler(this.logger, 'youtube-stream-detection');
-        this.timeout = options.timeout ?? 2000;
+        this.timeout = resolveTimeout(options.timeout, 2000);
         this._isShuttingDown = false;
 
         this._metrics = {
@@ -169,10 +175,15 @@ class YouTubeStreamDetectionService {
                 );
             }
 
-            const originalHandle = channelHandle;
             const cleanHandle = this._cleanChannelHandle(channelHandle);
+            if (!cleanHandle) {
+                const error = new Error('Channel handle is required');
+                this._metrics.failedRequests += 1;
+                this._updateErrorMetrics(error);
+                return this._formatErrorResponse(error, options.debug, startTime, false);
+            }
 
-            this.logger.debug?.(`Detecting live streams for channel: ${cleanHandle}`, 'youtube-stream-detection');
+            this.logger.debug?.('Detecting live streams for channel', 'youtube-stream-detection');
 
             if (!this.client || this._isShuttingDown) {
                 throw new Error('YouTube stream detection client is not configured');
@@ -183,12 +194,12 @@ class YouTubeStreamDetectionService {
             ]);
             const detectionResult = await this.client.withMetadataOperation({
                 signal,
-                timeoutMs: options.timeoutMs ?? this.timeout
+                timeoutMs: resolveTimeout(options.timeoutMs, this.timeout)
             }, async client => {
                 if (!hasDetectionCapability(client)) {
                     throw new Error('Innertube client requires getChannel for stream detection');
                 }
-                const result = await this._performDetection(cleanHandle, client, options.timeoutMs ?? this.timeout);
+                const result = await this._performDetection(cleanHandle, client, resolveTimeout(options.timeoutMs, this.timeout));
                 signal.throwIfAborted();
                 return result;
             });
@@ -219,7 +230,7 @@ class YouTubeStreamDetectionService {
             this._metrics.totalResponseTime += Date.now() - startTime;
             this._resetCircuitBreaker();
 
-            return this._formatSuccessResponse(validVideoIds, options.debug, startTime, originalHandle, detectionResult);
+            return this._formatSuccessResponse(validVideoIds, options.debug, startTime, detectionResult);
         } catch (error) {
             const normalizedError = asError(error);
 
@@ -231,13 +242,14 @@ class YouTubeStreamDetectionService {
 
             if (!this._isChannelNotFoundError(normalizedError)) {
                 this._handleDetectionError(
-                    `Stream detection failed for ${String(channelHandle)}: ${normalizedError.message}`,
-                    normalizedError,
+                    'Stream detection failed',
+                    new Error('Stream detection failed'),
                     'stream-detection'
                 );
             }
 
-            return this._formatErrorResponse(normalizedError, options.debug, startTime);
+            return this._formatErrorResponse(normalizedError, options.debug, startTime, null,
+                options.signal?.aborted || this.cancellation.signal.aborted ? 'AbortError' : undefined);
         }
     }
 
@@ -267,9 +279,7 @@ errorsByType: Record<string, number>;
 
 updateConfiguration(newConfig: { timeout?: number; username?: string }): boolean {
         try {
-            if (newConfig.timeout && typeof newConfig.timeout === 'number' && newConfig.timeout > 0) {
-                this.timeout = newConfig.timeout;
-            }
+            this.timeout = resolveTimeout(newConfig?.timeout, this.timeout);
 
             if (newConfig.username) {
                 this.username = newConfig.username;
@@ -277,9 +287,8 @@ updateConfiguration(newConfig: { timeout?: number; username?: string }): boolean
 
             this.logger.debug?.('Configuration updated successfully', 'youtube-stream-detection');
             return true;
-        } catch (error) {
-            const normalizedError = asError(error);
-            this._handleDetectionError(`Configuration update failed: ${normalizedError.message}`, normalizedError, 'configuration-update');
+        } catch (_error) {
+            this._handleDetectionError('Configuration update failed', new Error('Configuration update failed'), 'configuration-update');
             return false;
         }
     }
@@ -307,8 +316,7 @@ async cleanup(): Promise<void> {
             this.client = null;
             this.logger.debug?.('YouTube stream detection service cleanup complete', 'youtube-stream-detection');
         } catch (error) {
-            const normalizedError = asError(error);
-            this._handleDetectionError(`Cleanup error: ${normalizedError.message}`, normalizedError, 'cleanup');
+            this._handleDetectionError('Detection cleanup failed', new Error('Detection cleanup failed'), 'cleanup');
             throw error;
         }
     }
@@ -319,7 +327,11 @@ detectionClient,
 channelHandle,
             {
                 timeout,
-                logger: this.logger
+                logger: {
+                    debug: () => this.logger.debug?.('YouTube discovery progress', 'youtube-stream-detection'),
+                    warn: () => this.logger.warn?.('YouTube discovery warning', 'youtube-stream-detection'),
+                    error: () => this._handleDetectionError('YouTube discovery failed', new Error('YouTube discovery failed'), 'stream-detection')
+                }
             }
         );
 
@@ -349,7 +361,7 @@ _cleanChannelHandle(handle: unknown): string {
             cleanHandle = cleanHandle.substring(1);
         }
 
-        return cleanHandle;
+        return cleanHandle.trim();
     }
 
 _validateVideoIds(streams: DetectionStream[]): string[] {
@@ -366,7 +378,6 @@ _isValidVideoId(videoId: unknown): videoId is string {
         videoIds: string[],
         includeDebug: boolean | undefined,
         startTime: number,
-        channelHandle: string,
         detectionResult: DetectionResult
     ): DetectionServiceResponse {
         const responseTime = Date.now() - startTime;
@@ -398,7 +409,6 @@ _isValidVideoId(videoId: unknown): videoId is string {
         if (includeDebug) {
             response.debug = {
                 requestTime: getSystemTimestampISO(),
-                channelHandle,
                 totalVideosFound: detectionResult.streams ? detectionResult.streams.length : 0,
                 responseTimeMs: responseTime,
                 validVideoIds: videoIds.length,
@@ -414,7 +424,8 @@ _isValidVideoId(videoId: unknown): videoId is string {
         error: ErrorWithStatus,
         includeDebug: boolean | undefined,
         startTime: number,
-        retryable: boolean | null = null
+        retryable: boolean | null = null,
+        cancellationType?: 'AbortError'
     ): DetectionServiceResponse {
         const responseTime = Date.now() - startTime;
 
@@ -432,7 +443,7 @@ _isValidVideoId(videoId: unknown): videoId is string {
             message = 'rate limit exceeded';
             isRetryable = true;
             retryAfter = 60000;
-        } else if (error.status === 404 || error.message.includes('not found')) {
+        } else if (this._isChannelNotFoundError(error)) {
             message = 'channel not found';
             isRetryable = false;
         } else if (isRetryable === null) {
@@ -456,11 +467,11 @@ _isValidVideoId(videoId: unknown): videoId is string {
         if (includeDebug) {
             response.debug = {
                 requestTime: getSystemTimestampISO(),
-                errorType: error.constructor.name,
-                errorMessage: error.message,
+                errorType: cancellationType ?? (error instanceof DOMException ? 'DOMException' : error instanceof TypeError ? 'TypeError' : 'Error'),
+                errorMessage: message,
                 responseTimeMs: responseTime
             };
-            if (error.status !== undefined) {
+            if (typeof error.status === 'number' && Number.isInteger(error.status) && error.status >= 100 && error.status <= 599) {
                 response.debug.errorStatus = error.status;
             }
         }
@@ -477,11 +488,11 @@ _isChannelNotFoundError(error: ErrorWithStatus): boolean {
             return true;
         }
 
-        return error.message.toLowerCase().includes('channel not found');
+        return /channel[\s_-]+not[\s_-]+found/i.test(error.message);
     }
 
 _updateErrorMetrics(error: Error): void {
-        const errorType = error.constructor.name;
+        const errorType = error.name === 'TimeoutError' ? 'TimeoutError' : 'Error';
         this._metrics.errorsByType[errorType] = (this._metrics.errorsByType[errorType] || 0) + 1;
     }
 
@@ -506,6 +517,7 @@ _isCircuitBreakerOpen(): boolean {
     }
 
 _recordCircuitBreakerFailure(error: Error): void {
+        if (this._isChannelNotFoundError(error)) return;
         if (error.message && (
             error.name === 'TimeoutError'
             || error.message.includes('timeout')

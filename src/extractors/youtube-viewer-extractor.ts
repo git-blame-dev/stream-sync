@@ -85,7 +85,7 @@ class YouTubeViewerExtractor {
                 result.metadata.rawData[strategy] = strategyResult.rawData;
             }
 
-            if (strategyResult.success) {
+            if (strategyResult.success && this.isValidViewerCount(strategyResult.count)) {
                 result.count = strategyResult.count;
                 result.strategy = strategy;
                 result.success = true;
@@ -230,7 +230,7 @@ class YouTubeViewerExtractor {
                     };
                 }
                 
-                if (!!videoInfo.basic_info.is_live && videoInfo.basic_info.view_count !== undefined && videoInfo.basic_info.view_count !== null) {
+                if (videoInfo.basic_info.is_live === true && videoInfo.basic_info.view_count !== undefined && videoInfo.basic_info.view_count !== null) {
                     const count = this._parseStrictViewerCount(videoInfo.basic_info.view_count);
                     if (count !== null) {
                         result.count = count;
@@ -256,7 +256,7 @@ class YouTubeViewerExtractor {
 
     static _parseStrictViewerCount(value: unknown): number | null {
         if (typeof value === 'number') {
-            return Number.isFinite(value) && Number.isInteger(value) && value >= 0 ? value : null;
+            return this.isValidViewerCount(value) ? value : null;
         }
 
         if (typeof value !== 'string' || !/^\d+$/.test(value)) {
@@ -264,7 +264,7 @@ class YouTubeViewerExtractor {
         }
 
         const count = Number(value);
-        return Number.isFinite(count) && Number.isInteger(count) ? count : null;
+        return this.isValidViewerCount(count) ? count : null;
     }
     
     static _parseWatchingText(viewText: string): ParseWatchingTextResult {
@@ -305,10 +305,8 @@ class YouTubeViewerExtractor {
     
     static isValidViewerCount(count: unknown): boolean {
         return typeof count === 'number' && 
-               Number.isFinite(count) &&
-               Number.isInteger(count) &&
-               count >= 0 && 
-               count <= 10000000;
+               Number.isSafeInteger(count) &&
+               count >= 0;
     }
     
     static getCapabilities() {

@@ -258,7 +258,9 @@ describe("YouTube Viewer Count System - End-to-End Integration", () => {
       expect(YouTubeViewerExtractor.isValidViewerCount(-1)).toBe(false);
       expect(YouTubeViewerExtractor.isValidViewerCount(NaN)).toBe(false);
       expect(YouTubeViewerExtractor.isValidViewerCount("invalid")).toBe(false);
-      expect(YouTubeViewerExtractor.isValidViewerCount(11000000)).toBe(false);
+      expect(YouTubeViewerExtractor.isValidViewerCount(11000000)).toBe(true);
+      expect(YouTubeViewerExtractor.isValidViewerCount(1.5)).toBe(false);
+      expect(YouTubeViewerExtractor.isValidViewerCount(Number.MAX_SAFE_INTEGER + 1)).toBe(false);
     });
   });
 

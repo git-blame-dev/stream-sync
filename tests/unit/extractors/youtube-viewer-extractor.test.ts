@@ -465,12 +465,21 @@ describe("YouTubeViewerExtractor", () => {
   });
 
   describe("isValidViewerCount", () => {
+    test("requires a boolean live flag and safe integer strategy counts", () => {
+      for (const is_live of ["false", "true", 1, {}]) {
+        expect(YouTubeViewerExtractor.extractConcurrentViewers({ basic_info: { is_live, view_count: 12 } }, { strategies: ["basic_info"] }).success).toBe(false);
+      }
+      for (const viewer_count of [Number.MAX_SAFE_INTEGER + 1, String(Number.MAX_SAFE_INTEGER + 1)]) {
+        expect(YouTubeViewerExtractor.extractConcurrentViewers({ video_details: { viewer_count } }, { strategies: ["video_details"] }).success).toBe(false);
+      }
+    });
     test("validates viewer count bounds", () => {
       const cases = [
         { count: 0, expected: true },
         { count: 100, expected: true },
         { count: 10000000, expected: true },
-        { count: 10000001, expected: false },
+        { count: 10000001, expected: true },
+        { count: Number.MAX_SAFE_INTEGER + 1, expected: false },
         { count: -1, expected: false },
         { count: 1.5, expected: false },
         { count: NaN, expected: false },

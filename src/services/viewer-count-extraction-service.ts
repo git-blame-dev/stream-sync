@@ -1,5 +1,6 @@
 import { YouTubeViewerExtractor } from '../extractors/youtube-viewer-extractor';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
+import { validateTimeout } from '../utils/timeout-validator';
 import type { InnertubeService } from './innertube-service';
 
 type ViewerExtractor = {
@@ -66,24 +67,17 @@ type ExtractionResponse = {
     errorType?: string;
 };
 
-function getErrorMessage(error: unknown): string {
-    if (error instanceof Error) {
-        return error.message;
-    }
-
-    return String(error);
-}
+const STRATEGIES = ['view_text', 'video_details', 'basic_info'];
+const EXTRACTION_FAILURE = 'Viewer count extraction failed';
 
 function getErrorType(error: unknown): string {
-    if (error instanceof Error && error.constructor && typeof error.constructor.name === 'string') {
-        return error.constructor.name;
-    }
-
-    return 'UnknownError';
+    if (error instanceof DOMException) return error.name === 'AbortError' ? 'AbortError' : error.name === 'TimeoutError' ? 'TimeoutError' : 'DOMException';
+    return error instanceof TypeError ? 'TypeError' : error instanceof Error ? 'Error' : 'UnknownError';
 }
 
 function resolvePositiveNumber(value: unknown, fallback: number): number {
-    return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback;
+    return typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= 2147483647
+        ? validateTimeout(value, fallback) : fallback;
 }
 
 function resolveNonEmptyArray(value: unknown, fallback: string[]): string[] {
@@ -91,7 +85,8 @@ function resolveNonEmptyArray(value: unknown, fallback: string[]): string[] {
         return fallback;
     }
 
-    return value.filter((item): item is string => typeof item === 'string' && item.length > 0);
+    const strategies = [...new Set(value.filter((item): item is string => typeof item === 'string' && STRATEGIES.includes(item)))];
+    return strategies.length > 0 ? strategies : [...fallback];
 }
 
 function resolveBoolean(value: unknown, fallback = false): boolean {
@@ -99,23 +94,11 @@ function resolveBoolean(value: unknown, fallback = false): boolean {
 }
 
 function resolveNonNegativeInteger(value: unknown, fallback = 0): number {
-    return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : fallback;
+    return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : fallback;
 }
 
 function isValidViewerCount(count: number): boolean {
-    return Number.isSafeInteger(count) && count >= 0;
-}
-
-function resolveRejectedReasonMessage(reason: unknown): string {
-    if (reason instanceof Error) {
-        return reason.message;
-    }
-
-    if (typeof reason === 'string' && reason.trim()) {
-        return reason;
-    }
-
-    return 'Promise rejected';
+    return YouTubeViewerExtractor.isValidViewerCount(count);
 }
 
 function toMetadataRecord(metadata: unknown): Record<string, unknown> | undefined {
@@ -123,7 +106,34 @@ function toMetadataRecord(metadata: unknown): Record<string, unknown> | undefine
         return undefined;
     }
 
-    return { ...metadata };
+    const source = metadata as Record<string, unknown>;
+    const projected: Record<string, unknown> = {};
+    if (Array.isArray(source.strategiesAttempted)) {
+        projected.strategiesAttempted = [...new Set(source.strategiesAttempted.slice(0, 100).filter(
+            (strategy): strategy is string => typeof strategy === 'string' && STRATEGIES.includes(strategy)
+        ))];
+    }
+    if (source.error !== undefined) projected.error = 'Extraction unavailable';
+    if (source.rawData === null) projected.rawData = null;
+    if (source.rawData && typeof source.rawData === 'object' && !Array.isArray(source.rawData)) {
+        const raw = source.rawData as Record<string, unknown>;
+        const details: Record<string, unknown> = {};
+        for (const strategy of STRATEGIES) {
+            const entry = raw[strategy];
+            if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+            const record = entry as Record<string, unknown>;
+            const fields: Record<string, unknown> = {};
+            if (typeof record.sourceField === 'string' && ['viewer_count', 'concurrent_viewers', 'view_count'].includes(record.sourceField)) fields.sourceField = record.sourceField;
+            for (const flag of ['hasViewText', 'hasVideoDetails', 'hasBasicInfo', 'is_live']) {
+                if (typeof record[flag] === 'boolean') fields[flag] = record[flag];
+            }
+            if (typeof record.patternMatched === 'string' && ['watching_now', 'watching', 'currently_watching', 'viewers_watching', 'people_watching'].includes(record.patternMatched)) fields.patternMatched = record.patternMatched;
+            if (record.error !== undefined) fields.error = 'Extraction unavailable';
+            details[strategy] = fields;
+        }
+        projected.rawData = details;
+    }
+    return Object.keys(projected).length ? projected : undefined;
 }
 
 class ViewerCountExtractionService {
@@ -164,7 +174,7 @@ class ViewerCountExtractionService {
         this.stats.totalRequests++;
         
         try {
-            this.logger?.debug?.(`[ViewerCountExtraction] Extracting viewer count for: ${videoId}`, 'viewer-extraction');
+            this.logger?.debug?.('[ViewerCountExtraction] Extracting viewer count', 'viewer-extraction');
             
             const extractionResult = await this.innertubeService.withMetadataOperation({
                 timeoutMs: resolvePositiveNumber(options.timeout, this.config.timeout),
@@ -179,17 +189,17 @@ class ViewerCountExtractionService {
                         strategies: resolveNonEmptyArray(options.strategies, this.config.strategies)
                     }
                 );
-                return { ...result, ...(result.metadata ? { metadata: { ...result.metadata } } : {}) };
+                return { ...result, metadata: toMetadataRecord(result.metadata) };
             });
             options.signal?.throwIfAborted();
             
             const responseTime = Date.now() - startTime;
-            const success = extractionResult.success && isValidViewerCount(extractionResult.count);
+            const success = extractionResult.success === true && isValidViewerCount(extractionResult.count);
             this._updateStats(success, responseTime);
             
             if (success) {
                 this.logger?.debug?.(
-                    `[ViewerCountExtraction] Successfully extracted ${extractionResult.count} viewers using ${extractionResult.strategy} for video ${videoId}`, 
+                    `[ViewerCountExtraction] Successfully extracted ${extractionResult.count} viewers`,
                     'viewer-extraction'
                 );
                 
@@ -197,14 +207,14 @@ class ViewerCountExtractionService {
                 return {
                     success: true,
                     count: extractionResult.count,
-                    ...(extractionResult.strategy === undefined ? {} : { strategy: extractionResult.strategy }),
+                    ...(extractionResult.strategy === null ? { strategy: null } : typeof extractionResult.strategy === 'string' && STRATEGIES.includes(extractionResult.strategy) ? { strategy: extractionResult.strategy } : {}),
                     videoId,
                     responseTime,
                     ...(metadata === undefined ? {} : { metadata })
                 };
             } else {
                 this.logger?.debug?.(
-                    `[ViewerCountExtraction] Failed to extract viewer count for ${videoId}. Strategies attempted: ${extractionResult.metadata?.strategiesAttempted?.join(', ') || 'unknown'}`, 
+                    '[ViewerCountExtraction] Viewer count unavailable',
                     'viewer-extraction'
                 );
                 
@@ -223,21 +233,22 @@ class ViewerCountExtractionService {
             const responseTime = Date.now() - startTime;
             this._updateStats(false, responseTime, error);
             
-            this._handleExtractionError(`Error extracting viewer count for ${videoId}: ${getErrorMessage(error)}`, error);
+            this._handleExtractionError(EXTRACTION_FAILURE, new Error(EXTRACTION_FAILURE));
             
             return {
                 success: false,
                 count: 0,
                 videoId,
                 responseTime,
-                error: getErrorMessage(error),
-                errorType: getErrorType(error)
+                error: EXTRACTION_FAILURE,
+                errorType: options.signal?.aborted ? 'AbortError' : getErrorType(error)
             };
         }
     }
     
     async extractViewerCountsBatch(videoIds: string[], options: ExtractViewerCountOptions = {}): Promise<ExtractionResponse[]> {
-        const maxConcurrency = Math.max(1, resolveNonNegativeInteger(options.maxConcurrency, 3));
+        const requested = resolveNonNegativeInteger(options.maxConcurrency, 3);
+        const maxConcurrency = requested === 0 ? 3 : Math.min(5, requested);
         const results: ExtractionResponse[] = [];
         
         this.logger?.debug?.(`[ViewerCountExtraction] Batch extracting ${videoIds.length} videos with concurrency ${maxConcurrency}`, 'viewer-extraction');
@@ -259,7 +270,7 @@ class ViewerCountExtractionService {
                         success: false,
                         count: 0,
                         videoId: batch[index] || '',
-                        error: resolveRejectedReasonMessage(result.reason),
+                        error: EXTRACTION_FAILURE,
                         errorType: 'Promise'
                     };
                 }
@@ -362,9 +373,15 @@ getStats(): ExtractionStats & { uptime: number; successRate: string } {
         };
     }
     
-updateConfig(newConfig: Record<string, unknown>): void {
-        this.config = { ...this.config, ...newConfig };
-        this.logger?.debug?.('[ViewerCountExtraction] Configuration updated', 'viewer-extraction', this.config);
+updateConfig(newConfig: Record<string, unknown> | null | undefined): void {
+        if (!newConfig || typeof newConfig !== 'object' || Array.isArray(newConfig)) return;
+        this.config = {
+            timeout: resolvePositiveNumber(newConfig.timeout, this.config.timeout),
+            strategies: resolveNonEmptyArray(newConfig.strategies, this.config.strategies),
+            debug: resolveBoolean(newConfig.debug, this.config.debug),
+            retries: resolveNonNegativeInteger(newConfig.retries, this.config.retries)
+        };
+        this.logger?.debug?.('[ViewerCountExtraction] Configuration updated', 'viewer-extraction');
     }
     
 _updateStats(success: boolean, responseTime: number, error: unknown = null): void {
