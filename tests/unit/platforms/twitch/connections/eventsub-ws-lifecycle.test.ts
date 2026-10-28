@@ -231,6 +231,111 @@ describe("Twitch EventSub WS lifecycle", () => {
     return state;
   };
 
+  const welcome = (socket: MockWebSocket) => socket.emit('message', JSON.stringify({
+    metadata: { message_type: 'session_welcome' },
+    payload: { session: { id: 'synthetic-session', keepalive_timeout_seconds: 30 } },
+  }));
+
+  test("ready close reports one safe loss diagnostic and an accurate emitted reason", async () => {
+    for (const code of [1000, 1006, 4002]) {
+      const logger = createRecordingLogger();
+      const lifecycle = buildLifecycle();
+      const state = createState({ logger });
+      const connected = lifecycle.connectWebSocket(state);
+      const socket = state.ws;
+      welcome(socket);
+      await connected;
+      socket.emit('close', code, Buffer.from('synthetic-secret-close-reason'));
+      socket.emit('close', code, Buffer.from('synthetic-secret-close-reason'));
+      const disconnected = state.emitCalls.find(event => event.event === 'eventSubDisconnected');
+      expect(disconnected?.payload).toMatchObject({ reason: code === 1006
+        ? 'Connection closed abnormally during EventSub session' : 'EventSub session closed' });
+      // Loss diagnostics are the operator-facing contract; exact fields also prove redaction.
+      expect(logger.entries.filter(entry => entry.level === 'warn')).toEqual([{ level: 'warn', message: 'EventSub session lost', source: 'twitch', data: {
+        cause: 'socket-close', phase: 'ready', closeCode: code, willReconnect: true, terminal: false,
+      } }]);
+    }
+  });
+
+  test("30 second welcome stays healthy for 12 seconds, refreshes keepalive, and loses once at silence deadline", async () => {
+    const logger = createRecordingLogger();
+    const lifecycle = buildLifecycle();
+    const state = createState({ logger });
+    const connected = lifecycle.connectWebSocket(state);
+    const socket = state.ws;
+    welcome(socket);
+    await connected;
+    await advanceTimersByTime(12000);
+    expect(state.ws).toBe(socket);
+    expect(state.subscriptionsReady).toBe(true);
+    expect(state.scheduleReconnectCalls).toHaveLength(0);
+    socket.emit('message', JSON.stringify({ metadata: { message_type: 'session_keepalive' }, payload: {} }));
+    await advanceTimersByTime(29999);
+    expect(state.ws).toBe(socket);
+    expect(logger.entries.filter(entry => entry.level === 'warn')).toEqual([]);
+    await advanceTimersByTime(1);
+    expect(state.scheduleReconnectCalls).toHaveLength(1);
+    expect(logger.entries.filter(entry => entry.level === 'warn')).toEqual([{ level: 'warn', message: 'EventSub session lost', source: 'twitch', data: {
+      cause: 'keepalive-timeout', phase: 'ready', closeCode: null, willReconnect: true, terminal: false,
+    } }]);
+    const replacement = lifecycle.connectWebSocket(state);
+    const replacementSocket = state.ws;
+    welcome(replacementSocket);
+    await replacement;
+    socket.emit('close', 1006);
+    await advanceTimersByTime(12000);
+    expect(state.ws).toBe(replacementSocket);
+    expect(state.subscriptionsReady).toBe(true);
+    expect(logger.entries.filter(entry => entry.level === 'warn')).toHaveLength(1);
+    lifecycle.dispose(state);
+    await advanceTimersByTime(30000);
+    expect(logger.entries.filter(entry => entry.level === 'warn')).toHaveLength(1);
+  });
+
+  test("loss diagnostics classify startup and setup failures without raw error content", async () => {
+    for (const cause of ['welcome-timeout', 'first-subscription-timeout', 'socket-error', 'message-or-setup-failure']) {
+      const logger = createRecordingLogger();
+      const lifecycle = buildLifecycle();
+      const state = createState({
+        logger,
+        _setupEventSubscriptions: async () => new Promise(() => {}),
+      });
+      const connected = lifecycle.connectWebSocket(state);
+      const rejected = connected.catch(error => error);
+      const socket = state.ws;
+      if (cause !== 'welcome-timeout') welcome(socket);
+      if (cause === 'welcome-timeout') await advanceTimersByTime(15000);
+      else if (cause === 'first-subscription-timeout') {
+        await advanceTimersByTime(15000);
+        socket.emit('message', JSON.stringify({ metadata: { message_type: 'session_keepalive' }, payload: {} }));
+        await advanceTimersByTime(15000);
+      }
+      else if (cause === 'socket-error') socket.emit('error', Object.assign(new Error('synthetic-secret-error'), { code: 'synthetic-secret-code' }));
+      else socket.emit('message', 'synthetic-secret-invalid-json');
+      expect(await rejected).toBeInstanceOf(Error);
+      expect(logger.entries.filter(entry => entry.level === 'warn')).toEqual([{ level: 'warn', message: 'EventSub session lost', source: 'twitch', data: {
+        cause, phase: cause === 'welcome-timeout' ? 'startup' : 'setting-up',
+        closeCode: null, willReconnect: true, terminal: false,
+      } }]);
+      expect(state.scheduleReconnectCalls).toHaveLength(1);
+      lifecycle.dispose(state);
+    }
+  });
+
+  test("throwing loss logger cannot prevent retirement, notification, or recovery", async () => {
+    const lifecycle = buildLifecycle();
+    const state = createState({ logger: { ...noOpLogger, warn: () => { throw new Error('synthetic logger failure'); } } });
+    const connected = lifecycle.connectWebSocket(state);
+    const socket = state.ws;
+    welcome(socket);
+    await connected;
+    expect(() => socket.emit('close', 1006)).not.toThrow();
+    expect(socket.closeCalls).toHaveLength(1);
+    expect(state.subscriptionsReady).toBe(false);
+    expect(state.emitCalls.filter(event => event.event === 'eventSubDisconnected')).toHaveLength(1);
+    expect(state.scheduleReconnectCalls).toHaveLength(1);
+  });
+
   test("frame admission rejects unsafe input without leaking or coercing it", async () => {
     let coercions = 0;
     const secret = "test-only-frame-secret";

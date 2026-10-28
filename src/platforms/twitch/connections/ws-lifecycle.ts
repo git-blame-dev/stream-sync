@@ -67,6 +67,8 @@ type Session = {
     settled: boolean;
     handoff: boolean;
 };
+type LossCause = 'socket-close' | 'socket-error' | 'welcome-timeout' | 'first-subscription-timeout'
+    | 'keepalive-timeout' | 'message-or-setup-failure';
 type Owner = {
     disposed: boolean;
     generation: number;
@@ -180,8 +182,9 @@ function createTwitchEventSubWsLifecycle(options: WsLifecycleOptions = {}) {
         if (session.startupTimer) clearTimeout(session.startupTimer);
         session.startupTimer = null;
     };
-    const lose = (state: LifecycleState, session: Session, error: unknown, code: number | null = null) => {
+    const lose = (state: LifecycleState, session: Session, error: unknown, cause: LossCause, code: number | null = null) => {
         if (!current(state, session)) return;
+        const phase = session.settled ? 'ready' : session.sessionId ? 'setting-up' : 'startup';
         const value = owner(state);
         const wasActive = value.active === session;
         if (wasActive) {
@@ -196,12 +199,20 @@ function createTwitchEventSubWsLifecycle(options: WsLifecycleOptions = {}) {
             if (state.ws === session.socket) state.ws = null;
         }
         retire(session, error);
-        if (!wasActive && value.active) return;
+        const activeSurvives = !wasActive && !!value.active;
         const failure = error as { code?: unknown; response?: { status?: number } };
         const recoveryBlocked = failure?.code === 'EVENTSUB_RETRY_AFTER_EXCEEDS_BUDGET';
         const authorizationFailure = failure?.response?.status === 401 || failure?.response?.status === 403;
-        if (recoveryBlocked || authorizationFailure) state.isInitialized = false;
+        if (!activeSurvives && (recoveryBlocked || authorizationFailure)) state.isInitialized = false;
         const willReconnect = state.isInitialized && !value.disposed;
+        try {
+            state.logger?.warn?.('EventSub session lost', 'twitch', {
+                cause, phase, closeCode: code === null ? null : Number.isInteger(code) && code >= 1000 && code <= 4999 ? code : 0,
+                willReconnect: willReconnect || !!value.pending,
+                terminal: recoveryBlocked || authorizationFailure
+            });
+        } catch { /* Diagnostics cannot interrupt loss notification or recovery. */ }
+        if (activeSurvives) return;
         notify(state, 'eventSubDisconnected', { code, reason: error instanceof Error ? error.message : String(error),
             abnormal: code !== 1000, willReconnect: willReconnect || !!value.pending, terminal: recoveryBlocked || authorizationFailure, recoveryBlocked, authorizationFailure });
         // An old transport closing during a handoff does not invalidate the pending migrated session.
@@ -223,7 +234,7 @@ function createTwitchEventSubWsLifecycle(options: WsLifecycleOptions = {}) {
             value.pending = session;
             if (!handoff) state.ws = socket;
             state.connectionStartTime = now();
-            session.startupTimer = safeSetTimeout(() => lose(state, session, new Error('Connection timeout - no welcome message')), 15000);
+            session.startupTimer = safeSetTimeout(() => lose(state, session, new Error('Connection timeout - no welcome message'), 'welcome-timeout'), 15000);
             const ready = () => {
                 if (!current(state, session) || session.settled) return;
                 session.settled = true;
@@ -235,7 +246,7 @@ function createTwitchEventSubWsLifecycle(options: WsLifecycleOptions = {}) {
             const resetWatchdog = () => {
                 if (!silenceMs || !current(state, session)) return;
                 if (session.timer) clearTimeout(session.timer);
-                session.timer = safeSetTimeout(() => lose(state, session, new Error('EventSub keepalive silence timeout')), silenceMs);
+                session.timer = safeSetTimeout(() => lose(state, session, new Error('EventSub keepalive silence timeout'), 'keepalive-timeout'), silenceMs);
             };
             socket.on('message', async (data: unknown) => {
                 if (!current(state, session)) return;
@@ -270,7 +281,7 @@ function createTwitchEventSubWsLifecycle(options: WsLifecycleOptions = {}) {
                             ready();
                             return;
                         }
-                        session.startupTimer = safeSetTimeout(() => lose(state, session, new Error('EventSub first subscription deadline exceeded')), silenceMs);
+                        session.startupTimer = safeSetTimeout(() => lose(state, session, new Error('EventSub first subscription deadline exceeded'), 'first-subscription-timeout'), silenceMs);
                         if (state._validateConnectionForSubscriptions?.() === false) throw Object.assign(new Error('Connection validation failed before subscription setup'), { reason: 'connection-validation' });
                         const result = await state._setupEventSubscriptions?.(true);
                         if (!current(state, session)) return;
@@ -297,19 +308,19 @@ function createTwitchEventSubWsLifecycle(options: WsLifecycleOptions = {}) {
                     await state.handleWebSocketMessage?.(message);
                 } catch (error) {
                     if (!current(state, session)) return;
-                    lose(state, session, error);
+                    lose(state, session, error, 'message-or-setup-failure');
                     report(state, 'EventSub message/setup failed', error, 'ws-message');
                     notify(state, 'eventSubSubscriptionFailed', { sessionId: session.sessionId, reason: (error as { reason?: unknown })?.reason, error: error instanceof Error ? error.message : String(error) });
                 }
             });
-            socket.on('error', (error: unknown) => lose(state, session, error));
+            socket.on('error', (error: unknown) => lose(state, session, error, 'socket-error'));
             socket.on('close', (code: unknown) => {
                 const closeCode = typeof code === 'number' ? code : 0;
                 const phase = session.settled ? 'EventSub session' : session.sessionId ? 'EventSub subscription setup' : 'initial handshake';
                 const error = new Error(closeCode === 1006 ? `Connection closed abnormally during ${phase}`
-                    : session.sessionId ? 'Connection closed before EventSub subscription setup completed' : 'Connection closed before EventSub startup completed') as Error & { closeCode: number };
+                    : session.settled ? 'EventSub session closed' : session.sessionId ? 'Connection closed before EventSub subscription setup completed' : 'Connection closed before EventSub startup completed') as Error & { closeCode: number };
                 error.closeCode = closeCode;
-                lose(state, session, error, error.closeCode);
+                lose(state, session, error, 'socket-close', error.closeCode);
             });
         });
     };
@@ -395,7 +406,7 @@ function createTwitchEventSubWsLifecycle(options: WsLifecycleOptions = {}) {
         }
         if (value.operation) return;
         if (value.active && !value.active.settled) {
-            lose(state, value.active, new Error('Connection closed abnormally during EventSub subscription setup'));
+            lose(state, value.active, new Error('Connection closed abnormally during EventSub subscription setup'), 'message-or-setup-failure');
             return;
         }
         if (state.reconnectTimeout) clearTimeout(state.reconnectTimeout);
