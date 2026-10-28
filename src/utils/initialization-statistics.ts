@@ -48,6 +48,11 @@ type PerformanceSummary = {
     max: number | null;
 };
 
+function appendBounded<T>(history: T[], value: T, limit: number): void {
+    history.push(value);
+    if (history.length > limit) history.splice(0, history.length - limit);
+}
+
 function resolveErrorMessage(error: unknown): string {
     if (error instanceof Error) {
         return error.message;
@@ -88,8 +93,17 @@ class InitializationStatistics {
     performanceMetrics: PerformanceBuckets;
     firstInitializationTime: number | null;
     lastInitializationTime: number | null;
-    isCurrentlyInitializing: boolean;
-    currentAttemptStartTime: number | null;
+    private readonly activeAttempts = new Map<string, number>();
+
+    get isCurrentlyInitializing(): boolean {
+        return this.activeAttempts.size > 0;
+    }
+
+    get currentAttemptStartTime(): number | null {
+        let latest: number | null = null;
+        for (const startTime of this.activeAttempts.values()) latest = startTime;
+        return latest;
+    }
 
     constructor(platformName: string, logger: LoggerLike) {
         this.platformName = platformName;
@@ -116,8 +130,6 @@ class InitializationStatistics {
         };
         this.firstInitializationTime = null;
         this.lastInitializationTime = null;
-        this.isCurrentlyInitializing = false;
-        this.currentAttemptStartTime = null;
 
         this.logger.debug('InitializationStatistics tracker created', this.platformName);
     }
@@ -127,11 +139,10 @@ class InitializationStatistics {
         const attemptId = `${this.platformName}-${startTime}-${randomUUID()}`;
 
         this.totalAttempts += 1;
-        this.isCurrentlyInitializing = true;
-        this.currentAttemptStartTime = startTime;
+        this.activeAttempts.set(attemptId, startTime);
 
-        if (!this.firstInitializationTime) {
-            this.firstInitializationTime = this.currentAttemptStartTime;
+        if (this.firstInitializationTime === null) {
+            this.firstInitializationTime = startTime;
         }
 
         this.logger.debug(
@@ -144,19 +155,20 @@ class InitializationStatistics {
     }
 
     recordSuccess(attemptId: string, metrics: AttemptMetrics = {}): void {
-        if (!this.isCurrentlyInitializing || this.currentAttemptStartTime === null) {
+        const startTime = this.activeAttempts.get(attemptId);
+        if (startTime === undefined) {
             this.logger.warn('recordSuccess called but no active initialization attempt', this.platformName);
             return;
         }
 
         const endTime = Date.now();
-        const duration = endTime - this.currentAttemptStartTime;
+        const duration = endTime - startTime;
+        this.activeAttempts.delete(attemptId);
 
         this.successfulAttempts += 1;
         this.consecutiveFailures = 0;
         this.lastSuccessTime = endTime;
         this.lastInitializationTime = endTime;
-        this.isCurrentlyInitializing = false;
         this.totalInitializationTime += duration;
         this.averageInitializationTime = this.totalInitializationTime / this.successfulAttempts;
 
@@ -171,50 +183,39 @@ class InitializationStatistics {
         const timingData: TimingData = {
             attemptId,
             duration,
-            startTime: this.currentAttemptStartTime,
+            startTime,
             endTime,
             success: true,
             metrics
         };
 
-        this.timingHistory.push(timingData);
+        appendBounded(this.timingHistory, timingData, 100);
 
-        if (metrics.connectionTime) {
-            this.performanceMetrics.connectionEstablishmentTime.push(metrics.connectionTime);
-        }
-        if (metrics.serviceInitTime) {
-            this.performanceMetrics.serviceInitializationTime.push(metrics.serviceInitTime);
-        }
-        if (metrics.configValidationTime) {
-            this.performanceMetrics.configurationValidationTime.push(metrics.configValidationTime);
-        }
-        if (metrics.dependencyTime) {
-            this.performanceMetrics.dependencyResolutionTime.push(metrics.dependencyTime);
-        }
+        this.appendPerformanceMetric('connectionEstablishmentTime', metrics.connectionTime);
+        this.appendPerformanceMetric('serviceInitializationTime', metrics.serviceInitTime);
+        this.appendPerformanceMetric('configurationValidationTime', metrics.configValidationTime);
+        this.appendPerformanceMetric('dependencyResolutionTime', metrics.dependencyTime);
 
         this.logger.info(
             `Initialization successful in ${duration}ms (attempt ${this.totalAttempts})`,
             this.platformName
         );
-
-        if (this.timingHistory.length > 100) {
-            this.timingHistory = this.timingHistory.slice(-100);
-        }
     }
 
     recordFailure(attemptId: string, error: unknown, context: Record<string, unknown> = {}): void {
-        if (!this.isCurrentlyInitializing || this.currentAttemptStartTime === null) {
+        const startTime = this.activeAttempts.get(attemptId);
+        if (startTime === undefined) {
             this.logger.warn('recordFailure called but no active initialization attempt', this.platformName);
             return;
         }
 
         const endTime = Date.now();
-        const duration = endTime - this.currentAttemptStartTime;
+        const duration = endTime - startTime;
+        this.activeAttempts.delete(attemptId);
 
         this.failedAttempts += 1;
         this.consecutiveFailures += 1;
         this.lastInitializationTime = endTime;
-        this.isCurrentlyInitializing = false;
 
         const errorType = resolveErrorType(error);
         this.errorTypes.set(errorType, (this.errorTypes.get(errorType) ?? 0) + 1);
@@ -229,25 +230,21 @@ class InitializationStatistics {
             consecutiveFailure: this.consecutiveFailures
         };
 
-        this.errorHistory.push(errorData);
-        this.timingHistory.push({
+        appendBounded(this.errorHistory, errorData, 50);
+        appendBounded(this.timingHistory, {
             attemptId,
             duration,
-            startTime: this.currentAttemptStartTime,
+            startTime,
             endTime,
             success: false,
             error: errorData
-        });
+        }, 100);
 
         this.handleInitializationError(
             `Initialization failed after ${duration}ms (attempt ${this.totalAttempts}, consecutive failures: ${this.consecutiveFailures}): ${resolveErrorMessage(error)}`,
             error,
             { attemptId, errorType }
         );
-
-        if (this.errorHistory.length > 50) {
-            this.errorHistory = this.errorHistory.slice(-50);
-        }
     }
 
     recordPreventedAttempt(reason: string): void {
@@ -369,10 +366,15 @@ class InitializationStatistics {
         };
         this.firstInitializationTime = null;
         this.lastInitializationTime = null;
-        this.isCurrentlyInitializing = false;
-        this.currentAttemptStartTime = null;
+        this.activeAttempts.clear();
 
         this.logger.debug('Initialization statistics reset', this.platformName);
+    }
+
+    private appendPerformanceMetric(metric: keyof PerformanceBuckets, value: unknown): void {
+        if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
+            appendBounded(this.performanceMetrics[metric], value, 100);
+        }
     }
 
     private calculatePerformanceAverages(): Record<string, PerformanceSummary> {
