@@ -907,6 +907,13 @@ describe("Text Processing", () => {
   });
 
   describe("when generating log filenames", () => {
+    it("sanitizes platform components without changing known platform or username contracts", () => {
+      for (const [platform, expected] of [["TikTok", "tiktok"], ["Twitch", "twitch"], ["YouTube", "youtube"], ["../Unsafe:Platform\\", "unsafeplatform"], ["../\\:", "platform"]]) {
+        expect(textProcessing.generateLogFilename(platform!, "test_user!"))
+          .toMatch(new RegExp(`^${expected}-testuser-\\d{4}-\\d{2}-\\d{2}\\.txt$`));
+      }
+    });
+
     it("should generate valid log filenames", () => {
       const filename = textProcessing.generateLogFilename("twitch", "testuser");
 

@@ -41,6 +41,16 @@ export class LineFileAppender {
     }
 
     write(filename: string, content: string): void {
+        // Portable basenames provide lexical containment only: the configured directory
+        // and existing filesystem entries (including symlinks) remain trusted.
+        if (!filename || filename === '.' || filename === '..'
+            || /[\\/\x00-\x1f<>:"|?*]/.test(filename)
+            || /[. ]$/.test(filename)
+            || /^(?:con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³]|conin\$|conout\$)(?: *\.|$)/i.test(filename)) {
+            process.stderr.write('[LineFileAppender] Rejected unsafe log filename\n');
+            return;
+        }
+
         const fullPath = path.join(this.config.logDir, filename);
 
         try {
