@@ -1,6 +1,43 @@
 import { describe, expect, it } from "bun:test";
 
 describe("monetization error payload no-fallback behavior", () => {
+  const numericCases = [
+    ["platform:gift", "giftCount"],
+    ["platform:gift", "amount"],
+    ["platform:envelope", "giftCount"],
+    ["platform:envelope", "amount"],
+    ["platform:giftpaypiggy", "giftCount"],
+    ["platform:paypiggy", "months"],
+  ] as const;
+
+  it("omits non-scalar numeric inputs without invoking object coercion", () => {
+    const { createMonetizationErrorPayload } = require("../../../src/utils/monetization-error-utils.ts");
+    let coercions = 0;
+    const coercible = { valueOf: () => { coercions += 1; return 1; } };
+    for (const [notificationType, field] of numericCases) {
+      for (const value of [[1], coercible, true, 1n, Symbol("synthetic-number"), "", "   ", null,
+        undefined, 0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+        const payload = createMonetizationErrorPayload({
+          notificationType, platform: "twitch", timestamp: "2024-01-01T00:00:00.000Z", [field]: value,
+        });
+        expect(payload).not.toHaveProperty(field);
+      }
+    }
+    expect(coercions).toBe(0);
+  });
+
+  it("preserves positive numbers and trimmed decimal or exponent strings across numeric fields", () => {
+    const { createMonetizationErrorPayload } = require("../../../src/utils/monetization-error-utils.ts");
+    for (const [notificationType, field] of numericCases) {
+      for (const [value, expected] of [[2, 2], [0.5, 0.5], [" 2 ", 2], ["1.25", 1.25], ["1.5e2", 150]]) {
+        const payload = createMonetizationErrorPayload({
+          notificationType, platform: "twitch", timestamp: "2024-01-01T00:00:00.000Z", [field]: value,
+        });
+        expect(payload[field]).toBe(expected);
+      }
+    }
+  });
+
   it("omits username when not provided", () => {
     const {
       createMonetizationErrorPayload,
