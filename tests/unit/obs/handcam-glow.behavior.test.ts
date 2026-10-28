@@ -67,6 +67,135 @@ describe("handcam-glow", () => {
     resetTestingDependencies();
   });
 
+  for (const value of [NaN, Infinity, -Infinity, -1, false, true, null, undefined, [], {}, "", "bad"]) {
+    it(`falls back to schema numeric defaults for malformed input ${JSON.stringify(value)}`, async () => {
+      const sizes: number[] = [];
+      const delays: number[] = [];
+      const writes: ObsCallPayload[] = [];
+      setTestingDependencies({ delay: async (ms) => { delays.push(ms); } });
+      const obs = createObsLike(async (action, payload) => {
+        if (action === "GetSourceFilter") return { filterSettings: { brightness: 10 } };
+        if (isFilterSettingsPayload(payload)) {
+          writes.push(payload);
+          sizes.push(Number(payload.filterSettings.Size));
+          // Keep the pre-fix Infinity regression bounded at the fake OBS boundary.
+          if (sizes.length > 2100) throw new Error("synthetic excessive OBS work");
+        }
+        return {};
+      });
+      triggerHandcamGlow(obs, createHandcamConfigFixture({
+        enabled: true, sourceName: "synthetic-camera", glowFilterName: "synthetic-glow",
+        maxSize: value, rampUpDuration: value, holdDuration: value,
+        rampDownDuration: value, totalSteps: value,
+      }));
+      await flushGlowTasks();
+      expect(sizes).toHaveLength(63);
+      expect(sizes.every((size) => Number.isFinite(size) && size >= 0)).toBe(true);
+      expect(Math.max(...sizes)).toBe(50);
+      expect(sizes.at(-1)).toBe(0);
+      expect(delays).toHaveLength(61);
+      expect(delays.every((ms) => Number.isFinite(ms) && ms >= 0)).toBe(true);
+      expect(delays[0]).toBeCloseTo(500 / 30);
+      expect(delays[30]).toBe(8000);
+      for (const payload of writes) {
+        expect(payload).toMatchObject({
+          sourceName: "synthetic-camera", filterName: "synthetic-glow",
+          filterSettings: { brightness: 10 },
+        });
+        if (isFilterSettingsPayload(payload)) {
+          expect(payload.filterSettings.glow_size).toBe(payload.filterSettings.Size);
+        }
+      }
+    });
+  }
+
+  for (const steps of [0, -1, 1.5, 1_000_000_000]) {
+    it(`bounds animation work for step count ${steps}`, async () => {
+      const sizes: number[] = [];
+      const obs = createObsLike(async (action, payload) => {
+        if (action === "GetSourceFilter") return { filterSettings: {} };
+        if (isFilterSettingsPayload(payload)) {
+          sizes.push(Number(payload.filterSettings.Size));
+          if (sizes.length > 2100) throw new Error("synthetic excessive OBS work");
+        }
+        return {};
+      });
+      triggerHandcamGlow(obs, createHandcamConfigFixture({ totalSteps: steps }));
+      await flushGlowTasks();
+      expect(sizes).toHaveLength(steps > 1000 ? 2003 : 63);
+      expect(sizes.every(Number.isFinite)).toBe(true);
+      expect(sizes.at(-1)).toBe(0);
+    });
+  }
+
+  it("preserves valid numeric strings and zero hold duration", async () => {
+    const sizes: number[] = [];
+    const delays: number[] = [];
+    setTestingDependencies({ delay: async (ms) => { delays.push(ms); } });
+    const obs = createObsLike(async (action, payload) => {
+      if (action === "GetSourceFilter") return { filterSettings: {} };
+      if (isFilterSettingsPayload(payload)) sizes.push(Number(payload.filterSettings.Size));
+      return {};
+    });
+    triggerHandcamGlow(obs, createHandcamConfigFixture({
+      maxSize: "24", totalSteps: "2", rampUpDuration: "0.2",
+      holdDuration: "0", rampDownDuration: "0.4", easingEnabled: false,
+    }));
+    await flushGlowTasks();
+    expect(sizes).toEqual([0, 0, 12, 24, 24, 12, 0]);
+    expect(delays).toEqual([100, 100, 0, 200, 200]);
+  });
+
+  it("leaves null or absent configuration disabled", async () => {
+    let accesses = 0;
+    const obs = createObsLike(async () => { accesses += 1; return {}; });
+    await expect(initializeHandcamGlow(obs, null)).resolves.toBeUndefined();
+    await expect(initializeHandcamGlow(obs, undefined)).resolves.toBeUndefined();
+    expect(() => triggerHandcamGlow(obs, null)).not.toThrow();
+    expect(() => triggerHandcamGlow(obs, undefined)).not.toThrow();
+    await flushGlowTasks();
+    expect(accesses).toBe(0);
+  });
+
+  for (const invalid of [0, 101]) {
+    it(`applies schema size and ramp bounds for ${invalid}`, async () => {
+      const sizes: number[] = [];
+      const delays: number[] = [];
+      setTestingDependencies({ delay: async (ms) => { delays.push(ms); } });
+      const obs = createObsLike(async (action, payload) => {
+        if (action === "GetSourceFilter") return { filterSettings: {} };
+        if (isFilterSettingsPayload(payload)) sizes.push(Number(payload.filterSettings.Size));
+        return {};
+      });
+      triggerHandcamGlow(obs, createHandcamConfigFixture({
+        maxSize: invalid, rampUpDuration: invalid, rampDownDuration: invalid, totalSteps: 1,
+      }));
+      await flushGlowTasks();
+      expect(sizes).toEqual([0, 0, 50, 50, 0]);
+      expect(delays).toEqual([500, 8000, 500]);
+    });
+  }
+
+  it("keeps a huge finite hold within the existing timer ceiling", async () => {
+    const delays: number[] = [];
+    setTestingDependencies({ delay: async (ms) => { delays.push(ms); } });
+    const obs = createObsLike(async () => ({ filterSettings: {} }));
+    triggerHandcamGlow(obs, createHandcamConfigFixture({ totalSteps: 1, holdDuration: 1e308 }));
+    await flushGlowTasks();
+    expect(delays).toEqual([500, 2147483647, 500]);
+  });
+
+  it("uses schema source and filter defaults when names are absent", async () => {
+    const requests: ObsCallPayload[] = [];
+    const obs = createObsLike(async (_action, payload) => {
+      requests.push(payload);
+      return { filterSettings: {} };
+    });
+    await initializeHandcamGlow(obs, createHandcamConfigFixture({ sourceName: undefined, glowFilterName: undefined }));
+    expect(requests).toHaveLength(2);
+    requests.forEach((payload) => expect(payload).toMatchObject({ sourceName: "handcam-source", filterName: "Glow" }));
+  });
+
   it("skips initialization when disabled in config", async () => {
     const obs = createObsLike(
       createMockFn<[string, ObsCallPayload], Promise<unknown>>(async () => ({})),

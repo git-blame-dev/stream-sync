@@ -1,5 +1,7 @@
 import { logger as defaultLogger } from '../core/logging';
-import { safeDelay as defaultDelay } from '../utils/timeout-validator';
+import { DEFAULTS } from '../core/config-schema';
+import { ConfigValidator } from '../utils/config-validator';
+import { safeDelay as defaultDelay, validateTimeout } from '../utils/timeout-validator';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 import { ensureOBSConnected as defaultEnsureConnected } from './connection';
 
@@ -26,7 +28,7 @@ type HandcamConfigInput = {
     easingEnabled: boolean;
     sourceName: string;
     glowFilterName: string;
-};
+} | null | undefined;
 
 type HandcamGlowConfig = {
     enabled: boolean;
@@ -114,17 +116,32 @@ function easeInCubic(t: number) {
     return t * t * t;
 }
 
+// Each ramp issues one OBS update per step; bound direct callers even when they bypass INI normalization.
+const MAX_ANIMATION_STEPS = 1000;
+
 function createHandcamGlowConfig(handcamConfig: HandcamConfigInput): HandcamGlowConfig {
+    const numberFromSchema = (field: 'maxSize' | 'rampUpDuration' | 'holdDuration' | 'rampDownDuration' | 'totalSteps') => {
+        const value = handcamConfig?.[field];
+        return ConfigValidator._parseNumberFromSchema('handcam', field,
+            typeof value === 'number' || typeof value === 'string' ? value : undefined) as number;
+    };
+    const parsedSteps = numberFromSchema('totalSteps');
+    const totalSteps = Number.isInteger(parsedSteps) && parsedSteps > 0
+        ? Math.min(parsedSteps, MAX_ANIMATION_STEPS)
+        : DEFAULTS.handcam.totalSteps as number;
+    const nameFromConfig = (value: unknown, fallback: unknown) =>
+        typeof value === 'string' && value.trim() ? value : String(fallback);
+
     return {
-        enabled: handcamConfig.enabled,
-        maxSize: Number(handcamConfig.maxSize),
-        rampUpDuration: Number(handcamConfig.rampUpDuration),
-        holdDuration: Number(handcamConfig.holdDuration),
-        rampDownDuration: Number(handcamConfig.rampDownDuration),
-        totalSteps: Number(handcamConfig.totalSteps),
-        easingEnabled: handcamConfig.easingEnabled,
-        sourceName: handcamConfig.sourceName,
-        filterName: handcamConfig.glowFilterName,
+        enabled: handcamConfig?.enabled === true,
+        maxSize: numberFromSchema('maxSize'),
+        rampUpDuration: numberFromSchema('rampUpDuration'),
+        holdDuration: numberFromSchema('holdDuration'),
+        rampDownDuration: numberFromSchema('rampDownDuration'),
+        totalSteps,
+        easingEnabled: handcamConfig?.easingEnabled ?? (DEFAULTS.handcam.easingEnabled === true),
+        sourceName: nameFromConfig(handcamConfig?.sourceName, DEFAULTS.handcam.sourceName),
+        filterName: nameFromConfig(handcamConfig?.glowFilterName, DEFAULTS.handcam.glowFilterName),
 
         get totalDuration() {
             return this.rampUpDuration + this.holdDuration + this.rampDownDuration;
@@ -217,7 +234,8 @@ async function animateGlowSize(obs: ObsLike, config: HandcamGlowConfig, baseSett
         );
 
         logger.debug(`[Handcam] Phase 2: Hold at maximum glow for ${config.holdDuration}s`, 'handcam-glow');
-        await delay(config.holdDuration * 1000, 1000, 'Handcam glow hold duration');
+        const holdDelay = config.holdDuration === 0 ? 0 : validateTimeout(config.holdDuration * 1000, config.holdDuration);
+        await delay(holdDelay, 1000, 'Handcam glow hold duration');
         assertActiveRun(runId);
 
         await executeAnimationPhase(
