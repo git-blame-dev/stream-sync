@@ -1,8 +1,10 @@
 import { YOUTUBE } from '../core/endpoints';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 import { withTimeout } from '../utils/timeout-wrapper';
+import { sanitizeLogText } from '../core/logger/safe-log-serializer';
 
 const DEFAULT_TIMEOUT_MS = 2000;
+const MAX_HANDLE_LENGTH = 128;
 
 type ResolverLogger = {
     error: (message: string, scope?: string, payload?: unknown) => void;
@@ -47,7 +49,8 @@ function normalizeChannelHandle(channelHandle: unknown): string {
         return '';
     }
 
-    return channelHandle.trim();
+    const normalized = channelHandle.trim();
+    return Array.from(normalized).length <= MAX_HANDLE_LENGTH ? normalized : '';
 }
 
 function isChannelId(channelHandle: unknown): boolean {
@@ -76,7 +79,12 @@ async function resolveChannelId(innertubeClient: ResolverClient | null, channelH
     const logger = options.logger;
     const onError = options.onError;
     const throwOnError = options.throwOnError === true;
-    const handleError = onError || createResolverErrorHandler(logger);
+    const errorHandler = onError || createResolverErrorHandler(logger);
+    const handleError: ResolverErrorHandler = (message, error, eventType, eventData) => {
+        errorHandler?.(sanitizeLogText(message).slice(0, 4096), error, eventType, {
+            channelHandle: sanitizeLogText(typeof eventData?.channelHandle === 'string' ? eventData.channelHandle : '').slice(0, 256)
+        });
+    };
 
     const trimmedHandle = normalizeChannelHandle(channelHandle);
     if (!trimmedHandle) {
@@ -125,7 +133,14 @@ async function resolveChannelId(innertubeClient: ResolverClient | null, channelH
             return null;
         }
 
-        return browseId.trim();
+        const channelId = browseId.trim();
+        if (!isChannelId(channelId)) {
+            handleError('Resolved channel ID is invalid', new Error('Resolved channel ID is invalid'), 'channel-resolve', {
+                channelHandle: handleKey
+            });
+            return null;
+        }
+        return channelId;
     } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         handleError?.(`Channel resolution failed: ${errorMessage}`, error, 'channel-resolve', {

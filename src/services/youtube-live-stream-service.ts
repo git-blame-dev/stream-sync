@@ -1,11 +1,14 @@
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 import { withTimeout } from '../utils/timeout-wrapper';
+import { sanitizeLogText } from '../core/logger/safe-log-serializer';
 import {
     isChannelId,
     normalizeChannelHandle,
     normalizeHandleForCache,
     resolveChannelId
 } from './youtube-channel-resolver';
+
+const MAX_CHANNEL_CACHE_ENTRIES = 64;
 
 type LoggerLike = {
     error: (message: string, scope?: string, payload?: unknown) => void;
@@ -105,6 +108,15 @@ type VideoObservation = {
     qualityReason?: DiscoveryQualityReason;
 };
 
+function safeDiagnosticText(value: string): string {
+    return sanitizeLogText(value).slice(0, 4096);
+}
+
+function isParserErrorMessage(message: string): boolean {
+    return message.includes('not found!') || message.includes('Type mismatch')
+        || message.includes('Parser') || message.includes('YOUTUBEJS');
+}
+
 class YouTubeLiveStreamService {
     static _channelCache = new Map<string, { channelId: string; timestamp: number }>();
     static _channelCacheTtl = 10 * 60 * 1000;
@@ -180,6 +192,7 @@ static isVideoLive(video: ChannelVideo | null | undefined): boolean {
             let liveStreams = channelVideos.streams;
             let observed = channelVideos.observed;
             let qualityReason = channelVideos.qualityReason;
+            let parserError = qualityReason === 'parser_error';
             detectionMeta.hasContent = channelVideos.hasContent;
 
             if (typeof channel.getLiveStreams === 'function') {
@@ -188,6 +201,7 @@ static isVideoLive(video: ChannelVideo | null | undefined): boolean {
                     ? Math.max(1, Math.floor(remainingTimeout / 2))
                     : timeout;
                 const apiStreams = await this._getLiveStreamsFromChannelApi(channel, apiTimeout, logger);
+                parserError ||= apiStreams.qualityReason === 'parser_error';
                 observed = observed || apiStreams.observed;
                 qualityReason ??= apiStreams.qualityReason;
                 detectionMeta.hasContent = detectionMeta.hasContent || apiStreams.hasContent;
@@ -217,6 +231,7 @@ static isVideoLive(video: ChannelVideo | null | undefined): boolean {
                 }
 
                 const searchStreams = await this._detectLiveStreamsViaSearch(innertubeClient, searchOptions);
+                parserError ||= searchStreams.qualityReason === 'parser_error';
                 observed = observed || searchStreams.observed;
                 qualityReason ??= searchStreams.qualityReason;
                 detectionMeta.hasContent = detectionMeta.hasContent || searchStreams.hasContent;
@@ -231,6 +246,7 @@ static isVideoLive(video: ChannelVideo | null | undefined): boolean {
                 success: !qualityReason || liveStreams.length > 0,
                 observationKind: qualityReason ? (observed ? 'partial' : 'unavailable') : 'complete',
                 ...(qualityReason ? { qualityReason } : {}),
+                ...(parserError ? { parserError: true } : {}),
                 streams: liveStreams,
                 videoIds: liveStreams.map((stream) => stream.videoId),
                 count: liveStreams.length,
@@ -239,6 +255,7 @@ static isVideoLive(video: ChannelVideo | null | undefined): boolean {
             };
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
+            const parserError = isParserErrorMessage(errorMessage);
             if (this._isChannelNotFoundError(error)) {
                 const handleLabel = typeof channelHandle === 'string' ? channelHandle : 'unknown channel';
                 this._log(logger, 'warn', `[YouTube] Channel not found for ${handleLabel}`);
@@ -249,29 +266,30 @@ static isVideoLive(video: ChannelVideo | null | undefined): boolean {
             return {
                 success: false,
                 observationKind: 'unavailable',
-                qualityReason: 'acquisition_failed',
+                qualityReason: parserError ? 'parser_error' : 'acquisition_failed',
+                ...(parserError ? { parserError: true } : {}),
                 streams: [],
                 videoIds: [],
                 count: 0,
                 hasContent: false,
                 detectionMethod: 'error',
-                error: errorMessage
+                error: safeDiagnosticText(errorMessage)
             };
         }
     }
 
 static async getLiveStreamsWithParserTolerance(innertubeClient: InnertubeClientLike, channelHandle: unknown, options: GetLiveStreamOptions = {}): Promise<LiveStreamsResult> {
         try {
-            return await this.getLiveStreams(innertubeClient, channelHandle, options);
+            const result = await this.getLiveStreams(innertubeClient, channelHandle, options);
+            if (result.parserError || result.qualityReason === 'parser_error' || (!result.success && result.error && isParserErrorMessage(result.error))) {
+                this._log(options.logger, 'warn', 'YouTube.js parser error; discovery is incomplete');
+                return { ...result, parserError: true };
+            }
+            return result;
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
-            if (
-                errorMessage.includes('not found!')
-                || errorMessage.includes('Type mismatch')
-                || errorMessage.includes('Parser')
-                || errorMessage.includes('YOUTUBEJS')
-            ) {
-                this._log(options.logger, 'warn', `YouTube.js parser error, returning empty results: ${errorMessage}`);
+            if (isParserErrorMessage(errorMessage)) {
+                this._log(options.logger, 'warn', 'YouTube.js parser error; discovery is unavailable');
                 return {
                     success: false,
                     observationKind: 'unavailable',
@@ -281,7 +299,7 @@ static async getLiveStreamsWithParserTolerance(innertubeClient: InnertubeClientL
                     count: 0,
                     hasContent: false,
                     parserError: true,
-                    error: errorMessage
+                    error: safeDiagnosticText(errorMessage)
                 };
             }
             throw error;
@@ -336,7 +354,7 @@ static async _getLiveStreamsFromChannelApi(channel: ChannelLike, timeout: number
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
             this._log(logger, 'debug', `[YouTube] channel.getLiveStreams failed: ${errorMessage}`);
-            return { streams: [], hasContent: false, observed: false, qualityReason: 'acquisition_failed' };
+            return { streams: [], hasContent: false, observed: false, qualityReason: isParserErrorMessage(errorMessage) ? 'parser_error' : 'acquisition_failed' };
         }
     }
 
@@ -441,10 +459,11 @@ logger?: LoggerLike
         const cacheKey = normalizeHandleForCache(channelHandle);
         const cached = cacheKey ? this._channelCache?.get(cacheKey) : null;
         const now = Date.now();
-        if (cached && (now - cached.timestamp) < this._channelCacheTtl) {
+        if (cached && isChannelId(cached.channelId) && (now - cached.timestamp) < this._channelCacheTtl) {
             this._log(logger, 'debug', `[YouTube] Using cached Channel ID: ${cached.channelId}`);
             return cached.channelId;
         }
+        if (cacheKey) this._channelCache.delete(cacheKey);
 
         this._log(logger, 'debug', '[YouTube] Resolving channel handle to Channel ID');
 
@@ -463,9 +482,14 @@ logger?: LoggerLike
         }
 
         const resolvedChannelId = await resolveChannelId(innertubeClient, channelHandle, resolveOptions);
-        if (resolvedChannelId && cacheKey) {
+        if (resolvedChannelId && isChannelId(resolvedChannelId) && cacheKey) {
             if (!this._channelCache) {
                 this._channelCache = new Map();
+            }
+            while (this._channelCache.size >= MAX_CHANNEL_CACHE_ENTRIES) {
+                const oldestKey = this._channelCache.keys().next().value;
+                if (oldestKey === undefined) break;
+                this._channelCache.delete(oldestKey);
             }
             this._channelCache.set(cacheKey, {
                 channelId: resolvedChannelId,
@@ -517,12 +541,13 @@ logger?: LoggerLike;
                 streams: [],
                 hasContent: false,
                 observed: false,
-                qualityReason: 'acquisition_failed'
+                qualityReason: isParserErrorMessage(errorMessage) ? 'parser_error' : 'acquisition_failed'
             };
         }
     }
 
 static _log(logger: LoggerLike | undefined, level: 'error' | 'warn' | 'debug', message: string, error?: unknown): void {
+        message = safeDiagnosticText(message);
         if (level === 'error' || level === 'warn') {
             const handler = createPlatformErrorHandler(logger, 'youtube-live-stream');
             if (error instanceof Error) {
@@ -539,7 +564,9 @@ static _log(logger: LoggerLike | undefined, level: 'error' | 'warn' | 'debug', m
             return;
         }
         if (typeof error !== 'undefined') {
-            logger[level]?.(message, 'youtube-live-stream-service', error);
+            logger[level]?.(message, 'youtube-live-stream-service', {
+                error: safeDiagnosticText(error instanceof Error ? error.message : String(error))
+            });
         } else {
             logger[level]?.(message, 'youtube-live-stream-service');
         }

@@ -24,6 +24,18 @@ type TestLogger = {
 };
 
 describe("YouTubeLiveStreamService error handler integration", () => {
+  it("sanitizes returned and injected diagnostic text at acquisition and secondary boundaries", async () => {
+    const calls: unknown[][] = [];
+    const record = (...args: unknown[]) => { calls.push(args); };
+    const logger = { debug: record, info: record, warn: record, error: record };
+    const error = new Error("Parser access_token=synthetic-live-token");
+    const channelId = "UC" + "d".repeat(22);
+    const result = await YouTubeLiveStreamService.getLiveStreamsWithParserTolerance({ getChannel: async () => { throw error; } }, channelId, { logger });
+    await YouTubeLiveStreamService.getLiveStreams({ getChannel: async () => ({ videos: [], getLiveStreams: async () => { throw error; } }), search: async () => { throw error; } }, channelId, { logger });
+    expect(JSON.stringify(calls)).not.toContain("synthetic-live-token");
+    expect(result.error).not.toContain("synthetic-live-token");
+    expect(result.parserError).toBe(true);
+  });
   let mockInnertube: InnertubeClient;
   let mockLogger: TestLogger;
 
@@ -62,12 +74,13 @@ describe("YouTubeLiveStreamService error handler integration", () => {
 
     const result = await YouTubeLiveStreamService.getLiveStreams(
       mockInnertube,
-      "UC_TEST_CHANNEL_00000000",
+      "UC" + "e".repeat(22),
       { logger: mockLogger },
     );
 
     expect(result.success).toBe(false);
     expect(mockLogger.error).toHaveBeenCalled();
+    expect(mockInnertube.getChannel).toHaveBeenCalledWith("UC" + "e".repeat(22));
     const errorCall = mockLogger.error.mock.calls[0];
     expect(errorCall).toBeDefined();
     if (!errorCall) {

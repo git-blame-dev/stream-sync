@@ -7,6 +7,34 @@ import {
 } from "../../../src/services/youtube-channel-resolver";
 
 describe("youtube-channel-resolver", () => {
+  it("rejects non-channel browse IDs without publishing them", async () => {
+    for (const browseId of ["PLsynthetic-playlist", "synthetic-arbitrary", "UCshort"]) {
+      expect(await resolveChannelId({ resolveURL: async () => ({ payload: { browseId } }) }, "@synthetic")).toBeNull();
+    }
+  });
+
+  it("rejects overlength handles instead of resolving a truncated identity", async () => {
+    let requests = 0;
+    const client = { resolveURL: async () => { requests++; return { payload: { browseId: "UC" + "a".repeat(22) } }; } };
+    expect(normalizeChannelHandle("雪".repeat(129))).toBe("");
+    expect(normalizeChannelHandle("😀".repeat(128))).toBe("😀".repeat(128));
+    expect(await resolveChannelId(client, "雪".repeat(129))).toBeNull();
+    expect(requests).toBe(0);
+  });
+
+  it("sanitizes callback text while preserving thrown error identity", async () => {
+    const error = new Error("resolve failed access_token=synthetic-resolver-token");
+    const messages: string[] = [];
+    const contexts: unknown[] = [];
+    let observedError: unknown;
+    await expect(resolveChannelId({ resolveURL: async () => { throw error; } }, "@synthetic?access_token=synthetic-context-token", {
+      throwOnError: true,
+      onError: (message, actualError, _eventType, context) => { messages.push(message); contexts.push(context); observedError = actualError; },
+    })).rejects.toBe(error);
+    expect(messages.join(" ")).not.toContain("synthetic-resolver-token");
+    expect(JSON.stringify(contexts)).not.toContain("synthetic-context-token");
+    expect(observedError).toBe(error);
+  });
   it("normalizes channel handle input", () => {
     expect(normalizeChannelHandle("  @TestHandle  ")).toBe("@TestHandle");
     expect(normalizeChannelHandle(null)).toBe("");

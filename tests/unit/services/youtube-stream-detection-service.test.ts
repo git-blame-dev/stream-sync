@@ -34,7 +34,7 @@ function createSearchVideo(stream: StreamFixture) {
     ...(stream.videoId === null ? {} : { id: stream.videoId }),
     title: stream.title,
     is_live: stream.isLive,
-    author: { id: "UCmockChannelId123", name: stream.channelName },
+    author: { id: "UC" + "m".repeat(22), name: stream.channelName },
   };
 }
 
@@ -58,7 +58,7 @@ function createMockInnertubeClient(
           channels: [
             {
               author: {
-                id: "UCmockChannelId123",
+                id: "UC" + "m".repeat(22),
                 name: "testchannel",
                 handle: "@testchannel",
               },
@@ -71,7 +71,7 @@ function createMockInnertubeClient(
       });
     }),
     resolveURL: createMockFn<[string], Promise<{ payload?: { browseId?: string } }>>().mockResolvedValue({
-      payload: { browseId: "UCmockChannelId123" },
+      payload: { browseId: "UC" + "m".repeat(22) },
     }),
     getChannel: createMockFn<[string], Promise<typeof mockChannel>>().mockResolvedValue(mockChannel),
   };
@@ -147,7 +147,7 @@ describe("YouTubeStreamDetectionService", () => {
       };
       mockClient = {
         resolveURL: createMockFn().mockResolvedValue({
-          payload: { browseId: "UCfeedChannel123" },
+          payload: { browseId: "UC" + "f".repeat(22) },
         }),
         getChannel: createMockFn().mockResolvedValue({
           videos: [feedStream],

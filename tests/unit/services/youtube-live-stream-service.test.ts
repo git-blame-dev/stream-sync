@@ -94,6 +94,78 @@ const lockupView = (options: {
 };
 
 describe("YouTube Live Stream Service - Complete User Experience", () => {
+  it("never requests a channel for an invalid resolver browse ID", async () => {
+    const getChannel = createMockFn<[string], Promise<ChannelLike>>().mockResolvedValue({ videos: [] });
+    YouTubeLiveStreamService._channelCache.clear();
+    const result = await YouTubeLiveStreamService.getLiveStreams({ getChannel, resolveURL: async () => ({ payload: { browseId: "PLsynthetic-playlist" } }) }, "@synthetic", { logger: noOpLogger });
+    expect(result.observationKind).toBe("unavailable");
+    expect(getChannel).not.toHaveBeenCalled();
+    expect(YouTubeLiveStreamService._channelCache.size).toBe(0);
+    const resolveURL = createMockFn<[string], Promise<ResolveUrlResult>>();
+    expect((await YouTubeLiveStreamService.getLiveStreams({ getChannel, resolveURL }, "雪".repeat(129), { logger: noOpLogger })).observationKind).toBe("unavailable");
+    expect(resolveURL).not.toHaveBeenCalled();
+    expect(getChannel).not.toHaveBeenCalled();
+  });
+
+  it("re-resolves a poisoned cache entry before channel acquisition", async () => {
+    const channelId = "UC" + "a".repeat(22);
+    YouTubeLiveStreamService._channelCache.set("synthetic", { channelId: "PLsynthetic-playlist", timestamp: testClock.now() });
+    const getChannel = createMockFn<[string], Promise<ChannelLike>>().mockResolvedValue({ videos: [], getLiveStreams: async () => ({ videos: [] }) });
+    const resolveURL = createMockFn<[string], Promise<ResolveUrlResult>>().mockResolvedValue({ payload: { browseId: channelId } });
+    await YouTubeLiveStreamService.getLiveStreams({ getChannel, resolveURL }, "@synthetic", { logger: noOpLogger });
+    expect(resolveURL).toHaveBeenCalledTimes(1);
+    expect(getChannel).toHaveBeenCalledWith(channelId);
+    expect(YouTubeLiveStreamService._channelCache.get("synthetic")?.channelId).toBe(channelId);
+  });
+
+  it("bounds channel cache insertion order to 64 entries and honors the existing TTL", async () => {
+    YouTubeLiveStreamService._channelCache.clear();
+    const channelId = "UC" + "b".repeat(22);
+    const resolveURL = createMockFn<[string], Promise<ResolveUrlResult>>().mockResolvedValue({ payload: { browseId: channelId } });
+    const client = { resolveURL, getChannel: async () => ({ videos: [], getLiveStreams: async () => ({ videos: [] }) }) };
+    for (let index = 0; index < 65; index++) await YouTubeLiveStreamService.getLiveStreams(client, `@synthetic${index}`, { logger: noOpLogger });
+    expect(YouTubeLiveStreamService._channelCache.size).toBe(64);
+    expect(YouTubeLiveStreamService._channelCache.has("synthetic0")).toBe(false);
+    expect(YouTubeLiveStreamService._channelCache.has("synthetic64")).toBe(true);
+    await YouTubeLiveStreamService.getLiveStreams(client, "@synthetic64", { logger: noOpLogger });
+    expect(resolveURL).toHaveBeenCalledTimes(65);
+    const entry = YouTubeLiveStreamService._channelCache.get("synthetic64");
+    if (!entry) throw new Error("Expected synthetic cache entry");
+    entry.timestamp = testClock.now() - YouTubeLiveStreamService._channelCacheTtl;
+    await YouTubeLiveStreamService.getLiveStreams(client, "@synthetic64", { logger: noOpLogger });
+    expect(resolveURL).toHaveBeenCalledTimes(66);
+  });
+
+  it("marks caught parser failures unavailable and retains positive secondary observations", async () => {
+    const channelId = "UC" + "c".repeat(22);
+    const failed = await YouTubeLiveStreamService.getLiveStreamsWithParserTolerance({ getChannel: async () => { throw new Error("YOUTUBEJS Parser synthetic failure"); } }, channelId, { logger: noOpLogger });
+    expect(failed).toMatchObject({ success: false, observationKind: "unavailable", qualityReason: "parser_error", parserError: true, streams: [] });
+    const partial = await YouTubeLiveStreamService.getLiveStreamsWithParserTolerance({ getChannel: async () => ({ videos: [{ id: "synthetic-live", is_live: true }], getLiveStreams: async () => { throw new Error("Parser synthetic failure"); } }) }, channelId, { logger: noOpLogger });
+    expect(partial).toMatchObject({ success: true, observationKind: "partial", qualityReason: "parser_error", parserError: true, videoIds: ["synthetic-live"] });
+    const ordinary = await YouTubeLiveStreamService.getLiveStreamsWithParserTolerance({ getChannel: async () => { throw new Error("synthetic network failure"); } }, channelId, { logger: noOpLogger });
+    expect(ordinary.qualityReason).toBe("acquisition_failed");
+    expect(ordinary.parserError).not.toBe(true);
+  });
+
+  describe("parser classification independent of earlier discovery quality reasons", () => {
+    const channelId = "UC" + "k".repeat(22);
+    const parserFailure = async (): Promise<never> => { throw new Error("Parser synthetic secondary failure"); };
+    const cases = [
+      { channel: { getLiveStreams: parserFailure }, qualityReason: "malformed_collection", observationKind: "unavailable", success: false, videoIds: [] },
+      { channel: { videos: [] }, qualityReason: "missing_capability", observationKind: "partial", success: false, videoIds: [] },
+      { channel: { videos: [null, { id: "synthetic-retained-live", is_live: true }], getLiveStreams: parserFailure }, qualityReason: "malformed_collection", observationKind: "partial", success: true, videoIds: ["synthetic-retained-live"] },
+    ];
+    for (const [index, fixture] of cases.entries()) it(`retains secondary parser classification for mixed-quality case ${index}`, async () => {
+      const warnings: unknown[][] = [];
+      const client = { getChannel: async () => fixture.channel, search: parserFailure } as InnertubeClient;
+      const result = await YouTubeLiveStreamService.getLiveStreamsWithParserTolerance(client, channelId, {
+        logger: { ...noOpLogger, warn: (...args: unknown[]) => { warnings.push(args); } },
+      });
+      expect(result).toMatchObject({ success: fixture.success, observationKind: fixture.observationKind, qualityReason: fixture.qualityReason, parserError: true, videoIds: fixture.videoIds });
+      expect(warnings).toHaveLength(1);
+      expect(JSON.stringify(warnings)).toContain("parser error; discovery is incomplete");
+    });
+  });
   let mockInnertubeClient: MockInnertubeClient;
 
   beforeEach(() => {
@@ -573,7 +645,7 @@ describe("YouTube Live Stream Service - Complete User Experience", () => {
 
     it("should resolve username input for user convenience", async () => {
       const username = "popularcreator";
-      const resolvedChannelId = "UCresolved1234567890123";
+      const resolvedChannelId = "UC" + "u".repeat(22);
       const mockChannel = {
         getLiveStreams: createMockFn().mockResolvedValue({
           videos: [
@@ -603,6 +675,7 @@ describe("YouTube Live Stream Service - Complete User Experience", () => {
       expect(stream.videoId).toBe("username123");
       expect(stream.title).toBe("Creator Live Stream");
       expect(stream.author).toBe("Popular Creator");
+      expect(mockInnertubeClient.getChannel).toHaveBeenCalledWith(resolvedChannelId);
 
       expectNoTechnicalArtifacts(stream.title);
       validateUserFacingString(stream.author, {
@@ -612,7 +685,7 @@ describe("YouTube Live Stream Service - Complete User Experience", () => {
 
     it("should handle @username handle format for users", async () => {
       const handleInput = "@creativechannel";
-      const resolvedChannelId = "UChandle123456789012345";
+      const resolvedChannelId = "UC" + "h".repeat(22);
       const mockChannel = {
         getLiveStreams: createMockFn().mockResolvedValue({
           videos: [
