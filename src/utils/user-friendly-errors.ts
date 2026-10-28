@@ -1,3 +1,4 @@
+import { sanitizeLogText } from '../core/logger/safe-log-serializer';
 import { createPlatformErrorHandler } from './platform-error-handler';
 
 const ERROR_MESSAGES = {
@@ -314,6 +315,15 @@ const TECHNICAL_ERROR_PATTERNS = [
     },
     {
         patterns: [
+            /YouTube.*connection.*timeout/i,
+            /YouTube.*temporarily unavailable/i,
+            /YouTube.*connection.*failed.*timeout/i,
+            /timeout.*after.*30000ms.*youtube/i
+        ],
+        errorKey: 'youtube_connection_timeout'
+    },
+    {
+        patterns: [
             /ECONNREFUSED/i,
             /ECONNRESET/i,
             /ENOTFOUND/i,
@@ -345,15 +355,6 @@ const TECHNICAL_ERROR_PATTERNS = [
             /Memory.*exceeded/i
         ],
         errorKey: 'memory_low'
-    },
-    {
-        patterns: [
-            /YouTube.*connection.*timeout/i,
-            /YouTube.*temporarily unavailable/i,
-            /YouTube.*connection.*failed.*timeout/i,
-            /timeout.*after.*30000ms.*youtube/i
-        ],
-        errorKey: 'youtube_connection_timeout'
     },
     {
         patterns: [
@@ -452,7 +453,7 @@ function translateError(technicalError: unknown, context: ErrorContext = {}): Fr
                     context: context
                 };
                 if (context.includeTechnical) {
-                    translated.technicalDetails = errorMessage;
+                    translated.technicalDetails = sanitizeLogText(errorMessage);
                 }
                 return {
                     ...translated
@@ -470,7 +471,7 @@ function translateError(technicalError: unknown, context: ErrorContext = {}): Fr
         context: context
     };
     if (context.includeTechnical) {
-        fallback.technicalDetails = errorMessage;
+        fallback.technicalDetails = sanitizeLogText(errorMessage);
     }
     return fallback;
 }
@@ -504,7 +505,7 @@ function formatErrorForConsole(friendlyError: FriendlyError, options: ConsoleFor
     }
     
     if (showTechnical && friendlyError.technicalDetails) {
-        output += `\nTechnical details: ${friendlyError.technicalDetails}\n`;
+        output += `\nTechnical details: ${sanitizeLogText(friendlyError.technicalDetails)}\n`;
     }
     
     if (colorize) {
@@ -522,7 +523,7 @@ function formatErrorForLog(friendlyError: FriendlyError) {
     }
     
     if (friendlyError.technicalDetails) {
-        logMessage += ` | Technical: ${friendlyError.technicalDetails}`;
+        logMessage += ` | Technical: ${sanitizeLogText(friendlyError.technicalDetails)}`;
     }
     
     return logMessage;
@@ -573,7 +574,7 @@ export {
 };
 
 function logUserFriendlyError(context: ErrorContext, friendlyError: FriendlyError, logMessage: string, technicalError: unknown) {
-    const category = context.category || 'user-error';
+    const category = sanitizeLogText(context.category || 'user-error');
     const handlerLogger = context.logger;
 
     if (!handlerLogger || typeof handlerLogger.error !== 'function') {
@@ -585,7 +586,7 @@ function logUserFriendlyError(context: ErrorContext, friendlyError: FriendlyErro
         category,
         severity: friendlyError.severity,
         userTitle: friendlyError.title,
-        technicalErrorMessage: technicalError instanceof Error ? technicalError.message : undefined
+        technicalErrorMessage: technicalError instanceof Error ? sanitizeLogText(technicalError.message) : undefined
     };
 
     if (friendlyError.severity === 'error') {
@@ -604,6 +605,6 @@ function logUserFriendlyError(context: ErrorContext, friendlyError: FriendlyErro
     }
 
     if (typeof handlerLogger.warn === 'function') {
-        handlerLogger.warn(logMessage, context.category || 'user-warning');
+        handlerLogger.warn(sanitizeLogText(logMessage), sanitizeLogText(context.category || 'user-warning'));
     }
 }

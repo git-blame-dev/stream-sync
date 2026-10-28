@@ -37,6 +37,64 @@ describe(
       });
 
       describe("when showing user-facing errors", () => {
+        it.each([
+          ["YouTube connection timeout", "YOUTUBE CONNECTION PROBLEM", "WARNING"],
+          ["Connection timeout", "INTERNET CONNECTION PROBLEM", "ERROR"],
+        ])("classifies %s without losing specific precedence", (message, title, severity) => {
+          handleUserFacingError(new Error(message), { logger: mockLogger });
+          expect(consoleOutput.join("\n")).toContain(title);
+          expect(consoleOutput.join("\n")).toContain(severity);
+        });
+
+        it.each(["YouTube connection timeout", "YouTube temporarily unavailable", "Unrecognized synthetic failure", "Token validation failed"])(
+          "redacts recognized credentials through friendly formatting and logger records for %s",
+          (prefix) => {
+            const records: unknown[][] = [];
+            mockLogger.error = (...args: unknown[]) => { records.push(args); };
+            mockLogger.warn = (...args: unknown[]) => { records.push(args); };
+            const credentials = [
+              "Authorization: Basic synthetic-basic-secret",
+              "Bearer synthetic-bearer-secret",
+              '{"access_token":"synthetic-json-secret"}',
+              'password="synthetic-quoted-secret tail"',
+              "https://example.invalid/path?signature=synthetic-url-secret",
+              `clientSecret="${"synthetic-long-secret".repeat(400)}"`,
+            ].join(" | ");
+            const original = new Error(`${prefix} | ${credentials}`);
+            const originalMessage = original.message;
+            handleUserFacingError(original, {
+              logger: mockLogger,
+              includeTechnical: true,
+              category: "test-category password=synthetic-category-secret",
+              opaque: { password: "synthetic-opaque-secret" },
+            });
+            const output = JSON.stringify({ records, consoleOutput });
+            expect(records.length).toBeGreaterThan(0);
+            expect(output).toContain("[REDACTED]");
+            expect(output).not.toContain("synthetic-basic");
+            expect(output).not.toContain("synthetic-bearer");
+            expect(output).not.toContain("synthetic-json");
+            expect(output).not.toContain("synthetic-quoted");
+            expect(output).not.toContain("synthetic-url");
+            expect(output).not.toContain("synthetic-long");
+            expect(output).not.toContain("synthetic-category");
+            expect(output).not.toContain("synthetic-opaque");
+            expect(consoleOutput.join("\n")).not.toContain("Technical details:");
+            expect(original.message).toBe(originalMessage);
+          },
+        );
+
+        it("keeps diagnostics disabled without leaking the original error into logger metadata", () => {
+          const records: unknown[][] = [];
+          mockLogger.error = (...args: unknown[]) => { records.push(args); };
+          handleUserFacingError(new Error("Unrecognized failure password=synthetic-disabled-secret"), {
+            logger: mockLogger,
+          });
+          expect(consoleOutput.join("\n")).toContain("UNEXPECTED PROBLEM");
+          expect(JSON.stringify({ records, consoleOutput })).not.toContain("synthetic-disabled");
+          expect(JSON.stringify(records)).not.toContain("Technical:");
+        });
+
         it("should display user-friendly console message", () => {
           const technicalError = "Missing clientId or clientSecret";
 
