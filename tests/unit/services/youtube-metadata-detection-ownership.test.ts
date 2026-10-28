@@ -40,6 +40,7 @@ describe('YouTube metadata detection ownership', () => {
             };
             const result = await detection.detectLiveStreams(channel, { signal: caller.signal });
             expect(result.success).toBe(false);
+            expect(result.observationKind).toBe('unavailable');
             expect(result.videoIds).toEqual([]);
             expect(detection._circuitBreaker.consecutiveFailures).toBe(2);
             expect(detection._circuitBreaker.lastFailureTime).toBe(123);
@@ -69,7 +70,7 @@ describe('YouTube metadata detection ownership', () => {
                         getInfo: async () => ({ basic_info: { is_live: true, view_count: 3 } }),
                         getChannel: async () => {
                             await read('channel');
-                            return { getLiveStreams: async () => {
+                            return { videos: stage === 'live' ? [{ id: 'synthetic_live', is_live: true }] : [], getLiveStreams: async () => {
                                 if (stage === 'search') throw new Error('synthetic parser failure');
                                 await read('live');
                                 return { videos: [] };
@@ -108,8 +109,8 @@ describe('YouTube metadata detection ownership', () => {
             await reading;
             if (scenario !== 'deadline') cancellation.abort(new Error('synthetic body cancellation'));
             expect(await pending).toMatchObject(scenario === 'deadline'
-                ? { success: false, videoIds: [], message: 'Detection timeout - please try again', debug: { errorType: 'DOMException' } }
-                : { success: false, videoIds: [], debug: { errorMessage: 'synthetic body cancellation' } });
+                ? { success: false, observationKind: 'unavailable', videoIds: [], message: 'Detection timeout - please try again', debug: { errorType: 'DOMException' } }
+                : { success: false, observationKind: 'unavailable', videoIds: [], debug: { errorMessage: 'synthetic body cancellation' } });
             await stopped;
             await owner.dispose();
             expect(calls).toEqual(stage === 'channel' ? ['channel'] : stage === 'live' ? ['channel', 'live'] : ['channel', 'search']);
@@ -196,7 +197,9 @@ describe('YouTube metadata detection ownership', () => {
             logger: noOpLogger, config,
             Innertube: { create: async () => {
                 if (++attempts === 1) throw new Error('synthetic SDK initialization failure');
-                return { getInfo: async () => ({}), getChannel: async () => ({ videos: [] }) };
+                return { getInfo: async () => ({}),
+                    getChannel: async () => ({ videos: [], getLiveStreams: async () => ({ videos: [] }) }),
+                    search: async () => ({ videos: [] }) };
             } }
         });
         const detection = deps.streamDetectionService as YouTubeStreamDetectionService;

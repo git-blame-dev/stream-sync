@@ -93,11 +93,13 @@ describe("YouTube Live Stream Service - Channel ID User Experience", () => {
     it("should handle valid Channel ID with no live streams gracefully", async () => {
       const validChannelId = "UC" + "x".repeat(22);
       const mockChannel = {
+        videos: [],
         getLiveStreams: createMockFn().mockResolvedValue({
           videos: [],
         }),
       };
       mockInnertubeClient.getChannel.mockResolvedValue(mockChannel);
+      mockInnertubeClient.search.mockResolvedValue({ videos: [] });
 
       const result = await YouTubeLiveStreamService.getLiveStreams(
         mockInnertubeClient,
@@ -305,11 +307,13 @@ describe("YouTube Live Stream Service - Channel ID User Experience", () => {
     it("should provide fast response when user provides Channel ID", async () => {
       const channelId = "UC" + "p".repeat(22);
       const mockChannel = {
+        videos: [],
         getLiveStreams: createMockFn().mockResolvedValue({
           videos: [],
         }),
       };
       mockInnertubeClient.getChannel.mockResolvedValue(mockChannel);
+      mockInnertubeClient.search.mockResolvedValue({ videos: [] });
 
       const startTime = testClock.now();
       const result = await YouTubeLiveStreamService.getLiveStreams(

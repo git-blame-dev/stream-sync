@@ -351,8 +351,9 @@ describe("YouTube Live Stream Service - Complete User Experience", () => {
 
     it("should handle channel with no live streams gracefully for users", async () => {
       const channelId = "UCinactive12345678901234";
-      const mockChannel = { videos: [] };
+      const mockChannel = { videos: [], getLiveStreams: async () => ({ videos: [] }) };
       mockInnertubeClient.getChannel.mockResolvedValue(mockChannel);
+      mockInnertubeClient.search.mockResolvedValue({ videos: [] });
 
       const result = await YouTubeLiveStreamService.getLiveStreams(
         mockInnertubeClient,

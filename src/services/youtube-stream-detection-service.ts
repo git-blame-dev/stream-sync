@@ -1,6 +1,7 @@
 import { getSystemTimestampISO } from '../utils/timestamp';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
-import { YouTubeLiveStreamService } from './youtube-live-stream-service';
+import { isYouTubeVideoId, YouTubeLiveStreamService } from './youtube-live-stream-service';
+import type { DiscoveryObservationKind, DiscoveryQualityReason } from './youtube-live-stream-service';
 import type { InnertubeService } from './innertube-service';
 
 type LoggerLike = {
@@ -26,6 +27,9 @@ type DetectionStream = {
 
 type DetectionResult = {
     streams: DetectionStream[];
+    observationKind: DiscoveryObservationKind;
+    qualityReason?: DiscoveryQualityReason;
+    error?: string;
     malformed?: boolean;
     hasContent?: boolean;
     parserError?: boolean;
@@ -42,6 +46,8 @@ function hasDetectionCapability(client: object): client is DetectionClient {
 
 type DetectionServiceResponse = {
     success: boolean;
+    observationKind: DiscoveryObservationKind;
+    qualityReason?: DiscoveryQualityReason;
     videoIds: string[];
     message: string;
     responseTime: number;
@@ -189,7 +195,26 @@ class YouTubeStreamDetectionService {
             signal.throwIfAborted();
 
             const validVideoIds = this._validateVideoIds(detectionResult.streams);
+            if (validVideoIds.length !== detectionResult.streams.length) {
+                detectionResult.observationKind = 'partial';
+                detectionResult.qualityReason = 'invalid_video_ids';
+            }
 
+            if (detectionResult.observationKind !== 'complete' && validVideoIds.length === 0) {
+                const error = new Error(detectionResult.error || 'Incomplete stream discovery');
+                this._metrics.failedRequests += 1;
+                this._updateErrorMetrics(error);
+                this._recordCircuitBreakerFailure(error);
+                return {
+                    ...this._formatErrorResponse(error, options.debug, startTime),
+                    observationKind: detectionResult.observationKind,
+                    qualityReason: detectionResult.qualityReason ?? 'detection_unavailable',
+                    hasContent: detectionResult.hasContent ?? false,
+                    detectionMethod: detectionResult.detectionMethod ?? null
+                };
+            }
+
+            // Complete negatives and partial positives remain usable successes.
             this._metrics.successfulRequests += 1;
             this._metrics.totalResponseTime += Date.now() - startTime;
             this._resetCircuitBreaker();
@@ -302,25 +327,11 @@ channelHandle,
         const detectionMethod: string = typeof result.detectionMethod === 'string'
             ? result.detectionMethod
             : 'unknown';
-        const responseError: string = typeof result.error === 'string'
-            ? result.error
-            : 'Stream detection failed';
-
-        if (!result.success) {
-            if (parserError) {
-                return {
-                    streams: [],
-                    malformed: true,
-                    hasContent: false,
-                    parserError: true
-                };
-            }
-
-            throw new Error(responseError);
-        }
-
         return {
-            streams: result.streams ?? [],
+            streams: result.streams,
+            observationKind: result.observationKind,
+            ...(result.qualityReason ? { qualityReason: result.qualityReason } : {}),
+            ...(result.error ? { error: result.error } : {}),
             malformed: parserError,
             hasContent: result.hasContent ?? false,
             parserError,
@@ -348,11 +359,7 @@ _validateVideoIds(streams: DetectionStream[]): string[] {
     }
 
 _isValidVideoId(videoId: unknown): videoId is string {
-        if (!videoId || typeof videoId !== 'string') {
-            return false;
-        }
-
-        return /^[a-zA-Z0-9_-]{11}$/.test(videoId) || /^[a-zA-Z0-9_-]+$/.test(videoId);
+        return isYouTubeVideoId(videoId);
     }
 
     _formatSuccessResponse(
@@ -379,6 +386,8 @@ _isValidVideoId(videoId: unknown): videoId is string {
 
         const response: DetectionServiceResponse = {
             success: true,
+            observationKind: detectionResult.observationKind,
+            ...(detectionResult.qualityReason ? { qualityReason: detectionResult.qualityReason } : {}),
             videoIds,
             message,
             responseTime,
@@ -432,6 +441,8 @@ _isValidVideoId(videoId: unknown): videoId is string {
 
         const response: DetectionServiceResponse = {
             success: false,
+            observationKind: 'unavailable',
+            qualityReason: 'detection_unavailable',
             videoIds: [],
             message,
             responseTime,

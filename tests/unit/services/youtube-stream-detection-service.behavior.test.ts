@@ -76,6 +76,7 @@ describe("YouTubeStreamDetectionService behavior", () => {
       { logger: noOpLogger },
     );
     service._performDetection = createMockFn().mockResolvedValue({
+      observationKind: "complete" as const,
       streams: [{ videoId: "ABCDEFGHIJK" }, { videoId: "invalid" }],
       hasContent: true,
       detectionMethod: "youtubei",

@@ -80,6 +80,8 @@ author: string | null;
 
 type LiveStreamsResult = {
 success: boolean;
+observationKind: DiscoveryObservationKind;
+qualityReason?: DiscoveryQualityReason;
 streams: LiveStreamRecord[];
 videoIds: string[];
 count: number;
@@ -87,6 +89,20 @@ hasContent: boolean;
 detectionMethod?: string;
 parserError?: boolean;
 error?: string;
+};
+
+// Observation quality does not authorize removal of omitted known streams.
+export type DiscoveryObservationKind = 'complete' | 'partial' | 'unavailable';
+export type DiscoveryQualityReason = 'missing_capability' | 'malformed_collection' | 'acquisition_failed' | 'parser_error' | 'invalid_video_ids' | 'detection_unavailable';
+export function isYouTubeVideoId(videoId: unknown): videoId is string {
+    if (!videoId || typeof videoId !== 'string') return false;
+    return /^[a-zA-Z0-9_-]{11}$/.test(videoId) || /^[a-zA-Z0-9_-]+$/.test(videoId);
+}
+type VideoObservation = {
+    streams: LiveStreamRecord[];
+    hasContent: boolean;
+    observed: boolean;
+    qualityReason?: DiscoveryQualityReason;
 };
 
 class YouTubeLiveStreamService {
@@ -160,8 +176,11 @@ static isVideoLive(video: ChannelVideo | null | undefined): boolean {
                 hasContent: false
             };
 
-            let liveStreams = this._extractLiveStreamsFromChannelVideos(channel, logger);
-            detectionMeta.hasContent = detectionMeta.hasContent || this._channelHasVideoContent(channel);
+            const channelVideos = this._extractLiveStreamsFromChannelVideos(channel, logger);
+            let liveStreams = channelVideos.streams;
+            let observed = channelVideos.observed;
+            let qualityReason = channelVideos.qualityReason;
+            detectionMeta.hasContent = channelVideos.hasContent;
 
             if (typeof channel.getLiveStreams === 'function') {
                 const remainingTimeout = Math.max(1, timeout - (Date.now() - detectionStartedAt));
@@ -169,6 +188,8 @@ static isVideoLive(video: ChannelVideo | null | undefined): boolean {
                     ? Math.max(1, Math.floor(remainingTimeout / 2))
                     : timeout;
                 const apiStreams = await this._getLiveStreamsFromChannelApi(channel, apiTimeout, logger);
+                observed = observed || apiStreams.observed;
+                qualityReason ??= apiStreams.qualityReason;
                 detectionMeta.hasContent = detectionMeta.hasContent || apiStreams.hasContent;
                 const streamIds = new Set(liveStreams.map((stream) => stream.videoId));
                 const additionalApiStreams = apiStreams.streams.filter((stream) => !streamIds.has(stream.videoId));
@@ -176,6 +197,8 @@ static isVideoLive(video: ChannelVideo | null | undefined): boolean {
                 if (additionalApiStreams.length) {
                     detectionMeta.detectionMethod = 'channel_api';
                 }
+            } else {
+                qualityReason ??= 'missing_capability';
             }
 
             if (!liveStreams.length) {
@@ -194,6 +217,8 @@ static isVideoLive(video: ChannelVideo | null | undefined): boolean {
                 }
 
                 const searchStreams = await this._detectLiveStreamsViaSearch(innertubeClient, searchOptions);
+                observed = observed || searchStreams.observed;
+                qualityReason ??= searchStreams.qualityReason;
                 detectionMeta.hasContent = detectionMeta.hasContent || searchStreams.hasContent;
                 liveStreams = searchStreams.streams;
 
@@ -203,7 +228,9 @@ static isVideoLive(video: ChannelVideo | null | undefined): boolean {
             }
 
             return {
-                success: true,
+                success: !qualityReason || liveStreams.length > 0,
+                observationKind: qualityReason ? (observed ? 'partial' : 'unavailable') : 'complete',
+                ...(qualityReason ? { qualityReason } : {}),
                 streams: liveStreams,
                 videoIds: liveStreams.map((stream) => stream.videoId),
                 count: liveStreams.length,
@@ -221,6 +248,8 @@ static isVideoLive(video: ChannelVideo | null | undefined): boolean {
 
             return {
                 success: false,
+                observationKind: 'unavailable',
+                qualityReason: 'acquisition_failed',
                 streams: [],
                 videoIds: [],
                 count: 0,
@@ -245,6 +274,8 @@ static async getLiveStreamsWithParserTolerance(innertubeClient: InnertubeClientL
                 this._log(options.logger, 'warn', `YouTube.js parser error, returning empty results: ${errorMessage}`);
                 return {
                     success: false,
+                    observationKind: 'unavailable',
+                    qualityReason: 'parser_error',
                     streams: [],
                     videoIds: [],
                     count: 0,
@@ -286,66 +317,75 @@ static _isChannelNotFoundError(error: unknown): boolean {
         return message.includes('channel not found');
     }
 
-static _channelHasVideoContent(channel: ChannelLike): boolean {
-        return Array.isArray(channel?.videos) && channel.videos.length > 0;
+static _extractLiveStreamsFromChannelVideos(channel: ChannelLike, logger?: LoggerLike): VideoObservation {
+        return this._mapLiveVideos(channel?.videos, logger, 'channel_videos');
     }
 
-static _extractLiveStreamsFromChannelVideos(channel: ChannelLike, logger?: LoggerLike): LiveStreamRecord[] {
-        const videos = Array.isArray(channel?.videos) ? channel.videos : [];
-        return this._mapLiveVideos(videos, logger, 'channel_videos');
-    }
-
-static async _getLiveStreamsFromChannelApi(channel: ChannelLike, timeout: number, logger?: LoggerLike): Promise<{ streams: LiveStreamRecord[]; hasContent: boolean }> {
+static async _getLiveStreamsFromChannelApi(channel: ChannelLike, timeout: number, logger?: LoggerLike): Promise<VideoObservation> {
         try {
+            if (typeof channel.getLiveStreams !== 'function') {
+                return { streams: [], hasContent: false, observed: false, qualityReason: 'missing_capability' };
+            }
             const liveStreams = await withTimeout(
-                channel.getLiveStreams ? channel.getLiveStreams() : Promise.resolve({ videos: [] }),
+                channel.getLiveStreams(),
                 timeout,
                 'YouTube getLiveStreams operation'
             );
 
-            return {
-                streams: this._mapLiveVideos(liveStreams?.videos ?? [], logger, 'channel_api'),
-                hasContent: !!liveStreams?.videos?.length
-            };
+            return this._mapLiveVideos(liveStreams?.videos, logger, 'channel_api');
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
             this._log(logger, 'debug', `[YouTube] channel.getLiveStreams failed: ${errorMessage}`);
-            return { streams: [], hasContent: false };
+            return { streams: [], hasContent: false, observed: false, qualityReason: 'acquisition_failed' };
         }
     }
 
-    static _mapLiveVideos(videos: ChannelVideo[], logger: LoggerLike | undefined, context: string): LiveStreamRecord[] {
-        if (!Array.isArray(videos) || videos.length === 0) {
-            return [];
+    static _mapLiveVideos(videos: unknown, logger: LoggerLike | undefined, context: string,
+        belongsToChannel: (video: ChannelVideo) => boolean | undefined = () => true): VideoObservation {
+        if (!Array.isArray(videos)) {
+            return { streams: [], hasContent: false, observed: false, qualityReason: 'malformed_collection' };
         }
-
-        const seenVideoIds = new Set<string>();
-        return videos
-            .filter((video) => {
-                const isLive = this.isVideoLive(video);
-                if (isLive) {
-                    const title = this._getVideoTitle(video);
-                    this._log(logger, 'debug', `[YouTube] Live stream found via ${context}: ${this._getVideoId(video)} - ${title}`);
+        const streams = new Map<string, LiveStreamRecord>();
+        let observed = videos.length === 0;
+        let hasContent = false;
+        let qualityReason: DiscoveryQualityReason | undefined;
+        for (const video of videos) {
+            if (!video || typeof video !== 'object' || Array.isArray(video)) {
+                qualityReason = 'malformed_collection';
+                continue;
+            }
+            try {
+                const videoId = this._getVideoId(video);
+                if (!isYouTubeVideoId(videoId)) {
+                    qualityReason = 'malformed_collection';
+                    continue;
                 }
-                return isLive;
-            })
-            .map((video) => ({
-                videoId: this._getVideoId(video),
-                title: this._getVideoTitle(video),
-                isLive: true as const,
-                author: video.author?.name || null
-            }))
-            .filter((stream): stream is LiveStreamRecord => {
-                if (!stream.videoId || seenVideoIds.has(stream.videoId)) {
-                    return false;
+                const attribution = belongsToChannel(video);
+                if (attribution === undefined) {
+                    qualityReason = 'malformed_collection';
+                    continue;
                 }
-                seenVideoIds.add(stream.videoId);
-                return true;
-            });
+                if (attribution) {
+                    if (this.isVideoLive(video)) {
+                        const title = this._getVideoTitle(video);
+                        this._log(logger, 'debug', `[YouTube] Live stream found via ${context}: ${videoId} - ${title}`);
+                        if (!streams.has(videoId)) streams.set(videoId, {
+                            videoId, title, isLive: true, author: video.author?.name || null
+                        });
+                    }
+                    hasContent = true;
+                }
+                observed = true;
+            } catch {
+                qualityReason = 'malformed_collection';
+            }
+        }
+        return { streams: [...streams.values()], hasContent, observed, ...(qualityReason ? { qualityReason } : {}) };
     }
 
     static _getVideoId(video: ChannelVideo): string {
-        return String(video.id || video.video_id || video.content_id || '');
+        const id = video.id || video.video_id || video.content_id;
+        return typeof id === 'string' ? id : '';
     }
 
     static _getVideoTitle(video: ChannelVideo): string {
@@ -356,17 +396,36 @@ static async _getLiveStreamsFromChannelApi(channel: ChannelLike, timeout: number
         return title?.text || title?.content || 'Live Stream';
     }
 
-    static _videoBelongsToChannel(video: ChannelVideo, channelId: string, normalizedHandle: string): boolean {
-        const authorHandle = video.author?.handle?.replace(/^@/, '').toLowerCase();
-        if (video.author?.id === channelId || authorHandle === normalizedHandle) {
-            return true;
+    static _videoBelongsToChannel(video: ChannelVideo, channelId: string, normalizedHandle: string): boolean | undefined {
+        const channelIds = new Set<string>();
+        const authorId = video.author?.id;
+        if (authorId !== undefined) {
+            if (authorId !== channelId && !isChannelId(authorId)) return undefined;
+            channelIds.add(authorId);
         }
-
-        return (video.metadata?.metadata?.metadata_rows ?? []).some((row) =>
-            (row.metadata_parts ?? []).some((part) =>
-                part.text?.endpoint?.payload?.browseId === channelId
-            )
-        );
+        const rawHandle = video.author?.handle;
+        if (rawHandle !== undefined && typeof rawHandle !== 'string') return undefined;
+        const authorHandle = rawHandle?.replace(/^@/, '').toLowerCase();
+        if (authorHandle !== undefined && (!authorHandle || /[@\s]/u.test(authorHandle))) return undefined;
+        const rows = video.metadata?.metadata?.metadata_rows ?? [];
+        if (!Array.isArray(rows)) return undefined;
+        for (const row of rows) {
+            if (!row || !Array.isArray(row.metadata_parts ?? [])) return undefined;
+            for (const part of row.metadata_parts ?? []) {
+                if (!part) return undefined;
+                const browseId = part.text?.endpoint?.payload?.browseId;
+                if (browseId === undefined) continue;
+                if (typeof browseId !== 'string') return undefined;
+                // Metadata rows also link playlists; those are not author identities.
+                if (browseId === channelId || isChannelId(browseId)) channelIds.add(browseId);
+            }
+        }
+        if (channelIds.size > 1) return undefined;
+        const hasTargetHandle = normalizedHandle !== channelId.toLowerCase();
+        const handleMatches = hasTargetHandle && authorHandle === normalizedHandle;
+        if (channelIds.has(channelId)) return true; // Stable identity survives a renamed handle.
+        if (channelIds.size === 1) return handleMatches ? undefined : false;
+        return authorHandle !== undefined && hasTargetHandle ? handleMatches : undefined;
     }
 
 static async _getOrResolveChannelId(
@@ -429,12 +488,14 @@ channelHandle: string;
 timeout: number;
 logger?: LoggerLike;
 }
-): Promise<{ streams: LiveStreamRecord[]; hasContent: boolean }> {
+): Promise<VideoObservation> {
         try {
             if (typeof innertubeClient.search !== 'function') {
                 return {
                     streams: [],
-                    hasContent: false
+                    hasContent: false,
+                    observed: false,
+                    qualityReason: 'missing_capability'
                 };
             }
 
@@ -445,23 +506,18 @@ logger?: LoggerLike;
                 'YouTube search live videos'
             );
 
-            const videos: ChannelVideo[] = searchResult?.videos ?? [];
             const normalizedHandle = channelHandle.replace(/^@/, '').toLowerCase();
 
-            const ownedVideos = videos
-                .filter((video) => this._videoBelongsToChannel(video, channelId, normalizedHandle));
-            const streams = this._mapLiveVideos(ownedVideos, logger, 'search');
-
-            return {
-                streams,
-                hasContent: ownedVideos.length > 0
-            };
+            return this._mapLiveVideos(searchResult?.videos, logger, 'search',
+                video => this._videoBelongsToChannel(video, channelId, normalizedHandle));
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
             this._log(logger, 'debug', `[YouTube] Search fallback failed: ${errorMessage}`);
             return {
                 streams: [],
-                hasContent: false
+                hasContent: false,
+                observed: false,
+                qualityReason: 'acquisition_failed'
             };
         }
     }

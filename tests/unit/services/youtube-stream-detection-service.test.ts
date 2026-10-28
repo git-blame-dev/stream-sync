@@ -34,7 +34,7 @@ function createSearchVideo(stream: StreamFixture) {
     ...(stream.videoId === null ? {} : { id: stream.videoId }),
     title: stream.title,
     is_live: stream.isLive,
-    author: { name: stream.channelName },
+    author: { id: "UCmockChannelId123", name: stream.channelName },
   };
 }
 
@@ -42,6 +42,7 @@ function createMockInnertubeClient(
   streamData: StreamFixture[] = [],
 ): DetectionClient {
   const mockChannel = {
+    videos: [],
     getLiveStreams: createMockFn<[], Promise<{ videos: ReturnType<typeof createChannelVideo>[] }>>().mockResolvedValue({
       videos: streamData.map(createChannelVideo),
     }),
@@ -400,9 +401,10 @@ describe("YouTubeStreamDetectionService", () => {
 
       const result = await service.detectLiveStreams("@testchannel");
 
-      expect(result.success).toBe(true);
+      expect(result.success).toBe(false);
+      expect(result.observationKind).toBe("partial");
       expect(result.videoIds).toEqual([]);
-      expect(result.message).toContain("No content found");
+      expect(result.message).toContain("Unable to detect streams");
       expectNoTechnicalArtifacts(result.message);
     });
   });
