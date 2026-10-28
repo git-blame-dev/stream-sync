@@ -18,6 +18,12 @@ type EventBusLike = {
 
 type EffectsManagerLike = OBSEffectsManager;
 
+function requireEventCorrelation(eventBus: EventBusLike | null, correlationId: string | undefined, operation: string): void {
+    if (eventBus && !correlationId) {
+        throw new Error(`${operation} requires correlationId when events are enabled`);
+    }
+}
+
 type VFXServiceConfig = Record<string, unknown> & {
     commands: Record<string, string>;
     farewell: Record<string, string>;
@@ -202,6 +208,7 @@ class VFXCommandService {
                 throw new Error('executeCommand requires platform and skipCooldown');
             }
             const normalizedUserId = resolveExecutionUserId(context, 'executeCommand');
+            requireEventCorrelation(this.eventBus, correlationId, 'executeCommand');
             const commandUser = (typeof username === 'string') ? username.trim() : '';
             if (!commandUser) {
                 return {
@@ -246,11 +253,14 @@ class VFXCommandService {
             const executionResult = await this._executeVFXCommand(vfxConfig, { username: commandUser, platform });
             
             if (executionResult.success) {
+                if (!skipCooldown) {
+                    if (!vfxConfig.commandKey) {
+                        throw new Error('VFX config requires commandKey for cooldown updates');
+                    }
+                    this._updateCooldowns(normalizedUserId, vfxConfig.commandKey);
+                }
+                this.stats.successfulCommands++;
                 if (this.eventBus) {
-                    try {
-                        if (!correlationId) {
-                            throw new Error('executeCommand requires correlationId when emitting events');
-                        }
                         const {
                             correlationId: _correlationId,
                             platform: _platform,
@@ -287,21 +297,18 @@ class VFXCommandService {
                             type: PlatformEvents.VFX_EFFECT_COMPLETED
                         };
 
-                        this.eventBus.emit(PlatformEvents.VFX_COMMAND_EXECUTED, commandExecutedPayload);
-                        this.eventBus.emit(PlatformEvents.VFX_EFFECT_COMPLETED, effectCompletedPayload);
-                    } catch (eventError) {
-                        handleVFXCommandError(`[VFXCommandService] EventBus error: ${getErrorMessage(eventError)}`, eventError, 'event-bus');
-                        throw eventError;
-                    }
+                        for (const payload of [commandExecutedPayload, effectCompletedPayload]) {
+                            try {
+                                this.eventBus.emit(payload.type, payload);
+                            } catch (eventError) {
+                                try {
+                                    handleVFXCommandError(`[VFXCommandService] EventBus publication failed for ${payload.type}`, eventError, 'event-bus');
+                                } catch {
+                                    // Diagnostics must not mask completed work or prevent releasing completion waiters.
+                                }
+                            }
+                        }
                 }
-
-                if (!skipCooldown) {
-                    if (!vfxConfig.commandKey) {
-                        throw new Error('VFX config requires commandKey for cooldown updates');
-                    }
-                    this._updateCooldowns(normalizedUserId, vfxConfig.commandKey);
-                }
-                this.stats.successfulCommands++;
             } else {
                 this.stats.failedCommands++;
             }
@@ -440,9 +447,7 @@ class VFXCommandService {
                 throw new Error('executeCommandForKey requires platform and skipCooldown');
             }
             resolveExecutionUserId(context, 'executeCommandForKey');
-            if (this.eventBus && !correlationId) {
-                throw new Error('executeCommandForKey requires correlationId when events are enabled');
-            }
+            requireEventCorrelation(this.eventBus, correlationId, 'executeCommandForKey');
             const commandUser = (typeof username === 'string') ? username.trim() : '';
             if (!commandUser) {
                 throw new Error('executeCommandForKey requires username');

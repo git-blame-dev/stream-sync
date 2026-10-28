@@ -1,8 +1,10 @@
-import { describe, test, expect, beforeEach } from "bun:test";
+import { describe, test, expect, beforeEach, spyOn } from "bun:test";
 import { createMockFn } from "../../../helpers/bun-mock-utils";
+import { noOpLogger } from "../../../helpers/mock-factories";
 
 import { PlatformEvents } from "../../../../src/interfaces/PlatformEvents";
 import { OBSEffectsManager } from "../../../../src/obs/effects";
+import { getUnifiedLogger } from "../../../../src/core/logging";
 import {
   VFXCommandService,
   createVFXCommandService,
@@ -15,7 +17,7 @@ type PlayMediaInOBS = OBSEffectsManager["playMediaInOBS"];
 
 function createConfig(): VFXServiceConfig {
   return {
-    commands: { greetings: "!hello" },
+    commands: { greetings: "!hello, Synthetic VFX Source" },
     farewell: {},
     vfx: { filePath: "/tmp" },
     cooldowns: { cmdCooldown: 60, globalCmdCooldownMs: 60000 },
@@ -45,6 +47,23 @@ function createMockEffectsManager(): OBSEffectsManager {
   effectsManager.playMediaInOBS = createMockFn<Parameters<PlayMediaInOBS>, ReturnType<PlayMediaInOBS>>()
     .mockResolvedValue(undefined);
   return effectsManager;
+}
+
+function createExternalOBSFixture() {
+  const call = createMockFn<[string, Record<string, unknown>?], Promise<unknown>>()
+    .mockResolvedValue({});
+  const effectsManager = new OBSEffectsManager({
+    ensureConnected: async () => {},
+    call,
+    addEventListener: (_name: string, handler: (data?: Record<string, unknown>) => void) => {
+      queueMicrotask(() => handler({ inputName: "Synthetic VFX Source" }));
+    },
+    removeEventListener: () => {},
+  }, {
+    logger: noOpLogger,
+    delay: async () => {},
+  });
+  return { effectsManager, call };
 }
 
 function expectRecordedEvent(
@@ -175,26 +194,42 @@ describe("VFXCommandService completion events", () => {
     expect(service._effectsManager).toBe(customEffectsManager);
   });
 
-  test("does not update cooldown state when completion event emission fails", async () => {
+  test("rejects missing correlation before OBS execution or cooldown updates", async () => {
+    const obs = createExternalOBSFixture();
+    const service = new VFXCommandService(createConfig(), eventBus, {
+      effectsManager: obs.effectsManager,
+    });
+    const result = await service.executeCommand("!hello", {
+      username: "Synthetic Viewer",
+      platform: "twitch",
+      userId: "synthetic-user",
+      skipCooldown: false,
+    });
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("correlationId");
+    expect(obs.call).not.toHaveBeenCalled();
+    expect(recordedEvents).toHaveLength(0);
+    expect(service.userLastCommand.size).toBe(0);
+    expect(service.globalCommandCooldowns.size).toBe(0);
+    expect(service.userCommandTimestamps.size).toBe(0);
+    expect(service.stats.timedCommands).toBe(0);
+  });
+
+  test.each([PlatformEvents.VFX_COMMAND_EXECUTED, PlatformEvents.VFX_EFFECT_COMPLETED])("preserves actual success and cooldowns when %s publication fails", async (failingEvent) => {
+    const obs = createExternalOBSFixture();
     const config = createConfig();
+    const cooldownCommittedAtPublication: boolean[] = [];
     const failingEventBus = {
       emit: (name: string) => {
-        if (name === PlatformEvents.VFX_EFFECT_COMPLETED) {
+        cooldownCommittedAtPublication.push(service.userLastCommand.has("test-user-123"));
+        recordedEvents.push({ name, payload: {} });
+        if (name === failingEvent) {
           throw new Error("emit failed");
         }
       },
     };
     const service = new VFXCommandService(config, failingEventBus, {
-      effectsManager: mockEffectsManager,
-    });
-
-    service.selectVFXCommand = createMockFn().mockResolvedValue({
-      commandKey: "greetings",
-      filename: "hello",
-      mediaSource: "VFX Top",
-      vfxFilePath: "/tmp",
-      command: "!hello",
-      duration: 5000,
+      effectsManager: obs.effectsManager,
     });
 
     const result = await service.executeCommand("!hello", {
@@ -205,11 +240,53 @@ describe("VFXCommandService completion events", () => {
       correlationId: "test-corr-2",
     });
 
-    expect(result.success).toBe(false);
-    expect(service.stats.successfulCommands).toBe(0);
-    expect(service.stats.failedCommands).toBe(1);
-    expect(service.userLastCommand.size).toBe(0);
-    expect(service.globalCommandCooldowns.size).toBe(0);
+    expect(result.success).toBe(true);
+    expect(service.stats.successfulCommands).toBe(1);
+    expect(service.stats.failedCommands).toBe(0);
+    expect(service.stats.timedCommands).toBe(1);
+    expect(cooldownCommittedAtPublication).toEqual([true, true]);
+    expect(service.userLastCommand.size).toBe(1);
+    expect(service.globalCommandCooldowns.has("greetings")).toBe(true);
+    expect(service.userCommandTimestamps.get("test-user-123")).toHaveLength(1);
+    expect(recordedEvents.map(({ name }) => name)).toEqual([
+      PlatformEvents.VFX_COMMAND_EXECUTED,
+      PlatformEvents.VFX_EFFECT_COMPLETED,
+    ]);
+    const repeated = await service.executeCommand("!hello", {
+      username: "Synthetic Viewer", platform: "twitch", userId: "test-user-123",
+      skipCooldown: false, correlationId: "synthetic-repeat",
+    });
+    expect(repeated.error).toBe("Command on cooldown");
+    expect(obs.call.mock.calls.map(([name]) => name)).toEqual([
+      "SetInputSettings", "TriggerMediaInputAction",
+    ]);
+  });
+
+  test("still publishes completion when executed publication and its diagnostic both throw", async () => {
+    const obs = createExternalOBSFixture();
+    const service = new VFXCommandService(createConfig(), {
+      emit: (name, payload) => {
+        if (name === PlatformEvents.VFX_COMMAND_EXECUTED) throw new Error("synthetic observer failure");
+        if (isRecord(payload)) recordedEvents.push({ name, payload });
+      },
+    }, { effectsManager: obs.effectsManager });
+    const diagnostic = spyOn(getUnifiedLogger(), "error").mockImplementation(() => {
+      throw new Error("synthetic diagnostic failure");
+    });
+    try {
+      const result = await service.executeCommand("!hello", {
+        username: "Synthetic Viewer", platform: "twitch", userId: "  synthetic-user  ",
+        skipCooldown: false, correlationId: "synthetic-diagnostic-correlation",
+      });
+      expect(result.success).toBe(true);
+      expect(diagnostic).toHaveBeenCalledTimes(1);
+      expectRecordedEvent(recordedEvents, PlatformEvents.VFX_EFFECT_COMPLETED);
+      expect(service.userLastCommand.has("synthetic-user")).toBe(true);
+      expect(service.stats.successfulCommands).toBe(1);
+      expect(service.stats.failedCommands).toBe(0);
+    } finally {
+      diagnostic.mockRestore();
+    }
   });
 
   test("returns safe error text when non-Error values are thrown during execution", async () => {
