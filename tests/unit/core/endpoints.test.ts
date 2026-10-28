@@ -43,6 +43,16 @@ describe("Centralized Endpoints Configuration", () => {
   });
 
   describe("YouTube Endpoints", () => {
+    test("encodes handles as one path segment without duplicating the at-prefix", () => {
+      const handle = "@synthetic/name?token=value#fragment";
+      const segment = "@synthetic%2Fname%3Ftoken%3Dvalue%23fragment";
+      expect(YOUTUBE.buildChannelUrl(` ${handle} `)).toBe(`${YOUTUBE.BASE}/${segment}`);
+      expect(YOUTUBE.buildHandleUrl(handle)).toBe(`${YOUTUBE.BASE}/${segment}`);
+      expect(YOUTUBE.buildStreamsUrl(handle)).toBe(`${YOUTUBE.BASE}/${segment}/streams`);
+      expect(YOUTUBE.buildLiveUrl(handle)).toBe(`${YOUTUBE.BASE}/${segment}/live`);
+      expect(YOUTUBE.buildHandleUrl("合成 profile")).toBe(`${YOUTUBE.BASE}/${encodeURIComponent("合成 profile")}`);
+    });
+
     test("should provide YouTube base URLs", () => {
       expect(YOUTUBE.BASE).toBe("https://www.youtube.com");
       expect(YOUTUBE.API_BASE).toBe(
