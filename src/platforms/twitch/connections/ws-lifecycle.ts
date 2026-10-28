@@ -46,7 +46,7 @@ type LifecycleState = {
 };
 
 type WsLifecycleOptions = {
-  WebSocketCtor?: new (url: string) => LifecycleWebSocket;
+  WebSocketCtor?: new (url: string, options?: { maxPayload: number }) => LifecycleWebSocket;
   safeSetTimeout?: (handler: () => void, timeoutMs: number) => ReturnType<typeof setTimeout>;
   safeDelay?: (timeoutMs: number, minMs: number, tag?: string, signal?: AbortSignal) => Promise<void>;
   validateTimeout?: (timeoutMs: number, minMs: number) => number;
@@ -74,6 +74,46 @@ type Owner = {
     pending: Session | null;
     operation: { controller: AbortController; kind: 'reconnect' | 'repair' } | null;
 };
+
+// Application admission limit, not a Twitch protocol maximum.
+const MAX_EVENTSUB_WS_MESSAGE_BYTES = 1024 * 1024;
+
+function parseWebSocketMessage(data: unknown): Record<string, unknown> {
+    const checkSize = (size: number) => {
+        if (size > MAX_EVENTSUB_WS_MESSAGE_BYTES) throw new Error('EventSub frame size limit exceeded');
+    };
+    let text: string;
+    if (typeof data === 'string') {
+        checkSize(Buffer.byteLength(data, 'utf8'));
+        text = data;
+    } else {
+        let bytes: Buffer | Uint8Array;
+        if (Buffer.isBuffer(data)) {
+            checkSize(data.byteLength);
+            bytes = data;
+        } else if (data instanceof ArrayBuffer) {
+            checkSize(data.byteLength);
+            bytes = new Uint8Array(data);
+        } else if (Array.isArray(data)) {
+            let size = 0;
+            for (const chunk of data) {
+                if (!Buffer.isBuffer(chunk)) throw new Error('Unsupported EventSub frame type');
+                size += chunk.byteLength;
+                checkSize(size);
+            }
+            bytes = Buffer.concat(data, size);
+        } else throw new Error('Unsupported EventSub frame type');
+        try {
+            // Preserve a BOM so JSON.parse rejects it, as it does for native ws text.
+            text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
+        } catch { throw new Error('Invalid EventSub frame UTF-8'); }
+    }
+    let message: unknown;
+    try { message = JSON.parse(text); }
+    catch { throw new Error('Invalid EventSub frame JSON'); }
+    if (!message || typeof message !== 'object' || Array.isArray(message)) throw new Error('Invalid EventSub frame root');
+    return message as Record<string, unknown>;
+}
 
 function createTwitchEventSubWsLifecycle(options: WsLifecycleOptions = {}) {
     const { WebSocketCtor, safeSetTimeout, safeDelay, validateTimeout,
@@ -175,7 +215,7 @@ function createTwitchEventSubWsLifecycle(options: WsLifecycleOptions = {}) {
         const handoff = !!state.reconnectUrl;
         return new Promise<void>((resolve, reject) => {
             let socket: LifecycleWebSocket;
-            try { socket = new WebSocketCtor(state.reconnectUrl || 'wss://eventsub.wss.twitch.tv/ws?keepalive_timeout_seconds=30'); }
+            try { socket = new WebSocketCtor(state.reconnectUrl || 'wss://eventsub.wss.twitch.tv/ws?keepalive_timeout_seconds=30', { maxPayload: MAX_EVENTSUB_WS_MESSAGE_BYTES }); }
             catch (error) { reject(error); return; }
             const session: Session = { socket, controller: new AbortController(), sessionId: null,
                 firstSubscriptionAt: Infinity, firstSubscriptionCreated: false, timer: null, startupTimer: null,
@@ -200,7 +240,7 @@ function createTwitchEventSubWsLifecycle(options: WsLifecycleOptions = {}) {
             socket.on('message', async (data: unknown) => {
                 if (!current(state, session)) return;
                 try {
-                    const message = JSON.parse(String(data)) as Record<string, unknown>;
+                    const message = parseWebSocketMessage(data);
                     const metadata = message.metadata as Record<string, unknown> | undefined;
                     const type = metadata?.message_type;
                     if (type === 'session_welcome') {
@@ -258,7 +298,7 @@ function createTwitchEventSubWsLifecycle(options: WsLifecycleOptions = {}) {
                 } catch (error) {
                     if (!current(state, session)) return;
                     lose(state, session, error);
-                    report(state, 'EventSub message/setup failed', error, 'ws-message', { rawDataLength: String(data).length });
+                    report(state, 'EventSub message/setup failed', error, 'ws-message');
                     notify(state, 'eventSubSubscriptionFailed', { sessionId: session.sessionId, reason: (error as { reason?: unknown })?.reason, error: error instanceof Error ? error.message : String(error) });
                 }
             });

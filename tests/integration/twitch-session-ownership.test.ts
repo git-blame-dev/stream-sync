@@ -167,7 +167,7 @@ describe('Twitch session ownership through real EventSub and subscription manage
         const socket = TestSocket.sockets[0]!;
         const handler = socket.listeners('message')[0]!;
         await expect(Promise.resolve(handler('test invalid JSON'))).resolves.toBeUndefined();
-        expect(await starting).toBeInstanceOf(SyntaxError);
+        expect(await starting).toMatchObject({ message: 'Invalid EventSub frame JSON' });
         expect(eventSub.ws).toBeNull();
         expect(socket.readyState).toBe(3);
         expect(socket.listenerCount('message')).toBe(0);

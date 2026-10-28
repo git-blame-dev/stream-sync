@@ -121,11 +121,13 @@ class MockWebSocket extends EventEmitter {
   readyState: number;
   pongCalls: unknown[];
   closeCalls: CloseCall[];
+  options: { maxPayload?: number } | undefined;
 
-  constructor(url: string) {
+  constructor(url: string, options?: { maxPayload?: number }) {
     super();
     MockWebSocket.latest = this;
     this.url = url;
+    this.options = options;
     this.readyState = 0;
     this.pongCalls = [];
     this.closeCalls = [];
@@ -228,6 +230,53 @@ describe("Twitch EventSub WS lifecycle", () => {
 
     return state;
   };
+
+  test("frame admission rejects unsafe input without leaking or coercing it", async () => {
+    let coercions = 0;
+    const secret = "test-only-frame-secret";
+    const cases: [unknown, string][] = [
+      [Buffer.from(JSON.stringify({ text: "é".repeat(600000) })), "size"],
+      [[Buffer.alloc(600000), Buffer.alloc(600000)], "size"],
+      [Buffer.concat([Buffer.from('{"text":"'), Buffer.from([0xff]), Buffer.from('"}')]), "UTF-8"],
+      [{ toString() { coercions++; throw new Error(secret); } }, "type"],
+      [Buffer.from("null"), "root"],
+      [Buffer.from("[]"), "root"],
+      [Buffer.from(`{"${secret}": broken}`), "JSON"],
+    ];
+    for (const [frame, classification] of cases) {
+      const lifecycle = buildLifecycle();
+      const state = createState();
+      const pending = lifecycle.connectWebSocket(state);
+      state.ws.emit("message", frame);
+      await expect(pending).rejects.toThrow(classification);
+      expect(state.scheduleReconnectCalls).toHaveLength(1);
+      expect(state.logEventSubErrorCalls).toHaveLength(1);
+      const diagnostics = JSON.stringify(state.emitCalls) + state.logEventSubErrorCalls.map(call => String(call.err)).join();
+      expect(diagnostics).not.toContain(secret);
+      expect(state.emitCalls.filter(call => call.event === "eventSubSubscriptionFailed")).toHaveLength(1);
+      lifecycle.dispose(state);
+    }
+    expect(coercions).toBe(0);
+  });
+
+  test("frame admission accepts exact byte limit and real ws data shapes", async () => {
+    const welcome = JSON.stringify({ metadata: { message_type: "session_welcome" }, payload: { session: { id: "test-frame-shapes" } } });
+    const exact = Buffer.from(welcome + " ".repeat(1024 * 1024 - Buffer.byteLength(welcome)));
+    const split = Buffer.from(welcome.replace("test-frame-shapes", "test-é-shapes"));
+    const boundary = split.indexOf(Buffer.from("é")) + 1;
+    for (const frame of [exact, [split.subarray(0, boundary), split.subarray(boundary)], Uint8Array.from(split).buffer, welcome]) {
+      const lifecycle = buildLifecycle();
+      const state = createState();
+      const pending = lifecycle.connectWebSocket(state);
+      expect(state.ws.options?.maxPayload).toBe(1024 * 1024);
+      state.ws.emit("message", frame);
+      await pending;
+      state.ws.emit("message", Buffer.from('{"metadata":{"message_type":"notification"},"payload":{}}'));
+      expect(state.handleWebSocketMessage).toHaveBeenCalledTimes(1);
+      expect(state.subscriptionsReady).toBe(true);
+      lifecycle.dispose(state);
+    }
+  });
 
   test("connectWebSocket waits for subscriptions before resolving startup", async () => {
     const lifecycle = buildLifecycle();
@@ -698,7 +747,8 @@ describe("Twitch EventSub WS lifecycle", () => {
       "EventSub message/setup failed",
     );
     expect(parseErrorLog.type).toBe("ws-message");
-    expect(JSON.stringify(parseErrorLog.data)).not.toContain("not valid json");
+    expect(String(parseErrorLog.err)).toContain("Invalid EventSub frame JSON");
+    expect(String(parseErrorLog.err)).not.toContain("not valid json");
   });
 
   test("connectWebSocket logs session establishment without the full session id", async () => {
@@ -1227,6 +1277,7 @@ describe("Twitch EventSub WS lifecycle", () => {
     state._reconnect = () => lifecycle.reconnect(state);
     const initial = lifecycle.connectWebSocket(state);
     const old = MockWebSocket.latest;
+    const staleMessage = old.listeners('message')[0]!;
     old.readyState = 1;
     old.emit('message', JSON.stringify({ metadata: { message_type: 'session_welcome' }, payload: { session: { id: 'test-old' } } }));
     await initial;
@@ -1240,6 +1291,9 @@ describe("Twitch EventSub WS lifecycle", () => {
     expect(old.closeCalls).toHaveLength(1);
     expect(state.sessionId).toBe('test-new');
     expect(state.subscriptionsReady).toBe(true);
+    staleMessage({ toString() { throw new Error('test stale coercion'); } });
+    expect(state.sessionId).toBe('test-new');
+    expect(state.scheduleReconnectCalls).toHaveLength(0);
     lifecycle.dispose(state);
   });
 
