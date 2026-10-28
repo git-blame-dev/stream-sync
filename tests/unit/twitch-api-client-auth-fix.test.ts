@@ -7,6 +7,9 @@ import {
   _resetForTesting,
 } from "../../src/core/secrets";
 import { TwitchApiClient } from "../../src/utils/api-clients/twitch-api-client.ts";
+import { TwitchViewerCountProvider } from "../../src/utils/viewer-count-providers";
+import { ViewerCountSystem } from "../../src/utils/viewer-count";
+import { createConfigFixture } from "../helpers/config-fixture";
 
 type TestHttpResponse = {
   status: number;
@@ -93,7 +96,7 @@ describe("TwitchApiClient authentication", () => {
     });
 
     it("encodes query values exactly once as data", async () => {
-      mockHttpClient.get.mockResolvedValue({ status: 200, data: { data: [{ id: "synthetic-id" }] } });
+      mockHttpClient.get.mockResolvedValue({ status: 200, data: { data: [{ id: "synthetic-id", viewer_count: 0 }] } });
       const value = "synthetic&other=?雪%20";
       await apiClient.getStreamInfo(value);
       await apiClient.getUserInfo(value);
@@ -136,6 +139,117 @@ describe("TwitchApiClient authentication", () => {
 
       expect(result.isLive).toBe(true);
       expect(result.viewerCount).toBe(42);
+    });
+
+    it("rejects malformed live JSON counts instead of fabricating offline zero", async () => {
+      for (const viewer_count of [NaN, Infinity, -Infinity, -1, 1.5, Number.MAX_SAFE_INTEGER + 1, "12", null, undefined]) {
+        mockHttpClient.get.mockResolvedValue({ status: 200, data: { data: [{ viewer_count }] } });
+        await expect(apiClient.getStreamInfo("synthetic-channel")).rejects.toThrow("Invalid Twitch viewer count");
+      }
+    });
+
+    it("accepts live zero and maximum safe integer counts", async () => {
+      for (const viewer_count of [0, Number.MAX_SAFE_INTEGER]) {
+        mockHttpClient.get.mockResolvedValue({ status: 200, data: { data: [{ viewer_count }] } });
+        expect(await apiClient.getStreamInfo("synthetic-channel")).toMatchObject({ isLive: true, viewerCount: viewer_count });
+      }
+    });
+
+    it("rejects HTTP failures unchanged and malformed stream-list bodies", async () => {
+      for (const failure of [new Error("synthetic network failure"), { response: { status: 401 } }, { response: { status: 500 } }]) {
+        mockHttpClient.get.mockRejectedValue(failure);
+        await expect(apiClient.getStreamInfo("synthetic-channel")).rejects.toBe(failure);
+      }
+      for (const data of [null, undefined, {}, { data: null }, { data: {} }, { data: "" }]) {
+        mockHttpClient.get.mockResolvedValue({ status: 200, data });
+        await expect(apiClient.getStreamInfo("synthetic-channel")).rejects.toThrow("Invalid Twitch stream response");
+      }
+    });
+
+    it("retains actual last-good state through HTTP/auth/body failures until confirmed offline", async () => {
+      const provider = new TwitchViewerCountProvider(apiClient, {}, { channel: "synthetic-channel" }, null, noOpLogger);
+      const system = new ViewerCountSystem({ platforms: { twitch: provider }, logger: noOpLogger, config: createConfigFixture() });
+      system.streamStatus.twitch = true;
+      mockHttpClient.get.mockResolvedValue({ status: 200, data: { data: [{ viewer_count: 12 }] } });
+      await system.pollPlatform("twitch");
+      const before = system.getViewerCountSnapshot("twitch");
+      const updates: unknown[] = [];
+      system.addObserver({ getObserverId: () => "synthetic-unavailable-observer", onViewerCountUpdate: value => { updates.push(value); } });
+      let errors = 0;
+      for (const failure of [new Error("synthetic network failure"), { response: { status: 401 } }, { response: { status: 500 } }]) {
+        mockHttpClient.get.mockRejectedValue(failure);
+        await system.pollPlatform("twitch");
+        expect(system.getViewerCount("twitch")).toBe(12);
+        expect(system.getViewerCountSnapshot("twitch")).toEqual(before);
+        expect(provider.getErrorStats().consecutiveErrors).toBe(++errors);
+      }
+      for (const data of [null, {}, { data: null }, { data: {} }]) {
+        mockHttpClient.get.mockResolvedValue({ status: 200, data });
+        await system.pollPlatform("twitch");
+        expect(system.getViewerCount("twitch")).toBe(12);
+        expect(system.getViewerCountSnapshot("twitch")).toEqual(before);
+        expect(provider.getErrorStats().consecutiveErrors).toBe(++errors);
+      }
+      secrets.twitch.accessToken = null;
+      const requests = mockHttpClient.get.mock.calls.length;
+      await system.pollPlatform("twitch");
+      expect(mockHttpClient.get.mock.calls).toHaveLength(requests);
+      expect(system.getViewerCountSnapshot("twitch")).toEqual(before);
+      expect(provider.getErrorStats().consecutiveErrors).toBe(++errors);
+      expect(updates).toHaveLength(0);
+      secrets.twitch.accessToken = "synthetic-restored-token";
+      mockHttpClient.get.mockResolvedValue({ status: 200, data: { data: [] } });
+      await system.pollPlatform("twitch");
+      expect(system.getViewerCount("twitch")).toBe(0);
+      expect(updates).toHaveLength(1);
+      expect(provider.getErrorStats().consecutiveErrors).toBe(0);
+    });
+
+    it("preserves real Helix measurement when channel configuration becomes blank", async () => {
+      const config = { channel: "synthetic-channel" };
+      const provider = new TwitchViewerCountProvider(apiClient, {}, config, null, noOpLogger);
+      const system = new ViewerCountSystem({ platforms: { twitch: provider }, logger: noOpLogger, config: createConfigFixture() });
+      system.streamStatus.twitch = true;
+      mockHttpClient.get.mockResolvedValue({ status: 200, data: { data: [{ viewer_count: 12 }] } });
+      await system.pollPlatform("twitch");
+      const before = system.getViewerCountSnapshot("twitch");
+      const updates: unknown[] = [];
+      system.addObserver({ getObserverId: () => "synthetic-blank-helix-observer", onViewerCountUpdate: value => { updates.push(value); } });
+      provider._handleProviderError(new Error("prior failure"));
+      for (const channel of ["", " \t "]) {
+        config.channel = channel;
+        expect(await provider.getViewerCount()).toBeNull();
+        await system.pollPlatform("twitch");
+        expect(system.getViewerCount("twitch")).toBe(12);
+        expect(system.getViewerCountSnapshot("twitch")).toEqual(before);
+        expect(provider.getErrorStats().consecutiveErrors).toBe(1);
+      }
+      expect(mockHttpClient.get).toHaveBeenCalledTimes(1);
+      expect(updates).toHaveLength(0);
+    });
+
+    it("preserves the last real poll through malformed Helix responses and admits a subsequent live zero", async () => {
+      const provider = new TwitchViewerCountProvider(apiClient, {}, { channel: "synthetic-channel" }, null, noOpLogger);
+      const system = new ViewerCountSystem({ platforms: { twitch: provider }, logger: noOpLogger, config: createConfigFixture() });
+      system.streamStatus.twitch = true;
+      mockHttpClient.get.mockResolvedValue({ status: 200, data: { data: [{ viewer_count: 12 }] } });
+      await system.pollPlatform("twitch");
+      const before = system.getViewerCountSnapshot("twitch");
+      const updates: unknown[] = [];
+      system.addObserver({ getObserverId: () => "synthetic-helix-observer", onViewerCountUpdate: value => { updates.push(value); } });
+      for (const viewer_count of [NaN, Infinity, -1, 1.5, Number.MAX_SAFE_INTEGER + 1, "12", null, undefined]) {
+        mockHttpClient.get.mockResolvedValue({ status: 200, data: { data: [{ viewer_count }] } });
+        await system.pollPlatform("twitch");
+        expect(system.getViewerCount("twitch")).toBe(12);
+        expect(system.getViewerCountSnapshot("twitch")).toEqual(before);
+      }
+      expect(updates).toHaveLength(0);
+      expect(provider.getErrorStats().consecutiveErrors).toBe(8);
+      mockHttpClient.get.mockResolvedValue({ status: 200, data: { data: [{ viewer_count: 0 }] } });
+      await system.pollPlatform("twitch");
+      expect(system.getViewerCount("twitch")).toBe(0);
+      expect(updates).toHaveLength(1);
+      expect(provider.getErrorStats().consecutiveErrors).toBe(0);
     });
 
     it("returns offline status when channel is not live", async () => {
@@ -356,13 +470,10 @@ describe("TwitchApiClient authentication", () => {
   });
 
   describe("auth failure handling", () => {
-    it("returns offline status when getAccessToken throws", async () => {
+    it("rejects missing authentication without making an HTTP request", async () => {
       secrets.twitch.accessToken = null;
-
-      const result = await apiClient.getStreamInfo("test-channel");
-
-      expect(result.isLive).toBe(false);
-      expect(result.viewerCount).toBe(0);
+      await expect(apiClient.getStreamInfo("test-channel")).rejects.toThrow("No access token available for Twitch API");
+      expect(mockHttpClient.get).not.toHaveBeenCalled();
     });
 
     it("throws when no access token available", async () => {

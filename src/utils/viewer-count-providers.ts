@@ -1,5 +1,7 @@
 import { getUnifiedLogger } from '../core/logging';
+import { sanitizeLogText } from '../core/logger/safe-log-serializer';
 import { createPlatformErrorHandler } from './platform-error-handler';
+import { parseNotificationCount } from './notification-count';
 import type { ViewerCountObservation, ViewerMembershipSnapshot } from '../contracts/viewer-count';
 
 type ProviderLogger = {
@@ -86,11 +88,11 @@ class ViewerCountProvider {
     _handleProviderError(error: unknown, operation = 'getViewerCount'): number {
         this.errorStats.totalErrors++;
         const message = getErrorMessage(error);
-        this.errorStats.lastError = message;
+        this.errorStats.lastError = sanitizeLogText(message);
         this.errorStats.consecutiveErrors++;
 
         const normalizedError = error instanceof Error ? error : new Error(message);
-        const errorType = this._categorizeError(normalizedError);
+        const errorType = this._categorizeError(error);
         const currentCount = this.errorStats.errorTypes.get(errorType) || 0;
         this.errorStats.errorTypes.set(errorType, currentCount + 1);
 
@@ -103,6 +105,10 @@ class ViewerCountProvider {
 
     _categorizeError(error: unknown): ProviderErrorType {
         const message = getErrorMessage(error).toLowerCase();
+        const record = typeof error === 'object' && error !== null ? error as { status?: unknown; response?: { status?: unknown } } : null;
+        if (record?.status === 404 || record?.response?.status === 404 || /\b404\b|not[ _-]found/.test(message)) {
+            return 'resource_not_found';
+        }
 
         if (message.includes('network') || message.includes('timeout') || message.includes('connect')) {
             return 'network';
@@ -113,10 +119,6 @@ class ViewerCountProvider {
         if (message.includes('rate limit') || message.includes('too many requests')) {
             return 'rate_limit';
         }
-        if (message.includes('not found') || message.includes('stream') || message.includes('video')) {
-            return 'resource_not_found';
-        }
-
         return 'unknown';
     }
 
@@ -147,24 +149,33 @@ class TwitchViewerCountProvider extends ViewerCountProvider {
     }
 
     override isReady() {
-        return !!(this.config && this.config.channel);
+        return typeof this.config?.channel === 'string' && this.config.channel.trim().length > 0;
     }
 
-    override async getViewerCount(): Promise<number> {
+    override async getViewerCount(): Promise<number | null> {
         this.logger.debug('Getting Twitch viewer count...', 'viewer-count-provider');
         
         if (!this.isReady()) {
-            this.logger.debug('Twitch provider not ready, returning 0', 'viewer-count-provider');
-            return 0;
+            this.logger.debug('Twitch provider not ready, viewer count unavailable', 'viewer-count-provider');
+            return null;
         }
 
         try {
-            const channel = this.config?.channel;
+            const channel = this.config?.channel?.trim();
             if (!channel) {
-                return 0;
+                return null;
             }
 
             const streamInfo = await this.apiClient.getStreamInfo(channel);
+            if (streamInfo.isLive !== true && streamInfo.isLive !== false) {
+                throw new TypeError('Invalid Twitch stream status');
+            }
+            const viewerCount = streamInfo.isLive === true
+                ? typeof streamInfo.viewerCount === 'number' ? parseNotificationCount(streamInfo.viewerCount) : null
+                : 0;
+            if (viewerCount === null) {
+                throw new TypeError('Invalid Twitch viewer count');
+            }
             
             this.logger.debug('Twitch stream info received', 'viewer-count-provider', {
                 isLive: streamInfo.isLive,
@@ -172,10 +183,11 @@ class TwitchViewerCountProvider extends ViewerCountProvider {
             });
 
             this._resetErrorCount();
-            return streamInfo.viewerCount;
+            return viewerCount;
             
         } catch (error) {
-            return this._handleProviderError(error, 'getStreamInfo');
+            this._handleProviderError(error, 'getStreamInfo');
+            return null;
         }
     }
 }

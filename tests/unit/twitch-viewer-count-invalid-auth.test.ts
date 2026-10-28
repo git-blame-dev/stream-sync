@@ -110,9 +110,9 @@ describe("Twitch Viewer Count with Invalid Authentication", () => {
       expect(viewerCountProvider.isReady()).toBe(false);
     });
 
-    it("should return 0 when channel is not configured", async () => {
+    it("returns unavailable when channel is not configured", async () => {
       const viewerCount = await viewerCountProvider.getViewerCount();
-      expect(viewerCount).toBe(0);
+      expect(viewerCount).toBeNull();
     });
   });
 
@@ -140,17 +140,19 @@ describe("Twitch Viewer Count with Invalid Authentication", () => {
       expect(viewerCountProvider.isReady()).toBe(true);
     });
 
-    it("should return 0 when API call fails", async () => {
+    it("returns unavailable when API call fails", async () => {
       const viewerCount = await viewerCountProvider.getViewerCount();
-      expect(viewerCount).toBe(0);
+      expect(viewerCount).toBeNull();
+      expect(viewerCountProvider.getErrorStats().consecutiveErrors).toBe(1);
     });
 
-    it("returns the fallback count on repeated requests when API is unavailable", async () => {
+    it("keeps repeated unavailable requests unknown and tracks errors", async () => {
       const firstViewerCount = await viewerCountProvider.getViewerCount();
       const secondViewerCount = await viewerCountProvider.getViewerCount();
 
-      expect(firstViewerCount).toBe(0);
-      expect(secondViewerCount).toBe(0);
+      expect(firstViewerCount).toBeNull();
+      expect(secondViewerCount).toBeNull();
+      expect(viewerCountProvider.getErrorStats().consecutiveErrors).toBe(2);
     });
   });
 

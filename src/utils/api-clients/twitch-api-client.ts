@@ -3,6 +3,7 @@ import { secrets } from '../../core/secrets';
 import { createEnhancedHttpClient } from '../enhanced-http-client';
 import { createHttpRetryExecutor, type RetryExecutor } from '../http-retry-executor';
 import { createPlatformErrorHandler } from '../platform-error-handler';
+import { parseNotificationCount } from '../notification-count';
 
 type LoggerLike = {
     debug: (message: string, scope?: string, payload?: unknown) => void;
@@ -142,33 +143,27 @@ class TwitchApiClient {
     }
 
     async getStreamInfo(channelName: string) {
+        let data: unknown;
         try {
-            const data = await this.makeRequest(`/streams?user_login=${encodeURIComponent(channelName)}`);
-            const streams = getDataArray(data);
-
-            if (streams.length > 0) {
-                const stream = getRecord(streams[0]);
-                return {
-                    isLive: true,
-                    stream: streams[0],
-                    viewerCount: typeof stream?.viewer_count === 'number' ? stream.viewer_count : 0
-                };
-            }
-
-            return {
-                isLive: false,
-                stream: null,
-                viewerCount: 0
-            };
-            
+            data = await this.makeRequest(`/streams?user_login=${encodeURIComponent(channelName)}`);
         } catch (error) {
             this._handleApiError('Failed to get stream info', error, 'getStreamInfo');
-            return {
-                isLive: false,
-                stream: null,
-                viewerCount: 0
-            };
+            throw error;
         }
+        const payload = getRecord(data);
+        if (!Array.isArray(payload?.data)) {
+            throw new TypeError('Invalid Twitch stream response');
+        }
+        const streams = payload.data;
+        if (streams.length > 0) {
+            const stream = getRecord(streams[0]);
+            const viewerCount = typeof stream?.viewer_count === 'number' ? parseNotificationCount(stream.viewer_count) : null;
+            if (viewerCount === null) {
+                throw new TypeError('Invalid Twitch viewer count');
+            }
+            return { isLive: true, stream: streams[0], viewerCount };
+        }
+        return { isLive: false, stream: null, viewerCount: 0 };
     }
 
     private async fetchUserInfo(username: string, requestOptions: RequestOptions = {}): Promise<unknown | null> {

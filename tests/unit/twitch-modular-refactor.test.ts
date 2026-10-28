@@ -370,21 +370,22 @@ describe("TwitchPlatform Modular Refactor", () => {
         );
       });
 
-      it("should return 0 without making API call", async () => {
+      it("returns unavailable without making an API call", async () => {
         const count = await provider.getViewerCount();
 
-        expect(count).toBe(0);
+        expect(count).toBeNull();
         expect(mockApiClient.getStreamInfo).not.toHaveBeenCalled();
       });
     });
 
     describe("when API call fails", () => {
-      it("should return 0 and handle error gracefully", async () => {
+      it("returns unavailable and tracks the API error", async () => {
         mockApiClient.getStreamInfo.mockRejectedValue(new Error("API Error"));
 
         const count = await provider.getViewerCount();
 
-        expect(count).toBe(0);
+        expect(count).toBeNull();
+        expect(provider.getErrorStats().consecutiveErrors).toBe(1);
       });
     });
   });

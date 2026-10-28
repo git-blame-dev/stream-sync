@@ -54,11 +54,10 @@ describe("TwitchApiClient error handler integration", () => {
   });
 
   it("routes getStreamInfo API error through error handler", async () => {
-    mockHttpClient.get.mockRejectedValue(new Error("network failure"));
-
-    const result = await apiClient.getStreamInfo("test-channel");
-
-    expect(result.isLive).toBe(false);
+    const failure = new Error("network failure");
+    mockHttpClient.get.mockRejectedValue(failure);
+    await expect(apiClient.getStreamInfo("test-channel")).rejects.toBe(failure);
+    expect(mockLogger.error).toHaveBeenCalled();
   });
 
   it("does not send token-bearing error messages to injected loggers", async () => {

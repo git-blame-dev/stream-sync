@@ -98,7 +98,7 @@ describe("TikTokViewerCountProvider error recovery", () => {
 });
 
 describe("TwitchViewerCountProvider readiness", () => {
-  it("returns 0 when provider not ready (missing channel)", async () => {
+  it("returns unavailable without an API call when channel is missing", async () => {
     const apiClient = createTwitchApiClient();
     const provider = new TwitchViewerCountProvider(
       apiClient,
@@ -110,7 +110,8 @@ describe("TwitchViewerCountProvider readiness", () => {
 
     const count = await provider.getViewerCount();
 
-    expect(count).toBe(0);
+    expect(count).toBeNull();
+    expect(apiClient.getStreamInfo).not.toHaveBeenCalled();
   });
 
   it("resets consecutive errors after successful fetch", async () => {
