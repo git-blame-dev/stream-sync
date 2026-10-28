@@ -15,9 +15,6 @@
     "gui/**/*.{ts,tsx}"
   ],
   "eslint": false,
-  "ignoreDependencies": [
-    "globals"
-  ],
   "ignore": [
     "src/interfaces/PlatformEvents.ts",
     "src/core/types/config-types.ts",
