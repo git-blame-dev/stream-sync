@@ -140,15 +140,22 @@ const buildOverrides = (options: BuildOverridesOptions = {}) => {
   };
 
   class TwitchAuthStub {
+    private initialized = false;
+
     async initialize() {
       if (options.twitchAuthInitError) {
         throw options.twitchAuthInitError;
       }
+      this.initialized = true;
     }
 
     isReady() {
-      return options.twitchAuthReady !== false;
+      return this.initialized && options.twitchAuthReady !== false;
     }
+
+    startValidationMonitoring() {}
+
+    async stopValidationMonitoring() {}
   }
 
   const createDonationSpamDetectionNoCleanup: DonationSpamFactory = (spamConfig, deps) =>

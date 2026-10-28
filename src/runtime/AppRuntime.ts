@@ -26,6 +26,9 @@ import type { OperatorControlService } from '../services/operator/operator-contr
 import type { OperatorLogSource } from '../services/operator/operator-log-source';
 import type { OperatorAppearanceService } from '../services/operator/operator-appearance-service';
 import type { FundingGoalService } from '../services/funding-goal-service';
+import type { TwitchAuth } from '../auth/TwitchAuth';
+
+type RuntimeTwitchAuth = Pick<TwitchAuth, 'isReady' | 'startValidationMonitoring' | 'stopValidationMonitoring'>;
 
 type RuntimeRecord = Record<string, unknown>;
 
@@ -135,6 +138,8 @@ type RuntimeUserTrackingService = {
 };
 
 type RuntimePlatformLifecycleService = {
+    getPlatform?: (name: string) => RuntimeViewerCountPlatform | null | undefined;
+    markPlatformFailure?: (name: string, error: unknown, options: { expectedInstance: RuntimeViewerCountPlatform | undefined; signal: AbortSignal }) => Promise<void>;
     getAllPlatforms: () => Record<string, RuntimeViewerCountPlatform>;
     initializeAllPlatforms: (platformModules: RuntimeRecord) => Promise<unknown>;
     disconnectAll: () => Promise<unknown>;
@@ -182,7 +187,7 @@ type RuntimeNeuralTtsProcessManager = {
 
 type RuntimeDependencies = RuntimeRecord & {
     logging: AppLogger;
-    twitchAuth?: unknown;
+    twitchAuth?: RuntimeTwitchAuth | null;
     lazyInnertube?: unknown;
     displayQueue: RuntimeDisplayQueue;
     notificationManager: RuntimeNotificationManager;
@@ -280,7 +285,7 @@ class AppRuntime {
     dependencies: RuntimeDependencies;
     logger: AppLogger;
     config: RuntimeConfig;
-    twitchAuth: unknown;
+    twitchAuth: RuntimeTwitchAuth | null | undefined;
     errorHandler: ReturnType<typeof createPlatformErrorHandler> | null;
     lazyInnertube: unknown;
     displayQueue: RuntimeDisplayQueue;
@@ -311,6 +316,7 @@ class AppRuntime {
     private startupPromise: Promise<void> | null = null;
     private earlyViewerCountPromise: Promise<void> | null = null;
     private stopped = false;
+    private twitchMonitorOwned = false;
 
     async _runUnifiedNotification(type: string, platform: string, username: unknown, options: NotificationOptions, process: RuntimeNotificationManager['handleNotification'] | undefined) {
         if (!options || typeof options !== 'object') {
@@ -795,6 +801,10 @@ class AppRuntime {
         });
 
         // Retire admission before the first await, leaving other EventBus owners intact.
+        if (this.twitchMonitorOwned) {
+            this.twitchMonitorOwned = false;
+            retirement.push(this.runTeardownStep(mode, 'stop Twitch validation monitoring', () => this.twitchAuth?.stopValidationMonitoring()));
+        }
         retirement.push(this.runTeardownStep(mode, 'dispose platform event router', () => this.platformEventRouter.dispose()));
         const unsubscribeVfx = this.vfxCommandUnsubscribe;
         this.vfxCommandUnsubscribe = null;
@@ -898,6 +908,20 @@ class AppRuntime {
         this.logger.debug('Start method called...', 'AppRuntime');
 
         try {
+            if (this.config.twitch?.enabled && this.twitchAuth?.isReady()) {
+                const lifecycle = this.platformLifecycleService;
+                if (typeof this.twitchAuth.startValidationMonitoring !== 'function' ||
+                    typeof this.twitchAuth.stopValidationMonitoring !== 'function' ||
+                    typeof lifecycle.getPlatform !== 'function' || typeof lifecycle.markPlatformFailure !== 'function') {
+                    throw new Error('Accepted Twitch authentication requires validation monitoring and lifecycle retirement');
+                }
+                this.twitchMonitorOwned = true;
+                this.twitchAuth.startValidationMonitoring({ onInvalidated: ({ reason, signal }) => {
+                    const expectedInstance = lifecycle.getPlatform!('twitch') ?? undefined;
+                    if (signal.aborted) return;
+                    return lifecycle.markPlatformFailure!('twitch', new Error(`Twitch authentication unavailable: ${reason}`), { expectedInstance, signal });
+                } });
+            }
             try {
                 await this._startGuiTransport();
                 this.assertActiveLifetime();

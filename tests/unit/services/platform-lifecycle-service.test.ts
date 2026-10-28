@@ -351,6 +351,104 @@ describe("PlatformLifecycleService", () => {
       expect(replacementCleanup).not.toHaveBeenCalled();
     });
 
+    it("ignores queued stale or aborted auth failures without touching replacement health", async () => {
+      const old = createDefaultPlatformInstance();
+      const replacement = createDefaultPlatformInstance();
+      service.platforms.twitch = replacement;
+      service.updatePlatformHealth("twitch", { state: "ready" });
+      await service.markPlatformFailure("twitch", new Error("test-stale"), { expectedInstance: old });
+      const controller = new AbortController();
+      controller.abort();
+      await service.markPlatformFailure("twitch", new Error("test-aborted"), { expectedInstance: replacement, signal: controller.signal });
+      expect(service.getPlatform("twitch")).toBe(replacement);
+      expect(service.getStatus().platformHealth.twitch?.state).toBe("ready");
+      expect(service.platformErrors).toHaveLength(0);
+    });
+
+    for (const platformName of ["twitch", "tiktok"] as const) {
+      it(`preserves replacement metadata when retired ${platformName} initialization later rejects`, async () => {
+        configFixture[platformName] = { enabled: true };
+        const pending = Promise.withResolvers<void>();
+        const entered = Promise.withResolvers<void>();
+        const oldClass = createPlatformConstructor(() => ({
+          ...createDefaultPlatformInstance(),
+          initialize: () => { entered.resolve(); return pending.promise; },
+        }));
+        const initializing = service.initializePlatform(platformName, oldClass);
+        await entered.promise;
+        const old = service.getPlatform(platformName);
+        await service.markPlatformFailure(platformName, new Error("test-auth-invalid"), { expectedInstance: old ?? undefined });
+        const replacementCleanup = createMockFn<[], Promise<void>>().mockResolvedValue();
+        await service.initializePlatform(platformName, createPlatformConstructor(() => ({
+          ...createDefaultPlatformInstance(), cleanup: replacementCleanup,
+        })));
+        await Promise.all(service.backgroundPlatformInits.filter(entry => entry.platform === platformName).slice(1).map(entry => entry.promise));
+        const replacement = service.getPlatform(platformName);
+        const health = structuredClone(service.platformHealth[platformName]);
+        expect(health?.state).toBe("ready");
+        const errors = [...service.platformErrors];
+        const background = service.backgroundPlatformInits.map(entry => entry.promise);
+        pending.reject(new Error("test-old-initialize-rejected"));
+        await initializing;
+        await Promise.all(background);
+        expect(service.getPlatform(platformName)).toBe(replacement);
+        expect(replacementCleanup).not.toHaveBeenCalled();
+        expect(service.platformHealth[platformName]).toEqual(health);
+        expect(service.platformErrors).toEqual(errors);
+      });
+    }
+
+    it("preserves replacement when unadopted auth-invalid construction cleanup finishes late", async () => {
+      configFixture.twitch = { enabled: true };
+      let ready = true;
+      service.sharedDependencies.twitchAuth = { isReady: () => ready };
+      const cleaning = Promise.withResolvers<void>();
+      const release = Promise.withResolvers<void>();
+      const oldClass = createPlatformConstructor(() => {
+        ready = false;
+        return { ...createDefaultPlatformInstance(), cleanup: () => { cleaning.resolve(); return release.promise; } };
+      });
+      const initializing = service.initializePlatform("twitch", oldClass);
+      await cleaning.promise;
+      ready = true;
+      const replacementCleanup = createMockFn<[], Promise<void>>().mockResolvedValue();
+      await service.initializePlatform("twitch", createPlatformConstructor(() => ({ ...createDefaultPlatformInstance(), cleanup: replacementCleanup })));
+      const replacement = service.getPlatform("twitch");
+      const health = structuredClone(service.platformHealth.twitch);
+      expect(health?.state).toBe("ready");
+      const errors = [...service.platformErrors];
+      release.resolve();
+      await initializing;
+      expect(service.getPlatform("twitch")).toBe(replacement);
+      expect(replacementCleanup).not.toHaveBeenCalled();
+      expect(service.platformHealth.twitch).toEqual(health);
+      expect(service.platformErrors).toEqual(errors);
+    });
+
+    it("retires failed instances even if cleanup and its reporter both throw", async () => {
+      service.platforms.twitch = { ...createDefaultPlatformInstance(), cleanup: async () => { throw new Error("test-cleanup"); } };
+      service.errorHandler.logOperationalError = () => { throw new Error("test-reporter"); };
+      service.errorHandler.handleEventProcessingError = () => { throw new Error("test-reporter"); };
+      await service.markPlatformFailure("twitch", new Error("test-invalid"));
+      expect(service.getPlatform("twitch")).toBeNull();
+      expect(service.getStatus().platformHealth.twitch?.state).toBe("failed");
+    });
+
+    it("does not adopt or mark ready a Twitch instance invalidated during construction", async () => {
+      configFixture.twitch = { enabled: true };
+      let ready = true;
+      service.sharedDependencies.twitchAuth = { isReady: () => ready };
+      const cleanup = createMockFn<[], Promise<void>>().mockResolvedValue();
+      const Platform = createPlatformConstructor(() => {
+        ready = false;
+        return { ...createDefaultPlatformInstance(), cleanup };
+      });
+      await service.initializePlatform("twitch", Platform);
+      expect(cleanup).toHaveBeenCalledTimes(1);
+      expect(service.getPlatform("twitch")).toBeNull();
+      expect(service.getStatus().platformHealth.twitch?.state).toBe("failed");
+    });
+
     it("shares failed-platform cleanup with concurrent shutdown", async () => {
       let resolveCleanup!: () => void;
       const cleanup = createMockFn(

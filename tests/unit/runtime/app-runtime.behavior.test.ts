@@ -21,6 +21,12 @@ import { createFundingGoalService } from "../../../src/services/funding-goal-ser
 import { CommandCooldownService } from "../../../src/services/CommandCooldownService";
 import { createDonationSpamDetection, createSpamDetectionConfig } from "../../../src/utils/spam-detection";
 import { AppRuntime } from "../../../src/runtime/AppRuntime";
+import { TwitchAuth } from "../../../src/auth/TwitchAuth";
+import { TWITCH_OAUTH_SCOPES } from "../../../src/auth/twitch-oauth-scopes";
+import { PlatformLifecycleService } from "../../../src/services/PlatformLifecycleService";
+import { secrets, _resetForTesting } from "../../../src/core/secrets";
+import fs from "node:fs/promises";
+import path from "node:path";
 
 type RuntimeConfig = ConstructorParameters<typeof AppRuntime>[0];
 type RuntimeDependencies = ConstructorParameters<typeof AppRuntime>[1];
@@ -148,6 +154,107 @@ const createRecordingNotificationManager = (calls: NotificationCallLog) => ({
 });
 
 describe("AppRuntime behavior", () => {
+  it("closes monitor admission synchronously and joins retirement on partial startup failure", async () => {
+    const retirement = Promise.withResolvers<void>();
+    let stopped = false;
+    let started = false;
+    const auth = {
+      isReady: () => true,
+      startValidationMonitoring: () => { started = true; },
+      stopValidationMonitoring: () => { stopped = true; return retirement.promise; },
+    };
+    const runtime = createRuntime({ twitchAuth: auth,
+      guiTransportService: { start: async () => { throw new Error("test-startup-failure"); }, stop: () => {} },
+      platformLifecycleService: { ...createDeps().platformLifecycleService, getPlatform: () => undefined, markPlatformFailure: async () => {} },
+    }, { twitch: { enabled: true }, gui: { enableDock: true } });
+    expect(started).toBe(false);
+    let completed = false;
+    const outcome = runtime.start().catch(error => { completed = true; return error; });
+    for (let index = 0; index < 20; index++) await Promise.resolve();
+    expect(started).toBe(true);
+    expect(stopped).toBe(true);
+    expect(completed).toBe(false);
+    retirement.resolve();
+    expect(await outcome).toBeInstanceOf(Error);
+    await runtime.rollbackStartup();
+  });
+
+  it("does not start validation monitoring for disabled Twitch", async () => {
+    const start = createMockFn();
+    const runtime = createRuntime({ twitchAuth: { isReady: () => true, startValidationMonitoring: start, stopValidationMonitoring: async () => {} },
+      guiTransportService: { start: async () => { throw new Error("test-stop-startup"); }, stop: () => {} },
+    }, { twitch: { enabled: false }, gui: { enableDock: true } });
+    await expect(runtime.start()).rejects.toThrow("test-stop-startup");
+    expect(start).not.toHaveBeenCalled();
+  });
+  for (const failure of ["invalid", "outage"] as const) {
+    it(`owns real Twitch monitoring and retires only Twitch on ${failure}`, async () => {
+      const directory = await fs.mkdtemp("/tmp/opencode/runtime-twitch-test-");
+      const tokenStorePath = path.join(directory, "test-tokens.json");
+      await fs.writeFile(tokenStorePath, JSON.stringify({ twitch: { accessToken: "test-access", refreshToken: "test-refresh" } }));
+      _resetForTesting();
+      secrets.twitch.clientSecret = "test-secret";
+      const get = createMockFn<unknown[], Promise<{ data: unknown }>>().mockResolvedValue({ data: {
+        user_id: "test-user-id", login: "test-user", client_id: "test-client", scopes: [...TWITCH_OAUTH_SCOPES]
+      } });
+      const oauthFlow = createMockFn<[], Promise<null>>();
+      const auth = new TwitchAuth({ tokenStorePath, clientId: "test-client", expectedUsername: "test-user", logger: noOpLogger,
+        httpClient: { get, post: createMockFn() }, oauthFlow, monitoringNow: testClock.now });
+      const cleanup = createMockFn<[], Promise<void>>().mockResolvedValue();
+      const otherCleanup = createMockFn<[], Promise<void>>().mockResolvedValue();
+      const lifecycle = new PlatformLifecycleService({ logger: noOpLogger, sharedDependencies: { twitchAuth: auth },
+        config: { twitch: { enabled: true }, youtube: { enabled: true, username: "test-channel" } } });
+      const admission = Promise.withResolvers<void>();
+      const runtime = createRuntime({ twitchAuth: auth, platformLifecycleService: lifecycle,
+        guiTransportService: { start: () => admission.promise, stop: () => {} } }, { twitch: { enabled: true }, gui: { enableDock: true } });
+      try {
+        await auth.initialize();
+        await lifecycle.initializeAllPlatforms({
+          twitch: class {
+            initialize = async () => {};
+            cleanup = cleanup;
+            on = () => {};
+          },
+          youtube: class {
+            initialize = async () => {};
+            cleanup = otherCleanup;
+            on = () => {};
+          },
+        });
+        expect(lifecycle.getStatus().initializedPlatforms).toContain("twitch");
+        useFakeTimers();
+        const starting = runtime.start();
+        const startupOutcome = starting.catch(error => error);
+        get.mockRejectedValue(failure === "invalid" ? { response: { status: 401 } } : new Error("test-unavailable"));
+        const advance = async (ms: number) => {
+          testClock.advance(ms); advanceTimersByTime(ms);
+          for (let index = 0; index < 60; index++) await Promise.resolve();
+        };
+        await advance(3_600_000);
+        if (failure === "outage") for (let index = 0; index < 10; index++) await advance(30_000);
+        expect(auth.isReady()).toBe(false);
+        expect(lifecycle.getPlatform("twitch")).toBeNull();
+        expect(lifecycle.getStatus().platformHealth.twitch?.state).toBe("failed");
+        expect(cleanup).toHaveBeenCalledTimes(1);
+        expect(otherCleanup).not.toHaveBeenCalled();
+        expect(oauthFlow).not.toHaveBeenCalled();
+        expect(secrets.twitch.accessToken).toBe("test-access");
+        expect(JSON.parse(await fs.readFile(tokenStorePath, "utf8")).twitch.refreshToken).toBe("test-refresh");
+        const stopping = runtime.rollbackStartup();
+        admission.resolve();
+        await stopping;
+        expect(await startupOutcome).toBeInstanceOf(Error);
+        await runtime.rollbackStartup();
+      } finally {
+        admission.resolve();
+        await auth.stopValidationMonitoring();
+        await runtime.rollbackStartup();
+        useRealTimers();
+        _resetForTesting();
+        await fs.rm(directory, { recursive: true, force: true });
+      }
+    });
+  }
   for (const mode of ["shutdown", "rollback"] as const) {
     it(`joins deferred early viewer acquisition before ${mode} releases observers`, async () => {
       useFakeTimers();

@@ -176,6 +176,9 @@ class PlatformLifecycleService {
         this.logger.debug(`Platform ${platformName} is enabled, initializing...`, 'PlatformLifecycleService');
         this.updatePlatformHealth(platformName, { state: 'initializing' });
 
+        // Only an adopted instance belongs to this attempt. A failed construction
+        // must not acquire ownership of a session registered while it was pending.
+        let adoptedInstance: PlatformInstance | undefined;
         try {
             if (platformName === 'youtube' && !platformConfig.username) {
                 this._handleLifecycleError('YouTube is enabled but no username is provided in config.ini.', null, 'configuration');
@@ -194,7 +197,13 @@ class PlatformLifecycleService {
                 configCopy
             );
 
+            if (platformName === 'twitch' && !this.isTwitchAuthReady()) {
+                await this.cleanupPlatformInstance(platformInstance);
+                throw new Error('Twitch authentication is unavailable');
+            }
+
             this.platforms[platformName] = platformInstance;
+            adoptedInstance = platformInstance;
             this.logger.debug(`Platform ${platformName} added to platforms object`, 'PlatformLifecycleService');
 
             const handlers = this.resolveEventHandlers(platformName, eventHandlers);
@@ -211,7 +220,7 @@ class PlatformLifecycleService {
             this.logger.info(`Platform ${platformName} initialized`, 'PlatformLifecycleService');
         } catch (error) {
             this._handleLifecycleError(`Failed to initialize platform ${platformName}: ${getErrorMessage(error)}`, error, 'initialize');
-            await this.markPlatformFailure(platformName, error);
+            await this.markPlatformFailure(platformName, error, { expectedInstance: adoptedInstance });
         }
     }
 
@@ -479,6 +488,11 @@ class PlatformLifecycleService {
             this.logger.info(`Connecting to ${platformName}...`, 'PlatformLifecycleService');
 
             const outcome = await platformInstance.initialize(handlers);
+            if (this.platforms[platformName] !== platformInstance) return platformInstance;
+            if (platformName === 'twitch' && !this.isTwitchAuthReady()) {
+                await this.markPlatformFailure(platformName, new Error('Twitch authentication is unavailable'), { expectedInstance: platformInstance });
+                return platformInstance;
+            }
             this.applyPlatformInitializationOutcome(platformName, outcome);
 
             return platformInstance;
@@ -493,7 +507,8 @@ class PlatformLifecycleService {
                 let backgroundInit: Promise<void>;
                 backgroundInit = this.initializePlatformAsync(
                     platformName,
-                    connectCallback
+                    connectCallback,
+                    platformInstance
                 ).finally(() => {
                     this.backgroundPlatformInits = this.backgroundPlatformInits.filter((entry) => entry.promise !== backgroundInit);
                 });
@@ -537,7 +552,7 @@ class PlatformLifecycleService {
         return false;
     }
 
-    async initializePlatformAsync(platformName: string, connectCallback: () => Promise<PlatformInstance>) {
+    async initializePlatformAsync(platformName: string, connectCallback: () => Promise<PlatformInstance>, expectedInstance = this.platforms[platformName]) {
         try {
             this.logger.info(`[${platformName}] Background initialization started`, 'PlatformLifecycleService');
 
@@ -550,7 +565,7 @@ class PlatformLifecycleService {
             this.logger.info(`[${platformName}] Background initialization completed successfully`, 'PlatformLifecycleService');
         } catch (error) {
             this._handleLifecycleError(`[${platformName}] Background initialization failed: ${getErrorMessage(error)}`, error, 'background-init');
-            await this.markPlatformFailure(platformName, error);
+            await this.markPlatformFailure(platformName, error, { expectedInstance });
         }
     }
 
@@ -713,7 +728,14 @@ class PlatformLifecycleService {
         }
     }
 
-    async markPlatformFailure(platformName: string, error: unknown): Promise<void> {
+    private isTwitchAuthReady(): boolean {
+        const auth = this.sharedDependencies.twitchAuth;
+        return !auth || typeof auth !== 'object' || !('isReady' in auth) ||
+            typeof auth.isReady !== 'function' || auth.isReady() === true;
+    }
+
+    async markPlatformFailure(platformName: string, error: unknown, options?: { expectedInstance: { getViewerCount?: () => Promise<unknown> | unknown } | undefined; signal?: AbortSignal }): Promise<void> {
+        if (options?.signal?.aborted || (options && this.platforms[platformName] !== options.expectedInstance)) return;
         const timestamp = getSystemTimestampISO();
         const errorMessage = getErrorMessage(error);
         this.platformErrors.push({
@@ -727,11 +749,15 @@ class PlatformLifecycleService {
             try {
                 await this.cleanupPlatformInstance(platform);
             } catch (cleanupError) {
-                this._handleLifecycleError(
-                    `Error cleaning up failed platform ${platformName}: ${getErrorMessage(cleanupError)}`,
-                    cleanupError,
-                    'cleanup'
-                );
+                try {
+                    this._handleLifecycleError(
+                        `Error cleaning up failed platform ${platformName}: ${getErrorMessage(cleanupError)}`,
+                        cleanupError,
+                        'cleanup'
+                    );
+                } catch {
+                    // Reporting must not strand the failed instance or its health.
+                }
             }
         }
 
