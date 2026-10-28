@@ -273,6 +273,11 @@ describe('behavior-validation helper behavior', () => {
     it('validates displayed notifications and system-state change expectations', () => {
         expect(() => expectValidDisplayedNotifications(null)).toThrow('displayedNotifications must be an array');
         expect(() => expectValidDisplayedNotifications([], { minimumCount: 1 })).toThrow('Expected at least 1 displayed notifications');
+        expect(() => expectValidDisplayedNotifications([{ content: 'test notification' }], { minimumCount: 2 })).toThrow('Expected at least 2 displayed notifications, got 1');
+        expect(() => expectValidDisplayedNotifications([], { minimumCount: 0 })).not.toThrow();
+        for (const minimumCount of [-1, 0.5, NaN, Infinity]) {
+            expect(() => expectValidDisplayedNotifications([], { minimumCount })).toThrow('minimumCount must be a non-negative integer');
+        }
 
         expect(() => expectValidDisplayedNotifications([{ visible: true }])).toThrow('missing user-visible content');
         expect(() => expectValidDisplayedNotifications([{ content: 'undefined', visible: true }])).toThrow('technical artifact');
@@ -365,7 +370,7 @@ describe('behavior-validation helper behavior', () => {
         expect(successful.outcomesMatched).toBe(true);
         expect(successful.performanceWithinLimits).toBe(true);
 
-        await expect(expectBehaviorOutcome(
+        const rejected = await expectBehaviorOutcome(
             async () => {
                 throw new Error('expected error branch');
             },
@@ -373,7 +378,21 @@ describe('behavior-validation helper behavior', () => {
                 expectError: true,
                 validateError: (error) => error.message.includes('expected')
             }
-        )).rejects.toThrow('Behavior execution exceeded time limit');
+        );
+        expect(rejected.outcomesMatched).toBe(true);
+        expect(rejected.performanceWithinLimits).toBe(true);
+
+        let errorValidatorCalls = 0;
+        await expect(expectBehaviorOutcome(async () => 'resolved', {
+            expectError: true,
+            validateError: () => { errorValidatorCalls += 1; return true; }
+        })).rejects.toThrow('Expected behavior to throw');
+        expect(errorValidatorCalls).toBe(0);
+
+        const validationError = new Error('synthetic validation failure');
+        await expect(expectBehaviorOutcome(async () => 'resolved', {
+            validateOutcome: () => { throw validationError; }
+        })).rejects.toBe(validationError);
 
         await expect(expectBehaviorOutcome(
             async () => ({ value: 1 }),
@@ -385,9 +404,6 @@ describe('behavior-validation helper behavior', () => {
 
         await expect(expectBehaviorOutcome(
             async () => {
-                for (let i = 0; i < 1000000; i += 1) {
-                    void i;
-                }
                 return { value: 'done' };
             },
             {

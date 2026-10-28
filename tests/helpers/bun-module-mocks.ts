@@ -92,11 +92,11 @@ const unmockModule = (moduleName: string) => {
   restoreRegisteredModuleMocks([entry]);
 };
 
-const requireActual = (moduleName: string) => {
+const requireActual = (moduleName: string, loadModule: (moduleName: string) => ReturnType<typeof nodeRequire> = nodeRequire) => {
   const moduleId = resolveModuleId(moduleName);
   const entry = activeMocks.get(moduleId);
   if (!entry) {
-    return nodeRequire(moduleName);
+    return loadModule(moduleName);
   }
 
   if (entry.hasActualModule) {
@@ -104,9 +104,11 @@ const requireActual = (moduleName: string) => {
   }
 
   restoreActualModules();
-  const actualModule = nodeRequire(moduleName);
-  restoreRegisteredModuleMocks();
-  return actualModule;
+  try {
+    return loadModule(moduleName);
+  } finally {
+    restoreRegisteredModuleMocks();
+  }
 };
 
 const restoreAllModuleMocks = () => {

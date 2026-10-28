@@ -536,8 +536,12 @@ const expectValidDisplayedNotifications = (displayedNotifications: unknown, expe
         throw new Error('displayedNotifications must be an array');
     }
     
-    if (displayedNotifications.length === 0 && (expectedBehavior.minimumCount ?? 0) > 0) {
-        throw new Error(`Expected at least ${expectedBehavior.minimumCount} displayed notifications, got 0`);
+    const minimumCount = expectedBehavior.minimumCount ?? 0;
+    if (!Number.isInteger(minimumCount) || minimumCount < 0) {
+        throw new Error('minimumCount must be a non-negative integer');
+    }
+    if (displayedNotifications.length < minimumCount) {
+        throw new Error(`Expected at least ${minimumCount} displayed notifications, got ${displayedNotifications.length}`);
     }
     
     displayedNotifications.forEach((notification: unknown, index) => {
@@ -668,16 +672,30 @@ const expectBehaviorOutcome = async <Result>(
     
     const startTime = process.hrtime.bigint();
     let executionTime = 0;
+    const maxTime = outcomeExpectations.maxExecutionTime ?? 5000;
+    let behaviorResult!: Result;
+    let behaviorError: unknown;
+    let behaviorRejected = false;
     
     try {
-        const behaviorResult = await behaviorUnderTest();
-        result.behaviorExecuted = true;
+        behaviorResult = await behaviorUnderTest();
+    } catch (error) {
+        behaviorRejected = true;
+        behaviorError = error;
+    }
+    result.behaviorExecuted = true;
         
-        // Validate performance timing using high-resolution timer (not affected by fake timers)
-        const endTime = process.hrtime.bigint();
-        executionTime = Number(endTime - startTime) / 1000000;
-        const maxTime = outcomeExpectations.maxExecutionTime || 5000;
-        result.performanceWithinLimits = executionTime <= maxTime;
+    // Measure both resolved and rejected behavior in the same monotonic clock domain.
+    const endTime = process.hrtime.bigint();
+    executionTime = Number(endTime - startTime) / 1000000;
+    result.performanceWithinLimits = executionTime <= maxTime;
+
+    if (behaviorRejected) {
+        if (!outcomeExpectations.expectError) throw behaviorError;
+        result.outcomesMatched = outcomeExpectations.validateError ?
+            outcomeExpectations.validateError(behaviorError instanceof Error ? behaviorError : new Error(String(behaviorError))) : true;
+    } else {
+        if (outcomeExpectations.expectError) throw new Error('Expected behavior to throw');
         
         if (outcomeExpectations.expectUserVisibleResults) {
             if (!outcomeExpectations.extractUserResults) {
@@ -696,14 +714,6 @@ const expectBehaviorOutcome = async <Result>(
             result.outcomesMatched = true;
         }
         
-    } catch (error) {
-        if (outcomeExpectations.expectError) {
-            result.behaviorExecuted = true;
-            result.outcomesMatched = outcomeExpectations.validateError ? 
-                outcomeExpectations.validateError(error instanceof Error ? error : new Error(String(error))) : true;
-        } else {
-            throw error;
-        }
     }
     
     if (!result.behaviorExecuted) {
@@ -715,7 +725,7 @@ const expectBehaviorOutcome = async <Result>(
     }
     
     if (!result.performanceWithinLimits) {
-        throw new Error(`Behavior execution exceeded time limit: ${executionTime.toFixed(2)}ms > ${outcomeExpectations.maxExecutionTime}ms`);
+        throw new Error(`Behavior execution exceeded time limit: ${executionTime.toFixed(2)}ms > ${maxTime}ms`);
     }
     
     return result;

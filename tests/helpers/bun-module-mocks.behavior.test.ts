@@ -68,6 +68,19 @@ expect(nodeRequire(artifact.modulePath).value).toBe("actual-value");
 expect(() => unmockModule(artifact.modulePath)).not.toThrow();
   });
 
+  it("reinstalls tracked mocks when loading the actual module throws", () => {
+    const artifact = createTempModulePath();
+    temporaryArtifacts.push(artifact);
+    mockModule("synthetic-module-load-failure", () => ({ syntheticMarker: "retained-mock" }));
+    mockModule(artifact.modulePath, () => ({ value: "other-active-mock" }));
+    expect(nodeRequire("synthetic-module-load-failure").syntheticMarker).toBe("retained-mock");
+    expect(() => requireActual("synthetic-module-load-failure", () => {
+      throw new Error("synthetic module load failure");
+    })).toThrow("synthetic module load failure");
+    expect(nodeRequire("synthetic-module-load-failure").syntheticMarker).toBe("retained-mock");
+    expect(nodeRequire(artifact.modulePath).value).toBe("other-active-mock");
+  });
+
   it("loads module implementation while preserving active mock registration", () => {
     const artifact = createTempModulePath();
     temporaryArtifacts.push(artifact);
