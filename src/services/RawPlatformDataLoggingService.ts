@@ -75,8 +75,8 @@ class RawPlatformDataLoggingService {
                     fileName: result.fileName
                 });
             }
-        } catch (error) {
-            this._handleLoggingError(`Error logging platform data for ${platform}: ${this.resolveErrorMessage(error)}`, error);
+        } catch {
+            this._handleLoggingError('Raw platform data capture failed', new Error('Raw platform data capture failed'));
         }
     }
 
@@ -98,9 +98,9 @@ class RawPlatformDataLoggingService {
                 lastModified: stats.mtime,
                 path: logFilePath
             };
-        } catch (error) {
+        } catch {
             return {
-                error: this.resolveErrorMessage(error),
+                error: 'Raw platform log statistics unavailable',
                 exists: false
             };
         }

@@ -132,6 +132,15 @@ describe("RawPlatformDataLoggingService behavior", () => {
   });
 
   describe("Raw Payload Logging Contract", () => {
+    it("uses strict writer validation for statistics and never writes disabled unknown renderer capture", async () => {
+      const realService = new RawPlatformDataLoggingService({ config: { dataLoggingPath: logDir } });
+      for (const platform of ["../outside", "foo/bar", "foo\\bar", "youtube\0", "YouTube"]) {
+        expect(await realService.getLogStatistics(platform)).toEqual({ error: "Raw platform log statistics unavailable", exists: false });
+      }
+      await realService.logRawPlatformData("youtube", "unknown-renderer", { message: "test raw" });
+      await realService.logRawPlatformData("youtube", "unknown-renderer", { message: "test raw" }, { dataLoggingEnabled: false });
+      expect(await fs.readdir(logDir)).toEqual([]);
+    });
     it("maintains NDJSON wrapper for raw payloads", async () => {
       const giftData = {
         giftType: "Rose",

@@ -1,8 +1,158 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { types } from 'node:util';
 
 import { ensureLogDirectory } from '../utils/log-directory';
 import { getSystemTimestampISO } from '../utils/timestamp';
+
+const RAW_PLATFORMS = new Set(['youtube', 'twitch', 'tiktok', 'streamelements']);
+const REDACTED = '[REDACTED]';
+const LIMITED = '[Capture limit]';
+const SECRET_KEY = /^(?:authorization|proxyauthorization|accessToken|refreshToken|idToken|authToken|jwtToken|sessionToken|token|clientSecret|secret|password|passwd|cookie|setCookie|sessionId|apiKey|xApiKey|accessKeyId|awsAccessKeyId|privateKey|signingKey|signature|sig|credential|credentials|keyPairId|policy|xAmz.*|xGoog.*)$/i;
+
+function isSecretKey(key: string): boolean {
+    return SECRET_KEY.test(key.replace(/[^a-z0-9]/gi, ''));
+}
+
+// RAW capture deliberately retains chat/provider content and non-secret URL parameters.
+// Oversized strings are omitted whole, rather than exposing a credential cut at a boundary.
+function rawText(value: string): string {
+    if (value.length > 4096) return LIMITED;
+    // Scan complete whitespace-delimited candidates: commas and parentheses are
+    // legal inside URL credentials. Never sanitize a prefix and retain its suffix.
+    const redactUrl = (candidate: string): string => {
+        try {
+            const url = new URL(candidate);
+            const secretKeys = [...url.searchParams.keys()].filter(isSecretKey);
+            const fragment = new URLSearchParams(url.hash.slice(1));
+            const fragmentSecretKeys = [...fragment.keys()].filter(isSecretKey);
+            if (!url.username && !url.password && secretKeys.length === 0 && fragmentSecretKeys.length === 0) return candidate;
+            // Punctuation may belong to the URL or enclosing diagnostic syntax.
+            // For credential-bearing candidates, omit the entire ambiguous span.
+            if (/[()[\]{},;|"'<>]/.test(candidate)) return '[Credential URL omitted]';
+            url.username = '';
+            url.password = '';
+            for (const key of secretKeys) url.searchParams.set(key, REDACTED);
+            if (fragmentSecretKeys.length) {
+                for (const key of fragmentSecretKeys) fragment.set(key, REDACTED);
+                url.hash = fragment.toString();
+            }
+            return url.toString();
+        } catch { return '[Invalid URL omitted]'; }
+    };
+    if (/^(?:https?|wss?):\/\/\S+$/i.test(value)) return redactUrl(value);
+    // Recognize assignment boundaries once, using the same key policy for quoted
+    // and bare values. Non-secret enclosing values cannot hide inner assignments.
+    const redactAssignments = (text: string, depth = 0): string => {
+        const labels = /("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\b[a-z][a-z0-9_-]*)(\s*[:=]\s*)/gi;
+        let result = '';
+        let cursor = 0;
+        let match: RegExpExecArray | null;
+        while ((match = labels.exec(text))) {
+            const label = match[1]!;
+            let key: string;
+            // Decode only a bounded primitive label, never provider objects.
+            try { key = label.startsWith('"') ? JSON.parse(label) as string : label.startsWith("'") ? label.slice(1, -1) : label; }
+            catch { continue; }
+            const start = labels.lastIndex;
+            const quote = text[start] === '"' || text[start] === "'" ? text[start] : '';
+            // Bare non-secret values need no transformation. Keep scanning the
+            // original remainder so they cannot split a following quoted secret.
+            if (!quote && !isSecretKey(key)) {
+                result += text.slice(cursor, start);
+                cursor = start;
+                continue;
+            }
+            let end = start;
+            let closed = false;
+            if (quote) {
+                end++;
+                while (end < text.length) {
+                    if (text[end] === '\\') { end = Math.min(end + 2, text.length); continue; }
+                    if (text[end++] === quote) { closed = true; break; }
+                }
+            } else {
+                const header = /^(?:authorization|proxyAuthorization|cookie|setCookie)$/i.test(key.replace(/[^a-z0-9]/gi, ''));
+                let innerQuote = '';
+                while (end < text.length) {
+                    const character = text[end]!;
+                    if (innerQuote) {
+                        if (character === '\\') { end = Math.min(end + 2, text.length); continue; }
+                        if (character === innerQuote) innerQuote = '';
+                    } else {
+                        if ((header ? /[\r\n]/ : /\s/).test(character)) break;
+                        if (character === '"' || character === "'") innerQuote = character;
+                    }
+                    end++;
+                }
+            }
+            const content = isSecretKey(key) ? REDACTED : depth >= 12 ? LIMITED
+                : redactAssignments(text.slice(start + (quote ? 1 : 0), end - (closed ? 1 : 0)), depth + 1);
+            result += text.slice(cursor, start) + quote + content + (closed ? quote : '');
+            cursor = end;
+            labels.lastIndex = end;
+        }
+        return result + text.slice(cursor);
+    };
+    const assignments = redactAssignments(value);
+    // Respect complete quoted strings so URL omission cannot erase the label or
+    // opening quote of an adjacent field. Bare URL candidates remain conservative.
+    return assignments.replace(/"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\b(?:https?|wss?):\/\/\S+/gi, candidate => {
+        const quote = candidate[0];
+        if (quote === '"' || quote === "'") {
+            return quote + candidate.slice(1, -1).replace(/\b(?:https?|wss?):\/\/\S+/gi, redactUrl) + quote;
+        }
+        return redactUrl(candidate);
+    }).replace(/\bBearer\s+[^\s,;]+/gi, `Bearer ${REDACTED}`);
+}
+
+function captureRaw(value: unknown): unknown {
+    let nodes = 1000;
+    let bytes = 48_000;
+    const ancestors = new WeakSet<object>();
+    const text = (input: string): string => {
+        const safe = rawText(input);
+        bytes -= Buffer.byteLength(JSON.stringify(safe));
+        return bytes < 0 ? LIMITED : safe;
+    };
+    const visit = (input: unknown, depth: number): unknown => {
+        if (--nodes < 0 || bytes <= 0 || depth >= 12) return LIMITED;
+        if (typeof input === 'string') return text(input);
+        if (input === null || typeof input === 'boolean' || typeof input === 'number') return input;
+        // Provider payloads contain bigint IDs; do not execute custom conversion hooks.
+        if (typeof input === 'bigint') return input > 2n ** 256n || input < -(2n ** 256n) ? LIMITED : text(String(input));
+        if (typeof input !== 'object') return '[Unsupported value]';
+        if (types.isProxy(input)) return '[Proxy omitted]';
+        if (ancestors.has(input)) return '[Circular]';
+        ancestors.add(input);
+        try {
+            const result: Record<string, unknown> = Object.create(null);
+            const array: unknown[] | undefined = Array.isArray(input) ? [] : undefined;
+            let count = 0;
+            // Own-key discovery itself is native and not interruptible; traversal and
+            // retained output are bounded. Reject proxies before any reflective calls.
+            for (const key of Object.keys(input)) {
+                const descriptor = Object.getOwnPropertyDescriptor(input, key);
+                if (!descriptor?.enumerable) continue;
+                if (++count > 100 || nodes <= 0 || bytes <= 0) {
+                    if (array) array.push(LIMITED);
+                    else result['[Capture truncated]'] = LIMITED;
+                    break;
+                }
+                const safeKey = text(key);
+                bytes -= 8;
+                const captured = key.length > 4096 ? LIMITED : isSecretKey(key) ? REDACTED
+                    : !('value' in descriptor) ? '[Accessor omitted]'
+                        : visit(descriptor.value, depth + 1);
+                if (array) array.push(captured);
+                else result[safeKey] = captured;
+            }
+            return array ?? result;
+        } catch { return '[Unreadable object]'; }
+        finally { ancestors.delete(input); }
+    };
+    return visit(value, 0);
+}
 
 type RawEventLogWriterOptions = {
     dataLoggingPath: string;
@@ -23,17 +173,29 @@ class RawEventLogWriter {
         const logEntry = {
             ingestTimestamp: getSystemTimestampISO(),
             platform: options.platform,
-            eventType: options.eventType,
-            payload: options.payload
+            eventType: rawText(options.eventType),
+            payload: captureRaw(options.payload)
         };
 
-        await ensureLogDirectory(options.dataLoggingPath);
-        await fs.appendFile(filePath, `${JSON.stringify(logEntry)}\n`, 'utf8');
+        let serialized = JSON.stringify(logEntry);
+        // Include wrapper, escaped text and newline in the hard per-entry byte ceiling.
+        if (Buffer.byteLength(serialized) >= 65_536) {
+            serialized = JSON.stringify({ ...logEntry, payload: LIMITED });
+        }
+
+        try {
+            await ensureLogDirectory(options.dataLoggingPath);
+            await fs.appendFile(filePath, `${serialized}\n`, { encoding: 'utf8', mode: 0o600 });
+        } catch {
+            // Direct callers must not accidentally forward filesystem/provider details.
+            throw new Error('Raw event capture write failed');
+        }
 
         return { filePath, fileName };
     }
 
     resolveLogFileName(platform: string, eventType: string): string {
+        if (!RAW_PLATFORMS.has(platform)) throw new Error('Unsupported raw logging platform');
         if (platform === 'youtube' && eventType === 'unknown-renderer') {
             return 'youtube-unknown-renderer-log.ndjson';
         }
