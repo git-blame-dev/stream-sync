@@ -272,6 +272,9 @@ interface RunPreviewScenarioOptions {
     safeSetTimeoutImpl: (handler: () => void, delayMs: number) => unknown;
     errorHandler: PreviewErrorHandler;
     dispatchImmediately?: boolean;
+    signal?: AbortSignal;
+    clearIntervalImpl?: (handle: ReturnType<typeof setInterval> | number) => void;
+    clearTimeoutImpl?: (handle: unknown) => void;
 }
 
 interface PreviewScenarioRunResult {
@@ -1787,14 +1790,39 @@ async function runPreviewScenario(options: RunPreviewScenarioOptions): Promise<P
         safeSetIntervalImpl,
         safeSetTimeoutImpl,
         errorHandler,
-        dispatchImmediately = true
+        dispatchImmediately = true,
+        signal,
+        clearIntervalImpl = clearInterval,
+        clearTimeoutImpl = (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>)
     } = options;
 
     let eventIndex = 0;
     const dispatchedEvents: PreviewScenarioEvent[] = [];
     const inFlight = new Set<Promise<void>>();
+    let closed = false;
+    let intervalHandle: ReturnType<typeof setInterval> | number = 0;
+    let ownedInterval: ReturnType<typeof setInterval> | number | undefined;
+    let ownedTimeout: unknown;
+    let timeoutRegistered = false;
+    let reportFailure: { error: unknown } | undefined;
+    let finishDuration = () => {};
+    const clearTimers = () => {
+        if (ownedInterval !== undefined) {
+            clearIntervalImpl(ownedInterval);
+            ownedInterval = undefined;
+        }
+        if (timeoutRegistered) {
+            clearTimeoutImpl(ownedTimeout);
+            timeoutRegistered = false;
+        }
+    };
+    const stop = () => {
+        closed = true;
+        clearTimers();
+        finishDuration();
+    };
     const dispatchNextEvent = () => {
-        if (eventIndex >= scenarioEvents.length) {
+        if (closed || eventIndex >= scenarioEvents.length) {
             return;
         }
 
@@ -1803,30 +1831,54 @@ async function runPreviewScenario(options: RunPreviewScenarioOptions): Promise<P
             return;
         }
         const adapter = adapters[event.adapter];
+        eventIndex += 1;
         if (adapter && typeof adapter.ingest === 'function') {
             dispatchedEvents.push(event);
-            const pending = Promise.resolve(adapter.ingest(event.rawEvent)).catch((error: unknown) => {
-                errorHandler.handleEventProcessingError(error, 'preview-ingest', event.rawEvent, 'Failed processing preview ingest event');
-            });
+            let complete = () => {};
+            const pending = new Promise<void>((resolve) => { complete = resolve; });
             inFlight.add(pending);
-            void pending.finally(() => inFlight.delete(pending));
+            const ingest = async () => {
+                try {
+                    await adapter.ingest(event.rawEvent);
+                } catch (error) {
+                    try {
+                        errorHandler.handleEventProcessingError(error, 'preview-ingest', event.rawEvent, 'Failed processing preview ingest event');
+                    } catch (error) {
+                        reportFailure ??= { error };
+                    }
+                } finally {
+                    inFlight.delete(pending);
+                    complete();
+                }
+            };
+            void ingest();
         }
-        eventIndex += 1;
     };
 
-    if (dispatchImmediately) {
-        dispatchNextEvent();
+    try {
+        signal?.addEventListener('abort', stop, { once: true });
+        if (signal?.aborted) stop();
+        if (dispatchImmediately) dispatchNextEvent();
+        if (!closed) {
+            intervalHandle = safeSetIntervalImpl(dispatchNextEvent, intervalMs);
+            ownedInterval = intervalHandle;
+            if (closed) clearTimers();
+        }
+        if (!closed) {
+            await new Promise<void>((resolve) => {
+                finishDuration = resolve;
+                ownedTimeout = safeSetTimeoutImpl(stop, durationMs);
+                timeoutRegistered = true;
+                if (closed) clearTimers();
+            });
+        }
+    } finally {
+        stop();
+        signal?.removeEventListener('abort', stop);
+        // Only adapter ingest is joined; void EventBus subscribers are not owned here.
+        await Promise.all([...inFlight]);
     }
-
-    const intervalHandle = safeSetIntervalImpl(() => {
-        dispatchNextEvent();
-    }, intervalMs);
-
-    await new Promise<void>((resolve) => {
-        safeSetTimeoutImpl(() => resolve(), durationMs);
-    });
-    clearInterval(intervalHandle);
-    await Promise.all([...inFlight]);
+    if (reportFailure) throw reportFailure.error;
 
     return { intervalHandle, dispatchedEvents };
 }

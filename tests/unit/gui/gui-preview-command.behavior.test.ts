@@ -99,7 +99,7 @@ type PreviewModule = {
     [key: string]: unknown;
   }) => PreviewIngestAdapters;
   runPreviewScenario: (options: {
-    adapters: PreviewIngestAdapters;
+    adapters: Partial<Record<PreviewAdapter, { ingest: (rawEvent: UnknownRecord) => Promise<void> | void }>>;
     scenarioEvents: ScenarioEvent[];
     intervalMs: number;
     durationMs: number;
@@ -109,6 +109,9 @@ type PreviewModule = {
     ) => number | ReturnType<typeof setInterval>;
     safeSetTimeoutImpl: (resolve: () => void, durationMs: number) => unknown;
     dispatchImmediately?: boolean;
+    signal?: AbortSignal;
+    clearIntervalImpl?: (handle: ReturnType<typeof setInterval> | number) => void;
+    clearTimeoutImpl?: (handle: unknown) => void;
     errorHandler: {
       handleEventProcessingError: (
         error: unknown,
@@ -865,6 +868,124 @@ describe("GUI local preview command behavior", () => {
     );
     expect(finalIngestedEvent.adapter).toBe("tiktok");
     expect(finalIngestedEvent.rawEvent.eventType).toBe("ENVELOPE");
+  });
+
+  it.each(["duration", "abort", "setup", "timeout-setup"])("owns admitted ingest settlement and timer cleanup after %s stop", async (mode) => {
+    const controller = new AbortController();
+    let tick = () => {};
+    let finish = () => {};
+    let release = () => {};
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    let calls = 0;
+    let settled = false;
+    const cleared: unknown[] = [];
+    const failure = new Error("synthetic scheduler failure");
+    const run = runPreviewScenario({
+      adapters: { twitch: { ingest() { calls += 1; return held; } } },
+      scenarioEvents: buildPreviewScenarioEvents(32000, 2000).map((event) => ({ ...event, adapter: "twitch" })),
+      intervalMs: 2000,
+      durationMs: 32000,
+      signal: controller.signal,
+      safeSetIntervalImpl(callback) {
+        tick = callback;
+        if (mode === "setup") throw failure;
+        return 41;
+      },
+      safeSetTimeoutImpl(callback) { finish = callback; if (mode === "timeout-setup") throw failure; return 42; },
+      clearIntervalImpl(handle) { cleared.push(handle); },
+      clearTimeoutImpl(handle) { cleared.push(handle); },
+      errorHandler: { handleEventProcessingError() { throw failure; } },
+    });
+    const outcome = run.then(() => { settled = true; return null; }, (error: unknown) => { settled = true; return error; });
+    if (mode === "abort") controller.abort();
+    else finish();
+    tick();
+    await Promise.resolve();
+    expect(calls).toBe(1);
+    expect(settled).toBe(false);
+    release();
+    expect(await outcome).toBe(mode === "setup" || mode === "timeout-setup" ? failure : null);
+    expect(cleared).toEqual(mode === "setup" ? [] : mode === "timeout-setup" ? [41] : [41, 42]);
+  });
+
+  it.each([false, true])("reports synchronous ingest failures and continues admission (reporter throws: %s)", async (reporterThrows) => {
+    let calls = 0;
+    let reports = 0;
+    const failure = new Error("synthetic reporter failure");
+    const run = runPreviewScenario({
+      adapters: { twitch: { ingest() { calls += 1; if (calls === 1) throw new Error("synthetic ingest failure"); } } },
+      scenarioEvents: buildPreviewScenarioEvents(32000, 2000).map((event) => ({ ...event, adapter: "twitch" })),
+      intervalMs: 2000,
+      durationMs: 32000,
+      safeSetIntervalImpl(callback) { callback(); return 41; },
+      safeSetTimeoutImpl(callback) { callback(); return 42; },
+      clearIntervalImpl() {},
+      clearTimeoutImpl() {},
+      errorHandler: { handleEventProcessingError() { reports += 1; if (reporterThrows) throw failure; } },
+    });
+    if (reporterThrows) await expect(run).rejects.toBe(failure);
+    else await run;
+    expect(calls).toBe(2);
+    expect(reports).toBe(1);
+  });
+
+  it.each(["already", "ingest", "interval", "timeout"])("closes admission and retires timers on synchronous %s abort", async (phase) => {
+    const controller = new AbortController();
+    if (phase === "already") controller.abort();
+    let calls = 0;
+    let timerRegistrations = 0;
+    const cleared: unknown[] = [];
+    await runPreviewScenario({
+      adapters: { twitch: { ingest() { calls += 1; if (phase === "ingest") controller.abort(); } } },
+      scenarioEvents: buildPreviewScenarioEvents(32000, 2000).map((event) => ({ ...event, adapter: "twitch" })),
+      intervalMs: 2000,
+      durationMs: 32000,
+      signal: controller.signal,
+      safeSetIntervalImpl() { timerRegistrations += 1; if (phase === "interval") controller.abort(); return 41; },
+      safeSetTimeoutImpl() { timerRegistrations += 1; if (phase === "timeout") controller.abort(); return 42; },
+      clearIntervalImpl(handle) { cleared.push(handle); },
+      clearTimeoutImpl(handle) { cleared.push(handle); },
+      errorHandler: { handleEventProcessingError() {} },
+    });
+    expect(calls).toBe(phase === "already" ? 0 : 1);
+    expect(timerRegistrations).toBe(phase === "interval" ? 1 : phase === "timeout" ? 2 : 0);
+    expect(cleared).toEqual(phase === "interval" ? [41] : phase === "timeout" ? [41, 42] : []);
+  });
+
+  it("observes asynchronous reporter failures after stopping timers and joining other ingest", async () => {
+    let tick = () => {};
+    let finish = () => {};
+    let rejectIngest = (_error: Error) => {};
+    let release = () => {};
+    const failing = new Promise<void>((_resolve, reject) => { rejectIngest = reject; });
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    const failure = new Error("synthetic asynchronous reporter failure");
+    let calls = 0;
+    let settled = false;
+    const cleared: unknown[] = [];
+    const run = runPreviewScenario({
+      adapters: { twitch: { ingest() { calls += 1; return calls === 1 ? failing : held; } } },
+      scenarioEvents: buildPreviewScenarioEvents(32000, 2000).map((event) => ({ ...event, adapter: "twitch" })),
+      intervalMs: 2000,
+      durationMs: 32000,
+      safeSetIntervalImpl(callback) { tick = callback; return 41; },
+      safeSetTimeoutImpl(callback) { finish = callback; return 42; },
+      clearIntervalImpl(handle) { cleared.push(handle); },
+      clearTimeoutImpl(handle) { cleared.push(handle); },
+      errorHandler: { handleEventProcessingError() { throw failure; } },
+    });
+    const outcome = run.then(() => { settled = true; return null; }, (error: unknown) => { settled = true; return error; });
+    tick();
+    rejectIngest(new Error("synthetic asynchronous ingest failure"));
+    finish();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    expect(cleared).toEqual([41, 42]);
+    tick();
+    expect(calls).toBe(2);
+    release();
+    expect(await outcome).toBe(failure);
   });
 
   it("routes ingest events through the preview pipeline boundaries", async () => {
