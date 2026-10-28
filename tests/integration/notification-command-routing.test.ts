@@ -52,6 +52,11 @@ describe("notification command routing integration", () => {
     "platform:chat-message": "messagesEnabled",
   };
 
+  it("covers every registered notification type in both mapping contracts", () => {
+    expect(Object.keys(EXPECTED_COMMAND_KEYS).sort()).toEqual(Object.keys(notificationConfigs).sort());
+    expect(Object.keys(EXPECTED_SETTING_KEYS).sort()).toEqual(Object.keys(notificationConfigs).sort());
+  });
+
   it("all notification types have valid command keys", () => {
     for (const [, config] of Object.entries(notificationConfigs)) {
       expect(config.commandKey).toBeDefined();

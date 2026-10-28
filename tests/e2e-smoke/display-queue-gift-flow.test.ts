@@ -37,7 +37,7 @@ describe("DisplayQueue gift flow (smoke E2E)", () => {
       },
     };
 
-    const vfxEvents: unknown[] = [];
+    const vfxEvents: Record<string, unknown>[] = [];
     emitter.on(
       PlatformEvents.VFX_COMMAND_RECEIVED,
       (payload: Record<string, unknown>) => {
@@ -211,11 +211,25 @@ describe("DisplayQueue gift flow (smoke E2E)", () => {
     expect(vfxEvents).toHaveLength(1);
     expect(vfxEvents[0]).toEqual(
       expect.objectContaining({
+        command: "!gift",
         commandKey: "gifts",
+        filename: "gift.mp4",
+        mediaSource: "vfx top",
         username: "test-user",
         platform: "tiktok",
+        userId: "test-user-id",
+        notificationType: "platform:gift",
+        source: "display-queue",
+        correlationId: expect.any(String),
       }),
     );
+    expect(vfxEvents[0]?.context).toEqual({
+      source: "display-queue",
+      notificationType: "platform:gift",
+      correlationId: vfxEvents[0]?.correlationId,
+      delayApplied: 2000,
+      skipCooldown: true,
+    });
 
     const ttsText = actions.find(
       (action) => action.type === "text" && action.source === "tts-source",
@@ -230,6 +244,21 @@ describe("DisplayQueue gift flow (smoke E2E)", () => {
       }),
     );
     expect(ttsText?.text).toBe("test-user sent a gift");
-    expect(obsCalls.length).toBe(2);
+    expect(obsCalls).toEqual([
+      {
+        method: "TriggerMediaInputAction",
+        payload: {
+          inputName: "gift-video",
+          mediaAction: "OBS_WEBSOCKET_MEDIA_INPUT_ACTION_RESTART",
+        },
+      },
+      {
+        method: "TriggerMediaInputAction",
+        payload: {
+          inputName: "gift-audio",
+          mediaAction: "OBS_WEBSOCKET_MEDIA_INPUT_ACTION_RESTART",
+        },
+      },
+    ]);
   });
 });

@@ -2,6 +2,12 @@ import { describe, expect, it } from "bun:test";
 import { CommandParser } from "../../src/chat/commands";
 import { ConfigValidator } from "../../src/utils/config-validator";
 import { VFXCommandService } from "../../src/services/VFXCommandService.ts";
+import { OBSEffectsManager } from "../../src/obs/effects";
+import { PlatformEvents } from "../../src/interfaces/PlatformEvents";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { noOpLogger } from "../helpers/mock-factories";
+import { clearAllTimers, useFakeTimers, useRealTimers } from "../helpers/bun-timers";
 
 type NormalizedConfig = ReturnType<typeof ConfigValidator.normalize>;
 type ParserVFXConfig = NonNullable<ReturnType<CommandParser["getVFXConfig"]>>;
@@ -268,6 +274,100 @@ describe("VFX notification resolution smoke E2E", () => {
     if (!vfxConfig) throw new Error("Expected gift VFX config");
     expect(vfxConfig.filename).toBe("test-gift-vfx");
     expect(vfxConfig.mediaSource).toBe("vfx top");
+  });
+
+  it("executes configured gift VFX through real effects with simulated OBS completion", async () => {
+    const rawConfig = createRawConfig();
+    rawConfig.vfx.filePath = join(tmpdir(), "synthetic-gift-vfx");
+    const normalized = ConfigValidator.normalize(rawConfig);
+    const requests: Array<{ method: string; payload: unknown }> = [];
+    const emitted: Array<{ event: string; payload: unknown }> = [];
+    type Handler = (data?: Record<string, unknown>) => void;
+    const handlers = new Map<string, Handler>();
+    const removed: Array<[string, Handler]> = [];
+    let completionHandler: Handler | undefined;
+    const effectsManager = new OBSEffectsManager({
+      ensureConnected: async () => {},
+      call: async (method, payload) => {
+        requests.push({ method, payload });
+        return {};
+      },
+      addEventListener: (name, handler) => {
+        handlers.set(name, handler);
+        completionHandler = handler;
+        // Only the external OBS playback-ended response is simulated.
+        queueMicrotask(() => handler({ inputName: "vfx top" }));
+      },
+      removeEventListener: (name, handler) => {
+        removed.push([name, handler]);
+        if (handlers.get(name) === handler) handlers.delete(name);
+      },
+    }, { logger: noOpLogger, delay: async () => {} });
+    const service = new VFXCommandService({
+      commands: extractStringRecord(normalized.commands, "commands"),
+      farewell: extractStringRecord(normalized.farewell, "farewell"),
+      gifts: normalized.gifts,
+      vfx: { filePath: requireString(normalized.vfx.filePath, "vfx.filePath") },
+      cooldowns: { cmdCooldown: 0, globalCmdCooldownMs: 0 },
+    }, { emit: (event, payload) => { emitted.push({ event, payload }); } }, { effectsManager });
+
+    useFakeTimers();
+    try {
+      const result = await service.executeCommandForKey("gifts", {
+        username: "SyntheticGiftViewer",
+        platform: "twitch",
+        userId: "synthetic-gift-viewer",
+        skipCooldown: true,
+        correlationId: "synthetic-gift-correlation",
+        source: "display-queue",
+        notificationType: "platform:gift",
+      });
+      expect(result.success).toBe(true);
+      expect(requests).toEqual([
+        { method: "SetInputSettings", payload: {
+          inputName: "vfx top",
+          inputSettings: { local_file: `${rawConfig.vfx.filePath}/test-gift-vfx.mp4`, looping: false },
+          overlay: false,
+        } },
+        { method: "TriggerMediaInputAction", payload: {
+          inputName: "vfx top",
+          mediaAction: "OBS_WEBSOCKET_MEDIA_INPUT_ACTION_RESTART",
+        } },
+      ]);
+      expect(emitted.map(({ event }) => event)).toEqual([
+        PlatformEvents.VFX_COMMAND_EXECUTED,
+        PlatformEvents.VFX_EFFECT_COMPLETED,
+      ]);
+      for (const { event, payload } of emitted) {
+        expect(payload).toMatchObject({
+          type: event,
+          command: "!testgift",
+          commandKey: "test-gift-vfx",
+          filename: "test-gift-vfx",
+          mediaSource: "vfx top",
+          username: "SyntheticGiftViewer",
+          platform: "twitch",
+          userId: "synthetic-gift-viewer",
+          correlationId: "synthetic-gift-correlation",
+          context: {
+            username: "SyntheticGiftViewer",
+            platform: "twitch",
+            userId: "synthetic-gift-viewer",
+            correlationId: "synthetic-gift-correlation",
+            skipCooldown: true,
+            source: "display-queue",
+            notificationType: "platform:gift",
+          },
+        });
+      }
+      expect(completionHandler).toEqual(expect.any(Function));
+      if (!completionHandler) throw new Error("Expected simulated OBS completion subscription");
+      expect(removed).toEqual([["MediaInputPlaybackEnded", completionHandler]]);
+      expect(handlers.size).toBe(0);
+    } finally {
+      clearAllTimers();
+      useRealTimers();
+    }
   });
 
   it("VFXCommandService.getVFXConfig returns valid config for envelopes", async () => {

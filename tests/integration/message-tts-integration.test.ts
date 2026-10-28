@@ -53,11 +53,10 @@ describe("MessageTTS Integration", () => {
 
       const stage = expectOnlyTTSStage(ttsStages);
       expect(stage).toEqual({
-        text: expect.stringContaining("SuperChatUser sent"),
+        text: "SuperChatUser sent a 5 US dollars Super Chat. Thanks for the stream!",
         delay: 0,
         type: "primary",
       });
-      expect(stage.text).toContain("Thanks for the stream");
     });
 
     test("should generate single-stage TTS for SuperChat without message", () => {
@@ -110,7 +109,7 @@ describe("MessageTTS Integration", () => {
 
       expect(ttsStages).toHaveLength(2);
       expect(ttsStages[0]).toEqual({
-        text: expect.stringContaining("MemberUser"),
+        text: "MemberUser just became a member",
         delay: 0,
         type: "primary",
       });
@@ -153,7 +152,7 @@ describe("MessageTTS Integration", () => {
 
       expect(ttsStages).toHaveLength(2);
       expect(ttsStages[0]).toEqual({
-        text: expect.stringContaining("TwitchSub"),
+        text: "TwitchSub renewed subscription for 6 months",
         delay: 0,
         type: "primary",
       });

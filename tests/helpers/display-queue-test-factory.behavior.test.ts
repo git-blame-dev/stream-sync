@@ -30,11 +30,22 @@ describe('display-queue-test-factory behavior', () => {
         expect(config.goals.twitchGoalTarget).toBe(500);
     });
 
-    it('creates real sources and goals managers wired to shared tracker dependencies', () => {
+    it('creates real sources and goals managers wired to shared tracker dependencies', async () => {
         const mockOBS = createMockOBSForTesting();
         const sourcesManager = createRealSourcesManager(mockOBS);
         const goalTracker = createRealGoalTracker();
         const goalsManager = createRealGoalsManager(mockOBS, sourcesManager, goalTracker);
+
+        mockOBS.call.mockResolvedValueOnce({ inputSettings: { font: { size: 24 } } });
+        await sourcesManager.updateTextSource('Synthetic Source', 'hello');
+        expect(mockOBS.call.mock.calls).toEqual([
+            ['GetInputSettings', { inputName: 'Synthetic Source' }],
+            ['SetInputSettings', {
+                inputName: 'Synthetic Source',
+                inputSettings: { font: { size: 24 }, text: 'hello' },
+                overlay: false
+            }]
+        ]);
 
         expect(typeof sourcesManager.updateTextSource).toBe('function');
         expect(typeof goalTracker.getAllGoalStates).toBe('function');

@@ -102,8 +102,8 @@ describe("OBS connection manager reconnect ownership integration", () => {
   });
 
   test("ConnectionClosed during in-flight connect does not start overlapping reconnect attempt", async () => {
-    let connectionClosedHandler: unknown = null;
-    let identifiedHandler: unknown = null;
+    type Handler = (data?: { reason?: unknown; code?: unknown }) => void;
+    const handlers = new Map<string, Handler>();
 
     const mockOBS = {
       connect: createMockFn().mockResolvedValue({
@@ -112,15 +112,12 @@ describe("OBS connection manager reconnect ownership integration", () => {
       }),
       disconnect: createMockFn().mockResolvedValue(undefined),
       call: createMockFn().mockResolvedValue({}),
-      on: createMockFn((eventName: string, handler: unknown) => {
-        if (eventName === "ConnectionClosed") {
-          connectionClosedHandler = handler;
-        }
-        if (eventName === "Identified") {
-          identifiedHandler = handler;
-        }
+      on: createMockFn((eventName: string, handler: Handler) => {
+        handlers.set(eventName, handler);
       }),
-      off: createMockFn(),
+      off: createMockFn((eventName: string, handler: Handler) => {
+        if (handlers.get(eventName) === handler) handlers.delete(eventName);
+      }),
       once: createMockFn(),
       addEventListener: createMockFn(),
       removeEventListener: createMockFn(),
@@ -136,25 +133,26 @@ describe("OBS connection manager reconnect ownership integration", () => {
       },
     });
 
-    const firstConnect = manager.connect().catch(() => false);
-
-    if (typeof connectionClosedHandler === "function") {
-      (
-        connectionClosedHandler as (data?: {
-          reason?: unknown;
-          code?: unknown;
-        }) => void
-      )({ code: 1006, reason: "socket-closed" });
-    }
-    const ensured = manager.ensureConnected(50).catch(() => undefined);
-    await Promise.resolve();
+    const firstConnect = manager.connect();
+    const ownedHandlers = [...handlers.entries()];
+    const closed = handlers.get("ConnectionClosed");
+    const identified = handlers.get("Identified");
+    expect(closed).toEqual(expect.any(Function));
+    expect(identified).toEqual(expect.any(Function));
+    if (!closed || !identified) throw new Error("Expected owned OBS lifecycle handlers");
+    closed({ code: 1006, reason: "socket-closed" });
+    const ensured = manager.ensureConnected(50);
 
     expect(mockOBS.connect).toHaveBeenCalledTimes(1);
 
-    if (typeof identifiedHandler === "function") {
-      (identifiedHandler as () => void)();
-    }
+    identified();
     await Promise.all([firstConnect, ensured]);
+    expect(manager.getConnectionState().isConnected).toBe(true);
+    expect(mockOBS.connect).toHaveBeenCalledTimes(1);
+
+    manager.dispose();
+    expect(mockOBS.off.mock.calls).toEqual(ownedHandlers);
+    expect(handlers.size).toBe(0);
   });
 });
 

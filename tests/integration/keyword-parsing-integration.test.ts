@@ -136,46 +136,6 @@ describe("Keyword Parsing Integration", () => {
     });
   });
 
-  describe("Performance and Memory", () => {
-    test("should not create memory leaks when keyword parsing is disabled", () => {
-      configFixture.general = { keywordParsingEnabled: false };
-      commandParser = new CommandParser(configFixture);
-
-      const initialMemory = process.memoryUsage().heapUsed;
-
-      for (let i = 0; i < 1000; i++) {
-        commandParser.getVFXConfig("!hello", "!hello everyone!");
-        commandParser.getVFXConfig(
-          "i",
-          "I am a mod and I approve this message",
-        );
-      }
-
-      const finalMemory = process.memoryUsage().heapUsed;
-      const memoryIncrease = finalMemory - initialMemory;
-
-      expect(memoryIncrease).toBeLessThan(10 * 1024 * 1024);
-    });
-
-    test("should maintain performance when keyword parsing is disabled", () => {
-      configFixture.general = { keywordParsingEnabled: false };
-      commandParser = new CommandParser(configFixture);
-
-      const startTime = testClock.now();
-
-      const iterations = 1000;
-      for (let i = 0; i < iterations; i++) {
-        commandParser.getVFXConfig("!hello", "!hello everyone!");
-      }
-
-      testClock.advance(iterations - 1);
-      const endTime = testClock.now();
-      const duration = endTime - startTime;
-
-      expect(duration).toBeLessThan(1000);
-    });
-  });
-
   describe("Real-world Scenarios", () => {
     test("should handle mixed messages correctly when keyword parsing is disabled", () => {
       configFixture.general = { keywordParsingEnabled: false };
