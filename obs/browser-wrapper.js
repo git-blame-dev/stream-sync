@@ -44,7 +44,10 @@
   function normalizeOrigin(value) {
     try {
       const url = new URL(value);
-      return url.protocol === 'http:' || url.protocol === 'https:'
+      const loopback = url.hostname === 'localhost' || url.hostname === '[::1]'
+        || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(url.hostname);
+      return (url.protocol === 'http:' || url.protocol === 'https:')
+        && loopback && !url.username && !url.password
         ? url.origin
         : DEFAULT_ORIGIN;
     } catch {
@@ -109,9 +112,11 @@
     const origin = normalizeOrigin(hashConfig.origin);
     const baseRoute = normalizeRoute(root.dataset.route || hashConfig.route);
     const targetRoute = root.dataset.route ? `${baseRoute}${window.location.search}` : baseRoute;
-    const routePath = new URL(targetRoute, DEFAULT_ORIGIN).pathname;
+    let target = new URL(targetRoute, origin);
+    if (target.origin !== origin) target = new URL(DEFAULT_ROUTE, origin);
+    const routePath = target.pathname;
     const healthUrl = `${origin}/health?route=${encodeURIComponent(routePath)}`;
-    const targetUrl = new URL(targetRoute, origin).toString();
+    const targetUrl = target.toString();
     let retryMs = INITIAL_RETRY_MS;
 
     frame.addEventListener('load', () => {

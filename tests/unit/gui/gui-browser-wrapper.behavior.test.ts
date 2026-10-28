@@ -9,9 +9,10 @@ function readObsFile(name: string): string {
 
 type HealthResponse = { ok: boolean } | { body: unknown; responseOk?: boolean } | Error;
 
-function createWrapperHarness(healthResponses: HealthResponse[]) {
+function createWrapperHarness(healthResponses: HealthResponse[], origin?: string, options: { hash?: string; route?: string | null } = {}) {
   let timerId = 0;
   const timers = new Map<number, () => void>();
+  const healthUrls: string[] = [];
   const frame = {
     src: "",
     removedSourceCount: 0,
@@ -35,10 +36,11 @@ function createWrapperHarness(healthResponses: HealthResponse[]) {
     URLSearchParams,
     clearTimeout: (id: number) => timers.delete(id),
     document: {
-      documentElement: { dataset: { route: "/overlay", statusVisible: "false" } },
+      documentElement: { dataset: { ...(options.route === null ? {} : { route: options.route ?? "/overlay" }), statusVisible: "false" } },
       getElementById: (id: string) => id === "stream-sync-frame" ? frame : status,
     },
-    fetch: async () => {
+    fetch: async (url: string) => {
+      healthUrls.push(url);
       const response = healthResponses.shift();
       if (!response) throw new Error("Missing health response fixture");
       if (response instanceof Error) throw response;
@@ -51,12 +53,13 @@ function createWrapperHarness(healthResponses: HealthResponse[]) {
       timers.set(id, callback);
       return id;
     },
-    window: { location: { hash: "", search: "" } },
+    window: { location: { hash: options.hash ?? (origin === undefined ? "" : `#origin=${encodeURIComponent(origin)}`), search: "" } },
   });
 
   return {
     flushMicrotasks,
     frame,
+    healthUrls,
     runNextTimer: async () => {
       const next = timers.entries().next().value as [number, () => void] | undefined;
       if (!next) throw new Error("Expected a scheduled wrapper timer");
@@ -68,6 +71,42 @@ function createWrapperHarness(healthResponses: HealthResponse[]) {
 }
 
 describe("OBS browser wrappers", () => {
+  test.each([
+    ["#/.//example.invalid/overlay", "/overlay"],
+    ["#%2F.%2F%2Fexample.invalid%2Foverlay", "/overlay"],
+    ["#//example.invalid/overlay", "/overlay"],
+    ["#/goal?synthetic=true", "/goal?synthetic=true"],
+  ])("keeps generic-wrapper hash routes on the validated origin: %s", async (hash, route) => {
+    const harness = createWrapperHarness([{ ok: true }], undefined, { hash, route: null });
+    await harness.flushMicrotasks();
+    expect(harness.frame.src).toBe(`http://localhost:3399${route}`);
+    expect(harness.healthUrls).toEqual([`http://localhost:3399/health?route=${encodeURIComponent(route.split("?")[0]!)}`]);
+  });
+
+  test.each([
+    ["http://localhost:4400", "http://localhost:4400"],
+    ["https://127.0.0.1:4400", "https://127.0.0.1:4400"],
+    ["http://127.0.0.2:4400", "http://127.0.0.2:4400"],
+    ["http://[::1]:4400", "http://[::1]:4400"],
+    ["http://127.1:4400", "http://127.0.0.1:4400"],
+    ["http://0x7f000001:4400", "http://127.0.0.1:4400"],
+    ["https://example.invalid", "http://localhost:3399"],
+    ["http://localhost.example.invalid:4400", "http://localhost:3399"],
+    ["http://192.168.1.2:4400", "http://localhost:3399"],
+    ["http://10.0.0.2:4400", "http://localhost:3399"],
+    ["http://0.0.0.0:4400", "http://localhost:3399"],
+    ["http://[2001:db8::1]:4400", "http://localhost:3399"],
+    ["http://127.0.0.1.example.invalid:4400", "http://localhost:3399"],
+    ["http://synthetic.local:4400", "http://localhost:3399"],
+    ["http://synthetic-user:synthetic-password@localhost:4400", "http://localhost:3399"],
+    ["file:///synthetic/preview", "http://localhost:3399"],
+  ])("admits only loopback wrapper origins: %s", async (origin, expected) => {
+    const harness = createWrapperHarness([{ ok: true }], origin);
+    await harness.flushMicrotasks();
+    expect(harness.healthUrls).toEqual([`${expected}/health?route=%2Foverlay`]);
+    expect(harness.frame.src).toBe(`${expected}/overlay`);
+  });
+
   test("shares compatibility polling while preserving source query parameters", () => {
     const wrapper = readObsFile("browser-wrapper.html");
 
@@ -111,7 +150,7 @@ describe("OBS browser wrappers", () => {
     expect(wrapper).toContain("setHealthMonitoring");
     expect(wrapper).toContain("loadFrame();");
     expect(wrapper).toContain("root.dataset.statusVisible === 'true'");
-    expect(wrapper).toContain("new URL(targetRoute, origin).toString()");
+    expect(wrapper).toContain("new URL(targetRoute, origin)");
     expect(wrapper).toContain("frame.addEventListener('load'");
     expect(wrapper).toContain("frame.getAttribute('src') === targetUrl");
     expect(wrapper).toContain("Connecting to Stream Sync...");
