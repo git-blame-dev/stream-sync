@@ -39,6 +39,8 @@ type LiveChatActions = {
 type CapturedRendererLog = {
   videoId?: string | null;
   matchedRenderers?: Array<Record<string, unknown>>;
+  parserWarnings?: unknown[];
+  responseMetadata?: { captureTraversal: { visitedNodes: number; truncated: boolean } };
 };
 type LogUnknownRendererMock = TestMockFn<
   [CapturedRendererLog],
@@ -144,6 +146,147 @@ describe("YouTube live chat unknown renderer capture", () => {
       logger,
       youtubeModule: { Parser: parserApi },
     });
+  });
+
+  test("disabled capture passes original arguments through without parsing or touching response getters", async () => {
+    let reads = 0;
+    const response = Object.defineProperty({}, "data", { get() { reads++; throw new Error("test accessor"); } });
+    const actions = createActions(response);
+    const originalExecute = actions.execute;
+    const logUnknownRenderer = createLogUnknownRendererMock();
+    installYouTubeLiveChatUnknownRendererCapture({ actions, parser: parserApi, videoId: "test-disabled", isEnabled: () => false, logUnknownRenderer });
+    const args = { continuation: "test-disabled-token", parse: true };
+    expect(await actions.execute("live_chat/get_live_chat", args)).toBe(response);
+    expect(originalExecute.mock.calls[0]?.[1]).toBe(args);
+    expect(parserApi.parseResponse).not.toHaveBeenCalled();
+    expect(logUnknownRenderer).not.toHaveBeenCalled();
+    expect(reads).toBe(0);
+  });
+
+  test("disabling during a pending raw request still parses once but does not capture", async () => {
+    let enabled = true;
+    let complete: (response: unknown) => void = () => { throw new Error("test request not started"); };
+    const actions = createActions(undefined);
+    actions.execute.mockImplementation(() => new Promise(resolve => { complete = resolve; }));
+    const parsed = createParsedResponse();
+    const handler = getParserErrorHandler(parserApi);
+    parserApi.parseResponse.mockImplementation(() => { handler({ error_type: "class_not_found", classname: "GiftMessageView" }); return parsed; });
+    const logUnknownRenderer = createLogUnknownRendererMock();
+    installYouTubeLiveChatUnknownRendererCapture({ actions, parser: parserApi, videoId: "test-pending", isEnabled: () => enabled, logUnknownRenderer });
+    const pending = actions.execute("live_chat/get_live_chat", { parse: true });
+    enabled = false;
+    complete(createGiftRawResponse());
+    expect(await pending).toBe(parsed);
+    expect(parserApi.parseResponse).toHaveBeenCalledTimes(1);
+    expect(logUnknownRenderer).not.toHaveBeenCalled();
+  });
+
+  test("bounds cyclic, deep and wide diagnostics and skips accessors while retaining shared references", async () => {
+    let reads = 0;
+    const shared = { giftMessageView: { id: "test-shared" } };
+    const raw: Record<string, unknown> = { first: shared, second: shared };
+    raw.self = raw;
+    Object.defineProperty(raw, "getter", { enumerable: true, get() { reads++; throw new Error("test accessor"); } });
+    raw.proxy = new Proxy({}, { ownKeys() { reads++; throw new Error("test proxy"); } });
+    let deep: unknown = { giftMessageView: { id: "test-too-deep" } };
+    for (let index = 0; index < 30; index++) deep = { next: deep };
+    raw.deep = deep;
+    raw.wide = Array.from({ length: 200 }, (_, index) => ({ giftMessageView: { id: `test-wide-${index}` } }));
+    const parsed = createParsedResponse();
+    const handler = getParserErrorHandler(parserApi);
+    parserApi.parseResponse.mockImplementation(() => { handler({ error_type: "class_not_found", classname: "GiftMessageView" }); return parsed; });
+    const logUnknownRenderer = createLogUnknownRendererMock();
+    const actions = createActions({ data: raw });
+    installYouTubeLiveChatUnknownRendererCapture({ actions, parser: parserApi, videoId: "test-bounded", logUnknownRenderer });
+    expect(await actions.execute("live_chat/get_live_chat", { parse: true })).toBe(parsed);
+    const entry = getLoggedRenderer(logUnknownRenderer);
+    expect(reads).toBe(0);
+    expect(entry.matchedRenderers?.length).toBeLessThanOrEqual(100);
+    expect(entry.matchedRenderers?.slice(0, 2).map(match => match.renderer)).toEqual([shared.giftMessageView, shared.giftMessageView]);
+    expect(entry).toMatchObject({ responseMetadata: { captureTraversal: { truncated: true } } });
+    expect(entry.matchedRenderers?.some(match => match.path === "$.deep.next.next.next.next.next.next.next.next.next.next.next.next.next.next.next.next.next.next.next.next.next.next.next.next.next.next.next.next.next.next.giftMessageView")).toBe(false);
+  });
+
+  test("diagnostic callback failures do not reject or repeat an otherwise parsed response", async () => {
+    const parsed = createParsedResponse();
+    const handler = getParserErrorHandler(parserApi);
+    parserApi.parseResponse.mockImplementation(() => { handler({ error_type: "class_not_found", classname: "GiftMessageView" }); return parsed; });
+    const actions = createActions(createGiftRawResponse());
+    const originalExecute = actions.execute;
+    const logUnknownRenderer = createLogUnknownRendererMock().mockRejectedValue(new Error("test diagnostic failure"));
+    installYouTubeLiveChatUnknownRendererCapture({ actions, parser: parserApi, videoId: "test-failure", logUnknownRenderer });
+    expect(await actions.execute("live_chat/get_live_chat", { parse: true })).toBe(parsed);
+    expect(originalExecute).toHaveBeenCalledTimes(1);
+    expect(parserApi.parseResponse).toHaveBeenCalledTimes(1);
+  });
+
+  test("caps total traversal nodes and warning classes with bounded paths and keys", async () => {
+    const handler = getParserErrorHandler(parserApi);
+    const parsed = createParsedResponse();
+    parserApi.parseResponse.mockImplementation(() => {
+      for (let index = 0; index < 150; index++) handler({ error_type: "class_not_found", classname: "GiftMessageView" });
+      return parsed;
+    });
+    const raw = {
+      ["test".repeat(2000)]: { giftMessageView: { id: "test-long-key" } },
+      ["k".repeat(4095)]: { giftMessageView: { id: "test-long-path" } },
+      list: Array.from({ length: 100 }, () => Array.from({ length: 100 }, () => null))
+    };
+    const actions = createActions({ data: raw });
+    const logUnknownRenderer = createLogUnknownRendererMock();
+    installYouTubeLiveChatUnknownRendererCapture({ actions, parser: parserApi, videoId: "test-budget", logUnknownRenderer });
+    expect(await actions.execute("live_chat/get_live_chat", { parse: true })).toBe(parsed);
+    const entry = getLoggedRenderer(logUnknownRenderer);
+    expect(entry.parserWarnings).toHaveLength(100);
+    expect(entry.matchedRenderers).toEqual([]);
+    expect(entry.responseMetadata?.captureTraversal).toEqual({ visitedNodes: 1000, truncated: true });
+  });
+
+  test("captures identities before concurrent requests settle and retires consumed continuation tokens", async () => {
+    const handler = getParserErrorHandler(parserApi);
+    parserApi.parseResponse.mockImplementation((data: unknown) => {
+      handler({ error_type: "class_not_found", classname: "GiftMessageView" });
+      return createParsedResponse((data as { next: string }).next);
+    });
+    const pendingResponses = new Map<string, (response: unknown) => void>();
+    const actions = createActions(undefined);
+    actions.execute.mockImplementation((_endpoint, args) => new Promise(resolve => { pendingResponses.set(args?.continuation ?? "", resolve); }));
+    const logUnknownRenderer = createLogUnknownRendererMock();
+    for (const videoId of ["test-one", "test-two"]) {
+      installYouTubeLiveChatUnknownRendererCapture({ actions, parser: parserApi, videoId, initialContinuation: `${videoId}-initial`, logUnknownRenderer });
+    }
+    const first = actions.execute("live_chat/get_live_chat", { parse: true, continuation: "test-one-initial" });
+    const second = actions.execute("live_chat/get_live_chat", { parse: true, continuation: "test-two-initial" });
+    pendingResponses.get("test-two-initial")?.({ data: { giftMessageView: {}, next: "test-two-next" } });
+    await second;
+    pendingResponses.get("test-one-initial")?.({ data: { giftMessageView: {}, next: "test-one-next" } });
+    await first;
+    expect(logUnknownRenderer.mock.calls.map(([entry]) => entry.videoId)).toEqual(["test-two", "test-one"]);
+    const retired = actions.execute("live_chat/get_live_chat", { parse: true, continuation: "test-one-initial" });
+    pendingResponses.get("test-one-initial")?.({ data: { giftMessageView: {}, next: "test-unmapped-next" } });
+    await retired;
+    expect(logUnknownRenderer.mock.calls[2]?.[0].videoId).toBeNull();
+    const next = actions.execute("live_chat/get_live_chat", { parse: true, continuation: "test-one-next" });
+    pendingResponses.get("test-one-next")?.({ data: { giftMessageView: {}, next: "test-one-final" } });
+    await next;
+    expect(logUnknownRenderer.mock.calls[3]?.[0].videoId).toBe("test-one");
+  });
+
+  test("bypasses other endpoints and unparsed or malformed SDK responses", async () => {
+    const actions = createActions({ data: {} });
+    const original = actions.execute;
+    const logUnknownRenderer = createLogUnknownRendererMock();
+    installYouTubeLiveChatUnknownRendererCapture({ actions, parser: parserApi, videoId: "test-pass-through", logUnknownRenderer });
+    for (const [endpoint, args] of [["test/other", { parse: true }], ["live_chat/get_live_chat", { parse: false }], ["live_chat/get_live_chat", undefined]] as const) {
+      await actions.execute(endpoint, args);
+      expect(original.mock.calls.at(-1)?.[1]).toBe(args);
+    }
+    original.mockResolvedValueOnce({ test: "not a raw response" });
+    expect(await actions.execute("live_chat/get_live_chat_replay", { parse: true })).toEqual({ test: "not a raw response" });
+    expect(parserApi.parseResponse).not.toHaveBeenCalled();
+    installYouTubeLiveChatUnknownRendererCapture({ actions, parser: parserApi, videoId: "test-pass-through", isEnabled: () => { throw new Error("test predicate failure"); }, logUnknownRenderer });
+    await actions.execute("live_chat/get_live_chat", { parse: true });
+    expect(parserApi.parseResponse).not.toHaveBeenCalled();
   });
 
   test("re-parses raw live chat responses and logs matched unknown renderers", async () => {

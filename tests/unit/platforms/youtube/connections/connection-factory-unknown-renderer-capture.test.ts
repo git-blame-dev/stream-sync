@@ -207,6 +207,7 @@ describe('YouTube connection factory unknown renderer capture wiring', () => {
         const actions: LiveChatActions = {
             execute: createMockFn<[string, Record<string, unknown>?], Promise<unknown>>().mockResolvedValue(rawResponse)
         };
+        const originalExecute = actions.execute;
         const liveChat = { id: 'test-live-chat-default-installer' };
         const info = {
             getLiveChat: createMockFn().mockResolvedValue(liveChat),
@@ -255,11 +256,14 @@ describe('YouTube connection factory unknown renderer capture wiring', () => {
         );
 
         platform.config = { dataLoggingEnabled: false };
-        await actions.execute('live_chat/get_live_chat', {
+        const disabledArgs = {
             continuation: 'next-continuation',
             parse: true
-        });
+        };
+        await expect(actions.execute('live_chat/get_live_chat', disabledArgs)).resolves.toBe(rawResponse);
 
         expect(platform.logRawPlatformData).toHaveBeenCalledTimes(1);
+        expect(parser.parseResponse).toHaveBeenCalledTimes(1);
+        expect(originalExecute).toHaveBeenLastCalledWith('live_chat/get_live_chat', disabledArgs);
     });
 });

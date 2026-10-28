@@ -141,6 +141,7 @@ function createYouTubeConnectionFactory(options: YouTubeConnectionFactoryOptions
             installYouTubeLiveChatUnknownRendererCapture({
                 ...captureOptions,
                 parser,
+                isEnabled: () => platform.config.dataLoggingEnabled === true,
                 logUnknownRenderer: async (entry) => {
                     if (platform.config.dataLoggingEnabled !== true) {
                         return;
