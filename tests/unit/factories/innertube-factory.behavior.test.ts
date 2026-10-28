@@ -176,6 +176,31 @@ describe("InnertubeFactory behavior", () => {
     ).toThrow("InnertubeFactory importer must be a function");
   });
 
+  test("failed imports are evicted and retried", async () => {
+    let attempts = 0;
+    InnertubeFactory.configure({ importer: async () => {
+      if (++attempts === 1) throw new Error("synthetic import failure");
+      return { Innertube: { create: async () => ({ id: "retry" }) } };
+    } });
+    await expect(InnertubeFactory.createInstance()).rejects.toThrow("synthetic import failure");
+    expect(await InnertubeFactory.createInstance()).toEqual({ id: "retry" });
+    expect(attempts).toBe(2);
+  });
+
+  test("old import completion cannot overwrite a configured new class", async () => {
+    const oldClass = { create: async () => ({ id: "old" }) };
+    const newClass = { create: async () => ({ id: "new" }) };
+    let release!: (module: { Innertube: typeof oldClass }) => void;
+    InnertubeFactory.configure({ importer: () => new Promise(resolve => { release = resolve; }) });
+    const old = InnertubeFactory.getLazyInnertubeClass();
+    await Promise.resolve();
+    InnertubeFactory.configure({ importer: async () => ({ Innertube: newClass }) });
+    expect(await InnertubeFactory.getLazyInnertubeClass()).toBe(newClass);
+    release({ Innertube: oldClass });
+    expect(await old).toBe(oldClass);
+    expect(await InnertubeFactory.getLazyInnertubeClass()).toBe(newClass);
+  });
+
   test("installs parser log adapter when parser API is available", async () => {
     let installCalls = 0;
     const parserApi = {

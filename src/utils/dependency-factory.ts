@@ -599,8 +599,15 @@ class DependencyFactory {
     
     _createInnertubeService(factory: typeof InnertubeFactory, logger: AppLogger, options: DependencyFactoryOptions = {}) {
         const serviceFactory: ConstructorParameters<typeof InnertubeService>[0] = {
-            createWithTimeout: async (timeoutMs?: number) => {
-                const instance = await factory.createWithTimeout(timeoutMs);
+            createWithConfig: async (config?: Record<string, unknown>) => {
+                const instance = await factory.createWithConfig(config);
+                if (!isInnertubeInfoClient(instance)) {
+                    throw new Error('InnertubeFactory returned an invalid client');
+                }
+                return instance;
+            },
+            createWithTimeout: async (timeoutMs?: number, config?: Record<string, unknown>) => {
+                const instance = await factory.createWithTimeout(timeoutMs, config);
                 if (!isInnertubeInfoClient(instance)) {
                     throw new Error('InnertubeFactory returned an invalid client');
                 }

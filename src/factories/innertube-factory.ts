@@ -35,7 +35,11 @@ class InnertubeFactory {
     static async _getYouTubeModule() {
         const importer = this._importer || (() => import('youtubei.js') as Promise<YouTubeModuleLike>);
         if (!this._importPromise) {
-            this._importPromise = importer();
+            const pending = Promise.resolve().then(importer);
+            this._importPromise = pending;
+            void pending.catch(() => {
+                if (this._importPromise === pending) this._importPromise = null;
+            });
         }
 
         const youtubei = await this._importPromise;
@@ -53,9 +57,11 @@ class InnertubeFactory {
             return this._innertubeClassCache;
         }
 
-        const youtubei = await this._getYouTubeModule();
-        this._innertubeClassCache = youtubei.Innertube;
-        return this._innertubeClassCache;
+        const pending = this._getYouTubeModule();
+        const importIdentity = this._importPromise;
+        const youtubei = await pending;
+        if (this._importPromise === importIdentity) this._innertubeClassCache = youtubei.Innertube;
+        return youtubei.Innertube;
     }
 
     static async getLazyYouTubeModule() {
