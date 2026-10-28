@@ -78,7 +78,7 @@ jobs:
             [ -n "$path" ] || continue
 
             case "$path" in
-              .env.example|config.example.ini|bun.lock|bunfig.toml|package.json|src/*|gui/*|obs/*|scripts/release/*|tsconfig*.json)
+              .env.example|config.example.ini|bun.lock|bunfig.toml|package.json|patches/*|src/*|gui/*|obs/*|scripts/release/*|tsconfig*.json)
                 has_release_artifact_input_change=true
                 ;;
             esac
@@ -278,7 +278,10 @@ jobs:
 
       - name: Archive Windows package
         if: matrix.script == 'build:release:windows'
-        run: cd dist/release && zip -r stream-sync-windows-x64.zip stream-sync-windows-x64
+        run: |
+          cd dist/release
+          rm -f stream-sync-windows-x64.zip
+          zip -r stream-sync-windows-x64.zip stream-sync-windows-x64
 
       - name: Upload release package
         uses: actions/upload-artifact@v7

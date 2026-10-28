@@ -89,7 +89,7 @@ jobs:
             [ -n "$path" ] || continue
 
             case "$path" in
-              .env.example|config.example.ini|bun.lock|bunfig.toml|package.json|src/*|gui/*|obs/*|scripts/release/*|tsconfig*.json)
+              .env.example|config.example.ini|bun.lock|bunfig.toml|package.json|patches/*|src/*|gui/*|obs/*|scripts/release/*|tsconfig*.json)
                 has_release_relevant_change=true
                 ;;
             esac
@@ -187,6 +187,12 @@ jobs:
           cd dist/release
           sha256sum "stream-sync-${VERSION}-linux-x64.tar.gz" "stream-sync-${VERSION}-windows-x64.zip" > SHA256SUMS
 
+      - name: Set up Bun for package verification
+        if: steps.scope.outputs.publish == 'true' && steps.duplicate.outputs.publish == 'true'
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.3.13'
+
       - name: Verify release assets
         if: steps.scope.outputs.publish == 'true' && steps.duplicate.outputs.publish == 'true'
         env:
@@ -194,26 +200,12 @@ jobs:
         run: |
           set -euo pipefail
 
-          tar -tzf "dist/release/stream-sync-${VERSION}-linux-x64.tar.gz" > linux-files.txt
-          unzip -l "dist/release/stream-sync-${VERSION}-windows-x64.zip" > windows-files.txt
-
-          grep -q 'stream-sync-linux-x64/stream-sync$' linux-files.txt
-          grep -q 'stream-sync-linux-x64/config.example.ini$' linux-files.txt
-          grep -q 'stream-sync-linux-x64/.env.example$' linux-files.txt
-          grep -q 'stream-sync-linux-x64/gui/dist/' linux-files.txt
-          grep -q 'stream-sync-linux-x64/obs/overlay.html' linux-files.txt
-          grep -q 'stream-sync-linux-x64/obs/dock.html' linux-files.txt
-          grep -q 'stream-sync-linux-x64/obs/browser-wrapper.js' linux-files.txt
-          grep -q 'stream-sync-linux-x64/obs/browser-wrapper.css' linux-files.txt
-
-          grep -q 'stream-sync-windows-x64/stream-sync.exe' windows-files.txt
-          grep -q 'stream-sync-windows-x64/config.example.ini' windows-files.txt
-          grep -q 'stream-sync-windows-x64/.env.example' windows-files.txt
-          grep -q 'stream-sync-windows-x64/gui/dist/' windows-files.txt
-          grep -q 'stream-sync-windows-x64/obs/overlay.html' windows-files.txt
-          grep -q 'stream-sync-windows-x64/obs/dock.html' windows-files.txt
-          grep -q 'stream-sync-windows-x64/obs/browser-wrapper.js' windows-files.txt
-          grep -q 'stream-sync-windows-x64/obs/browser-wrapper.css' windows-files.txt
+          verification_root="$(mktemp -d)"
+          trap 'rm -rf "$verification_root"' EXIT
+          tar -xzf "dist/release/stream-sync-${VERSION}-linux-x64.tar.gz" -C "$verification_root"
+          unzip -q "dist/release/stream-sync-${VERSION}-windows-x64.zip" -d "$verification_root"
+          bun scripts/release/build-artifact.ts --verify linux-x64 "$verification_root/stream-sync-linux-x64"
+          bun scripts/release/build-artifact.ts --verify windows-x64 "$verification_root/stream-sync-windows-x64"
 
       - name: Generate release notes
         if: steps.scope.outputs.publish == 'true' && steps.duplicate.outputs.publish == 'true'
