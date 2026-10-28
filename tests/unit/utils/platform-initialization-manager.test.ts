@@ -55,7 +55,12 @@ describe("PlatformInitializationManager", () => {
 
     const proceed = manager.beginInitialization();
     expect(proceed).toBe(false);
-    expect(manager.getInitializationState().totalAttempts).toBe(2);
+    expect(manager.getInitializationState().totalAttempts).toBe(1);
+    expect(manager.getStatistics().lastInitialization).toMatchObject({
+      success: false,
+      attempt: 1,
+      error: "Maximum initialization attempts (1) exceeded",
+    });
     expect(mockHandler.logOperationalError).toHaveBeenCalled();
   });
 

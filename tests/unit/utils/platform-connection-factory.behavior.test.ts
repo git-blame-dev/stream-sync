@@ -1,4 +1,5 @@
 import { describe, test, expect, afterEach } from "bun:test";
+import { EventEmitter } from "node:events";
 import { noOpLogger } from "../../helpers/mock-factories";
 import { PlatformConnectionFactory } from "../../../src/utils/platform-connection-factory";
 import {
@@ -75,6 +76,78 @@ describe("platform-connection-factory behavior", () => {
     const connection = conn as Record<string, unknown>;
     expect(typeof connection.on).toBe("function");
     expect(typeof connection.removeAllListeners).toBe("function");
+    const emitter = connection as unknown as EventEmitter;
+    let delivered = 0;
+    emitter.on("synthetic-event", () => { delivered++; });
+    emitter.emit("synthetic-event");
+    expect(delivered).toBe(1);
+    emitter.removeAllListeners();
+    emitter.emit("synthetic-event");
+    expect(delivered).toBe(1);
+  });
+
+  test.each(["on", "emit", "removeAllListeners", "once"])("rejects partial native emitter method %s before padding", (method) => {
+    const factory = new PlatformConnectionFactory(noOpLogger);
+    expect(() => factory.createConnection("tiktok", { username: "synthetic-user" }, {
+      logger: noOpLogger,
+      TikTokWebSocketClient: createTikTokClientFactory((connection) => {
+        connection.connect = () => {};
+        connection[method] = () => {};
+      }),
+    })).toThrow("incomplete EventEmitter interface");
+  });
+
+  test("preserves complete native emitter methods and actual delivery", () => {
+    const factory = new PlatformConnectionFactory(noOpLogger);
+    const native = new EventEmitter();
+    const originalOn = native.on;
+    const originalEmit = native.emit;
+    const originalRemove = native.removeAllListeners;
+    const connection = factory.createConnection("tiktok", { username: "synthetic-user" }, {
+      logger: noOpLogger,
+      TikTokWebSocketClient: class {
+        constructor() { return Object.assign(native, { connect: () => {} }); }
+      } as unknown as TikTokWebSocketClient,
+    }) as EventEmitter;
+    expect(connection).toBe(native);
+    expect(connection.on).toBe(originalOn);
+    expect(connection.emit).toBe(originalEmit);
+    expect(connection.removeAllListeners).toBe(originalRemove);
+    let delivered = false;
+    connection.on("synthetic-event", () => { delivered = true; });
+    connection.emit("synthetic-event");
+    expect(delivered).toBe(true);
+  });
+
+  test.each([undefined, 1, "", " ", "@", " @@ "])("rejects invalid username %s before construction", (username) => {
+    const factory = new PlatformConnectionFactory(noOpLogger);
+    let constructions = 0;
+    expect(() => factory.createConnection("tiktok", { username }, {
+      logger: noOpLogger,
+      TikTokWebSocketClient: createTikTokClientFactory((connection) => { constructions++; connection.connect = () => {}; }),
+    })).toThrow(/username.*required/i);
+    expect(constructions).toBe(0);
+  });
+
+  test("trims before stripping all leading @ markers", () => {
+    const factory = new PlatformConnectionFactory(noOpLogger);
+    let constructedUsername = "";
+    factory.createConnection("tiktok", { username: "  @@ synthetic-user  " }, {
+      logger: noOpLogger,
+      TikTokWebSocketClient: createTikTokClientFactory((connection, username) => { constructedUsername = username; connection.connect = () => {}; }),
+    });
+    expect(constructedUsername).toBe("synthetic-user");
+  });
+
+  test.each(["abc", "synthetic-key-value-long"])("logs API key presence without fragments for %s", (apiKey) => {
+    const logger = createLogCollector();
+    const factory = new PlatformConnectionFactory(logger);
+    secrets.tiktok.apiKey = apiKey;
+    expect(factory.buildTikTokConnectionConfig({}).apiKey).toBe(apiKey);
+    expect(logger.entries.filter((entry) => entry.message.includes("EulerStream API key"))).toEqual([
+      { level: "debug", message: "EulerStream API key configured" },
+    ]);
+    expect(logger.entries.some((entry) => entry.message.includes(apiKey.slice(0, 3)))).toBe(false);
   });
 
   test("throws on missing inputs", () => {

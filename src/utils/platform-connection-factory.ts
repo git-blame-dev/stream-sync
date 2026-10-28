@@ -51,6 +51,11 @@ function ensureEmitterInterface(connection: unknown, logger: FactoryLogger, plat
         return mutableConnection;
     }
 
+    if (['on', 'once', 'off', 'emit', 'removeListener', 'removeAllListeners', 'prependListener', 'prependOnceListener', 'listenerCount', 'eventNames']
+        .some(method => isCallable(mutableConnection[method]))) {
+        throw new Error(`${platform} connection has an incomplete EventEmitter interface`);
+    }
+
     const emitter = new EventEmitter();
     const emitterMethods: EmitterMethodName[] = [
         'on',
@@ -157,8 +162,10 @@ class PlatformConnectionFactory {
     }
 
     createTikTokConnection(config: Record<string, unknown>, dependencies: PlatformDependencies): unknown {
-        const rawUsername = typeof config.username === 'string' ? config.username : '';
-        const cleanUsername = rawUsername.replace(/^@/, '').trim();
+        if (typeof config.username !== 'string') throw new Error('TikTok username is required and must be a non-empty string');
+        const rawUsername = config.username;
+        const cleanUsername = rawUsername.trim().replace(/^@+/, '').trim();
+        if (!cleanUsername) throw new Error('TikTok username is required and must not be blank or only @ markers');
         if (cleanUsername !== rawUsername) {
             this.logger.debug(`TikTok username cleaned from '${rawUsername}' to '${cleanUsername}'`, 'tiktok');
         }
@@ -190,14 +197,14 @@ class PlatformConnectionFactory {
                 }
             }
 
-            const optionalMethods = ['disconnect', 'fetchIsLive', 'waitUntilLive', 'on', 'removeAllListeners'];
+            ensureEmitterInterface(connection, this.logger, 'tiktok');
+            const optionalMethods = ['disconnect', 'fetchIsLive', 'waitUntilLive'];
             for (const method of optionalMethods) {
                 if (typeof connection[method] !== 'function') {
                     connection[method] = () => {};
                 }
             }
 
-            ensureEmitterInterface(connection, this.logger, 'tiktok');
             return connection;
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
@@ -216,10 +223,7 @@ class PlatformConnectionFactory {
         };
 
         if (apiKey) {
-            const maskedKey = apiKey.length <= 12
-                ? `${apiKey.slice(0, 5)}...`
-                : `${apiKey.slice(0, 10)}...`;
-            this.logger.debug(`Using EulerStream API key: ${maskedKey}`, 'tiktok');
+            this.logger.debug('EulerStream API key configured', 'tiktok');
         } else {
             this.logger.warn('No API key configured - WebSocket may fail', 'tiktok');
         }

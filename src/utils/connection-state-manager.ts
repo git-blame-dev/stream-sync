@@ -1,4 +1,5 @@
 import { createPlatformErrorHandler } from './platform-error-handler';
+import { sanitizeLogText } from '../core/logger/safe-log-serializer';
 import {
     validateConnectionFactoryInterface,
     validateConnectionStateManagerDependencies
@@ -31,19 +32,10 @@ function getErrorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
 }
 
-function hasCatchMethod(value: unknown): value is { catch: (handler: () => void) => void } {
-    return !!value
-        && typeof value === 'object'
-        && typeof (value as { catch?: unknown }).catch === 'function';
-}
-
 function getErrorMessageFromUnknown(error: unknown): string | null {
-    if (!error || typeof error !== 'object') {
-        return null;
-    }
-
-    const message = (error as { message?: unknown }).message;
-    return typeof message === 'string' ? message : null;
+    const candidate = error && typeof error === 'object' ? (error as { message?: unknown }).message : null;
+    const message = typeof error === 'string' ? error : typeof candidate === 'string' ? candidate : null;
+    return message === null ? null : sanitizeLogText(message).slice(0, 4096);
 }
 
 class ConnectionStateManager {
@@ -57,6 +49,7 @@ class ConnectionStateManager {
     connectionTime: number;
     config: unknown;
     dependencies: DependenciesLike | null;
+    private connectionEpoch = 0;
 
     constructor(platform: string, connectionFactory: ConnectionFactoryLike) {
         this.platform = platform;
@@ -110,6 +103,7 @@ class ConnectionStateManager {
             }
 
             this.connection = createdConnection;
+            this.connectionEpoch++;
             return this.connection;
         } catch (error) {
             this.lastError = error;
@@ -139,6 +133,7 @@ class ConnectionStateManager {
 
     setState(newState: ConnectionState): void {
         const oldState = this.state;
+        this.connectionEpoch++;
         this.state = newState;
 
         if (newState === 'connected') {
@@ -184,28 +179,38 @@ class ConnectionStateManager {
     }
 
     cleanup(): void {
-        if (this.connection) {
-            try {
-                if (typeof this.connection.removeAllListeners === 'function') {
-                    this.connection.removeAllListeners();
-                }
-                if (typeof this.connection.disconnect === 'function') {
-                    const result = this.connection.disconnect();
-                    if (hasCatchMethod(result)) {
-                        result.catch(() => {});
-                    }
-                }
-            } catch (error) {
-                this.logger?.debug(`Error during connection cleanup for ${this.platform}: ${getErrorMessage(error)}`, this.platform);
-            }
-        }
-
+        const connection = this.connection;
+        const epoch = ++this.connectionEpoch;
         this.connection = null;
         this.state = 'disconnected';
         this.connectionTime = 0;
-        this.lastError = null;
+        if (connection) this.lastError = null;
 
-        this.logger?.debug(`Connection state manager cleaned up for ${this.platform}`, this.platform);
+        let failed = false;
+        const reportFailure = (error: unknown, stage: 'listener-removal' | 'disconnect'): void => {
+            if (failed) return;
+            failed = true;
+            if (this.connectionEpoch === epoch && this.connection === null && this.state === 'disconnected') this.lastError = error;
+            try {
+                const message = stage === 'listener-removal'
+                    ? 'Connection cleanup failed (listener-removal)'
+                    : 'Connection cleanup failed (disconnect)';
+                this.errorHandler?.logOperationalError(message, 'connection-state-manager', {
+                    error: getErrorMessageFromUnknown(error) ?? 'Unknown error'
+                });
+            } catch { /* Reporting cannot interrupt independent cleanup or reject its observer. */ }
+        };
+        if (connection) {
+            try { connection.removeAllListeners?.(); }
+            catch (error) { reportFailure(error, 'listener-removal'); }
+            try {
+                const result = connection.disconnect?.();
+                void Promise.resolve(result).catch(error => reportFailure(error, 'disconnect'));
+            } catch (error) { reportFailure(error, 'disconnect'); }
+        }
+
+        try { this.logger?.debug(`Connection state manager cleaned up for ${this.platform}`, this.platform); }
+        catch { /* Logical retirement is already complete; diagnostics are not resource ownership. */ }
     }
 
     getConnectionInfo(): {

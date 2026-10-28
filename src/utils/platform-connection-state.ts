@@ -7,6 +7,10 @@ type ConnectionStateInput = {
     username?: string;
 };
 
+function normalizeIdentity(value: unknown): string | undefined {
+    return typeof value === 'string' ? value.trim() || undefined : undefined;
+}
+
 class ConnectionState {
     isConnected: boolean;
     platform: string | undefined;
@@ -15,10 +19,10 @@ class ConnectionState {
     timestamp: string;
 
     constructor({ isConnected, platform, channel, username }: ConnectionStateInput) {
-        this.isConnected = !!isConnected;
+        this.isConnected = isConnected === true;
         this.platform = platform;
-        this.channel = channel;
-        this.username = username;
+        this.channel = normalizeIdentity(channel);
+        this.username = normalizeIdentity(username);
         this.timestamp = getSystemTimestampISO();
     }
 

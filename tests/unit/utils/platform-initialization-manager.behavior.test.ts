@@ -39,6 +39,7 @@ describe("PlatformInitializationManager behavior edges", () => {
     manager.markInitializationSuccess();
 
     expect(manager.beginInitialization()).toBe(false);
+    expect(manager.getStatistics().initializationAttempts).toBe(1);
     manager.configure({ allowReinitialization: true });
     expect(manager.beginInitialization()).toBe(true);
   });
@@ -50,6 +51,12 @@ describe("PlatformInitializationManager behavior edges", () => {
     expect(manager.beginInitialization()).toBe(true);
     expect(manager.beginInitialization()).toBe(false);
     expect(sharedHandler.logOperationalError).toHaveBeenCalled();
+    expect(manager.getInitializationState()).toMatchObject({
+      totalAttempts: 1,
+      attempt: 1,
+      success: false,
+      error: "Maximum initialization attempts (1) exceeded",
+    });
   });
 
   it("routes failures with errors through handleEventProcessingError and records state", () => {
@@ -78,7 +85,7 @@ describe("PlatformInitializationManager behavior edges", () => {
     expect(sharedHandler.logOperationalError).toHaveBeenCalled();
   });
 
-  it("records unknown-error state when failure is not an Error instance", () => {
+  it("retains a string failure message without inventing Unknown error", () => {
     const manager = createManager("youtube");
 
     manager.beginInitialization();
@@ -87,7 +94,7 @@ describe("PlatformInitializationManager behavior edges", () => {
     const state = manager.getInitializationState();
     expect(state.success).toBe(false);
     expect(state.stage).toBe("config");
-    expect(state.error).toBe("Unknown error");
+    expect(state.error).toBe("string failure");
     expect(sharedHandler.logOperationalError).toHaveBeenCalled();
   });
 
@@ -152,7 +159,7 @@ describe("PlatformInitializationManager behavior edges", () => {
 
     expect(manager.beginInitialization()).toBe(false);
     const stats = manager.getStatistics();
-    expect(stats.initializationAttempts).toBe(2);
+    expect(stats.initializationAttempts).toBe(1);
     expect(stats.initializationCount).toBe(0);
     expect(stats.isInitialized).toBe(false);
     expect(sharedHandler.logOperationalError).toHaveBeenCalled();
@@ -205,6 +212,28 @@ describe("PlatformInitializationManager behavior edges", () => {
     expect(() => new PlatformInitializationManager("tiktok", undefined)).toThrow(
       "PlatformInitializationManager requires a logger",
     );
+  });
+
+  it("validates all four logger methods before constructing its error handler", () => {
+    let constructed = false;
+    expect(() => new PlatformInitializationManager("tiktok", { debug: () => {}, warn: () => {}, error: () => {} }, {
+      createPlatformErrorHandler: () => { constructed = true; return sharedHandler; },
+    })).toThrow(/info/);
+    expect(constructed).toBe(false);
+  });
+
+  it("bounds and sanitizes string failure metadata without serializing provider objects", () => {
+    const manager = createManager("tiktok");
+    manager.beginInitialization();
+    manager.markInitializationFailure(`Authorization: Bearer synthetic-init-secret ${"x".repeat(5000)}`);
+    const summary = manager.getInitializationState().error!;
+    expect(summary).not.toContain("synthetic-init-secret");
+    expect(summary.length).toBeLessThanOrEqual(4096);
+    const payload = { toString: () => { throw new Error("Do not stringify provider objects"); } };
+    expect(() => manager.markInitializationFailure(payload)).not.toThrow();
+    expect(manager.getInitializationState().error).toBe("Unknown error");
+    manager.markInitializationFailure({ ...payload, message: "synthetic structured message" });
+    expect(manager.getInitializationState().error).toBe("synthetic structured message");
   });
 
   it("skips initialization when platform disabled in config and records prevention", () => {
@@ -306,7 +335,7 @@ describe("PlatformInitializationManager behavior edges", () => {
     expect(String(messageArg)).toContain("Initialization failed");
     expect(platformArg).toBe("youtube");
     expect(payloadArg).toEqual({ stage: "nonerror" });
-    expect(manager.getInitializationState().error).toBe("Unknown error");
+    expect(manager.getInitializationState().error).toBe("string failure");
   });
 
   it("uses default error-handler context when platform name is missing", () => {
@@ -343,6 +372,7 @@ describe("PlatformInitializationManager behavior edges", () => {
 
   it("computes success rate in statistics", () => {
     const manager = createManager("youtube");
+    manager.configure({ allowReinitialization: true });
 
     manager.beginInitialization();
     manager.markInitializationSuccess();

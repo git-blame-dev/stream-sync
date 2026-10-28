@@ -1,5 +1,7 @@
 import { createPlatformErrorHandler } from './platform-error-handler';
 import { getSystemTimestampISO } from './timestamp';
+import { validateLoggerInterface } from './dependency-validator';
+import { sanitizeLogText } from '../core/logger/safe-log-serializer';
 
 type LoggerLike = {
     debug: (message: string, scope?: string, payload?: unknown) => void;
@@ -26,16 +28,9 @@ type InitializationConfig = {
 };
 
 function resolveErrorMessage(error: unknown): string {
-    if (error instanceof Error) {
-        return error.message;
-    }
-
-    const candidate = error as { message?: unknown } | null;
-    if (candidate && typeof candidate.message === 'string') {
-        return candidate.message;
-    }
-
-    return 'Unknown error';
+    const candidate = error && typeof error === 'object' ? (error as { message?: unknown }).message : null;
+    const message = typeof error === 'string' ? error : typeof candidate === 'string' ? candidate : 'Unknown error';
+    return sanitizeLogText(message).slice(0, 4096);
 }
 
 class PlatformInitializationManager {
@@ -55,6 +50,7 @@ class PlatformInitializationManager {
         if (!logger || typeof (logger as { error?: unknown }).error !== 'function') {
             throw new Error('PlatformInitializationManager requires a logger');
         }
+        validateLoggerInterface(logger);
 
         this.logger = logger as LoggerLike;
         this._createPlatformErrorHandler = deps.createPlatformErrorHandler ?? createPlatformErrorHandler;
@@ -87,8 +83,6 @@ class PlatformInitializationManager {
             this.initializationState = {};
         }
 
-        this.initializationAttempts += 1;
-
         if (this.isInitialized() && !forceReinitialize && !this.allowReinitialization) {
             this.preventedReinitializations += 1;
             this.logger.warn(
@@ -96,13 +90,17 @@ class PlatformInitializationManager {
                 this.platformName
             );
             this.logger.debug(
-                `Prevented reinitialization attempt ${this.initializationAttempts}`,
+                `Prevented reinitialization attempt ${this.preventedReinitializations}`,
                 this.platformName
             );
             return false;
         }
 
-        if (this.initializationAttempts > this.maxAttempts) {
+        if (this.initializationAttempts >= this.maxAttempts) {
+            this.initializationState = {
+                timestamp: getSystemTimestampISO(), success: false, attempt: this.initializationAttempts,
+                error: `Maximum initialization attempts (${this.maxAttempts}) exceeded`
+            };
             this.handleInitializationError(
                 `Maximum initialization attempts (${this.maxAttempts}) exceeded`,
                 null,
@@ -111,6 +109,7 @@ class PlatformInitializationManager {
             return false;
         }
 
+        this.initializationAttempts += 1;
         this.logger.info(
             `Beginning initialization attempt ${this.initializationAttempts}`,
             this.platformName
