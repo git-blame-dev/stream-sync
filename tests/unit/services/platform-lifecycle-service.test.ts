@@ -721,6 +721,77 @@ describe("PlatformLifecycleService", () => {
   });
 
   describe("Platform Instance Creation", () => {
+    it("retires local detection when diagnostics fail between dependency acquisition and construction", async () => {
+      const failure = new Error("synthetic construction diagnostic failure");
+      let stopped = false;
+      const lifecycle = new PlatformLifecycleService({ logger: { ...noOpLogger, debug: message => {
+        if (message.includes("platform instance created via factory")) throw failure;
+      } }, dependencyFactory: { createYoutubeDependencies: () => ({
+        streamDetectionService: { cleanup: async () => { stopped = true; } },
+      }) } });
+      await expect(lifecycle.createPlatformInstance("youtube", createPlatformConstructor(), {})).rejects.toBe(failure);
+      expect(stopped).toBe(true);
+    });
+
+    it("retires local detection for malformed instances without cleanup, but not for healthy instances", async () => {
+      let stopped = 0;
+      const lifecycle = new PlatformLifecycleService({ logger: noOpLogger,
+        dependencyFactory: { createYoutubeDependencies: () => ({ streamDetectionService: { cleanup: async () => { stopped += 1; } } }) } });
+      class MalformedPlatform {}
+      await expect(lifecycle.createPlatformInstance("youtube", MalformedPlatform as unknown as PlatformConstructor, {})).rejects.toThrow("missing required methods: cleanup, initialize, on");
+      expect(stopped).toBe(1);
+      const healthy = createDefaultPlatformInstance();
+      const HealthyPlatform = createPlatformConstructor(() => healthy);
+      expect(await lifecycle.createPlatformInstance("youtube", HealthyPlatform, {})).toBeInstanceOf(HealthyPlatform);
+      expect(stopped).toBe(1);
+      expect(healthy.cleanup).not.toHaveBeenCalled();
+    });
+
+    it("awaits captured malformed instance cleanup and retires its local detector despite cleanup/reporting faults", async () => {
+      const entered = createDeferred();
+      const release = createDeferred();
+      let detectorStopped = false;
+      const replacement = createDefaultPlatformInstance();
+      const detector = { cleanup: async () => { detectorStopped = true; throw new Error("synthetic detection cleanup fault"); } };
+      const lifecycle = new PlatformLifecycleService({ logger: noOpLogger,
+        dependencyFactory: { createYoutubeDependencies: () => ({ streamDetectionService: detector }) } });
+      lifecycle.platforms.youtube = replacement;
+      lifecycle._handleLifecycleError = () => { throw new Error("synthetic diagnostic fault"); };
+      class MalformedPlatform {
+        async cleanup() {
+          entered.resolve();
+          await release.promise;
+          throw new Error("synthetic cleanup fault");
+        }
+      }
+      let completed = false;
+      const outcome = lifecycle.createPlatformInstance("youtube", MalformedPlatform as unknown as PlatformConstructor, {})
+        .catch(error => { completed = true; return error; });
+      await entered.promise;
+      expect(completed).toBe(false);
+      release.resolve();
+      expect((await outcome).message).toContain("missing required methods: initialize, on");
+      expect(detectorStopped).toBe(true);
+      expect(lifecycle.platforms.youtube).toBe(replacement);
+      expect(replacement.cleanup).not.toHaveBeenCalled();
+    });
+
+    it("retires constructor-local detection without disposing a borrowed root or shared custom detector", async () => {
+      const failure = new Error("synthetic constructor failure");
+      let localCleanup = 0;
+      let borrowedCleanup = 0;
+      const borrowed = { cleanup: async () => { borrowedCleanup += 1; } };
+      const lifecycle = new PlatformLifecycleService({ logger: noOpLogger,
+        sharedDependencies: { streamDetectionService: borrowed },
+        dependencyFactory: { createYoutubeDependencies: () => ({ streamDetectionService: { cleanup: async () => { localCleanup += 1; } } }) } });
+      class ThrowingPlatform { constructor() { throw failure; } }
+      await expect(lifecycle.createPlatformInstance("youtube", ThrowingPlatform as unknown as PlatformConstructor, {})).rejects.toBe(failure);
+      expect(localCleanup).toBe(1);
+      lifecycle.dependencyFactory = { createYoutubeDependencies: () => ({ streamDetectionService: borrowed }) };
+      await expect(lifecycle.createPlatformInstance("youtube", ThrowingPlatform as unknown as PlatformConstructor, {})).rejects.toBe(failure);
+      expect(borrowedCleanup).toBe(0);
+    });
+
     it("should create platform instance without DI when no factory", async () => {
       const mockPlatformClass = createPlatformConstructor();
       const config = { test: "config" };

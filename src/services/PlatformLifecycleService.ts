@@ -443,27 +443,57 @@ class PlatformLifecycleService {
             throw new Error(`Invalid PlatformClass for ${platformName}`);
         }
 
-        let instance;
-
-        if (!this.dependencyFactory) {
-            this.logger.warn(`No dependency factory available, creating ${platformName} without DI`, 'PlatformLifecycleService');
-            instance = new PlatformClass(config);
-        } else {
-            const factoryMethod = this.getDependencyFactoryMethod(platformName);
-            if (!factoryMethod) {
-                const factoryMethodName = this.getDependencyFactoryMethodName(platformName);
-                this.logger.debug(`No factory method ${factoryMethodName}, creating ${platformName} without DI`, 'PlatformLifecycleService');
+        let instance: PlatformInstance | undefined;
+        let localYoutubeDetection: unknown;
+        try {
+            if (!this.dependencyFactory) {
+                this.logger.warn(`No dependency factory available, creating ${platformName} without DI`, 'PlatformLifecycleService');
                 instance = new PlatformClass(config);
             } else {
-                const dependencies = factoryMethod.call(this.dependencyFactory, config, this.sharedDependencies);
+                const factoryMethod = this.getDependencyFactoryMethod(platformName);
+                if (!factoryMethod) {
+                    const factoryMethodName = this.getDependencyFactoryMethodName(platformName);
+                    this.logger.debug(`No factory method ${factoryMethodName}, creating ${platformName} without DI`, 'PlatformLifecycleService');
+                    instance = new PlatformClass(config);
+                } else {
+                    const dependencies = factoryMethod.call(this.dependencyFactory, config, this.sharedDependencies);
+                    if (platformName === 'youtube' && dependencies && typeof dependencies === 'object' && 'streamDetectionService' in dependencies) {
+                        const detector = dependencies.streamDetectionService;
+                        if (detector !== this.sharedDependencies.streamDetectionService) localYoutubeDetection = detector;
+                    }
 
-                this.logger.debug(`${platformName} platform instance created via factory`, 'PlatformLifecycleService');
-                instance = new PlatformClass(config, dependencies);
+                    this.logger.debug(`${platformName} platform instance created via factory`, 'PlatformLifecycleService');
+                    instance = new PlatformClass(config, dependencies);
+                }
+            }
+
+            assertPlatformInterface(platformName, instance);
+            return instance;
+        } catch (error) {
+            await this.retireProvisionalPlatformResource(platformName, 'instance', instance);
+            // A failed constructor cannot retire its fresh detection domain. Even
+            // malformed instance cleanup may omit it or fail before reaching it.
+            // Domain cleanup is idempotent; the borrowed root SDK owner is untouched.
+            if (localYoutubeDetection !== instance) {
+                await this.retireProvisionalPlatformResource(platformName, 'detection', localYoutubeDetection);
+            }
+            throw error;
+        }
+    }
+
+    private async retireProvisionalPlatformResource(platformName: string, resourceName: string, resource: unknown): Promise<void> {
+        try {
+            if (resource && typeof resource === 'object' && 'cleanup' in resource && typeof resource.cleanup === 'function') {
+                await resource.cleanup();
+            }
+        } catch (error) {
+            try {
+                this._handleLifecycleError(`Failed to retire provisional ${platformName} ${resourceName}`, error, 'construction-cleanup');
+            } catch {
+                // Cleanup and diagnostics must preserve the original construction
+                // failure and must not skip the remaining attempt-local resource.
             }
         }
-
-        assertPlatformInterface(platformName, instance);
-        return instance;
     }
 
     getDependencyFactoryMethodName(platformName: string) {
