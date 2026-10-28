@@ -36,16 +36,37 @@ function resolveErrorLogger(logger: unknown, platformName: string): LoggerLike {
 }
 
 function resolveErrorMessage(error: unknown): string {
-    return sanitizeLogText(getErrorMessage(error));
+    return sanitizeDiagnosticText(getErrorMessage(error));
+}
+
+function sanitizeDiagnosticText(text: string): string {
+    return sanitizeLogText(text).slice(0, 4096);
 }
 
 function sanitizeErrorDetails(error: unknown): UnknownRecord {
+    const record = toRecord(error);
+    // Select scalar diagnostics only: Error's details otherwise include its cause.
+    const details = getErrorDetails({
+        message: getErrorMessage(error),
+        name: record?.name,
+        code: record?.code,
+        statusCode: record?.statusCode,
+    });
     return Object.fromEntries(
-        Object.entries(getErrorDetails(error)).map(([key, value]) => [
+        Object.entries(details).map(([key, value]) => [
             key,
-            typeof value === 'string' ? sanitizeLogText(value) : value,
+            typeof value === 'string' ? sanitizeDiagnosticText(value) : value,
         ]),
     );
+}
+
+function buildErrorMetadata(error: unknown): UnknownRecord {
+    const errorDetails = sanitizeErrorDetails(error);
+    return omitUndefined({
+        error: resolveErrorMessage(error),
+        errorType: errorDetails.name,
+        errorDetails,
+    });
 }
 
 function summarizeEventData(eventData: unknown): UnknownRecord | null {
@@ -87,7 +108,7 @@ function summarizeCuratedOperationalPayload(payload: UnknownRecord): UnknownReco
 
     return Object.fromEntries(entries.map(([key, value]) => [
         key,
-        typeof value === 'string' ? sanitizeLogText(value) : value
+        typeof value === 'string' ? sanitizeDiagnosticText(value) : value
     ]));
 }
 
@@ -130,7 +151,7 @@ class PlatformErrorHandler {
     }
 
     handleInitializationError(error: unknown, context = 'initialization'): never {
-        this.logger.error(`Failed to initialize ${this.platformName} platform during ${context}`, this.platformName, error);
+        this.logger.error(sanitizeDiagnosticText(`Failed to initialize ${this.platformName} platform during ${context}`), sanitizeDiagnosticText(this.platformName), buildErrorMetadata(error));
         throw error;
     }
 
@@ -146,52 +167,52 @@ class PlatformErrorHandler {
         const metadata = omitUndefined({
             error: resolveErrorMessage(error),
             errorDetails: sanitizeErrorDetails(error),
-            eventType: sanitizeLogText(eventType),
+            eventType: sanitizeDiagnosticText(eventType),
             eventDataSummary: summarizeEventData(eventData) ?? undefined,
         });
-        this.logger.error(logMessage, contextName, metadata);
+        this.logger.error(sanitizeDiagnosticText(logMessage), sanitizeDiagnosticText(contextName), metadata);
     }
 
     handleConnectionError(error: unknown, action = 'connection', message: string | null = null): void {
         const logMessage = message || `${this.platformName} ${action} failed: ${resolveErrorMessage(error)}`;
-        this.logger.error(logMessage, this.platformName, error);
+        this.logger.error(sanitizeDiagnosticText(logMessage), sanitizeDiagnosticText(this.platformName), buildErrorMetadata(error));
     }
 
     handleServiceUnavailableError(serviceName: string, error: unknown): void {
-        this.logger.warn(`${serviceName} service unavailable, using fallback behavior`, this.platformName, error);
+        this.logger.warn(sanitizeDiagnosticText(`${serviceName} service unavailable, using fallback behavior`), sanitizeDiagnosticText(this.platformName), buildErrorMetadata(error));
     }
 
     handleMessageSendError(error: unknown, context = 'message sending', message: string | null = null): void {
         const logMessage = message || `Failed to send message via ${this.platformName} during ${context}`;
-        this.logger.error(logMessage, this.platformName, error);
+        this.logger.error(sanitizeDiagnosticText(logMessage), sanitizeDiagnosticText(this.platformName), buildErrorMetadata(error));
     }
 
     logOperationalError(message: string, context = this.platformName, payload: unknown = null): void {
         const payloadSummary = summarizeOperationalPayload(payload);
         if (payloadSummary) {
-            this.logger.error(message, context, { payloadSummary });
+            this.logger.error(sanitizeDiagnosticText(message), sanitizeDiagnosticText(context), { payloadSummary });
         } else if (context !== undefined) {
-            this.logger.error(message, context);
+            this.logger.error(sanitizeDiagnosticText(message), sanitizeDiagnosticText(context));
         } else {
-            this.logger.error(message);
+            this.logger.error(sanitizeDiagnosticText(message));
         }
     }
 
     handleAuthenticationError(reason: string): void {
-        this.logger.error(`Cannot proceed - ${this.platformName} authentication ${reason}`, this.platformName);
+        this.logger.error(sanitizeDiagnosticText(`Cannot proceed - ${this.platformName} authentication ${reason}`), sanitizeDiagnosticText(this.platformName));
     }
 
     handleCleanupError(error: unknown, resource: string, message: string | null = null): void {
         const logMessage = message || `Failed to cleanup ${resource} during ${this.platformName} shutdown`;
-        this.logger.warn(logMessage, this.platformName, {
+        this.logger.warn(sanitizeDiagnosticText(logMessage), sanitizeDiagnosticText(this.platformName), {
             error: resolveErrorMessage(error),
-            resource
+            resource: sanitizeDiagnosticText(resource)
         });
     }
 
     handleDataLoggingError(error: unknown, dataType: string, message: string | null = null): void {
         const logMessage = message || `Error logging ${dataType} data: ${resolveErrorMessage(error)}`;
-        this.logger.error(logMessage, `${this.platformName}-platform`);
+        this.logger.error(sanitizeDiagnosticText(logMessage), sanitizeDiagnosticText(`${this.platformName}-platform`));
     }
 }
 

@@ -8,6 +8,96 @@ import {
   createPlatformErrorHandler,
 } from "../../../src/utils/platform-error-handler.ts";
 describe("Platform Error Handler - User Experience Behavior", () => {
+  test("curates every recovery error before passing it to an external logger", () => {
+    const logger = createRecordingLogger();
+    const handler = new PlatformErrorHandler(logger, "test-platform");
+    const error = Object.assign(new Error("access_token=test-token Authorization: Bearer test-bearer https://example.invalid/failure?signature=test-signature"), {
+      name: "TestProviderError", code: "TEST_RETRY", statusCode: 429,
+      response: { data: { message: "test-private-chat" } },
+      headers: { Authorization: "test-header" },
+      cause: new Error("test-private-cause"),
+    });
+    expect(() => handler.handleInitializationError(error)).toThrow(error);
+    handler.handleConnectionError(error);
+    handler.handleServiceUnavailableError("test-service", error);
+    handler.handleMessageSendError(error);
+    expect(logger.entries).toHaveLength(4);
+    for (const entry of logger.entries) {
+      expect(entry.data === error).toBe(false);
+      expect(entry.data).toMatchObject({
+        errorType: "TestProviderError",
+        errorDetails: { name: "TestProviderError", code: "TEST_RETRY", statusCode: 429 },
+      });
+    }
+    const output = JSON.stringify(logger.entries);
+    for (const forbidden of ["test-token", "test-bearer", "test-signature", "test-private-chat", "test-header", "test-private-cause", '"stack"', '"response"', '"headers"', '"cause"']) {
+      expect(output.includes(forbidden)).toBe(false);
+    }
+  });
+
+  test("sanitizes caller diagnostic strings and bounds error text", () => {
+    const logger = createRecordingLogger();
+    const text = "https://example.invalid/test?access_token=test-caller-secret";
+    const handler = new PlatformErrorHandler(logger, text);
+    handler.handleConnectionError("test", text, text);
+    handler.handleMessageSendError("test", text, text);
+    handler.handleServiceUnavailableError(text, "test");
+    handler.handleEventProcessingError("test", text, null, text, text);
+    handler.logOperationalError(text, text, { error: text });
+    handler.handleCleanupError("test", text, text);
+    handler.handleAuthenticationError(text);
+    handler.handleDataLoggingError("test", text, text);
+    expect(JSON.stringify(logger.entries).includes("test-caller-secret")).toBe(false);
+    handler.handleConnectionError("x".repeat(10_000));
+    expect((logger.entries.at(-1)?.data as { error: string }).error.length).toBeLessThanOrEqual(4096);
+  });
+
+  test("keeps non-Error recovery reasons curated and initialization identity unchanged", () => {
+    const logger = createRecordingLogger();
+    const handler = new PlatformErrorHandler(logger, "test-platform");
+    for (const reason of ["access_token=test-string-secret", null, undefined, 7, { message: "test failure", code: 503, statusCode: 503, payload: "test-private-body" }]) {
+      let caught: unknown = "not thrown";
+      try { handler.handleInitializationError(reason); } catch (error) { caught = error; }
+      expect(caught).toBe(reason);
+      handler.handleConnectionError(reason);
+      handler.handleServiceUnavailableError("test-service", reason);
+      handler.handleMessageSendError(reason);
+    }
+    expect(logger.entries).toHaveLength(20);
+    expect(logger.entries[4]?.data).toEqual({ error: "null", errorDetails: { message: "null" } });
+    expect(logger.entries.at(-1)?.data).toEqual({
+      error: "test failure", errorDetails: { message: "test failure", code: 503, statusCode: 503 },
+    });
+    expect(JSON.stringify(logger.entries).includes("test-string-secret")).toBe(false);
+    expect(JSON.stringify(logger.entries).includes("test-private-body")).toBe(false);
+  });
+
+  test("preserves logger failure propagation rather than claiming recovery completed", () => {
+    const failure = new Error("test logger failure");
+    const logger = { error: () => { throw failure; }, warn: () => { throw failure; } };
+    const handler = new PlatformErrorHandler(logger, "test-platform");
+    expect(() => handler.handleInitializationError(new Error("test original"))).toThrow(failure);
+    expect(() => handler.handleConnectionError("test")).toThrow(failure);
+    expect(() => handler.handleServiceUnavailableError("test-service", "test")).toThrow(failure);
+    expect(() => handler.handleMessageSendError("test")).toThrow(failure);
+  });
+
+  test("retains curated operational diagnostics and cleanup context without raw content", () => {
+    const logger = createRecordingLogger();
+    const handler = new PlatformErrorHandler(logger, "test-platform");
+    handler.logOperationalError("test operation", "test-context", { errorType: "TestFailure", code: "TEST_RETRY", statusCode: 429, hasPayload: true });
+    handler.logOperationalError("test array", "test-context", ["test-private-content"]);
+    handler.logOperationalError("test null", "test-context", null);
+    handler.handleCleanupError(new Error("test cleanup"), "test-resource");
+    handler.handleAuthenticationError("not ready");
+    handler.handleDataLoggingError(new Error("test disk failure"), "test-events");
+    expect(logger.entries[0]?.data).toEqual({ payloadSummary: { errorType: "TestFailure", code: "TEST_RETRY", statusCode: 429, hasPayload: true } });
+    expect(logger.entries[1]?.data).toEqual({ payloadSummary: { fieldCount: 1, hasMessage: false, hasRawData: false, hasPayload: false } });
+    expect(logger.entries[2]?.data).toBeUndefined();
+    expect(logger.entries[3]).toMatchObject({ level: "warn", data: { error: "test cleanup", resource: "test-resource" } });
+    expect(logger.entries[4]?.message).toBe("Cannot proceed - test-platform authentication not ready");
+    expect(logger.entries[5]).toMatchObject({ message: "Error logging test-events data: test disk failure", source: "test-platform-platform" });
+  });
   let errorHandler: PlatformErrorHandler;
   let testPlatformName: string;
 
