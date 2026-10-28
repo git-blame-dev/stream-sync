@@ -7,6 +7,9 @@ import net from "net";
 import os from "os";
 import path from "path";
 import selfsigned from "selfsigned";
+import { EventEmitter } from "node:events";
+import tls from "node:tls";
+import { installTimerTracking } from "../../helpers/bun-timers";
 import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../helpers/mock-factories";
 import { createRecordingLogger } from "../../helpers/recording-logger";
@@ -185,7 +188,8 @@ it("exposes oauth-flow helper functions", () => {
     const invalidHtml = renderCallbackHtml("invalid");
     const serverHtml = renderCallbackHtml("server");
 
-    expect(successHtml).toContain("Authentication Successful!");
+    expect(successHtml).toContain("Authorization received");
+    expect(successHtml).not.toContain("saved");
     expect(failedHtml).toContain("Authentication Failed");
     expect(invalidHtml).toContain("Invalid Callback");
     expect(serverHtml).toContain("Server Error");
@@ -231,7 +235,7 @@ it("exposes oauth-flow helper functions", () => {
   });
 
   it("startCallbackServer sends no-store headers on callback responses", async () => {
-    const { server, waitForCode } = await startCallbackServer({
+    const { server, waitForCode, cancel } = await startCallbackServer({
       port: 0,
       autoFindPort: false,
       logger: noOpLogger,
@@ -246,13 +250,207 @@ it("exposes oauth-flow helper functions", () => {
         path: "/?code=test-auth-code&state=expected-state",
         method: "GET",
       });
-      await waitForCode;
+      cancel!();
+      cancel!();
+      expect(await waitForCode).toBe("test-auth-code");
 
       expect(response.headers["cache-control"]).toBe("no-store, max-age=0");
       expect(response.headers.pragma).toBe("no-cache");
+      expect(response.body).toContain("Authorization received");
+      expect(response.body.trim().endsWith("</html>")).toBe(true);
     } finally {
       server.close();
     }
+  });
+
+  it("rejects unrelated callback traffic without consuming the pending flow", async () => {
+    const { server, waitForCode, port } = await startCallbackServer({ port: 0, logger: noOpLogger, expectedState: "test-state" });
+    try {
+      expect((server.address() as AddressInfo).address).toBe("127.0.0.1");
+      for (const options of [
+        { method: "POST", path: "/?code=test-code&state=test-state" },
+        { method: "GET", path: "/other?code=test-code&state=test-state" },
+        { method: "GET", path: "/?code=test-code&state=test-state", headers: { Host: "attacker.test" } },
+        { method: "GET", path: "/?code=test-code&state=test-state&state=test-state" },
+        { method: "GET", path: "/?code=test-code&state=test-state&error=denied" },
+        { method: "GET", path: "/?code=" + "x".repeat(8200) },
+      ]) {
+        expect((await fetchLocal({ hostname: "localhost", port, ...options })).statusCode).toBeGreaterThanOrEqual(400);
+      }
+      await fetchLocal({ hostname: "localhost", port, path: "/callback?code=test-code&state=test-state" });
+      expect(await waitForCode).toBe("test-code");
+    } finally { server.close(); }
+  });
+
+  it("rejects callback startup failure without taking ownership of a timer", async () => {
+    const blocker = net.createServer();
+    await new Promise<void>((resolve) => blocker.listen(0, "127.0.0.1", resolve));
+    try {
+      await expect(startCallbackServer({ port: getServerPort(blocker), logger: noOpLogger })).rejects.toMatchObject({ code: "EADDRINUSE" });
+    } finally { blocker.close(); }
+  });
+
+  it("settles a callback flow when its owner closes the server", async () => {
+    const { server, waitForCode } = await startCallbackServer({ port: 0, logger: noOpLogger });
+    server.close();
+    await expect(waitForCode).rejects.toThrow("closed");
+  });
+
+  for (const ownerAction of ["cancel", "close"] as const) {
+    it(`immediately retires an incomplete native HTTPS request on owner ${ownerAction}`, async () => {
+      const tracking = installTimerTracking();
+      const before = new Set(tracking.activeTimers);
+      const { server, waitForCode, port, cancel } = await startCallbackServer({ port: 0, logger: noOpLogger });
+      const ownedTimers = [...tracking.activeTimers].filter((timer) => !before.has(timer));
+      const socket = tls.connect({ host: "127.0.0.1", port, rejectUnauthorized: false });
+      const closed = new Promise<void>((resolve) => socket.once("close", () => resolve()));
+      let watchdog: ReturnType<typeof safeSetTimeout> | undefined;
+      try {
+        await new Promise<void>((resolve, reject) => {
+          socket.once("secureConnect", resolve);
+          socket.once("error", reject);
+        });
+        await new Promise<void>((resolve, reject) => socket.write(
+          `GET / HTTP/1.1\r\nHost: localhost:${port}\r\nX-Incomplete: `,
+          (error) => error ? reject(error) : resolve(),
+        ));
+        const outcome = waitForCode.then(() => "resolved", () => "rejected");
+        if (ownerAction === "cancel") cancel!();
+        else server.close();
+        cancel!();
+        // Bun also tracks its server connection-check interval; the OAuth deadline
+        // must be explicitly cleared, not merely left until its ten-minute expiry.
+        expect(ownedTimers.filter((timer) => !tracking.activeTimers.has(timer))).toHaveLength(1);
+        expect(await Promise.race([
+          outcome,
+          new Promise<string>((resolve) => { watchdog = safeSetTimeout(() => resolve("pending"), 100); }),
+        ])).toBe("rejected");
+        await expect(waitForCode).rejects.toThrow("closed by owner");
+        clearTimeout(watchdog);
+        await Promise.race([
+          closed,
+          new Promise<never>((_resolve, reject) => { watchdog = safeSetTimeout(() => reject(new Error("owned socket remained open")), 1000); }),
+        ]);
+      } finally {
+        clearTimeout(watchdog);
+        socket.destroy();
+        server.closeAllConnections();
+        server.close();
+        await waitForCode.catch(() => {});
+      }
+    });
+  }
+
+  it("flushes success while retiring a parallel incomplete HTTPS connection", async () => {
+    const tracking = installTimerTracking();
+    const before = new Set(tracking.activeTimers);
+    const { server, port, waitForCode, cancel } = await startCallbackServer({ port: 0, logger: noOpLogger, expectedState: "test-state" });
+    const initialTimers = [...tracking.activeTimers].filter((timer) => !before.has(timer));
+    const socket = tls.connect({ host: "127.0.0.1", port, rejectUnauthorized: false });
+    const closed = new Promise<void>((resolve) => socket.once("close", () => resolve()));
+    let watchdog: ReturnType<typeof safeSetTimeout> | undefined;
+    try {
+      await new Promise<void>((resolve, reject) => {
+        socket.once("secureConnect", resolve);
+        socket.once("error", reject);
+      });
+      await new Promise<void>((resolve, reject) => socket.write(
+        `GET / HTTP/1.1\r\nHost: localhost:${port}\r\nX-Incomplete: `,
+        (error) => error ? reject(error) : resolve(),
+      ));
+      const responsePromise = fetchLocal({ hostname: "localhost", port, path: "/?code=test-code&state=test-state" });
+      expect(await waitForCode).toBe("test-code");
+      cancel!();
+      cancel!();
+      const response = await responsePromise;
+      expect(response.statusCode).toBe(200);
+      expect(response.body).toContain("Authorization received");
+      expect(response.body.trim().endsWith("</html>")).toBe(true);
+      expect(await waitForCode).toBe("test-code");
+      cancel!();
+      cancel!();
+      expect(await waitForCode).toBe("test-code");
+      await Promise.race([
+        closed,
+        new Promise<never>((_resolve, reject) => { watchdog = safeSetTimeout(() => reject(new Error("parallel socket remained open after success")), 1000); }),
+      ]);
+      clearTimeout(watchdog);
+      expect(initialTimers.filter((timer) => !tracking.activeTimers.has(timer))).toHaveLength(1);
+      expect([...tracking.activeTimers].filter((timer) => !before.has(timer) && !initialTimers.includes(timer))).toHaveLength(0);
+      expect(server.listenerCount("close")).toBe(0);
+      expect(server.listenerCount("error")).toBe(0);
+    } finally {
+      clearTimeout(watchdog);
+      socket.destroy();
+      server.closeAllConnections();
+      server.close();
+      await waitForCode.catch(() => {});
+    }
+  });
+
+  it("bounds stalled and oversized token bodies and redacts malformed provider bodies", async () => {
+    for (const mode of ["stalled", "oversized", "malformed", "wrong-types"]) {
+      const pems = generateSelfSignedCert();
+      const server = https.createServer(pems, (_req, res) => {
+        res.writeHead(200);
+        if (mode === "stalled") res.write("{");
+        else if (mode === "oversized") res.end("x".repeat(128));
+        else if (mode === "wrong-types") res.end(JSON.stringify({ access_token: {}, refresh_token: 42 }));
+        else res.end("test-private-provider-body");
+      });
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+      const originalUrl = TWITCH.OAUTH.TOKEN;
+      TWITCH.OAUTH.TOKEN = `https://localhost:${getServerPort(server)}/token`;
+      try {
+        const error = await exchangeCodeForTokens("test-code", {
+          clientId: "test-client", clientSecret: "test-secret", redirectUri: "https://localhost:3000", logger: noOpLogger,
+          httpsRequest: createLocalHttpsRequest(httpsAgent), timeoutMs: 50, maxResponseBytes: 64,
+        }).catch((error: Error) => error);
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).not.toContain("test-private-provider-body");
+      } finally {
+        TWITCH.OAUTH.TOKEN = originalUrl;
+        server.closeAllConnections();
+        server.close();
+      }
+    }
+  });
+
+  it("preserves special URL characters through argument-based browser launch", () => {
+    const url = "https://example.test/authorize?state=test&scope=a%20b&quote='\";$()";
+    for (const platform of ["linux", "darwin", "win32"] as const) {
+      const invocation = resolveBrowserOpenCommand(url, { platform, env: {}, procVersion: "Linux" });
+      if (platform === "win32") {
+        expect(Buffer.from(invocation.args[3]!, "base64").toString("utf16le")).toBe(`Start-Process -FilePath '${url.replace(/'/g, "''")}'`);
+      } else expect(invocation.args).toEqual([url]);
+    }
+  });
+
+  it("physically destroys a token request and response when the byte cap is exceeded", async () => {
+    const response = Object.assign(new EventEmitter(), { statusCode: 200, complete: false, destroy: createMockFn() });
+    const request = Object.assign(new EventEmitter(), {
+      write: createMockFn(), destroy: createMockFn(),
+      end: () => { response.emit("data", Buffer.alloc(65)); response.emit("end"); },
+    });
+    const httpsRequest = ((_options: unknown, callback: (response: IncomingMessage) => void) => {
+      callback(response as unknown as IncomingMessage);
+      return request;
+    }) as unknown as typeof https.request;
+    await expect(exchangeCodeForTokens("test-code", {
+      clientId: "test-client", clientSecret: "test-secret", redirectUri: "https://localhost:3000", logger: noOpLogger,
+      httpsRequest, maxResponseBytes: 64,
+    })).rejects.toThrow("exceeded limit");
+    expect(request.destroy).toHaveBeenCalledTimes(1);
+    expect(response.destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses external-process argv without a shell and preserves manual fallback on launch failure", () => {
+    const execCommand = createMockFn((..._args: unknown[]) => { throw new Error("synthetic-launch-error"); });
+    const url = "https://example.test/authorize?state=test&scope=a%20b";
+    expect(() => openBrowser(url, noOpLogger, { platform: "linux", env: {}, procVersion: "Linux", execCommand: execCommand as never })).not.toThrow();
+    expect(execCommand.mock.calls[0]?.slice(0, 2)).toEqual(["xdg-open", [url]]);
+    const wsl = resolveBrowserOpenCommand(url, { platform: "linux", env: { WSL_DISTRO_NAME: "synthetic-distro" } });
+    expect(Buffer.from(wsl.args[3]!, "base64").toString("utf16le")).toBe(`Start-Process -FilePath '${url}'`);
   });
 
   it("startCallbackServer rejects OAuth errors", async () => {
@@ -260,6 +458,7 @@ it("exposes oauth-flow helper functions", () => {
       port: 0,
       autoFindPort: false,
       logger: noOpLogger,
+      expectedState: "expected-state",
     });
     const boundPort = getServerPort(server);
 
@@ -267,12 +466,12 @@ it("exposes oauth-flow helper functions", () => {
     await fetchLocal({
       hostname: "localhost",
       port: boundPort,
-      path: "/?error=access_denied&error_description=test-error",
+      path: "/?error=access_denied&error_description=test-error&state=expected-state",
       method: "GET",
     });
 
     const error = await errorPromise;
-    expect(error.message).toContain("OAuth error: access_denied");
+    expect(error.message).toContain("OAuth error: provider rejected authorization");
     server.close();
   });
 
@@ -293,8 +492,8 @@ it("exposes oauth-flow helper functions", () => {
       method: "GET",
     });
 
-    const error = await errorPromise;
-    expect(error.message).toContain("state did not match");
+    await fetchLocal({ hostname: "localhost", port: boundPort, path: "/?code=test-auth-code&state=expected-state", method: "GET" });
+    expect(await errorPromise).toBe("test-auth-code");
     server.close();
   });
 
@@ -315,9 +514,8 @@ it("exposes oauth-flow helper functions", () => {
       method: "GET",
     });
 
-    const error = await errorPromise;
-    expect(error.message).toContain("state did not match");
-    expect(error.message).not.toContain("OAuth error");
+    await fetchLocal({ hostname: "localhost", port: boundPort, path: "/?code=test-auth-code&state=expected-state", method: "GET" });
+    expect(await errorPromise).toBe("test-auth-code");
     server.close();
   });
 
@@ -339,7 +537,7 @@ it("exposes oauth-flow helper functions", () => {
     });
 
     const error = await errorPromise;
-    expect(error.message).toContain("OAuth error: access_denied");
+    expect(error.message).toContain("OAuth error: provider rejected authorization");
     server.close();
   });
 
@@ -348,6 +546,7 @@ it("exposes oauth-flow helper functions", () => {
       port: 0,
       autoFindPort: false,
       logger: noOpLogger,
+      expectedState: "expected-state",
     });
     const boundPort = getServerPort(server);
 
@@ -359,8 +558,8 @@ it("exposes oauth-flow helper functions", () => {
       method: "GET",
     });
 
-    const error = await errorPromise;
-    expect(error.message).toContain("Invalid callback");
+    await fetchLocal({ hostname: "localhost", port: boundPort, path: "/?code=test-auth-code&state=expected-state", method: "GET" });
+    expect(await errorPromise).toBe("test-auth-code");
     server.close();
   });
 
@@ -497,14 +696,15 @@ it("exposes oauth-flow helper functions", () => {
   });
 
   it("resolveBrowserOpenCommand selects platform commands without side effects", () => {
-    expect(resolveBrowserOpenCommand("https://example.test", { platform: "win32" }).command).toContain("start");
-    expect(resolveBrowserOpenCommand("https://example.test", { platform: "darwin" }).command).toBe('open "https://example.test"');
+    expect(resolveBrowserOpenCommand("https://example.test", { platform: "win32" }).command).toBe("powershell.exe");
+    expect(resolveBrowserOpenCommand("https://example.test", { platform: "darwin" })).toMatchObject({ command: "open", args: ["https://example.test"] });
     expect(resolveBrowserOpenCommand("https://example.test", { platform: "linux", env: {}, procVersion: "Linux microsoft" })).toMatchObject({
-      command: "/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe -Command \"Start-Process 'https://example.test'\"",
+      command: "/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe",
       isWsl: true,
     });
     expect(resolveBrowserOpenCommand("https://example.test", { platform: "linux", env: {}, procVersion: "Linux" })).toMatchObject({
-      command: 'xdg-open "https://example.test"',
+      command: 'xdg-open',
+      args: ["https://example.test"],
       isWsl: false,
     });
   });
@@ -578,6 +778,19 @@ it("exposes oauth-flow helper functions", () => {
     );
 
     expect(result).toMatchObject({ accessToken: "test-access-token", refreshToken: "test-refresh-token" });
+    expect(fs.existsSync(tokenStorePath)).toBe(false);
+  });
+
+  it("retires the callback through its owner API when the flow fails", async () => {
+    const callback = { ...createCallbackServerStub(), cancel: createMockFn() };
+    const result = await runOAuthFlow({ clientId: "test-client", tokenStorePath, logger: noOpLogger, persistTokens: false }, {
+      startCallbackServer: async () => callback,
+      exchangeCodeForTokens: async () => { throw new Error("synthetic-exchange-failure"); },
+      openBrowser: createMockFn(),
+    });
+    expect(result).toBeNull();
+    expect(callback.cancel).toHaveBeenCalledTimes(1);
+    expect(callback.server.close).not.toHaveBeenCalled();
     expect(fs.existsSync(tokenStorePath)).toBe(false);
   });
 

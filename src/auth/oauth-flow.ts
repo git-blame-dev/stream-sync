@@ -1,7 +1,8 @@
-import { exec } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import * as https from 'node:https';
+import type { IncomingMessage } from 'node:http';
 import * as querystring from 'node:querystring';
 import * as selfsigned from 'selfsigned';
 import { TWITCH } from '../core/endpoints';
@@ -41,6 +42,7 @@ type CallbackServerBootstrapResult = {
     waitForCode: Promise<string>;
     port: number;
     redirectUri: string;
+    cancel?: () => void;
 };
 
 type RunOAuthFlowDependencies = {
@@ -63,7 +65,7 @@ type BrowserCommandDependencies = {
 
 type BrowserOpenOptions = {
     skipBrowserOpen?: boolean;
-    execCommand?: typeof exec;
+    execCommand?: typeof execFile;
 } & BrowserCommandDependencies;
 
 const HTML_ESCAPE_MAP: Record<string, string> = {
@@ -93,10 +95,6 @@ const getErrorCode = (error: unknown): string | number | null => {
     return null;
 };
 
-const getErrorMessage = (error: unknown): string => {
-    return error instanceof Error ? error.message : String(error);
-};
-
 const logConsole = (logger: OAuthLogger, message: string, context = 'oauth-flow') => {
     if (typeof logger.console === 'function') {
         logger.console(message, context);
@@ -105,11 +103,15 @@ const logConsole = (logger: OAuthLogger, message: string, context = 'oauth-flow'
     logger.info(message, context);
 };
 
-const safeCloseServer = (server: { close?: () => void } | null | undefined) => {
+const safeCloseServer = (server: { close?: () => void; closeAllConnections?: () => void } | null | undefined, force = false) => {
     if (!server || typeof server.close !== 'function') {
         return;
     }
-    server.close();
+    if (force) {
+        // Bun's close() drops its transport reference, so force-close must come first.
+        try { server.closeAllConnections?.(); } catch { /* Cleanup is best effort. */ }
+    }
+    try { server.close(); } catch { /* Cleanup must not replace the flow outcome. */ }
 };
 
 function escapeHtml(value: string) {
@@ -145,7 +147,6 @@ function summarizeInvalidTokenResponse(response: Record<string, unknown>): Recor
         hasAccessToken: typeof response.access_token === 'string' && response.access_token.length > 0,
         hasRefreshToken: typeof response.refresh_token === 'string' && response.refresh_token.length > 0,
         hasExpiresIn: response.expires_in !== undefined,
-        error: typeof response.error === 'string' ? response.error : null,
         errorDescriptionPresent: typeof response.error_description === 'string' && response.error_description.length > 0
     };
 }
@@ -191,10 +192,9 @@ function renderCallbackHtml(status: string, details: { error?: string; descripti
         return `
             <html>
                 <body style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
-                    <h1 style="color: #9146FF;">Authentication Successful!</h1>
-                    <p>Your Twitch tokens have been obtained and saved.</p>
+                    <h1 style="color: #9146FF;">Authorization received</h1>
+                    <p>Completing token exchange and validation in the application.</p>
                     <p style="color: #666;">You can close this window and return to your terminal.</p>
-                    <p><strong>The application will now restart automatically.</strong></p>
                 </body>
             </html>
         `;
@@ -236,9 +236,8 @@ function renderCallbackHtml(status: string, details: { error?: string; descripti
     `;
 }
 
-async function startCallbackServer({ port = OAUTH_SERVER_CONFIG.DEFAULT_PORT, autoFindPort = false, logger, expectedState }: { port?: number; autoFindPort?: boolean; logger?: unknown; expectedState?: string }): Promise<CallbackServerBootstrapResult> {
+async function startCallbackServer({ port = OAUTH_SERVER_CONFIG.DEFAULT_PORT, autoFindPort = false, logger, expectedState = generateOAuthState() }: { port?: number; autoFindPort?: boolean; logger?: unknown; expectedState?: string }): Promise<CallbackServerBootstrapResult> {
     const resolvedLogger: OAuthLogger = resolveLogger(logger, 'oauth-flow') as OAuthLogger;
-    const handler = createOAuthFlowErrorHandler(resolvedLogger);
 
     let resolveCode: (value: string) => void = () => {};
     let rejectCode: (reason: unknown) => void = () => {};
@@ -246,63 +245,128 @@ async function startCallbackServer({ port = OAUTH_SERVER_CONFIG.DEFAULT_PORT, au
         resolveCode = resolve;
         rejectCode = reject;
     });
+    void waitForCode.catch(() => {});
 
     let server: https.Server;
     let boundPort = port;
-    const timeoutId = safeSetTimeout(() => {
-        safeCloseServer(server);
-        rejectCode(new Error(`OAuth flow timed out after ${TOKEN_REFRESH_CONFIG.OAUTH_TIMEOUT_MS / 60000} minutes`));
-    }, TOKEN_REFRESH_CONFIG.OAUTH_TIMEOUT_MS);
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    let flushTimeout: ReturnType<typeof setTimeout> | undefined;
+    let settled = false;
+    let retired = false;
+    let flushingSuccess = false;
+    let detachResponseListeners = () => {};
+    let closeTransport: (force: boolean) => void = () => {};
+    const settle = (error?: Error, code?: string) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeoutId);
+        if (error) rejectCode(error);
+        else resolveCode(code!);
+    };
+    const retire = () => {
+        if (retired) return;
+        retired = true;
+        flushingSuccess = false;
+        clearTimeout(flushTimeout);
+        detachResponseListeners();
+        detachResponseListeners = () => {};
+        closeTransport(true);
+        server.off('close', onServerClose);
+        server.off('error', onServerError);
+    };
+    const finish = (error?: Error) => {
+        settle(error);
+        retire();
+    };
+    const onServerClose = () => finish(new Error('OAuth callback server closed'));
+    const onServerError = (error: Error) => finish(error);
 
     const options = generateSelfSignedCert();
     server = https.createServer({ key: options.key, cert: options.cert }, (req, res) => {
-        const requestUrl = new URL(req.url || '/', `https://localhost:${port || OAUTH_SERVER_CONFIG.DEFAULT_PORT}`);
+        const rejectRequest = (status = 400) => {
+            res.writeHead(status, CALLBACK_HTML_HEADERS);
+            res.end(renderCallbackHtml('invalid'));
+        };
+        if (settled || req.method !== 'GET' || req.headers.host !== `localhost:${boundPort}` || !req.url || req.url.length > 8192 || !req.url.startsWith('/') || req.url.startsWith('//')) {
+            rejectRequest();
+            return;
+        }
+        let requestUrl: URL;
+        try { requestUrl = new URL(req.url, `https://localhost:${boundPort}`); }
+        catch { rejectRequest(); return; }
+        const params = requestUrl.searchParams;
+        if ([...params].some(([key, value]) => !['state', 'code', 'error', 'error_description', 'scope'].includes(key) || value.length > 4096 || params.getAll(key).length !== 1)) {
+            rejectRequest(); return;
+        }
 
         if (requestUrl.pathname === '/' || requestUrl.pathname === '/callback') {
-            if (expectedState && requestUrl.searchParams.get('state') !== expectedState) {
+            if (!expectedState || requestUrl.searchParams.get('state') !== expectedState) {
                 res.writeHead(400, CALLBACK_HTML_HEADERS);
                 res.end(renderCallbackHtml('invalid'));
-                clearTimeout(timeoutId);
-                server.close();
-                rejectCode(new Error('Invalid callback - state did not match expected OAuth state'));
                 return;
             }
 
             const code = requestUrl.searchParams.get('code');
-            if (code) {
-                res.writeHead(200, CALLBACK_HTML_HEADERS);
+            if (code && !params.has('error')) {
+                // Keep the transport reference until the complete response is handed
+                // off. Then force-retire unrelated incomplete connections as well.
+                flushingSuccess = true;
+                const onResponseComplete = () => {
+                    flushingSuccess = false;
+                    retire();
+                };
+                res.once('finish', onResponseComplete);
+                res.once('close', onResponseComplete);
+                res.once('error', onResponseComplete);
+                detachResponseListeners = () => {
+                    res.off('finish', onResponseComplete);
+                    res.off('close', onResponseComplete);
+                    res.off('error', onResponseComplete);
+                };
+                // A stalled response cannot retain the listener or sockets forever.
+                flushTimeout = safeSetTimeout(onResponseComplete, 2000);
+                settle(undefined, code);
+                res.writeHead(200, { ...CALLBACK_HTML_HEADERS, Connection: 'close' });
                 res.end(renderCallbackHtml('success'));
-                clearTimeout(timeoutId);
-                server.close();
-                resolveCode(code);
                 return;
             }
 
             const oauthError = requestUrl.searchParams.get('error');
-            if (oauthError) {
-                const oauthErrorDescription = requestUrl.searchParams.get('error_description') || undefined;
+            if (oauthError && !params.has('code')) {
                 res.writeHead(400, CALLBACK_HTML_HEADERS);
                 res.end(renderCallbackHtml('failed', {
-                    error: oauthError,
-                    ...(oauthErrorDescription === undefined ? {} : { description: oauthErrorDescription })
+                    error: 'Provider rejected authorization',
+                    description: 'Return to the application and retry authorization.'
                 }));
-                clearTimeout(timeoutId);
-                server.close();
-                rejectCode(new Error(`OAuth error: ${oauthError} - ${oauthErrorDescription || 'Unknown error'}`));
+                finish(new Error('OAuth error: provider rejected authorization'));
                 return;
             }
 
             res.writeHead(400, CALLBACK_HTML_HEADERS);
             res.end(renderCallbackHtml('invalid'));
-            clearTimeout(timeoutId);
-            server.close();
-            rejectCode(new Error('Invalid callback - no authorization code received'));
             return;
         }
 
         res.writeHead(404, { 'Content-Type': 'text/plain' });
         res.end('Not Found');
     });
+
+    const nativeClose = server.close.bind(server);
+    closeTransport = (force) => safeCloseServer({
+        close: nativeClose,
+        closeAllConnections: server.closeAllConnections.bind(server)
+    }, force);
+    const cancel = () => {
+        settle(new Error('OAuth callback server closed by owner'));
+        if (!flushingSuccess) retire();
+    };
+    // Retain legacy owner-close semantics without waiting for active sockets to drain.
+    server.close = ((callback?: (error?: Error) => void) => {
+        if (retired) return nativeClose(callback);
+        if (callback) server.once('close', callback);
+        cancel();
+        return server;
+    }) as typeof server.close;
 
     const listenOnPort = async (candidatePort: number) => {
         await new Promise<void>((resolve, reject) => {
@@ -319,7 +383,7 @@ async function startCallbackServer({ port = OAUTH_SERVER_CONFIG.DEFAULT_PORT, au
             server.once('listening', onListening);
 
             try {
-                server.listen(candidatePort);
+                server.listen(candidatePort, '127.0.0.1');
             } catch (error) {
                 server.off('error', onError);
                 server.off('listening', onListening);
@@ -351,23 +415,20 @@ async function startCallbackServer({ port = OAUTH_SERVER_CONFIG.DEFAULT_PORT, au
             await listenOnPort(port);
         }
     } catch (error) {
-        clearTimeout(timeoutId);
-        safeCloseServer(server);
+        finish(error instanceof Error ? error : new Error('OAuth callback startup failed'));
         throw error;
     }
 
     const serverAddress = server.address();
     boundPort = serverAddress && typeof serverAddress === 'object' ? serverAddress.port : port;
     const redirectUri = `https://localhost:${boundPort}`;
-    resolvedLogger.info(`OAuth callback server started on port ${boundPort}`, 'oauth-flow');
+    timeoutId = safeSetTimeout(() => finish(new Error('OAuth flow timed out')), TOKEN_REFRESH_CONFIG.OAUTH_TIMEOUT_MS);
+    server.once('close', onServerClose);
+    try { resolvedLogger.info(`OAuth callback server started on port ${boundPort}`, 'oauth-flow'); } catch { /* Diagnostics are best effort. */ }
 
-    server.on('error', (error) => {
-        clearTimeout(timeoutId);
-        handler.handleEventProcessingError(error, 'oauth-flow', { port: boundPort }, 'OAuth callback server error');
-        rejectCode(error);
-    });
+    server.on('error', onServerError);
 
-    return { server, waitForCode, port: boundPort, redirectUri };
+    return { server, waitForCode, port: boundPort, redirectUri, cancel };
 }
 
 async function exchangeCodeForTokens(
@@ -377,17 +438,20 @@ async function exchangeCodeForTokens(
         clientSecret,
         redirectUri,
         logger,
-        httpsRequest
+        httpsRequest,
+        timeoutMs = 30_000,
+        maxResponseBytes = 64 * 1024
     }: {
         clientId: string;
         clientSecret: string;
         redirectUri: string;
         logger: unknown;
         httpsRequest?: typeof https.request;
+        timeoutMs?: number;
+        maxResponseBytes?: number;
     }
 ): Promise<OAuthTokenResponse> {
     const resolvedLogger: OAuthLogger = resolveLogger(logger, 'oauth-flow') as OAuthLogger;
-    const handler = createOAuthFlowErrorHandler(resolvedLogger);
     const postData = querystring.stringify({
         client_id: clientId,
         client_secret: clientSecret,
@@ -399,6 +463,18 @@ async function exchangeCodeForTokens(
     const requestImpl = httpsRequest || https.request;
 
     return await new Promise<OAuthTokenResponse>((resolve, reject) => {
+        let settled = false;
+        let req: ReturnType<typeof https.request> | undefined;
+        let responseStream: IncomingMessage | undefined;
+        const fail = (message: string) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(deadline);
+            reject(new Error(message));
+            try { responseStream?.destroy(); } catch { /* best effort */ }
+            try { req?.destroy(); } catch { /* best effort */ }
+        };
+        const deadline = safeSetTimeout(() => fail('Token exchange timed out'), timeoutMs);
         const urlParts = new URL(TWITCH.OAUTH.TOKEN);
         const options = {
             hostname: urlParts.hostname,
@@ -411,15 +487,27 @@ async function exchangeCodeForTokens(
             }
         };
 
-        const req = requestImpl(options, (res) => {
-            let data = '';
+        try {
+        req = requestImpl(options, (res) => {
+            responseStream = res;
+            if (settled) { res.destroy(); return; }
+            const chunks: Buffer[] = [];
+            let bytes = 0;
             res.on('data', (chunk) => {
-                data += chunk;
+                bytes += Buffer.byteLength(chunk);
+                if (bytes > maxResponseBytes) { fail('Token exchange response exceeded limit'); return; }
+                chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
             });
+            res.on('error', () => fail('Token exchange response failed'));
+            res.on('aborted', () => fail('Token exchange response aborted'));
+            res.on('close', () => { if (!res.complete) fail('Token exchange response closed'); });
             res.on('end', () => {
+                if (settled) return;
                 try {
-                    const response = JSON.parse(data);
-                    if (response.access_token && response.refresh_token) {
+                    const response = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+                    if (res.statusCode === 200 && response && typeof response.access_token === 'string' && response.access_token.trim() && typeof response.refresh_token === 'string' && response.refresh_token.trim()) {
+                        settled = true;
+                        clearTimeout(deadline);
                         resolve({
                             accessToken: response.access_token,
                             refreshToken: response.refresh_token,
@@ -428,22 +516,21 @@ async function exchangeCodeForTokens(
                         return;
                     }
 
-                    handler.logOperationalError('Invalid token response', 'oauth-flow', summarizeInvalidTokenResponse(response));
-                    reject(new Error(`Token exchange failed: ${response.error || 'Unknown error'}`));
-                } catch (error) {
-                    handler.handleEventProcessingError(error, 'oauth-flow', null, 'Failed to parse token response');
-                    reject(new Error(`Failed to parse token response: ${getErrorMessage(error)}`));
+                    try { resolvedLogger.warn('Invalid token response', 'oauth-flow', summarizeInvalidTokenResponse(response || {})); } catch { /* Diagnostics cannot prevent settlement. */ }
+                    fail('Token exchange failed: invalid response');
+                } catch {
+                    fail('Failed to parse token response');
                 }
             });
         });
 
-        req.on('error', (error) => {
-            handler.handleEventProcessingError(error, 'oauth-flow', null, 'Token exchange request failed');
-            reject(new Error(`Token exchange request failed: ${getErrorMessage(error)}`));
+        req.on('error', () => {
+            fail('Token exchange request failed');
         });
 
         req.write(postData);
         req.end();
+        } catch { fail('Token exchange request failed'); }
     });
 }
 
@@ -487,27 +574,25 @@ function displayOAuthInstructions(authUrl: string, logger: unknown, { scopes = T
 }
 
 function resolveBrowserOpenCommand(authUrl: string, { platform = process.platform, env = process.env, procVersion, readProcVersion }: BrowserCommandDependencies = {}) {
-    const isWsl = platform !== 'win32' && isWslEnvironment({ env, procVersion, readProcVersion });
+    const isWsl = platform === 'linux' && isWslEnvironment({ env, procVersion, readProcVersion });
 
-    if (platform === 'win32') {
-        return { command: `start "" "${authUrl}"`, isWsl: false };
-    }
-
-    if (platform === 'darwin') {
-        return { command: `open "${authUrl}"`, isWsl: false };
-    }
-
-    if (isWsl) {
+    if (platform === 'win32' || isWsl) {
+        const script = `Start-Process -FilePath '${authUrl.replace(/'/g, "''")}'`;
         return {
-            command: `/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe -Command "Start-Process '${authUrl}'"`,
-            isWsl: true
+            command: isWsl ? '/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe' : 'powershell.exe',
+            args: ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')],
+            isWsl
         };
     }
 
-    return { command: `xdg-open "${authUrl}"`, isWsl: false };
+    if (platform === 'darwin') {
+        return { command: 'open', args: [authUrl], isWsl: false };
+    }
+
+    return { command: 'xdg-open', args: [authUrl], isWsl: false };
 }
 
-function openBrowser(authUrl: string, logger: unknown, { skipBrowserOpen = false, execCommand = exec, platform, env, procVersion, readProcVersion }: BrowserOpenOptions = {}) {
+function openBrowser(authUrl: string, logger: unknown, { skipBrowserOpen = false, execCommand = execFile, platform, env, procVersion, readProcVersion }: BrowserOpenOptions = {}) {
     const resolvedLogger: OAuthLogger = resolveLogger(logger, 'oauth-flow') as OAuthLogger;
     if (skipBrowserOpen) {
         resolvedLogger.info('Skipping automatic browser opening', 'oauth-flow');
@@ -515,17 +600,21 @@ function openBrowser(authUrl: string, logger: unknown, { skipBrowserOpen = false
         return;
     }
 
-    const { command, isWsl } = resolveBrowserOpenCommand(authUrl, { platform, env, procVersion, readProcVersion });
+    const { command, args, isWsl } = resolveBrowserOpenCommand(authUrl, { platform, env, procVersion, readProcVersion });
 
-    execCommand(command, (error) => {
-        if (error) {
-            if (!isWsl || getErrorCode(error) !== 1) {
-                resolvedLogger.warn('Failed to open browser automatically', 'oauth-flow', error);
-            } else {
-                resolvedLogger.debug('WSL browser command completed with exit code 1', 'oauth-flow');
+    const reportOpenFailure = (error: unknown) => {
+        try {
+            if (error) {
+                if (!isWsl || getErrorCode(error) !== 1) {
+                    resolvedLogger.warn('Failed to open browser automatically; use the authorization URL above.', 'oauth-flow');
+                } else {
+                    resolvedLogger.debug('WSL browser command completed with exit code 1', 'oauth-flow');
+                }
             }
-        }
-    });
+        } catch { /* Manual authorization remains available if diagnostics fail. */ }
+    };
+    try { execCommand(command, args, reportOpenFailure); }
+    catch (error) { reportOpenFailure(error); }
 }
 
 async function runOAuthFlow(
@@ -550,15 +639,17 @@ async function runOAuthFlow(
     }
 
     let serverRef: https.Server | null = null;
+    let cancelCallback: (() => void) | undefined;
     try {
         const state = generateOAuthState();
-        const { server, waitForCode, redirectUri } = await startCallbackServerImpl({
+        const { server, waitForCode, redirectUri, cancel } = await startCallbackServerImpl({
             port,
             autoFindPort,
             logger: resolvedLogger,
             expectedState: state
         });
         serverRef = server;
+        cancelCallback = cancel;
 
         const authUrl = buildAuthUrl(clientId, redirectUri, scopes, state);
         displayOAuthInstructions(authUrl, resolvedLogger, { scopes, tokenStorePath });
@@ -592,16 +683,20 @@ async function runOAuthFlow(
             );
         }
 
-        safeCloseServer(serverRef);
         return {
             accessToken: tokens.accessToken,
             refreshToken: tokens.refreshToken,
             expiresIn: tokens.expiresIn
         };
     } catch (error) {
-        safeCloseServer(serverRef);
-        handler.handleEventProcessingError(error, 'oauth-flow', null, 'OAuth flow failed');
+        try { handler.handleEventProcessingError(error, 'oauth-flow', null, 'OAuth flow failed'); } catch { /* Preserve failure outcome. */ }
         return null;
+    } finally {
+        if (cancelCallback) {
+            try { cancelCallback(); } catch { /* Cleanup must preserve the result. */ }
+        } else {
+            safeCloseServer(serverRef, true);
+        }
     }
 }
 
