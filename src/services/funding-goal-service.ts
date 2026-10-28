@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
+import type { FundingGoalSnapshot } from '../contracts/funding-goal';
 import { validateFundingGoalLabel } from '../core/funding-goal-label';
 import type { MonetizationValuesConfig, SynchronousUsdConverter } from '../core/monetization-values';
 
@@ -30,18 +31,6 @@ interface FundingGoalFileSystem {
     writeFile(path: string, data: string, options: { encoding: 'utf8'; mode?: number }): Promise<unknown>;
     rename(from: string, to: string): Promise<void>;
     unlink(path: string): Promise<void>;
-}
-
-interface FundingGoalSnapshot {
-    readonly enabled: boolean;
-    readonly id: string;
-    readonly label: string;
-    readonly labelOverridden: boolean;
-    readonly currentUsd: number;
-    readonly targetUsd: number;
-    readonly completed: boolean;
-    readonly revision: number;
-    readonly sessionId: string;
 }
 
 interface FundingGoalServiceOptions {

@@ -6,8 +6,50 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { GuiRow, GUI_AVATAR_FALLBACK_URL } from "../../../gui/src/shared/components/GuiRow";
 import type { GuiRowDto } from "../../../gui/src/shared/types";
 import { getPlatformIconUrl } from "../../../gui/src/shared/platform-icon-map";
+import { createGuiFeedStore } from "../../../gui/src/shared/feed-store";
+import { createEventToGuiContractMapper } from "../../../src/services/gui/event-to-gui-contract-mapper";
 
 describe("GuiRow rendering behavior", () => {
+  it("preserves the wire row through mapping, frontend parsing, and member rendering", async () => {
+    const mapper = createEventToGuiContractMapper();
+    const mapped = await mapper.mapDisplayRow({
+      eventId: "test-contract-event",
+      type: "platform:chat-message",
+      platform: "twitch",
+      timestamp: "2024-01-01T00:00:00.000Z",
+      data: {
+        username: "test-contract-member",
+        avatarUrl: "https://example.invalid/contract-avatar.png",
+        message: {
+          text: "test rich message",
+          parts: [
+            { type: "text", text: "test rich message " },
+            { type: "emote", platform: "twitch", emoteId: "test-emote", imageUrl: "https://example.invalid/contract-emote.png" },
+          ],
+        },
+        badgeImages: [{ imageUrl: "https://example.invalid/contract-badge.png", source: "twitch", label: "Test badge" }],
+        isPaypiggy: true,
+        isStreamSupporter: true,
+        presentationOverride: { theme: "red", effects: ["particles"], spriteUrl: "https://example.invalid/contract-sprite.gif" },
+      },
+    });
+    const store = createGuiFeedStore();
+    const parsed = store.pushEvent(JSON.parse(JSON.stringify(mapped)));
+    expect(parsed).toEqual(mapped);
+    expect(parsed?.eventId).toBe("test-contract-event");
+    expect(parsed?.presentationRole).toBe("member");
+    if (!parsed) throw new Error("Expected the mapped contract row to be admitted");
+    const html = renderToStaticMarkup(React.createElement(GuiRow, { mode: "dock", row: parsed }));
+    expect(html).toContain("gui-row--theme-red");
+    expect(html).toContain("gui-row__member-particles");
+    expect(html).toContain("https://example.invalid/contract-sprite.gif");
+    expect(html).toContain("https://example.invalid/contract-emote.png");
+    expect(html).toContain("https://example.invalid/contract-badge.png");
+    expect(html).toContain("https://example.invalid/contract-avatar.png");
+    expect(html).toContain("test-contract-member");
+    expect(html).toContain("test rich message");
+  });
+
   it("replaces a failed avatar with the local neutral fallback without retrying the remote URL", () => {
     let renderer!: TestRenderer.ReactTestRenderer;
     act(() => {

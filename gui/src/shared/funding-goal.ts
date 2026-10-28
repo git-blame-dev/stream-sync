@@ -1,14 +1,6 @@
-export interface FundingGoalSnapshot {
-  enabled: boolean
-  id: string
-  label: string
-  labelOverridden: boolean
-  currentUsd: number
-  targetUsd: number
-  completed: boolean
-  revision: number
-  sessionId: string
-}
+import type { FundingGoalSnapshot } from '../../../src/contracts/funding-goal'
+
+export type { FundingGoalSnapshot } from '../../../src/contracts/funding-goal'
 
 export interface FundingGoalDisplayState {
   currentText: string

@@ -1,4 +1,4 @@
-import type { GuiBadgeImage, GuiMessagePart, GuiRowDto, GuiRowKind, RowPresentationOverride } from '../../../gui/src/shared/types';
+import type { GuiBadgeImage, GuiMessagePart, GuiRowDto, GuiRowKind, RowPresentationOverride } from '../../contracts/gui';
 import { DEFAULT_AVATAR_URL } from '../../constants/avatar';
 import { normalizeRowEffects, normalizeRowSpriteUrl, normalizeRowTheme } from '../../core/row-presentation';
 import { getValidMessageParts, normalizeBadgeImages } from '../../utils/message-parts';
