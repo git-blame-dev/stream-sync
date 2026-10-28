@@ -1,4 +1,5 @@
 import { config } from '../core/config';
+import { DEFAULTS } from '../core/config-schema';
 
 type ValidationGeneralConfig = {
     fallbackUsername: string;
@@ -20,12 +21,8 @@ const REGEX_PATTERNS = {
     WHITESPACE_NORMALIZE: /\s+/g
 };
 
-function formatUsername12(username: unknown, forTTS = false): string {
-    if (!username || typeof username !== 'string') {
-        return getFallbackUsername();
-    }
-
-    let processedUsername = username.trim();
+function sanitizeUsernameValue(username: unknown, maxLength: number, forTTS: boolean): string {
+    let processedUsername = typeof username === 'string' ? username.trim() : '';
     
     if (forTTS) {
         processedUsername = processedUsername.replace(REGEX_PATTERNS.EMOJI_UNICODE, '').trim();
@@ -33,10 +30,6 @@ function formatUsername12(username: unknown, forTTS = false): string {
         processedUsername = processedUsername.replace(/[^a-zA-Z0-9 ]/g, '');
         processedUsername = processedUsername.replace(/\d{2,}/g, (match) => match[0] ?? '');
         processedUsername = processedUsername.replace(/\s+/g, ' ').trim();
-        
-        if (!processedUsername) {
-            return getFallbackUsername();
-        }
     } else {
         processedUsername = processedUsername
             .replace(REGEX_PATTERNS.HTML_TAGS, '')
@@ -47,10 +40,10 @@ function formatUsername12(username: unknown, forTTS = false): string {
     }
     
     if (!processedUsername) {
-        return getFallbackUsername();
+        return '';
     }
     
-    if (processedUsername.length <= 12) {
+    if (processedUsername.length <= maxLength) {
         return processedUsername;
     }
     
@@ -59,7 +52,7 @@ function formatUsername12(username: unknown, forTTS = false): string {
     
     for (const word of words) {
         const testResult = result ? `${result} ${word}` : word;
-        if (testResult.length <= 12) {
+        if (testResult.length <= maxLength) {
             result = testResult;
         } else {
             break;
@@ -70,11 +63,27 @@ function formatUsername12(username: unknown, forTTS = false): string {
         return result;
     }
     
-    return processedUsername.substring(0, 12);
+    const clipped = processedUsername.substring(0, maxLength);
+    return /[\uD800-\uDBFF]$/.test(clipped) ? clipped.slice(0, -1) : clipped;
+}
+
+function formatUsername(username: unknown, maxLength: number, forTTS: boolean): string {
+    const limit = Number.isFinite(maxLength) && maxLength >= 0 ? Math.floor(maxLength) : 12;
+    if (limit === 0) return '';
+
+    const formatted = sanitizeUsernameValue(username, limit, forTTS);
+    if (formatted) return formatted;
+
+    return sanitizeUsernameValue(getFallbackUsername(), limit, forTTS)
+        || sanitizeUsernameValue(DEFAULTS.general.fallbackUsername, limit, forTTS);
+}
+
+function formatUsername12(username: unknown, forTTS = false): string {
+    return formatUsername(username, 12, forTTS);
 }
 
 function sanitizeDisplayName(displayName: unknown, maxLength = 12): string {
-    return formatUsername12(displayName, false);
+    return formatUsername(displayName, maxLength, false);
 }
 
 function sanitizeForDisplay(text: unknown, maxLength = 200): string {
