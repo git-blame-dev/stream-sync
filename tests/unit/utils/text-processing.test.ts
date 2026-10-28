@@ -619,6 +619,19 @@ describe("Text Processing", () => {
   });
 
   describe("when truncating text", () => {
+    it("keeps tiny and nonpositive limits bounded in both modes", () => {
+      for (const preserveWords of [false, true]) {
+        for (const limit of [-2, 0, 1, 2, 3]) {
+          expect(textProcessing.truncateText("abcdef", limit, preserveWords)).toBe(".".repeat(Math.max(0, limit)));
+        }
+        expect(textProcessing.truncateText("hi", 2, preserveWords)).toBe("hi");
+      }
+    });
+
+    it("includes inserted word separators in the truncation budget", () => {
+      expect(textProcessing.truncateText("one two three", 9, true)).toBe("one...");
+    });
+
     it("should truncate text to specified length", () => {
       const longText = "This is a very long text that needs to be truncated";
       const truncated = textProcessing.truncateText(longText, 20);

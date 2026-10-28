@@ -251,19 +251,24 @@ class TextProcessingManager {
             return '';
         }
 
+        if (maxLength <= 0) return '';
+
         if (text.length <= maxLength) {
             return text;
         }
+
+        if (maxLength <= 3) return '.'.repeat(maxLength);
 
         if (preserveWords) {
             const words = text.split(' ');
             let result = '';
 
             for (const word of words) {
-                if ((result + word).length > maxLength - 3) {
+                const candidate = result ? `${result} ${word}` : word;
+                if (candidate.length > maxLength - 3) {
                     break;
                 }
-                result += (result ? ' ' : '') + word;
+                result = candidate;
             }
 
             return result + (result.length < text.length ? '...' : '');
