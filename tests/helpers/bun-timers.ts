@@ -100,11 +100,22 @@ const restoreTimerTracking = () => {
     global.clearTimeout = timerState.original.clearTimeout;
     global.clearInterval = timerState.original.clearInterval;
     timerState.installed = false;
+    timerState.original = null;
 };
 
-const useFakeTimers = () => vi.useFakeTimers();
+const switchTimerMode = <T>(switchMode: () => T): T => {
+    const wasInstalled = timerState.installed;
+    restoreTimerTracking();
+    try {
+        return switchMode();
+    } finally {
+        if (wasInstalled) installTimerTracking();
+    }
+};
 
-const useRealTimers = () => vi.useRealTimers();
+const useFakeTimers = () => switchTimerMode(() => vi.useFakeTimers());
+
+const useRealTimers = () => switchTimerMode(() => vi.useRealTimers());
 
 const setSystemTimeForTests = (date?: Date) => setSystemTime(date);
 const advanceTimersByTime = (milliseconds: number) => vi.advanceTimersByTime(milliseconds);

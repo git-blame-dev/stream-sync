@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { createRequire } from 'node:module';
 
 import testClock from './test-clock';
@@ -9,6 +9,9 @@ const { createTestDataFactory } = nodeRequire('./test-database') as {
 };
 
 describe('test-database helpers', () => {
+    afterEach(() => {
+        testClock.useRealTime();
+    });
     beforeEach(() => {
         testClock.reset();
     });

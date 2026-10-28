@@ -1,10 +1,13 @@
-import { beforeEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 
 import testClock from './test-clock';
 
 const setClockWithUnknownValue = (value: unknown) => Reflect.apply(testClock.set as (nextValue: number) => number, testClock, [value as number]);
 
 describe('testClock', () => {
+    afterEach(() => {
+        testClock.useRealTime();
+    });
     beforeEach(() => {
         testClock.reset();
     });

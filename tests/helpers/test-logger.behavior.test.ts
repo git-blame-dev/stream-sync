@@ -143,10 +143,12 @@ describe('test-logger behavior', () => {
             captured.push(String(message));
         };
 
-        const verboseLogger = createVerboseLogger();
-        verboseLogger.info('console-visible-message');
-
-        console.log = originalConsoleLog;
+        try {
+            const verboseLogger = createVerboseLogger();
+            verboseLogger.info('console-visible-message');
+        } finally {
+            console.log = originalConsoleLog;
+        }
 
         expect(captured.some((line) => line.includes('console-visible-message'))).toBe(true);
 

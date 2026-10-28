@@ -47,13 +47,15 @@ preRunGlobal.__NOOP_PROCESS_EXIT__ = noopProcessExit;
 const originalStdoutWrite = process.stdout.write.bind(process.stdout);
 const originalStderrWrite = process.stderr.write.bind(process.stderr);
 
-const suppressedStdoutWrite = ((_chunk: string | Uint8Array, _encoding?: BufferEncoding, callback?: WriteCallback) => {
-    if (typeof callback === 'function') callback();
+const suppressedStdoutWrite = ((_chunk: string | Uint8Array, encodingOrCallback?: BufferEncoding | WriteCallback, callback?: WriteCallback) => {
+    const writeCallback = typeof encodingOrCallback === 'function' ? encodingOrCallback : callback;
+    writeCallback?.();
     return true;
 }) as typeof process.stdout.write;
 
-const suppressedStderrWrite = ((_chunk: string | Uint8Array, _encoding?: BufferEncoding, callback?: WriteCallback) => {
-    if (typeof callback === 'function') callback();
+const suppressedStderrWrite = ((_chunk: string | Uint8Array, encodingOrCallback?: BufferEncoding | WriteCallback, callback?: WriteCallback) => {
+    const writeCallback = typeof encodingOrCallback === 'function' ? encodingOrCallback : callback;
+    writeCallback?.();
     return true;
 }) as typeof process.stderr.write;
 

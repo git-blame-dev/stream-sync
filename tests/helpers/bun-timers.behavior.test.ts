@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 
 import {
     advanceTimersByTime,
@@ -29,6 +29,53 @@ describe('bun-timers behavior', () => {
             // Ignore when fake timers are not active.
         }
         useRealTimers();
+        setSystemTime();
+        installTimerTracking();
+    });
+
+    it('retires tracked handles before each fake and real mode transition', () => {
+        const state = installTimerTracking();
+        const trackedTimeout = global.setTimeout;
+        const trackedInterval = global.setInterval;
+        trackedTimeout(() => {}, 60000);
+        trackedInterval(() => {}, 60000);
+        useFakeTimers();
+        expect(state.activeTimers.size).toBe(0);
+        const fakeTimeout = global.setTimeout;
+        const fakeInterval = global.setInterval;
+        let calls = 0;
+        fakeTimeout(() => { calls += 1; }, 10);
+        fakeInterval(() => { calls += 1; }, 10);
+        expect(state.activeTimers.size).toBe(2);
+        useRealTimers();
+        expect(state.activeTimers.size).toBe(0);
+        useFakeTimers();
+        const nextTimeout = global.setTimeout;
+        const nextInterval = global.setInterval;
+        nextTimeout(() => { calls += 1; }, 10);
+        nextInterval(() => { calls += 1; }, 10);
+        clearTrackedTimers();
+        advanceTimersByTime(10);
+        expect(calls).toBe(0);
+        expect(getTimerCount()).toBe(0);
+    });
+
+    it('captures the current timer owner on reinstall and restores its exact reference', () => {
+        installTimerTracking();
+        restoreTimerTracking();
+        const timerSpy = vi.spyOn(global, 'setTimeout');
+        const currentOwner = global.setTimeout;
+        try {
+            installTimerTracking();
+            const trackedTimeout = global.setTimeout;
+            trackedTimeout(() => {}, 60000);
+            expect(timerSpy).toHaveBeenCalledTimes(1);
+            restoreTimerTracking();
+            expect(global.setTimeout).toBe(currentOwner);
+        } finally {
+            restoreTimerTracking();
+            timerSpy.mockRestore();
+        }
     });
 
     it('installs tracking once and tracks timeout and interval lifecycle', () => {
