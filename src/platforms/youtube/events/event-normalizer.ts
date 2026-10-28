@@ -1,4 +1,5 @@
-import type { UnknownRecord } from '../../../utils/record-contracts';
+import { asRecord, isRecord, type UnknownRecord } from '../../../utils/record-contracts';
+import { normalizeYouTubeUsername } from '../youtube-username-normalizer';
 
 const GIFT_PURCHASE_EVENT_TYPE = 'LiveChatSponsorshipsGiftPurchaseAnnouncement';
 type NormalizedEventStructure = 'wrapped' | 'direct' | null;
@@ -9,24 +10,16 @@ interface NormalizeYouTubeEventResult {
     debugMetadata: UnknownRecord;
 }
 
-const asRecord = (value: unknown): UnknownRecord | null => {
-    if (!value || typeof value !== 'object') {
-        return null;
-    }
-
-    return value as UnknownRecord;
-};
-
 const asEventType = (value: unknown): string | null => {
     return typeof value === 'string' ? value : null;
 };
 
 const asTrimmedString = (value: unknown): string => {
-return typeof value === 'string' ? value.trim() : '';
+    return typeof value === 'string' ? value.trim() : '';
 };
 
 const hasDirectEventType = (value: UnknownRecord): boolean => {
-return typeof value.type === 'string' && value.type.trim().length > 0;
+    return typeof value.type === 'string' && value.type.trim().length > 0;
 };
 
 function normalizeYouTubeEvent(chatItem: unknown): NormalizeYouTubeEventResult {
@@ -50,11 +43,11 @@ function normalizeYouTubeEvent(chatItem: unknown): NormalizeYouTubeEventResult {
         normalizedChatItem = rawChatItem;
         eventType = asEventType(wrappedItem.type);
         structure = 'wrapped';
-} else if (hasDirectEventType(rawChatItem)) {
-normalizedChatItem = { item: rawChatItem };
-eventType = asEventType(rawChatItem.type);
-structure = 'direct';
-}
+    } else if (hasDirectEventType(rawChatItem)) {
+        normalizedChatItem = { item: rawChatItem };
+        eventType = asEventType(rawChatItem.type);
+        structure = 'direct';
+    }
 
     if (!normalizedChatItem || !eventType) {
         return {
@@ -145,7 +138,7 @@ function hydrateGiftPurchaseAuthor(normalizedChatItem: UnknownRecord): UnknownRe
 
     const authorRecord = asRecord(item.author);
     const authorId = asTrimmedString(authorRecord?.id);
-    const authorName = asTrimmedString(authorRecord?.name);
+    const authorName = normalizeYouTubeUsername(authorRecord?.name);
     if (authorId && authorName) {
         return normalizedChatItem;
     }
@@ -155,12 +148,12 @@ function hydrateGiftPurchaseAuthor(normalizedChatItem: UnknownRecord): UnknownRe
     const headerName = asTrimmedString(headerAuthorName?.text);
     const headerId = asTrimmedString(item.author_external_channel_id);
 
-    if (!headerName || !headerId) {
+    if (!normalizeYouTubeUsername(headerName) || !headerId) {
         return null;
     }
 
     const headerPhoto = Array.isArray(header?.author_photo) ? header.author_photo : [];
-    const headerBadges = Array.isArray(header?.author_badges) ? header.author_badges : [];
+    const headerBadges = Array.isArray(header?.author_badges) ? header.author_badges.filter(isRecord) : [];
     const hydratedAuthor = {
         id: headerId,
         name: headerName,

@@ -117,6 +117,9 @@ class YouTubeUserAgentManager {
         const index = this.userAgents.indexOf(agent);
         if (index !== -1) {
             this.userAgents.splice(index, 1);
+            this.currentIndex = this.userAgents.length === 0
+                ? 0
+                : this.currentIndex % this.userAgents.length;
         }
     }
 }

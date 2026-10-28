@@ -17,6 +17,37 @@ describe("YouTube User-Agent Utility", () => {
   });
 
   describe("User-Agent Management", () => {
+    it("keeps the rotation cursor valid when the next agent is removed", () => {
+      userAgentManager.setUserAgents(["Test-Agent/1", "Test-Agent/2"]);
+      expect(userAgentManager.getNextUserAgent()).toBe("Test-Agent/1");
+      userAgentManager.removeUserAgent("Test-Agent/2");
+      expect(userAgentManager.getCurrentIndex()).toBe(0);
+      expect(userAgentManager.getNextUserAgent()).toBe("Test-Agent/1");
+      expect(userAgentManager.getNextUserAgent()).toBe("Test-Agent/1");
+    });
+
+    it("wraps the cursor for earlier removals without changing rotation policy", () => {
+      userAgentManager.setUserAgents(["Test-Agent/1", "Test-Agent/2", "Test-Agent/3"]);
+      userAgentManager.getNextUserAgent();
+      userAgentManager.getNextUserAgent();
+      userAgentManager.removeUserAgent("Test-Agent/1");
+      expect(userAgentManager.getCurrentIndex()).toBe(0);
+      expect(userAgentManager.getNextUserAgent()).toBe("Test-Agent/2");
+    });
+
+    it("does not move the cursor for unknown removals and resets an emptied pool", () => {
+      userAgentManager.setUserAgents(["Test-Agent/1", "Test-Agent/2"]);
+      userAgentManager.getNextUserAgent();
+      const stats = userAgentManager.getStats();
+      userAgentManager.removeUserAgent("Test-Agent/absent");
+      expect(userAgentManager.getStats()).toEqual(stats);
+      userAgentManager.removeUserAgent("Test-Agent/1");
+      userAgentManager.removeUserAgent("Test-Agent/2");
+      expect(userAgentManager.getCurrentIndex()).toBe(0);
+      expect(userAgentManager.getNextUserAgent()).toBe("");
+      userAgentManager.addUserAgent("Test-Agent/3");
+      expect(userAgentManager.getNextUserAgent()).toBe("Test-Agent/3");
+    });
     it("should initialize with default user agents", () => {
       expect(userAgentManager.getUserAgents()).toHaveLength(8);
       expect(userAgentManager.getUserAgents()[0]).toContain("Chrome/120");

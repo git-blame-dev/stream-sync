@@ -14,6 +14,56 @@ const assertRecord = (value: unknown, label: string): UnknownRecord => {
 };
 
 describe('normalizeYouTubeEvent', () => {
+    test('does not treat an unusable gift handle as an available author', () => {
+        for (const name of ['@', ' @   ', '@N/A', ' @ N/A ']) {
+            const result = normalizeYouTubeEvent({ item: {
+                type: 'LiveChatSponsorshipsGiftPurchaseAnnouncement',
+                author: { id: 'UC_TEST_GIFT_CHANNEL', name }
+            } });
+            expect(result.normalizedChatItem).toBeNull();
+            expect(result.debugMetadata.reason).toBe('missing_gift_purchase_author');
+            const invalidHeader = normalizeYouTubeEvent({ item: {
+                type: 'LiveChatSponsorshipsGiftPurchaseAnnouncement',
+                author_external_channel_id: 'UC_TEST_GIFT_CHANNEL', header: { author_name: { text: name } }
+            } });
+            expect(invalidHeader.normalizedChatItem).toBeNull();
+            const fallback = normalizeYouTubeEvent({ item: {
+                type: 'LiveChatSponsorshipsGiftPurchaseAnnouncement',
+                author: { id: 'UC_TEST_UNUSABLE_AUTHOR', name },
+                author_external_channel_id: 'UC_TEST_HEADER_CHANNEL',
+                header: { author_name: { text: '@test-header-giver' } }
+            } });
+            expect(assertRecord(fallback.normalizedChatItem?.item, 'fallback item').author).toMatchObject({
+                id: 'UC_TEST_HEADER_CHANNEL', name: '@test-header-giver'
+            });
+        }
+    });
+
+    test('filters malformed hydrated gift badges while preserving SDK records', () => {
+        class SyntheticBadge { tooltip = 'Test member'; }
+        const badge = new SyntheticBadge();
+        const result = normalizeYouTubeEvent({ item: {
+            type: 'LiveChatSponsorshipsGiftPurchaseAnnouncement',
+            author_external_channel_id: ' UC_TEST_GIFT_CHANNEL ',
+            header: { author_name: { text: ' @test-giver ' }, author_badges: [null, 1, false, 'member', [], badge] }
+        } });
+        const item = assertRecord(result.normalizedChatItem?.item, 'normalized item');
+        const author = assertRecord(item.author, 'normalized author');
+        expect(author.id).toBe('UC_TEST_GIFT_CHANNEL');
+        expect(author.badges).toEqual([badge]);
+        expect((author.badges as unknown[])[0]).toBe(badge);
+    });
+
+    test('rejects array-shaped gift author headers rather than fabricating an author', () => {
+        const header = Object.assign([], { author_name: { text: 'test-giver' } });
+        const result = normalizeYouTubeEvent({ item: {
+            type: 'LiveChatSponsorshipsGiftPurchaseAnnouncement',
+            author_external_channel_id: 'UC_TEST_GIFT_CHANNEL', header
+        } });
+        expect(result.normalizedChatItem).toBeNull();
+        expect(result.debugMetadata.reason).toBe('missing_gift_purchase_author');
+    });
+
     test('hydrates gift purchase author from header fields', () => {
         const fixture = getSyntheticFixture('youtube', 'gift-purchase-header');
         const fixtureRecord = assertRecord(fixture, 'fixture');

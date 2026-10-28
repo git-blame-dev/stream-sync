@@ -1,4 +1,5 @@
-type UnknownRecord = Record<string, unknown>;
+import { asRecord, isRecord } from '../../utils/record-contracts';
+import { normalizeYouTubeUsername } from './youtube-username-normalizer';
 
 interface ExtractedAuthor {
   id: string;
@@ -11,14 +12,6 @@ interface ExtractedAuthor {
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
-}
-
-function asRecord(value: unknown): UnknownRecord | null {
-  if (!value || typeof value !== 'object') {
-    return null;
-  }
-
-  return value as UnknownRecord;
 }
 
 function extractAuthor(chatItem: unknown): ExtractedAuthor | null {
@@ -43,14 +36,17 @@ function extractAuthor(chatItem: unknown): ExtractedAuthor | null {
     return null;
   }
 
-  const name = stripAtPrefix(rawName);
+  const name = normalizeYouTubeUsername(rawName);
+  if (!name) {
+    return null;
+  }
   const thumbnailUrl = extractThumbnailUrl(author.thumbnails);
-  const badges = Array.isArray(author.badges) ? author.badges : [];
+  const badges = Array.isArray(author.badges) ? author.badges.filter(isRecord) : [];
   const isModerator = author.is_moderator === true;
   const isVerified = author.is_verified === true;
 
   return {
-    id,
+    id: id.trim(),
     name,
     thumbnailUrl,
     badges,
@@ -59,19 +55,17 @@ function extractAuthor(chatItem: unknown): ExtractedAuthor | null {
   };
 }
 
-function stripAtPrefix(name: string): string {
-  if (name.startsWith('@')) {
-    return name.slice(1);
-  }
-  return name;
-}
-
 function extractThumbnailUrl(thumbnails: unknown): string {
   if (!thumbnails || !Array.isArray(thumbnails) || thumbnails.length === 0) {
     return '';
   }
-  const firstThumbnail = asRecord(thumbnails[0]);
-  return typeof firstThumbnail?.url === 'string' ? firstThumbnail.url : '';
+  for (const thumbnail of thumbnails) {
+    const record = asRecord(thumbnail);
+    if (isNonEmptyString(record?.url)) {
+      return record.url.trim();
+    }
+  }
+  return '';
 }
 
 export { extractAuthor };

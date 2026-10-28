@@ -23,6 +23,36 @@ const expectExtractedAuthor = (author: ExtractedAuthor | null): ExtractedAuthor 
 };
 
 describe("YouTube Author Extraction - Modern (Production Data)", () => {
+  it("normalizes canonical identity and selects the first usable thumbnail", () => {
+    const author = YouTubeAuthorExtractor.extractAuthor({ item: { author: {
+      id: "  UC_TEST_STABLE_CHANNEL  ", name: "  @  Test Viewer  ",
+      thumbnails: [null, "bad", [], { url: null }, { url: "  " }, { url: " https://example.invalid/test-avatar.png " }, { url: "https://example.invalid/later.png" }],
+    } } });
+    expect(author).toMatchObject({ id: "UC_TEST_STABLE_CHANNEL", name: "Test Viewer", thumbnailUrl: "https://example.invalid/test-avatar.png" });
+  });
+
+  it("filters malformed badge entries without losing native badge prototypes", () => {
+    class SyntheticNativeBadge {
+      tooltip = "Test member";
+      custom_thumbnail = [{ url: "https://example.invalid/test-badge.png" }];
+    }
+    const nativeBadge = new SyntheticNativeBadge();
+    const ownerBadge = { icon_type: "OWNER" };
+    const author = expectExtractedAuthor(YouTubeAuthorExtractor.extractAuthor({ item: { author: {
+      id: "UC_TEST_STABLE_CHANNEL", name: "@test-viewer", badges: [null, undefined, 1, true, "member", [], nativeBadge, ownerBadge],
+    } } }));
+    expect(author.badges).toEqual([nativeBadge, ownerBadge]);
+    expect(author.badges[0]).toBe(nativeBadge);
+    expect(author.badges[0]).toBeInstanceOf(SyntheticNativeBadge);
+  });
+
+  it("does not fabricate authors from empty handles, sentinels, or array-shaped records", () => {
+    for (const name of ["@", " @   ", "@N/A", " @ N/A ", null]) {
+      expect(YouTubeAuthorExtractor.extractAuthor({ item: { author: { id: "UC_TEST_STABLE_CHANNEL", name } } })).toBeNull();
+    }
+    const authorArray = Object.assign([], { id: "UC_TEST_STABLE_CHANNEL", name: "test-viewer" });
+    expect(YouTubeAuthorExtractor.extractAuthor({ item: { author: authorArray } })).toBeNull();
+  });
   describe("Real Chat Message Format", () => {
     it("extracts author from chat message with @ prefix in name", () => {
       const author = expectExtractedAuthor(

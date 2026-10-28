@@ -9,6 +9,13 @@ import {
 import testClock from "../../helpers/test-clock";
 describe("YouTube Username Normalization", () => {
   describe("normalizeYouTubeUsername", () => {
+    test("trims after removing exactly one handle prefix before checking sentinels", () => {
+      expect(normalizeYouTubeUsername("  @  Test Viewer  ")).toBe("Test Viewer");
+      expect(normalizeYouTubeUsername("@N/A")).toBeNull();
+      expect(normalizeYouTubeUsername(" @ N/A ")).toBeNull();
+      expect(normalizeYouTubeUsername(" @   ")).toBeNull();
+      expect(normalizeYouTubeUsername("@@test-viewer")).toBe("@test-viewer");
+    });
     test("should remove @ prefix from YouTube usernames", () => {
       expect(normalizeYouTubeUsername("@gordontechreviews")).toBe(
         "gordontechreviews",
