@@ -13,6 +13,72 @@ function expectRecord(value: unknown): asserts value is Record<string, unknown> 
 }
 
 describe('Platform Events Interface', () => {
+    describe('exported semantic contract consistency', () => {
+        const timestamp = '2026-01-01T00:00:00.000Z';
+        const chat = { type: 'platform:chat-message', platform: 'twitch', username: 'SyntheticUser', avatarUrl: DEFAULT_AVATAR_URL, message: { text: 'synthetic text' } };
+
+        it('requires chat provenance through direct validation and fluent building', () => {
+            const validator = new PlatformEventValidator();
+            expect(validator.validate(chat).valid).toBe(false);
+            expect(PlatformEvents.validateChatMessageEvent(chat)).toBe(false);
+            expect(() => PlatformEvents.builder().platform('twitch').type('chat-message').username('SyntheticUser').avatarUrl(DEFAULT_AVATAR_URL).message('synthetic text').build()).toThrow('userId');
+            const degraded = { ...chat, metadata: { missingFields: ['userId', 'timestamp'] } };
+            expect(validator.validate(degraded)).toEqual({ valid: true, errors: [] });
+            expect(PlatformEvents.validateChatMessageEvent(degraded)).toBe(true);
+            for (const invalid of [{ ...degraded, userId: ' ' }, { ...degraded, timestamp: '' }, { ...chat, metadata: { missingFields: ['userId'] } }]) {
+                expect(validator.validate(invalid).valid).toBe(false);
+                expect(PlatformEvents.validateChatMessageEvent(invalid)).toBe(false);
+            }
+        });
+
+        it('shares direct gift identity admission with runtime validation and preserves exceptions', () => {
+            const validator = new PlatformEventValidator();
+            const gift = { type: 'platform:gift', platform: 'twitch', timestamp, id: 'synthetic-gift', giftType: 'bits', giftCount: 1, amount: 10, currency: 'bits' };
+            const giftSubs = { type: 'platform:giftpaypiggy', platform: 'twitch', timestamp, giftCount: 1 };
+            for (const base of [gift, giftSubs]) {
+                for (const event of [base, { ...base, username: 'SyntheticUser' }, { ...base, userId: 'synthetic-user' }, { ...base, isAnonymous: true, username: 'SyntheticUser' }]) {
+                    expect(validator.validate(event).valid).toBe(false);
+                    expect(PlatformEvents.validateEvent(event)).toBe(false);
+                }
+                for (const event of [{ ...base, isAnonymous: true }, { ...base, username: 'SyntheticUser', userId: 'synthetic-user' }, { ...base, isAnonymous: true, username: 'SyntheticUser', userId: 'synthetic-user' }, { type: base.type, platform: 'twitch', timestamp, isError: true }]) {
+                    expect(validator.validate(event)).toEqual({ valid: true, errors: [] });
+                    expect(PlatformEvents.validateEvent(event)).toBe(true);
+                }
+            }
+            const jewels = { ...gift, platform: 'youtube', currency: 'jewels', username: 'SyntheticUser', metadata: { missingFields: ['userId', 'amount'] } };
+            const { amount: _amount, ...withoutAmount } = jewels;
+            expect(validator.validate(withoutAmount).valid).toBe(true);
+            expect(PlatformEvents.validateEvent(withoutAmount)).toBe(true);
+        });
+
+        it('rejects partial split or conflicting anonymous envelope identities at both exports', () => {
+            const validator = new PlatformEventValidator();
+            const envelope = PlatformEvents.createNotificationEvent('twitch', 'platform:gift', { isAnonymous: true });
+            const pair = { username: 'SyntheticUser', userId: 'synthetic-user' };
+            for (const event of [
+                { ...envelope, username: pair.username },
+                { ...envelope, userId: pair.userId },
+                { ...envelope, data: { ...envelope.data, username: pair.username } },
+                { ...envelope, data: { ...envelope.data, userId: pair.userId } },
+                { ...envelope, userId: pair.userId, data: { ...envelope.data, username: pair.username } },
+                { ...envelope, ...pair, data: { ...envelope.data, ...pair, userId: 'synthetic-other' } },
+                { ...envelope, data: { ...envelope.data, username: '', userId: pair.userId } },
+            ]) {
+                expect(validator.validate(event).valid).toBe(false);
+                expect(PlatformEvents.validateNotificationEvent(event)).toBe(false);
+            }
+            for (const event of [envelope, { ...envelope, ...pair }, { ...envelope, data: { ...envelope.data, ...pair } }, { ...envelope, ...pair, data: { ...envelope.data, ...pair } }]) {
+                expect(validator.validate(event)).toEqual({ valid: true, errors: [] });
+                expect(PlatformEvents.validateNotificationEvent(event)).toBe(true);
+            }
+        });
+
+        it('does not retain the original unsanitized fluent message body', () => {
+            const event = PlatformEvents.builder().platform('twitch').type('chat-message').username('SyntheticUser').userId('synthetic-user').avatarUrl(DEFAULT_AVATAR_URL).message('hello<script>synthetic-body-marker</script>').build();
+            expect(event.message).toEqual({ text: 'hello' });
+            expect(JSON.stringify(event)).not.toContain('synthetic-body-marker');
+        });
+    });
     describe('Event Schema Validation', () => {
         it('requires avatarUrl for chat events and permits optional avatar for notification payloads', () => {
             const validator = new PlatformEventValidator();

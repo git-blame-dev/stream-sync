@@ -159,6 +159,22 @@ function isPlatformName(value: unknown): value is PlatformName {
     return typeof value === 'string' && VALID_PLATFORMS.includes(value);
 }
 
+function hasIdentityPair(record: Record<string, unknown>): boolean {
+    return typeof record.username === 'string' && !!record.username.trim()
+        && typeof record.userId === 'string' && !!record.userId.trim();
+}
+
+function hasValidAnonymousIdentity(record: Record<string, unknown>): boolean {
+    return (record.username === undefined && record.userId === undefined) || hasIdentityPair(record);
+}
+
+function hasValidAnonymousEnvelopeIdentity(event: Record<string, unknown>): boolean {
+    const data = isRecord(event.data) ? event.data : {};
+    if (!hasValidAnonymousIdentity(event) || !hasValidAnonymousIdentity(data)) return false;
+    return !hasIdentityPair(event) || !hasIdentityPair(data)
+        || (event.username === data.username && event.userId === data.userId);
+}
+
 function resolveAvatarUrl(avatarUrl: unknown): string {
     const normalizedAvatarUrl = typeof avatarUrl === 'string' ? avatarUrl.trim() : '';
     return normalizedAvatarUrl || DEFAULT_AVATAR_URL;
@@ -669,6 +685,8 @@ class PlatformEventValidator {
             }
         }
         
+        this._validateSemanticContracts(event, errors);
+
         return {
             valid: errors.length === 0,
             errors
@@ -681,6 +699,42 @@ class PlatformEventValidator {
     
     getEventSchema(eventType: string): EventSchema | null {
         return this.schemas[eventType] || null;
+    }
+
+    private _validateSemanticContracts(event: Record<string, unknown>, errors: string[]): void {
+        if (event.type === PlatformEvents.CHAT_MESSAGE) {
+            const metadata = isRecord(event.metadata) ? event.metadata : {};
+            const missingFields = Array.isArray(metadata.missingFields) ? metadata.missingFields : [];
+            for (const field of ['userId', 'timestamp']) {
+                if (event[field] === undefined && !missingFields.includes(field)) {
+                    errors.push(`Missing required field: ${field}`);
+                }
+            }
+        }
+
+        if ((event.type === PlatformEvents.GIFT || event.type === PlatformEvents.GIFTPAYPIGGY) && event.isError !== true) {
+            if (event.isAnonymous === true) {
+                if (!hasValidAnonymousIdentity(event)) {
+                    errors.push('Anonymous identity must include both username and userId or neither');
+                }
+            } else {
+                if (typeof event.username !== 'string' || !event.username.trim()) {
+                    errors.push('Missing required field: username');
+                }
+                if ((typeof event.userId !== 'string' || !event.userId.trim()) && !allowsYouTubeJewelsMissingUserId({
+                    type: event.type, platform: event.platform, currency: event.currency, metadata: event.metadata
+                })) {
+                    errors.push('Missing required field: userId');
+                }
+            }
+        }
+
+        const data = isRecord(event.data) ? event.data : {};
+        if (event.type === PlatformEvents.PLATFORM_NOTIFICATION && data.isAnonymous === true
+            && (event.notificationType === PlatformEvents.GIFT || event.notificationType === PlatformEvents.GIFTPAYPIGGY)
+            && !hasValidAnonymousEnvelopeIdentity(event)) {
+            errors.push('Anonymous envelope identity must contain complete consistent pairs or no identity');
+        }
     }
     
     private _validateFieldType(
@@ -1183,27 +1237,7 @@ class EnhancedPlatformEvents {
         }
 
         const validator = new PlatformEventValidator();
-        if (!validator.validate(event).valid) {
-            return false;
-        }
-
-        const metadata = isRecord(event.metadata) ? event.metadata : null;
-        const missingFields = Array.isArray(metadata?.missingFields)
-            ? metadata.missingFields
-            : [];
-
-        const hasUserId = typeof event.userId === 'string' && event.userId.trim().length > 0;
-        const hasTimestamp = typeof event.timestamp === 'string' && event.timestamp.trim().length > 0;
-
-        if (!hasUserId && !missingFields.includes('userId')) {
-            return false;
-        }
-
-        if (!hasTimestamp && !missingFields.includes('timestamp')) {
-            return false;
-        }
-
-        return true;
+        return validator.validate(event).valid;
     }
 
     static validateRuntimeMonetizationEvent(event: unknown): boolean {
@@ -1212,41 +1246,7 @@ class EnhancedPlatformEvents {
         }
 
         const validator = new PlatformEventValidator();
-        if (!validator.validate(event).valid) {
-            return false;
-        }
-
-        const isErrorPayload = event.isError === true;
-        const isAnonymousGift = event.isAnonymous === true &&
-            (event.type === PlatformEvents.GIFT || event.type === PlatformEvents.GIFTPAYPIGGY);
-        const hasValidUsername = typeof event.username === 'string' && event.username.trim().length > 0;
-        const hasValidUserId = typeof event.userId === 'string' && event.userId.trim().length > 0;
-        const metadata = event.metadata && typeof event.metadata === 'object'
-            ? event.metadata
-            : null;
-        const allowsMissingUserId = allowsYouTubeJewelsMissingUserId({
-            type: event.type,
-            platform: event.platform,
-            currency: event.currency,
-            metadata
-        });
-
-        if (isErrorPayload) {
-            return true;
-        }
-
-        if (isAnonymousGift) {
-            if ((event.username !== undefined && event.username !== null && !hasValidUsername) ||
-                (event.userId !== undefined && event.userId !== null && !hasValidUserId)) {
-                return false;
-            }
-            if ((hasValidUsername && !hasValidUserId) || (!hasValidUsername && hasValidUserId)) {
-                return false;
-            }
-            return true;
-        }
-
-        return hasValidUsername && (hasValidUserId || allowsMissingUserId);
+        return validator.validate(event).valid;
     }
 
     static validateNotificationEvent(event: unknown): boolean {
@@ -1285,12 +1285,7 @@ class EnhancedPlatformEvents {
             return true;
         }
 
-        if ((event.username !== undefined && event.username !== null && !hasValidUsername) ||
-            (event.userId !== undefined && event.userId !== null && !hasValidUserId)) {
-            return false;
-        }
-
-        return true;
+        return hasValidAnonymousEnvelopeIdentity(event);
     }
 
     static validateConnectionEvent(event: unknown): boolean {
@@ -1439,8 +1434,7 @@ class EventBuilder {
 
     message(text: string) {
         this._event.message = {
-            text: EnhancedPlatformEvents._sanitizeText(text),
-            original: text
+            text: EnhancedPlatformEvents._sanitizeText(text)
         };
         return this;
     }
