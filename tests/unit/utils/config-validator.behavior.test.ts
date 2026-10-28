@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { ConfigValidator } from "../../../src/utils/config-validator";
 import { CONFIG_SCHEMA } from "../../../src/core/config-schema";
 import ini from "ini";
-import { buildGeneralConfig, buildLoggingConfig } from "../../../src/core/config-builders";
+import { buildConfig, buildGeneralConfig, buildLoggingConfig } from "../../../src/core/config-builders";
 import type {
   ConfigFieldSpec,
   ConfigSectionName,
@@ -21,6 +21,57 @@ type ValidationPlatformOverrides = {
   twitch?: RawConfigSection;
   youtube?: RawConfigSection;
 };
+
+describe("INI runtime numeric configuration", () => {
+  const timeoutDefaults = {
+    defaultTimeoutMs: 10000,
+    reachabilityTimeoutMs: 5000,
+    enhancedTimeoutMs: 6000,
+    enhancedReachabilityTimeoutMs: 3000,
+  };
+
+  for (const value of ["0", "-1", "1.5", "NaN", "Infinity", "", "   "]) {
+    it(`uses HTTP timeout defaults for invalid INI value ${JSON.stringify(value)}`, () => {
+      const raw = ini.parse(`[http]\n${Object.keys(timeoutDefaults).map((field) => `${field} = ${value}`).join("\n")}`);
+      const config = buildConfig(ConfigValidator.normalize(raw, {}));
+      expect(config.http).toMatchObject(timeoutDefaults);
+    });
+  }
+
+  it("retains positive integer HTTP values through INI parsing and runtime building", () => {
+    const config = buildConfig(ConfigValidator.normalize(ini.parse(`
+[http]
+defaultTimeoutMs = 1
+reachabilityTimeoutMs = "2345"
+enhancedTimeoutMs = 6789
+enhancedReachabilityTimeoutMs = "3456"
+`), {}));
+    expect(config.http).toMatchObject({
+      defaultTimeoutMs: 1,
+      reachabilityTimeoutMs: 2345,
+      enhancedTimeoutMs: 6789,
+      enhancedReachabilityTimeoutMs: 3456,
+    });
+  });
+
+  for (const platform of ["tiktok", "youtube", "twitch"] as const) {
+    for (const interval of ["0", "7", "", "NaN", "Infinity", null]) {
+      it(`preserves ${platform} polling policy for ${JSON.stringify(interval)}`, () => {
+        const raw = ini.parse(`
+[general]
+viewerCountPollingInterval = 42
+messagesEnabled = true
+[${platform}]
+${interval === null ? "" : `pollInterval = ${interval}`}
+messagesEnabled = false
+`);
+        const config = buildConfig(ConfigValidator.normalize(raw, {}));
+        expect(config[platform].pollIntervalMs).toBe(interval === "0" ? 0 : interval === "7" ? 7000 : 42000);
+        expect(config[platform].messagesEnabled).toBe(false);
+      });
+    }
+  }
+});
 
 function validateUncheckedConfig(
   config: Partial<Record<ConfigSectionName, NormalizedConfigSection>>,

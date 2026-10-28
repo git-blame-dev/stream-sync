@@ -1,6 +1,25 @@
 import { describe, expect, it } from 'bun:test';
 import { CONFIG_SCHEMA, getFieldsRequiredWhenEnabled, buildDefaultsFromSchema, DEFAULTS } from '../../../src/core/config-schema.ts';
 import type { ConfigDefaultSectionName, ConfigDefaults, ConfigSchema } from '../../../src/core/types/config-types';
+import { ConfigValidator } from '../../../src/utils/config-validator';
+
+describe('HTTP schema numeric policy', () => {
+    it('applies the same positive integer policy through schema and runtime normalization', () => {
+        for (const value of [0, -1, 1.5, NaN, Infinity, -Infinity, 1, 2345, '6789']) {
+            const raw = {
+                defaultTimeoutMs: value,
+                reachabilityTimeoutMs: value,
+                enhancedTimeoutMs: value,
+                enhancedReachabilityTimeoutMs: value
+            };
+            const schemaResult = ConfigValidator.normalizeFromSchema('http', raw);
+            const runtimeResult = ConfigValidator.normalize({ http: raw }, {}).http;
+            for (const field of Object.keys(raw)) {
+                expect(runtimeResult?.[field]).toBe(schemaResult[field]);
+            }
+        }
+    });
+});
 
 function expectConfigSection<K extends ConfigDefaultSectionName>(
     defaults: Partial<ConfigDefaults>,

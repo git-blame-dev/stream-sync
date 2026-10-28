@@ -203,10 +203,10 @@ class ConfigValidator {
 
         return {
             userAgents: parsedAgents.length > 0 ? parsedAgents : DEFAULT_HTTP_USER_AGENTS.slice(),
-            defaultTimeoutMs: ConfigValidator.parseNumber(raw.defaultTimeoutMs, { defaultValue: DEFAULTS.http.defaultTimeoutMs }),
-            reachabilityTimeoutMs: ConfigValidator.parseNumber(raw.reachabilityTimeoutMs, { defaultValue: DEFAULTS.http.reachabilityTimeoutMs }),
-            enhancedTimeoutMs: ConfigValidator.parseNumber(raw.enhancedTimeoutMs, { defaultValue: DEFAULTS.http.enhancedTimeoutMs }),
-            enhancedReachabilityTimeoutMs: ConfigValidator.parseNumber(raw.enhancedReachabilityTimeoutMs, { defaultValue: DEFAULTS.http.enhancedReachabilityTimeoutMs })
+            defaultTimeoutMs: ConfigValidator._parseNumberFromSchema('http', 'defaultTimeoutMs', raw.defaultTimeoutMs),
+            reachabilityTimeoutMs: ConfigValidator._parseNumberFromSchema('http', 'reachabilityTimeoutMs', raw.reachabilityTimeoutMs),
+            enhancedTimeoutMs: ConfigValidator._parseNumberFromSchema('http', 'enhancedTimeoutMs', raw.enhancedTimeoutMs),
+            enhancedReachabilityTimeoutMs: ConfigValidator._parseNumberFromSchema('http', 'enhancedReachabilityTimeoutMs', raw.enhancedReachabilityTimeoutMs)
         };
     }
 

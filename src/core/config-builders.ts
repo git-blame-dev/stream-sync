@@ -68,7 +68,7 @@ function buildPlatformConfig(platformName: string, normalized: NormalizedConfig,
 
     const result: PlatformConfigRecord = {
         ...platform,
-        pollIntervalMs: platform.pollInterval ? platform.pollInterval * 1000 : generalViewerPollMs,
+        pollIntervalMs: platform.pollInterval == null ? generalViewerPollMs : platform.pollInterval * 1000,
         dataLoggingPath: DEFAULTS.LOG_DIRECTORY
     };
 

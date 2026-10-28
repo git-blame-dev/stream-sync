@@ -62,6 +62,12 @@ describe('config-builders', () => {
     });
 
     describe('buildPlatformConfig', () => {
+        it('keeps explicit zero disabled while null uses the general polling interval', () => {
+            const generalConfig = { viewerCountPollingIntervalMs: 45000 };
+            expect(buildPlatformConfig('tiktok', { tiktok: { pollInterval: 0 } }, generalConfig).pollIntervalMs).toBe(0);
+            expect(buildPlatformConfig('tiktok', { tiktok: { pollInterval: null } }, generalConfig).pollIntervalMs).toBe(45000);
+        });
+
         it('converts pollInterval seconds to milliseconds', () => {
             const normalized = { tiktok: { enabled: true, pollInterval: 30 } };
             const generalConfig = { viewerCountPollingIntervalMs: 60000 };

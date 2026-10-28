@@ -30,10 +30,10 @@ const CONFIG_SCHEMA: ConfigSchema = {
 
     http: {
         userAgents: { type: 'stringArray', default: null },
-        defaultTimeoutMs: { type: 'number', default: 10000 },
-        reachabilityTimeoutMs: { type: 'number', default: 5000 },
-        enhancedTimeoutMs: { type: 'number', default: DEFAULT_ENHANCED_TIMEOUT_MS },
-        enhancedReachabilityTimeoutMs: { type: 'number', default: 3000 }
+        defaultTimeoutMs: { type: 'number', default: 10000, min: 1, integer: true },
+        reachabilityTimeoutMs: { type: 'number', default: 5000, min: 1, integer: true },
+        enhancedTimeoutMs: { type: 'number', default: DEFAULT_ENHANCED_TIMEOUT_MS, min: 1, integer: true },
+        enhancedReachabilityTimeoutMs: { type: 'number', default: 3000, min: 1, integer: true }
     },
 
     youtube: {
