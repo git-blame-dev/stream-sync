@@ -1,4 +1,5 @@
 import type { ConfigDefaults, ConfigFieldSpec, ConfigSchema, ConfigSectionSpec } from './types/config-types';
+import { GUI_CONFIG_DEFAULTS } from './constants';
 
 const DEFAULT_ENHANCED_TIMEOUT_MS = 6_000;
 
@@ -138,8 +139,8 @@ const CONFIG_SCHEMA: ConfigSchema = {
         host: { type: 'string', default: '127.0.0.1' },
         port: { type: 'number', default: 3399, min: 0, max: 65535, integer: true },
         messageCharacterLimit: { type: 'number', default: 0, min: 0, integer: true },
-        overlayMaxMessages: { type: 'number', default: 6, min: 1, integer: true },
-        overlayMaxLinesPerMessage: { type: 'number', default: 3, min: 1, integer: true },
+        overlayMaxMessages: { type: 'number', default: GUI_CONFIG_DEFAULTS.overlayMaxMessages, min: 1, integer: true },
+        overlayMaxLinesPerMessage: { type: 'number', default: GUI_CONFIG_DEFAULTS.overlayMaxLinesPerMessage, min: 1, integer: true },
         minimalOverlayMaxMessages: { type: 'number', default: 6, min: 1, max: 100, integer: true },
         minimalCompactRows: { type: 'boolean', default: true },
         minimalRowBackgroundsEnabled: { type: 'boolean', default: false },

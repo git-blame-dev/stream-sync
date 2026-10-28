@@ -1,3 +1,8 @@
+const GUI_CONFIG_DEFAULTS = {
+    overlayMaxMessages: 6,
+    overlayMaxLinesPerMessage: 3
+} as const;
+
 const PRIORITY_LEVELS = {
     CHAT: 1,
     COMMAND: 2,
@@ -102,6 +107,7 @@ const VIEWER_COUNT_CONSTANTS = {
 } as const;
 
 export {
+    GUI_CONFIG_DEFAULTS,
     PRIORITY_LEVELS,
     NOTIFICATION_CONFIGS,
     ERROR_MESSAGES,

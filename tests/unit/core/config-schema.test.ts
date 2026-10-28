@@ -18,6 +18,8 @@ describe('GUI notification and feed mode schema', () => {
         expect(guiSchema.dockFeedMode).toEqual({ type: 'string', default: 'all', enum: ['all', 'chat', 'non-chat'] });
         expect(guiSchema.dockMaxMessages).toEqual({ type: 'number', default: 200, min: 1, max: 2000, integer: true });
         expect(guiSchema.overlayFeedMode).toEqual({ type: 'string', default: 'all', enum: ['all', 'chat', 'non-chat'] });
+        expect(guiSchema.overlayMaxMessages).toEqual({ type: 'number', default: 6, min: 1, integer: true });
+        expect(guiSchema.overlayMaxLinesPerMessage).toEqual({ type: 'number', default: 3, min: 1, integer: true });
     });
 });
 

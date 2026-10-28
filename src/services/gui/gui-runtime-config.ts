@@ -1,3 +1,4 @@
+import { GUI_CONFIG_DEFAULTS } from '../../core/constants';
 import {
     normalizeRowEffects,
     normalizeRowTheme,
@@ -39,10 +40,8 @@ type GuiRuntimeConfig = {
     };
 };
 
-const DEFAULT_OVERLAY_MAX_MESSAGES = 6;
 const DEFAULT_DOCK_MAX_MESSAGES = 200;
 const DEFAULT_MINIMAL_OVERLAY_MAX_MESSAGES = 6;
-const DEFAULT_OVERLAY_MAX_LINES_PER_MESSAGE = 3;
 const DEFAULT_NOTIFICATION_IDLE_HOLD_MS = 5000;
 const DEFAULT_MONETIZATION_IDLE_HOLD_MS = 30000;
 const DEFAULT_NOTIFICATION_TRANSITION_MS = 1000;
@@ -123,10 +122,10 @@ function buildGuiRuntimeConfig(
     const appearanceSnapshot = normalizeAppearanceSnapshot(guiConfig, appearance);
     return {
         dockMaxMessages: parseBoundedPositiveInteger(guiConfig.dockMaxMessages, DEFAULT_DOCK_MAX_MESSAGES, MAX_DOCK_MESSAGES),
-        overlayMaxMessages: parsePositiveInteger(guiConfig.overlayMaxMessages, DEFAULT_OVERLAY_MAX_MESSAGES),
+        overlayMaxMessages: parsePositiveInteger(guiConfig.overlayMaxMessages, GUI_CONFIG_DEFAULTS.overlayMaxMessages),
         overlayMaxLinesPerMessage: parsePositiveInteger(
             guiConfig.overlayMaxLinesPerMessage,
-            DEFAULT_OVERLAY_MAX_LINES_PER_MESSAGE
+            GUI_CONFIG_DEFAULTS.overlayMaxLinesPerMessage
         ),
         dockFeedMode: parseFeedMode(guiConfig.dockFeedMode, 'all'),
         overlayFeedMode: parseFeedMode(guiConfig.overlayFeedMode, 'all'),
