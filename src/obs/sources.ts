@@ -134,12 +134,15 @@ function createOBSSourcesManager(obsManager: SourcesObsManager, dependencies: So
         activeConnectionManager.setSourcesCacheInvalidator(clearSceneItemCache);
     }
 
-    async function updateTextSource(sourceName: string, message?: string): Promise<void> {
+    async function updateTextSource(sourceName: string, message?: string, signal?: AbortSignal): Promise<void> {
+    signal?.throwIfAborted();
     const obsManager = getOBSConnectionManager();
     await safeOBSOperation(
         obsManager,
         async () => {
+            if (signal?.aborted) return;
             await ensureConnected();
+            if (signal?.aborted) return;
             
             const sanitizedMessage = sanitizeForOBS(message);
             
@@ -148,10 +151,10 @@ function createOBSSourcesManager(obsManager: SourcesObsManager, dependencies: So
             if (sanitizedMessage !== message) {
                 logger.debug(`[OBS Source] Text sanitized for OBS safety: "${message}" → "${sanitizedMessage}"`, 'obs-sources');
             }
-            
+            if (signal?.aborted) return;
             const { inputSettings } = await callOBS('GetInputSettings', { inputName: sourceName }) as InputSettingsResponse;
             const currentInputSettings = inputSettings && typeof inputSettings === 'object' ? inputSettings : {};
-            
+            if (signal?.aborted) return;
             await callOBS('SetInputSettings', {
                 inputName: sourceName, 
                 inputSettings: { 
@@ -163,18 +166,22 @@ function createOBSSourcesManager(obsManager: SourcesObsManager, dependencies: So
         },
         `Updating text source "${sourceName}"`
     );
+    // Report cancellation outside safeOBSOperation so an expected abort is not logged as an OBS failure.
+    signal?.throwIfAborted();
     }
 
-    async function clearTextSource(sourceName: string): Promise<void> {
+    async function clearTextSource(sourceName: string, signal?: AbortSignal): Promise<void> {
+    signal?.throwIfAborted();
     const obsManager = getOBSConnectionManager();
     await safeOBSOperation(
         obsManager,
         async () => {
+            if (signal?.aborted) return;
             await ensureConnected();
-            
-            
+            if (signal?.aborted) return;
             const { inputSettings } = await callOBS('GetInputSettings', { inputName: sourceName }) as InputSettingsResponse;
             const currentInputSettings = inputSettings && typeof inputSettings === 'object' ? inputSettings : {};
+            if (signal?.aborted) return;
             await callOBS('SetInputSettings', {
                 inputName: sourceName, 
                 inputSettings: { 
@@ -187,6 +194,7 @@ function createOBSSourcesManager(obsManager: SourcesObsManager, dependencies: So
         },
         `Clearing text source "${sourceName}"`
     );
+    signal?.throwIfAborted();
     }
 
     async function getSceneItemId(sceneName: string, sourceName: string): Promise<SceneItemCacheEntry> {

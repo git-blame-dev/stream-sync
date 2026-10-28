@@ -149,7 +149,7 @@ describe("DisplayQueueEffects", () => {
         },
         processPaypiggyGoal: async () => {},
       },
-      triggerHandcamGlow: () => {
+      triggerHandcamGlow: async () => {
         handcamTriggered = true;
       },
       delay: async () => {},
@@ -171,7 +171,8 @@ describe("DisplayQueueEffects", () => {
     });
 
     expect(handcamTriggered).toBe(true);
-    expect(goalCalls).toEqual([{ platform: "tiktok", amount: 100, currency: "coins" }]);
+    // Accounting belongs to the queue's common presentation-start boundary, not an effect replay.
+    expect(goalCalls).toEqual([]);
     expect(obsCalls.length).toBe(2);
   });
 
@@ -240,12 +241,12 @@ describe("DisplayQueueEffects", () => {
       extractUsername,
     });
 
-    await effects.handleNotificationEffects({
+    await effects.processMonetizationGoal({
       type: "platform:paypiggy",
       platform: "youtube",
       data: { username: "member", userId: "member-id" },
     });
-    await effects.handleNotificationEffects({
+    await effects.processMonetizationGoal({
       type: "platform:giftpaypiggy",
       platform: "twitch",
       data: { username: "gifter", userId: "gifter-id", giftCount: 5 },

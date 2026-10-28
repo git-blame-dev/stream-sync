@@ -10,6 +10,8 @@ type AddSequenceOptions = {
 
 class DisplayQueueState {
     queue: DisplayItem[] = [];
+    private readonly admissionOrder = new WeakMap<DisplayItem, number>();
+    private nextAdmissionOrder = 0;
     maxQueueSize: number | null;
     getPriority: ((itemType: string) => number) | null;
 
@@ -48,6 +50,7 @@ class DisplayQueueState {
             item.priority = this.getPriority(item.type);
         }
         const insertIndex = this._findInsertIndex(item.priority);
+        this.admissionOrder.set(item, this.nextAdmissionOrder++);
         this.queue.splice(insertIndex, 0, item);
         return { insertIndex };
     }
@@ -65,10 +68,10 @@ class DisplayQueueState {
 
         children.forEach((item) => this.validate(item));
         this.assertCapacity(reservedRows + children.length);
-        const normalized = children.map((item) => ({
-            ...item,
-            priority: item.priority ?? this.getPriority?.(item.type) ?? 0
-        }));
+        const normalized = children.map((item) => {
+            item.priority ??= this.getPriority?.(item.type) ?? 0;
+            return item;
+        });
 
         const sequence: DisplayQueueSequence = {
             type: '__display_queue_sequence__',
@@ -76,6 +79,7 @@ class DisplayQueueState {
             children: normalized
         };
         const insertIndex = this._findInsertIndex(sequence.priority);
+        this.admissionOrder.set(sequence, this.nextAdmissionOrder++);
         this.queue.splice(insertIndex, 0, sequence);
 
         return { insertIndex };
@@ -91,6 +95,7 @@ class DisplayQueueState {
 
     removeMatching(predicate: (item: DisplayQueueItem) => boolean) {
         const removed: DisplayQueueItem[] = [];
+        let reprioritized = false;
         const retained: DisplayItem[] = this.queue.flatMap((entry): DisplayItem[] => {
             if (!this.isSequence(entry)) {
                 const matches = predicate(entry);
@@ -102,8 +107,22 @@ class DisplayQueueState {
                 if (matches) removed.push(child);
                 return !matches;
             });
-            return children.length === 0 ? [] : [{ ...entry, children }];
+            if (children.length === 0) return [];
+            if (children.length === entry.children.length) return [entry];
+            const retainedSequence: DisplayQueueSequence = {
+                ...entry,
+                priority: Math.max(...children.map((child) => child.priority ?? 0)),
+                children
+            };
+            reprioritized ||= retainedSequence.priority !== entry.priority;
+            this.admissionOrder.set(retainedSequence, this.admissionOrder.get(entry) ?? 0);
+            return [retainedSequence];
         });
+        // Reprioritization must recover admission FIFO, not the former priority-sorted position.
+        if (reprioritized) {
+            retained.sort((left, right) => (right.priority ?? 0) - (left.priority ?? 0)
+                || (this.admissionOrder.get(left) ?? 0) - (this.admissionOrder.get(right) ?? 0));
+        }
         this.queue.splice(0, this.queue.length, ...retained);
         return removed;
     }

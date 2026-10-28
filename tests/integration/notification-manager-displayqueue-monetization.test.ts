@@ -1,611 +1,289 @@
-import { describe, test, beforeEach, afterEach, expect } from "bun:test";
-import {
-  createMockFn,
-  clearAllMocks,
-  restoreAllMocks,
-  type TestMockFn,
-} from "../helpers/bun-mock-utils";
-import EventEmitter from "events";
-import { PlatformEventRouter } from "../../src/services/PlatformEventRouter.ts";
-import NotificationManager from "../../src/notifications/NotificationManager";
-import { DisplayQueue } from "../../src/obs/display-queue";
-import * as constants from "../../src/core/constants";
-import { noOpLogger } from "../helpers/mock-factories";
-import { PlatformEvents } from "../../src/interfaces/PlatformEvents";
-import { createConfigFixture } from "../helpers/config-fixture";
-import { waitFor } from "../helpers/event-driven-testing";
-import type { DisplayQueueDependency, DisplayQueueItem } from "../../src/interfaces/DisplayQueue";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { createFundingGoalService } from "../../src/services/funding-goal-service";
+import { describe, test, beforeEach, afterEach, expect } from 'bun:test';
+import EventEmitter from 'node:events';
+import { createHash } from 'node:crypto';
+import { PlatformEventRouter } from '../../src/services/PlatformEventRouter';
+import NotificationManager from '../../src/notifications/NotificationManager';
+import { DisplayQueue } from '../../src/obs/display-queue';
+import { createOBSGoalsManager } from '../../src/obs/goals';
+import { createOBSSourcesManager } from '../../src/obs/sources';
+import { GoalTracker } from '../../src/utils/goal-tracker';
+import * as constants from '../../src/core/constants';
+import { noOpLogger } from '../helpers/mock-factories';
+import { PlatformEvents } from '../../src/interfaces/PlatformEvents';
+import { createConfigFixture } from '../helpers/config-fixture';
+import type { DisplayQueueItem } from '../../src/interfaces/DisplayQueue';
+import { createFundingGoalService } from '../../src/services/funding-goal-service';
 
-type EventBusHandler = (payload: unknown) => void | Promise<void>;
-type EventBus = {
-  emit: (eventName: string, payload: unknown) => boolean;
-  on: (eventName: string, handler: EventBusHandler) => EventEmitter;
-  subscribe: (eventName: string, handler: EventBusHandler) => () => void;
+const logger = {
+    ...noOpLogger, config: {},
+    outputs: { console: { write: () => {} }, file: { write: () => {}, config: {}, fileAppender: null } },
+    reconfigure: () => {}, log: () => {}, shouldOutput: () => false,
+    console: () => {}, emergency: () => {}
 };
-type MonetizationType =
-  | "platform:giftpaypiggy"
-  | "platform:gift"
-  | "platform:paypiggy"
-  | "platform:envelope";
-type MonetizationPayload = Record<string, unknown> & {
-  username: string;
-  userId: string;
-  id: string;
-  timestamp: string;
-};
-type MonetizationQueueItem = DisplayQueueItem & {
-  type: MonetizationType;
-  data: Record<string, unknown>;
-};
-type RecordedVfxEvent = {
-  commandKey: string;
-  username: unknown;
-  platform: string;
-  userId: unknown;
-  context: { source: string };
-};
-type RuntimePayload = Record<string, unknown> & { type?: MonetizationType };
-type DisplayQueueAddItem = Parameters<DisplayQueue["addItem"]>[0];
-type DisplayQueueObsManager = {
-  isReady: () => Promise<boolean>;
-  call: (requestType: string, payload: Record<string, unknown>) => Promise<unknown>;
-};
+const values = { tiktokGiftUnitUsd: 0.005, twitchBitUsd: 0.01, youtubeJewelUsd: 0.005,
+    tiktokMembershipUsd: 2.1, twitchMembershipUsd: 3.5, youtubeMembershipUsd: 3.89 };
+const fixedTimestamp = '2025-01-01T00:00:00.000Z';
+type MonetizationType = 'platform:giftpaypiggy' | 'platform:gift' | 'platform:paypiggy' | 'platform:envelope';
+type VfxEvent = Record<string, unknown> & { context: { source: string } };
+type Flow = { platform: string; type: MonetizationType; expectedCommandKey: string; username: string;
+    userId: string; giftType?: string; giftCount?: number; amount?: number; currency?: string };
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null;
+describe('Monetisation pipeline integration', () => {
+    let displayQueue: DisplayQueue;
+    let notificationManager: NotificationManager;
+    let router: PlatformEventRouter;
+    let config: ReturnType<typeof createConfigFixture>;
+    let fundingGoal: Awaited<ReturnType<typeof createFundingGoalService>>;
+    let tracker: GoalTracker;
+    let ingress: Promise<unknown>[];
+    let emitter: EventEmitter;
+    let recordedEvents: VfxEvent[];
+    let rows: DisplayQueueItem[];
+    let persisted: Map<string, string>;
+    let writes: string[];
+    let converterCalls: Array<[number, string]>;
 
-const isMonetizationType = (value: unknown): value is MonetizationType =>
-  value === "platform:giftpaypiggy" ||
-  value === "platform:gift" ||
-  value === "platform:paypiggy" ||
-  value === "platform:envelope";
-
-const requireDisplayQueueItem = (value: unknown): DisplayQueueAddItem => {
-  expect(isRecord(value)).toBe(true);
-  if (!isRecord(value)) {
-    throw new Error("Expected queued display item");
-  }
-  expect(typeof value.type).toBe("string");
-  expect(typeof value.platform).toBe("string");
-  expect(isRecord(value.data)).toBe(true);
-  if (
-    typeof value.type !== "string" ||
-    typeof value.platform !== "string" ||
-    !isRecord(value.data)
-  ) {
-    throw new Error("Queued display item has invalid shape");
-  }
-  return value as DisplayQueueAddItem;
-};
-
-const requireMonetizationQueueItem = (value: unknown): MonetizationQueueItem => {
-  const item = requireDisplayQueueItem(value);
-  expect(isMonetizationType(item.type)).toBe(true);
-  if (!isMonetizationType(item.type)) {
-    throw new Error("Expected monetization display item");
-  }
-  return item as MonetizationQueueItem;
-};
-
-const requireRecordedVfxEvent = (value: unknown): RecordedVfxEvent => {
-  expect(isRecord(value)).toBe(true);
-  if (!isRecord(value) || !isRecord(value.context)) {
-    throw new Error("Expected recorded VFX event");
-  }
-  expect(typeof value.commandKey).toBe("string");
-  expect(typeof value.platform).toBe("string");
-  expect(value.context.source).toBe("display-queue");
-  if (typeof value.commandKey !== "string" || typeof value.platform !== "string") {
-    throw new Error("Recorded VFX event has invalid shape");
-  }
-  return {
-    commandKey: value.commandKey,
-    username: value.username,
-    platform: value.platform,
-    userId: value.userId,
-    context: { source: "display-queue" },
-  };
-};
-
-describe("Monetisation pipeline integration", () => {
-  let eventBus: EventBus;
-  let recordedEvents: RecordedVfxEvent[];
-  let displayQueue: DisplayQueue;
-  let addItemMock: TestMockFn<[DisplayQueueAddItem], void>;
-  let notificationManager: NotificationManager;
-  let router: PlatformEventRouter;
-  let config: ReturnType<typeof createConfigFixture>;
-  const fixedTimestamp = "2025-01-01T00:00:00.000Z";
-
-  const createEventBus = (): EventBus => {
-    const emitter = new EventEmitter();
-    return {
-      emit: emitter.emit.bind(emitter),
-      on: emitter.on.bind(emitter),
-      subscribe: (event: string, handler: EventBusHandler) => {
-        emitter.on(event, handler);
-        return () => {
-          emitter.off(event, handler);
+    beforeEach(async () => {
+        ingress = [];
+        emitter = new EventEmitter();
+        recordedEvents = [];
+        rows = [];
+        persisted = new Map();
+        writes = [];
+        converterCalls = [];
+        const eventBus = {
+            emit: emitter.emit.bind(emitter),
+            subscribe: (event: string, handler: (payload: unknown) => unknown) => {
+                const receive = (payload: unknown) => { ingress.push(Promise.resolve(handler(payload))); };
+                emitter.on(event, receive);
+                return () => { emitter.off(event, receive); };
+            }
         };
-      },
-    };
-  };
-
-  beforeEach(() => {
-    eventBus = createEventBus();
-    recordedEvents = [];
-    eventBus.on(PlatformEvents.VFX_COMMAND_RECEIVED, (data) => {
-      recordedEvents.push(requireRecordedVfxEvent(data));
-    });
-
-    const displayQueueConfig = {
-      autoProcess: false,
-      maxQueueSize: 25,
-      ttsChatEnabled: false,
-      ttsNotificationsEnabled: false,
-      chat: {
-        sourceName: "chat-source",
-        sceneName: "chat-scene",
-        groupName: "chat-group",
-        platformLogos: {},
-      },
-      notification: {
-        sourceName: "notif-source",
-        sceneName: "notif-scene",
-        groupName: "notif-group",
-        platformLogos: {},
-      },
-      obs: { ttsTxt: "tts-source" },
-      vfx: { vfxFilePath: "/test/vfx/path" },
-      twitch: {},
-      youtube: {},
-      tiktok: {},
-    };
-
-    const mockObs: DisplayQueueObsManager = {
-      isReady: createMockFn().mockResolvedValue(true),
-      call: createMockFn().mockResolvedValue({ success: true }),
-    };
-
-    displayQueue = new DisplayQueue(
-      mockObs,
-      displayQueueConfig,
-      constants,
-      eventBus,
-    );
-    displayQueue.playGiftVideoAndAudio = createMockFn().mockResolvedValue();
-    displayQueue.effects.isNotificationTTSEnabled = createMockFn(() => false);
-    const originalAddItem = displayQueue.addItem.bind(displayQueue);
-    addItemMock = createMockFn<[DisplayQueueAddItem], void>((item) => {
-      originalAddItem(item);
-    });
-    displayQueue.addItem = addItemMock;
-
-    displayQueue.processQueue = createMockFn(async () => {
-      while (displayQueue.queue.length > 0) {
-        const item = requireMonetizationQueueItem(displayQueue.queue.shift());
-        const commandKey =
-          typeof item.data.commandKey === "string"
-            ? item.data.commandKey
-            : item.type === "platform:paypiggy"
-              ? "paypiggies"
-              : "gifts";
-        eventBus.emit(PlatformEvents.VFX_COMMAND_RECEIVED, {
-          commandKey,
-          username: item.data?.username,
-          platform: item.platform,
-          userId: item.data?.userId,
-          context: { source: "display-queue" },
+        // External VFX playback acknowledges the actual correlated queue request.
+        emitter.on(PlatformEvents.VFX_COMMAND_RECEIVED, (event: VfxEvent) => {
+            recordedEvents.push(event);
+            emitter.emit('vfx:effect-completed', { correlationId: event.correlationId });
         });
-      }
-    });
-
-    const vfxCommandService = {
-      executeCommand: createMockFn(),
-      getVFXConfig: createMockFn(async (commandKey) => ({
-        commandKey,
-        command: `!${commandKey}`,
-        filename: `${commandKey}.mp4`,
-        mediaSource: "vfx top",
-        vfxFilePath: "/test/vfx/path",
-        duration: 10,
-      })),
-    };
-
-    config = createConfigFixture({
-      general: {
-        giftsEnabled: true,
-        paypiggiesEnabled: true,
-      },
-      twitch: {},
-      youtube: {},
-      tiktok: {},
-    });
-
-    notificationManager = new NotificationManager({
-      logger: noOpLogger,
-      constants,
-      obsGoals: { processDonationGoal: createMockFn() },
-      displayQueue: {
-        addItem: (item: DisplayQueueItem) => {
-          displayQueue.addItem(requireDisplayQueueItem(item));
-        },
-        getQueueLength: () => displayQueue.queue.length,
-      } satisfies DisplayQueueDependency,
-      eventBus,
-      config,
-      vfxCommandService,
-      userTrackingService: {
-        isFirstMessage: createMockFn().mockResolvedValue(false),
-      },
-    });
-
-    const runtime = {
-      handleGiftNotification: createMockFn(
-        (platform: string, _username: unknown, payload: RuntimePayload) =>
-        notificationManager.handleNotification(
-          payload.type || "platform:gift",
-          platform,
-          payload,
-        ),
-      ),
-      handleGiftPaypiggyNotification: createMockFn(
-        (platform: string, _username: unknown, payload: RuntimePayload) =>
-          notificationManager.handleNotification(
-            "platform:giftpaypiggy",
-            platform,
-            payload,
-          ),
-      ),
-      handlePaypiggyNotification: createMockFn(
-        (platform: string, _username: unknown, payload: RuntimePayload) =>
-        notificationManager.handleNotification(
-          "platform:paypiggy",
-          platform,
-          payload,
-        ),
-      ),
-      handleEnvelopeNotification: createMockFn(
-        (platform: string, payload: RuntimePayload) =>
-        notificationManager.handleNotification(
-          "platform:envelope",
-          platform,
-          payload,
-        ),
-      ),
-    };
-
-    router = new PlatformEventRouter({
-      eventBus,
-      runtime,
-      notificationManager,
-      config,
-      logger: noOpLogger,
-    });
-  });
-
-  afterEach(() => {
-    router?.dispose();
-    if (displayQueue && typeof displayQueue.stop === "function") {
-      displayQueue.stop();
-    }
-    clearAllMocks();
-    restoreAllMocks();
-  });
-
-  const flows: Array<
-    {
-      platform: string;
-      type: MonetizationType;
-      expectedCommandKey: string;
-      username: string;
-      userId: string;
-      giftType?: string;
-      giftCount?: number;
-      amount?: number;
-      currency?: string;
-    }
-  > = [
-    {
-      platform: "youtube",
-      type: "platform:giftpaypiggy",
-      expectedCommandKey: "gifts",
-      username: "GiftPilot",
-      userId: "yt-gift-1",
-    },
-    {
-      platform: "youtube",
-      type: "platform:gift",
-      giftType: "Super Chat",
-      giftCount: 1,
-      amount: 5,
-      currency: "USD",
-      expectedCommandKey: "gifts",
-      username: "ChatPilot",
-      userId: "yt-superchat-2",
-    },
-    {
-      platform: "youtube",
-      type: "platform:gift",
-      giftType: "Super Sticker",
-      giftCount: 1,
-      amount: 10,
-      currency: "USD",
-      expectedCommandKey: "gifts",
-      username: "StickerPilot",
-      userId: "yt-sticker-3",
-    },
-    {
-      platform: "twitch",
-      type: "platform:giftpaypiggy",
-      expectedCommandKey: "gifts",
-      username: "SubPilot",
-      userId: "tw-giftpaypiggy-4",
-    },
-    {
-      platform: "twitch",
-      type: "platform:gift",
-      giftType: "bits",
-      giftCount: 1,
-      amount: 100,
-      currency: "bits",
-      expectedCommandKey: "gifts",
-      username: "BitsPilot",
-      userId: "tw-bits-5",
-    },
-    {
-      platform: "tiktok",
-      type: "platform:paypiggy",
-      expectedCommandKey: "paypiggies",
-      username: "MemberPilot",
-      userId: "tt-paypiggy-7",
-    },
-    {
-      platform: "tiktok",
-      type: "platform:envelope",
-      giftType: "Treasure Chest",
-      giftCount: 1,
-      amount: 100,
-      currency: "coins",
-      expectedCommandKey: "gifts",
-      username: "ChestPilot",
-      userId: "tt-envelope-1",
-    },
-  ];
-
-  test.each(flows)(
-    "routes %s %s with canonical command key",
-    async ({
-      platform,
-      type,
-      expectedCommandKey,
-      username,
-      userId,
-      giftType,
-      giftCount,
-      amount,
-      currency,
-    }) => {
-      recordedEvents.length = 0;
-
-      const baseData: MonetizationPayload = {
-        username,
-        userId,
-        id: `event-${userId}`,
-        timestamp: fixedTimestamp,
-      };
-      const typeData: Partial<Record<MonetizationType, Record<string, unknown>>> = {
-        "platform:giftpaypiggy": { giftCount: 5, tier: "1000" },
-        "platform:paypiggy": { membershipLevel: "Member", months: 2 },
-      };
-      const payload = {
-        ...baseData,
-        ...(typeData[type] ?? {}),
-        ...(giftType ? { giftType } : {}),
-        ...(giftCount ? { giftCount } : {}),
-        ...(amount !== undefined ? { amount } : {}),
-        ...(currency ? { currency } : {}),
-      };
-
-      if (type === "platform:envelope") {
-        await notificationManager.handleNotification(
-          "platform:envelope",
-          platform,
-          payload,
-        );
-      } else {
-        eventBus.emit("platform:event", {
-          platform,
-          type,
-          data: payload,
+        emitter.on('display:row', (item: DisplayQueueItem) => { rows.push(item); });
+        fundingGoal = await createFundingGoalService({
+            config: { enabled: true, id: 'test-controller', label: 'Test controller', targetUsd: 100 },
+            monetizationValuesConfig: values,
+            fiatToUsd: (amount, currency) => {
+                converterCalls.push([amount, currency]);
+                return currency === 'cad' ? amount * 0.75 : null;
+            },
+            filePath: '/test-only/pipeline-funding.json',
+            fs: {
+                readFile: async () => { throw Object.assign(new Error('test missing'), { code: 'ENOENT' }); },
+                mkdir: async () => {},
+                writeFile: async (path, contents) => { writes.push(contents); persisted.set(path, contents); },
+                rename: async (from, to) => { persisted.set(to, persisted.get(from)!); persisted.delete(from); },
+                unlink: async path => { persisted.delete(path); }
+            }
         });
-      }
-
-      await waitFor(() => addItemMock.mock.calls.length === 1, {
-        timeout: 100,
-        interval: 1,
-      });
-
-      expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
-      const queueItem = requireDisplayQueueItem(addItemMock.mock.calls[0]?.[0]);
-      expect(typeof queueItem.data.displayMessage).toBe("string");
-      expect(typeof queueItem.data.logMessage).toBe("string");
-      if (
-        typeof queueItem.data.displayMessage !== "string" ||
-        typeof queueItem.data.logMessage !== "string"
-      ) {
-        throw new Error("Expected display and log copy");
-      }
-      expect(queueItem.data.displayMessage).toBeTruthy();
-      expect(queueItem.data.logMessage).toBeTruthy();
-      expect(queueItem.data.displayMessage).not.toMatch(/undefined|null/i);
-      expect(queueItem.data.logMessage).not.toMatch(/undefined|null/i);
-
-      await displayQueue.processQueue();
-
-      expect(recordedEvents).toHaveLength(1);
-      const recordedEvent = requireRecordedVfxEvent(recordedEvents[0]);
-      expect(recordedEvent.commandKey).toBe(expectedCommandKey);
-      expect(recordedEvent.username).toBe(username);
-      expect(recordedEvent.platform).toBe(platform);
-      expect(recordedEvent.userId).toBe(userId);
-      expect(recordedEvent.context.source).toBe("display-queue");
-    },
-  );
-
-  test("respects paypiggiesEnabled gating", async () => {
-    config.general.paypiggiesEnabled = false;
-    config.twitch.paypiggiesEnabled = false;
-
-    eventBus.emit("platform:event", {
-      platform: "twitch",
-      type: "platform:paypiggy",
-      data: {
-        username: "GatedMember",
-        userId: "member-1",
-        id: "paypiggy-1",
-        timestamp: fixedTimestamp,
-      },
+        config = createConfigFixture({
+            general: { giftsEnabled: true, paypiggiesEnabled: true },
+            twitch: { giftsEnabled: true, paypiggiesEnabled: true },
+            youtube: { giftsEnabled: true, paypiggiesEnabled: true },
+            tiktok: { giftsEnabled: true, paypiggiesEnabled: true }
+        });
+        const goalsConfig = { enabled: true,
+            twitchGoalEnabled: true, twitchGoalSource: 'test-twitch-goal', twitchGoalTarget: 1000, twitchGoalCurrency: 'bits',
+            youtubeGoalEnabled: true, youtubeGoalSource: 'test-youtube-goal', youtubeGoalTarget: 100, youtubeGoalCurrency: 'USD',
+            tiktokGoalEnabled: true, tiktokGoalSource: 'test-tiktok-goal', tiktokGoalTarget: 1000, tiktokGoalCurrency: 'coins' };
+        const obs = { ensureConnected: async () => {}, isConnected: () => true, isReady: async () => true,
+            call: async () => ({ inputSettings: {}, sceneItems: [], scenes: [] }) };
+        const sources = createOBSSourcesManager(obs, { logger: noOpLogger });
+        tracker = new GoalTracker({ logger, config: { goals: goalsConfig, monetizationValues: values } });
+        const goals = createOBSGoalsManager(obs, { logger, config: { goals: goalsConfig }, goalTracker: tracker,
+            updateTextSource: sources.updateTextSource });
+        await goals.initializeGoalDisplay();
+        displayQueue = new DisplayQueue(obs, {
+            autoProcess: false, maxQueueSize: 25, rowIntervalMs: 0,
+            ttsChatEnabled: false, ttsNotificationsEnabled: false,
+            chat: { sourceName: 'test-chat', sceneName: 'test-scene', groupName: 'test-group', platformLogos: {} },
+            notification: { sourceName: 'test-notification', sceneName: 'test-scene', groupName: 'test-group', platformLogos: {} },
+            obs: { ttsTxt: 'test-tts' }, handcam: { enabled: false },
+            gifts: {}, vfx: { vfxFilePath: '/test-only/vfx' }, twitch: {}, youtube: {}, tiktok: {}
+        }, constants, eventBus, {
+            sourcesManager: sources, goalsManager: goals,
+            // Exercise real scheduling/effects without wall-clock presentation waits.
+            delay: async () => {}, notificationDelay: async () => {},
+            onPresentationStarted: item => fundingGoal.processPresentedContributions(
+                Array.isArray(item.data.contributions) ? item.data.contributions : [])
+        });
+        notificationManager = new NotificationManager({
+            logger: noOpLogger, constants,
+            obsGoals: { processDonationGoal: (...args: unknown[]) => Reflect.apply(goals.processDonationGoal, goals, args) },
+            displayQueue, eventBus, config,
+            vfxCommandService: {
+                getVFXConfig: async (commandKey: string) => ({ commandKey, command: `!${commandKey}`,
+                    filename: `${commandKey}.mp4`, mediaSource: 'test-vfx', vfxFilePath: '/test-only/vfx', duration: 10 })
+            },
+            userTrackingService: { isFirstMessage: () => false }
+        });
+        // Thin runtime adapters leave routing, normalization and admission real.
+        router = new PlatformEventRouter({ eventBus, notificationManager, config, logger: noOpLogger, runtime: {
+            handleGiftNotification: (platform, _username, payload) => notificationManager.handleNotification('platform:gift', platform, payload),
+            handleGiftPaypiggyNotification: (platform, _username, payload) => notificationManager.handleNotification('platform:giftpaypiggy', platform, payload),
+            handlePaypiggyNotification: (platform, _username, payload) => notificationManager.handleNotification('platform:paypiggy', platform, payload),
+            handleEnvelopeNotification: (platform, payload) => notificationManager.handleNotification('platform:envelope', platform, payload)
+        } });
     });
 
-    await displayQueue.processQueue();
-
-    expect(displayQueue.queue).toHaveLength(0);
-    expect(recordedEvents).toHaveLength(0);
-  });
-
-  test("keeps funding progress independent from giftsEnabled notification gating", async () => {
-    const root = await mkdtemp(join(tmpdir(), "funding-notification-gate-"));
-    const fundingGoal = await createFundingGoalService({
-      config: {
-        enabled: true,
-        id: "controller",
-        label: "🎮 New Controller",
-        targetUsd: 100,
-      },
-      monetizationValuesConfig: {
-        tiktokGiftUnitUsd: 0.005,
-        twitchBitUsd: 0.01,
-        youtubeJewelUsd: 0.005,
-        tiktokMembershipUsd: 2.10,
-        twitchMembershipUsd: 3.50,
-        youtubeMembershipUsd: 3.89,
-      },
-      eventBus,
-      filePath: join(root, "funding-goal.json"),
-    });
-    config.general.giftsEnabled = false;
-    config.twitch.giftsEnabled = false;
-
-    try {
-      eventBus.emit("platform:event", {
-        platform: "twitch",
-        type: "platform:gift",
-        data: {
-          username: "GatedGifter",
-          userId: "gifter-1",
-          id: "gift-1",
-          timestamp: fixedTimestamp,
-          bits: 100,
-          giftType: "bits",
-          giftCount: 1,
-          amount: 100,
-          currency: "bits",
-        },
-      });
-
-      await waitFor(() => fundingGoal.snapshot.currentUsd === 1);
-      await displayQueue.processQueue();
-
-      expect(fundingGoal.snapshot.currentUsd).toBe(1);
-      expect(displayQueue.queue).toHaveLength(0);
-      expect(recordedEvents).toHaveLength(0);
-    } finally {
-      await fundingGoal.dispose();
-      await rm(root, { recursive: true, force: true });
-    }
-  });
-
-  test("publishes foreign YouTube fiat through the injected converter on the event bus", async () => {
-    const root = await mkdtemp(join(tmpdir(), "funding-foreign-youtube-"));
-    const converterCalls: Array<[number, string]> = [];
-    const fundingGoal = await createFundingGoalService({
-      config: {
-        enabled: true,
-        id: "controller",
-        label: "🎮 New Controller",
-        targetUsd: 100,
-      },
-      monetizationValuesConfig: {
-        tiktokGiftUnitUsd: 0.005,
-        twitchBitUsd: 0.01,
-        youtubeJewelUsd: 0.005,
-        tiktokMembershipUsd: 2.10,
-        twitchMembershipUsd: 3.50,
-        youtubeMembershipUsd: 3.89,
-      },
-      fiatToUsd: (amount, currency) => {
-        converterCalls.push([amount, currency]);
-        return currency === "cad" ? amount * 0.75 : null;
-      },
-      eventBus,
-      filePath: join(root, "funding-goal.json"),
+    afterEach(async () => {
+        router?.dispose();
+        try {
+            await Promise.all(ingress);
+        } finally {
+            try {
+                await displayQueue?.stop();
+            } finally {
+                await fundingGoal?.dispose();
+                emitter?.removeAllListeners();
+            }
+        }
     });
 
-    try {
-      eventBus.emit("platform:event", {
-        platform: "youtube",
-        type: "platform:gift",
-        data: {
-          username: "ForeignSupporter",
-          userId: "yt-cad-1",
-          id: "foreign-gift-1",
-          timestamp: fixedTimestamp,
-          amount: 4,
-          currency: "CAD",
-        },
-      });
+    const send = async (platform: string, type: MonetizationType, data: Record<string, unknown>) => {
+        emitter.emit('platform:event', { platform, type, data });
+        await Promise.all(ingress.splice(0));
+    };
+    const savedState = () => JSON.parse(persisted.get('/test-only/pipeline-funding.json')!) as {
+        version: number; processedEventKeys: string[]; currentMicros: number;
+    };
+    const flows: Flow[] = [
+        { platform: 'youtube', type: 'platform:giftpaypiggy', expectedCommandKey: 'gifts', username: 'Test GiftPilot', userId: 'test-yt-gift-1' },
+        { platform: 'youtube', type: 'platform:gift', giftType: 'Super Chat', giftCount: 1, amount: 5, currency: 'USD',
+            expectedCommandKey: 'gifts', username: 'Test ChatPilot', userId: 'test-yt-superchat-2' },
+        { platform: 'youtube', type: 'platform:gift', giftType: 'Super Sticker', giftCount: 1, amount: 10, currency: 'USD',
+            expectedCommandKey: 'gifts', username: 'Test StickerPilot', userId: 'test-yt-sticker-3' },
+        { platform: 'twitch', type: 'platform:giftpaypiggy', expectedCommandKey: 'gifts', username: 'Test SubPilot', userId: 'test-tw-giftsubs-4' },
+        { platform: 'twitch', type: 'platform:gift', giftType: 'bits', giftCount: 1, amount: 100, currency: 'bits',
+            expectedCommandKey: 'gifts', username: 'Test BitsPilot', userId: 'test-tw-bits-5' },
+        { platform: 'tiktok', type: 'platform:paypiggy', expectedCommandKey: 'paypiggies', username: 'Test MemberPilot', userId: 'test-tt-member-7' },
+        { platform: 'tiktok', type: 'platform:envelope', giftType: 'Treasure Chest', giftCount: 1, amount: 100, currency: 'coins',
+            expectedCommandKey: 'envelopes', username: 'Test ChestPilot', userId: 'test-tt-envelope-1' }
+    ];
 
-      await waitFor(() => fundingGoal.snapshot.currentUsd === 3);
-      expect(converterCalls).toEqual([[4, "cad"]]);
-      expect(fundingGoal.snapshot.currentUsd).toBe(3);
-    } finally {
-      await fundingGoal.dispose();
-      await rm(root, { recursive: true, force: true });
-    }
-  });
-
-  test("normalizes paypiggy months/levels and builds copy/TTS/log without placeholders", async () => {
-    eventBus.emit("platform:event", {
-      platform: "youtube",
-      type: "platform:paypiggy",
-      data: {
-        username: "RenewedMember",
-        userId: "member-22",
-        id: "paypiggy-2",
-        timestamp: fixedTimestamp,
-        membershipLevel: "Test Member Plus",
-        months: 2,
-      },
+    test.each(flows)('routes %s %s with canonical command key', async flow => {
+        const { platform, type, username, userId, expectedCommandKey, giftType, giftCount, amount, currency } = flow;
+        const payload = { username, userId, id: `test-event-${userId}`, timestamp: fixedTimestamp,
+            ...(type === 'platform:giftpaypiggy' ? { giftCount: 5, tier: '1000' } : {}),
+            ...(type === 'platform:paypiggy' ? { membershipLevel: 'Member', months: 2 } : {}),
+            ...(giftType ? { giftType } : {}), ...(giftCount ? { giftCount } : {}),
+            ...(amount !== undefined ? { amount } : {}), ...(currency ? { currency } : {}) };
+        await send(platform, type, payload);
+        expect(displayQueue.getQueueLength()).toBe(1);
+        const item = displayQueue.queue[0] as DisplayQueueItem;
+        expect(item.type).toBe(type);
+        expect(item.platform).toBe(platform);
+        expect(item.data.username).toBe(username);
+        expect(item.data.userId).toBe(userId);
+        if (giftCount !== undefined || type === 'platform:giftpaypiggy') expect(item.data.giftCount).toBe(giftCount ?? 5);
+        expect(typeof item.data.displayMessage).toBe('string');
+        expect(typeof item.data.logMessage).toBe('string');
+        expect(item.data.displayMessage).toBeTruthy();
+        expect(item.data.logMessage).toBeTruthy();
+        expect(item.data.displayMessage).not.toMatch(/undefined|null/i);
+        expect(item.data.logMessage).not.toMatch(/undefined|null/i);
+        expect(rows).toHaveLength(0);
+        expect(fundingGoal.snapshot.currentUsd).toBe(0);
+        await displayQueue.processQueue();
+        expect(rows).toHaveLength(1);
+        expect(recordedEvents).toHaveLength(1);
+        expect(recordedEvents[0]).toMatchObject({ commandKey: expectedCommandKey, username, platform, userId,
+            context: { source: 'display-queue' } });
+        expect(displayQueue.getQueueLength()).toBe(0);
     });
 
-    await waitFor(() => displayQueue.queue.length === 1, {
-      timeout: 100,
-      interval: 1,
+    test('respects paypiggiesEnabled gating', async () => {
+        config.general.paypiggiesEnabled = false;
+        config.twitch.paypiggiesEnabled = false;
+        await send('twitch', 'platform:paypiggy', { username: 'Test GatedMember', userId: 'test-member-1',
+            id: 'test-membership-1', timestamp: fixedTimestamp });
+        await displayQueue.processQueue();
+        expect(displayQueue.getQueueLength()).toBe(0);
+        expect(rows).toHaveLength(0);
+        expect(recordedEvents).toHaveLength(0);
+        expect(fundingGoal.snapshot.currentUsd).toBe(0);
+        expect(writes).toHaveLength(0);
     });
 
-    expect(displayQueue.queue).toHaveLength(1);
-    const item = requireDisplayQueueItem(displayQueue.queue[0]);
-    expect(item.data.months).toBe(2);
-    expect(item.data.displayMessage).toMatch(/2nd month/i);
-    expect(item.data.displayMessage).toContain("Test Member Plus");
-    expect(item.data.ttsMessage).toMatch(/2nd month/i);
-    expect(item.data.logMessage).not.toMatch(/undefined|null/);
-    expect(item.data.displayMessage).not.toMatch(/undefined|null/);
-    expect(item.data.ttsMessage).not.toMatch(/undefined|null/);
-  });
+    test('credits native and funding goals only when an enabled gift starts presentation', async () => {
+        const gift = { username: 'Test GatedGifter', userId: 'test-gifter-1', id: 'test-muted-gift',
+            timestamp: fixedTimestamp, bits: 100, giftType: 'bits', giftCount: 1, amount: 100, currency: 'bits' };
+        config.general.giftsEnabled = false;
+        config.twitch.giftsEnabled = false;
+        await send('twitch', 'platform:gift', gift);
+        await displayQueue.processQueue();
+        expect(displayQueue.getQueueLength()).toBe(0);
+        expect(rows).toHaveLength(0);
+        expect(recordedEvents).toHaveLength(0);
+        expect(tracker.getGoalState('twitch')?.current).toBe(0);
+        expect(fundingGoal.snapshot.currentUsd).toBe(0);
+        expect(fundingGoal.snapshot.revision).toBe(0);
+        expect(persisted.size).toBe(0);
+        expect(writes).toHaveLength(0);
+        config.general.giftsEnabled = true;
+        config.twitch.giftsEnabled = true;
+        await send('twitch', 'platform:gift', { ...gift, id: 'test-shown-gift' });
+        expect(displayQueue.getQueueLength()).toBe(1);
+        expect(tracker.getGoalState('twitch')?.current).toBe(0);
+        expect(fundingGoal.snapshot.currentUsd).toBe(0);
+        expect(writes).toHaveLength(0);
+        await displayQueue.processQueue();
+        expect(rows).toHaveLength(1);
+        expect(recordedEvents).toHaveLength(1);
+        expect(tracker.getGoalState('twitch')?.current).toBe(100);
+        expect(fundingGoal.snapshot.currentUsd).toBe(1);
+        expect(savedState().processedEventKeys).toHaveLength(1);
+        expect(writes).toHaveLength(1);
+        await displayQueue.processQueue();
+        expect(fundingGoal.snapshot.revision).toBe(1);
+        expect(writes).toHaveLength(1);
+    });
+
+    test('converts foreign YouTube fiat from the presented original source exactly once', async () => {
+        const gift = { username: 'Test ForeignSupporter', userId: 'test-yt-cad-1', id: 'test-foreign-gift-1',
+            timestamp: fixedTimestamp, giftCount: 1, giftType: 'Super Chat', amount: 4, currency: 'CAD' };
+        await send('youtube', 'platform:gift', gift);
+        expect(displayQueue.getQueueLength()).toBe(1);
+        expect(fundingGoal.snapshot.currentUsd).toBe(0);
+        expect(converterCalls).toEqual([]);
+        expect(writes).toHaveLength(0);
+        expect((displayQueue.queue[0] as DisplayQueueItem).data.contributions).toEqual([
+            { platform: 'youtube', type: 'platform:gift', data: { id: gift.id, timestamp: fixedTimestamp,
+                userId: gift.userId, giftCount: 1, giftType: 'Super Chat', amount: 4, currency: 'CAD' } }
+        ]);
+        await displayQueue.processQueue();
+        expect(rows).toHaveLength(1);
+        expect(converterCalls).toEqual([[4, 'cad']]);
+        expect(fundingGoal.snapshot.currentUsd).toBe(3);
+        expect(savedState().version).toBe(1);
+        const digest = createHash('sha256').update(JSON.stringify(['youtube', 'platform:gift', gift.id])).digest('hex');
+        expect(savedState().processedEventKeys).toEqual([`youtube:platform:gift:sha256:${digest}`]);
+        await send('youtube', 'platform:gift', gift);
+        await displayQueue.processQueue();
+        expect(converterCalls).toEqual([[4, 'cad']]);
+        expect(fundingGoal.snapshot.currentUsd).toBe(3);
+        expect(writes).toHaveLength(1);
+    });
+
+    test('normalizes paypiggy months/levels and builds copy/TTS/log without placeholders', async () => {
+        await send('youtube', 'platform:paypiggy', { username: 'Test RenewedMember', userId: 'test-member-22',
+            id: 'test-membership-2', timestamp: fixedTimestamp, membershipLevel: 'Test Member Plus', months: 2 });
+        expect(displayQueue.getQueueLength()).toBe(1);
+        const item = displayQueue.queue[0] as DisplayQueueItem;
+        expect(item.data.months).toBe(2);
+        expect(item.data.displayMessage).toMatch(/2nd month/i);
+        expect(item.data.displayMessage).toContain('Test Member Plus');
+        expect(item.data.ttsMessage).toMatch(/2nd month/i);
+        expect(item.data.logMessage).not.toMatch(/undefined|null/);
+        expect(item.data.displayMessage).not.toMatch(/undefined|null/);
+        expect(item.data.ttsMessage).not.toMatch(/undefined|null/);
+        await displayQueue.processQueue();
+        expect(rows).toHaveLength(1);
+        expect(fundingGoal.snapshot.currentUsd).toBe(3.89);
+    });
 });

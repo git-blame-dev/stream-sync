@@ -823,7 +823,6 @@ async function main(overrides: MainOverrides = {}) {
             config: config.fundingGoal as unknown as FundingGoalConfig,
             monetizationValuesConfig: config.monetizationValues as unknown as MonetizationValuesConfig,
             fiatToUsd: usdRateService.convertToUsd,
-            eventBus,
             warn: (message) => logger.warn(message, 'funding-goal'),
             debug: (message) => logger.debug(message, 'funding-goal')
         });
@@ -847,6 +846,11 @@ async function main(overrides: MainOverrides = {}) {
         const displayQueueDependencies = {
             sourcesManager: obsSubsystem.sourcesManager,
             goalsManager: obsSubsystem.goalsManager,
+            onPresentationStarted: async (item: import('./interfaces/DisplayQueue').DisplayQueueItem) => {
+                if (Array.isArray(item.data.contributions)) {
+                    await fundingGoal?.processPresentedContributions(item.data.contributions);
+                }
+            },
             ...(operatorControls ? { operatorControls } : {})
         };
         const displayQueue = runtimeOverrides.initializeDisplayQueue

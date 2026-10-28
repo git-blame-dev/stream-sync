@@ -294,6 +294,9 @@ describe("AppRuntime behavior", () => {
         expect(otherCleanup).not.toHaveBeenCalled();
         expect(oauthFlow).not.toHaveBeenCalled();
         expect(secrets.twitch.accessToken).toBe("test-access");
+        // Bun's advanced fake clock can stall real filesystem completion.
+        // Monitoring assertions are complete; restore the clock before real I/O.
+        useRealTimers();
         expect(JSON.parse(await fs.readFile(tokenStorePath, "utf8")).twitch.refreshToken).toBe("test-refresh");
         const stopping = runtime.rollbackStartup();
         admission.resolve();
@@ -301,10 +304,10 @@ describe("AppRuntime behavior", () => {
         expect(await startupOutcome).toBeInstanceOf(Error);
         await runtime.rollbackStartup();
       } finally {
+        useRealTimers();
         admission.resolve();
         await auth.stopValidationMonitoring();
         await runtime.rollbackStartup();
-        useRealTimers();
         _resetForTesting();
         await fs.rm(directory, { recursive: true, force: true });
       }
@@ -486,7 +489,7 @@ describe("AppRuntime behavior", () => {
   }
 
   for (const mode of ["shutdown", "rollback"] as const) {
-    it(`joins real funding persistence and retires its subscription during ${mode}`, async () => {
+    it(`joins real funding persistence during ${mode}`, async () => {
       const eventBus = new EventBus();
       const writeEntered = Promise.withResolvers<void>();
       const releaseWrite = Promise.withResolvers<void>();
@@ -525,7 +528,6 @@ describe("AppRuntime behavior", () => {
         expect(eventBus.listenerCount("platform:event")).toBe(0);
         await Promise.resolve();
         expect(finished).toBe(false);
-        await expect(fundingGoal.adjust(1)).rejects.toThrow(/disposed/i);
       } finally {
         releaseWrite.resolve();
         await Promise.all([adjustment, stopping]);
@@ -533,6 +535,7 @@ describe("AppRuntime behavior", () => {
       expect(JSON.parse(persisted).currentMicros).toBe(5_000_000);
       expect(fundingGoal.snapshot.currentUsd).toBe(5);
       expect(fundingGoal.snapshot.revision).toBe(1);
+      await expect(fundingGoal.adjust(1)).rejects.toThrow(/disposed/i);
     });
   }
 
@@ -749,6 +752,23 @@ describe("AppRuntime behavior", () => {
     await Promise.all([stopping, reentered]);
     expect(reentered).toBe(stopping);
     expect(notification.mock.calls.length).toBe(1);
+  });
+
+  it("closes display admission synchronously and drains accounting before disposing funding", async () => {
+    let release!: () => void;
+    const drain = new Promise<void>(resolve => { release = resolve; });
+    const queueStop = createMockFn(() => drain);
+    const dispose = createMockFn();
+    const runtime = createRuntime({ displayQueue: { stop: queueStop }, fundingGoal: { dispose } });
+    runtime.emitSystemShutdown = createMockFn();
+    const stopping = runtime.shutdown();
+    expect(queueStop.mock.calls.length).toBe(1);
+    await Promise.resolve();
+    expect(dispose.mock.calls.length).toBe(0);
+    release();
+    await stopping;
+    expect(dispose.mock.calls.length).toBe(1);
+    expect(queueStop.mock.calls.length).toBe(1);
   });
 
   it("retires admission before waiting and joins teardown including funding persistence", async () => {

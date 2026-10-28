@@ -21,6 +21,12 @@ import type { OperatorControlService } from '../services/operator/operator-contr
 type QueueItem = DisplayQueueItem;
 type QueueEntry = QueueItem | DisplayQueueSequence;
 type QueueItemData = DisplayQueueItemData;
+type OutstandingPresentation = {
+    presented: boolean;
+    active: boolean;
+    rowDone: Promise<void>;
+    finishRow: () => void;
+};
 
 type DisplayQueueConfig = {
     autoProcess?: boolean;
@@ -41,10 +47,12 @@ type DisplayQueueEventBus = {
 } | null;
 
 type DisplayQueueDependencies = {
+    onPresentationStarted?: (item: DisplayQueueItem) => Promise<unknown> | unknown;
+    fetch?: ConstructorParameters<typeof DisplayQueueEffects>[0]['fetch'];
     operatorControls?: Pick<OperatorControlService, 'isEnabled' | 'subscribe'>;
     sourcesManager?: DisplayQueueSourcesManager;
     goalsManager?: ReturnType<typeof getDefaultGoalsManager>;
-    delay?: (ms: number) => Promise<void>;
+    delay?: (ms: number, signal?: AbortSignal) => Promise<void>;
     notificationDelay?: (ms: number) => Promise<void>;
     giftAnimationResolver?: ConstructorParameters<typeof DisplayQueueEffects>[0]['giftAnimationResolver'];
     createGiftAnimationResolver?: ConstructorParameters<typeof DisplayQueueEffects>[0]['createGiftAnimationResolver'];
@@ -57,8 +65,8 @@ type DisplayQueueObsManager = {
 };
 
 type DisplayQueueSourcesManager = {
-    updateTextSource: (sourceName: string, text?: string) => Promise<void>;
-    clearTextSource: (sourceName: string) => Promise<void>;
+    updateTextSource: (sourceName: string, text?: string, signal?: AbortSignal) => Promise<void>;
+    clearTextSource: (sourceName: string, signal?: AbortSignal) => Promise<void>;
     [key: string]: unknown;
 };
 
@@ -117,12 +125,22 @@ function handleDisplayQueueError(message: string, error: unknown = null, payload
     displayQueueErrorHandler?.logOperationalError(message, 'display-queue', payload);
 }
 
-function defaultDelay(ms: number) {
+function defaultDelay(ms: number, signal?: AbortSignal) {
     const numMs = Number(ms);
-    return safeDelay(numMs, Number.isFinite(numMs) ? numMs : 1000, 'DisplayQueue delay');
+    if (numMs === 0) return Promise.resolve();
+    return safeDelay(numMs, Number.isFinite(numMs) ? numMs : 1000, 'DisplayQueue delay', signal);
 }
 
 class DisplayQueue {
+    private stopped = false;
+    private readonly stopController = new AbortController();
+    private stopPromise: Promise<void> | null = null;
+    private runner: Promise<void> | null = null;
+    private rowRunner: Promise<void> | null = null;
+    private readonly wakeWaiters = new Set<() => void>();
+    // State orders pending entries; records retain their admission slots through final settlement.
+    private readonly records = new Map<QueueItem, OutstandingPresentation>();
+    private readonly onPresentationStarted: DisplayQueueDependencies['onPresentationStarted'];
     queue: QueueEntry[] = [];
     isProcessing = false;
     processingRunActive = false;
@@ -132,12 +150,12 @@ class DisplayQueue {
     sourcesManager: DisplayQueueSourcesManager;
     goalsManager: ReturnType<typeof getDefaultGoalsManager>;
     eventBus: DisplayQueueEventBus;
-    delay: (ms: number) => Promise<void>;
+    delay: (ms: number, signal?: AbortSignal) => Promise<void>;
     config: DisplayQueueConfig;
     state: DisplayQueueState;
     effects: DisplayQueueEffects;
     notificationCoordinator: NotificationDisplayCoordinator;
-    effectChain: Promise<void> = Promise.resolve();
+    get effectChain(): Promise<void> { return this.runner ?? Promise.resolve(); }
     operatorControls?: DisplayQueueDependencies['operatorControls'];
     unsubscribeOperatorControls?: () => void;
 
@@ -160,6 +178,7 @@ class DisplayQueue {
         this.delay = dependencies.delay || defaultDelay;
         this.config = config;
         this.operatorControls = dependencies.operatorControls;
+        this.onPresentationStarted = dependencies.onPresentationStarted;
         this.state = new DisplayQueueState({
             ...(this.config.maxQueueSize === undefined ? {} : { maxQueueSize: this.config.maxQueueSize }),
             getPriority: (type) => this.getTypePriority(type) ?? PRIORITY_LEVELS.CHAT
@@ -176,6 +195,7 @@ class DisplayQueue {
             delay: this.delay,
             handleDisplayQueueError,
             extractUsername: (data) => this.extractUsername(data),
+            ...(dependencies.fetch ? { fetch: dependencies.fetch } : {}),
             ...(dependencies.createGiftAnimationResolver === undefined
                 ? {}
                 : { createGiftAnimationResolver: dependencies.createGiftAnimationResolver }),
@@ -188,6 +208,7 @@ class DisplayQueue {
             ...(Number.isFinite(Number(timing.notificationIdleHoldMs)) ? { notificationIdleHoldMs: Number(timing.notificationIdleHoldMs) } : {}),
             ...(Number.isFinite(Number(timing.monetizationIdleHoldMs)) ? { monetizationIdleHoldMs: Number(timing.monetizationIdleHoldMs) } : {}),
             ...(Number.isFinite(Number(timing.notificationTransitionMs)) ? { notificationTransitionMs: Number(timing.notificationTransitionMs) } : {}),
+            ...(Number.isFinite(Number(timing.effectFallbackMs)) ? { effectFallbackMs: Number(timing.effectFallbackMs) } : {}),
             ...(dependencies.notificationDelay ? { delay: dependencies.notificationDelay } : {}),
             emit: (event, payload) => this.eventBus?.emit?.(event, payload as Record<string, unknown>)
         });
@@ -218,34 +239,41 @@ class DisplayQueue {
     }
 
     addItem(item: QueueItem) {
+        if (this.stopped) throw new Error('Display queue stopped');
         this.state.validate(item);
+        if (this.records.has(item)) throw new Error('Display item already outstanding');
         if (!this.isViewerOutputEnabled(item)) {
-            this.accountMonetization(item);
             return;
         }
-        const { insertIndex } = this.state.addItem(item, this.activeSequenceRemaining.length);
+        const { insertIndex } = this.state.addItem(item, this.records.size - this.state.getQueueLength());
+        this.registerRecord(item);
         logger.debug(`[Display Queue] Added ${item.type} at position ${insertIndex}. Queue length: ${this.getQueueLength()}`, 'display-queue');
         this.startProcessingIfNeeded();
     }
 
     addSequence(items: QueueItem[]) {
+        if (this.stopped) throw new Error('Display queue stopped');
         if (!Array.isArray(items) || items.length === 0) {
             this.state.addSequence(items);
             return;
         }
         items.forEach((item) => this.state.validate(item));
+        if (new Set(items).size !== items.length || items.some((item) => this.records.has(item))) {
+            throw new Error('Display item already outstanding');
+        }
         const classified = items.map((item) => ({ item, enabled: this.isViewerOutputEnabled(item) }));
         const admitted = classified.filter(({ enabled }) => enabled).map(({ item }) => item);
-        classified.filter(({ enabled }) => !enabled).forEach(({ item }) => this.accountMonetization(item));
         if (admitted.length === 0) return;
         const { insertIndex } = this.state.addSequence(admitted, {
-            reservedRows: this.activeSequenceRemaining.length
+            reservedRows: this.records.size - this.state.getQueueLength()
         });
+        admitted.forEach((item) => this.registerRecord(item));
         logger.debug(`[Display Queue] Added sequence (${items.length} items) at position ${insertIndex}. Queue length: ${this.getQueueLength()}`, 'display-queue');
         this.startProcessingIfNeeded();
     }
 
     startProcessingIfNeeded() {
+        if (this.processingRunActive) this.startRowRunner();
         if (!this.processingRunActive && !this.isProcessing && this.config.autoProcess) {
             void this.processQueue();
         }
@@ -276,20 +304,28 @@ class DisplayQueue {
         }
     }
 
-    async processQueue() {
-        if (this.processingRunActive || this.isProcessing) {
-            return;
-        }
-
-        const configuredInterval = Number(this.config.rowIntervalMs);
-        const rowIntervalMs = Number.isFinite(configuredInterval) && configuredInterval >= 0
-            ? configuredInterval
-            : 1000;
+    processQueue(): Promise<void> {
+        if (this.runner) return this.runner;
+        if (this.stopped) return Promise.resolve();
         this.processingRunActive = true;
         this.isProcessing = true;
+        this.startRowRunner();
+        this.runner = Promise.resolve().then(() => this.runEffects()).finally(() => {
+            this.runner = null;
+            this.isProcessing = false;
+            this.processingRunActive = false;
+            if (!this.stopped && this.config.autoProcess && this.queue.length > 0) void this.processQueue();
+        });
+        return this.runner;
+    }
 
+    private async runEffects() {
         try {
-            while (this.queue.length > 0) {
+            while (!this.stopped && (this.queue.length > 0 || this.rowRunner)) {
+                if (this.queue.length === 0) {
+                    await this.rowRunner;
+                    continue;
+                }
                 const entry = this.state.shift();
                 if (!entry) {
                     continue;
@@ -300,18 +336,114 @@ class DisplayQueue {
                 while (this.activeSequenceRemaining.length > 0) {
                     const item = this.activeSequenceRemaining.shift();
                     if (item) {
-                        await this.processSingleItem(item, rowIntervalMs);
+                        if (!this.isViewerOutputEnabled(item) || this.stopped) {
+                            this.retire(item);
+                            continue;
+                        }
+                        try {
+                            const record = this.records.get(item);
+                            if (record) record.active = true;
+                            this.effects.beginPresentation();
+                            if (isChatType(item.type)) {
+                                await this.records.get(item)?.rowDone;
+                                if (!this.stopped && this.isViewerOutputEnabled(item)) {
+                                    await this.effects.handleChatTTSEffects(item, resolveChatMessageText(item.data.message));
+                                }
+                            } else {
+                                const start = () => this.emitDisplayRow(item);
+                                const effect = () => this.runPresentation(item);
+                                if (this.isNotificationCoordinationEnabled()) {
+                                    await this.notificationCoordinator.register(item).run(start, effect, () => this.effects.cancelActive());
+                                } else {
+                                    start();
+                                    await effect();
+                                }
+                            }
+                        } catch (error) {
+                            handleDisplayQueueError(`[Display Queue] Error presenting ${item.type}`, error, { itemType: item.type });
+                        } finally {
+                            this.retire(item);
+                        }
                     }
                 }
             }
         } finally {
             this.activeSequenceRemaining = [];
-            this.isProcessing = false;
-            this.processingRunActive = false;
-            if (this.config.autoProcess && this.queue.length > 0) {
-                void this.processQueue();
-            }
+            await this.rowRunner;
         }
+    }
+
+    private registerRecord(item: QueueItem) {
+        let finishRow!: () => void;
+        const rowDone = new Promise<void>((resolve) => { finishRow = resolve; });
+        this.records.set(item, { presented: false, active: false, rowDone, finishRow });
+        this.ensureEventId(item);
+        this.notificationCoordinator.setSuccessorAvailable(this.hasPendingNotification());
+    }
+
+    private retire(item: QueueItem) {
+        this.records.get(item)?.finishRow();
+        this.records.delete(item);
+        this.notificationCoordinator.setSuccessorAvailable(this.hasPendingNotification());
+    }
+
+    private hasPendingNotification() {
+        for (const [item, record] of this.records) {
+            if (!isChatType(item.type) && !record.presented) return true;
+        }
+        return false;
+    }
+
+    private nextChatRecord() {
+        let next: [QueueItem, OutstandingPresentation] | undefined;
+        for (const entry of this.records) {
+            const [item, record] = entry;
+            if (!isChatType(item.type) || record.presented) continue;
+            if (!next || (item.priority ?? 0) > (next[0].priority ?? 0)) next = entry;
+        }
+        return next;
+    }
+
+    private async runPresentation(item: QueueItem) {
+        const record = this.records.get(item);
+        if (record) record.presented = true;
+        this.notificationCoordinator.setSuccessorAvailable(this.hasPendingNotification());
+        const results = await Promise.allSettled([
+            this.effects.processMonetizationGoal(item),
+            Promise.resolve().then(() => this.onPresentationStarted?.(item)),
+            this.effects.handleNotificationEffects(item)
+        ]);
+        for (const result of results) if (result.status === 'rejected') throw result.reason;
+    }
+
+    private startRowRunner() {
+        if (this.rowRunner || this.stopped) return;
+        this.rowRunner = Promise.resolve().then(() => this.runRows()).finally(() => {
+            this.rowRunner = null;
+            if (this.nextChatRecord()) this.startRowRunner();
+        });
+    }
+
+    private async runRows() {
+        while (!this.stopped) {
+            const next = this.nextChatRecord();
+            if (!next) return;
+            const [item, record] = next;
+            record.presented = true;
+            try { if (this.isViewerOutputEnabled(item)) this.emitDisplayRow(item); }
+            catch (error) { handleDisplayQueueError('[Display Queue] Error emitting chat row', error); }
+            finally { record.finishRow(); }
+            const interval = Number(this.config.rowIntervalMs ?? 1000);
+            await this.wakeableDelay(Number.isFinite(interval) && interval >= 0 ? interval : 1000);
+        }
+    }
+
+    private async wakeableDelay(ms: number) {
+        let wake!: () => void;
+        const cancelled = new Promise<void>((resolve) => { wake = resolve; this.wakeWaiters.add(wake); });
+        try { await Promise.race([this.delay(ms, this.stopController.signal), cancelled]); }
+        catch (error) { if (!this.stopped) throw error; }
+        finally { this.wakeWaiters.delete(wake); }
     }
 
     async processSingleItem(item: QueueItem, rowIntervalMs: number) {
@@ -330,42 +462,19 @@ class DisplayQueue {
     }
 
     async displayChatItem(item: QueueItem) {
-        this.emitDisplayRow(item);
         this.enqueueEffects(item);
+        await this.processQueue();
         return true;
     }
 
     async displayNotificationItem(item: QueueItem) {
-        if (!this.isNotificationCoordinationEnabled()) {
-            this.emitDisplayRow(item);
-        }
         this.enqueueEffects(item);
+        await this.processQueue();
         return true;
     }
 
     enqueueEffects(item: QueueItem) {
-        this.ensureEventId(item);
-        const notificationRegistration = isChatType(item.type) || !this.isNotificationCoordinationEnabled()
-            ? null
-            : this.notificationCoordinator.register(item);
-        this.effectChain = this.effectChain
-            .then(async () => {
-                if (isChatType(item.type)) {
-                    await this.effects.handleChatTTSEffects(item, resolveChatMessageText(item.data.message));
-                    return;
-                }
-                if (notificationRegistration) {
-                    await notificationRegistration.run(
-                        () => this.emitDisplayRow(item),
-                        () => this.effects.handleNotificationEffects(item)
-                    );
-                    return;
-                }
-                await this.effects.handleNotificationEffects(item);
-            })
-            .catch((error) => {
-                handleDisplayQueueError(`[Display Queue] Error processing ${item.type} effects`, error, { itemType: item.type });
-            });
+        this.addItem(item);
     }
 
     handleNotificationEffects(item: QueueItem) {
@@ -407,26 +516,41 @@ class DisplayQueue {
     }
 
     getQueueLength() {
-        return this.state.getQueueLength() + this.activeSequenceRemaining.length;
+        return this.records.size;
     }
 
     clearQueue() {
         this.state.clear();
+        for (const item of this.activeSequenceRemaining) this.retire(item);
         this.activeSequenceRemaining = [];
+        for (const [item, record] of this.records) if (!record.active) this.retire(item);
         logger.debug('[Display Queue] Queue cleared', 'display-queue');
     }
 
-    async stop() {
-        this.unsubscribeOperatorControls?.();
+    stop(): Promise<void> {
+        if (this.stopPromise) return this.stopPromise;
+        let resolve!: () => void;
+        let reject!: (reason: unknown) => void;
+        this.stopPromise = new Promise<void>((done, fail) => { resolve = done; reject = fail; });
+        this.stopped = true;
+        this.stopController.abort();
+        const cleanups: Array<Promise<unknown>> = [];
+        const attempt = (operation: () => unknown) => {
+            try { cleanups.push(Promise.resolve(operation())); }
+            catch (error) { cleanups.push(Promise.reject(error)); }
+        };
+        attempt(() => this.unsubscribeOperatorControls?.());
         delete this.unsubscribeOperatorControls;
         this.clearQueue();
         this.notificationCoordinator.stop();
-        const disposal = this.effects.dispose();
-        const results = await Promise.allSettled([disposal, this.effectChain]);
-        for (const result of results) {
-            if (result.status === 'rejected') throw result.reason;
-        }
-        logger.info('[Display Queue] Processing stopped and queue cleared.');
+        for (const wake of this.wakeWaiters) wake();
+        attempt(() => this.effects.dispose());
+        void Promise.allSettled([...cleanups, this.runner, this.rowRunner]).then((results) => {
+            for (const item of this.records.keys()) this.retire(item);
+            for (const result of results) if (result.status === 'rejected') throw result.reason;
+            logger.info('[Display Queue] Processing stopped and queue cleared.');
+        }).then(resolve, reject);
+        return this.stopPromise;
     }
 
     extractUsername(data: unknown): string | null {
@@ -444,20 +568,17 @@ class DisplayQueue {
         return !settingKey || this.operatorControls.isEnabled(settingKey);
     }
 
-    private accountMonetization(item: QueueItem) {
-        if (item.type === 'platform:gift' || item.type === 'platform:paypiggy' || item.type === 'platform:giftpaypiggy') {
-            this.effectChain = this.effectChain.then(() => this.effects.processMonetizationGoal(item)).catch((error) => {
-                handleDisplayQueueError(`[Display Queue] Error processing ${item.type} monetization`, error, { itemType: item.type });
-            });
-        }
-    }
-
     private cancelDisabledItems(settingKey: string) {
         const removed = this.state.removeMatching((item) => {
             const itemKey = isChatType(item.type) ? 'messagesEnabled' : NOTIFICATION_CONFIGS[item.type as keyof typeof NOTIFICATION_CONFIGS]?.settingKey;
             return itemKey === settingKey;
         });
-        removed.forEach((item) => this.accountMonetization(item));
+        removed.forEach((item) => this.retire(item));
+        this.activeSequenceRemaining = this.activeSequenceRemaining.filter((item) => {
+            if (this.isViewerOutputEnabled(item)) return true;
+            this.retire(item);
+            return false;
+        });
     }
 }
 

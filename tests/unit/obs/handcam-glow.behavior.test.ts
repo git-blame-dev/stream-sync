@@ -67,6 +67,45 @@ describe("handcam-glow", () => {
     resetTestingDependencies();
   });
 
+  it('returns joinable work and fences all later writes after cancellation during an OBS response', async () => {
+    let requested!: () => void;
+    const entered = new Promise<void>((resolve) => { requested = resolve; });
+    let release!: () => void;
+    const response = new Promise<void>((resolve) => { release = resolve; });
+    const calls: string[] = [];
+    const controller = new AbortController();
+    const obs = createObsLike(async (request) => {
+      calls.push(request);
+      requested();
+      await response;
+      return { filterSettings: {} };
+    });
+    let retired = false;
+    const run = triggerHandcamGlow(obs, createHandcamConfigFixture({ enabled: true }), controller.signal);
+    void run?.then(() => { retired = true; });
+    await entered;
+    controller.abort();
+    expect(retired).toBe(false);
+    release();
+    await run;
+    expect(calls).toEqual(['GetSourceFilter']);
+    expect(retired).toBe(true);
+  });
+
+  it('wakes an owned glow delay on cancellation without another OBS write', async () => {
+    let delayed!: () => void;
+    const entered = new Promise<void>((resolve) => { delayed = resolve; });
+    setTestingDependencies({ delay: () => { delayed(); return new Promise<void>(() => {}); } });
+    const calls: string[] = [];
+    const obs = createObsLike(async (request) => { calls.push(request); return { filterSettings: {} }; });
+    const controller = new AbortController();
+    const run = triggerHandcamGlow(obs, createHandcamConfigFixture({ enabled: true }), controller.signal);
+    await entered;
+    controller.abort();
+    await run;
+    expect(calls).toEqual(['GetSourceFilter', 'SetSourceFilterSettings', 'SetSourceFilterSettings']);
+  });
+
   for (const value of [NaN, Infinity, -Infinity, -1, false, true, null, undefined, [], {}, "", "bad"]) {
     it(`falls back to schema numeric defaults for malformed input ${JSON.stringify(value)}`, async () => {
       const sizes: number[] = [];

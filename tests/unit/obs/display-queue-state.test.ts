@@ -3,6 +3,43 @@ import { describe, expect, it } from "bun:test";
 import { DisplayQueueState } from "../../../src/obs/display-queue-state.ts";
 
 describe("DisplayQueueState", () => {
+  const child = (name: string, priority: number) => ({
+    type: name, platform: 'twitch', priority, data: { username: name }
+  });
+  const names = (state: DisplayQueueState) => state.queue.map((entry) => state.isSequence(entry)
+    ? entry.children.map((item) => item.type).join(',') : entry.type);
+
+  it('recomputes a waiting sequence from surviving children and reorders pending entries', () => {
+    const state = new DisplayQueueState();
+    state.addSequence([child('synthetic-chat', 1), child('synthetic-greeting', 4)]);
+    state.addItem(child('synthetic-command', 2));
+    expect(state.removeMatching((item) => item.type === 'synthetic-greeting').map((item) => item.type)).toEqual(['synthetic-greeting']);
+    expect(names(state)).toEqual(['synthetic-command', 'synthetic-chat']);
+    expect(state.queue.map((entry) => entry.priority)).toEqual([2, 1]);
+  });
+
+  it('uses original admission FIFO when a demoted sequence ties older and newer pending entries', () => {
+    const state = new DisplayQueueState();
+    state.addItem(child('synthetic-older', 1));
+    state.addSequence([child('synthetic-first-child', 1), child('synthetic-remove', 9), child('synthetic-last-child', 1)]);
+    state.addItem(child('synthetic-newer', 1));
+    state.removeMatching((item) => item.type === 'synthetic-remove');
+    expect(names(state)).toEqual(['synthetic-older', 'synthetic-first-child,synthetic-last-child', 'synthetic-newer']);
+    state.removeMatching((item) => item.type === 'synthetic-first-child');
+    expect(names(state)).toEqual(['synthetic-older', 'synthetic-last-child', 'synthetic-newer']);
+  });
+
+  it('removes empty sequences without disturbing ordinary priority and equal-FIFO ordering', () => {
+    const state = new DisplayQueueState();
+    state.addItem(child('synthetic-low', 1));
+    state.addItem(child('synthetic-high-first', 7));
+    state.addSequence([child('synthetic-remove-one', 9), child('synthetic-remove-two', 8)]);
+    state.addItem(child('synthetic-high-second', 7));
+    state.removeMatching((item) => item.type.startsWith('synthetic-remove'));
+    expect(names(state)).toEqual(['synthetic-high-first', 'synthetic-high-second', 'synthetic-low']);
+    state.removeMatching(() => false);
+    expect(names(state)).toEqual(['synthetic-high-first', 'synthetic-high-second', 'synthetic-low']);
+  });
   type DisplayItem = DisplayQueueState["queue"][number];
   type DisplayData = Record<string, unknown>;
   type PriorityType = "high" | "medium" | "low" | "chat";

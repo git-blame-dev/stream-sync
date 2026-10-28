@@ -64,6 +64,64 @@ function event(platform: string, type: string, data: Record<string, unknown>) {
 }
 
 describe("FundingGoalService", () => {
+  for (const failFirst of [false, true]) {
+    test(`bounds outstanding manual commands, reserves presentation admission, and frees settled slots (failure=${failFirst})`, async () => {
+      const fs = memoryFileSystem();
+      const originalWrite = fs.writeFile;
+      let releaseFirst!: () => void;
+      let releaseRest!: () => void;
+      const firstGate = new Promise<void>(resolve => { releaseFirst = resolve; });
+      const restGate = new Promise<void>(resolve => { releaseRest = resolve; });
+      const totals: number[] = [];
+      fs.writeFile = async (path, content, writeOptions) => {
+        totals.push(JSON.parse(content).currentMicros);
+        if (totals.length === 1) {
+          await firstGate;
+          if (failFirst) throw new Error("synthetic first write failure");
+        } else {
+          await restGate;
+        }
+        return originalWrite(path, content, writeOptions);
+      };
+      const service = await createFundingGoalService(options({ fs }));
+      const first = service.adjust(1).then(() => "completed", () => "failed");
+      const rest = Array.from({ length: 99 }, () => service.adjust(1));
+      const expectImmediateCapacityRejection = async (command: Promise<void>) => {
+        let rejection: unknown;
+        void command.catch(error => { rejection = error; });
+        await Promise.resolve();
+        expect(rejection).toBeInstanceOf(Error);
+        expect((rejection as Error).message).toContain("capacity");
+      };
+      await expectImmediateCapacityRejection(service.adjust(999));
+      await expectImmediateCapacityRejection(service.setTotal(999));
+      await expectImmediateCapacityRejection(service.setLabel("Synthetic overload"));
+      await expectImmediateCapacityRejection(service.resetLabel());
+      const presentation = service.processPresentedContributions([
+        event("youtube", "platform:gift", { id: "synthetic-reserved", amount: 5, currency: "USD" }),
+      ]);
+      releaseFirst();
+      expect(await first).toBe(failFirst ? "failed" : "completed");
+      const replacement = service.setTotal(200);
+      await expectImmediateCapacityRejection(service.adjust(999));
+      let disposed = false;
+      const disposing = service.dispose().then(() => { disposed = true; });
+      await expect(service.adjust(1)).rejects.toThrow("disposed");
+      await expect(service.setTotal(1)).rejects.toThrow("disposed");
+      await expect(service.setLabel("Synthetic late")).rejects.toThrow("disposed");
+      await expect(service.resetLabel()).rejects.toThrow("disposed");
+      await expect(service.processPresentedContributions([])).rejects.toThrow("disposed");
+      expect(disposed).toBe(false);
+      releaseRest();
+      await Promise.all([...rest, presentation, replacement, disposing]);
+      expect(totals).toHaveLength(102);
+      const manualTotal = failFirst ? 99 : 100;
+      expect(totals.slice(-3)).toEqual([manualTotal * 1000000, (manualTotal + 5) * 1000000, 200000000]);
+      expect(service.snapshot).toMatchObject({ currentUsd: 200, revision: failFirst ? 101 : 102 });
+      expect(disposed).toBe(true);
+    });
+  }
+
   test("rejects missing monetization values before subscribing", async () => {
     let subscribed = false;
     const creation = createFundingGoalService(options({
@@ -342,7 +400,7 @@ describe("FundingGoalService", () => {
     expect(service.snapshot).toMatchObject({ currentUsd: 0, revision: 0, label: "🎮 New Controller", labelOverridden: false });
   });
 
-  test("publishes immutable revisioned snapshots and unsubscribes from the event bus", async () => {
+  test("raw publication cannot credit funding; explicit presentation publishes immutable snapshots", async () => {
     let handler: ((payload: unknown) => unknown) | undefined;
     let unsubscribed = false;
     const service = await createFundingGoalService(options({
@@ -357,11 +415,70 @@ describe("FundingGoalService", () => {
     service.subscribe((snapshot) => revisions.push(snapshot.revision));
 
     await handler?.(event("youtube", "platform:gift", { id: "yt-1", amount: 5, currency: "USD" }));
-    service.dispose();
+    expect(service.snapshot.currentUsd).toBe(0);
+    expect(handler).toBeUndefined();
+    await service.processPresentedContributions([event("youtube", "platform:gift", { id: "yt-1", amount: 5, currency: "USD" })]);
+    await service.dispose();
 
     expect(revisions).toEqual([1]);
     expect(Object.isFrozen(service.snapshot)).toBe(true);
-    expect(unsubscribed).toBe(true);
+    expect(unsubscribed).toBe(false);
+  });
+
+  test("presentation batches partially deduplicate version1 sources atomically across restart", async () => {
+    const fs = memoryFileSystem();
+    const old = event("youtube", "platform:gift", { id: 123, amount: 2, currency: "USD" });
+    const fresh = event("twitch", "platform:gift", { id: "synthetic-bits", amount: 100, currency: "bits" });
+    const first = await createFundingGoalService(options({ fs }));
+    await first.processPlatformEvent(old);
+    const second = await createFundingGoalService(options({ fs }));
+    const revisions: number[] = [];
+    second.subscribe(snapshot => revisions.push(snapshot.revision));
+    await second.processPresentedContributions([old, fresh, fresh, null]);
+    expect(second.snapshot).toMatchObject({ currentUsd: 3, revision: 2 });
+    expect(revisions).toEqual([2]);
+    expect(JSON.parse(fs.value ?? "null")).toMatchObject({ version: 1, currentMicros: 3000000, revision: 2 });
+    const third = await createFundingGoalService(options({ fs }));
+    await third.processPresentedContributions([old, fresh]);
+    expect(third.snapshot).toMatchObject({ currentUsd: 3, revision: 2 });
+  });
+
+  test("failed batch preserves all state and explicit retry credits once", async () => {
+    const fs = memoryFileSystem(undefined, 1);
+    const service = await createFundingGoalService(options({ fs }));
+    const batch = [
+      event("tiktok", "platform:gift", { id: "synthetic-coins", amount: 100, currency: "coins" }),
+      event("twitch", "platform:giftpaypiggy", { id: "synthetic-members", giftCount: 2 }),
+    ];
+    const revisions: number[] = [];
+    service.subscribe(snapshot => revisions.push(snapshot.revision));
+    await expect(service.processPresentedContributions(batch)).rejects.toThrow("write failed");
+    expect(service.snapshot).toMatchObject({ currentUsd: 0, revision: 0 });
+    expect(fs.value).toBeUndefined();
+    expect(revisions).toEqual([]);
+    await service.processPresentedContributions(batch);
+    await service.processPresentedContributions(batch);
+    expect(service.snapshot).toMatchObject({ currentUsd: 7.5, revision: 1 });
+    expect(revisions).toEqual([1]);
+  });
+
+  test("filters malformed and zero-valued sources without writes and rejects overflow atomically", async () => {
+    const fs = memoryFileSystem();
+    const service = await createFundingGoalService(options({ fs }));
+    await service.processPresentedContributions([
+      null, [], {}, event("youtube", "platform:gift", { amount: 3, currency: "USD" }),
+      event("youtube", "platform:gift", { id: "synthetic-zero", amount: 0, currency: "USD" }),
+      event("youtube", "platform:gift", { id: "synthetic-error", amount: 3, currency: "USD", isError: true }),
+    ]);
+    expect(fs.value).toBeUndefined();
+    const valid = event("youtube", "platform:gift", { id: "synthetic-valid", amount: 2, currency: "USD" });
+    await expect(service.processPresentedContributions([
+      valid, event("youtube", "platform:gift", { id: "synthetic-overflow", amount: Number.MAX_SAFE_INTEGER, currency: "USD" }),
+    ])).rejects.toThrow("supported range");
+    expect(service.snapshot).toMatchObject({ currentUsd: 0, revision: 0 });
+    expect(fs.value).toBeUndefined();
+    await service.processPresentedContributions([valid]);
+    expect(service.snapshot).toMatchObject({ currentUsd: 2, revision: 1 });
   });
 
   test("dispose stops new work and waits for an in-flight persistence", async () => {
@@ -372,25 +489,32 @@ describe("FundingGoalService", () => {
     const blockedFs: FundingGoalFileSystem = {
       ...fs,
       writeFile: async (...args) => {
-        writeStarted();
-        await new Promise<void>((resolve) => { releaseWrite = resolve; });
+        if (!releaseWrite) {
+          writeStarted();
+          await new Promise<void>((resolve) => { releaseWrite = resolve; });
+        }
         return fs.writeFile(...args);
       },
     };
     const service = await createFundingGoalService(options({ fs: blockedFs }));
-    const accepted = service.adjust(5);
+    const accepted = service.processPresentedContributions([
+      event("youtube", "platform:gift", { id: "synthetic-blocked", amount: 5, currency: "USD" }),
+    ]);
     await started;
+    const queued = service.adjust(2);
 
     let disposed = false;
     const disposing = service.dispose().then(() => { disposed = true; });
     await Promise.resolve();
     expect(disposed).toBe(false);
     await expect(service.adjust(1)).rejects.toThrow("disposed");
+    await expect(service.processPresentedContributions([])).rejects.toThrow("disposed");
 
     releaseWrite();
     await accepted;
+    await queued;
     await disposing;
     expect(disposed).toBe(true);
-    expect(service.snapshot.currentUsd).toBe(5);
+    expect(service.snapshot.currentUsd).toBe(7);
   });
 });

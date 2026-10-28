@@ -27,6 +27,7 @@ type DisplayQueueItemData = Record<string, unknown> & {
     months?: unknown;
     isError?: boolean;
     goalProcessed?: boolean;
+    goalOutcome?: 'applied' | 'not-applied' | 'failed';
     badgeImages?: unknown;
     isPaypiggy?: boolean;
     isStreamSupporter?: boolean;

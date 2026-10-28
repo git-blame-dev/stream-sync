@@ -8,6 +8,7 @@ import type { MonetizationValuesConfig, SynchronousUsdConverter } from '../core/
 const MICROS_PER_USD = 1_000_000;
 const STATE_VERSION = 1;
 const DEFAULT_MAX_PROCESSED_EVENT_KEYS = 10_000;
+const MAX_OUTSTANDING_MANUAL_COMMANDS = 100;
 const MONETIZATION_TYPES = new Set([
     'platform:gift',
     'platform:paypiggy',
@@ -192,7 +193,6 @@ class FundingGoalService {
     private readonly config: FundingGoalConfig;
     private readonly monetizationValuesConfig: MonetizationValuesConfig;
     private readonly fiatToUsd: SynchronousUsdConverter | undefined;
-    private readonly eventBus: FundingGoalEventBus | undefined;
     private readonly filePath: string;
     private readonly fs: FundingGoalFileSystem;
     private readonly warn: (message: string) => void;
@@ -205,8 +205,8 @@ class FundingGoalService {
     private processedEventKeys = new Set<string>();
     private listeners = new Set<(snapshot: FundingGoalSnapshot) => void>();
     private operation: Promise<void> = Promise.resolve();
+    private outstandingManualCommands = 0;
     private tempSequence = 0;
-    private unsubscribeEventBus: (() => void) | null = null;
     private disposed = false;
     private disposePromise: Promise<void> | null = null;
 
@@ -215,7 +215,6 @@ class FundingGoalService {
         this.config = options.config;
         this.monetizationValuesConfig = options.monetizationValuesConfig;
         this.fiatToUsd = options.fiatToUsd;
-        this.eventBus = options.eventBus;
         this.filePath = options.filePath ?? './data/funding-goal.json';
         this.fs = options.fs ?? { readFile, mkdir, writeFile, rename, unlink };
         this.warn = options.warn ?? (() => undefined);
@@ -228,7 +227,6 @@ class FundingGoalService {
     static async create(options: FundingGoalServiceOptions): Promise<FundingGoalService> {
         const service = new FundingGoalService(options);
         await service.load();
-        service.start();
         return service;
     }
 
@@ -252,34 +250,45 @@ class FundingGoalService {
     }
 
     processPlatformEvent(payload: unknown): Promise<void> {
+        return this.processPresentedContributions([payload]);
+    }
+
+    // The presentation owner awaits this command within its bounded outstanding record.
+    // Malformed/unvalued sources are skipped; range failure rejects the whole batch.
+    processPresentedContributions(payloads: readonly unknown[]): Promise<void> {
+        if (this.disposed) return Promise.reject(new Error('Funding goal service is disposed'));
         if (!this.config.enabled) return Promise.resolve();
-        const event = asRecord(payload);
-        const platform = typeof event?.platform === 'string' ? event.platform.trim().toLowerCase() : '';
-        const type = typeof event?.type === 'string' ? event.type.trim() : '';
-        const data = asRecord(event?.data);
-        if (!platform || !MONETIZATION_TYPES.has(type) || !data) return Promise.resolve();
-
-        const amountMicros = contributionMicros(
-            platform,
-            type,
-            data,
-            this.monetizationValuesConfig,
-            this.fiatToUsd,
-            this.debug
-        );
-        const key = eventKey(platform, type, data);
-        if (!Number.isSafeInteger(amountMicros) || amountMicros <= 0 || !key) {
-            this.debug(`Skipped unvalued or unidentifiable funding event: ${platform} ${type}`);
-            return Promise.resolve();
-        }
-
         return this.enqueue(async () => {
-            if (this.processedEventKeys.has(key)) return;
-            const nextMicros = this.currentMicros + amountMicros;
-            if (!Number.isSafeInteger(nextMicros)) {
-                throw new RangeError('Funding goal total exceeds the supported range');
+            const nextKeys = new Set(this.processedEventKeys);
+            let nextMicros = this.currentMicros;
+            let accepted = false;
+            for (const payload of payloads) {
+                const event = asRecord(payload);
+                const platform = typeof event?.platform === 'string' ? event.platform.trim().toLowerCase() : '';
+                const type = typeof event?.type === 'string' ? event.type.trim() : '';
+                const data = asRecord(event?.data);
+                if (!platform || !MONETIZATION_TYPES.has(type) || !data) continue;
+
+                const key = eventKey(platform, type, data);
+                if (!key || nextKeys.has(key)) continue;
+                const amountMicros = contributionMicros(
+                    platform, type, data, this.monetizationValuesConfig, this.fiatToUsd, this.debug
+                );
+                if (!Number.isSafeInteger(amountMicros)) {
+                    throw new RangeError('Funding goal contribution exceeds the supported range');
+                }
+                if (amountMicros <= 0) {
+                    this.debug(`Skipped unvalued or unidentifiable funding event: ${platform} ${type}`);
+                    continue;
+                }
+                nextMicros += amountMicros;
+                if (!Number.isSafeInteger(nextMicros)) {
+                    throw new RangeError('Funding goal total exceeds the supported range');
+                }
+                nextKeys.add(key);
+                accepted = true;
             }
-            const nextKeys = new Set(this.processedEventKeys).add(key);
+            if (!accepted) return;
             while (nextKeys.size > this.maxProcessedEventKeys) {
                 const oldestKey = nextKeys.values().next().value;
                 if (typeof oldestKey !== 'string') break;
@@ -298,7 +307,7 @@ class FundingGoalService {
         if (!Number.isFinite(Number(amountUsd)) || !Number.isSafeInteger(amountMicros) || amountMicros === 0) {
             return Promise.reject(new RangeError('Funding goal adjustment must be a finite nonzero amount'));
         }
-        return this.enqueue(async () => {
+        return this.enqueueManual(async () => {
             const nextMicros = this.currentMicros + amountMicros;
             if (!Number.isSafeInteger(nextMicros) || nextMicros < 0) {
                 throw new RangeError('Funding goal total cannot be negative or exceed the supported range');
@@ -315,7 +324,7 @@ class FundingGoalService {
         if (!Number.isSafeInteger(amountMicros) || amountMicros < 0) {
             return Promise.reject(new RangeError('Funding goal total must be a non-negative amount'));
         }
-        return this.enqueue(async () => {
+        return this.enqueueManual(async () => {
             await this.persist(amountMicros, this.processedEventKeys, this.currentRevision + 1, this.labelOverride);
             this.currentMicros = amountMicros;
             this.currentRevision += 1;
@@ -330,7 +339,7 @@ class FundingGoalService {
         } catch (error) {
             return Promise.reject(error);
         }
-        return this.enqueue(async () => {
+        return this.enqueueManual(async () => {
             if ((this.labelOverride ?? this.config.label) === validated) return;
             await this.persist(this.currentMicros, this.processedEventKeys, this.currentRevision + 1, validated);
             this.labelOverride = validated;
@@ -340,7 +349,7 @@ class FundingGoalService {
     }
 
     resetLabel(): Promise<void> {
-        return this.enqueue(async () => {
+        return this.enqueueManual(async () => {
             if (this.labelOverride === undefined) return;
             await this.persist(this.currentMicros, this.processedEventKeys, this.currentRevision + 1, undefined);
             this.labelOverride = undefined;
@@ -352,17 +361,9 @@ class FundingGoalService {
     async dispose(): Promise<void> {
         if (this.disposePromise) return this.disposePromise;
         this.disposed = true;
-        this.unsubscribeEventBus?.();
-        this.unsubscribeEventBus = null;
         this.listeners.clear();
         this.disposePromise = this.operation;
         await this.disposePromise;
-    }
-
-    private start(): void {
-        if (!this.config.enabled || !this.eventBus) return;
-        const unsubscribe = this.eventBus.subscribe('platform:event', payload => this.processPlatformEvent(payload));
-        this.unsubscribeEventBus = typeof unsubscribe === 'function' ? unsubscribe : null;
     }
 
     private async load(): Promise<void> {
@@ -422,6 +423,21 @@ class FundingGoalService {
             }
             throw error;
         }
+    }
+
+    private enqueueManual(task: () => Promise<void>): Promise<void> {
+        if (this.disposed) return Promise.reject(new Error('Funding goal service is disposed'));
+        if (this.outstandingManualCommands >= MAX_OUTSTANDING_MANUAL_COMMANDS) {
+            return Promise.reject(new Error('Funding goal manual command capacity reached'));
+        }
+        this.outstandingManualCommands += 1;
+        return this.enqueue(async () => {
+            try {
+                await task();
+            } finally {
+                this.outstandingManualCommands -= 1;
+            }
+        });
     }
 
     private enqueue(task: () => Promise<void>): Promise<void> {

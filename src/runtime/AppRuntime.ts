@@ -317,6 +317,7 @@ class AppRuntime {
     private teardownPromise: Promise<void> | null = null;
     private startupPromise: Promise<void> | null = null;
     private earlyViewerCountPromise: Promise<void> | null = null;
+    private displayRetirement: Promise<void> | null = null;
     private stopped = false;
     private twitchMonitorOwned = false;
     readonly innertubeService: InnertubeService | undefined;
@@ -805,12 +806,12 @@ class AppRuntime {
             if (joinStartup) await this.startupPromise?.catch(() => {});
             await this.earlyViewerCountPromise?.catch(() => {});
             await this.teardownResources(mode);
-            await fundingCleanup;
         }).finally(() => {
             this.isShuttingDown = false;
         });
 
         // Retire admission before the first await, leaving other EventBus owners intact.
+        this.displayRetirement = this.runTeardownStep(mode, 'stop display queue', () => this.displayQueue.stop?.());
         if (this.twitchMonitorOwned) {
             this.twitchMonitorOwned = false;
             retirement.push(this.runTeardownStep(mode, 'stop Twitch validation monitoring', () => this.twitchAuth?.stopValidationMonitoring()));
@@ -825,7 +826,6 @@ class AppRuntime {
         retirement.push(this.runTeardownStep(mode, 'destroy donation spam detector', () => this.notificationManager.donationSpamDetector?.destroy?.()));
         retirement.push(this.runTeardownStep(mode, 'dispose command cooldown service', () => this.commandCooldownService.dispose()));
         retirement.push(this.runTeardownStep(mode, 'stop viewer count admission', () => this.viewerCountSystem.stopPolling()));
-        const fundingCleanup = this.runTeardownStep(mode, 'dispose funding goal', () => this.fundingGoal?.dispose());
         retirement.push(this.runTeardownStep(mode, 'clear keep-alive interval', () => {
             if (this.keepAliveInterval) clearInterval(this.keepAliveInterval);
             delete this.keepAliveInterval;
@@ -835,7 +835,8 @@ class AppRuntime {
 
     private async teardownResources(mode: 'shutdown' | 'startup-rollback') {
         await this.runTeardownStep(mode, 'stop GUI transport', () => this._stopGuiTransport());
-        await this.runTeardownStep(mode, 'stop display queue', () => this.displayQueue.stop?.());
+        await this.displayRetirement;
+        await this.runTeardownStep(mode, 'dispose funding goal', () => this.fundingGoal?.dispose());
         // Stop only the acquired manager; do not create a process owner during teardown.
         await this.runTeardownStep(mode, 'stop neural TTS process manager', () => this.neuralTtsProcessManager?.stop?.());
         await this.runTeardownStep(mode, 'disconnect platforms', () => this.platformLifecycleService.disconnectAll());

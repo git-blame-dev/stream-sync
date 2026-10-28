@@ -725,6 +725,21 @@ describe("main startup behavior", () => {
     );
   });
 
+  it("wires canonical presentation accounting and skips items without source metadata", async () => {
+    process.env.CHAT_BOT_STARTUP_ONLY = "true";
+    const { overrides, getCapturedDisplayQueueDependencies } = buildOverrides({ cliArgs: { chat: 1 } });
+    await main({ ...overrides, config: buildMainConfig() });
+    const deps = getCapturedDisplayQueueDependencies() as {
+      onPresentationStarted: (item: { data: Record<string, unknown> }) => Promise<void>;
+    };
+    // Startup-only mode retired the real funding owner. Only canonical metadata
+    // should reach that owner; display fields must never manufacture a source.
+    await expect(deps.onPresentationStarted({ data: { id: "test-display-only", amount: 10, currency: "bits" } })).resolves.toBeUndefined();
+    await expect(deps.onPresentationStarted({ data: { contributions: Object.freeze([
+      { platform: "twitch", type: "platform:gift", data: { id: "test-source", amount: 10, currency: "bits" } },
+    ]) } })).rejects.toThrow(/disposed/i);
+  });
+
   it("uses one OBS subsystem instance for display queue, event services, and VFX wiring", async () => {
     process.env.CHAT_BOT_STARTUP_ONLY = "true";
     const { overrides } = buildOverrides({ cliArgs: { chat: 1 } });

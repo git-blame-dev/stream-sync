@@ -47,14 +47,14 @@ describe('DisplayQueue operator controls', () => {
         expect(effects).toBe(0);
     });
 
-    it('accounts disabled monetization exactly once', async () => {
+    it('does not credit disabled monetization', async () => {
         const operatorControls = controls({ giftsEnabled: false });
         const { queue } = makeQueue(operatorControls);
         let accounting = 0;
         queue.effects.processMonetizationGoal = async () => { accounting++; };
         queue.addItem(item('platform:gift'));
         await queue.effectChain;
-        expect(accounting).toBe(1);
+        expect(accounting).toBe(0);
     });
 
     it('removes disabled waiting items while preserving order and categories', () => {
@@ -75,7 +75,7 @@ describe('DisplayQueue operator controls', () => {
         expect((queue.state.queue[0] as { children: DisplayQueueItem[] }).children.map((child) => child.data.message)).toEqual(['chat', 'gift']);
     });
 
-    it('does not remove active sequence children on control updates', async () => {
+    it('removes reserved unseen sequence children on control updates', async () => {
         const operatorControls = controls();
         const { queue, rows } = makeQueue(operatorControls);
         let release!: () => void;
@@ -87,7 +87,7 @@ describe('DisplayQueue operator controls', () => {
         operatorControls.disable('followsEnabled');
         release();
         await processing;
-        expect(rows).toEqual(['chat', 'platform:follow']);
+        expect(rows).toEqual(['chat']);
     });
 
     it('keeps existing behavior without controls', async () => {

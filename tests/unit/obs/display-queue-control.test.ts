@@ -152,6 +152,13 @@ describe("DisplayQueue GUI-primary control", () => {
   it("does not let pending OBS effects delay later GUI rows", async () => {
     const { queue, rows } = createQueue({ rowIntervalMs: 0 });
     let releaseFirstEffect: (() => void) | undefined;
+    let secondRow!: () => void;
+    const secondDisplayed = new Promise<void>((resolve) => { secondRow = resolve; });
+    const originalEmit = queue.eventBus?.emit?.bind(queue.eventBus);
+    queue.eventBus = { emit: (event, payload) => {
+      originalEmit?.(event, payload);
+      if (event === 'display:row' && (payload.data as { message?: string }).message === 'two') secondRow();
+    } };
     const firstEffect = new Promise<void>((resolve) => {
       releaseFirstEffect = resolve;
     });
@@ -163,11 +170,12 @@ describe("DisplayQueue GUI-primary control", () => {
     queue.addItem(chatItem("one"));
     queue.addItem(chatItem("two"));
 
-    await queue.processQueue();
+    const processing = queue.processQueue();
+    await secondDisplayed;
 
     expect(rows.map((row) => (row.data as { message: string }).message)).toEqual(["one", "two"]);
     releaseFirstEffect?.();
-    await queue.effectChain;
+    await processing;
   });
 
   it("isolates effect failures and runs later effects", async () => {

@@ -11,7 +11,7 @@ export type NotificationDisplayCoordinatorOptions = {
 };
 
 export type NotificationDisplayRegistration = {
-    run: (onStart: () => void, effect: () => Promise<unknown> | unknown) => Promise<void>;
+    run: (onStart: () => void, effect: () => Promise<unknown> | unknown, cancelEffect?: () => void) => Promise<void>;
 };
 
 type CancellableDelay = {
@@ -25,6 +25,7 @@ const DEFAULTS = { notificationIdleHoldMs: 5000, monetizationIdleHoldMs: 30000, 
 export class NotificationDisplayCoordinator {
     private stopped = false;
     private pendingCount = 0;
+    private successorAvailable = false;
     private pendingVersion = 0;
     private readonly pendingWaiters = new Set<() => void>();
     private readonly stopWaiters = new Set<() => void>();
@@ -32,6 +33,11 @@ export class NotificationDisplayCoordinator {
 
     constructor(options: NotificationDisplayCoordinatorOptions = {}) {
         this.options = { ...DEFAULTS, ...options };
+    }
+
+    setSuccessorAvailable(available: boolean) {
+        this.successorAvailable = available;
+        if (available) this.wakePendingWaiters();
     }
 
     register(item: { eventId?: string; type: string; platform?: string }): NotificationDisplayRegistration {
@@ -42,7 +48,7 @@ export class NotificationDisplayCoordinator {
 
         let claimed = false;
         return {
-            run: async (onStart, effect) => {
+            run: async (onStart, effect, cancelEffect) => {
                 if (claimed) {
                     throw new Error('Notification display registration can only run once');
                 }
@@ -53,7 +59,6 @@ export class NotificationDisplayCoordinator {
                 const holdMs = MONETIZATION_TYPES.has(item.type)
                     ? this.options.monetizationIdleHoldMs
                     : this.options.notificationIdleHoldMs;
-                const pendingVersionAtStart = this.pendingVersion;
                 const payload = (phase: DisplayLifecyclePayload['phase']): DisplayLifecyclePayload => ({
                     eventId,
                     phase,
@@ -63,24 +68,32 @@ export class NotificationDisplayCoordinator {
                 });
 
                 onStart();
-                this.options.emit?.(DISPLAY_EVENT_TYPES.NOTIFICATION_LIFECYCLE, payload('started'));
-
-                const hold = this.createDelay(holdMs);
                 let effectError: unknown = null;
                 try {
-                    await this.runEffectWithFallback(effect);
+                    if (!this.stopped) this.options.emit?.(DISPLAY_EVENT_TYPES.NOTIFICATION_LIFECYCLE, payload('started'));
                 } catch (error) {
                     effectError = error;
                 }
 
-                if (!this.stopped && this.pendingCount === 0 && this.pendingVersion === pendingVersionAtStart) {
-                    const pendingWait = this.createPendingWait(pendingVersionAtStart);
+                const hold = this.createDelay(holdMs);
+                this.stopWaiters.add(hold.cancel);
+                try {
+                    await this.runEffectWithFallback(effect, cancelEffect);
+                } catch (error) {
+                    effectError ??= error;
+                }
+
+                let holdFinished = false;
+                void hold.promise.then(() => { holdFinished = true; });
+                while (!this.stopped && !holdFinished && this.pendingCount === 0 && !this.successorAvailable) {
+                    const pendingWait = this.createPendingWait(this.pendingVersion);
                     await this.withStop(Promise.race([hold.promise, pendingWait.promise]));
                     pendingWait.cancel();
                 }
                 hold.cancel();
+                this.stopWaiters.delete(hold.cancel);
 
-                this.options.emit?.(DISPLAY_EVENT_TYPES.NOTIFICATION_LIFECYCLE, payload('exit-started'));
+                if (!this.stopped) this.options.emit?.(DISPLAY_EVENT_TYPES.NOTIFICATION_LIFECYCLE, payload('exit-started'));
                 if (!this.stopped) {
                     const transition = this.createDelay(this.options.notificationTransitionMs);
                     await this.withStop(transition.promise);
@@ -92,7 +105,7 @@ export class NotificationDisplayCoordinator {
     }
 
     private createPendingWait(version: number): { promise: Promise<void>; cancel: () => void } {
-        if (this.pendingCount > 0 || this.pendingVersion !== version || this.stopped) {
+        if (this.pendingCount > 0 || this.successorAvailable || this.pendingVersion !== version || this.stopped) {
             return { promise: Promise.resolve(), cancel: () => {} };
         }
 
@@ -108,6 +121,7 @@ export class NotificationDisplayCoordinator {
     }
 
     private createDelay(ms: number): CancellableDelay {
+        if (this.stopped) return { promise: Promise.resolve(), cancel: () => {} };
         if (this.options.delay) {
             return { promise: this.options.delay(ms), cancel: () => {} };
         }
@@ -132,26 +146,22 @@ export class NotificationDisplayCoordinator {
         };
     }
 
-    private runEffectWithFallback(effect: () => Promise<unknown> | unknown): Promise<void> {
-        return new Promise((resolve, reject) => {
-            let settled = false;
-            const settle = (complete: () => void) => {
-                if (settled) return;
-                settled = true;
-                clearTimeout(timeout);
-                this.stopWaiters.delete(stop);
-                complete();
-            };
-            const timeout = safeSetTimeout(() => settle(resolve), this.options.effectFallbackMs);
-            const stop = () => settle(resolve);
-            this.stopWaiters.add(stop);
-            Promise.resolve()
-                .then(effect)
-                .then(
-                    () => settle(resolve),
-                    (error) => settle(() => reject(error))
-                );
-        });
+    private async runEffectWithFallback(effect: () => Promise<unknown> | unknown, cancelEffect = () => {}) {
+        let cancelled = false;
+        const cancel = () => {
+            if (cancelled) return;
+            cancelled = true;
+            clearTimeout(timeout);
+            cancelEffect();
+        };
+        const timeout = safeSetTimeout(cancel, this.options.effectFallbackMs);
+        this.stopWaiters.add(cancel);
+        if (this.stopped) cancel();
+        try { await effect(); }
+        finally {
+            clearTimeout(timeout);
+            this.stopWaiters.delete(cancel);
+        }
     }
 
     private withStop(operation: Promise<unknown>): Promise<void> {

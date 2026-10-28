@@ -134,10 +134,10 @@ describe("NotificationDisplayCoordinator", () => {
 
     coordinator.stop();
     await run;
-    expect(phases).toEqual(["started", "exit-started"]);
+    expect(phases).toEqual(["started"]);
   });
 
-  it("uses the bounded fallback when an effect never settles", async () => {
+  it("requests cancellation at fallback but retains execution until the effect retires", async () => {
     const phases: string[] = [];
     const coordinator = new NotificationDisplayCoordinator({
       notificationIdleHoldMs: 0,
@@ -145,8 +145,39 @@ describe("NotificationDisplayCoordinator", () => {
       effectFallbackMs: 1,
       emit: (_event, payload) => phases.push(payload.phase),
     });
-    await coordinator.register({ eventId: "event-1", type: "platform:follow" })
-      .run(() => {}, () => new Promise(() => {}));
+    let cancel!: () => void;
+    const cancelled = new Promise<void>((resolve) => { cancel = resolve; });
+    let release!: () => void;
+    const effect = new Promise<void>((resolve) => { release = resolve; });
+    let retired = false;
+    const run = coordinator.register({ eventId: "event-1", type: "platform:follow" })
+      .run(() => {}, () => effect, cancel).then(() => { retired = true; });
+    await cancelled;
+    expect(retired).toBe(false);
+    expect(phases).toEqual(["started"]);
+    release();
+    await run;
     expect(phases).toEqual(["started", "exit-started"]);
+  });
+
+  it('does not shorten the idle hold when the sole successor is cancelled before selection', async () => {
+    const delays = new ControlledDelay();
+    const phases: string[] = [];
+    const coordinator = new NotificationDisplayCoordinator({
+      delay: delays.delay,
+      emit: (_event, payload) => phases.push(payload.phase),
+    });
+    const run = coordinator.register({ eventId: 'synthetic-active', type: 'platform:follow' })
+      .run(() => {}, async () => {});
+    await flush();
+    coordinator.setSuccessorAvailable(true);
+    coordinator.setSuccessorAvailable(false);
+    await flush();
+    expect(phases).toEqual(['started']);
+    delays.resolve(5000);
+    await flush();
+    expect(phases).toEqual(['started', 'exit-started']);
+    delays.resolve(1000);
+    await run;
   });
 });

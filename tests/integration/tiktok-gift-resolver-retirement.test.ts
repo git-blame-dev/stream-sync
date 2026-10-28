@@ -49,6 +49,7 @@ async function makeResolver(downloadArchive?: NonNullable<Parameters<typeof crea
 function queueWithOwnedResolver(resolver: Resolver, bus = new TestEventBus(),
   processDonationGoal = async () => {}, coordinated = true) {
   const queue = new DisplayQueue({ call: async () => ({}) }, {
+    autoProcess: true,
     gui: { enableOverlay: true, showGifts: true, enableNotifications: coordinated },
     obs: { ttsTxt: "synthetic-tts" }, ttsNotificationsEnabled: false,
   }, {}, bus, {

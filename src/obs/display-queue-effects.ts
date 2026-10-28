@@ -53,8 +53,8 @@ type DisplayQueueEffectsDependencies = {
         removeEventListener?: (eventName: string, handler: (payload?: Record<string, unknown>) => void) => void;
     };
     sourcesManager: {
-        clearTextSource: (sourceName: string) => Promise<void>;
-        updateTextSource: (sourceName: string, text: string) => Promise<void>;
+        clearTextSource: (sourceName: string, signal?: AbortSignal) => Promise<void>;
+        updateTextSource: (sourceName: string, text: string, signal?: AbortSignal) => Promise<void>;
     };
     goalsManager: {
         processDonationGoal: (platform: string, amount: number, currency?: string) => Promise<unknown>;
@@ -91,7 +91,7 @@ type DisplayQueueEffectsDependencies = {
             showGifts?: boolean;
         };
     };
-    delay: (ms: number) => Promise<void>;
+    delay: (ms: number, signal?: AbortSignal) => Promise<void>;
     handleDisplayQueueError: (message: string, error?: unknown, payload?: Record<string, unknown>) => void;
     triggerHandcamGlow?: typeof triggerHandcamGlow;
     extractUsername: (data: Record<string, unknown> | null | undefined) => string | null;
@@ -109,8 +109,14 @@ type DisplayQueueEffectsDependencies = {
 };
 
 class DisplayQueueEffects {
-    obsManager: DisplayQueueEffectsDependencies['obsManager'];
-    sourcesManager: DisplayQueueEffectsDependencies['sourcesManager'];
+    private outputObsManager: DisplayQueueEffectsDependencies['obsManager'];
+    private readonly guardedObsManager: DisplayQueueEffectsDependencies['obsManager'];
+    private outputSourcesManager: DisplayQueueEffectsDependencies['sourcesManager'];
+    private readonly guardedSourcesManager: DisplayQueueEffectsDependencies['sourcesManager'];
+    get obsManager() { return this.guardedObsManager; }
+    set obsManager(manager: DisplayQueueEffectsDependencies['obsManager']) { this.outputObsManager = manager; }
+    get sourcesManager() { return this.guardedSourcesManager; }
+    set sourcesManager(manager: DisplayQueueEffectsDependencies['sourcesManager']) { this.outputSourcesManager = manager; }
     goalsManager: DisplayQueueEffectsDependencies['goalsManager'];
     eventBus: DisplayQueueEffectsDependencies['eventBus'];
     config: DisplayQueueEffectsDependencies['config'];
@@ -121,7 +127,33 @@ class DisplayQueueEffects {
     giftAnimationResolver: NonNullable<DisplayQueueEffectsDependencies['giftAnimationResolver']>;
     private readonly ownsGiftAnimationResolver: boolean;
     private disposalPromise: Promise<void> | null = null;
+    private controller = new AbortController();
+    private readonly cancellations = new Set<() => void>();
+    private readonly goalAttempts = new WeakSet<QueueItem>();
     fetch: SpeechFetch;
+
+    beginPresentation() {
+        if (this.disposalPromise) throw new Error('Display effects disposed');
+        this.controller = new AbortController();
+    }
+
+    cancelActive() {
+        this.controller.abort();
+        for (const cancel of [...this.cancellations]) {
+            try { cancel(); }
+            catch (error) { this.handleDisplayQueueError('[Display Queue] Error cancelling an effect wait', error); }
+        }
+    }
+
+    private assertActive() {
+        this.controller.signal.throwIfAborted();
+    }
+
+    private trackWaiter<T>(waiter: { promise: Promise<T>; cancel: () => void }) {
+        this.cancellations.add(waiter.cancel);
+        void waiter.promise.then(() => this.cancellations.delete(waiter.cancel), () => this.cancellations.delete(waiter.cancel));
+        return waiter;
+    }
 
     constructor({
         obsManager,
@@ -137,18 +169,51 @@ class DisplayQueueEffects {
         createGiftAnimationResolver = createTikTokGiftAnimationResolver,
         fetch: fetchOverride
     }: DisplayQueueEffectsDependencies) {
-        this.obsManager = obsManager;
-        this.sourcesManager = sourcesManager;
+        this.outputObsManager = obsManager;
+        this.guardedObsManager = {
+            ...(obsManager.addEventListener ? { addEventListener: (event: string, handler: (payload?: Record<string, unknown>) => void) => this.outputObsManager.addEventListener?.(event, handler) } : {}),
+            ...(obsManager.removeEventListener ? { removeEventListener: (event: string, handler: (payload?: Record<string, unknown>) => void) => this.outputObsManager.removeEventListener?.(event, handler) } : {}),
+            call: async (request, payload) => {
+                this.assertActive();
+                const result = await this.outputObsManager.call(request, payload);
+                this.assertActive();
+                return result;
+            }
+        };
+        this.outputSourcesManager = sourcesManager;
+        this.guardedSourcesManager = {
+            clearTextSource: async (source) => { this.assertActive(); await this.outputSourcesManager.clearTextSource(source, this.controller.signal); this.assertActive(); },
+            updateTextSource: async (source, text) => { this.assertActive(); await this.outputSourcesManager.updateTextSource(source, text, this.controller.signal); this.assertActive(); }
+        };
         this.goalsManager = goalsManager;
-        this.eventBus = eventBus || null;
+        this.eventBus = eventBus ? {
+            ...eventBus,
+            ...(eventBus.subscribe ? { subscribe: eventBus.subscribe.bind(eventBus) } : {}),
+            ...(eventBus.on ? { on: eventBus.on.bind(eventBus) } : {}),
+            ...(eventBus.off ? { off: eventBus.off.bind(eventBus) } : {}),
+            emit: (event, payload) => { this.assertActive(); eventBus.emit(event, payload); }
+        } : null;
         this.config = config;
-        this.delay = delay;
+        this.delay = async (ms) => {
+            this.assertActive();
+            let cancel!: () => void;
+            const cancelled = new Promise<void>((resolve) => { cancel = resolve; this.cancellations.add(cancel); });
+            try { await Promise.race([delay(ms, this.controller.signal), cancelled]); this.assertActive(); }
+            finally { this.cancellations.delete(cancel); }
+        };
         this.handleDisplayQueueError = handleDisplayQueueError;
         this.triggerHandcamGlow = triggerHandcamGlowOverride || triggerHandcamGlow;
         this.extractUsername = extractUsername;
         this.ownsGiftAnimationResolver = !giftAnimationResolver;
         this.giftAnimationResolver = giftAnimationResolver || createGiftAnimationResolver({ logger });
-        this.fetch = fetchOverride || globalThis.fetch.bind(globalThis);
+        const speechFetch = fetchOverride || globalThis.fetch.bind(globalThis);
+        this.fetch = async (input, init) => {
+            this.assertActive();
+            const signal = init?.signal ? AbortSignal.any([init.signal, this.controller.signal]) : this.controller.signal;
+            const result = await speechFetch(input, { ...init, signal });
+            this.assertActive();
+            return result;
+        };
     }
 
     dispose(): Promise<void> {
@@ -160,6 +225,7 @@ class DisplayQueueEffects {
             reject = rejectPromise;
         });
         try {
+            this.cancelActive();
             const disposal = this.ownsGiftAnimationResolver ? this.giftAnimationResolver.dispose?.() : undefined;
             Promise.resolve(disposal).then(resolve, reject);
         } catch (error) {
@@ -209,6 +275,7 @@ class DisplayQueueEffects {
         }
 
         const resolved = await this.giftAnimationResolver.resolveFromNotificationData(item?.data);
+        this.assertActive();
         if (!resolved) {
             this.logDebug('[Gift] No TikTok gift animation asset resolved', {
                 platform: item?.platform || null,
@@ -258,7 +325,8 @@ class DisplayQueueEffects {
             let settled = false;
             const cleanup = () => {
                 if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
-                unsubscribe();
+                try { unsubscribe(); }
+                catch (error) { this.handleDisplayQueueError('[Gift] Error removing animation completion subscription', error); }
             };
             const settle = () => {
                 if (settled) return;
@@ -278,7 +346,7 @@ class DisplayQueueEffects {
             timeoutHandle = safeSetTimeout(settle, timeoutMs);
             cancelWait = settle;
         });
-        return { promise, cancel: () => cancelWait() };
+        return this.trackWaiter({ promise, cancel: () => cancelWait() });
     }
 
     isChatTTSEnabled() {
@@ -350,8 +418,6 @@ class DisplayQueueEffects {
             const username = this.extractUsername(item?.data);
             logger.debug(`[Display Queue] Processing notification effects for ${item?.type} from ${username}`, 'display-queue');
 
-            await this.processMonetizationGoal(item);
-
             const ttsStages = MessageTTSHandler.createTTSStages(item.data);
             logger.debug(`[Display Queue] Generated ${ttsStages.length} TTS stages`, 'display-queue', { stages: ttsStages });
 
@@ -361,6 +427,7 @@ class DisplayQueueEffects {
                 await this.handleSequentialEffects(item, ttsStages);
             }
         } catch (error) {
+            if (error === this.controller.signal.reason && this.controller.signal.aborted) return;
             this.handleDisplayQueueError(`[Display Queue] Error handling notification effects for ${item?.type}`, error, { itemType: item?.type });
         }
     }
@@ -388,6 +455,7 @@ class DisplayQueueEffects {
                 await this.setTTSText(stage.text);
             }
         } catch (error) {
+            if (error === this.controller.signal.reason && this.controller.signal.aborted) return;
             this.handleDisplayQueueError('[Display Queue] Error handling chat TTS effects', error, { itemType: item?.type });
         }
     }
@@ -397,29 +465,33 @@ class DisplayQueueEffects {
             return;
         }
 
-        if (item.data.goalProcessed) {
+        if (item.data.goalProcessed || this.goalAttempts.has(item)) {
             logger.debug(`[Display Queue] Goal already processed for ${item.data.username}, skipping`, 'display-queue');
             return;
         }
 
+        this.goalAttempts.add(item);
         try {
+            let result: unknown;
             if (item.type === 'platform:gift') {
-                await this.processDonationGoal(item);
+                result = await this.processDonationGoal(item);
             } else if (item.type === 'platform:paypiggy') {
-                await this.goalsManager.processPaypiggyGoal(item.platform || '', 1);
-                logger.debug(`[Display Queue] Paypiggy goal tracking processed for ${item.platform}`, 'display-queue');
+                result = await this.goalsManager.processPaypiggyGoal(item.platform || '', 1);
             } else if (item.type === 'platform:giftpaypiggy') {
                 const giftCount = Number(item.data.giftCount);
                 if (!Number.isFinite(giftCount) || !Number.isInteger(giftCount) || giftCount <= 0) {
                     throw new Error('Giftpaypiggy goal tracking requires giftCount');
                 }
-                await this.goalsManager.processPaypiggyGoal(item.platform || '', giftCount);
-                logger.debug(`[Display Queue] Giftpaypiggy goal tracking processed for ${item.platform}: ${giftCount}`, 'display-queue');
+                result = await this.goalsManager.processPaypiggyGoal(item.platform || '', giftCount);
             } else {
                 return;
             }
-            item.data.goalProcessed = true;
+            const applied = !!result && typeof result === 'object' && 'success' in result && result.success === true;
+            item.data.goalOutcome = applied ? 'applied' : 'not-applied';
+            if (applied) item.data.goalProcessed = true;
+            logger.debug(`[Display Queue] Native goal outcome: ${item.data.goalOutcome}`, 'display-queue', { type: item.type, platform: item.platform });
         } catch (error) {
+            item.data.goalOutcome = 'failed';
             this.handleDisplayQueueError(`[Display Queue] Goal tracking failed for ${item.platform}`, error, { platform: item.platform, type: item.type });
         }
     }
@@ -442,7 +514,8 @@ class DisplayQueueEffects {
             throw new Error('Gift goal tracking requires giftCount');
         }
 
-        await this.goalsManager.processDonationGoal(item.platform || '', totalGiftValue, currencyValue);
+        const result = await this.goalsManager.processDonationGoal(item.platform || '', totalGiftValue, currencyValue);
+        if (!result || typeof result !== 'object' || !('success' in result) || result.success !== true) return result;
         if (currencyValue === 'bits') {
             logger.debug(`[Display Queue] Goal tracking processed for ${item.platform}: ${totalGiftValue} bits`, 'display-queue');
         } else if (currencyValue === 'coins') {
@@ -451,6 +524,7 @@ class DisplayQueueEffects {
         } else {
             logger.debug(`[Display Queue] Goal tracking processed for ${item.platform}: ${totalGiftValue} ${currencyValue}`, 'display-queue');
         }
+        return result;
     }
 
     async handleGiftEffects(item: QueueItem, ttsStages: TtsStage[]) {
@@ -471,7 +545,7 @@ class DisplayQueueEffects {
         const handcamConfig = this.config.handcam;
         if (handcamConfig?.enabled) {
             allPromises.push(Promise.resolve().then(() => {
-                this.triggerHandcamGlow(this.obsManager, handcamConfig);
+                return this.triggerHandcamGlow(this.obsManager, handcamConfig, this.controller.signal);
             }).catch(err => {
                 this.handleDisplayQueueError('[Gift] Error activating handcam glow', err);
             }));
@@ -511,8 +585,8 @@ class DisplayQueueEffects {
             allPromises.push(vfxPromise);
         }
 
-        await Promise.all(allPromises);
-        await animationPromise;
+        const results = await Promise.allSettled([...allPromises, animationPromise]);
+        for (const result of results) if (result.status === 'rejected') throw result.reason;
     }
 
     async handleSequentialEffects(item: QueueItem, ttsStages: TtsStage[]) {
@@ -601,7 +675,8 @@ class DisplayQueueEffects {
             }));
 
             try {
-                await Promise.all(promises);
+                const results = await Promise.allSettled(promises);
+                for (const result of results) if (result.status === 'rejected') throw result.reason;
                 await Promise.all(completionPromises);
             } catch (error) {
                 completionWaiters.forEach((waiter) => waiter.cancel());
@@ -632,8 +707,9 @@ class DisplayQueueEffects {
                 resolve();
             };
             const cleanup = () => {
-                removeEventListener.call(obs, 'MediaInputPlaybackEnded', handler);
                 if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
+                try { removeEventListener.call(obs, 'MediaInputPlaybackEnded', handler); }
+                catch (error) { this.handleDisplayQueueError('[Gift] Error removing media completion subscription', error); }
             };
             cancelWait = () => {
                 if (settled) return;
@@ -649,7 +725,7 @@ class DisplayQueueEffects {
                 resolve();
             }, timeoutMs);
         });
-        return { promise, cancel: () => cancelWait() };
+        return this.trackWaiter({ promise, cancel: () => cancelWait() });
     }
 
     buildVfxMatch(config: Record<string, unknown>): VfxMatch {
@@ -792,10 +868,10 @@ class DisplayQueueEffects {
             }, timeoutMs);
         });
 
-        return {
+        return this.trackWaiter({
             promise,
             cancel: () => cancelWait()
-        };
+        });
     }
 
     async waitForVfxCompletion(match: Partial<VfxMatch> = {}, options: { timeoutMs?: number } = {}) {
