@@ -55,7 +55,12 @@ describe("Command Cooldown Integration", () => {
   });
 
   afterEach(() => {
-    restoreAllMocks();
+    try {
+      clearExpiredGlobalCooldowns(-1);
+    } finally {
+      testClock.useRealTime();
+      restoreAllMocks();
+    }
   });
 
   describe("when multiple users trigger same command", () => {
@@ -78,11 +83,12 @@ describe("Command Cooldown Integration", () => {
     testWithTimeout("should allow same command after cooldown expires", () => {
       updateGlobalCommandCooldown("!hello");
 
-      testClock.advance(4000);
-
-      const isBlocked = checkGlobalCommandCooldown("!hello", 3000);
-
-      expect(isBlocked).toBe(false);
+      testClock.advance(2999);
+      expect(checkGlobalCommandCooldown("!hello", 3000)).toBe(true);
+      testClock.advance(1);
+      expect(checkGlobalCommandCooldown("!hello", 3000)).toBe(false);
+      updateGlobalCommandCooldown("!hello");
+      expect(checkGlobalCommandCooldown("!hello", 3000)).toBe(true);
     });
   });
 
@@ -122,15 +128,18 @@ describe("Command Cooldown Integration", () => {
 
   describe("when memory management is required", () => {
     testWithTimeout("should clean up expired cooldowns", () => {
-      const commands = ["!old1", "!old2", "!recent"];
-
-      commands.forEach((cmd) => updateGlobalCommandCooldown(cmd));
-
-      testClock.advance(10000);
-
-      const cleanedCount = clearExpiredGlobalCooldowns(5000);
-
-      expect(cleanedCount).toBeGreaterThanOrEqual(0);
+      updateGlobalCommandCooldown("!old1");
+      updateGlobalCommandCooldown("!old2");
+      testClock.advance(4999);
+      updateGlobalCommandCooldown("!recent");
+      testClock.advance(1);
+      expect(clearExpiredGlobalCooldowns(5000)).toBe(0);
+      testClock.advance(1);
+      expect(clearExpiredGlobalCooldowns(5000)).toBe(2);
+      expect(clearExpiredGlobalCooldowns(5000)).toBe(0);
+      expect(checkGlobalCommandCooldown("!old1", 10000)).toBe(false);
+      expect(checkGlobalCommandCooldown("!old2", 10000)).toBe(false);
+      expect(checkGlobalCommandCooldown("!recent", 5000)).toBe(true);
     });
 
     testWithTimeout(
@@ -138,7 +147,7 @@ describe("Command Cooldown Integration", () => {
       () => {
         updateGlobalCommandCooldown("!active");
 
-        clearExpiredGlobalCooldowns(10000);
+        expect(clearExpiredGlobalCooldowns(10000)).toBe(0);
 
         const isStillBlocked = checkGlobalCommandCooldown("!active", 5000);
         expect(isStillBlocked).toBe(true);
@@ -148,7 +157,7 @@ describe("Command Cooldown Integration", () => {
 
   describe("when handling edge cases", () => {
     testWithTimeout(
-      "should handle concurrent cooldown operations safely",
+      "admits only the first of sequential check-and-update operations",
       () => {
         const commandName = "!concurrent";
 
@@ -165,7 +174,7 @@ describe("Command Cooldown Integration", () => {
 
         const results = operations.map((op) => op());
 
-        expect(results.some((result) => result === false)).toBe(true);
+        expect(results).toEqual([false, true, true, true, true, true, true, true, true, true]);
       },
     );
 
@@ -204,9 +213,9 @@ describe("Command Cooldown Integration", () => {
     });
   });
 
-  describe("when integrating with configuration system", () => {
+  describe("when varying explicit cooldown arguments", () => {
     testWithTimeout(
-      "should respect different cooldown periods per platform",
+      "respects different cooldown periods for separately keyed commands",
       () => {
         const platforms = ["twitch", "youtube", "tiktok"];
         const cooldownPeriods = [1000, 2000, 3000];
@@ -221,11 +230,15 @@ describe("Command Cooldown Integration", () => {
           );
           expect(isBlocked).toBe(true);
         });
+        testClock.advance(1000);
+        expect(checkGlobalCommandCooldown("!twitchcmd", 1000)).toBe(false);
+        expect(checkGlobalCommandCooldown("!youtubecmd", 2000)).toBe(true);
+        expect(checkGlobalCommandCooldown("!tiktokcmd", 3000)).toBe(true);
       },
     );
 
     testWithTimeout(
-      "should handle config changes without losing existing cooldowns",
+      "uses the current cooldown argument without losing the existing timestamp",
       () => {
         updateGlobalCommandCooldown("!persistent");
         const initialBlock = checkGlobalCommandCooldown("!persistent", 2000);

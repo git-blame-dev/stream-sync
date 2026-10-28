@@ -2,6 +2,7 @@ import { NOTIFICATION_CONFIGS, PRIORITY_LEVELS } from '../../src/core/constants'
 import NotificationManager from '../../src/notifications/NotificationManager';
 import { AppRuntime } from '../../src/runtime/AppRuntime';
 import { ChatNotificationRouter } from '../../src/services/ChatNotificationRouter';
+import { CommandCooldownService } from '../../src/services/CommandCooldownService';
 import { PlatformEventRouter } from '../../src/services/PlatformEventRouter';
 import { VFXCommandService } from '../../src/services/VFXCommandService';
 
@@ -57,6 +58,7 @@ function createFarewellRoutingHarness(configOverrides: FarewellRoutingHarnessOve
     platformEventRouter: PlatformEventRouter;
     queuedItems: QueuedNotificationCollection;
     queuedSequences: QueuedNotification[][];
+    cleanup: () => void;
 } {
     const farewellConfig = {
         command: '!bye|!bye2|!bye3, bye|goodbye|cya',
@@ -92,7 +94,7 @@ function createFarewellRoutingHarness(configOverrides: FarewellRoutingHarnessOve
 
     const queuedItems = [] as unknown as QueuedNotificationCollection;
     const queuedSequences: QueuedNotification[][] = [];
-    const platformFarewellCooldowns = new Set<string>();
+    const commandCooldownService = new CommandCooldownService({ config, logger: noOpLogger });
     const displayQueue: DisplayQueue & {
         addSequence: (items: Array<Record<string, unknown>>) => void;
     } = {
@@ -144,12 +146,12 @@ function createFarewellRoutingHarness(configOverrides: FarewellRoutingHarnessOve
             getPlatformConnectionTime: (_platform: string) => null
         },
         commandCooldownService: {
-            checkUserCooldown: () => true,
-            checkGlobalCooldown: (key: string) => !platformFarewellCooldowns.has(key),
-            updateUserCooldown: () => {},
-            updateGlobalCooldown: (key: string) => {
-                platformFarewellCooldowns.add(key);
-            }
+            checkUserCooldown: (userId, perUserCooldown, heavyCooldown) => commandCooldownService.checkUserCooldown(
+                typeof userId === 'string' ? userId : null, perUserCooldown, heavyCooldown
+            ),
+            updateUserCooldown: (userId) => commandCooldownService.updateUserCooldown(typeof userId === 'string' ? userId : null),
+            checkGlobalCooldown: (key, duration) => commandCooldownService.checkGlobalCooldown(key, duration),
+            updateGlobalCooldown: (key) => commandCooldownService.updateGlobalCooldown(key)
         },
         isFirstMessage: () => false,
         _handleAppRuntimeError: () => {},
@@ -196,6 +198,13 @@ function createFarewellRoutingHarness(configOverrides: FarewellRoutingHarnessOve
         platformEventRouter,
         queuedItems,
         queuedSequences,
+        cleanup: () => {
+            try {
+                platformEventRouter.dispose();
+            } finally {
+                commandCooldownService.dispose();
+            }
+        },
     };
 }
 
