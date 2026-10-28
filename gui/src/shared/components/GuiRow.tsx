@@ -76,8 +76,8 @@ export function GuiRow({ row, mode, className, onAnimationEnd, appearance = DEFA
     return (
       <>
         <span className="gui-row__avatar-wrapper" aria-hidden="true">
-          <img className="gui-row__avatar gui-row__avatar--circle" src={avatarUrl} alt="" onError={handleAvatarError} />
-          {platformIconUrl ? <img className="gui-row__platform-icon" src={platformIconUrl} alt="" /> : null}
+          <img referrerPolicy="no-referrer" className="gui-row__avatar gui-row__avatar--circle" src={avatarUrl} alt="" onError={handleAvatarError} />
+          {platformIconUrl ? <img referrerPolicy="no-referrer" className="gui-row__platform-icon" src={platformIconUrl} alt="" /> : null}
         </span>
         <div className={[
           'gui-row__content',
@@ -88,6 +88,7 @@ export function GuiRow({ row, mode, className, onAnimationEnd, appearance = DEFA
             <span className="gui-row__monetization-image-clip" aria-hidden="true">
               <img
                 className="gui-row__monetization-image"
+                referrerPolicy="no-referrer"
                 src={monetizationSpriteUrl}
                 alt=""
                 decoding="async"
@@ -99,6 +100,7 @@ export function GuiRow({ row, mode, className, onAnimationEnd, appearance = DEFA
             <span className="gui-row__member-image-clip" aria-hidden="true">
               <img
                 className="gui-row__member-image"
+                referrerPolicy="no-referrer"
                 src={memberSpriteUrl}
                 alt=""
                 loading="lazy"
@@ -117,6 +119,7 @@ export function GuiRow({ row, mode, className, onAnimationEnd, appearance = DEFA
                     <img
                       key={`${badge.imageUrl}-${index}`}
                       className="gui-row__badge"
+                      referrerPolicy="no-referrer"
                       src={badge.imageUrl}
                       alt=""
                       loading="lazy"
@@ -135,6 +138,7 @@ export function GuiRow({ row, mode, className, onAnimationEnd, appearance = DEFA
                         <img
                           key={`emote-${part.emoteId}-${index}`}
                           className="gui-row__emote"
+                          referrerPolicy="no-referrer"
                           src={part.imageUrl}
                           alt={part.emoteId}
                           loading="lazy"

@@ -48,6 +48,9 @@ describe("GuiRow rendering behavior", () => {
     expect(html).toContain("https://example.invalid/contract-avatar.png");
     expect(html).toContain("test-contract-member");
     expect(html).toContain("test rich message");
+    const images = html.match(/<img\b[^>]*>/g) || [];
+    expect(images.length).toBeGreaterThanOrEqual(5);
+    for (const image of images) expect(image).toContain('referrerPolicy="no-referrer"');
   });
 
   it("replaces a failed avatar with the local neutral fallback without retrying the remote URL", () => {

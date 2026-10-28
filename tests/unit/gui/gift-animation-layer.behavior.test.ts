@@ -32,7 +32,7 @@ function createEffect(
     effectType: "tiktok-gift-animation",
     playbackId: "test-playback-id",
     durationMs: 2400,
-    assetUrl: "/gui/runtime/test.mp4",
+    assetUrl: "/gui/runtime/0123456789abcdef01234567.mp4",
     ...effectOverrides,
     config: {
       ...baseConfig,
@@ -183,6 +183,99 @@ function installDomRuntime(
 }
 
 describe("GiftAnimationLayer behavior", () => {
+  for (const assetUrl of ["https://example.invalid/a.mp4", "//example.invalid/a.mp4", "javascript:alert(1)", "/gui/runtime/../a.mp4", "/gui/runtime/0123456789abcdef01234567.mp4?x=1", "/gui/runtime/%2e%2e.mp4", "/gui/runtime/0123456789abcdef01234567.mp4\n"]) {
+    it(`rejects non-local media before assigning src: ${assetUrl}`, async () => {
+      const harness = installDomRuntime();
+      const video = createVideoNode();
+      const completions: string[] = [];
+      let renderer!: TestRenderer.ReactTestRenderer;
+      try {
+        await TestRenderer.act(async () => {
+          renderer = TestRenderer.create(React.createElement(GiftAnimationLayer, {
+            effect: createEffect({ assetUrl }), onComplete: (_id, reason) => completions.push(reason),
+          }), { createNodeMock: (element) => element.type === "video" ? video : createCanvasNode(createCanvasContext()) });
+        });
+        expect(video.src).toBe("");
+        expect(video.play.mock.calls).toHaveLength(0);
+        expect(completions).toEqual(["media-error"]);
+      } finally {
+        await TestRenderer.act(async () => renderer?.unmount());
+        harness.restore();
+      }
+    });
+  }
+
+  for (const failure of ["rgb-missing", "alpha-missing", "context-throws", "drawImage", "getImageData", "putImageData"]) {
+    it(`completes canvas failure once and retires callbacks: ${failure}`, async () => {
+      let count = 0;
+      const rgb = createCanvasContext(failure === "drawImage" || failure === "getImageData" || failure === "putImageData"
+        ? { [failure]: () => { throw new Error("synthetic canvas failure"); } } : {});
+      const harness = installDomRuntime({ createElement: () => {
+        count += 1;
+        if (failure === "context-throws") return { getContext: () => { throw new Error("synthetic unavailable context"); } };
+        return createCanvasNode((count === 1 && failure === "rgb-missing") || (count === 2 && failure === "alpha-missing") ? null : rgb);
+      } });
+      const video = createVideoNode();
+      const completions: string[] = [];
+      let renderer!: TestRenderer.ReactTestRenderer;
+      try {
+        await TestRenderer.act(async () => {
+          renderer = TestRenderer.create(React.createElement(GiftAnimationLayer, {
+            effect: createEffect(), onComplete: (_id, reason) => completions.push(reason),
+          }), { createNodeMock: (element) => element.type === "video" ? video : createCanvasNode(createCanvasContext()) });
+        });
+        const retainedLoad = video.onloadeddata;
+        const retainedEnd = video.onended;
+        await TestRenderer.act(async () => {
+          retainedLoad?.();
+          harness.runNextAnimationFrame();
+          retainedLoad?.();
+          retainedEnd?.();
+          harness.runNextAnimationFrame();
+          harness.runLatestTimeout();
+        });
+        expect(completions).toEqual(["canvas-unavailable"]);
+        expect(video.onloadeddata).toBeNull();
+        expect(video.pause.mock.calls).toHaveLength(1);
+        expect(video.removeAttribute.mock.calls).toEqual([["src"]]);
+        const playCalls = video.play.mock.calls.length;
+        await TestRenderer.act(async () => renderer.unmount());
+        retainedLoad?.();
+        harness.runNextAnimationFrame();
+        expect(video.play.mock.calls).toHaveLength(playCalls);
+        expect(video.pause.mock.calls).toHaveLength(1);
+      } finally {
+        await TestRenderer.act(async () => renderer?.unmount());
+        harness.restore();
+      }
+    });
+  }
+
+  it("reports play rejection and prevents retained callbacks from restarting playback", async () => {
+    const harness = installDomRuntime();
+    const video = createVideoNode();
+    video.paused = true;
+    video.play.mockRejectedValue(new Error("synthetic playback rejection"));
+    const completions: string[] = [];
+    let renderer!: TestRenderer.ReactTestRenderer;
+    try {
+      await TestRenderer.act(async () => {
+        renderer = TestRenderer.create(React.createElement(GiftAnimationLayer, {
+          effect: createEffect(), onComplete: (_id, reason) => completions.push(reason),
+        }), { createNodeMock: (element) => element.type === "video" ? video : createCanvasNode(createCanvasContext()) });
+      });
+      const load = video.onloadeddata!;
+      const end = video.onended!;
+      await TestRenderer.act(async () => load());
+      expect(completions).toEqual(["play-rejected"]);
+      await TestRenderer.act(async () => { load(); end(); harness.runNextAnimationFrame(); harness.runLatestTimeout(); });
+      expect(completions).toEqual(["play-rejected"]);
+      expect(video.play.mock.calls).toHaveLength(1);
+    } finally {
+      await TestRenderer.act(async () => renderer?.unmount());
+      harness.restore();
+    }
+  });
   beforeEach(() => {
     global.console.timeStamp = global.console.timeStamp || (() => {});
   });
@@ -204,6 +297,34 @@ describe("GiftAnimationLayer behavior", () => {
     await TestRenderer.act(async () => {
       renderer.unmount();
     });
+  });
+
+  it("retires active callbacks on disposal without acknowledging a completed playback", async () => {
+    const harness = installDomRuntime();
+    const video = createVideoNode();
+    const completions: string[] = [];
+    let renderer!: TestRenderer.ReactTestRenderer;
+    try {
+      await TestRenderer.act(async () => {
+        renderer = TestRenderer.create(React.createElement(GiftAnimationLayer, {
+          effect: createEffect(), onComplete: (_id, reason) => completions.push(reason),
+        }), { createNodeMock: (element) => element.type === "video" ? video : createCanvasNode(createCanvasContext()) });
+      });
+      const load = video.onloadeddata!;
+      const end = video.onended!;
+      await TestRenderer.act(async () => load());
+      await TestRenderer.act(async () => renderer.unmount());
+      video.paused = true;
+      await TestRenderer.act(async () => { load(); end(); harness.runNextAnimationFrame(); harness.runLatestTimeout(); });
+      expect(completions).toEqual([]);
+      expect(video.play.mock.calls).toHaveLength(0);
+      expect(video.pause.mock.calls).toHaveLength(1);
+      expect(harness.windowMock.cancelAnimationFrame.mock.calls.length).toBeGreaterThan(0);
+      expect(harness.windowMock.clearTimeout.mock.calls.length).toBeGreaterThan(0);
+    } finally {
+      await TestRenderer.act(async () => renderer?.unmount());
+      harness.restore();
+    }
   });
 
   it("completes immediately when canvas context is unavailable", async () => {
@@ -316,8 +437,8 @@ describe("GiftAnimationLayer behavior", () => {
       expect(onCompleteCalls).toEqual(["test-playback-id"]);
 
       await TestRenderer.act(async () => {
-        videoNode.onended!();
-        videoNode.onerror!();
+        videoNode.onended?.();
+        videoNode.onerror?.();
         harness.runLatestTimeout();
       });
 

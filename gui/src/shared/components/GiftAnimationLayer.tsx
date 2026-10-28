@@ -7,6 +7,10 @@ interface GiftAnimationLayerProps {
   onComplete: (playbackId: string, reason: GuiGiftAnimationCompletionReason) => void
 }
 
+export function isLocalGiftAnimationAssetUrl(value: unknown): value is string {
+  return typeof value === 'string' && /^\/gui\/runtime\/[a-f0-9]{24}\.mp4(?![\s\S])/.test(value)
+}
+
 function clampFrame(frame: [number, number, number, number], sourceWidth: number, sourceHeight: number): [number, number, number, number] {
   const maxX = Math.max(0, sourceWidth - 1)
   const maxY = Math.max(0, sourceHeight - 1)
@@ -47,21 +51,38 @@ export function GiftAnimationLayer({ effect, onComplete }: GiftAnimationLayerPro
     const canvas = canvasRef.current
     const video = videoRef.current
     if (!effect || !canvas || !video) {
-      if (video) {
-        video.pause()
-        video.removeAttribute('src')
-      }
       return
     }
 
     const activePlaybackId = effect.playbackId
     let playbackCompleted = false
+    let disposed = false
+    const cleanup = () => {
+      if (disposed) return
+      disposed = true
+      if (timeoutRef.current !== null) window.clearTimeout(timeoutRef.current)
+      if (rafRef.current !== null) window.cancelAnimationFrame(rafRef.current)
+      timeoutRef.current = null
+      rafRef.current = null
+      video.onended = null
+      video.onerror = null
+      video.onpause = null
+      video.onloadeddata = null
+      video.pause()
+      video.removeAttribute('src')
+      video.load()
+    }
     const finishPlayback = (reason: GuiGiftAnimationCompletionReason) => {
-      if (playbackCompleted || currentPlaybackIdRef.current !== activePlaybackId) {
+      if (disposed || playbackCompleted || currentPlaybackIdRef.current !== activePlaybackId) {
         return
       }
       playbackCompleted = true
+      cleanup()
       onCompleteRef.current(activePlaybackId, reason)
+    }
+    if (!isLocalGiftAnimationAssetUrl(effect.assetUrl)) {
+      finishPlayback('media-error')
+      return cleanup
     }
     const { config } = effect
     const rgbFrame = clampFrame(config.rgbFrame, config.sourceWidth, config.sourceHeight)
@@ -120,12 +141,20 @@ export function GiftAnimationLayer({ effect, onComplete }: GiftAnimationLayerPro
       alphaBuffer.height = compositeHeight
     }
 
-    const canvasContext = canvas.getContext('2d')
-    const rgbContext = rgbBuffer.getContext('2d', { willReadFrequently: true })
-    const alphaContext = alphaBuffer?.getContext('2d', { willReadFrequently: true }) || null
-    if (!canvasContext || !rgbContext) {
+    let canvasContext: CanvasRenderingContext2D | null
+    let rgbContext: CanvasRenderingContext2D | null
+    let alphaContext: CanvasRenderingContext2D | null
+    try {
+      canvasContext = canvas.getContext('2d')
+      rgbContext = rgbBuffer.getContext('2d', { willReadFrequently: true })
+      alphaContext = alphaBuffer?.getContext('2d', { willReadFrequently: true }) || null
+    } catch {
       finishPlayback('canvas-unavailable')
-      return
+      return cleanup
+    }
+    if (!canvasContext || !rgbContext || (hasAlpha && !alphaContext)) {
+      finishPlayback('canvas-unavailable')
+      return cleanup
     }
 
     const drawToViewport = (source: HTMLCanvasElement) => {
@@ -134,7 +163,7 @@ export function GiftAnimationLayer({ effect, onComplete }: GiftAnimationLayerPro
     }
 
     const tryResumePlayback = () => {
-      if (currentPlaybackIdRef.current !== activePlaybackId || video.ended || !video.paused) {
+      if (disposed || currentPlaybackIdRef.current !== activePlaybackId || video.ended || !video.paused) {
         return
       }
 
@@ -145,15 +174,7 @@ export function GiftAnimationLayer({ effect, onComplete }: GiftAnimationLayerPro
 
     let mergedData: ImageData | null = null
 
-    const renderFrame = () => {
-      if (currentPlaybackIdRef.current !== activePlaybackId) {
-        return
-      }
-
-      if (video.paused && !video.ended) {
-        tryResumePlayback()
-      }
-
+    const drawFrame = () => {
       if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
         updateViewport()
 
@@ -174,10 +195,7 @@ export function GiftAnimationLayer({ effect, onComplete }: GiftAnimationLayerPro
           drawToViewport(rgbBuffer)
         } else {
           const activeAlphaBuffer = alphaBuffer
-          if (!activeAlphaBuffer) {
-            drawToViewport(rgbBuffer)
-            return
-          }
+          if (!activeAlphaBuffer) return
 
           alphaContext.clearRect(0, 0, activeAlphaBuffer.width, activeAlphaBuffer.height)
           alphaContext.drawImage(
@@ -201,28 +219,38 @@ export function GiftAnimationLayer({ effect, onComplete }: GiftAnimationLayerPro
           const pixelCount = compositeWidth * compositeHeight
           for (let pixelIndex = 0; pixelIndex < pixelCount; pixelIndex += 1) {
             const offset = pixelIndex * 4
-const alpha = alphaData.data[offset] ?? 0
+            const alpha = alphaData.data[offset] ?? 0
 
-if (alpha <= 2) {
-mergedData.data[offset] = 0
-mergedData.data[offset + 1] = 0
-mergedData.data[offset + 2] = 0
-mergedData.data[offset + 3] = 0
-continue
-}
+            if (alpha <= 2) {
+              mergedData.data[offset] = 0
+              mergedData.data[offset + 1] = 0
+              mergedData.data[offset + 2] = 0
+              mergedData.data[offset + 3] = 0
+              continue
+            }
 
-mergedData.data[offset] = rgbData.data[offset] ?? 0
-mergedData.data[offset + 1] = rgbData.data[offset + 1] ?? 0
-mergedData.data[offset + 2] = rgbData.data[offset + 2] ?? 0
-mergedData.data[offset + 3] = alpha
+            mergedData.data[offset] = rgbData.data[offset] ?? 0
+            mergedData.data[offset + 1] = rgbData.data[offset + 1] ?? 0
+            mergedData.data[offset + 2] = rgbData.data[offset + 2] ?? 0
+            mergedData.data[offset + 3] = alpha
           }
 
           rgbContext.putImageData(mergedData, 0, 0)
           drawToViewport(rgbBuffer)
         }
       }
+    }
 
-      if (!video.ended) {
+    const renderFrame = () => {
+      if (disposed || currentPlaybackIdRef.current !== activePlaybackId) return
+      if (video.paused && !video.ended) tryResumePlayback()
+      try {
+        drawFrame()
+      } catch {
+        finishPlayback('canvas-unavailable')
+        return
+      }
+      if (!disposed && !video.ended) {
         rafRef.current = window.requestAnimationFrame(renderFrame)
       }
     }
@@ -236,11 +264,12 @@ mergedData.data[offset + 3] = alpha
     video.onerror = () => finishPlayback('media-error')
     video.onpause = tryResumePlayback
     video.onloadeddata = () => {
-      if (currentPlaybackIdRef.current !== activePlaybackId) {
+      if (disposed || currentPlaybackIdRef.current !== activePlaybackId) {
         return
       }
 
       tryResumePlayback()
+      if (rafRef.current !== null) window.cancelAnimationFrame(rafRef.current)
       rafRef.current = window.requestAnimationFrame(renderFrame)
     }
 
@@ -248,23 +277,7 @@ mergedData.data[offset + 3] = alpha
       finishPlayback('timeout')
     }, Math.max(1000, effect.durationMs + 500))
 
-    return () => {
-      if (timeoutRef.current !== null) {
-        window.clearTimeout(timeoutRef.current)
-        timeoutRef.current = null
-      }
-      if (rafRef.current !== null) {
-        window.cancelAnimationFrame(rafRef.current)
-        rafRef.current = null
-      }
-      video.onended = null
-      video.onerror = null
-      video.onpause = null
-      video.onloadeddata = null
-      video.pause()
-      video.removeAttribute('src')
-      video.load()
-    }
+    return cleanup
   }, [effect])
 
   if (!effect) {

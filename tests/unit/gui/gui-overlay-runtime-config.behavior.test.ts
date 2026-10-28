@@ -3,6 +3,15 @@ import { describe, expect, it } from "bun:test";
 import { readOverlayRuntimeConfig } from "../../../gui/src/overlay/runtime-config";
 
 describe("Overlay runtime config behavior", () => {
+  it("rejects non-number injected limits without coercion", () => {
+    for (const value of [true, false, "3", null, [], {}, NaN, Infinity, 1.5]) {
+      for (const field of ["overlayMaxMessages", "overlayMaxLinesPerMessage"]) {
+        expect(() => readOverlayRuntimeConfig({ __STREAM_SYNC_GUI_CONFIG__: {
+          overlayMaxMessages: 6, overlayMaxLinesPerMessage: 3, [field]: value,
+        } })).toThrow("positive integer");
+      }
+    }
+  });
   it("reads positive integer overlay limits from runtime config", () => {
     const runtimeConfig = readOverlayRuntimeConfig({
       __STREAM_SYNC_GUI_CONFIG__: {

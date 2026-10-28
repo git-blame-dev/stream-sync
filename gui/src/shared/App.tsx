@@ -4,6 +4,7 @@ import { createEventFeed } from './create-event-feed'
 import { createGuiFeedStore } from './feed-store'
 import { GuiShell } from './components/GuiShell'
 import { ActivityBar } from './components/ActivityBar'
+import { isLocalGiftAnimationAssetUrl } from './components/GiftAnimationLayer'
 import { matchesGuiFeedMode } from './feed-mode'
 import { DEFAULT_GUI_APPEARANCE, parseGuiAppearanceEvent, type GuiAppearance } from './appearance'
 import type {
@@ -110,8 +111,7 @@ function isGiftAnimationEffectEnvelope(payload: unknown): payload is GuiGiftAnim
     effect.effectType === 'tiktok-gift-animation' &&
     typeof effect.playbackId === 'string' &&
     effect.playbackId.length > 0 &&
-    typeof effect.assetUrl === 'string' &&
-    effect.assetUrl.length > 0 &&
+    isLocalGiftAnimationAssetUrl(effect.assetUrl) &&
     typeof effect.durationMs === 'number' &&
     Number.isFinite(effect.durationMs) &&
     effect.durationMs > 0 &&

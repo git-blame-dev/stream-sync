@@ -393,12 +393,23 @@ describe("GUI app behavior", () => {
     });
 
     await TestRenderer.act(async () => {
+      for (const assetUrl of ["https://example.invalid/effect.mp4", "//example.invalid/effect.mp4", "javascript:alert(1)", "/gui/runtime/../effect.mp4", "/gui/runtime/0123456789abcdef01234567.mp4?x=1"]) {
+        onEventHandler!({
+          __guiEvent: "effect", effectType: "tiktok-gift-animation", playbackId: "test-invalid-effect",
+          durationMs: 2500, assetUrl,
+          config: { profileName: "portrait", sourceWidth: 960, sourceHeight: 864, renderWidth: 480, renderHeight: 854, rgbFrame: [0, 0, 480, 854], aFrame: [480, 0, 480, 854] },
+        });
+      }
+    });
+    expect(renderer!.root.findByType(GuiShell).props.activeEffect).toBeNull();
+
+    await TestRenderer.act(async () => {
       onEventHandler!({
         __guiEvent: "effect",
         effectType: "tiktok-gift-animation",
         playbackId: "effect-1",
         durationMs: 2500,
-        assetUrl: "/gui/runtime/test.mp4",
+        assetUrl: "/gui/runtime/0123456789abcdef01234567.mp4",
         config: {
           profileName: "portrait",
           sourceWidth: 960,
@@ -452,7 +463,7 @@ describe("GUI app behavior", () => {
         effectType: "tiktok-gift-animation",
         playbackId: "effect-1",
         durationMs: 2500,
-        assetUrl: "/gui/runtime/test.mp4",
+        assetUrl: "/gui/runtime/0123456789abcdef01234567.mp4",
       });
     });
 
@@ -484,7 +495,7 @@ describe("GUI app behavior", () => {
         effectType: "tiktok-gift-animation",
         playbackId: "effect-bad-duration",
         durationMs: "2500",
-        assetUrl: "/gui/runtime/test.mp4",
+        assetUrl: "/gui/runtime/0123456789abcdef01234567.mp4",
         config: {
           profileName: "portrait",
           sourceWidth: 960,
@@ -530,7 +541,7 @@ describe("GUI app behavior", () => {
         effectType: "tiktok-gift-animation",
         playbackId: "effect-1",
         durationMs: 2500,
-        assetUrl: "/gui/runtime/test-1.mp4",
+        assetUrl: "/gui/runtime/0123456789abcdef01234567.mp4",
         config: {
           profileName: "portrait",
           sourceWidth: 960,
@@ -546,7 +557,7 @@ describe("GUI app behavior", () => {
         effectType: "tiktok-gift-animation",
         playbackId: "effect-2",
         durationMs: 2600,
-        assetUrl: "/gui/runtime/test-2.mp4",
+        assetUrl: "/gui/runtime/1123456789abcdef01234567.mp4",
         config: {
           profileName: "portrait",
           sourceWidth: 960,
@@ -597,7 +608,7 @@ describe("GUI app behavior", () => {
         effectType: "tiktok-gift-animation",
         playbackId: "effect-ignored-overlay",
         durationMs: 2500,
-        assetUrl: "/gui/runtime/test.mp4",
+        assetUrl: "/gui/runtime/0123456789abcdef01234567.mp4",
         config: {
           profileName: "portrait",
           sourceWidth: 960,
@@ -645,7 +656,7 @@ describe("GUI app behavior", () => {
         effectType: "tiktok-gift-animation",
         playbackId: "effect-minimal-overlay",
         durationMs: 2500,
-        assetUrl: "/gui/runtime/test.mp4",
+        assetUrl: "/gui/runtime/0123456789abcdef01234567.mp4",
         config: {
           profileName: "portrait",
           sourceWidth: 960,
@@ -687,7 +698,7 @@ describe("GUI app behavior", () => {
         effectType: "tiktok-gift-animation",
         playbackId: "effect-standard-overlay",
         durationMs: 2500,
-        assetUrl: "/gui/runtime/test.mp4",
+        assetUrl: "/gui/runtime/0123456789abcdef01234567.mp4",
         config: {
           profileName: "portrait",
           sourceWidth: 960,
@@ -777,7 +788,7 @@ describe("GUI app behavior", () => {
         effectType: "tiktok-gift-animation",
         playbackId: "effect-tiktok-only",
         durationMs: 2500,
-        assetUrl: "/gui/runtime/test.mp4",
+        assetUrl: "/gui/runtime/0123456789abcdef01234567.mp4",
         config: {
           profileName: "portrait",
           sourceWidth: 960,
@@ -914,7 +925,7 @@ describe("GUI app behavior", () => {
         effectType: "tiktok-gift-animation",
         playbackId: "effect-ignored-notifications",
         durationMs: 2500,
-        assetUrl: "/gui/runtime/test.mp4",
+        assetUrl: "/gui/runtime/0123456789abcdef01234567.mp4",
         config: {
           profileName: "portrait",
           sourceWidth: 960,

@@ -685,6 +685,26 @@ html, body {
   transform: translateY(1px);
 }
 
+@supports not (color: color-mix(in srgb, white, black)) {
+  .gui-row__effect--sheen {
+    background: linear-gradient(120deg, transparent 42%, var(--gui-row-theme-sheen-edge) 49%, white 50%, var(--gui-row-theme-sheen-edge) 51%, transparent 58%);
+    background-size: 240% 100%;
+    background-position-x: -170%;
+  }
+
+  .gui-row--decorated .gui-row__avatar {
+    outline: 1px solid var(--gui-row-theme-avatar-halo);
+    box-shadow: 0 0 0 2px var(--gui-row-theme-avatar-halo), 0 0 14px 1px var(--gui-row-theme-avatar-halo), 0 0 24px 3px var(--gui-row-theme-avatar-deep);
+    filter: drop-shadow(0 0 6px var(--gui-row-theme-avatar-halo));
+  }
+
+  .gui-row__member-tag {
+    border: 1px solid var(--gui-member-tag-border);
+    background: linear-gradient(180deg, var(--gui-member-tag-top), var(--gui-member-tag-mid) 55%, var(--gui-member-tag-bottom));
+    box-shadow: inset 0 1px 0 var(--gui-member-tag-shine), 0 0 10px -2px var(--gui-member-tag-border);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .gui-row__effect--sheen {
     animation: none;

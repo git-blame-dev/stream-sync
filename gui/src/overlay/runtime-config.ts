@@ -7,12 +7,11 @@ interface RuntimeConfigSource {
 }
 
 function parsePositiveInteger(value: unknown, fieldName: string): number {
-  const parsed = Number(value)
-  if (!Number.isInteger(parsed) || parsed < 1) {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 1) {
     throw new Error(`Overlay runtime config requires positive integer ${fieldName}`)
   }
 
-  return parsed
+  return value
 }
 
 export function readOverlayRuntimeConfig(scope: RuntimeConfigSource = globalThis as RuntimeConfigSource): { overlayMaxMessages: number, overlayMaxLinesPerMessage: number, overlayFeedMode: GuiFeedMode, appearance: ReturnType<typeof parseGuiAppearanceSnapshot> } {
