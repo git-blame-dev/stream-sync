@@ -131,7 +131,11 @@ describe("handcam-glow", () => {
   it("preserves valid numeric strings and zero hold duration", async () => {
     const sizes: number[] = [];
     const delays: number[] = [];
-    setTestingDependencies({ delay: async (ms) => { delays.push(ms); } });
+    const delayStages: string[] = [];
+    setTestingDependencies({ delay: async (ms, _minMs, context) => {
+      delays.push(ms);
+      delayStages.push(context);
+    } });
     const obs = createObsLike(async (action, payload) => {
       if (action === "GetSourceFilter") return { filterSettings: {} };
       if (isFilterSettingsPayload(payload)) sizes.push(Number(payload.filterSettings.Size));
@@ -143,7 +147,8 @@ describe("handcam-glow", () => {
     }));
     await flushGlowTasks();
     expect(sizes).toEqual([0, 0, 12, 24, 24, 12, 0]);
-    expect(delays).toEqual([100, 100, 0, 200, 200]);
+    expect(delays).toEqual([100, 100, 200, 200]);
+    expect(delayStages).not.toContain("Handcam glow hold duration");
   });
 
   it("leaves null or absent configuration disabled", async () => {

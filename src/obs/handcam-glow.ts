@@ -234,8 +234,10 @@ async function animateGlowSize(obs: ObsLike, config: HandcamGlowConfig, baseSett
         );
 
         logger.debug(`[Handcam] Phase 2: Hold at maximum glow for ${config.holdDuration}s`, 'handcam-glow');
-        const holdDelay = config.holdDuration === 0 ? 0 : validateTimeout(config.holdDuration * 1000, config.holdDuration);
-        await delay(holdDelay, 1000, 'Handcam glow hold duration');
+        if (config.holdDuration > 0) {
+            const holdDelay = validateTimeout(config.holdDuration * 1000, config.holdDuration);
+            await delay(holdDelay, 1000, 'Handcam glow hold duration');
+        }
         assertActiveRun(runId);
 
         await executeAnimationPhase(
