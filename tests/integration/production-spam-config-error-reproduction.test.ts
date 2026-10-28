@@ -1,11 +1,51 @@
-import { describe, it, expect } from "bun:test";
+import { afterEach, beforeEach, describe, it, expect } from "bun:test";
 import { createRequire } from "node:module";
+import fs from "node:fs";
+import path from "node:path";
+import { tmpdir } from "node:os";
+import ini from "ini";
+import { getRawTestConfig } from "../helpers/config-fixture";
+import { createDonationSpamDetection, createSpamDetectionConfig } from "../../src/utils/spam-detection";
 
 const load = createRequire(import.meta.url);
-const { config } = load("../../src/core/config");
+const configModulePath = load.resolve("../../src/core/config");
+let config: { spam: Required<Parameters<typeof createSpamDetectionConfig>[0]> };
+let previousEntry: NodeJS.Module | undefined;
+let previousConfigPath: string | undefined;
+let temporaryDirectory: string | undefined;
+const logger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
 
-describe("Production Spam Config Error Reproduction - Modernized", () => {
-  describe("when reproducing the exact production error scenario", () => {
+describe("Synthetic spam configuration integration", () => {
+  beforeEach(() => {
+    previousEntry = load.cache[configModulePath];
+    previousConfigPath = process.env.CHAT_BOT_CONFIG_PATH;
+    temporaryDirectory = fs.mkdtempSync(path.join(tmpdir(), 'spam-config-fixture-'));
+    const raw = getRawTestConfig();
+    raw.general.envFileReadEnabled = false;
+    const syntheticPath = path.join(temporaryDirectory, 'synthetic.ini');
+    fs.writeFileSync(syntheticPath, ini.stringify(raw));
+    process.env.CHAT_BOT_CONFIG_PATH = syntheticPath;
+    delete load.cache[configModulePath];
+    ({ config } = load(configModulePath));
+  });
+
+  afterEach(() => {
+    try {
+      if (previousEntry) load.cache[configModulePath] = previousEntry;
+      else delete load.cache[configModulePath];
+    } finally {
+      try {
+        if (previousConfigPath === undefined) delete process.env.CHAT_BOT_CONFIG_PATH;
+        else process.env.CHAT_BOT_CONFIG_PATH = previousConfigPath;
+      } finally {
+        if (temporaryDirectory) fs.rmSync(temporaryDirectory, { recursive: true, force: true });
+        temporaryDirectory = undefined;
+      }
+    }
+    expect(load.cache[configModulePath]).toBe(previousEntry);
+    expect(process.env.CHAT_BOT_CONFIG_PATH).toBe(previousConfigPath);
+  });
+  describe("when parsing configuration for spam detection", () => {
     describe("and config.spam is unexpectedly undefined", () => {
 it("provides spam configuration from the config module", () => {
         expect(config.spam).toBeDefined();
@@ -25,12 +65,16 @@ it("exposes a complete spam config structure", () => {
 
     describe("and checking for potential configuration loading race conditions", () => {
 it("keeps spam config available after a fresh config module load", () => {
-        delete load.cache[load.resolve("../../src/core/config")];
-
-        const { config: freshConfig } = load("../../src/core/config");
-
-        expect(freshConfig.spam).toBeDefined();
-        expect(freshConfig.spam.enabled).toBeDefined();
+        const originalEntry = load.cache[configModulePath];
+        try {
+          delete load.cache[configModulePath];
+          const { config: freshConfig } = load(configModulePath);
+          expect(freshConfig.spam).toBeDefined();
+          expect(freshConfig.spam.enabled).toBeDefined();
+        } finally {
+          if (originalEntry) load.cache[configModulePath] = originalEntry;
+          else delete load.cache[configModulePath];
+        }
       });
 
 it("makes spam config immediately accessible", () => {
@@ -70,23 +114,15 @@ it("uses spam config values valid for service initialization", () => {
       it("should successfully create spam detection service without errors", () => {
         const spamConfig = config.spam;
 
-        expect(() => {
-          if (!spamConfig) {
-            throw new Error("Spam config missing");
-          }
-          if (typeof spamConfig.enabled !== "boolean") {
-            throw new Error("Invalid enabled");
-          }
-          if (typeof spamConfig.detectionWindow !== "number") {
-            throw new Error("Invalid detectionWindow");
-          }
-          if (typeof spamConfig.maxIndividualNotifications !== "number") {
-            throw new Error("Invalid maxIndividualNotifications");
-          }
-          if (typeof spamConfig.lowValueThreshold !== "number") {
-            throw new Error("Invalid lowValueThreshold");
-          }
-        }).not.toThrow();
+        const detectionConfig = createSpamDetectionConfig(spamConfig, { logger });
+        const detector = createDonationSpamDetection(detectionConfig, { logger, autoCleanup: false });
+        try {
+          const threshold = detectionConfig.getPlatformConfig('twitch').lowValueThreshold;
+          expect(detector.isLowValueDonation(threshold, 'twitch')).toBe(true);
+          expect(detector.isLowValueDonation(threshold + 1, 'twitch')).toBe(false);
+        } finally {
+          detector.destroy();
+        }
       });
 
       it("should provide config values that enable spam detection", () => {

@@ -71,59 +71,65 @@ describe("GUI preview pipeline boundary integration", () => {
       },
     });
     const rows: UnknownRecord[] = [];
-    const unsubscribe = pipeline.eventBus.subscribe(
-      "display:row",
-      (row: UnknownRecord) => {
-        rows.push(row);
-      },
-    );
+    let unsubscribe: (() => void) | undefined;
+    try {
+      unsubscribe = pipeline.eventBus.subscribe(
+        "display:row",
+        (row: UnknownRecord) => {
+          rows.push(row);
+        },
+      );
 
-    const adapters = createPreviewIngestAdapters({
-      config,
-      logger,
-      emitPlatformEvent: (event: UnknownRecord) =>
-        pipeline.emitIngestEvent(event),
-    });
+      const adapters = createPreviewIngestAdapters({
+        config,
+        logger,
+        emitPlatformEvent: (event: UnknownRecord) =>
+          pipeline.emitIngestEvent(event),
+      });
 
-    const scenarioEvents = buildPreviewScenarioEvents(32000, 2000);
-    for (const event of scenarioEvents) {
-      await adapters[event.adapter].ingest(event.rawEvent);
-    }
-
-    for (let attempt = 0; attempt < 80; attempt += 1) {
-      const emittedTypes = new Set(rows.map((row) => row.type));
-      if (
-        emittedTypes.has("command") &&
-        emittedTypes.has("farewell") &&
-        emittedTypes.has("platform:giftpaypiggy")
-      ) {
-        break;
+      const scenarioEvents = buildPreviewScenarioEvents(32000, 2000);
+      for (const event of scenarioEvents) {
+        await adapters[event.adapter].ingest(event.rawEvent);
       }
-      await waitForDelay(1);
+
+      for (let attempt = 0; attempt < 80; attempt += 1) {
+        const emittedTypes = new Set(rows.map((row) => row.type));
+        if (
+          emittedTypes.has("command") &&
+          emittedTypes.has("farewell") &&
+          emittedTypes.has("platform:giftpaypiggy")
+        ) {
+          break;
+        }
+        await waitForDelay(1);
+      }
+
+      const emittedTypes = new Set(rows.map((row) => row.type));
+      expect(emittedTypes.has("chat")).toBe(true);
+      expect(emittedTypes.has("command")).toBe(true);
+      expect(emittedTypes.has("greeting")).toBe(true);
+      expect(emittedTypes.has("farewell")).toBe(true);
+      expect(emittedTypes.has("platform:follow")).toBe(true);
+      expect(emittedTypes.has("platform:gift")).toBe(true);
+      expect(emittedTypes.has("platform:raid")).toBe(true);
+      expect(emittedTypes.has("platform:share")).toBe(true);
+      expect(emittedTypes.has("platform:paypiggy")).toBe(true);
+      expect(emittedTypes.has("platform:giftpaypiggy")).toBe(true);
+
+      const chatAvatars = new Map(
+        rows
+          .filter((row) => row.type === "chat")
+          .map((row) => [row.platform, row.data?.avatarUrl]),
+      );
+      expect(chatAvatars.get("twitch")).toBe(DEMO_CHARACTER_CATALOG.Goku);
+      expect(chatAvatars.get("youtube")).toBe(DEMO_CHARACTER_CATALOG.Ichigo);
+      expect(chatAvatars.get("tiktok")).toBe(DEMO_CHARACTER_CATALOG.Naruto);
+    } finally {
+      try {
+        unsubscribe?.();
+      } finally {
+        await pipeline.dispose();
+      }
     }
-
-    const emittedTypes = new Set(rows.map((row) => row.type));
-    expect(emittedTypes.has("chat")).toBe(true);
-    expect(emittedTypes.has("command")).toBe(true);
-    expect(emittedTypes.has("greeting")).toBe(true);
-    expect(emittedTypes.has("farewell")).toBe(true);
-    expect(emittedTypes.has("platform:follow")).toBe(true);
-    expect(emittedTypes.has("platform:gift")).toBe(true);
-    expect(emittedTypes.has("platform:raid")).toBe(true);
-    expect(emittedTypes.has("platform:share")).toBe(true);
-    expect(emittedTypes.has("platform:paypiggy")).toBe(true);
-    expect(emittedTypes.has("platform:giftpaypiggy")).toBe(true);
-
-    const chatAvatars = new Map(
-      rows
-        .filter((row) => row.type === "chat")
-        .map((row) => [row.platform, row.data?.avatarUrl]),
-    );
-    expect(chatAvatars.get("twitch")).toBe(DEMO_CHARACTER_CATALOG.Goku);
-    expect(chatAvatars.get("youtube")).toBe(DEMO_CHARACTER_CATALOG.Ichigo);
-    expect(chatAvatars.get("tiktok")).toBe(DEMO_CHARACTER_CATALOG.Naruto);
-
-    unsubscribe();
-    await pipeline.dispose();
   });
 });

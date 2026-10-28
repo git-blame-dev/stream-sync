@@ -7,9 +7,9 @@ import { createRecordingLogger } from "./recording-logger";
 describe("recording logger behavior", () => {
   it("records canonical logger entries without emitting stdout or stderr", () => {
     const stdout = captureStdout();
-    const stderr = captureStderr();
-
     try {
+      const stderr = captureStderr();
+      try {
       const logger: AppLogger & ReturnType<typeof createRecordingLogger> = createRecordingLogger();
       const data = { feature: "test-logging-foundation" };
 
@@ -32,9 +32,11 @@ describe("recording logger behavior", () => {
           data: undefined,
         },
       ]);
+      } finally {
+        stderr.restore();
+      }
     } finally {
       stdout.restore();
-      stderr.restore();
     }
   });
 });

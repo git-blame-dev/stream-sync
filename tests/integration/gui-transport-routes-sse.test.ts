@@ -80,6 +80,9 @@ function createSseReader(response: any) {
   };
 
   return {
+    cancel() {
+      return reader.cancel();
+    },
     async readEvent(timeoutMs = 2000) {
       while (true) {
         const payload = await readPayload(timeoutMs);
@@ -1253,36 +1256,31 @@ describe("GUI transport routes and SSE integration", () => {
     const allowedRoot = fs.mkdtempSync(
       path.join(os.tmpdir(), "gui-transport-allowed-"),
     );
-    const blockedRoot = fs.mkdtempSync(
-      path.join(os.tmpdir(), "gui-transport-blocked-"),
-    );
-    const blockedMediaPath = path.join(blockedRoot, "gift.mp4");
-    fs.writeFileSync(blockedMediaPath, Buffer.from("blocked-mp4-content"));
-
-    const config = buildConfig({
-      enableDock: true,
-      enableOverlay: false,
-      showGifts: true,
-      port,
-      messageCharacterLimit: 0,
-    });
-    const service = createGuiTransportService({
-      config,
-      eventBus,
-      logger: null,
-      runtimeAssetRoots: [allowedRoot],
-    });
-    await service.start();
-
-    const baseUrl = getBaseUrl(service);
+    let blockedRoot: string | undefined;
+    let service: ReturnType<typeof createGuiTransportService> | undefined;
+    let reader: ReturnType<typeof createSseReader> | undefined;
+    let response: Response | undefined;
     const abort = new AbortController();
 
     try {
-      const response = await fetch(`${baseUrl}/gui/events`, {
+      blockedRoot = fs.mkdtempSync(path.join(os.tmpdir(), "gui-transport-blocked-"));
+      const blockedMediaPath = path.join(blockedRoot, "gift.mp4");
+      fs.writeFileSync(blockedMediaPath, Buffer.from("synthetic-blocked-media"));
+      const config = buildConfig({
+        enableDock: true,
+        enableOverlay: false,
+        showGifts: true,
+        port,
+        messageCharacterLimit: 0,
+      });
+      service = createGuiTransportService({ config, eventBus, logger: null, runtimeAssetRoots: [allowedRoot] });
+      await service.start();
+      const baseUrl = getBaseUrl(service);
+      response = await fetch(`${baseUrl}/gui/events`, {
         signal: abort.signal,
       });
       expect(response.status).toBe(200);
-      const reader = createSseReader(response);
+      reader = createSseReader(response);
 
       eventBus.emit("display:gift-animation", {
         playbackId: "blocked-playback-id",
@@ -1300,24 +1298,35 @@ describe("GUI transport routes and SSE integration", () => {
         },
       });
 
-      let receivedEvent = false;
-      reader
-        .readEvent()
-        .then(() => {
-          receivedEvent = true;
-        })
-        .catch(() => {});
-
-      await new Promise((resolve) => {
-        safeSetTimeout(resolve, 300);
+      eventBus.emit("display:row", {
+        type: "chat",
+        platform: "twitch",
+        data: {
+          username: "synthetic-sentinel-user",
+          userId: "synthetic-sentinel-id",
+          message: "synthetic-allowed-sentinel",
+          timestamp: "2024-01-01T00:00:00.000Z",
+        },
       });
-
-      expect(receivedEvent).toBe(false);
+      const nextEvent = await reader.readEvent();
+      expect(nextEvent.type).toBe("chat");
+      expect(nextEvent.text).toBe("synthetic-allowed-sentinel");
     } finally {
-      abort.abort();
-      await service.stop();
-      fs.rmSync(allowedRoot, { recursive: true, force: true });
-      fs.rmSync(blockedRoot, { recursive: true, force: true });
+      try {
+        if (reader) await reader.cancel();
+        else await response?.body?.cancel();
+      } finally {
+        abort.abort();
+        try {
+          await service?.stop();
+        } finally {
+          try {
+            if (blockedRoot) fs.rmSync(blockedRoot, { recursive: true, force: true });
+          } finally {
+            fs.rmSync(allowedRoot, { recursive: true, force: true });
+          }
+        }
+      }
     }
   });
 

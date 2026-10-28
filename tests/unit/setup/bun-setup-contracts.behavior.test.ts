@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { isMockFunction } from "../../helpers/bun-mock-utils";
 
 import {
   registerModuleMocks,
@@ -27,8 +28,18 @@ const expectWithSetupMatchers = (received: unknown): SetupMatcherAssertions =>
   expect(received) as SetupMatcherAssertions;
 
 describe("bun setup contracts behavior", () => {
-  it("allows module mock registration to run repeatedly", () => {
+  it("allows repeated module mock registration and retains usable registered mocks", async () => {
     expect(() => registerModuleMocks()).not.toThrow();
+    // Axios has distinct ESM/CJS entries; consume the ESM entry registered by mock.module.
+    const firstRegistration = await import("axios") as unknown as ReturnType<typeof createAxiosMock>;
+    if (!isMockFunction(firstRegistration.get)) throw new Error("Expected registered mock HTTP boundary");
+    const firstGet = firstRegistration.get;
+    expect(() => registerModuleMocks()).not.toThrow();
+    const registered = await import("axios") as unknown as ReturnType<typeof createAxiosMock>;
+    if (!isMockFunction(registered.get)) throw new Error("Expected registered mock HTTP boundary");
+    expect(registered.get).not.toBe(firstGet);
+    expect(await registered.get()).toEqual({ data: { data: [] } });
+    expect(registered.get).toHaveBeenCalledTimes(1);
   });
 
   it("builds websocket mock factory contract", () => {
@@ -66,7 +77,8 @@ describe("bun setup contracts behavior", () => {
   it("restores console through global helper", () => {
     const testGlobal = globalThis as TestGlobal;
     const originalConsole = testGlobal.originalConsole;
-    global.console = {
+    try {
+      global.console = {
       ...originalConsole,
       log: () => {},
       info: () => {},
@@ -75,9 +87,11 @@ describe("bun setup contracts behavior", () => {
       debug: () => {},
     };
 
-    testGlobal.restoreConsole();
-
-    expect(global.console).toBe(originalConsole);
+      testGlobal.restoreConsole();
+      expect(global.console).toBe(originalConsole);
+    } finally {
+      global.console = originalConsole;
+    }
   });
 
   it("supports toHaveLengthGreaterThan matcher behavior", () => {

@@ -1,14 +1,17 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import path from "path";
 import fs from "fs";
-import os from "os";
-import { initializeLoggingConfig } from "../../src/core/logging";
+import { tmpdir } from "node:os";
+import { createRequire } from "node:module";
+import { getDebugMode, getLoggingConfig, initializeLoggingConfig, setDebugMode } from "../../src/core/logging";
 import { buildLoggingConfig } from "../../src/core/config-builders";
-import { ConfigValidator } from "../../src/utils/config-validator";
+const load = createRequire(import.meta.url);
+const configModulePath = load.resolve("../../src/core/config");
 
 type LoggingConfig = NonNullable<Parameters<typeof initializeLoggingConfig>[0]["logging"]>;
 
 const buildSmokeConfigIni = () => `[general]
+envFileReadEnabled=false
 debugEnabled=true
 viewerCountPollingInterval=60
 maxMessageLength=500
@@ -86,7 +89,7 @@ describe("Startup wiring smoke", () => {
   let tempConfigPath: string;
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "startup-smoke-"));
+    tempDir = fs.mkdtempSync(path.join(tmpdir(), "startup-smoke-"));
     tempConfigPath = path.join(tempDir, "config.smoke.ini");
     fs.writeFileSync(tempConfigPath, buildSmokeConfigIni());
   });
@@ -101,14 +104,48 @@ describe("Startup wiring smoke", () => {
     expect(typeof buildLoggingConfig).toBe("function");
     expect(typeof initializeLoggingConfig).toBe("function");
 
-    const normalized = ConfigValidator.normalize({ general: {} });
-    const builtLoggingConfig = buildLoggingConfig(normalized);
-    const loggingConfig: LoggingConfig = {
-      ...builtLoggingConfig,
-      console: { ...builtLoggingConfig.console, level: "debug" },
-      file: { ...builtLoggingConfig.file, level: "debug" },
-    };
-    initializeLoggingConfig({ logging: loggingConfig });
+    const originalEntry = load.cache[configModulePath];
+    const originalConfigPath = process.env.CHAT_BOT_CONFIG_PATH;
+    const originalLogging = getLoggingConfig();
+    const originalDebug = getDebugMode();
+    try {
+      process.env.CHAT_BOT_CONFIG_PATH = tempConfigPath;
+      delete load.cache[configModulePath];
+      const configModule = load(configModulePath) as typeof import("../../src/core/config");
+      const normalized = configModule.loadConfig();
+      expect(normalized.general?.debugEnabled).toBe(true);
+      expect(normalized.general?.envFileReadEnabled).toBe(false);
+      const builtLoggingConfig = buildLoggingConfig(normalized);
+      const loggingConfig: LoggingConfig = {
+        ...builtLoggingConfig,
+        console: { ...builtLoggingConfig.console, level: "debug" },
+        file: { ...builtLoggingConfig.file, level: "debug" },
+      };
+      initializeLoggingConfig({ logging: loggingConfig });
+      setDebugMode(true);
+      expect(getLoggingConfig()).toBe(loggingConfig);
+      expect(getDebugMode()).toBe(true);
+    } finally {
+      try {
+        initializeLoggingConfig({ logging: originalLogging });
+      } finally {
+        try {
+          setDebugMode(originalDebug);
+        } finally {
+          try {
+            if (originalEntry) load.cache[configModulePath] = originalEntry;
+            else delete load.cache[configModulePath];
+          } finally {
+            if (originalConfigPath === undefined) delete process.env.CHAT_BOT_CONFIG_PATH;
+            else process.env.CHAT_BOT_CONFIG_PATH = originalConfigPath;
+          }
+        }
+      }
+    }
+    expect(getLoggingConfig()).toBe(originalLogging);
+    expect(getDebugMode()).toBe(originalDebug);
+    expect(load.cache[configModulePath]).toBe(originalEntry);
+    expect(process.env.CHAT_BOT_CONFIG_PATH).toBe(originalConfigPath);
   });
 
   test("smoke config file exists and is readable", () => {
