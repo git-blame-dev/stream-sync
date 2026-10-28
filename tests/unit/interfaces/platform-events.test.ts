@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'bun:test';
+import { PRIORITY_LEVELS } from '../../../src/core/constants';
+import { resolvePriorityForType } from '../../../src/core/notification-priority';
 
 import { createTestUser } from '../../helpers/test-setup';
 import { PlatformEvents, PlatformEventValidator } from '../../../src/interfaces/PlatformEvents.ts';
@@ -365,6 +367,33 @@ describe('Platform Events Interface', () => {
             expect(event.correlationId.length).toBeGreaterThan(0);
             expect(event.timestamp).toEqual(expect.any(String));
             expect(event.id).toBeDefined();
+        });
+
+        it('uses shared priorities for every supported notification factory event', () => {
+            for (const notificationType of Object.values(PlatformEvents.NOTIFICATION_TYPES)) {
+                const event = PlatformEvents.createNotificationEvent('twitch', notificationType, {
+                    username: 'SyntheticPriorityViewer', userId: 'synthetic-priority-viewer'
+                });
+                const expectedPriority = resolvePriorityForType(notificationType, PRIORITY_LEVELS);
+                if (expectedPriority === undefined) {
+                    throw new Error(`Missing supported notification priority: ${notificationType}`);
+                }
+                expect(event.priority).toBe(expectedPriority);
+                expect(PlatformEvents.validateNotificationEvent(event)).toBe(true);
+            }
+        });
+
+        it('defaults unknown notification factory priorities to chat', () => {
+            const event = PlatformEvents.createNotificationEvent('twitch', 'synthetic:unknown', {});
+            expect(event.priority).toBe(PRIORITY_LEVELS.CHAT);
+        });
+
+        it('creates and validates the supported giftpaypiggy priority above ten', () => {
+            const event = PlatformEvents.createNotificationEvent('twitch', 'platform:giftpaypiggy', {
+                username: 'SyntheticPriorityViewer', userId: 'synthetic-priority-viewer'
+            });
+            expect(event.priority).toBe(PRIORITY_LEVELS.GIFTPAYPIGGY);
+            expect(PlatformEvents.validateNotificationEvent(event)).toBe(true);
         });
 
         it('should create standardized notification events with priority', () => {

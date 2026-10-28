@@ -4,6 +4,11 @@ import { NOTIFICATION_CONFIGS, PRIORITY_LEVELS } from '../../../src/core/constan
 import { resolvePriorityForType } from '../../../src/core/notification-priority';
 
 describe('notification priority resolver', () => {
+    it('preserves command, greeting and farewell display priority mappings', () => {
+        expect(resolvePriorityForType('command', PRIORITY_LEVELS)).toBe(PRIORITY_LEVELS.COMMAND);
+        expect(resolvePriorityForType('greeting', PRIORITY_LEVELS)).toBe(PRIORITY_LEVELS.GREETING);
+        expect(resolvePriorityForType('farewell', PRIORITY_LEVELS)).toBe(PRIORITY_LEVELS.FAREWELL);
+    });
     it('resolves every configured notification type', () => {
         for (const notificationType of Object.keys(NOTIFICATION_CONFIGS)) {
             expect(resolvePriorityForType(notificationType, PRIORITY_LEVELS)).toBeNumber();

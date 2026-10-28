@@ -1,5 +1,7 @@
 import crypto from 'node:crypto';
 import { DEFAULT_AVATAR_URL } from '../constants/avatar';
+import { PRIORITY_LEVELS } from '../core/constants';
+import { resolvePriorityForType } from '../core/notification-priority';
 import {
     allowsYouTubeJewelsMissingAmount,
     allowsYouTubeJewelsMissingUserId
@@ -1379,13 +1381,7 @@ class EnhancedPlatformEvents {
     }
 
     static _calculatePriority(notificationType: string): number {
-        const priorities: Record<string, number> = {
-            [this.NOTIFICATION_TYPES.GIFT]: 8,
-            [this.NOTIFICATION_TYPES.RAID]: 6,
-            [this.NOTIFICATION_TYPES.PAYPIGGY]: 5,
-            [this.NOTIFICATION_TYPES.FOLLOW]: 2
-        };
-        return priorities[notificationType] || 1;
+        return resolvePriorityForType(notificationType, PRIORITY_LEVELS) ?? PRIORITY_LEVELS.CHAT;
     }
 
     static _isRecoverableError(error: Error, context: Record<string, unknown>): boolean {
