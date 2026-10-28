@@ -102,6 +102,79 @@ async function operatorControls() {
 }
 
 describe('bounded presentation lifetime with real queue, effects, sources, goals and tracker', () => {
+    it('wakes idle shared effects on admission without draining or accelerating a continuously paced chat pump', async () => {
+        const ticks = Array.from({ length: 3 }, () => ({ entered: deferred(), release: deferred() }));
+        const intervals: number[] = [];
+        const qualified: string[] = [];
+        const flush = async () => { for (let index = 0; index < 16; index++) await Promise.resolve(); };
+        const { queue, rows } = harness({
+            config: { rowIntervalMs: 1000, ttsChatEnabled: false, ttsNotificationsEnabled: false },
+            dependencies: {
+                delay: (ms) => {
+                    const tick = ticks[intervals.length];
+                    if (!tick) throw new Error('synthetic unexpected pacing interval');
+                    intervals.push(ms);
+                    tick.entered.resolve();
+                    return tick.release.promise;
+                },
+                onPresentationStarted: (item) => { qualified.push(String(item.data.username)); }
+            }
+        });
+        const chat = (name: string): DisplayQueueItem => ({ type: 'chat', platform: 'twitch', priority: 1,
+            data: { username: name, message: 'synthetic message' } });
+        queue.addItem(chat('synthetic-chat-one'));
+        const running = queue.processQueue();
+        try {
+            await ticks[0]!.entered.promise;
+            await flush();
+            expect(queue.getQueueLength()).toBe(0);
+            queue.addItem({ ...notification('synthetic-follow'), priority: 5 });
+            queue.addItem(chat('synthetic-chat-two'));
+            await flush();
+            expect(rows).toEqual(['synthetic-chat-one', 'synthetic-follow']);
+            expect(intervals).toEqual([1000]);
+
+            ticks[0]!.release.resolve();
+            await ticks[1]!.entered.promise;
+            await flush();
+            expect(queue.getQueueLength()).toBe(0);
+            queue.addItem({ ...notification('synthetic-farewell', 'farewell'), priority: 5 });
+            queue.addItem(chat('synthetic-chat-three'));
+            await flush();
+            expect(rows).toEqual(['synthetic-chat-one', 'synthetic-follow', 'synthetic-chat-two', 'synthetic-farewell']);
+            expect(intervals).toEqual([1000, 1000]);
+
+            ticks[1]!.release.resolve();
+            await ticks[2]!.entered.promise;
+            await flush();
+            expect(rows).toEqual(['synthetic-chat-one', 'synthetic-follow', 'synthetic-chat-two', 'synthetic-farewell', 'synthetic-chat-three']);
+            expect(qualified).toEqual(['synthetic-follow', 'synthetic-farewell']);
+            expect(intervals).toEqual([1000, 1000, 1000]);
+            expect(queue.getQueueLength()).toBe(0);
+        } finally {
+            await queue.stop();
+            await running;
+        }
+    });
+
+    it('preserves row-pacing failure propagation while the effects runner awaits work', async () => {
+        const entered = deferred();
+        let failPacing!: (error: Error) => void;
+        const failure = new Error('synthetic pacing failure');
+        const { queue } = harness({ dependencies: {
+            delay: () => {
+                entered.resolve();
+                return new Promise<void>((_resolve, reject) => { failPacing = reject; });
+            }
+        } });
+        queue.addItem({ type: 'chat', platform: 'twitch', data: { username: 'synthetic-viewer', message: 'synthetic message' } });
+        const outcome = queue.processQueue().then(() => null, (error: unknown) => error);
+        await entered.promise;
+        failPacing(failure);
+        expect(await outcome).toBe(failure);
+        await queue.stop();
+    });
+
     it('drains already-qualified native goal projection without passing it an effect cancellation signal', async () => {
         const entered = deferred();
         const release = deferred();

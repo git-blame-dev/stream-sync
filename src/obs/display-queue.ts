@@ -137,6 +137,8 @@ class DisplayQueue {
     private stopPromise: Promise<void> | null = null;
     private runner: Promise<void> | null = null;
     private rowRunner: Promise<void> | null = null;
+    private workWaiter: (() => void) | undefined;
+    private rowFailure: { error: unknown } | undefined;
     private readonly wakeWaiters = new Set<() => void>();
     // State orders pending entries; records retain their admission slots through final settlement.
     private readonly records = new Map<QueueItem, OutstandingPresentation>();
@@ -322,8 +324,9 @@ class DisplayQueue {
     private async runEffects() {
         try {
             while (!this.stopped && (this.queue.length > 0 || this.rowRunner)) {
+                if (this.rowFailure) throw this.rowFailure.error;
                 if (this.queue.length === 0) {
-                    await this.rowRunner;
+                    await this.waitForWorkOrRowCompletion();
                     continue;
                 }
                 const entry = this.state.shift();
@@ -370,7 +373,21 @@ class DisplayQueue {
         } finally {
             this.activeSequenceRemaining = [];
             await this.rowRunner;
+            const failure = this.rowFailure;
+            this.rowFailure = undefined;
+            if (failure) throw failure.error;
         }
+    }
+
+    private waitForWorkOrRowCompletion() {
+        return new Promise<void>((resolve) => {
+            const wake = () => {
+                if (this.workWaiter === wake) this.workWaiter = undefined;
+                resolve();
+            };
+            this.workWaiter = wake;
+            if (this.stopped || this.queue.length > 0 || !this.rowRunner) wake();
+        });
     }
 
     private registerRecord(item: QueueItem) {
@@ -379,6 +396,7 @@ class DisplayQueue {
         this.records.set(item, { presented: false, active: false, rowDone, finishRow });
         this.ensureEventId(item);
         this.notificationCoordinator.setSuccessorAvailable(this.hasPendingNotification());
+        this.workWaiter?.();
     }
 
     private retire(item: QueueItem) {
@@ -418,9 +436,12 @@ class DisplayQueue {
 
     private startRowRunner() {
         if (this.rowRunner || this.stopped) return;
-        this.rowRunner = Promise.resolve().then(() => this.runRows()).finally(() => {
+        this.rowRunner = Promise.resolve().then(() => this.runRows()).catch((error: unknown) => {
+            this.rowFailure = { error };
+        }).finally(() => {
             this.rowRunner = null;
-            if (this.nextChatRecord()) this.startRowRunner();
+            if (!this.rowFailure && this.nextChatRecord()) this.startRowRunner();
+            this.workWaiter?.();
         });
     }
 
@@ -533,6 +554,7 @@ class DisplayQueue {
         let reject!: (reason: unknown) => void;
         this.stopPromise = new Promise<void>((done, fail) => { resolve = done; reject = fail; });
         this.stopped = true;
+        this.workWaiter?.();
         this.stopController.abort();
         const cleanups: Array<Promise<unknown>> = [];
         const attempt = (operation: () => unknown) => {
