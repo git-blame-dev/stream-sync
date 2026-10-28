@@ -43,6 +43,22 @@ describe("IntervalManager behavior", () => {
     expect(manager.getActiveIntervals().length).toBe(1);
   });
 
+  it("records the effective scheduled interval in active, creation and cleanup metadata", () => {
+    const manager = new IntervalManager("platform", noOpLogger, { safeSetInterval: mockSafeSetInterval });
+    for (const [index, input] of [NaN, Infinity, 0, -1, 2147483648, 2147483647, 50].entries()) {
+      const expected = index < 4 ? 1000 : index < 6 ? 2147483647 : 50;
+      const name = `test-${index}`;
+      manager.createInterval(name, () => {}, input);
+      expect(mockSafeSetInterval).toHaveBeenLastCalledWith(expect.any(Function), expected);
+      expect(manager.getIntervalInfo(name)?.intervalMs).toBe(expected);
+      expect(manager.intervalHistory.at(-1)?.intervalMs).toBe(expected);
+      testClock.advance(10);
+      manager.clearInterval(name);
+      expect(manager.getCleanupHistory().at(-1)?.intervalMs).toBe(expected);
+      expect(manager.getCleanupHistory().at(-1)?.duration).toBe(10);
+    }
+  });
+
   it("clears intervals individually and in bulk with stats updates", () => {
     const manager = new IntervalManager("platform", noOpLogger, {
       safeSetInterval: mockSafeSetInterval,

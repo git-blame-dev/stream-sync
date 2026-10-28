@@ -1,4 +1,4 @@
-import { safeSetInterval as defaultSafeSetInterval } from './timeout-validator';
+import { safeSetInterval as defaultSafeSetInterval, validateInterval } from './timeout-validator';
 import { getSystemTimestampISO } from './timestamp';
 
 type LoggerLike = {
@@ -81,7 +81,8 @@ class IntervalManager {
             );
         }
 
-        const intervalId = this.safeSetInterval(callback, intervalMs);
+        const effectiveIntervalMs = validateInterval(intervalMs);
+        const intervalId = this.safeSetInterval(callback, effectiveIntervalMs);
         this.totalIntervalsCreated += 1;
         this.intervalCount += 1;
 
@@ -90,7 +91,7 @@ class IntervalManager {
             name,
             type,
             startTime: getSystemTimestampISO(),
-            intervalMs,
+            intervalMs: effectiveIntervalMs,
             callback: callback.name || 'anonymous',
             options
         };
@@ -102,7 +103,7 @@ class IntervalManager {
         });
 
         this.logger.debug(
-            `Created ${type} interval '${name}' (${intervalMs}ms) with ID: ${String(intervalId)}`,
+            `Created ${type} interval '${name}' (${effectiveIntervalMs}ms) with ID: ${String(intervalId)}`,
             this.platformName
         );
 

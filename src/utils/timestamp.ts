@@ -21,7 +21,18 @@ function isIsoTimestamp(value: unknown): boolean {
         return false;
     }
     const parsed = Date.parse(value);
-    return !Number.isNaN(parsed);
+    if (Number.isNaN(parsed)) {
+        return false;
+    }
+    // Validate the written calendar date independently of time normalization (e.g. 24:00).
+    const year = Number(value.slice(0, 4));
+    const month = Number(value.slice(5, 7));
+    const day = Number(value.slice(8, 10));
+    const calendarDate = new Date(0);
+    calendarDate.setUTCFullYear(year, month - 1, day);
+    return calendarDate.getUTCFullYear() === year
+        && calendarDate.getUTCMonth() + 1 === month
+        && calendarDate.getUTCDate() === day;
 }
 
 function getSystemTimestampISO(): string {

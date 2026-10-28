@@ -8,6 +8,16 @@ import {
 } from "../../../src/utils/timestamp.ts";
 describe("Timestamp utilities", () => {
   describe("isIsoTimestamp", () => {
+    it("rejects normalized impossible calendar days while preserving existing time grammar", () => {
+      for (const date of ["2023-02-29", "1900-02-29", "2024-02-30", "2024-04-31", "2024-00-01", "2024-13-01", "2024-01-00"]) {
+        expect(isIsoTimestamp(`${date}T00:00:00Z`)).toBe(false);
+      }
+      for (const date of ["2024-02-29", "2000-02-29", "0000-02-29", "0099-02-28"]) {
+        expect(isIsoTimestamp(`${date}T00:00:00Z`)).toBe(true);
+      }
+      expect(isIsoTimestamp("2024-01-01T24:00:00Z")).toBe(true);
+      expect(parseTimestampMs("2024-02-29T23:30:00+02:30", { allowDateString: true })).toBe(Date.parse("2024-02-29T21:00:00Z"));
+    });
     it("validates correct ISO timestamps", () => {
       expect(isIsoTimestamp("2024-01-01T00:00:00Z")).toBe(true);
       expect(isIsoTimestamp("2024-01-01T00:00:00.000Z")).toBe(true);

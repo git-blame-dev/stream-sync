@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { createMockFn, restoreAllMocks, spyOn } from '../../helpers/bun-mock-utils';
 import {
     safeSetInterval,
+    safeDelay,
     safeSetTimeout,
     validateExponentialBackoff,
     validateTimeout
@@ -29,6 +30,12 @@ describe('Timeout Validator', () => {
     });
 
     describe('validateTimeout', () => {
+        test('clamps values and fallbacks to the signed timer ceiling', () => {
+            expect(validateTimeout(2147483647)).toBe(2147483647);
+            expect(validateTimeout(2147483648)).toBe(2147483647);
+            expect(validateTimeout(NaN, 2147483648)).toBe(2147483647);
+            expect(validateTimeout(Infinity, Infinity)).toBe(5000);
+        });
         test('should return valid positive numbers unchanged', () => {
             expect(validateTimeout(1000)).toBe(1000);
             expect(validateTimeout(5000)).toBe(5000);
@@ -60,6 +67,11 @@ describe('Timeout Validator', () => {
     });
 
     describe('validateExponentialBackoff', () => {
+        test('normalizes non-finite attempts without losing attempt zero', () => {
+            for (const attempt of [Infinity, -Infinity, NaN, 0]) {
+                expect(validateExponentialBackoff(1000, 2, attempt)).toBe(1000);
+            }
+        });
         test('should calculate valid exponential backoff delays', () => {
             expect(validateExponentialBackoff(1000, 2, 0)).toBe(1000);
             expect(validateExponentialBackoff(1000, 2, 1)).toBe(2000);
@@ -105,6 +117,26 @@ describe('Timeout Validator', () => {
     });
 
     describe('safeSetTimeout', () => {
+        test('abortable waits clean listeners on cancellation and completion', async () => {
+            const cancelled = new AbortController();
+            cancelled.abort('test cancellation');
+            await expect(safeDelay(10, 5000, 'test', cancelled.signal)).rejects.toBe('test cancellation');
+            expect(timeoutSpy).not.toHaveBeenCalled();
+
+            const pending = new AbortController();
+            const remove = spyOnGlobal(pending.signal, 'removeEventListener');
+            const wait = safeDelay(2147483647, 5000, 'test', pending.signal);
+            pending.abort('pending cancellation');
+            await expect(wait).rejects.toBe('pending cancellation');
+            expect(remove).toHaveBeenCalledTimes(1);
+
+            const completed = new AbortController();
+            const completedRemove = spyOnGlobal(completed.signal, 'removeEventListener');
+            await safeDelay(1, 5000, 'test', completed.signal);
+            expect(completedRemove).toHaveBeenCalledTimes(1);
+            completed.abort('after completion');
+            expect(completedRemove).toHaveBeenCalledTimes(1);
+        });
         test('should call setTimeout with validated delay', () => {
             const mockCallback = createMockFn();
             

@@ -12,13 +12,15 @@ const createCurrentSetInterval = () => (...args: SetIntervalArguments): SetInter
 let activeSetTimeout = createCurrentSetTimeout();
 let activeSetInterval = createCurrentSetInterval();
 
+const MAX_TIMER_DELAY_MS = 2147483647;
+
 function validateTimeout(value: unknown, fallback = 5000, _context = 'timeout'): number {
     const safeFallback = (typeof fallback === 'number' && !isNaN(fallback) && fallback > 0 && isFinite(fallback))
-        ? fallback
+        ? Math.min(fallback, MAX_TIMER_DELAY_MS)
         : 5000;
 
     if (typeof value === 'number' && !isNaN(value) && value > 0 && isFinite(value)) {
-        return value;
+        return Math.min(value, MAX_TIMER_DELAY_MS);
     }
     
     return safeFallback;
@@ -27,7 +29,7 @@ function validateTimeout(value: unknown, fallback = 5000, _context = 'timeout'):
 function validateExponentialBackoff(baseDelay: unknown, multiplier: unknown = 2, attemptNumber: unknown = 0, maxDelay: unknown = 300000): number {
     const safeBase = validateTimeout(baseDelay, 5000, 'baseDelay');
     const safeMultiplier = validateTimeout(multiplier, 2, 'multiplier');
-    const safeAttempt = (typeof attemptNumber === 'number' && !isNaN(attemptNumber) && attemptNumber >= 0) 
+    const safeAttempt = (typeof attemptNumber === 'number' && Number.isFinite(attemptNumber) && attemptNumber >= 0)
         ? attemptNumber 
         : 0;
     const safeMaxDelay = validateTimeout(maxDelay, 300000, 'maxDelay');
@@ -74,6 +76,7 @@ function safeSetInterval(callback: SetIntervalArguments[0], interval: unknown, .
 
 export {
     validateTimeout,
+    validateInterval,
     validateExponentialBackoff,
     safeSetTimeout,
     safeSetInterval,
