@@ -2,6 +2,7 @@
 import { setupAutomatedCleanup } from './mock-lifecycle';
 import { waitForDelay } from './time-utils';
 import { createMockFn, isMockFunction } from './bun-mock-utils';
+import { parseTimestampISO, parseTimestampMs } from '../../src/utils/timestamp';
 
 const BASE_TIMESTAMP_MS = Date.parse('2024-01-01T00:00:00.000Z');
 type UnknownRecord = Record<string, unknown>;
@@ -853,8 +854,8 @@ const createMockOBSConnection = (connectionState = 'connected', methodOverrides:
                 sourceUuid: eventData.sourceUuid || 'source-uuid',
                 inputKind: eventData.inputKind || 'text_source',
                 inputName: eventData.inputName || eventData.sourceName || 'Chat Display',
-                newText: inputSettings.text || 'New chat message from viewer',
-                fontSize: inputSettings.font_size || 24,
+                newText: inputSettings.text ?? 'New chat message from viewer',
+                fontSize: inputSettings.font_size ?? 24,
                 success: true,
                 processed: true,
                 timestamp: timestamp.iso
@@ -887,7 +888,7 @@ const createMockOBSConnection = (connectionState = 'connected', methodOverrides:
             return {
                 displayed: true,
                 obsSource: 'notification-display',
-                finalText: notificationRecord.displayMessage || notificationRecord.message || `${notificationRecord.username || 'User'} notification`,
+                finalText: notificationRecord.displayMessage ?? notificationRecord.message ?? `${notificationRecord.username || 'User'} notification`,
                 notification: notificationRecord,
                 success: true,
                 timestamp: timestamp.iso
@@ -934,7 +935,7 @@ const createMockDisplayQueue = (queueState: DisplayQueueState = {}, methodOverri
         resumeProcessing: createMockFn().mockResolvedValue(true),
         getQueueItems: createMockFn().mockReturnValue(normalizedQueueState.items || []),
         setMaxQueueSize: createMockFn().mockResolvedValue(true),
-        getMaxQueueSize: createMockFn().mockReturnValue(normalizedQueueState.maxSize || 100),
+        getMaxQueueSize: createMockFn().mockReturnValue(normalizedQueueState.maxSize ?? 100),
         isQueueFull: createMockFn().mockReturnValue(normalizedQueueState.isFull || false),
         getProcessingStats: createMockFn().mockReturnValue({
             processed: normalizedQueueState.processed || 0,
@@ -1190,7 +1191,7 @@ const createMockTikTokPlatform = (behaviorConfig: UnknownRecord = {}) => {
                     giftType,
                     giftCount,
                     giftId: giftRecord.giftId || 7934,
-                    repeatCount: giftRecord.repeatCount || 1,
+                    repeatCount: giftRecord.repeatCount ?? 1,
                     amount,
                     currency,
                     displayMessage: `${normalizedUser.username} sent ${giftCount} ${giftType}${giftCount > 1 ? 's' : ''}`,
@@ -1498,7 +1499,7 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
         if (platformName === 'tiktok') {
             const giftDetails = asRecord(giftRecord.giftDetails);
             giftType = giftRecord.giftType || giftDetails.giftName || 'Rose';
-            giftCount = Number(giftRecord.giftCount || giftRecord.repeatCount || 1);
+            giftCount = Number(giftRecord.giftCount ?? giftRecord.repeatCount ?? 1);
             const unitAmount = giftDetails.diamondCount ?? giftRecord.unitAmount ?? null;
             amount = Number.isFinite(Number(unitAmount)) ? Number(unitAmount) * giftCount : 0;
             currency = giftRecord.currency || 'coins';
@@ -1603,8 +1604,8 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
                     username: tiktokUser.username,
                     messageContent: messageRecord.comment === null ? 'Empty message' : (messageRecord.comment ?? messageRecord.content ?? 'Test message'),
                     userId: tiktokUser.userId,
-                    gifterLevel: tiktokUser.gifterLevel || 23,
-                    isSubscriber: tiktokUser.isSubscriber || true,
+                    gifterLevel: tiktokUser.gifterLevel ?? 23,
+                    isSubscriber: tiktokUser.isSubscriber ?? true,
                     userBadges: tiktokUser.userBadges || ['follower', 'verified'],
                     followRole: tiktokUser.followRole || 'new_follower',
                     displayMessage: `${tiktokUser.username}: ${messageRecord.comment === null ? 'Empty message' : (messageRecord.comment ?? messageRecord.content ?? 'Test message')}`,
@@ -1685,13 +1686,14 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
         
         processFollow: createMockFn<[unknown], UnknownRecord>().mockImplementation((followData) => {
             const normalizedUser = normalizeUserData(followData);
+            const followRecord = asRecord(followData);
             const timestamp = createTimestamp();
             return {
                 id: buildTestId('follow'),
                 type: 'platform:follow',
                 eventType: 'follow',
                 messageType: 'follow',
-                platform: 'tiktok',
+                platform: platformName,
                 username: normalizedUser.username,
                 userId: normalizedUser.userId,
                 displayMessage: `${normalizedUser.username} followed you!`,
@@ -1699,7 +1701,7 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
                 logMessage: `Follow from ${normalizedUser.username}`,
                 processedAt: timestamp.ms,
                 processed: true,
-                timestamp: timestamp.iso
+                timestamp: parseTimestampISO(followRecord.timestamp, { allowDateString: true }) ?? timestamp.iso
             };
         }),
         
@@ -1865,7 +1867,7 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
         processEventSubRaid: createMockFn<[unknown], UnknownRecord>().mockImplementation((raidData) => {
             const raidRecord = raidData as UnknownRecord;
             const username = raidRecord.from_broadcaster_user_name || 'RaiderUser';
-            const viewerCount = raidRecord.viewerCount || 42;
+            const viewerCount = raidRecord.viewerCount ?? 42;
             const displayMessage = `${username} raided with ${viewerCount} viewers!`;
             const timestamp = createTimestamp();
             
@@ -2172,14 +2174,14 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
                 inputKind: eventData.inputKind || 'text_source',
                 inputName: eventData.inputName || eventData.sourceName || 'Chat Display',
                 inputUuid: eventData.inputUuid || eventData.sourceUuid || '00000000-0000-0000-0000-000000000012',
-                newText: inputSettings.text || 'New chat message from viewer',
-                fontSize: font.size || 24,
+                newText: inputSettings.text ?? 'New chat message from viewer',
+                fontSize: font.size ?? 24,
                 newSettings: {
-                    text: inputSettings.text || 'New chat message from viewer',
+                    text: inputSettings.text ?? 'New chat message from viewer',
                     font: {
-                        size: font.size || 24
+                        size: font.size ?? 24
                     },
-                    color: inputSettings.color || 4294967295
+                    color: inputSettings.color ?? 4294967295
                 },
                 success: true,
                 processed: true,
@@ -2201,7 +2203,7 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
                 platform: 'youtube',
                 username: viewerRecord.username || user.name || 'NewViewer123',
                 userId: viewerRecord.userId,
-                viewerCount: viewerRecord.viewerCount || 1245,
+                viewerCount: viewerRecord.viewerCount ?? 1245,
                 displayMessage: `${viewerRecord.username || user.name || 'NewViewer123'} ${eventType === 'viewer_leave' ? 'left' : 'joined'} the stream`,
                 processed: true,
                 timestamp: timestamp.iso
@@ -2412,7 +2414,7 @@ const createMockPlatform = (platformName: string, behaviorConfig: UnknownRecord 
                 const normalizedUser = normalizeUserData(giftRecord);
                 const giftDetails = asRecord(giftRecord.giftDetails);
                 const giftType = giftRecord.giftType || giftDetails.giftName || 'Rose';
-                const giftCount = Number(giftRecord.giftCount || giftRecord.repeatCount || 1);
+                const giftCount = Number(giftRecord.giftCount ?? giftRecord.repeatCount ?? 1);
                 const giftId = giftDetails.id ?? null;
                 const amount = Number.isFinite(Number(giftRecord.amount))
                     ? Number(giftRecord.amount)
@@ -2687,10 +2689,13 @@ const createHttpMethods = (options: AuthFactoryOptions = {}) => {
     
     return {
         getRequestHeaders: createMockFn<[string, string], Promise<RequestHeaders>>().mockImplementation(async (_endpoint, operation) => {
+            const requestAuthHeaders = operation === 'token_refresh'
+                ? { 'Client-ID': options.config?.clientId ?? 'test-client-id' }
+                : authHeaders;
             return {
                 standardHeaders,
-                authHeaders: operation !== 'token_refresh' ? authHeaders : {},
-                combined: { ...standardHeaders, ...authHeaders }
+                authHeaders: requestAuthHeaders,
+                combined: { ...standardHeaders, ...requestAuthHeaders }
             };
         }),
         
@@ -3004,12 +3009,13 @@ function createMockWebSocketMessage(platform: string, eventType: string, eventDa
 
 const createTwitchWebSocketMessage = (eventType: string, eventData: UnknownRecord = {}): TwitchWebSocketMessage => {
     const timestamp = createTimestamp();
+    const eventTimestamp = parseTimestampISO(eventData.timestamp, { allowDateString: true }) ?? timestamp.iso;
     const username = typeof eventData.username === 'string' ? eventData.username : undefined;
     const baseMessage: TwitchWebSocketMessage = {
         metadata: {
             message_id: buildTestId('msg'),
             message_type: 'notification',
-            message_timestamp: timestamp.iso,
+            message_timestamp: eventTimestamp,
             subscription_type: eventType,
             subscription_version: '1'
         },
@@ -3044,7 +3050,7 @@ const createTwitchWebSocketMessage = (eventType: string, eventData: UnknownRecor
                 chatter_user_login: username?.toLowerCase() || 'testuser',
                 message_id: buildTestId('msg'),
                 message: {
-                    text: eventData.message || 'Test message',
+                    text: eventData.message ?? 'Test message',
                     fragments: []
                 },
                 color: eventData.color || '#FF0000',
@@ -3061,12 +3067,12 @@ const createTwitchWebSocketMessage = (eventType: string, eventData: UnknownRecor
                 broadcaster_user_id: 'test-broadcaster-id',
                 broadcaster_user_name: 'teststreamer',
                 broadcaster_user_login: 'teststreamer',
-                followed_at: timestamp.iso
+                followed_at: eventTimestamp
             };
             break;
 
         case 'channel.bits.use':
-            const bitsAmount = eventData.bits || 100;
+            const bitsAmount = eventData.bits ?? 100;
             const messagePayload = eventData.message && typeof eventData.message === 'object'
                 ? eventData.message
                 : {
@@ -3102,7 +3108,7 @@ const createTwitchWebSocketMessage = (eventType: string, eventData: UnknownRecor
                 to_broadcaster_user_id: 'test-broadcaster-id',
                 to_broadcaster_user_name: 'teststreamer',
                 to_broadcaster_user_login: 'teststreamer',
-                viewers: eventData.viewerCount || 42
+                viewers: eventData.viewerCount ?? 42
             };
             break;
 
@@ -3134,7 +3140,7 @@ const createYouTubeWebSocketMessage = (eventType: string, eventData: UnknownReco
         kind: 'youtube#liveChatMessage',
         etag: buildTestId('etag'),
         snippet: {
-            publishedAt: timestamp.iso,
+            publishedAt: parseTimestampISO(eventData.timestamp, { allowDateString: true }) ?? timestamp.iso,
             hasDisplayContent: true,
             liveChatId: 'live_chat_123',
             messageDeletedDetails: null
@@ -3156,9 +3162,9 @@ const createYouTubeWebSocketMessage = (eventType: string, eventData: UnknownReco
     switch (eventType) {
         case 'textMessageEvent':
             baseMessage.snippet.type = 'textMessageEvent';
-            baseMessage.snippet.displayMessage = eventData.message || 'Test message';
+            baseMessage.snippet.displayMessage = eventData.message ?? 'Test message';
             baseMessage.snippet.textMessageDetails = {
-                messageText: eventData.message || 'Test message'
+                messageText: eventData.message ?? 'Test message'
             };
             break;
 
@@ -3205,8 +3211,8 @@ const createTikTokWebSocketMessage = (eventType: string, eventData: UnknownRecor
         profilePictureUrl: 'https://example.com/avatar.jpg',
         following: false,
         followerCount: 1000,
-        teamMemberLevel: eventData.teamMemberLevel || 1,
-        gifterLevel: eventData.gifterLevel || 1,
+        teamMemberLevel: eventData.teamMemberLevel ?? 1,
+        gifterLevel: eventData.gifterLevel ?? 1,
         isSubscriber: eventData.isSubscriber || false
     };
 
@@ -3215,8 +3221,8 @@ const createTikTokWebSocketMessage = (eventType: string, eventData: UnknownRecor
             return {
                 type: 'chat',
                 user: baseUser,
-                comment: eventData.message || 'Test chat message',
-                timestamp: createTimestamp().ms,
+                comment: eventData.message ?? 'Test chat message',
+                timestamp: parseTimestampMs(eventData.timestamp, { allowDateString: true }) ?? createTimestamp().ms,
                 emotes: eventData.emotes || []
             };
 
@@ -3227,13 +3233,13 @@ const createTikTokWebSocketMessage = (eventType: string, eventData: UnknownRecor
                 gift: {
                     gift_id: eventData.giftId || 5655,
                     name: eventData.giftName || 'rose',
-                    diamonds: eventData.diamonds || 1,
+                    diamonds: eventData.diamonds ?? 1,
                     image: {
                         url_list: ['https://example.com/gift.png']
                     }
                 },
-                giftCount: eventData.giftCount || 1,
-                totalCost: eventData.totalCost || eventData.diamonds || 1,
+                giftCount: eventData.giftCount ?? 1,
+                totalCost: eventData.totalCost ?? eventData.diamonds ?? 1,
                 comboId: eventData.comboId || null,
                 timestamp: createTimestamp().ms
             };
@@ -3249,7 +3255,7 @@ const createTikTokWebSocketMessage = (eventType: string, eventData: UnknownRecor
         case 'roomUser':
             return {
                 type: 'roomUser',
-                viewerCount: eventData.viewerCount || 100,
+                viewerCount: eventData.viewerCount ?? 100,
                 timestamp: createTimestamp().ms
             };
 
@@ -3260,6 +3266,11 @@ const createTikTokWebSocketMessage = (eventType: string, eventData: UnknownRecor
 
 const createWebSocketMessageSimulator = (options: { platform?: SupportedPlatform } = {}) => {
     const { platform = 'twitch' } = options;
+    const chatEventTypes: Record<SupportedPlatform, string> = {
+        twitch: 'channel.chat.message',
+        youtube: 'textMessageEvent',
+        tiktok: 'chat'
+    };
     
     return {
         generateRapidMessages: (count = 10, eventType = 'chat') => {
@@ -3277,8 +3288,9 @@ const createWebSocketMessageSimulator = (options: { platform?: SupportedPlatform
         generateConcurrentPlatformMessages: (platforms: SupportedPlatform[] = ['twitch', 'youtube', 'tiktok']) => {
             const messages: Record<string, SupportedWebSocketMessage> = {};
             platforms.forEach(plat => {
-                messages[plat] = createMockWebSocketMessage(plat, 'chat', {
+                messages[plat] = createMockWebSocketMessage(plat, chatEventTypes[plat], {
                     username: `TestUser_${plat}`,
+                    userId: `synthetic-concurrent-${plat}`,
                     message: `Hello from ${plat}!`
                 });
             });

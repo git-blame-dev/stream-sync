@@ -114,6 +114,79 @@ describe('mock-factories helper behavior', () => {
         testClock.useRealTime();
     });
 
+    it('preserves cleared OBS text and explicitly supplied zero style values', () => {
+        const connection = createMockOBSConnection();
+        expect(connection.processSourceEvent({ eventData: { inputSettings: { text: '', font_size: 0 } } })).toMatchObject({ newText: '', fontSize: 0 });
+        const platform = createPlatform('obs');
+        expect(platform.processSourceEvent!({ eventData: { inputSettings: { text: '', font: { size: 0 }, color: 0 } } })).toMatchObject({
+            newText: '', fontSize: 0, newSettings: { text: '', font: { size: 0 }, color: 0 }
+        });
+        expect(connection.displayNotification({ displayMessage: '', message: 'synthetic fallback' }).finalText).toBe('');
+    });
+
+    it('reports explicitly configured zero queue capacity without inventing capacity behavior', () => {
+        expect(createMockDisplayQueue({ maxSize: 0 }).getMaxQueueSize()).toBe(0);
+        expect(createMockDisplayQueue().getMaxQueueSize()).toBe(100);
+    });
+
+    it('preserves zero gift count in raw, direct and generic TikTok gift paths', async () => {
+        const gift = { user: { uniqueId: 'synthetic-gifter', userId: 'synthetic-user' }, giftCount: 0, repeatCount: 3, giftDetails: { diamondCount: 2 } };
+        const platform = createPlatform('tiktok');
+        expect(platform.processGift(gift)).toMatchObject({ giftCount: 0, repeatCount: 0, amount: 0 });
+        expect(platform.processEvent({ ...gift, type: 'gift' })).toMatchObject({ notification: { giftCount: 0, repeatCount: 0, amount: 0 } });
+        const specialized = createMockTikTokPlatform();
+        const result = await specialized.processGift({ username: 'synthetic-gifter', giftType: 'Rose', giftCount: 0, repeatCount: 0, amount: 0 });
+        expect(result.notification).toMatchObject({ giftCount: 0, repeatCount: 0 });
+        expect(createTikTokWebSocketMessage('gift', { giftCount: 0, diamonds: 0, totalCost: 0 })).toMatchObject({ giftCount: 0, totalCost: 0, gift: { diamonds: 0 } });
+    });
+
+    it('retains explicit non-subscriber status and zero user levels', () => {
+        expect(createPlatform('tiktok').processMessage({ user: { uniqueId: 'synthetic-viewer', userId: 'synthetic-user', isSubscriber: false, gifterLevel: 0 }, comment: '' })).toMatchObject({
+            isSubscriber: false, gifterLevel: 0, messageContent: ''
+        });
+        expect(createTikTokWebSocketMessage('chat', { gifterLevel: 0, teamMemberLevel: 0, isSubscriber: false, message: '' })).toMatchObject({
+            user: { gifterLevel: 0, teamMemberLevel: 0, isSubscriber: false }, comment: ''
+        });
+    });
+
+    it('preserves zero viewers and bits in processors and raw event fixtures', () => {
+        expect(createPlatform('youtube').processViewerEvent!({ viewerCount: 0 }).viewerCount).toBe(0);
+        expect(createPlatform('twitch').processEventSubRaid!({ viewerCount: 0 }).viewerCount).toBe(0);
+        expect(createTikTokWebSocketMessage('roomUser', { viewerCount: 0 }).viewerCount).toBe(0);
+        expect(createTwitchWebSocketMessage('channel.raid', { viewerCount: 0 }).payload.event.viewers).toBe(0);
+        expect(createTwitchWebSocketMessage('channel.bits.use', { bits: 0 }).payload.event.bits).toBe(0);
+    });
+
+    for (const platformName of ['twitch', 'youtube', 'tiktok']) {
+        it(`keeps ${platformName} follow identity and canonical timestamp`, () => {
+            const follow = createPlatform(platformName).processFollow({ username: 'synthetic-follower', userId: 'synthetic-user', timestamp: 0 });
+            expect(follow).toMatchObject({ type: 'platform:follow', eventType: 'follow', platform: platformName, username: 'synthetic-follower', userId: 'synthetic-user', timestamp: '1970-01-01T00:00:00.000Z' });
+        });
+    }
+
+    it('omits bearer authorization from refresh headers without dropping client headers', async () => {
+        const refresh = createMockTokenRefresh({ config: { accessToken: 'synthetic-access-token', clientId: 'synthetic-client' } });
+        const headers = await refresh.getRequestHeaders('/synthetic-token', 'token_refresh');
+        expect(headers.authHeaders).not.toHaveProperty('Authorization');
+        expect(headers.combined).not.toHaveProperty('Authorization');
+        expect(headers.combined['Client-ID']).toBe('synthetic-client');
+        expect(headers.combined.Accept).toBe('application/json');
+        expect((await refresh.getRequestHeaders('/synthetic-validation', 'token_validation')).combined.Authorization).toBe('Bearer synthetic-access-token');
+    });
+
+    it('generates concurrent messages with each supported raw event type and user identity', () => {
+        const messages = createWebSocketMessageSimulator().generateConcurrentPlatformMessages();
+        expect(messages.twitch).toMatchObject({ metadata: { subscription_type: 'channel.chat.message' }, payload: { event: { chatter_user_name: 'TestUser_twitch', chatter_user_id: 'synthetic-concurrent-twitch' } } });
+        expect(messages.youtube).toMatchObject({ snippet: { type: 'textMessageEvent' }, authorDetails: { displayName: 'TestUser_youtube', channelId: 'synthetic-concurrent-youtube' } });
+        expect(messages.tiktok).toMatchObject({ type: 'chat', user: { uniqueId: 'TestUser_tiktok', userId: 'synthetic-concurrent-tiktok' } });
+    });
+
+    it('preserves explicit empty raw chat text and epoch timestamps', () => {
+        expect(createTwitchWebSocketMessage('channel.chat.message', { message: '', timestamp: 0 })).toMatchObject({ metadata: { message_timestamp: '1970-01-01T00:00:00.000Z' }, payload: { event: { message: { text: '' } } } });
+        expect(createYouTubeWebSocketMessage('textMessageEvent', { message: '', timestamp: 0 })).toMatchObject({ snippet: { publishedAt: '1970-01-01T00:00:00.000Z', displayMessage: '', textMessageDetails: { messageText: '' } } });
+        expect(createTikTokWebSocketMessage('chat', { message: '', timestamp: 0 })).toMatchObject({ comment: '', timestamp: 0 });
+    });
+
     it('builds notification data with required field validation', () => {
         const builder = createMockNotificationBuilder();
         expect(() => builder.build()).toThrow('type is required');
