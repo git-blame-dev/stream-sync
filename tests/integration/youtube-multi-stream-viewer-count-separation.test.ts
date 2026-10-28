@@ -4,8 +4,8 @@ import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
 import {
   noOpLogger,
   createMockNotificationManager,
-  setupAutomatedCleanup,
 } from "../helpers/mock-factories";
+import { registerMockLifecycleHooks } from "../helpers/mock-lifecycle";
 import { expectNoTechnicalArtifacts } from "../helpers/behavior-validation";
 import { YouTubePlatform } from "../../src/platforms/youtube";
 
@@ -35,13 +35,10 @@ const expectViewerCount = (value: number | null, expected: number): number => {
 
 describe("YouTube Multi-Stream Viewer Count Separation", () => {
   let mockNotificationManager: NotificationManagerFixture;
-  let cleanup: unknown;
+  registerMockLifecycleHooks();
 
   afterEach(async () => {
     restoreAllMocks();
-    if (typeof cleanup === "function") {
-      await cleanup();
-    }
   });
 
   const createMultiStreamScenario = (
@@ -146,7 +143,6 @@ describe("YouTube Multi-Stream Viewer Count Separation", () => {
   };
 
   beforeEach(async () => {
-    cleanup = setupAutomatedCleanup();
     mockNotificationManager = createMockNotificationManager();
   });
 

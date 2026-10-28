@@ -1,13 +1,13 @@
 import { describe, expect, it } from "bun:test";
 
-import { setupAutomatedCleanup } from "../helpers/mock-lifecycle";
+import { registerMockLifecycleHooks } from "../helpers/mock-lifecycle";
 import { createNotificationData } from "../helpers/notification-test-utils";
 import { initializeTestLogging } from "../helpers/test-setup";
 import { interpolateTemplate } from "../../src/utils/notification-template-interpolator";
 
 initializeTestLogging();
 
-setupAutomatedCleanup({
+registerMockLifecycleHooks({
   clearCallsBeforeEach: true,
   validateAfterCleanup: true,
   logPerformanceMetrics: true,

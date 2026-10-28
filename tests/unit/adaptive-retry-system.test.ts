@@ -1,9 +1,9 @@
 import { describe, test, expect, beforeEach } from "bun:test";
 import { noOpLogger } from "../helpers/mock-factories";
-import { setupAutomatedCleanup } from "../helpers/mock-lifecycle";
+import { registerMockLifecycleHooks } from "../helpers/mock-lifecycle";
 import testClock from "../helpers/test-clock";
 
-setupAutomatedCleanup({
+registerMockLifecycleHooks({
   clearCallsBeforeEach: true,
   validateAfterCleanup: true,
   logPerformanceMetrics: true,

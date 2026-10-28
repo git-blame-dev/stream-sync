@@ -6,7 +6,7 @@ import {
 } from "../../helpers/bun-mock-utils";
 
 import { TEST_TIMEOUTS } from "../../helpers/test-setup";
-import { setupAutomatedCleanup } from "../../helpers/mock-lifecycle";
+import { registerMockLifecycleHooks } from "../../helpers/mock-lifecycle";
 import * as testClock from "../../helpers/test-clock";
 import { createOBSGoalsManager } from "../../../src/obs/goals.ts";
 
@@ -28,7 +28,7 @@ type MockGoalTracker = {
   getAllGoalStates: TestMockFn<[], Record<string, GoalState | null>>;
 };
 
-setupAutomatedCleanup({
+registerMockLifecycleHooks({
   clearCallsBeforeEach: true,
   validateAfterCleanup: true,
   logPerformanceMetrics: true,

@@ -8,7 +8,7 @@ import { createTextProcessingManager } from "../../../src/utils/text-processing"
 import * as constants from "../../../src/core/constants";
 import { getDefaultGoalsManager } from "../../../src/obs/goals";
 import { noOpLogger } from "../../helpers/mock-factories";
-import { setupAutomatedCleanup } from "../../helpers/mock-lifecycle";
+import { registerMockLifecycleHooks } from "../../helpers/mock-lifecycle";
 import testClock from "../../helpers/test-clock";
 
 type NotificationDependencies = NonNullable<
@@ -38,7 +38,7 @@ const expectNotificationSucceeded = (result: NotificationResult) => {
   expect(result.success).toBe(true);
   expect(result.filtered).not.toBe(true);
 };
-setupAutomatedCleanup({
+registerMockLifecycleHooks({
   clearCallsBeforeEach: true,
   validateAfterCleanup: true,
 });

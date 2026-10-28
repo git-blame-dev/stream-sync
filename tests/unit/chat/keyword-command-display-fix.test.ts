@@ -5,12 +5,12 @@ import {
   TEST_TIMEOUTS,
 } from "../../helpers/test-setup";
 import { createConfigFixture } from "../../helpers/config-fixture";
-import { setupAutomatedCleanup } from "../../helpers/mock-lifecycle";
+import { registerMockLifecycleHooks } from "../../helpers/mock-lifecycle";
 import { CommandParser } from "../../../src/chat/commands";
 
 initializeTestLogging();
 
-setupAutomatedCleanup({
+registerMockLifecycleHooks({
   clearCallsBeforeEach: true,
   logPerformanceMetrics: true,
 });

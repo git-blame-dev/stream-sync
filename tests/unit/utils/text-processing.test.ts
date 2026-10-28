@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "bun:test";
 import { initializeTestLogging } from "../../helpers/test-setup";
 import { noOpLogger } from "../../helpers/mock-factories";
-import { setupAutomatedCleanup } from "../../helpers/mock-lifecycle";
+import { registerMockLifecycleHooks } from "../../helpers/mock-lifecycle";
 import {
   TextProcessingManager,
   createTextProcessingManager,
@@ -11,7 +11,7 @@ type TextProcessingManagerInstance = InstanceType<typeof TextProcessingManager>;
 
 initializeTestLogging();
 
-setupAutomatedCleanup({
+registerMockLifecycleHooks({
   clearCallsBeforeEach: true,
   validateAfterCleanup: true,
   logPerformanceMetrics: true,

@@ -2,7 +2,7 @@ import { describe, expect, beforeEach, afterEach, it } from "bun:test";
 import { restoreAllMocks } from "../../helpers/bun-mock-utils";
 import { initializeTestLogging } from "../../helpers/test-setup";
 import { noOpLogger } from "../../helpers/mock-factories";
-import { setupAutomatedCleanup } from "../../helpers/mock-lifecycle";
+import { registerMockLifecycleHooks } from "../../helpers/mock-lifecycle";
 import {
   SpamDetectionConfig,
   createSpamDetectionConfig,
@@ -15,7 +15,7 @@ type SpamDetectionConfigInstance = InstanceType<typeof SpamDetectionConfig>;
 
 initializeTestLogging();
 
-setupAutomatedCleanup({
+registerMockLifecycleHooks({
   clearCallsBeforeEach: true,
   validateAfterCleanup: true,
   logPerformanceMetrics: true,

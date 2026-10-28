@@ -2,14 +2,14 @@ import { describe, test, expect } from "bun:test";
 
 import { createMockFn } from "../../helpers/bun-mock-utils";
 import { createConfigFixture } from "../../helpers/config-fixture";
-import { setupAutomatedCleanup } from "../../helpers/mock-lifecycle";
+import { registerMockLifecycleHooks } from "../../helpers/mock-lifecycle";
 import { generateLogMessage } from "../../helpers/notification-test-utils";
 import { createTestUser, TEST_TIMEOUTS } from "../../helpers/test-setup";
 import * as constants from "../../../src/core/constants";
 import { PlatformEvents } from "../../../src/interfaces/PlatformEvents";
 import { PlatformEventRouter } from "../../../src/services/PlatformEventRouter.ts";
 
-setupAutomatedCleanup({
+registerMockLifecycleHooks({
   clearCallsBeforeEach: true,
   validateAfterCleanup: true,
   logPerformanceMetrics: true,

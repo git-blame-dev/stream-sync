@@ -14,7 +14,7 @@ import {
   createMockTikTokPlatform,
   createMockDisplayQueue,
 } from "../helpers/mock-factories";
-import { setupAutomatedCleanup } from "../helpers/mock-lifecycle";
+import { registerMockLifecycleHooks } from "../helpers/mock-lifecycle";
 import { createAppRuntimeTestDependencies } from "../helpers/runtime-test-harness";
 import testClock from "../helpers/test-clock";
 import { safeDelay } from "../../src/utils/timeout-validator";
@@ -51,7 +51,7 @@ const createMockGoalsManager = () => ({
   processDonationGoal: createMockFn(),
 });
 
-setupAutomatedCleanup({
+registerMockLifecycleHooks({
   clearCallsBeforeEach: true,
   logPerformanceMetrics: true,
 });

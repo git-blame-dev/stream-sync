@@ -5,7 +5,7 @@ import {
   clearAllMocks,
   restoreAllMocks,
 } from "../helpers/bun-mock-utils";
-import { setupAutomatedCleanup } from "../helpers/mock-lifecycle";
+import { registerMockLifecycleHooks } from "../helpers/mock-lifecycle";
 import { createAppRuntimeTestDependencies } from "../helpers/runtime-test-harness";
 import { TEST_TIMEOUTS } from "../helpers/test-setup";
 import { PlatformEvents } from "../../src/interfaces/PlatformEvents";
@@ -88,7 +88,7 @@ const emitVfxCommand = (
   emit(PlatformEvents.VFX_COMMAND_RECEIVED, payload);
 };
 
-setupAutomatedCleanup({
+registerMockLifecycleHooks({
   clearCallsBeforeEach: true,
   validateAfterCleanup: true,
   logPerformanceMetrics: true,

@@ -10,7 +10,7 @@ import {
   createMockNotificationManager,
   noOpLogger,
 } from "../helpers/mock-factories";
-import { setupAutomatedCleanup } from "../helpers/mock-lifecycle";
+import { registerMockLifecycleHooks } from "../helpers/mock-lifecycle";
 import { createTestUser, TEST_TIMEOUTS } from "../helpers/test-setup";
 import { PlatformEventRouter } from "../../src/services/PlatformEventRouter.ts";
 
@@ -58,7 +58,7 @@ type EventBusSubscribe = TestMockFn<
   () => void
 >;
 
-setupAutomatedCleanup({
+registerMockLifecycleHooks({
   clearCallsBeforeEach: true,
   validateAfterCleanup: true,
   logPerformanceMetrics: true,

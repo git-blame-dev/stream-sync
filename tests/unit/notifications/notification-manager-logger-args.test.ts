@@ -6,7 +6,7 @@ import {
 } from "../../helpers/bun-mock-utils";
 import { createConfigFixture } from "../../helpers/config-fixture";
 import { PRIORITY_LEVELS } from "../../../src/core/constants";
-import { setupAutomatedCleanup } from "../../helpers/mock-lifecycle";
+import { registerMockLifecycleHooks } from "../../helpers/mock-lifecycle";
 import NotificationManager from "../../../src/notifications/NotificationManager";
 
 type NotificationManagerLike = {
@@ -45,7 +45,7 @@ type DisplayQueueMock = {
   getQueueLength: TestMockFn<[], number>;
 };
 
-setupAutomatedCleanup({
+registerMockLifecycleHooks({
   clearCallsBeforeEach: true,
   logPerformanceMetrics: true,
 });

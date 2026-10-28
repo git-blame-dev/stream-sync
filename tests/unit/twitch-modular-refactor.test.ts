@@ -1,13 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
-import { setupAutomatedCleanup } from "../helpers/mock-lifecycle";
+import { registerMockLifecycleHooks } from "../helpers/mock-lifecycle";
 import { noOpLogger } from "../helpers/mock-factories";
 import {
   initializeStaticSecrets,
   secrets,
   _resetForTesting,
 } from "../../src/core/secrets";
-setupAutomatedCleanup({
+registerMockLifecycleHooks({
   clearCallsBeforeEach: true,
   validateAfterCleanup: true,
   logPerformanceMetrics: true,

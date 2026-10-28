@@ -4,7 +4,7 @@ import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
 import { expectNoTechnicalArtifacts } from "../../helpers/assertion-helpers";
 import { createConfigFixture } from "../../helpers/config-fixture";
 import { noOpLogger } from "../../helpers/mock-factories";
-import { setupAutomatedCleanup } from "../../helpers/mock-lifecycle";
+import { registerMockLifecycleHooks } from "../../helpers/mock-lifecycle";
 import { initializeTestLogging } from "../../helpers/test-setup";
 import { config as mainConfig } from "../../../src/core/config";
 import { PRIORITY_LEVELS } from "../../../src/core/constants";
@@ -50,7 +50,7 @@ type AsyncVfxConfigMockFn = ReturnType<
 
 initializeTestLogging();
 
-setupAutomatedCleanup({
+registerMockLifecycleHooks({
   clearCallsBeforeEach: true,
   logPerformanceMetrics: true,
 });

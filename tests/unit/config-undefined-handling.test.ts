@@ -5,7 +5,7 @@ import {
   createMockNotificationManager,
   noOpLogger,
 } from "../helpers/mock-factories";
-import { setupAutomatedCleanup } from "../helpers/mock-lifecycle";
+import { registerMockLifecycleHooks } from "../helpers/mock-lifecycle";
 import { createTestAppRuntime } from "../helpers/runtime-test-harness";
 
 type LoggerLike = {
@@ -19,7 +19,7 @@ type RuntimeNotificationManager = {
   handleNotification: (...args: unknown[]) => Promise<unknown>;
 };
 
-setupAutomatedCleanup({
+registerMockLifecycleHooks({
   clearCallsBeforeEach: true,
   validateAfterCleanup: true,
   logPerformanceMetrics: true,

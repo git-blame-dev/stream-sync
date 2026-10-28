@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { createMockFn } from './bun-mock-utils';
+import { MockLifecycleManager } from './mock-lifecycle';
 import {
     initializeTestLogging,
-    setupAutomatedCleanup,
     validateMockUsage,
     createTestUser,
     createTestGift,
@@ -161,58 +161,33 @@ describe('test-setup helper behavior', () => {
         expect(typeof fixture).toBe('object');
     });
 
-    it('tracks automated cleanup lifecycle and usage metrics', () => {
-        const cleanup = setupAutomatedCleanup({
-            validateMocksBeforeEach: true,
-            clearMocksAfterEach: true,
-            trackMockUsage: true,
-            logUnusedMocks: true,
-            handleCleanupErrors: true
-        });
-
-        cleanup.beforeEach();
-        cleanup.afterEach();
-
-        const stats = cleanup.getCleanupStats();
-        expect(stats.mocksCleared).toBeGreaterThanOrEqual(1);
-        expect(Array.isArray(stats.unusedMocks)).toBe(true);
-        expect(Array.isArray(stats.performanceMetrics)).toBe(true);
-        expect(stats.performanceMetrics.length).toBe(1);
-        expect(Array.isArray(stats.cleanupErrors)).toBe(true);
-        expect(cleanup.isCompatible).toBe(true);
-        expect(cleanup.preservesExistingSetup).toBe(true);
-
-        const mockObject = {
-            alpha: createMockFn(),
-            beta: { mockReset: createMockFn() }
-        };
-        mockObject.alpha('called');
-        cleanup.cleanupMock(mockObject);
-        expect(mockObject.alpha.mock.calls.length).toBe(0);
-        expect(mockObject.beta.mockReset.mock.calls.length).toBe(1);
+    it('cleans real registered mocks without touching a retired mock replaced under the same key', () => {
+        const manager = new MockLifecycleManager();
+        const retired = { action: createMockFn() };
+        const replacement = { action: createMockFn() };
+        const independent = { action: createMockFn() };
+        manager.registerMock('synthetic-owner', retired, { autoValidate: false });
+        manager.registerMock('synthetic-owner', replacement, { autoValidate: false });
+        retired.action();
+        replacement.action();
+        independent.action();
+        manager.cleanup();
+        expect(replacement.action.mock.calls).toHaveLength(0);
+        expect(retired.action.mock.calls).toHaveLength(1);
+        expect(independent.action.mock.calls).toHaveLength(1);
+        expect(manager.getPerformanceMetrics().activeMocks).toBe(1);
+        expect(manager.getPerformanceMetrics().totalCleanupOperations).toBe(1);
     });
 
-    it('handles cleanup errors based on configured error policy', () => {
-        const tolerantCleanup = setupAutomatedCleanup({ handleCleanupErrors: true });
-        const tolerantTarget = {};
-        Object.defineProperty(tolerantTarget, 'broken', {
+    it('propagates a real registered mock cleanup failure', () => {
+        const manager = new MockLifecycleManager();
+        const target = {};
+        Object.defineProperty(target, 'broken', {
             enumerable: true,
-            get() {
-                throw new Error('tolerated cleanup failure');
-            }
+            get() { throw new Error('synthetic cleanup failure'); }
         });
-        expect(() => tolerantCleanup.cleanupMock(tolerantTarget)).not.toThrow();
-        expect(tolerantCleanup.getCleanupStats().cleanupErrors.length).toBe(1);
-
-        const strictCleanup = setupAutomatedCleanup({ handleCleanupErrors: false });
-        const strictTarget = {};
-        Object.defineProperty(strictTarget, 'broken', {
-            enumerable: true,
-            get() {
-                throw new Error('strict cleanup failure');
-            }
-        });
-        expect(() => strictCleanup.cleanupMock(strictTarget)).toThrow('strict cleanup failure');
+        manager.registerMock('synthetic-broken', target, { autoValidate: false });
+        expect(() => manager.cleanup()).toThrow('synthetic cleanup failure');
     });
 
     it('validates mock usage outcomes across validation options', () => {

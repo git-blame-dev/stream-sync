@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { setupAutomatedCleanup } from "../../helpers/mock-lifecycle";
+import { registerMockLifecycleHooks } from "../../helpers/mock-lifecycle";
 import { initializeTestLogging } from "../../helpers/test-setup";
 import { config } from "../../../src/core/config";
 
@@ -21,7 +21,7 @@ const getConfig = () => {
 
 initializeTestLogging();
 
-setupAutomatedCleanup({
+registerMockLifecycleHooks({
   clearCallsBeforeEach: true,
   logPerformanceMetrics: true,
 });

@@ -2,6 +2,7 @@ import { validateMockContract } from './mock-validation';
 import testClock from './test-clock';
 import { nextTestId } from './test-id';
 import { isMockFunction, type TestMockFn } from './bun-mock-utils';
+import { beforeEach, afterEach, afterAll } from 'bun:test';
 
 type MockObject = object & {
     _mockType?: string;
@@ -40,9 +41,12 @@ type AutomatedCleanupOptions = {
     resetImplementationsAfterEach?: boolean;
     validateAfterCleanup?: boolean;
     logPerformanceMetrics?: boolean;
+    performanceMetricsReporter?: (metrics: LifecycleMetrics) => void;
 };
 
-type ResolvedAutomatedCleanupOptions = Required<AutomatedCleanupOptions>;
+type ResolvedAutomatedCleanupOptions = Omit<Required<AutomatedCleanupOptions>, 'performanceMetricsReporter'> & {
+    performanceMetricsReporter?: (metrics: LifecycleMetrics) => void;
+};
 
 type CleanupHooks = {
     beforeEach: () => void;
@@ -399,12 +403,19 @@ const setupAutomatedCleanup = (options: AutomatedCleanupOptions = {}): CleanupHo
         },
 
         afterAll: () => {
-            if (defaultOptions.logPerformanceMetrics) {
+            if (defaultOptions.logPerformanceMetrics && defaultOptions.performanceMetricsReporter) {
                 const metrics = globalLifecycleManager.getPerformanceMetrics();
-                console.log('Mock Lifecycle Performance Metrics:', JSON.stringify(metrics, null, 2));
+                defaultOptions.performanceMetricsReporter(metrics);
             }
         }
     };
+};
+
+const registerMockLifecycleHooks = (options: AutomatedCleanupOptions = {}): void => {
+    const hooks = setupAutomatedCleanup(options);
+    beforeEach(hooks.beforeEach);
+    afterEach(hooks.afterEach);
+    afterAll(hooks.afterAll);
 };
 
 const withLifecycleManagement = <Args extends unknown[], TMock extends object>(
@@ -478,23 +489,24 @@ function withMockIsolation(
     mockFactories: Array<() => object> = []
 ) {
     return async (...args: unknown[]) => {
-        const freshMocks = mockFactories.map((factory) => factory());
+        const freshMocks: object[] = [];
 
         try {
-            const result = await testFunction(...freshMocks, ...args);
-
+            for (const factory of mockFactories) freshMocks.push(factory());
             const isolationCheck = checkMockIsolation(freshMocks);
             if (!isolationCheck.isolated) {
-                console.warn('Mock isolation issues detected:', isolationCheck.issues);
+                throw new Error(`Mock isolation issues detected: ${isolationCheck.issues.join('; ')}`);
             }
 
-            return result;
+            return await testFunction(...freshMocks, ...args);
         } finally {
             freshMocks.forEach((mock) => {
-                if (getMockType(mock)) {
-                    globalLifecycleManager._clearMockCalls(mock);
-                }
+                globalLifecycleManager._clearMockCalls(mock);
             });
+            const isolationCheck = checkMockIsolation(freshMocks);
+            if (!isolationCheck.isolated) {
+                throw new Error(`Mock isolation issues after cleanup: ${isolationCheck.issues.join('; ')}`);
+            }
         }
     };
 }
@@ -589,6 +601,7 @@ export {
     globalLifecycleManager,
 
     setupAutomatedCleanup,
+    registerMockLifecycleHooks,
 
     withLifecycleManagement,
     createManagedMock,

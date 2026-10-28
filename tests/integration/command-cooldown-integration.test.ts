@@ -2,13 +2,13 @@ import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { createRequire } from "node:module";
 import { restoreAllMocks } from "../helpers/bun-mock-utils";
 import { createConfigFixture } from "../helpers/config-fixture";
-import { setupAutomatedCleanup } from "../helpers/mock-lifecycle";
+import { registerMockLifecycleHooks } from "../helpers/mock-lifecycle";
 import { TEST_TIMEOUTS } from "../helpers/test-setup";
 import testClock from "../helpers/test-clock";
 
 const load = createRequire(import.meta.url);
 
-setupAutomatedCleanup({
+registerMockLifecycleHooks({
   clearCallsBeforeEach: true,
   validateAfterCleanup: true,
   logPerformanceMetrics: true,

@@ -8,9 +8,9 @@ import {
   expectNoTechnicalArtifacts,
   expectContentReadabilityForAudience,
 } from "../../helpers/assertion-helpers";
-import { setupAutomatedCleanup } from "../../helpers/mock-lifecycle";
+import { registerMockLifecycleHooks } from "../../helpers/mock-lifecycle";
 import { noOpLogger } from "../../helpers/mock-factories";
-setupAutomatedCleanup({
+registerMockLifecycleHooks({
   clearCallsBeforeEach: true,
   logPerformanceMetrics: true,
 });

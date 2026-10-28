@@ -6,12 +6,12 @@ import {
 } from "../../helpers/bun-mock-utils";
 import { createSourcesConfigFixture } from "../../helpers/config-fixture";
 import { noOpLogger } from "../../helpers/mock-factories";
-import { setupAutomatedCleanup } from "../../helpers/mock-lifecycle";
+import { registerMockLifecycleHooks } from "../../helpers/mock-lifecycle";
 import { PRIORITY_LEVELS } from "../../../src/core/constants";
 import { DisplayQueue } from "../../../src/obs/display-queue";
 import { createOBSSourcesManager } from "../../../src/obs/sources";
 
-setupAutomatedCleanup({
+registerMockLifecycleHooks({
   clearCallsBeforeEach: true,
   validateAfterCleanup: true,
   logPerformanceMetrics: true,

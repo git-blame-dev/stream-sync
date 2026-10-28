@@ -7,7 +7,7 @@ import {
 } from "../../helpers/bun-mock-utils";
 import type { TestMockFn } from "../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../helpers/mock-factories";
-import { setupAutomatedCleanup } from "../../helpers/mock-lifecycle";
+import { registerMockLifecycleHooks } from "../../helpers/mock-lifecycle";
 import { expectNoTechnicalArtifacts } from "../../helpers/assertion-helpers";
 import { extractTikTokUserData } from "../../../src/utils/tiktok-data-extraction";
 import * as testClock from "../../helpers/test-clock";
@@ -196,7 +196,7 @@ describe("TikTok Envelope Notification - Behavior Testing", () => {
   }>;
   let capturedGiftResults: GiftHandlerResult[];
 
-  setupAutomatedCleanup();
+  registerMockLifecycleHooks();
 
   beforeEach(() => {
     mockLogger = noOpLogger;

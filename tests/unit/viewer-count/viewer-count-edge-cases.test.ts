@@ -11,9 +11,9 @@ import { safeSetInterval } from "../../../src/utils/timeout-validator.ts";
 import { createConfigFixture } from "../../helpers/config-fixture";
 import {
   createMockOBSManager,
-  setupAutomatedCleanup,
   noOpLogger,
 } from "../../helpers/mock-factories";
+import { registerMockLifecycleHooks } from "../../helpers/mock-lifecycle";
 import testClock from "../../helpers/test-clock";
 import { scheduleTimeout, waitForDelay } from "../../helpers/time-utils";
 
@@ -256,7 +256,7 @@ const expectSystemStability = (system: ViewerCountSystemUnderTest) => {
 };
 
 describe("Viewer Count & OBS Observer Edge Case Tests", () => {
-  setupAutomatedCleanup();
+  registerMockLifecycleHooks();
 
   beforeEach(() => {
     useFakeTimers();

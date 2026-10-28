@@ -4,7 +4,7 @@ import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
 import { expectNoTechnicalArtifacts } from "../helpers/assertion-helpers";
 import { createConfigFixture } from "../helpers/config-fixture";
 import { createMockDisplayQueue, noOpLogger } from "../helpers/mock-factories";
-import { setupAutomatedCleanup } from "../helpers/mock-lifecycle";
+import { registerMockLifecycleHooks } from "../helpers/mock-lifecycle";
 import * as constants from "../../src/core/constants";
 import NotificationManager from "../../src/notifications/NotificationManager";
 import { getDefaultGoalsManager } from "../../src/obs/goals";
@@ -66,7 +66,7 @@ type NotificationManagerInstance = {
   ) => Promise<unknown>;
 };
 
-setupAutomatedCleanup({
+registerMockLifecycleHooks({
   clearCallsBeforeEach: true,
   validateAfterCleanup: true,
   logPerformanceMetrics: true,

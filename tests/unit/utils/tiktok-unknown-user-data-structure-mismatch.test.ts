@@ -1,12 +1,12 @@
 import { describe, expect, it, afterEach } from "bun:test";
 import { restoreAllMocks } from "../../helpers/bun-mock-utils";
 import { TEST_TIMEOUTS } from "../../helpers/test-setup";
-import { setupAutomatedCleanup } from "../../helpers/mock-lifecycle";
+import { registerMockLifecycleHooks } from "../../helpers/mock-lifecycle";
 import { expectNoTechnicalArtifacts } from "../../helpers/assertion-helpers";
 import testClock from "../../helpers/test-clock";
 import { normalizeTikTokMessage } from "../../../src/utils/message-normalization";
 import { extractTikTokUserData } from "../../../src/utils/tiktok-data-extraction";
-setupAutomatedCleanup({
+registerMockLifecycleHooks({
   clearCallsBeforeEach: true,
   logPerformanceMetrics: true,
 });

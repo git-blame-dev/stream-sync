@@ -3,8 +3,7 @@ import { expect } from 'bun:test';
 import { initializeLoggingConfig } from '../../src/core/logging';
 import { createRetrySystem, type RetrySystem } from '../../src/utils/retry-system';
 
-import testClock from './test-clock';
-import { createMockFn, isMockFunction, clearAllMocks, type TestMockFn } from './bun-mock-utils';
+import { createMockFn, isMockFunction, type TestMockFn } from './bun-mock-utils';
 import { loadPlatformFixture as loadSyntheticFixture } from './platform-test-data';
 
 type TestRecord = Record<string, unknown>;
@@ -162,37 +161,6 @@ type TestRetrySystem = Omit<RetrySystem, 'executeWithRetry' | 'resetRetryCount' 
     getRetryCount: TestMockFn<[platform?: string], number>;
 };
 
-type CleanupOptions = {
-    clearMocksAfterEach: boolean;
-    validateMocksBeforeEach: boolean;
-    logUnusedMocks: boolean;
-    trackMockUsage: boolean;
-    handleCleanupErrors: boolean;
-};
-
-type MockUsageMetric = {
-    timestamp: number;
-    totalMocksActive: number;
-    memoryUsage: NodeJS.MemoryUsage;
-};
-
-type CleanupStats = {
-    mocksCleared: number;
-    unusedMocks: string[];
-    performanceMetrics: MockUsageMetric[];
-    cleanupErrors: unknown[];
-};
-
-type AutomatedCleanup = {
-    config: CleanupOptions;
-    beforeEach: () => void;
-    afterEach: () => void;
-    cleanupMock: (mockObject: unknown) => void;
-    getCleanupStats: () => CleanupStats;
-    isCompatible: boolean;
-    preservesExistingSetup: boolean;
-};
-
 type MockUsageOptions = {
     requireAllMethodsCalled: boolean;
     detectUnusedMocks: boolean;
@@ -214,10 +182,6 @@ type MockUsageValidation = {
 
 const isRecord = (value: unknown): value is TestRecord => {
     return !!value && typeof value === 'object';
-};
-
-const hasMockReset = (value: unknown): value is { mockReset: () => unknown } => {
-    return isRecord(value) && typeof value.mockReset === 'function';
 };
 
 const BASE_TIMESTAMP_MS = Date.parse('2024-01-01T00:00:00.000Z');
@@ -538,92 +502,6 @@ const loadPlatformFixture = (platform: string, eventType: string) => {
     return loadSyntheticFixture(platform, eventType);
 };
 
-const setupAutomatedCleanup = (options: Partial<CleanupOptions> = {}): AutomatedCleanup => {
-    const defaultOptions = {
-        clearMocksAfterEach: true,
-        validateMocksBeforeEach: false,
-        logUnusedMocks: false,
-        trackMockUsage: false,
-        handleCleanupErrors: true,
-        ...options
-    };
-
-    const cleanupStats: CleanupStats = {
-        mocksCleared: 0,
-        unusedMocks: [],
-        performanceMetrics: [],
-        cleanupErrors: []
-    };
-
-    const mockUsageTracker = new Map<string, unknown>();
-
-    const cleanup: AutomatedCleanup = {
-        config: defaultOptions,
-        
-        beforeEach: () => {
-            if (defaultOptions.validateMocksBeforeEach) {
-                validateActiveMocks();
-            }
-            
-            if (defaultOptions.trackMockUsage) {
-                mockUsageTracker.clear();
-            }
-        },
-
-        afterEach: () => {
-            try {
-                if (defaultOptions.clearMocksAfterEach) {
-                    const clearedCount = clearAllActiveMocks();
-                    cleanupStats.mocksCleared += clearedCount;
-                }
-
-                if (defaultOptions.logUnusedMocks) {
-                    const unusedMocks = findUnusedMocks();
-                    cleanupStats.unusedMocks.push(...unusedMocks);
-                }
-
-                if (defaultOptions.trackMockUsage) {
-                    const usageMetrics = collectMockUsageMetrics();
-                    cleanupStats.performanceMetrics.push(usageMetrics);
-                }
-            } catch (error) {
-                if (defaultOptions.handleCleanupErrors) {
-                    cleanupStats.cleanupErrors.push(error);
-                } else {
-                    throw error;
-                }
-            }
-        },
-
-        cleanupMock: (mockObject: unknown) => {
-            try {
-                if (isRecord(mockObject)) {
-                    Object.keys(mockObject).forEach(key => {
-                        if (isMockFunction(mockObject[key])) {
-                            mockObject[key].mockReset();
-                        } else if (hasMockReset(mockObject[key])) {
-                            mockObject[key].mockReset();
-                        }
-                    });
-                }
-            } catch (error) {
-                if (defaultOptions.handleCleanupErrors) {
-                    cleanupStats.cleanupErrors.push(error);
-                } else {
-                    throw error;
-                }
-            }
-        },
-
-        getCleanupStats: () => ({ ...cleanupStats }),
-
-        isCompatible: true,
-        preservesExistingSetup: true
-    };
-
-    return cleanup;
-};
-
 const validateMockUsage = (mockObject: unknown, options: Partial<MockUsageOptions> = {}): MockUsageValidation => {
     const defaultOptions = {
         requireAllMethodsCalled: false,
@@ -700,34 +578,10 @@ const validateMockUsage = (mockObject: unknown, options: Partial<MockUsageOption
     return validation;
 };
 
-const clearAllActiveMocks = () => {
-    let clearedCount = 0;
-    clearAllMocks();
-    clearedCount++;
-    return clearedCount;
-};
-
-const findUnusedMocks = () => {
-    return [];
-};
-
-const collectMockUsageMetrics = () => {
-    return {
-        timestamp: testClock.now(),
-        totalMocksActive: 0,
-        memoryUsage: process.memoryUsage()
-    };
-};
-
-const validateActiveMocks = () => {
-    return true;
-};
-
 export {
     resetTestSetupSequence,
     initializeTestLogging,
     
-    setupAutomatedCleanup,
     validateMockUsage,
     
     createTestUser,

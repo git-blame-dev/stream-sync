@@ -10,7 +10,7 @@ import { PRIORITY_LEVELS } from "../../../src/core/constants";
 import { config as appConfig } from "../../../src/core/config";
 import NotificationManager from "../../../src/notifications/NotificationManager";
 
-import { setupAutomatedCleanup } from "../../helpers/mock-lifecycle";
+import { registerMockLifecycleHooks } from "../../helpers/mock-lifecycle";
 
 type NotificationConstants = {
   PRIORITY_LEVELS: typeof PRIORITY_LEVELS;
@@ -70,7 +70,7 @@ const getSpamConfig = (): SpamConfig => {
   return spamConfig;
 };
 
-setupAutomatedCleanup({
+registerMockLifecycleHooks({
   clearCallsBeforeEach: true,
   logPerformanceMetrics: true,
 });
