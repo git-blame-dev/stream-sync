@@ -509,7 +509,7 @@ describe('TypeScript toolchain gates behavior', () => {
     });
 
     it('requires lint and knip lanes aligned to final ts-only executable surface', () => {
-        const lintScript = packageJson.scripts.lint;
+        const lintScript = packageJson.scripts['lint:eslint'];
         expect(lintScript).toContain('bun x eslint "src/**/*.ts" "tests/**/*.ts" "scripts/**/*.ts" "tools/**/*.ts"');
         expect(lintScript).not.toContain('{js,ts}');
 
@@ -594,14 +594,16 @@ describe('TypeScript toolchain gates behavior', () => {
     });
 
     it('keeps lint script contracts on TypeScript tooling paths', () => {
-        const lintScript = packageJson.scripts.lint;
+        expect(packageJson.scripts.lint).toBe('bun run lint:guards && bun run lint:eslint && bun run lint:knip');
+        expect(packageJson.scripts['lint:knip']).toBe('knip --config knip.json --include files,unlisted');
+        const lintScript = packageJson.scripts['lint:guards'];
 
         expect(lintScript).toContain('bun scripts/lint/no-raw-timeouts.ts');
         expect(lintScript).toContain('bun scripts/lint/no-mock-timers-in-tests.ts');
         expect(lintScript).toContain('bun scripts/lint/no-implementation-test-patterns.ts');
         expect(lintScript).toContain('bun scripts/lint/no-implicit-test-defaults.ts');
         expect(lintScript).toContain('bun scripts/lint/prefer-double-bang.ts');
-        expect(lintScript).toContain('bun x eslint');
+        expect(packageJson.scripts['lint:eslint']).toContain('bun x eslint');
     });
 
     it('keeps foundational test helper modules on TypeScript file paths', () => {
