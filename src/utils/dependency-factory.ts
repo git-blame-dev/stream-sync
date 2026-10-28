@@ -34,11 +34,10 @@ type TikTokConnectorDependencyMap = {
     WebcastPushConnection?: unknown;
 };
 
-type InnertubeDetectionClient = ConstructorParameters<typeof YouTubeStreamDetectionService>[0];
 type InnertubeInfoClient = Awaited<ReturnType<ConstructorParameters<typeof InnertubeService>[0]['createWithTimeout']>>;
 
 type InnertubeClassLike = {
-    create: () => Promise<InnertubeDetectionClient>;
+    create: (config?: Record<string, unknown>) => Promise<unknown>;
 };
 
 type InnertubeDependency = InnertubeClassLike | (() => Promise<InnertubeClassLike> | InnertubeClassLike);
@@ -68,16 +67,6 @@ type DependencyFactoryOptions = Record<string, unknown> & {
 type DependencyInterfaceType = 'logger' | 'notificationManager' | 'apiClient';
 type InterfaceValidator = (dependency: Record<string, unknown>) => void;
 type InterfaceValidators = Record<DependencyInterfaceType, InterfaceValidator>;
-
-type DeferredYouTubeStreamDetectionService = {
-    _innertubeInstance: InnertubeDetectionClient | null;
-    _initializePromise: Promise<InnertubeDetectionClient> | null;
-    _streamDetectionService: YouTubeStreamDetectionService | null;
-    _getInnertubeInstance: () => Promise<InnertubeDetectionClient>;
-    _getStreamDetectionService: () => Promise<YouTubeStreamDetectionService>;
-    detectLiveStreams: (channel: string, detectOptions?: Record<string, unknown>) => Promise<unknown>;
-    getUsageMetrics: () => Record<string, unknown>;
-};
 
 function getErrorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
@@ -147,7 +136,7 @@ class DependencyFactory {
             const selfMessageDetectionService = new SelfMessageDetectionService(normalizedOptions.config);
 
             const streamDetectionService = injectedStreamDetectionService ||
-                this._createYouTubeStreamDetectionService(normalizedConfig, logger, normalizedOptions);
+                this._createYouTubeStreamDetectionService(normalizedConfig, logger, normalizedOptions, innertubeService);
             
             const dependencies = {
                 logger,
@@ -356,78 +345,26 @@ class DependencyFactory {
         };
     }
 
-    _createYouTubeStreamDetectionService(config: PlatformDependencyConfig, logger: AppLogger, options: DependencyFactoryOptions = {}) {
+    _createYouTubeStreamDetectionService(config: PlatformDependencyConfig, logger: AppLogger, options: DependencyFactoryOptions, innertubeService: InnertubeService) {
         try {
-            // Support both direct class references and lazy loading functions for modular design
             if (config.streamDetectionMethod === 'youtubei') {
                 if (!options.Innertube) {
                     throw new Error('Innertube dependency required for youtubei stream detection');
                 }
-                logger.debug('Creating Innertube instance for stream detection service', 'dependency-factory');
-                const innertubeDependency = options.Innertube;
-                
-                const deferredService: DeferredYouTubeStreamDetectionService = {
-                    _innertubeInstance: null,
-                    _initializePromise: null,
-                    _streamDetectionService: null,
-
-                    async _getInnertubeInstance(): Promise<InnertubeDetectionClient> {
-                        if (this._innertubeInstance) {
-                            return this._innertubeInstance;
-                        }
-
-                        if (!this._initializePromise) {
-                            const InnertubeClass = typeof innertubeDependency === 'function' ?
-                                await innertubeDependency() :
-                                innertubeDependency;
-
-                            this._initializePromise = InnertubeClass.create();
-                        }
-
-                        this._innertubeInstance = await this._initializePromise;
-                        return this._innertubeInstance;
-                    },
-
-                    async _getStreamDetectionService(): Promise<YouTubeStreamDetectionService> {
-                        if (this._streamDetectionService) {
-                            return this._streamDetectionService;
-                        }
-
-                        const innertube = await this._getInnertubeInstance();
-                        this._streamDetectionService = new YouTubeStreamDetectionService(innertube, {
-                            logger,
-                            timeout: 3000
-                        });
-                        return this._streamDetectionService;
-                    },
-
-                    async detectLiveStreams(channel: string, detectOptions: Record<string, unknown> = {}) {
-                        const service = await this._getStreamDetectionService();
-                        return service.detectLiveStreams(channel, detectOptions);
-                    },
-                    
-                    getUsageMetrics() {
-                        return {
-                            totalRequests: 0,
-                            successfulRequests: 0,
-                            failedRequests: 0,
-                            averageResponseTime: 0,
-                            errorRate: 0,
-                            errorsByType: {}
-                        };
-                    }
-                };
-                
-                return deferredService;
+                return new YouTubeStreamDetectionService(innertubeService, { logger, timeout: 3000 });
             }
             
             logger.debug('Using mock Innertube client for stream detection service', 'dependency-factory');
-            const mockInnertubeClient: InnertubeDetectionClient = {
+            const mockInnertubeClient = {
+                getInfo: async () => ({}),
                 search: async (_query: string) => ({ videos: [] }),
                 getChannel: async (_handle: string) => ({ videos: [] })
             };
             
-            return new YouTubeStreamDetectionService(mockInnertubeClient, {
+            const disabledOwner: Pick<InnertubeService, 'withMetadataOperation'> = {
+                withMetadataOperation: async (_context, operation) => operation(mockInnertubeClient)
+            };
+            return new YouTubeStreamDetectionService(disabledOwner, {
                 logger,
                 timeout: 3000
             });
@@ -600,7 +537,10 @@ class DependencyFactory {
     _createInnertubeService(factory: typeof InnertubeFactory, logger: AppLogger, options: DependencyFactoryOptions = {}) {
         const serviceFactory: ConstructorParameters<typeof InnertubeService>[0] = {
             createWithConfig: async (config?: Record<string, unknown>) => {
-                const instance = await factory.createWithConfig(config);
+                const dependency = options.Innertube;
+                const instance = dependency
+                    ? await (typeof dependency === 'function' ? await dependency() : dependency).create(config)
+                    : await factory.createWithConfig(config);
                 if (!isInnertubeInfoClient(instance)) {
                     throw new Error('InnertubeFactory returned an invalid client');
                 }

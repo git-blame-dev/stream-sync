@@ -1,7 +1,7 @@
 import { getSystemTimestampISO } from '../utils/timestamp';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
-import { withTimeout } from '../utils/timeout-wrapper';
 import { YouTubeLiveStreamService } from './youtube-live-stream-service';
+import type { InnertubeService } from './innertube-service';
 
 type LoggerLike = {
     debug?: (message: string, scope?: string, payload?: unknown) => void;
@@ -16,6 +16,8 @@ type DetectionServiceOptions = {
 
 type DetectOptions = {
     debug?: boolean;
+    signal?: AbortSignal;
+    timeoutMs?: number;
 };
 
 type DetectionStream = {
@@ -32,6 +34,11 @@ type DetectionResult = {
 
 type LiveStreamServiceResult = Awaited<ReturnType<typeof YouTubeLiveStreamService.getLiveStreamsWithParserTolerance>>;
 type DetectionClient = Parameters<typeof YouTubeLiveStreamService.getLiveStreamsWithParserTolerance>[0];
+type MetadataOwner = Pick<InnertubeService, 'withMetadataOperation'>;
+
+function hasDetectionCapability(client: object): client is DetectionClient {
+    return 'getChannel' in client && typeof client.getChannel === 'function';
+}
 
 type DetectionServiceResponse = {
     success: boolean;
@@ -83,7 +90,8 @@ function asError(error: unknown): ErrorWithStatus {
 }
 
 class YouTubeStreamDetectionService {
-    client: DetectionClient | null;
+    client: MetadataOwner | null;
+    private cancellation = new AbortController();
     logger: LoggerLike;
     errorHandler: ReturnType<typeof createPlatformErrorHandler>;
     timeout: number;
@@ -92,7 +100,7 @@ class YouTubeStreamDetectionService {
     _circuitBreaker: CircuitBreakerState;
     username?: string;
 
-    constructor(innertubeClient: DetectionClient, options: DetectionServiceOptions) {
+    constructor(innertubeClient: MetadataOwner, options: DetectionServiceOptions) {
         this.client = innertubeClient;
 
         if (!options.logger || typeof options.logger.error !== 'function') {
@@ -125,12 +133,18 @@ class YouTubeStreamDetectionService {
 
     async detectLiveStreams(channelHandle: unknown, options: DetectOptions = {}): Promise<DetectionServiceResponse> {
         const startTime = Date.now();
+        if (this._isShuttingDown) {
+            return this._formatErrorResponse(new Error('YouTube stream detection service stopped'), options.debug, startTime);
+        }
         this._metrics.totalRequests += 1;
 
         try {
             if (this._isCircuitBreakerOpen()) {
+                const error = new Error('Circuit breaker is open - service temporarily unavailable');
+                this._metrics.failedRequests += 1;
+                this._updateErrorMetrics(error);
                 return this._formatErrorResponse(
-                    new Error('Circuit breaker is open - service temporarily unavailable'),
+                    error,
                     options.debug,
                     startTime,
                     true
@@ -138,8 +152,11 @@ class YouTubeStreamDetectionService {
             }
 
             if (!channelHandle || typeof channelHandle !== 'string') {
+                const error = new Error('Channel handle is required');
+                this._metrics.failedRequests += 1;
+                this._updateErrorMetrics(error);
                 return this._formatErrorResponse(
-                    new Error('Channel handle is required'),
+                    error,
                     options.debug,
                     startTime,
                     false
@@ -151,15 +168,25 @@ class YouTubeStreamDetectionService {
 
             this.logger.debug?.(`Detecting live streams for channel: ${cleanHandle}`, 'youtube-stream-detection');
 
-            const detectionPromise = this._performDetection(cleanHandle);
-            const detectionResult = await withTimeout(
-                detectionPromise,
-                this.timeout,
-                {
-                    operationName: `YouTube detection (${cleanHandle})`,
-                    errorMessage: 'Detection timeout'
+            if (!this.client || this._isShuttingDown) {
+                throw new Error('YouTube stream detection client is not configured');
+            }
+            const signal = AbortSignal.any([
+                this.cancellation.signal,
+                ...(options.signal ? [options.signal] : [])
+            ]);
+            const detectionResult = await this.client.withMetadataOperation({
+                signal,
+                timeoutMs: options.timeoutMs ?? this.timeout
+            }, async client => {
+                if (!hasDetectionCapability(client)) {
+                    throw new Error('Innertube client requires getChannel for stream detection');
                 }
-            );
+                const result = await this._performDetection(cleanHandle, client, options.timeoutMs ?? this.timeout);
+                signal.throwIfAborted();
+                return result;
+            });
+            signal.throwIfAborted();
 
             const validVideoIds = this._validateVideoIds(detectionResult.streams);
 
@@ -171,9 +198,11 @@ class YouTubeStreamDetectionService {
         } catch (error) {
             const normalizedError = asError(error);
 
-            this._metrics.failedRequests += 1;
-            this._updateErrorMetrics(normalizedError);
-            this._recordCircuitBreakerFailure(normalizedError);
+            if (!this._isShuttingDown) {
+                this._metrics.failedRequests += 1;
+                this._updateErrorMetrics(normalizedError);
+                this._recordCircuitBreakerFailure(normalizedError);
+            }
 
             if (!this._isChannelNotFoundError(normalizedError)) {
                 this._handleDetectionError(
@@ -241,6 +270,7 @@ isActive(): boolean {
 async cleanup(): Promise<void> {
         try {
             this._isShuttingDown = true;
+            this.cancellation.abort(new Error('YouTube stream detection service stopped'));
             this._metrics = {
                 totalRequests: 0,
                 successfulRequests: 0,
@@ -258,17 +288,12 @@ async cleanup(): Promise<void> {
         }
     }
 
-async _performDetection(channelHandle: string): Promise<DetectionResult> {
-if (!this.client) {
-throw new Error('YouTube stream detection client is not configured');
-}
-
-const detectionClient: DetectionClient = this.client;
+async _performDetection(channelHandle: string, detectionClient: DetectionClient, timeout = this.timeout): Promise<DetectionResult> {
 const result: LiveStreamServiceResult = await YouTubeLiveStreamService.getLiveStreamsWithParserTolerance(
 detectionClient,
 channelHandle,
             {
-                timeout: this.timeout,
+                timeout,
                 logger: this.logger
             }
         );
@@ -388,7 +413,7 @@ _isValidVideoId(videoId: unknown): videoId is string {
         let isRetryable: boolean | null = retryable;
         let retryAfter: number | undefined;
 
-        if (error.message.includes('timeout')) {
+        if (error.name === 'TimeoutError' || error.message.includes('timeout')) {
             message = 'Detection timeout - please try again';
             isRetryable = true;
         } else if (error.message.includes('Network') || error.message.includes('connection')) {
@@ -471,7 +496,8 @@ _isCircuitBreakerOpen(): boolean {
 
 _recordCircuitBreakerFailure(error: Error): void {
         if (error.message && (
-            error.message.includes('timeout')
+            error.name === 'TimeoutError'
+            || error.message.includes('timeout')
             || error.message.includes('hanging')
             || error.message.includes('not found!')
             || error.message.includes('Type mismatch')

@@ -107,9 +107,11 @@ describe("DependencyFactory behavior", () => {
         ],
       });
       const createInnertube = createMockFn<[], Promise<{
+        getInfo: () => Promise<Record<string, unknown>>;
         search: () => Promise<{ results: never[] }>;
         getChannel: typeof getChannel;
       }>>().mockResolvedValue({
+        getInfo: async () => ({}),
         search: createMockFn().mockResolvedValue({ results: [] }),
         getChannel,
       });
@@ -159,6 +161,11 @@ describe("DependencyFactory behavior", () => {
       expect(secondResult.videoIds).toEqual(["liveVideo01"]);
       expect(createInnertube).toHaveBeenCalledTimes(1);
       expect(getChannel).toHaveBeenCalledTimes(2);
+      expect(streamDetectionService.getUsageMetrics()).toMatchObject({
+        totalRequests: 2,
+        successfulRequests: 2,
+        failedRequests: 0,
+      });
     });
 
     it("throws when TikTok websocket client dependency is missing", () => {

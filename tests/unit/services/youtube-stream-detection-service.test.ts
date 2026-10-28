@@ -2,9 +2,11 @@ import { describe, it, beforeEach, expect } from "bun:test";
 import { createMockFn, clearAllMocks } from "../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../helpers/mock-factories";
 import { YouTubeStreamDetectionService } from "../../../src/services/youtube-stream-detection-service.ts";
+import { InnertubeService } from "../../../src/services/innertube-service";
+import { YouTubeLiveStreamService } from "../../../src/services/youtube-live-stream-service";
 import * as testClock from "../../helpers/test-clock";
 
-type DetectionClient = ConstructorParameters<typeof YouTubeStreamDetectionService>[0];
+type DetectionClient = Parameters<typeof YouTubeLiveStreamService.getLiveStreamsWithParserTolerance>[0];
 type DetectionService = InstanceType<typeof YouTubeStreamDetectionService>;
 
 type StreamFixture = {
@@ -79,7 +81,10 @@ function createStreamDetectionService(
   timeout = 2000,
 ): DetectionService {
   const client = mockClient || createMockInnertubeClient();
-  return new YouTubeStreamDetectionService(client, { logger: noOpLogger, timeout });
+  const owner = new InnertubeService({
+    createWithTimeout: async () => ({ ...client, getInfo: async () => ({}) }),
+  }, { logger: noOpLogger });
+  return new YouTubeStreamDetectionService(owner, { logger: noOpLogger, timeout });
 }
 
 function createLiveStreamData(): StreamFixture[] {

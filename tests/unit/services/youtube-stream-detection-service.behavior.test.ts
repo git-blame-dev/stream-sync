@@ -6,6 +6,7 @@ import {
 } from "../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../helpers/mock-factories";
 import { YouTubeStreamDetectionService } from "../../../src/services/youtube-stream-detection-service.ts";
+import { InnertubeService } from "../../../src/services/innertube-service";
 import * as testClock from "../../helpers/test-clock";
 
 type ChannelVideo = {
@@ -23,9 +24,12 @@ type DetectionClient = {
 };
 type DetectionConfig = { timeout?: number; username?: string };
 
-const createDetectionClient = (): DetectionClient => ({
-  getChannel: createMockFn<[channelId: string], Promise<ChannelLike | null>>().mockResolvedValue(null),
-});
+const createDetectionClient = () => new InnertubeService({
+  createWithTimeout: async (): Promise<DetectionClient & { getInfo: () => Promise<unknown> }> => ({
+    getInfo: async () => ({}),
+    getChannel: createMockFn<[channelId: string], Promise<ChannelLike | null>>().mockResolvedValue(null),
+  }),
+}, { logger: noOpLogger });
 
 describe("YouTubeStreamDetectionService behavior", () => {
   beforeEach(() => {
@@ -46,6 +50,7 @@ describe("YouTubeStreamDetectionService behavior", () => {
     expect(result.success).toBe(false);
     expect(result.retryable).toBe(false);
     expect(result.message).toContain("Unable to detect streams");
+    expect(service.getUsageMetrics()).toMatchObject({ totalRequests: 1, failedRequests: 1, successfulRequests: 0 });
   });
 
   it("short-circuits when circuit breaker is open", async () => {
@@ -62,6 +67,7 @@ describe("YouTubeStreamDetectionService behavior", () => {
     expect(result.success).toBe(false);
     expect(result.retryable).toBe(true);
     expect(service._metrics.totalRequests).toBe(1);
+    expect(service.getUsageMetrics()).toMatchObject({ totalRequests: 1, failedRequests: 1, successfulRequests: 0 });
   });
 
   it("formats successful detection with validated video IDs", async () => {
