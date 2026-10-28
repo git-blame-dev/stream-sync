@@ -9,15 +9,16 @@ function readObsFile(name: string): string {
 
 type HealthResponse = { ok: boolean } | { body: unknown; responseOk?: boolean } | Error;
 
-function createWrapperHarness(healthResponses: HealthResponse[], origin?: string, options: { hash?: string; route?: string | null } = {}) {
+function createWrapperHarness(healthResponses: HealthResponse[], origin?: string, options: { hash?: string; route?: string | null; statusVisible?: boolean } = {}) {
   let timerId = 0;
   const timers = new Map<number, () => void>();
   const healthUrls: string[] = [];
+  const frameListeners = new Map<string, () => void>();
   const frame = {
     src: "",
     removedSourceCount: 0,
     style: { display: "" },
-    addEventListener: () => undefined,
+    addEventListener: (event: string, listener: () => void) => frameListeners.set(event, listener),
     getAttribute: (name: string) => name === "src" ? frame.src || null : null,
     removeAttribute: (name: string) => {
       if (name !== "src") return;
@@ -36,7 +37,7 @@ function createWrapperHarness(healthResponses: HealthResponse[], origin?: string
     URLSearchParams,
     clearTimeout: (id: number) => timers.delete(id),
     document: {
-      documentElement: { dataset: { ...(options.route === null ? {} : { route: options.route ?? "/overlay" }), statusVisible: "false" } },
+      documentElement: { dataset: { ...(options.route === null ? {} : { route: options.route ?? "/overlay" }), statusVisible: String(options.statusVisible ?? false) } },
       getElementById: (id: string) => id === "stream-sync-frame" ? frame : status,
     },
     fetch: async (url: string) => {
@@ -59,6 +60,12 @@ function createWrapperHarness(healthResponses: HealthResponse[], origin?: string
   return {
     flushMicrotasks,
     frame,
+    status,
+    loadFrame: () => {
+      const listener = frameListeners.get("load");
+      if (!listener) throw new Error("Expected a registered iframe load listener");
+      listener();
+    },
     healthUrls,
     runNextTimer: async () => {
       const next = timers.entries().next().value as [number, () => void] | undefined;
@@ -188,13 +195,45 @@ describe("OBS browser wrappers", () => {
   test("detaches only for explicit route unavailability and reloads after recovery", async () => {
     const harness = createWrapperHarness([{ ok: true }, { ok: false }, { ok: true }]);
     await harness.flushMicrotasks();
+    harness.loadFrame();
+    expect(harness.status.style.display).toBe("none");
 
     await harness.runNextTimer();
     expect(harness.frame.src).toBe("");
     expect(harness.frame.removedSourceCount).toBe(1);
+    expect(harness.status.style.display).toBe("none");
 
     await harness.runNextTimer();
     expect(harness.frame.src).toBe("http://localhost:3399/overlay");
     expect(harness.frame.removedSourceCount).toBe(1);
+    expect(harness.status.style.display).toBe("none");
+    harness.loadFrame();
+    expect(harness.status.style.display).toBe("none");
+  });
+
+  test("restores dock status after a loaded frame becomes unavailable and hides it after recovery loads", async () => {
+    const harness = createWrapperHarness([{ ok: true }, { ok: false }, { ok: true }], undefined, {
+      route: "/dock",
+      statusVisible: true,
+    });
+    await harness.flushMicrotasks();
+    expect(harness.frame.src).toBe("http://localhost:3399/dock");
+    expect(harness.status.style.display).toBe("block");
+    harness.loadFrame();
+    expect(harness.status.style.display).toBe("none");
+
+    await harness.runNextTimer();
+    expect(harness.frame.src).toBe("");
+    expect(harness.frame.style.display).toBe("none");
+    expect(harness.status.style.display).toBe("block");
+    expect(harness.status.textContent).toBe("Waiting for Stream Sync at http://localhost:3399/health?route=%2Fdock...");
+
+    await harness.runNextTimer();
+    expect(harness.frame.src).toBe("http://localhost:3399/dock");
+    expect(harness.frame.style.display).toBe("block");
+    expect(harness.status.textContent).toBe("Connecting to Stream Sync...");
+    expect(harness.status.style.display).toBe("block");
+    harness.loadFrame();
+    expect(harness.status.style.display).toBe("none");
   });
 });
