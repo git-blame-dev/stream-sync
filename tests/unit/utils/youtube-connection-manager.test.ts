@@ -11,8 +11,8 @@ import { YouTubeConnectionManager } from "../../../src/platforms/youtube/youtube
 
 type TestConnection = {
   videoId?: string;
-  stop?: () => Promise<void>;
-  disconnect?: () => Promise<void>;
+  stop?: () => void | Promise<void>;
+  disconnect?: () => void | Promise<void>;
   [key: string]: unknown;
 };
 
@@ -197,13 +197,14 @@ describe("YouTube Connection Manager - Behavior Excellence", () => {
       );
       await Promise.resolve();
 
-      await connectionManager.removeConnection("replace-pending");
+      const removal = connectionManager.removeConnection("replace-pending");
       const replacement = { videoId: "replacement" };
       const replacementResult = await connectionManager.connectToStream(
         "replace-pending",
         async () => replacement,
       );
       resolveFirst({ videoId: "superseded", stop: firstStop, disconnect: firstDisconnect });
+      await removal;
 
       await expect(firstAttempt).resolves.toBe(false);
       expect(replacementResult).toBe(true);
@@ -562,8 +563,9 @@ describe("YouTube Connection Manager - Behavior Excellence", () => {
 
       const connectionAttempt = connectionManager.connectToStream("late-stream", factory);
       await Promise.resolve();
-      await connectionManager.cleanupAllConnections();
+      const cleanup = connectionManager.cleanupAllConnections();
       resolveFactory({ stop, disconnect });
+      await cleanup;
 
       await expect(connectionAttempt).resolves.toBe(false);
       expect(stop).toHaveBeenCalledTimes(1);
@@ -582,7 +584,7 @@ describe("YouTube Connection Manager - Behavior Excellence", () => {
         }),
       );
       await Promise.resolve();
-      await connectionManager.cleanupAllConnections();
+      const cleanup = connectionManager.cleanupAllConnections();
       connectionManager.startLifecycle();
       const replacement = { videoId: "new-lifecycle" };
 
@@ -591,6 +593,7 @@ describe("YouTube Connection Manager - Behavior Excellence", () => {
         async () => replacement,
       );
       resolveOldFactory({ videoId: "old-lifecycle", stop: oldStop, disconnect: oldDisconnect });
+      await cleanup;
 
       await expect(oldAttempt).resolves.toBe(false);
       expect(replacementResult).toBe(true);
