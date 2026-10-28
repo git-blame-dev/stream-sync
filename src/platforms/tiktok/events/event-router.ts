@@ -3,6 +3,7 @@ import { normalizeTikTokChatEvent } from './event-normalizer';
 import { UNKNOWN_CHAT_MESSAGE, UNKNOWN_CHAT_USERNAME } from '../../../constants/degraded-chat';
 import { getValidMessageParts } from '../../../utils/message-parts';
 import { collectMissingFields, getMissingFields, mergeMissingFieldsMetadata } from '../../../utils/missing-fields';
+import { parseNotificationCount } from '../../../utils/notification-count';
 
 const PlatformEvents = {
     CHAT_MESSAGE: 'platform:chat-message',
@@ -79,7 +80,8 @@ type TikTokPlatformRouterContract = {
     connectionGeneration: number;
     connection: {
         on: (eventName: string, handler: (payload: unknown) => void | Promise<void>) => void;
-        removeAllListeners?: (eventName?: string) => void;
+        off?: (eventName: string, handler: (payload: unknown) => void | Promise<void>) => void;
+        removeListener?: (eventName: string, handler: (payload: unknown) => void | Promise<void>) => void;
     } | null;
     WebcastEvent: TikTokWebcastEventMap;
     ControlEvent?: TikTokControlEventMap;
@@ -297,83 +299,58 @@ function isStaleChatReplay(platform: TikTokPlatformRouterContract, eventTimestam
     return (Date.now() - eventTimestampMs) > maxAgeMs;
 }
 
-function parseViewerCount(value: unknown): number | null {
-    const numericValue = typeof value === 'number' ? value : Number(value);
-    if (!Number.isFinite(numericValue)) {
-        return null;
-    }
+type RouterConnection = NonNullable<TikTokPlatformRouterContract['connection']>;
+type RouterCallback = (payload: unknown) => void | Promise<void>;
+const ownedListeners = new WeakMap<TikTokPlatformRouterContract, Array<{
+    connection: RouterConnection;
+    event: string;
+    callback: RouterCallback;
+}>>();
 
-    return numericValue;
+async function reportEventFailure(platform: TikTokPlatformRouterContract, error: unknown, context: string, message?: string) {
+    try {
+        await platform.errorHandler.handleEventProcessingError(error, context, undefined, message);
+    } catch {
+        // A failed diagnostic must not escape an EventEmitter callback.
+    }
+}
+
+function registerListener(platform: TikTokPlatformRouterContract, event: string, handler: RouterCallback) {
+    const connection = platform.connection;
+    if (!connection) return;
+    const callback: RouterCallback = async (payload) => {
+        try {
+            await handler(payload);
+        } catch (error) {
+            await reportEventFailure(platform, error, event === platform.WebcastEvent.CHAT ? 'chat-message' : event);
+        }
+    };
+    connection.on(event, callback);
+    const listeners = ownedListeners.get(platform) ?? [];
+    listeners.push({ connection, event, callback });
+    ownedListeners.set(platform, listeners);
 }
 
 function cleanupTikTokEventListeners(platform: TikTokPlatformRouterContract) {
-    if (!platform?.connection) {
-        return;
-    }
-
-    const removeAllListeners = platform.connection.removeAllListeners;
-    if (typeof removeAllListeners !== 'function') {
-        platform.listenersConfigured = false;
-        return;
-    }
-
-    if (platform.WebcastEvent) {
-        const eventTypes = [
-            platform.WebcastEvent.CHAT,
-            platform.WebcastEvent.GIFT,
-            platform.WebcastEvent.FOLLOW,
-            platform.WebcastEvent.SHARE,
-            platform.WebcastEvent.ROOM_USER,
-            platform.WebcastEvent.ENVELOPE,
-            platform.WebcastEvent.SUBSCRIBE,
-            platform.WebcastEvent.SUPER_FAN,
-            platform.WebcastEvent.SOCIAL,
-            platform.WebcastEvent.ERROR,
-            platform.WebcastEvent.DISCONNECT,
-            platform.WebcastEvent.STREAM_END
-        ];
-
-        eventTypes.forEach((eventType) => {
-            if (!eventType) {
-                return;
-            }
-
-            try {
-                removeAllListeners.call(platform.connection, eventType);
-            } catch (error) {
-                platform.errorHandler?.handleCleanupError(error, 'tiktok event listener cleanup');
-            }
-        });
-    }
-
-    const connectedEvent = platform.ControlEvent?.CONNECTED || 'connected';
-    const disconnectedEvent = platform.ControlEvent?.DISCONNECTED || 'disconnected';
-    const errorEvent = platform.ControlEvent?.ERROR || 'error';
-
-    // Remove rawData listener to prevent duplicate logging on reconnect
-    try {
-        removeAllListeners.call(platform.connection, 'rawData');
-    } catch (error) {
-        platform.errorHandler?.handleCleanupError(error, 'tiktok rawData listener cleanup');
-    }
-
-    [connectedEvent, disconnectedEvent, errorEvent].forEach((eventType) => {
-        if (!eventType) {
-            return;
-        }
-
+    for (const { connection, event, callback } of ownedListeners.get(platform) ?? []) {
         try {
-            removeAllListeners.call(platform.connection, eventType);
+            const remove = connection.off ?? connection.removeListener;
+            remove?.call(connection, event, callback);
         } catch (error) {
             platform.errorHandler?.handleCleanupError(error, 'tiktok event listener cleanup');
         }
-    });
-
+    }
+    ownedListeners.delete(platform);
     platform.listenersConfigured = false;
 }
 
+function isTikTokEventListenerSetupCurrent(platform: TikTokPlatformRouterContract): boolean {
+    return platform.listenersConfigured
+        && (ownedListeners.get(platform)?.some(({ connection }) => connection === platform.connection) ?? false);
+}
+
 function setupTikTokEventListeners(platform: TikTokPlatformRouterContract) {
-    if (platform.listenersConfigured) {
+    if (isTikTokEventListenerSetupCurrent(platform)) {
         return;
     }
 
@@ -384,7 +361,7 @@ function setupTikTokEventListeners(platform: TikTokPlatformRouterContract) {
     }
 
     if (typeof platform.connection.on !== 'function') {
-        const error = new Error('TikTok connection missing event emitter interface (on/removeAllListeners)');
+        const error = new Error('TikTok connection missing event emitter interface (on)');
         platform.errorHandler?.handleConnectionError(
             error,
             'connection',
@@ -395,7 +372,13 @@ function setupTikTokEventListeners(platform: TikTokPlatformRouterContract) {
 
     cleanupTikTokEventListeners(platform);
 
-    platform.connection.on(platform.WebcastEvent.CHAT, async (payload: unknown) => {
+    const registeredConnection = platform.connection;
+    const registeredGeneration = platform.connectionGeneration;
+    const isCurrentRegistration = () => platform.connection === registeredConnection
+        && platform.connectionGeneration === registeredGeneration
+        && (ownedListeners.get(platform)?.some(({ connection }) => connection === registeredConnection) ?? false);
+
+    registerListener(platform, platform.WebcastEvent.CHAT, async (payload: unknown) => {
         await platform._logIncomingEvent('chat', payload);
         const payloadRecord = asRecord(payload);
         const data = asTikTokRawEvent(payload);
@@ -503,57 +486,55 @@ function setupTikTokEventListeners(platform: TikTokPlatformRouterContract) {
 
             await platform._handleChatMessage(data, normalizedData);
         } catch (error) {
-            platform.errorHandler.handleEventProcessingError(
+            await reportEventFailure(platform,
                 error,
                 'chat-message',
-                data,
                 `Error processing chat message: ${error instanceof Error ? error.message : error}`
             );
         }
     });
 
-    platform.connection.on(platform.WebcastEvent.GIFT, async (payload: unknown) => {
+    registerListener(platform, platform.WebcastEvent.GIFT, async (payload: unknown) => {
         const data = asTikTokRawEvent(payload);
         await platform._logIncomingEvent('gift', data);
 
         try {
             await platform.handleTikTokGift(data);
         } catch (error) {
-            platform.errorHandler.handleEventProcessingError(error, 'gift', data, 'Error processing gift');
+            await reportEventFailure(platform, error, 'gift', 'Error processing gift');
         }
     });
 
-    platform.connection.on(platform.WebcastEvent.FOLLOW, async (payload: unknown) => {
+    registerListener(platform, platform.WebcastEvent.FOLLOW, async (payload: unknown) => {
         const data = asTikTokRawEvent(payload);
         await platform._logIncomingEvent('follow', data);
 
         try {
             await platform.handleTikTokFollow(data);
         } catch (error) {
-            platform.errorHandler.handleEventProcessingError(
+            await reportEventFailure(platform,
                 error,
                 'follow',
-                data,
                 `Error processing follow: ${error instanceof Error ? error.message : error}`
             );
         }
     });
 
     if (typeof platform.WebcastEvent.SHARE !== 'undefined') {
-        platform.connection.on(platform.WebcastEvent.SHARE, async (payload: unknown) => {
+        registerListener(platform, platform.WebcastEvent.SHARE, async (payload: unknown) => {
             const data = asTikTokRawEvent(payload);
             await platform._logIncomingEvent('share', data);
 
             try {
                 await platform.handleTikTokShare(data);
             } catch (error) {
-                platform.errorHandler.handleEventProcessingError(error, 'share', data, 'Error processing share event');
+                await reportEventFailure(platform, error, 'share', 'Error processing share event');
             }
         });
     }
 
     if (typeof platform.WebcastEvent.ENVELOPE !== 'undefined') {
-        platform.connection.on(platform.WebcastEvent.ENVELOPE, async (payload: unknown) => {
+        registerListener(platform, platform.WebcastEvent.ENVELOPE, async (payload: unknown) => {
             const data = asTikTokRawEvent(payload);
             try {
                 await platform._logIncomingEvent('envelope', data);
@@ -562,13 +543,13 @@ function setupTikTokEventListeners(platform: TikTokPlatformRouterContract) {
                     emitType: PlatformEvents.ENVELOPE
                 });
             } catch (error) {
-                platform.errorHandler.handleEventProcessingError(error, 'envelope', data, 'Error in handleEnvelopeNotification');
+                await reportEventFailure(platform, error, 'envelope', 'Error in handleEnvelopeNotification');
             }
         });
     }
 
     if (typeof platform.WebcastEvent.SUBSCRIBE !== 'undefined') {
-        platform.connection.on(platform.WebcastEvent.SUBSCRIBE, async (payload: unknown) => {
+        registerListener(platform, platform.WebcastEvent.SUBSCRIBE, async (payload: unknown) => {
             const data = asTikTokRawEvent(payload);
             await platform._logIncomingEvent('subscribe', data);
 
@@ -578,13 +559,13 @@ function setupTikTokEventListeners(platform: TikTokPlatformRouterContract) {
                     emitType: PlatformEvents.PAYPIGGY
                 });
             } catch (error) {
-                platform.errorHandler.handleEventProcessingError(error, 'subscribe', data, 'Error in handleSubscriptionNotification');
+                await reportEventFailure(platform, error, 'subscribe', 'Error in handleSubscriptionNotification');
             }
         });
     }
 
     if (typeof platform.WebcastEvent.SUPER_FAN !== 'undefined') {
-        platform.connection.on(platform.WebcastEvent.SUPER_FAN, async (payload: unknown) => {
+        registerListener(platform, platform.WebcastEvent.SUPER_FAN, async (payload: unknown) => {
             const data = asTikTokRawEvent(payload);
             await platform._logIncomingEvent('superfan', data);
 
@@ -594,111 +575,120 @@ function setupTikTokEventListeners(platform: TikTokPlatformRouterContract) {
                     emitType: PlatformEvents.PAYPIGGY
                 });
             } catch (error) {
-                platform.errorHandler.handleEventProcessingError(error, 'superfan', data, 'Error in handleSuperfanNotification');
+                await reportEventFailure(platform, error, 'superfan', 'Error in handleSuperfanNotification');
             }
         });
     }
 
     if (typeof platform.WebcastEvent.SOCIAL !== 'undefined') {
-        platform.connection.on(platform.WebcastEvent.SOCIAL, async (payload: unknown) => {
+        registerListener(platform, platform.WebcastEvent.SOCIAL, async (payload: unknown) => {
             const data = asTikTokRawEvent(payload);
             await platform._logIncomingEvent('social', data);
 
             try {
                 await platform.handleTikTokSocial(data);
             } catch (error) {
-                platform.errorHandler.handleEventProcessingError(error, 'social', data, 'Error processing social event');
+                await reportEventFailure(platform, error, 'social', 'Error processing social event');
             }
         });
     }
 
-    platform.connection.on(platform.WebcastEvent.ROOM_USER, (payload: unknown) => {
+    registerListener(platform, platform.WebcastEvent.ROOM_USER, async (payload: unknown) => {
         const data = asTikTokRawEvent(payload);
-        platform._logIncomingEvent('roomUser', data);
-        const viewerCount = parseViewerCount(data.viewerCount);
-        if (viewerCount === null) {
-            platform.logger.warn('[TikTok Viewer Count] Invalid viewer count in room user payload', 'tiktok', {
-                viewerCountType: typeof data.viewerCount,
-                hasViewerCount: data.viewerCount !== null && data.viewerCount !== undefined,
-                eventKeys: Object.keys(data).sort()
+        const incomingLog = platform._logIncomingEvent('roomUser', data);
+        try {
+            const viewerCount = parseNotificationCount(data.viewerCount);
+            if (viewerCount === null) {
+                platform.logger.warn('[TikTok Viewer Count] Invalid viewer count in room user payload', 'tiktok', {
+                    viewerCountType: typeof data.viewerCount,
+                    hasViewerCount: data.viewerCount !== null && data.viewerCount !== undefined,
+                    eventKeys: Object.keys(data).sort()
+                });
+                return;
+            }
+
+            const timestamp = typeof platform._getTimestamp === 'function'
+                ? platform._getTimestamp(data)
+                : null;
+            if (typeof timestamp !== 'string' || !timestamp.trim() || !Number.isFinite(Date.parse(timestamp))) {
+                platform.logger.warn('[TikTok Viewer Count] Missing timestamp in room user payload', 'tiktok', {
+                    eventKeys: Object.keys(data).sort(),
+                    hasViewerCount: data.viewerCount !== null && data.viewerCount !== undefined
+                });
+                return;
+            }
+
+            platform.cachedViewerCount = viewerCount;
+            platform._emitPlatformEvent(PlatformEvents.VIEWER_COUNT, {
+                platform: 'tiktok',
+                count: viewerCount,
+                timestamp
             });
-            return;
+        } finally {
+            await incomingLog;
         }
-
-        platform.cachedViewerCount = viewerCount;
-
-        const timestamp = typeof platform._getTimestamp === 'function'
-            ? platform._getTimestamp(data)
-            : null;
-        if (!timestamp) {
-            platform.logger.warn('[TikTok Viewer Count] Missing timestamp in room user payload', 'tiktok', {
-                eventKeys: Object.keys(data).sort(),
-                hasViewerCount: data.viewerCount !== null && data.viewerCount !== undefined
-            });
-            return;
-        }
-
-        platform._emitPlatformEvent(PlatformEvents.VIEWER_COUNT, {
-            platform: 'tiktok',
-            count: viewerCount,
-            timestamp
-        });
     });
 
     const disconnectedEvent = platform.ControlEvent?.DISCONNECTED || 'disconnected';
     const errorEvent = platform.ControlEvent?.ERROR || 'error';
 
-    platform.connection.on(disconnectedEvent, async (reason: unknown) => {
+    registerListener(platform, disconnectedEvent, async (reason: unknown) => {
+        if (!isCurrentRegistration()) return;
         await platform._logIncomingEvent('disconnected', reason);
+        if (!isCurrentRegistration()) return;
         try {
             await platform.handleConnectionIssue(reason, false);
         } catch (error) {
-            platform.errorHandler.handleEventProcessingError(
+            await reportEventFailure(platform,
                 error,
                 'disconnected',
-                reason,
                 'Error handling disconnected control event'
             );
         }
     });
 
-    platform.connection.on(errorEvent, (err: unknown) => {
-        platform._logIncomingEvent('control-error', err);
-        platform.handleConnectionError(err);
+    registerListener(platform, errorEvent, async (err: unknown) => {
+        if (!isCurrentRegistration()) return;
+        await platform._logIncomingEvent('control-error', err);
+        if (!isCurrentRegistration()) return;
+        await platform.handleConnectionError(err);
     });
 
-    platform.connection.on(platform.WebcastEvent.ERROR, (err: unknown) => {
+    registerListener(platform, platform.WebcastEvent.ERROR, async (err: unknown) => {
+        if (!isCurrentRegistration()) return;
         const errorRecord = asRecord(err);
-        platform._logIncomingEvent('error', err);
-        platform.errorHandler.handleConnectionError(
+        await platform._logIncomingEvent('error', err);
+        if (!isCurrentRegistration()) return;
+        await platform.errorHandler.handleConnectionError(
             err,
             'webcast connection',
             `Webcast Connection Error: ${errorRecord?.message}`
         );
 
-        if (platform.connectionActive) {
-            platform.handleRetry(err);
+        if (isCurrentRegistration() && platform.connectionActive) {
+            await platform.handleRetry(err);
         }
     });
 
-    platform.connection.on(platform.WebcastEvent.DISCONNECT, async () => {
-        platform._logIncomingEvent('disconnect', {});
+    registerListener(platform, platform.WebcastEvent.DISCONNECT, async () => {
+        if (!isCurrentRegistration()) return;
+        await platform._logIncomingEvent('disconnect', {});
+        if (!isCurrentRegistration()) return;
         platform.logger.info('Disconnected from webcast', 'tiktok');
         platform.connectionActive = false;
         platform.listenersConfigured = false;
     });
 
     if (typeof platform.WebcastEvent.STREAM_END !== 'undefined') {
-        const connectionGeneration = platform.connectionGeneration;
-        platform.connection.on(platform.WebcastEvent.STREAM_END, async (payload: unknown) => {
+        registerListener(platform, platform.WebcastEvent.STREAM_END, async (payload: unknown) => {
+            if (!isCurrentRegistration()) return;
             const data = asTikTokRawEvent(payload);
-            const streamEndPromise = platform._handleStreamEnd(data, connectionGeneration);
-            await platform._logIncomingEvent('streamEnd', data);
-            await streamEndPromise;
+            const streamEndPromise = platform._handleStreamEnd(data, registeredGeneration);
+            await Promise.all([streamEndPromise, Promise.resolve().then(() => platform._logIncomingEvent('streamEnd', data))]);
         });
     }
 
-    platform.connection.on('rawData', async (payload: unknown) => {
+    registerListener(platform, 'rawData', async (payload: unknown) => {
         const payloadRecord = asRecord(payload);
         const eventType = typeof payloadRecord?.type === 'string' ? payloadRecord.type : 'unknown';
         await platform._logIncomingEvent(eventType, payload);
@@ -707,4 +697,4 @@ function setupTikTokEventListeners(platform: TikTokPlatformRouterContract) {
     platform.listenersConfigured = true;
 }
 
-export { cleanupTikTokEventListeners, setupTikTokEventListeners };
+export { cleanupTikTokEventListeners, isTikTokEventListenerSetupCurrent, setupTikTokEventListeners };

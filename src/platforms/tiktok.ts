@@ -17,7 +17,7 @@ import { extractTikTokUserData, extractTikTokAvatarUrl, formatCoinAmount, normal
 import { validateNotificationManagerInterface } from '../utils/dependency-validator';
 import { normalizeTikTokChatEvent, normalizeTikTokGiftEvent } from './tiktok/events/event-normalizer';
 import { createTikTokConnectionOrchestrator } from './tiktok/connections/tiktok-connection-orchestrator';
-import { cleanupTikTokEventListeners, setupTikTokEventListeners } from './tiktok/events/event-router';
+import { cleanupTikTokEventListeners, isTikTokEventListenerSetupCurrent, setupTikTokEventListeners } from './tiktok/events/event-router';
 import { createTikTokGiftAggregator } from './tiktok/monetization/gift-aggregator';
 import { createTikTokEventFactory } from './tiktok/events/event-factory';
 import { DEFAULT_AVATAR_URL } from '../constants/avatar';
@@ -339,7 +339,10 @@ const getErrorMessage = (error: unknown): string => {
   return String(error ?? 'Unknown error');
 };
 
+type TikTokEventRouterAdapter = Parameters<typeof setupTikTokEventListeners>[0];
+
 class TikTokPlatform extends EventEmitter {
+    private cachedEventRouterAdapter?: TikTokEventRouterAdapter;
     private readonly monotonicNow: () => number;
     private connectionEstablishedAt: number | null = null;
     declare logger: TikTokLogger;
@@ -542,9 +545,10 @@ class TikTokPlatform extends EventEmitter {
         };
     }
 
-    _createEventRouterPlatformAdapter() {
+    _createEventRouterPlatformAdapter(): TikTokEventRouterAdapter {
+        if (this.cachedEventRouterAdapter) return this.cachedEventRouterAdapter;
         const platform = this;
-        return {
+        this.cachedEventRouterAdapter = {
             get listenersConfigured() { return platform.listenersConfigured; },
             set listenersConfigured(listenersConfigured: boolean) { platform.listenersConfigured = listenersConfigured; },
             get connection() { return platform.connection; },
@@ -583,6 +587,7 @@ class TikTokPlatform extends EventEmitter {
                 await platform._handleChatMessage(rawData, normalizedData);
             }
         };
+        return this.cachedEventRouterAdapter;
     }
 
     _validateDependencies(dependencies: TikTokDependencies = {}, config: TikTokConfig = {}): void {
@@ -786,9 +791,11 @@ class TikTokPlatform extends EventEmitter {
     }
 
     setupEventListeners() {
+        const adapter = this._createEventRouterPlatformAdapter();
+        if (isTikTokEventListenerSetupCurrent(adapter)) return;
         this._connectionGeneration += 1;
         this._terminalStreamEndEmitted = false;
-        setupTikTokEventListeners(this._createEventRouterPlatformAdapter());
+        setupTikTokEventListeners(adapter);
     }
 
     async _logIncomingEvent(eventType: string, data: unknown): Promise<void> {

@@ -180,12 +180,12 @@ describe("TikTok event router", () => {
     };
 
     expect(() => setupTikTokEventListeners(platform)).toThrow(
-      "TikTok connection missing event emitter interface (on/removeAllListeners)",
+      "TikTok connection missing event emitter interface (on)",
     );
     expect(errorHandler.handleConnectionError.mock.calls).toHaveLength(1);
   });
 
-  test("cleans up listeners when removeAllListeners is missing", () => {
+  test("clears configured state when there are no owned listeners", () => {
     const platform = {
       connection: {},
       listenersConfigured: true,
@@ -196,7 +196,7 @@ describe("TikTok event router", () => {
     expect(platform.listenersConfigured).toBe(false);
   });
 
-  test("removes listeners for all known event types", () => {
+  test("does not remove listeners it did not register", () => {
     const removeAllListeners = createMockFn();
     const platform = {
       connection: { removeAllListeners },
@@ -225,7 +225,7 @@ describe("TikTok event router", () => {
 
     cleanupTikTokEventListeners(platform);
 
-    expect(removeAllListeners.mock.calls.length).toBe(16);
+    expect(removeAllListeners.mock.calls.length).toBe(0);
     expect(platform.listenersConfigured).toBe(false);
   });
 
@@ -483,9 +483,9 @@ describe("TikTok event router", () => {
 
     setupTikTokEventListeners(platform);
 
-    listeners[platform.ControlEvent.DISCONNECTED]("bye");
-    listeners[platform.ControlEvent.ERROR](new Error("control-error"));
-    listeners[platform.WebcastEvent.ERROR](new Error("webcast-error"));
+    await listeners[platform.ControlEvent.DISCONNECTED]("bye");
+    await listeners[platform.ControlEvent.ERROR](new Error("control-error"));
+    await listeners[platform.WebcastEvent.ERROR](new Error("webcast-error"));
     await listeners[platform.WebcastEvent.DISCONNECT]();
     await listeners[platform.WebcastEvent.STREAM_END]({});
 
@@ -507,7 +507,7 @@ describe("TikTok event router", () => {
     await listeners[platform.WebcastEvent.ROOM_USER]({ viewerCount: 12 });
 
     expect(emitted).toHaveLength(0);
-    expect(platform.cachedViewerCount).toBe(12);
+    expect(platform.cachedViewerCount).toBe(0);
   });
 
   test("processes degraded chat event when comment is invalid", async () => {
@@ -696,5 +696,29 @@ describe("TikTok event router", () => {
     const logCall = expectDefined(platform._logIncomingEvent.mock.calls[0]);
     expect(logCall[0]).toBe("chat");
     expect(logCall[1]).toBe(payload);
+  });
+
+  test.each([null, true, false, {}, [], -1, 1.5, Number.MAX_SAFE_INTEGER + 1])("retains viewer state for invalid count %p", async (viewerCount) => {
+    const { platform, listeners, emitted } = createPlatformHarness({ cachedViewerCount: 17 });
+    setupTikTokEventListeners(platform);
+    await listeners.roomUser({ viewerCount });
+    expect(platform.cachedViewerCount).toBe(17);
+    expect(emitted).toEqual([]);
+  });
+
+  test.each([null, "", " ", "not-a-timestamp"])("retains viewer state for invalid timestamp %p", async (timestamp) => {
+    const { platform, listeners, emitted } = createPlatformHarness({ cachedViewerCount: 17, _getTimestamp: () => timestamp });
+    setupTikTokEventListeners(platform);
+    await listeners.roomUser({ viewerCount: 25 });
+    expect(platform.cachedViewerCount).toBe(17);
+    expect(emitted).toEqual([]);
+  });
+
+  test("accepts a measured zero", async () => {
+    const { platform, listeners, emitted } = createPlatformHarness({ cachedViewerCount: 17 });
+    setupTikTokEventListeners(platform);
+    await listeners.roomUser({ viewerCount: 0 });
+    expect(platform.cachedViewerCount).toBe(0);
+    expect(emitted[0]?.payload.count).toBe(0);
   });
 });

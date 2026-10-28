@@ -1,4 +1,5 @@
 import { describe, test, expect, afterEach } from "bun:test";
+import { EventEmitter } from "node:events";
 import {
   createMockFn,
   restoreAllMocks,
@@ -140,15 +141,146 @@ describe("TikTok event router connection lifecycle", () => {
       const error = new Error("connection-lost");
 
       // Both events fire (as can happen in real scenarios)
-      requireListener(listeners, platform.ControlEvent.ERROR)(error);
-      requireListener(listeners, platform.WebcastEvent.ERROR)(error);
+      await requireListener(listeners, platform.ControlEvent.ERROR)(error);
+      await requireListener(listeners, platform.WebcastEvent.ERROR)(error);
 
       expect(retryCalls.length).toBe(1);
     });
   });
 
+  test("cleanup retains observers and retires captured old connection only", () => {
+    const oldConnection = new EventEmitter();
+    const replacement = new EventEmitter();
+    const observer = () => {};
+    oldConnection.on("chat", observer);
+    oldConnection.on("rawData", observer);
+    replacement.on("chat", observer);
+    const { platform } = createPlatformHarness({ connection: oldConnection });
+    setupTikTokEventListeners(platform);
+    setupTikTokEventListeners(platform);
+    expect(oldConnection.listenerCount("chat")).toBe(2);
+    Object.assign(platform, { connection: replacement });
+    cleanupTikTokEventListeners(platform);
+    expect(oldConnection.listeners("chat")).toEqual([observer]);
+    expect(oldConnection.listeners("rawData")).toEqual([observer]);
+    expect(replacement.listeners("chat")).toEqual([observer]);
+    setupTikTokEventListeners(platform);
+    setupTikTokEventListeners(platform);
+    expect(replacement.listenerCount("chat")).toBe(2);
+    cleanupTikTokEventListeners(platform);
+    expect(replacement.listeners("chat")).toEqual([observer]);
+  });
+
+  test.each(["rawData", "control-error", "disconnected", "chat", "gift", "roomUser", "streamEnd"])("contains diagnostic and reporter failure for %s", async (event) => {
+    const failure = new Error("synthetic diagnostic failure");
+    const report = createMockFn<[unknown, string, unknown?, string?], void>(() => { throw new Error("synthetic reporter failure"); });
+    const { platform, listeners } = createPlatformHarness({
+      _logIncomingEvent: () => Promise.reject(failure),
+      errorHandler: { handleEventProcessingError: report },
+    });
+    setupTikTokEventListeners(platform);
+    await expect(requireListener(listeners, event)({ secret: "synthetic-private-payload" })).resolves.toBeUndefined();
+    expect(report.mock.calls).toHaveLength(1);
+    expect(report.mock.calls[0]?.slice(0, 3)).toEqual([failure, event === "chat" ? "chat-message" : event, undefined]);
+    if (event === "streamEnd") expect(platform._handleStreamEnd.mock.calls).toHaveLength(1);
+  });
+
+  test("reconfiguration adopts replacement without requiring an earlier cleanup", () => {
+    const oldConnection = new EventEmitter();
+    const replacement = new EventEmitter();
+    const { platform } = createPlatformHarness({ connection: oldConnection });
+    setupTikTokEventListeners(platform);
+    Object.assign(platform, { connection: replacement });
+    setupTikTokEventListeners(platform);
+    expect(oldConnection.listenerCount("chat")).toBe(0);
+    expect(replacement.listenerCount("chat")).toBe(1);
+    cleanupTikTokEventListeners(platform);
+  });
+
+  test("cleanup supports removeListener without off and only removes owned callbacks", () => {
+    const emitter = new EventEmitter();
+    const connection = {
+      on: emitter.on.bind(emitter),
+      removeListener: emitter.removeListener.bind(emitter),
+    };
+    const observer = () => {};
+    emitter.on("rawData", observer);
+    const { platform } = createPlatformHarness({ connection });
+    setupTikTokEventListeners(platform);
+    cleanupTikTokEventListeners(platform);
+    expect(emitter.listeners("rawData")).toEqual([observer]);
+    expect(emitter.listenerCount("chat")).toBe(0);
+  });
+
+  test("stream end acts synchronously before diagnostics and captures its generation", async () => {
+    const order: string[] = [];
+    const { platform, listeners } = createPlatformHarness({
+      connectionGeneration: 7,
+      _handleStreamEnd: async (_data: unknown, generation: number) => { order.push(`terminal:${generation}`); },
+      _logIncomingEvent: async () => { order.push("diagnostic"); },
+    });
+    setupTikTokEventListeners(platform);
+    const pending = requireListener(listeners, "streamEnd")({});
+    expect(order).toEqual(["terminal:7"]);
+    await pending;
+    expect(order).toEqual(["terminal:7", "diagnostic"]);
+    Object.assign(platform, { connectionGeneration: 8 });
+    await requireListener(listeners, "streamEnd")({});
+    expect(order).toEqual(["terminal:7", "diagnostic"]);
+  });
+
+  test("contains synchronous diagnostic throws and rejected reporters", async () => {
+    const failure = new Error("synthetic sync diagnostic failure");
+    const reporter = createMockFn<[unknown, string, unknown?, (string | undefined)?], Promise<void>>(async () => { throw new Error("synthetic async reporter failure"); });
+    const { platform, listeners } = createPlatformHarness({
+      _logIncomingEvent: () => { throw failure; },
+      errorHandler: { handleEventProcessingError: reporter },
+    });
+    setupTikTokEventListeners(platform);
+    await expect(requireListener(listeners, "rawData")({})).resolves.toBeUndefined();
+    expect(reporter.mock.calls).toEqual([[failure, "rawData", undefined, undefined]]);
+  });
+
+  test("control action waits for incoming diagnostics", async () => {
+    let finishLog: (() => void) | undefined;
+    const diagnostic = new Promise<void>((resolve) => { finishLog = resolve; });
+    const { platform, listeners } = createPlatformHarness({ _logIncomingEvent: () => diagnostic });
+    setupTikTokEventListeners(platform);
+    const pending = requireListener(listeners, "control-error")(new Error("synthetic control error"));
+    expect(platform.handleConnectionError.mock.calls).toHaveLength(0);
+    finishLog?.();
+    await pending;
+    expect(platform.handleConnectionError.mock.calls).toHaveLength(1);
+  });
+
+  test("native EventEmitter failures do not become unhandled rejections", async () => {
+    const routerPath = require.resolve("../../../../../src/platforms/tiktok/events/event-router.ts");
+    const child = Bun.spawn([process.execPath, "--eval", `
+      import { EventEmitter } from 'node:events';
+      import { setImmediate } from 'node:timers/promises';
+      const { setupTikTokEventListeners } = await import(${JSON.stringify(routerPath)});
+      const connection = new EventEmitter();
+      let reports = 0;
+      const platform = {
+        connection, listenersConfigured: false, connectionGeneration: 1,
+        WebcastEvent: { CHAT:'chat', GIFT:'gift', FOLLOW:'follow', SOCIAL:'social', ROOM_USER:'roomUser', ERROR:'webcast-error', DISCONNECT:'disconnect' },
+        _logIncomingEvent: () => Promise.reject(new Error('synthetic diagnostic failure')),
+        errorHandler: { handleEventProcessingError: () => { reports++; return Promise.reject(new Error('synthetic reporter failure')); } }
+      };
+      setupTikTokEventListeners(platform);
+      connection.emit('rawData', { type: 'synthetic' });
+      connection.emit('error', new Error('synthetic control failure'));
+      await setImmediate();
+      await setImmediate();
+      if (reports !== 2) throw new Error('expected exactly two reports');
+    `], { stdout: "pipe", stderr: "pipe" });
+    const [exitCode, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()]);
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+  });
+
   describe("rawData listener cleanup", () => {
-    test("rawData listener should be removed during cleanup", () => {
+    test("cleanup does not bulk-remove unowned rawData listeners", () => {
       const cleanedEvents: string[] = [];
       const removeAllListeners = (eventName: string) => {
         cleanedEvents.push(eventName);
@@ -179,7 +311,7 @@ describe("TikTok event router connection lifecycle", () => {
 
       cleanupTikTokEventListeners(platform);
 
-      expect(cleanedEvents).toContain("rawData");
+      expect(cleanedEvents).toEqual([]);
     });
   });
 
@@ -193,7 +325,7 @@ describe("TikTok event router connection lifecycle", () => {
 
       expect(platform.listenersConfigured).toBe(true);
 
-      requireListener(listeners, platform.WebcastEvent.DISCONNECT)();
+      await requireListener(listeners, platform.WebcastEvent.DISCONNECT)();
 
       expect(platform.listenersConfigured).toBe(false);
     });
@@ -268,7 +400,7 @@ describe("TikTok event router connection lifecycle", () => {
       const handledError = requireFirst(handledErrors);
       expect(handledError.error).toBe(disconnectionError);
       expect(handledError.context).toBe("disconnected");
-      expect(handledError.payload).toEqual(disconnectedPayload);
+      expect(handledError.payload).toBeUndefined();
       expect(handledError.message).toBe(
         "Error handling disconnected control event",
       );
