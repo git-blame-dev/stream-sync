@@ -102,6 +102,10 @@ function resolveNonNegativeInteger(value: unknown, fallback = 0): number {
     return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : fallback;
 }
 
+function isValidViewerCount(count: number): boolean {
+    return Number.isSafeInteger(count) && count >= 0;
+}
+
 function resolveRejectedReasonMessage(reason: unknown): string {
     if (reason instanceof Error) {
         return reason.message;
@@ -177,11 +181,13 @@ class ViewerCountExtractionService {
                 );
                 return { ...result, ...(result.metadata ? { metadata: { ...result.metadata } } : {}) };
             });
+            options.signal?.throwIfAborted();
             
             const responseTime = Date.now() - startTime;
-            this._updateStats(extractionResult.success, responseTime);
+            const success = extractionResult.success && isValidViewerCount(extractionResult.count);
+            this._updateStats(success, responseTime);
             
-            if (extractionResult.success) {
+            if (success) {
                 this.logger?.debug?.(
                     `[ViewerCountExtraction] Successfully extracted ${extractionResult.count} viewers using ${extractionResult.strategy} for video ${videoId}`, 
                     'viewer-extraction'
@@ -271,7 +277,9 @@ totalCount: number;
 successfulStreams: number;
 failedStreams: number;
 streams: Array<{ videoId: string; count: number; success: boolean; strategy?: string | null; error?: string }>;
+error?: string;
 }> {
+        videoIds = [...new Set(videoIds)];
         if (!videoIds || videoIds.length === 0) {
             return {
                 success: true,
@@ -289,36 +297,45 @@ streams: Array<{ videoId: string; count: number; success: boolean; strategy?: st
         let totalCount = 0;
         let successfulStreams = 0;
         let failedStreams = 0;
+        let safeTotal = true;
         
-        const streamDetails = results.map(result => {
-            if (result.success && typeof result.count === 'number' && result.count >= 0) {
-                totalCount += result.count;
+        const streamDetails = videoIds.map((videoId, index) => {
+            const result = results[index];
+            const success = !!result && result.videoId === videoId && result.success && isValidViewerCount(result.count);
+            if (success) {
+                const nextTotal = totalCount + result.count;
+                if (isValidViewerCount(nextTotal)) {
+                    totalCount = nextTotal;
+                } else {
+                    safeTotal = false;
+                }
                 successfulStreams++;
             } else {
                 failedStreams++;
             }
             
             return {
-                videoId: result.videoId,
-                count: result.count,
-                success: result.success,
-                ...(result.strategy === undefined ? {} : { strategy: result.strategy }),
-                ...(result.error === undefined ? {} : { error: result.error })
+                videoId,
+                count: success ? result.count : 0,
+                success,
+                ...(result?.strategy === undefined ? {} : { strategy: result.strategy }),
+                ...(!success ? { error: result?.error || 'Missing or invalid viewer count' } : {})
             };
         });
 
-        if (successfulStreams === 0) {
+        if (failedStreams > 0 || !safeTotal || results.length !== videoIds.length) {
             this.logger?.debug?.(
-                `[ViewerCountExtraction] Aggregation unavailable: 0/${videoIds.length} streams extracted successfully`,
+                `[ViewerCountExtraction] Aggregation unavailable: ${successfulStreams}/${videoIds.length} streams extracted successfully; safe total: ${safeTotal}`,
                 'viewer-extraction'
             );
 
             return {
                 success: false,
                 totalCount: 0,
-                successfulStreams: 0,
+                successfulStreams,
                 failedStreams,
-                streams: streamDetails
+                streams: streamDetails,
+                error: !safeTotal ? 'Unsafe aggregate viewer count' : 'Incomplete viewer count aggregation'
             };
         }
         

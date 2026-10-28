@@ -166,8 +166,8 @@ describe("ViewerCountExtractionService", () => {
 
     const result = await service.getAggregatedViewerCount(["vid-a", "vid-b"]);
 
-    expect(result.success).toBe(true);
-    expect(result.totalCount).toBe(14);
+    expect(result.success).toBe(false);
+    expect(result.totalCount).toBe(0);
     expect(result.successfulStreams).toBe(1);
     expect(result.failedStreams).toBe(1);
     expect(result.streams).toHaveLength(2);
@@ -206,6 +206,31 @@ describe("ViewerCountExtractionService", () => {
     expect(result.totalCount).toBe(0);
     expect(result.successfulStreams).toBe(0);
     expect(result.failedStreams).toBe(2);
+  });
+
+  it("marks missing batch members unavailable instead of accepting the available result", async () => {
+    const service = new ViewerCountExtractionService(metadataOwner(mockInnertube), { logger: noOpLogger });
+    service.extractViewerCountsBatch = createMockFn<[string[]], Promise<ExtractionResponse[]>>().mockResolvedValue([
+      { success: true, count: 14, videoId: "test-a" },
+    ]);
+    expect(await service.getAggregatedViewerCount(["test-a", "test-b"])).toMatchObject({
+      success: false, totalCount: 0, successfulStreams: 1, failedStreams: 1,
+      streams: [
+        { videoId: "test-a", count: 14, success: true },
+        { videoId: "test-b", count: 0, success: false, error: "Missing or invalid viewer count" },
+      ],
+    });
+  });
+
+  it("does not trust invalid counts marked successful by a batch result", async () => {
+    const service = new ViewerCountExtractionService(metadataOwner(mockInnertube), { logger: noOpLogger });
+    service.extractViewerCountsBatch = createMockFn<[string[]], Promise<ExtractionResponse[]>>().mockResolvedValue([
+      { success: true, count: Infinity, videoId: "test-a" },
+    ]);
+    expect(await service.getAggregatedViewerCount(["test-a"])).toMatchObject({
+      success: false, totalCount: 0, successfulStreams: 0, failedStreams: 1,
+      streams: [{ videoId: "test-a", count: 0, success: false }],
+    });
   });
 
   it("updates config and exposes usage stats", async () => {

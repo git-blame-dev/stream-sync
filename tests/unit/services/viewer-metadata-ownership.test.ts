@@ -4,6 +4,30 @@ import { ViewerCountExtractionService } from '../../../src/services/viewer-count
 import { noOpLogger } from '../../helpers/mock-factories';
 
 describe('viewer metadata ownership', () => {
+    it('rejects caller cancellation after the owned operation settles but before extraction publishes', async () => {
+        const cancellation = new AbortController();
+        const owner = new InnertubeService({
+            createWithTimeout: async () => ({ getInfo: async () => ({ basic_info: { is_live: true, view_count: 8 } }) })
+        }, { logger: noOpLogger });
+        const adapter: Pick<InnertubeService, 'withMetadataOperation'> = {
+            withMetadataOperation: async (options, operation) => {
+                const result = await owner.withMetadataOperation(options, operation);
+                cancellation.abort(new Error('synthetic post-operation cancellation'));
+                return result;
+            }
+        };
+        const service = new ViewerCountExtractionService(adapter, { logger: noOpLogger });
+        try {
+            expect(await service.extractViewerCount('test-cancelled', { signal: cancellation.signal })).toMatchObject({
+                success: false, count: 0, error: 'synthetic post-operation cancellation'
+            });
+            expect(service.stats.successfulExtractions).toBe(0);
+            expect(service.stats.failedExtractions).toBe(1);
+        } finally {
+            await owner.dispose();
+        }
+    });
+
     it('retries failed initialization and coalesces waiters without inheriting caller cancellation', async () => {
         let attempts = 0;
         let release!: () => void;
