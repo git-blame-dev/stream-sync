@@ -1,5 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import fs from 'node:fs/promises';
+import disk from 'node:fs';
 import path from 'node:path';
 import { TwitchAuth } from '../../../src/auth/TwitchAuth';
 import { TWITCH_OAUTH_SCOPES } from '../../../src/auth/twitch-oauth-scopes';
@@ -16,15 +17,64 @@ const valid = (overrides: Record<string, unknown> = {}) => ({ data: {
 const flush = async () => { for (let i = 0; i < 30; i++) await Promise.resolve(); };
 const advance = async (ms: number) => { testClock.advance(ms); advanceTimersByTime(ms); await flush(); };
 
+// Advanced Bun fake clocks can stall native async filesystem completion. Keep
+// token-store/auth logic and its await boundaries real, but complete external I/O
+// synchronously on this test's real synthetic files without resetting timers.
+function completeTokenIoSynchronously(tokenStorePath: string) {
+    const directory = path.dirname(tokenStorePath);
+    const ownsFile = (target: unknown): target is string => typeof target === 'string' &&
+        (target === tokenStorePath || (target.startsWith(`${tokenStorePath}.`) &&
+            path.dirname(target) === directory && target.endsWith('.tmp')));
+    const ownsDirectory = (target: unknown) => target === directory;
+    const original = { readFile: fs.readFile.bind(fs), writeFile: fs.writeFile.bind(fs),
+        mkdir: fs.mkdir.bind(fs), chmod: fs.chmod.bind(fs), rename: fs.rename.bind(fs), unlink: fs.unlink.bind(fs) };
+    const spies: Array<{ mockRestore(): void }> = [];
+    try {
+        const readFile = (async (target: Parameters<typeof fs.readFile>[0], options?: Parameters<typeof fs.readFile>[1]) =>
+            ownsFile(target) && options === 'utf8'
+                ? disk.readFileSync(target, 'utf8')
+                : original.readFile(target, options)) as typeof fs.readFile;
+        spies.push(spyOn(fs, 'readFile').mockImplementation(readFile));
+        spies.push(spyOn(fs, 'writeFile').mockImplementation(async (target, data, options) => {
+            if (ownsFile(target) && typeof data === 'string' && typeof options === 'object' && options !== null &&
+                options.encoding === 'utf8' && options.flag === undefined && options.signal === undefined) {
+                disk.writeFileSync(target, data, { encoding: 'utf8', mode: options.mode, flush: options.flush });
+            }
+            else await original.writeFile(target, data, options);
+        }));
+        const mkdir = (async (target: Parameters<typeof fs.mkdir>[0], options?: Parameters<typeof fs.mkdir>[1]) =>
+            ownsDirectory(target) ? disk.mkdirSync(directory, options) : original.mkdir(target, options)) as typeof fs.mkdir;
+        spies.push(spyOn(fs, 'mkdir').mockImplementation(mkdir));
+        spies.push(spyOn(fs, 'chmod').mockImplementation(async (target, mode) => {
+            if (ownsFile(target) || ownsDirectory(target)) disk.chmodSync(String(target), mode);
+            else await original.chmod(target, mode);
+        }));
+        spies.push(spyOn(fs, 'rename').mockImplementation(async (from, to) => {
+            if (ownsFile(from) && ownsFile(to)) disk.renameSync(from, to);
+            else await original.rename(from, to);
+        }));
+        spies.push(spyOn(fs, 'unlink').mockImplementation(async target => {
+            if (ownsFile(target)) disk.unlinkSync(target);
+            else await original.unlink(target);
+        }));
+    } catch (error) {
+        for (const spy of spies.reverse()) spy.mockRestore();
+        throw error;
+    }
+    return () => { for (const spy of spies.splice(0).reverse()) spy.mockRestore(); };
+}
+
 describe('TwitchAuth validation monitoring', () => {
     let directory: string;
     let tokenStorePath: string;
     let auth: TwitchAuth;
+    let restoreTokenIo: () => void;
     const get = createMockFn<unknown[], Promise<{ data?: unknown }>>();
     const post = createMockFn<unknown[], Promise<{ data?: unknown }>>();
     const oauthFlow = createMockFn<[], Promise<null>>();
 
     beforeEach(async () => {
+        restoreTokenIo = () => {};
         _resetForTesting();
         secrets.twitch.clientSecret = 'test-secret';
         get.mockReset(); post.mockReset(); oauthFlow.mockReset();
@@ -35,14 +85,22 @@ describe('TwitchAuth validation monitoring', () => {
         auth = new TwitchAuth({ tokenStorePath, clientId: 'test-client', expectedUsername: 'test-user', logger: noOpLogger,
             httpClient: { get, post }, oauthFlow, monitoringNow: testClock.now });
         await auth.initialize();
+        restoreTokenIo = completeTokenIoSynchronously(tokenStorePath);
         useFakeTimers();
     });
 
     afterEach(async () => {
-        await auth.stopValidationMonitoring();
         useRealTimers();
-        await fs.rm(directory, { recursive: true, force: true });
-        _resetForTesting();
+        try {
+            await auth?.stopValidationMonitoring();
+        } finally {
+            restoreTokenIo();
+            try {
+                await fs.rm(directory, { recursive: true, force: true });
+            } finally {
+                _resetForTesting();
+            }
+        }
     });
 
     it('is inert until explicitly started and validates idle sessions hourly without overlap', async () => {
@@ -105,11 +163,12 @@ describe('TwitchAuth validation monitoring', () => {
         expect(onInvalidated.mock.calls[0]?.[0]).toMatchObject({ reason: 'validation-unavailable' });
         expect(auth.getUserId()).toBe('test-user-id');
         expect(secrets.twitch.accessToken).toBe('test-access');
-        expect(await fs.readFile(tokenStorePath, 'utf8')).toBe(before);
         await advance(HOUR);
         expect(onInvalidated.mock.calls.length).toBe(1);
         expect(oauthFlow.mock.calls.length).toBe(0);
         expect(post.mock.calls.length).toBe(0);
+        useRealTimers();
+        expect(await fs.readFile(tokenStorePath, 'utf8')).toBe(before);
     });
 
     it('treats malformed successful validation as bounded unavailability, not revocation', async () => {
@@ -319,7 +378,8 @@ describe('TwitchAuth validation monitoring', () => {
         await advance(1000);
         get.mockResolvedValue(valid());
         post.mockResolvedValue({ data: { access_token: 'test-new-access', refresh_token: 'test-new-refresh' } });
-        // Real candidate persistence uses asynchronous filesystem work, not fake time.
+        // Candidate acceptance awaits real token-store logic through the scoped
+        // immediate-completion filesystem boundary, without resetting monitor timers.
         await auth.refreshTokens();
         await advance(1000);
         if (kind === 'invalid') reject({ response: { status: 401 } }); else resolve(valid());
