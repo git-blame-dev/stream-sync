@@ -9,6 +9,8 @@ import { AuthConstants } from '../utils/auth-constants';
 import { createHttpRetryExecutor, type RetryExecutor } from '../utils/http-retry-executor';
 import { runOAuthFlow } from './oauth-flow';
 import { TWITCH_OAUTH_SCOPES } from './twitch-oauth-scopes';
+import { safeDelay, safeSetTimeout } from '../utils/timeout-validator';
+import { withOperationDeadline } from '../utils/timeout-wrapper';
 
 type AuthRecord = Record<string, unknown>;
 
@@ -64,7 +66,26 @@ type TwitchAuthOptions = {
     httpClient?: HttpClient;
     oauthFlow?: OAuthFlowRunner;
     retryExecutor?: RetryExecutor;
+    monitoringNow?: () => number;
 };
+
+type ValidationInvalidation = {
+    reason: 'invalid-token' | 'identity-mismatch' | 'validation-unavailable';
+    signal: AbortSignal;
+};
+type ValidationMonitoringOptions = { onInvalidated: (event: ValidationInvalidation) => void | Promise<void> };
+type ValidationMonitor = {
+    controller: AbortController;
+    task: Promise<void>;
+    invalidated: boolean;
+    operations: Set<Promise<unknown>>;
+    retirement: Promise<void> | null;
+};
+
+const VALIDATION_INTERVAL_MS = 60 * 60 * 1000;
+const VALIDATION_RETRY_MS = 30 * 1000;
+const VALIDATION_OUTAGE_GRACE_MS = 5 * 60 * 1000;
+const VALIDATION_RETIREMENT_BUDGET_MS = 5 * 1000;
 
 type HttpErrorShape = {
     response?: {
@@ -204,14 +225,18 @@ class TwitchAuth {
     #httpClient: HttpClient;
     #oauthFlowRunner: OAuthFlowRunner;
     #retryExecutor: RetryExecutor;
+    #monitoringNow: () => number;
+    #lastAcceptedAt = 0;
+    #monitor: ValidationMonitor | null = null;
 
-    constructor({ tokenStorePath, clientId, logger, expectedUsername = null, httpClient, oauthFlow, retryExecutor }: TwitchAuthOptions) {
+    constructor({ tokenStorePath, clientId, logger, expectedUsername = null, httpClient, oauthFlow, retryExecutor, monitoringNow }: TwitchAuthOptions) {
         this.#tokenStorePath = typeof tokenStorePath === 'string' ? tokenStorePath : '';
         this.#clientId = typeof clientId === 'string' ? clientId : '';
         this.#logger = resolveLogger(logger, 'TwitchAuth') as ReturnType<typeof resolveLogger>;
         this.#expectedUsername = typeof expectedUsername === 'string' ? expectedUsername : null;
         this.#httpClient = httpClient || axiosModule.default || axiosModule;
         this.#retryExecutor = retryExecutor || createHttpRetryExecutor({ logger: this.#logger });
+        this.#monitoringNow = monitoringNow || (() => performance.now());
         if (oauthFlow !== undefined && typeof oauthFlow !== 'function') {
             throw new Error('oauthFlow must be a function when provided');
         }
@@ -301,6 +326,206 @@ class TwitchAuth {
         return this.#initialized;
     }
 
+    // Invalidation callbacks must honor their signal across asynchronous effects.
+    // Explicit validated recovery retires an invalidated monitor; start it again afterward.
+    startValidationMonitoring(options: ValidationMonitoringOptions): void {
+        if (this.#monitor) {
+            if (this.#monitor.retirement) {
+                throw new Error('Twitch validation monitoring is still retiring');
+            }
+            return;
+        }
+        if (!this.#initialized || !secrets.twitch.accessToken) {
+            throw new Error('Twitch validation monitoring requires accepted credentials');
+        }
+        if (typeof options?.onInvalidated !== 'function') {
+            throw new Error('Twitch validation monitoring requires onInvalidated');
+        }
+        const monitor: ValidationMonitor = {
+            controller: new AbortController(), task: Promise.resolve(), invalidated: false,
+            operations: new Set(), retirement: null
+        };
+        this.#monitor = monitor;
+        monitor.task = this.#runValidationMonitor(monitor, options).catch(async () => {
+            if (this.#isCurrentMonitor(monitor)) {
+                await this.#notifyInvalidation(monitor, options, 'validation-unavailable');
+                this.#reportMonitorFailure('Twitch validation monitor stopped unexpectedly');
+            }
+        });
+    }
+
+    // Closes admission synchronously, then joins original HTTP/callback completion
+    // (including cooperative finally cleanup), bounded by the retirement budget.
+    stopValidationMonitoring(): Promise<void> {
+        const monitor = this.#monitor;
+        if (!monitor) {
+            return Promise.resolve();
+        }
+        if (monitor.retirement) {
+            return monitor.retirement;
+        }
+        // Install the shared join before abort dispatch can reenter this method.
+        monitor.retirement = withOperationDeadline(async () => {
+            await monitor.task;
+            await Promise.allSettled([...monitor.operations]);
+        }, { budgetMs: VALIDATION_RETIREMENT_BUDGET_MS, operationName: 'Twitch validation monitor retirement' })
+            .catch(() => {
+                this.#reportMonitorFailure('Twitch validation monitor retirement deadline exceeded');
+            })
+            .finally(() => {
+                if (this.#monitor === monitor) {
+                    this.#monitor = null;
+                }
+            });
+        monitor.controller.abort();
+        return monitor.retirement;
+    }
+
+    #isCurrentMonitor(monitor: ValidationMonitor): boolean {
+        return this.#monitor === monitor && !monitor.controller.signal.aborted;
+    }
+
+    #reportMonitorFailure(message: string) {
+        try {
+            this.#logger.warn(message, 'twitch-auth');
+        } catch {
+            // Diagnostics must never strand retirement or the notification task.
+        }
+    }
+
+    async #notifyInvalidation(monitor: ValidationMonitor, options: ValidationMonitoringOptions, reason: ValidationInvalidation['reason']) {
+        if (!this.#isCurrentMonitor(monitor)) {
+            return;
+        }
+        this.#initialized = false;
+        monitor.invalidated = true;
+        const generation = this.#generation;
+        // The monitor never refreshes or opens OAuth. Lifecycle recovery must explicitly
+        // accept a validated candidate and retire the old Twitch session first.
+        try {
+            const callback = this.#trackMonitorOperation(monitor, Promise.resolve().then(() => {
+                if (this.#isCurrentMonitor(monitor) && generation === this.#generation) {
+                    return options.onInvalidated({ reason, signal: monitor.controller.signal });
+                }
+            }).catch(() => {
+                this.#reportMonitorFailure('Twitch validation invalidation callback failed');
+            }));
+            await this.#untilMonitorStopped(monitor, callback);
+        } catch {
+            if (this.#isCurrentMonitor(monitor)) {
+                this.#reportMonitorFailure('Twitch validation invalidation callback failed');
+            }
+        }
+    }
+
+    #trackMonitorOperation<T>(monitor: ValidationMonitor, operation: Promise<T>): Promise<T> {
+        monitor.operations.add(operation);
+        void operation.then(
+            () => { monitor.operations.delete(operation); },
+            () => { monitor.operations.delete(operation); }
+        );
+        return operation;
+    }
+
+    async #untilMonitorStopped<T>(monitor: ValidationMonitor, operation: Promise<T>): Promise<T> {
+        const signal = monitor.controller.signal;
+        signal.throwIfAborted();
+        let onAbort!: () => void;
+        const stopped = new Promise<never>((_resolve, reject) => {
+            onAbort = () => reject(signal.reason);
+            signal.addEventListener('abort', onAbort, { once: true });
+        });
+        try {
+            return await Promise.race([operation, stopped]);
+        } finally {
+            signal.removeEventListener('abort', onAbort);
+        }
+    }
+
+    async #monitorValidation(monitor: ValidationMonitor, accessToken: string, budgetMs: number): Promise<TokenValidationResult> {
+        const request = new AbortController();
+        const signal = monitor.controller.signal;
+        const onAbort = () => request.abort();
+        signal.addEventListener('abort', onAbort, { once: true });
+        const timer = safeSetTimeout(() => request.abort(), budgetMs);
+        let rejectAborted!: () => void;
+        const aborted = new Promise<TokenValidationFailure>(resolve => {
+            rejectAborted = () => resolve({ error: new Error('Twitch monitor validation interrupted'), status: null });
+            request.signal.addEventListener('abort', rejectAborted, { once: true });
+        });
+        try {
+            const validation = this.#trackMonitorOperation(monitor, this.#validateToken(accessToken, request.signal));
+            return await Promise.race([validation, aborted]);
+        } finally {
+            globalThis.clearTimeout(timer);
+            signal.removeEventListener('abort', onAbort);
+            request.signal.removeEventListener('abort', rejectAborted);
+        }
+    }
+
+    async #runValidationMonitor(monitor: ValidationMonitor, options: ValidationMonitoringOptions) {
+        let nextAt = this.#lastAcceptedAt + VALIDATION_INTERVAL_MS;
+        let outageStartedAt: number | null = null;
+        let generation = this.#generation;
+        while (this.#isCurrentMonitor(monitor)) {
+            const delay = nextAt - this.#monitoringNow();
+            if (delay > 0) {
+                await safeDelay(delay, delay, 'Twitch validation monitoring', monitor.controller.signal);
+            }
+            if (!this.#isCurrentMonitor(monitor)) {
+                return;
+            }
+            if (generation !== this.#generation) {
+                generation = this.#generation;
+                outageStartedAt = null;
+                nextAt = this.#lastAcceptedAt + VALIDATION_INTERVAL_MS;
+                continue;
+            }
+            const remainingGrace = outageStartedAt === null ? VALIDATION_OUTAGE_GRACE_MS
+                : outageStartedAt + VALIDATION_OUTAGE_GRACE_MS - this.#monitoringNow();
+            if (remainingGrace <= 0) {
+                await this.#notifyInvalidation(monitor, options, 'validation-unavailable');
+                return;
+            }
+            const token = secrets.twitch.accessToken;
+            if (!token) {
+                await this.#notifyInvalidation(monitor, options, 'invalid-token');
+                return;
+            }
+            const validationStartedAt = this.#monitoringNow();
+            const validation = await this.#monitorValidation(monitor, token, Math.min(TWITCH_VALIDATION_TIMEOUT_MS, remainingGrace));
+            if (!this.#isCurrentMonitor(monitor)) {
+                return;
+            }
+            if (generation !== this.#generation || token !== secrets.twitch.accessToken) {
+                generation = this.#generation;
+                outageStartedAt = null;
+                nextAt = this.#lastAcceptedAt + VALIDATION_INTERVAL_MS;
+                continue;
+            }
+            if (!isValidationFailure(validation)) {
+                try {
+                    this.#acceptIdentity(validation);
+                    if (validation.userId !== this.#userId) {
+                        throw new Error('Twitch token user identity mismatch');
+                    }
+                } catch {
+                    await this.#notifyInvalidation(monitor, options, 'identity-mismatch');
+                    return;
+                }
+                outageStartedAt = null;
+                nextAt = this.#monitoringNow() + VALIDATION_INTERVAL_MS;
+                continue;
+            }
+            if (validation.status !== null && validation.status < 500 && validation.status !== 429 && validation.status !== 408) {
+                await this.#notifyInvalidation(monitor, options, 'invalid-token');
+                return;
+            }
+            outageStartedAt ??= validationStartedAt;
+            nextAt = Math.min(this.#monitoringNow() + VALIDATION_RETRY_MS, outageStartedAt + VALIDATION_OUTAGE_GRACE_MS);
+        }
+    }
+
     #requireConfig(): string {
         if (!this.#expectedUsername) {
             throw new Error('expectedUsername is required for Twitch authentication');
@@ -342,6 +567,10 @@ class TwitchAuth {
         this.#userId = validation.userId;
         this.#initialized = true;
         this.#generation++;
+        this.#lastAcceptedAt = this.#monitoringNow();
+        if (this.#monitor?.invalidated) {
+            void this.stopValidationMonitoring();
+        }
     }
 
     async #acceptCandidate(candidate: OAuthTokenPayload, generation: number) {
@@ -489,7 +718,7 @@ class TwitchAuth {
         return false;
     }
 
-    async #validateToken(accessToken: string): Promise<TokenValidationResult> {
+    async #validateToken(accessToken: string, signal?: AbortSignal): Promise<TokenValidationResult> {
         const handler = createTwitchAuthErrorHandler(this.#logger);
         if (!accessToken) {
             return { error: new Error('Access token is missing'), status: null };
@@ -504,10 +733,12 @@ class TwitchAuth {
                         headers: {
                             Authorization: `Bearer ${accessToken}`
                         },
-                        timeout: TWITCH_VALIDATION_TIMEOUT_MS
+                        timeout: TWITCH_VALIDATION_TIMEOUT_MS,
+                        ...(signal ? { signal } : {})
                     }
                 ),
-                3
+                signal ? 1 : 3,
+                signal ? { signal } : undefined
             );
 
             const data = asRecord(response && response.data ? response.data : null);
@@ -527,9 +758,11 @@ class TwitchAuth {
             };
         } catch (error) {
             const httpError = asHttpError(error);
-            handler.logOperationalError('Token validation failed', 'twitch-auth', {
-                status: typeof httpError.response?.status === 'number' ? httpError.response.status : null,
-            });
+            if (!signal) {
+                handler.logOperationalError('Token validation failed', 'twitch-auth', {
+                    status: typeof httpError.response?.status === 'number' ? httpError.response.status : null,
+                });
+            }
             return {
                 error,
                 status: typeof httpError.response?.status === 'number' ? httpError.response.status : null
