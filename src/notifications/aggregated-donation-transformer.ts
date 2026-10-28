@@ -1,3 +1,5 @@
+import { copyNotificationContributions, type NotificationContribution } from './notification-contribution';
+
 type AggregatedDonation = {
     userId: string;
     username: string;
@@ -5,6 +7,8 @@ type AggregatedDonation = {
     totalGifts: number;
     totalCoins: number;
     message: string;
+    currency?: string;
+    contributions?: readonly NotificationContribution[];
 };
 
 function createSyntheticGiftFromAggregated(aggregatedData: AggregatedDonation) {
@@ -14,7 +18,8 @@ function createSyntheticGiftFromAggregated(aggregatedData: AggregatedDonation) {
         giftType: `Multiple Gifts (${aggregatedData.giftTypes.join(', ')})`,
         giftCount: aggregatedData.totalGifts,
         amount: aggregatedData.totalCoins,
-        currency: 'coins',
+        currency: aggregatedData.currency ?? 'coins',
+        ...(aggregatedData.contributions ? { contributions: copyNotificationContributions(aggregatedData.contributions) } : {}),
         message: aggregatedData.message,
         isAggregated: true
     };

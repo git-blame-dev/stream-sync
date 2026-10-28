@@ -12,6 +12,7 @@ import { NotificationInputValidator } from './notification-input-validator';
 import { NotificationPayloadBuilder } from './notification-payload-builder';
 import { allowsYouTubeJewelsMissingAmount } from '../utils/missing-fields';
 import { parseNotificationCount } from '../utils/notification-count';
+import { createNotificationContribution, type NotificationContribution } from './notification-contribution';
 
 type NotificationRecord = Record<string, unknown>;
 
@@ -49,14 +50,15 @@ type UserTrackingServiceLike = {
 
 type DonationSpamDetectorLike = {
     destroy?: () => void;
-    handleDonationSpam: (
+    handleDonationSpam(
         userId: unknown,
         username: unknown,
         perGiftAmount: number,
         giftType: unknown,
         giftCount: number,
         platform: string,
-    ) => { shouldShow: boolean };
+        source?: { amount: number; currency: string; contribution: NotificationContribution },
+    ): { shouldShow: boolean };
 };
 
 type ObsGoalsLike = {
@@ -88,6 +90,8 @@ type AggregatedDonationInput = {
     totalGifts: number;
     totalCoins: number;
     message: string;
+    currency?: string;
+    contributions?: readonly NotificationContribution[];
 };
 
 function isRecord(value: unknown): value is NotificationRecord {
@@ -391,6 +395,11 @@ class NotificationManager extends EventEmitter {
             currency: normalizedData.currency,
             metadata: normalizedData.metadata
         });
+        if (isMonetizationType && !skipSpamDetection) {
+            normalizedData.contributions = Object.freeze([
+                createNotificationContribution(platformName, notificationType, data as NotificationRecord)
+            ]);
+        }
         if (notificationType === 'platform:gift' && this.donationSpamDetector && !skipSpamDetection &&
             !normalizedData.isAggregated && !isErrorPayload && !isAmountlessYouTubeJewelsGift) {
             if (!isAnonymousGift && hasStableGiftSpamIdentity(normalizedData)) {
@@ -413,7 +422,12 @@ class NotificationManager extends EventEmitter {
                         perGiftAmount,
                         normalizedData.giftType,
                         giftCount,
-                        platformName
+                        platformName,
+                        {
+                            amount,
+                            currency: typeof normalizedData.currency === 'string' ? normalizedData.currency : '',
+                            contribution: createNotificationContribution(platformName, notificationType, data as NotificationRecord)
+                        }
                     );
 
                     if (!spamResult.shouldShow) {

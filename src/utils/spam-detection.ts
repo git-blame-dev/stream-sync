@@ -1,5 +1,6 @@
 import { safeSetInterval, safeSetTimeout } from './timeout-validator';
 import { createPlatformErrorHandler } from './platform-error-handler';
+import { copyNotificationContributions, type NotificationContribution } from '../notifications/notification-contribution';
 
 type SpamLogger = {
     debug: (message: string, source?: string) => void;
@@ -34,6 +35,8 @@ type DonationSpamDetectionDependencies = {
         giftTypes: string[];
         message: string;
         notifications: DonationNotification[];
+        currency: string;
+        contributions: readonly NotificationContribution[];
     }) => void) | null;
     autoCleanup?: boolean;
 };
@@ -44,11 +47,15 @@ type DonationNotification = {
     giftType: string;
     giftCount: number;
     platform: string;
+    amount?: number;
+    currency?: string;
+    contribution?: NotificationContribution;
 };
 
 type UserSpamTracker = {
     userId: string;
     notifications: DonationNotification[];
+    pending?: DonationNotification[];
     aggregatedCount: number;
     lastReset: number;
     aggregationTimer: ReturnType<typeof setTimeout> | null;
@@ -237,7 +244,8 @@ class DonationSpamDetection {
         unitAmount: number,
         giftType: string,
         giftCount: number,
-        platform?: string | null
+        platform?: string | null,
+        source?: { amount: number; currency: string; contribution: NotificationContribution }
     ) {
         if (this.destroyed) {
             return { shouldShow: false, aggregatedMessage: null };
@@ -270,6 +278,7 @@ class DonationSpamDetection {
                 this.donationSpamTracker[trackerKey] = {
                     userId: normalizedUserId,
                     notifications: [],
+                    pending: [],
                     aggregatedCount: 0,
                     lastReset: now,
                     aggregationTimer: null,
@@ -289,13 +298,14 @@ class DonationSpamDetection {
                 this.logger.debug(`Cleaned ${originalCount - userTracker.notifications.length} old notifications for ${trackerKey}`, 'spam-detection');
             }
 
-            userTracker.notifications.push({
+            const notification: DonationNotification = {
                 timestamp: now,
                 coinValue: unitAmount,
                 giftType,
                 giftCount,
                 platform: normalizedPlatform
-            });
+            };
+            userTracker.notifications.push(notification);
 
             const currentNotificationCount = userTracker.notifications.length;
             this.logger.debug(`${normalizedUsername}: ${currentNotificationCount}/${platformConfig.maxIndividualNotifications} notifications in window`, 'spam-detection');
@@ -322,6 +332,12 @@ class DonationSpamDetection {
             }
 
             this.logger.info(`${normalizedPlatform} - ${normalizedUsername}: Suppressing individual notification ${currentNotificationCount} (aggregating)`, 'spam-detection');
+            (userTracker.pending ??= []).push({
+                ...notification,
+                amount: source?.amount ?? unitAmount * giftCount,
+                currency: source?.currency ?? 'coins',
+                ...(source ? { contribution: copyNotificationContributions([source.contribution])[0]! } : {})
+            });
             return { shouldShow: false, aggregatedMessage: null };
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
@@ -336,8 +352,12 @@ class DonationSpamDetection {
     }
 
     processAggregatedDonation(trackerKey: string, userTracker: UserSpamTracker) {
+        if (userTracker.aggregationTimer) {
+            clearTimeout(userTracker.aggregationTimer);
+            userTracker.aggregationTimer = null;
+        }
         try {
-            if (!userTracker.notifications || userTracker.notifications.length === 0) {
+            if (!userTracker.pending?.length) {
                 this.logger.debug(`No notifications to aggregate for user ${trackerKey}`, 'spam-detection');
                 return {
                     shouldShow: false,
@@ -347,35 +367,46 @@ class DonationSpamDetection {
                 };
             }
 
-            const totalCoins = userTracker.notifications.reduce((sum, notification) => sum + (notification.coinValue * notification.giftCount), 0);
-            const totalGifts = userTracker.notifications.reduce((sum, notification) => sum + notification.giftCount, 0);
-            const uniqueGiftTypes = [...new Set(userTracker.notifications.map((notification) => notification.giftType))];
+            const pending = userTracker.pending;
+            const groups = new Map<string, DonationNotification[]>();
+            for (const notification of pending) {
+                const currency = notification.currency ?? 'coins';
+                const group = groups.get(currency) ?? [];
+                group.push(notification);
+                groups.set(currency, group);
+            }
+            let totalCoins = 0;
+            let totalGifts = 0;
+            let aggregatedMessage = '';
+            for (const [currency, notifications] of groups) {
+                const groupAmount = notifications.reduce((sum, notification) => sum + (notification.amount ?? notification.coinValue * notification.giftCount), 0);
+                const groupCount = notifications.reduce((sum, notification) => sum + notification.giftCount, 0);
+                const uniqueGiftTypes = [...new Set(notifications.map((notification) => notification.giftType))];
 
-            const aggregatedMessage = totalGifts > 1
-                ? `${userTracker.username} sent ${totalGifts} gifts worth ${totalCoins} coins (${uniqueGiftTypes.join(', ')})`
-                : `${userTracker.username} sent ${totalGifts} gift worth ${totalCoins} coins (${uniqueGiftTypes[0]})`;
+                aggregatedMessage = `${userTracker.username} sent ${groupCount} ${groupCount === 1 ? 'gift' : 'gifts'} worth ${groupAmount} ${currency} (${uniqueGiftTypes.join(', ')})`;
 
-            this.logger.info(`${userTracker.platform} - Processing aggregated donation: ${aggregatedMessage}`, 'spam-detection');
+                this.logger.info(`${userTracker.platform} - Processing aggregated donation: ${aggregatedMessage}`, 'spam-detection');
 
-            if (this.onAggregatedDonation) {
-                this.onAggregatedDonation({
-                    userId: userTracker.userId,
-                    username: userTracker.username,
-                    platform: userTracker.platform,
-                    totalCoins,
-                    totalGifts,
-                    giftTypes: uniqueGiftTypes,
-                    message: aggregatedMessage,
-                    notifications: userTracker.notifications
-                });
+                if (this.onAggregatedDonation) {
+                    this.onAggregatedDonation({
+                        userId: userTracker.userId,
+                        username: userTracker.username,
+                        platform: userTracker.platform,
+                        totalCoins: groupAmount,
+                        totalGifts: groupCount,
+                        currency,
+                        contributions: copyNotificationContributions(notifications.flatMap(notification => notification.contribution ? [notification.contribution] : [])),
+                        giftTypes: uniqueGiftTypes,
+                        message: aggregatedMessage,
+                        notifications
+                    });
+                }
+                if (groups.size === 1) totalCoins = groupAmount;
+                totalGifts += groupCount;
+                userTracker.pending = userTracker.pending?.filter(notification => (notification.currency ?? 'coins') !== currency) ?? [];
             }
 
-            if (userTracker.aggregationTimer) {
-                clearTimeout(userTracker.aggregationTimer);
-                userTracker.aggregationTimer = null;
-            }
-
-            userTracker.notifications = [];
+            userTracker.pending = [];
             userTracker.aggregatedCount = 0;
             userTracker.lastReset = Date.now();
 
@@ -384,7 +415,7 @@ class DonationSpamDetection {
             return {
                 shouldShow: true,
                 aggregatedMessage,
-                totalCoinValue: totalCoins,
+                totalCoinValue: groups.size === 1 ? totalCoins : null,
                 totalGiftCount: totalGifts
             };
         } catch (error) {
@@ -418,7 +449,7 @@ class DonationSpamDetection {
                     (notification) => (now - notification.timestamp) <= windowMs
                 );
 
-                if (userTracker.notifications.length === 0 && (forceCleanup || (now - userTracker.lastReset) > windowMs)) {
+                if (!userTracker.pending?.length && userTracker.notifications.length === 0 && (forceCleanup || (now - userTracker.lastReset) > windowMs)) {
                     if (userTracker.aggregationTimer) {
                         clearTimeout(userTracker.aggregationTimer);
                         userTracker.aggregationTimer = null;

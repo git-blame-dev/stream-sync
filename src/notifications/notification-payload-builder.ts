@@ -1,3 +1,5 @@
+import { copyNotificationContributions, type NotificationContribution } from './notification-contribution';
+
 const STRIPPED_FIELDS = [
     'type',
     'platform',
@@ -61,6 +63,9 @@ class NotificationPayloadBuilder {
         });
 
         notificationData.type = canonicalType;
+        if (Array.isArray(resolvedData.contributions)) {
+            notificationData.contributions = copyNotificationContributions(resolvedData.contributions as NotificationContribution[]);
+        }
 
         if (resolvedSourceType !== undefined) {
             if (isMonetizationType) {

@@ -18,6 +18,23 @@ const createAggregatedDonationFixture = (
 });
 
 describe("createSyntheticGiftFromAggregated", () => {
+  it("preserves residual currency and independently freezes compact source inputs", () => {
+    const source = { platform: "twitch", type: "platform:gift", data: {
+      id: "test-bits-source", timestamp: "2026-01-01T00:00:00.000Z", amount: 9,
+      giftCount: 3, currency: "bits", rawData: "test-only-omitted", message: "test-only"
+    } };
+    const result = createSyntheticGiftFromAggregated(createAggregatedDonationFixture({
+      currency: "bits", totalCoins: 9, totalGifts: 3, contributions: [source]
+    }));
+    source.data.amount = 99;
+    expect(result.currency).toBe("bits");
+    expect(result.amount).toBe(9);
+    expect(result.giftCount).toBe(3);
+    expect(result.contributions).toEqual([{ platform: "twitch", type: "platform:gift", data: {
+      id: "test-bits-source", timestamp: "2026-01-01T00:00:00.000Z", amount: 9, giftCount: 3, currency: "bits"
+    } }]);
+    expect(Object.isFrozen(result.contributions?.[0]?.data)).toBe(true);
+  });
   it("creates synthetic gift with isAggregated flag", () => {
     const result = createSyntheticGiftFromAggregated(createAggregatedDonationFixture({
       userId: "testUser123",

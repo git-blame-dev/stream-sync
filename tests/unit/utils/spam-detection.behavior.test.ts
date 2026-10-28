@@ -15,6 +15,57 @@ type DonationSpamDetection = ReturnType<typeof createDonationSpamDetection>;
 describe("SpamDetection behavior", () => {
   let detection: DonationSpamDetection | null = null;
 
+  it("does not include a fail-open admission in residuals and can schedule after an empty flush", () => {
+    useFakeTimers();
+    let failSuppression = true;
+    const summaries: number[] = [];
+    detection = createDonationSpamDetection(createSpamDetectionConfig({
+      enabled: true, lowValueThreshold: 5, detectionWindow: 1, maxIndividualNotifications: 0
+    }, { logger: noOpLogger }), {
+      logger: { ...noOpLogger, info: message => {
+        if (failSuppression && message.includes("Suppressing individual")) throw new Error("test diagnostic failure");
+      } },
+      autoCleanup: false,
+      onAggregatedDonation: summary => { summaries.push(summary.totalCoins); }
+    });
+    expect(detection.handleDonationSpam("test-donor", "Test Donor", 5, "Rose", 1, "tiktok").shouldShow).toBe(true);
+    advanceTimersByTime(1000);
+    expect(summaries).toEqual([]);
+    failSuppression = false;
+    expect(detection.handleDonationSpam("test-donor", "Test Donor", 3, "Rose", 1, "tiktok").shouldShow).toBe(false);
+    advanceTimersByTime(1000);
+    expect(summaries).toEqual([3]);
+  });
+
+  it("retains a failed currency group without replaying an already emitted group", () => {
+    useFakeTimers();
+    let failSecond = true;
+    const summaries: number[] = [];
+    detection = createDonationSpamDetection(createSpamDetectionConfig({
+      enabled: true, lowValueThreshold: 5, detectionWindow: 1, maxIndividualNotifications: 0
+    }, { logger: noOpLogger }), {
+      logger: noOpLogger, autoCleanup: false,
+      onAggregatedDonation: summary => {
+        if (summary.currency === "EUR" && failSecond) throw new Error("test callback failure");
+        summaries.push(summary.totalCoins);
+      }
+    });
+    const send = (amount: number, currency: string) => detection!.handleDonationSpam(
+      "test-donor", "Test Donor", amount, "Test Gift", 1, "youtube", {
+        amount, currency, contribution: { platform: "youtube", type: "platform:gift", data: { amount, currency } }
+      }
+    );
+    send(2, "USD");
+    send(3, "EUR");
+    advanceTimersByTime(1000);
+    expect(summaries).toEqual([2]);
+    detection.cleanupSpamDetection(true);
+    failSecond = false;
+    send(1, "EUR");
+    advanceTimersByTime(1000);
+    expect(summaries).toEqual([2, 4]);
+  });
+
   it("retires admission and timers idempotently despite failed cleanup diagnostics", () => {
     useFakeTimers();
     let retired = false;

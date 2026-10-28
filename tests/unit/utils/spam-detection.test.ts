@@ -539,11 +539,12 @@ describe("Spam Detection", () => {
       }
     });
 
-    it("should combine notifications into one aggregated message", () => {
+    it("should combine only pending suppressed notifications and preserve admission history", () => {
       const aggregationTimer = safeSetTimeout(() => {}, 1000);
       const tracker = {
         userId: "user1",
-        notifications: [
+        notifications: [{ timestamp: 1700000000000, coinValue: 50, giftType: "Admitted", giftCount: 1, platform: "tiktok" }],
+        pending: [
           {
             timestamp: 1700000000000,
             coinValue: 5,
@@ -574,7 +575,8 @@ describe("Spam Detection", () => {
       expect(result.aggregatedMessage).toContain(
         "User1 sent 3 gifts worth 13 coins",
       );
-      expect(tracker.notifications).toEqual([]);
+      expect(tracker.notifications).toHaveLength(1);
+      expect(tracker.pending).toEqual([]);
       expect(tracker.aggregationTimer).toBeNull();
       expect(aggregatedDonation).toBeDefined();
       expect(aggregatedDonation?.totalCoins).toBe(13);
