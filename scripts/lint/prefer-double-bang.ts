@@ -6,6 +6,7 @@ import path from 'node:path';
 const BOOLEAN_PATTERN = /(?<![a-zA-Z_.])Boolean\(([^)]+)\)/g;
 
 const SOURCE_DIRS: readonly string[] = ['src', 'tests', 'scripts'];
+const PROJECT_ROOT = path.resolve(process.argv[2] ?? process.cwd());
 
 type BooleanViolation = {
     line: number;
@@ -17,7 +18,8 @@ function findSourceFiles(dir: string): string[] {
     const files: string[] = [];
     if (!fs.existsSync(dir)) return files;
     
-    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    const entries = fs.readdirSync(dir, { withFileTypes: true })
+        .sort((left, right) => left.name < right.name ? -1 : left.name > right.name ? 1 : 0);
     for (const entry of entries) {
         const fullPath = path.join(dir, entry.name);
         if (entry.isDirectory()) {
@@ -59,14 +61,14 @@ function checkFile(filePath: string): BooleanViolation[] {
 }
 
 function main() {
-    const allFiles = SOURCE_DIRS.flatMap(findSourceFiles);
+    const allFiles = SOURCE_DIRS.flatMap(directory => findSourceFiles(path.join(PROJECT_ROOT, directory))).sort();
     let hasViolations = false;
     
     for (const file of allFiles) {
         const violations = checkFile(file);
         if (violations.length > 0) {
             hasViolations = true;
-            console.error(`\n${file}:`);
+            console.error(`\n${path.relative(PROJECT_ROOT, file).replace(/\\/g, '/')}:`);
             for (const v of violations) {
                 console.error(`  Line ${v.line}: ${v.content}`);
                 console.error(`    Suggestion: Use ${v.suggestion} instead`);

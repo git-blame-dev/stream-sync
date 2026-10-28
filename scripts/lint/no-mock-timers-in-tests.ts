@@ -20,7 +20,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const PROJECT_ROOT = path.resolve(__dirname, '../..');
+const PROJECT_ROOT = path.resolve(process.argv[2] ?? path.resolve(__dirname, '../..'));
 const TARGET_DIRECTORIES: readonly string[] = ['tests'];
 const FILE_EXTENSIONS = new Set(['.js', '.mjs', '.cjs', '.ts', '.tsx']);
 const IGNORE_DIRECTORIES = new Set([
@@ -33,6 +33,7 @@ const IGNORE_DIRECTORIES = new Set([
 // Allowlist for existing files that need refactoring (technical debt)
 // New test files should use fake timers, not mock injection
 const ALLOWLIST = new Set<string>([]);
+const ARROW_FUNCTION_PATTERN = String.raw`(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>`;
 
 type MockTimerPattern = {
     pattern: RegExp;
@@ -42,12 +43,12 @@ type MockTimerPattern = {
 
 const MOCK_TIMER_PATTERNS: readonly MockTimerPattern[] = [
     {
-        pattern: /safeSetTimeout\s*:\s*(?:createMockFn\s*\(|function\s*\(|\([^)]*\)\s*=>)/g,
+        pattern: new RegExp(String.raw`safeSetTimeout\s*:\s*(?:createMockFn\s*\(|function\s*\(|${ARROW_FUNCTION_PATTERN})`, 'g'),
         message: 'Injecting mock safeSetTimeout',
         hint: 'Use useFakeTimers() and advanceTimersByTime() from tests/helpers/bun-timers.js'
     },
     {
-        pattern: /clearTimeoutFn\s*:\s*(?:createMockFn\s*\(|function\s*\(|\([^)]*\)\s*=>)/g,
+        pattern: new RegExp(String.raw`clearTimeoutFn\s*:\s*(?:createMockFn\s*\(|function\s*\(|${ARROW_FUNCTION_PATTERN})`, 'g'),
         message: 'Injecting mock clearTimeoutFn',
         hint: 'Use useFakeTimers() and getTimerCount() from tests/helpers/bun-timers.js'
     },
@@ -86,7 +87,8 @@ function normalizePath(filePath: string): string {
 }
 
 function collectFiles(dir: string): string[] {
-    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    const entries = fs.readdirSync(dir, { withFileTypes: true })
+        .sort((left, right) => left.name < right.name ? -1 : left.name > right.name ? 1 : 0);
     const files: string[] = [];
 
     for (const entry of entries) {
@@ -145,12 +147,11 @@ function scanFile(relativePath: string): MockTimerViolation[] {
 function main() {
     const issues: MockTimerViolation[] = [];
 
-    for (const dir of TARGET_DIRECTORIES) {
+    const files = TARGET_DIRECTORIES.flatMap((dir) => {
         const absoluteDir = path.join(PROJECT_ROOT, dir);
-        if (!fs.existsSync(absoluteDir)) continue;
-        const files = collectFiles(absoluteDir);
-        files.forEach((file) => issues.push(...scanFile(file)));
-    }
+        return fs.existsSync(absoluteDir) ? collectFiles(absoluteDir) : [];
+    }).sort();
+    files.forEach((file) => issues.push(...scanFile(file)));
 
     if (issues.length === 0) {
         console.log('✓ No mock timer injection detected in tests.');

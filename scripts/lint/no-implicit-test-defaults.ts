@@ -11,6 +11,7 @@ const PATTERN = new RegExp(
 );
 
 const TEST_DIRS: readonly string[] = ['tests/helpers', 'tests/unit', 'tests/integration', 'tests/e2e-smoke'];
+const PROJECT_ROOT = path.resolve(process.argv[2] ?? process.cwd());
 
 type ImplicitDefaultViolation = {
     line: number;
@@ -22,7 +23,8 @@ function findTestFiles(dir: string): string[] {
     const files: string[] = [];
     if (!fs.existsSync(dir)) return files;
     
-    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    const entries = fs.readdirSync(dir, { withFileTypes: true })
+        .sort((left, right) => left.name < right.name ? -1 : left.name > right.name ? 1 : 0);
     for (const entry of entries) {
         const fullPath = path.join(dir, entry.name);
         if (entry.isDirectory()) {
@@ -54,14 +56,14 @@ function checkFile(filePath: string): ImplicitDefaultViolation[] {
 }
 
 function main() {
-    const allFiles = TEST_DIRS.flatMap(findTestFiles);
+    const allFiles = TEST_DIRS.flatMap(directory => findTestFiles(path.join(PROJECT_ROOT, directory))).sort();
     let hasViolations = false;
     
     for (const file of allFiles) {
         const violations = checkFile(file);
         if (violations.length > 0) {
             hasViolations = true;
-            console.error(`\n${file}:`);
+            console.error(`\n${path.relative(PROJECT_ROOT, file).replace(/\\/g, '/')}:`);
             for (const v of violations) {
                 console.error(`  Line ${v.line}: ${v.content}`);
             }

@@ -11,21 +11,17 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const PROJECT_ROOT = path.resolve(__dirname, '../..');
+const PROJECT_ROOT = path.resolve(process.argv[2] ?? path.resolve(__dirname, '../..'));
 const TARGET_DIRECTORIES: readonly string[] = ['src', 'tests', 'scripts'];
 const FILE_EXTENSIONS = new Set(['.js', '.mjs', '.cjs', '.ts', '.tsx']);
 const IGNORE_DIRECTORIES = new Set([
   'node_modules',
   'coverage',
   'logs',
-  'archive',
-  'lint',
-  'scripts/lint' // prevent self-scanning
+  'archive'
 ]);
 
-const VIOLATION_PATTERN = /\bset(?:Timeout|Interval)\s*\(/g;
-const SAFE_PREFIX = 'safe';
-const ALLOWED_PREFIXES: readonly string[] = [];
+const VIOLATION_PATTERN = /(?<![\w$])set(?:Timeout|Interval)\s*\(/g;
 const PROMISE_TIMEOUT_PATTERN = /new\s+Promise\s*\([^)]*=>\s*(?:safeSetTimeout|setTimeout)\s*\(/;
 const PROMISE_TIMEOUT_ALLOWLIST = new Set([
   'src/utils/timeout-validator.ts'
@@ -51,7 +47,8 @@ function normalizePath(filePath: string): string {
 }
 
 function collectFiles(dir: string): string[] {
-  const entries = fs.readdirSync(dir, { withFileTypes: true });
+  const entries = fs.readdirSync(dir, { withFileTypes: true })
+    .sort((left, right) => left.name < right.name ? -1 : left.name > right.name ? 1 : 0);
   const files: string[] = [];
 
   for (const entry of entries) {
@@ -59,7 +56,7 @@ function collectFiles(dir: string): string[] {
     const relativePath = path.relative(PROJECT_ROOT, fullPath);
 
     if (entry.isDirectory()) {
-      if (IGNORE_DIRECTORIES.has(entry.name)) {
+      if (IGNORE_DIRECTORIES.has(entry.name) || normalizePath(relativePath) === 'scripts/lint') {
         continue;
       }
       files.push(...collectFiles(fullPath));
@@ -74,15 +71,6 @@ function collectFiles(dir: string): string[] {
 function isSafeUsage(line: string, matchIndex: number): boolean {
   const charBefore = matchIndex > 0 ? line[matchIndex - 1] : '';
   if (charBefore === '\'' || charBefore === '"' || charBefore === '`') {
-    return true;
-  }
-
-  const trimmedPrefix = line.slice(0, matchIndex).trimEnd();
-  if (trimmedPrefix.toLowerCase().endsWith(SAFE_PREFIX)) {
-    return true;
-  }
-
-  if (ALLOWED_PREFIXES.some(prefix => trimmedPrefix.endsWith(prefix))) {
     return true;
   }
 
@@ -155,12 +143,11 @@ function scanFile(relativePath: string): TimeoutViolation[] {
 
 function main() {
   const issues: TimeoutViolation[] = [];
-  for (const dir of TARGET_DIRECTORIES) {
+  const files = TARGET_DIRECTORIES.flatMap((dir) => {
     const absoluteDir = path.join(PROJECT_ROOT, dir);
-    if (!fs.existsSync(absoluteDir)) continue;
-    const files = collectFiles(absoluteDir);
-    files.forEach((file) => issues.push(...scanFile(file)));
-  }
+    return fs.existsSync(absoluteDir) ? collectFiles(absoluteDir) : [];
+  }).sort();
+  files.forEach((file) => issues.push(...scanFile(file)));
 
   if (issues.length === 0) {
     console.log('✓ No raw setTimeout/setInterval usage detected.');

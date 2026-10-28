@@ -20,7 +20,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const PROJECT_ROOT = path.resolve(__dirname, '../..');
+const PROJECT_ROOT = path.resolve(process.argv[2] ?? path.resolve(__dirname, '../..'));
 const TARGET_DIRECTORIES: readonly string[] = ['tests'];
 const FILE_EXTENSIONS = new Set(['.js', '.mjs', '.cjs', '.ts', '.tsx']);
 const IGNORE_DIRECTORIES = new Set([
@@ -78,7 +78,8 @@ type ImplementationViolation = {
 };
 
 function collectFiles(dir: string): string[] {
-    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    const entries = fs.readdirSync(dir, { withFileTypes: true })
+        .sort((left, right) => left.name < right.name ? -1 : left.name > right.name ? 1 : 0);
     const files: string[] = [];
 
     for (const entry of entries) {
@@ -132,12 +133,11 @@ function scanFile(relativePath: string): ImplementationViolation[] {
 function main() {
     const issues: ImplementationViolation[] = [];
 
-    for (const dir of TARGET_DIRECTORIES) {
+    const files = TARGET_DIRECTORIES.flatMap((dir) => {
         const absoluteDir = path.join(PROJECT_ROOT, dir);
-        if (!fs.existsSync(absoluteDir)) continue;
-        const files = collectFiles(absoluteDir);
-        files.forEach((file) => issues.push(...scanFile(file)));
-    }
+        return fs.existsSync(absoluteDir) ? collectFiles(absoluteDir) : [];
+    }).sort();
+    files.forEach((file) => issues.push(...scanFile(file)));
 
     if (issues.length === 0) {
         console.log('✓ No implementation test anti-patterns detected.');
