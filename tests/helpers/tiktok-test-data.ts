@@ -6,6 +6,18 @@ let sequence = 0;
 
 type TestRecord = Record<string, unknown>;
 
+export const validateFixtureCount = (count: number, name: string, maximum = 10000) => {
+    if (!Number.isSafeInteger(count) || count < 0 || count > maximum) {
+        throw new RangeError(`${name} must be a non-negative safe integer no greater than ${maximum}`);
+    }
+};
+
+export const validateFixtureWindow = (window: number) => {
+    if (!Number.isFinite(window) || window < 0) {
+        throw new RangeError('timeWindow must be a non-negative finite number');
+    }
+};
+
 type GiftConfig = {
     id: number;
     type: number;
@@ -231,6 +243,7 @@ const createTikTokConnectionEvent = (connectionState = 'connected', overrides = 
 };
 
 const createTikTokGiftEventBatch = (count = 5, baseConfig: TestRecord & { userId?: string | number } = {}) => {
+    validateFixtureCount(count, 'count');
     const events: Array<ReturnType<typeof createTikTokGiftEvent>> = [];
     const giftTypes = ['Rose', 'Perfume', 'Swan', 'Heart Me', 'Sunglasses'];
     const usernames = ['GiftUser1', 'GiftUser2', 'GiftUser3', 'GenerousViewer', 'TikTokFan'];
@@ -257,13 +270,15 @@ const createTikTokGiftEventBatch = (count = 5, baseConfig: TestRecord & { userId
 };
 
 const createTikTokSpamGiftScenario = (giftCount = 5, giftType = 'Rose', timeWindow = 2000) => {
+    validateFixtureCount(giftCount, 'giftCount');
+    validateFixtureWindow(timeWindow);
     const seed = nextSequence();
     const baseUserId = userIdFromSeed(seed);
     const startTime = timestampFromSeed(seed);
     const username = `SpamUser${seed}`;
     
     const events: Array<ReturnType<typeof createTikTokGiftEvent>> = [];
-    const timeInterval = timeWindow / giftCount;
+    const timeInterval = giftCount === 0 ? 0 : timeWindow / giftCount;
 
     for (let i = 0; i < giftCount; i++) {
         const eventTime = startTime + (i * timeInterval);
@@ -274,7 +289,7 @@ const createTikTokSpamGiftScenario = (giftCount = 5, giftType = 'Rose', timeWind
                 nickname: username
             },
             createTime: eventTime,
-            msgId: eventTime.toString()
+            msgId: `synthetic-tiktok-${nextSequence()}`
         });
         
         events.push(event);

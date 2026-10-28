@@ -1,5 +1,5 @@
 
-import { createTikTokChatEvent, createTikTokGiftEvent } from './tiktok-test-data';
+import { createTikTokChatEvent, createTikTokGiftEvent, validateFixtureCount, validateFixtureWindow } from './tiktok-test-data';
 import {
     createTwitchChatEvent,
     createTwitchRaidEvent,
@@ -274,6 +274,7 @@ const EMOJI_SETS = {
 };
 
 const createMultiPlatformEventScenario = (platforms: string[] = ['youtube', 'twitch', 'tiktok'], eventCount = 10) => {
+    validateFixtureCount(eventCount, 'eventCount');
     const events: ScenarioEvent[] = [];
     const timeline = [];
     const baseTime = timestampFromSeed(nextSequence());
@@ -306,7 +307,7 @@ const createMultiPlatformEventScenario = (platforms: string[] = ['youtube', 'twi
                     giftTypes[i % giftTypes.length] as string,
                     (i % 5) + 1,
                     {
-                        timestamp: eventTime,
+                        createTime: eventTime,
                         user: {
                             userId: `${1000 + i}`,
                             uniqueId: Object.values(INTERNATIONAL_USERNAMES)[i % Object.values(INTERNATIONAL_USERNAMES).length]
@@ -361,17 +362,19 @@ const createMultiPlatformEventScenario = (platforms: string[] = ['youtube', 'twi
             }, {}),
             timeSpan: (timeline[timeline.length - 1]?.timestamp ?? baseTime) - (timeline[0]?.timestamp ?? baseTime),
             startTime: baseTime,
-            endTime: baseTime + ((eventCount - 1) * 2000)
+            endTime: baseTime + (Math.max(0, eventCount - 1) * 2000)
         }
     };
 };
 
 const createGiftSpamScenario = (giftCount = 10, giftType = 'Rose', timeWindow = 2000) => {
+    validateFixtureCount(giftCount, 'giftCount');
+    validateFixtureWindow(timeWindow);
     const events: ReturnType<typeof createTikTokGiftEvent>[] = [];
     const seed = nextSequence();
     const baseUserId = BASE_USER_ID + seed;
     const startTime = timestampFromSeed(seed);
-    const timeInterval = timeWindow / giftCount;
+    const timeInterval = giftCount === 0 ? 0 : timeWindow / giftCount;
     const username = pickByIndex(Object.values(INTERNATIONAL_USERNAMES), seed);
     
     for (let i = 0; i < giftCount; i++) {
@@ -382,8 +385,7 @@ const createGiftSpamScenario = (giftCount = 10, giftType = 'Rose', timeWindow = 
                 uniqueId: username,
                 nickname: username
             },
-            timestamp: eventTime,
-            msgId: eventTime.toString()
+            createTime: eventTime
         });
         
         events.push(event);
@@ -401,12 +403,13 @@ const createGiftSpamScenario = (giftCount = 10, giftType = 'Rose', timeWindow = 
             startTime: startTime,
             endTime: startTime + timeWindow,
             detectionTrigger: giftCount >= 5 && timeWindow <= 5000, // Spam threshold
-            spamScore: Math.min(giftCount / timeWindow * 1000, 1.0)
+            spamScore: giftCount === 0 ? 0 : timeWindow === 0 ? 1 : Math.min(giftCount / timeWindow * 1000, 1.0)
         }
     };
 };
 
 const createRaidScenario = (maxViewers = 500, targetChannel = 'testchannel') => {
+    validateFixtureCount(maxViewers, 'maxViewers', Number.MAX_SAFE_INTEGER);
     const events: ReturnType<typeof createTwitchRaidEvent>[] = [];
     const viewerProgression = [
         Math.floor(maxViewers * 0.1),  // Initial announcement
@@ -521,6 +524,7 @@ const createErrorScenario = (errorType = 'network', platform: PlatformName = 'yo
 };
 
 const createInternationalUserScenario = (userCount = 10) => {
+    validateFixtureCount(userCount, 'userCount');
     const users: InternationalUser[] = [];
     const events: unknown[] = [];
     const usernames = Object.values(INTERNATIONAL_USERNAMES);
@@ -564,7 +568,7 @@ const createInternationalUserScenario = (userCount = 10) => {
                             uniqueId: username,
                             nickname: username
                         },
-                        timestamp: baseTime
+                        createTime: baseTime
                     }
                 ));
                 break;

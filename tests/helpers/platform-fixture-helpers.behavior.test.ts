@@ -4,12 +4,87 @@ import * as platformData from './platform-test-data';
 import * as tiktokData from './tiktok-test-data';
 import * as twitchData from './twitch-test-data';
 import * as youtubeData from './youtube-test-data';
+import { resetDeterministicTestState } from './deterministic-test-state';
 
 type TikTokConnectionFixture = { roomInfo?: { roomId: string } };
 type TwitchSubscriptionFixture = { event: { is_gift: boolean; gifter_user_name: string } };
 type TwitchRaidFixture = { event: { viewers: number } };
 
 describe('platform fixture helper behavior', () => {
+    it('rejects invalid counts before generating events', () => {
+        const generators = [
+            (count: number) => tiktokData.createTikTokSpamGiftScenario(count),
+            (count: number) => platformData.createGiftSpamScenario(count),
+            (count: number) => tiktokData.createTikTokGiftEventBatch(count),
+            (count: number) => platformData.createMultiPlatformEventScenario(['tiktok'], count),
+            (count: number) => platformData.createInternationalUserScenario(count)
+        ];
+        for (const generate of generators) {
+            // Finite regressions run first so the pre-fix proof never enters an infinite loop.
+            for (const count of [-1, 1.5, NaN, Infinity, -Infinity, 10001, Number.MAX_SAFE_INTEGER + 1]) {
+                expect(() => generate(count)).toThrow(RangeError);
+            }
+            expect(generate(0)).toBeDefined();
+        }
+    });
+
+    it('validates windows and preserves simultaneous gift identities and replay', () => {
+        for (const generate of [tiktokData.createTikTokSpamGiftScenario, platformData.createGiftSpamScenario]) {
+            for (const window of [-1, NaN, Infinity, -Infinity]) {
+                expect(() => generate(1, 'Rose', window)).toThrow(RangeError);
+            }
+            resetDeterministicTestState();
+            const first = generate(3, 'Rose', 0);
+            expect(new Set(first.events.map(event => event.msgId)).size).toBe(3);
+            expect(new Set(first.events.map(event => event.createTime)).size).toBe(1);
+            expect(first.metadata.averageInterval).toBe(0);
+            expect(first.events.every(event => event.giftCount === 1 && event.gift.repeatEnd)).toBe(true);
+            resetDeterministicTestState();
+            expect(generate(3, 'Rose', 0)).toEqual(first);
+            expect(generate(0, 'Rose', 0).metadata.averageInterval).toBe(0);
+        }
+    });
+
+    it('uses native TikTok timeline overrides and retains YouTube epoch zero', () => {
+        const multi = platformData.createMultiPlatformEventScenario(['tiktok'], 3);
+        expect(multi.events.map(event => event.createTime)).toEqual(multi.timeline.map(entry => entry.timestamp));
+        expect(multi.events.every(event => !('timestamp' in event))).toBe(true);
+        const spam = platformData.createGiftSpamScenario(3, 'Rose', 600);
+        expect(spam.events.map(event => event.createTime)).toEqual([0, 200, 400].map(offset => spam.metadata.startTime + offset));
+        expect(tiktokData.createTikTokGiftEvent('Rose', 1, { createTime: 0 }).createTime).toBe(0);
+        const epoch = youtubeData.createYouTubeChatEvent({ timestamp: 0 });
+        expect(epoch.timestamp).toBe(0);
+        const defaultEvent = youtubeData.createYouTubeChatEvent();
+        expect(defaultEvent.timestamp).toBe(Number(defaultEvent.item.timestamp_usec) / 1000);
+        for (const count of [-1, 1.5, NaN, Infinity]) {
+            expect(() => platformData.createRaidScenario(count)).toThrow(RangeError);
+        }
+        expect(platformData.createRaidScenario(0).metadata.progression).toEqual([0, 0, 0, 0, 0]);
+    });
+
+    it('accepts the generation budget and replays mixed generators through the existing reset owner', () => {
+        expect(tiktokData.createTikTokGiftEventBatch(10000)).toHaveLength(10000);
+        const generate = () => [
+            platformData.createMultiPlatformEventScenario(['youtube', 'twitch', 'tiktok'], 9),
+            platformData.createInternationalUserScenario(6),
+            platformData.createGiftSpamScenario(3, 'Rose', 0),
+            tiktokData.createTikTokSpamGiftScenario(3, 'Rose', 0),
+            platformData.createRaidScenario(0)
+        ];
+        resetDeterministicTestState();
+        const first = generate();
+        resetDeterministicTestState();
+        expect(generate()).toEqual(first);
+        const aggregate = platformData.createGiftSpamScenario(3, 'Rose', 0);
+        const primitive = tiktokData.createTikTokSpamGiftScenario(3, 'Rose', 0);
+        expect(new Set([...aggregate.events, ...primitive.events].map(event => event.msgId)).size).toBe(6);
+        expect(platformData.createGiftSpamScenario(0, 'Rose', 0).metadata.spamScore).toBe(0);
+        expect(platformData.createGiftSpamScenario(3, 'Rose', 0).metadata.spamScore).toBe(1);
+        const international = platformData.createInternationalUserScenario(3);
+        const tikTokEvent = international.events[2] as { createTime: number; timestamp?: number };
+        expect(typeof tikTokEvent.createTime).toBe('number');
+        expect(tikTokEvent.timestamp).toBeUndefined();
+    });
     it('builds TikTok gift events with configured gift metadata and deep override merging', () => {
         const event = tiktokData.createTikTokGiftEvent('TikTok Universe', 2, {
             user: { uniqueId: 'custom-user' },

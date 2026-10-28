@@ -94,7 +94,7 @@ const createYouTubeChatEvent = (
         mergedEvent.userId = baseUserId;
     }
     
-    mergedEvent.timestamp = actualOverrides.timestamp || nextTimestampMs();
+    mergedEvent.timestamp = actualOverrides.timestamp ?? baseTimestamp;
     
     return mergedEvent;
 };
