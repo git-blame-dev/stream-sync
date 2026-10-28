@@ -1,8 +1,10 @@
 import { logger } from '../core/logging';
 import { resolveTikTokTimestampMs, resolveTikTokTimestampISO, resolveYouTubeTimestampISO } from './platform-timestamp';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
-import { normalizeBadgeImages } from './message-parts';
+import { getValidMessageParts, normalizeBadgeImages } from './message-parts';
 import { CheermoteProcessor } from './cheermote-processor';
+import { getMissingFields } from './missing-fields';
+import { sanitizeLogText } from '../core/logger/safe-log-serializer';
 
 const normalizationErrorHandler = createPlatformErrorHandler(logger, 'message-normalization');
 
@@ -94,7 +96,7 @@ function buildTikTokMessageParts(rawComment: unknown, emotes: unknown[] = []): M
 
         if (boundedIndex > cursor) {
             const textSegment = commentCodepoints.slice(cursor, boundedIndex).join('');
-            if (textSegment.trim().length > 0) {
+            if (textSegment.trim().length > 0 || (textSegment.length > 0 && parts.at(-1)?.type === 'emote')) {
                 parts.push({
                     type: 'text',
                     text: textSegment
@@ -128,6 +130,40 @@ function buildTikTokMessageParts(rawComment: unknown, emotes: unknown[] = []): M
 }
 
 const TWITCH_DEFAULT_EMOTE_IMAGE_URL = 'https://static-cdn.jtvnw.net/emoticons/v2/emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7/animated/dark/3.0';
+
+function summarizeYouTubeChat(messageData: MessageRecord, author: MessageRecord, timestamp: string) {
+    return { chatItem: { item: {
+        timestamp,
+        hasMessage: messageData.message !== undefined && messageData.message !== null,
+        hasSuperchat: !!messageData.superchat,
+        hasSupersticker: !!messageData.supersticker,
+        author: {
+            badgeCount: Array.isArray(author.badges) ? author.badges.length : 0,
+            thumbnailCount: Array.isArray(author.thumbnails) ? author.thumbnails.length : 0
+        }
+    } } };
+}
+
+function finiteSummaryNumber(value: unknown): number | null {
+    return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function summarizeTikTokChat(data: MessageRecord, timestamp: string) {
+    const details = getRecord(data, 'giftDetails');
+    const comment = typeof data.comment === 'string' ? data.comment : '';
+    return { data: {
+        timestamp,
+        commentLength: comment.length,
+        hasCommentText: comment.trim().length > 0,
+        emoteCount: Array.isArray(data.emotes) ? data.emotes.length : 0,
+        repeatCount: finiteSummaryNumber(data.repeatCount),
+        giftDetails: details ? {
+            giftName: typeof details.giftName === 'string' ? sanitizeLogText(details.giftName).slice(0, 128) : null,
+            diamondCount: finiteSummaryNumber(details.diamondCount),
+            giftType: finiteSummaryNumber(details.giftType)
+        } : null
+    } };
+}
 
 function resolveTwitchEmoteScale(scaleOptions: unknown[] = []): string {
     if (!Array.isArray(scaleOptions) || scaleOptions.length === 0) {
@@ -399,16 +435,13 @@ function normalizeYouTubeMessage(chatItem: unknown, platformName = 'youtube') {
             throw new Error('Missing YouTube username');
         }
 
-        let message;
-        if (messageData.superchat) {
-            const superchat = getRecord(messageData, 'superchat');
-            message = extractYouTubeMessageText(superchat?.message);
-        } else {
-            message = extractYouTubeMessageText(messageData.message);
-        }
+        const selectedMessagePayload = messageData.superchat
+            ? getRecord(messageData, 'superchat')?.message
+            : messageData.message;
+        const message = extractYouTubeMessageText(selectedMessagePayload);
 
         const normalizedMessage = typeof message === 'string' ? message.trim() : '';
-        const messageParts = buildYouTubeMessageParts(messageData.message);
+        const messageParts = buildYouTubeMessageParts(selectedMessagePayload);
         const hasRenderableEmote = messageParts.some((part) => part.type === 'emote');
 
         if (!normalizedMessage && !hasRenderableEmote) {
@@ -450,7 +483,7 @@ function normalizeYouTubeMessage(chatItem: unknown, platformName = 'youtube') {
                 isMembership: !!messageData.isMembership,
                 authorPhoto: thumbnails[0]?.url || null
             },
-            rawData: { chatItem }
+            rawData: summarizeYouTubeChat(messageData, author, timestamp)
         };
         const badgeImages = extractYouTubeBadgeImages(author);
         if (badgeImages.length > 0) {
@@ -460,7 +493,7 @@ function normalizeYouTubeMessage(chatItem: unknown, platformName = 'youtube') {
             normalized.message.parts = messageParts;
         }
 
-        logger.debug(`Normalized YouTube message from ${normalized.username}`, 'message-normalization');
+        logger.debug(`Normalized YouTube message: textLength=${normalizedMessage.length}, hasEmotes=${hasRenderableEmote}`, 'message-normalization');
         return normalized;
     } catch (error) {
         const chatRecord = isRecord(chatItem) ? chatItem : {};
@@ -535,7 +568,7 @@ function normalizeTikTokMessage(data: unknown, platformName = 'tiktok') {
                 createTime: resolvedCreateTimeMs || null,
                 numericId: typeof userData.userId === 'string' ? userData.userId.trim() : null
             },
-            rawData: { data }
+            rawData: summarizeTikTokChat(data, timestamp)
         };
         const badgeImages = extractTikTokBadgeImages(data);
         if (badgeImages.length > 0) {
@@ -545,7 +578,7 @@ function normalizeTikTokMessage(data: unknown, platformName = 'tiktok') {
             normalized.message.parts = messageParts;
         }
 
-        logger.debug(`Normalized TikTok message from ${normalized.username}`, 'message-normalization');
+        logger.debug(`Normalized TikTok message: textLength=${message.length}, partCount=${messageParts.length}`, 'message-normalization');
         return normalized;
     } catch (error) {
         handleNormalizationError(`Failed to normalize TikTok message: ${error instanceof Error ? error.message : String(error)}`, error, 'tiktok', {
@@ -577,7 +610,12 @@ function extractTwitchMessageData(messageObj: unknown) {
     let cheermoteInfo: (Record<string, unknown> & { totalBits?: unknown }) | null = null;
     
     if (cheermoteFragments.length > 0) {
-        const primaryCheermote = cheermoteFragments[0];
+        const primaryPrefix = CheermoteProcessor.findPrimaryType(Object.fromEntries(
+            processedData.types.map(type => [type.prefix, { count: type.count, bits: type.totalBits }])
+        ));
+        const primaryCheermote = cheermoteFragments.find(fragment =>
+            CheermoteProcessor.extractCleanPrefix(fragment.cheermote.prefix) === primaryPrefix
+            && typeof fragment.text === 'string' && fragment.text.trim().length > 0);
         if (isRecord(primaryCheermote) && isRecord(primaryCheermote.cheermote) && primaryCheermote.text) {
             const parsedTier = Number(primaryCheermote.cheermote.tier);
             const tier = Number.isFinite(parsedTier) && parsedTier > 0
@@ -585,11 +623,9 @@ function extractTwitchMessageData(messageObj: unknown) {
                 : undefined;
             
             cheermoteInfo = {
-                prefix: primaryCheermote.cheermote.prefix,
+                prefix: primaryPrefix,
                 text: primaryCheermote.text,
-                cleanPrefix: ('cleanPrimaryTypeOriginalCase' in processedData && typeof processedData.cleanPrimaryTypeOriginalCase === 'string'
-                    ? processedData.cleanPrimaryTypeOriginalCase
-                    : primaryCheermote.cheermote.prefix),
+                cleanPrefix: primaryPrefix,
                 textContent: processedData.textContent,
                 totalBits: processedData.totalBits,
                 count: cheermoteFragments.length,
@@ -601,12 +637,14 @@ function extractTwitchMessageData(messageObj: unknown) {
     }
     
     const result = {
-        textContent: textParts.trim(),
+        textContent: textParts.trim() || (cheermoteInfo ? cheermoteFragments
+            .map(fragment => typeof fragment.text === 'string' ? fragment.text.trim() : '')
+            .filter(Boolean).join(' ') : ''),
         cheermoteInfo: cheermoteInfo
     };
     
     const inputText = typeof messageObj.text === 'string' ? messageObj.text : '';
-    logger.debug(`[extractTwitchMessageData] Input: "${inputText}" | Output: text="${result.textContent}", bits=${result.cheermoteInfo?.totalBits || 0}`, 'message-normalization');
+    logger.debug(`[extractTwitchMessageData] inputLength=${inputText.length}, textLength=${result.textContent.length}, hasCheermote=${!!cheermoteInfo}`, 'message-normalization');
     return result;
 }
 
@@ -702,7 +740,7 @@ function extractYouTubeMessageText(messageObj: unknown): string {
     } else {
         result = '';
     }
-    logger.debug(`[extractYouTubeMessageText] Input type: ${typeof messageObj} | Output: "${result}" (${result.length} chars)`, 'message-normalization');
+    logger.debug(`[extractYouTubeMessageText] inputType=${typeof messageObj}, outputLength=${result.length}, hasOutput=${result.length > 0}`, 'message-normalization');
     return result;
 }
 
@@ -717,11 +755,17 @@ function validateNormalizedMessage(normalizedMessage: unknown) {
     const messageRecord = normalizedMessage as MessageRecord;
 
     const requiredFields = ['platform', 'userId', 'username', 'timestamp'];
+    const missingFields = getMissingFields(messageRecord.metadata);
     for (const field of requiredFields) {
+        if (messageRecord[field] === undefined && (field === 'userId' || field === 'timestamp') && missingFields.includes(field)) {
+            continue;
+        }
         if (messageRecord[field] === undefined || messageRecord[field] === null) {
             issues.push(`Missing required field: ${field}`);
         } else if (typeof messageRecord[field] !== 'string') {
             issues.push(`${field} must be a string`);
+        } else if (messageRecord[field].trim().length === 0) {
+            issues.push(`${field} must not be empty`);
         }
     }
 
@@ -730,6 +774,13 @@ function validateNormalizedMessage(normalizedMessage: unknown) {
         if (!isRecord(messagePayload) || typeof messagePayload.text !== 'string') {
             issues.push('message must be a string or an object with string text');
         }
+    }
+    const hasText = typeof messagePayload === 'string'
+        ? messagePayload.trim().length > 0
+        : isRecord(messagePayload) && typeof messagePayload.text === 'string' && messagePayload.text.trim().length > 0;
+    const hasParts = isRecord(messagePayload) && getValidMessageParts({ message: messagePayload }).length > 0;
+    if (!hasText && !hasParts) {
+        issues.push('message must contain text or renderable parts');
     }
     
     const booleanFields = ['isMod', 'isPaypiggy', 'isBroadcaster'];

@@ -1,4 +1,5 @@
-import { describe, test, expect, beforeEach } from "bun:test";
+import { describe, test, expect, beforeEach, spyOn } from "bun:test";
+import { getUnifiedLogger } from "../../../src/core/logging";
 import testClock from "../../helpers/test-clock";
 import { createYouTubeRunsMessageChatItem } from "../../helpers/youtube-test-data";
 import {
@@ -13,6 +14,128 @@ import {
 } from "../../../src/utils/message-normalization.ts";
 beforeEach(() => {
   testClock.reset();
+});
+
+describe("Canonical normalization residuals", () => {
+  const timestamp = "2025-01-20T12:00:00.000Z";
+  const youtubeItem = (extra: Record<string, unknown> = {}) => ({ item: {
+    timestamp, author: { id: "synthetic-author", name: "Synthetic Viewer" }, ...extra,
+  } });
+  const tiktokData = (extra: Record<string, unknown> = {}) => ({
+    timestamp, user: { uniqueId: "synthetic-viewer", nickname: "Synthetic Viewer" }, ...extra,
+  });
+  const youtubeEmote = { emoji: { emoji_id: "synthetic/emote", is_custom: true,
+    shortcuts: [":synthetic:"], image: [{ url: "https://example.invalid/emote.webp", width: 48 }] } };
+  const tiktokEmote = (placeInComment: number, emoteId: string) => ({ placeInComment,
+    emote: { emoteId, image: { imageUrl: "https://example.invalid/emote.webp" } } });
+  const cheer = (prefix: string, bits: number, tier: number) => ({ type: "cheermote",
+    text: `${prefix}${bits}`, cheermote: { prefix, bits, tier } });
+  const validMessage = () => ({ platform: "youtube", userId: "synthetic-viewer", username: "Synthetic Viewer",
+    timestamp, message: { text: "hello" }, isMod: false, isPaypiggy: false, isBroadcaster: false, metadata: {} });
+
+  test("selects superchat text and emote parts from one payload, never the stale ordinary message", () => {
+    const result = normalizeYouTubeMessage(youtubeItem({ message: { runs: [{ text: "stale" }, youtubeEmote] },
+      superchat: { message: { runs: [{ text: "thanks " }, youtubeEmote] } } }));
+    expect(result.message.text).toBe("thanks :synthetic:");
+    expect(result.message.parts).toEqual([{ type: "text", text: "thanks " },
+      { type: "emote", platform: "youtube", emoteId: "synthetic/emote", imageUrl: "https://example.invalid/emote.webp" }]);
+    expect(normalizeYouTubeMessage(youtubeItem({ message: { runs: [youtubeEmote] },
+      superchat: { message: "plain selected" } })).message).toEqual({ text: "plain selected" });
+  });
+
+  test("admits selected superchat-only emotes without ordinary message fallback", () => {
+    const emoteWithoutShortcut = { emoji: { ...youtubeEmote.emoji, shortcuts: [] } };
+    expect(normalizeYouTubeMessage(youtubeItem({ superchat: { message: { runs: [emoteWithoutShortcut] } } })).message)
+      .toMatchObject({ text: "", parts: [{ type: "emote", emoteId: "synthetic/emote" }] });
+    expect(() => normalizeYouTubeMessage(youtubeItem({ message: { runs: [youtubeEmote] },
+      superchat: { message: " " } }))).toThrow("Missing YouTube message text");
+  });
+
+  test("preserves Unicode codepoint offsets and intermediate emote whitespace, not trailing padding", () => {
+    expect(normalizeTikTokMessage(tiktokData({ comment: "A👍B", emotes: [tiktokEmote(2, "synthetic-one")] })).message.parts)
+      .toEqual([{ type: "text", text: "A👍" }, expect.objectContaining({ type: "emote", placeInComment: 2 }),
+        { type: "text", text: "B" }]);
+    expect(normalizeTikTokMessage(tiktokData({ comment: "   ",
+      emotes: [tiktokEmote(0, "synthetic-one"), tiktokEmote(2, "synthetic-two")] })).message.parts)
+      .toEqual([expect.objectContaining({ emoteId: "synthetic-one" }), { type: "text", text: " " },
+        expect.objectContaining({ emoteId: "synthetic-two" })]);
+  });
+
+  test("uses aggregate primary cheer identity, text and tier while counting every valid fragment", () => {
+    expect(extractTwitchMessageData({ fragments: [cheer("Party", 50, 50), cheer("Cheer", 100, 100),
+      cheer("Cheer", 100, 100), { type: "text", text: " thanks " }] })).toMatchObject({ textContent: "thanks",
+      cheermoteInfo: { prefix: "Cheer", cleanPrefix: "Cheer", text: "Cheer100", tier: 100,
+        count: 3, totalBits: 250, textContent: " thanks ", isMixed: true } });
+    expect(extractTwitchMessageData({ fragments: [cheer("Party", 100, 100), cheer("Cheer", 100, 100)] }).cheermoteInfo)
+      .toMatchObject({ prefix: "Cheer", text: "Cheer100" });
+    expect(extractTwitchMessageData({ fragments: [cheer("Cheer", 1, 1), cheer("cheer", 100, 100)] }).cheermoteInfo)
+      .toMatchObject({ prefix: "cheer", cleanPrefix: "cheer", text: "cheer100", tier: 100 });
+    expect(extractTwitchMessageData({ fragments: [cheer("Cheer100", 100, 100)] }).cheermoteInfo)
+      .toMatchObject({ prefix: "Cheer", cleanPrefix: "Cheer", text: "Cheer100100" });
+  });
+
+  test("joins only accepted cheer fragment text for cheer-only extraction, leaving TTS text empty", () => {
+    expect(extractTwitchMessageData({ fragments: [cheer("Invalid", -1, 1), cheer("Cheer", 100, 100),
+      cheer("Party", 50, 50)] })).toMatchObject({ textContent: "Cheer100 Party50",
+      cheermoteInfo: { totalBits: 150, count: 2, textContent: "" } });
+  });
+
+  test("debug diagnostics retain lengths and flags, not chat bodies or identity strings", () => {
+    const calls: unknown[][] = [];
+    const debug = spyOn(getUnifiedLogger(), "debug").mockImplementation((...args) => { calls.push(args); });
+    try {
+      extractTwitchMessageData({ text: "synthetic-private-body", fragments: [{ type: "text", text: "synthetic-private-body" }] });
+      extractYouTubeMessageText({ text: "synthetic-private-body" });
+      normalizeYouTubeMessage(youtubeItem({ message: "synthetic-private-body" }));
+      normalizeTikTokMessage(tiktokData({ comment: "synthetic-private-body" }));
+      expect(calls.length).toBeGreaterThan(0);
+      const output = JSON.stringify(calls);
+      expect(output).not.toContain("synthetic-private-body");
+      expect(output).not.toContain("Synthetic Viewer");
+      expect(output).toContain("Length");
+    } finally { debug.mockRestore(); }
+  });
+
+  test("chat rawData projections omit provider bodies, identities and unbounded objects", () => {
+    const privateValue = "synthetic-private-payload";
+    const youtube = normalizeYouTubeMessage(youtubeItem({ message: privateValue,
+      id: privateValue, extra: { nested: privateValue.repeat(1000) } }));
+    const tiktok = normalizeTikTokMessage(tiktokData({ comment: privateValue, asset: { secret: privateValue },
+      giftDetails: { giftName: "Rose", diamondCount: 2, giftType: 1, extra: privateValue }, repeatCount: 3 }));
+    for (const result of [youtube, tiktok]) {
+      const raw = JSON.stringify(result.rawData);
+      expect(raw).not.toContain(privateValue);
+      expect(raw).not.toContain("Synthetic Viewer");
+      expect(raw).not.toContain("synthetic-viewer");
+      expect(raw.length).toBeLessThan(1024);
+    }
+    expect(tiktok.rawData).toMatchObject({ data: { giftDetails: { giftName: "Rose", diamondCount: 2 }, repeatCount: 3 } });
+    const malformed = normalizeTikTokMessage(tiktokData({ comment: "hello", repeatCount: { nested: privateValue },
+      giftDetails: { giftName: "X".repeat(10000), diamondCount: { nested: privateValue }, giftType: Infinity } }));
+    expect(JSON.stringify(malformed.rawData).length).toBeLessThan(1024);
+    expect(JSON.stringify(malformed.rawData)).not.toContain(privateValue);
+  });
+
+  test("requires nonblank strings and genuinely renderable content", () => {
+    for (const field of ["platform", "userId", "username", "timestamp"]) {
+      expect(validateNormalizedMessage({ ...validMessage(), [field]: "   " }).isValid).toBe(false);
+    }
+    for (const message of [{}, " ", { text: " " }, { text: "", parts: [{ type: "text", text: " " }] },
+      { text: "", parts: [{ type: "emote", emoteId: " ", imageUrl: "https://example.invalid/emote.webp" }] }]) {
+      expect(validateNormalizedMessage({ ...validMessage(), message }).isValid).toBe(false);
+    }
+    expect(validateNormalizedMessage({ ...validMessage(), message: { text: "", parts: [{ type: "emote",
+      emoteId: "synthetic-emote", imageUrl: "https://example.invalid/emote.webp" }] } }).isValid).toBe(true);
+    expect(validateNormalizedMessage({ ...validMessage(), message: { text: "", parts: [{ type: "text", text: "hello" }] } }).isValid)
+      .toBe(true);
+  });
+
+  test("allows only explicitly marked absent userId and timestamp for degraded chat", () => {
+    const { userId: _userId, timestamp: _timestamp, ...degraded } = validMessage();
+    expect(validateNormalizedMessage({ ...degraded, metadata: { missingFields: ["userId", "timestamp"] } }).isValid).toBe(true);
+    expect(validateNormalizedMessage(degraded).isValid).toBe(false);
+    expect(validateNormalizedMessage({ ...validMessage(), userId: " ", metadata: { missingFields: ["userId"] } }).isValid).toBe(false);
+  });
 });
 
 describe("Message Normalization", () => {

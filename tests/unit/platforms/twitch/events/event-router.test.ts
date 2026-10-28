@@ -265,7 +265,7 @@ describe("Twitch EventSub event router", () => {
     });
   });
 
-  test("emits one-bit cheers without falling back to cheermote token text", () => {
+  test("emits accepted one-bit cheer token text with no ordinary TTS text", () => {
     const emitted: EmittedEvent[] = [];
     const router = createTwitchEventSubEventRouter({
       config: { dataLoggingEnabled: false },
@@ -300,8 +300,9 @@ describe("Twitch EventSub event router", () => {
       giftType: "bits",
       amount: 1,
       bits: 1,
-      message: "",
+      message: "Cheer1",
       eventType: "cheer",
+      cheermoteInfo: { textContent: "" },
     });
   });
 
