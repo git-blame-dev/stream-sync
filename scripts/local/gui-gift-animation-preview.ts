@@ -160,6 +160,14 @@ async function runGuiGiftAnimationPreview(options: GiftAnimationPreviewOptions =
     let pipeline: ReturnType<NonNullable<GiftAnimationPreviewOptions['createPreviewPipelineImpl']>> | null = null;
     let service: ReturnType<NonNullable<GiftAnimationPreviewOptions['createGuiTransportServiceImpl']>> | null = null;
     const scheduledEmitTimers: GiftAnimationPreviewTimerHandle[] = [];
+    let closed = false;
+    const reportError = (error: unknown, context: string, message: string) => {
+        try {
+            errorHandler.handleEventProcessingError(error, context, null, message);
+        } catch {
+            // A reporting failure must not replace the run failure or interrupt resource retirement.
+        }
+    };
 
     try {
         const giftAnimationResolver = options.giftAnimationResolver || createTikTokGiftAnimationResolver({ logger });
@@ -199,6 +207,7 @@ async function runGuiGiftAnimationPreview(options: GiftAnimationPreviewOptions =
         const previewPipeline = pipeline;
 
         const emitGiftAnimation = () => {
+            if (closed) return;
             previewPipeline.eventBus.emit('display:gift-animation', {
                 playbackId: randomUUID(),
                 type: 'platform:gift',
@@ -210,24 +219,53 @@ async function runGuiGiftAnimationPreview(options: GiftAnimationPreviewOptions =
             });
         };
 
-        emitGiftAnimation();
-        scheduledEmitTimers.push(safeSetTimeoutImpl(() => emitGiftAnimation(), 750));
-        scheduledEmitTimers.push(safeSetTimeoutImpl(() => emitGiftAnimation(), 2250));
-
-        await new Promise((resolve) => {
-            safeSetTimeoutImpl(() => resolve(undefined), durationMs);
+        await new Promise<void>((resolve, reject) => {
+            let armed = false;
+            const pending: Array<() => void> = [];
+            const fail = (error: unknown) => {
+                closed = true;
+                reject(error);
+            };
+            const schedule = (callback: () => void, duration: number) => {
+                const invoke = () => {
+                    if (closed) return;
+                    try {
+                        callback();
+                    } catch (error) {
+                        fail(error);
+                    }
+                };
+                scheduledEmitTimers.push(safeSetTimeoutImpl(() => {
+                    if (armed) invoke();
+                    else pending.push(invoke);
+                }, duration));
+            };
+            schedule(emitGiftAnimation, 750);
+            schedule(emitGiftAnimation, 2250);
+            schedule(() => {
+                closed = true;
+                resolve();
+            }, durationMs);
+            armed = true;
+            try {
+                emitGiftAnimation();
+            } catch (error) {
+                fail(error);
+            }
+            pending.forEach((callback) => callback());
         });
 
         stdout.write('GUI gift animation preview finished\n');
     } catch (error) {
-        errorHandler.handleEventProcessingError(error, 'preview-run', null, 'GUI gift animation preview failed');
+        reportError(error, 'preview-run', 'GUI gift animation preview failed');
         throw error;
     } finally {
+        closed = true;
         for (const timerHandle of scheduledEmitTimers) {
             try {
                 clearTimeoutImpl(timerHandle);
             } catch (error) {
-                errorHandler.handleEventProcessingError(error, 'preview-cleanup', null, 'Failed clearing GUI gift animation preview timer');
+                reportError(error, 'preview-cleanup', 'Failed clearing GUI gift animation preview timer');
             }
         }
 
@@ -235,7 +273,7 @@ async function runGuiGiftAnimationPreview(options: GiftAnimationPreviewOptions =
             try {
                 await service.stop();
             } catch (error) {
-                errorHandler.handleEventProcessingError(error, 'preview-cleanup', null, 'Failed stopping GUI gift animation preview transport');
+                reportError(error, 'preview-cleanup', 'Failed stopping GUI gift animation preview transport');
             }
         }
 
@@ -243,7 +281,7 @@ async function runGuiGiftAnimationPreview(options: GiftAnimationPreviewOptions =
             try {
                 await pipeline.dispose();
             } catch (error) {
-                errorHandler.handleEventProcessingError(error, 'preview-cleanup', null, 'Failed disposing GUI gift animation preview pipeline');
+                reportError(error, 'preview-cleanup', 'Failed disposing GUI gift animation preview pipeline');
             }
         }
     }
