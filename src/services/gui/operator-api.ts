@@ -175,6 +175,7 @@ function writeSse(
     payload: unknown,
     id?: string | number
 ): boolean {
+    if (client.cleanedUp) return false;
     let serializedPayload: string | undefined;
     try {
         serializedPayload = JSON.stringify(payload);
@@ -223,12 +224,24 @@ function createOperatorApi(options: OperatorApiOptions) {
         : null;
     const stateClients = new Set<SseClient>();
     const logClients = new Set<SseClient>();
+    let epoch = 0;
+    let stopping = false;
+    let retired = false;
+    const retireResource = (cleanup: () => void) => {
+        try { cleanup(); } catch (error) {
+            try {
+                errorHandler?.handleEventProcessingError(error, 'retirement', null, 'Failed retiring operator resource');
+            } catch { /* Reporting must not interrupt retirement. */ }
+        }
+    };
 
     const removeClient = (clients: Set<SseClient>, client: SseClient) => {
         if (client.cleanedUp) return;
         client.cleanedUp = true;
-        client.unsubscribe?.();
         clients.delete(client);
+        const unsubscribe = client.unsubscribe;
+        delete client.unsubscribe;
+        if (unsubscribe) retireResource(unsubscribe);
     };
     const attachCleanup = (req: IncomingMessage, clients: Set<SseClient>, client: SseClient): boolean => {
         const cleanup = () => removeClient(clients, client);
@@ -515,6 +528,10 @@ function createOperatorApi(options: OperatorApiOptions) {
     };
 
     const handle = async (req: IncomingMessage, res: ServerResponse<IncomingMessage>, route: string): Promise<void> => {
+        if (retired) {
+            sendJson(res, 503, { error: 'Operator API is stopped' });
+            return;
+        }
         if (route === '/api/v1/operator/state') {
             handleState(req, res);
         } else if (route === '/api/v1/operator/events') {
@@ -538,24 +555,41 @@ function createOperatorApi(options: OperatorApiOptions) {
     };
 
     const start = () => {
-        unsubscribeControls ??= controls.subscribe(broadcastState);
-        unsubscribeAppearance ??= appearance.subscribe(broadcastAppearance);
-        if (fundingGoal) unsubscribeFundingGoal ??= fundingGoal.subscribe(broadcastFundingGoal);
+        if (stopping) return;
+        retired = false;
+        const generation = epoch;
+        unsubscribeControls ??= controls.subscribe((snapshot) => { if (generation === epoch) broadcastState(snapshot); });
+        unsubscribeAppearance ??= appearance.subscribe((snapshot) => { if (generation === epoch) broadcastAppearance(snapshot); });
+        if (fundingGoal) unsubscribeFundingGoal ??= fundingGoal.subscribe((snapshot) => {
+            if (generation === epoch) broadcastFundingGoal(snapshot);
+        });
     };
 
     const stop = () => {
-        unsubscribeControls?.();
+        if (stopping) return;
+        stopping = true;
+        retired = true;
+        epoch += 1;
+        const subscriptions = [unsubscribeControls, unsubscribeAppearance, unsubscribeFundingGoal];
         unsubscribeControls = null;
-        unsubscribeAppearance?.();
         unsubscribeAppearance = null;
-        unsubscribeFundingGoal?.();
         unsubscribeFundingGoal = null;
-        for (const clients of [stateClients, logClients]) {
-            for (const client of [...clients]) {
-                removeClient(clients, client);
-                client.response.end();
-            }
+        const clients = [...stateClients, ...logClients];
+        stateClients.clear();
+        logClients.clear();
+        const clientSubscriptions = clients.map((client) => {
+            client.cleanedUp = true;
+            const unsubscribe = client.unsubscribe;
+            delete client.unsubscribe;
+            return unsubscribe;
+        });
+        for (const unsubscribe of [...subscriptions, ...clientSubscriptions]) {
+            if (unsubscribe) retireResource(unsubscribe);
         }
+        for (const client of clients) {
+            retireResource(() => { client.response.end(); });
+        }
+        stopping = false;
     };
 
     return { handle, start, stop };

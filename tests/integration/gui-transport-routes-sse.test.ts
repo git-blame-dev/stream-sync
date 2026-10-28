@@ -11,6 +11,9 @@ import { TestEventBus } from "../helpers/gui-transport-test-utils";
 import { createConfigFixture } from "../helpers/config-fixture";
 import { createOperatorAppearanceService } from "../../src/services/operator/operator-appearance-service";
 import { createFundingGoalService } from "../../src/services/funding-goal-service";
+import { createOperatorControlService, OPERATOR_CONTROL_KEYS } from "../../src/services/operator/operator-control-service";
+import { createOperatorLogSource } from "../../src/services/operator/operator-log-source";
+import { DISPLAY_EVENT_TYPES } from "../../src/interfaces/DisplayEvents";
 
 function buildConfig(guiOverrides = {}) {
   return createConfigFixture({
@@ -115,6 +118,191 @@ function requireRuntimeErrorListener(
 }
 
 describe("GUI transport routes and SSE integration", () => {
+  it("retires every display listener even when unsubscribe and diagnostics throw", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "gui-retirement-test-"));
+    const appearance = await createOperatorAppearanceService({
+      defaults: { compactRows: true, rowBackgroundsEnabled: false, maxDisplayableBadges: 3 },
+      filePath: path.join(root, "appearance.json"),
+    });
+    const controls = await createOperatorControlService({
+      defaults: Object.fromEntries(OPERATOR_CONTROL_KEYS.map((key) => [key, true])) as Parameters<typeof createOperatorControlService>[0]["defaults"],
+      filePath: path.join(root, "controls.json"),
+    });
+    const funding = await createFundingGoalService({
+      config: { enabled: true, id: "test-goal", label: "Synthetic goal", targetUsd: 100 },
+      monetizationValuesConfig: { tiktokGiftUnitUsd: 0.005, twitchBitUsd: 0.01, youtubeJewelUsd: 0.005,
+        tiktokMembershipUsd: 2, twitchMembershipUsd: 3, youtubeMembershipUsd: 4 },
+      filePath: path.join(root, "funding.json"),
+    });
+    const retired: string[] = [];
+    for (const [name, owner] of [["appearance", appearance], ["controls", controls], ["funding", funding]] as const) {
+      const original = owner.subscribe.bind(owner);
+      // Wrap real listener removal, not the service under test.
+      owner.subscribe = ((callback: never) => {
+        const detach = original(callback);
+        return () => { detach(); retired.push(name); throw new Error("synthetic owner retirement failure"); };
+      }) as typeof owner.subscribe;
+    }
+    const bus = new TestEventBus();
+    const subscribe = bus.subscribe.bind(bus);
+    bus.subscribe = (event, callback) => {
+      const detach = subscribe(event, callback);
+      return () => {
+        detach();
+        retired.push(event);
+        throw new Error("synthetic retirement failure");
+      };
+    };
+    let closed = 0;
+    let listener: ((req: any, res: any) => void) | undefined;
+    const logs = createOperatorLogSource();
+    const connect = logs.connect.bind(logs);
+    let logDetached = 0;
+    logs.connect = (...args) => {
+      const connection = connect(...args);
+      return { ...connection, unsubscribe: () => {
+        connection.unsubscribe(); logDetached += 1; throw new Error("synthetic log unsubscribe failure");
+      } };
+    };
+    const service = createGuiTransportService({
+      config: buildConfig({ enableOverlay: true, enableChatFeed: true, enableOperator: true, port: 0 }),
+      eventBus: bus,
+      operatorAppearance: appearance, operatorControls: controls, fundingGoal: funding,
+      operatorLogs: logs,
+      logger: { warn: () => { throw new Error("diagnostic failure"); }, error: () => { throw new Error("diagnostic failure"); } },
+      createServer: (handler) => { listener = handler; return ({
+        once: () => undefined, on: () => undefined, removeListener: () => undefined,
+        listen: (_port, _host, callback) => callback?.(),
+        address: () => ({ address: "127.0.0.1", family: "IPv4", port: 45682 }),
+        close: (callback) => { closed += 1; callback?.(); },
+      }); },
+    });
+    await service.start();
+    const responses = ["/gui/events", "/api/v1/chat/events", "/api/v1/operator/events", "/api/v1/logs/events"].map((url) => {
+      let ends = 0;
+      const response = Object.assign(new EventEmitter(), {
+        destroyed: false, writableEnded: false, writableLength: 0,
+        writeHead: () => undefined, write: () => true,
+        end: () => { ends += 1; throw new Error("synthetic end failure"); },
+      });
+      listener!(Object.assign(new EventEmitter(), { method: "GET", url, headers: {} }), response);
+      return () => ends;
+    });
+    await service.stop();
+    await service.stop();
+    expect(retired).toHaveLength(8);
+    expect(bus.eventNames()).toEqual([]);
+    expect(closed).toBe(1);
+    expect(service.isActive()).toBe(false);
+    expect(responses.map((ends) => ends())).toEqual([1, 1, 1, 1]);
+    expect(logDetached).toBe(1);
+    funding.dispose();
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("preserves startup failure through throwing rollback and diagnostics", async () => {
+    const original = new Error("synthetic listen failure");
+    const bus = new TestEventBus();
+    const subscribe = bus.subscribe.bind(bus);
+    let retired = 0;
+    bus.subscribe = (event, callback) => {
+      const detach = subscribe(event, callback);
+      return () => { detach(); retired += 1; throw new Error("synthetic detach failure"); };
+    };
+    let closes = 0;
+    const service = createGuiTransportService({
+      config: buildConfig({ enableOverlay: true, port: 0 }), eventBus: bus,
+      logger: { warn: () => { throw new Error("diagnostic failure"); }, error: () => { throw new Error("diagnostic failure"); } },
+      createServer: () => ({
+        once: () => undefined, on: () => undefined, removeListener: () => { throw new Error("synthetic remove failure"); },
+        listen: () => { throw original; }, address: () => null,
+        close: () => { closes += 1; throw new Error("synthetic close failure"); },
+      }),
+    });
+    expect(await service.start().catch((error: unknown) => error)).toBe(original);
+    await service.stop();
+    expect(retired).toBe(3);
+    expect(closes).toBe(1);
+    expect(bus.eventNames()).toEqual([]);
+    expect(service.isActive()).toBe(false);
+  });
+
+  it("coalesces reentrant stop and waits for a pending server listen before completing", async () => {
+    let finishListen: (() => void) | undefined;
+    let closes = 0;
+    let reentrantStop: Promise<void> | undefined;
+    const bus = new TestEventBus();
+    const subscribe = bus.subscribe.bind(bus);
+    bus.subscribe = (event, callback) => {
+      const detach = subscribe(event, callback);
+      return () => { const result = detach(); reentrantStop = service.stop(); return result; };
+    };
+    const service = createGuiTransportService({
+      config: buildConfig({ enableOverlay: true, port: 0 }), eventBus: bus, logger: null,
+      createServer: () => ({
+        once: () => undefined, on: () => undefined, removeListener: () => undefined,
+        listen: (_port, _host, callback) => { finishListen = callback; }, address: () => null,
+        close: (callback) => { closes += 1; callback?.(); },
+      }),
+    });
+    const starting = service.start();
+    let stopped = false;
+    const stopping = service.stop();
+    expect(service.stop()).toBe(stopping);
+    void stopping.then(() => { stopped = true; });
+    await Promise.resolve();
+    expect(stopped).toBe(false);
+    expect(closes).toBe(0);
+    finishListen!();
+    await starting;
+    await stopping;
+    expect(reentrantStop).toBe(stopping);
+    expect(closes).toBe(1);
+    expect(service.isActive()).toBe(false);
+    expect(bus.eventNames()).toEqual([]);
+  });
+
+  it("rejects a retained lifecycle callback after restart while delivering the current generation", async () => {
+    const bus = new TestEventBus();
+    const callbacks: Array<(...args: unknown[]) => void> = [];
+    const subscribe = bus.subscribe.bind(bus);
+    bus.subscribe = (event, callback) => {
+      if (event === DISPLAY_EVENT_TYPES.NOTIFICATION_LIFECYCLE) callbacks.push(callback);
+      return subscribe(event, callback);
+    };
+    let listener: ((req: any, res: any) => void) | undefined;
+    const service = createGuiTransportService({
+      config: buildConfig({ enableOverlay: true, port: 0 }), eventBus: bus, logger: null,
+      createServer: (handler) => { listener = handler; return {
+        once: () => undefined, on: () => undefined, removeListener: () => undefined,
+        listen: (_port, _host, callback) => callback?.(), address: () => null,
+        close: (callback) => callback?.(),
+      }; },
+    });
+    await service.start();
+    await service.stop();
+    await service.start();
+    const packets: string[] = [];
+    let delivered: (() => void) | undefined;
+    const currentDelivered = new Promise<void>((resolve) => { delivered = resolve; });
+    const response = Object.assign(new EventEmitter(), {
+      destroyed: false, writableEnded: false, writableLength: 0,
+      writeHead: () => undefined, end: () => undefined,
+      write: (packet: string) => {
+        packets.push(packet);
+        if (packet.includes("test-current-event")) delivered!();
+        return true;
+      },
+    });
+    listener!(Object.assign(new EventEmitter(), { method: "GET", url: "/gui/events", headers: {} }), response);
+    callbacks[0]!({ eventId: "test-retired-event", phase: "started", timestamp: 1 });
+    callbacks[1]!({ eventId: "test-current-event", phase: "started", timestamp: 2 });
+    await currentDelivered;
+    expect(packets.some((packet) => packet.includes("test-retired-event"))).toBe(false);
+    expect(packets.some((packet) => packet.includes("test-current-event"))).toBe(true);
+    await service.stop();
+  });
+
   it("sends the current funding goal on connect and broadcasts later revisions", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "gui-funding-goal-"));
     const fundingGoal = await createFundingGoalService({
@@ -451,6 +639,57 @@ describe("GUI transport routes and SSE integration", () => {
     expect(replacement.statusCode).toBe(200);
 
     await service.stop();
+  });
+
+  it("does not resurrect runtime-error recovery after an explicit stop", async () => {
+    const bus = new TestEventBus();
+    const servers: EventEmitter[] = [];
+    let releaseClose: (() => void) | undefined;
+    let closeStarted: (() => void) | undefined;
+    const closing = new Promise<void>((resolve) => { closeStarted = resolve; });
+    let requestListener: ((req: any, res: any) => void) | undefined;
+    const service = createGuiTransportService({
+      config: buildConfig({ enableOverlay: true, port: 0 }), eventBus: bus, logger: null,
+      createServer: (handler) => {
+        requestListener = handler;
+        const index = servers.length;
+        const server = Object.assign(new EventEmitter(), {
+          listen: (_port: number, _host: string, callback?: () => void) => callback?.(),
+          address: () => ({ address: "127.0.0.1", family: "IPv4", port: 45683 }),
+          close: (callback?: (error?: Error) => void) => {
+            if (index === 0) {
+              releaseClose = () => callback?.();
+              closeStarted!();
+            } else callback?.();
+          },
+        });
+        servers.push(server);
+        return server;
+      },
+    });
+    await service.start();
+    servers[0]!.emit("error", new Error("synthetic runtime failure"));
+    const recovering = service.start();
+    await closing;
+    const stopping = service.stop();
+    releaseClose!();
+    await Promise.all([recovering, stopping]);
+    expect(servers).toHaveLength(1);
+    expect(bus.eventNames()).toEqual([]);
+    expect(service.isActive()).toBe(false);
+    expect(service.getAddress()).toBeNull();
+    let status = 0;
+    requestListener!({ method: "GET", url: "/gui/events", headers: {} }, {
+      writeHead: (code: number) => { status = code; }, end: () => undefined,
+    });
+    expect(status).toBe(503);
+
+    await Promise.all([service.start(), service.start()]);
+    expect(servers).toHaveLength(2);
+    expect(service.isActive()).toBe(true);
+    expect(bus.eventNames()).toHaveLength(3);
+    await service.stop();
+    expect(bus.eventNames()).toEqual([]);
   });
 
   it("marks transport inactive when server emits runtime error after start", async () => {

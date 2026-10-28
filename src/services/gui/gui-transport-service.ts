@@ -164,6 +164,9 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
     let server: GuiHttpServer | null = null;
     let active = false;
     let startPromise: Promise<void> | null = null;
+    let stopPromise: Promise<void> | null = null;
+    let stopGeneration = 0;
+    let acceptingDispatch = false;
     let serverRuntimeErrorHandler: ((error: Error) => void) | null = null;
     let unsubscribeDisplayRows: (() => void) | null = null;
     let unsubscribeDisplayEffects: (() => void) | null = null;
@@ -327,6 +330,7 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
     };
 
     const enqueueDispatch = (operation: () => void | Promise<void>) => {
+        if (!acceptingDispatch) return;
         const enqueueEpoch = dispatchEpoch;
         dispatchChain = dispatchChain
             .then(() => {
@@ -405,7 +409,9 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
 
     const subscribeToDisplayLifecycle = () => {
         if (!eventBus || typeof eventBus.subscribe !== 'function') return;
+        const epoch = dispatchEpoch;
         const unsubscribe = eventBus.subscribe(DISPLAY_EVENT_TYPES.NOTIFICATION_LIFECYCLE, (payload: unknown) => {
+            if (epoch !== dispatchEpoch) return;
             enqueueDispatch(() => {
                 const record = toTransportRecord(payload);
                 const eventId = typeof record.eventId === 'string' ? record.eventId : '';
@@ -433,30 +439,24 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
 
     const subscribeToAppearance = () => {
         if (!options.operatorAppearance) return;
+        const epoch = dispatchEpoch;
         unsubscribeAppearance = options.operatorAppearance.subscribe((snapshot) => {
+            if (epoch !== dispatchEpoch) return;
             enqueueDispatch(() => sendSse(createAppearanceEnvelope(snapshot)));
         });
     };
 
     const subscribeToFundingGoal = () => {
         if (!options.fundingGoal) return;
+        const epoch = dispatchEpoch;
         unsubscribeFundingGoal = options.fundingGoal.subscribe((snapshot) => {
+            if (epoch !== dispatchEpoch) return;
             enqueueDispatch(() => sendSse(createFundingGoalEnvelope(snapshot)));
         });
     };
 
-    const unsubscribeFromAppearance = () => {
-        unsubscribeAppearance?.();
-        unsubscribeAppearance = null;
-    };
-
-    const unsubscribeFromFundingGoal = () => {
-        unsubscribeFundingGoal?.();
-        unsubscribeFundingGoal = null;
-    };
-
     const publishChatMessage = (platform: string, payload: Record<string, unknown>) => {
-        if (!chatFeedEnabled) {
+        if (!chatFeedEnabled || !acceptingDispatch) {
             return;
         }
 
@@ -504,7 +504,9 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
             return;
         }
 
+        const epoch = dispatchEpoch;
         const unsubscribe = eventBus.subscribe('display:row', async (row: unknown) => {
+            if (epoch !== dispatchEpoch) return;
             enqueueDispatch(async () => {
                 try {
                     const mapped = await mapper.mapDisplayRow(row as DisplayRowMapperInput);
@@ -531,7 +533,9 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
             return;
         }
 
+        const epoch = dispatchEpoch;
         const unsubscribe = eventBus.subscribe('display:gift-animation', (payload: unknown) => {
+            if (epoch !== dispatchEpoch) return;
             enqueueDispatch(() => {
                 const payloadRecord = toTransportRecord(payload);
                 const giftsVisible = guiConfig.showGifts !== false;
@@ -572,22 +576,22 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
         unsubscribeDisplayEffects = typeof unsubscribe === 'function' ? unsubscribe : null;
     };
 
-    const unsubscribeFromDisplayRows = () => {
-        if (typeof unsubscribeDisplayRows === 'function') {
-            unsubscribeDisplayRows();
-        }
-        unsubscribeDisplayRows = null;
+    const reportRetirementError = (error: unknown) => {
+        try {
+            errorHandler.logOperationalError('Failed retiring GUI transport resource', 'gui-transport', {
+                error: error instanceof Error ? error.message : String(error)
+            });
+        } catch { /* Diagnostics must not interrupt retirement. */ }
     };
-
-    const unsubscribeFromDisplayEffects = () => {
-        if (typeof unsubscribeDisplayEffects === 'function') {
-            unsubscribeDisplayEffects();
-        }
-        unsubscribeDisplayEffects = null;
+    const retireResource = (cleanup: () => void) => {
+        try { cleanup(); } catch (error) { reportRetirementError(error); }
     };
-    const unsubscribeFromDisplayLifecycle = () => {
-        unsubscribeDisplayLifecycle?.();
-        unsubscribeDisplayLifecycle = null;
+    const detachSubscriptions = () => {
+        const subscriptions = [unsubscribeDisplayRows, unsubscribeDisplayEffects, unsubscribeDisplayLifecycle,
+            unsubscribeAppearance, unsubscribeFundingGoal];
+        unsubscribeDisplayRows = unsubscribeDisplayEffects = unsubscribeDisplayLifecycle = null;
+        unsubscribeAppearance = unsubscribeFundingGoal = null;
+        return subscriptions;
     };
 
     const isRouteAvailable = (route: string): boolean => {
@@ -612,6 +616,11 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
     };
 
     const requestHandler = (req: IncomingMessage, res: ServerResponse<IncomingMessage>) => {
+        if (!acceptingDispatch) {
+            res.writeHead(503);
+            res.end();
+            return;
+        }
         const rawUrl = typeof req.url === 'string' ? req.url : '/';
         const sendBody = !isHeadRequest(req);
         let url = rawUrl;
@@ -1137,13 +1146,19 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
             return await startPromise;
         }
 
+        const generation = stopGeneration;
         startPromise = (async () => {
+            if (stopPromise) {
+                await stopPromise;
+                if (generation !== stopGeneration) return;
+            }
             if (active && server) {
                 return;
             }
 
             if (!active && server) {
-                await stop();
+                await beginRetirement();
+                if (generation !== stopGeneration) return;
             }
 
             if (!demoOnly && !isGuiActive(config) && !chatFeedEnabled) {
@@ -1169,24 +1184,27 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
                 throw new Error('GUI transport requires integer port between 0 and 65535');
             }
 
-            operatorApi?.start();
-            subscribeToAppearance();
-            subscribeToFundingGoal();
-            subscribeToDisplayRows();
-            subscribeToDisplayEffects();
-            subscribeToDisplayLifecycle();
-
-            serverRuntimeErrorHandler = (error: Error) => {
-                active = false;
-                errorHandler.handleEventProcessingError(
-                    error,
-                    'server-runtime',
-                    null,
-                    'GUI transport server runtime error'
-                );
-            };
-
+            if (generation !== stopGeneration) return;
+            acceptingDispatch = true;
+            const startupEpoch = dispatchEpoch;
             try {
+                operatorApi?.start();
+                subscribeToAppearance();
+                subscribeToFundingGoal();
+                subscribeToDisplayRows();
+                subscribeToDisplayEffects();
+                subscribeToDisplayLifecycle();
+
+                serverRuntimeErrorHandler = (error: Error) => {
+                    active = false;
+                    errorHandler.handleEventProcessingError(
+                        error,
+                        'server-runtime',
+                        null,
+                        'GUI transport server runtime error'
+                    );
+                };
+
                 await new Promise<void>((resolve, reject) => {
                     server = createServer(requestHandler);
                     server.once('error', reject);
@@ -1197,34 +1215,16 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
                         if (server && typeof server.on === 'function' && serverRuntimeErrorHandler) {
                             server.on('error', serverRuntimeErrorHandler);
                         }
-                        active = true;
+                        active = acceptingDispatch && startupEpoch === dispatchEpoch;
                         const address = server && typeof server.address === 'function' ? server.address() : null;
                         const boundPort = address && typeof address === 'object' ? address.port : port;
-                        logInfo(`GUI transport started on ${host}:${boundPort}`);
+                        try { logInfo(`GUI transport started on ${host}:${boundPort}`); }
+                        catch (error) { reject(error); return; }
                         resolve();
                     });
                 });
             } catch (error) {
-                unsubscribeFromDisplayRows();
-                unsubscribeFromDisplayEffects();
-                unsubscribeFromDisplayLifecycle();
-                unsubscribeFromAppearance();
-                unsubscribeFromFundingGoal();
-                operatorApi?.stop();
-                if (server) {
-                    if (serverRuntimeErrorHandler && typeof server.removeListener === 'function') {
-                        server.removeListener('error', serverRuntimeErrorHandler);
-                    }
-                    try {
-                        server.close();
-                    } catch (closeError) {
-                        errorHandler.logOperationalError('Failed closing GUI server after start error', 'gui-transport', {
-                            error: closeError instanceof Error ? closeError.message : String(closeError)
-                        });
-                    }
-                    server = null;
-                }
-                active = false;
+                await retire();
                 throw error;
             }
         })().finally(() => {
@@ -1234,55 +1234,59 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
         return await startPromise;
     };
 
-    const stop = async () => {
+    const retire = async (pendingStart?: Promise<void> | null) => {
+        acceptingDispatch = false;
+        active = false;
         dispatchEpoch += 1;
-        unsubscribeFromDisplayRows();
-        unsubscribeFromDisplayEffects();
-        unsubscribeFromDisplayLifecycle();
-        unsubscribeFromAppearance();
-        unsubscribeFromFundingGoal();
-        await dispatchChain;
+        const subscriptions = detachSubscriptions();
+        const closingServer = server;
+        const runtimeErrorHandler = serverRuntimeErrorHandler;
+        server = null;
+        serverRuntimeErrorHandler = null;
+        const closingClients = [...clients, ...chatClients];
+        clients.clear();
+        chatClients.clear();
+        retireResource(() => operatorApi?.stop());
+        for (const unsubscribe of subscriptions) {
+            if (unsubscribe) retireResource(unsubscribe);
+        }
+        for (const client of closingClients) retireResource(() => { client.end(); });
+        await dispatchChain.catch(reportRetirementError);
         runtimeAssetRegistry.clear();
         giftPlaybackRegistry.clear();
-        operatorApi?.stop();
-        for (const client of clients) {
-            try {
-                client.end();
-            } catch (error) {
-                errorHandler.logOperationalError('Failed closing GUI SSE client', 'gui-transport', {
-                    error: error instanceof Error ? error.message : String(error)
-                });
-            }
+        await pendingStart?.catch(() => undefined);
+        if (!closingServer) return;
+        if (runtimeErrorHandler && typeof closingServer.removeListener === 'function') {
+            retireResource(() => { closingServer.removeListener?.('error', runtimeErrorHandler); });
         }
-        clients.clear();
-        for (const client of chatClients) {
-            client.end();
-        }
-        chatClients.clear();
-
-        if (!server) {
-            active = false;
-            return;
-        }
-
-        const closingServer = server;
-        server = null;
-        active = false;
-        if (serverRuntimeErrorHandler && typeof closingServer.removeListener === 'function') {
-            closingServer.removeListener('error', serverRuntimeErrorHandler);
-        }
-        serverRuntimeErrorHandler = null;
-
         await new Promise<void>((resolve) => {
-            closingServer.close((error) => {
-                if (error) {
-                    errorHandler.logOperationalError('Failed closing GUI transport server', 'gui-transport', {
-                        error: error instanceof Error ? error.message : String(error)
-                    });
-                }
+            try {
+                closingServer.close((error) => {
+                    if (error) reportRetirementError(error);
+                    resolve();
+                });
+            } catch (error) {
+                reportRetirementError(error);
                 resolve();
-            });
+            }
         });
+    };
+
+    const beginRetirement = (pendingStart?: Promise<void> | null): Promise<void> => {
+        if (stopPromise) return stopPromise;
+        acceptingDispatch = false;
+        active = false;
+        dispatchEpoch += 1;
+        stopPromise = Promise.resolve().then(() => retire(pendingStart)).finally(() => {
+            stopPromise = null;
+        });
+        return stopPromise;
+    };
+
+    const stop = (): Promise<void> => {
+        // Explicit shutdown cancels pending startup even when retirement is already coalesced.
+        stopGeneration += 1;
+        return beginRetirement(startPromise);
     };
 
     const getAddress = (): ReturnType<Server['address']> | null => {
