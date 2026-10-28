@@ -1,17 +1,14 @@
-import { describe, test, expect } from "bun:test";
+import { describe, test, expect, afterEach } from "bun:test";
 import { createMockFn } from "../../../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../../../helpers/mock-factories";
 
 import { createYouTubeConnectionFactory } from "../../../../../src/platforms/youtube/connections/youtube-connection-factory.ts";
+import { InnertubeService } from "../../../../../src/services/innertube-service";
 
 type FactoryOptions = NonNullable<
   Parameters<typeof createYouTubeConnectionFactory>[0]
 >;
 type FactoryPlatform = NonNullable<FactoryOptions["platform"]>;
-type FactoryInnertubeInstanceManager = NonNullable<
-  FactoryOptions["innertubeInstanceManager"]
->;
-type FactoryWithTimeout = NonNullable<FactoryOptions["withTimeout"]>;
 type UnknownRecord = Record<string, unknown>;
 type ChatEventHandler = (payload?: unknown) => void;
 type HandlerMap = Record<string, ChatEventHandler>;
@@ -37,13 +34,12 @@ type ValidationResult = {
 type LiveChatBehavior = {
   value?: unknown;
   error?: Error;
+  pending?: Promise<unknown>;
 };
 
-type WithTimeoutImplementation = (
-  promise: Promise<unknown>,
-  timeoutMs: number,
-  operationName: string,
-) => Promise<unknown>;
+const services: Array<{ dispose(): Promise<void> }> = [];
+afterEach(async () => { await Promise.all(services.splice(0).map(service => service.dispose())); });
+const attemptContext = () => ({ signal: new AbortController().signal, adopt: () => {} });
 
 const getHandler = (handlers: HandlerMap, event: string): ChatEventHandler => {
   const handler = handlers[event];
@@ -77,12 +73,12 @@ const createFactory = ({
   validationResult,
   liveChatBehavior,
   platformOverrides,
-  withTimeoutImplementation,
+  timeoutMs = 1000,
 }: {
   validationResult?: ValidationResult;
   liveChatBehavior?: LiveChatBehavior;
   platformOverrides?: Record<string, unknown>;
-  withTimeoutImplementation?: WithTimeoutImplementation;
+  timeoutMs?: number;
 } = {}) => {
   const platform: FactoryPlatform = {
     logger: noOpLogger,
@@ -104,7 +100,9 @@ const createFactory = ({
   const liveChat = liveChatBehavior?.value || null;
   const getLiveChat = liveChatBehavior?.error
     ? createMockFn().mockRejectedValue(liveChatBehavior.error)
-    : createMockFn().mockResolvedValue(liveChat);
+    : liveChatBehavior?.pending
+      ? createMockFn(() => liveChatBehavior.pending)
+      : createMockFn().mockResolvedValue(liveChat);
 
   const info = {
     getLiveChat,
@@ -114,50 +112,19 @@ const createFactory = ({
     getInfo: createMockFn().mockResolvedValue(info),
   };
 
-  const manager: ReturnType<FactoryInnertubeInstanceManager["getInstance"]> = {
-    getInstance: async <T,>() => Promise.resolve(yt) as Promise<T>,
-  };
-
-  const innertubeInstanceManager: FactoryInnertubeInstanceManager = {
-    getInstance: () => manager,
-  };
-
-  const withTimeout: FactoryWithTimeout = <T,>(
-    promise: Promise<T>,
-    timeoutMs: number,
-    operationName: string,
-  ) => {
-    if (withTimeoutImplementation) {
-      return withTimeoutImplementation(
-        promise,
-        timeoutMs,
-        operationName,
-      ) as Promise<T>;
-    }
-    return promise;
-  };
-  const withTimeoutCalls: [Promise<unknown>, number, string][] = [];
-  const trackedWithTimeout: FactoryWithTimeout = <T,>(
-    promise: Promise<T>,
-    timeoutMs: number,
-    operationName: string,
-  ) => {
-    withTimeoutCalls.push([promise, timeoutMs, operationName]);
-    return withTimeout(promise, timeoutMs, operationName);
-  };
+  const service = new InnertubeService({ createWithTimeout: async () => yt }, { logger: noOpLogger });
+  services.push(service);
 
   const factory = createYouTubeConnectionFactory({
     platform,
-    innertubeInstanceManager,
-    withTimeout: trackedWithTimeout,
-    innertubeCreationTimeoutMs: 1000,
+    innertubeService: service,
+    innertubeCreationTimeoutMs: timeoutMs,
   });
 
   return {
     factory,
     liveChat,
     getLiveChat,
-    withTimeoutCalls,
   };
 };
 
@@ -174,7 +141,7 @@ describe("YouTube connection factory", () => {
       liveChatBehavior: { value: liveChat },
     });
 
-    await expect(factory.createConnection("video-1")).rejects.toThrow(
+    await expect(factory.createConnection("video-1", attemptContext())).rejects.toThrow(
       "Stream validation failed: Video is not live content (replay/VOD)",
     );
     expect(getLiveChat).toHaveBeenCalledTimes(0);
@@ -191,15 +158,15 @@ describe("YouTube connection factory", () => {
       liveChatBehavior: { error: new Error("Live Chat is not available") },
     });
 
-    await expect(factory.createConnection("video-2")).rejects.toThrow(
+    await expect(factory.createConnection("video-2", attemptContext())).rejects.toThrow(
       "Stream validation failed: Video is not live content (replay/VOD)",
     );
   });
 
-  test("uses timeout wrapper for getLiveChat on valid streams", async () => {
-    const liveChat = { id: "live-chat", on: createMockFn() };
+  test("adopts an unstarted managed connection after valid setup", async () => {
+    const liveChat = { id: "live-chat", on: createMockFn(), start: createMockFn(), stop: createMockFn() };
 
-    const { factory, withTimeoutCalls } = createFactory({
+    const { factory } = createFactory({
       validationResult: {
         shouldConnect: true,
         reason: "Stream is live",
@@ -207,56 +174,37 @@ describe("YouTube connection factory", () => {
       liveChatBehavior: { value: liveChat },
     });
 
-    await factory.createConnection("video-3");
-
-    expect(withTimeoutCalls).toHaveLength(2);
-    const getLiveChatTimeoutCall = firstCall(withTimeoutCalls.slice(1));
-    expect(getLiveChatTimeoutCall[1]).toBe(1000);
-    expect(getLiveChatTimeoutCall[2]).toBe("YouTube getLiveChat call");
+    const adopt = createMockFn();
+    const connection = await factory.createConnection("video-3", { ...attemptContext(), adopt });
+    expect(adopt).toHaveBeenCalledWith(connection);
+    expect(liveChat.start).not.toHaveBeenCalled();
+    await connection.stop();
+    expect(liveChat.stop).toHaveBeenCalledTimes(1);
   });
 
-  test("surfaces timeout-wrapper rejections from getLiveChat on valid streams", async () => {
-    const getLiveChatTimeoutError = new Error(
-      "YouTube getLiveChat call timeout after 1000ms",
-    );
-    const withTimeoutImplementation: WithTimeoutImplementation = (
-      promise,
-      _timeoutMs,
-      operationName,
-    ) => {
-      if (operationName === "YouTube getInfo stream info call") {
-        return promise;
-      }
-
-      if (operationName === "YouTube getLiveChat call") {
-        return Promise.reject(getLiveChatTimeoutError);
-      }
-
-      return promise;
-    };
-
+  test("surfaces a getLiveChat setup failure without replacing the originating error", async () => {
     const { factory } = createFactory({
       validationResult: {
         shouldConnect: true,
         reason: "Stream is live",
       },
-      liveChatBehavior: { value: { id: "unused-live-chat" } },
-      withTimeoutImplementation,
+      liveChatBehavior: { error: new Error("synthetic getLiveChat failure") },
     });
 
-    await expect(factory.createConnection("video-4")).rejects.toThrow(
-      "YouTube getLiveChat call timeout after 1000ms",
+    await expect(factory.createConnection("video-4", attemptContext())).rejects.toThrow(
+      "synthetic getLiveChat failure",
     );
   });
 
   test("ignores every callback from a detached connection attempt", async () => {
+    let current = true;
     const handlers: HandlerMap = {};
     const setReady = createMockFn();
     const disconnect = createMockFn().mockResolvedValue(false);
     const handleChatMessage = createMockFn();
     const { factory } = createFactory({
       platformOverrides: {
-        isCurrentYouTubeConnection: createMockFn().mockReturnValue(false),
+        isCurrentYouTubeConnection: () => current,
         setYouTubeConnectionReady: setReady,
         disconnectFromYouTubeStream: disconnect,
         handleChatMessage,
@@ -266,9 +214,10 @@ describe("YouTube connection factory", () => {
       on: createMockFn((event: string, handler: ChatEventHandler) => {
         handlers[event] = handler;
       }),
-      start: createMockFn(),
+      start: createMockFn<[], void>(),
     };
     await factory.setupConnectionEventListeners(connection, "stale-video", 7);
+    current = false;
 
     getHandler(handlers, "start")({ actions: [] });
     getHandler(handlers, "chat-update")({
@@ -340,7 +289,7 @@ describe("YouTube connection factory", () => {
       on: createMockFn((event: string, handler: ChatEventHandler) => {
         chatUpdateHandlers[event] = handler;
       }),
-      start: createMockFn(),
+      start: createMockFn<[], void>(),
       removeAllListeners: createMockFn(),
     };
 
@@ -391,7 +340,7 @@ describe("YouTube connection factory", () => {
       on: createMockFn((event: string, handler: ChatEventHandler) => {
         chatUpdateHandlers[event] = handler;
       }),
-      start: createMockFn(),
+      start: createMockFn<[], void>(),
       removeAllListeners: createMockFn(),
     };
 
@@ -430,7 +379,7 @@ describe("YouTube connection factory", () => {
       on: createMockFn((event: string, handler: ChatEventHandler) => {
         chatUpdateHandlers[event] = handler;
       }),
-      start: createMockFn(),
+      start: createMockFn<[], void>(),
       removeAllListeners: createMockFn(),
     };
 
@@ -472,7 +421,7 @@ describe("YouTube connection factory", () => {
       on: createMockFn((event: string, handler: ChatEventHandler) => {
         chatUpdateHandlers[event] = handler;
       }),
-      start: createMockFn(),
+      start: createMockFn<[], void>(),
       removeAllListeners: createMockFn(),
     };
 
@@ -542,7 +491,7 @@ describe("YouTube connection factory", () => {
       on: createMockFn((event: string, handler: ChatEventHandler) => {
         chatUpdateHandlers[event] = handler;
       }),
-      start: createMockFn(),
+      start: createMockFn<[], void>(),
       removeAllListeners: createMockFn(),
     };
 
@@ -607,7 +556,7 @@ describe("YouTube connection factory", () => {
       on: createMockFn((event: string, handler: ChatEventHandler) => {
         chatUpdateHandlers[event] = handler;
       }),
-      start: createMockFn(),
+      start: createMockFn<[], void>(),
       removeAllListeners: createMockFn(),
     };
 
@@ -654,7 +603,7 @@ describe("YouTube connection factory", () => {
       on: createMockFn((event: string, handler: ChatEventHandler) => {
         chatUpdateHandlers[event] = handler;
       }),
-      start: createMockFn(),
+      start: createMockFn<[], void>(),
       removeAllListeners: createMockFn(),
     };
 
@@ -698,7 +647,7 @@ describe("YouTube connection factory", () => {
         applyFilterCalls += 1;
         selectedChatFilter.value = filter;
       },
-      start: createMockFn(),
+      start: createMockFn<[], void>(),
       removeAllListeners: createMockFn(),
     };
 
@@ -748,7 +697,7 @@ describe("YouTube connection factory", () => {
         applyFilterCalls += 1;
         selectedChatFilter.value = filter;
       },
-      start: createMockFn(),
+      start: createMockFn<[], void>(),
       removeAllListeners: createMockFn(),
     };
 
@@ -796,7 +745,7 @@ describe("YouTube connection factory", () => {
       applyFilter: (filter: string) => {
         selectedChatFilter = filter;
       },
-      start: createMockFn(),
+      start: createMockFn<[], void>(),
       removeAllListeners: createMockFn(),
     };
 
@@ -833,7 +782,7 @@ describe("YouTube connection factory", () => {
       applyFilter: (filter: string) => {
         selectedChatFilter = filter;
       },
-      start: createMockFn(),
+      start: createMockFn<[], void>(),
       removeAllListeners: createMockFn(),
     };
 
@@ -880,7 +829,7 @@ describe("YouTube connection factory", () => {
         startHandlers[event] = handler;
       }),
       applyFilter,
-      start: createMockFn(),
+      start: createMockFn<[], void>(),
       removeAllListeners: createMockFn(),
     };
 
@@ -926,7 +875,7 @@ describe("YouTube connection factory", () => {
       on: createMockFn((event: string, handler: ChatEventHandler) => {
         errorHandlers[event] = handler;
       }),
-      start: createMockFn(),
+      start: createMockFn<[], void>(),
       removeAllListeners: createMockFn(),
     };
 
@@ -965,7 +914,7 @@ describe("YouTube connection factory", () => {
       on: createMockFn((event: string, handler: ChatEventHandler) => {
         errorHandlers[event] = handler;
       }),
-      start: createMockFn(),
+      start: createMockFn<[], void>(),
       removeAllListeners: createMockFn(),
     };
 
@@ -1000,7 +949,7 @@ describe("YouTube connection factory", () => {
       on: createMockFn((event: string, handler: ChatEventHandler) => {
         errorHandlers[event] = handler;
       }),
-      start: createMockFn(),
+      start: createMockFn<[], void>(),
       removeAllListeners: createMockFn(),
     };
 
@@ -1071,7 +1020,7 @@ describe("YouTube connection factory", () => {
       on: createMockFn((event: string, handler: ChatEventHandler) => {
         chatUpdateHandlers[event] = handler;
       }),
-      start: createMockFn(),
+      start: createMockFn<[], void>(),
       removeAllListeners: createMockFn(),
     };
 
@@ -1111,7 +1060,7 @@ describe("YouTube connection factory", () => {
       on: createMockFn((event: string, handler: ChatEventHandler) => {
         handlers[event] = handler;
       }),
-      start: createMockFn(),
+      start: createMockFn<[], void>(),
       removeAllListeners: createMockFn(),
     };
 

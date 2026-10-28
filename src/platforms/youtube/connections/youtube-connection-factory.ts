@@ -7,6 +7,11 @@ import { InnertubeFactory } from '../../../factories/innertube-factory';
 import { getFallbackUsername } from '../../../utils/validation';
 import type { UnknownRecord } from '../../../utils/record-contracts';
 import { normalizeYouTubeUsername } from '../youtube-username-normalizer';
+import { withOperationDeadline } from '../../../utils/timeout-wrapper';
+import type { InnertubeChatClientOwner, InnertubeChatClientCreation, InnertubeOperationContext } from '../../../services/innertube-service';
+import type { YouTubeConnectionAttemptContext } from '../youtube-connection-manager';
+
+const RETIREMENT_TIMEOUT_MS = 5000;
 
 interface LoggerLike {
     debug: (...args: unknown[]) => void;
@@ -27,7 +32,7 @@ interface YouTubePlatform {
         reason: string,
         options?: { requestImmediateRefresh?: boolean; source?: string; expectedAttemptId?: number }
   ) => Promise<boolean>;
-    handleChatMessage: (message: UnknownRecord) => void;
+    handleChatMessage: (message: UnknownRecord, isCurrent?: () => boolean) => void | Promise<void>;
     logRawPlatformData: (channel: string, payload: unknown) => Promise<void>;
     _validateVideoForConnection: (videoId: string, info: unknown) => { shouldConnect: boolean; reason?: string };
     _handleProcessingError: (message: string, error: unknown, category: string, metadata?: UnknownRecord) => void;
@@ -38,22 +43,20 @@ interface YouTubePlatform {
 
 interface YouTubeConnectionFactoryOptions {
     platform?: YouTubePlatform;
-    innertubeInstanceManager?: {
-        getInstance: (options: { logger: LoggerLike }) => {
-      getInstance: <T>(key: string, factory: () => Promise<T>) => Promise<T>;
-        };
-    };
-    withTimeout?: <T>(promise: Promise<T>, timeoutMs: number, operationName: string) => Promise<T>;
+    innertubeService?: unknown;
     innertubeCreationTimeoutMs?: number;
     installLiveChatUnknownRendererCapture?: LiveChatUnknownRendererCaptureInstaller;
 }
 
 interface YouTubeConnection {
-    on: (event: string, handler: (payload?: unknown) => void) => void;
-    start: () => void;
-    stop?: () => Promise<void>;
-    disconnect?: () => Promise<void>;
-    applyFilter?: (filterName: string) => void;
+    on: (event: string, handler: (payload?: unknown) => void | Promise<void>) => void;
+    off?: (event: string, handler: (payload?: unknown) => void) => unknown;
+    removeListener?: (event: string, handler: (payload?: unknown) => void) => unknown;
+    start: () => void | Promise<void>;
+    stop?: () => void | Promise<void>;
+    disconnect?: () => void | Promise<void>;
+    applyFilter?: (filterName: string) => void | Promise<void>;
+    sendMessage?: (message: unknown) => Promise<unknown>;
 }
 
 interface YouTubeInfo {
@@ -67,7 +70,19 @@ interface YouTubeInfo {
 }
 
 interface YouTubeClient {
-    getInfo: (videoId: string, options: { client: string }) => Promise<YouTubeInfo>;
+    getInfo: (videoId: string, options?: Record<string, unknown>) => Promise<unknown>;
+}
+
+export type YouTubeChatClientProvider = {
+    beginChatClient: (context: InnertubeOperationContext) => InnertubeChatClientCreation<YouTubeClient>;
+};
+
+function isChatClientProvider(value: unknown): value is YouTubeChatClientProvider {
+    return isRecord(value) && typeof value.beginChatClient === 'function';
+}
+
+function isYouTubeConnection(value: unknown): value is YouTubeConnection {
+    return isRecord(value) && typeof value.on === 'function' && typeof value.start === 'function' && typeof value.stop === 'function';
 }
 
 type ParserModuleLike = {
@@ -106,22 +121,13 @@ function isActionsLike(value: unknown): value is LiveChatUnknownRendererCaptureO
 function createYouTubeConnectionFactory(options: YouTubeConnectionFactoryOptions = {}) {
     const {
         platform,
-        innertubeInstanceManager,
-        withTimeout,
+        innertubeService,
         innertubeCreationTimeoutMs,
         installLiveChatUnknownRendererCapture
     } = options;
 
     if (!platform) {
         throw new Error('YouTube connection factory requires platform instance');
-    }
-
-    if (!innertubeInstanceManager) {
-        throw new Error('YouTube connection factory requires innertubeInstanceManager');
-    }
-
-    if (typeof withTimeout !== 'function') {
-        throw new Error('YouTube connection factory requires withTimeout function');
     }
 
     const timeoutMs = Number(innertubeCreationTimeoutMs);
@@ -162,7 +168,7 @@ function createYouTubeConnectionFactory(options: YouTubeConnectionFactoryOptions
             });
         };
 
-    const applyConfiguredChatMode = (connection: YouTubeConnection, videoId: string, startData: unknown) => {
+    const applyConfiguredChatMode = async (connection: YouTubeConnection, videoId: string, attemptId: number, startData: unknown) => {
         const chatMode = platform.config.chatMode;
         const isTopChatMode = chatMode === 'top';
         const filterName = isTopChatMode ? 'TOP_CHAT' : 'LIVE_CHAT';
@@ -215,9 +221,11 @@ function createYouTubeConnectionFactory(options: YouTubeConnectionFactoryOptions
         }
 
         try {
-            connection.applyFilter(filterName);
+            await connection.applyFilter(filterName);
+            if (!platform.isCurrentYouTubeConnection(videoId, attemptId)) return;
             platform.logger.info(`Applied YouTube chat mode for ${videoId}: ${chatMode}`, 'youtube');
         } catch (error: unknown) {
+            if (!platform.isCurrentYouTubeConnection(videoId, attemptId)) return;
             const errorMessage = error instanceof Error ? error.message : String(error);
             platform._handleProcessingError(
                 `Failed to apply YouTube chat mode for ${videoId}: ${errorMessage}`,
@@ -228,47 +236,142 @@ function createYouTubeConnectionFactory(options: YouTubeConnectionFactoryOptions
         }
     };
 
-    const createConnection = async (videoId: string) => {
-        const manager = innertubeInstanceManager.getInstance({ logger: platform.logger });
+    const reportCleanup = (error: unknown, videoId: string) => {
+        try { platform._handleProcessingError('YouTube chat operation failed', error, 'connection-cleanup', { videoId }); }
+        catch { /* Reporting cannot replace the original failure or interrupt retirement. */ }
+    };
 
-    const youtubeCandidate = await manager.getInstance('shared-youtube-instance',
-      () => InnertubeFactory.createWithTimeout(timeoutMs)
-    );
-    if (!isYouTubeClient(youtubeCandidate)) {
-      throw new Error('YouTube instance manager returned invalid YouTube client');
-    }
-    const yt = youtubeCandidate;
+    const requestDisconnect = (videoId: string, reason: string, settings: { expectedAttemptId: number; requestImmediateRefresh?: boolean; source?: string }) => {
+        // The manager owns this retirement. Awaiting it inside an owned event
+        // callback would make disposal join itself; still observe its rejection.
+        try {
+            void Promise.resolve(platform.disconnectFromYouTubeStream(videoId, reason, settings)).catch(error => {
+                if (platform.isCurrentYouTubeConnection(videoId, settings.expectedAttemptId)) reportCleanup(error, videoId);
+            });
+        } catch (error) { reportCleanup(error, videoId); }
+    };
 
-    const infoCandidate = await withTimeout(
-      yt.getInfo(videoId, { client: 'WEB' }),
-      timeoutMs,
-      'YouTube getInfo stream info call'
-    );
-    if (!isYouTubeInfo(infoCandidate)) {
-      throw new Error(`YouTube getInfo returned invalid stream info for ${videoId}`);
-    }
-    const info = infoCandidate;
-
-        const validationResult = platform._validateVideoForConnection(videoId, info);
-        if (!validationResult.shouldConnect) {
-            throw new Error(`Stream validation failed: ${validationResult.reason}`);
-        }
-
-        if (isActionsLike(info.actions)) {
-            await captureInstaller({
-        actions: info.actions,
-                videoId,
-                initialContinuation: typeof info.livechat?.continuation === 'string'
-                    ? info.livechat.continuation
-                    : null
+    const manageConnection = (raw: YouTubeConnection, owner: InnertubeChatClientOwner<YouTubeClient>, videoId: string, context: YouTubeConnectionAttemptContext, actions: YouTubeInfo['actions']) => {
+        let closed = false;
+        let retirement: Promise<void> | undefined;
+        const listeners: Array<{ event: string; handler: (payload?: unknown) => void }> = [];
+        const assertOpen = () => {
+            context.signal.throwIfAborted();
+            if (closed) throw new Error('YouTube chat connection retired');
+        };
+        if (isActionsLike(actions)) {
+            const execute = actions.execute.bind(actions);
+            // LiveChat starts private fire-and-forget polling loops. Own their
+            // actual execute/body/parser completion, not merely start()'s return.
+            // Install only after setup, so setup requests retain their short scope.
+            actions.execute = (endpoint, args) => owner.run(async () => {
+                assertOpen();
+                return await execute(endpoint, args);
             });
         }
+        const detach = (event: string, handler: (payload?: unknown) => void) => {
+            try {
+                if (typeof raw.off === 'function') raw.off(event, handler);
+                else raw.removeListener?.(event, handler);
+            } catch (error) { reportCleanup(error, videoId); }
+        };
+        const managed = {
+            on(event: string, handler: (payload?: unknown) => void | Promise<void>) {
+                assertOpen();
+                const ownedHandler = (payload?: unknown) => {
+                    if (closed || context.signal.aborted) return;
+                    try {
+                        void owner.run(async () => {
+                            if (closed || context.signal.aborted) return;
+                            await handler(payload);
+                        }).catch(error => { if (!closed && !context.signal.aborted) reportCleanup(error, videoId); });
+                    } catch (error) { if (!closed && !context.signal.aborted) reportCleanup(error, videoId); }
+                };
+                listeners.push({ event, handler: ownedHandler });
+                try { raw.on(event, ownedHandler); }
+                finally { if (closed) detach(event, ownedHandler); }
+                assertOpen();
+            },
+            start() {
+                assertOpen();
+                return owner.run(async () => { assertOpen(); await raw.start(); });
+            },
+            ...(typeof raw.applyFilter !== 'function' ? {} : { applyFilter(filter: string) {
+                assertOpen();
+                return owner.run(async () => { assertOpen(); await raw.applyFilter!(filter); });
+            } }),
+            ...(typeof raw.sendMessage !== 'function' ? {} : { sendMessage(message: unknown) {
+                assertOpen();
+                return owner.run(async () => { assertOpen(); return await raw.sendMessage!(message); });
+            } }),
+            stop() {
+                if (retirement) return retirement;
+                closed = true;
+                let complete!: () => void, fail!: (error: unknown) => void;
+                retirement = new Promise<void>((resolve, reject) => { complete = resolve; fail = reject; });
+                for (const { event, handler } of listeners) detach(event, handler);
+                listeners.length = 0;
+                let stopped: Promise<void>;
+                try { stopped = Promise.resolve(raw.stop?.()); }
+                catch (error) { stopped = Promise.reject(error); }
+                // Native SDK stop closes scheduling synchronously. Independently
+                // join actual owned fetch/body/callback cleanup even if stop fails.
+                const disposed = owner.dispose();
+                void withOperationDeadline(() => Promise.allSettled([stopped, disposed]), {
+                    budgetMs: RETIREMENT_TIMEOUT_MS, operationName: 'YouTube chat retirement'
+                }).then(outcomes => {
+                    const failure = outcomes.find(outcome => outcome.status === 'rejected');
+                    if (failure?.status === 'rejected') fail(failure.reason);
+                    else complete();
+                }, fail);
+                return retirement;
+            }
+        };
+        return managed;
+    };
 
-        return await withTimeout(
-            info.getLiveChat(),
-            timeoutMs,
-            'YouTube getLiveChat call'
-        );
+    const createConnection = async (videoId: string, context: YouTubeConnectionAttemptContext) => {
+        if (!isChatClientProvider(innertubeService)) throw new Error('YouTube chat requires innertubeService.beginChatClient');
+        let creation: InnertubeChatClientCreation<YouTubeClient> | undefined;
+        let managed: ReturnType<typeof manageConnection> | undefined;
+        try {
+            return await withOperationDeadline(async ({ signal, remainingBudgetMs }) => {
+                creation = innertubeService.beginChatClient({ signal, timeoutMs: Math.ceil(remainingBudgetMs()) });
+                const owner = await creation.ready;
+                signal.throwIfAborted();
+                const acquiredOwner = owner;
+                return await acquiredOwner.run(async client => {
+                    if (!isYouTubeClient(client)) throw new Error('YouTube chat owner returned invalid client');
+                    const info = await client.getInfo(videoId, { client: 'WEB' });
+                    signal.throwIfAborted();
+                    if (!isYouTubeInfo(info)) throw new Error(`YouTube getInfo returned invalid stream info for ${videoId}`);
+                    const validation = platform._validateVideoForConnection(videoId, info);
+                    if (!validation.shouldConnect) throw new Error(`Stream validation failed: ${validation.reason}`);
+                    if (isActionsLike(info.actions)) await captureInstaller({ actions: info.actions, videoId,
+                        initialContinuation: typeof info.livechat?.continuation === 'string' ? info.livechat.continuation : null });
+                    signal.throwIfAborted();
+                    const chat = await info.getLiveChat();
+                    if (!isYouTubeConnection(chat)) throw new Error('YouTube getLiveChat returned invalid connection');
+                    // The callback itself remains tracked by the owner. A late SDK
+                    // result is stopped here even after bounded logical retirement.
+                    if (signal.aborted) {
+                        try { await chat.stop?.(); } catch (error) { reportCleanup(error, videoId); }
+                        signal.throwIfAborted();
+                    }
+                    managed = manageConnection(chat, acquiredOwner, videoId, context, info.actions);
+                    context.adopt(managed);
+                    return managed;
+                }, { signal, timeoutMs: Math.ceil(remainingBudgetMs()) });
+            }, { budgetMs: timeoutMs, parentAbortSignal: context.signal, operationName: 'YouTube chat setup' });
+        } catch (error) {
+            try {
+                // The handle exists before initialization starts, so cancellation
+                // joins actual cleanup even when no client was ever published.
+                if (managed) await managed.stop();
+                else await creation?.dispose();
+            } catch (cleanupError) { reportCleanup(cleanupError, videoId); }
+            throw error;
+        }
     };
 
     const cleanupUnownedConnection = async (connection: YouTubeConnection, videoId: string, attemptId: number) => {
@@ -300,7 +403,7 @@ function createYouTubeConnectionFactory(options: YouTubeConnectionFactoryOptions
             throw new Error('YouTube connection missing event emitter interface (on)');
         }
 
-        connection.on('start', (data: unknown) => {
+        connection.on('start', async (data: unknown) => {
             if (!platform.isCurrentYouTubeConnection(videoId, attemptId)) {
                 return;
             }
@@ -311,7 +414,8 @@ function createYouTubeConnectionFactory(options: YouTubeConnectionFactoryOptions
                 'Viewer engagement message: Welcome to live chat! Remember to guard your privacy and abide by our community guidelines.',
                 'youtube'
             );
-            applyConfiguredChatMode(connection, videoId, data);
+            await applyConfiguredChatMode(connection, videoId, attemptId, data);
+            if (!platform.isCurrentYouTubeConnection(videoId, attemptId)) return;
 
             const dataRecord = data && typeof data === 'object' ? data as UnknownRecord : null;
             if (dataRecord && Array.isArray(dataRecord.actions)) {
@@ -349,32 +453,34 @@ function createYouTubeConnectionFactory(options: YouTubeConnectionFactoryOptions
             const isApiError = errorMessage.includes('400') || errorMessage.includes('403') || errorMessage.includes('429');
             if (isApiError) {
                 platform.logger.warn(`YouTube API error for stream ${videoId}: ${errorMessage}`, 'youtube');
-                platform.disconnectFromYouTubeStream(videoId, `API error: ${errorMessage}`, { expectedAttemptId: attemptId });
+                requestDisconnect(videoId, `API error: ${errorMessage}`, { expectedAttemptId: attemptId });
                 return;
             }
 
             platform._handleProcessingError(`Stream ${videoId} error: ${errorMessage}`, error, 'stream-error', { videoId });
-            platform.disconnectFromYouTubeStream(videoId, `Error: ${errorMessage}`, {
+            requestDisconnect(videoId, `Error: ${errorMessage}`, {
                 requestImmediateRefresh: true,
                 source: 'livechat-error',
                 expectedAttemptId: attemptId
             });
         });
 
-        connection.on('chat-update', (chatItem: unknown) => {
+        connection.on('chat-update', async (chatItem: unknown) => {
             if (!platform.isCurrentYouTubeConnection(videoId, attemptId)) {
                 return;
             }
-            if (platform.config.dataLoggingEnabled && chatItem !== undefined) {
-                platform.logRawPlatformData('chat', chatItem).catch((logError: unknown) => {
+            const logging = platform.config.dataLoggingEnabled && chatItem !== undefined
+                ? platform.logRawPlatformData('chat', chatItem).catch((logError: unknown) => {
+                    if (!platform.isCurrentYouTubeConnection(videoId, attemptId)) return;
                     const logErrorMessage = logError instanceof Error ? logError.message : String(logError);
                     platform._handleProcessingError(
                         `Error logging raw chat data: ${logErrorMessage}`,
                         logError,
                         'data-logging'
                     );
-                });
-            }
+                }) : undefined;
+
+            try {
 
             if (!chatItem || typeof chatItem !== 'object') {
                 platform.logger.debug(`Received invalid chat-update for ${videoId}: null or non-object`, 'youtube');
@@ -445,7 +551,7 @@ function createYouTubeConnectionFactory(options: YouTubeConnectionFactoryOptions
                     authorName,
                     messageLength: messageText.length
                 });
-                platform.handleChatMessage(normalizedChatItem);
+                await platform.handleChatMessage(normalizedChatItem, () => platform.isCurrentYouTubeConnection(videoId, attemptId));
                 return;
             }
 
@@ -454,6 +560,7 @@ function createYouTubeConnectionFactory(options: YouTubeConnectionFactoryOptions
             const messages = platform._extractMessagesFromChatItem(chatItemRecord);
 
             for (const message of messages) {
+                if (!platform.isCurrentYouTubeConnection(videoId, attemptId)) return;
                 if (platform._shouldSkipMessage(message)) {
                     platform.logger.debug(`Skipping filtered event for ${videoId}: ${message.type}`, 'youtube');
                     continue;
@@ -496,8 +603,9 @@ function createYouTubeConnectionFactory(options: YouTubeConnectionFactoryOptions
                     messageLength: messageText.length
                 });
 
-                platform.handleChatMessage(enhancedMessage);
+                await platform.handleChatMessage(enhancedMessage, () => platform.isCurrentYouTubeConnection(videoId, attemptId));
             }
+            } finally { await logging; }
         });
 
         connection.on('end', () => {
@@ -506,7 +614,7 @@ function createYouTubeConnectionFactory(options: YouTubeConnectionFactoryOptions
             }
             platform.logger.debug(`LiveChat 'end' event for: ${videoId}`, 'youtube');
             platform.logger.info(`Stream ended: ${videoId}`, 'youtube');
-            platform.disconnectFromYouTubeStream(videoId, 'stream ended', {
+            requestDisconnect(videoId, 'stream ended', {
                 requestImmediateRefresh: true,
                 source: 'livechat-end',
                 expectedAttemptId: attemptId
@@ -514,7 +622,8 @@ function createYouTubeConnectionFactory(options: YouTubeConnectionFactoryOptions
         });
 
         platform.logger.debug(`About to call connection.start() for: ${videoId}`, 'youtube');
-        connection.start();
+        await connection.start();
+        if (!platform.isCurrentYouTubeConnection(videoId, attemptId)) throw new Error('YouTube connection retired during start');
         platform.logger.debug('connection.start() called successfully', 'youtube');
 
         platform.logger.debug(`Successfully initiated connection to stream: ${videoId}`, 'youtube');
@@ -523,8 +632,10 @@ function createYouTubeConnectionFactory(options: YouTubeConnectionFactoryOptions
         if (platform.viewerService && typeof platform.viewerService.setActiveStream === 'function') {
             try {
                 await platform.viewerService.setActiveStream(videoId);
+                if (!platform.isCurrentYouTubeConnection(videoId, attemptId)) return;
                 platform.logger.debug(`Set active stream in viewer service: ${videoId}`, 'youtube');
             } catch (serviceError: unknown) {
+                if (!platform.isCurrentYouTubeConnection(videoId, attemptId)) return;
                 const serviceErrorMessage = serviceError instanceof Error ? serviceError.message : String(serviceError);
                 platform.logger.warn(`Failed to set active stream in viewer service: ${serviceErrorMessage}`, 'youtube');
             }

@@ -14,7 +14,6 @@ import { resolveYouTubeTimestampISO } from '../utils/platform-timestamp';
 import { ensureLogDirectorySync } from '../utils/log-directory';
 import { getSystemTimestampISO } from '../utils/timestamp';
 import { safeSetInterval, validateTimeout } from '../utils/timeout-validator';
-import { withTimeout } from '../utils/timeout-wrapper';
 import { getFallbackUsername } from '../utils/validation';
 import { ViewerCountProviderFactory } from '../utils/viewer-count-providers';
 import { createYouTubeConnectionFactory } from './youtube/connections/youtube-connection-factory';
@@ -24,7 +23,7 @@ import { createYouTubeEventRouter } from './youtube/events/event-router';
 import { createYouTubeMonetizationParser, resolveYouTubeGiftMembershipCount } from './youtube/monetization/monetization-parser';
 import { createYouTubeMultiStreamManager } from './youtube/streams/youtube-multistream-manager';
 import { extractAuthor } from './youtube/youtube-author-extractor';
-import { YouTubeConnectionManager } from './youtube/youtube-connection-manager';
+import { YouTubeConnectionManager, type YouTubeConnectionAttemptContext } from './youtube/youtube-connection-manager';
 import { extractMessageText } from './youtube/youtube-message-extractor';
 import { YouTubeUserAgentManager } from './youtube/youtube-user-agent-manager';
 import { normalizeYouTubeUsername } from './youtube/youtube-username-normalizer';
@@ -132,8 +131,8 @@ type ProviderLoggerLike = {
 
 type YouTubeConnectionLike = {
   on: (event: string, handler: (payload?: unknown) => void) => void;
-  start: () => void;
-  applyFilter?: (filterName: string) => void;
+  start: () => void | Promise<void>;
+  applyFilter?: (filterName: string) => void | Promise<void>;
   [key: string]: unknown;
 };
 
@@ -315,8 +314,7 @@ class YouTubePlatform extends EventEmitter {
 
         this._youtubeConnectionFactory = createYouTubeConnectionFactory({
             platform: this._createConnectionFactoryPlatformAdapter(),
-            innertubeInstanceManager: this._createInnertubeInstanceManagerAdapter(),
-            withTimeout,
+            innertubeService: dependencies.innertubeService,
             innertubeCreationTimeoutMs: INNERTUBE_CREATION_TIMEOUT_MS
         });
 
@@ -384,20 +382,6 @@ class YouTubePlatform extends EventEmitter {
     }
 
 
-    _createInnertubeInstanceManagerAdapter() {
-        return {
-            getInstance: (_options: { logger: LoggerLike }) => {
-                const manager = innertubeInstanceManager.getInstance();
-                return {
-                    getInstance: async <T>(key: string, factory: () => Promise<T>): Promise<T> => {
-                        const instance = await manager.getInstance(key, factory as () => Promise<{ [key: string]: unknown }>);
-                        return instance as T;
-                    }
-                };
-            }
-        };
-    }
-
     _createProviderLoggerAdapter(): ProviderLoggerLike {
         return {
             debug: (message: string, context?: string, payload?: unknown) => this.logger.debug(message, context, payload),
@@ -444,9 +428,7 @@ class YouTubePlatform extends EventEmitter {
                 reason: string,
                 options?: { requestImmediateRefresh?: boolean; source?: string; expectedAttemptId?: number }
             ) => this.disconnectFromYouTubeStream(videoId, reason, options),
-            handleChatMessage: (message: UnknownMap) => {
-                void this.handleChatMessage(message);
-            },
+            handleChatMessage: (message: UnknownMap, isCurrent?: () => boolean) => this.handleChatMessage(message, isCurrent),
             logRawPlatformData: async (channel: string, payload: unknown): Promise<void> => {
                 await this.logRawPlatformData(channel, payload);
             },
@@ -745,15 +727,20 @@ class YouTubePlatform extends EventEmitter {
         }
 
         const previousCount = this.connectionManager.getConnectionCount();
+        let admittedAttemptId: number | undefined;
         
         try {
             const success = await this.connectionManager.connectToStream(
                 videoId, 
-                (videoId: string, attemptId: number) => this._createYouTubeConnection(videoId, attemptId),
+                (videoId: string, attemptId: number, context: YouTubeConnectionAttemptContext) => {
+                    admittedAttemptId = attemptId;
+                    return this._createYouTubeConnection(videoId, attemptId, context);
+                },
                 { reason: 'stream detected', ...options }
             );
             
             if (success) {
+                if (admittedAttemptId !== undefined && !this.connectionManager.isCurrentAttempt(videoId, admittedAttemptId)) return false;
                 this.logger.info(`Connected to YouTube stream: ${videoId}`, 'youtube');
                 const connectionId = `youtube-${videoId}`;
                 const timestamp = getSystemTimestampISO();
@@ -780,16 +767,17 @@ class YouTubePlatform extends EventEmitter {
         }
     }
 
-    async _createYouTubeConnection(videoId: string, attemptId: number): Promise<{ [key: string]: unknown }> {
+    async _createYouTubeConnection(videoId: string, attemptId: number, context: YouTubeConnectionAttemptContext): Promise<{ [key: string]: unknown }> {
         try {
-            const connection = await this._youtubeConnectionFactory.createConnection(videoId);
+            const connection = await this._youtubeConnectionFactory.createConnection(videoId, context);
             if (!isYouTubeConnectionLike(connection)) {
                 throw new Error('YouTube connection factory returned invalid connection');
             }
             await this._setupConnectionEventListeners(connection, videoId, attemptId);
             return connection;
         } catch (error) {
-            this._handleConnectionErrorLogging(`Failed to create YouTube connection: ${getErrorMessage(error)}`, error, 'connection-create');
+            try { this._handleConnectionErrorLogging(`Failed to create YouTube connection: ${getErrorMessage(error)}`, error, 'connection-create'); }
+            catch { /* Preserve the setup failure even if diagnostics fail. */ }
             throw error;
         }
     }
@@ -798,7 +786,8 @@ class YouTubePlatform extends EventEmitter {
         return await this._youtubeConnectionFactory.setupConnectionEventListeners(connection, videoId, attemptId);
 	    }
 
-    async handleChatMessage(chatItem: unknown): Promise<void> {
+    async handleChatMessage(chatItem: unknown, isCurrent?: () => boolean): Promise<void> {
+        if (isCurrent && !isCurrent()) return;
         this.logger.debug('handleChatMessage() called', 'youtube');
         
         if (!chatItem) {
@@ -841,10 +830,12 @@ class YouTubePlatform extends EventEmitter {
         
         try {
             const routed = await this.eventRouter.routeEvent(normalizedChatItem, resolvedEventType);
+            if (isCurrent && !isCurrent()) return;
             if (!routed) {
                 this._handleMissingChatEvent(resolvedEventType, normalizedChatItem);
             }
         } catch (error) {
+            if (isCurrent && !isCurrent()) return;
             this._handleProcessingError(
                 `Error handling event type ${resolvedEventType}: ${getErrorMessage(error)}`,
                 error,

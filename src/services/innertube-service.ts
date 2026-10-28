@@ -11,6 +11,10 @@ export type InnertubeChatClientOwner<T> = {
     run: <R>(operation: (client: T) => Promise<R>, context?: InnertubeOperationContext) => Promise<R>;
     dispose: () => Promise<void>;
 };
+export type InnertubeChatClientCreation<T> = {
+    ready: Promise<InnertubeChatClientOwner<T>>;
+    dispose: () => Promise<void>;
+};
 type Lifetime = { controller: AbortController; active: Set<Promise<unknown>>; disposal?: Promise<void> };
 
 function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
@@ -202,35 +206,63 @@ class InnertubeService<TClient extends InnertubeInfoClient = InnertubeInfoClient
 
     // The setup deadline is not the polling lifetime. Start background work through owner.run().
     async createChatClient(context: InnertubeOperationContext = {}): Promise<InnertubeChatClientOwner<TClient>> {
+        return this.beginChatClient(context).ready;
+    }
+
+    beginChatClient(context: InnertubeOperationContext = {}): InnertubeChatClientCreation<TClient> {
         const signal = this.signal(context);
         signal.throwIfAborted();
         const lifetime: Lifetime = { controller: new AbortController(), active: new Set() };
         this.owners.add(lifetime);
-        try {
-            const client = await abortable(this.scopes.exit(() => this.createOwnedClient(lifetime)), signal);
-            signal.throwIfAborted();
-            return {
-                client,
-                run: (operation, context) => this.scopes.exit(() => {
-                    lifetime.controller.signal.throwIfAborted();
-                    this.lifetime.controller.signal.throwIfAborted();
-                    // Explicit setup scopes bound all SDK continuations. Omitted
-                    // context keeps polling outside any short caller ALS scope.
-                    const signal = context === undefined
-                        ? lifetime.controller.signal
-                        : this.signal(context, lifetime);
-                    signal.throwIfAborted();
-                    return this.scopes.run(signal, () => abortable(this.track(lifetime, Promise.resolve().then(() => {
+        const dispose = () => this.retire(lifetime);
+        const creationSignal = AbortSignal.any([signal, lifetime.controller.signal]);
+        const ready = (async (): Promise<InnertubeChatClientOwner<TClient>> => {
+            try {
+                const client = await abortable(this.scopes.exit(() => this.createOwnedClient(lifetime)), creationSignal);
+                creationSignal.throwIfAborted();
+                return {
+                    client,
+                    run: <R>(operation: (client: TClient) => Promise<R>, context?: InnertubeOperationContext): Promise<R> => this.scopes.exit(() => {
+                        lifetime.controller.signal.throwIfAborted();
+                        this.lifetime.controller.signal.throwIfAborted();
+                        // Explicit setup scopes bound all SDK continuations. Omitted
+                        // context keeps polling outside any short caller ALS scope.
+                        const signal = context === undefined
+                            ? lifetime.controller.signal
+                            : this.signal(context, lifetime);
                         signal.throwIfAborted();
-                        return operation(client);
-                    })), signal));
-                }),
-                dispose: () => this.retire(lifetime)
-            };
-        } catch (error) {
-            void this.retire(lifetime);
-            throw error;
-        }
+                        return this.scopes.run(signal, () => {
+                            if (context !== undefined) return abortable(this.track(lifetime, Promise.resolve().then(() => {
+                                signal.throwIfAborted();
+                                return operation(client);
+                            })), signal);
+
+                            let complete!: (result: R | PromiseLike<R>) => void;
+                            let fail!: (error: unknown) => void;
+                            const completion = this.track(lifetime, new Promise<R>((resolve, reject) => {
+                                complete = resolve;
+                                fail = reject;
+                            }));
+                            const caller = abortable(completion, signal);
+                            // SDK event preludes (notably filter selection) must
+                            // run before the emitter continues. Publish completion
+                            // first so synchronous disposal still joins async tails.
+                            try { void Promise.resolve(operation(client)).then(complete, fail); }
+                            catch (error) { fail(error); }
+                            return caller;
+                        });
+                    }),
+                    dispose
+                };
+            } catch (error) {
+                void dispose();
+                throw error;
+            }
+        })();
+        // A caller may retire the handle without awaiting readiness. Observe the
+        // rejection independently while preserving the ordinary rejecting promise.
+        void ready.catch(() => {});
+        return { ready, dispose };
     }
 
     async getSharedInstance(key = 'shared'): Promise<InnertubeInfoClient> {

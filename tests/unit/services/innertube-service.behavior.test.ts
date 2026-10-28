@@ -622,4 +622,176 @@ describe("InnertubeService behavior", () => {
       expect(calls).toBe(0);
     } finally { await service.dispose(); }
   });
+
+  test("default run applies its synchronous prelude before the SDK selects its next continuation", async () => {
+    const service = new InnertubeService(factory, { logger: noOpLogger });
+    const owner = await service.createChatClient();
+    let continuation = "synthetic-top";
+    const operation = owner.run(async () => { continuation = "synthetic-live"; });
+    void operation.catch(() => {});
+    try {
+      expect(continuation).toBe("synthetic-live");
+      await operation;
+    } finally { await service.dispose(); }
+  });
+
+  test("default synchronous callback failure is an observed promise rejection, not an admission throw", async () => {
+    const service = new InnertubeService(factory, { logger: noOpLogger });
+    const owner = await service.createChatClient();
+    const failure = new Error("synthetic callback failure");
+    let caller: Promise<unknown> | undefined;
+    try {
+      expect(() => { caller = owner.run(() => { throw failure; }); }).not.toThrow();
+      await expect(caller).rejects.toBe(failure);
+      expect(await owner.run(async () => "still admitted")).toBe("still admitted");
+    } finally { await service.dispose(); }
+  });
+
+  test("default run publishes actual completion before reentrant disposal and joins asynchronous finally", async () => {
+    const service = new InnertubeService(factory, { logger: noOpLogger });
+    const owner = await service.createChatClient();
+    const cleaning = deferred(), finish = deferred();
+    let disposal: Promise<void> | undefined;
+    const caller = owner.run(async () => {
+      disposal = owner.dispose();
+      try { await Promise.resolve(); }
+      finally { cleaning.resolve(); await finish.promise; }
+    }).catch(error => error);
+    try {
+      expect(disposal).toBeInstanceOf(Promise);
+      expect(owner.dispose()).toBe(disposal!);
+      expect(String(await caller)).toContain("disposed");
+      await cleaning.promise;
+      let retired = false;
+      void disposal!.then(() => { retired = true; });
+      await flush();
+      expect(retired).toBe(false);
+      finish.resolve(); await disposal;
+      expect(retired).toBe(true);
+      expect(service.stats.retirementTimeouts).toBe(0);
+    } finally { finish.resolve(); await service.dispose(); await caller; }
+  });
+
+  test("begin handle keeps prompt ready rejection separate from unpublished initializer retirement", async () => {
+    const started = deferred(), cleaning = deferred(), finish = deferred();
+    const cancel = new AbortController();
+    const service = new InnertubeService({ createWithTimeout: async (_timeout, config) => {
+      try { await (await (config!.fetch as (input: string) => Promise<Response>)("https://synthetic.invalid/initializing")).json(); }
+      finally { cleaning.resolve(); await finish.promise; }
+      return { getInfo: async () => ({ video: "synthetic" }) };
+    } }, { logger: noOpLogger, fetch: async (_input, init) => new Response(new ReadableStream({ start(controller) {
+      init!.signal!.addEventListener("abort", () => controller.error(init!.signal!.reason), { once: true });
+      started.resolve();
+    } })) });
+    const creation = service.beginChatClient({ signal: cancel.signal });
+    const caller = creation.ready.catch(error => error);
+    try {
+      await started.promise;
+      cancel.abort(new Error("synthetic creation cancelled"));
+      expect(String(await caller)).toContain("synthetic creation cancelled");
+      await cleaning.promise;
+      const disposal = creation.dispose();
+      expect(creation.dispose()).toBe(disposal);
+      let retired = false;
+      void disposal.then(() => { retired = true; });
+      await flush();
+      expect(retired).toBe(false);
+      finish.resolve(); await disposal;
+      expect(retired).toBe(true);
+      expect(service.stats.instancesCreated).toBe(0);
+    } finally { finish.resolve(); await creation.dispose(); await service.dispose(); }
+  });
+
+  test("begin publishes disposal before the initialization microtask and never starts a retired SDK client", async () => {
+    const service = new InnertubeService(factory, { logger: noOpLogger });
+    const creation = service.beginChatClient();
+    const disposal = creation.dispose();
+    expect(creation.dispose()).toBe(disposal);
+    await expect(creation.ready).rejects.toThrow("disposed");
+    await disposal;
+    expect(factory.createWithTimeout).not.toHaveBeenCalled();
+    expect(service.stats.instancesCreated).toBe(0);
+    await service.dispose();
+  });
+
+  test("published owner and creation handle share the same disposer and retirement identity", async () => {
+    const service = new InnertubeService(factory, { logger: noOpLogger });
+    const creation = service.beginChatClient();
+    const owner = await creation.ready;
+    expect(owner.dispose).toBe(creation.dispose);
+    const disposal = owner.dispose();
+    expect(creation.dispose()).toBe(disposal);
+    expect(owner.dispose()).toBe(disposal);
+    await disposal;
+    expect(() => owner.run(async () => "not admitted")).toThrow("disposed");
+    await service.dispose();
+  });
+
+  test("pre-aborted begin throws before admission while async convenience preserves rejection semantics", async () => {
+    const service = new InnertubeService(factory, { logger: noOpLogger });
+    const cancel = new AbortController();
+    cancel.abort(new Error("synthetic pre-aborted creation"));
+    expect(() => service.beginChatClient({ signal: cancel.signal })).toThrow("synthetic pre-aborted creation");
+    await expect(service.createChatClient({ signal: cancel.signal })).rejects.toThrow("synthetic pre-aborted creation");
+    await flush();
+    expect(factory.createWithTimeout).not.toHaveBeenCalled();
+    await service.dispose();
+  });
+
+  test("failed readiness auto-retires even when its handle consumer only awaits disposal", async () => {
+    const failure = new Error("synthetic initialization failed");
+    let requestSignal: AbortSignal | undefined, creations = 0;
+    const service = new InnertubeService({ createWithTimeout: async (_timeout, config) => {
+      creations++;
+      void (config!.fetch as (input: string) => Promise<Response>)("https://synthetic.invalid/initialization-side-request").catch(() => {});
+      throw failure;
+    } }, { logger: noOpLogger, fetch: async (_input, init) => {
+      requestSignal = init!.signal!;
+      return await new Promise<Response>((_resolve, reject) => requestSignal!.addEventListener("abort", () => reject(requestSignal!.reason), { once: true }));
+    } });
+    const creation = service.beginChatClient();
+    try {
+      // Deliberately leave ready unawaited: the creation owner observes rejection.
+      await flush();
+      expect(requestSignal?.aborted).toBe(true);
+      const disposal = creation.dispose();
+      expect(creation.dispose()).toBe(disposal);
+      await disposal;
+      expect(creations).toBe(1);
+      expect(service.stats.instancesCreated).toBe(0);
+      expect(service.stats.retirementTimeouts).toBe(0);
+    } finally { await service.dispose(); }
+  });
+
+  test("uncooperative unpublished initialization retires within five seconds and cannot publish its late client", async () => {
+    useFakeTimers();
+    const started = deferred();
+    let release!: (client: InnertubeInfoClient) => void;
+    const errors: unknown[][] = [];
+    const service = new InnertubeService({ createWithTimeout: () => {
+      started.resolve(); return new Promise<InnertubeInfoClient>(resolve => { release = resolve; });
+    } }, { logger: { ...noOpLogger, error: (...args) => { errors.push(args); throw new Error("synthetic retirement reporter failure"); } } });
+    try {
+      const creation = service.beginChatClient();
+      let published = false;
+      const caller = creation.ready.then(() => { published = true; }, error => error);
+      await started.promise;
+      const disposal = creation.dispose();
+      expect(String(await caller)).toContain("disposed");
+      let retired = false;
+      void disposal.then(() => { retired = true; });
+      await flush(); advanceTimersByTime(4999); await flush();
+      expect(retired).toBe(false);
+      advanceTimersByTime(1); await disposal;
+      expect(retired).toBe(true);
+      expect(service.stats.retirementTimeouts).toBe(1);
+      expect(errors).toEqual([["Innertube retirement deadline exceeded after 5000ms; 1 operations may still be running", "innertube-service"]]);
+      release({ getInfo: async () => ({ video: "synthetic late client" }) });
+      await flush();
+      expect(published).toBe(false);
+      expect(service.stats.instancesCreated).toBe(0);
+      advanceTimersByTime(5000); await flush();
+      expect(getTimerCount()).toBe(0);
+    } finally { await service.dispose(); useRealTimers(); }
+  });
 });
