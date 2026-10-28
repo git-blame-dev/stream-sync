@@ -572,13 +572,13 @@ function extractTwitchMessageData(messageObj: unknown) {
         .map((fragment) => typeof fragment.text === 'string' ? fragment.text : '')
         .join('');
     
-    const cheermoteFragments = fragments.filter((fragment) => fragment.type === 'cheermote');
+    const processedData = CheermoteProcessor.processEventSubFragments(messageObj.fragments);
+    const cheermoteFragments = 'fragments' in processedData ? processedData.fragments : [];
     let cheermoteInfo: (Record<string, unknown> & { totalBits?: unknown }) | null = null;
     
     if (cheermoteFragments.length > 0) {
         const primaryCheermote = cheermoteFragments[0];
         if (isRecord(primaryCheermote) && isRecord(primaryCheermote.cheermote) && primaryCheermote.text) {
-            const processedData = CheermoteProcessor.processEventSubFragments(messageObj.fragments);
             const parsedTier = Number(primaryCheermote.cheermote.tier);
             const tier = Number.isFinite(parsedTier) && parsedTier > 0
                 ? parsedTier

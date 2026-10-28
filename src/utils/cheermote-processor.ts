@@ -4,28 +4,52 @@ type CheermoteFragment = {
     cheermote?: {
         prefix?: string;
         bits?: unknown;
+        tier?: unknown;
     };
 };
 
 type CheermoteTypeStats = Record<string, { count: number; bits: number }>;
 
 class CheermoteProcessor {
+    static isValidCheermoteFragment(fragment: unknown): fragment is CheermoteFragment & {
+        cheermote: { prefix: string; bits: number | string; tier?: unknown };
+    } {
+        if (!fragment || typeof fragment !== 'object' || Array.isArray(fragment)) {
+            return false;
+        }
+        const candidate = fragment as CheermoteFragment;
+        if (!candidate.cheermote || typeof candidate.cheermote !== 'object' || Array.isArray(candidate.cheermote)) {
+            return false;
+        }
+        const prefix = candidate.cheermote?.prefix;
+        const bits = candidate.cheermote?.bits;
+        return candidate.type === 'cheermote'
+            && typeof prefix === 'string'
+            && this.extractCleanPrefix(prefix).trim().length > 0
+            && (typeof bits === 'number' || (typeof bits === 'string' && /^\d+$/.test(bits.trim())))
+            && Number.isSafeInteger(Number(bits))
+            && Number(bits) > 0;
+    }
+
     static processEventSubFragments(fragments: unknown) {
         if (!fragments || !Array.isArray(fragments) || fragments.length === 0) {
             return this.createEmptyResult();
         }
 
-        const typedFragments = fragments as CheermoteFragment[];
-        const cheermoteFragments = typedFragments.filter(frag => frag.type === 'cheermote');
-        const textFragments = typedFragments.filter(frag => frag.type === 'text');
+        const cheermoteFragments = fragments.filter(fragment => this.isValidCheermoteFragment(fragment));
+        const textFragments = fragments.filter((fragment): fragment is CheermoteFragment =>
+            !!fragment && typeof fragment === 'object' && !Array.isArray(fragment) && fragment.type === 'text');
 
         if (cheermoteFragments.length === 0) {
             return this.createEmptyResult();
         }
 
-        const textContent = textFragments.map(frag => frag.text || '').join('');
+        const textContent = textFragments.map(frag => typeof frag.text === 'string' ? frag.text : '').join('');
 
         const analysis = this.analyzeCheermoteTypes(cheermoteFragments);
+        if (analysis.primaryType === null) {
+            return this.createEmptyResult();
+        }
 
         return {
             totalBits: analysis.totalBits,
@@ -40,13 +64,16 @@ class CheermoteProcessor {
     }
 
     static analyzeCheermoteTypes(cheermoteFragments: CheermoteFragment[]) {
-        const typeStats: CheermoteTypeStats = {};
+        const typeStats: CheermoteTypeStats = Object.create(null);
         let totalBits = 0;
 
         for (const fragment of cheermoteFragments) {
-            if (fragment.cheermote && fragment.cheermote.prefix) {
+            if (this.isValidCheermoteFragment(fragment)) {
                 const cleanPrefix = this.extractCleanPrefix(fragment.cheermote.prefix);
-                const fragmentBits = Number(fragment.cheermote.bits) || 0;
+                const fragmentBits = Number(fragment.cheermote.bits);
+                if (!Number.isSafeInteger(totalBits + fragmentBits)) {
+                    return this.createEmptyResult();
+                }
                 if (!typeStats[cleanPrefix]) {
                     typeStats[cleanPrefix] = { count: 0, bits: 0 };
                 }
