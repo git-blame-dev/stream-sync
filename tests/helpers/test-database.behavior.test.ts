@@ -1,4 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 
 import {
     TestDataStore,
@@ -12,7 +15,9 @@ import testClock from './test-clock';
 import { resetTestIds } from './test-id';
 
 describe('test-database behavior', () => {
+    let previousEnvironment: PropertyDescriptor | undefined;
     beforeEach(() => {
+        previousEnvironment = Object.getOwnPropertyDescriptor(globalThis, 'testEnv');
         testClock.reset();
         resetTestIds();
         Reflect.deleteProperty(globalThis, 'testEnv');
@@ -21,6 +26,7 @@ describe('test-database behavior', () => {
     afterEach(() => {
         testClock.useRealTime();
         Reflect.deleteProperty(globalThis, 'testEnv');
+        if (previousEnvironment) Object.defineProperty(globalThis, 'testEnv', previousEnvironment);
     });
 
     it('manages datastore entries, metadata, and aggregate stats', () => {
@@ -114,11 +120,126 @@ describe('test-database behavior', () => {
         expect(stats.stateManager.snapshotCount).toBe(0);
     });
 
-    it('supports automatic cleanup mode initialization', () => {
-        const environment = new TestEnvironment();
+    it('runs automatic cleanup in native Bun suite scope with current isolation settings', () => {
+        const root = mkdtempSync(path.join(tmpdir(), 'synthetic-test-environment-'));
+        try {
+            writeFileSync(path.join(root, 'bunfig.toml'), '[test]\n');
+            writeFileSync(path.join(root, 'environment.test.ts'), `
+import { describe, it, afterAll, expect } from 'bun:test';
+import { TestEnvironment } from ${JSON.stringify(import.meta.resolve('./test-database'))};
+const environments = [];
+const manualEnvironments = [];
+for (const isolationLevel of ['test', 'suite', 'global']) {
+  describe(isolationLevel, () => {
+    const environment = new TestEnvironment();
+    environments.push(environment);
+    environment.initialize({ isolationLevel: 'test' });
+    environment.initialize({ isolationLevel });
+    let cleaned = 0;
+    it('creates state and a cleanup task', () => {
+      environment.dataStore.set('synthetic-entry', true);
+      environment.stateManager.saveSnapshot('synthetic-snapshot', { ok: true });
+      environment.stateManager.addCleanupTask(() => { cleaned++; }, 'synthetic cleanup');
+    });
+    it('respects the configured retention boundary', () => {
+      expect(cleaned).toBe(1);
+      expect(environment.dataStore.has('synthetic-entry')).toBe(isolationLevel !== 'test');
+      expect(environment.stateManager.getSnapshot('synthetic-snapshot')).toEqual(isolationLevel === 'test' ? null : { ok: true });
+    });
+  });
+}
+for (const initiallyAutomatic of [false, true]) {
+  describe(initiallyAutomatic ? 'switched to manual' : 'manual', () => {
+    const environment = new TestEnvironment();
+    manualEnvironments.push(environment);
+    if (initiallyAutomatic) environment.initialize();
+    environment.initialize({ cleanupMode: 'manual' });
+    it('creates manually owned state', () => {
+      environment.dataStore.set('synthetic-manual', true);
+      environment.stateManager.saveSnapshot('synthetic-manual', true);
+      environment.stateManager.addCleanupTask(() => { throw new Error('must remain queued'); });
+    });
+    it('does not run automatic cleanup', () => {
+      expect(environment.dataStore.has('synthetic-manual')).toBe(true);
+      expect(environment.stateManager.getSnapshot('synthetic-manual')).toBe(true);
+      expect(environment.stateManager.cleanupQueue.length).toBe(1);
+    });
+  });
+}
+describe('last published automatic owner', () => {
+  const environment = new TestEnvironment();
+  environments.push(environment);
+  environment.initialize();
+  it('publishes its own reference until suite cleanup', () => {
+    expect(globalThis.testEnv.data).toBe(environment.dataStore);
+  });
+});
+afterAll(() => {
+  expect(globalThis.testEnv).toBeUndefined();
+  for (const environment of environments) {
+    expect(environment.dataStore.keys()).toEqual([]);
+    expect(environment.stateManager.stateSnapshots.size).toBe(0);
+  }
+  for (const environment of manualEnvironments) {
+    expect(environment.dataStore.has('synthetic-manual')).toBe(true);
+    expect(environment.stateManager.getSnapshot('synthetic-manual')).toBe(true);
+    expect(environment.stateManager.cleanupQueue.length).toBe(1);
+    environment.cleanupAfterSuite();
+  }
+  expect(globalThis.testEnv).toBeUndefined();
+});
+`);
+            const child = Bun.spawnSync([process.execPath, 'test', '--config', path.join(root, 'bunfig.toml'), path.join(root, 'environment.test.ts')], {
+                cwd: root, env: { NODE_ENV: 'test' }, stdout: 'pipe', stderr: 'pipe'
+            });
+            expect({ code: child.exitCode, output: child.stderr.toString() }).toEqual({
+                code: 0, output: expect.stringContaining('11 pass')
+            });
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
 
-        expect(() => environment.initialize({ cleanupMode: 'automatic' })).not.toThrow();
-        expect(globalThis.testEnv?.config.cleanupMode).toBe('automatic');
+    it.each(['test', 'suite', 'global'])('cleans queued tasks and preserves %s isolation semantics', async (isolationLevel) => {
+        const environment = new TestEnvironment();
+        environment.initialize({ cleanupMode: 'manual', isolationLevel });
+        const published = globalThis.testEnv;
+        environment.dataStore.set('synthetic-entry', true);
+        environment.stateManager.saveSnapshot('synthetic-snapshot', { ok: true });
+        environment.stateManager.addCleanupTask(() => { throw new Error('synthetic cleanup failure'); }, 'failing cleanup');
+        environment.stateManager.addCleanupTask(() => {}, 'successful cleanup');
+
+        const results = await environment.cleanupAfterTest();
+
+        expect(results.map(({ success, description, error }) => ({ success, description, error }))).toEqual([
+            { success: false, description: 'failing cleanup', error: 'synthetic cleanup failure' },
+            { success: true, description: 'successful cleanup', error: undefined }
+        ]);
+        expect(environment.stateManager.cleanupQueue).toEqual([]);
+        expect(environment.dataStore.has('synthetic-entry')).toBe(isolationLevel !== 'test');
+        expect(environment.stateManager.getSnapshot('synthetic-snapshot')).toEqual(isolationLevel === 'test' ? null : { ok: true });
+        expect(globalThis.testEnv).toBe(published);
+        environment.cleanupAfterSuite();
+        expect(environment.dataStore.keys()).toEqual([]);
+        expect(environment.stateManager.getSnapshot('synthetic-snapshot')).toBeNull();
+        expect(globalThis.testEnv).toBeUndefined();
+    });
+
+    it('releases only the exact published global reference, not another owner or a lookalike', () => {
+        const first = new TestEnvironment();
+        first.initialize({ cleanupMode: 'manual' });
+        const second = new TestEnvironment();
+        second.initialize({ cleanupMode: 'manual' });
+        const newerOwner = globalThis.testEnv;
+        first.cleanupAfterSuite();
+        expect(globalThis.testEnv).toBe(newerOwner);
+        const lookalike = { ...newerOwner! };
+        globalThis.testEnv = lookalike;
+        second.cleanupAfterSuite();
+        expect(globalThis.testEnv).toBe(lookalike);
+        second.initialize({ cleanupMode: 'manual' });
+        second.cleanupAfterSuite();
+        expect(globalThis.testEnv).toBeUndefined();
     });
 
     it('creates deterministic data factories for supported entity types', () => {

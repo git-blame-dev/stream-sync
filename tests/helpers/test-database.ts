@@ -293,6 +293,8 @@ class TestEnvironment {
     dataStore: TestDataStore;
     stateManager: TestStateManager;
     config: TestEnvironmentConfig;
+    private publishedEnvironment?: GlobalTestEnvironment;
+    private cleanupHooksRegistered = false;
 
     constructor() {
         this.dataStore = new TestDataStore();
@@ -309,25 +311,43 @@ class TestEnvironment {
     initialize(config: Partial<TestEnvironmentConfig> = {}): void {
         this.config = { ...this.config, ...config };
         
-        globalThis.testEnv = {
+        this.publishedEnvironment = {
             data: this.dataStore,
             state: this.stateManager,
             config: this.config
         };
+        globalThis.testEnv = this.publishedEnvironment;
 
         this.setupCleanupHooks();
     }
 
     setupCleanupHooks(): void {
-        if (this.config.cleanupMode === 'automatic') {
+        if (this.config.cleanupMode === 'automatic' && !this.cleanupHooksRegistered) {
             afterEach(async () => {
-                await this.stateManager.executeCleanup();
+                if (this.config.cleanupMode === 'automatic') await this.cleanupAfterTest();
             });
 
             afterAll(() => {
-                this.dataStore.clear();
-                this.stateManager.clearSnapshots();
+                if (this.config.cleanupMode === 'automatic') this.cleanupAfterSuite();
             });
+            this.cleanupHooksRegistered = true;
+        }
+    }
+
+    async cleanupAfterTest(): Promise<CleanupResult[]> {
+        const results = await this.stateManager.executeCleanup();
+        if (this.config.isolationLevel === 'test') {
+            this.dataStore.clear();
+            this.stateManager.clearSnapshots();
+        }
+        return results;
+    }
+
+    cleanupAfterSuite(): void {
+        this.dataStore.clear();
+        this.stateManager.clearSnapshots();
+        if (this.publishedEnvironment && globalThis.testEnv === this.publishedEnvironment) {
+            Reflect.deleteProperty(globalThis, 'testEnv');
         }
     }
 
