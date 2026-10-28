@@ -12,6 +12,8 @@ type HttpHeaders = Record<string, string>;
 
 type HttpOptions = {
   headers?: HttpHeaders;
+  signal?: AbortSignal;
+  timeout?: number;
 };
 
 type HttpResponse<T = unknown> = AxiosResponse<T>;
@@ -139,6 +141,155 @@ const createManager = (overrides: ManagerOverrides = {}) => {
 };
 
 describe("Twitch EventSub subscription manager", () => {
+  test.each([429, 503])("classifies numeric status %s independently of provider prose", (status) => {
+    const manager = createManager();
+    const definition = createSubscription({ name: "Synthetic", type: "channel.follow", version: "2", getCondition: () => ({}) });
+    for (const data of [{ error: "unfamiliar", message: "synthetic failure" }, { error: "Forbidden", message: "synthetic misleading label" }, "synthetic body"]) {
+      const result = manager.parseSubscriptionError({ response: { status, data } }, definition);
+      expect(result.isRetryable).toBe(true);
+      expect(result.isCritical).toBe(false);
+      expect(result.status).toBe(status);
+    }
+  });
+
+  test("does not retry an ambiguous subscription POST 503", async () => {
+    let posts = 0;
+    const manager = createManager({ axios: { post: async () => {
+      posts++;
+      throw createHttpError("synthetic unavailable", { status: 503, data: { error: "unfamiliar", message: "synthetic" } });
+    } } });
+    const result = await manager.setupEventSubscriptions({
+      requiredSubscriptions: [createSubscription({ name: "Synthetic", type: "channel.follow", version: "2", getCondition: () => ({}) })],
+      userId: "test-user", broadcasterId: "test-broadcaster", sessionId: "test-session", subscriptionDelay: 0,
+    });
+    expect(posts).toBe(1);
+    expect(result.failures[0]?.error.isRetryable).toBe(true);
+  });
+
+  test.each([false, true])("cleans matching owned subscriptions across encoded cursor pages (startup=%s)", async (startup) => {
+    const urls: string[] = [];
+    const deleted: string[] = [];
+    const cursor = "synthetic+/=&?opaque";
+    const manager = createManager({ axios: {
+      get: async (url) => {
+        urls.push(url);
+        const page = urls.length;
+        return createHttpResponse({ data: [
+          { id: `test-owned-${page}`, transport: { method: "websocket", session_id: "test-session" } },
+          { id: `test-other-${page}`, transport: { method: "websocket", session_id: "other-session" } },
+        ], pagination: page === 1 ? { cursor } : {} });
+      },
+      delete: async (url) => { deleted.push(new URL(url).searchParams.get("id")!); return createHttpResponse({}); },
+    } });
+    if (startup) await manager.cleanupAllWebSocketSubscriptions({ sessionId: "test-session" });
+    else await manager.deleteAllSubscriptions({ sessionId: "test-session" });
+    expect(urls).toHaveLength(2);
+    expect(new URL(urls[1]!).origin).toBe("https://api.twitch.tv");
+    expect(new URL(urls[1]!).searchParams.get("after")).toBe(cursor);
+    expect([...new URL(urls[1]!).searchParams.keys()]).toEqual(["after"]);
+    expect(deleted.sort()).toEqual(["test-owned-1", "test-owned-2"]);
+  });
+
+  test("startup stale filtering applies on every page without an owned session", async () => {
+    let pages = 0;
+    const deleted: string[] = [];
+    const manager = createManager({ axios: {
+      get: async () => createHttpResponse({ data: [
+        { id: `test-stale-${++pages}`, status: "websocket_disconnected", transport: { method: "websocket" } },
+        { id: `test-active-${pages}`, status: "enabled", transport: { method: "websocket" } },
+      ], pagination: pages === 1 ? { cursor: "test-next" } : {} }),
+      delete: async (url) => { deleted.push(new URL(url).searchParams.get("id")!); return createHttpResponse({}); },
+    } });
+    await manager.cleanupAllWebSocketSubscriptions();
+    expect(pages).toBe(2);
+    expect(deleted.sort()).toEqual(["test-stale-1", "test-stale-2"]);
+  });
+
+  test.each(["repeat", "limit", "bad-pagination", "bad-cursor", "blank-cursor", "long-cursor", "bad-data", "budget"])("reports incomplete pagination safely: %s", async (mode) => {
+    let pages = 0;
+    let remaining = 5000;
+    let deletes = 0;
+    const reports: Array<{ message: string; error: unknown }> = [];
+    const manager = createManager({ logError: (message, error) => reports.push({ message, error }), axios: {
+      get: async () => {
+        pages++;
+        if (mode === "budget") remaining = 0;
+        const pagination = mode === "bad-pagination" ? "test-invalid"
+          : mode === "bad-cursor" ? { cursor: { synthetic: true } }
+            : mode === "blank-cursor" ? { cursor: " " }
+              : mode === "long-cursor" ? { cursor: "x".repeat(4097) }
+                : { cursor: mode === "repeat" ? "test-repeated" : `test-${pages}` };
+        return createHttpResponse({ data: mode === "bad-data" ? {} : [], pagination });
+      },
+      delete: async () => { deletes++; return createHttpResponse({}); },
+    } });
+    await manager.deleteAllSubscriptions({ sessionId: "test-session", operationContext: { signal: new AbortController().signal, remainingBudgetMs: () => remaining } });
+    expect(pages).toBe(mode === "repeat" ? 2 : mode === "limit" ? 100 : 1);
+    expect(deletes).toBe(0);
+    expect(reports).toHaveLength(1);
+    expect(reports[0]?.message).toBe("EventSub remote cleanup incomplete");
+    expect(String(reports[0]?.error)).not.toContain("test-repeated");
+    const reason = mode === "repeat" ? "Repeated EventSub cleanup cursor"
+      : mode === "limit" ? "EventSub cleanup page limit exceeded"
+        : mode === "bad-pagination" ? "Invalid EventSub cleanup pagination"
+          : mode === "bad-data" ? "Invalid EventSub cleanup page"
+            : mode === "budget" ? "EventSub cleanup request failed" : "Invalid EventSub cleanup cursor";
+    expect(String(reports[0]?.error)).toBe(`Error: ${reason}`);
+  });
+
+  test("accepts exactly 100 pages when the last page has no cursor", async () => {
+    let pages = 0;
+    const reports: string[] = [];
+    const manager = createManager({ logError: (message) => reports.push(message), axios: {
+      get: async () => createHttpResponse({ data: [], pagination: ++pages < 100 ? { cursor: `test-${pages}` } : {} }),
+    } });
+    await manager.deleteAllSubscriptions({ sessionId: "test-session" });
+    expect(pages).toBe(100);
+    expect(reports).toEqual([]);
+  });
+
+  test("parent cancellation after a listed page prevents another page or DELETE", async () => {
+    const controller = new AbortController();
+    let pages = 0;
+    let deletes = 0;
+    const manager = createManager({ axios: {
+      get: async () => { pages++; controller.abort(new Error("synthetic stop")); return createHttpResponse({ data: [], pagination: { cursor: "test-next" } }); },
+      delete: async () => { deletes++; return createHttpResponse({}); },
+    } });
+    await manager.deleteAllSubscriptions({ sessionId: "test-session", operationContext: { signal: controller.signal, remainingBudgetMs: () => 5000 } });
+    expect(pages).toBe(1);
+    expect(deletes).toBe(0);
+  });
+
+  test("later pages and deletes share the caller's shrinking total budget", async () => {
+    let remaining = 4000;
+    let pages = 0;
+    const timeouts: number[] = [];
+    const manager = createManager({ axios: {
+      get: async (_url, options) => {
+        timeouts.push(options!.timeout!);
+        remaining = ++pages === 1 ? 2000 : 1000;
+        return createHttpResponse({ data: [{ id: `test-budget-${pages}`, transport: { method: "websocket", session_id: "test-session" } }], pagination: pages === 1 ? { cursor: "test-next" } : {} });
+      },
+      delete: async (_url, options) => { timeouts.push(options!.timeout!); return createHttpResponse({}); },
+    } });
+    await manager.deleteAllSubscriptions({ sessionId: "test-session", operationContext: { signal: new AbortController().signal, remainingBudgetMs: () => remaining } });
+    expect(timeouts).toHaveLength(4);
+    expect(timeouts[0]).toBeLessThanOrEqual(4000);
+    expect(timeouts[1]).toBeLessThanOrEqual(2000);
+    expect(timeouts[2]).toBeLessThanOrEqual(1000);
+    expect(timeouts[3]).toBeLessThanOrEqual(1000);
+  });
+
+  test("cleanup reports fixed reasons rather than HTTP URLs or provider bodies", async () => {
+    const reports: unknown[] = [];
+    const manager = createManager({ logError: (message, error) => reports.push([message, String(error)]), axios: {
+      get: async () => { throw new Error("https://synthetic-user:synthetic-password@example.invalid/?after=synthetic-cursor"); },
+    } });
+    await manager.deleteAllSubscriptions({ sessionId: "test-session" });
+    expect(reports).toEqual([["EventSub remote cleanup incomplete", "Error: EventSub cleanup request failed"]]);
+  });
+
   test("categorizes subscription errors as critical or retryable", () => {
     const manager = createManager();
 

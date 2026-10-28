@@ -8,6 +8,8 @@ import { secrets } from '../../../core/secrets';
 
 const STARTUP_CLEANUP_DELETE_CONCURRENCY = 3;
 const STARTUP_STALE_WEBSOCKET_STATUS = 'websocket_disconnected';
+const CLEANUP_PAGE_LIMIT = 100;
+const CLEANUP_CURSOR_MAX_LENGTH = 4096;
 
 type LoggerLike = {
   info: (message: string, scope?: string, payload?: unknown) => void;
@@ -77,6 +79,7 @@ type EventSubRemoteSubscription = {
 
 type EventSubSubscriptionResponse = {
   data: EventSubRemoteSubscription[];
+  pagination?: { cursor?: string };
 };
 
 const getRecord = (value: unknown): Record<string, unknown> | null =>
@@ -204,8 +207,13 @@ function createTwitchEventSubSubscriptionManager(options: SubscriptionManagerOpt
             const errorCode = typeof errorData.error === 'string' ? errorData.error : 'HTTP_ERROR';
             const errorMessage = typeof errorData.message === 'string' ? errorData.message : httpDetails.message;
 
-            const isCritical = response?.status === 401 || response?.status === 403 || ['Unauthorized', 'Forbidden'].includes(errorCode);
-            const isRetryable = ['Too Many Requests', 'Internal Server Error'].includes(errorCode);
+            const status = response?.status;
+            const isCritical = typeof status === 'number'
+                ? status === 401 || status === 403
+                : ['Unauthorized', 'Forbidden'].includes(errorCode);
+            const isRetryable = typeof status === 'number'
+                ? status === 429 || (status >= 500 && status <= 599)
+                : ['Too Many Requests', 'Internal Server Error'].includes(errorCode);
 
             return {
                 code: errorCode,
@@ -222,7 +230,9 @@ function createTwitchEventSubSubscriptionManager(options: SubscriptionManagerOpt
             message: httpDetails.message,
             status: response?.status ?? null,
             isCritical: response?.status === 401 || response?.status === 403,
-            isRetryable: httpDetails.code !== 'EVENTSUB_RETRY_AFTER_EXCEEDS_BUDGET',
+            isRetryable: typeof response?.status === 'number'
+                ? response.status === 429 || (response.status >= 500 && response.status <= 599)
+                : httpDetails.code !== 'EVENTSUB_RETRY_AFTER_EXCEEDS_BUDGET',
             details: httpDetails
         };
     };
@@ -251,18 +261,20 @@ function createTwitchEventSubSubscriptionManager(options: SubscriptionManagerOpt
     };
 
   // Each request and the complete operation are bounded. No generic HTTP retry wraps POST.
-    const request = async <T>(method: AxiosMethodName, context: OperationDeadlineContext, payload?: unknown, id?: string): Promise<AxiosResponse<T>> => {
+    const request = async <T>(method: AxiosMethodName, context: OperationDeadlineContext, payload?: unknown, id?: string, cursor?: string): Promise<AxiosResponse<T>> => {
         context.signal.throwIfAborted();
         return withOperationDeadline(async ({ signal, remainingBudgetMs }) => {
             const execute = async () => {
                 signal.throwIfAborted();
                 const headers = await getAuthHeaders();
                 signal.throwIfAborted();
-                const url = `https://api.twitch.tv/helix/eventsub/subscriptions${id ? `?id=${encodeURIComponent(id)}` : ''}`;
+                const url = new URL('https://api.twitch.tv/helix/eventsub/subscriptions');
+                if (id) url.searchParams.set('id', id);
+                if (cursor) url.searchParams.set('after', cursor);
                 const config = { headers, signal, timeout: Math.max(1, Math.ceil(remainingBudgetMs())) };
-                if (method === 'post') return axios.post<T>(url, payload, config);
-                if (method === 'delete') return axios.delete<T>(url, config);
-                return axios.get<T>(url, config);
+                if (method === 'post') return axios.post<T>(url.toString(), payload, config);
+                if (method === 'delete') return axios.delete<T>(url.toString(), config);
+                return axios.get<T>(url.toString(), config);
             };
             try { return await execute(); }
             catch (error) {
@@ -351,13 +363,39 @@ function createTwitchEventSubSubscriptionManager(options: SubscriptionManagerOpt
     type CleanupOptions = { sessionId?: string | null; operationContext?: OperationDeadlineContext };
     const cleanupRemote = async ({ sessionId, operationContext }: CleanupOptions, startup: boolean) => {
         try {
-            await withOperationDeadline(async (context) => {
+            await withOperationDeadline(async (overall) => {
+                const context: OperationDeadlineContext = {
+                    signal: overall.signal,
+                    remainingBudgetMs: () => Math.min(overall.remainingBudgetMs(), operationContext?.remainingBudgetMs() ?? Infinity)
+                };
                 if (!(await ensureAuthReady())) return;
                 // Never target every active session when the caller has no owned session ID.
                 if (!startup && !sessionId) return;
-                const response = await request<EventSubSubscriptionResponse>('get', context);
-                context.signal.throwIfAborted();
-                const subscriptions = getSubscriptionResponseData(response).filter(sub => sub.transport?.method === 'websocket'
+                const listed: EventSubRemoteSubscription[] = [];
+                const cursors = new Set<string>();
+                let cursor: string | undefined;
+                for (let page = 0; page < CLEANUP_PAGE_LIMIT; page++) {
+                    const response = await request<EventSubSubscriptionResponse>('get', context, undefined, undefined, cursor);
+                    context.signal.throwIfAborted();
+                    const body = getRecord(response.data);
+                    if (!Array.isArray(body?.data)) throw new Error('Invalid EventSub cleanup page');
+                    for (const value of body.data) {
+                        const sub = getRecord(value);
+                        if (!sub || typeof sub.id !== 'string' || !sub.id.trim()) throw new Error('Invalid EventSub cleanup subscription');
+                        listed.push(value as EventSubRemoteSubscription);
+                    }
+                    if (body.pagination === undefined) break;
+                    const pagination = getRecord(body.pagination);
+                    if (!pagination || Array.isArray(pagination)) throw new Error('Invalid EventSub cleanup pagination');
+                    if (pagination.cursor === undefined) break;
+                    if (typeof pagination.cursor !== 'string' || !pagination.cursor.trim()
+                        || pagination.cursor.length > CLEANUP_CURSOR_MAX_LENGTH) throw new Error('Invalid EventSub cleanup cursor');
+                    cursor = pagination.cursor;
+                    if (cursors.has(cursor)) throw new Error('Repeated EventSub cleanup cursor');
+                    cursors.add(cursor);
+                    if (page + 1 === CLEANUP_PAGE_LIMIT) throw new Error('EventSub cleanup page limit exceeded');
+                }
+                const subscriptions = listed.filter(sub => sub.transport?.method === 'websocket'
                     && (sessionId ? sub.transport.session_id === sessionId : sub.status === STARTUP_STALE_WEBSOCKET_STATUS));
                 let nextIndex = 0;
                 const worker = async () => {
@@ -369,9 +407,9 @@ function createTwitchEventSubSubscriptionManager(options: SubscriptionManagerOpt
                             await request('delete', context, undefined, subscription.id);
                             context.signal.throwIfAborted();
                             // Local release is owned by the session lifecycle, never by late DELETE results.
-                        } catch (error) {
+                        } catch {
                             context.signal.throwIfAborted();
-                            safeLogError('Failed to delete EventSub subscription', error, 'subscription-delete');
+                            safeLogError('Failed to delete EventSub subscription', new Error('EventSub DELETE failed'), 'subscription-delete');
                         }
                     }
                 };
@@ -379,7 +417,15 @@ function createTwitchEventSubSubscriptionManager(options: SubscriptionManagerOpt
             }, { budgetMs: Math.min(5000, operationContext?.remainingBudgetMs() ?? 5000),
                 parentAbortSignal: operationContext?.signal, operationName: 'Twitch EventSub cleanup' });
         } catch (error) {
-            if (!operationContext?.signal.aborted) safeLogError('EventSub remote cleanup incomplete', error, 'eventsub-cleanup');
+            if (!operationContext?.signal.aborted) {
+                const reasons = new Set([
+                    'Invalid EventSub cleanup page', 'Invalid EventSub cleanup subscription',
+                    'Invalid EventSub cleanup pagination', 'Invalid EventSub cleanup cursor',
+                    'Repeated EventSub cleanup cursor', 'EventSub cleanup page limit exceeded'
+                ]);
+                const reason = error instanceof Error && reasons.has(error.message) ? error.message : 'EventSub cleanup request failed';
+                safeLogError('EventSub remote cleanup incomplete', new Error(reason), 'eventsub-cleanup');
+            }
         }
     };
     const cleanupAllWebSocketSubscriptions = (options: CleanupOptions = {}) => cleanupRemote(options, true);

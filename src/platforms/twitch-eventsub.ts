@@ -333,6 +333,11 @@ class TwitchEventSub extends EventEmitter {
         this.recentMessageIds.set(messageId, now);
         if (this.recentMessageIds.size > this.maxMessageIds) {
             this._pruneMessageIds(now);
+            while (this.recentMessageIds.size > this.maxMessageIds) {
+                const oldest = this.recentMessageIds.keys().next();
+                if (oldest.done) break;
+                this.recentMessageIds.delete(oldest.value);
+            }
         }
 
         return false;

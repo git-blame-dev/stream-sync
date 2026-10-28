@@ -129,6 +129,17 @@ describe("TwitchEventSub lifecycle", () => {
   });
 
   describe("message ID deduplication", () => {
+    it("evicts the oldest fresh ID when a burst exceeds the retained ID cap", () => {
+      eventSub = createEventSub();
+      eventSub.maxMessageIds = 3;
+      for (const id of ["test-fresh-1", "test-fresh-2", "test-fresh-3", "test-fresh-4"]) {
+        expect(eventSub._isDuplicateMessageId({ message_id: id })).toBe(false);
+      }
+      expect([...eventSub.recentMessageIds.keys()]).toEqual(["test-fresh-2", "test-fresh-3", "test-fresh-4"]);
+      expect(eventSub._isDuplicateMessageId({ message_id: "test-fresh-4" })).toBe(true);
+      expect(eventSub.recentMessageIds.size).toBe(3);
+    });
+
     it("prunes message IDs older than TTL", () => {
       eventSub = createEventSub();
       const now = testClock.now();

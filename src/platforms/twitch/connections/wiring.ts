@@ -43,34 +43,35 @@ function createTwitchEventSubWiring(options: WiringOptions = {}) {
         listenerStore.push({ eventName, handler });
     };
 
-  const bindAll = (handlersByEventName: Record<string, unknown> = {}): void => {
-        Object.entries(handlersByEventName).forEach(([eventName, handler]) => {
-      if (typeof handler !== 'function') {
-        return;
-      }
-      bind(eventName, handler as (...args: unknown[]) => void);
-    });
-  };
-
-  const unbindAll = (): void => {
-        if (!listenerStore.length || !eventSub) {
-            listenerStore.length = 0;
-            return;
+    const remove = (listener: EventSubListener): void => {
+        try {
+            if (typeof eventSub?.off === 'function') eventSub.off(listener.eventName, listener.handler);
+            else if (typeof eventSub?.removeListener === 'function') eventSub.removeListener(listener.eventName, listener.handler);
+            else return;
+            const index = listenerStore.indexOf(listener);
+            if (index !== -1) listenerStore.splice(index, 1);
+        } catch (error) {
+            try { errorHandler.handleCleanupError(error, 'twitch eventsub listener cleanup'); }
+            catch { /* Keep the entry retryable even if cleanup reporting fails. */ }
         }
+    };
 
-        listenerStore.forEach(({ eventName, handler }) => {
-            try {
-                if (typeof eventSub.off === 'function') {
-                    eventSub.off(eventName, handler);
-                } else if (typeof eventSub.removeListener === 'function') {
-                    eventSub.removeListener(eventName, handler);
-                }
-            } catch (error) {
-                errorHandler.handleCleanupError(error, 'twitch eventsub listener cleanup');
+    const bindAll = (handlersByEventName: Record<string, unknown> = {}): void => {
+        const previous = new Set(listenerStore);
+        try {
+            for (const [eventName, handler] of Object.entries(handlersByEventName)) {
+                if (typeof handler === 'function') bind(eventName, handler as (...args: unknown[]) => void);
             }
-        });
+        } catch (error) {
+            for (const listener of [...listenerStore]) {
+                if (!previous.has(listener)) remove(listener);
+            }
+            throw error;
+        }
+    };
 
-        listenerStore.length = 0;
+    const unbindAll = (): void => {
+        for (const listener of [...listenerStore]) remove(listener);
     };
 
     return {

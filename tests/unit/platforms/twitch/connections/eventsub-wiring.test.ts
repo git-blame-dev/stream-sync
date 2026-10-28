@@ -7,6 +7,78 @@ type ListenerStore = Record<string, Listener[]>;
 type BoundListener = { eventName: string; handler: Listener };
 
 describe("Twitch EventSub wiring", () => {
+  test("rolls back only newly bound exact callbacks when a later bind throws", () => {
+    const listeners = new Map<string, Listener>();
+    const store: BoundListener[] = [];
+    const first = () => {};
+    const existing = () => {};
+    const failure = new Error("synthetic bind failure");
+    const removed: BoundListener[] = [];
+    const wiring = createTwitchEventSubWiring({ logger: noOpLogger, eventSubListeners: store, eventSub: {
+      on: (event, handler) => { if (event === "second") throw failure; listeners.set(event, handler); },
+      off: (eventName, handler) => { removed.push({ eventName, handler }); if (listeners.get(eventName) === handler) listeners.delete(eventName); },
+    } });
+    wiring.bind("existing", existing);
+    expect(() => wiring.bindAll({ first, second: () => {} })).toThrow(failure);
+    expect(removed).toEqual([{ eventName: "first", handler: first }]);
+    expect([...listeners.keys()]).toEqual(["existing"]);
+    expect(store).toEqual([{ eventName: "existing", handler: existing }]);
+  });
+
+  test("retains failed rollback entries and preserves the original bind failure despite diagnostics", () => {
+    const store: BoundListener[] = [];
+    const first = () => {};
+    const failure = new Error("synthetic bind failure");
+    let removalFails = true;
+    const wiring = createTwitchEventSubWiring({
+      logger: { ...noOpLogger, error: () => { throw new Error("synthetic diagnostic failure"); } },
+      eventSubListeners: store, eventSub: {
+        on: (event) => { if (event === "second") throw failure; },
+        off: () => { if (removalFails) throw new Error("synthetic removal failure"); },
+      },
+    });
+    expect(() => wiring.bindAll({ first, second: () => {} })).toThrow(failure);
+    expect(store).toEqual([{ eventName: "first", handler: first }]);
+    removalFails = false;
+    wiring.unbindAll();
+    expect(store).toEqual([]);
+  });
+
+  test("retains listeners without a removal API until a later retry can remove them", () => {
+    const store: BoundListener[] = [];
+    const handler = () => {};
+    const eventSub: { on: () => void; off?: (event: string, listener: Listener) => void } = { on: () => {} };
+    const wiring = createTwitchEventSubWiring({ logger: noOpLogger, eventSubListeners: store, eventSub });
+    wiring.bind("test", handler);
+    wiring.unbindAll();
+    expect(store).toEqual([{ eventName: "test", handler }]);
+    const removed: BoundListener[] = [];
+    eventSub.off = (eventName, callback) => { removed.push({ eventName, handler: callback }); };
+    wiring.unbindAll();
+    expect(removed).toEqual([{ eventName: "test", handler }]);
+    expect(store).toEqual([]);
+  });
+
+  test("unbind attempts independent removals and retains only failures for retry", () => {
+    const store: BoundListener[] = [];
+    const first = () => {};
+    const second = () => {};
+    let fail = true;
+    const removed: string[] = [];
+    const wiring = createTwitchEventSubWiring({ logger: noOpLogger, eventSubListeners: store, eventSub: {
+      on: () => {},
+      off: (event) => { if (event === "first" && fail) throw new Error("synthetic removal failure"); removed.push(event); },
+    } });
+    wiring.bindAll({ first, second });
+    wiring.unbindAll();
+    expect(removed).toEqual(["second"]);
+    expect(store).toEqual([{ eventName: "first", handler: first }]);
+    fail = false;
+    wiring.unbindAll();
+    expect(removed).toEqual(["second", "first"]);
+    expect(store).toEqual([]);
+  });
+
   const createEventSub = ({ useOff = true } = {}) => {
     const listeners: ListenerStore = {};
     const add = (event: string, handler: Listener): void => {
