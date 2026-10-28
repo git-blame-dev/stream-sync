@@ -1219,13 +1219,7 @@ class AppRuntime {
         if (!options || typeof options !== 'object') {
             throw new Error('handleRaidNotification requires options');
         }
-        if (options.viewerCount === undefined) {
-            throw new Error('handleRaidNotification requires viewerCount');
-        }
-        return this.handleUnifiedNotification('platform:raid', platform, raiderName, {
-            viewerCount: options.viewerCount,
-            ...options
-        });
+        return this.handleUnifiedNotification('platform:raid', platform, raiderName, options);
     }
 
     async handleGiftNotification(platform: string, username: unknown, options: NotificationOptions) {

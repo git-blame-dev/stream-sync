@@ -43,12 +43,31 @@ describe("NotificationManager raid viewer count fallback", () => {
     });
   };
 
-  test("throws when raid viewer count is missing", () => {
+  test("keeps raid logs without inventing an unknown viewer count", () => {
     const manager = createManager();
-    expect(() =>
-      manager.generateLogMessage("platform:raid", {
-        username: "MysteryRaider",
-      }),
-    ).toThrow("Raid log message requires viewerCount");
+    for (const viewerCount of [undefined, null, true, [], {}, "", " ", -1, 1.5, Infinity, NaN, Number.MAX_SAFE_INTEGER + 1]) {
+      expect(manager.generateLogMessage("platform:raid", { username: "SyntheticRaider", viewerCount })).toBe("Incoming raid from SyntheticRaider!");
+    }
+  });
+
+  test("normalizes valid raid fallback counts including zero and singular", () => {
+    const manager = createManager();
+    for (const viewerCount of [0, "0", 1, "1", 12, " 12 "]) {
+      const count = Number(viewerCount);
+      expect(manager.generateLogMessage("platform:raid", { username: "SyntheticRaider", viewerCount })).toBe(`Incoming raid from SyntheticRaider with ${count} ${count === 1 ? "viewer" : "viewers"}!`);
+    }
+  });
+
+  test("prepares a raid with unknown count instead of rejecting the notification", async () => {
+    const manager = createManager();
+    const result = await manager.prepareNotification("platform:raid", "twitch", {
+      username: "SyntheticRaider", userId: "synthetic-raider", viewerCount: -1,
+    });
+    expect(result.success).toBe(true);
+    expect(result.item?.data).toMatchObject({
+      displayMessage: "Incoming raid from SyntheticRaider!",
+      logMessage: "Incoming raid from SyntheticRaider!",
+      ttsMessage: "Incoming raid from SyntheticRaider",
+    });
   });
 });

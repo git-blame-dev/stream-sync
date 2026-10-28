@@ -3,6 +3,7 @@ import { interpolateTemplate } from './notification-template-interpolator';
 import { normalizeCurrency } from './currency-utils';
 import { getAnonymousUsername } from './validation';
 import { allowsYouTubeJewelsMissingAmount } from './missing-fields';
+import { parseNotificationCount } from './notification-count';
 
 const HARDCODED_TYPES = ['platform:gift', 'platform:giftpaypiggy', 'platform:paypiggy', 'platform:follow', 'platform:share', 'platform:raid', 'platform:envelope'];
 const VIRTUAL_GIFT_CURRENCIES = new Set(['coins', 'bits', 'jewels']);
@@ -543,11 +544,11 @@ class NotificationBuilder {
         }
 
         if (type === 'platform:raid') {
-            const viewerCount = Number(input.viewerCount);
-            if (!Number.isFinite(viewerCount)) {
-                throw new Error('Raid notification requires viewerCount');
+            const viewerCount = parseNotificationCount(input.viewerCount);
+            if (viewerCount === null) {
+                return `Incoming raid from ${this.getTruncatedUsername(username)}!`;
             }
-            const viewerText = 'viewers';
+            const viewerText = viewerCount === 1 ? 'viewer' : 'viewers';
             return `Incoming raid from ${this.getTruncatedUsername(username)} with ${viewerCount} ${viewerText}!`;
         }
 
@@ -647,9 +648,9 @@ class NotificationBuilder {
         }
 
         if (type === 'platform:raid') {
-            const viewerCount = Number(input.viewerCount);
-            if (!Number.isFinite(viewerCount)) {
-                throw new Error('Raid notification requires viewerCount');
+            const viewerCount = parseNotificationCount(input.viewerCount);
+            if (viewerCount === null) {
+                return `Incoming raid from ${this.sanitizeUsernameForTts(username)}`;
             }
             const viewerText = viewerCount === 1 ? 'viewer' : 'viewers';
             return `Incoming raid from ${this.sanitizeUsernameForTts(username)} with ${viewerCount} ${viewerText}`;
@@ -751,11 +752,11 @@ class NotificationBuilder {
         }
         
         if (type === 'platform:raid') {
-            const viewerCount = Number(input.viewerCount);
-            if (!Number.isFinite(viewerCount)) {
-                throw new Error('Raid notification requires viewerCount');
+            const viewerCount = parseNotificationCount(input.viewerCount);
+            if (viewerCount === null) {
+                return `Incoming raid from ${userName}!`;
             }
-            return `Incoming raid from ${userName} with ${viewerCount} viewers!`;
+            return `Incoming raid from ${userName} with ${viewerCount} ${viewerCount === 1 ? 'viewer' : 'viewers'}!`;
         }
         
         if (type === 'platform:envelope') {

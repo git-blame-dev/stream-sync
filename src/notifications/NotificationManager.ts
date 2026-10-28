@@ -11,6 +11,7 @@ import { NotificationGate } from './notification-gate';
 import { NotificationInputValidator } from './notification-input-validator';
 import { NotificationPayloadBuilder } from './notification-payload-builder';
 import { allowsYouTubeJewelsMissingAmount } from '../utils/missing-fields';
+import { parseNotificationCount } from '../utils/notification-count';
 
 type NotificationRecord = Record<string, unknown>;
 
@@ -592,11 +593,13 @@ class NotificationManager extends EventEmitter {
                     : `${amount} ${data.currency}`;
                 return `Gift from ${data.username}: ${giftType} (${formattedAmount})`;
             }
-            case 'platform:raid':
-                if (data.viewerCount === undefined) {
-                    throw new Error('Raid log message requires viewerCount');
+            case 'platform:raid': {
+                const viewerCount = parseNotificationCount(data.viewerCount);
+                if (viewerCount === null) {
+                    return `Incoming raid from ${data.username}!`;
                 }
-                return `Incoming raid from ${data.username} with ${data.viewerCount} viewers!`;
+                return `Incoming raid from ${data.username} with ${viewerCount} ${viewerCount === 1 ? 'viewer' : 'viewers'}!`;
+            }
             default:
                 throw new Error(`Unsupported notification type for log message: ${notificationType}`);
         }

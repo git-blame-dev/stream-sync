@@ -50,6 +50,20 @@ describe("ViewerCountSystem polling with malformed payloads", () => {
     expect(observerUpdates).toHaveLength(0);
   });
 
+  test("retains a real previous measurement and freshness after negative or fractional polls", async () => {
+    for (const invalid of [-1, 1.5]) {
+      const { system } = createSystemWithPlatformReturning(invalid);
+      await system.updateViewerCount("youtube", 12);
+      const before = system.getViewerCountSnapshot("youtube");
+      const observerUpdates: ViewerCountUpdatePayload[] = [];
+      system.addObserver({ getObserverId: () => "synthetic-observer", onViewerCountUpdate: (payload: ViewerCountUpdatePayload) => observerUpdates.push(payload) });
+      await system.pollPlatform("youtube");
+      expect(system.getViewerCount("youtube")).toBe(12);
+      expect(system.getViewerCountSnapshot("youtube")).toEqual(before);
+      expect(observerUpdates).toHaveLength(0);
+    }
+  });
+
   test("skips update when platform returns object payload without numeric count", async () => {
     const { system } = createSystemWithPlatformReturning({ count: "unknown" });
     const observerUpdates: ViewerCountUpdatePayload[] = [];

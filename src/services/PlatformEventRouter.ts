@@ -5,6 +5,7 @@ import { getValidMessageParts, normalizeBadgeImages } from '../utils/message-par
 import { UNKNOWN_CHAT_MESSAGE, UNKNOWN_CHAT_USERNAME } from '../constants/degraded-chat';
 import { allowsYouTubeJewelsMissingUserId, getMissingFields } from '../utils/missing-fields';
 import { NotificationInputValidator } from '../notifications/notification-input-validator';
+import { parseNotificationCount } from '../utils/notification-count';
 
 type RouterUserTrackingService = {
     markStreamSupporter?: (platform: unknown, userId: unknown) => boolean;
@@ -236,10 +237,8 @@ class PlatformEventRouter {
                     if (payload.count === undefined) {
                         throw new Error('Viewer-count event requires count');
                     }
-                    const count = typeof payload.count === 'string'
-                        ? Number(payload.count)
-                        : (typeof payload.count === 'number' ? payload.count : Number.NaN);
-                    if (!Number.isFinite(count)) {
+                    const count = parseNotificationCount(payload.count);
+                    if (count === null) {
                         throw new Error('Viewer-count event requires numeric count');
                     }
                     await this.runtime.updateViewerCount(platform, count);

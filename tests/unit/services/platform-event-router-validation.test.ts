@@ -779,6 +779,22 @@ describe("PlatformEventRouter validation", () => {
     expect(runtime.updateViewerCount).not.toHaveBeenCalled();
   });
 
+  it("rejects invalid scalar counts without invoking the store", async () => {
+    const { router, runtime } = buildRouter();
+    for (const count of [-1, 1.5, "", "  ", null, true, [], {}, Number.MAX_SAFE_INTEGER + 1, "9007199254740992"]) {
+      await expect(router.routeEvent({ platform: "twitch", type: "platform:viewer-count", data: { count, timestamp: "2026-01-01T00:00:00.000Z" } })).rejects.toThrow();
+    }
+    expect(runtime.updateViewerCount).not.toHaveBeenCalled();
+  });
+
+  it("forwards valid numbers and nonblank numeric strings including zero", async () => {
+    const { router, runtime } = buildRouter();
+    for (const count of [0, "0", 12, " 12 ", Number.MAX_SAFE_INTEGER]) {
+      await router.routeEvent({ platform: "twitch", type: "platform:viewer-count", data: { count, timestamp: "2026-01-01T00:00:00.000Z" } });
+    }
+    expect(runtime.updateViewerCount.mock.calls.map(([, count]) => count)).toEqual([0, 0, 12, 12, Number.MAX_SAFE_INTEGER]);
+  });
+
   it("awaits viewer-count transitions", async () => {
     let releaseUpdate!: () => void;
     let updateCompleted = false;

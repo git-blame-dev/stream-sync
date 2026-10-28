@@ -1484,7 +1484,13 @@ describe("AppRuntime behavior", () => {
 
     await expect(
       runtime.handleRaidNotification("twitch", "test-raider", {}),
-    ).rejects.toThrow("handleRaidNotification requires viewerCount");
+    ).resolves.toMatchObject({
+      success: false,
+      error: "Missing userId for platform:raid notification",
+    });
+    await expect(
+      runtime.handleRaidNotification("twitch", "test-raider", undefined as unknown as Parameters<AppRuntime["handleRaidNotification"]>[2]),
+    ).rejects.toThrow("handleRaidNotification requires options");
   });
 
   it("routes envelope notifications with required payload", async () => {

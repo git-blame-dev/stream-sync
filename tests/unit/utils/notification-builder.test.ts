@@ -31,6 +31,25 @@ const expectNotification = (
 };
 
 describe("NotificationBuilder", () => {
+  test("omits unknown raid counts consistently without dropping the notification", () => {
+    for (const viewerCount of [undefined, null, true, [], {}, "", " ", -1, 1.5, Infinity, NaN, Number.MAX_SAFE_INTEGER + 1]) {
+      const notification = expectNotification(NotificationBuilder.build({ platform: "twitch", type: "platform:raid", username: "SyntheticRaider", userId: "synthetic-raider", viewerCount } as Parameters<typeof NotificationBuilder.build>[0]));
+      expect(notification.displayMessage).toBe("Incoming raid from SyntheticRaider!");
+      expect(notification.logMessage).toBe("Incoming raid from SyntheticRaider!");
+      expect(notification.ttsMessage).toBe("Incoming raid from SyntheticRaider");
+    }
+  });
+
+  test("normalizes valid raid counts and preserves singular and zero wording", () => {
+    for (const viewerCount of [0, "0", 1, "1", 12, " 12 "]) {
+      const notification = expectNotification(NotificationBuilder.build({ platform: "twitch", type: "platform:raid", username: "SyntheticRaider", userId: "synthetic-raider", viewerCount }));
+      const count = Number(viewerCount);
+      const fragment = ` with ${count} ${count === 1 ? "viewer" : "viewers"}`;
+      expect(notification.displayMessage).toBe(`Incoming raid from SyntheticRaider${fragment}!`);
+      expect(notification.logMessage).toBe(`Incoming raid from SyntheticRaider${fragment}!`);
+      expect(notification.ttsMessage).toBe(`Incoming raid from SyntheticRaider${fragment}`);
+    }
+  });
   test("builds a basic notification object from minimal input", () => {
     const input = {
       platform: "youtube",

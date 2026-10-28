@@ -240,19 +240,28 @@ describe("NotificationManager follow/raid/share behavior", () => {
     expect(queuedItems).toHaveLength(0);
   });
 
-  test("raid notifications without viewer counts are rejected", async () => {
+  test("raid notifications without viewer counts queue once with count-free text and raid VFX", async () => {
     const result = await manager.handleNotification("platform:raid", "twitch", {
-      username: "MysteryRaider",
-      userId: "raid-1",
+      username: "SyntheticRaider",
+      userId: "synthetic-raid-unknown",
     });
 
     expect(result).toEqual(
       expect.objectContaining({
-        success: false,
-        error: "Notification build failed",
+        success: true,
+        priority: constants.PRIORITY_LEVELS.RAID,
       }),
     );
-    expect(queuedItems).toHaveLength(0);
+    expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
+    expect(queuedItems).toHaveLength(1);
+    const raidItem = requireQueuedItem(queuedItems[0]);
+    expect(raidItem.data).toMatchObject({
+      displayMessage: "Incoming raid from SyntheticRaider!",
+      ttsMessage: "Incoming raid from SyntheticRaider",
+      logMessage: "Incoming raid from SyntheticRaider!",
+    });
+    expect(raidItem.priority).toBe(constants.PRIORITY_LEVELS.RAID);
+    expect(raidItem.vfxConfig).toEqual({ commandKey: "raids", filename: "raids.mp4" });
   });
 
   test("raid notifications with zero viewers still route and surface zero count", async () => {
@@ -263,6 +272,7 @@ describe("NotificationManager follow/raid/share behavior", () => {
     });
 
     expect(result.success).toBe(true);
+    expect(queuedItems).toHaveLength(1);
     const raidItem = requireQueuedItem(queuedItems[0]);
     expect(raidItem.data?.displayMessage).toBe(
       "Incoming raid from ZeroRaider with 0 viewers!",
@@ -270,6 +280,21 @@ describe("NotificationManager follow/raid/share behavior", () => {
     expect(raidItem.data?.ttsMessage).toBe(
       "Incoming raid from ZeroRaider with 0 viewers",
     );
+    expect(raidItem.data?.logMessage).toBe("Incoming raid from ZeroRaider with 0 viewers!");
+  });
+
+  test("raid notifications retain singular wording for one viewer", async () => {
+    const result = await manager.handleNotification("platform:raid", "twitch", {
+      username: "SyntheticRaider", viewerCount: "1", userId: "synthetic-raid-one",
+    });
+    expect(result.success).toBe(true);
+    expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
+    expect(queuedItems).toHaveLength(1);
+    expect(requireQueuedItem(queuedItems[0]).data).toMatchObject({
+      displayMessage: "Incoming raid from SyntheticRaider with 1 viewer!",
+      ttsMessage: "Incoming raid from SyntheticRaider with 1 viewer",
+      logMessage: "Incoming raid from SyntheticRaider with 1 viewer!",
+    });
   });
 
   test("raid notifications carry raid VFX command mapping", async () => {
