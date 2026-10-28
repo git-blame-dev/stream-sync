@@ -220,6 +220,7 @@ type TikTokGiftAggregationState = {
     giftImageUrl: string;
     currency: string;
     totalCount: number;
+    totalAmount: number;
     timer: ReturnType<typeof setTimeout> | number | null;
     unitAmount: number;
     lastGift: TikTokPayload;

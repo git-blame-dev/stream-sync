@@ -61,6 +61,7 @@ type TikTokGiftAggregationState = {
     giftImageUrl: string;
     currency: string;
     totalCount: number;
+    totalAmount: number;
     timer: ReturnType<typeof setTimeout> | number | null;
     unitAmount: number;
     lastGift: TikTokGiftPayload;
@@ -144,7 +145,7 @@ const normalizeRequiredPositive = (value: unknown, label: string): number => {
         if (!Number.isFinite(Number(storedUnitAmount))) {
             throw new Error('Aggregated gift requires unitAmount');
         }
-        const totalAmount = Number(storedUnitAmount) * aggregatedCount;
+        const totalAmount = aggregationData.totalAmount;
         const finalUsername = aggregationData.username;
         const giftType = aggregationData.giftType;
         const resolvedCurrency = aggregationData.currency;
@@ -280,7 +281,7 @@ const handleStandardGift = async (gift: TikTokGiftPayload): Promise<void> => {
         const resolvedAvatarUrl = typeof gift.avatarUrl === 'string' ? gift.avatarUrl.trim() : '';
         const resolvedGiftImageUrl = typeof gift.giftImageUrl === 'string' ? gift.giftImageUrl.trim() : '';
 
-        const key = `${userId}-${giftType}`;
+        const key = JSON.stringify([userId, giftType, resolvedCurrency]);
         const existingAggregation = platform.giftAggregation[key];
         if (existingAggregation) {
             platform.logger.debug(
@@ -299,6 +300,7 @@ const handleStandardGift = async (gift: TikTokGiftPayload): Promise<void> => {
                 giftImageUrl: resolvedGiftImageUrl,
                 currency: resolvedCurrency,
                 totalCount: 0,
+                totalAmount: 0,
                 timer: null,
                 unitAmount,
                 lastGift: gift,
@@ -340,6 +342,7 @@ const handleStandardGift = async (gift: TikTokGiftPayload): Promise<void> => {
         highWaterMap.set(identityValue, giftCount);
 
         aggregationState.totalCount += deltaCount;
+        aggregationState.totalAmount += deltaCount * unitAmount;
         aggregationState.unitAmount = unitAmount;
         aggregationState.lastGift = gift;
         aggregationState.lastId = giftId;

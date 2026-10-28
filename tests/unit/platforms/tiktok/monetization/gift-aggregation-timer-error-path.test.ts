@@ -70,6 +70,28 @@ describe("TikTok gift processing", () => {
     expect(platform.giftAggregator).toBeDefined();
   });
 
+  it("keeps real normalized combo progress filtered and delivers completion once", async () => {
+    const { platform } = createPlatform({ aggregationEnabled: true });
+    const events: unknown[] = [];
+    platform.on("platform:event", (event: unknown) => events.push(event));
+    const wireGift = {
+      user: { uniqueId: "test-combo-user", nickname: "TestComboUser" },
+      common: { msgId: "test-combo-message", createTime: 1735787045 },
+      timestamp: "2025-01-02T03:04:05.000Z",
+      groupId: "test-combo-group",
+      giftDetails: { giftName: "Test Rose", giftType: 1, diamondCount: 2 },
+    };
+    for (const repeatCount of [1, 3]) {
+      await platform.handleTikTokGift({ ...wireGift, repeatCount, repeatEnd: 0 });
+    }
+    expect(platform.giftAggregation).toEqual({});
+    expect(events).toHaveLength(0);
+    await platform.handleTikTokGift({ ...wireGift, repeatCount: 3, repeatEnd: 1 });
+    await platform.giftAggregator.cleanupGiftAggregation();
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ data: { giftCount: 3, amount: 6, currency: "coins" } });
+  });
+
   it("handles gift processing via aggregator without throwing", async () => {
     const { platform } = createPlatform({ aggregationEnabled: false });
     const errorHandler = {

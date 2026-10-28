@@ -152,6 +152,69 @@ describe("TikTok gift aggregator", () => {
   });
 
   describe("gift aggregation behavior", () => {
+    test("keeps delimiter-colliding user and gift tuples separate", async () => {
+      const handled: GiftPayload[] = [];
+      const aggregator = createTikTokGiftAggregator({ platform: createTestPlatform({
+        _handleGift: async (payload) => handled.push(payload),
+      }) });
+      await aggregator.handleStandardGift(buildGift({ userId: "test-a-b", giftType: "c", giftCount: 1 }));
+      await aggregator.handleStandardGift(buildGift({ userId: "test-a", giftType: "b-c", giftCount: 2 }));
+      await aggregator.cleanupGiftAggregation();
+      expect(handled.map(({ userId, giftType, giftCount, amount }) => ({ userId, giftType, giftCount, amount }))).toEqual([
+        { userId: "test-a-b", giftType: "c", giftCount: 1, amount: 1 },
+        { userId: "test-a", giftType: "b-c", giftCount: 2, amount: 2 },
+      ]);
+    });
+
+    test("keeps exact currencies separate without changing their case", async () => {
+      const handled: GiftPayload[] = [];
+      const aggregator = createTikTokGiftAggregator({ platform: createTestPlatform({
+        _handleGift: async (payload) => handled.push(payload),
+      }) });
+      for (const currency of ["coins", "Coins", "test-currency"]) {
+        await aggregator.handleStandardGift(buildGift({ currency }));
+      }
+      await aggregator.cleanupGiftAggregation();
+      expect(handled.map(({ currency, giftCount, amount }) => ({ currency, giftCount, amount }))).toEqual([
+        { currency: "coins", giftCount: 2, amount: 2 },
+        { currency: "Coins", giftCount: 2, amount: 2 },
+        { currency: "test-currency", giftCount: 2, amount: 2 },
+      ]);
+    });
+
+    test("values only accepted message deltas at their observed unit amount", async () => {
+      const handled: GiftPayload[] = [];
+      const aggregator = createTikTokGiftAggregator({ platform: createTestPlatform({
+        _handleGift: async (payload) => handled.push(payload),
+      }) });
+      const rawData = { testAnimation: "test-enrichment" };
+      await aggregator.handleStandardGift(buildGift({ giftCount: 1, unitAmount: 2 }));
+      await aggregator.handleStandardGift(buildGift({ giftCount: 3, unitAmount: 5, rawData }));
+      await aggregator.handleStandardGift(buildGift({ giftCount: 3, unitAmount: 90 }));
+      await aggregator.handleStandardGift(buildGift({ giftCount: 2, unitAmount: 100 }));
+      await aggregator.cleanupGiftAggregation();
+      expect(handled).toHaveLength(1);
+      expect(handled[0]).toMatchObject({ giftCount: 3, amount: 12, unitAmount: 5,
+        enhancedGiftData: { giftCount: 3, amount: 12, originalData: rawData } });
+    });
+
+    test("combines distinct completed groups without repricing or replay contributions", async () => {
+      const handled: GiftPayload[] = [];
+      const aggregator = createTikTokGiftAggregator({ platform: createTestPlatform({
+        _handleGift: async (payload) => handled.push(payload),
+      }) });
+      const completion = { comboType: 1, repeatEnd: true, groupId: "test-group-a" };
+      await aggregator.handleStandardGift(buildGift({ ...completion, giftCount: 1, unitAmount: 2 }));
+      await aggregator.handleStandardGift(buildGift({ ...completion, id: "test-replay", giftCount: 1, unitAmount: 99 }));
+      await aggregator.handleStandardGift(buildGift({ ...completion, giftCount: 3, unitAmount: 5 }));
+      await aggregator.handleStandardGift(buildGift({ ...completion, giftCount: 2, unitAmount: 99 }));
+      await aggregator.handleStandardGift(buildGift({ ...completion, groupId: "test-group-b", giftCount: 2, unitAmount: 3 }));
+      await aggregator.cleanupGiftAggregation();
+      expect(handled).toHaveLength(1);
+      expect(handled[0]).toMatchObject({ giftCount: 5, amount: 18, unitAmount: 3,
+        enhancedGiftData: { giftCount: 5, amount: 18 } });
+    });
+
     test("aggregates gifts and delivers after delay", async () => {
       const handledGifts: GiftPayload[] = [];
       const platform = createTestPlatform({
@@ -458,11 +521,11 @@ describe("TikTok gift aggregator", () => {
 
       await giftAggregator.handleStandardGift(buildGift());
 
-      expect(platform.giftAggregation["tt-user1-Rose"]).toBeDefined();
+      expect(platform.giftAggregation[JSON.stringify(["tt-user1", "Rose", "coins"])]).toBeDefined();
 
       await advanceTimersByTime(platform.giftAggregationDelay);
 
-      expect(platform.giftAggregation["tt-user1-Rose"]).toBeUndefined();
+      expect(platform.giftAggregation).toEqual({});
     });
 
     test("cleans up aggregation state when delivery fails", async () => {
@@ -477,7 +540,7 @@ describe("TikTok gift aggregator", () => {
       await giftAggregator.handleStandardGift(buildGift());
       await advanceTimersByTime(platform.giftAggregationDelay);
 
-      expect(platform.giftAggregation["tt-user1-Rose"]).toBeUndefined();
+      expect(platform.giftAggregation).toEqual({});
     });
 
     test("summarizes gift delivery failures without raw provider payloads", async () => {
