@@ -409,12 +409,10 @@ describe("Observer Pattern Integration", () => {
       expect(calls.length).toBeGreaterThanOrEqual(2);
     });
 
-    test("should handle platform-specific observer filtering", async () => {
+    test("broadcasts all platform updates to a registered observer", async () => {
       const youtubeObserver = {
         getObserverId: () => "youtube-only-observer",
-        onViewerCountUpdate: createMockFn<[ViewerCountUpdate], void>((update) => {
-          if (update.platform !== "youtube") return;
-        }),
+        onViewerCountUpdate: createMockFn<[ViewerCountUpdate], void>(),
         onStreamStatusChange: createMockFn(),
       };
       viewerCountSystem.addObserver(youtubeObserver);

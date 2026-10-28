@@ -1,5 +1,6 @@
 import { describe, test, beforeEach, afterEach, expect } from "bun:test";
 import path from "node:path";
+import os from "node:os";
 import {
   createMockFn,
   clearAllMocks,
@@ -10,6 +11,7 @@ import { createAppRuntimeTestDependencies } from "../helpers/runtime-test-harnes
 import { TEST_TIMEOUTS } from "../helpers/test-setup";
 import { PlatformEvents } from "../../src/interfaces/PlatformEvents";
 import { AppRuntime } from "../../src/main";
+import { noOpLogger } from "../helpers/mock-factories";
 
 type RuntimeUnderTest = InstanceType<typeof AppRuntime>;
 type AppRuntimeConfig = ConstructorParameters<typeof AppRuntime>[0];
@@ -57,7 +59,7 @@ const createRuntimeConfig = (overrides: Partial<RuntimeConfig> = {}): RuntimeCon
     },
     farewell: { timeout: 1_000 },
     vfx: {
-      filePath: path.join(__dirname, "../../test-assets/vfx"),
+      filePath: path.join(os.tmpdir(), "synthetic-runtime-vfx"),
       ...overrides.vfx,
     },
     commands: {
@@ -105,11 +107,11 @@ describe("AppRuntime VFXCommandService Lifecycle Management", () => {
   });
 
   afterEach(async () => {
-    const stopRuntime = runtime ? Reflect.get(runtime, "stop") : undefined;
-    if (typeof stopRuntime === "function") {
-      await stopRuntime.call(runtime);
+    try {
+      await runtime?.shutdown();
+    } finally {
+      restoreAllMocks();
     }
-    restoreAllMocks();
   });
 
   describe("VFXCommandService Initialization", () => {
@@ -133,7 +135,7 @@ describe("AppRuntime VFXCommandService Lifecycle Management", () => {
 
   describe("EventBus VFX Command Integration", () => {
     test(
-      "should execute VFX commands via EventBus",
+      "routes EventBus commands to the injected VFX service",
       async () => {
         const { dependencies } = createAppRuntimeTestDependencies();
         runtime = new AppRuntime(config, dependencies);
@@ -165,14 +167,34 @@ describe("AppRuntime VFXCommandService Lifecycle Management", () => {
     );
 
     test(
-      "should handle VFX command errors gracefully",
+      "diagnoses a rejected service call and routes a later command through the runtime handler",
       async () => {
-        const { dependencies } = createAppRuntimeTestDependencies();
+        const diagnosed = Promise.withResolvers<void>();
+        const completed = Promise.withResolvers<void>();
+        const diagnostics: string[] = [];
+        const { dependencies } = createAppRuntimeTestDependencies({
+          logger: {
+            ...noOpLogger,
+            error(message: unknown, context?: unknown, metadata?: unknown) {
+              const details = metadata as { error?: string; eventType?: string } | undefined;
+              if (message === "[EventHandler] Error executing VFX command"
+                && context === "AppRuntime" && details?.eventType === "event-handler") {
+                diagnostics.push(details.error || "");
+                if (details.error === "synthetic VFX execution failure") diagnosed.resolve();
+              }
+            },
+          },
+        });
         runtime = new AppRuntime(config, dependencies);
         await runtime.start();
 
-        runtime.vfxCommandService.executeCommand =
-          createMockFn().mockRejectedValue(new Error("VFX execution failed"));
+        const routed: unknown[] = [];
+        runtime.vfxCommandService.executeCommand = createMockFn(async (command: unknown) => {
+          routed.push(command);
+          if (command === "!invalid") throw new Error("synthetic VFX execution failure");
+          completed.resolve();
+          return { success: true };
+        });
 
         emitVfxCommand(runtime, {
           command: "!invalid",
@@ -182,10 +204,20 @@ describe("AppRuntime VFXCommandService Lifecycle Management", () => {
           context: { skipCooldown: true, correlationId: "corr-2" },
         });
 
-        await flushAsyncEvents();
+        await diagnosed.promise;
+        expect(diagnostics.some((message) => message.includes("synthetic VFX execution failure"))).toBe(true);
+        emitVfxCommand(runtime, {
+          command: "!hello",
+          username: "SyntheticRecoveryViewer",
+          platform: "twitch",
+          userId: "synthetic-recovery-id",
+          context: { skipCooldown: true, correlationId: "synthetic-recovery-correlation" },
+        });
+        await completed.promise;
+        expect(routed).toEqual(["!invalid", "!hello"]);
 
         expect(runtime.vfxCommandService.executeCommand).toHaveBeenCalledTimes(
-          1,
+          2,
         );
       },
       { timeout: integrationTimeout },

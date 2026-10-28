@@ -4,12 +4,12 @@ import type { TestMockFn } from "../helpers/bun-mock-utils";
 import { createMockPlatform, noOpLogger } from "../helpers/mock-factories";
 import { ViewerCountSystem } from "../../src/utils/viewer-count.ts";
 import { createConfigFixture } from "../helpers/config-fixture";
-import { safeDelay } from "../../src/utils/timeout-validator";
 
 type PlatformName = "tiktok" | "twitch" | "youtube";
 type PlatformBehavior = { viewerCount: number };
 type PlatformBehaviors = Partial<Record<PlatformName, PlatformBehavior>>;
 type ViewerCountSystemUnderTest = InstanceType<typeof ViewerCountSystem>;
+const systems = new Set<ViewerCountSystemUnderTest>();
 type MockPlatformWithViewerCount = ReturnType<typeof createMockPlatform> & {
   getViewerCount: TestMockFn<[], Promise<number>>;
   initialize: TestMockFn<[], Promise<boolean>>;
@@ -54,6 +54,7 @@ const createViewerCountSystemWithBehaviors = (
     logger: noOpLogger,
     config: createConfigFixture(),
   });
+  systems.add(system);
 
   return { system, platforms };
 };
@@ -105,8 +106,13 @@ const expectUserSeesViewerCount = (
 };
 
 describe("ViewerCount Unified Initialization Behavior", () => {
-  afterEach(() => {
-    restoreAllMocks();
+  afterEach(async () => {
+    try {
+      await Promise.all([...systems].map((system) => system.cleanup()));
+    } finally {
+      systems.clear();
+      restoreAllMocks();
+    }
   });
 
   describe("Unified Initialization Behavior", () => {
@@ -225,6 +231,12 @@ describe("ViewerCount Unified Initialization Behavior", () => {
       expect(initialStability.isStable).toBe(true);
 
       simulateNetworkFailure(platforms.tiktok, "connection_refused");
+      await simulatePlatformReadiness(system, "tiktok", true);
+      await system.pollPlatform("tiktok");
+      expect(platforms.tiktok.getViewerCount).toHaveBeenCalledTimes(1);
+      expect(system.getViewerCountSnapshot("tiktok")).toMatchObject({
+        count: 0, hasCompleteObservation: false, latestOutcome: "unknown",
+      });
 
       const recoveryStability = validateSystemStability(system);
       expect(recoveryStability.isStable).toBe(true);
@@ -238,10 +250,27 @@ describe("ViewerCount Unified Initialization Behavior", () => {
 
       simulateNetworkFailure(platforms.youtube, "initialization_failed");
       await system.initialize();
+      for (const platform of Object.values(platforms)) {
+        expect(platform.initialize).not.toHaveBeenCalled();
+      }
+      await simulatePlatformReadiness(system, "youtube", true);
+      await system.pollPlatform("youtube");
+      expect(platforms.youtube.getViewerCount).toHaveBeenCalledTimes(1);
+      expect(system.getViewerCountSnapshot("youtube")).toMatchObject({
+        count: 0, hasCompleteObservation: false, latestOutcome: "unknown",
+      });
 
       platforms.youtube.getViewerCount.mockResolvedValue(250);
       platforms.youtube.initialize.mockResolvedValue(true);
       await simulatePlatformReadiness(system, "youtube", true);
+      await system.pollPlatform("youtube");
+      expect(platforms.youtube.getViewerCount).toHaveBeenCalledTimes(2);
+      expect(system.getViewerCountSnapshot("youtube")).toMatchObject({
+        count: 250, hasCompleteObservation: true, latestOutcome: "complete",
+      });
+      for (const platform of Object.values(platforms)) {
+        expect(platform.initialize).not.toHaveBeenCalled();
+      }
 
       const status = system.getSystemStatus();
       expect(status.streamStatus.youtube).toBe(true);
@@ -262,6 +291,13 @@ describe("ViewerCount Unified Initialization Behavior", () => {
       Object.values(platforms).forEach((platform) => {
         simulateNetworkFailure(platform, "network_outage");
       });
+      await Promise.all(["tiktok", "twitch", "youtube"].map((platform) => system.pollPlatform(platform)));
+      for (const [name, platform] of Object.entries(platforms)) {
+        expect(platform.getViewerCount).toHaveBeenCalledTimes(1);
+        expect(system.getViewerCountSnapshot(name)).toMatchObject({
+          count: 0, hasCompleteObservation: false, latestOutcome: "unknown",
+        });
+      }
 
       const stability = validateSystemStability(system);
       expect(stability.isStable).toBe(true);
@@ -312,12 +348,20 @@ describe("ViewerCount Unified Initialization Behavior", () => {
       await system.initialize();
       system.startPolling();
 
-      await safeDelay(50);
+      const published = Promise.withResolvers<void>();
+      system.addObserver({
+        getObserverId: () => "synthetic-late-readiness-observer",
+        onViewerCountUpdate(update) {
+          if (update.platform === "tiktok" && update.count === 150) published.resolve();
+        },
+      });
       await simulatePlatformReadiness(system, "tiktok", true);
+      await published.promise;
 
       const status = system.getSystemStatus();
       expect(status.streamStatus.tiktok).toBe(true);
       expect(system.isPlatformEligibleForPolling("tiktok")).toBe(true);
+      expect(system.getViewerCount("tiktok")).toBe(150);
     });
 
     test("should maintain predictable polling behavior across timing scenarios", async () => {
