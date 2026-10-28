@@ -176,7 +176,6 @@ const API_CONTRACTS = {
             'handleFollowNotification',
             'handlePaypiggyNotification',
             'handleRaidNotification',
-            'handlePaypiggyNotification',
             'updateViewerCount'
         ],
         methodSignatures: {
@@ -231,6 +230,11 @@ const validateMockContract = (mockObject: unknown, contractName: string): MockCo
             return;
         }
 
+        if (typeof mockRecord[methodName] !== 'function') {
+            errors.push(`Required method must be a function: ${methodName}`);
+            return;
+        }
+
         if (!isMockFunction(mockRecord[methodName])) {
             warnings.push(`Method ${methodName} is not a mock function`);
         }
@@ -259,26 +263,34 @@ const validateNotificationData = (notificationData: unknown): NotificationValida
     contract.requiredReturnFields.forEach((field) => {
         if (!hasOwn(notificationRecord, field)) {
             errors.push(`Missing required notification field: ${field}`);
+        } else if (notificationRecord[field] === null || notificationRecord[field] === undefined) {
+            errors.push(`Required notification field must not be null or undefined: ${field}`);
         }
     });
 
-    if (notificationRecord.id && typeof notificationRecord.id !== 'string') {
+    if (hasOwn(notificationRecord, 'id') && typeof notificationRecord.id !== 'string') {
         errors.push('Notification ID must be a string');
     }
 
-    if (notificationRecord.type && typeof notificationRecord.type !== 'string') {
+    if (hasOwn(notificationRecord, 'type') && typeof notificationRecord.type !== 'string') {
         errors.push('Notification type must be a string');
     }
 
-    if (notificationRecord.platform && !['youtube', 'twitch', 'tiktok'].includes(String(notificationRecord.platform))) {
+    for (const field of ['platform', 'displayMessage', 'ttsMessage', 'logMessage']) {
+        if (hasOwn(notificationRecord, field) && typeof notificationRecord[field] !== 'string') {
+            errors.push(`Notification ${field} must be a string`);
+        }
+    }
+
+    if (typeof notificationRecord.platform === 'string' && !['youtube', 'twitch', 'tiktok'].includes(notificationRecord.platform)) {
         warnings.push(`Unknown platform: ${notificationRecord.platform}`);
     }
 
-    if (notificationRecord.processedAt && !Number.isInteger(notificationRecord.processedAt)) {
+    if (hasOwn(notificationRecord, 'processedAt') && !Number.isSafeInteger(notificationRecord.processedAt)) {
         errors.push('processedAt must be a timestamp integer');
     }
 
-    if (notificationRecord.timestamp && isNaN(Date.parse(String(notificationRecord.timestamp)))) {
+    if (hasOwn(notificationRecord, 'timestamp') && (typeof notificationRecord.timestamp !== 'string' || !Number.isFinite(Date.parse(notificationRecord.timestamp)))) {
         errors.push('timestamp must be a valid ISO date string');
     }
 

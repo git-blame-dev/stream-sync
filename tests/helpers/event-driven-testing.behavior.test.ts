@@ -18,6 +18,60 @@ import {
 const hasGlobalObserver = () => Object.prototype.hasOwnProperty.call(globalThis, 'testUserExperienceObserver');
 
 describe('event-driven-testing behavior', () => {
+    it('retains explicit hidden display and status observations', () => {
+        const observer = new UserExperienceObserver();
+        observer.recordDisplayChange({ source: 'synthetic-hidden', userVisible: false });
+        observer.recordStatusChange({ component: 'synthetic-hidden', newStatus: false, userVisible: false });
+        observer.recordStatusChange({ component: 'synthetic-visible', newStatus: false });
+        expect(observer.getObservations().displayChanges[0]?.userVisible).toBe(false);
+        expect(observer.getObservations().statusChanges[0]?.userVisible).toBe(false);
+        expect(observer.userSawStatusChange('synthetic-hidden', false)).toBe(false);
+        expect(observer.userSawStatusChange('synthetic-visible', false)).toBe(true);
+    });
+
+    it('rejects invalid intervals at registration without advancing potentially stuck clocks', () => {
+        const timer = new TimeSimulator();
+        let calls = 0;
+        for (const delay of [0, -1, NaN, Infinity, -Infinity]) {
+            expect(() => timer['setInterval'](() => { calls += 1; }, delay)).toThrow(RangeError);
+        }
+        expect(timer.intervals.size).toBe(0);
+        expect(calls).toBe(0);
+    });
+
+    it('rejects nonfinite advances without changing simulated time', () => {
+        const timer = new TimeSimulator();
+        const initial = timer.now();
+        for (const duration of [NaN, Infinity, -Infinity]) {
+            expect(() => timer.advanceTime(duration)).toThrow(RangeError);
+            expect(timer.now()).toBe(initial);
+        }
+    });
+
+    it('rejects unrepresentable interval progress and clock overflow before scheduling or advancing', () => {
+        const timer = new TimeSimulator();
+        expect(() => timer['setInterval'](() => {}, Number.MIN_VALUE)).toThrow(RangeError);
+        timer.advanceTime(Number.MAX_VALUE);
+        const initial = timer.now();
+        expect(() => timer.advanceTime(Number.MAX_VALUE)).toThrow(RangeError);
+        expect(timer.now()).toBe(initial);
+    });
+
+    it('retains positive fractional interval timing and one-off zero-delay behavior', () => {
+        const timer = new TimeSimulator();
+        let intervals = 0;
+        let timeouts = 0;
+        const id = timer['setInterval'](() => { intervals += 1; }, 0.5);
+        timer['setTimeout'](() => { timeouts += 1; }, 0);
+        timer.advanceTime(0);
+        expect(timeouts).toBe(1);
+        expect(intervals).toBe(0);
+        timer.advanceTime(2);
+        expect(intervals).toBe(4);
+        timer.clearInterval(id);
+        timer.advanceTime(1);
+        expect(intervals).toBe(4);
+    });
     beforeEach(() => {
         testClock.reset();
         Reflect.deleteProperty(globalThis, 'testUserExperienceObserver');

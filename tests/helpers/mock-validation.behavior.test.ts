@@ -29,6 +29,42 @@ const createNotificationDispatcherMock = (overrides: Record<string, unknown> = {
 type NotificationDispatcherMock = ReturnType<typeof createNotificationDispatcherMock>;
 
 describe('mock-validation behavior', () => {
+    it('rejects nullish required payload fields while retaining legitimate zero and empty text', () => {
+        const payload = {
+            id: 'synthetic-notification', type: 'platform:follow', platform: 'twitch', user: 'synthetic-viewer',
+            displayMessage: '', ttsMessage: '', logMessage: '', processedAt: 0, timestamp: new Date(0).toISOString(),
+        };
+        expect(validateNotificationData(payload).success).toBe(true);
+        for (const field of API_CONTRACTS.NotificationBuilder.requiredReturnFields) {
+            for (const value of [null, undefined]) {
+                expect(validateNotificationData({ ...payload, [field]: value }).success).toBe(false);
+            }
+        }
+        for (const field of ['id', 'type', 'platform', 'displayMessage', 'ttsMessage', 'logMessage', 'timestamp']) {
+            for (const value of [0, false]) {
+                expect(validateNotificationData({ ...payload, [field]: value }).success).toBe(false);
+            }
+        }
+        for (const processedAt of [NaN, Infinity, -Infinity, 0.5, Number.MAX_SAFE_INTEGER + 1]) {
+            expect(validateNotificationData({ ...payload, processedAt }).success).toBe(false);
+        }
+    });
+
+    it('retains false and zero platform-event scalars but rejects nullish fields', () => {
+        expect(validatePlatformEventData({ gift: {}, user: {}, giftCount: 0 }, 'tiktok', 'gift').success).toBe(true);
+        expect(validatePlatformEventData({ event: { user_name: 'synthetic-viewer', tier: '1000', is_gift: false } }, 'twitch', 'subscription').success).toBe(true);
+        for (const giftCount of [null, undefined]) {
+            expect(validatePlatformEventData({ gift: {}, user: {}, giftCount }, 'tiktok', 'gift').success).toBe(false);
+        }
+    });
+
+    it('requires callable contract methods and reports a missing application method only once', () => {
+        for (const method of [null, undefined, 0, false]) {
+            expect(validateMockContract(createNotificationDispatcherMock({ dispatchMessage: method }), 'NotificationDispatcher').success).toBe(false);
+        }
+        const application = Object.fromEntries(API_CONTRACTS.Application.requiredMethods.filter(method => method !== 'handlePaypiggyNotification').map(method => [method, createMockFn()]));
+        expect(validateMockContract(application, 'Application').errors).toEqual(['Missing required method: handlePaypiggyNotification']);
+    });
     let originalValidateMock: typeof globalThis.validateMock;
     let originalValidateNotification: typeof globalThis.validateNotification;
     let originalValidatePlatformEvent: typeof globalThis.validatePlatformEvent;

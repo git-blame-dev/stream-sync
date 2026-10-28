@@ -32,6 +32,26 @@ createNotificationTestSuite('platform:follow', [
 ]);
 
 describe('notification-test-utils behavior', () => {
+    it('builds real notifications from canonical identity despite conflicting event extras', () => {
+        const notification = createNotificationData('platform:gift', 'tiktok',
+            { username: ' synthetic-viewer ', userId: 'synthetic-canonical-id' },
+            { type: 'platform:follow', platform: 'twitch', username: 'synthetic-conflict', userId: 'synthetic-conflicting-id', giftType: 'Rose', giftCount: 2, amount: 5, currency: 'coins', syntheticExtra: false },
+        );
+        expect(notification.type).toBe('platform:gift');
+        expect(notification.platform).toBe('tiktok');
+        expect(notification.username).toBe('synthetic-viewer');
+        expect(notification.userId).toBe('synthetic-canonical-id');
+        expect(notification.amount).toBe(5);
+        expect(notification.giftCount).toBe(2);
+        expect(notification.syntheticExtra).toBe(false);
+        expect(notification.displayMessage).toContain('synthetic-viewer');
+        expect(notification.displayMessage).not.toContain('synthetic-conflict');
+        expect(Number.isSafeInteger(notification.processedAt)).toBe(true);
+        expect(Number.isFinite(Date.parse(notification.timestamp))).toBe(true);
+        expect(generateLogMessage('platform:follow', { type: 'command', platform: 'tiktok', username: 'synthetic-viewer' })).toBe('New follower: synthetic-viewer');
+        const zeroIdentity = createNotificationData('platform:follow', 'tiktok', { username: 'synthetic-viewer', userId: 0 }, { userId: 'synthetic-conflict' });
+        expect(zeroIdentity.userId).toBe('0');
+    });
     it('validates required notification data inputs', () => {
         expect(() => createNotificationData('', 'tiktok', { username: 'test-user' }))
             .toThrow('type is required for notification test data');

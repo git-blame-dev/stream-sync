@@ -63,7 +63,7 @@ function createNotificationData<
     userData: NotificationUserData,
     eventData: EventData = {} as EventData,
     vfxConfig: VfxConfig = null as VfxConfig
-): NotificationPayload & EventData & { vfxConfig: VfxConfig } {
+): NotificationPayload & Omit<EventData, 'type' | 'platform' | 'username' | 'userId'> & { vfxConfig: VfxConfig } {
     if (!type || typeof type !== 'string' || !type.trim()) {
         throw new Error('type is required for notification test data');
     }
@@ -81,16 +81,16 @@ function createNotificationData<
     const normalizedEventData = { ...eventData };
 
     const result = requireBuiltNotification(type, NotificationBuilder.build({
+        ...normalizedEventData,
         type,
         platform,
         username,
-        userId,
-        ...normalizedEventData
+        userId
     }));
 
     result.vfxConfig = vfxConfig;
 
-    return result as NotificationPayload & EventData & { vfxConfig: VfxConfig };
+    return result as NotificationPayload & Omit<EventData, 'type' | 'platform' | 'username' | 'userId'> & { vfxConfig: VfxConfig };
 }
 
 function generateLogMessage(type: string, data: NotificationInputData): string {
@@ -107,11 +107,11 @@ function generateLogMessage(type: string, data: NotificationInputData): string {
     }
 
     const result = requireBuiltNotification(type, NotificationBuilder.build({
+        ...data,
         type,
         platform: data.platform,
         username: data.username,
-        userId: data.userId,
-        ...data
+        userId: data.userId
     }));
 
     return result.logMessage;

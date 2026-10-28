@@ -215,7 +215,7 @@ class UserExperienceObserver {
             source: change.source,
             newValue: change.newValue,
             previousValue: change.previousValue,
-            userVisible: change.userVisible || true
+            userVisible: change.userVisible ?? true
         });
     }
 
@@ -244,7 +244,7 @@ class UserExperienceObserver {
             component: status.component,
             newStatus: status.newStatus,
             previousStatus: status.previousStatus,
-            userVisible: status.userVisible || true
+            userVisible: status.userVisible ?? true
         });
     }
 
@@ -395,7 +395,11 @@ class TimeSimulator {
     }
 
     advanceTime(milliseconds: number): void {
-        this.currentTime += milliseconds;
+        const targetTime = this.currentTime + milliseconds;
+        if (!Number.isFinite(milliseconds) || !Number.isFinite(targetTime)) {
+            throw new RangeError('Time advance must produce a finite simulated time');
+        }
+        this.currentTime = targetTime;
         
         for (const [id, timer] of this.timers.entries()) {
             if (timer.fireTime <= this.currentTime) {
@@ -407,7 +411,11 @@ class TimeSimulator {
         for (const [_id, interval] of this.intervals.entries()) {
             while (interval.nextFire <= this.currentTime) {
                 interval.callback();
-                interval.nextFire += interval.delay;
+                const nextFire = interval.nextFire + interval.delay;
+                if (!Number.isFinite(nextFire) || nextFire <= interval.nextFire) {
+                    throw new RangeError('Interval delay must advance finite simulated time');
+                }
+                interval.nextFire = nextFire;
             }
         }
     }
@@ -422,11 +430,18 @@ class TimeSimulator {
     }
 
     ['setInterval'](callback: TimerCallback, delay: number): number {
+        if (!Number.isFinite(delay) || delay <= 0) {
+            throw new RangeError('Interval delay must be a finite positive number');
+        }
+        const nextFire = this.currentTime + delay;
+        if (!Number.isFinite(nextFire) || nextFire <= this.currentTime) {
+            throw new RangeError('Interval delay must advance finite simulated time');
+        }
         const id = this.nextTimerId++;
         this.intervals.set(id, {
             callback,
             delay,
-            nextFire: this.currentTime + delay
+            nextFire
         });
         return id;
     }
