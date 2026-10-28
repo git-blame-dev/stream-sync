@@ -4,6 +4,7 @@ import { noOpLogger } from "../../helpers/mock-factories";
 import { InnertubeService } from "../../../src/services/innertube-service";
 import { InnertubeFactory as SDKFactory } from "../../../src/factories/innertube-factory";
 import { useFakeTimers, useRealTimers, advanceTimersByTime, getTimerCount } from "../../helpers/bun-timers";
+import { setTimeout as delay } from "node:timers/promises";
 
 const deferred = () => {
   let resolve!: () => void;
@@ -462,5 +463,163 @@ describe("InnertubeService behavior", () => {
       await cleaning.promise; await flush();
       expect(disposed).toBe(false);
     } finally { finish.resolve(); await disposal; }
+  });
+
+  const bodyService = (requestTimeoutMs = 8000) => {
+    const signals = new Map<string, AbortSignal>();
+    const service = new InnertubeService({ createWithTimeout: async (_timeout, config) => ({
+      getInfo: async (id: string) => (await (config!.fetch as (input: string) => Promise<Response>)(`https://synthetic.invalid/${id}`)).json()
+    }) }, { logger: noOpLogger, requestTimeoutMs, fetch: async (input, init) => {
+      const id = new URL(String(input)).pathname.slice(1);
+      signals.set(id, init!.signal!);
+      return new Response(new ReadableStream({ start(controller) {
+        init!.signal!.addEventListener("abort", () => controller.error(init!.signal!.reason), { once: true });
+      } }));
+    } });
+    return { service, signals };
+  };
+
+  test("explicit chat scope aborts its response body without retiring polling, metadata or another owner", async () => {
+    const { service, signals } = bodyService();
+    const chat = await service.createChatClient(), other = await service.createChatClient();
+    const cancel = new AbortController();
+    const scoped = chat.run(client => client.getInfo("scoped"), { signal: cancel.signal }).catch(error => error);
+    const polling = chat.run(client => client.getInfo("polling")).catch(error => error);
+    const independent = other.run(client => client.getInfo("other")).catch(error => error);
+    const metadata = service.withMetadataOperation({}, client => client.getInfo("metadata")).catch(error => error);
+    try {
+      await flush();
+      expect(signals.size).toBe(4);
+      cancel.abort(new Error("synthetic setup cancelled"));
+      await flush();
+      expect(signals.get("scoped")!.aborted).toBe(true);
+      expect(String(await scoped)).toContain("synthetic setup cancelled");
+      for (const id of ["polling", "other", "metadata"]) expect(signals.get(id)!.aborted).toBe(false);
+      expect(await chat.run(async () => "still admitted")).toBe("still admitted");
+    } finally { await service.dispose(); await Promise.all([scoped, polling, independent, metadata]); }
+  });
+
+  test("explicit timeout covers response-body continuation without closing the owner", async () => {
+    const { service, signals } = bodyService();
+    const chat = await service.createChatClient();
+    const caller = chat.run(client => client.getInfo("timed"), { timeoutMs: 20 }).catch(error => error);
+    try {
+      await flush();
+      expect(signals.get("timed")!.aborted).toBe(false);
+      await delay(50);
+      expect(signals.get("timed")!.aborted).toBe(true);
+      expect(await caller).toBeInstanceOf(Error);
+      expect(await chat.run(async () => "alive")).toBe("alive");
+    } finally { await service.dispose(); await caller; }
+  });
+
+  test("default nested run escapes expired metadata and explicit chat scopes", async () => {
+    const { service, signals } = bodyService();
+    const chat = await service.createChatClient();
+    const cancel = new AbortController();
+    const background: Promise<unknown>[] = [];
+    try {
+      await service.withMetadataOperation({ signal: cancel.signal, timeoutMs: 20 }, async () => {
+        await chat.run(async () => {
+          background.push(chat.run(client => client.getInfo("escaped")).catch(error => error));
+          await flush();
+        }, { signal: cancel.signal, timeoutMs: 20 });
+      });
+      cancel.abort(new Error("synthetic outer scope finished"));
+      await delay(50);
+      expect(signals.get("escaped")!.aborted).toBe(false);
+    } finally { await service.dispose(); await Promise.all(background); }
+  });
+
+  test("scoped caller cancellation is prompt but repeated owner disposal joins actual finally cleanup", async () => {
+    const { service, signals } = bodyService();
+    const chat = await service.createChatClient();
+    const cancel = new AbortController(), cleaning = deferred(), finish = deferred();
+    const caller = chat.run(async client => {
+      try { await client.getInfo("cleanup-scoped"); }
+      finally { cleaning.resolve(); await finish.promise; }
+    }, { signal: cancel.signal }).catch(error => error);
+    try {
+      await flush();
+      cancel.abort(new Error("synthetic scoped cancellation"));
+      await flush();
+      expect(signals.get("cleanup-scoped")!.aborted).toBe(true);
+      expect(String(await caller)).toContain("synthetic scoped cancellation");
+      await cleaning.promise;
+      const disposal = chat.dispose();
+      expect(chat.dispose()).toBe(disposal);
+      let retired = false;
+      void disposal.then(() => { retired = true; });
+      await flush();
+      expect(retired).toBe(false);
+      finish.resolve();
+      await disposal;
+      expect(retired).toBe(true);
+    } finally { finish.resolve(); await service.dispose(); await caller; }
+  });
+
+  test("pre-aborted and closed scoped admission never invokes the SDK callback", async () => {
+    const service = new InnertubeService(factory, { logger: noOpLogger });
+    const chat = await service.createChatClient();
+    const cancel = new AbortController();
+    cancel.abort(new Error("synthetic already aborted"));
+    let calls = 0;
+    const operation = async () => { calls++; };
+    try {
+      expect(() => chat.run(operation, { signal: cancel.signal })).toThrow("synthetic already aborted");
+      await flush();
+      expect(calls).toBe(0);
+      await chat.dispose();
+      expect(() => chat.run(operation, {})).toThrow("disposed");
+      expect(calls).toBe(0);
+    } finally { await service.dispose(); }
+  });
+
+  test("explicit empty context defaults to request deadline while omitted context has no operation deadline", async () => {
+    const service = new InnertubeService(factory, { logger: noOpLogger, requestTimeoutMs: 20 });
+    const chat = await service.createChatClient(), finish = deferred();
+    let scopedRejected = false, pollingSettled = false;
+    const scoped = chat.run(() => finish.promise, {}).catch(() => { scopedRejected = true; });
+    const polling = chat.run(() => finish.promise).finally(() => { pollingSettled = true; });
+    try {
+      await delay(50);
+      expect(scopedRejected).toBe(true);
+      expect(pollingSettled).toBe(false);
+    } finally { finish.resolve(); await Promise.all([scoped, polling]); await service.dispose(); }
+  });
+
+  test("nested explicit scopes retain owner cancellation and join the inner callback finally", async () => {
+    const { service, signals } = bodyService();
+    const chat = await service.createChatClient(), finish = deferred(), cleaning = deferred();
+    const caller = chat.run(() => chat.run(async client => {
+      try { await client.getInfo("nested"); }
+      finally { cleaning.resolve(); await finish.promise; }
+    }, {}), {}).catch(error => error);
+    try {
+      await flush();
+      const disposal = chat.dispose();
+      expect(signals.get("nested")!.aborted).toBe(true);
+      expect(String(await caller)).toContain("disposed");
+      await cleaning.promise;
+      let retired = false;
+      void disposal.then(() => { retired = true; });
+      await flush();
+      expect(retired).toBe(false);
+      finish.resolve(); await disposal;
+      expect(retired).toBe(true);
+    } finally { finish.resolve(); await service.dispose(); await caller; }
+  });
+
+  test("abort between scoped admission and callback microtask prevents SDK side effects", async () => {
+    const service = new InnertubeService(factory, { logger: noOpLogger });
+    const chat = await service.createChatClient(), cancel = new AbortController();
+    let calls = 0;
+    const caller = chat.run(async () => { calls++; }, { signal: cancel.signal }).catch(error => error);
+    cancel.abort(new Error("synthetic queued cancellation"));
+    try {
+      expect(String(await caller)).toContain("synthetic queued cancellation");
+      await flush();
+      expect(calls).toBe(0);
+    } finally { await service.dispose(); }
   });
 });

@@ -8,7 +8,7 @@ export type InnertubeOperationContext = { signal?: AbortSignal; timeoutMs?: numb
 type OwnedFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 export type InnertubeChatClientOwner<T> = {
     client: T;
-    run: <R>(operation: (client: T) => Promise<R>) => Promise<R>;
+    run: <R>(operation: (client: T) => Promise<R>, context?: InnertubeOperationContext) => Promise<R>;
     dispose: () => Promise<void>;
 };
 type Lifetime = { controller: AbortController; active: Set<Promise<unknown>>; disposal?: Promise<void> };
@@ -211,13 +211,19 @@ class InnertubeService<TClient extends InnertubeInfoClient = InnertubeInfoClient
             signal.throwIfAborted();
             return {
                 client,
-                run: operation => this.scopes.exit(() => {
+                run: (operation, context) => this.scopes.exit(() => {
                     lifetime.controller.signal.throwIfAborted();
                     this.lifetime.controller.signal.throwIfAborted();
-                    return abortable(this.track(lifetime, Promise.resolve().then(() => {
-                        lifetime.controller.signal.throwIfAborted();
+                    // Explicit setup scopes bound all SDK continuations. Omitted
+                    // context keeps polling outside any short caller ALS scope.
+                    const signal = context === undefined
+                        ? lifetime.controller.signal
+                        : this.signal(context, lifetime);
+                    signal.throwIfAborted();
+                    return this.scopes.run(signal, () => abortable(this.track(lifetime, Promise.resolve().then(() => {
+                        signal.throwIfAborted();
                         return operation(client);
-                    })), lifetime.controller.signal);
+                    })), signal));
                 }),
                 dispose: () => this.retire(lifetime)
             };
