@@ -1671,7 +1671,20 @@ class YouTubePlatform extends EventEmitter {
         const handler = this.handlers?.[handlerName];
 
         if (typeof handler === 'function') {
-            handler(payload);
+            const reportFailure = (error: unknown): void => {
+                try {
+                    this._handleProcessingError(
+                        `Error in YouTube platform handler: ${handlerName}`, error, type, { handlerName }
+                    );
+                } catch {
+                    // The optional observer and its reporter must not interrupt publication.
+                }
+            };
+            try {
+                void Promise.resolve(handler(payload)).catch(reportFailure);
+            } catch (error) {
+                reportFailure(error);
+            }
         } else {
             this.logger.debug(`No handler registered for event type: ${type}`, 'youtube');
         }

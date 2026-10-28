@@ -13,7 +13,7 @@ import { getSystemTimestampISO } from '../utils/timestamp';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 import { createMonetizationErrorPayload } from '../utils/monetization-error-utils';
 import { createRetrySystem } from '../utils/retry-system';
-import { extractTikTokUserData, extractTikTokAvatarUrl, formatCoinAmount } from '../utils/tiktok-data-extraction';
+import { extractTikTokUserData, extractTikTokAvatarUrl, formatCoinAmount, normalizeTikTokMessageId } from '../utils/tiktok-data-extraction';
 import { validateNotificationManagerInterface } from '../utils/dependency-validator';
 import { normalizeTikTokChatEvent, normalizeTikTokGiftEvent } from './tiktok/events/event-normalizer';
 import { createTikTokConnectionOrchestrator } from './tiktok/connections/tiktok-connection-orchestrator';
@@ -1749,13 +1749,7 @@ class TikTokPlatform extends EventEmitter {
 
         const dataRecord = asRecord(data);
         const common = asRecord(dataRecord.common);
-        const msgId = common.msgId;
-        if (msgId == null) {
-            return null;
-        }
-
-        const normalized = String(msgId).trim();
-        return normalized || null;
+        return normalizeTikTokMessageId(common.msgId);
     }
 
     _shouldSkipDuplicatePlatformMessage(data: unknown, ttlMs = this.deduplicationConfig?.ttlMs ?? 2 * 60 * 1000): { isDuplicate: boolean; cleanupPerformed: boolean } {
@@ -2197,7 +2191,20 @@ class TikTokPlatform extends EventEmitter {
         const handler = this.handlers?.[handlerName];
 
         if (typeof handler === 'function') {
-            handler(payload);
+            const reportFailure = (error: unknown): void => {
+                try {
+                    this.errorHandler.handleEventProcessingError(
+                        error, type, { handlerName }, `Error in TikTok platform handler: ${handlerName}`
+                    );
+                } catch {
+                    // The optional observer and its reporter must not interrupt publication.
+                }
+            };
+            try {
+                void Promise.resolve(handler(payload)).catch(reportFailure);
+            } catch (error) {
+                reportFailure(error);
+            }
         }
     }
 

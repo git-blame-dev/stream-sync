@@ -1,4 +1,6 @@
 import { describe, test, expect, afterEach } from "bun:test";
+import { spawnSync } from "node:child_process";
+import { noOpLogger } from "../../../helpers/mock-factories";
 import { createMockFn, restoreAllMocks } from "../../../helpers/bun-mock-utils";
 
 import { YouTubePlatform } from "../../../../src/platforms/youtube";
@@ -111,9 +113,10 @@ describe("YouTube Platform Event Routing", () => {
     },
   } satisfies Record<string, PlatformPayload>;
 
-  const createPlatform = () =>
+  const createPlatform = (logger = noOpLogger) =>
     new YouTubePlatform(baseConfig, {
       ...createMockPlatformDependencies("youtube"),
+      logger,
       streamDetectionService: {
         detectLiveStreams: createMockFn().mockResolvedValue({
           success: true,
@@ -121,6 +124,90 @@ describe("YouTube Platform Event Routing", () => {
         }),
       },
     });
+
+  test("isolates a throwing legacy observer while preserving synchronous publication and payload identity", () => {
+    const reports: unknown[][] = [];
+    const platform = createPlatform({ ...noOpLogger, error: (...args: unknown[]) => { reports.push(args); } });
+    const order: string[] = [];
+    const payload = { platform: "youtube", message: "synthetic private payload" };
+    platform.on("platform:event", (event) => { expect(event.data).toBe(payload); order.push("local"); });
+    platform.handlers.onChat = (received) => {
+      expect(received).toBe(payload);
+      order.push("handler");
+      throw new Error("Bearer test-handler-secret");
+    };
+    expect(() => platform._emitPlatformEvent(PlatformEvents.CHAT_MESSAGE, payload)).not.toThrow();
+    expect(order).toEqual(["local", "handler"]);
+    expect(reports).toHaveLength(1);
+    expect(JSON.stringify(reports)).not.toContain("test-handler-secret");
+    expect(JSON.stringify(reports)).not.toContain(payload.message);
+    platform.handlers.onChat = () => { order.push("healthy"); };
+    platform._emitPlatformEvent(PlatformEvents.CHAT_MESSAGE, payload);
+    expect(order).toEqual(["local", "handler", "local", "healthy"]);
+  });
+
+  test("contains a throwing legacy observer reporter without recursive reporting", () => {
+    let attempts = 0;
+    const platform = createPlatform({ ...noOpLogger, error: () => { attempts += 1; throw new Error("synthetic reporter failure"); } });
+    platform.handlers.onChat = () => { throw new Error("synthetic callback failure"); };
+    expect(() => platform._emitPlatformEvent(PlatformEvents.CHAT_MESSAGE, {})).not.toThrow();
+    expect(attempts).toBe(1);
+    platform.handlers.onChat = () => {};
+    expect(() => platform._emitPlatformEvent(PlatformEvents.CHAT_MESSAGE, {})).not.toThrow();
+    expect(attempts).toBe(1);
+  });
+
+  test("contains rejected legacy observers in a child runtime", () => {
+    const child = spawnSync(process.execPath, ["test", import.meta.path, "-t", "YouTube legacy callback rejection child"], {
+      encoding: "utf8", timeout: 15000, env: { ...process.env, STREAM_SYNC_LEGACY_OBSERVER_CHILD: "youtube" },
+    });
+    expect(child.status).toBe(0);
+    expect(`${child.stdout}${child.stderr}`).toContain("1 pass");
+  });
+
+  test.skipIf(process.env.STREAM_SYNC_LEGACY_OBSERVER_CHILD !== "youtube")("YouTube legacy callback rejection child", async () => {
+    const unhandled: unknown[] = [];
+    const onUnhandled = (error: unknown) => { unhandled.push(error); };
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      let attempts = 0;
+      let completeReport: () => void = () => {};
+      let reporterThrows = false;
+      const platform = createPlatform({ ...noOpLogger, error: () => {
+        attempts += 1;
+        completeReport();
+        if (reporterThrows) throw new Error("synthetic reporter failure");
+      } });
+      const order: string[] = [];
+      const payload = { platform: "youtube" };
+      platform.on("platform:event", (event) => { expect(event.data).toBe(payload); order.push("local"); });
+      for (const throws of [false, true]) {
+        reporterThrows = throws;
+        for (const mode of ["rejection", "then-getter"]) {
+          const reported = new Promise<void>((resolve) => { completeReport = resolve; });
+          platform.handlers.onChat = (received) => {
+            expect(received).toBe(payload);
+            order.push("handler");
+            if (mode === "rejection") return Promise.reject(new Error("synthetic callback rejection"));
+            return Object.defineProperty({}, "then", { get() { throw new Error("synthetic then getter failure"); } });
+          };
+          const start = order.length;
+          platform._emitPlatformEvent(PlatformEvents.CHAT_MESSAGE, payload);
+          order.push("returned");
+          expect(order.slice(start)).toEqual(["local", "handler", "returned"]);
+          await reported;
+        }
+      }
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(attempts).toBe(4);
+      expect(unhandled).toEqual([]);
+      platform.handlers.onChat = () => { order.push("healthy"); };
+      platform._emitPlatformEvent(PlatformEvents.CHAT_MESSAGE, payload);
+      expect(order.slice(-2)).toEqual(["local", "healthy"]);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
+  });
 
   describe("handler map dispatch", () => {
     for (const [eventType, { handlerName, dataKey }] of Object.entries(
