@@ -26,6 +26,7 @@ type RefreshTokenPayload = {
 };
 
 type TokenValidationSuccess = {
+    clientId: string;
     userId: string;
     login: string;
     scopes: string[];
@@ -96,19 +97,6 @@ function isValidationFailure(result: TokenValidationResult): result is TokenVali
     return 'error' in result;
 }
 
-const logAuthError = (
-    handler: ReturnType<typeof createPlatformErrorHandler>,
-    message: string,
-    error: unknown,
-    payload: Record<string, unknown> | null = null
-) => {
-    if (error instanceof Error) {
-        handler.handleEventProcessingError(error, 'twitch-auth', payload, message, 'twitch-auth');
-        return;
-    }
-    handler.logOperationalError(message, 'twitch-auth', payload || error);
-};
-
 const ensureCamelTokenPayload = (payload: unknown, sourceLabel: string): OAuthTokenPayload | null => {
     if (!payload) {
         return null;
@@ -133,7 +121,7 @@ const ensureCamelTokenPayload = (payload: unknown, sourceLabel: string): OAuthTo
     if (Object.prototype.hasOwnProperty.call(payloadRecord, 'refreshToken')
         && payloadRecord.refreshToken !== null
         && payloadRecord.refreshToken !== undefined
-        && typeof payloadRecord.refreshToken !== 'string') {
+        && (typeof payloadRecord.refreshToken !== 'string' || !payloadRecord.refreshToken.trim())) {
         throw new Error(`${sourceLabel} must provide string refreshToken when present`);
     }
 
@@ -167,6 +155,9 @@ const parseRefreshResponse = (data: unknown): RefreshTokenPayload => {
     }
 
     const hasRefreshToken = Object.prototype.hasOwnProperty.call(dataRecord, 'refresh_token');
+    if (hasRefreshToken && (typeof dataRecord.refresh_token !== 'string' || !dataRecord.refresh_token.trim())) {
+        throw new Error('Token refresh response has malformed refresh token');
+    }
     const refreshToken = hasRefreshToken && typeof dataRecord.refresh_token === 'string'
         ? dataRecord.refresh_token
         : undefined;
@@ -204,6 +195,8 @@ class TwitchAuth {
     #initialized = false;
     #userId: string | null = null;
     #refreshPromise: Promise<TokenRefreshResult> | null = null;
+    #generation = 0;
+    #commitPromise: Promise<void> = Promise.resolve();
     #tokenStorePath: string;
     #clientId: string;
     #logger: ReturnType<typeof resolveLogger>;
@@ -226,40 +219,39 @@ class TwitchAuth {
     }
 
     async initialize() {
-        const expectedUsername = this.#requireConfig();
+        this.#requireConfig();
+        const generation = this.#generation;
 
         const tokenData = await loadTokens({
             tokenStorePath: this.#tokenStorePath,
             logger: this.#logger
         });
         const normalized = ensureCamelTokenPayload(tokenData, 'Token store');
-        const hasToken = normalized && normalized.accessToken;
-
-        if (hasToken) {
-            this.#applyTokens(normalized);
-        } else {
-            this.#applyTokens({ accessToken: null, refreshToken: null });
+        if (generation !== this.#generation) {
+            throw new Error('Twitch credential candidate was superseded');
         }
+        const hasToken = normalized && normalized.accessToken;
 
         if (!hasToken) {
             if (isAuthDisabled()) {
                 throw new Error('TWITCH_DISABLE_AUTH is set but no Twitch tokens are available');
             }
             await this.#runOAuthAndPersistTokens('OAuth flow did not return valid Twitch tokens');
+            return this.#userId;
         }
 
-        let validation = await this.#validateToken();
+        const validation = await this.#validateToken(normalized.accessToken);
+        if (generation !== this.#generation) {
+            throw new Error('Twitch credential candidate was superseded');
+        }
         if (isValidationFailure(validation)) {
             if (validation.status !== 401) {
                 throw validation.error;
             }
-            const hadRefreshToken = !!secrets.twitch.refreshToken;
-            const refreshResult = await this.#refreshTokenResult();
+            const hadRefreshToken = !!normalized.refreshToken;
+            const refreshResult = await this.#refreshTokenResult(normalized.refreshToken);
             if (refreshResult.refreshed) {
-                validation = await this.#validateToken();
-                if (isValidationFailure(validation) && validation.status !== 401) {
-                    throw validation.error;
-                }
+                return this.#userId;
             } else if (hadRefreshToken) {
                 if (refreshResult.error !== null) {
                     throw refreshResult.error;
@@ -270,29 +262,17 @@ class TwitchAuth {
 
         if (isValidationFailure(validation)) {
             await this.#runOAuthAndPersistTokens('Twitch authentication failed after refresh');
-            validation = await this.#validateToken();
-        }
-
-        if (isValidationFailure(validation)) {
-            throw new Error('Twitch authentication failed');
+            return this.#userId;
         }
 
         if (this.#missingScopes(validation.scopes).length > 0) {
+            this.#acceptIdentity(validation, false);
             await this.#runOAuthAndPersistTokens('Twitch authentication failed due to missing scopes');
-            validation = await this.#validateToken();
+            return this.#userId;
         }
 
-        if (isValidationFailure(validation) || this.#missingScopes(validation.scopes).length > 0) {
-            throw new Error('Twitch authentication failed due to missing scopes');
-        }
-
-        const login = validation.login || '';
-        if (login.toLowerCase() !== expectedUsername.toLowerCase()) {
-            throw new Error(`Twitch token login mismatch for ${this.#expectedUsername}`);
-        }
-
-        this.#userId = validation.userId;
-        this.#initialized = true;
+        this.#acceptIdentity(validation);
+        await this.#commitCandidate(normalized, validation, generation, false);
         return this.#userId;
     }
 
@@ -301,11 +281,11 @@ class TwitchAuth {
         return result.refreshed;
     }
 
-    async #refreshTokenResult(): Promise<TokenRefreshResult> {
+    async #refreshTokenResult(refreshToken = secrets.twitch.refreshToken): Promise<TokenRefreshResult> {
         if (this.#refreshPromise) {
             return this.#refreshPromise;
         }
-        this.#refreshPromise = this.#doRefresh();
+        this.#refreshPromise = this.#doRefresh(refreshToken);
         try {
             return await this.#refreshPromise;
         } finally {
@@ -342,6 +322,51 @@ class TwitchAuth {
         }
     }
 
+    #acceptIdentity(validation: TokenValidationSuccess, requireScopes = true) {
+        if (validation.clientId !== this.#clientId) {
+            throw new Error('Twitch token client mismatch');
+        }
+        if (validation.login.toLowerCase() !== this.#expectedUsername?.toLowerCase()) {
+            throw new Error('Twitch token login mismatch');
+        }
+        if (requireScopes && this.#missingScopes(validation.scopes).length) {
+            throw new Error('Twitch authentication failed due to missing scopes');
+        }
+    }
+
+    #publishCandidate(candidate: OAuthTokenPayload, validation: TokenValidationSuccess, generation: number) {
+        if (generation !== this.#generation) {
+            throw new Error('Twitch credential candidate was superseded');
+        }
+        this.#applyTokens(candidate);
+        this.#userId = validation.userId;
+        this.#initialized = true;
+        this.#generation++;
+    }
+
+    async #acceptCandidate(candidate: OAuthTokenPayload, generation: number) {
+        const validation = await this.#validateToken(candidate.accessToken);
+        if (isValidationFailure(validation)) {
+            throw validation.error;
+        }
+        this.#acceptIdentity(validation);
+        await this.#commitCandidate(candidate, validation, generation, true);
+    }
+
+    async #commitCandidate(candidate: OAuthTokenPayload, validation: TokenValidationSuccess, generation: number, persist: boolean) {
+        const commit = this.#commitPromise.then(async () => {
+            if (generation !== this.#generation) {
+                throw new Error('Twitch credential candidate was superseded');
+            }
+            if (persist) {
+                await this.#persistTokens(candidate);
+            }
+            this.#publishCandidate(candidate, validation, generation);
+        });
+        this.#commitPromise = commit.catch(() => undefined);
+        await commit;
+    }
+
     async #persistTokens(normalized: OAuthTokenPayload) {
         await saveTokens(
             {
@@ -365,6 +390,10 @@ class TwitchAuth {
     }
 
     async #runOAuthAndPersistTokens(failureMessage: string): Promise<OAuthTokenPayload> {
+        if (isAuthDisabled()) {
+            throw new Error('TWITCH_DISABLE_AUTH is set; interactive authentication is disabled');
+        }
+        const generation = this.#generation;
         const oauthTokens = await this.#runOAuthFlow();
         const oauthNormalized = ensureCamelTokenPayload(oauthTokens, 'OAuth flow');
         if (!oauthNormalized || !oauthNormalized.accessToken) {
@@ -373,13 +402,13 @@ class TwitchAuth {
         if (!oauthNormalized.refreshToken) {
             throw new Error(`${failureMessage}: OAuth flow did not return a refresh token`);
         }
-        await this.#persistTokens(oauthNormalized);
-        this.#applyTokens(oauthNormalized);
+        await this.#acceptCandidate(oauthNormalized, generation);
         return oauthNormalized;
     }
 
-    async #doRefresh() {
-        if (!secrets.twitch.refreshToken) {
+    async #doRefresh(previousRefreshToken: string | null) {
+        const generation = this.#generation;
+        if (!previousRefreshToken) {
             return { refreshed: false, error: null };
         }
 
@@ -393,7 +422,7 @@ class TwitchAuth {
         try {
             const form = new URLSearchParams({
                 grant_type: 'refresh_token',
-                refresh_token: secrets.twitch.refreshToken,
+                refresh_token: previousRefreshToken,
                 client_id: this.#clientId,
                 client_secret: clientSecret
             }).toString();
@@ -412,29 +441,30 @@ class TwitchAuth {
             const normalized = parseRefreshResponse(data);
 
             const refreshToken = normalized.refreshToken === undefined
-                ? secrets.twitch.refreshToken
+                ? previousRefreshToken
                 : normalized.refreshToken;
-            await this.#persistTokens({
+            await this.#acceptCandidate({
                 accessToken: normalized.accessToken,
                 refreshToken,
                 expiresIn: normalized.expiresIn
-            });
-            this.#applyTokens({ accessToken: normalized.accessToken, refreshToken });
+            }, generation);
             return { refreshed: true, error: null };
         } catch (error) {
             const httpError = asHttpError(error);
+            if (generation !== this.#generation) {
+                return { refreshed: false, error: new Error('Twitch credential candidate was superseded') };
+            }
             if (this.#isTerminalRefreshError(httpError)) {
                 try {
                     await this.#runOAuthAndPersistTokens('OAuth flow did not return valid Twitch tokens');
                     return { refreshed: true, error: null };
                 } catch (oauthError) {
-                    logAuthError(handler, 'OAuth flow failed after terminal refresh error', oauthError);
+                    handler.logOperationalError('OAuth flow failed after terminal refresh error', 'twitch-auth');
                     return { refreshed: false, error: oauthError };
                 }
             }
-            logAuthError(handler, 'Token refresh failed', error, {
+            handler.logOperationalError('Token refresh failed', 'twitch-auth', {
                 status: typeof httpError.response?.status === 'number' ? httpError.response.status : null,
-                error: typeof httpError.response?.data?.error === 'string' ? httpError.response.data.error : null
             });
             return { refreshed: false, error };
         }
@@ -459,9 +489,9 @@ class TwitchAuth {
         return false;
     }
 
-    async #validateToken(): Promise<TokenValidationResult> {
+    async #validateToken(accessToken: string): Promise<TokenValidationResult> {
         const handler = createTwitchAuthErrorHandler(this.#logger);
-        if (!secrets.twitch.accessToken) {
+        if (!accessToken) {
             return { error: new Error('Access token is missing'), status: null };
         }
 
@@ -472,7 +502,7 @@ class TwitchAuth {
                     TWITCH.OAUTH.VALIDATE,
                     {
                         headers: {
-                            Authorization: `Bearer ${secrets.twitch.accessToken}`
+                            Authorization: `Bearer ${accessToken}`
                         },
                         timeout: TWITCH_VALIDATION_TIMEOUT_MS
                     }
@@ -481,23 +511,24 @@ class TwitchAuth {
             );
 
             const data = asRecord(response && response.data ? response.data : null);
-            if (!data.user_id || !data.login) {
+            if (typeof data.user_id !== 'string' || !data.user_id.trim()
+                || typeof data.login !== 'string' || !data.login.trim()
+                || typeof data.client_id !== 'string' || !data.client_id.trim()
+                || !Array.isArray(data.scopes) || !data.scopes.every(scope => typeof scope === 'string' && scope.trim())) {
                 return { error: new Error('Token validation response missing user data'), status: null };
             }
 
             return {
-                userId: String(data.user_id),
-                login: String(data.login),
-                scopes: Array.isArray(data.scopes)
-                    ? data.scopes.filter((scope): scope is string => typeof scope === 'string')
-                    : [],
+                clientId: data.client_id,
+                userId: data.user_id,
+                login: data.login,
+                scopes: data.scopes as string[],
                 expiresIn: asFiniteNumber(data.expires_in)
             };
         } catch (error) {
             const httpError = asHttpError(error);
-            logAuthError(handler, 'Token validation failed', error, {
+            handler.logOperationalError('Token validation failed', 'twitch-auth', {
                 status: typeof httpError.response?.status === 'number' ? httpError.response.status : null,
-                message: typeof httpError.message === 'string' ? httpError.message : null
             });
             return {
                 error,

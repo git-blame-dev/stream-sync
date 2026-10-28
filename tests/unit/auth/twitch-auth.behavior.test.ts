@@ -33,6 +33,7 @@ type CreateAuthOptions = {
 const buildValidationResponse = (overrides: Record<string, unknown> = {}) => ({
   data: {
     user_id: "test-user-id",
+    client_id: "test-client-id",
     login: "test-user",
     scopes: requiredScopes,
     expires_in: 3600,
@@ -335,8 +336,8 @@ describe("TwitchAuth behavior", () => {
     expect(retryDelay.mock.calls.length).toBe(2);
     expect(httpClient.post.mock.calls.length).toBe(0);
     expect(oauthFlow.mock.calls.length).toBe(0);
-    expect(secrets.twitch.accessToken).toBe("test-original-access-token");
-    expect(secrets.twitch.refreshToken).toBe("test-original-refresh-token");
+    expect(secrets.twitch.accessToken).toBeNull();
+    expect(secrets.twitch.refreshToken).toBeNull();
   });
 
   it("does not retry malformed successful validation data or trigger recovery", async () => {
@@ -362,6 +363,24 @@ describe("TwitchAuth behavior", () => {
     expect(httpClient.get.mock.calls.length).toBe(1);
     expect(retryDelay.mock.calls.length).toBe(0);
     expect(httpClient.post.mock.calls.length).toBe(0);
+    expect(oauthFlow.mock.calls.length).toBe(0);
+  });
+
+  it.each([
+    { login: "test-other-user" },
+    { client_id: "test-other-client" },
+    { user_id: 123 },
+    { scopes: ["chat:edit", 123] },
+  ])("rejects untrusted stored identity before publication: %j", async (invalid) => {
+    await writeTokenStore({ twitch: { accessToken: "test-candidate", refreshToken: "test-refresh" } });
+    const before = await fs.promises.readFile(tokenStorePath, "utf8");
+    secrets.twitch.accessToken = "test-previous";
+    const oauthFlow = createMockFn();
+    const auth = createAuth({ httpClient: { get: createMockFn().mockResolvedValue(buildValidationResponse(invalid)), post: createMockFn() }, oauthFlow });
+    await expect(auth.initialize()).rejects.toThrow();
+    expect(secrets.twitch.accessToken).toBe("test-previous");
+    expect(auth.isReady()).toBe(false);
+    expect(await fs.promises.readFile(tokenStorePath, "utf8")).toBe(before);
     expect(oauthFlow.mock.calls.length).toBe(0);
   });
 
@@ -461,7 +480,7 @@ describe("TwitchAuth behavior", () => {
     const invalidParent = path.join(tempDir, "not-a-directory");
     await fs.promises.writeFile(invalidParent, "test-only", "utf8");
     const httpClient = {
-      get: createMockFn(),
+      get: createMockFn().mockResolvedValue(buildValidationResponse()),
       post: createMockFn().mockResolvedValue({
         data: {
           access_token: "test-new-access-token",
@@ -490,7 +509,7 @@ describe("TwitchAuth behavior", () => {
     });
 
     const httpClient = {
-      get: createMockFn(),
+      get: createMockFn().mockResolvedValue(buildValidationResponse()),
       post: createMockFn().mockReturnValue(postPromise),
     };
     const oauthFlow = createMockFn();
@@ -521,7 +540,7 @@ describe("TwitchAuth behavior", () => {
     secrets.twitch.refreshToken = "test-refresh-token";
 
     const httpClient = {
-      get: createMockFn(),
+      get: createMockFn().mockResolvedValue(buildValidationResponse()),
       post: createMockFn().mockResolvedValue({
         data: {
           access_token: "test-new-access-token",
@@ -549,7 +568,7 @@ describe("TwitchAuth behavior", () => {
     secrets.twitch.refreshToken = "test-refresh-token";
 
     const httpClient = {
-      get: createMockFn(),
+      get: createMockFn().mockResolvedValue(buildValidationResponse()),
       post: createMockFn().mockRejectedValue({
         response: { status: 400, data: { error: "invalid_grant" } },
       }),
@@ -587,5 +606,87 @@ describe("TwitchAuth behavior", () => {
     await expect(auth.refreshTokens()).resolves.toBe(false);
     expect(secrets.twitch.accessToken).toBe("test-old-access-token");
     expect(secrets.twitch.refreshToken).toBe("test-invalid-refresh-token");
+  });
+
+  it.each(["", "   ", null, 123])("rejects explicit malformed rotated refresh token %j", async (refreshToken) => {
+    secrets.twitch.accessToken = "test-accepted";
+    secrets.twitch.refreshToken = "test-original-refresh";
+    await writeTokenStore({ twitch: { accessToken: "test-accepted", refreshToken: "test-original-refresh" } });
+    const before = await fs.promises.readFile(tokenStorePath, "utf8");
+    const get = createMockFn().mockResolvedValue(buildValidationResponse());
+    const auth = createAuth({ httpClient: { get, post: createMockFn().mockResolvedValue({ data: { access_token: "test-candidate", refresh_token: refreshToken } }) } });
+    expect(await auth.refreshTokens()).toBe(false);
+    expect(get.mock.calls.length).toBe(0);
+    expect(secrets.twitch.accessToken).toBe("test-accepted");
+    expect(await fs.promises.readFile(tokenStorePath, "utf8")).toBe(before);
+  });
+
+  it.each(["missing", "scopes", "terminal"])("disables interactive recovery for %s", async (route) => {
+    process.env.TWITCH_DISABLE_AUTH = "true";
+    const oauthFlow = createMockFn();
+    if (route === "scopes") {
+      await writeTokenStore({ twitch: { accessToken: "test-candidate" } });
+    }
+    const auth = createAuth({ oauthFlow, httpClient: {
+      get: createMockFn().mockResolvedValue(buildValidationResponse({ scopes: [] })),
+      post: createMockFn().mockRejectedValue({ response: { status: 400, data: { error: "invalid_grant" } } }),
+    } });
+    if (route === "terminal") {
+      secrets.twitch.refreshToken = "test-revoked";
+      expect(await auth.refreshTokens()).toBe(false);
+    } else {
+      await expect(auth.initialize()).rejects.toThrow("TWITCH_DISABLE_AUTH");
+    }
+    expect(oauthFlow.mock.calls.length).toBe(0);
+  });
+
+  it.each([{ login: "test-wrong-user" }, { client_id: "test-wrong-client" }, { scopes: [] }])("rejects OAuth candidate before persistence: %j", async (invalid) => {
+    secrets.twitch.accessToken = "test-previous";
+    const auth = createAuth({
+      httpClient: { get: createMockFn().mockResolvedValue(buildValidationResponse(invalid)), post: createMockFn() },
+      oauthFlow: createMockFn().mockResolvedValue({ accessToken: "test-candidate", refreshToken: "test-refresh" }),
+    });
+    await expect(auth.initialize()).rejects.toThrow();
+    expect(secrets.twitch.accessToken).toBe("test-previous");
+    expect(fs.existsSync(tokenStorePath)).toBe(false);
+    expect(auth.isReady()).toBe(false);
+  });
+
+  it("rejects a stale stored candidate after a newer refresh is accepted", async () => {
+    await writeTokenStore({ twitch: { accessToken: "test-old", refreshToken: "test-refresh" } });
+    secrets.twitch.refreshToken = "test-refresh";
+    let resolveOld!: (value: ReturnType<typeof buildValidationResponse>) => void;
+    let oldStarted!: () => void;
+    const started = new Promise<void>(resolve => { oldStarted = resolve; });
+    const oldValidation = new Promise<ReturnType<typeof buildValidationResponse>>(resolve => { resolveOld = resolve; });
+    const get = createMockFn().mockImplementationOnce(() => { oldStarted(); return oldValidation; }).mockResolvedValue(buildValidationResponse());
+    const auth = createAuth({ httpClient: { get, post: createMockFn().mockResolvedValue({ data: { access_token: "test-new", refresh_token: "test-new-refresh" } }) } });
+    const initialization = auth.initialize();
+    await started;
+    expect(await auth.refreshTokens()).toBe(true);
+    resolveOld(buildValidationResponse());
+    await expect(initialization).rejects.toThrow("superseded");
+    expect(secrets.twitch.accessToken).toBe("test-new");
+    expect(auth.isReady()).toBe(true);
+    expect(JSON.parse(await fs.promises.readFile(tokenStorePath, "utf8")).twitch.accessToken).toBe("test-new");
+  });
+
+  it.each([{ login: "test-wrong" }, { client_id: "test-wrong" }, { scopes: [] }, { scopes: null }, { user_id: {} }])("keeps accepted credentials and identity when refreshed candidate fails validation: %j", async (invalid) => {
+    await writeTokenStore({ twitch: { accessToken: "test-accepted", refreshToken: "test-refresh" } });
+    const httpClient = {
+      get: createMockFn().mockResolvedValueOnce(buildValidationResponse()).mockResolvedValue(buildValidationResponse(invalid)),
+      post: createMockFn().mockResolvedValue({ data: { access_token: "test-rejected", refresh_token: "test-rejected-refresh" } }),
+    };
+    const oauthFlow = createMockFn();
+    const auth = createAuth({ httpClient, oauthFlow });
+    await auth.initialize();
+    const before = await fs.promises.readFile(tokenStorePath, "utf8");
+    expect(await auth.refreshTokens()).toBe(false);
+    expect(auth.isReady()).toBe(true);
+    expect(auth.getUserId()).toBe("test-user-id");
+    expect(secrets.twitch.accessToken).toBe("test-accepted");
+    expect(secrets.twitch.refreshToken).toBe("test-refresh");
+    expect(await fs.promises.readFile(tokenStorePath, "utf8")).toBe(before);
+    expect(oauthFlow.mock.calls.length).toBe(0);
   });
 });
