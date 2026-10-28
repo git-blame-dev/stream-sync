@@ -2,6 +2,7 @@ import { describe, expect, beforeEach, it, afterEach } from "bun:test";
 import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../helpers/mock-factories";
 import { DependencyFactory } from "../../../src/utils/dependency-factory";
+import { YouTubeStreamDetectionService } from "../../../src/services/youtube-stream-detection-service";
 import {
   _resetForTesting,
   initializeStaticSecrets,
@@ -35,6 +36,46 @@ describe("DependencyFactory behavior", () => {
   });
 
   describe("YouTube dependency validation", () => {
+    it("returns an explicitly caller-owned service when no root owner is injected", async () => {
+      let creations = 0;
+      const deps = factory.createYoutubeDependencies({ username: "synthetic-channel" }, {
+        logger: noOpLogger,
+        config: configFixture,
+        Innertube: { create: async () => {
+          creations += 1;
+          return { getInfo: async () => ({}) };
+        } },
+      });
+      expect(creations).toBe(0);
+      try {
+        await Promise.all([
+          deps.innertubeService.withMetadataOperation({}, client => client.getInfo("synthetic-one")),
+          deps.innertubeService.withMetadataOperation({}, client => client.getInfo("synthetic-two")),
+        ]);
+        expect(creations).toBe(1);
+      } finally {
+        await deps.innertubeService.dispose();
+      }
+      expect(() => deps.innertubeService.withMetadataOperation({}, async () => true)).toThrow("disposed");
+    });
+
+    it("uses the injected root owner for every recreated metadata consumer", async () => {
+      const rootFactory = new DependencyFactory();
+      const root = rootFactory.createYoutubeInnertubeService({ logger: noOpLogger });
+      try {
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+          const deps = factory.createYoutubeDependencies(
+            { username: "synthetic-channel", streamDetectionMethod: "youtubei" },
+            { logger: noOpLogger, config: configFixture, innertubeService: root, Innertube: { create: async () => ({ getInfo: async () => ({}) }) } },
+          );
+          expect(deps.innertubeService).toBe(root);
+          expect(deps.viewerExtractionService.innertubeService).toBe(root);
+          expect((deps.streamDetectionService as YouTubeStreamDetectionService).client).toBe(root);
+        }
+      } finally {
+        await root.dispose();
+      }
+    });
     it("requires API key when YouTube API is enabled", () => {
       _resetForTesting();
       expect(() =>

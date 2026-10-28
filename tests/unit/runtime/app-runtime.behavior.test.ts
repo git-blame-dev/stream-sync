@@ -24,6 +24,7 @@ import { AppRuntime } from "../../../src/runtime/AppRuntime";
 import { TwitchAuth } from "../../../src/auth/TwitchAuth";
 import { TWITCH_OAUTH_SCOPES } from "../../../src/auth/twitch-oauth-scopes";
 import { PlatformLifecycleService } from "../../../src/services/PlatformLifecycleService";
+import { InnertubeService } from "../../../src/services/innertube-service";
 import { secrets, _resetForTesting } from "../../../src/core/secrets";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -154,6 +155,60 @@ const createRecordingNotificationManager = (calls: NotificationCallLog) => ({
 });
 
 describe("AppRuntime behavior", () => {
+  for (const mode of ["shutdown", "rollback"] as const) {
+    it(`joins real YouTube transport retirement after consumer admission closes during ${mode}`, async () => {
+      const entered = Promise.withResolvers<void>();
+      const aborted = Promise.withResolvers<void>();
+      const release = Promise.withResolvers<void>();
+      let transportFinished = false;
+      const owner = new InnertubeService({
+        createWithTimeout: async () => { throw new Error("Expected raw SDK creation"); },
+        createWithConfig: async options => {
+          const fetch = options?.fetch as typeof globalThis.fetch;
+          return { getInfo: async (_videoId: string) => fetch("https://synthetic.example.test/metadata") };
+        },
+      }, {
+        logger: noOpLogger,
+        fetch: async (_input, init) => {
+          entered.resolve();
+          await new Promise<void>(resolve => init!.signal!.addEventListener("abort", () => {
+            aborted.resolve(); resolve();
+          }, { once: true }));
+          await release.promise;
+          transportFinished = true;
+          throw new Error("Synthetic transport retired");
+        },
+      });
+      const lifecycle = new PlatformLifecycleService({ config: {}, logger: noOpLogger });
+      const runtime = createRuntime({ innertubeService: owner, platformLifecycleService: lifecycle },
+        { general: { viewerCountPollingIntervalMs: 1000 } });
+      runtime.viewerCountSystem.startPolling();
+      expect(runtime.viewerCountSystem.isPolling).toBe(true);
+      const disconnect = lifecycle.disconnectAll.bind(lifecycle);
+      let disconnected = false;
+      lifecycle.disconnectAll = async () => {
+        expect(runtime.viewerCountSystem.isPolling).toBe(false);
+        await disconnect();
+        disconnected = true;
+      };
+      const metadata = owner.withMetadataOperation({}, client => client.getInfo("synthetic-video")).catch(error => error);
+      await entered.promise;
+      let finished = false;
+      const retirement = (mode === "shutdown" ? runtime.shutdown() : runtime.rollbackStartup()).then(() => { finished = true; });
+      await aborted.promise;
+      expect(disconnected).toBe(true);
+      expect(finished).toBe(false);
+      expect(transportFinished).toBe(false);
+      expect(() => owner.withMetadataOperation({}, async () => true)).toThrow("disposed");
+      release.resolve();
+      await retirement;
+      await metadata;
+      expect(transportFinished).toBe(true);
+      await runtime.shutdown();
+      await runtime.rollbackStartup();
+    });
+  }
+
   it("closes monitor admission synchronously and joins retirement on partial startup failure", async () => {
     const retirement = Promise.withResolvers<void>();
     let stopped = false;
@@ -826,7 +881,10 @@ describe("AppRuntime behavior", () => {
     const acquisition = Promise.withResolvers<void>();
     const entered = Promise.withResolvers<void>();
     const disconnectAll = createMockFn(async () => {});
-    const runtime = createRuntime();
+    const owner = new InnertubeService({
+      createWithTimeout: async () => ({ getInfo: async () => ({ synthetic: true }) }),
+    }, { logger: noOpLogger });
+    const runtime = createRuntime({ innertubeService: owner });
     runtime.initializePlatforms = async () => {
       entered.resolve();
       await acquisition.promise;
@@ -842,11 +900,13 @@ describe("AppRuntime behavior", () => {
     await Promise.resolve();
     expect(stopped).toBe(false);
     expect(disconnectAll.mock.calls.length).toBe(0);
+    expect(await owner.withMetadataOperation({}, async () => true)).toBe(true);
     acquisition.resolve();
     expect(await rejectedStart).toEqual(expect.objectContaining({ message: "AppRuntime is stopped" }));
     await stopping;
     expect(disconnectAll.mock.calls.length).toBe(1);
     expect(ready.mock.calls.length).toBe(0);
+    expect(() => owner.withMetadataOperation({}, async () => true)).toThrow("disposed");
   });
 
   it("keeps the lifetime stopped when a readiness subscriber requests shutdown", async () => {

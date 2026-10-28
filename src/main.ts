@@ -98,7 +98,10 @@ type ProductionDependencies = Record<string, unknown> & {
 type AppRuntimeConfig = ConstructorParameters<typeof AppRuntime>[0];
 type AppRuntimeDependencies = ConstructorParameters<typeof AppRuntime>[1];
 type TwitchHttpClient = ConstructorParameters<typeof TwitchAuth>[0]['httpClient'];
-type PlatformLifecycleDependencyFactory = NonNullable<NonNullable<ConstructorParameters<typeof PlatformLifecycleService>[0]>['dependencyFactory']>;
+type YoutubeOwnerOptions = NonNullable<Parameters<InstanceType<typeof DependencyFactory>['createYoutubeInnertubeService']>[0]>;
+type PlatformLifecycleDependencyFactory = NonNullable<NonNullable<ConstructorParameters<typeof PlatformLifecycleService>[0]>['dependencyFactory']> & {
+    createYoutubeInnertubeService?: InstanceType<typeof DependencyFactory>['createYoutubeInnertubeService'];
+};
 type InitializeLoggingConfig = Parameters<typeof initializeLoggingConfig>[0];
 type MainLoggingConfig = NonNullable<InitializeLoggingConfig['logging']>;
 type LogOutputConfig = NonNullable<MainLoggingConfig['console']>;
@@ -257,6 +260,7 @@ function enableOperatorNotificationPreparation(config: MainConfig): MainConfig {
 function createDefaultDependencyFactory(): PlatformLifecycleDependencyFactory {
     const factory = new DependencyFactory();
     return {
+        createYoutubeInnertubeService: factory.createYoutubeInnertubeService.bind(factory),
         createYoutubeDependencies: factory.createYoutubeDependencies.bind(factory),
         createTiktokDependencies: factory.createTiktokDependencies.bind(factory),
         createTwitchDependencies: factory.createTwitchDependencies.bind(factory)
@@ -936,7 +940,22 @@ async function main(overrides: MainOverrides = {}) {
             dependencies.operatorAppearance = operatorAppearance;
         }
 
+        let innertubeService: AppRuntimeDependencies['innertubeService'];
+        if (config.youtube.enabled) {
+            if (typeof dependencies.dependencyFactory.createYoutubeInnertubeService !== 'function') {
+                throw new Error('Enabled YouTube requires dependencyFactory.createYoutubeInnertubeService');
+            }
+            const owner = dependencies.dependencyFactory.createYoutubeInnertubeService({
+                logger,
+                Innertube: dependencies.lazyInnertube as NonNullable<YoutubeOwnerOptions['Innertube']>
+            });
+            construction.defer(() => owner.dispose());
+            innertubeService = owner;
+            dependencies.innertubeService = innertubeService;
+        }
+
         const sharedPlatformDependencies: Record<string, unknown> = {
+            innertubeService,
             logger,
             notificationManager,
             twitchAuth,

@@ -3,6 +3,7 @@ import type { MemberProfile } from '../core/types/config-types';
 import { InnertubeFactory } from '../factories/innertube-factory';
 import { PlatformEvents } from '../interfaces/PlatformEvents';
 import { OBSViewerCountObserver } from '../observers/obs-viewer-count-observer';
+import type { InnertubeService } from '../services/innertube-service';
 import { getOBSConnectionManager, initializeOBSConnection } from '../obs/connection';
 import { clearStartupTTS } from '../obs/startup';
 import { getDefaultGoalsManager } from '../obs/goals';
@@ -189,6 +190,7 @@ type RuntimeDependencies = RuntimeRecord & {
     logging: AppLogger;
     twitchAuth?: RuntimeTwitchAuth | null;
     lazyInnertube?: unknown;
+    innertubeService?: InnertubeService;
     displayQueue: RuntimeDisplayQueue;
     notificationManager: RuntimeNotificationManager;
     eventBus: RuntimeEventBus;
@@ -317,6 +319,7 @@ class AppRuntime {
     private earlyViewerCountPromise: Promise<void> | null = null;
     private stopped = false;
     private twitchMonitorOwned = false;
+    readonly innertubeService: InnertubeService | undefined;
 
     async _runUnifiedNotification(type: string, platform: string, username: unknown, options: NotificationOptions, process: RuntimeNotificationManager['handleNotification'] | undefined) {
         if (!options || typeof options !== 'object') {
@@ -427,6 +430,7 @@ class AppRuntime {
         }
 
         this.dependencies = dependencies;
+        this.innertubeService = dependencies.innertubeService;
         this.logger = this.dependencies.logging;
         if (!this.logger || typeof this.logger.debug !== 'function') {
             throw new Error('AppRuntime requires logger');
@@ -814,6 +818,7 @@ class AppRuntime {
         retirement.push(this.runTeardownStep(mode, 'cleanup viewer count status listeners', () => cleanupStatus?.()));
         retirement.push(this.runTeardownStep(mode, 'destroy donation spam detector', () => this.notificationManager.donationSpamDetector?.destroy?.()));
         retirement.push(this.runTeardownStep(mode, 'dispose command cooldown service', () => this.commandCooldownService.dispose()));
+        retirement.push(this.runTeardownStep(mode, 'stop viewer count admission', () => this.viewerCountSystem.stopPolling()));
         const fundingCleanup = this.runTeardownStep(mode, 'dispose funding goal', () => this.fundingGoal?.dispose());
         retirement.push(this.runTeardownStep(mode, 'clear keep-alive interval', () => {
             if (this.keepAliveInterval) clearInterval(this.keepAliveInterval);
@@ -837,9 +842,9 @@ class AppRuntime {
             }
         });
         await this.runTeardownStep(mode, 'destroy OBS event service', () => this.obsEventService?.destroy?.());
-        await this.runTeardownStep(mode, 'stop viewer count polling', () => this.viewerCountSystem.stopPolling());
         await this.runTeardownStep(mode, 'cleanup viewer count system', () => this.viewerCountSystem.cleanup?.());
         this.viewerCountSystemStarted = false;
+        await this.runTeardownStep(mode, 'dispose YouTube Innertube owner', () => this.innertubeService?.dispose());
     }
 
     private async runTeardownStep(mode: 'shutdown' | 'startup-rollback', stepName: string, step: () => unknown) {

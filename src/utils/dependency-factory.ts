@@ -57,6 +57,7 @@ type DependencyFactoryOptions = Record<string, unknown> & {
     axios?: unknown;
     WebSocketCtor?: unknown;
     Innertube?: InnertubeDependency;
+    innertubeService?: InnertubeService;
     cleanupInterval?: number;
     timeout?: number;
     strategies?: string[];
@@ -99,6 +100,13 @@ class DependencyFactory {
         this.interfaceValidators = this._createInterfaceValidators();
     }
 
+    createYoutubeInnertubeService(options: DependencyFactoryOptions = {}): InnertubeService {
+        return this._createInnertubeService(this._createInnertubeFactory(),
+            options.logger || this.createValidatedLogger('youtube'), options);
+    }
+
+    // Without an injected root owner, the caller owns dependencies.innertubeService
+    // and must await its disposal after retiring every consumer.
     createYoutubeDependencies(config: PlatformDependencyConfig, options: DependencyFactoryOptions = {}) {
         this._validateConfiguration(config, 'YouTube');
         this._validateOptions(options);
@@ -118,13 +126,15 @@ class DependencyFactory {
 
         try {
             const normalizedOptions = { ...options };
+            const injectedInnertubeService = normalizedOptions.innertubeService;
+            delete normalizedOptions.innertubeService;
             const injectedStreamDetectionService = normalizedOptions.streamDetectionService || null;
             delete normalizedOptions.streamDetectionService;
 
             const logger = normalizedOptions.logger || this.createValidatedLogger('youtube');
 
             const innertubeFactory = this._createInnertubeFactory();
-            const innertubeService = this._createInnertubeService(innertubeFactory, logger, normalizedOptions);
+            const innertubeService = injectedInnertubeService || this.createYoutubeInnertubeService({ ...normalizedOptions, logger });
             const viewerExtractionService = this._createViewerExtractionService(innertubeService, logger, normalizedOptions);
             
             const ResolvedRawPlatformDataLoggingService = normalizedOptions.RawPlatformDataLoggingService || RawPlatformDataLoggingService;
@@ -136,7 +146,8 @@ class DependencyFactory {
             const selfMessageDetectionService = new SelfMessageDetectionService(normalizedOptions.config);
 
             const streamDetectionService = injectedStreamDetectionService ||
-                this._createYouTubeStreamDetectionService(normalizedConfig, logger, normalizedOptions, innertubeService);
+                this._createYouTubeStreamDetectionService(normalizedConfig, logger,
+                    { ...normalizedOptions, ...(injectedInnertubeService ? { innertubeService: injectedInnertubeService } : {}) }, innertubeService);
             
             const dependencies = {
                 logger,
@@ -348,7 +359,7 @@ class DependencyFactory {
     _createYouTubeStreamDetectionService(config: PlatformDependencyConfig, logger: AppLogger, options: DependencyFactoryOptions, innertubeService: InnertubeService) {
         try {
             if (config.streamDetectionMethod === 'youtubei') {
-                if (!options.Innertube) {
+                if (!options.Innertube && !options.innertubeService) {
                     throw new Error('Innertube dependency required for youtubei stream detection');
                 }
                 return new YouTubeStreamDetectionService(innertubeService, { logger, timeout: 3000 });

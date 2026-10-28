@@ -1,6 +1,13 @@
 import { describe, it, beforeEach, afterEach, expect } from "bun:test";
 
 import { main } from "../../src/main.ts";
+import { AppRuntime } from "../../src/runtime/AppRuntime";
+import { DependencyFactory } from "../../src/utils/dependency-factory";
+import { createGracefulExitService } from "../../src/services/GracefulExitService";
+import { PlatformLifecycleService } from "../../src/services/PlatformLifecycleService";
+import { YouTubeStreamDetectionService } from "../../src/services/youtube-stream-detection-service";
+import { YouTubePlatform } from "../../src/platforms/youtube";
+import { InnertubeFactory } from "../../src/factories/innertube-factory";
 import { createEventBus } from "../../src/core/EventBus";
 import type { UsdRateService } from "../../src/services/usd-rate-service";
 import type { SingleInstanceMetadata } from "../../src/services/SingleInstanceGuard.ts";
@@ -225,9 +232,102 @@ describe("main startup behavior", () => {
       process.env.CHAT_BOT_STARTUP_ONLY = originalStartupOnly;
     }
     clearAllTimers();
+    InnertubeFactory.configure();
     useRealTimers();
     stdoutCapture.restore();
     stderrCapture.restore();
+  });
+
+  for (const enabled of [true, false]) {
+    it(`composes the default production YouTube owner only when enabled=${enabled}`, async () => {
+      process.env.CHAT_BOT_STARTUP_ONLY = "true";
+      const { overrides } = buildOverrides({ cliArgs: { chat: 1 } });
+      let app: AppRuntime | undefined;
+      const platformAttempts: Promise<void>[] = [];
+      let sdkCreations = 0;
+      const result = await main({
+        ...overrides,
+        config: buildMainConfig({ youtube: { enabled, username: "" } }),
+        innertubeImporter: async () => ({ Innertube: { create: async () => {
+          sdkCreations += 1;
+          return { getInfo: async () => ({}) };
+        } } }) as never,
+        createGracefulExitService: (runtime, ...args) => {
+          app = runtime as AppRuntime;
+          expect(sdkCreations).toBe(0);
+          if (enabled) {
+            const owner = app.innertubeService;
+            if (!owner) throw new Error("Expected the production root owner");
+            const factory = new DependencyFactory();
+            for (let attempt = 0; attempt < 2; attempt += 1) {
+              const deps = factory.createYoutubeDependencies(
+                { username: "synthetic-channel", streamDetectionMethod: "youtubei" },
+                { logger: noOpLogger, config: buildMainConfig(), innertubeService: owner },
+              );
+              expect(deps.innertubeService).toBe(owner);
+              expect(deps.viewerExtractionService.innertubeService).toBe(owner);
+              expect((deps.streamDetectionService as YouTubeStreamDetectionService).client).toBe(owner);
+            }
+            expect((app.platformLifecycleService as PlatformLifecycleService).sharedDependencies.innertubeService).toBe(owner);
+            const lifecycle = app.platformLifecycleService as PlatformLifecycleService;
+            for (let attempt = 0; attempt < 2; attempt += 1) {
+              platformAttempts.push(lifecycle.createPlatformInstance("youtube",
+                YouTubePlatform as unknown as Parameters<PlatformLifecycleService["createPlatformInstance"]>[1],
+                { ...buildMainConfig().youtube, username: "synthetic-channel", streamDetectionMethod: "youtubei" },
+              ).then(async instance => {
+                const platform = instance as unknown as YouTubePlatform;
+                expect(platform.viewerExtractionService).toBeDefined();
+                expect((platform.streamDetectionService as YouTubeStreamDetectionService).client).toBe(owner);
+                await owner.withMetadataOperation({}, client => client.getInfo("synthetic-video"));
+                await platform.cleanup();
+              }));
+            }
+          }
+          return createGracefulExitService(runtime, ...args);
+        },
+      });
+      await Promise.all(platformAttempts);
+      expect(result.success).toBe(true);
+      expect(sdkCreations).toBe(enabled ? 1 : 0);
+      expect(!!app?.innertubeService).toBe(enabled);
+      if (app?.innertubeService) {
+        expect(() => app!.innertubeService!.withMetadataOperation({}, async () => true)).toThrow("disposed");
+      }
+    });
+  }
+
+  for (const failure of ["validation", "constructor"] as const) {
+    it(`retires the acquired root YouTube owner on pre-adoption ${failure} failure`, async () => {
+      const { overrides } = buildOverrides({ cliArgs: { chat: 1 } });
+      const factory = new DependencyFactory();
+      let owner: ReturnType<DependencyFactory["createYoutubeInnertubeService"]> | undefined;
+      let disposals = 0;
+      const dependencyFactory = {
+        createYoutubeInnertubeService: (...args: Parameters<DependencyFactory["createYoutubeInnertubeService"]>) => {
+          owner = factory.createYoutubeInnertubeService(...args);
+          const dispose = owner.dispose.bind(owner);
+          owner.dispose = () => { disposals += 1; return dispose(); };
+          return owner;
+        },
+      };
+      await expect(main({
+        ...overrides,
+        config: buildMainConfig({ youtube: { enabled: true } }),
+        createProductionDependencies: (() => ({ dependencyFactory, ...(failure === "constructor" ? { logging: {} } : {}) })) as never,
+      })).rejects.toThrow(failure === "constructor" ? "AppRuntime requires logger" : "Runtime dependencies missing required keys: logging");
+      expect(disposals).toBe(1);
+      expect(owner).toBeDefined();
+      expect(() => owner!.withMetadataOperation({}, async () => true)).toThrow("disposed");
+    });
+  }
+
+  it("rejects enabled YouTube composition without the root acquisition capability", async () => {
+    const { overrides } = buildOverrides({ cliArgs: { chat: 1 } });
+    await expect(main({
+      ...overrides,
+      config: buildMainConfig({ youtube: { enabled: true } }),
+      dependencyFactory: {},
+    })).rejects.toThrow("Enabled YouTube requires dependencyFactory.createYoutubeInnertubeService");
   });
 
   for (const failure of ["validation", "constructor", "cleanup"] as const) {
