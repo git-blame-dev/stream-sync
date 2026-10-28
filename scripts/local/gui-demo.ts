@@ -1,9 +1,7 @@
 import { createRequire } from 'node:module';
+import { buildSyntheticGuiConfig } from './gui-synthetic-config';
 
 const load = createRequire(__filename);
-const { config: baseConfig } = load('../../src/core/config');
-const { logger } = load('../../src/core/logging');
-const { createGuiTransportService } = load('../../src/services/gui/gui-transport-service');
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -11,6 +9,17 @@ interface DemoService {
   start: () => Promise<void>;
   stop: () => Promise<void>;
   getAddress: () => { port?: number } | string | null;
+}
+
+interface GuiDemoOptions {
+  baseConfig?: unknown;
+  logger?: unknown;
+  createGuiTransportServiceImpl?: (options: { config: UnknownRecord; logger: unknown; demoOnly: boolean }) => DemoService;
+  process?: {
+    once: (signal: 'SIGINT' | 'SIGTERM', listener: () => void) => unknown;
+    exit: (code: number) => void;
+    stdout: { write: (text: string) => unknown };
+  };
 }
 
 function toRecord(value: unknown): UnknownRecord {
@@ -30,8 +39,11 @@ function buildGuiDemoConfig(source: unknown): UnknownRecord {
   };
 }
 
-async function runGuiDemo(): Promise<void> {
-  const config = buildGuiDemoConfig(baseConfig);
+async function runGuiDemo(options: GuiDemoOptions = {}): Promise<void> {
+  const logger = options.logger || load('../../src/core/logging').logger;
+  const createGuiTransportService = options.createGuiTransportServiceImpl || load('../../src/services/gui/gui-transport-service').createGuiTransportService;
+  const hostProcess = options.process || process;
+  const config = buildGuiDemoConfig(options.baseConfig ?? buildSyntheticGuiConfig());
   const guiConfig = toRecord(config.gui);
 
   const service: DemoService = createGuiTransportService({
@@ -47,22 +59,22 @@ async function runGuiDemo(): Promise<void> {
   const port = address && typeof address === 'object' && typeof address.port === 'number'
     ? address.port
     : Number(guiConfig.port);
-  process.stdout.write(`Demo URL: http://${host}:${port}/demo\n`);
+  hostProcess.stdout.write(`Demo URL: http://${host}:${port}/demo\n`);
 
   const stop = async () => {
     await service.stop();
   };
 
-  process.once('SIGINT', () => {
+  hostProcess.once('SIGINT', () => {
     stop()
-      .then(() => process.exit(0))
-      .catch(() => process.exit(1));
+      .then(() => hostProcess.exit(0))
+      .catch(() => hostProcess.exit(1));
   });
 
-  process.once('SIGTERM', () => {
+  hostProcess.once('SIGTERM', () => {
     stop()
-      .then(() => process.exit(0))
-      .catch(() => process.exit(1));
+      .then(() => hostProcess.exit(0))
+      .catch(() => hostProcess.exit(1));
   });
 }
 

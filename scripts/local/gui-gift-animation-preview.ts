@@ -1,13 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
+import { buildPreviewConfig, buildPreviewScenarioEvents } from './gui-preview';
+import { safeSetTimeout, safeDelay } from '../../src/utils/timeout-validator';
 
 const load = createRequire(__filename);
-const { buildPreviewConfig, buildPreviewScenarioEvents, createPreviewPipeline } = load('./gui-preview');
-const { createGuiTransportService } = load('../../src/services/gui/gui-transport-service');
-const { logger: defaultLogger } = load('../../src/core/logging');
-const { createPlatformErrorHandler } = load('../../src/utils/platform-error-handler');
-const { createTikTokGiftAnimationResolver } = load('../../src/services/tiktok-gift-animation/resolver');
-const { safeSetTimeout, safeDelay } = load('../../src/utils/timeout-validator');
 
 const DEFAULT_DURATION_MS = 12000;
 
@@ -60,6 +56,7 @@ function resolveLogger(logger: GiftAnimationPreviewOptions['logger']) {
         return logger;
     }
 
+    const { logger: defaultLogger } = load('../../src/core/logging');
     if (defaultLogger && typeof defaultLogger.error === 'function') {
         return defaultLogger;
     }
@@ -123,6 +120,10 @@ function buildGiftPreviewNotificationData(giftEvent: { rawEvent: unknown }): Rec
 }
 
 async function runGuiGiftAnimationPreview(options: GiftAnimationPreviewOptions = {}): Promise<void> {
+    const { createPreviewPipeline } = load('./gui-preview');
+    const { createGuiTransportService } = load('../../src/services/gui/gui-transport-service');
+    const { createPlatformErrorHandler } = load('../../src/utils/platform-error-handler');
+    const { createTikTokGiftAnimationResolver } = load('../../src/services/tiktok-gift-animation/resolver');
     const baseConfig = (options.baseConfig && typeof options.baseConfig === 'object')
         ? options.baseConfig
         : {};
@@ -184,8 +185,9 @@ async function runGuiGiftAnimationPreview(options: GiftAnimationPreviewOptions =
         await createdService.start();
 
         stdout.write(`GUI gift animation preview running for ${Math.floor(durationMs / 1000)}s\n`);
-        stdout.write(`Dock URL: http://${config.gui.host}:${config.gui.port}/dock\n`);
-        stdout.write(`TikTok Animation URL: http://${config.gui.host}:${config.gui.port}/tiktok-animations\n`);
+        const guiConfig = asRecord(config.gui) || {};
+        stdout.write(`Dock URL: http://${guiConfig.host}:${guiConfig.port}/dock\n`);
+        stdout.write(`TikTok Animation URL: http://${guiConfig.host}:${guiConfig.port}/tiktok-animations\n`);
 
         const giftEvent = options.giftEvent || buildGiftAnimationPreviewEvent();
         const notificationData = buildGiftPreviewNotificationData(giftEvent);

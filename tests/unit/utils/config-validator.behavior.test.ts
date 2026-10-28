@@ -109,6 +109,19 @@ fileLoggingEnabled = false
 });
 
 describe("ConfigValidator.normalize()", () => {
+  it("uses only the explicitly supplied environment for Twitch client id", () => {
+    const reads: string[] = [];
+    const environment = {
+      get TWITCH_CLIENT_ID() {
+        reads.push("TWITCH_CLIENT_ID");
+        return "  synthetic-client-id  ";
+      },
+    };
+    expect(ConfigValidator.normalize({}, environment).twitch.clientId).toBe("synthetic-client-id");
+    expect(reads).toEqual(["TWITCH_CLIENT_ID"]);
+    expect(ConfigValidator.normalize({}, {}).twitch.clientId).toBe("");
+    expect(ConfigValidator._normalizeTwitchSection({}, {}).clientId).toBe("");
+  });
   const ALL_SECTIONS: readonly (ConfigSectionName | "profiles")[] = [
     "general",
     "http",

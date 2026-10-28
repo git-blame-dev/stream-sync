@@ -1,10 +1,10 @@
 import EventEmitter from 'node:events';
 import { createRequire } from 'node:module';
 import path from 'node:path';
-import * as TwitchEventRouterModule from '../../src/platforms/twitch/events/event-router.ts';
-import * as CommandCooldownServiceModule from '../../src/services/CommandCooldownService.ts';
-import * as UserTrackingServiceModule from '../../src/services/UserTrackingService.ts';
-import * as VFXCommandServiceModule from '../../src/services/VFXCommandService.ts';
+import { buildSyntheticGuiConfig } from './gui-synthetic-config';
+import { PlatformEvents } from '../../src/interfaces/PlatformEvents';
+import { DISPLAY_EVENT_TYPES } from '../../src/interfaces/DisplayEvents';
+import { safeSetInterval, safeSetTimeout, safeDelay } from '../../src/utils/timeout-validator';
 import { validateFundingGoalLabel } from '../../src/core/funding-goal-label.ts';
 import { DEMO_CHARACTER_CATALOG } from '../../gui/src/demo/demo-catalog.ts';
 
@@ -92,81 +92,13 @@ type CommandCooldownServiceCtor = new (options?: {
     dispose?: () => void;
 };
 
-const createTwitchEventSubEventRouterCandidate = (TwitchEventRouterModule as {
-    createTwitchEventSubEventRouter?: TwitchEventRouterFactory;
-}).createTwitchEventSubEventRouter;
-if (typeof createTwitchEventSubEventRouterCandidate !== 'function') {
-    throw new Error('gui-preview requires createTwitchEventSubEventRouter');
-}
-const createTwitchEventSubEventRouter: TwitchEventRouterFactory = createTwitchEventSubEventRouterCandidate;
-
-const createUserTrackingServiceCandidate = (UserTrackingServiceModule as {
-    createUserTrackingService?: CreateUserTrackingService;
-}).createUserTrackingService;
-if (typeof createUserTrackingServiceCandidate !== 'function') {
-    throw new Error('gui-preview requires createUserTrackingService');
-}
-const createUserTrackingService: CreateUserTrackingService = createUserTrackingServiceCandidate;
-
-const createVFXCommandServiceCandidate = (VFXCommandServiceModule as {
-    createVFXCommandService?: CreateVFXCommandService;
-}).createVFXCommandService;
-if (typeof createVFXCommandServiceCandidate !== 'function') {
-    throw new Error('gui-preview requires createVFXCommandService');
-}
-const createVFXCommandService: CreateVFXCommandService = createVFXCommandServiceCandidate;
-
-const CommandCooldownServiceClassCandidate = (CommandCooldownServiceModule as {
-    CommandCooldownService?: CommandCooldownServiceCtor;
-}).CommandCooldownService;
-if (typeof CommandCooldownServiceClassCandidate !== 'function') {
-    throw new Error('gui-preview requires CommandCooldownService');
-}
-const CommandCooldownServiceClass: CommandCooldownServiceCtor = CommandCooldownServiceClassCandidate;
-
 const load = createRequire(__filename);
-const configModule = load('../../src/core/config');
-const { logger: defaultLogger } = load('../../src/core/logging');
-const { createEventBus } = load('../../src/core/EventBus');
-const { PlatformEvents } = load('../../src/interfaces/PlatformEvents');
-const { DISPLAY_EVENT_TYPES } = load('../../src/interfaces/DisplayEvents');
-const { PRIORITY_LEVELS, NOTIFICATION_CONFIGS } = load('../../src/core/constants');
-const { createPlatformErrorHandler } = load('../../src/utils/platform-error-handler');
-const { safeSetInterval, safeSetTimeout, safeDelay } = load('../../src/utils/timeout-validator');
-const { createGuiTransportService } = load('../../src/services/gui/gui-transport-service');
-const { createOperatorControlService, OPERATOR_CONTROL_KEYS } = load('../../src/services/operator/operator-control-service');
-const { createOperatorAppearanceService } = load('../../src/services/operator/operator-appearance-service');
-const { createOperatorLogSource } = load('../../src/services/operator/operator-log-source');
-const { PlatformEventRouter } = load('../../src/services/PlatformEventRouter.ts');
-const { ChatNotificationRouter } = load('../../src/services/ChatNotificationRouter.ts');
 type PreviewNotificationManager = {
     handleNotification: (type: string, platform: string, payload: UnknownRecord) => Promise<unknown>;
     prepareNotification: (type: string, platform: string, payload: UnknownRecord) => Promise<unknown>;
 };
 
 type NotificationManagerCtor = new (...args: unknown[]) => PreviewNotificationManager;
-
-const NotificationManagerModule = load('../../src/notifications/NotificationManager') as {
-    default?: NotificationManagerCtor;
-    NotificationManager?: NotificationManagerCtor;
-};
-const NotificationManager = NotificationManagerModule.default || NotificationManagerModule.NotificationManager;
-if (typeof NotificationManager !== 'function') {
-    throw new Error('gui-preview requires NotificationManager constructor export');
-}
-const NotificationManagerClass: NotificationManagerCtor = NotificationManager;
-const { DisplayQueue } = load('../../src/obs/display-queue');
-const { setupTikTokEventListeners } = load('../../src/platforms/tiktok/events/event-router.ts');
-const { createTikTokEventFactory } = load('../../src/platforms/tiktok/events/event-factory.ts');
-const { normalizeTikTokGiftEvent } = load('../../src/platforms/tiktok/events/event-normalizer.ts');
-const { extractTikTokUserData, extractTikTokAvatarUrl } = load('../../src/utils/tiktok-data-extraction.ts');
-const { resolveTikTokTimestampISO } = load('../../src/utils/platform-timestamp.ts');
-const { TwitchPlatform: TwitchPlatformClass } = load('../../src/platforms/twitch.ts') as {
-    TwitchPlatform: PreviewTwitchPlatformCtor;
-};
-const { YouTubePlatform: YouTubePlatformClass } = load('../../src/platforms/youtube.ts') as {
-    YouTubePlatform: PreviewYouTubePlatformCtor;
-};
 
 type PreviewAdapter = 'twitch' | 'youtube' | 'tiktok';
 type PreviewScenario = 'all' | 'chat' | 'notifications' | 'funding';
@@ -597,10 +529,14 @@ const NOOP_LOGGER = {
 };
 
 function createGuiPreviewErrorHandler(logger: PreviewLogger): PreviewErrorHandler {
+    const { createPlatformErrorHandler } = load('../../src/utils/platform-error-handler');
     return createPlatformErrorHandler(logger, 'gui-preview');
 }
 
 function resolveLogger(logger?: PreviewLogger | UnknownRecord): PreviewLogger {
+    const defaultLogger = logger && typeof logger.error === 'function'
+        ? null
+        : load('../../src/core/logging').logger;
     const source: UnknownRecord = (logger && typeof logger.error === 'function')
         ? logger
         : ((defaultLogger && typeof defaultLogger.error === 'function') ? defaultLogger : NOOP_LOGGER);
@@ -629,7 +565,7 @@ function mergeSection(
 }
 
 function buildPreviewConfig(baseConfig: UnknownRecord = {}): UnknownRecord {
-    const sourceConfig = toPreviewRecord(configModule.config);
+    const sourceConfig = toPreviewRecord(buildSyntheticGuiConfig());
     const overrideConfig = toPreviewRecord(baseConfig);
 
     const merged = {
@@ -1348,6 +1284,23 @@ function buildPreviewScenarioEvents(
 function createPreviewIngestAdapters(
     options: CreatePreviewIngestAdaptersOptions
 ): PreviewIngestAdapters {
+    const { createTwitchEventSubEventRouter } = load('../../src/platforms/twitch/events/event-router.ts') as {
+        createTwitchEventSubEventRouter: TwitchEventRouterFactory;
+    };
+    if (typeof createTwitchEventSubEventRouter !== 'function') {
+        throw new Error('gui-preview requires createTwitchEventSubEventRouter');
+    }
+    const { setupTikTokEventListeners } = load('../../src/platforms/tiktok/events/event-router.ts');
+    const { createTikTokEventFactory } = load('../../src/platforms/tiktok/events/event-factory.ts');
+    const { normalizeTikTokGiftEvent } = load('../../src/platforms/tiktok/events/event-normalizer.ts');
+    const { extractTikTokUserData, extractTikTokAvatarUrl } = load('../../src/utils/tiktok-data-extraction.ts');
+    const { resolveTikTokTimestampISO } = load('../../src/utils/platform-timestamp.ts');
+    const { TwitchPlatform: TwitchPlatformClass } = load('../../src/platforms/twitch.ts') as {
+        TwitchPlatform: PreviewTwitchPlatformCtor;
+    };
+    const { YouTubePlatform: YouTubePlatformClass } = load('../../src/platforms/youtube.ts') as {
+        YouTubePlatform: PreviewYouTubePlatformCtor;
+    };
     const { config = {}, logger, emitPlatformEvent } = options;
     const resolvedLogger = resolveLogger(logger);
 
@@ -1555,6 +1508,7 @@ function createPreviewIngestAdapters(
 }
 
 function createPreviewRuntime(options: CreatePreviewRuntimeOptions) {
+    const { ChatNotificationRouter } = load('../../src/services/ChatNotificationRouter.ts');
     const {
         config,
         logger,
@@ -1626,6 +1580,36 @@ function createPreviewRuntime(options: CreatePreviewRuntimeOptions) {
 }
 
 function createPreviewPipeline(options: CreatePreviewPipelineOptions = {}): PreviewPipeline {
+    const { createEventBus } = load('../../src/core/EventBus');
+    const { PRIORITY_LEVELS, NOTIFICATION_CONFIGS } = load('../../src/core/constants');
+    const { DisplayQueue } = load('../../src/obs/display-queue');
+    const { PlatformEventRouter } = load('../../src/services/PlatformEventRouter.ts');
+    const { CommandCooldownService: CommandCooldownServiceClass } = load('../../src/services/CommandCooldownService.ts') as {
+        CommandCooldownService: CommandCooldownServiceCtor;
+    };
+    const { createUserTrackingService } = load('../../src/services/UserTrackingService.ts') as {
+        createUserTrackingService: CreateUserTrackingService;
+    };
+    const { createVFXCommandService } = load('../../src/services/VFXCommandService.ts') as {
+        createVFXCommandService: CreateVFXCommandService;
+    };
+    if (typeof CommandCooldownServiceClass !== 'function') {
+        throw new Error('gui-preview requires CommandCooldownService');
+    }
+    if (typeof createUserTrackingService !== 'function') {
+        throw new Error('gui-preview requires createUserTrackingService');
+    }
+    if (typeof createVFXCommandService !== 'function') {
+        throw new Error('gui-preview requires createVFXCommandService');
+    }
+    const NotificationManagerModule = load('../../src/notifications/NotificationManager') as {
+        default?: NotificationManagerCtor;
+        NotificationManager?: NotificationManagerCtor;
+    };
+    const NotificationManagerClass = NotificationManagerModule.default || NotificationManagerModule.NotificationManager;
+    if (typeof NotificationManagerClass !== 'function') {
+        throw new Error('gui-preview requires NotificationManager constructor export');
+    }
     const config = toPreviewRecord(options.config);
     const logger = resolveLogger(options.logger);
     const errorHandler = createGuiPreviewErrorHandler(logger);
@@ -1910,6 +1894,10 @@ async function disposePreviewPipeline(options: DisposePreviewPipelineOptions): P
 }
 
 async function runGuiPreview(options: RunGuiPreviewOptions = {}): Promise<void> {
+    const { createGuiTransportService } = load('../../src/services/gui/gui-transport-service');
+    const { createOperatorControlService, OPERATOR_CONTROL_KEYS } = load('../../src/services/operator/operator-control-service');
+    const { createOperatorAppearanceService } = load('../../src/services/operator/operator-appearance-service');
+    const { createOperatorLogSource } = load('../../src/services/operator/operator-log-source');
     const config = buildPreviewConfig(options.baseConfig);
     const scenario = options.scenario || 'all';
     const requestedDurationMs = options.durationMs;

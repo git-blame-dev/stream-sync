@@ -140,13 +140,13 @@ class ConfigValidator {
         };
     }
 
-    static normalize(rawConfig: RawConfig): NormalizedConfig {
+    static normalize(rawConfig: RawConfig, environment: Readonly<Record<string, string | undefined>> = process.env): NormalizedConfig {
         return {
             general: ConfigValidator._normalizeGeneralSection(rawConfig.general || {}),
             http: ConfigValidator._normalizeHttpSection(rawConfig.http || {}),
             obs: ConfigValidator._normalizeObsSection(rawConfig.obs || {}),
             tiktok: ConfigValidator._normalizeTiktokSection(rawConfig.tiktok || {}),
-            twitch: ConfigValidator._normalizeTwitchSection(rawConfig.twitch || {}),
+            twitch: ConfigValidator._normalizeTwitchSection(rawConfig.twitch || {}, environment),
             youtube: ConfigValidator._normalizeYoutubeSection(rawConfig.youtube || {}),
             handcam: ConfigValidator._normalizeHandcamSection(rawConfig.handcam || {}),
             goals: ConfigValidator._normalizeGoalsSection(rawConfig.goals || {}),
@@ -239,11 +239,11 @@ class ConfigValidator {
         };
     }
 
-    static _normalizeTwitchSection(raw: RawConfigSection): NormalizedConfigSection {
+    static _normalizeTwitchSection(raw: RawConfigSection, environment: Readonly<Record<string, string | undefined>> = process.env): NormalizedConfigSection {
         return {
             enabled: ConfigValidator.parseBoolean(raw.enabled, DEFAULTS.twitch.enabled),
             username: ConfigValidator.parseString(raw.username, ''),
-            clientId: ConfigValidator._readEnvString('TWITCH_CLIENT_ID'),
+            clientId: String(environment.TWITCH_CLIENT_ID ?? '').trim(),
             channel: ConfigValidator.parseString(raw.channel, ''),
             viewerCountEnabled: ConfigValidator.parseBoolean(raw.viewerCountEnabled, DEFAULTS.twitch.viewerCountEnabled),
             viewerCountSource: ConfigValidator.parseString(raw.viewerCountSource, null),
