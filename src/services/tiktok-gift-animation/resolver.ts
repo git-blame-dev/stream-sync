@@ -1,715 +1,462 @@
-import { execFile } from 'node:child_process';
 import crypto from 'node:crypto';
-import fs from 'node:fs';
+import { constants } from 'node:fs';
 import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { promisify } from 'node:util';
-
-import * as axios from 'axios';
-
 import { logger } from '../../core/logging';
+import type { AppLogger } from '../../core/logger/types';
 import { createPlatformErrorHandler } from '../../utils/platform-error-handler';
-
-const execFileAsyncDefault = promisify(execFile);
-const axiosClient = axios.default || axios;
+import { createArchiveDownloader } from './archive-downloader';
+import { DEFAULT_ZIP_EXTRACTION_LIMITS, extractBoundedZip } from './bounded-zip-extractor';
 
 const GIFT_ANIMATION_CACHE_DIR = path.join(os.tmpdir(), 'stream-sync-tiktok-gift-animation');
-const GIFT_ANIMATION_MAX_ENTRIES = 12;
+const JSON_BYTES = 256 * 1024;
+const TREE_NODES = 32768;
+const ENTRY_NODES = 4096;
+const MAX_DURATION_MS = 120000;
 
-type ResolverLogger = {
-debug?: (message: string, scope?: string, payload?: unknown) => void;
-};
-
+type ResolverLogger = Pick<AppLogger, 'warn' | 'error'> & Partial<Pick<AppLogger, 'debug'>>;
 type ResolverOptions = {
-logger?: ResolverLogger;
-cacheDirectory?: unknown;
-maxEntries?: unknown;
-fetchBinary?: (url: string, requestOptions: { timeout: number }) => Promise<{ data: ArrayBuffer | Buffer | Uint8Array | string }>;
-executeFile?: (file: string, args: string[]) => Promise<{ stdout?: string; stderr?: string }>;
-unzipBinary?: unknown;
-unzipBinaries?: unknown;
-fileExists?: (candidatePath: string) => boolean;
-platform?: unknown;
-pathEnv?: unknown;
-pathext?: unknown;
+    logger?: ResolverLogger;
+    cacheDirectory?: string;
+    maxEntries?: number;
+    maxCacheBytes?: number;
+    maxConcurrent?: number;
+    timeoutMs?: number;
+    /** Trusted external download boundary only; extraction/validation are never injected. */
+    downloadArchive?: ReturnType<typeof createArchiveDownloader>;
 };
-
-type AnimationCandidate = { url: string; label: string };
-type RankedAnimationCandidate = AnimationCandidate & { score: number };
-
 type AnimationConfig = {
-profileName: unknown;
-sourceWidth: number;
-sourceHeight: number;
-renderWidth: number;
-renderHeight: number;
-rgbFrame: number[];
-aFrame: number[] | null;
+    profileName: string;
+    sourceWidth: number;
+    sourceHeight: number;
+    renderWidth: number;
+    renderHeight: number;
+    rgbFrame: number[];
+    aFrame: number[] | null;
 };
-
 type ResolvedGiftAnimation = {
-mediaFilePath: string;
-mediaContentType: string;
-durationMs: number;
+    mediaFilePath: string;
+    mediaContentType: string;
+    durationMs: number;
     animationConfig: AnimationConfig;
 };
+type Candidate = { url: string; score: number };
+type Tree = { bytes: number; files: Map<string, number> };
 
-type FetchBinaryData = ArrayBuffer | Buffer | Uint8Array | string;
-
-function fileExists(candidatePath: unknown): boolean {
-    if (typeof candidatePath !== 'string' || candidatePath.trim().length === 0) {
-        return false;
-    }
-
-    try {
-        return fs.statSync(candidatePath).isFile();
-    } catch {
-        return false;
-    }
+function record(value: unknown): Record<string, unknown> | null {
+    return value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
-
-function normalizeString(value: unknown): string {
-    return typeof value === 'string' ? value.trim() : '';
+function unavailable(): Error {
+    return Object.assign(new Error('Gift animation asset unavailable'), { code: 'ERR_GIFT_ANIMATION_RESOLVE' });
 }
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) {
-        return null;
-    }
-
-    return value as Record<string, unknown>;
+function check(signal: AbortSignal): void {
+    if (signal.aborted) throw unavailable();
 }
-
-function hasErrorCode(error: unknown, code: string): boolean {
-    const errorRecord = asRecord(error);
-    return errorRecord?.code === code;
+function within(root: string, candidate: string): boolean {
+    return candidate.startsWith(root + path.sep);
 }
-
-function isResolvedGiftAnimation(value: unknown): value is ResolvedGiftAnimation {
-    const record = asRecord(value);
-    const animationConfig = asRecord(record?.animationConfig);
-    return typeof record?.mediaFilePath === 'string'
-        && typeof record.mediaContentType === 'string'
-        && typeof record.durationMs === 'number'
-        && Number.isFinite(record.durationMs)
-        && animationConfig !== null;
+function positiveInteger(value: unknown, maximum: number): value is number {
+    return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 && value <= maximum;
 }
-
-function toBuffer(data: FetchBinaryData): Buffer {
-    if (typeof data === 'string') {
-        return Buffer.from(data);
-    }
-    if (data instanceof ArrayBuffer) {
-        return Buffer.from(new Uint8Array(data));
-    }
-    return Buffer.from(data);
+function frame(value: unknown, width: number, height: number): number[] | null {
+    if (!Array.isArray(value) || value.length !== 4 || !value.every(part => Number.isSafeInteger(part) && part >= 0)) return null;
+    const [x, y, w, h] = value as [number, number, number, number];
+    return w > 0 && h > 0 && x + w <= width && y + h <= height ? [x, y, w, h] : null;
 }
-
-function uniqueNonEmpty(values: unknown[] = []): string[] {
-    const seen = new Set<string>();
-    const result: string[] = [];
-
-    for (const value of values) {
-        const normalized = normalizeString(value);
-        if (!normalized || seen.has(normalized)) {
-            continue;
-        }
-        seen.add(normalized);
-        result.push(normalized);
+function duration(profile: Record<string, unknown>): number {
+    for (const [key, scale] of [['f', 1000 / 30], ['durationMs', 1], ['duration', 1000]] as const) {
+        const value = profile[key];
+        if (value === undefined || value === null || value === 0) continue;
+        if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0 ||
+            (key !== 'duration' && !Number.isSafeInteger(value))) return 0;
+        const result = Math.round(value * scale);
+        return result > 0 && result <= MAX_DURATION_MS ? result : 0;
     }
-
-    return result;
-}
-
-function buildUnzipBinaryCandidates(options: ResolverOptions = {}): string[] {
-    const configuredUnzipBinaries = Array.isArray(options.unzipBinaries)
-        ? options.unzipBinaries
-        : [options.unzipBinary];
-
-    const candidates = [...configuredUnzipBinaries, 'unzip'];
-    if (process.platform !== 'win32') {
-        candidates.push('/usr/bin/unzip', '/bin/unzip');
-    }
-
-    return uniqueNonEmpty(candidates);
-}
-
-function resolveMetadataDurationMs(profile: Record<string, unknown> = {}): number {
-    const frameCount = Number(profile.f);
-    if (Number.isFinite(frameCount) && frameCount > 0) {
-        return Math.round((frameCount / 30) * 1000);
-    }
-
-    const durationMs = Number(profile.durationMs);
-    if (Number.isFinite(durationMs) && durationMs > 0) {
-        return Math.round(durationMs);
-    }
-
-    const durationSeconds = Number(profile.duration);
-    if (Number.isFinite(durationSeconds) && durationSeconds > 0) {
-        return Math.round(durationSeconds * 1000);
-    }
-
     return 0;
 }
-
-function resolveCommandInPath(commandName: unknown, options: ResolverOptions = {}): string | null {
-    const command = normalizeString(commandName);
-    if (!command) {
-        return null;
+function profileFor(config: unknown): { profile: Record<string, unknown>; animationConfig: AnimationConfig; durationMs: number } {
+    const object = record(config);
+    if (!object) throw unavailable();
+    const keys = Object.keys(object);
+    if (keys.length > 64 || keys.some(key => key.length > 128)) throw unavailable();
+    const profiles: [string, unknown][] = [['portrait', object.portrait], ...keys.filter(key => key !== 'portrait').map(key => [key, object[key]] as [string, unknown])];
+    if (typeof object.path === 'string' && object.path) profiles.push(['default', object]);
+    for (const [profileName, value] of profiles) {
+        const profile = record(value);
+        if (!profile) continue;
+        const { videoW, videoH, w, h } = profile;
+        if (!positiveInteger(videoW, 4096) || !positiveInteger(videoH, 4096) || !positiveInteger(w, 4096) || !positiveInteger(h, 4096) ||
+            videoW * videoH > 16000000 || w * h > 16000000) continue;
+        const rgbFrame = frame(profile.rgbFrame, videoW, videoH);
+        const aFrame = profile.aFrame === undefined || profile.aFrame === null ? null : frame(profile.aFrame, videoW, videoH);
+        const durationMs = duration(profile);
+        if (!rgbFrame || (!aFrame && profile.aFrame !== undefined && profile.aFrame !== null) || !durationMs) continue;
+        return { profile, durationMs, animationConfig: { profileName, sourceWidth: videoW, sourceHeight: videoH, renderWidth: w, renderHeight: h, rgbFrame, aFrame } };
     }
+    throw unavailable();
+}
 
-    const fileExistsFn = typeof options.fileExists === 'function' ? options.fileExists : fileExists;
-    if (path.isAbsolute(command) || command.includes(path.sep)) {
-        return fileExistsFn(command) ? command : null;
+function candidatesFrom(data: unknown): Candidate[] {
+    const original = record(record(record(data)?.enhancedGiftData)?.originalData);
+    const asset = record(original?.asset);
+    if (!asset) return [];
+    const candidates = new Map<string, Candidate>();
+    const seen = new Set<string>();
+    let inspected = 0;
+    const push = (value: unknown, labelValue: unknown) => {
+        if (++inspected > 64 || candidates.size >= 16 || typeof value !== 'string' || value.length > 16384) return;
+        const url = value.trim();
+        if (!url || seen.has(url)) return;
+        seen.add(url);
+        if (typeof labelValue === 'string' && labelValue.length > 128) return;
+        const label = typeof labelValue === 'string' ? labelValue.toLowerCase() : '';
+        if (label.includes('encrypt') || url.toLowerCase().includes('encrypt')) return;
+        let score = 20;
+        if (label.includes('h264')) score += 100;
+        if (label.includes('bytevc1')) score += 90;
+        if (label.includes('bvc1')) score += 80;
+        if (label.includes('480p')) score -= 10;
+        if (label.includes('crop')) score -= 15;
+        if (!label) score += 10;
+        candidates.set(url, { url, score });
+    };
+    const resources = Array.isArray(asset.videoResourceList) ? asset.videoResourceList : [];
+    for (let index = 0; index < Math.min(64, resources.length) && inspected < 64 && candidates.size < 16; index++) {
+        const resource = record(resources[index]);
+        if (!resource) { inspected++; continue; }
+        const label = resource.videoTypeName || resource.format || resource.qualityType;
+        const list = record(resource.videoUrl)?.urlList;
+        if (Array.isArray(list)) for (let item = 0; item < list.length && inspected < 64 && candidates.size < 16; item++) push(list[item], label);
+        if (inspected < 64 && candidates.size < 16) push(resource.mainUrl, label);
     }
+    const list = record(asset.resourceModel)?.urlList;
+    if (Array.isArray(list)) for (let item = 0; item < list.length && inspected < 64 && candidates.size < 16; item++) push(list[item], 'resourceModel');
+    if (inspected < 64 && candidates.size < 16) push(asset.resourceUri, 'resourceUri');
+    return [...candidates.values()].sort((left, right) => right.score - left.score);
+}
 
-    const runtimePlatform = normalizeString(options.platform) || process.platform;
-    const pathEnv = typeof options.pathEnv === 'string' ? options.pathEnv : (process.env.PATH || '');
-    const pathEntries = pathEnv
-        .split(path.delimiter)
-        .map((entry) => entry.trim())
-        .filter((entry) => entry.length > 0);
+async function exists(file: string): Promise<boolean> {
+    try { await fsp.lstat(file); return true; }
+    catch (error) { if (record(error)?.code === 'ENOENT') return false; throw unavailable(); }
+}
 
-    const hasExtension = path.extname(command).length > 0;
-    let extensions = [''];
-    if (runtimePlatform === 'win32' && !hasExtension) {
-        const pathext = typeof options.pathext === 'string' ? options.pathext : (process.env.PATHEXT || '.EXE;.CMD;.BAT;.COM');
-        extensions = uniqueNonEmpty(pathext.split(';')).map((entry) => entry.toLowerCase());
-    }
-
-    for (const entry of pathEntries) {
-        for (const extension of extensions) {
-            const suffix = runtimePlatform === 'win32' ? extension : '';
-            const candidate = path.join(entry, `${command}${suffix}`);
-            if (fileExistsFn(candidate)) {
-                return candidate;
+/** Streaming directory enumeration, no symlink/special-file traversal or unbounded readdir allocation. */
+async function walk(root: string, signal: AbortSignal, byteLimit: number, nodeLimit: number, skip = new Set<string>()): Promise<Tree> {
+    const tree: Tree = { bytes: 0, files: new Map() };
+    let nodes = 0;
+    const visit = async (directory: string, depth: number): Promise<void> => {
+        check(signal);
+        if (depth > 32) throw unavailable();
+        const info = await fsp.lstat(directory);
+        if (!info.isDirectory() || info.isSymbolicLink()) throw unavailable();
+        const entries = await fsp.opendir(directory, { bufferSize: 32 });
+        for await (const entry of entries) {
+            check(signal);
+            const file = path.join(directory, entry.name);
+            if (skip.has(file)) continue;
+            if (++nodes > nodeLimit) throw unavailable();
+            const stat = await fsp.lstat(file);
+            if (stat.isSymbolicLink()) throw unavailable();
+            if (stat.isDirectory()) await visit(file, depth + 1);
+            else {
+                if (!stat.isFile() || stat.nlink !== 1 || !Number.isSafeInteger(stat.size) || stat.size < 0) throw unavailable();
+                tree.bytes += stat.size;
+                if (!Number.isSafeInteger(tree.bytes) || tree.bytes > byteLimit) throw unavailable();
+                tree.files.set(file, stat.size);
             }
         }
-    }
-
-    return null;
-}
-
-function resolveFirstAvailableCommand(candidates: unknown[], options: ResolverOptions = {}): string | null {
-    for (const candidate of uniqueNonEmpty(candidates)) {
-        const resolved = resolveCommandInPath(candidate, options);
-        if (resolved) {
-            return resolved;
-        }
-    }
-    return null;
-}
-
-function getGiftAnimationDependencyStatus(options: ResolverOptions = {}): {
-unzip: { available: boolean; command: string | null; candidates: string[] };
-extraction: { available: boolean; command: string | null };
-} {
-    const unzipCandidates = buildUnzipBinaryCandidates(options);
-
-    const unzipCommand = resolveFirstAvailableCommand(unzipCandidates, options);
-
-    return {
-        unzip: {
-            available: !!unzipCommand,
-            command: unzipCommand || null,
-            candidates: unzipCandidates
-        },
-        extraction: {
-            available: !!unzipCommand,
-            command: unzipCommand || null
-        }
     };
+    await visit(root, 0);
+    return tree;
 }
 
-function normalizeFrame(value: unknown): number[] | null {
-    if (!Array.isArray(value) || value.length < 4) {
-        return null;
-    }
-
-    const parsed = value.slice(0, 4).map((entry) => Number(entry));
-    if (!parsed.every((entry) => Number.isFinite(entry) && entry >= 0)) {
-        return null;
-    }
-
-    return parsed;
+async function readJson(file: string, signal: AbortSignal): Promise<unknown> {
+    check(signal);
+    const handle = await fsp.open(file, constants.O_RDONLY | constants.O_NOFOLLOW);
+    try {
+        const stat = await handle.stat();
+        if (!stat.isFile() || stat.nlink !== 1 || stat.size > JSON_BYTES) throw unavailable();
+        const buffer = Buffer.alloc(JSON_BYTES + 1);
+        let length = 0;
+        while (length < buffer.length) {
+            check(signal);
+            const { bytesRead } = await handle.read(buffer, length, buffer.length - length, length);
+            if (!bytesRead) break;
+            length += bytesRead;
+        }
+        check(signal);
+        if (length > JSON_BYTES) throw unavailable();
+        return JSON.parse(buffer.subarray(0, length).toString('utf8'));
+    } finally { await handle.close(); }
 }
 
-function sanitizeAnimationConfig(profileInfo: { profileName?: unknown; profile?: Record<string, unknown> } | null | undefined): AnimationConfig | null {
-    if (!profileInfo || !profileInfo.profile) {
-        return null;
+async function validateAsset(entry: string, tree: Tree, signal: AbortSignal): Promise<ResolvedGiftAnimation> {
+    const asset = path.join(entry, 'asset');
+    const realAsset = await fsp.realpath(asset);
+    if (realAsset !== asset || !tree.files.has(path.join(asset, 'config.json'))) throw unavailable();
+    const { profile, animationConfig, durationMs } = profileFor(await readJson(path.join(asset, 'config.json'), signal));
+    const preferred = profile.path === undefined || profile.path === '' ? 'output.mp4' : profile.path;
+    if (typeof preferred !== 'string' || preferred.length > 1024 || /[\\:\p{Cc}]/u.test(preferred) ||
+        preferred.split('/').some(part => !part || part === '.' || part === '..' || /[. ]$/u.test(part))) throw unavailable();
+    let media = path.resolve(asset, preferred);
+    if (!within(asset, media)) throw unavailable();
+    if (!tree.files.has(media)) {
+        const fallback = [...tree.files.keys()].filter(file => path.dirname(file) === asset && file.toLowerCase().endsWith('.mp4')).sort()[0];
+        if (!fallback) throw unavailable();
+        media = fallback;
     }
+    if (!media.toLowerCase().endsWith('.mp4') || !tree.files.has(media) || tree.files.get(media)! > DEFAULT_ZIP_EXTRACTION_LIMITS.fileBytes ||
+        await fsp.realpath(media) !== media) throw unavailable();
+    const handle = await fsp.open(media, constants.O_RDONLY | constants.O_NOFOLLOW);
+    try {
+        const stat = await handle.stat();
+        const header = Buffer.alloc(8);
+        const { bytesRead } = await handle.read(header, 0, 8, 0);
+        if (!stat.isFile() || stat.nlink !== 1 || stat.size > DEFAULT_ZIP_EXTRACTION_LIMITS.fileBytes ||
+            bytesRead !== 8 || header.toString('ascii', 4, 8) !== 'ftyp') throw unavailable();
+    } finally { await handle.close(); }
+    check(signal);
+    return { mediaFilePath: media, mediaContentType: 'video/mp4', durationMs, animationConfig };
+}
 
-    const profile = profileInfo.profile;
-    const sourceWidth = Number(profile.videoW);
-    const sourceHeight = Number(profile.videoH);
-    const renderWidth = Number(profile.w);
-    const renderHeight = Number(profile.h);
-    const rgbFrame = normalizeFrame(profile.rgbFrame);
-    const aFrame = normalizeFrame(profile.aFrame);
+/** One readiness contract for both warm hits and new-work root admission. */
+async function readPublished(entry: string, signal: AbortSignal, byteLimit: number): Promise<ResolvedGiftAnimation> {
+    const tree = await walk(entry, signal, byteLimit, ENTRY_NODES);
+    const metadata = record(await readJson(path.join(entry, 'metadata.json'), signal));
+    const metadataKeys = ['mediaFilePath', 'mediaContentType', 'durationMs', 'animationConfig'];
+    if (!metadata || Object.keys(metadata).length !== metadataKeys.length || !metadataKeys.every(key => Object.hasOwn(metadata, key)) ||
+        typeof metadata.mediaFilePath !== 'string' || !within(path.join(entry, 'asset'), metadata.mediaFilePath)) throw unavailable();
+    const value = await validateAsset(entry, tree, signal);
+    const config = record(metadata.animationConfig);
+    const scalarKeys = ['profileName', 'sourceWidth', 'sourceHeight', 'renderWidth', 'renderHeight'] as const;
+    const configKeys = [...scalarKeys, 'rgbFrame', 'aFrame'];
+    const sameFrame = (input: unknown, expected: number[] | null) => expected === null ? input === null :
+        Array.isArray(input) && input.length === expected.length && expected.every((part, index) => input[index] === part);
+    if (metadata.mediaFilePath !== value.mediaFilePath || metadata.durationMs !== value.durationMs || metadata.mediaContentType !== value.mediaContentType ||
+        !config || Object.keys(config).length !== configKeys.length || !configKeys.every(key => Object.hasOwn(config, key)) ||
+        !scalarKeys.every(key => config[key] === value.animationConfig[key]) ||
+        !sameFrame(config.rgbFrame, value.animationConfig.rgbFrame) || !sameFrame(config.aFrame, value.animationConfig.aFrame)) throw unavailable();
+    check(signal);
+    return value;
+}
 
-    if (!Number.isFinite(sourceWidth) || sourceWidth <= 0) {
-        return null;
-    }
-    if (!Number.isFinite(sourceHeight) || sourceHeight <= 0) {
-        return null;
-    }
-    if (!Number.isFinite(renderWidth) || renderWidth <= 0) {
-        return null;
-    }
-    if (!Number.isFinite(renderHeight) || renderHeight <= 0) {
-        return null;
-    }
-    if (!rgbFrame) {
-        return null;
-    }
+function getGiftAnimationDependencyStatus() {
+    return { extraction: { available: true, command: null, implementation: 'bounded-zip' } };
+}
 
-    return {
-        profileName: profileInfo.profileName,
-        sourceWidth,
-        sourceHeight,
-        renderWidth,
-        renderHeight,
-        rgbFrame,
-        aFrame
+/**
+ * Published entries are immutable, including on dispose/corruption/quota pressure.
+ * One cache owner serializes admission/publication and reserves pending entry
+ * slots. Extraction takes an exclusive reservation of the remaining byte budget;
+ * concurrent downloads may hold at most maxConcurrent bounded temporary archives.
+ * No multi-process quota/lease guarantee is made. Clear the cache only when its
+ * playback users have retired. A coalesced job borrows its first caller's budget;
+ * later callers do not cancel that shared job and recheck their own signal.
+ * Cancellation after the disk commit can populate the cache without returning
+ * an asset to the caller; a public readiness marker must never be rolled back.
+ */
+function createTikTokGiftAnimationResolver(options: ResolverOptions = {}) {
+    const maxEntries = options.maxEntries ?? 12;
+    const maxCacheBytes = options.maxCacheBytes ?? 512 * 1024 * 1024;
+    const maxConcurrent = options.maxConcurrent ?? 2;
+    const timeoutMs = options.timeoutMs ?? 30000;
+    if (![maxEntries, maxCacheBytes, maxConcurrent, timeoutMs].every(value => Number.isSafeInteger(value) && value > 0) || timeoutMs > 0x7fffffff) throw unavailable();
+    const log = options.logger ?? logger;
+    const errorHandler = createPlatformErrorHandler(log, 'tiktok-gift-animation');
+    const download = options.downloadArchive ?? createArchiveDownloader();
+    const configuredRoot = path.resolve(options.cacheDirectory || GIFT_ANIMATION_CACHE_DIR);
+    const lifetime = new AbortController();
+    const jobs = new Map<string, Promise<ResolvedGiftAnimation | null>>();
+    const attempts = new Set<Promise<ResolvedGiftAnimation | null>>();
+    const pendingEntries = new Set<string>();
+    const worktrees = new Set<string>();
+    const publications = new Set<string>();
+    let admitted = true;
+    let disposal: Promise<void> | undefined;
+    let rootPromise: Promise<string> | undefined;
+    let cacheTail = Promise.resolve();
+    const locked = async <T>(action: () => Promise<T>): Promise<T> => {
+        const previous = cacheTail;
+        let release!: () => void;
+        cacheTail = new Promise<void>(resolve => { release = resolve; });
+        await previous;
+        try { return await action(); } finally { release(); }
     };
-}
-
-function resolveAnimationProfile(configObject: Record<string, unknown> | null | undefined): {
-profileName: unknown;
-profile: Record<string, unknown>;
-animationConfig: AnimationConfig;
-} | null {
-    if (!configObject || typeof configObject !== 'object') {
-        return null;
-    }
-
-const orderedProfiles: Array<{ profileName: unknown; profile: Record<string, unknown> }> = [];
-    const portraitProfile = asRecord(configObject.portrait);
-    if (portraitProfile) {
-        orderedProfiles.push({ profileName: 'portrait', profile: portraitProfile });
-    }
-
-    for (const [key, value] of Object.entries(configObject)) {
-        const profile = asRecord(value);
-        if (key === 'portrait' || !profile) {
-            continue;
-        }
-        orderedProfiles.push({ profileName: key, profile });
-    }
-
-    if (normalizeString(configObject.path)) {
-        orderedProfiles.push({ profileName: 'default', profile: configObject });
-    }
-
-    for (const profileInfo of orderedProfiles) {
-        const animationConfig = sanitizeAnimationConfig(profileInfo);
-        if (animationConfig) {
-            return {
-                profileName: profileInfo.profileName,
-                profile: profileInfo.profile,
-                animationConfig
-            };
-        }
-    }
-
-    return null;
-}
-
-function scoreAnimationCandidate(candidate: AnimationCandidate): number {
-    const label = normalizeString(candidate.label).toLowerCase();
-    const url = normalizeString(candidate.url).toLowerCase();
-    if (!url || label.includes('encrypt') || url.includes('encrypt')) {
-        return -1;
-    }
-
-    let score = 20;
-    if (label.includes('h264')) score += 100;
-    if (label.includes('bytevc1')) score += 90;
-    if (label.includes('bvc1')) score += 80;
-    if (label.includes('480p')) score -= 10;
-    if (label.includes('crop')) score -= 15;
-    if (!label) score += 10;
-    return score;
-}
-
-function extractAnimationCandidates(originalData: unknown): RankedAnimationCandidate[] {
-    if (!originalData || typeof originalData !== 'object') {
-        return [];
-    }
-
-    const originalRecord = originalData as Record<string, unknown>;
-    const asset = originalRecord.asset && typeof originalRecord.asset === 'object'
-        ? originalRecord.asset as Record<string, unknown>
-        : {};
-    const candidates: AnimationCandidate[] = [];
-
-const pushCandidate = (url: unknown, label: unknown): void => {
-        const normalizedUrl = normalizeString(url);
-        if (!normalizedUrl) {
-            return;
-        }
-        candidates.push({ url: normalizedUrl, label: normalizeString(label) });
-    };
-
-    const resources: unknown[] = Array.isArray(asset.videoResourceList) ? asset.videoResourceList : [];
-    for (const resource of resources) {
-        if (!resource || typeof resource !== 'object') {
-            continue;
-        }
-
-        const resourceRecord = resource as Record<string, unknown>;
-        const label = resourceRecord.videoTypeName || resourceRecord.format || resourceRecord.qualityType;
-        const videoUrlRecord = resourceRecord.videoUrl && typeof resourceRecord.videoUrl === 'object'
-            ? resourceRecord.videoUrl as Record<string, unknown>
-            : {};
-        const urlList: unknown[] = Array.isArray(videoUrlRecord.urlList) ? videoUrlRecord.urlList : [];
-        for (const url of urlList) {
-            pushCandidate(url, label);
-        }
-        pushCandidate(resourceRecord.mainUrl, label);
-    }
-
-    const resourceModel = asset.resourceModel && typeof asset.resourceModel === 'object'
-        ? asset.resourceModel as Record<string, unknown>
-        : {};
-    const resourceModelUrls: unknown[] = Array.isArray(resourceModel.urlList) ? resourceModel.urlList : [];
-    for (const url of resourceModelUrls) {
-        pushCandidate(url, 'resourceModel');
-    }
-    pushCandidate(asset.resourceUri, 'resourceUri');
-
-    const deduped = new Map<string, AnimationCandidate>();
-    for (const candidate of candidates) {
-        if (!deduped.has(candidate.url)) {
-            deduped.set(candidate.url, candidate);
-        }
-    }
-
-    return Array.from(deduped.values())
-        .map((candidate) => ({ ...candidate, score: scoreAnimationCandidate(candidate) }))
-        .filter((candidate) => candidate.score >= 0)
-        .sort((left, right) => right.score - left.score);
-}
-
-function isPathWithin(rootPath: string, candidatePath: string): boolean {
-    const normalizedRoot = path.resolve(rootPath);
-    const normalizedCandidate = path.resolve(candidatePath);
-    return normalizedCandidate === normalizedRoot
-        || normalizedCandidate.startsWith(`${normalizedRoot}${path.sep}`);
-}
-
-function isMissingExecutableError(error: unknown, executableName: unknown): boolean {
-    const name = normalizeString(executableName).toLowerCase();
-    if (!name) {
-        return false;
-    }
-
-    if (hasErrorCode(error, 'ENOENT')) {
-        return true;
-    }
-
-    const message = normalizeString(asRecord(error)?.message).toLowerCase();
-    return message.includes('executable not found') && message.includes(name);
-}
-
-function createTikTokGiftAnimationResolver(options: ResolverOptions = {}): { resolveFromNotificationData: (notificationData: unknown) => Promise<ResolvedGiftAnimation | null> } {
-    const resolverLogger = options.logger || logger;
-    const errorHandler = createPlatformErrorHandler(resolverLogger, 'tiktok-gift-animation');
-    const cacheDirectory = normalizeString(options.cacheDirectory) || GIFT_ANIMATION_CACHE_DIR;
-    const configuredMaxEntries = Number(options.maxEntries);
-    const maxEntries = Number.isInteger(configuredMaxEntries) && configuredMaxEntries > 0
-        ? configuredMaxEntries
-        : GIFT_ANIMATION_MAX_ENTRIES;
-
-    const fetchBinary = options.fetchBinary || ((url, requestOptions) => axiosClient.get(url, {
-        responseType: 'arraybuffer',
-        timeout: requestOptions.timeout
-    }));
-    const executeFile = options.executeFile || execFileAsyncDefault;
-
-const logDebug = (message: string, data: unknown = null): void => {
-        if (!resolverLogger || typeof resolverLogger.debug !== 'function') {
-            return;
-        }
-        resolverLogger.debug(message, 'tiktok-gift-animation', data);
-    };
-
-const inFlight = new Map<string, Promise<ResolvedGiftAnimation>>();
-
-const extractZipArchive = async (zipPath: string, extractDirectory: string): Promise<void> => {
-        const unzipBinaries = buildUnzipBinaryCandidates(options);
-
-        const tried = new Set<string>();
-        for (const unzipBinary of unzipBinaries) {
-            if (tried.has(unzipBinary)) {
-                continue;
-            }
-            tried.add(unzipBinary);
-
-            try {
-                await executeFile(unzipBinary, ['-o', zipPath, '-d', extractDirectory]);
-                return;
-            } catch (unzipError) {
-                if (isMissingExecutableError(unzipError, unzipBinary)) {
-                    continue;
-                }
-
-                if (unzipBinary !== 'unzip') {
-                    if (isMissingExecutableError(unzipError, 'unzip')) {
-                        continue;
-                    }
-                }
-
-                throw unzipError;
-            }
-        }
-
-        throw new Error('Gift animation extraction requires unzip in PATH');
-    };
-
-const pruneCache = async (): Promise<void> => {
-        await fsp.mkdir(cacheDirectory, { recursive: true });
-        const entries = await fsp.readdir(cacheDirectory, { withFileTypes: true });
-const directories: Array<{ entryPath: string; modifiedAtMs: number }> = [];
-
-        for (const entry of entries) {
-            if (!entry.isDirectory()) {
-                continue;
-            }
-
-            const entryPath = path.join(cacheDirectory, entry.name);
-            try {
-                const stat = await fsp.stat(entryPath);
-                directories.push({ entryPath, modifiedAtMs: stat.mtimeMs });
-            } catch {
-                continue;
-            }
-        }
-
-        directories.sort((left, right) => right.modifiedAtMs - left.modifiedAtMs);
-        for (let index = maxEntries; index < directories.length; index += 1) {
-            const directory = directories[index];
-            if (!directory) {
-                continue;
-            }
-            await fsp.rm(directory.entryPath, { recursive: true, force: true });
-        }
-    };
-
-const touchCacheEntry = async (entryDirectory: string): Promise<void> => {
-        const now = new Date();
+    const report = (key: string, stage: string) => {
         try {
-            await fsp.utimes(entryDirectory, now, now);
+            errorHandler.handleEventProcessingError(unavailable(), 'gift-animation-resolve', { cacheKey: key, stage }, 'Failed resolving TikTok gift animation asset candidate');
+            log.debug?.('Gift animation candidate unavailable', 'tiktok-gift-animation', { cacheKey: key, stage });
+        } catch { /* Diagnostics must not interrupt cleanup or optional fallback. */ }
+    };
+    const rootDirectory = () => rootPromise ??= (async () => {
+        await fsp.mkdir(configuredRoot, { recursive: true, mode: 0o700 });
+        const info = await fsp.lstat(configuredRoot);
+        if (!info.isDirectory() || info.isSymbolicLink() ||
+            (typeof process.getuid === 'function' && info.uid !== process.getuid())) throw unavailable();
+        // Old cache roots may have been created with the process's default mode.
+        // Tighten our owned root without removing any retained playback files.
+        if (process.platform !== 'win32') await fsp.chmod(configuredRoot, 0o700);
+        return fsp.realpath(configuredRoot);
+    })();
+    const scan = async (root: string, signal: AbortSignal, reservedEntries: number) => {
+        if (reservedEntries > maxEntries) throw unavailable();
+        const owned = new Set([...worktrees, ...publications]);
+        const entries: string[] = [];
+        const directory = await fsp.opendir(root, { bufferSize: 32 });
+        for await (const item of directory) {
+            check(signal);
+            const entry = path.join(root, item.name);
+            if (owned.has(entry)) continue;
+            // SHA-1 URL cache keys are exactly 40 lowercase hexadecimal digits.
+            // A workspace-looking prefix is never proof of this owner's admission.
+            if (!/^[a-f0-9]{40}$/u.test(item.name) || !item.isDirectory()) throw unavailable();
+            entries.push(entry);
+            if (entries.length + reservedEntries > maxEntries || entries.length > TREE_NODES) throw unavailable();
+        }
+        const tree = await walk(root, signal, maxCacheBytes, TREE_NODES, owned);
+        for (const entry of entries) await readPublished(entry, signal, maxCacheBytes);
+        return { bytes: tree.bytes, entries: entries.length };
+    };
+
+    async function run(candidate: Candidate, key: string, signal: AbortSignal): Promise<ResolvedGiftAnimation | null> {
+        let work: string | undefined;
+        let unpublished: string | undefined;
+        let stage = 'cache';
+        try {
+            check(signal);
+            const root = await rootDirectory();
+            const entry = path.join(root, key);
+            const hit = await locked(async () => {
+                check(signal);
+                if (await exists(entry)) {
+                    return readPublished(entry, signal, maxCacheBytes);
+                }
+                stage = 'admission';
+                const usage = await scan(root, signal, pendingEntries.size + 1);
+                if (usage.bytes >= maxCacheBytes) throw unavailable();
+                pendingEntries.add(key);
+                work = await fsp.mkdtemp(path.join(root, '.gift-work-'));
+                worktrees.add(work);
+                return null;
+            });
+            if (hit) { check(signal); return hit; }
+            check(signal);
+            const privateWork = work!;
+            const archive = path.join(privateWork, 'archive.zip');
+            const archiveBytes = Math.min(maxCacheBytes, DEFAULT_ZIP_EXTRACTION_LIMITS.archiveBytes);
+            stage = 'download';
+            await download(candidate.url, archive, { signal, maxBytes: archiveBytes, timeoutMs });
+            check(signal);
+            const archiveStat = await fsp.lstat(archive);
+            if (!archiveStat.isFile() || archiveStat.isSymbolicLink() || archiveStat.size > archiveBytes) throw unavailable();
+            return await locked(async () => {
+                check(signal);
+                stage = 'quota';
+                const usage = await scan(root, signal, pendingEntries.size);
+                const available = maxCacheBytes - usage.bytes;
+                if (available <= 0) throw unavailable();
+                stage = 'extract';
+                const extracted = await extractBoundedZip(archive, privateWork, { signal, limits: {
+                    archiveBytes,
+                    fileBytes: Math.min(available, DEFAULT_ZIP_EXTRACTION_LIMITS.fileBytes),
+                    totalBytes: Math.min(available, DEFAULT_ZIP_EXTRACTION_LIMITS.totalBytes)
+                } });
+                check(signal);
+                await fsp.rename(extracted.directory, path.join(privateWork, 'asset'));
+                await fsp.rm(archive);
+                stage = 'validate';
+                const tree = await walk(privateWork, signal, available, ENTRY_NODES);
+                const local = await validateAsset(privateWork, tree, signal);
+                const value = { ...local, mediaFilePath: path.join(entry, path.relative(privateWork, local.mediaFilePath)) };
+                const metadata = Buffer.from(JSON.stringify(value));
+                stage = 'quota';
+                if (metadata.length > JSON_BYTES || tree.bytes + metadata.length > available) throw unavailable();
+                await fsp.writeFile(path.join(privateWork, 'metadata.json'), metadata, { flag: 'wx', mode: 0o600, signal });
+                check(signal);
+                stage = 'publish';
+                // Reserve this destination exclusively, then publish its readiness
+                // marker by atomic file rename (portable to Windows too). Only
+                // an unready reservation can be rolled back. A successful marker
+                // rename is a public disk commit, even before its await resumes.
+                await fsp.mkdir(entry, { mode: 0o700 });
+                unpublished = entry;
+                publications.add(entry);
+                check(signal);
+                await fsp.rename(path.join(privateWork, 'asset'), path.join(entry, 'asset'));
+                check(signal);
+                await fsp.rename(path.join(privateWork, 'metadata.json'), path.join(entry, 'metadata.json'));
+                unpublished = undefined;
+                publications.delete(entry);
+                pendingEntries.delete(key);
+                check(signal);
+                return value;
+            });
         } catch {
-            return;
-        }
-    };
-
-const removeCacheEntry = async (entryDirectory: string): Promise<void> => {
-        await fsp.rm(entryDirectory, { recursive: true, force: true });
-    };
-
-const readJson = async (filePath: string): Promise<unknown> => {
-        const raw = await fsp.readFile(filePath, 'utf8');
-        return JSON.parse(raw);
-    };
-
-const ensureMediaPathWithinExtractDirectory = async (extractDirectory: string, mediaFilePath: string): Promise<string> => {
-        const extractDirectoryRealPath = await fsp.realpath(extractDirectory);
-        const mediaFileRealPath = await fsp.realpath(mediaFilePath);
-        if (!isPathWithin(extractDirectoryRealPath, mediaFileRealPath)) {
-            throw new Error('Gift animation media path escapes extract directory');
-        }
-        return mediaFileRealPath;
-    };
-
-const resolveCandidate = async (candidate: RankedAnimationCandidate): Promise<ResolvedGiftAnimation> => {
-        const cacheKey = crypto.createHash('sha1').update(candidate.url).digest('hex');
-        const existingPromise = inFlight.get(cacheKey);
-        if (existingPromise) {
-            return existingPromise;
-        }
-
-        const resolverPromise = (async () => {
-            const entryDirectory = path.join(cacheDirectory, cacheKey);
-            const metadataPath = path.join(entryDirectory, 'metadata.json');
-
-            await fsp.mkdir(entryDirectory, { recursive: true });
-
-            if (fs.existsSync(metadataPath)) {
-                let resolvedFromCache: ResolvedGiftAnimation | null = null;
-                try {
-                    const metadata = await readJson(metadataPath);
-                    const metadataRecord = asRecord(metadata);
-                    const metadataMediaFilePath = typeof metadataRecord?.mediaFilePath === 'string'
-                        ? metadataRecord.mediaFilePath
-                        : '';
-                    if (!metadataRecord || !metadataMediaFilePath || !fs.existsSync(metadataMediaFilePath)) {
-                        throw new Error('Cached gift animation metadata is invalid');
-                    }
-
-                    const extractDirectory = path.join(entryDirectory, 'asset');
-                    const safeMediaPath = await ensureMediaPathWithinExtractDirectory(extractDirectory, metadataMediaFilePath);
-                    const cacheCandidate = {
-                        ...metadataRecord,
-                        mediaFilePath: safeMediaPath
-                    };
-                    if (!isResolvedGiftAnimation(cacheCandidate)) {
-                        throw new Error('Cached gift animation metadata is invalid');
-                    }
-                    resolvedFromCache = cacheCandidate;
-                } catch (cacheError) {
-                    logDebug('Evicting corrupt TikTok gift animation cache entry', {
-                        candidateUrl: candidate.url,
-                        cacheKey,
-                        error: normalizeString(asRecord(cacheError)?.message) || String(cacheError)
-                    });
-                    await removeCacheEntry(entryDirectory);
-                    await fsp.mkdir(entryDirectory, { recursive: true });
-                }
-
-                if (resolvedFromCache) {
-                    await touchCacheEntry(entryDirectory);
-                    await pruneCache();
-                    logDebug('Resolved TikTok gift animation from cache', {
-                        candidateUrl: candidate.url,
-                        cacheKey,
-                        durationMs: resolvedFromCache.durationMs
-                    });
-                    return resolvedFromCache;
-                }
-            }
-
-            const zipPath = path.join(entryDirectory, 'asset.zip');
-            const extractDirectory = path.join(entryDirectory, 'asset');
-            await fsp.mkdir(extractDirectory, { recursive: true });
-
-            logDebug('Downloading TikTok gift animation candidate', {
-                candidateUrl: candidate.url,
-                cacheKey
-            });
-            const response = await fetchBinary(candidate.url, { timeout: 30000 });
-            await fsp.writeFile(zipPath, toBuffer(response.data));
-            await extractZipArchive(zipPath, extractDirectory);
-
-            const configObject = await readJson(path.join(extractDirectory, 'config.json'));
-            const profileInfo = resolveAnimationProfile(asRecord(configObject));
-            if (!profileInfo || !profileInfo.animationConfig) {
-                throw new Error('Gift animation profile is invalid');
-            }
-
-            const preferredPath = normalizeString(profileInfo.profile.path);
-            let mediaFilePath = preferredPath
-                ? path.resolve(extractDirectory, preferredPath)
-                : path.resolve(extractDirectory, 'output.mp4');
-
-            if (!isPathWithin(extractDirectory, mediaFilePath)) {
-                throw new Error('Gift animation path escaped extract directory');
-            }
-
-            if (!fs.existsSync(mediaFilePath)) {
-                const files = await fsp.readdir(extractDirectory);
-                const fallback = files.find((entry) => entry.toLowerCase().endsWith('.mp4'));
-                if (!fallback) {
-                    throw new Error('Gift animation mp4 not found');
-                }
-
-                mediaFilePath = path.join(extractDirectory, fallback);
-                if (!isPathWithin(extractDirectory, mediaFilePath)) {
-                    throw new Error('Gift animation fallback path escaped extract directory');
-                }
-            }
-
-            mediaFilePath = await ensureMediaPathWithinExtractDirectory(extractDirectory, mediaFilePath);
-
-            const durationMs = resolveMetadataDurationMs(profileInfo.profile);
-            if (!durationMs || durationMs <= 0) {
-                throw new Error('Gift animation duration unavailable');
-            }
-
-            const resolved: ResolvedGiftAnimation = {
-                mediaFilePath,
-                mediaContentType: 'video/mp4',
-                durationMs,
-                animationConfig: profileInfo.animationConfig
-            };
-
-            await fsp.writeFile(metadataPath, JSON.stringify(resolved));
-            await touchCacheEntry(entryDirectory);
-            await pruneCache();
-            logDebug('Resolved TikTok gift animation candidate', {
-                candidateUrl: candidate.url,
-                cacheKey,
-                durationMs: resolved.durationMs,
-                profileName: resolved.animationConfig?.profileName || null
-            });
-            return resolved;
-        })();
-
-        inFlight.set(cacheKey, resolverPromise);
-        try {
-            return await resolverPromise;
-        } finally {
-            inFlight.delete(cacheKey);
-        }
-    };
-
-    const initPromise = pruneCache();
-
-const resolveFromNotificationData = async (notificationData: unknown): Promise<ResolvedGiftAnimation | null> => {
-        await initPromise;
-
-        const notificationRecord = asRecord(notificationData);
-        const enhancedGiftData = asRecord(notificationRecord?.enhancedGiftData);
-        const candidates = extractAnimationCandidates(enhancedGiftData?.originalData);
-        logDebug('Resolving TikTok gift animation candidates', {
-            candidateCount: candidates.length
-        });
-        if (candidates.length === 0) {
-            logDebug('No TikTok gift animation candidates found', {
-                candidateCount: 0
-            });
+            report(key, signal.aborted ? 'stopped' : stage);
             return null;
-        }
-
-        for (const candidate of candidates) {
-            logDebug('Trying TikTok gift animation candidate', {
-                candidateUrl: candidate.url,
-                label: candidate.label,
-                score: candidate.score
-            });
+        } finally {
             try {
-                const resolved = await resolveCandidate(candidate);
-                if (resolved) {
-                    logDebug('Selected TikTok gift animation candidate', {
-                        candidateUrl: candidate.url,
-                        durationMs: resolved.durationMs,
-                        profileName: resolved.animationConfig?.profileName || null
-                    });
-                    return resolved;
+                const cleanup = await Promise.allSettled([
+                    ...(unpublished ? [fsp.rm(unpublished, { recursive: true, force: true })] : []),
+                    ...(work ? [fsp.rm(work, { recursive: true, force: true })] : [])
+                ]);
+                if (cleanup.some(result => result.status === 'rejected')) {
+                    report(key, 'cleanup');
+                    throw unavailable();
                 }
-            } catch (error) {
-                errorHandler.handleEventProcessingError(
-                    error,
-                    'gift-animation-resolve',
-                    { url: candidate.url },
-                    'Failed resolving TikTok gift animation asset candidate'
-                );
+            } finally {
+                if (work) worktrees.delete(work);
+                if (unpublished) publications.delete(unpublished);
+                pendingEntries.delete(key);
             }
         }
+    }
 
-        return null;
-    };
+    function resolveFromNotificationData(data: unknown, context: { signal?: AbortSignal } = {}): Promise<ResolvedGiftAnimation | null> {
+        if (!admitted) return Promise.resolve(null);
+        const timeout = AbortSignal.timeout(timeoutMs);
+        const signal = AbortSignal.any([lifetime.signal, timeout, ...(context.signal ? [context.signal] : [])]);
+        // Retain one observer across downloader/extractor/validation transitions
+        // (Bun native timeout stops when its last listener is removed).
+        const observeStop = () => undefined;
+        signal.addEventListener('abort', observeStop, { once: true });
+        const attempt = Promise.resolve().then(async () => {
+            try {
+                for (const candidate of candidatesFrom(data)) {
+                    check(signal);
+                    if (!admitted) return null;
+                    const key = crypto.createHash('sha1').update(candidate.url).digest('hex');
+                    let job = jobs.get(key);
+                    if (!job) {
+                        if (jobs.size >= maxConcurrent) return null;
+                        job = Promise.resolve().then(() => run(candidate, key, signal));
+                        jobs.set(key, job);
+                        void job.then(() => { jobs.delete(key); }, () => { jobs.delete(key); });
+                    }
+                    const value = await job;
+                    check(signal);
+                    if (value) return value;
+                }
+                return null;
+            } catch { return null; }
+            finally { signal.removeEventListener('abort', observeStop); }
+        });
+        attempts.add(attempt);
+        void attempt.then(() => { attempts.delete(attempt); }, () => { attempts.delete(attempt); });
+        return attempt;
+    }
 
-    return {
-        resolveFromNotificationData
-    };
+    function dispose(): Promise<void> {
+        if (disposal) return disposal;
+        admitted = false;
+        let complete!: () => void;
+        disposal = new Promise<void>(resolve => { complete = resolve; });
+        lifetime.abort();
+        void Promise.allSettled([...attempts, ...jobs.values()]).then(() => complete());
+        return disposal;
+    }
+    return { resolveFromNotificationData, dispose };
 }
 
-export {
-    createTikTokGiftAnimationResolver,
-    GIFT_ANIMATION_CACHE_DIR,
-    getGiftAnimationDependencyStatus
-};
+export { createTikTokGiftAnimationResolver, GIFT_ANIMATION_CACHE_DIR, getGiftAnimationDependencyStatus };
