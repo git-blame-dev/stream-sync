@@ -82,7 +82,7 @@ type RawPlatformDataLoggingServiceConstructor = new (options: { logger: unknown;
 type ViewerServiceLike = {
   _activeStream?: { videoId?: string };
   clearActiveStream?: () => void;
-  cleanup?: () => void;
+  cleanup?: () => void | Promise<void>;
   setActiveStream?: (videoId: string) => Promise<void>;
 };
 
@@ -92,10 +92,11 @@ type ViewerCountProviderLike = {
 };
 
 type StreamDetectionServiceLike = {
+  cleanup?: () => void | Promise<void>;
   detectLiveStreams: (channelHandle: unknown) => Promise<{
     success?: boolean;
     videoIds?: unknown;
-    detectionMethod?: string;
+    detectionMethod?: string | null;
     error?: string;
     message?: string;
   }>;
@@ -1681,31 +1682,46 @@ class YouTubePlatform extends EventEmitter {
 
 
     async cleanup(): Promise<void> {
-        this.logger.debug('Cleaning up YouTube platform resources', 'youtube');
-
-        try {
-            this._clearMonitoringInterval();
-
-            if (this.connectionManager) {
-                await this.connectionManager.cleanupAllConnections();
-                const activeStreams = this.connectionManager.getActiveVideoIds();
-                for (const videoId of activeStreams) {
-                    await this.connectionManager.removeConnection(videoId);
-                }
-            }
-        } catch (error) {
-            this._handleCleanupErrorLogging(`Error disconnecting from YouTube: ${getErrorMessage(error)}`, error, 'disconnect');
-        }
-
-        try {
-            if (this.viewerService) {
-                this.viewerService.cleanup?.();
-            }
-        } catch (error) {
-            this._handleCleanupErrorLogging('Error during cleanup: viewerService', error, 'viewerService');
-        }
-
+        const detector = this.streamDetectionService;
+        const connections = this.connectionManager;
+        const viewer = this.viewerService;
+        this._clearMonitoringInterval();
         this.isInitialized = false;
+        const failures: { error: unknown; resource: string }[] = [];
+        const retire = (resource: string, cleanup: () => void | Promise<void>): Promise<void> => {
+            try {
+                return Promise.resolve(cleanup()).catch(error => { failures.push({ error, resource }); });
+            } catch (error) {
+                failures.push({ error, resource });
+                return Promise.resolve();
+            }
+        };
+        // Stop detector admission synchronously, before joining any consumer. The
+        // borrowed root metadata owner separately owns physical transport joins.
+        const detectionCleanup = retire('streamDetectionService', () => detector?.cleanup?.());
+        const connectionCleanup = retire('disconnect', () => connections?.cleanupAllConnections());
+        const viewerCleanup = retire('viewerService', () => viewer?.cleanup?.());
+        let reportingFailure: unknown;
+        let reportingFailed = false;
+        try {
+            this.logger.debug('Cleaning up YouTube platform resources', 'youtube');
+        } catch (error) {
+            reportingFailure = error;
+            reportingFailed = true;
+        }
+        await Promise.all([detectionCleanup, connectionCleanup, viewerCleanup]);
+        for (const { error, resource } of failures) {
+            try {
+                const message = resource === 'disconnect'
+                    ? `Error disconnecting from YouTube: ${getErrorMessage(error)}`
+                    : `Error during cleanup: ${resource}`;
+                this._handleCleanupErrorLogging(message, error, resource);
+            } catch (error) {
+                if (!reportingFailed) reportingFailure = error;
+                reportingFailed = true;
+            }
+        }
+        if (reportingFailed) throw reportingFailure;
     }
 
     isActive(): boolean {
