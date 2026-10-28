@@ -68,6 +68,44 @@ describe("TwitchApiClient authentication", () => {
   });
 
   describe("API request authentication", () => {
+    it("keeps owner authentication authoritative while retaining transport options", async () => {
+      mockHttpClient.get.mockResolvedValue({ status: 200, data: { data: [] } });
+      const signal = new AbortController().signal;
+      await apiClient.makeRequest("/users", {
+        authToken: "synthetic-caller-token", authType: "caller", clientId: "caller-id",
+        headers: { authorization: "caller", AUTHORIZATION: "caller2", "CLIENT-ID": "caller", "X-Test": "retained" },
+        signal, maxAttempts: 3, totalTimeout: 1234,
+      });
+      expect(mockHttpClient.get.mock.calls[0]?.[1]).toMatchObject({
+        authToken: "test-access-token", authType: "app", clientId: "test-client-id",
+        headers: { Authorization: "Bearer test-access-token", "Client-Id": "test-client-id", "X-Test": "retained" },
+        signal, maxAttempts: 3, totalTimeout: 1234,
+      });
+      expect(Object.keys(mockHttpClient.get.mock.calls[0]?.[1]?.headers as object).sort()).toEqual(["Authorization", "Client-Id", "X-Test"]);
+    });
+
+    it("does not use caller client identity when owner identity is absent", async () => {
+      mockHttpClient.get.mockResolvedValue({ status: 200, data: { data: [] } });
+      const client = new TwitchApiClient(null, {}, mockLogger, { enhancedHttpClient: mockHttpClient });
+      await client.makeRequest("/users", { clientId: "caller", headers: { "client-id": "caller" } });
+      expect(mockHttpClient.get.mock.calls[0]?.[1]?.clientId).toBeUndefined();
+      expect(mockHttpClient.get.mock.calls[0]?.[1]?.headers).toEqual({ Authorization: "Bearer test-access-token" });
+    });
+
+    it("encodes query values exactly once as data", async () => {
+      mockHttpClient.get.mockResolvedValue({ status: 200, data: { data: [{ id: "synthetic-id" }] } });
+      const value = "synthetic&other=?雪%20";
+      await apiClient.getStreamInfo(value);
+      await apiClient.getUserInfo(value);
+      await apiClient.getBroadcasterId(value);
+      await apiClient.getChannelInfo(value);
+      expect(mockHttpClient.get.mock.calls.map(([url]) => url)).toEqual([
+        `https://api.twitch.tv/helix/streams?user_login=${encodeURIComponent(value)}`,
+        `https://api.twitch.tv/helix/users?login=${encodeURIComponent(value)}`,
+        `https://api.twitch.tv/helix/users?login=${encodeURIComponent(value)}`,
+        `https://api.twitch.tv/helix/channels?broadcaster_id=${encodeURIComponent(value)}`,
+      ]);
+    });
     it("includes Bearer token and Client-Id in requests", async () => {
       mockHttpClient.get.mockResolvedValue({
         status: 200,
@@ -222,6 +260,34 @@ describe("TwitchApiClient authentication", () => {
   });
 
   describe("401 retry with token refresh", () => {
+    it("recognizes common transport status shapes without refreshing twice", async () => {
+      for (const failure of [{ statusCode: "401" }, { status: 401 }, { response: { statusCode: 401 } }]) {
+        mockHttpClient.get.mockRejectedValueOnce(failure).mockResolvedValueOnce({ status: 200, data: { data: [] } });
+        await expect(apiClient.makeRequest("/users")).resolves.toEqual({ data: [] });
+      }
+      expect(mockTwitchAuth.refreshTokens).toHaveBeenCalledTimes(3);
+      expect(mockHttpClient.get).toHaveBeenCalledTimes(6);
+    });
+    it("rotates protected credentials once and preserves the terminal error", async () => {
+      const failure = { response: { status: 401 } };
+      mockHttpClient.get.mockRejectedValue(failure);
+      mockTwitchAuth.refreshTokens.mockImplementation(async () => {
+        secrets.twitch.accessToken = "synthetic-rotated-token";
+        return true;
+      });
+      await expect(apiClient.makeRequest("/users", { authToken: "caller", headers: { authorization: "caller" } })).rejects.toBe(failure);
+      expect(mockTwitchAuth.refreshTokens).toHaveBeenCalledTimes(1);
+      expect(mockHttpClient.get).toHaveBeenCalledTimes(2);
+      expect(mockHttpClient.get.mock.calls[1]?.[1]).toMatchObject({ authToken: "synthetic-rotated-token", disableRetry: true, headers: { Authorization: "Bearer synthetic-rotated-token" } });
+    });
+
+    it("preserves the original 401 when refresh declines", async () => {
+      const failure = { response: { status: 401 } };
+      mockHttpClient.get.mockRejectedValue(failure);
+      mockTwitchAuth.refreshTokens.mockResolvedValue(false);
+      await expect(apiClient.makeRequest("/users")).rejects.toBe(failure);
+      expect(mockHttpClient.get).toHaveBeenCalledTimes(1);
+    });
     it("retries request after refreshing token on 401", async () => {
       mockHttpClient.get
         .mockRejectedValueOnce({ response: { status: 401 } })

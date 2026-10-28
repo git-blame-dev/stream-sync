@@ -43,12 +43,14 @@ const TWITCH_STARTUP_REQUEST_OPTIONS = {
 const getRecord = (value: unknown): Record<string, unknown> | null =>
     value && typeof value === 'object' ? value as Record<string, unknown> : null;
 
-const getErrorMessage = (error: unknown): string => error instanceof Error ? error.message : String(error);
-
 const getResponseStatus = (error: unknown): number | null => {
-    const response = getRecord(error)?.response;
-    const status = getRecord(response)?.status;
-    return typeof status === 'number' ? status : null;
+    const record = getRecord(error);
+    const response = getRecord(record?.response);
+    for (const status of [response?.status, response?.statusCode, record?.status, record?.statusCode]) {
+        if (typeof status === 'number' && Number.isInteger(status)) return status;
+        if (typeof status === 'string' && /^\d+$/.test(status)) return Number(status);
+    }
+    return null;
 };
 
 const getDataArray = (data: unknown): unknown[] => {
@@ -93,22 +95,23 @@ class TwitchApiClient {
             const requestOptions = {
                 ...options,
                 headers: {
+                    ...Object.fromEntries(Object.entries(options.headers ?? {}).filter(([name]) =>
+                        !['authorization', 'client-id'].includes(name.toLowerCase()))),
                     'Authorization': `Bearer ${accessToken}`,
                     ...(typeof this.config.clientId === 'string' ? { 'Client-Id': this.config.clientId } : {}),
-                    ...options.headers
-                }
+                },
+                authToken: accessToken,
+                authType: 'app',
+                clientId: typeof this.config.clientId === 'string' ? this.config.clientId : undefined
             };
 
             return this.httpClient.get(url, {
-                authToken: accessToken,
-                authType: 'app',
-                ...(typeof this.config.clientId === 'string' ? { clientId: this.config.clientId } : {}),
                 ...requestOptions,
                 ...(disableRetry ? { disableRetry: true } : {})
             });
         };
 
-        this.logger.debug(`Making Twitch API request: ${url}`, 'twitch-api');
+        this.logger.debug('Making Twitch API request', 'twitch-api');
 
         try {
             const response = await executeRequest();
@@ -131,7 +134,7 @@ class TwitchApiClient {
                 return retryResponse.data;
             } catch (retryError) {
                 this.logger.warn('Twitch API retry after refresh failed', 'twitch-api', {
-                    error: getErrorMessage(retryError)
+                    status: getResponseStatus(retryError)
                 });
                 throw retryError;
             }
@@ -140,7 +143,7 @@ class TwitchApiClient {
 
     async getStreamInfo(channelName: string) {
         try {
-            const data = await this.makeRequest(`/streams?user_login=${channelName}`);
+            const data = await this.makeRequest(`/streams?user_login=${encodeURIComponent(channelName)}`);
             const streams = getDataArray(data);
 
             if (streams.length > 0) {
@@ -159,7 +162,7 @@ class TwitchApiClient {
             };
             
         } catch (error) {
-            this._handleApiError(`Failed to get stream info: ${getErrorMessage(error)}`, error, 'getStreamInfo');
+            this._handleApiError('Failed to get stream info', error, 'getStreamInfo');
             return {
                 isLive: false,
                 stream: null,
@@ -169,7 +172,7 @@ class TwitchApiClient {
     }
 
     private async fetchUserInfo(username: string, requestOptions: RequestOptions = {}): Promise<unknown | null> {
-        const data = await this.makeRequest(`/users?login=${username}`, requestOptions);
+        const data = await this.makeRequest(`/users?login=${encodeURIComponent(username)}`, requestOptions);
         const users = getDataArray(data);
         return users.length > 0 ? users[0] : null;
     }
@@ -178,7 +181,7 @@ class TwitchApiClient {
         try {
             return await this.fetchUserInfo(username);
         } catch (error) {
-            this._handleApiError(`Failed to get user info: ${getErrorMessage(error)}`, error, 'getUserInfo');
+            this._handleApiError('Failed to get user info', error, 'getUserInfo');
             return null;
         }
     }
@@ -189,7 +192,7 @@ class TwitchApiClient {
             const users = getDataArray(data);
             return users.length > 0 ? users[0] : null;
         } catch (error) {
-            this._handleApiError(`Failed to get user id: ${getErrorMessage(error)}`, error, 'getUserById');
+            this._handleApiError('Failed to get user id', error, 'getUserById');
             return null;
         }
     }
@@ -199,7 +202,7 @@ class TwitchApiClient {
         try {
             userInfo = await this.fetchUserInfo(channel, TWITCH_STARTUP_REQUEST_OPTIONS);
         } catch (error) {
-            this._handleApiError(`Failed to get user info: ${getErrorMessage(error)}`, error, 'getBroadcasterId');
+            this._handleApiError('Failed to get user info', error, 'getBroadcasterId');
             throw error;
         }
         const userId = getRecord(userInfo)?.id;
@@ -211,11 +214,11 @@ class TwitchApiClient {
 
     async getChannelInfo(channelId: string): Promise<unknown | null> {
         try {
-            const data = await this.makeRequest(`/channels?broadcaster_id=${channelId}`);
+            const data = await this.makeRequest(`/channels?broadcaster_id=${encodeURIComponent(channelId)}`);
             const channels = getDataArray(data);
             return channels.length > 0 ? channels[0] : null;
         } catch (error) {
-            this._handleApiError(`Failed to get channel info: ${getErrorMessage(error)}`, error, 'getChannelInfo');
+            this._handleApiError('Failed to get channel info', error, 'getChannelInfo');
             return null;
         }
     }
@@ -225,7 +228,7 @@ class TwitchApiClient {
             const data = await this.makeRequest('/chat/badges/global');
             return getDataArray(data);
         } catch (error) {
-            this._handleApiError(`Failed to get global chat badges: ${getErrorMessage(error)}`, error, 'getGlobalChatBadges');
+            this._handleApiError('Failed to get global chat badges', error, 'getGlobalChatBadges');
             return [];
         }
     }
@@ -240,7 +243,7 @@ class TwitchApiClient {
             const data = await this.makeRequest(`/chat/badges?broadcaster_id=${encodeURIComponent(normalizedBroadcasterId)}`);
             return getDataArray(data);
         } catch (error) {
-            this._handleApiError(`Failed to get channel chat badges: ${getErrorMessage(error)}`, error, 'getChannelChatBadges');
+            this._handleApiError('Failed to get channel chat badges', error, 'getChannelChatBadges');
             return [];
         }
     }
@@ -255,7 +258,7 @@ class TwitchApiClient {
             const data = await this.makeRequest(endpoint);
             return getDataArray(data);
         } catch (error) {
-            this._handleApiError(`Failed to get cheermotes: ${getErrorMessage(error)}`, error, 'getCheermotes');
+            this._handleApiError('Failed to get cheermotes', error, 'getCheermotes');
             return [];
         }
     }
