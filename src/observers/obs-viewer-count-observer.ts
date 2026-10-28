@@ -2,6 +2,7 @@ import { ViewerCountObserver } from './viewer-count-observer';
 import { VIEWER_COUNT_CONSTANTS } from '../core/constants';
 import { createTextProcessingManager } from '../utils/text-processing';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
+import type { ViewerCountSnapshot } from '../contracts/viewer-count';
 
 type LoggerLike = {
     debug: (message: string, context?: string, payload?: unknown) => void;
@@ -22,6 +23,7 @@ type PlatformConfig = {
 
 type ObserverDependencies = {
     config?: Record<string, PlatformConfig>;
+    getViewerCountSnapshot?: (platform: string) => ViewerCountSnapshot;
 };
 
 type ViewerCountUpdate = {
@@ -30,6 +32,7 @@ type ViewerCountUpdate = {
     previousCount?: number;
     isStreamLive: boolean;
     timestamp?: unknown;
+    observationKind?: 'complete';
 };
 
 type StreamStatusUpdate = {
@@ -53,6 +56,7 @@ class OBSViewerCountObserver extends ViewerCountObserver {
     config: Record<string, PlatformConfig>;
     textProcessing: { formatViewerCount: (count: number) => string };
     errorHandler: ReturnType<typeof createPlatformErrorHandler>;
+    private getViewerCountSnapshot?: ObserverDependencies['getViewerCountSnapshot'];
 
     constructor(obsManager: ObsManagerLike, logger: LoggerLike, deps: ObserverDependencies = {}) {
         super();
@@ -65,6 +69,7 @@ class OBSViewerCountObserver extends ViewerCountObserver {
         this.obsManager = obsManager;
         this.logger = logger;
         this.config = deps.config;
+        this.getViewerCountSnapshot = deps.getViewerCountSnapshot;
         this.textProcessing = createTextProcessingManager({ logger: this.logger });
         this.errorHandler = createPlatformErrorHandler(logger, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.OBS_OBSERVER);
     }
@@ -88,20 +93,20 @@ class OBSViewerCountObserver extends ViewerCountObserver {
         
         for (const platformName of platformNames) {
             try {
-                await this.updateObsCount(platformName, VIEWER_COUNT_CONSTANTS.VIEWER_COUNT_ZERO);
-                this.logger.debug(`Initialized ${platformName} viewer count to 0 in OBS`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.OBS_OBSERVER);
+                const snapshot = this.getViewerCountSnapshot?.(platformName);
+                if (snapshot?.hasCompleteObservation) await this.updateObsCount(platformName, snapshot.count);
             } catch (error: unknown) {
                 this.logger.debug(`Could not initialize ${platformName} viewer count (source may not exist): ${getErrorMessage(error)}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.OBS_OBSERVER);
             }
         }
         
-        this.logger.info('All platform viewer counts initialized to 0 in OBS', VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.OBS_OBSERVER);
+        this.logger.info('Observed viewer snapshots replayed to OBS', VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.OBS_OBSERVER);
     }
 
     override async onViewerCountUpdate(update: ViewerCountUpdate) {
         const { platform, count, isStreamLive } = update;
         
-        if (!isStreamLive) {
+        if (!isStreamLive && !(platform.toLowerCase() === 'youtube' && update.observationKind === 'complete')) {
             this.logger.debug(`Skipping OBS update for ${platform} (stream offline)`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.OBS_OBSERVER);
             return;
         }
@@ -116,7 +121,7 @@ class OBSViewerCountObserver extends ViewerCountObserver {
     override async onStreamStatusChange(statusUpdate: StreamStatusUpdate) {
         const { platform, isLive, wasLive } = statusUpdate;
         
-        if (wasLive && !isLive) {
+        if (platform.toLowerCase() !== 'youtube' && wasLive && !isLive) {
             this.logger.info(`Stream went offline for ${platform}, resetting viewer count to 0`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.OBS_OBSERVER);
             try {
                 await this.updateObsCount(platform, VIEWER_COUNT_CONSTANTS.VIEWER_COUNT_ZERO);
@@ -133,7 +138,8 @@ class OBSViewerCountObserver extends ViewerCountObserver {
             return { valid: false, reason: 'Platform name must be a non-empty string' };
         }
         
-        if (typeof count !== 'number' || count < 0 || isNaN(count)) {
+        if (typeof count !== 'number' || count < 0 || isNaN(count)
+            || (platformName.toLowerCase() === 'youtube' && !Number.isSafeInteger(count))) {
             return { valid: false, reason: 'Count must be a non-negative number' };
         }
         

@@ -137,12 +137,12 @@ describe("YouTubeViewerCountProvider", () => {
     clearAllMocks();
   });
 
-  it("returns 0 when required dependencies are missing", async () => {
+  it("returns unavailable when required dependencies are missing", async () => {
     const provider = new YouTubeViewerCountProvider({}, null, {
       logger: noOpLogger,
     });
 
-    await expect(provider.getViewerCount()).resolves.toBe(0);
+    await expect(provider.getViewerCount()).resolves.toBeNull();
   });
 
   it("aggregates counts across active streams via service layer", async () => {
@@ -155,7 +155,7 @@ describe("YouTubeViewerCountProvider", () => {
     );
     const provider = new YouTubeViewerCountProvider(
       {},
-      () => ["testVideoId1"],
+      () => ({ generation: 1, videoIds: ["testVideoId1"], availability: "live" }),
       { viewerExtractionService, logger: noOpLogger },
     );
 
@@ -176,7 +176,7 @@ describe("YouTubeViewerCountProvider", () => {
     );
     const provider = new YouTubeViewerCountProvider(
       {},
-      () => ["testVideoId1"],
+      () => ({ generation: 1, videoIds: ["testVideoId1"], availability: "live" }),
       { viewerExtractionService, logger: noOpLogger },
     );
 
@@ -196,7 +196,7 @@ describe("YouTubeViewerCountProvider", () => {
     );
     const provider = new YouTubeViewerCountProvider(
       {},
-      () => ["testVideoId1", "testVideoId2"],
+      () => ({ generation: 1, videoIds: ["testVideoId1", "testVideoId2"], availability: "live" }),
       { viewerExtractionService, logger: noOpLogger },
     );
 
@@ -206,8 +206,8 @@ describe("YouTubeViewerCountProvider", () => {
     expect(provider.getErrorStats().totalErrors).toBe(1);
   });
 
-  it("returns 0 without incrementing errors when no active streams", async () => {
-    const provider = new YouTubeViewerCountProvider({}, () => [], {
+  it("returns confirmed empty zero without incrementing errors", async () => {
+    const provider = new YouTubeViewerCountProvider({}, () => ({ generation: 1, videoIds: [], availability: "offline" }), {
       viewerExtractionService: createViewerExtractionService(),
       logger: noOpLogger,
     });
@@ -230,7 +230,7 @@ describe("YouTubeViewerCountProvider", () => {
     );
     const provider = new YouTubeViewerCountProvider(
       {},
-      () => ["testVideoId1"],
+      () => ({ generation: 1, videoIds: ["testVideoId1"], availability: "live" }),
       { viewerExtractionService, logger: noOpLogger },
     );
 

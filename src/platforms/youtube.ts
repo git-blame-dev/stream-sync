@@ -1,4 +1,7 @@
 import { EventEmitter } from 'node:events';
+import type { ViewerCountObservation, ViewerMembershipSnapshot } from '../contracts/viewer-count';
+import type { InnertubeService } from '../services/innertube-service';
+import { isYouTubeVideoId } from '../services/youtube-live-stream-service';
 
 import { UNKNOWN_CHAT_MESSAGE, UNKNOWN_CHAT_USERNAME } from '../constants/degraded-chat';
 import { PlatformEvents } from '../interfaces/PlatformEvents';
@@ -88,13 +91,15 @@ type ViewerServiceLike = {
 
 type ViewerCountProviderLike = {
   getViewerCount: () => Promise<number | null>;
+  getViewerCountObservation?: () => Promise<ViewerCountObservation>;
   getViewerCountForVideo?: (videoId: string) => Promise<number | null>;
 };
 
 type StreamDetectionServiceLike = {
   cleanup?: () => void | Promise<void>;
-  detectLiveStreams: (channelHandle: unknown) => Promise<{
+  detectLiveStreams: (channelHandle: unknown, options?: { signal?: AbortSignal }) => Promise<{
     success?: boolean;
+    observationKind?: 'complete' | 'partial' | 'unavailable';
     videoIds?: unknown;
     detectionMethod?: string | null;
     error?: string;
@@ -155,6 +160,7 @@ type YouTubeDependencies = UnknownMap & {
   viewerCountProvider?: ViewerCountProviderLike;
   viewerExtractionService?: YouTubeExtractionServiceLike;
   innertubeService?: unknown;
+  now?: () => number;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -239,7 +245,11 @@ class YouTubePlatform extends EventEmitter {
   streamViewerCounts?: Map<string, number>;
   lastRecoveryTime?: number;
   currentVideoId?: string;
-  terminalStreamEndEmitted = false;
+  private membership: ViewerMembershipSnapshot = { generation: 0, videoIds: [], availability: 'unknown' };
+  private membershipLifetime = new AbortController();
+  private membershipRequest = 0;
+  private metadataOwner?: Pick<InnertubeService, 'withMetadataOperation'>;
+  private now: () => number;
 
   constructor(config: UnknownMap = {}, dependencyInput: unknown = {}) {
         super();
@@ -268,6 +278,10 @@ class YouTubePlatform extends EventEmitter {
         this.platformLogger = this.logger;
         
         this.config = { ...config };
+        this.now = dependencies.now ?? Date.now;
+        if (isRecord(dependencies.innertubeService) && typeof dependencies.innertubeService.withMetadataOperation === 'function') {
+            this.metadataOwner = dependencies.innertubeService as Pick<InnertubeService, 'withMetadataOperation'>;
+        }
         this.platformName = 'youtube';
         this.eventFactory = createYouTubeEventFactory();
         try {
@@ -319,7 +333,7 @@ class YouTubePlatform extends EventEmitter {
             platform: this._createMultiStreamPlatformAdapter(),
             safeSetInterval,
             validateTimeout,
-            now: () => Date.now()
+            now: () => this.now()
         });
 
         this.streamDetectionService = dependencies.streamDetectionService;
@@ -363,12 +377,12 @@ class YouTubePlatform extends EventEmitter {
 
                 this.viewerCountProvider = ViewerCountProviderFactory.createYouTubeProvider(
                     this.config,
-                    () => this.getDetectedStreamIds(),
+                    () => this.getViewerMembershipSnapshot(),
                     providerDependencies
                 );
                 this.logger.debug('Created YouTube viewer count provider with service layer dependencies', 'youtube');
             } catch (error) {
-                this.logger.warn('Failed to create viewer count provider, viewer counts will return 0', 'youtube', error);
+                this.logger.warn('Failed to create viewer count provider, viewer counts are unavailable', 'youtube', error);
                 this.viewerCountProvider = null;
             }
         }
@@ -473,6 +487,7 @@ class YouTubePlatform extends EventEmitter {
             getActiveYouTubeVideoIds: () => this.getActiveYouTubeVideoIds(),
             getLiveVideoIds: () => this.getLiveVideoIds(),
             connectToYouTubeStream: async (videoId: string) => {
+                if (this.membershipLifetime.signal.aborted || !this.membership.videoIds.includes(videoId)) return false;
                 return await this.connectToYouTubeStream(videoId);
             },
             disconnectFromYouTubeStream: async (
@@ -531,16 +546,10 @@ class YouTubePlatform extends EventEmitter {
             return false;
         }
 
-        const previousCount = this.connectionManager.getConnectionCount();
         const result = await this.connectionManager.disconnectFromStream(videoId, reason, options.expectedAttemptId);
         if (!result) {
             return false;
         }
-        const isLiveChatEnd = options.source === 'livechat-end';
-        if (!isLiveChatEnd) {
-            this._emitStreamStatusIfNeeded(previousCount, { videoId, reason });
-        }
-
         if (result && options.requestImmediateRefresh === true) {
             const refreshContext = {
                 videoId,
@@ -551,7 +560,7 @@ class YouTubePlatform extends EventEmitter {
             const checkInProgress = this._youtubeMultiStreamManager &&
                 typeof this._youtubeMultiStreamManager.isCheckInProgress === 'function' &&
                 this._youtubeMultiStreamManager.isCheckInProgress() === true;
-            if (checkInProgress && !isLiveChatEnd) {
+            if (checkInProgress) {
                 this.requestImmediateYouTubeStreamRefresh(refreshContext).catch((error) => {
                     this._handleConnectionErrorLogging(
                         `Immediate stream refresh failed after disconnect: ${getErrorMessage(error)}`,
@@ -573,15 +582,6 @@ class YouTubePlatform extends EventEmitter {
                 return result;
             }
 
-            if (isLiveChatEnd && this.connectionManager.getConnectionCount() === 0 && !this.terminalStreamEndEmitted) {
-                this.terminalStreamEndEmitted = true;
-                this._emitPlatformEvent(PlatformEvents.STREAM_STATUS, {
-                    platform: 'youtube',
-                    isLive: false,
-                    status: 'stream-ended',
-                    timestamp: getSystemTimestampISO()
-                });
-            }
         }
 
         return result;
@@ -613,13 +613,31 @@ class YouTubePlatform extends EventEmitter {
     }
 
     getDetectedStreamIds(): string[] {
-        if (!this.connectionManager) {
-            return [];
+        return [...this.membership.videoIds];
+    }
+
+    getViewerMembershipGeneration(): number {
+        return this.membership.generation;
+    }
+
+    getViewerMembershipSnapshot(): ViewerMembershipSnapshot {
+        return { ...this.membership, videoIds: [...this.membership.videoIds] };
+    }
+
+    private setMembership(videoIds: string[], availability: ViewerMembershipSnapshot['availability']): void {
+        const previous = this.membership;
+        if (previous.availability === availability && videoIds.length === previous.videoIds.length
+            && videoIds.every(id => previous.videoIds.includes(id))) return;
+        this.membership = { generation: previous.generation + 1, videoIds: [...videoIds], availability };
+        if (availability !== previous.availability && availability !== 'unknown') {
+            this._emitPlatformEvent(PlatformEvents.STREAM_STATUS, {
+                platform: 'youtube', isLive: availability === 'live', timestamp: getSystemTimestampISO()
+            });
         }
-        return this.connectionManager.getActiveVideoIds();
     }
 
     async initialize(handlers: HandlerMap = {}, forceReconnect = false): Promise<void> {
+        if (this.membershipLifetime.signal.aborted) this.membershipLifetime = new AbortController();
         if (this.isInitialized) {
             const activeConnectionCount = this.connectionManager.getConnectionCount();
 
@@ -698,17 +716,69 @@ class YouTubePlatform extends EventEmitter {
             throw error;
         }
 
-        const result = await this.streamDetectionService.detectLiveStreams(channelHandle);
-
-        if (result.success && Array.isArray(result.videoIds) && result.videoIds.length > 0) {
-            const method = result.detectionMethod || 'youtubei';
-            this.logger.debug(`[YouTube] Found ${result.videoIds.length} live streams via youtubei service (method: ${method})`, 'youtube');
-            return result.videoIds.filter((videoId: unknown): videoId is string => typeof videoId === 'string');
+        const lifetime = this.membershipLifetime;
+        const request = ++this.membershipRequest;
+        const isCurrent = () => !lifetime.signal.aborted && lifetime === this.membershipLifetime && request === this.membershipRequest;
+        if (!isCurrent()) return [];
+        const result = await this.streamDetectionService.detectLiveStreams(channelHandle, { signal: lifetime.signal });
+        if (!isCurrent()) return [];
+        const positives = result.success && result.observationKind !== 'unavailable' && Array.isArray(result.videoIds)
+            ? [...new Set(result.videoIds.filter(isYouTubeVideoId))] : [];
+        const complete = result.success === true && result.observationKind === 'complete'
+            && Array.isArray(result.videoIds) && result.videoIds.every(isYouTubeVideoId);
+        const previousIds = this.getDetectedStreamIds();
+        const added = positives.filter(id => !previousIds.includes(id));
+        const members = [...previousIds, ...added];
+        if (members.length > 0) this.setMembership(members, 'live');
+        else this.setMembership([], complete ? 'offline' : 'unknown');
+        if (!isCurrent()) return [];
+        if (added.length > 0) this._emitPlatformEvent(PlatformEvents.STREAM_DETECTED, {
+            platform: 'youtube', eventType: 'stream-detected', newStreamIds: added,
+            allStreamIds: members, detectionTime: this.now(), connectionCount: this.connectionManager.getConnectionCount()
+        });
+        if (!isCurrent()) return [];
+        const generation = this.membership.generation;
+        const omitted = previousIds.filter(id => !positives.includes(id));
+        const statuses = await Promise.all(omitted.map(async videoId => ({ videoId,
+            status: await this.confirmStream(videoId, lifetime.signal) })));
+        if (!isCurrent() || generation !== this.membership.generation) return this.getDetectedStreamIds();
+        const ended = statuses.filter(result => result.status === 'ended').map(result => result.videoId);
+        const retirements = ended.map(videoId => ({ videoId, attemptId: this.connectionManager.getConnectionStatus(videoId)?.attemptId }));
+        if (ended.length > 0) {
+            const remaining = this.getDetectedStreamIds().filter(id => !ended.includes(id));
+            this.setMembership(remaining, remaining.length ? 'live' : complete ? 'offline' : 'unknown');
         }
+        await Promise.all(retirements.map(({ videoId, attemptId }) => attemptId === undefined ? undefined
+            : this.disconnectFromYouTubeStream(videoId, 'confirmed stream end', { expectedAttemptId: attemptId })));
+        return isCurrent() ? this.getDetectedStreamIds() : [];
+    }
 
-        const message = result.error || result.message || 'No live streams detected';
-        this.logger.debug(`[YouTube] youtubei service returned no live streams: ${message}`, 'youtube');
-        return [];
+    private async confirmStream(videoId: string, signal: AbortSignal): Promise<'live' | 'ended' | 'unknown'> {
+        if (!this.metadataOwner) return 'unknown';
+        try {
+            return await this.metadataOwner.withMetadataOperation({ signal }, async client => {
+                const info = toUnknownMap(await client.getInfo(videoId, { client: 'WEB' }));
+                signal.throwIfAborted();
+                const playability = toUnknownMap(info.playability_status);
+                if (playability.status !== undefined && playability.status !== 'OK') return 'unknown';
+                const basic = toUnknownMap(info.basic_info);
+                if (basic.id !== videoId) return 'unknown';
+                if ((basic.is_live !== undefined && typeof basic.is_live !== 'boolean')
+                    || (basic.is_upcoming !== undefined && typeof basic.is_upcoming !== 'boolean')) return 'unknown';
+                const end = basic.end_timestamp;
+                const start = basic.start_timestamp;
+                if (end !== null && end !== undefined) {
+                    if (!(end instanceof Date) || !Number.isFinite(end.getTime()) || end.getTime() > this.now()
+                        || basic.is_live === true || basic.is_upcoming === true) return 'unknown';
+                    if (start !== null && start !== undefined && (!(start instanceof Date)
+                        || !Number.isFinite(start.getTime()) || start.getTime() > end.getTime())) return 'unknown';
+                    return 'ended';
+                }
+                return basic.is_live === true ? 'live' : 'unknown';
+            });
+        } catch {
+            return 'unknown';
+        }
     }
 
 
@@ -719,7 +789,6 @@ class YouTubePlatform extends EventEmitter {
             return true;
         }
 
-        const previousCount = this.connectionManager.getConnectionCount();
         let admittedAttemptId: number | undefined;
         
         try {
@@ -743,10 +812,6 @@ class YouTubePlatform extends EventEmitter {
                     platform: eventPlatform,
                     type: PlatformEvents.CHAT_CONNECTED,
                     data: chatConnectedEvent
-                });
-                this._emitStreamStatusIfNeeded(previousCount, {
-                    videoId,
-                    reason: options.reason || 'stream detected'
                 });
             } else {
                 this.logger.warn(`Failed to connect to YouTube stream: ${videoId}`, 'youtube');
@@ -1284,61 +1349,56 @@ class YouTubePlatform extends EventEmitter {
     
 
     
-    async getViewerCount(): Promise<number | null> {
+    async getViewerCountObservation(): Promise<ViewerCountObservation> {
+        const membership = this.getViewerMembershipSnapshot();
+        const unavailable = (reason: Extract<ViewerCountObservation, { kind: 'unavailable' }>['reason']): ViewerCountObservation =>
+            ({ kind: 'unavailable', membershipGeneration: membership.generation, reason });
+        if (this.membershipLifetime.signal.aborted) return unavailable('retired');
         try {
-            this.logger.debug('YouTube getViewerCount() called - using provider', 'youtube');
-            
-            if (!this.viewerCountProvider) {
-                this.logger.warn('Viewer count provider not available', 'youtube');
-                return 0;
+            if (!this.viewerCountProvider?.getViewerCountObservation) return unavailable('capability_missing');
+            const observation = await this.viewerCountProvider.getViewerCountObservation();
+            if (this.membershipLifetime.signal.aborted) return unavailable('retired');
+            if (this.membership.generation !== membership.generation || observation.membershipGeneration !== membership.generation) {
+                return unavailable('membership_changed');
             }
-            
-            const viewerCount = await this.viewerCountProvider.getViewerCount();
-            this.logger.debug(`Provider returned viewer count: ${viewerCount}`, 'youtube');
-
-            return typeof viewerCount === 'number' ? viewerCount : null;
-            
+            if (observation.kind === 'complete' && (!Number.isSafeInteger(observation.count) || observation.count < 0)) {
+                return unavailable('extraction_unavailable');
+            }
+            return observation;
         } catch (error) {
             this._handleProcessingError('Error getting viewer count via provider', error, 'viewer-count');
-            return 0;
+            return unavailable('extraction_unavailable');
         }
     }
 
-    async getViewerCountByYoutubei(): Promise<number> {
-        const activeVideoIds = this.getDetectedStreamIds();
-        if (this.viewerExtractionService && activeVideoIds.length > 0) {
-            try {
-                const result = await this.viewerExtractionService.getAggregatedViewerCount(activeVideoIds);
-                if (result.success && typeof result.totalCount === 'number') {
-                    return result.totalCount;
-                }
-            } catch (error) {
-                this._handleProcessingError('Error aggregating YouTube viewer count via extraction service', error, 'viewer-count', { activeVideoIds });
-            }
-        }
-
-        return await this.getViewerCount() ?? 0;
+    async getViewerCount(): Promise<number | null> {
+        const observation = await this.getViewerCountObservation();
+        return observation.kind === 'complete' ? observation.count : null;
     }
 
-    async getViewerCountForVideo(videoId: string): Promise<number> {
+    async getViewerCountByYoutubei(): Promise<number | null> {
+        return this.getViewerCount();
+    }
+
+    async getViewerCountForVideo(videoId: string): Promise<number | null> {
         this.logger.debug('Using provider for single video viewer count', 'youtube');
         
         if (!this.viewerCountProvider) {
             this.logger.warn('Viewer count provider not available for single video', 'youtube');
-            return 0;
+            return null;
         }
         
         try {
             if (typeof this.viewerCountProvider.getViewerCountForVideo === 'function') {
                 const viewerCount = await this.viewerCountProvider.getViewerCountForVideo(videoId);
-                return typeof viewerCount === 'number' ? viewerCount : 0;
+                return typeof viewerCount === 'number' && Number.isSafeInteger(viewerCount) && viewerCount >= 0 ? viewerCount : null;
             } else {
                 this.logger.debug('Provider does not support single video viewer count', 'youtube');
-                return 0;
+                return null;
             }
         } catch (error) {
             this._handleProcessingError(`Error getting viewer count for video ${videoId} via provider: ${getErrorMessage(error)}`, error, 'viewer-count', { videoId });
-            return 0;
+            return null;
         }
     }
 
@@ -1617,31 +1677,6 @@ class YouTubePlatform extends EventEmitter {
         }
     }
 
-    _emitStreamStatusIfNeeded(previousCount: number, context: UnknownMap = {}): void {
-        if (!this.connectionManager) {
-            return;
-        }
-
-        const nextCount = this.connectionManager.getConnectionCount();
-        const becameLive = previousCount === 0 && nextCount > 0;
-        const wentOffline = previousCount > 0 && nextCount === 0;
-
-        if (!becameLive && !wentOffline) {
-            return;
-        }
-
-        const isLive = becameLive;
-        if (becameLive) {
-            this.terminalStreamEndEmitted = false;
-        }
-        this._emitPlatformEvent(PlatformEvents.STREAM_STATUS, {
-            platform: 'youtube',
-            isLive,
-            timestamp: getSystemTimestampISO()
-        });
-
-    }
-
     getHealthStatus(): UnknownMap {
         const activeConnections = this.connectionManager ? this.connectionManager.getConnectionCount() : 0;
         const monitoringActive = !!this.monitoringInterval;
@@ -1682,11 +1717,17 @@ class YouTubePlatform extends EventEmitter {
 
 
     async cleanup(): Promise<void> {
+        const lifetime = this.membershipLifetime;
         const detector = this.streamDetectionService;
         const connections = this.connectionManager;
         const viewer = this.viewerService;
+        if (!lifetime.signal.aborted) {
+            this.membershipRequest++;
+            this.membership = { generation: this.membership.generation + 1, videoIds: [], availability: 'unknown' };
+        }
         this._clearMonitoringInterval();
         this.isInitialized = false;
+        lifetime.abort(new Error('YouTube platform retired'));
         const failures: { error: unknown; resource: string }[] = [];
         const retire = (resource: string, cleanup: () => void | Promise<void>): Promise<void> => {
             try {

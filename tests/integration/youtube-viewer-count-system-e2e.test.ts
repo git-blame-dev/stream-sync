@@ -334,7 +334,7 @@ describe("YouTube Viewer Count System - End-to-End Integration", () => {
       const obsCall = obsManager.call.mock.calls.find(isSetInputSettingsCall);
       expect(obsCall).toBeDefined();
       const text = obsCall?.[1]?.inputSettings?.text ?? "";
-      expect(text).toMatch(/^\d{1,3}(,\d{3})*$/);
+      expect(text).toBe("1.2K");
       expectNoTechnicalArtifacts(text);
     });
 

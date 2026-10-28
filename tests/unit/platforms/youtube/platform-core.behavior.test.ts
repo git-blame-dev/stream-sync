@@ -527,7 +527,6 @@ describe("YouTubePlatform behavior", () => {
     platform.connectionManager.disconnectFromStream = createMockFn()
       .mockResolvedValueOnce(true)
       .mockResolvedValueOnce(false);
-    platform._emitStreamStatusIfNeeded = createMockFn();
     platform._youtubeMultiStreamManager.requestImmediateRefresh = createMockFn(
       async (context) => {
         if (isRefreshRecord(context)) {
@@ -566,7 +565,6 @@ describe("YouTubePlatform behavior", () => {
       createMockFn().mockReturnValue(1);
     platform.connectionManager.disconnectFromStream =
       createMockFn().mockResolvedValue(true);
-    platform._emitStreamStatusIfNeeded = createMockFn();
     const refreshSpy = createMockFn().mockResolvedValue(undefined);
     platform._youtubeMultiStreamManager.requestImmediateRefresh = refreshSpy;
 
@@ -581,7 +579,7 @@ describe("YouTubePlatform behavior", () => {
     const disconnect = createMockFn().mockResolvedValue(true);
     platform.connectionManager.disconnectFromStream = disconnect;
     const emitStatus = createMockFn();
-    platform._emitStreamStatusIfNeeded = emitStatus;
+    platform.on("platform:event", emitStatus);
     const refresh = createMockFn().mockResolvedValue(undefined);
     platform._youtubeMultiStreamManager.requestImmediateRefresh = refresh;
 
@@ -608,7 +606,7 @@ describe("YouTubePlatform behavior", () => {
       .mockReturnValueOnce(0);
     platform.connectionManager.disconnectFromStream = createMockFn().mockResolvedValue(false);
     const emitStatus = createMockFn();
-    platform._emitStreamStatusIfNeeded = emitStatus;
+    platform.on("platform:event", emitStatus);
     const refresh = createMockFn().mockResolvedValue(undefined);
     platform._youtubeMultiStreamManager.requestImmediateRefresh = refresh;
 
@@ -634,7 +632,6 @@ describe("YouTubePlatform behavior", () => {
       createMockFn().mockReturnValue(1);
     platform.connectionManager.disconnectFromStream =
       createMockFn().mockResolvedValue(true);
-    platform._emitStreamStatusIfNeeded = createMockFn();
     platform._handleConnectionErrorLogging = createMockFn();
     platform._youtubeMultiStreamManager.isCheckInProgress =
       createMockFn().mockReturnValue(true);

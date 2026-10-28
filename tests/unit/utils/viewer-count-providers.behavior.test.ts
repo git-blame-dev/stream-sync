@@ -50,16 +50,16 @@ describe("ViewerCountProvider error handling", () => {
 });
 
 describe("YouTubeViewerCountProvider readiness and error routes", () => {
-  it("returns 0 when active video ids missing", async () => {
+  it("returns unavailable when membership capability is missing", async () => {
     const viewerExtractionService = createViewerExtractionService();
-    const provider = new YouTubeViewerCountProvider({}, () => [], {
+    const provider = new YouTubeViewerCountProvider({}, null, {
       viewerExtractionService,
       logger: noOpLogger,
     });
 
     const count = await provider.getViewerCount();
 
-    expect(count).toBe(0);
+    expect(count).toBeNull();
   });
 
   it("returns unavailable and categorizes errors from extraction service", async () => {
@@ -70,7 +70,7 @@ describe("YouTubeViewerCountProvider readiness and error routes", () => {
     );
     const provider = new YouTubeViewerCountProvider(
       {},
-      () => ["testVideoId1"],
+      () => ({ generation: 1, videoIds: ["testVideoId1"], availability: "live" }),
       { viewerExtractionService, logger: noOpLogger },
     );
 

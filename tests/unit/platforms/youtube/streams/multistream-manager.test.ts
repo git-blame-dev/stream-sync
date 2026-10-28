@@ -129,11 +129,13 @@ describe("YouTube multi-stream manager", () => {
     return platform;
   };
 
-  test("reports only streams connected successfully", async () => {
+  test("attempts discovered candidates without publishing attachment success as domain discovery", async () => {
     const events: PlatformEventRecord[] = [];
+    const attempted: string[] = [];
     const platform = buildPlatform({
       getLiveVideoIds: async () => ["candidate", "connected"],
       connectToYouTubeStream: async (videoId) => {
+        attempted.push(videoId);
         if (videoId === "candidate") return false;
         return true;
       },
@@ -143,9 +145,8 @@ describe("YouTube multi-stream manager", () => {
 
     await manager.checkMultiStream();
 
-    expect(events).toHaveLength(1);
-    expect(events[0]?.payload.newStreamIds).toEqual(["connected"]);
-    expect(events[0]?.payload.allStreamIds).toEqual(["candidate", "connected"]);
+    expect(attempted).toEqual(["candidate", "connected"]);
+    expect(events).toEqual([]);
   });
 
   const buildManager = (platform: MultiStreamPlatformFixture) =>
@@ -156,7 +157,7 @@ describe("YouTube multi-stream manager", () => {
       now: testClock.now,
     });
 
-  test("emits stream-detected platform:event when new streams appear", async () => {
+  test("does not duplicate platform-owned discovery events during attachment", async () => {
     const emitted: PlatformEventRecord[] = [];
     const platform = buildPlatform({
       getLiveVideoIds: createMockFn(async () => ["stream-1"]),
@@ -166,16 +167,8 @@ describe("YouTube multi-stream manager", () => {
 
     await manager.checkMultiStream();
 
-    expect(emitted).toHaveLength(1);
-    expect(emitted[0]).toMatchObject({
-      type: "platform:stream-detected",
-      payload: expect.objectContaining({
-        eventType: "stream-detected",
-        newStreamIds: ["stream-1"],
-        allStreamIds: ["stream-1"],
-        detectionTime: testClock.now(),
-      }),
-    });
+    expect(platform.getLiveVideoIds).toHaveBeenCalledTimes(1);
+    expect(emitted).toEqual([]);
   });
 
   test("does not emit stream-detected when no new streams are found", async () => {
@@ -276,11 +269,11 @@ describe("YouTube multi-stream manager", () => {
       platform.checkMultiStream = () => manager.checkMultiStream();
 
       await manager.startMonitoring();
-      const initialEmitCount = emitted.length;
+      const initialCheckCount = (platform.getLiveVideoIds as ReturnType<typeof createMockFn>).mock.calls.length;
 
       await advanceTimersByTime(1100);
 
-      expect(emitted.length).toBeGreaterThan(initialEmitCount);
+      expect((platform.getLiveVideoIds as ReturnType<typeof createMockFn>).mock.calls.length).toBeGreaterThan(initialCheckCount);
     });
 
     test("records monitoring start time", async () => {

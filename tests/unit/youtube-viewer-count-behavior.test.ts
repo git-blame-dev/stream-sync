@@ -53,15 +53,15 @@ describe("YouTubePlatform viewer count behavior", () => {
     expect(result).toBe(321);
   });
 
-  it("returns 0 when no provider is configured", async () => {
+  it("returns unavailable when no provider is configured", async () => {
     const platform = createPlatform(null);
 
     const result = await platform.getViewerCountForVideo("video-123");
 
-    expect(result).toBe(0);
+    expect(result).toBeNull();
   });
 
-  it("returns 0 when provider does not support per-video lookup", async () => {
+  it("returns unavailable when provider does not support per-video lookup", async () => {
     const provider = {
       getViewerCount: createMockFn(() => Promise.resolve(0)),
     };
@@ -69,10 +69,10 @@ describe("YouTubePlatform viewer count behavior", () => {
 
     const result = await platform.getViewerCountForVideo("video-123");
 
-    expect(result).toBe(0);
+    expect(result).toBeNull();
   });
 
-  it("returns 0 when provider throws", async () => {
+  it("returns unavailable when provider throws", async () => {
     const provider = {
       getViewerCount: createMockFn(() => Promise.resolve(0)),
       getViewerCountForVideo: createMockFn().mockRejectedValue(
@@ -83,6 +83,6 @@ describe("YouTubePlatform viewer count behavior", () => {
 
     const result = await platform.getViewerCountForVideo("video-123");
 
-    expect(result).toBe(0);
+    expect(result).toBeNull();
   });
 });

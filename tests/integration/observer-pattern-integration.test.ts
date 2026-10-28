@@ -309,25 +309,28 @@ describe("Observer Pattern Integration", () => {
       expect(latestObsUpdate.inputSettings.text).not.toBe("0");
     });
 
-    test("should handle OBS observer initialization and cleanup", async () => {
+    test("initializes OBS from measured snapshots only and cleans up observers", async () => {
       const obsManager = createMockOBSManager();
       const obsObserver = new OBSViewerCountObserver(
         obsManager,
         createViewerCountLogger(),
         {
           config: createConfigFixture(),
+          getViewerCountSnapshot: platform => viewerCountSystem.getViewerCountSnapshot(platform),
         },
       );
 
       viewerCountSystem.addObserver(obsObserver);
       await viewerCountSystem.initializeObservers();
 
-      const initializedToZero = obsManager.call.mock.calls.some(
-        (call) =>
-          call[0] === "SetInputSettings" &&
-          isObsInputSettingsRequest(call[1]) && call[1].inputSettings.text === "0",
-      );
-      expect(initializedToZero).toBe(true);
+      expect(obsManager.call.mock.calls.filter(call => call[0] === "SetInputSettings")).toHaveLength(0);
+      viewerCountSystem.removeObserver(obsObserver.getObserverId());
+      await viewerCountSystem.updateViewerCount("youtube", 42);
+      viewerCountSystem.addObserver(obsObserver);
+      await viewerCountSystem.initializeObservers();
+      expect(obsManager.call.mock.calls.filter(call => call[0] === "SetInputSettings")).toEqual([
+        ["SetInputSettings", { inputName: "test-viewer-count-source", inputSettings: { text: "42" }, overlay: true }],
+      ]);
 
       await viewerCountSystem.cleanup();
 

@@ -40,6 +40,7 @@ describe("YouTube Multi-Stream Aggregation", () => {
     };
 
     const mockViewerExtractionService = {
+      extractViewerCount: async () => ({ success: false, count: 0 }),
       getAggregatedViewerCount: createMockFn().mockImplementation(
         async (...args: unknown[]) => {
           const [videoIds] = args;
@@ -63,8 +64,8 @@ describe("YouTube Multi-Stream Aggregation", () => {
             }
           }
           return {
-            success: true,
-            totalCount,
+            success: successfulStreams === videoIds.length,
+            totalCount: successfulStreams === videoIds.length ? totalCount : 0,
             successfulStreams,
           };
         },
@@ -85,15 +86,14 @@ describe("YouTube Multi-Stream Aggregation", () => {
         streamDetectionService: {
           detectLiveStreams: createMockFn().mockResolvedValue({
             success: true,
-            videoIds: [],
+            observationKind: "complete",
+            videoIds: options.detectedIds || activeVideoIds,
           }),
         },
       },
     );
 
-    platform.getDetectedStreamIds = createMockFn().mockReturnValue(
-      options.detectedIds || activeVideoIds,
-    );
+    await platform.getLiveVideoIds();
     return platform;
   };
 
@@ -152,7 +152,7 @@ describe("YouTube Multi-Stream Aggregation", () => {
   });
 
   describe("Error Resilience and Partial Failures", () => {
-    test("should continue aggregation when one stream fails to load", async () => {
+    test("should return unavailable rather than a subtotal when one stream fails to load", async () => {
       const streams = [
         { videoId: "working-stream-1", viewers: 300 },
         { videoId: "working-stream-2", viewers: 700 },
@@ -164,7 +164,7 @@ describe("YouTube Multi-Stream Aggregation", () => {
 
       const totalViewers = await platform.getViewerCountByYoutubei();
 
-      expect(totalViewers).toBe(1000);
+      expect(totalViewers).toBeNull();
     });
 
     test("should return 0 when no active streams are found", async () => {
@@ -183,7 +183,7 @@ describe("YouTube Multi-Stream Aggregation", () => {
 
       const totalViewers = await platform.getViewerCountByYoutubei();
 
-      expect(totalViewers).toBe(0);
+      expect(totalViewers).toBeNull();
     });
   });
 

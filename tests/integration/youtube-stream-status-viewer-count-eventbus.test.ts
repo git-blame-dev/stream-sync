@@ -72,6 +72,7 @@ const createPlatform = () =>
       streamDetectionService: {
         detectLiveStreams: createMockFn().mockResolvedValue({
           success: true,
+          observationKind: "complete",
           videoIds: [],
         }),
       },
@@ -119,15 +120,10 @@ describe("YouTube stream status + viewer count event bus (integration)", () => {
     });
     const platform = createPlatform();
     platform.handlers = lifecycle.createDefaultEventHandlers("youtube");
-    await platform.connectionManager.connectToStream("test-stream-1", async () => ({}));
-
     const eventPromise = waitForPlatformEvent(eventBus);
 
     try {
-      await platform.disconnectFromYouTubeStream(
-        "test-stream-1",
-        "test-disconnect",
-      );
+      await platform.getLiveVideoIds();
 
       const event = await eventPromise;
 

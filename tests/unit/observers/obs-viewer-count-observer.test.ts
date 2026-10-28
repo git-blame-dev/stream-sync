@@ -100,17 +100,9 @@ describe("OBSViewerCountObserver - Behavior-Focused Testing", () => {
       await expect(initPromise).resolves.toBeUndefined();
     });
 
-    test("should initialize all platform counts to zero when OBS connected", async () => {
+    test("leaves unobserved platform sources untouched when OBS connects", async () => {
       await observer.initialize();
-
-      expect(obsManager.call.mock.calls).toContainEqual([
-        "SetInputSettings",
-        expect.objectContaining({
-          inputSettings: { text: "0" },
-        }),
-      ]);
-
-      expect(obsManager.call).toHaveBeenCalledTimes(3);
+      expect(obsManager.call).not.toHaveBeenCalled();
     });
   });
 
@@ -239,7 +231,7 @@ describe("OBSViewerCountObserver - Behavior-Focused Testing", () => {
   });
 
   describe("Stream Status Change Behavior", () => {
-    test("should reset viewer counts to 0 when stream goes offline", async () => {
+    test("does not fabricate a YouTube zero from an offline status notification", async () => {
       const statusUpdate = {
         platform: "youtube",
         isLive: false,
@@ -249,12 +241,7 @@ describe("OBSViewerCountObserver - Behavior-Focused Testing", () => {
 
       await observer.onStreamStatusChange(statusUpdate);
 
-      expect(obsManager.call.mock.calls).toContainEqual([
-        "SetInputSettings",
-        expect.objectContaining({
-          inputSettings: { text: "0" },
-        }),
-      ]);
+      expect(obsManager.call).not.toHaveBeenCalled();
     });
 
     test("should enable updates when stream comes online", async () => {

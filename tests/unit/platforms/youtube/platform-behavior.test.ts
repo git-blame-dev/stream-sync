@@ -449,10 +449,10 @@ describe("YouTubePlatform modern architecture", () => {
       expect.arrayContaining([
         expect.objectContaining({
           platform: "youtube",
-          type: "platform:stream-status",
+          type: "platform:chat-connected",
           data: expect.objectContaining({
             platform: "youtube",
-            isLive: true,
+            videoId: "abc123",
           }),
         }),
       ]),
@@ -680,7 +680,7 @@ describe("YouTubePlatform modern architecture", () => {
     );
   });
 
-  it("emits stream-status when the first YouTube stream becomes live", async () => {
+  it("does not infer domain live status from the first chat connection", async () => {
     const mockConnectionManager = {
       hasConnection: createMockFn().mockReturnValue(false),
       connectToStream: createMockFn().mockResolvedValue(true),
@@ -698,21 +698,11 @@ describe("YouTubePlatform modern architecture", () => {
 
     await youtubePlatform.connectToYouTubeStream("abc123");
 
-    expect(events).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          platform: "youtube",
-          type: "platform:stream-status",
-          data: expect.objectContaining({
-            platform: "youtube",
-            isLive: true,
-          }),
-        }),
-      ]),
-    );
+    expect(events.filter(event => event.type === "platform:stream-status")).toEqual([]);
+    expect(youtubePlatform.getViewerMembershipSnapshot().availability).toBe("unknown");
   });
 
-  it("emits stream-status when the last YouTube stream disconnects", async () => {
+  it("does not infer domain offline status from the last chat disconnection", async () => {
     const mockConnectionManager = {
       hasConnection: createMockFn().mockReturnValue(true),
       disconnectFromStream: createMockFn().mockResolvedValue(true),
@@ -729,21 +719,10 @@ describe("YouTubePlatform modern architecture", () => {
 
     await youtubePlatform.disconnectFromYouTubeStream("abc123", "stream ended");
 
-    expect(events).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          platform: "youtube",
-          type: "platform:stream-status",
-          data: expect.objectContaining({
-            platform: "youtube",
-            isLive: false,
-          }),
-        }),
-      ]),
-    );
+    expect(events).toEqual([]);
   });
 
-  it("emits terminal status after successful livechat refresh confirms zero connections", async () => {
+  it("does not infer terminal status from a refresh leaving zero chat connections", async () => {
     const platform = createStandalonePlatform();
     platform.connectionManager = {
       disconnectFromStream: createMockFn().mockResolvedValue(true),
@@ -759,7 +738,7 @@ describe("YouTubePlatform modern architecture", () => {
     });
 
     expect(platform._youtubeMultiStreamManager.requestImmediateRefresh).toHaveBeenCalledTimes(1);
-    expect(events.filter((event) => event.data?.status === "stream-ended")).toHaveLength(1);
+    expect(events.filter((event) => event.type === "platform:stream-status")).toHaveLength(0);
   });
 
   it("does not emit terminal status when refresh fails", async () => {
@@ -800,7 +779,7 @@ describe("YouTubePlatform modern architecture", () => {
     expect(events.filter((event) => event.data?.status === "stream-ended")).toHaveLength(0);
   });
 
-  it("emits terminal status once for repeated zero-connection livechat ends", async () => {
+  it("does not fabricate terminal status for repeated zero-connection livechat ends", async () => {
     const platform = createStandalonePlatform();
     platform.connectionManager = {
       disconnectFromStream: createMockFn().mockResolvedValue(true),
@@ -823,7 +802,7 @@ describe("YouTubePlatform modern architecture", () => {
       source: "livechat-end",
     });
 
-    expect(events.filter((event) => event.data?.status === "stream-ended")).toHaveLength(1);
+    expect(events.filter((event) => event.type === "platform:stream-status")).toHaveLength(0);
   });
 
   it("removeYouTubeConnection clears active stream in viewer service when matching", () => {
@@ -899,16 +878,16 @@ describe("YouTubePlatform modern architecture", () => {
     expect(result).toEqual([]);
   });
 
-  it("getViewerCount returns 0 when provider is not available", async () => {
+  it("getViewerCount returns unavailable when provider is not available", async () => {
     const { platform } = createPlatform();
     platform.viewerCountProvider = null;
 
     const count = await platform.getViewerCount();
 
-    expect(count).toBe(0);
+    expect(count).toBeNull();
   });
 
-  it("getViewerCount returns 0 on provider error", async () => {
+  it("getViewerCount returns unavailable without an observation capability", async () => {
     const { platform } = createPlatform();
     platform.viewerCountProvider = {
       getViewerCount: createMockFn().mockRejectedValue(
@@ -918,28 +897,28 @@ describe("YouTubePlatform modern architecture", () => {
 
     const count = await platform.getViewerCount();
 
-    expect(count).toBe(0);
+    expect(count).toBeNull();
   });
 
-  it("getViewerCountForVideo returns 0 when provider is not available", async () => {
+  it("getViewerCountForVideo returns unavailable when provider is not available", async () => {
     const { platform } = createPlatform();
     platform.viewerCountProvider = null;
 
     const count = await platform.getViewerCountForVideo("vid-123");
 
-    expect(count).toBe(0);
+    expect(count).toBeNull();
   });
 
-  it("getViewerCountForVideo returns 0 when provider lacks single-video method", async () => {
+  it("getViewerCountForVideo returns unavailable when provider lacks single-video method", async () => {
     const { platform } = createPlatform();
     platform.viewerCountProvider = {};
 
     const count = await platform.getViewerCountForVideo("vid-123");
 
-    expect(count).toBe(0);
+    expect(count).toBeNull();
   });
 
-  it("getViewerCountForVideo returns 0 on provider error", async () => {
+  it("getViewerCountForVideo returns unavailable on provider error", async () => {
     const { platform } = createPlatform();
     platform.viewerCountProvider = {
       getViewerCountForVideo: createMockFn().mockRejectedValue(
@@ -949,7 +928,7 @@ describe("YouTubePlatform modern architecture", () => {
 
     const count = await platform.getViewerCountForVideo("vid-123");
 
-    expect(count).toBe(0);
+    expect(count).toBeNull();
   });
 
   it("isActive returns false when isConnected throws", () => {
@@ -1023,25 +1002,25 @@ describe("YouTubePlatform modern architecture", () => {
     expect(first(initCalls)).toEqual(platform.handlers);
   });
 
-  it("_emitStreamStatusIfNeeded does nothing when connectionManager is null", () => {
+  it("membership reads do not require an available chat manager", () => {
     const { platform } = createPlatform();
     setNullableConnectionManager(platform, null);
     const events: PlatformEvent[] = [];
     platform.on("platform:event", (e: PlatformEvent) => events.push(e));
 
-    platform._emitStreamStatusIfNeeded(0, {});
+    expect(platform.getViewerMembershipSnapshot().availability).toBe("unknown");
 
     expect(events).toEqual([]);
   });
 
-  it("_emitStreamStatusIfNeeded does nothing when count unchanged", () => {
+  it("chat count alone does not change membership", () => {
     const { platform } = createPlatform();
     platform.connectionManager.getConnectionCount =
       createMockFn().mockReturnValue(1);
     const events: PlatformEvent[] = [];
     platform.on("platform:event", (e: PlatformEvent) => events.push(e));
 
-    platform._emitStreamStatusIfNeeded(1, {});
+    expect(platform.getViewerMembershipSnapshot()).toEqual({ generation: 0, videoIds: [], availability: "unknown" });
 
     expect(events).toEqual([]);
   });

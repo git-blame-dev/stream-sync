@@ -29,14 +29,21 @@ describe("YouTube Direct getViewerCount() Integration", () => {
       getViewerCount: createMockFn().mockResolvedValue(expectedViewerCount),
       ...providerOverrides,
     });
+    Object.assign(mockProvider, { getViewerCountObservation: async () => {
+      const count = await mockProvider.getViewerCount();
+      return count === null ? { kind: "unavailable", membershipGeneration: 1, reason: "extraction_unavailable" }
+        : { kind: "complete", count, membershipGeneration: 1 };
+    } });
 
     const configFixture = createYouTubeConfigFixture();
     const mockDeps = createMockPlatformDependencies("youtube", {
       logger: noOpLogger,
       viewerCountProvider: mockProvider,
+      streamDetectionService: { detectLiveStreams: async () => ({ success: true, observationKind: "complete", videoIds: ["synthetic_stream"] }) },
     });
 
     const platform = new YouTubePlatform(configFixture, mockDeps);
+    await platform.getLiveVideoIds();
 
     return { platform, mockProvider };
   };
@@ -86,8 +93,7 @@ describe("YouTube Direct getViewerCount() Integration", () => {
 
       const viewerCount = await platform.getViewerCount();
 
-      expect(viewerCount).toBe(0);
-      expect(typeof viewerCount).toBe("number");
+      expect(viewerCount).toBeNull();
     });
 
     test("returns unavailable when provider reports unavailable count", async () => {
@@ -102,7 +108,7 @@ describe("YouTube Direct getViewerCount() Integration", () => {
   });
 
   describe("Error Handling and User Experience", () => {
-    test("should return 0 when provider fails completely", async () => {
+    test("should return unavailable when provider fails completely", async () => {
       const { platform } = await createProviderYouTubePlatform(0, {
         getViewerCount: createMockFn().mockRejectedValue(
           new Error("Provider API unavailable"),
@@ -111,11 +117,10 @@ describe("YouTube Direct getViewerCount() Integration", () => {
 
       const viewerCount = await platform.getViewerCount();
 
-      expect(viewerCount).toBe(0);
-      expect(typeof viewerCount).toBe("number");
+      expect(viewerCount).toBeNull();
     });
 
-    test("should handle no active streams gracefully", async () => {
+    test("should preserve a measured zero", async () => {
       const { platform } = await createProviderYouTubePlatform(0);
 
       const viewerCount = await platform.getViewerCount();

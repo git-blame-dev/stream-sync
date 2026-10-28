@@ -175,18 +175,15 @@ const runCheckMultiStream = async (throwOnError: boolean): Promise<void> => {
                 platform.lastFullStreamCheck = currentTimeMs;
 
                 const videoIds = await platform.getLiveVideoIds();
-                const limitedVideoIds = maxStreams > 0 && videoIds.length > maxStreams
-                    ? videoIds.slice(0, maxStreams)
-                    : videoIds;
 
-                if (limitedVideoIds.length === 0 && platform.connectionManager.getConnectionCount() > 0) {
+                if (videoIds.length === 0 && platform.connectionManager.getConnectionCount() > 0) {
                     platform.logger.warn('Stream detection failed, preserving existing connections', 'youtube');
                     return;
                 }
 
                 const connectedVideoIds = platform.connectionManager.getAllVideoIds();
                 const omittedConnectedVideoIds = connectedVideoIds.filter((videoId: string) =>
-                    !limitedVideoIds.includes(videoId)
+                    !videoIds.includes(videoId)
                 );
 
                 if (omittedConnectedVideoIds.length > 0) {
@@ -202,12 +199,7 @@ const runCheckMultiStream = async (throwOnError: boolean): Promise<void> => {
                 return;
             }
 
-            let videoIds = await platform.getLiveVideoIds();
-
-            if (maxStreams > 0 && videoIds.length > maxStreams) {
-                platform.logger.debug(`Limiting to maxStreams=${maxStreams} (found ${videoIds.length})`, 'youtube');
-                videoIds = videoIds.slice(0, maxStreams);
-            }
+            const videoIds = await platform.getLiveVideoIds();
 
             platform.checkStreamShortageAndWarn(videoIds.length, maxStreams);
 
@@ -225,7 +217,7 @@ const runCheckMultiStream = async (throwOnError: boolean): Promise<void> => {
                 !platform.connectionManager.hasConnection(id)
             );
             const availableSlots = maxStreams > 0
-                ? Math.max(maxStreams - currentConnections, 0)
+                ? Math.max(maxStreams - platform.connectionManager.getConnectionCount(), 0)
                 : Number.POSITIVE_INFINITY;
             const newStreamIds = Number.isFinite(availableSlots)
                 ? newStreamCandidates.slice(0, availableSlots)
@@ -238,13 +230,9 @@ const runCheckMultiStream = async (throwOnError: boolean): Promise<void> => {
                 );
             }
 
-            const successfullyConnectedStreamIds: string[] = [];
             for (const videoId of newStreamIds) {
                 try {
-                    const connected = await platform.connectToYouTubeStream(videoId);
-                    if (connected) {
-                        successfullyConnectedStreamIds.push(videoId);
-                    }
+                    await platform.connectToYouTubeStream(videoId);
                 } catch (error: unknown) {
                     platform._handleConnectionErrorLogging(
                         `Failed to connect to stream ${videoId}: ${toErrorMessage(error)}`,
@@ -252,19 +240,6 @@ const runCheckMultiStream = async (throwOnError: boolean): Promise<void> => {
                         'stream-connect'
                     );
                 }
-            }
-
-            if (successfullyConnectedStreamIds.length > 0) {
-                const streamDetectedEvent = {
-                    platform: 'youtube',
-                    eventType: 'stream-detected',
-                    newStreamIds: successfullyConnectedStreamIds,
-                    allStreamIds: videoIds,
-                    detectionTime: now(),
-                    connectionCount: platform.connectionManager.getConnectionCount()
-                };
-
-                platform._emitPlatformEvent(PlatformEvents.STREAM_DETECTED, streamDetectedEvent);
             }
 
             if (videoIds.length === 0 && platform.connectionManager.getConnectionCount() > 0) {

@@ -2,6 +2,7 @@ import { VIEWER_COUNT_CONSTANTS } from '../core/constants';
 import { safeSetInterval, safeDelay } from './timeout-validator';
 import { createPlatformErrorHandler } from './platform-error-handler';
 import { validateLoggerInterface } from './dependency-validator';
+import type { ViewerCountObservation, ViewerCountSnapshot } from '../contracts/viewer-count';
 
 type ViewerCountLogger = {
     debug: (message: string, context?: string, payload?: unknown) => void;
@@ -11,6 +12,8 @@ type ViewerCountLogger = {
 
 type ViewerCountPlatform = {
     getViewerCount?: () => Promise<unknown> | unknown;
+    getViewerCountObservation?: () => Promise<ViewerCountObservation>;
+    getViewerMembershipGeneration?: () => number;
 };
 
 type ViewerCountObserver = {
@@ -27,6 +30,7 @@ type ViewerCountUpdate = {
     previousCount: number;
     isStreamLive: boolean;
     timestamp: Date;
+    observationKind?: 'complete';
 };
 
 type StreamStatusUpdate = {
@@ -42,6 +46,7 @@ type ViewerCountDependencies = {
         general?: {
             viewerCountPollingIntervalMs?: number;
         };
+        youtube?: { enabled?: boolean };
     };
     platformProvider?: () => Record<string, ViewerCountPlatform>;
     getPlatforms?: () => Record<string, ViewerCountPlatform>;
@@ -86,6 +91,7 @@ class ViewerCountSystem {
     logger: ViewerCountLogger;
     platformProvider: () => Record<string, ViewerCountPlatform>;
     pollingIntervalMs: number | undefined;
+    private youtubePollingEnabled: boolean;
     timeProvider: { now: () => number; createDate: (timestampMs: number) => Date };
     isPolling: boolean;
     pollingInterval: number | undefined | null;
@@ -98,6 +104,7 @@ class ViewerCountSystem {
         cleanup?: () => Promise<unknown> | unknown;
     }>;
     private counts: Record<string, number>;
+    private observations: Record<string, Omit<ViewerCountSnapshot, 'count'>> = {};
     private activePolls: Set<string>;
     private pollGenerations: Map<string, number>;
     streamStatus: Record<string, boolean>;
@@ -132,6 +139,7 @@ class ViewerCountSystem {
             throw new Error('ViewerCountSystem requires config.general');
         }
         this.pollingIntervalMs = dependencies.config.general.viewerCountPollingIntervalMs;
+        this.youtubePollingEnabled = dependencies.config.youtube?.enabled === true;
         this.timeProvider = resolveTimeProvider(dependencies.timeProvider);
         this.isPolling = false;
         this.pollingInterval = null;
@@ -281,6 +289,7 @@ class ViewerCountSystem {
             count,
             previousCount,
             isStreamLive: this.isStreamLive(platform),
+            ...(this.observations[platform]?.hasCompleteObservation ? { observationKind: 'complete' as const } : {}),
             timestamp: this._createDate(this._now())
         };
 
@@ -339,10 +348,17 @@ class ViewerCountSystem {
             this.logger.debug(`Stream status confirmed for ${platformKey}: ${isLive ? 'LIVE' : 'OFFLINE'}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
         }
 
-        await this._optimizePollingForStatusChange(platformKey, isLive);
+        await this._optimizePollingForStatusChange(platformKey, isLive, !wasLive && isLive);
     }
 
-    async _optimizePollingForStatusChange(platformKey: string, isLive: boolean) {
+    async _optimizePollingForStatusChange(platformKey: string, isLive: boolean, becameLive = false) {
+        if (platformKey === 'youtube' && becameLive && this.isPolling && this.pollingHandles[platformKey]) {
+            void this.pollPlatformImmediately(platformKey);
+        }
+        if (platformKey === 'youtube' && this._hasObservationCapability(this._getPlatforms()[platformKey])) {
+            if (this.isPolling) this.startPlatformPolling(platformKey);
+            return;
+        }
         if (isLive && this.isPolling) {
             this.logger.debug(`Auto-starting polling for ${platformKey} (system already active)`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
             this.startPlatformPolling(platformKey);
@@ -365,19 +381,30 @@ class ViewerCountSystem {
         return Object.freeze({ ...this.counts });
     }
 
-    async updateViewerCount(platform: string, count: unknown) {
+    getViewerCountSnapshot(platform: string): ViewerCountSnapshot {
+        const key = this._normalizePlatformName(platform);
+        return { count: this.counts[key] ?? 0, hasCompleteObservation: false, lastCompleteAt: null,
+            latestOutcome: 'unknown', ...this.observations[key] };
+    }
+
+    async updateViewerCount(platform: string, count: unknown, observation?: { membershipGeneration: number; isCurrent: () => boolean }) {
         const platformKey = this._normalizePlatformName(platform);
         if (!(platformKey in this.counts)) {
             this.logger.warn(`Unknown platform for viewer count update: ${platform}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
             return false;
         }
-        if (typeof count !== 'number' || !Number.isFinite(count) || !Number.isInteger(count) || count < 0) {
+        if (typeof count !== 'number' || !Number.isFinite(count) || !Number.isInteger(count) || count < 0
+            || (observation && !Number.isSafeInteger(count))) {
             this.logger.warn(`Invalid viewer count for ${platformKey}: ${JSON.stringify(count)}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
             return false;
         }
 
         const previousCount = this.counts[platformKey] ?? VIEWER_COUNT_CONSTANTS.VIEWER_COUNT_ZERO;
+        const completedAt = this._now();
+        if (observation && !observation.isCurrent()) return false;
         this.counts[platformKey] = count;
+        this.observations[platformKey] = { hasCompleteObservation: true, lastCompleteAt: completedAt,
+            latestOutcome: 'complete', ...(observation ? { membershipGeneration: observation.membershipGeneration } : {}) };
         this.logger.info(`${platformKey} viewer count: ${count}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
         await this.notifyObservers(platformKey, count, previousCount);
         return true;
@@ -442,13 +469,16 @@ class ViewerCountSystem {
             const isLive = this.isStreamLive(platformName);
             this.logger.debug(`Platform ${platformName}: isLive=${isLive}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
             
-            if (isLive) {
+            if (isLive || (platformName === 'youtube' && this._hasObservationCapability(platforms[platformName]))) {
                 this.logger.debug(`Starting polling for ${platformName} (stream is live)`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
                 this.startPlatformPolling(platformName);
             } else {
                 this.logger.debug(`Skipping polling for ${platformName} (stream not live)`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
             }
         }
+        // Registration and chat initialization may still be pending. Reserve the
+        // existing polling cadence for an enabled YouTube platform independently.
+        if (this.youtubePollingEnabled && !this.pollingHandles.youtube) this.startPlatformPolling('youtube');
     }
 
 
@@ -606,6 +636,7 @@ class ViewerCountSystem {
         Object.keys(this.counts).forEach(platform => {
             this.counts[platform] = VIEWER_COUNT_CONSTANTS.VIEWER_COUNT_ZERO;
         });
+        this.observations = {};
         
         this.pollingStats = {
             totalPolls: 0,
@@ -703,6 +734,7 @@ class ViewerCountSystem {
             return { valid: false, reason: `No platform found for ${platformKey}` };
         }
         
+        if (platformKey === 'youtube' && this._hasObservationCapability(platform)) return { valid: true, platform };
         if (typeof platform.getViewerCount !== 'function') {
             return { valid: false, reason: `No getViewerCount method for ${platformKey}` };
         }
@@ -712,6 +744,13 @@ class ViewerCountSystem {
         }
         
         return { valid: true, platform };
+    }
+
+    private _hasObservationCapability(platform: ViewerCountPlatform | undefined): platform is ViewerCountPlatform & {
+        getViewerCountObservation: () => Promise<ViewerCountObservation>;
+        getViewerMembershipGeneration: () => number;
+    } {
+        return typeof platform?.getViewerCountObservation === 'function' && typeof platform.getViewerMembershipGeneration === 'function';
     }
 
     createViewerCountUpdate(platformName: string, count: number, previousCount: number) {
@@ -741,7 +780,9 @@ class ViewerCountSystem {
         
         if (!validation.valid) {
             const reasonText = typeof validation.reason === 'string' ? validation.reason : 'Viewer count polling validation failed';
-            if (reasonText.includes('offline')) {
+            if (platformKey === 'youtube' && this.youtubePollingEnabled && reasonText.includes('No platform found')) {
+                this.logger.debug('Waiting for YouTube platform registration', VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
+            } else if (reasonText.includes('offline')) {
                 this.logger.debug(`Skipping viewer count poll for ${platformKey} (stream offline)`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
             } else {
                 this.logger.warn(reasonText, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
@@ -756,6 +797,21 @@ class ViewerCountSystem {
         try {
             this.logger.debug(`Polling ${platformKey} for viewer count...`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
             const platform = validation.platform;
+            if (platformKey === 'youtube' && this._hasObservationCapability(platform)) {
+                const observation = await platform.getViewerCountObservation();
+                const isSamePoll = () => pollGeneration === this._getPollGeneration(platformKey)
+                    && this._getPlatforms()[platformKey] === platform;
+                const isCurrent = () => isSamePoll() && platform.getViewerMembershipGeneration() === observation.membershipGeneration;
+                if (observation.kind === 'complete') {
+                    if (await this.updateViewerCount(platformKey, observation.count, {
+                        membershipGeneration: observation.membershipGeneration, isCurrent
+                    })) this.pollingStats.successfulPolls++;
+                    else if (isSamePoll()) this._markUnavailable(platformKey);
+                } else if (isSamePoll()) {
+                    this._markUnavailable(platformKey);
+                }
+                return;
+            }
             if (!platform || typeof platform.getViewerCount !== 'function') {
                 this.logger.warn(`No getViewerCount method for ${platformKey}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
                 return;
@@ -777,6 +833,9 @@ class ViewerCountSystem {
                 this.logger.warn(`${platformKey} returned null/undefined viewer count`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
             }
         } catch (error) {
+            if (platformKey === 'youtube' && this._hasObservationCapability(validation.platform)
+                && pollGeneration === this._getPollGeneration(platformKey)
+                && this._getPlatforms()[platformKey] === validation.platform) this._markUnavailable(platformKey);
             this._handleViewerCountError(`Failed to poll ${platformKey}: ${getErrorMessage(error)}`, error, 'polling', { platform: platformKey });
         } finally {
             this.activePolls.delete(platformKey);
@@ -789,6 +848,11 @@ class ViewerCountSystem {
         } catch {
             // Diagnostics cannot prevent retiring polling or other observers.
         }
+    }
+
+    private _markUnavailable(platformKey: string): void {
+        this.observations[platformKey] = { hasCompleteObservation: false, lastCompleteAt: null,
+            ...this.observations[platformKey], latestOutcome: 'unavailable' };
     }
 
     async cleanup() {

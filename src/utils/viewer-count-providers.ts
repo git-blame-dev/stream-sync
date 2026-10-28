@@ -1,5 +1,6 @@
 import { getUnifiedLogger } from '../core/logging';
 import { createPlatformErrorHandler } from './platform-error-handler';
+import type { ViewerCountObservation, ViewerMembershipSnapshot } from '../contracts/viewer-count';
 
 type ProviderLogger = {
     debug: (message: string, context?: string, payload?: unknown) => void;
@@ -182,8 +183,8 @@ class TwitchViewerCountProvider extends ViewerCountProvider {
 
 class YouTubeViewerCountProvider extends ViewerCountProvider {
     config: Record<string, unknown> | null;
-    getActiveVideoIds: (() => string[]) | null;
     viewerExtractionService: YouTubeExtractionService | null;
+    getMembershipSnapshot: (() => ViewerMembershipSnapshot) | null;
     stats: {
         totalRequests: number;
         successfulRequests: number;
@@ -192,13 +193,13 @@ class YouTubeViewerCountProvider extends ViewerCountProvider {
 
     constructor(
         config: Record<string, unknown> | null,
-        getActiveVideoIds: (() => string[]) | null,
+        getMembershipSnapshot: (() => ViewerMembershipSnapshot) | null,
         dependencies: { viewerExtractionService?: YouTubeExtractionService; logger?: ProviderLogger } = {}
     ) {
         super('youtube', dependencies.logger);
         this.config = config;
-        this.getActiveVideoIds = getActiveVideoIds;
         this.viewerExtractionService = dependencies.viewerExtractionService || null;
+        this.getMembershipSnapshot = getMembershipSnapshot;
         this.stats = {
             totalRequests: 0,
             successfulRequests: 0,
@@ -207,70 +208,77 @@ class YouTubeViewerCountProvider extends ViewerCountProvider {
     }
 
     override isReady() {
-        return !!(this.viewerExtractionService && this.config && this.getActiveVideoIds);
+        return !!(this.viewerExtractionService && this.config && this.getMembershipSnapshot);
     }
 
     override async getViewerCount(): Promise<number | null> {
+        const observation = await this.getViewerCountObservation();
+        return observation.kind === 'complete' ? observation.count : null;
+    }
+
+    async getViewerCountObservation(): Promise<ViewerCountObservation> {
         this.stats.totalRequests++;
-        this.logger.debug('Getting YouTube viewer count - aggregating from all active streams', 'viewer-count-provider');
-        
-        if (!this.isReady()) {
-            this.logger.debug('YouTube provider not ready, returning 0', 'viewer-count-provider');
-            return 0;
-        }
-
+        let membership: ViewerMembershipSnapshot | undefined;
         try {
-            const getActiveVideoIds = this.getActiveVideoIds;
+            membership = this.getMembershipSnapshot?.();
+        } catch (error) {
+            this._handleProviderError(error, 'getMembershipSnapshot');
+            return { kind: 'unavailable', membershipGeneration: 0, reason: 'capability_missing' };
+        }
+        const membershipGeneration = membership?.generation ?? 0;
+        const unavailable = (reason: Extract<ViewerCountObservation, { kind: 'unavailable' }>['reason']): ViewerCountObservation =>
+            ({ kind: 'unavailable', membershipGeneration, reason });
+        if (!membership) return unavailable('capability_missing');
+        if (membership.videoIds.length === 0) {
+            if (membership.availability !== 'offline') return unavailable('membership_unknown');
+            this.stats.successfulRequests++;
+            this._resetErrorCount();
+            return { kind: 'complete', count: 0, membershipGeneration };
+        }
+        if (!this.isReady()) return unavailable('capability_missing');
+        try {
             const extractionService = this.viewerExtractionService;
-            if (!getActiveVideoIds || !extractionService) {
-                return 0;
-            }
-
-            const activeVideoIds = getActiveVideoIds();
-            
-            if (!activeVideoIds || activeVideoIds.length === 0) {
-                this.logger.debug('No active YouTube streams found', 'viewer-count-provider');
-                return 0;
-            }
-            
-            this.logger.debug(`Found ${activeVideoIds.length} active streams for aggregation: ${activeVideoIds.join(', ')}`, 'viewer-count-provider');
-            
+            if (!extractionService) return unavailable('capability_missing');
+            const activeVideoIds = [...new Set(membership.videoIds)];
             const result = await extractionService.getAggregatedViewerCount(activeVideoIds);
-            
-            if (result.success) {
+            if (this.getMembershipSnapshot?.().generation !== membershipGeneration) return unavailable('membership_changed');
+            if (result.success && result.successfulStreams === activeVideoIds.length && !result.failedStreams
+                && Number.isSafeInteger(result.totalCount) && result.totalCount >= 0) {
                 this.stats.successfulRequests++;
                 this.logger.debug(`YouTube aggregation complete: ${result.totalCount} total viewers from ${result.successfulStreams}/${activeVideoIds.length} streams`, 'viewer-count-provider');
                 this._resetErrorCount();
-                return result.totalCount;
+                return { kind: 'complete', count: result.totalCount, membershipGeneration };
             } else {
                 this._handleProviderError(new Error('Service layer aggregation unavailable'), 'getAggregatedViewerCount');
-                return null;
+                return unavailable('extraction_unavailable');
             }
             
         } catch (error) {
             this._handleProviderError(error, 'getAggregatedViewerCount');
-            return null;
+            return unavailable('extraction_unavailable');
         }
     }
 
-    async getViewerCountForVideo(videoId: string): Promise<number> {
+    async getViewerCountForVideo(videoId: string): Promise<number | null> {
         this.logger.debug(`Getting YouTube viewer count for video: ${videoId}`, 'viewer-count-provider');
         
         try {
             const extractionService = this.viewerExtractionService;
             if (!extractionService) {
-                return 0;
+                return null;
             }
 
             const result = await extractionService.extractViewerCount(videoId);
-            if (result.success) {
+            if (result.success && Number.isSafeInteger(result.count) && result.count >= 0) {
                 this._resetErrorCount();
                 return result.count;
             } else {
-                return this._handleProviderError(new Error('Video extraction failed'), 'extractViewerCount');
+                this._handleProviderError(new Error('Video extraction failed'), 'extractViewerCount');
+                return null;
             }
         } catch (error) {
-            return this._handleProviderError(error, 'extractViewerCount');
+            this._handleProviderError(error, 'extractViewerCount');
+            return null;
         }
     }
     
@@ -320,10 +328,10 @@ class ViewerCountProviderFactory {
 
     static createYouTubeProvider(
         config: Record<string, unknown> | null,
-        getActiveVideoIds: (() => string[]) | null,
+        getMembershipSnapshot: (() => ViewerMembershipSnapshot) | null,
         dependencies: { viewerExtractionService?: YouTubeExtractionService; logger?: ProviderLogger } = {}
     ) {
-        return new YouTubeViewerCountProvider(config, getActiveVideoIds, dependencies);
+        return new YouTubeViewerCountProvider(config, getMembershipSnapshot, dependencies);
     }
 
     static createTikTokProvider(platform: TikTokPlatformLike | null, options: { logger?: ProviderLogger } = {}) {

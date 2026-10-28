@@ -1030,7 +1030,8 @@ class AppRuntime {
             this.assertActiveLifetime();
             this.logger.info('Goal display initialized', 'AppRuntime');
 
-            const obsObserver = new OBSViewerCountObserver(obsManager, this.logger, { config: this.config });
+            const obsObserver = new OBSViewerCountObserver(obsManager, this.logger, { config: this.config,
+                getViewerCountSnapshot: platform => this.viewerCountSystem.getViewerCountSnapshot(platform) });
             this.viewerCountSystem.addObserver(obsObserver);
             this.logger.info('Initializing viewer count system...', 'AppRuntime');
             this.logger.debug('Starting viewerCountSystem.initialize()', 'AppRuntime');

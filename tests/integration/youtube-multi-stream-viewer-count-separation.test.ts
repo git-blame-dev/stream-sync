@@ -120,11 +120,14 @@ describe("YouTube Multi-Stream Viewer Count Separation", () => {
         streamDetectionService: {
           detectLiveStreams: createMockFn().mockResolvedValue({
             success: true,
-            videoIds: [],
+            observationKind: "complete",
+            videoIds: scenario.streams.filter(stream => stream.isLive !== false).map(stream => stream.videoId),
           }),
         },
       },
     );
+
+    await platform.getLiveVideoIds();
 
     platform.connectionManager.getActiveVideoIds =
       createMockFn<[], string[]>().mockReturnValue(
