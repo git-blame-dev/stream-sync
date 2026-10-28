@@ -71,6 +71,92 @@ const createFactoryMock = () => {
 };
 
 describe('assertion-helpers behavior', () => {
+    it('compares actual unified outcomes including falsy and deeply nested values', () => {
+        const validation = (isValid: boolean) => ({ validationSource: 'centralized_validator', isValid });
+        expect(() => expectUnifiedBehavior({ scenario: 'token_validation', results: [validation(false), validation(false)], expectedOutcome: true })).toThrow();
+        expect(() => expectUnifiedBehavior({ scenario: 'token_validation', results: [validation(false), validation(false)], expectedOutcome: false })).not.toThrow();
+        for (const outcome of [0, '', { nested: [false, { count: 0 }] }]) {
+            const result = { validationSource: 'centralized_validator', outcome };
+            expect(() => expectUnifiedBehavior({ scenario: 'synthetic-output', results: [result, result], expectedOutcome: outcome })).not.toThrow();
+            expect(() => expectUnifiedBehavior({ scenario: 'synthetic-output', results: [result, result], expectedOutcome: { wrong: true } })).toThrow();
+        }
+        expect(() => expectUnifiedBehavior({ scenario: 'token_validation', results: [validation(false), validation(true)], expectedOutcome: false })).toThrow();
+        const nestedResult = { validationSource: 'centralized_validator', outcome: { nested: [false, { count: 0 }] } };
+        expect(() => expectUnifiedBehavior({ scenario: 'synthetic-output', results: [nestedResult, nestedResult], expectedOutcome: { nested: [false, { count: 0 }] } })).not.toThrow();
+        expect(() => expectUnifiedBehavior({ scenario: 'synthetic-output', results: [nestedResult, nestedResult], expectedOutcome: { nested: [false, { count: 1 }] } })).toThrow();
+        for (const [scenario, field, outcome] of [
+            ['token_expiration_detection', 'isExpired', false],
+            ['token_format_validation', 'format', ''],
+            ['single_source_of_truth', 'validationSteps', []],
+        ] as const) {
+            const result = { validationSource: 'centralized_validator', [field]: outcome };
+            expect(() => expectUnifiedBehavior({ scenario, results: [result, result], expectedOutcome: outcome })).not.toThrow();
+            expect(() => expectUnifiedBehavior({ scenario, results: [result, result], expectedOutcome: 'wrong' })).toThrow();
+        }
+    });
+
+    it('enforces zero timing limits and rejects nonfinite inputs and invalid timestamps', () => {
+        const notification = { processedAt: 1, createdAt: 0, timestamp: new Date(0).toISOString() };
+        expect(() => expectNotificationTiming(notification, { maxProcessingDelay: 0 })).toThrow();
+        expect(() => expectNotificationTiming(notification, { timestampTolerance: 0 })).toThrow();
+        expect(() => expectNotificationTiming({ processedAt: testClock.now() - 1 }, { maxAge: 0 })).toThrow();
+        for (const invalid of [NaN, Infinity, -Infinity]) {
+            expect(() => expectNotificationTiming({ processedAt: invalid }, {})).toThrow();
+            expect(() => expectNotificationTiming({ processedAt: 0, createdAt: invalid }, {})).toThrow();
+            expect(() => expectNotificationTiming({ processedAt: 0 }, { maxAge: invalid })).toThrow();
+        }
+        expect(() => expectNotificationTiming({ processedAt: 0, createdAt: 'invalid' }, {})).toThrow();
+        expect(() => expectNotificationTiming({ processedAt: 0, timestamp: 'invalid' }, { timestampTolerance: 0 })).toThrow();
+        for (const timestamp of [true, null, {}, new Date('invalid'), 1e300]) {
+            expect(() => expectNotificationTiming({ processedAt: 0, timestamp }, { timestampTolerance: 0 })).toThrow();
+        }
+        for (const timestamp of [0, new Date(0), new Date(0).toISOString()]) {
+            expect(() => expectNotificationTiming({ processedAt: 0, createdAt: 0, timestamp }, { timestampTolerance: 0, maxProcessingDelay: 0 })).not.toThrow();
+        }
+    });
+
+    it('requires known ordering and finite values without rejecting empty known sequences', () => {
+        expect(() => expectNotificationSequence([], 'unknown')).toThrow();
+        for (const order of ['priority_desc', 'timestamp_asc', 'timestamp_desc']) {
+            expect(() => expectNotificationSequence([], order)).not.toThrow();
+            expect(() => expectNotificationSequence(null as unknown as unknown[], order)).toThrow();
+            expect(() => expectNotificationSequence([{}], order)).toThrow();
+            for (const invalid of [NaN, Infinity, -Infinity]) {
+                expect(() => expectNotificationSequence([{ priority: invalid, processedAt: invalid }, { priority: 0, processedAt: 0 }], order)).toThrow();
+            }
+            expect(() => expectNotificationSequence([{ priority: 0, processedAt: 0 }], order)).not.toThrow();
+        }
+    });
+
+    it('preserves trimmed Unicode content rather than accepting substitutions or reordering', () => {
+        expect(() => expectInternationalContentPreservation('A👍B', 'A😀B')).toThrow();
+        expect(() => expectInternationalContentPreservation('A👍B', 'B👍A')).toThrow();
+        expect(() => expectInternationalContentPreservation('  A👍B  ', 'A👍B')).not.toThrow();
+    });
+
+    it('executes platform methods with their receiver and awaits boolean outcomes', async () => {
+        let calls = 0;
+        const platform = { value: false, async processMessage() { calls += 1; return this.value; } };
+        await expectValidPlatformBehavior(platform, 'message_processing', { shouldProcessAsync: true, shouldReturnBoolean: true });
+        expect(calls).toBe(1);
+        const invalidResult = async () => expectValidPlatformBehavior({ processMessage: async () => 'wrong' }, 'message_processing', { shouldReturnBoolean: true });
+        await expect(invalidResult()).rejects.toThrow('should return boolean');
+        const synchronous = async () => expectValidPlatformBehavior({ processMessage: () => false }, 'message_processing', { shouldProcessAsync: true });
+        await expect(synchronous()).rejects.toThrow('asynchronously');
+        const rejection = new Error('synthetic message-processing rejection');
+        await expect(expectValidPlatformBehavior({ processMessage: async () => { throw rejection; } }, 'message_processing', { shouldReturnBoolean: true })).rejects.toBe(rejection);
+        await expectValidPlatformBehavior({ processMessage: createMockFn(async () => false) }, 'message_processing', { shouldProcessAsync: true, shouldReturnBoolean: true });
+    });
+
+    it('awaits actual platform rejection and distinguishes it from successful resolution', async () => {
+        const rejection = Promise.reject(new Error('synthetic wrong rejection'));
+        void rejection.catch(() => {});
+        const wrongError = async () => expectValidPlatformBehavior({ processMessage: () => rejection }, 'error_handling', { shouldHandleErrors: true, expectedErrorTypes: ['expected-type'] });
+        await expect(wrongError()).rejects.toThrow('not recognized');
+        const noError = async () => expectValidPlatformBehavior({ processMessage: async () => false }, 'error_handling', { shouldHandleErrors: true, expectedErrorTypes: ['expected-type'] });
+        await expect(noError()).rejects.toThrow('Expected platform behavior to reject');
+        await expectValidPlatformBehavior({ processMessage: async () => { throw new Error('expected-type'); } }, 'error_handling', { shouldHandleErrors: true, expectedErrorTypes: ['expected-type'] });
+    });
     beforeEach(() => {
         testClock.reset();
     });
@@ -253,7 +339,7 @@ describe('assertion-helpers behavior', () => {
 
     it('validates data structure and content integrity helpers', () => {
         expect(() => expectInternationalContentPreservation('  hola  ', 'hola')).not.toThrow();
-        expect(() => expectInternationalContentPreservation('hello', 'different-long-output-value')).toThrow('significantly altered');
+        expect(() => expectInternationalContentPreservation('hello', 'different-long-output-value')).toThrow('altered');
 
         expect(() => expectValidUserData({ username: 'test-user', userId: 'u1', platform: 'youtube' })).not.toThrow();
         expect(() => expectValidUserData({ username: '' })).toThrow('non-empty string');
@@ -296,7 +382,7 @@ describe('assertion-helpers behavior', () => {
         )).toThrow('Inconsistent numbers');
     });
 
-    it('validates gift, platform behavior, and currency formatting helpers', () => {
+    it('validates gift, platform behavior, and currency formatting helpers', async () => {
         const validGift = createGiftNotification({ amount: 5, currency: 'USD', displayMessage: 'test-user sent 5 USD', ttsMessage: 'test-user sent 5 USD' });
         expect(() => expectValidGiftNotification(validGift, { platform: 'tiktok', minAmount: 1, allowedCurrencies: ['USD', 'coins'] })).not.toThrow();
         expect(() => expectValidGiftNotification({ ...validGift, amount: 0 }, { platform: 'tiktok' })).toThrow('amount must be positive');
@@ -305,10 +391,11 @@ describe('assertion-helpers behavior', () => {
             processMessage: createMockFn(() => true),
             handleNotification: () => {}
         };
-        expect(() => expectValidPlatformBehavior(messagePlatform, 'message_processing', { requiredMethods: ['processMessage'], shouldReturnBoolean: true })).not.toThrow();
-        expect(() => expectValidPlatformBehavior(messagePlatform, 'notification_handling')).not.toThrow();
-        expect(() => expectValidPlatformBehavior({ processMessage: () => { throw new Error('expected-failure'); } }, 'error_handling', { shouldHandleErrors: true, expectedErrorTypes: ['expected'] })).not.toThrow();
-        expect(() => expectValidPlatformBehavior({}, 'message_processing', { requiredMethods: ['processMessage'] })).toThrow('missing required method');
+        await expectValidPlatformBehavior(messagePlatform, 'message_processing', { requiredMethods: ['processMessage'], shouldReturnBoolean: true });
+        expect(messagePlatform.processMessage).toHaveBeenCalledTimes(1);
+        await expectValidPlatformBehavior(messagePlatform, 'notification_handling');
+        await expectValidPlatformBehavior({ processMessage: () => { throw new Error('expected-failure'); } }, 'error_handling', { shouldHandleErrors: true, expectedErrorTypes: ['expected'] });
+        await expect(expectValidPlatformBehavior({}, 'message_processing', { requiredMethods: ['processMessage'] })).rejects.toThrow('missing required method');
 
         expect(() => expectProperCurrencyFormatting(10.25, 'USD', 'youtube')).not.toThrow();
         expect(() => expectProperCurrencyFormatting(10.123, 'USD', 'youtube')).toThrow('cannot have more than 2 decimal places');
@@ -438,11 +525,11 @@ describe('assertion-helpers behavior', () => {
         ])).toThrow('Retry pattern inconsistent');
     });
 
-    it('covers additional assertion-helper branch paths', () => {
+    it('covers additional assertion-helper branch paths', async () => {
         const oldNotification = createGiftNotification({ processedAt: testClock.now() - 1000 });
         expect(() => expectNotificationTiming(oldNotification, { maxAge: 100 })).toThrow('too old');
         expect(() => expectNotificationTiming({ processedAt: 'bad' }, {})).toThrow('numeric processedAt');
-        expect(() => expectNotificationSequence([createGiftNotification()], 'priority_desc')).not.toThrow();
+        expect(() => expectNotificationSequence([createGiftNotification({ priority: 0 })], 'priority_desc')).not.toThrow();
         expect(() => expectNotificationSequence([{ processedAt: 'bad' }, { processedAt: 1 }], 'timestamp_asc')).toThrow('numeric processedAt');
 
         expect(() => expectPlatformEventStructure({}, 'youtube', undefined)).toThrow('item property');
@@ -450,7 +537,7 @@ describe('assertion-helpers behavior', () => {
         expect(() => expectYouTubeEventProcessing({ item: { type: 'LiveChatPaidMessage', purchase_amount: '$10.00' } }, { notificationType: 'platform:gift' }))
             .toThrow('authorDetails');
 
-        expect(() => expectInternationalContentPreservation('你好', 'plain-text')).toThrow('Unicode chars');
+        expect(() => expectInternationalContentPreservation('你好', 'plain-text')).toThrow('altered');
         expect(() => expectInternationalContentSupport('missing test data', null)).toThrow('Test data must be provided');
 
         expect(() => expectUserFriendlyErrorMessage('Please review details code 500', { allowErrorCodes: true })).not.toThrow();
@@ -459,8 +546,8 @@ describe('assertion-helpers behavior', () => {
         const nonBooleanPlatform = {
             processMessage: createMockFn(() => 'not-boolean')
         };
-        expect(() => expectValidPlatformBehavior(nonBooleanPlatform, 'message_processing', { shouldReturnBoolean: true }))
-            .toThrow('should return boolean or Promise<boolean>');
+        await expect(expectValidPlatformBehavior(nonBooleanPlatform, 'message_processing', { shouldReturnBoolean: true }))
+            .rejects.toThrow('should return boolean or Promise<boolean>');
 
         const artifactHeavyString = '[DEBUG] Error: 500 undefined mockObject ${name} at app.js:1 src/path /api/v1 localhost:3000 SELECT row WHERE id = 1 process.env.TEST_KEY';
         expect(() => expectNoTechnicalArtifacts(artifactHeavyString)).toThrow('Technical artifacts detected');

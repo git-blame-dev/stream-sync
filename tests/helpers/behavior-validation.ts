@@ -381,21 +381,21 @@ const validateCrossPlatformBehavior = async (platforms: Record<string, EventPlat
 
     const workingResults = result.workingPlatforms.map(name => platformResults[name]).filter(isRecord);
 
-    const userMessages = workingResults.map(r => r.userMessage).filter(Boolean);
+    const userMessages = workingResults.map(r => r.userMessage).filter(value => value !== undefined && value !== null);
     const uniqueMessages = [...new Set(userMessages)];
     result.consistency.userMessages = uniqueMessages.length <= 1;
     if (!result.consistency.userMessages) {
         result.inconsistencies.push('userMessages');
     }
 
-    const displayTimes = workingResults.map(r => r.displayTime).filter(Boolean);
+    const displayTimes = workingResults.map(r => r.displayTime).filter(value => value !== undefined && value !== null);
     const uniqueTimes = [...new Set(displayTimes)];
     result.consistency.displayTiming = uniqueTimes.length <= 1;
     if (!result.consistency.displayTiming) {
         result.inconsistencies.push('displayTiming');
     }
 
-    const priorities = workingResults.map(r => r.priority).filter(Boolean);
+    const priorities = workingResults.map(r => r.priority).filter(value => value !== undefined && value !== null);
     const uniquePriorities = [...new Set(priorities)];
     result.consistency.priorityHandling = uniquePriorities.length <= 1;
     if (!result.consistency.priorityHandling) {
@@ -556,7 +556,7 @@ const expectValidDisplayedNotifications = (displayedNotifications: unknown, expe
             throw new Error(`Notification ${index} should be visible to user but is not`);
         }
 
-        if (expectedBehavior.priority && notificationRecord.priority !== expectedBehavior.priority) {
+        if (expectedBehavior.priority !== undefined && notificationRecord.priority !== expectedBehavior.priority) {
             throw new Error(`Notification ${index} priority mismatch. Expected: ${expectedBehavior.priority}, Got: ${notificationRecord.priority}`);
         }
 
@@ -566,7 +566,10 @@ const expectValidDisplayedNotifications = (displayedNotifications: unknown, expe
             }
         }
 
-        if (expectedBehavior.mustContainAmount && expectedBehavior.amount) {
+        if (expectedBehavior.mustContainAmount && expectedBehavior.amount !== undefined) {
+            if (!Number.isFinite(expectedBehavior.amount)) {
+                throw new Error('Expected amount must be a finite number');
+            }
             if (!notificationRecord.content.includes(expectedBehavior.amount.toString())) {
                 throw new Error(`Notification ${index} content should contain amount "${expectedBehavior.amount}"`);
             }

@@ -1,5 +1,6 @@
 
-import { isMockFunction, type TestMockFn } from './bun-mock-utils';
+import { expect } from 'bun:test';
+import { isMockFunction } from './bun-mock-utils';
 import testClock from './test-clock';
 
 type UnknownRecord = Record<string, unknown>;
@@ -300,12 +301,20 @@ const expectNotificationTiming = (notification: unknown, expectedTiming: Notific
     const notificationRecord = requireRecord(notification, 'Notification');
     const now = testClock.now();
     const processedAt = notificationRecord.processedAt;
-    const createdAt = typeof notificationRecord.createdAt === 'number' ? notificationRecord.createdAt : processedAt;
+    const createdAt = hasOwn(notificationRecord, 'createdAt') ? notificationRecord.createdAt : processedAt;
     if (typeof processedAt !== 'number' || typeof createdAt !== 'number') {
         throw new Error('Notification timing requires numeric processedAt and createdAt values');
     }
+    if (!Number.isFinite(processedAt) || !Number.isFinite(createdAt)) {
+        throw new Error('Notification timing requires finite numeric values');
+    }
+    for (const [name, value] of Object.entries(expectedTiming)) {
+        if (value !== undefined && (typeof value !== 'number' || !Number.isFinite(value) || value < 0)) {
+            throw new Error(`Notification timing expectation '${name}' must be a finite non-negative number`);
+        }
+    }
     
-    if (expectedTiming.maxProcessingDelay) {
+    if (expectedTiming.maxProcessingDelay !== undefined) {
         const processingDelay = processedAt - createdAt;
         if (processingDelay > expectedTiming.maxProcessingDelay) {
             throw new Error(
@@ -315,8 +324,14 @@ const expectNotificationTiming = (notification: unknown, expectedTiming: Notific
         }
     }
     
-    if (expectedTiming.timestampTolerance) {
-        const timestampMs = new Date(String(notificationRecord.timestamp)).getTime();
+    if (expectedTiming.timestampTolerance !== undefined) {
+        const timestamp = notificationRecord.timestamp;
+        const timestampMs = timestamp instanceof Date ? timestamp.getTime()
+            : typeof timestamp === 'number' ? new Date(timestamp).getTime()
+                : typeof timestamp === 'string' ? Date.parse(timestamp) : NaN;
+        if (!Number.isFinite(timestampMs)) {
+            throw new Error('Notification timestamp must be a valid parsed date');
+        }
         const timeDiff = Math.abs(timestampMs - processedAt);
         if (timeDiff > expectedTiming.timestampTolerance) {
             throw new Error(
@@ -326,7 +341,7 @@ const expectNotificationTiming = (notification: unknown, expectedTiming: Notific
         }
     }
     
-    if (expectedTiming.maxAge) {
+    if (expectedTiming.maxAge !== undefined) {
         const age = now - processedAt;
         if (age > expectedTiming.maxAge) {
             throw new Error(
@@ -338,18 +353,27 @@ const expectNotificationTiming = (notification: unknown, expectedTiming: Notific
 };
 
 const expectNotificationSequence = (notifications: unknown[], expectedOrder: NotificationOrder | string): void => {
-    if (!Array.isArray(notifications) || notifications.length < 2) {
-        return;
+    if (!Array.isArray(notifications)) {
+        throw new Error('notifications must be an array');
+    }
+    if (!['priority_desc', 'timestamp_asc', 'timestamp_desc'].includes(expectedOrder)) {
+        throw new Error(`Unknown expected order: ${expectedOrder}`);
     }
     const notificationRecords = notifications.map((notification, index) => requireRecord(notification, `Notification ${index}`));
+    const field = expectedOrder === 'priority_desc' ? 'priority' : 'processedAt';
+    notificationRecords.forEach((notification, index) => {
+        if (typeof notification[field] !== 'number' || !Number.isFinite(notification[field])) {
+            throw new Error(`Notification ${index} requires finite numeric ${field}`);
+        }
+    });
     
     switch (expectedOrder) {
         case 'priority_desc':
             for (let i = 1; i < notificationRecords.length; i++) {
                 const previousNotification = notificationRecords[i - 1];
                 const currentNotification = notificationRecords[i];
-                const prev = typeof previousNotification?.priority === 'number' ? previousNotification.priority : 0;
-                const curr = typeof currentNotification?.priority === 'number' ? currentNotification.priority : 0;
+                const prev = previousNotification!.priority as number;
+                const curr = currentNotification!.priority as number;
                 if (prev < curr) {
                     throw new Error(
                         `Notification sequence not in priority descending order at index ${i}. ` +
@@ -854,28 +878,11 @@ const expectPlatformEventStructure = (event: unknown, platform: PlatformName | s
 };
 
 const expectInternationalContentPreservation = (originalContent: string, processedContent: string): void => {
-    if (originalContent !== processedContent) {
-        if (originalContent.trim() === processedContent.trim()) {
-            return;
-        }
-        
-        const originalUnicodeCount = (originalContent.match(/[\u{80}-\u{10FFFF}]/gu) || []).length;
-        const processedUnicodeCount = (processedContent.match(/[\u{80}-\u{10FFFF}]/gu) || []).length;
-        
-        if (originalUnicodeCount !== processedUnicodeCount) {
-            throw new Error(
-                `International content was corrupted during processing. ` +
-                `Original Unicode chars: ${originalUnicodeCount}, Processed: ${processedUnicodeCount}`
-            );
-        }
-        
-        const lengthDiff = Math.abs(originalContent.length - processedContent.length);
-        if (lengthDiff > originalContent.length * 0.1) { // More than 10% length change
-            throw new Error(
-                `International content was significantly altered during processing. ` +
-                `Original: "${originalContent}", Processed: "${processedContent}"`
-            );
-        }
+    if (typeof originalContent !== 'string' || typeof processedContent !== 'string') {
+        throw new Error('International content preservation requires strings');
+    }
+    if (originalContent.trim() !== processedContent.trim()) {
+        throw new Error('International content was altered during processing');
     }
 };
 
@@ -1395,7 +1402,7 @@ const expectValidGiftNotification = (notification: unknown, expectedData: GiftNo
     expectNoTechnicalArtifacts(giftNotification.ttsMessage);
 };
 
-const expectValidPlatformBehavior = (platform: unknown, behaviorType: string, expectations: PlatformBehaviorExpectations = {}): void => {
+const expectValidPlatformBehavior = async (platform: unknown, behaviorType: string, expectations: PlatformBehaviorExpectations = {}): Promise<void> => {
     if (!platform || typeof platform !== 'object') {
         throw new Error('Platform must be an object');
     }
@@ -1418,20 +1425,21 @@ const expectValidPlatformBehavior = (platform: unknown, behaviorType: string, ex
             if (typeof processMessage !== 'function') {
                 throw new Error('Platform missing required method: processMessage');
             }
-            if (expectations.shouldProcessAsync && !isMockFunction(processMessage)) {
-                break;
-            }
-            if (expectations.shouldReturnBoolean && isMockFunction(processMessage)) {
-                const mockReturn = (processMessage as TestMockFn & { getMockImplementation?: () => (() => unknown) | undefined }).getMockImplementation?.();
-                const returned = mockReturn?.();
-                if (mockReturn && typeof returned !== 'boolean' && !(isRecord(returned) && typeof returned.then === 'function')) {
+            if (expectations.shouldProcessAsync || expectations.shouldReturnBoolean) {
+                const returned: unknown = processMessage.call(platformRecord);
+                const isAsync = isRecord(returned) && typeof returned.then === 'function';
+                const resolved: unknown = await returned;
+                if (expectations.shouldProcessAsync && !isAsync) {
+                    throw new Error('Platform processMessage should process asynchronously');
+                }
+                if (expectations.shouldReturnBoolean && typeof resolved !== 'boolean') {
                     throw new Error('Platform processMessage should return boolean or Promise<boolean>');
                 }
             }
             break;
             
         case 'notification_handling':
-            if (!platformRecord.handleNotification) {
+            if (typeof platformRecord.handleNotification !== 'function') {
                 throw new Error('Platform missing required method: handleNotification');
             }
             break;
@@ -1442,16 +1450,18 @@ const expectValidPlatformBehavior = (platform: unknown, behaviorType: string, ex
                 if (typeof processMessage !== 'function') {
                     throw new Error('Platform missing required method: processMessage');
                 }
+                let rejected = false;
                 try {
-                    const result = processMessage();
-                    if (expectations.expectedErrorTypes && !result) {
-                        throw new Error('Platform should handle errors gracefully');
-                    }
+                    await processMessage.call(platformRecord);
                 } catch (error) {
+                    rejected = true;
                     const errorMessage = getErrorMessage(error);
                     if (expectations.expectedErrorTypes && !expectations.expectedErrorTypes.some(type => errorMessage.includes(type))) {
-                        throw new Error('Platform should handle errors gracefully');
+                        throw new Error(`Platform error type not recognized: ${errorMessage}`);
                     }
+                }
+                if (expectations.expectedErrorTypes && !rejected) {
+                    throw new Error('Expected platform behavior to reject');
                 }
             }
             break;
@@ -1667,7 +1677,7 @@ const expectConsistentValidation = (validationResults: unknown[]): void => {
 const expectUnifiedBehavior = (options: UnifiedBehaviorOptions): void => {
     const { scenario, results, expectedOutcome } = options;
     
-    if (!scenario || !results || !expectedOutcome) {
+    if (!scenario || !results || expectedOutcome === undefined) {
         throw new Error('expectUnifiedBehavior requires scenario, results, and expectedOutcome');
     }
     
@@ -1750,6 +1760,29 @@ const expectUnifiedBehavior = (options: UnifiedBehaviorOptions): void => {
             });
             break;
     }
+    const outcomeFieldByScenario: Record<string, string> = {
+        token_validation: 'isValid',
+        'standard-validation': 'isValid',
+        token_expiration_detection: 'isExpired',
+        token_format_validation: 'format',
+        single_source_of_truth: 'validationSteps',
+        centralized_validation: 'validationSteps'
+    };
+    const outcomeField = hasOwn(outcomeFieldByScenario, scenario) ? outcomeFieldByScenario[scenario]! : 'outcome';
+    const aliases: Record<string, { field: string; value: boolean }> = {
+        valid: { field: 'isValid', value: true },
+        invalid: { field: 'isValid', value: false },
+        expired: { field: 'isExpired', value: true },
+        'not-expired': { field: 'isExpired', value: false }
+    };
+    const alias = typeof expectedOutcome === 'string' ? aliases[expectedOutcome] : undefined;
+    const expected = alias?.field === outcomeField ? alias.value : expectedOutcome;
+    resultRecords.forEach((result, index) => {
+        if (!hasOwn(result, outcomeField)) {
+            throw new Error(`Result ${index} missing explicit ${outcomeField} outcome field`);
+        }
+        expect(result[outcomeField]).toEqual(expected);
+    });
 };
 
 const expectConsistentConfigBehavior = (configResults: unknown[]): void => {

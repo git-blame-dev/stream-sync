@@ -24,6 +24,25 @@ import {
 } from './behavior-validation';
 
 describe('behavior-validation helper behavior', () => {
+    it('compares zero and empty cross-platform samples rather than dropping them', async () => {
+        const result = await validateCrossPlatformBehavior({
+            youtube: { processEvent: () => ({ userMessage: '', displayTime: 0, priority: 0 }) },
+            twitch: { processEvent: () => ({ userMessage: 'synthetic message', displayTime: 1, priority: 1 }) },
+        }, {});
+        expect(result.success).toBe(false);
+        expect(result.inconsistencies).toEqual(['userMessages', 'displayTiming', 'priorityHandling']);
+        const matching = await validateCrossPlatformBehavior({
+            youtube: { processEvent: () => ({ userMessage: '', displayTime: 0, priority: 0 }) },
+            twitch: { processEvent: () => ({ userMessage: '', displayTime: 0, priority: 0 }) },
+        }, {});
+        expect(matching.success).toBe(true);
+    });
+
+    it('enforces zero priority and amount expectations for displayed notifications', () => {
+        expect(() => expectValidDisplayedNotifications([{ content: 'synthetic message', priority: 1 }], { priority: 0 })).toThrow('priority mismatch');
+        expect(() => expectValidDisplayedNotifications([{ content: 'synthetic message', priority: 0 }], { mustContainAmount: true, amount: 0 })).toThrow('contain amount');
+        expect(() => expectValidDisplayedNotifications([{ content: 'synthetic amount 0', priority: 0 }], { priority: 0, mustContainAmount: true, amount: 0 })).not.toThrow();
+    });
     beforeEach(() => {
         testClock.reset();
     });
