@@ -6,6 +6,8 @@ import { resolveLogger } from './logger-resolver';
 import { withOperationDeadline } from './timeout-wrapper';
 import { config as appConfig } from '../core/config';
 import { DEFAULT_ENHANCED_TIMEOUT_MS } from '../core/config-schema';
+import { sanitizeLogText } from '../core/logger/safe-log-serializer';
+import { validateTimeout } from './timeout-validator';
 
 type HttpClientAdapter = {
     get: (url: string, config: Record<string, unknown>) => Promise<Record<string, unknown>>;
@@ -35,7 +37,7 @@ type EnhancedHttpClientConfig = {
 
 type RequestOptions = Record<string, unknown> & {
     authToken?: string;
-    authType?: string;
+    authType?: string | null | undefined;
     headers?: Record<string, string>;
     operationContext?: {
         operationType?: string;
@@ -81,9 +83,14 @@ type HttpRuntimeConfig = {
 };
 
 const resolveTimeout = (value: unknown, fallback: number): number => {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+    const parsed = typeof value === 'number'
+        ? value
+        : typeof value === 'string' && value.trim() ? Number(value) : Number.NaN;
+    return Number.isFinite(parsed) && Number.isInteger(parsed) && parsed > 0 ? validateTimeout(parsed) : fallback;
 };
+
+const getDiagnosticErrorMessage = (error: unknown): string =>
+    error instanceof Error ? error.message : typeof error === 'string' ? error : 'HTTP request failed';
 
 const getHttpRuntimeConfig = (): HttpRuntimeConfig => {
     const httpConfig = (appConfig as { http?: unknown }).http;
@@ -94,7 +101,24 @@ const getConfiguredUserAgents = (value: unknown): string[] => {
     if (!Array.isArray(value)) {
         return [];
     }
-    return value.filter((entry): entry is string => typeof entry === 'string');
+    return value.filter((entry): entry is string => typeof entry === 'string')
+        .map((entry) => entry.trim())
+        .filter((entry) => entry.length > 0);
+};
+
+const prepareRequestBody = (data: unknown, headers: Record<string, string>): unknown => {
+    const contentTypeEntries = Object.entries(headers).filter(([key]) => key.trim().toLowerCase() === 'content-type');
+    const contentType = contentTypeEntries.at(-1)?.[1] ?? 'application/json';
+    for (const [key] of contentTypeEntries) delete headers[key];
+    headers['Content-Type'] = contentType;
+    if (!contentType.trim().toLowerCase().startsWith('application/x-www-form-urlencoded') || data === null || typeof data !== 'object') {
+        return data;
+    }
+    const prototype = Object.getPrototypeOf(data);
+    if (prototype !== Object.prototype && prototype !== null) return data;
+    return new URLSearchParams(Object.entries(data as Record<string, unknown>)
+        .filter(([, value]) => value !== null && value !== undefined)
+        .map(([key, value]) => [key, String(value)])).toString();
 };
 
 class EnhancedHttpClient {
@@ -113,18 +137,18 @@ class EnhancedHttpClient {
         this.defaultTimeout = resolveTimeout(config.timeout, resolveTimeout(httpConfig.enhancedTimeoutMs, DEFAULT_ENHANCED_TIMEOUT_MS));
         this.reachabilityTimeoutMs = resolveTimeout(config.reachabilityTimeoutMs, resolveTimeout(httpConfig.enhancedReachabilityTimeoutMs, 5_000));
         this.retryExecutor = config.retryExecutor || createHttpRetryExecutor({ logger: this.logger });
-        this.userAgents = Array.isArray(config.userAgents)
-            ? config.userAgents.slice()
-            : getConfiguredUserAgents(httpConfig.userAgents);
+        this.userAgents = getConfiguredUserAgents(Array.isArray(config.userAgents) ? config.userAgents : httpConfig.userAgents);
         this.currentUserAgentIndex = 0;
     }
 
-    buildAuthHeaders(authToken: string | undefined, authType = 'bearer'): Record<string, string> {
+    buildAuthHeaders(authToken: string | undefined, authType: string | null = 'bearer'): Record<string, string> {
+        const scheme = authType == null ? 'bearer' : typeof authType === 'string' ? authType.trim().toLowerCase() : '';
+        if (!['bearer', 'oauth', 'app'].includes(scheme)) throw new TypeError('Unsupported auth type');
         if (!authToken) {
             return {};
         }
 
-        if (authType === 'oauth') {
+        if (scheme === 'oauth') {
             return { Authorization: `OAuth ${authToken}` };
         }
 
@@ -156,14 +180,21 @@ class EnhancedHttpClient {
             timeout = this.getStreamingOptimizedTimeout(normalizeOperationContext(operationContext), axiosOptions.timeout);
         }
 
+        const resolvedUserAgent = typeof userAgent === 'string' ? userAgent.trim() : this.getNextUserAgent();
+        const ownsUserAgent = typeof userAgent === 'string' || resolvedUserAgent.length > 0;
+        const requestHeaders = Object.fromEntries(Object.entries(headers ?? {}).filter(([name, value]) => {
+            const normalizedName = name.trim().toLowerCase();
+            if (normalizedName === 'authorization' && authHeaders.Authorization) return false;
+            if (normalizedName === 'user-agent') return !ownsUserAgent && typeof value === 'string' && value.trim().length > 0;
+            return true;
+        }));
+        if (authHeaders.Authorization) requestHeaders.Authorization = authHeaders.Authorization;
+        if (resolvedUserAgent) requestHeaders['User-Agent'] = resolvedUserAgent;
+
         return {
             ...axiosOptions,
             timeout,
-            headers: {
-                'User-Agent': typeof userAgent === 'string' ? userAgent : this.getNextUserAgent(),
-                ...authHeaders,
-                ...(headers || {})
-            }
+            headers: requestHeaders
         };
     }
 
@@ -176,10 +207,10 @@ class EnhancedHttpClient {
         try {
             const criticality = AuthConstants.determineOperationCriticality(context ?? {});
             const operationType = typeof context?.operationType === 'string' ? context.operationType : 'tokenValidation';
-            return AuthConstants.getStreamingOptimizedTimeout(criticality, operationType);
+            return resolveTimeout(AuthConstants.getStreamingOptimizedTimeout(criticality, operationType), this.defaultTimeout);
         } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            this.logger.debug('Failed to get streaming timeout, using default', 'enhanced-http-client', message);
+            const message = getDiagnosticErrorMessage(error);
+            this.logger.debug('Failed to get streaming timeout, using default', 'enhanced-http-client', sanitizeLogText(message));
             return this.defaultTimeout;
         }
     }
@@ -214,7 +245,7 @@ class EnhancedHttpClient {
 
             const makeRequest = async (): Promise<Record<string, unknown>> => {
                 signal.throwIfAborted();
-                this.logger.debug(`HTTP ${method}: ${url}`, 'enhanced-http-client');
+                this.logger.debug(sanitizeLogText(`HTTP ${method}: ${url}`), 'enhanced-http-client');
                 let response: Record<string, unknown>;
 
                 switch (method) {
@@ -223,38 +254,14 @@ class EnhancedHttpClient {
                         break;
                     case 'POST': {
                         const headers = (config.headers || {}) as Record<string, string>;
-                        const hasContentType = Object.keys(headers).some((key) => key.toLowerCase() === 'content-type');
-                        if (!hasContentType) {
-                            headers['Content-Type'] = 'application/json';
-                        }
-
-                        let postData = data;
-                        const contentTypeHeaderKey = Object.keys(headers).find((key) => key.toLowerCase() === 'content-type');
-                        const contentTypeHeaderValue = contentTypeHeaderKey ? (headers[contentTypeHeaderKey] ?? '').trim().toLowerCase() : '';
-                        if (
-                            contentTypeHeaderValue.startsWith('application/x-www-form-urlencoded')
-                            && data
-                            && typeof data === 'object'
-                            && !(data instanceof URLSearchParams)
-                            && !Array.isArray(data)
-                        ) {
-                            const encodedParams = new URLSearchParams(
-                                Object.entries(data as Record<string, unknown>).map(([key, value]) => [key, String(value)])
-                            );
-                            postData = encodedParams.toString();
-                        }
-
+                        const postData = prepareRequestBody(data, headers);
                         response = await this.axios.post(url, postData, config);
                         break;
                     }
                     case 'PUT': {
                         const headers = (config.headers || {}) as Record<string, string>;
-                        const hasContentType = Object.keys(headers).some((key) => key.toLowerCase() === 'content-type');
-                        if (!hasContentType) {
-                            headers['Content-Type'] = 'application/json';
-                        }
-
-                        response = await this.axios.put(url, data, config);
+                        const putData = prepareRequestBody(data, headers);
+                        response = await this.axios.put(url, putData, config);
                         break;
                     }
                     case 'DELETE':
@@ -270,21 +277,24 @@ class EnhancedHttpClient {
                     response.config = response.config || {};
                 }
 
-                this.logger.debug(`HTTP ${method} Success: ${url} (${String(response.status)})`, 'enhanced-http-client');
+                this.logger.debug(sanitizeLogText(`HTTP ${method} Success: ${url} (${String(response.status)})`), 'enhanced-http-client');
                 return response;
             };
 
             const retryOwner = retryScope || platform;
             const retryAllowed = method !== 'POST' || idempotentRequest;
-            if (retryOwner && !disableRetry && retryAllowed) {
-                return this.retryExecutor.executeWithRetry(retryOwner, makeRequest, maxAttempts, { signal, remainingBudgetMs });
-            }
-
             try {
+                if (retryOwner && !disableRetry && retryAllowed) {
+                    return await this.retryExecutor.executeWithRetry(retryOwner, makeRequest, maxAttempts, { signal, remainingBudgetMs });
+                }
                 return await makeRequest();
             } catch (error) {
-                const message = error instanceof Error ? error.message : String(error);
-                this.logger.debug(`HTTP ${method} Error: ${url} - ${message}`, 'enhanced-http-client');
+                try {
+                    const message = getDiagnosticErrorMessage(error);
+                    this.logger.debug(sanitizeLogText(`HTTP ${method} Error: ${url} - ${message}`), 'enhanced-http-client');
+                } catch {
+                    // Terminal diagnostics must not replace the original request failure.
+                }
                 throw error;
             }
         }, { budgetMs: overallBudgetMs, parentAbortSignal: parentSignal, operationName: `HTTP ${method}` });

@@ -12,6 +12,20 @@ describe("HttpRetryExecutor", () => {
     testClock.useRealTime();
   });
 
+  test("sanitizes retry warning text and scope without changing attempts or rejection identity", async () => {
+    const messages: string[] = [];
+    const logger = { ...noOpLogger, warn: (message: string, scope?: string) => { messages.push(message, scope ?? ""); }, info: (message: string, scope?: string) => { messages.push(message, scope ?? ""); } };
+    const delay = createMockFn().mockResolvedValue(undefined);
+    const executor = new HttpRetryExecutor({ logger, safeDelay: delay });
+    const failure = transportError("Failed https://synthetic.example.invalid/path?client_secret=synthetic-error-secret Authorization: Bearer synthetic-bearer");
+    const call = createMockFn<[], Promise<unknown>>().mockRejectedValue(failure);
+    await expect(executor.executeWithRetry("https://synthetic.example.invalid/scope?access_token=synthetic-scope-secret", call, 2)).rejects.toBe(failure);
+    expect(call).toHaveBeenCalledTimes(2);
+    expect(delay).toHaveBeenCalledTimes(1);
+    expect(messages.join("\n")).toContain("attempt 1");
+    for (const secret of ["synthetic-error-secret", "synthetic-bearer", "synthetic-scope-secret"]) expect(messages.join("\n")).not.toContain(secret);
+  });
+
   test("retries known transport failures but not unknown statusless errors", async () => {
     const delay = createMockFn().mockResolvedValue(undefined);
     const executor = new HttpRetryExecutor({ logger: noOpLogger, safeDelay: delay });
