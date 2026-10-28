@@ -1,7 +1,76 @@
 import { describe, test, expect } from "bun:test";
 import { safeObjectStringify, sanitizeLogText, sanitizeLogData } from "../../../../src/core/logger/safe-log-serializer.ts";
+import { promises as fs } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { RawEventLogWriter } from "../../../../src/services/RawEventLogWriter";
 
 describe("safe log serializer behavior", () => {
+    test("redacts quoted assignments and complete unquoted values containing quotes", () => {
+        const assignments = [
+            'password="synthetic-password"', "access_token='synthetic-token'",
+            'password=synthetic\'credential', 'access_token=synthetic"credential',
+            'password="synthetic escaped \\"quote\\" and tail"',
+            "access_token='synthetic escaped \\'quote\\' and tail'",
+        ];
+        for (const assignment of assignments) {
+            const result = sanitizeLogText(`${assignment}; scope missing`);
+            expect(result).toMatch(/^(?:password|access_token)=\[REDACTED\]; scope missing$/);
+        }
+        const large = 'password="synthetic-' + 'z'.repeat(2_000_000) + '\\"tail"; scope missing';
+        expect(sanitizeLogText(large)).toBe('password=[REDACTED]; scope missing');
+    });
+    test("redacts recognized authorization schemes and preserves diagnostic suffixes", () => {
+        for (const input of [
+            'aUtHoRiZaTiOn: bAsIc synthetic-basic; scope missing',
+            'AUTHORIZATION = BEARER synthetic-header; scope missing',
+            'Bearer synthetic-standalone; scope missing',
+            'Authorization:\tBasic synthetic-control\r\n; scope missing',
+        ]) {
+            const sanitized = sanitizeLogText(input);
+            expect(sanitized).not.toContain('synthetic-');
+            expect(sanitized).toContain('; scope missing');
+        }
+    });
+
+    test("redacts quoted JSON credentials including escaped quotes without consuming safe fields", () => {
+        const input = JSON.stringify({
+            access_token: 'synthetic-access', refreshToken: 'synthetic-refresh',
+            client_secret: 'synthetic-client', password: 'synthetic-escaped "quote" \\ tail',
+            authorization: 'Basic synthetic-basic', api_key: 'synthetic-api',
+            cookie: 'synthetic-cookie', session_id: 'synthetic-session',
+            message: 'scope missing', hasAccessToken: true,
+        });
+        const sanitized = sanitizeLogText(input);
+        expect(sanitized).not.toContain('synthetic-');
+        expect(JSON.parse(sanitized)).toEqual({
+            access_token: '[REDACTED]', refreshToken: '[REDACTED]', client_secret: '[REDACTED]',
+            password: '[REDACTED]', authorization: '[REDACTED]', api_key: '[REDACTED]',
+            cookie: '[REDACTED]', session_id: '[REDACTED]', message: 'scope missing', hasAccessToken: true,
+        });
+    });
+
+    test("sanitizes complete oversized text before applying the shared string bound", () => {
+        const prefix = 'x'.repeat(4070) + ' Authorization: Basic ';
+        const input = prefix + 'synthetic-boundary-token' + 'z'.repeat(2_000_000) + '; scope missing';
+        const sanitized = sanitizeLogText(input);
+        expect(sanitized).toBe(prefix + '[REDACTED]; scope missing');
+        const data = sanitizeLogData({ message: input }) as { message: string };
+        expect(data.message).not.toContain('synthetic-');
+        expect(data.message.length).toBeLessThanOrEqual(4099);
+    });
+
+    test("RAW opt-in retains provider chat while independently redacting credential keys", async () => {
+        const directory = await fs.mkdtemp(path.join(tmpdir(), 'serializer-raw-policy-'));
+        try {
+            const result = await new RawEventLogWriter().writeRawEvent({
+                dataLoggingPath: directory, platform: 'twitch', eventType: 'chat',
+                payload: { message: 'synthetic ordinary chat', authorization: 'Basic synthetic-raw-credential', password: 'synthetic-raw-password' },
+            });
+            const captured = JSON.parse(await fs.readFile(result.filePath, 'utf8'));
+            expect(captured.payload).toEqual({ message: 'synthetic ordinary chat', authorization: '[REDACTED]', password: '[REDACTED]' });
+        } finally { await fs.rm(directory, { recursive: true, force: true }); }
+    });
     test("safely stringifies primitives and objects", () => {
         expect(safeObjectStringify(null)).toBe("null");
         expect(safeObjectStringify(undefined)).toBe("undefined");

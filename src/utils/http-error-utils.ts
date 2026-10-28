@@ -1,3 +1,5 @@
+import { sanitizeLogText } from '../core/logger/safe-log-serializer';
+
 const DEFAULT_MAX_RESPONSE_SNIPPET_LENGTH = 1000;
 const REDACTED_VALUE = '[REDACTED]';
 
@@ -44,6 +46,8 @@ const redactSensitiveData = (value: unknown, depth = 0): unknown => {
     if (value === null || value === undefined) return value;
     if (depth >= 6) return '[Truncated]';
 
+    if (typeof value === 'string') return sanitizeLogText(value);
+
     if (Array.isArray(value)) {
         return value.map((entry) => redactSensitiveData(entry, depth + 1));
     }
@@ -70,7 +74,7 @@ const safeStringify = (value: unknown): string | null => {
         return JSON.stringify(value);
     } catch {
         try {
-            return String(value);
+            return sanitizeLogText(String(value));
         } catch {
             return null;
         }
@@ -135,20 +139,20 @@ function extractHttpErrorDetails(error: unknown, options: HttpErrorExtractionOpt
 
     let responseSnippet: string | null = null;
     if (responseData !== undefined && responseData !== null) {
-        const redacted = responseDataObject ? redactSensitiveData(responseData) : responseData;
-        responseSnippet = truncate(safeStringify(redacted), maxResponseSnippetLength ?? DEFAULT_MAX_RESPONSE_SNIPPET_LENGTH);
+        const serialized = safeStringify(redactSensitiveData(responseData));
+        responseSnippet = truncate(serialized, maxResponseSnippetLength ?? DEFAULT_MAX_RESPONSE_SNIPPET_LENGTH);
     }
 
     return {
-        message,
-        code,
+        message: sanitizeLogText(message),
+        code: code === null ? null : sanitizeLogText(code),
         status,
-        statusText,
-        serviceError,
-        serviceMessage,
+        statusText: statusText === null ? null : sanitizeLogText(statusText),
+        serviceError: serviceError === null ? null : sanitizeLogText(serviceError),
+        serviceMessage: serviceMessage === null ? null : sanitizeLogText(serviceMessage),
         isAxiosError,
-        method,
-        url,
+        method: method === null ? null : sanitizeLogText(method),
+        url: url === null ? null : sanitizeLogText(url),
         responseSnippet
     };
 }

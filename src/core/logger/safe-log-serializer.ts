@@ -15,10 +15,14 @@ const SENSITIVE_LOG_KEYS = new Set([
 const RAW_PROVIDER_PAYLOAD_KEY_PATTERN = /^(?:payload|rawPayload|rawData|originalData|eventData|providerPayload)$/i;
 const SENSITIVE_URL_KEY_PATTERN = /(?:url|uri|endpoint|reconnect)/i;
 const URL_PATTERN = /\b(?:https?|wss?):\/\/[^\s|)\]}>,"']+/gi;
+const JSON_STRING_ASSIGNMENT_PATTERN = /("([a-z_-]+)"\s*:\s*")(?:[^"\\]*\\[\s\S])*[^"\\]*"/gi;
+// Quote-started values consume escaped quotes; bare values retain embedded quotes.
+const SECRET_TEXT_VALUE_PATTERN = String.raw`(?:"(?:[^"\\]*\\[\s\S])*[^"\\]*"|'(?:[^'\\]*\\[\s\S])*[^'\\]*'|[^\s,;&"'][^\s,;&]*)`;
 const FREE_TEXT_SECRET_PATTERNS: readonly RegExp[] = [
-    /\b(authorization\s*[:=]\s*bearer\s+)[^\s,;]+/gi,
-    /\b((?:access|refresh|jwt|id|auth)[_-]?token\s*[:=]\s*)[^\s,;&]+/gi,
-    /\b((?:api[_-]?key|x-api-key|client[_-]?secret|password|secret)\s*[:=]\s*)[^\s,;&]+/gi,
+    new RegExp(String.raw`\b(authorization\s*[:=]\s*(?:bearer|basic)\s+)${SECRET_TEXT_VALUE_PATTERN}`, 'gi'),
+    new RegExp(String.raw`\b(bearer\s+)${SECRET_TEXT_VALUE_PATTERN}`, 'gi'),
+    new RegExp(String.raw`\b((?:access|refresh|jwt|id|auth)[_-]?token\s*[:=]\s*)${SECRET_TEXT_VALUE_PATTERN}`, 'gi'),
+    new RegExp(String.raw`\b((?:api[_-]?key|x-api-key|client[_-]?secret|password|secret)\s*[:=]\s*)${SECRET_TEXT_VALUE_PATTERN}`, 'gi'),
     /\b((?:cookie|set-cookie)\s*[:=]\s*)[^\r\n]+/gi,
 ];
 const MAX_ENTRIES = 100;
@@ -49,7 +53,10 @@ function stripUrlSecrets(value: string): string {
 }
 
 function sanitizeLogText(value: string): string {
-    const withoutUrlSecrets = value.replace(URL_PATTERN, (candidate) => stripUrlSecrets(candidate));
+    const withoutJsonSecrets = value.replace(JSON_STRING_ASSIGNMENT_PATTERN, (assignment, prefix: string, key: string) =>
+        isSensitiveLogKey(key) ? `${prefix}[REDACTED]"` : assignment,
+    );
+    const withoutUrlSecrets = withoutJsonSecrets.replace(URL_PATTERN, (candidate) => stripUrlSecrets(candidate));
     return FREE_TEXT_SECRET_PATTERNS.reduce(
         (sanitized, pattern) => sanitized.replace(pattern, '$1[REDACTED]'),
         withoutUrlSecrets,

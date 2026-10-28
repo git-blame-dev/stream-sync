@@ -1,6 +1,47 @@
 import { describe, test, expect } from "bun:test";
 import { extractHttpErrorDetails } from "../../../src/utils/http-error-utils.ts";
 describe("http-error-utils behavior", () => {
+  test("redacts quoted assignments and embedded quotes throughout HTTP diagnostics", () => {
+    for (const assignment of ['password="synthetic-password"', "access_token='synthetic-token'", "password=synthetic'credential", 'access_token=synthetic"credential']) {
+      const text = `${assignment}; scope missing`;
+      const details = extractHttpErrorDetails({ message: text, response: { data: { error: text, message: text, nested: [text] } } });
+      expect(JSON.stringify(details)).not.toMatch(/synthetic|credential/);
+      expect(details.message).toContain('; scope missing');
+      expect(extractHttpErrorDetails({ response: { data: text } }).responseSnippet).not.toMatch(/synthetic|credential/);
+    }
+  });
+  test.each([
+    ['Authorization: Basic synthetic-basic-value; scope missing', 'synthetic-basic-value'],
+    ['Bearer synthetic-bare-value; scope missing', 'synthetic-bare-value'],
+    [JSON.stringify({ access_token: 'synthetic-json-value', message: 'scope missing' }), 'synthetic-json-value'],
+  ])("does not expose credential-bearing text: %s", (text, credential) => {
+    const details = extractHttpErrorDetails({ message: text, response: { data: text } });
+    expect(JSON.stringify(details)).not.toContain(credential);
+    expect(details.message).toContain('scope missing');
+  });
+  test("sanitizes diagnostic strings before snippet truncation", () => {
+    const text = 'authorization: Bearer synthetic-http-token; scope missing https://example.invalid/path?signature=synthetic-signature';
+    const details = extractHttpErrorDetails({
+      message: text, code: text, config: { method: text, url: '/path?token=synthetic-query' },
+      response: { status: 403, statusText: text, data: { error: text, message: text, nested: [text], password: 'synthetic-password' } }
+    });
+    expect(JSON.stringify(details)).not.toContain('synthetic-');
+    expect(details.message).toContain('; scope missing');
+    expect(details.responseSnippet).toContain('"password":"[REDACTED]"');
+    expect(details.url).toBe('/path');
+    for (const data of [text, JSON.stringify({ message: text }), { nested: [text] }]) {
+      const result = extractHttpErrorDetails({ response: { data } }, { maxResponseSnippetLength: 45 });
+      expect(result.responseSnippet).not.toContain('synthetic-');
+      expect(result.responseSnippet!.length).toBeLessThanOrEqual(45);
+    }
+    expect(extractHttpErrorDetails(text).message).not.toContain('synthetic-');
+  });
+  test("sanitizes credentials crossing the response snippet boundary before cutting", () => {
+    const text = 'x'.repeat(4050) + ' Authorization: Basic synthetic-cross-boundary-token; scope missing';
+    const details = extractHttpErrorDetails({ response: { data: { nested: [text] } } }, { maxResponseSnippetLength: 4096 });
+    expect(details.responseSnippet).not.toContain('synthetic-');
+    expect(details.responseSnippet!.length).toBeLessThanOrEqual(4096);
+  });
   test("extractHttpErrorDetails returns safe defaults for non-HTTP errors", () => {
     const error = new Error("boom");
 
@@ -18,6 +59,19 @@ describe("http-error-utils behavior", () => {
       url: null,
       responseSnippet: null,
     });
+  });
+
+  test("preserves bounded traversal, alternate service fields, and safe serialization fallbacks", () => {
+    const nested: Record<string, unknown> = {};
+    nested.self = nested;
+    const details = extractHttpErrorDetails({ response: { data: { code: 'Forbidden', error_description: 'scope missing', nested } } });
+    expect(details.serviceError).toBe('Forbidden');
+    expect(details.serviceMessage).toBe('scope missing');
+    expect(details.responseSnippet).toContain('[Truncated]');
+    expect(extractHttpErrorDetails({ response: { data: 1n } }).responseSnippet).toBe('1');
+    expect(extractHttpErrorDetails({ response: { data: 'safe' } }, { maxResponseSnippetLength: 0 }).responseSnippet).toBeNull();
+    expect(extractHttpErrorDetails({ config: { method: ' ', url: 42 } }).method).toBeNull();
+    expect(extractHttpErrorDetails({ config: { url: 'https://example.invalid/path?q=synthetic-query#fragment' } }).url).toBe('https://example.invalid/path');
   });
 
   test("extractHttpErrorDetails redacts sensitive fields from response data", () => {

@@ -1,3 +1,5 @@
+import { sanitizeLogText } from '../core/logger/safe-log-serializer';
+
 type LoggerLike = {
     warn: (message: string, context: string) => void;
 };
@@ -73,7 +75,7 @@ function getSymbolToCodeMap(): Map<string, string> {
 
 function warnUnknownCurrency(input: unknown, logger: LoggerLike | null): void {
     if (logger && typeof logger.warn === 'function') {
-        logger.warn(`Unknown currency input "${input}", normalized to XXX`, 'currency-utils');
+        logger.warn(`Unknown currency input ${JSON.stringify(sanitizeLogText(String(input)))}, normalized to XXX`, 'currency-utils');
     }
 }
 
