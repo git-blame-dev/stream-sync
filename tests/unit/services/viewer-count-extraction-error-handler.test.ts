@@ -1,6 +1,7 @@
 import { describe, it, beforeEach, expect } from "bun:test";
 import { createMockFn } from "../../helpers/bun-mock-utils";
 import { ViewerCountExtractionService } from "../../../src/services/viewer-count-extraction-service.ts";
+import { InnertubeService } from "../../../src/services/innertube-service";
 
 describe("ViewerCountExtractionService error handler integration", () => {
   type MockInnertube = { getVideoInfo: (videoId: string) => Promise<Record<string, unknown>> };
@@ -41,7 +42,10 @@ describe("ViewerCountExtractionService error handler integration", () => {
       throw new Error("innertube failed");
     });
 
-    const service = new ViewerCountExtractionService(mockInnertube, {
+    const owner = new InnertubeService({
+      createWithTimeout: async () => ({ getInfo: (id: string) => mockInnertube.getVideoInfo(id) }),
+    }, { logger: mockLogger });
+    const service = new ViewerCountExtractionService(owner, {
       logger: mockLogger,
       YouTubeViewerExtractor: mockExtractor,
     });

@@ -2,6 +2,7 @@ import { describe, it, beforeEach, expect } from "bun:test";
 import { createMockFn } from "../../helpers/bun-mock-utils";
 import { noOpLogger } from "../../helpers/mock-factories";
 import { ViewerCountExtractionService } from "../../../src/services/viewer-count-extraction-service.ts";
+import { InnertubeService } from "../../../src/services/innertube-service";
 
 type VideoInfo = Record<string, unknown>;
 type ExtractorOptions = { debug?: boolean; strategies?: string[] };
@@ -22,6 +23,12 @@ type MockExtractor = {
   >;
 };
 type ExtractionResponse = Awaited<ReturnType<ViewerCountExtractionService["extractViewerCount"]>>;
+
+function metadataOwner(client: MockInnertube) {
+  return new InnertubeService({
+    createWithTimeout: async () => ({ getInfo: (id: string) => client.getVideoInfo(id) }),
+  }, { logger: noOpLogger });
+}
 
 describe("ViewerCountExtractionService", () => {
   let mockInnertube: MockInnertube;
@@ -48,7 +55,7 @@ describe("ViewerCountExtractionService", () => {
       metadata: { attempted: ["view_text"] },
     });
 
-    const service = new ViewerCountExtractionService(mockInnertube, {
+    const service = new ViewerCountExtractionService(metadataOwner(mockInnertube), {
       logger: noOpLogger,
       strategies: ["view_text"],
       YouTubeViewerExtractor: mockExtractor,
@@ -70,7 +77,7 @@ describe("ViewerCountExtractionService", () => {
       metadata: { strategiesAttempted: ["a"] },
     });
 
-    const service = new ViewerCountExtractionService(mockInnertube, {
+    const service = new ViewerCountExtractionService(metadataOwner(mockInnertube), {
       logger: noOpLogger,
       YouTubeViewerExtractor: mockExtractor,
     });
@@ -85,7 +92,7 @@ describe("ViewerCountExtractionService", () => {
   it("returns failure and error message when innertube throws", async () => {
     mockInnertube.getVideoInfo.mockRejectedValue(new Error("boom"));
 
-    const service = new ViewerCountExtractionService(mockInnertube, {
+    const service = new ViewerCountExtractionService(metadataOwner(mockInnertube), {
       logger: noOpLogger,
       YouTubeViewerExtractor: mockExtractor,
     });
@@ -98,7 +105,7 @@ describe("ViewerCountExtractionService", () => {
   });
 
   it("handles batch extraction with rejected promises", async () => {
-    const service = new ViewerCountExtractionService(mockInnertube, {
+    const service = new ViewerCountExtractionService(metadataOwner(mockInnertube), {
       logger: noOpLogger,
       YouTubeViewerExtractor: mockExtractor,
     });
@@ -127,7 +134,7 @@ describe("ViewerCountExtractionService", () => {
   });
 
   it("aggregates zero when no video ids provided", async () => {
-    const service = new ViewerCountExtractionService(mockInnertube, {
+    const service = new ViewerCountExtractionService(metadataOwner(mockInnertube), {
       logger: noOpLogger,
       YouTubeViewerExtractor: mockExtractor,
     });
@@ -140,7 +147,7 @@ describe("ViewerCountExtractionService", () => {
   });
 
   it("aggregates mixed stream results and exposes stream details", async () => {
-    const service = new ViewerCountExtractionService(mockInnertube, {
+    const service = new ViewerCountExtractionService(metadataOwner(mockInnertube), {
       logger: noOpLogger,
       YouTubeViewerExtractor: mockExtractor,
     });
@@ -171,7 +178,7 @@ describe("ViewerCountExtractionService", () => {
   });
 
   it("surfaces unavailable aggregation when all stream extractions fail", async () => {
-    const service = new ViewerCountExtractionService(mockInnertube, {
+    const service = new ViewerCountExtractionService(metadataOwner(mockInnertube), {
       logger: noOpLogger,
       YouTubeViewerExtractor: mockExtractor,
     });
@@ -202,7 +209,7 @@ describe("ViewerCountExtractionService", () => {
   });
 
   it("updates config and exposes usage stats", async () => {
-    const service = new ViewerCountExtractionService(mockInnertube, {
+    const service = new ViewerCountExtractionService(metadataOwner(mockInnertube), {
       logger: noOpLogger,
       YouTubeViewerExtractor: mockExtractor,
       timeout: 2000,
@@ -231,7 +238,7 @@ describe("ViewerCountExtractionService", () => {
       }),
     );
 
-    const service = new ViewerCountExtractionService(mockInnertube, {
+    const service = new ViewerCountExtractionService(metadataOwner(mockInnertube), {
       logger: noOpLogger,
       debug: "false",
       YouTubeViewerExtractor: mockExtractor,

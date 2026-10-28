@@ -1,5 +1,6 @@
 import { YouTubeViewerExtractor } from '../extractors/youtube-viewer-extractor';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
+import type { InnertubeService } from './innertube-service';
 
 type ViewerExtractor = {
     extractConcurrentViewers: (
@@ -27,9 +28,7 @@ type ServiceDependencies = {
     YouTubeViewerExtractor?: ViewerExtractor;
 };
 
-type InnertubeServiceLike = {
-    getVideoInfo: (videoId: string, options?: { timeout?: number; instanceKey?: unknown }) => Promise<Record<string, unknown>>;
-};
+type InnertubeServiceLike = Pick<InnertubeService, 'withMetadataOperation'>;
 
 type ExtractionConfig = {
     timeout: number;
@@ -48,6 +47,7 @@ type ExtractionStats = {
 };
 
 type ExtractViewerCountOptions = {
+    signal?: AbortSignal;
     timeout?: unknown;
     instanceKey?: unknown;
     debug?: unknown;
@@ -162,14 +162,20 @@ class ViewerCountExtractionService {
         try {
             this.logger?.debug?.(`[ViewerCountExtraction] Extracting viewer count for: ${videoId}`, 'viewer-extraction');
             
-            const info = await this.innertubeService.getVideoInfo(videoId, {
-                timeout: resolvePositiveNumber(options.timeout, this.config.timeout),
-                instanceKey: options.instanceKey
-            });
-            
-            const extractionResult = this.YouTubeViewerExtractor.extractConcurrentViewers(info, {
-                debug: resolveBoolean(options.debug, this.config.debug),
-                strategies: resolveNonEmptyArray(options.strategies, this.config.strategies)
+            const extractionResult = await this.innertubeService.withMetadataOperation({
+                timeoutMs: resolvePositiveNumber(options.timeout, this.config.timeout),
+                ...(options.signal ? { signal: options.signal } : {})
+            }, async client => {
+                const info = await client.getInfo(videoId, { client: 'WEB' });
+                options.signal?.throwIfAborted();
+                const result = this.YouTubeViewerExtractor.extractConcurrentViewers(
+                    info && typeof info === 'object' && !Array.isArray(info) ? info as Record<string, unknown> : {},
+                    {
+                        debug: resolveBoolean(options.debug, this.config.debug),
+                        strategies: resolveNonEmptyArray(options.strategies, this.config.strategies)
+                    }
+                );
+                return { ...result, ...(result.metadata ? { metadata: { ...result.metadata } } : {}) };
             });
             
             const responseTime = Date.now() - startTime;

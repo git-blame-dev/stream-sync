@@ -623,22 +623,7 @@ class DependencyFactory {
     }
     
     _createViewerExtractionService(innertubeService: InnertubeService, logger: AppLogger, options: DependencyFactoryOptions = {}) {
-        const viewerInnertubeService: ConstructorParameters<typeof ViewerCountExtractionService>[0] = {
-            getVideoInfo: async (videoId, videoOptions) => {
-                const normalizedVideoOptions: { timeout?: number; instanceKey?: string } = {};
-                if (typeof videoOptions?.timeout === 'number') {
-                    normalizedVideoOptions.timeout = videoOptions.timeout;
-                }
-                if (typeof videoOptions?.instanceKey === 'string') {
-                    normalizedVideoOptions.instanceKey = videoOptions.instanceKey;
-                }
-
-                const videoInfo = await innertubeService.getVideoInfo(videoId, normalizedVideoOptions);
-                return isRecord(videoInfo) ? videoInfo : {};
-            }
-        };
-
-        return new ViewerCountExtractionService(viewerInnertubeService, {
+        return new ViewerCountExtractionService(innertubeService, {
             logger,
             YouTubeViewerExtractor,
             timeout: options.timeout || 8000,
