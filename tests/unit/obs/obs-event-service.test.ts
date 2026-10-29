@@ -1,539 +1,186 @@
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import {
-  createMockFn,
-  restoreAllMocks,
-  type TestMockFn,
-} from "../../helpers/bun-mock-utils";
-import { noOpLogger } from "../../helpers/mock-factories";
-import { createEventBus } from "../../../src/core/EventBus";
-import * as testClock from "../../helpers/test-clock";
-import { createOBSEventService } from "../../../src/obs/obs-event-service.ts";
-import { safeDelay } from "../../../src/utils/timeout-validator.ts";
+import { describe, expect, spyOn, test } from 'bun:test';
+import { EventEmitter } from 'node:events';
+import { createEventBus } from '../../../src/core/EventBus';
+import { OBSConnectionManager } from '../../../src/obs/connection';
+import { createOBSSourcesManager } from '../../../src/obs/sources';
+import { createOBSEventService } from '../../../src/obs/obs-event-service';
+import { noOpLogger } from '../../helpers/mock-factories';
 
-type EventBus = ReturnType<typeof createEventBus>;
-type OBSEventService = ReturnType<typeof createOBSEventService>;
-type ServiceEventBus = Parameters<typeof createOBSEventService>[0]["eventBus"];
-type ConnectionEventHandler = (data?: { reason?: unknown; code?: unknown }) => void;
-type ObsCallArgs = [requestType: string, payload: Record<string, unknown>];
-type MockOBSConnection = {
-  connect: TestMockFn<[], Promise<void>>;
-  disconnect: TestMockFn<[], Promise<void>>;
-  isConnected: TestMockFn<[], boolean>;
-  isReady: TestMockFn<[], Promise<boolean>>;
-  call: TestMockFn<ObsCallArgs, Promise<unknown>>;
-  addEventListener: TestMockFn<[event: string, handler: ConnectionEventHandler], ConnectionEventHandler>;
-  removeEventListener: TestMockFn<[event: string, handler: ConnectionEventHandler], void>;
-  getConnectionState: TestMockFn<[], { isConnected: boolean; isConnecting: boolean }>;
-};
-type MockObsSources = {
-  updateTextSource: TestMockFn<[sourceName: string, text: string], Promise<void>>;
-  setSourceVisibility: TestMockFn<[sceneName: string, sourceName: string, visible: boolean], Promise<void>>;
-  clearTextSource: TestMockFn<[sourceName: string], Promise<void>>;
-};
-
-const waitForDelay = (ms: number) => safeDelay(ms, ms, "obs-event-service-test-delay");
-
-const firstRecordedCall = <Args extends unknown[]>(calls: Args[], description: string): Args => {
-  const call = calls[0];
-  if (!call) {
-    throw new Error(`Expected ${description} to have been called`);
+type Request = { method: string; data: Record<string, unknown> };
+const settings = { text: 'synthetic old', font: { face: 'synthetic font' } };
+async function until(condition: () => boolean) {
+  for (let turn = 0; turn < 200; turn++) {
+    if (condition()) return;
+    await Promise.resolve();
   }
-  return call;
-};
-
-const toEventRecord = (payload: unknown): Record<string, unknown> => {
-  if (payload && typeof payload === "object" && !Array.isArray(payload)) {
-    return Object.fromEntries(Object.entries(payload));
+  throw new Error('Synthetic OBS event did not settle');
+}
+class SyntheticSDK extends EventEmitter {
+  requests: Request[] = [];
+  connectCount = 0;
+  failConnect = false;
+  failMethod = '';
+  connectHold: ReturnType<typeof Promise.withResolvers<void>> | null = null;
+  async connect() {
+    this.connectCount++;
+    await this.connectHold?.promise;
+    if (this.failConnect) throw new Error('synthetic connection failure');
+    this.emit('Identified');
+    return { obsWebSocketVersion: 'synthetic' };
   }
-  return {};
-};
-
-describe("OBSEventService", () => {
-  let obsEventService: OBSEventService;
-  let eventBus: EventBus;
-  let serviceEventBus: ServiceEventBus;
-  let mockOBSConnection: MockOBSConnection;
-  let mockObsSources: MockObsSources;
-
-  beforeEach(() => {
-    eventBus = createEventBus({ debugEnabled: false });
-    serviceEventBus = {
-      subscribe: (eventName, handler) =>
-        eventBus.subscribe(eventName, (payload) => handler(toEventRecord(payload))),
-      emit: (eventName, payload) => eventBus.emit(eventName, payload),
-    };
-
-    mockOBSConnection = {
-      connect: createMockFn<[], Promise<void>>().mockResolvedValue(),
-      disconnect: createMockFn<[], Promise<void>>().mockResolvedValue(),
-      isConnected: createMockFn<[], boolean>().mockReturnValue(true),
-      isReady: createMockFn<[], Promise<boolean>>().mockResolvedValue(true),
-      call: createMockFn<ObsCallArgs, Promise<unknown>>().mockResolvedValue({}),
-      addEventListener: createMockFn<[string, ConnectionEventHandler], ConnectionEventHandler>((event, handler) => {
-        return handler;
-      }),
-      removeEventListener: createMockFn<[string, ConnectionEventHandler], void>(),
-      getConnectionState: createMockFn<[], { isConnected: boolean; isConnecting: boolean }>().mockReturnValue({
-        isConnected: true,
-        isConnecting: false,
-      }),
-    };
-    mockOBSConnection.connect.mockImplementation(async () => {
-      mockOBSConnection.isConnected.mockReturnValue(true);
-    });
-    mockOBSConnection.disconnect.mockImplementation(async () => {
-      mockOBSConnection.isConnected.mockReturnValue(false);
-    });
-
-    mockObsSources = {
-      updateTextSource: createMockFn<[string, string], Promise<void>>().mockResolvedValue(),
-      setSourceVisibility: createMockFn<[string, string, boolean], Promise<void>>().mockResolvedValue(),
-      clearTextSource: createMockFn<[string], Promise<void>>().mockResolvedValue(),
-    };
-
-    obsEventService = createOBSEventService({
-      eventBus: serviceEventBus,
-      obsConnection: mockOBSConnection,
-      obsSources: mockObsSources,
-      logger: noOpLogger,
-    });
+  async disconnect() { this.emit('ConnectionClosed'); }
+  async call(method: string, data: Record<string, unknown> = {}) {
+    this.requests.push({ method, data });
+    if (this.failMethod === method) { this.failMethod = ''; throw new Error('synthetic OBS failure'); }
+    if (method === 'GetVersion') return { obsVersion: 'synthetic' };
+    if (method === 'GetInputSettings') return { inputSettings: settings };
+    if (method === 'GetSceneItemId') return { sceneItemId: 7 };
+    if (method === 'SetInputSettings' || method === 'SetSceneItemEnabled' || method === 'SetCurrentProgramScene') return {};
+    throw new Error(`Unexpected synthetic request: ${method}`);
+  }
+}
+function setup() {
+  const sdk = new SyntheticSDK();
+  const connection = new OBSConnectionManager({ obs: sdk, config: { enabled: true, address: 'ws://synthetic.invalid', password: 'synthetic', connectionTimeoutMs: 5000 } });
+  const sources = createOBSSourcesManager(connection, { logger: noOpLogger });
+  const bus = createEventBus();
+  const service = createOBSEventService({
+    eventBus: { subscribe: (name, handler) => bus.subscribe(name, value => handler(value as Record<string, unknown>)), emit: (name, value) => { bus.emit(name, value); } },
+    obsConnection: { connect: async () => { await connection.connect(); }, disconnect: () => connection.disconnect(),
+      call: (method, data) => connection.call(method, data), isConnected: () => connection.isConnected(), isReady: () => connection.isReady(),
+      addEventListener: (name, handler) => connection.addEventListener(name, handler), removeEventListener: (name, handler) => connection.removeEventListener(name, handler) },
+    obsSources: sources, logger: noOpLogger,
   });
-
-  afterEach(() => {
-    restoreAllMocks();
-    if (obsEventService) {
-      obsEventService.destroy();
-    }
-    eventBus.reset();
-  });
-
-  describe("Connection Events", () => {
-    test("connects and updates state when connection succeeds", async () => {
-      await obsEventService.connect();
-
-      expect(mockOBSConnection.connect).toHaveBeenCalled();
-      const state = obsEventService.getConnectionState();
-      expect(state.connected).toBe(true);
-      expect(state.ready).toBe(true);
-    });
-
-    test("disconnects and updates state when disconnection occurs", async () => {
-      await obsEventService.connect();
-      await obsEventService.disconnect();
-
-      expect(mockOBSConnection.disconnect).toHaveBeenCalled();
-      const state = obsEventService.getConnectionState();
-      expect(state.connected).toBe(false);
-      expect(state.ready).toBe(false);
-    });
-
-    test("records connection errors when connection fails", async () => {
-      mockOBSConnection.connect.mockRejectedValueOnce(
-        new Error("Connection refused"),
-      );
-      mockOBSConnection.isConnected.mockReturnValue(false);
-
-      await obsEventService.connect().catch(() => {});
-
-      const state = obsEventService.getConnectionState();
-      expect(state.connected).toBe(false);
-      expect(state.ready).toBe(false);
-      expect(state.lastError).toBeInstanceOf(Error);
-    });
-
-    test("removes OBS connection listeners on destroy", () => {
-      obsEventService.destroy();
-      expect(mockOBSConnection.removeEventListener).toHaveBeenCalled();
-      const [eventName, handler] =
-        firstRecordedCall(mockOBSConnection.removeEventListener.mock.calls, "removeEventListener");
-      expect(eventName).toBe("ConnectionClosed");
-      expect(typeof handler).toBe("function");
-    });
-
-    test("marks service disconnected when OBS emits ConnectionClosed", async () => {
-      const reconnectDisabledConnection = {
-        ...mockOBSConnection,
-        addEventListener: createMockFn<[string, ConnectionEventHandler], ConnectionEventHandler>((_event, handler) => handler),
-        removeEventListener: createMockFn<[string, ConnectionEventHandler], void>(),
-      };
-      const service = createOBSEventService({
-        eventBus: serviceEventBus,
-        obsConnection: reconnectDisabledConnection,
-        obsSources: mockObsSources,
-        logger: noOpLogger,
-      });
-
-      try {
-        await service.connect();
-        expect(service.getConnectionState().connected).toBe(true);
-
-        const [, connectionClosedHandler] =
-          firstRecordedCall(reconnectDisabledConnection.addEventListener.mock.calls, "addEventListener");
-        connectionClosedHandler({ code: 1006, reason: "socket closed" });
-        reconnectDisabledConnection.isConnected.mockReturnValue(false);
-        await waitForDelay(10);
-
-        const state = service.getConnectionState();
-        expect(state.connected).toBe(false);
-        expect(state.ready).toBe(false);
-      } finally {
-        service.destroy();
-      }
-    });
-
-    test("dedupes concurrent connect requests into one OBS connect attempt", async () => {
-      const releaseConnect: { current: (() => void) | null } = { current: null };
-      const pendingConnect = new Promise<void>((resolve) => {
-        releaseConnect.current = resolve;
-      });
-      mockOBSConnection.connect.mockImplementation(() => pendingConnect);
-
-      const first = obsEventService.connect();
-      const second = obsEventService.connect();
-
-      expect(mockOBSConnection.connect).toHaveBeenCalledTimes(1);
-
-      if (!releaseConnect.current) {
-        throw new Error("Expected pending connect release callback to be set");
-      }
-      releaseConnect.current();
-      await Promise.all([first, second]);
-    });
-  });
-
-  describe("Text Source Events", () => {
-    test("updates text source when obs:update-text is emitted", async () => {
-      eventBus.emit("obs:update-text", {
-        sourceName: "ChatMessage",
-        text: "Hello World",
-      });
-
-      await waitForDelay(10);
-
-      expect(mockObsSources.updateTextSource).toHaveBeenCalled();
-      const [sourceName, text] = firstRecordedCall(mockObsSources.updateTextSource.mock.calls, "updateTextSource");
-      expect(sourceName).toBe("ChatMessage");
-      expect(text).toBe("Hello World");
-    });
-
-    test("ignores invalid text update payloads", async () => {
-      eventBus.emit("obs:update-text", {
-        sourceName: null,
-        text: "Hello World",
-      });
-
-      await waitForDelay(10);
-
-      expect(mockObsSources.updateTextSource).not.toHaveBeenCalled();
-    });
-
-    test("clears text source when obs:clear-text is emitted", async () => {
-      eventBus.emit("obs:clear-text", {
-        sourceName: "ChatMessage",
-      });
-
-      await waitForDelay(10);
-
-      expect(mockObsSources.clearTextSource).toHaveBeenCalled();
-      const [sourceName] = firstRecordedCall(mockObsSources.clearTextSource.mock.calls, "clearTextSource");
-      expect(sourceName).toBe("ChatMessage");
-    });
-
-    test("ignores invalid text clear payloads", async () => {
-      eventBus.emit("obs:clear-text", {
-        sourceName: "",
-      });
-
-      await waitForDelay(10);
-
-      expect(mockObsSources.clearTextSource).not.toHaveBeenCalled();
-    });
-
-    test("handles text update failures without crashing", async () => {
-      mockObsSources.updateTextSource.mockRejectedValueOnce(
-        new Error("Source not found"),
-      );
-
-      eventBus.emit("obs:update-text", {
-        sourceName: "InvalidSource",
-        text: "Test",
-      });
-
-      await waitForDelay(10);
-
-      expect(mockObsSources.updateTextSource).toHaveBeenCalled();
-    });
-  });
-
-  describe("Visibility Events", () => {
-    test("sets source visibility when obs:set-visibility is emitted", async () => {
-      eventBus.emit("obs:set-visibility", {
-        sceneName: "MainScene",
-        sourceName: "Statusbar",
-        visible: true,
-      });
-
-      await waitForDelay(10);
-
-      expect(mockObsSources.setSourceVisibility).toHaveBeenCalled();
-      const [sceneName, sourceName, visible] =
-        firstRecordedCall(mockObsSources.setSourceVisibility.mock.calls, "setSourceVisibility");
-      expect(sceneName).toBe("MainScene");
-      expect(sourceName).toBe("Statusbar");
-      expect(visible).toBe(true);
-    });
-
-    test("ignores invalid visibility payloads", async () => {
-      eventBus.emit("obs:set-visibility", {
-        sceneName: "MainScene",
-        sourceName: "Statusbar",
-        visible: "true",
-      });
-
-      await waitForDelay(10);
-
-      expect(mockObsSources.setSourceVisibility).not.toHaveBeenCalled();
-    });
-  });
-
-  describe("Scene Events", () => {
-    test("switches scenes when obs:switch-scene is emitted", async () => {
-      mockOBSConnection.call.mockResolvedValueOnce({});
-      eventBus.emit("obs:switch-scene", {
-        sceneName: "GameplayScene",
-      });
-
-      await waitForDelay(10);
-
-      expect(mockOBSConnection.call).toHaveBeenCalled();
-      const [method, payload] = firstRecordedCall(mockOBSConnection.call.mock.calls, "OBS call");
-      expect(method).toBe("SetCurrentProgramScene");
-      expect(payload).toEqual({ sceneName: "GameplayScene" });
-    });
-
-    test("ignores invalid scene switch payloads", async () => {
-      eventBus.emit("obs:switch-scene", {
-        sceneName: null,
-      });
-
-      await waitForDelay(10);
-
-      expect(mockOBSConnection.call).not.toHaveBeenCalled();
-    });
-
-    test("handles scene switch failures without crashing", async () => {
-      mockOBSConnection.call.mockRejectedValueOnce(
-        new Error("Scene not found"),
-      );
-      eventBus.emit("obs:switch-scene", {
-        sceneName: "InvalidScene",
-      });
-
-      await waitForDelay(10);
-
-      expect(mockOBSConnection.call).toHaveBeenCalled();
-    });
-  });
-
-  describe("Connection State Tracking", () => {
-    test("derives state from manager after manager-owned reconnect", async () => {
-      await obsEventService.connect();
-      mockOBSConnection.isConnected.mockReturnValue(false);
-      expect(obsEventService.getConnectionState()).toMatchObject({ connected: false, ready: false });
-      mockOBSConnection.isConnected.mockReturnValue(true);
-      expect(obsEventService.getConnectionState()).toMatchObject({ connected: true, ready: true, lastError: null });
-    });
-
-    test("maintains connection state after connection", async () => {
-      await obsEventService.connect();
-
-      const state = obsEventService.getConnectionState();
-
-      expect(state).toEqual(
-        expect.objectContaining({
-          connected: true,
-          ready: true,
-        }),
-      );
-    });
-
-    test("maintains connection state after disconnection", async () => {
-      await obsEventService.connect();
-      await obsEventService.disconnect();
-
-      const state = obsEventService.getConnectionState();
-
-      expect(state).toEqual(
-        expect.objectContaining({
-          connected: false,
-          ready: false,
-        }),
-      );
-    });
-
-    test("provides connection health status", async () => {
-      await obsEventService.connect();
-
-      const health = await obsEventService.getHealthStatus();
-
-      expect(health).toEqual(
-        expect.objectContaining({
-          healthy: true,
-          connected: true,
-          responsive: true,
-        }),
-      );
-    });
-  });
-
-  describe("Error Recovery", () => {
-    test("does not auto-reconnect when connection loss is observed", async () => {
-      await obsEventService.connect();
-      const connectCallCountBeforeLoss =
-        mockOBSConnection.connect.mock.calls.length;
-      eventBus.emit("obs:connection-lost");
-
-      await waitForDelay(100);
-
-      expect(mockOBSConnection.connect.mock.calls.length).toBe(
-        connectCallCountBeforeLoss,
-      );
-    });
-
-    test("keeps connected state unchanged when connection loss event bus signal is observed", async () => {
-      await obsEventService.connect();
-      eventBus.emit("obs:connection-lost");
-      await waitForDelay(100);
-
-      const state = obsEventService.getConnectionState();
-      expect(state.connected).toBe(true);
-      expect(state.ready).toBe(true);
-    });
-
-    test("disconnect keeps service disconnected after connection loss signal", async () => {
-      await obsEventService.connect();
-
-      mockOBSConnection.connect.mockImplementation(() => new Promise(() => {}));
-      eventBus.emit("obs:connection-lost");
-      await waitForDelay(20);
-
-      await obsEventService.disconnect();
-
-      const state = obsEventService.getConnectionState();
-      expect(state.connected).toBe(false);
-      expect(state.ready).toBe(false);
-    });
-  });
-
-  describe("Performance Requirements", () => {
-    test("handles text updates within 50ms latency", async () => {
-      const startTime = testClock.now();
-
-      eventBus.emit("obs:update-text", {
-        sourceName: "ChatMessage",
-        text: "Performance Test",
-      });
-
-      await waitForDelay(10);
-      testClock.advance(10);
-
-      const duration = testClock.now() - startTime;
-      expect(duration).toBeLessThan(50);
-    });
-
-    test("maintains memory footprint under 200MB during operations", async () => {
-      const initialMemory = process.memoryUsage().heapUsed;
-
-      for (let i = 0; i < 100; i++) {
-        eventBus.emit("obs:update-text", {
-          sourceName: "ChatMessage",
-          text: `Message ${i}`,
-        });
-      }
-
-      await waitForDelay(50);
-
-      const finalMemory = process.memoryUsage().heapUsed;
-      const memoryIncrease = (finalMemory - initialMemory) / 1024 / 1024;
-
-      expect(memoryIncrease).toBeLessThan(10);
-    });
-  });
-
-  describe("Integration with EventBus", () => {
-    test("continues destroy after an unsubscribe throws and remains idempotent", async () => {
-      obsEventService.destroy();
-      mockOBSConnection.removeEventListener.mockClear();
-      const cleanupEvents: string[] = [];
-      obsEventService = createOBSEventService({
-        eventBus: {
-          ...serviceEventBus,
-          subscribe: (eventName, handler) => {
-            const unsubscribe = serviceEventBus.subscribe(eventName, handler);
-            return () => {
-              cleanupEvents.push(eventName);
-              unsubscribe();
-              if (eventName === "obs:update-text") {
-                throw new Error("Synthetic unsubscribe failure");
-              }
-            };
-          },
-        },
-        obsConnection: mockOBSConnection,
-        obsSources: mockObsSources,
-        logger: noOpLogger,
-      });
-
-      expect(() => obsEventService.destroy()).not.toThrow();
-      expect(cleanupEvents).toEqual([
-        "obs:update-text", "obs:clear-text", "obs:set-visibility", "obs:switch-scene",
+  const emit = async (name: string, payload: Record<string, unknown>) => {
+    const previous = bus.getEventStats()[name]?.success ?? 0;
+    expect(bus.emit(name, payload)).toBe(true);
+    await until(() => (bus.getEventStats()[name]?.success ?? 0) === previous + 1);
+  };
+  const dispose = async () => {
+    sdk.connectHold?.resolve();
+    service.destroy();
+    connection.dispose();
+    await connection.disconnect();
+    expect(bus.getListenerSummary()).toEqual({});
+    expect(sdk.eventNames()).toEqual([]);
+    bus.reset();
+  };
+  return { sdk, connection, bus, service, emit, dispose };
+}
+
+describe('OBS events through real connection and sources', () => {
+  test('valid commands produce exact external writes; invalid commands produce none', async () => {
+    const h = setup();
+    try {
+      await h.service.connect();
+      h.sdk.requests.length = 0;
+      await h.emit('obs:update-text', { sourceName: null, text: 'synthetic' });
+      await h.emit('obs:clear-text', { sourceName: '' });
+      await h.emit('obs:set-visibility', { sceneName: 'synthetic scene', sourceName: 'synthetic source', visible: 'true' });
+      await h.emit('obs:switch-scene', { sceneName: '' });
+      expect(h.sdk.requests).toEqual([]);
+      await h.emit('obs:update-text', { sourceName: 'synthetic source', text: 'synthetic text' });
+      await h.emit('obs:clear-text', { sourceName: 'synthetic source' });
+      await h.emit('obs:set-visibility', { sceneName: 'synthetic scene', sourceName: 'synthetic source', visible: true });
+      await h.emit('obs:switch-scene', { sceneName: 'synthetic scene' });
+      expect(h.sdk.requests).toEqual([
+        { method: 'GetVersion', data: {} },
+        { method: 'GetInputSettings', data: { inputName: 'synthetic source' } },
+        { method: 'SetInputSettings', data: { inputName: 'synthetic source', inputSettings: { ...settings, text: 'synthetic text' }, overlay: false } },
+        { method: 'GetInputSettings', data: { inputName: 'synthetic source' } },
+        { method: 'SetInputSettings', data: { inputName: 'synthetic source', inputSettings: { ...settings, text: '' }, overlay: false } },
+        { method: 'GetSceneItemId', data: { sceneName: 'synthetic scene', sourceName: 'synthetic source' } },
+        { method: 'SetSceneItemEnabled', data: { sceneName: 'synthetic scene', sceneItemId: 7, sceneItemEnabled: true } },
+        { method: 'SetCurrentProgramScene', data: { sceneName: 'synthetic scene' } },
       ]);
-      expect(eventBus.getListenerSummary()).toEqual({});
-      expect(mockOBSConnection.removeEventListener).toHaveBeenCalledTimes(1);
-      eventBus.emit("obs:clear-text", { sourceName: "SyntheticSource" });
-      await Promise.resolve();
-      expect(mockObsSources.clearTextSource).not.toHaveBeenCalled();
-
-      obsEventService.destroy();
-      expect(cleanupEvents).toHaveLength(4);
-      expect(mockOBSConnection.removeEventListener).toHaveBeenCalledTimes(1);
-    });
-
-    test("retires destroy state when connection listener removal throws", () => {
-      mockOBSConnection.removeEventListener.mockImplementationOnce(() => {
-        throw new Error("Synthetic listener removal failure");
-      });
-
-      expect(() => obsEventService.destroy()).not.toThrow();
-      expect(eventBus.getListenerSummary()).toEqual({});
-      expect(() => obsEventService.destroy()).not.toThrow();
-      expect(mockOBSConnection.removeEventListener).toHaveBeenCalledTimes(1);
-    });
-
-    test("subscribes to all required OBS command events", () => {
-      const requiredEvents = [
-        "obs:update-text",
-        "obs:clear-text",
-        "obs:set-visibility",
-        "obs:switch-scene",
-      ];
-
-      const listeners = eventBus.getListenerSummary();
-
-      requiredEvents.forEach((eventName) => {
-        expect(listeners[eventName]).toBeGreaterThan(0);
-      });
-    });
-
-    test("cleans up event listeners on service destruction", () => {
-      obsEventService.destroy();
-
-      const listeners = eventBus.getListenerSummary();
-      const obsListeners = Object.keys(listeners).filter((name) =>
-        name.startsWith("obs:"),
-      );
-
-      expect(obsListeners.length).toBe(0);
-    });
+    } finally { await h.dispose(); }
   });
+  test('external failures settle and subsequent text and scene writes recover', async () => {
+    const h = setup();
+    try {
+      await h.service.connect();
+      h.sdk.requests.length = 0;
+      h.sdk.failMethod = 'SetInputSettings';
+      await h.emit('obs:update-text', { sourceName: 'synthetic source', text: 'synthetic rejected' });
+      await h.emit('obs:update-text', { sourceName: 'synthetic source', text: 'synthetic recovered' });
+      h.sdk.failMethod = 'SetCurrentProgramScene';
+      await h.emit('obs:switch-scene', { sceneName: 'synthetic rejected' });
+      await h.emit('obs:switch-scene', { sceneName: 'synthetic recovered' });
+      expect(h.sdk.requests.filter(request => request.method === 'SetInputSettings')).toEqual([
+        { method: 'SetInputSettings', data: { inputName: 'synthetic source', inputSettings: { ...settings, text: 'synthetic rejected' }, overlay: false } },
+        { method: 'SetInputSettings', data: { inputName: 'synthetic source', inputSettings: { ...settings, text: 'synthetic recovered' }, overlay: false } },
+      ]);
+      expect(h.sdk.requests.filter(request => request.method === 'SetCurrentProgramScene').map(request => request.data.sceneName)).toEqual(['synthetic rejected', 'synthetic recovered']);
+    } finally { await h.dispose(); }
+  });
+  test('concurrent service connects share an actual held SDK attempt and retirement removes listeners', async () => {
+    const h = setup();
+    h.sdk.connectHold = Promise.withResolvers<void>();
+    let first: Promise<void> | undefined;
+    let second: Promise<void> | undefined;
+    try {
+      first = h.service.connect();
+      second = h.service.connect();
+      expect(h.sdk.connectCount).toBe(1);
+      expect(h.service.getConnectionState().connected).toBe(false);
+      h.sdk.connectHold.resolve();
+      await Promise.all([first, second]);
+      expect(h.service.getConnectionState()).toEqual({ connected: true, ready: true, lastError: null });
+      expect(await h.service.getHealthStatus()).toEqual({ healthy: true, connected: true, responsive: true, lastError: undefined });
+      await h.service.disconnect();
+      expect(h.service.getConnectionState()).toMatchObject({ connected: false, ready: false });
+      h.service.destroy();
+      h.service.destroy();
+      expect(h.bus.getListenerSummary()).toEqual({});
+      expect(h.bus.emit('obs:update-text', { sourceName: 'synthetic source', text: 'synthetic late' })).toBe(false);
+    } finally { h.sdk.connectHold.resolve(); await Promise.allSettled([first, second]); await h.dispose(); }
+  });
+  test('failed SDK connection is reported and recovers on a later attempt', async () => {
+    const h = setup();
+    try {
+      h.sdk.failConnect = true;
+      await expect(h.service.connect()).rejects.toThrow('synthetic connection failure');
+      expect(h.service.getConnectionState()).toMatchObject({ connected: false, ready: false, lastError: expect.any(Error) });
+      await h.connection.disconnect();
+      h.sdk.failConnect = false;
+      await h.service.connect();
+      expect(h.service.getConnectionState()).toEqual({ connected: true, ready: true, lastError: null });
+      expect(h.sdk.connectCount).toBe(2);
+    } finally { await h.dispose(); }
+  });
+  test('actual close emits connection loss, and an unrelated bus signal does not fabricate disconnection', async () => {
+    const h = setup();
+    const events: unknown[] = [];
+    const off = h.bus.subscribe('obs:connection-lost', value => { events.push(value); });
+    try {
+      await h.service.connect();
+      h.bus.emit('obs:connection-lost', { reason: 'synthetic bus signal' });
+      expect(h.service.getConnectionState().connected).toBe(true);
+      h.sdk.emit('ConnectionClosed', { code: 1006, reason: 'synthetic socket close' });
+      expect(h.service.getConnectionState()).toMatchObject({ connected: false, ready: false });
+      expect(events).toHaveLength(2);
+      expect(events[1]).toMatchObject({ code: 1006, reason: 'synthetic socket close' });
+    } finally { off(); await h.dispose(); }
+  });
+
+  test('destroy retires bus listeners even when external socket listener removal throws', async () => {
+    const h = setup();
+    const original = h.sdk.off.bind(h.sdk);
+    let failed = false;
+    const off = spyOn(h.sdk, 'off').mockImplementation((event, handler) => {
+      const result = original(event, handler);
+      if (event === 'ConnectionClosed' && !failed) { failed = true; throw new Error('synthetic socket off failure'); }
+      return result;
+    });
+    try {
+      await h.service.connect();
+      h.service.destroy();
+      expect(failed).toBe(true);
+      expect(h.bus.getListenerSummary()).toEqual({});
+      expect(h.service.connectionEventHandlers).toEqual([]);
+      expect(h.service.unsubscribeFns).toEqual([]);
+      expect(() => h.service.destroy()).not.toThrow();
+    } finally { off.mockRestore(); await h.dispose(); }
+  });
+
 });

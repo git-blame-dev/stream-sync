@@ -3,7 +3,6 @@ import { DEFAULTS } from '../core/config-schema';
 import { ConfigValidator } from '../utils/config-validator';
 import { safeDelay as defaultDelay, validateTimeout } from '../utils/timeout-validator';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
-import { ensureOBSConnected as defaultEnsureConnected } from './connection';
 
 type GlowLogger = {
     debug: (message: string, context?: string, payload?: unknown) => void;
@@ -13,7 +12,7 @@ type EnsureConnected = () => Promise<void>;
 type GlowDelay = (ms: number, minMs: number, context: string) => Promise<void>;
 
 type HandcamModuleDeps = {
-    ensureConnected: EnsureConnected;
+    ensureConnected?: EnsureConnected;
     logger: GlowLogger;
     delay: GlowDelay;
 };
@@ -48,6 +47,7 @@ type HandcamGlowConfig = {
 type FilterSettings = Record<string, unknown>;
 
 type ObsLike = {
+    ensureConnected?: EnsureConnected;
     call: (requestType: string, payload: Record<string, unknown>) => Promise<unknown>;
 };
 
@@ -62,7 +62,6 @@ function getErrorMessage(error: unknown): string {
 }
 
 let moduleDeps: HandcamModuleDeps = {
-    ensureConnected: defaultEnsureConnected,
     logger: defaultLogger,
     delay: defaultDelay
 };
@@ -73,10 +72,19 @@ function _setDependencies(deps: Partial<HandcamModuleDeps>) {
 
 function _resetDependencies() {
     moduleDeps = {
-        ensureConnected: defaultEnsureConnected,
         logger: defaultLogger,
         delay: defaultDelay
     };
+}
+
+async function ensureGlowConnected(obs: ObsLike): Promise<void> {
+    if (moduleDeps.ensureConnected) {
+        await moduleDeps.ensureConnected();
+    } else if (obs.ensureConnected) {
+        await obs.ensureConnected();
+    } else {
+        throw new Error('Handcam glow requires OBS owner readiness');
+    }
 }
 
 let handcamGlowErrorHandler: ReturnType<typeof createPlatformErrorHandler> | null = null;
@@ -167,10 +175,10 @@ function createHandcamGlowConfig(handcamConfig: HandcamConfigInput): HandcamGlow
 }
 
 async function setHandcamGlowSize(obs: ObsLike, config: HandcamGlowConfig, baseSettings: FilterSettings, size: number, runId: number | null = null, signal?: AbortSignal) {
-    const { logger, ensureConnected } = moduleDeps;
+    const { logger } = moduleDeps;
     try {
         assertActiveRun(runId, signal);
-        await ensureConnected();
+        await ensureGlowConnected(obs);
         assertActiveRun(runId, signal);
 
         const newSettings = {
@@ -278,7 +286,7 @@ async function animateGlowSize(obs: ObsLike, config: HandcamGlowConfig, baseSett
 }
 
 async function activateHandcamGlow(obs: ObsLike, handcamConfig: HandcamConfigInput, signal?: AbortSignal) {
-    const { logger, ensureConnected } = moduleDeps;
+    const { logger } = moduleDeps;
     const config = createHandcamGlowConfig(handcamConfig);
     const runId = ++handcamGlowRunId;
 
@@ -291,7 +299,7 @@ async function activateHandcamGlow(obs: ObsLike, handcamConfig: HandcamConfigInp
         logger.debug(`[Handcam] Starting glow animation: 0→${config.maxSize}→0 over ${config.totalDuration}s (${config.rampUpDuration}s up + ${config.holdDuration}s hold + ${config.rampDownDuration}s down)`, 'handcam-glow');
 
         assertActiveRun(runId, signal);
-        await ensureConnected();
+        await ensureGlowConnected(obs);
         assertActiveRun(runId, signal);
 
         const filterInfo = await obs.call('GetSourceFilter', {
@@ -316,7 +324,7 @@ async function activateHandcamGlow(obs: ObsLike, handcamConfig: HandcamConfigInp
 
         try {
             assertActiveRun(runId, signal);
-            await ensureConnected();
+            await ensureGlowConnected(obs);
             assertActiveRun(runId, signal);
             const filterInfo = await obs.call('GetSourceFilter', {
                 sourceName: config.sourceName,
@@ -331,7 +339,7 @@ async function activateHandcamGlow(obs: ObsLike, handcamConfig: HandcamConfigInp
 }
 
 async function initializeHandcamGlow(obs: ObsLike, handcamConfig: HandcamConfigInput) {
-    const { logger, ensureConnected } = moduleDeps;
+    const { logger } = moduleDeps;
     const config = createHandcamGlowConfig(handcamConfig);
 
     if (!config.enabled) {
@@ -340,7 +348,7 @@ async function initializeHandcamGlow(obs: ObsLike, handcamConfig: HandcamConfigI
     }
 
     try {
-        await ensureConnected();
+        await ensureGlowConnected(obs);
 
         const filterInfo = await obs.call('GetSourceFilter', {
             sourceName: config.sourceName,

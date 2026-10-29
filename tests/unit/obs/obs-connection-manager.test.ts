@@ -318,7 +318,7 @@ describe("OBSConnectionManager", () => {
     runOnlyPendingTimers();
 
     await expect(pendingConnect).rejects.toThrow(
-      /timed out waiting for authentication/i,
+      /connection cancelled/i,
     );
     expect(manager.isConnected()).toBe(false);
   });

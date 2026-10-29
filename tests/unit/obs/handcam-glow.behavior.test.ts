@@ -369,6 +369,47 @@ describe("handcam-glow", () => {
     await flushGlowTasks();
   });
 
+  it("waits for the supplied OBS owner before reading or changing the filter", async () => {
+    resetTestingDependencies();
+    setTestingDependencies({ logger: mockLogger, delay: mockDelay });
+    const readiness: { release?: () => void } = {};
+    const ready = new Promise<void>(resolve => { readiness.release = resolve; });
+    const calls: string[] = [];
+    const obs = {
+      connected: false,
+      async ensureConnected() {
+        await ready;
+        this.connected = true;
+      },
+      async call(request: string) {
+        expect(this.connected).toBe(true);
+        calls.push(request);
+        return { filterSettings: { syntheticSetting: 7 } };
+      },
+    };
+    const run = initializeHandcamGlow(obs, createHandcamConfigFixture({ enabled: true }));
+    expect(calls).toEqual([]);
+    readiness.release?.();
+    await run;
+    expect(calls).toEqual(["GetSourceFilter", "SetSourceFilterSettings"]);
+  });
+
+  it("makes no OBS calls when owner readiness fails or is absent", async () => {
+    resetTestingDependencies();
+    setTestingDependencies({ logger: mockLogger, delay: mockDelay });
+    const calls: string[] = [];
+    const obs = {
+      async call(request: string) { calls.push(request); return {}; },
+      async ensureConnected() { throw new Error("Synthetic OBS disconnected"); },
+    };
+    const config = createHandcamConfigFixture({ enabled: true, totalSteps: 1 });
+    await initializeHandcamGlow(obs, config);
+    await triggerHandcamGlow(obs, config);
+    await initializeHandcamGlow({ call: obs.call }, config);
+    await triggerHandcamGlow({ call: obs.call }, config);
+    expect(calls).toEqual([]);
+  });
+
   it("supersedes an in-flight glow run when triggered again rapidly", async () => {
     const firstHoldRelease: { current?: () => void } = {};
     let delayCallCount = 0;

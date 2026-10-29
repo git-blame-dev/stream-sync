@@ -1,4 +1,6 @@
 import { describe, expect, afterEach, it, beforeEach } from "bun:test";
+import { EventEmitter } from "node:events";
+import { createHandcamConfigFixture } from "../../helpers/config-fixture";
 import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
 import {
   secrets,
@@ -15,24 +17,45 @@ const {
 } = require("../../../src/obs/connection.ts");
 const { initializeOBSConnection } = require("../../../src/obs/connection.ts");
 
+class SyntheticOBS extends EventEmitter {
+  requests: Array<{ method: string; data: Record<string, unknown> }> = [];
+  async connect() { this.emit('Identified'); return { obsWebSocketVersion: 'synthetic' }; }
+  async disconnect() { this.emit('ConnectionClosed'); }
+  async call(method: string, data: Record<string, unknown> = {}) {
+    this.requests.push({ method, data });
+    if (method === 'GetSourceFilter') return { filterSettings: { size: 4 } };
+    return { ok: true };
+  }
+}
+
 describe("OBSConnectionManager behavior", () => {
   let originalNodeEnv: string | undefined;
+  const localManagers: Array<InstanceType<typeof OBSConnectionManager>> = [];
+  const createLocalManager = (deps: ReturnType<typeof createDeps>) => {
+    const manager = new OBSConnectionManager(deps);
+    localManagers.push(manager);
+    return manager;
+  };
 
   beforeEach(() => {
     originalNodeEnv = process.env.NODE_ENV;
     process.env.NODE_ENV = "test";
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    for (const manager of localManagers.splice(0)) {
+      manager.dispose();
+      await manager.disconnect();
+    }
     if (originalNodeEnv === undefined) {
       delete process.env.NODE_ENV;
     } else {
       process.env.NODE_ENV = originalNodeEnv;
     }
+    resetOBSConnectionManager();
     restoreAllMocks();
     _resetForTesting();
     initializeStaticSecrets();
-    resetOBSConnectionManager();
   });
 
   const createMockOBS = () => ({
@@ -82,7 +105,7 @@ describe("OBSConnectionManager behavior", () => {
   it("returns true immediately when already connected", async () => {
     const mockOBS = createMockOBS();
     const deps = createDeps({ obs: mockOBS });
-    const manager = new OBSConnectionManager(deps);
+    const manager = createLocalManager(deps);
     manager._isConnected = true;
 
     const result = await manager.connect();
@@ -93,7 +116,7 @@ describe("OBSConnectionManager behavior", () => {
 
   it("returns existing promise when connection already in progress", async () => {
     const deps = createDeps();
-    const manager = new OBSConnectionManager(deps);
+    const manager = createLocalManager(deps);
     manager._isConnected = false;
     manager.isConnecting = true;
     const existingPromise = Promise.resolve("existing");
@@ -106,7 +129,7 @@ describe("OBSConnectionManager behavior", () => {
 
   it("skips reconnect scheduling when OBS is disabled", () => {
     const deps = createDeps({ config: { enabled: false } });
-    const manager = new OBSConnectionManager(deps);
+    const manager = createLocalManager(deps);
 
     manager.scheduleReconnect("test");
 
@@ -115,23 +138,43 @@ describe("OBSConnectionManager behavior", () => {
 
   it("does not double-schedule reconnect when already pending", () => {
     const deps = createDeps();
-    const manager = new OBSConnectionManager(deps);
+    const manager = createLocalManager(deps);
     manager.reconnectTimer = { id: "existing" };
-
-    manager.scheduleReconnect("test");
-
-    expect(manager.reconnectTimer).toEqual({ id: "existing" });
+    try {
+      manager.scheduleReconnect("test");
+      expect(manager.reconnectTimer).toEqual({ id: "existing" });
+    } finally {
+      manager.reconnectTimer = null;
+    }
   });
 
   it("closes timed-out transport and schedules one reconnect", async () => {
     const mockOBS = createMockOBS();
-    const manager = new OBSConnectionManager(createDeps({ obs: mockOBS, config: { enabled: true, connectionTimeoutMs: 10 } }));
-    manager.reconnectIntervalMs = 1000;
-    await expect(manager.connect()).rejects.toThrow("timed out");
-    expect(mockOBS.disconnect).toHaveBeenCalledTimes(1);
-    expect(manager.reconnectTimer).not.toBeNull();
-    manager.scheduleReconnect("duplicate");
-    expect(manager.reconnectTimer).not.toBeNull();
+    const manager = createLocalManager(createDeps({ obs: mockOBS, config: { enabled: true, connectionTimeoutMs: 10 } }));
+    try {
+      manager.reconnectIntervalMs = 1000;
+      await expect(manager.connect()).rejects.toThrow("timed out");
+      expect(mockOBS.disconnect).toHaveBeenCalledTimes(1);
+      expect(manager.reconnectTimer).not.toBeNull();
+      manager.scheduleReconnect("duplicate");
+      expect(manager.reconnectTimer).not.toBeNull();
+    } finally {
+      manager.dispose();
+      await manager.disconnect();
+      expect(manager.reconnectTimer).toBeNull();
+    }
+  });
+
+  it("resets startup glow after the SDK identifies the owning connection", async () => {
+    const obs = new SyntheticOBS();
+    const result = await initializeOBSConnection({ enabled: true }, {
+      obs, handcam: createHandcamConfigFixture({ enabled: true }),
+    });
+    try {
+      expect(result.outcome).toBe("connected");
+      expect(result.manager.isConnected()).toBe(true);
+      expect(obs.requests.map(request => request.method)).toEqual(["GetSourceFilter", "SetSourceFilterSettings"]);
+    } finally { await result.manager.disconnect(); resetOBSConnectionManager(); }
   });
 
   it("returns an explicit startup outcome for disabled and degraded initialization", async () => {
@@ -147,7 +190,7 @@ describe("OBSConnectionManager behavior", () => {
 
   it("exposes connection state via getConnectionState", () => {
     const deps = createDeps();
-    const manager = new OBSConnectionManager(deps);
+    const manager = createLocalManager(deps);
     manager._isConnected = true;
 
     const state = manager.getConnectionState();
@@ -158,7 +201,7 @@ describe("OBSConnectionManager behavior", () => {
 
   it("exposes config via getConfig", () => {
     const deps = createDeps();
-    const manager = new OBSConnectionManager(deps);
+    const manager = createLocalManager(deps);
 
     const config = manager.getConfig();
 
@@ -178,14 +221,14 @@ describe("OBSConnectionManager behavior", () => {
         connectionTimeoutMs: 50,
       },
     });
-    const manager = new OBSConnectionManager(deps);
+    const manager = createLocalManager(deps);
 
     expect(manager.getConfig().password).toBe("secret-from-env");
   });
 
   it("isConnected returns internal connection state", () => {
     const deps = createDeps();
-    const manager = new OBSConnectionManager(deps);
+    const manager = createLocalManager(deps);
 
     expect(manager.isConnected()).toBe(false);
 
@@ -234,33 +277,17 @@ describe("OBSConnectionManager behavior", () => {
     );
   });
 
-  it("routes obsCall and ensureOBSConnected through the singleton manager", async () => {
-    const mockOBS = createMockOBS();
-    mockOBS.call.mockResolvedValue({ ok: true });
-    const manager = getOBSConnectionManager({
-      obs: mockOBS,
-      config: {
-        address: "ws://helper:4455",
-        password: "helper-pass",
-        enabled: true,
-        connectionTimeoutMs: 50,
-      },
-      constants: { ERROR_MESSAGES: { OBS_CONNECTION_TIMEOUT: "Timed out" } },
-    });
-
-    manager._isConnected = true;
-    let observedMaxWait: number | null = null;
-    manager.ensureConnected = createMockFn<[number], Promise<void>>().mockImplementation(
-      async (maxWait: number) => {
-        observedMaxWait = maxWait;
-      },
-    );
-
-    const response = await obsCall("GetSceneList", {});
-    await ensureOBSConnected(1234);
-
-    expect(response).toEqual({ ok: true });
-    expect(observedMaxWait ?? -1).toBe(1234);
+  it("routes obsCall and readiness through the identified singleton", async () => {
+    const obs = new SyntheticOBS();
+    const manager = getOBSConnectionManager({ obs, config: {
+      address: "ws://synthetic.invalid", password: "synthetic", enabled: true, connectionTimeoutMs: 50,
+    } });
+    try {
+      await ensureOBSConnected(1234);
+      expect(manager.isConnected()).toBe(true);
+      expect(await obsCall("GetSceneList", {})).toEqual({ ok: true });
+      expect(obs.requests).toEqual([{ method: "GetSceneList", data: {} }]);
+    } finally { await manager.disconnect(); resetOBSConnectionManager(); }
   });
 
   it("forwards event listener registration helpers to obs client methods", () => {
@@ -280,7 +307,7 @@ describe("OBSConnectionManager behavior", () => {
       },
     );
 
-    const manager = new OBSConnectionManager(createDeps({ obs: mockOBS }));
+    const manager = createLocalManager(createDeps({ obs: mockOBS }));
     const handler = () => {};
 
     manager.addEventListener("ConnectionClosed", handler);
@@ -291,7 +318,7 @@ describe("OBSConnectionManager behavior", () => {
   });
 
   it("caches and clears scene item ids via helper methods", () => {
-    const manager = new OBSConnectionManager(createDeps());
+    const manager = createLocalManager(createDeps());
 
     manager.cacheSceneItemId("scene:source", 42);
     expect(manager.getCachedSceneItemId("scene:source")).toBe(42);

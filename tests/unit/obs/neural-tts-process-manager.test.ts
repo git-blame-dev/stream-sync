@@ -1,13 +1,7 @@
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, spyOn } from 'bun:test';
 import { NeuralTtsProcessManager } from '../../../src/obs/neural-tts-process-manager';
-import { AppRuntime } from '../../../src/runtime/AppRuntime';
-import { createMockFn } from '../../helpers/bun-mock-utils';
-import { createConfigFixture } from '../../helpers/config-fixture';
-import {
-    createMockDisplayQueue,
-    createMockNotificationManager,
-    noOpLogger
-} from '../../helpers/mock-factories';
+import { createMainPresentationFixture } from '../../helpers/main-presentation-fixture';
+import { noOpLogger } from '../../helpers/mock-factories';
 
 type RecordedRequest = {
     url: string;
@@ -309,162 +303,62 @@ describe('NeuralTtsProcessManager', () => {
         expect(warnings.some((w) => w.includes('warmup timed out'))).toBe(true);
     });
 
-    it('integrates with AppRuntime.start() and AppRuntime.shutdown() cleanly, including degraded mode on startup error', async () => {
-        const lifecycleOrder: string[] = [];
-        const neuralTtsProcessManager = {
-            ensureStarted: createMockFn(async () => {
-                lifecycleOrder.push('neuralTts:ensureStarted');
-            }),
-            stop: createMockFn(async () => {
-                lifecycleOrder.push('neuralTts:stop');
-            })
-        };
-
-        const displayQueue = {
-            ...createMockDisplayQueue(),
-            stop: createMockFn(async () => {
-                lifecycleOrder.push('displayQueue:stop');
-            })
-        };
-
-        const config = createConfigFixture({
-            obs: {
-                enabled: false,
-                ttsTxt: 'test-tts-source',
-                ttsMethod: 'neural-tts',
-                neuralTtsEndpoint: 'http://127.0.0.1:8765',
-                neuralTtsCommand: 'neural-tts serve'
-            }
-        });
-
-        const runtime = new AppRuntime(config, {
-            logging: noOpLogger,
-            displayQueue,
-            notificationManager: createMockNotificationManager(),
-            eventBus: {
-                subscribe: createMockFn(),
-                emit: createMockFn()
-            },
-            vfxCommandService: {
-                executeCommand: createMockFn(),
-                executeCommandForKey: createMockFn(),
-                getVFXConfig: createMockFn()
-            },
-            userTrackingService: {
-                isFirstMessage: createMockFn()
-            },
-            obsEventService: {
-                disconnect: createMockFn().mockResolvedValue()
-            },
-            commandCooldownService: {
-                dispose: createMockFn<[], void>(),
-                checkUserCooldown: createMockFn().mockReturnValue(true),
-                updateUserCooldown: createMockFn(),
-                getStatus: createMockFn().mockReturnValue({ commands: {} })
-            },
-            platformLifecycleService: {
-                getAllPlatforms: createMockFn().mockReturnValue({}),
-                getStatus: createMockFn().mockReturnValue({ platformHealth: {} }),
-                getPlatformConnectionTime: createMockFn().mockReturnValue(null),
-                initializeAllPlatforms: createMockFn().mockResolvedValue(),
-                disconnectAll: createMockFn(async () => {
-                    lifecycleOrder.push('platforms:disconnectAll');
-                })
-            },
-            gracefulExitService: {
-                isEnabled: createMockFn().mockReturnValue(false),
-                getTargetMessageCount: createMockFn().mockReturnValue(0),
-                incrementMessageCount: createMockFn().mockReturnValue(false),
-                triggerExit: createMockFn().mockResolvedValue()
-            },
-            neuralTtsProcessManager,
-            obs: {
-                goalsManager: { initializeGoalDisplay: async () => {} },
-                connectionManager: { isConnected: () => false, call: async () => ({}) }
-            }
-        });
-
-        Reflect.set(runtime, 'viewerCountSystem', {
-            addObserver: createMockFn(),
-            initialize: createMockFn().mockResolvedValue(),
-            startPolling: createMockFn().mockResolvedValue(),
-            stopPolling: createMockFn(),
-            cleanup: createMockFn().mockResolvedValue()
-        });
-
-        const originalExit = process.exit;
-        Reflect.set(process, 'exit', createMockFn());
+    it('releases a real runtime neural lease on an early exit after startup', async () => {
+        const h = await createMainPresentationFixture();
+        h.config.logging.file.enabled = false;
+        h.config.logging.chat.enabled = false;
+        h.config.obs.ttsMethod = 'neural-tts';
+        h.config.obs.neuralTtsEndpoint = 'http://127.0.0.1:8765';
+        const requests: string[] = [];
+        const leaseBodies: unknown[] = [];
+        const lifecycle: string[] = [];
+        let restoreObservers = () => {};
+        const syntheticFetch = Object.assign(async (input: RequestInfo | URL, init?: RequestInit) => {
+            const path = new URL(String(input)).pathname;
+            requests.push(path);
+            if (path.startsWith('/v1/lease/')) leaseBodies.push(JSON.parse(String(init?.body)));
+            if (path === '/health') return new Response('{}', { status: 200 });
+            if (path === '/v1/lease/acquire') return new Response('{}', { status: 200 });
+            if (path === '/v1/lease/release') lifecycle.push('lease released');
+            if (path === '/v1/lease/release') return new Response(JSON.stringify({ active_clients: 0, active_jobs: 0, should_shutdown: false }), { status: 200 });
+            throw new Error(`Unexpected synthetic neural request: ${path}`);
+        }, { preconnect: globalThis.fetch.preconnect });
+        const fetch = spyOn(globalThis, 'fetch').mockImplementation(syntheticFetch);
+        const early = new Error('synthetic early exit');
         try {
-            await runtime.start();
-            expect(neuralTtsProcessManager.ensureStarted.mock.calls.length).toBe(1);
-            expect(runtime.isStarted).toBe(true);
+            await expect((async () => {
+                try {
+                    await h.start();
+                    const queueStop = h.queue.stop.bind(h.queue);
+                    const queueObserver = spyOn(h.queue, 'stop').mockImplementation(async () => { await queueStop(); lifecycle.push('queue stopped'); });
+                    const platforms = h.runtime.platformLifecycleService;
+                    const disconnect = platforms.disconnectAll.bind(platforms);
+                    const platformObserver = spyOn(platforms, 'disconnectAll').mockImplementation(async () => { await disconnect(); lifecycle.push('platforms disconnected'); });
+                    restoreObservers = () => { queueObserver.mockRestore(); platformObserver.mockRestore(); };
+                    expect(h.runtime.isStarted).toBe(true);
+                    expect(requests).toEqual(['/health', '/v1/lease/acquire']);
+                    throw early;
+                } finally { await h.dispose(); }
+            })()).rejects.toBe(early);
+            expect(requests).toEqual(['/health', '/v1/lease/acquire', '/v1/lease/release']);
+            expect(leaseBodies).toHaveLength(2);
+            expect(leaseBodies[0]).toMatchObject({ client_id: expect.any(String) });
+            expect(leaseBodies[1]).toEqual(leaseBodies[0]);
+            expect(lifecycle).toEqual(['queue stopped', 'lease released', 'platforms disconnected']);
+            expect(h.runtime.isStarted).toBe(false);
+        } finally { restoreObservers(); fetch.mockRestore(); }
+    });
 
-            await runtime.shutdown();
-            expect(neuralTtsProcessManager.stop.mock.calls.length).toBe(1);
-            expect(lifecycleOrder).toEqual([
-                'neuralTts:ensureStarted',
-                'displayQueue:stop',
-                'neuralTts:stop',
-                'platforms:disconnectAll'
-            ]);
-        } finally {
-            Reflect.set(process, 'exit', originalExit);
-        }
-
-        // Verify degraded startup when ensureStarted throws
-        const failingManager = {
-            ensureStarted: createMockFn(async () => {
-                throw new Error('Invalid neural TTS endpoint');
-            }),
-            stop: createMockFn(async () => {})
-        };
-        const degradedRuntime = new AppRuntime(config, {
-            logging: noOpLogger,
-            displayQueue: createMockDisplayQueue(),
-            notificationManager: createMockNotificationManager(),
-            eventBus: { subscribe: createMockFn(), emit: createMockFn() },
-            vfxCommandService: {
-                executeCommand: createMockFn(),
-                executeCommandForKey: createMockFn(),
-                getVFXConfig: createMockFn()
-            },
-            userTrackingService: { isFirstMessage: createMockFn() },
-            obsEventService: { disconnect: createMockFn().mockResolvedValue() },
-            commandCooldownService: {
-                dispose: createMockFn<[], void>(),
-                checkUserCooldown: createMockFn().mockReturnValue(true),
-                updateUserCooldown: createMockFn(),
-                getStatus: createMockFn().mockReturnValue({ commands: {} })
-            },
-            platformLifecycleService: {
-                getAllPlatforms: createMockFn().mockReturnValue({}),
-                getStatus: createMockFn().mockReturnValue({ platformHealth: {} }),
-                getPlatformConnectionTime: createMockFn().mockReturnValue(null),
-                initializeAllPlatforms: createMockFn().mockResolvedValue(),
-                disconnectAll: createMockFn().mockResolvedValue()
-            },
-            gracefulExitService: {
-                isEnabled: createMockFn().mockReturnValue(false),
-                getTargetMessageCount: createMockFn().mockReturnValue(0),
-                incrementMessageCount: createMockFn().mockReturnValue(false),
-                triggerExit: createMockFn().mockResolvedValue()
-            },
-            neuralTtsProcessManager: failingManager,
-            obs: {
-                goalsManager: { initializeGoalDisplay: async () => {} },
-                connectionManager: { isConnected: () => false, call: async () => ({}) }
-            }
-        });
-        Reflect.set(degradedRuntime, 'viewerCountSystem', {
-            addObserver: createMockFn(),
-            initialize: createMockFn().mockResolvedValue(),
-            startPolling: createMockFn().mockResolvedValue(),
-            stopPolling: createMockFn(),
-            cleanup: createMockFn().mockResolvedValue()
-        });
-
-        await expect(degradedRuntime.start()).resolves.toBeUndefined();
-        expect(failingManager.ensureStarted.mock.calls.length).toBe(1);
-        expect(degradedRuntime.isStarted).toBe(true);
+    it('retires the real runtime after degraded neural endpoint startup', async () => {
+        const h = await createMainPresentationFixture();
+        h.config.logging.file.enabled = false;
+        h.config.logging.chat.enabled = false;
+        h.config.obs.ttsMethod = 'neural-tts';
+        h.config.obs.neuralTtsEndpoint = 'https://synthetic.invalid';
+        try {
+            await h.start();
+            expect(h.runtime.isStarted).toBe(true);
+        } finally { await h.dispose(); }
+        expect(h.runtime.isStarted).toBe(false);
     });
 });

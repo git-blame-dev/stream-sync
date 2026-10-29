@@ -81,6 +81,10 @@ class OBSConnectionManager {
     eventHandlers: Map<string, (data?: { reason?: unknown; code?: unknown }) => void>;
     sourcesCacheInvalidator: (() => void) | null;
 
+    private cancelConnectAttempt: (() => void) | null = null;
+    private transportRetirement: Promise<void> | null = null;
+    private transportInUse = false;
+
     constructor(dependencies: ConnectionDependencies = {}) {
         this.logger = logger;
         this.log = logger;
@@ -131,6 +135,9 @@ class OBSConnectionManager {
         this.obs.on('ConnectionOpened', connectionOpenedHandler);
         
         const connectionClosedHandler = (data?: { reason?: unknown; code?: unknown }) => {
+            // During acquisition the SDK's attempt promise owns close failures.
+            // Retirement closes belong to the old transport, never a queued one.
+            if (this.transportRetirement || this.isConnecting) return;
             this.logger.debug(`[OBS Connection] Connection Closed: ${data?.reason} (${data?.code})`, 'obs-connection', data);
             this._isConnected = false;
             this.lifecycleState = this.isDisposed
@@ -165,18 +172,9 @@ class OBSConnectionManager {
                 return;
             }
 
-            this.log.info('[OBS] Successfully connected and authenticated with OBS.');
-            this._isConnected = true;
-            this.lifecycleState = 'connected';
-            this.clearReconnectTimer();
-            
-            if (this.connectionCompleteHandler) {
-                this.logger.debug('[OBS Connection] Calling connection completion handler', 'obs-connection');
-                this.connectionCompleteHandler();
-                this.connectionCompleteHandler = null;
-            } else {
-                this.logger.debug('[OBS Connection] No completion handler waiting', 'obs-connection');
-            }
+            // Identified is global to the SDK. Only the current connect promise
+            // can corroborate it; an old transport's event cannot admit a session.
+            this.connectionCompleteHandler?.();
         };
         this.eventHandlers.set('Identified', identifiedHandler);
         this.obs.on('Identified', identifiedHandler);
@@ -238,8 +236,8 @@ class OBSConnectionManager {
             const isEnabled = this.config.enabled !== false;
             if (!isEnabled) {
                 this.clearReconnectTimer();
-                if (wasEnabled && this.isConnected()) {
-                    void this.disconnect();
+                if (wasEnabled && (this.isConnected() || this.isConnecting)) {
+                    void this.disconnect().catch(error => this._handleConnectionError('OBS disable disconnect failed', error));
                 }
             }
         }
@@ -279,47 +277,64 @@ class OBSConnectionManager {
         this.connectionPromise = new Promise<boolean>(async (resolve, reject) => {
             let identifiedTimeout: ReturnType<typeof globalThis.setTimeout> | null = null;
             let connectionCompleted = false;
+            let sdkConnected = false;
+            let identified = false;
+            const finishAttempt = () => {
+                connectionCompleted = true;
+                if (identifiedTimeout) clearTimeout(identifiedTimeout);
+                identifiedTimeout = null;
+                this.cancelConnectAttempt = null;
+                this.connectionCompleteHandler = null;
+                this.isConnecting = false;
+                this.connectionPromise = null;
+                this.activeConnectAttemptVersion = null;
+            };
+            this.cancelConnectAttempt = () => {
+                if (connectionCompleted) return;
+                finishAttempt();
+                reject(new Error('OBS connection cancelled'));
+            };
             
             const completeConnection = () => {
                 if (this.activeConnectAttemptVersion !== attemptVersion) {
                     return;
                 }
-                if (connectionCompleted) return;
-                connectionCompleted = true;
-                
-                if (identifiedTimeout) {
-                    clearTimeout(identifiedTimeout);
-                    identifiedTimeout = null;
-                }
-                this.isConnecting = false;
+                if (connectionCompleted || !sdkConnected || !identified) return;
+                finishAttempt();
+                this._isConnected = true;
                 this.lifecycleState = 'connected';
-                this.connectionPromise = null;
-                this.activeConnectAttemptVersion = null;
+                this.clearReconnectTimer();
+                this.log.info('[OBS] Successfully connected and authenticated with OBS.');
                 resolve(true);
             };
             
-            this.connectionCompleteHandler = completeConnection;
+            this.connectionCompleteHandler = () => {
+                identified = true;
+                completeConnection();
+            };
             
             try {
+                if (this.transportRetirement) await this.transportRetirement;
+                if (this.activeConnectAttemptVersion !== attemptVersion) return;
                 const identifiedTimeoutMs = this.OBS_CONNECTION_TIMEOUT;
                 identifiedTimeout = safeSetTimeout(() => {
                     if (this.activeConnectAttemptVersion !== attemptVersion) {
                         return;
                     }
                     if (!connectionCompleted) {
-                        connectionCompleted = true;
-                        this.isConnecting = false;
+                        finishAttempt();
                         this.lifecycleState = this.isDisposed ? 'disposed' : 'disconnected';
-                        this.connectionPromise = null;
-                        this.connectionCompleteHandler = null;
-                        this.activeConnectAttemptVersion = null;
-                        void this.obs.disconnect().catch(() => undefined);
+                        void this.retireTransport().catch(error => this._handleConnectionError('OBS timeout disconnect failed', error));
                         if (!this.isIntentionalDisconnect && !this.isDisposed) this.scheduleReconnect('authentication-timeout');
                         reject(new Error('OBS connection timed out waiting for authentication'));
                     }
                 }, identifiedTimeoutMs);
                 
+                this.transportInUse = true;
                 const { obsWebSocketVersion, negotiatedRpcVersion } = await this.obs.connect(this.config.address, this.config.password);
+                if (this.activeConnectAttemptVersion !== attemptVersion) return;
+                sdkConnected = true;
+                completeConnection();
                 this.logger.debug(`[OBS Connection] WebSocket connected to server ${obsWebSocketVersion} (using RPC ${negotiatedRpcVersion})`, 'obs-connection');
                 
                 // Connection established, but now we wait for Identified event
@@ -333,7 +348,7 @@ class OBSConnectionManager {
                 if (this.activeConnectAttemptVersion !== attemptVersion) {
                     return;
                 }
-                this.connectionCompleteHandler = null;
+                finishAttempt();
                 
                 const connectionError = error instanceof Error ? error : new Error(String(error));
                 const errorCode = typeof error === 'object' && error !== null && 'code' in error
@@ -358,10 +373,7 @@ class OBSConnectionManager {
                 this.logger.debug(`4. Verify server port matches config (current: ${this.config.address})`, 'OBS');
                 this.logger.debug('5. Check if password in config.ini matches OBS WebSocket password', 'OBS');
                 
-                this.isConnecting = false;
                 this.lifecycleState = this.isDisposed ? 'disposed' : 'disconnected';
-                this.connectionPromise = null;
-                this.activeConnectAttemptVersion = null;
                 if (!this.isIntentionalDisconnect && !this.isDisposed) {
                     this.scheduleReconnect('connect-failed');
                 }
@@ -372,29 +384,41 @@ class OBSConnectionManager {
         return this.connectionPromise;
     }
     
+    private retireTransport(): Promise<void> {
+        if (this.transportRetirement) return this.transportRetirement;
+        if (!this.transportInUse && !this._isConnected) return Promise.resolve();
+        this.transportInUse = false;
+        let retirement: Promise<void>;
+        try {
+            retirement = this.obs.disconnect();
+        } catch (error) {
+            retirement = Promise.reject(error);
+        }
+        this.transportRetirement = retirement;
+        // Keep a failed retirement as an admission barrier: its transport is not
+        // known to be closed. Every background owner observes its rejection.
+        void retirement.then(() => {
+            if (this.transportRetirement === retirement) this.transportRetirement = null;
+        }, () => undefined);
+        return retirement;
+    }
+
     async disconnect() {
         this.isIntentionalDisconnect = true;
         this.clearReconnectTimer();
+        this.cancelConnectAttempt?.();
         this.connectAttemptVersion += 1;
         this.activeConnectAttemptVersion = null;
         this.connectionCompleteHandler = null;
         this.isConnecting = false;
         this.lifecycleState = this.isDisposed ? 'disposed' : 'disconnected';
-
-        if (this.obs && this.isConnected()) {
-            this.logger.debug('[OBS Connection] Disconnecting from OBS WebSocket...', 'obs-connection');
-            await this.obs.disconnect();
-            this.logger.debug('[OBS Connection] Successfully disconnected from OBS WebSocket', 'obs-connection');
-        }
-        
-        if (this.healthChecker) {
-            this.healthChecker.invalidateCache();
-        }
-        
+        const retirement = this.retireTransport();
         this._isConnected = false;
         this.connectionPromise = null;
+        this.healthChecker?.invalidateCache();
+        await retirement;
     }
-    
+
     isConnected() {
         return this._isConnected;
     }
@@ -506,6 +530,7 @@ class OBSConnectionManager {
             try {
                 await this.connect();
             } catch (error) {
+                if (this.isIntentionalDisconnect || this.isDisposed) return;
                 this._handleConnectionError('Reconnection attempt failed', error, { requestType: 'Reconnect' });
                 this.scheduleReconnect('reconnect-failed');
             }
@@ -525,15 +550,9 @@ class OBSConnectionManager {
         }
 
         this.isDisposed = true;
-        this.isIntentionalDisconnect = true;
-        this.clearReconnectTimer();
-        this.connectAttemptVersion += 1;
-        this.activeConnectAttemptVersion = null;
-        this.connectionCompleteHandler = null;
-        this.connectionPromise = null;
-        this.isConnecting = false;
-        this._isConnected = false;
-        this.lifecycleState = 'disposed';
+        // Logical retirement is synchronous; reset callers retain their existing
+        // synchronous contract while asynchronous close errors are observed.
+        void this.disconnect().catch(error => this._handleConnectionError('OBS disposal disconnect failed', error));
         this.sourcesCacheInvalidator = null;
 
         for (const [eventName, handler] of this.eventHandlers.entries()) {
@@ -637,7 +656,7 @@ async function initializeOBSConnection(config: ObsConfig = {}, dependencies: Con
             const handcamConfig = dependencies.handcam;
             if (handcamConfig?.enabled) {
                 try {
-                    await initializeHandcamGlow(manager.obs, handcamConfig);
+                    await initializeHandcamGlow(manager, handcamConfig);
                     logger.debug('[OBS] Handcam glow initialized to 0 (startup reset)', 'OBS');
                 } catch (glowError) {
                     const glowErrorMessage = glowError instanceof Error ? glowError.message : String(glowError);

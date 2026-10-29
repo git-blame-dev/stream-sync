@@ -1,177 +1,117 @@
-import { describe, expect, beforeEach, afterEach, it } from "bun:test";
-import {
-  type TestMockFn,
-  createMockFn,
-  clearAllMocks,
-  restoreAllMocks,
-} from "../../helpers/bun-mock-utils";
-import {
-  useFakeTimers,
-  useRealTimers,
-  runOnlyPendingTimers,
-} from "../../helpers/bun-timers";
+import { EventEmitter } from 'node:events';
+import { describe, expect, beforeEach, afterEach, it } from 'bun:test';
+import { createMockFn } from '../../helpers/bun-mock-utils';
+import { useFakeTimers, useRealTimers, advanceTimersByTime, getTimerCount } from '../../helpers/bun-timers';
+import { OBSConnectionManager, getOBSConnectionManager, resetOBSConnectionManager } from '../../../src/obs/connection';
 
-import {
-  OBSConnectionManager,
-  getOBSConnectionManager,
-  resetOBSConnectionManager,
-} from "../../../src/obs/connection.ts";
+class Socket extends EventEmitter {
+  connect = createMockFn(async () => {
+    this.emit('Identified');
+    return { obsWebSocketVersion: '5', negotiatedRpcVersion: 1 };
+  });
+  disconnect = createMockFn(async () => { this.emit('ConnectionClosed', { code: 1000, reason: 'synthetic intentional close' }); });
+  async call() { return {}; }
+}
+const config = { address: 'ws://synthetic.invalid', password: 'synthetic-only', enabled: true, connectionTimeoutMs: 5000 };
 
-type ConnectResult = {
-  obsWebSocketVersion: string;
-  negotiatedRpcVersion: number;
-};
-
-type ConnectionClosedData = { code: number; reason: string };
-type ObsEventHandler = (data?: { reason?: unknown; code?: unknown }) => void;
-
-type ObsSocketFake = {
-  connect: TestMockFn<[address?: string, password?: string], Promise<ConnectResult>>;
-  disconnect: TestMockFn<[], Promise<void>>;
-  call: TestMockFn<[requestType: string, requestData?: Record<string, unknown>], Promise<unknown>>;
-  on: TestMockFn<[eventName: string, handler: ObsEventHandler], void>;
-  once: TestMockFn<[eventName: string, handler: ObsEventHandler], void>;
-  off: TestMockFn<[eventName: string, handler: ObsEventHandler], void>;
-};
-
-describe("OBSConnectionManager reconnection behavior", () => {
-  let mockOBS: ObsSocketFake;
+describe('OBSConnectionManager reconnection behavior', () => {
+  let socket: Socket;
   let manager: OBSConnectionManager;
-  let identifiedCallback: (() => void) | null;
-  let connectionClosedCallback: ((data: ConnectionClosedData) => void) | null;
-
-  const advanceTimers = async () => {
-    runOnlyPendingTimers();
-    await Promise.resolve();
-  };
-
   beforeEach(() => {
     resetOBSConnectionManager();
     useFakeTimers();
-    identifiedCallback = null;
-    connectionClosedCallback = null;
-
-    mockOBS = {
-      connect: createMockFn<[address?: string, password?: string], Promise<ConnectResult>>(),
-      disconnect: createMockFn<[], Promise<void>>().mockResolvedValue(),
-      call: createMockFn<[requestType: string, requestData?: Record<string, unknown>], Promise<unknown>>(),
-      on: createMockFn<[eventName: string, handler: ObsEventHandler], void>((event, cb) => {
-        if (event === "Identified") identifiedCallback = cb;
-        if (event === "ConnectionClosed") connectionClosedCallback = cb;
-      }),
-      once: createMockFn<[eventName: string, handler: ObsEventHandler], void>(),
-      off: createMockFn<[eventName: string, handler: ObsEventHandler], void>(),
-    };
-
-    manager = new OBSConnectionManager({
-      obs: mockOBS,
-      config: {
-        address: "ws://localhost:4455",
-        password: "test-password",
-        enabled: true,
-        connectionTimeoutMs: 5000,
-      },
-    });
-  });
-
-  afterEach(() => {
-    resetOBSConnectionManager();
-    restoreAllMocks();
-    useRealTimers();
-    clearAllMocks();
-  });
-
-  it("schedules a reconnect after a failed connect attempt", async () => {
-    mockOBS.connect
-      .mockRejectedValueOnce(new Error("fail-first"))
-      .mockResolvedValue({ obsWebSocketVersion: "5", negotiatedRpcVersion: 1 });
-
-    await manager.connect().catch(() => {});
-
-    await advanceTimers();
-
-    expect(mockOBS.connect).toHaveBeenCalledTimes(2);
-
-    if (identifiedCallback) {
-      identifiedCallback();
-    }
-  });
-
-  it("schedules reconnect on ConnectionClosed events", async () => {
-    mockOBS.connect.mockResolvedValue({
-      obsWebSocketVersion: "5",
-      negotiatedRpcVersion: 1,
-    });
-
-    const connectPromise = manager.connect();
-    if (identifiedCallback) identifiedCallback();
-    await connectPromise;
-
-    if (connectionClosedCallback) {
-      connectionClosedCallback({ code: 1006, reason: "test" });
-    }
-
-    await advanceTimers();
-
-    expect(mockOBS.connect).toHaveBeenCalledTimes(2);
-  });
-
-  it("does not reconnect after intentional disconnect", async () => {
-    mockOBS.disconnect.mockImplementation(async () => {
-      if (connectionClosedCallback) {
-        connectionClosedCallback({
-          code: 1000,
-          reason: "intentional-disconnect",
-        });
-      }
-    });
-    mockOBS.connect.mockResolvedValue({
-      obsWebSocketVersion: "5",
-      negotiatedRpcVersion: 1,
-    });
-
-    const connectPromise = manager.connect();
-    if (identifiedCallback) {
-      identifiedCallback();
-    }
-    await connectPromise;
-
+    socket = new Socket();
+    manager = new OBSConnectionManager({ obs: socket, config });
     manager.reconnectIntervalMs = 10;
-    await manager.disconnect();
-    await advanceTimers();
-
-    expect(mockOBS.connect).toHaveBeenCalledTimes(1);
+  });
+  afterEach(async () => {
+    try {
+      manager.dispose();
+      await manager.disconnect();
+      expect(socket.eventNames()).toEqual([]);
+      expect(getTimerCount()).toBe(0);
+    } finally {
+      resetOBSConnectionManager();
+      useRealTimers();
+    }
   });
 
-  it("clears pending reconnect work when singleton manager resets", async () => {
-    const singletonOBS: ObsSocketFake = {
-      connect: createMockFn<[address?: string, password?: string], Promise<ConnectResult>>().mockResolvedValue({
-        obsWebSocketVersion: "5",
-        negotiatedRpcVersion: 1,
-      }),
-      disconnect: createMockFn<[], Promise<void>>().mockResolvedValue(),
-      call: createMockFn<[requestType: string, requestData?: Record<string, unknown>], Promise<unknown>>(),
-      on: createMockFn<[eventName: string, handler: ObsEventHandler], void>(),
-      off: createMockFn<[eventName: string, handler: ObsEventHandler], void>(),
-      once: createMockFn<[eventName: string, handler: ObsEventHandler], void>(),
-    };
-
-    const singletonManager = getOBSConnectionManager({
-      obs: singletonOBS,
-      config: {
-        address: "ws://localhost:4455",
-        password: "singleton-password",
-        enabled: true,
-        connectionTimeoutMs: 5000,
-      },
+  it('schedules a reconnect after a failed connect attempt', async () => {
+    socket.connect.mockRejectedValueOnce(new Error('synthetic first failure'));
+    await expect(manager.connect()).rejects.toThrow('synthetic first failure');
+    let entered!: () => void;
+    const attempt = new Promise<void>(resolve => { entered = resolve; });
+    socket.connect.mockImplementation(async () => {
+      socket.emit('Identified');
+      entered();
+      return { obsWebSocketVersion: '5', negotiatedRpcVersion: 1 };
     });
+    advanceTimersByTime(10);
+    await attempt;
+    // Joining the actual connection owner also waits for its SDK acknowledgement.
+    await manager.ensureConnected();
+    expect(socket.connect).toHaveBeenCalledTimes(2);
+    expect(manager.isConnected()).toBe(true);
+  });
 
-    singletonManager.reconnectIntervalMs = 10;
-    singletonManager.scheduleReconnect("test-singleton-reset");
+  it('schedules reconnect on ConnectionClosed events', async () => {
+    await manager.connect();
+    socket.emit('ConnectionClosed', { code: 1006, reason: 'synthetic dropped connection' });
+    let entered!: () => void;
+    const attempt = new Promise<void>(resolve => { entered = resolve; });
+    socket.connect.mockImplementation(async () => {
+      socket.emit('Identified'); entered();
+      return { obsWebSocketVersion: '5', negotiatedRpcVersion: 1 };
+    });
+    advanceTimersByTime(10);
+    await attempt;
+    await manager.ensureConnected();
+    expect(socket.connect).toHaveBeenCalledTimes(2);
+  });
 
-    resetOBSConnectionManager();
-    await advanceTimers();
+  it('does not reconnect after intentional disconnect', async () => {
+    await manager.connect();
+    await manager.disconnect();
+    advanceTimersByTime(6000);
+    expect(socket.connect).toHaveBeenCalledTimes(1);
+    expect(getTimerCount()).toBe(0);
+  });
 
-    expect(singletonOBS.connect).not.toHaveBeenCalled();
+  it('retires a held local retry and releases listeners before timer restoration', async () => {
+    let release!: (value: { obsWebSocketVersion: string; negotiatedRpcVersion: number }) => void;
+    const held = new Promise<{ obsWebSocketVersion: string; negotiatedRpcVersion: number }>(resolve => { release = resolve; });
+    let entered!: () => void;
+    const attempt = new Promise<void>(resolve => { entered = resolve; });
+    socket.connect.mockImplementation(() => { entered(); return held; });
+    try {
+      manager.scheduleReconnect('synthetic held retry');
+      advanceTimersByTime(10);
+      await attempt;
+      manager.dispose();
+      await manager.disconnect();
+      release({ obsWebSocketVersion: '5', negotiatedRpcVersion: 1 });
+      await held;
+      socket.emit('Identified');
+      advanceTimersByTime(6000);
+      expect(socket.connect).toHaveBeenCalledTimes(1);
+      expect(socket.eventNames()).toEqual([]);
+      expect(manager.isConnected()).toBe(false);
+      expect(getTimerCount()).toBe(0);
+    } finally { release({ obsWebSocketVersion: '5', negotiatedRpcVersion: 1 }); }
+  });
+
+  it('clears pending reconnect work when singleton manager resets', async () => {
+    const singletonSocket = new Socket();
+    const singleton = getOBSConnectionManager({ obs: singletonSocket, config });
+    try {
+      singleton.reconnectIntervalMs = 10;
+      singleton.scheduleReconnect('synthetic singleton reset');
+      resetOBSConnectionManager();
+      await singleton.disconnect();
+      advanceTimersByTime(6000);
+      expect(singletonSocket.connect).not.toHaveBeenCalled();
+      expect(singletonSocket.eventNames()).toEqual([]);
+      expect(getTimerCount()).toBe(0);
+    } finally { singleton.dispose(); await singleton.disconnect(); }
   });
 });

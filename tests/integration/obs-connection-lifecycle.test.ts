@@ -19,11 +19,6 @@ describe("OBS Connection Lifecycle Integration", () => {
   let viewerCountSystem: InstanceType<typeof ViewerCountSystem>;
   let obsManager: ReturnType<typeof createOBSConnectionManager>;
   let obsObserver: InstanceType<typeof OBSViewerCountObserver>;
-  let mockPlatforms: {
-    youtube: ReturnType<typeof createStreamingPlatformMock>;
-    twitch: ReturnType<typeof createStreamingPlatformMock>;
-    tiktok: ReturnType<typeof createStreamingPlatformMock>;
-  };
   let mockOBSWebSocket: ReturnType<typeof createMockOBSWebSocket>;
   let testConfig: ReturnType<typeof createConfigFixture>;
 
@@ -41,14 +36,8 @@ describe("OBS Connection Lifecycle Integration", () => {
       },
     });
 
-    mockPlatforms = {
-      youtube: createStreamingPlatformMock("youtube", 1500),
-      twitch: createStreamingPlatformMock("twitch", 2500),
-      tiktok: createStreamingPlatformMock("tiktok", 800),
-    };
-
     viewerCountSystem = new ViewerCountSystem({
-      platforms: mockPlatforms,
+      platforms: {},
       config: testConfig,
       logger: noOpLogger,
     });
@@ -67,6 +56,9 @@ describe("OBS Connection Lifecycle Integration", () => {
     if (viewerCountSystem) {
       await viewerCountSystem.cleanup();
     }
+
+    obsManager?.dispose();
+    await obsManager?.disconnect();
 
     clearAllMocks();
     restoreAllMocks();
@@ -134,23 +126,26 @@ describe("OBS connection manager reconnect ownership integration", () => {
     });
 
     const firstConnect = manager.connect();
+    let ensured: Promise<unknown> | undefined;
     const ownedHandlers = [...handlers.entries()];
-    const closed = handlers.get("ConnectionClosed");
-    const identified = handlers.get("Identified");
-    expect(closed).toEqual(expect.any(Function));
-    expect(identified).toEqual(expect.any(Function));
-    if (!closed || !identified) throw new Error("Expected owned OBS lifecycle handlers");
-    closed({ code: 1006, reason: "socket-closed" });
-    const ensured = manager.ensureConnected(50);
-
-    expect(mockOBS.connect).toHaveBeenCalledTimes(1);
-
-    identified();
-    await Promise.all([firstConnect, ensured]);
-    expect(manager.getConnectionState().isConnected).toBe(true);
-    expect(mockOBS.connect).toHaveBeenCalledTimes(1);
-
-    manager.dispose();
+    try {
+      const closed = handlers.get("ConnectionClosed");
+      const identified = handlers.get("Identified");
+      expect(closed).toEqual(expect.any(Function));
+      expect(identified).toEqual(expect.any(Function));
+      if (!closed || !identified) throw new Error("Expected owned OBS lifecycle handlers");
+      closed({ code: 1006, reason: "socket-closed" });
+      ensured = manager.ensureConnected(50);
+      expect(mockOBS.connect).toHaveBeenCalledTimes(1);
+      identified();
+      await Promise.all([firstConnect, ensured]);
+      expect(manager.getConnectionState().isConnected).toBe(true);
+      expect(mockOBS.connect).toHaveBeenCalledTimes(1);
+    } finally {
+      manager.dispose();
+      await manager.disconnect();
+      await Promise.allSettled([firstConnect, ensured]);
+    }
     expect(mockOBS.off.mock.calls).toEqual(ownedHandlers);
     expect(handlers.size).toBe(0);
   });
@@ -173,17 +168,5 @@ function createMockOBSWebSocket() {
     setConnected(connected: boolean) {
       this.connected = connected;
     },
-  };
-}
-
-function createStreamingPlatformMock(
-  platformName: string,
-  initialViewerCount: number,
-) {
-  return {
-    getViewerCount: createMockFn().mockResolvedValue(initialViewerCount),
-    isEnabled: createMockFn(() => true),
-    isConnected: createMockFn(() => true),
-    platform: platformName,
   };
 }

@@ -1,55 +1,18 @@
-import { describe, expect, it, afterEach } from "bun:test";
-import { restoreAllMocks } from "../../helpers/bun-mock-utils";
-import { createMockOBSForTesting } from "../../helpers/display-queue-test-factory";
-import { PRIORITY_LEVELS } from "../../../src/core/constants";
-import { DisplayQueue } from "../../../src/obs/display-queue";
+import { expect, it } from 'bun:test';
+import { OBSConnectionManager } from '../../../src/obs/connection';
+import { PRIORITY_LEVELS } from '../../../src/core/constants';
+import { DisplayQueue } from '../../../src/obs/display-queue';
 
-describe("DisplayQueue getQueueLength", () => {
-  afterEach(() => {
-    restoreAllMocks();
-  });
-
-  function createQueue() {
-    const mockOBS = createMockOBSForTesting();
-    const config = {
-      maxQueueSize: 50,
-      autoProcess: false,
-      timing: { transitionDelay: 100 },
-    };
-    return new DisplayQueue(mockOBS, config, { PRIORITY_LEVELS });
-  }
-
-  it("returns 0 for an empty queue", () => {
-    const queue = createQueue();
+it('reports empty, mixed admission and cleared queue lengths through the actual state owner', async () => {
+  const obs = new OBSConnectionManager({ config: { enabled: false, password: 'synthetic-only' } });
+  let queue: DisplayQueue | undefined;
+  try {
+    queue = new DisplayQueue(obs as OBSConnectionManager & ConstructorParameters<typeof DisplayQueue>[0], { maxQueueSize: 50, autoProcess: false }, { PRIORITY_LEVELS });
     expect(queue.getQueueLength()).toBe(0);
-  });
-
-  it("returns the correct count after adding items of different types", () => {
-    const queue = createQueue();
-    queue.addItem({
-      type: "chat",
-      priority: 1,
-      platform: "tiktok",
-      data: { username: "test-user", message: "hello" },
-    });
-    queue.addItem({
-      type: "platform:gift",
-      priority: 3,
-      platform: "twitch",
-      data: { username: "test-user-2", message: "gift" },
-    });
+    queue.addItem({ type: 'chat', priority: 1, platform: 'tiktok', data: { username: 'Synthetic A', message: 'Synthetic text' } });
+    queue.addItem({ type: 'platform:gift', priority: 3, platform: 'twitch', data: { username: 'Synthetic B', message: 'Synthetic gift' } });
     expect(queue.getQueueLength()).toBe(2);
-  });
-
-  it("returns 0 after clearing the queue", () => {
-    const queue = createQueue();
-    queue.addItem({
-      type: "chat",
-      priority: 1,
-      platform: "tiktok",
-      data: { username: "test-user", message: "hello" },
-    });
     queue.clearQueue();
     expect(queue.getQueueLength()).toBe(0);
-  });
+  } finally { try { await queue?.stop(); } finally { obs.dispose(); await obs.disconnect(); } }
 });

@@ -240,24 +240,25 @@ class DisplayQueue {
         return resolvePriorityForType(type, priorityLevels) ?? priorityLevels.CHAT;
     }
 
-    addItem(item: QueueItem) {
+    addItem(item: QueueItem): readonly DisplayQueueItem[] {
         if (this.stopped) throw new Error('Display queue stopped');
         this.state.validate(item);
         if (this.records.has(item)) throw new Error('Display item already outstanding');
         if (!this.isViewerOutputEnabled(item)) {
-            return;
+            return [];
         }
         const { insertIndex } = this.state.addItem(item, this.records.size - this.state.getQueueLength());
         this.registerRecord(item);
         logger.debug(`[Display Queue] Added ${item.type} at position ${insertIndex}. Queue length: ${this.getQueueLength()}`, 'display-queue');
         this.startProcessingIfNeeded();
+        return [item];
     }
 
-    addSequence(items: QueueItem[]) {
+    addSequence(items: QueueItem[]): readonly DisplayQueueItem[] {
         if (this.stopped) throw new Error('Display queue stopped');
         if (!Array.isArray(items) || items.length === 0) {
             this.state.addSequence(items);
-            return;
+            return [];
         }
         items.forEach((item) => this.state.validate(item));
         if (new Set(items).size !== items.length || items.some((item) => this.records.has(item))) {
@@ -265,13 +266,14 @@ class DisplayQueue {
         }
         const classified = items.map((item) => ({ item, enabled: this.isViewerOutputEnabled(item) }));
         const admitted = classified.filter(({ enabled }) => enabled).map(({ item }) => item);
-        if (admitted.length === 0) return;
+        if (admitted.length === 0) return [];
         const { insertIndex } = this.state.addSequence(admitted, {
             reservedRows: this.records.size - this.state.getQueueLength()
         });
         admitted.forEach((item) => this.registerRecord(item));
         logger.debug(`[Display Queue] Added sequence (${items.length} items) at position ${insertIndex}. Queue length: ${this.getQueueLength()}`, 'display-queue');
         this.startProcessingIfNeeded();
+        return admitted;
     }
 
     startProcessingIfNeeded() {
@@ -300,10 +302,11 @@ class DisplayQueue {
         if (!chatItem || !isChatType(chatItem.type)) {
             throw new Error('Invalid chat item: must be type "chat"');
         }
-        this.addItem(chatItem);
+        const admitted = this.addItem(chatItem);
         if (!this.isProcessing && this.config.autoProcess) {
             await this.processQueue();
         }
+        return admitted;
     }
 
     processQueue(): Promise<void> {
@@ -483,19 +486,19 @@ class DisplayQueue {
     }
 
     async displayChatItem(item: QueueItem) {
-        this.enqueueEffects(item);
+        const admitted = this.enqueueEffects(item);
         await this.processQueue();
-        return true;
+        return admitted.includes(item);
     }
 
     async displayNotificationItem(item: QueueItem) {
-        this.enqueueEffects(item);
+        const admitted = this.enqueueEffects(item);
         await this.processQueue();
-        return true;
+        return admitted.includes(item);
     }
 
     enqueueEffects(item: QueueItem) {
-        this.addItem(item);
+        return this.addItem(item);
     }
 
     handleNotificationEffects(item: QueueItem) {

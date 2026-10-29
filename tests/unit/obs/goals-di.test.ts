@@ -1,162 +1,67 @@
-import { describe, expect, beforeEach, it, afterEach } from "bun:test";
-import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
-import { initializeTestLogging } from "../../helpers/test-setup";
-import * as testClock from "../../helpers/test-clock";
-import * as goals from "../../../src/obs/goals.ts";
-import {
-  OBSGoalsManager,
-  createOBSGoalsManager,
-  getDefaultGoalsManager,
-  resetDefaultGoalsManager,
-} from "../../../src/obs/goals.ts";
+import { afterEach, describe, expect, it } from 'bun:test';
+import * as goals from '../../../src/obs/goals';
+import { OBSGoalsManager, createOBSGoalsManager, getDefaultGoalsManager, resetDefaultGoalsManager } from '../../../src/obs/goals';
+import { createGoalTracker } from '../../../src/utils/goal-tracker';
+import { createOBSSourcesManager } from '../../../src/obs/sources';
+import { createMainPresentationFixture } from '../../helpers/main-presentation-fixture';
 
-initializeTestLogging();
+afterEach(() => resetDefaultGoalsManager());
 
-type ObsManagerFixture = Parameters<typeof createOBSGoalsManager>[0];
-type GoalsDependencies = NonNullable<Parameters<typeof createOBSGoalsManager>[1]>;
-type GoalTrackerFixture = NonNullable<GoalsDependencies["goalTracker"]>;
-type UpdateTextSource = NonNullable<GoalsDependencies["updateTextSource"]>;
-
-const createObsManagerFixture = (): ObsManagerFixture => ({
-  isConnected: createMockFn<[], boolean>(() => true),
-});
-
-const createGoalTrackerFixture = (
-  formatted: string,
-  currentState: Record<string, unknown> = { formatted },
-): GoalTrackerFixture => ({
-  initializeGoalTracker: createMockFn<[], Promise<void>>(() => Promise.resolve()),
-  addDonationToGoal: createMockFn<[string, number, string?], Promise<{ success: boolean; formatted: string }>>(async () => ({
-    success: true,
-    formatted,
-  })),
-  addPaypiggyToGoal: createMockFn<[string, number?], Promise<{ success: boolean; formatted: string }>>(async () => ({
-    success: true,
-    formatted,
-  })),
-  getGoalState: createMockFn<[string], Record<string, unknown> | null>(() => currentState),
-  getAllGoalStates: createMockFn<[], Record<string, Record<string, unknown> | null>>(() => ({
-    tiktok: currentState,
-  })),
-});
-
-describe("OBSGoalsManager DI requirements", () => {
-  afterEach(() => {
-    restoreAllMocks();
-    resetDefaultGoalsManager();
-  });
-
-  beforeEach(() => {
-    initializeTestLogging();
-  });
-
-  it("exports only the DI public API surface", () => {
-    const exportedKeys = Object.keys(goals).sort();
-    expect(exportedKeys).toEqual([
-      "OBSGoalsManager",
-      "createOBSGoalsManager",
-      "getDefaultGoalsManager",
-      "resetDefaultGoalsManager",
+describe('OBS goals concrete dependency injection', () => {
+  it('exports the public goals construction and singleton API', () => {
+    expect(Object.keys(goals).sort()).toEqual([
+      'OBSGoalsManager', 'createOBSGoalsManager', 'getDefaultGoalsManager', 'resetDefaultGoalsManager',
     ]);
   });
 
-  it("requires an OBS manager in the constructor", () => {
-    expect(() => Reflect.construct(OBSGoalsManager, [])).toThrow(
-      /OBSGoalsManager requires OBSConnectionManager/,
-    );
+  it('requires an OBS manager in the constructor', () => {
+    expect(() => Reflect.construct(OBSGoalsManager, [])).toThrow('OBSGoalsManager requires OBSConnectionManager');
   });
 
-  it("returns goal status from injected goal tracker", async () => {
-    const mockObsManager = createObsManagerFixture();
-    const mockGoalTracker = createGoalTrackerFixture("100/500", {
-      current: 100,
-      target: 500,
-      formatted: "100/500",
+  for (const [kind, text] of [['factory', '25/100'], ['singleton', '30/100']] as const) {
+    it(`${kind} preserves the supplied concrete tracker and source projection`, async () => {
+      const h = await createMainPresentationFixture();
+      h.config.logging.file.enabled = false;
+      h.config.logging.chat.enabled = false;
+      Object.assign(h.config.goals, { tiktokGoalEnabled: true, tiktokGoalTarget: 500,
+        tiktokGoalCurrency: 'coins', tiktokGoalSource: `synthetic-${kind}-goal` });
+      try {
+        await h.start();
+        const tracker = createGoalTracker({ config: h.config });
+        tracker.initializeGoalTracker();
+        expect(tracker.addDonationToGoal('tiktok', 100, 'coins')).toMatchObject({ success: true, newTotal: 100 });
+        const sources = createOBSSourcesManager(h.obs);
+        const dependencies = { config: h.config, goalTracker: tracker, updateTextSource: sources.updateTextSource };
+        const manager = kind === 'factory' ? createOBSGoalsManager(h.obs, dependencies)
+          : getDefaultGoalsManager({ ...dependencies, obsManager: h.obs });
+        expect(manager.getCurrentGoalStatus('tiktok')).toEqual(tracker.getGoalState('tiktok'));
+        expect(manager.getCurrentGoalStatus('tiktok')).toMatchObject({ current: 100, target: 500, formatted: '100/500 coins' });
+        const before = h.socket.writes.length;
+        await manager.updateGoalDisplay('tiktok', text);
+        expect(h.socket.writes.slice(before)).toEqual([{ inputName: `synthetic-${kind}-goal`,
+          inputSettings: { font: { face: 'Synthetic font' }, color: 123, text }, overlay: false }]);
+      } finally {
+        resetDefaultGoalsManager();
+        await h.dispose();
+      }
     });
+  }
 
-    const goalsManager = createOBSGoalsManager(mockObsManager, {
-      config: {
-        goals: {
-          enabled: true,
-          tiktokGoalEnabled: true,
-          youtubeGoalEnabled: true,
-          twitchGoalEnabled: true,
-        },
-      },
-      updateTextSource: createMockFn<[string, string?], Promise<void>>(() => Promise.resolve()),
-      goalTracker: mockGoalTracker,
-    });
-
-    const status = await goalsManager.getCurrentGoalStatus("tiktok");
-
-    expect(status).toEqual({ current: 100, target: 500, formatted: "100/500" });
-  });
-
-  it("writes goal text through injected updateTextSource", async () => {
-    const mockObsManager = createObsManagerFixture();
-    const updateTextSource = createMockFn<Parameters<UpdateTextSource>, ReturnType<UpdateTextSource>>(() => Promise.resolve());
-
-    const goalsManager = createOBSGoalsManager(mockObsManager, {
-      config: {
-        goals: {
-          enabled: true,
-          tiktokGoalEnabled: true,
-          tiktokGoalSource: "test-tiktok-goal-source",
-        },
-      },
-      updateTextSource,
-      goalTracker: createGoalTrackerFixture("25/100"),
-    });
-
-    await goalsManager.updateGoalDisplay("tiktok", "25/100");
-
-    expect(updateTextSource.mock.calls).toEqual([
-      ["test-tiktok-goal-source", "25/100"],
-    ]);
-  });
-
-  it("writes goal updates through injected default-manager dependencies", async () => {
-    const updateTextSource = createMockFn<Parameters<UpdateTextSource>, ReturnType<UpdateTextSource>>(() => Promise.resolve());
-    const goalTracker = createGoalTrackerFixture("30/100");
-
-    const freshGoals = await import(
-      `../../../src/obs/goals.ts?test-default-update-source=${testClock.now()}`
-    );
-    const defaultGoalsManager = freshGoals.getDefaultGoalsManager({
-      config: {
-        goals: {
-          enabled: true,
-          tiktokGoalEnabled: true,
-          tiktokGoalSource: "test-default-tiktok-goal-source",
-        },
-      },
-      obsManager: {
-        isConnected: createMockFn().mockReturnValue(true),
-      },
-      updateTextSource,
-      goalTracker,
-    });
-
-    await defaultGoalsManager.updateGoalDisplay("tiktok", "30/100");
-
-    expect(updateTextSource.mock.calls).toEqual([
-      ["test-default-tiktok-goal-source", "30/100"],
-    ]);
-  });
-
-  it("supports resetting default goals manager singleton", () => {
-    const first = getDefaultGoalsManager({
-      config: { goals: { enabled: false } },
-      obsManager: { isConnected: () => false },
-    });
-
-    resetDefaultGoalsManager();
-
-    const second = getDefaultGoalsManager({
-      config: { goals: { enabled: false } },
-      obsManager: { isConnected: () => false },
-    });
-
-    expect(second).not.toBe(first);
+  it('resetting the default manager acquires a different actual owner', async () => {
+    const h = await createMainPresentationFixture();
+    h.config.logging.file.enabled = false;
+    h.config.logging.chat.enabled = false;
+    try {
+      await h.start();
+      const dependencies = { config: h.config, obsManager: h.obs,
+        updateTextSource: createOBSSourcesManager(h.obs).updateTextSource };
+      const first = getDefaultGoalsManager(dependencies);
+      resetDefaultGoalsManager();
+      const second = getDefaultGoalsManager(dependencies);
+      expect(second).not.toBe(first);
+    } finally {
+      resetDefaultGoalsManager();
+      await h.dispose();
+    }
   });
 });

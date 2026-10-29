@@ -9,6 +9,7 @@ type ObsManagerLike = {
     call: (requestType: string, payload?: Record<string, unknown>) => Promise<unknown>;
     isConnected: () => boolean;
     isReady: () => Promise<boolean>;
+    setSourcesCacheInvalidator?: (invalidator: (() => void) | null) => void;
     connect?: () => Promise<boolean>;
     disconnect?: () => Promise<void>;
     addEventListener?: (eventName: string, handler: (data?: Record<string, unknown>) => void) => void;
@@ -61,6 +62,9 @@ function createOBSSubsystem(deps: ObsSubsystemDeps) {
         isReady: typeof rawConnectionManager.isReady === 'function'
             ? rawConnectionManager.isReady.bind(rawConnectionManager)
             : async () => rawConnectionManager.isConnected(),
+        ...(typeof rawConnectionManager.setSourcesCacheInvalidator === 'function'
+            ? { setSourcesCacheInvalidator: rawConnectionManager.setSourcesCacheInvalidator.bind(rawConnectionManager) }
+            : {}),
         ...(typeof rawConnectionManager.connect === 'function'
             ? { connect: rawConnectionManager.connect.bind(rawConnectionManager) }
             : {}),

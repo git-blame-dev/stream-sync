@@ -61,7 +61,9 @@ describe("OBS Connection Race Condition - User Experience Validation", () => {
     });
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    connectionManager.dispose();
+    await connectionManager.disconnect();
     restoreAllMocks();
     clearAllMocks();
   });
@@ -139,9 +141,15 @@ describe("OBS Connection Race Condition - User Experience Validation", () => {
         negotiatedRpcVersion: 1,
       });
 
-      await expect(shortTimeoutManager.connect()).rejects.toThrow(
-        /timed out waiting for authentication/i,
-      );
+      try {
+        await expect(shortTimeoutManager.connect()).rejects.toThrow(
+          /timed out waiting for authentication/i,
+        );
+      } finally {
+        shortTimeoutManager.dispose();
+        await shortTimeoutManager.disconnect();
+        expect(shortTimeoutManager.reconnectTimer).toBeNull();
+      }
     });
   });
 });

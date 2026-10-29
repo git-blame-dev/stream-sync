@@ -151,6 +151,8 @@ class VFXCommandService {
     eventBus: EventBusLike | null;
     _effectsManager: EffectsManagerLike | null;
     commandParser: CommandParserLike | null;
+    private readonly inflightUsers = new Set<string>();
+    private readonly inflightCommands = new Set<string>();
     userLastCommand: Map<string, number>;
     globalCommandCooldowns: Map<string, number>;
     userCommandTimestamps: Map<string, number[]>;
@@ -195,9 +197,11 @@ class VFXCommandService {
     }
 
     async executeCommand(command: string, context: CommandExecutionContext): Promise<CommandExecutionResult> {
-        const startTime = Date.now();
+        const startTime = performance.now();
         this.stats.totalCommands++;
         let timedExecutionRecorded = false;
+        let claimedUser: string | undefined;
+        let claimedCommand: string | undefined;
         
         try {
             if (!context || typeof context !== 'object') {
@@ -249,9 +253,20 @@ class VFXCommandService {
                 }
             }
 
+            if (!skipCooldown) {
+                if (this.config.cooldowns.cmdCooldown > 0) {
+                    claimedUser = normalizedUserId;
+                    this.inflightUsers.add(claimedUser);
+                }
+                if (this.config.cooldowns.globalCmdCooldownMs > 0 && vfxConfig.commandKey) {
+                    claimedCommand = vfxConfig.commandKey;
+                    this.inflightCommands.add(claimedCommand);
+                }
+            }
             timedExecutionRecorded = true;
             const executionResult = await this._executeVFXCommand(vfxConfig, { username: commandUser, platform });
             
+            let executionTime: number;
             if (executionResult.success) {
                 if (!skipCooldown) {
                     if (!vfxConfig.commandKey) {
@@ -259,6 +274,7 @@ class VFXCommandService {
                     }
                     this._updateCooldowns(normalizedUserId, vfxConfig.commandKey);
                 }
+                executionTime = performance.now() - startTime;
                 this.stats.successfulCommands++;
                 if (this.eventBus) {
                         const {
@@ -279,7 +295,7 @@ class VFXCommandService {
                             correlationId,
                             vfxConfig,
                             result: executionResult,
-                            duration: Date.now() - startTime,
+                            duration: executionTime,
                             context: {
                                 ...contextExtras,
                                 username: commandUser,
@@ -310,10 +326,9 @@ class VFXCommandService {
                         }
                 }
             } else {
+                executionTime = performance.now() - startTime;
                 this.stats.failedCommands++;
             }
-            
-            const executionTime = Math.max(1, Date.now() - startTime);
             if (timedExecutionRecorded) {
                 this.stats.timedCommands += 1;
                 if (this.stats.timedCommands === 1) {
@@ -341,6 +356,9 @@ class VFXCommandService {
                 username: (typeof safeContext.username === 'string' && safeContext.username.trim()) ? safeContext.username.trim() : null,
                 platform: (typeof safeContext.platform === 'string') ? safeContext.platform : null
             };
+        } finally {
+            if (claimedUser !== undefined) this.inflightUsers.delete(claimedUser);
+            if (claimedCommand !== undefined) this.inflightCommands.delete(claimedCommand);
         }
     }
 
@@ -497,6 +515,12 @@ class VFXCommandService {
             const userCooldownMs = userCooldownSec * 1000;
             this._pruneCooldownBookkeeping(now);
             
+            if (userCooldownMs > 0 && this.inflightUsers.has(userId)) {
+                return { allowed: false, type: 'user', remainingMs: userCooldownMs, cooldownMs: userCooldownMs };
+            }
+            if (globalCooldownMs > 0 && this.inflightCommands.has(command)) {
+                return { allowed: false, type: 'global', remainingMs: globalCooldownMs, cooldownMs: globalCooldownMs };
+            }
             const lastUserCommand = this.userLastCommand.get(userId);
             if (lastUserCommand !== undefined && userCooldownMs > 0 && (now - lastUserCommand) < userCooldownMs) {
                 return {
@@ -730,17 +754,13 @@ class VFXCommandService {
         return selectedOption ?? null;
     }
 
-    _resolveSelectableCommandSpec(commandKey: string, commandSpec: string): string {
+    _resolveSelectableCommandSpec(_commandKey: string, commandSpec: string): string {
         if (typeof commandSpec !== 'string') {
             return commandSpec;
         }
 
         const normalizedSpec = commandSpec.trim();
         if (!normalizedSpec) {
-            return normalizedSpec;
-        }
-
-        if (!SECTION_COMMAND_KEYS.has(commandKey)) {
             return normalizedSpec;
         }
 

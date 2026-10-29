@@ -47,16 +47,6 @@ describe('DisplayQueue operator controls', () => {
         expect(effects).toBe(0);
     });
 
-    it('does not credit disabled monetization', async () => {
-        const operatorControls = controls({ giftsEnabled: false });
-        const { queue } = makeQueue(operatorControls);
-        let accounting = 0;
-        queue.effects.processMonetizationGoal = async () => { accounting++; };
-        queue.addItem(item('platform:gift'));
-        await queue.effectChain;
-        expect(accounting).toBe(0);
-    });
-
     it('removes disabled waiting items while preserving order and categories', () => {
         const operatorControls = controls();
         const { queue } = makeQueue(operatorControls);

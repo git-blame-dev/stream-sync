@@ -1,7 +1,7 @@
 import { logger } from '../core/logging';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 import { createRetrySystem } from '../utils/retry-system';
-import { safeDelay } from '../utils/timeout-validator';
+import { safeDelay, safeSetTimeout } from '../utils/timeout-validator';
 import { getOBSConnectionManager } from './connection';
 import { getDefaultSourcesManager } from './sources';
 
@@ -44,7 +44,22 @@ function hasObsEventListeners(obsManager: ObsManagerLike): obsManager is ObsMana
     return typeof obsManager.addEventListener === 'function' && typeof obsManager.removeEventListener === 'function';
 }
 
+type MediaWaiter = { promise: Promise<void>; cancel: (reason?: Error) => void };
+type MediaRequest = {
+    cancelled: Promise<never>;
+    reason?: Error;
+    cancel: (reason: Error) => void;
+    waiter?: MediaWaiter;
+};
+
+function cancellationError(message: string): Error {
+    return Object.assign(new Error(message), { name: 'AbortError' });
+}
+
 class OBSEffectsManager {
+    private disposed = false;
+    private readonly requests = new Map<string, MediaRequest>();
+    private readonly waiters = new Set<MediaWaiter>();
     obsManager: ObsManagerLike;
     logger: EffectsLogger;
     log: EffectsLogger;
@@ -92,106 +107,152 @@ class OBSEffectsManager {
     }
 
 
+    private assertActive() {
+        if (this.disposed) throw cancellationError('OBS effects manager is disposed');
+    }
+
+    private beginRequest(source: string): MediaRequest {
+        this.assertActive();
+        this.requests.get(source)?.cancel(cancellationError(`OBS media request superseded: ${source}`));
+        let reject!: (reason: Error) => void;
+        const cancelled = new Promise<never>((_resolve, rejectPromise) => { reject = rejectPromise; });
+        // Cancellation may precede the next await; always observe it immediately.
+        void cancelled.catch(() => {});
+        const request: MediaRequest = {
+            cancelled,
+            cancel: reason => {
+                if (request.reason) return;
+                request.reason = reason;
+                request.waiter?.cancel(reason);
+                reject(reason);
+            }
+        };
+        this.requests.set(source, request);
+        return request;
+    }
+
+    private awaitRequest<T>(request: MediaRequest, operation: Promise<T>): Promise<T> {
+        return Promise.race([operation, request.cancelled]);
+    }
+
+    private assertRequest(request: MediaRequest) {
+        this.assertActive();
+        if (request.reason) throw request.reason;
+    }
+
+    private finishRequest(source: string, request: MediaRequest) {
+        request.waiter?.cancel();
+        if (this.requests.get(source) === request) this.requests.delete(source);
+    }
+
+    /** Permanently close admission and settle all locally owned requests/waits. */
+    dispose(): void {
+        if (this.disposed) return;
+        this.disposed = true;
+        const reason = cancellationError('OBS effects manager is disposed');
+        for (const request of this.requests.values()) request.cancel(reason);
+        this.requests.clear();
+        for (const waiter of this.waiters) waiter.cancel(reason);
+    }
+
     async playMediaInOBS(commandConfig: { mediaSource?: string; filename?: string; vfxFilePath?: string }, waitForCompletion = true) {
-    if (!commandConfig || !commandConfig.mediaSource || !commandConfig.filename || !commandConfig.vfxFilePath) {
-        throw new Error("No media config provided with source, filename, and vfxFilePath");
-    }
-    
-        await this.ensureOBSConnected();
-
-        const filePath = `${commandConfig.vfxFilePath}/${commandConfig.filename}.mp4`;
-    
-    try {
-            this.logger.debug(`[VFX] Playing media: ${commandConfig.filename} in source: ${commandConfig.mediaSource} from path: ${filePath}`, 'effects');
-        
-            await this.obsCall("SetInputSettings", { 
-            inputName: commandConfig.mediaSource, 
-            inputSettings: { 
-                local_file: filePath, 
-                looping: false 
-            }, 
-            overlay: false 
-        });
-
-            await this.obsCall("TriggerMediaInputAction", { 
-            inputName: commandConfig.mediaSource, 
-            mediaAction: "OBS_WEBSOCKET_MEDIA_INPUT_ACTION_RESTART" 
-        });
-
-        if (waitForCompletion) {
-                this.logger.debug(`[VFX] Waiting for media completion: ${commandConfig.filename}`, 'effects');
-                await this.waitForMediaCompletion(commandConfig.mediaSource);
-        } else {
-                this.logger.debug(`[VFX] Fire-and-forget mode: ${commandConfig.filename} started, returning immediately`, 'effects');
+        if (!commandConfig || !commandConfig.mediaSource || !commandConfig.filename || !commandConfig.vfxFilePath) {
+            throw new Error('No media config provided with source, filename, and vfxFilePath');
         }
-        
+        const source = commandConfig.mediaSource;
+        const request = this.beginRequest(source);
+        try {
+            await this.awaitRequest(request, this.ensureOBSConnected());
+            this.assertRequest(request);
+            const filePath = `${commandConfig.vfxFilePath}/${commandConfig.filename}.mp4`;
+            this.logger.debug(`[VFX] Playing media: ${commandConfig.filename} in source: ${source} from path: ${filePath}`, 'effects');
+            await this.awaitRequest(request, this.obsCall('SetInputSettings', {
+                inputName: source,
+                inputSettings: { local_file: filePath, looping: false },
+                overlay: false
+            }));
+            this.assertRequest(request);
+
+            // Arm immediately before dispatch: completion can precede the trigger acknowledgement.
+            // The 10s event budget starts here, not at acknowledgement. It does not time out RPCs.
+            // OBS exposes source identity, not playback identity: delayed old ends remain ambiguous.
+            if (waitForCompletion) request.waiter = this.createMediaWaiter(source, 10000);
+            await this.awaitRequest(request, this.obsCall('TriggerMediaInputAction', {
+                inputName: source,
+                mediaAction: 'OBS_WEBSOCKET_MEDIA_INPUT_ACTION_RESTART'
+            }));
+            this.assertRequest(request);
+            if (request.waiter) {
+                await this.awaitRequest(request, request.waiter.promise);
+                this.assertRequest(request);
+            }
             this.logger.debug(`[VFX] Successfully played media: ${commandConfig.filename}`, 'effects');
-    } catch (err) { 
-            this._handleEffectsError(`[VFX] Failed to play media: ${commandConfig.filename}`, err, { command: commandConfig });
-        throw err; 
+        } catch (error) {
+            if (!request.reason) this._handleEffectsError(`[VFX] Failed to play media: ${commandConfig.filename}`, error, { command: commandConfig });
+            throw error;
+        } finally {
+            this.finishRequest(source, request);
+        }
     }
-}
 
     async waitForMediaCompletion(mediaSourceName: string, timeoutMs = 10000) {
+        this.assertActive();
         if (!this.obsManager) {
             this.logger.warn('[VFX] No OBS manager available, skipping wait', 'effects');
             return;
         }
+        return this.createMediaWaiter(mediaSourceName, timeoutMs).promise;
+    }
 
-        if (!hasObsEventListeners(this.obsManager)) {
+    private createMediaWaiter(source: string, timeoutMs: number): MediaWaiter {
+        this.assertActive();
+        const obs = this.obsManager;
+        if (!hasObsEventListeners(obs)) {
             throw new Error('OBS manager requires event listener support to wait for media completion');
         }
-
-        const { addEventListener, removeEventListener } = this.obsManager;
-
-        return new Promise<void>((resolve) => {
-            let settled = false;
-            const mediaEndHandler = (data?: Record<string, unknown>) => {
-                if (settled) {
-                    return;
-                }
-
-                if (data?.inputName === mediaSourceName) {
-                    settled = true;
-                    removeEventListener.call(this.obsManager, 'MediaInputPlaybackEnded', mediaEndHandler);
-                    this.logger.debug(`[VFX] Media playback ended: ${mediaSourceName}`, 'effects');
-                    resolve();
-                }
-            };
-
-            addEventListener.call(this.obsManager, 'MediaInputPlaybackEnded', mediaEndHandler);
-            this.logger.debug(`[VFX] Waiting for media end event: ${mediaSourceName}`, 'effects');
-
-            safeDelay(timeoutMs, timeoutMs, 'obs-effects-media-completion-timeout').then(() => {
-                if (settled) {
-                    return;
-                }
-
-                settled = true;
-                removeEventListener.call(this.obsManager, 'MediaInputPlaybackEnded', mediaEndHandler);
-                this.logger.warn(`[VFX] Media completion wait timed out: ${mediaSourceName}`, 'effects', { timeoutMs });
-                resolve();
-            });
-        });
+        let resolve!: () => void;
+        let reject!: (reason: Error) => void;
+        const promise = new Promise<void>((yes, no) => { resolve = yes; reject = no; });
+        // A trigger may still be awaiting acknowledgement when disposal rejects this waiter.
+        void promise.catch(() => {});
+        let settled = false;
+        let timer: ReturnType<typeof safeSetTimeout> | undefined;
+        const settle = (reason?: Error) => {
+            if (settled) return;
+            settled = true;
+            if (timer !== undefined) clearTimeout(timer);
+            obs.removeEventListener('MediaInputPlaybackEnded', onEnd);
+            this.waiters.delete(waiter);
+            if (reason) reject(reason); else resolve();
+        };
+        const onEnd = (data?: Record<string, unknown>) => {
+            if (data?.inputName === source) settle();
+        };
+        const waiter: MediaWaiter = { promise, cancel: settle };
+        this.waiters.add(waiter);
+        obs.addEventListener('MediaInputPlaybackEnded', onEnd);
+        timer = safeSetTimeout(() => {
+            this.logger.warn(`[VFX] Media completion wait timed out: ${source}`, 'effects', { timeoutMs });
+            settle();
+        }, timeoutMs);
+        return waiter;
     }
 
     async triggerMediaAction(inputName: string, mediaAction: string) {
-    try {
-            await this.ensureOBSConnected();
-        
-            this.logger.debug(`[Media] Triggering action "${mediaAction}" on input: ${inputName}`, 'effects');
-        
-            await this.obsCall("TriggerMediaInputAction", { 
-            inputName, 
-            mediaAction 
-        });
-        
+        const request = this.beginRequest(inputName);
+        try {
+            await this.awaitRequest(request, this.ensureOBSConnected());
+            this.assertRequest(request);
+            await this.awaitRequest(request, this.obsCall('TriggerMediaInputAction', { inputName, mediaAction }));
+            this.assertRequest(request);
             this.logger.debug(`[Media] Successfully triggered action on: ${inputName}`, 'effects');
-    } catch (err) {
-            this._handleEffectsError(`[Media] Error triggering action on ${inputName}`, err, { inputName, mediaAction });
-        throw err;
+        } catch (error) {
+            if (!request.reason) this._handleEffectsError(`[Media] Error triggering action on ${inputName}`, error, { inputName, mediaAction });
+            throw error;
+        } finally {
+            this.finishRequest(inputName, request);
+        }
     }
-}
 
     _handleEffectsError(message: string, error: unknown, payload: Record<string, unknown> | null = null) {
         if (!this.errorHandler && this.logger) {

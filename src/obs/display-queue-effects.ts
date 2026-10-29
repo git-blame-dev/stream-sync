@@ -48,6 +48,7 @@ type SpeechFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Res
 
 type DisplayQueueEffectsDependencies = {
     obsManager: {
+        ensureConnected?: () => Promise<void>;
         call: (requestType: string, payload: Record<string, unknown>) => Promise<unknown>;
         addEventListener?: (eventName: string, handler: (payload?: Record<string, unknown>) => void) => void;
         removeEventListener?: (eventName: string, handler: (payload?: Record<string, unknown>) => void) => void;
@@ -171,6 +172,12 @@ class DisplayQueueEffects {
     }: DisplayQueueEffectsDependencies) {
         this.outputObsManager = obsManager;
         this.guardedObsManager = {
+            ensureConnected: async () => {
+                this.assertActive();
+                if (!this.outputObsManager.ensureConnected) throw new Error('Handcam glow requires OBS owner readiness');
+                await this.outputObsManager.ensureConnected();
+                this.assertActive();
+            },
             ...(obsManager.addEventListener ? { addEventListener: (event: string, handler: (payload?: Record<string, unknown>) => void) => this.outputObsManager.addEventListener?.(event, handler) } : {}),
             ...(obsManager.removeEventListener ? { removeEventListener: (event: string, handler: (payload?: Record<string, unknown>) => void) => this.outputObsManager.removeEventListener?.(event, handler) } : {}),
             call: async (request, payload) => {

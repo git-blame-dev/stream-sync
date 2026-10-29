@@ -119,12 +119,14 @@ function createOBSSourcesManager(obsManager: SourcesObsManager, dependencies: So
     };
 
     const sceneItemCache = new Map<string, SceneItemCacheEntry>();
+    let cacheEpoch = 0;
     
     function getCacheKey(sceneName: string, sourceName: string) {
-        return `${sceneName}:${sourceName}`;
+        return JSON.stringify([sceneName, sourceName]);
     }
     
     function clearSceneItemCache() {
+        cacheEpoch += 1;
         sceneItemCache.clear();
         logger.debug('[OBS Cache] Scene item cache cleared', 'obs-sources');
     }
@@ -197,63 +199,59 @@ function createOBSSourcesManager(obsManager: SourcesObsManager, dependencies: So
     signal?.throwIfAborted();
     }
 
-    async function getSceneItemId(sceneName: string, sourceName: string): Promise<SceneItemCacheEntry> {
-    const cacheKey = getCacheKey(sceneName, sourceName);
-    
-    if (sceneItemCache.has(cacheKey)) {
-        const cachedResult = sceneItemCache.get(cacheKey);
-        if (cachedResult) {
-            return cachedResult;
-        }
-    }
-    
-    const obsManager = getOBSConnectionManager();
-    const result = await safeOBSOperation(
-        obsManager,
-        async () => {
-            await ensureConnected();
-            
-            
-            const { sceneItemId } = await callOBS('GetSceneItemId', { sceneName, sourceName }) as SceneItemIdResponse;
-            
-            if (typeof sceneItemId === 'number') {
-                const result = { sceneItemId, sceneName };
-                
-                sceneItemCache.set(cacheKey, result);
-                
-                return result;
-            }
-            
+    async function getSceneItemSnapshot(sceneName: string, sourceName: string) {
+        const epoch = cacheEpoch;
+        const cacheKey = getCacheKey(sceneName, sourceName);
+        const cached = sceneItemCache.get(cacheKey);
+        if (cached) return { entry: cached, epoch };
+
+        const result = await safeOBSOperation(
+            getOBSConnectionManager(),
+            async () => {
+                await ensureConnected();
+                const { sceneItemId } = await callOBS('GetSceneItemId', { sceneName, sourceName }) as SceneItemIdResponse;
+                if (typeof sceneItemId !== 'number') {
+                    throw new Error(`Scene item ID for source "${sourceName}" in scene "${sceneName}" not found.`);
+                }
+                return { sceneItemId, sceneName };
+            },
+            `Getting scene item ID for "${sourceName}" in scene "${sceneName}"`
+        ) as SceneItemCacheEntry | null;
+        if (!result) {
             throw new Error(`Scene item ID for source "${sourceName}" in scene "${sceneName}" not found.`);
-        },
-        `Getting scene item ID for "${sourceName}" in scene "${sceneName}"`
-    );
-
-    if (!result || typeof result !== 'object' || typeof (result as SceneItemCacheEntry).sceneItemId !== 'number') {
-        throw new Error(`Scene item ID for source "${sourceName}" in scene "${sceneName}" not found.`);
+        }
+        if (epoch === cacheEpoch) sceneItemCache.set(cacheKey, result);
+        return { entry: result, epoch };
     }
 
-    return result as SceneItemCacheEntry;
+    async function getSceneItemId(sceneName: string, sourceName: string): Promise<SceneItemCacheEntry> {
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+            const snapshot = await getSceneItemSnapshot(sceneName, sourceName);
+            if (snapshot.epoch === cacheEpoch) return snapshot.entry;
+        }
+        throw new Error(`OBS scene changed while resolving source "${sourceName}" in scene "${sceneName}"`);
     }
 
     async function setSourceVisibility(sceneName: string, sourceName: string, visible: boolean): Promise<void> {
-    const obsManager = getOBSConnectionManager();
-    await safeOBSOperation(
-        obsManager,
-        async () => {
-            await ensureConnected();
-            
-            
-            const { sceneItemId } = await getSceneItemId(sceneName, sourceName);
-            await callOBS('SetSceneItemEnabled', {
-                sceneName, 
-                sceneItemId, 
-                sceneItemEnabled: visible 
-            });
-            
-        },
-        `Setting ${sourceName} visibility to ${visible} in scene ${sceneName}`
-    );
+        await safeOBSOperation(
+            getOBSConnectionManager(),
+            async () => {
+                await ensureConnected();
+                for (let attempt = 0; attempt < 2; attempt += 1) {
+                    const snapshot = await getSceneItemSnapshot(sceneName, sourceName);
+                    // A cached hit also crosses an await: validate at the write boundary.
+                    if (snapshot.epoch !== cacheEpoch) continue;
+                    await callOBS('SetSceneItemEnabled', {
+                        sceneName,
+                        sceneItemId: snapshot.entry.sceneItemId,
+                        sceneItemEnabled: visible
+                    });
+                    return;
+                }
+                throw new Error(`OBS scene changed while setting source "${sourceName}" visibility in scene "${sceneName}"`);
+            },
+            `Setting ${sourceName} visibility to ${visible} in scene ${sceneName}`
+        );
     }
 
 

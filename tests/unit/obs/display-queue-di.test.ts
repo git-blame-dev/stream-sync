@@ -1,257 +1,80 @@
-import { describe, expect, beforeEach, it, afterEach } from "bun:test";
-import { createMockFn, restoreAllMocks } from "../../helpers/bun-mock-utils";
-import { createMockOBSManager } from "../../helpers/mock-factories";
-import { initializeTestLogging } from "../../helpers/test-setup";
-import {
-  DisplayQueue,
-  initializeDisplayQueue,
-  resetDisplayQueue,
-} from "../../../src/obs/display-queue.ts";
-import { PRIORITY_LEVELS } from "../../../src/core/constants";
-import { getDefaultSourcesManager } from "../../../src/obs/sources.ts";
-import { getDefaultGoalsManager } from "../../../src/obs/goals.ts";
+import { afterEach, expect, it, spyOn } from 'bun:test';
+import { OBSConnectionManager } from '../../../src/obs/connection';
+import { DisplayQueue, initializeDisplayQueue, resetDisplayQueue } from '../../../src/obs/display-queue';
+import { PRIORITY_LEVELS } from '../../../src/core/constants';
+import { createOBSSourcesManager } from '../../../src/obs/sources';
+import { createOBSGoalsManager } from '../../../src/obs/goals';
+import { createGoalTracker } from '../../../src/utils/goal-tracker';
+import { createConfigFixture } from '../../helpers/config-fixture';
 
-initializeTestLogging();
-
-type DisplayQueueDependencies = ConstructorParameters<typeof DisplayQueue>[4];
-type SourcesManagerApi = ReturnType<typeof getDefaultSourcesManager>;
-type GoalsManager = ReturnType<typeof getDefaultGoalsManager>;
-
-const resolvedVoid = () => Promise.resolve();
-
-function createSourcesManagerFixture(): SourcesManagerApi {
-  return {
-    updateTextSource: createMockFn<[string, string?], Promise<void>>(resolvedVoid),
-    clearTextSource: createMockFn<[string], Promise<void>>(resolvedVoid),
-    getSceneItemId: createMockFn<[string, string], Promise<{ sceneItemId: number }>>(async () => ({ sceneItemId: 1 })),
-    setSourceVisibility: createMockFn<[string, string, boolean], Promise<void>>(resolvedVoid),
-    setSourceFilterEnabled: createMockFn<[string, string, boolean], Promise<void>>(resolvedVoid),
-    getSourceFilterSettings: createMockFn<[string, string], Promise<Record<string, unknown>>>(async () => ({})),
-    setSourceFilterSettings: createMockFn<[string, string, Record<string, unknown>], Promise<void>>(resolvedVoid),
-    clearSceneItemCache: createMockFn<[], void>(() => {}),
-  };
+const queues = new Set<DisplayQueue>();
+const managers = new Set<OBSConnectionManager>();
+type QueueOBS = OBSConnectionManager & ConstructorParameters<typeof DisplayQueue>[0];
+function manager() {
+  const owner = new OBSConnectionManager({ config: { enabled: false, password: 'synthetic-only' } });
+  managers.add(owner);
+  return owner as QueueOBS;
 }
-
-function createGoalsManagerFixture(): GoalsManager {
-  return {
-    initializeGoalDisplay: createMockFn<[], Promise<void>>(resolvedVoid),
-    updateAllGoalDisplays: createMockFn<[], Promise<void>>(resolvedVoid),
-    updateGoalDisplay: createMockFn<[string, string?], Promise<void>>(resolvedVoid),
-    processDonationGoal: createMockFn<[unknown, number], Promise<{ success: boolean }>>(async () => ({ success: true })),
-    processPaypiggyGoal: createMockFn<[string], Promise<{ success: boolean }>>(async () => ({ success: true })),
-    getCurrentGoalStatus: createMockFn<[string], Record<string, unknown> | null>(() => null),
-    getAllCurrentGoalStatuses: createMockFn<[], Record<string, unknown>>(() => ({})),
-  };
+function initialize(owner: QueueOBS, dependencies: ConstructorParameters<typeof DisplayQueue>[4] = {}) {
+  const queue = initializeDisplayQueue(owner, { autoProcess: false }, { PRIORITY_LEVELS }, null, dependencies);
+  queues.add(queue);
+  return queue;
 }
+afterEach(async () => {
+  resetDisplayQueue();
+  try { await Promise.all([...queues].map(queue => queue.stop())); }
+  finally {
+    queues.clear();
+    for (const owner of managers) owner.dispose();
+    try { await Promise.all([...managers].map(owner => owner.disconnect())); } finally { managers.clear(); }
+  }
+});
 
-describe("DisplayQueue DI requirements", () => {
-  afterEach(() => {
-    restoreAllMocks();
-    resetDisplayQueue();
-  });
-
-  beforeEach(() => {
-    initializeTestLogging();
-  });
-
-  it("requires an OBS manager in the constructor", () => {
-    expect(() => Reflect.construct(DisplayQueue, [null, {}, {}, null, {}])).toThrow(
-      /OBSConnectionManager/,
-    );
-  });
-
-  it("accepts items when initialized with injected obsManager", () => {
-    const mockObsManager = createMockOBSManager("connected");
-
-    const queue = initializeDisplayQueue(
-      mockObsManager,
-      {
-        autoProcess: false,
-        chat: {
-          sourceName: "chat",
-          sceneName: "scene",
-          groupName: "group",
-          platformLogos: {},
-        },
-        notification: {
-          sourceName: "notification",
-          sceneName: "scene",
-          groupName: "group",
-          platformLogos: {},
-        },
-      },
-      {
-        PRIORITY_LEVELS,
-        CHAT_MESSAGE_DURATION: 4500,
-      },
-      null,
-      {},
-    );
-
-    expect(() =>
-      queue.addItem({
-        type: "chat",
-        platform: "twitch",
-        data: { username: "test-user", message: "Hello" },
-      }),
-    ).not.toThrow();
-
-    expect(queue.queue.length).toBe(1);
-  });
-
-  it("throws when dependencies throw during construction", () => {
-    const mockObsManager = createMockOBSManager("connected");
-    const dependencies = {};
-    Object.defineProperty(dependencies, "sourcesManager", {
-      get: () => {
-        throw new Error("test-injected error");
-      },
-    });
-
-    expect(() => {
-      new DisplayQueue(
-        mockObsManager,
-        { autoProcess: true },
-        { PRIORITY_LEVELS },
-        null,
-        dependencies,
-      );
-    }).toThrow("test-injected error");
-  });
-
-  it("passes initializeDisplayQueue dependencies through to DisplayQueue construction", () => {
-    const mockObsManager = createMockOBSManager("connected");
-    const injectedSourcesManager = createSourcesManagerFixture();
-    const injectedGoalsManager = createGoalsManagerFixture();
-
-    const queue = initializeDisplayQueue(
-      mockObsManager,
-      {
-        autoProcess: false,
-        chat: {
-          sourceName: "chat",
-          sceneName: "scene",
-          groupName: "group",
-          platformLogos: {},
-        },
-        notification: {
-          sourceName: "notification",
-          sceneName: "scene",
-          groupName: "group",
-          platformLogos: {},
-        },
-      },
-      { PRIORITY_LEVELS, CHAT_MESSAGE_DURATION: 4500 },
-      null,
-      {
-        sourcesManager: injectedSourcesManager,
-        goalsManager: injectedGoalsManager,
-      } satisfies DisplayQueueDependencies,
-    );
-
-    expect(queue.sourcesManager).toBe(injectedSourcesManager);
-    expect(queue.goalsManager).toBe(injectedGoalsManager);
-  });
-
-  it("rebinds obs manager on repeated initializeDisplayQueue calls", () => {
-    const firstManager = createMockOBSManager("connected");
-    const secondManager = createMockOBSManager("connected");
-
-    const queue = initializeDisplayQueue(
-      firstManager,
-      {
-        autoProcess: false,
-        chat: {
-          sourceName: "chat",
-          sceneName: "scene",
-          groupName: "group",
-          platformLogos: {},
-        },
-        notification: {
-          sourceName: "notification",
-          sceneName: "scene",
-          groupName: "group",
-          platformLogos: {},
-        },
-      },
-      { PRIORITY_LEVELS, CHAT_MESSAGE_DURATION: 4500 },
-      null,
-      {},
-    );
-
-    initializeDisplayQueue(
-      secondManager,
-      {
-        autoProcess: false,
-        chat: {
-          sourceName: "chat",
-          sceneName: "scene",
-          groupName: "group",
-          platformLogos: {},
-        },
-        notification: {
-          sourceName: "notification",
-          sceneName: "scene",
-          groupName: "group",
-          platformLogos: {},
-        },
-      },
-      { PRIORITY_LEVELS, CHAT_MESSAGE_DURATION: 4500 },
-      null,
-      {},
-    );
-
-    expect(queue.obsManager).toBe(secondManager);
-  });
-
-  it("supports resetting display queue singleton between initializations", () => {
-    const manager = createMockOBSManager("connected");
-    const first = initializeDisplayQueue(
-      manager,
-      {
-        autoProcess: false,
-        chat: {
-          sourceName: "chat",
-          sceneName: "scene",
-          groupName: "group",
-          platformLogos: {},
-        },
-        notification: {
-          sourceName: "notification",
-          sceneName: "scene",
-          groupName: "group",
-          platformLogos: {},
-        },
-      },
-      { PRIORITY_LEVELS, CHAT_MESSAGE_DURATION: 4500 },
-      null,
-      {},
-    );
-
-    resetDisplayQueue();
-
-    const second = initializeDisplayQueue(
-      manager,
-      {
-        autoProcess: false,
-        chat: {
-          sourceName: "chat",
-          sceneName: "scene",
-          groupName: "group",
-          platformLogos: {},
-        },
-        notification: {
-          sourceName: "notification",
-          sceneName: "scene",
-          groupName: "group",
-          platformLogos: {},
-        },
-      },
-      { PRIORITY_LEVELS, CHAT_MESSAGE_DURATION: 4500 },
-      null,
-      {},
-    );
-
-    expect(second).not.toBe(first);
-  });
+it('requires an OBS manager in the constructor', () => {
+  expect(() => Reflect.construct(DisplayQueue, [null, {}, {}, null, {}])).toThrow(/OBSConnectionManager/);
+});
+it('accepts an item through the singleton with an actual supplied OBS owner', () => {
+  const queue = initialize(manager());
+  queue.addItem({ type: 'chat', platform: 'twitch', data: { username: 'Synthetic User', message: 'Synthetic text' } });
+  expect(queue.getQueueLength()).toBe(1);
+  expect(queue.queue[0]).toMatchObject({ type: 'chat', platform: 'twitch', data: { message: 'Synthetic text' } });
+});
+it('preserves a dependency DTO getter failure during construction', () => {
+  const dependencies = Object.defineProperty({}, 'sourcesManager', { get() { throw new Error('Synthetic getter failure'); } });
+  expect(() => new DisplayQueue(manager(), { autoProcess: false }, { PRIORITY_LEVELS }, null, dependencies))
+    .toThrow('Synthetic getter failure');
+});
+it('passes actual source and goal owners through singleton construction', () => {
+  const obs = manager();
+  const config = createConfigFixture();
+  Object.assign(config.goals, { enabled: true, tiktokGoalEnabled: true, tiktokGoalTarget: 500, tiktokGoalCurrency: 'coins' });
+  const tracker = createGoalTracker({ config });
+  tracker.initializeGoalTracker();
+  expect(tracker.addDonationToGoal('tiktok', 100, 'coins')).toMatchObject({ success: true });
+  const sources = createOBSSourcesManager(obs);
+  const goals = createOBSGoalsManager(obs, { config, goalTracker: tracker, updateTextSource: sources.updateTextSource });
+  const queue = initialize(obs, { sourcesManager: sources, goalsManager: goals });
+  expect(queue.sourcesManager).toBe(sources);
+  expect(queue.goalsManager).toBe(goals);
+  expect(queue.effects.goalsManager).toBe(goals);
+  expect(queue.goalsManager.getCurrentGoalStatus('tiktok')).toMatchObject({ current: 100, target: 500 });
+});
+it('rebinds both queue and guarded effects to a subsequent actual OBS owner', async () => {
+  const first = manager(), second = manager();
+  const queue = initialize(first);
+  expect(initialize(second)).toBe(queue);
+  expect(queue.obsManager).toBe(second);
+  const oldCalls = spyOn(first, 'call');
+  const newCalls = spyOn(second, 'call');
+  try {
+    await expect(queue.effects.obsManager.call('GetVersion', {})).rejects.toThrow();
+    expect(newCalls).toHaveBeenCalledWith('GetVersion', {});
+    expect(oldCalls).not.toHaveBeenCalled();
+  } finally { oldCalls.mockRestore(); newCalls.mockRestore(); }
+});
+it('reset acquires a distinct queue and retires both owners', () => {
+  const obs = manager();
+  const first = initialize(obs);
+  resetDisplayQueue();
+  expect(initialize(obs)).not.toBe(first);
 });

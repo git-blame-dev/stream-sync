@@ -52,6 +52,7 @@ describe("DisplayQueue gift effects handcam glow", () => {
     };
 
     const obsManager = {
+      ensureConnected: createMockFn<[], Promise<void>>(async () => {}),
       call: createMockFn().mockResolvedValue({}),
       isConnected: () => true,
       isReady: () => Promise.resolve(true),
@@ -75,7 +76,7 @@ describe("DisplayQueue gift effects handcam glow", () => {
         chat: {},
         notification: {},
         obs: { ttsTxt: "testTtsTxt" },
-        handcam: createHandcamConfigFixture({ enabled: handcamEnabled }),
+        handcam: createHandcamConfigFixture({ enabled: handcamEnabled, rampUpDuration: 0, rampDownDuration: 0, holdDuration: 0, totalSteps: 1 }),
       },
       { PRIORITY_LEVELS },
       new EventEmitter(),
@@ -90,7 +91,7 @@ describe("DisplayQueue gift effects handcam glow", () => {
   }
 
   it("processes gift notification effects without errors when handcam enabled", async () => {
-    const { queue, recordedTexts } = createQueue(true);
+    const { queue, recordedTexts, obsManager } = createQueue(true);
 
     await expect(
       queue.handleNotificationEffects({
@@ -109,6 +110,10 @@ describe("DisplayQueue gift effects handcam glow", () => {
     ).resolves.toBeUndefined();
 
     expect(recordedTexts.length).toBeGreaterThan(0);
+    expect(obsManager.ensureConnected).toHaveBeenCalled();
+    expect(obsManager.call).toHaveBeenCalledWith("GetSourceFilter", {
+      sourceName: "test-handcam-source", filterName: "test-glow-filter",
+    });
   });
 
   it("updates TTS text source for gift notifications", async () => {
