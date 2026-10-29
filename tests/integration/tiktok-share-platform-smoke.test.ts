@@ -1,24 +1,13 @@
-import { describe, test, afterEach, expect } from "bun:test";
-import EventEmitter from "events";
+import { describe, test, afterEach, expect, spyOn } from "bun:test";
+
 import { PlatformLifecycleService } from "../../src/services/PlatformLifecycleService.ts";
-import NotificationManager from "../../src/notifications/NotificationManager";
-import { TikTokPlatform } from "../../src/platforms/tiktok";
-import { createTestAppRuntime } from "../helpers/runtime-test-harness";
-import {
-  createMockDisplayQueue,
-  createMockTikTokPlatformDependencies,
-  noOpLogger,
-} from "../helpers/mock-factories";
-import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
-import {
-  createConfigFixture,
-  createTikTokConfigFixture,
-} from "../helpers/config-fixture";
+import { createMainPresentationFixture } from "../helpers/main-presentation-fixture.ts";
+import { createTikTokLifetimeFixture } from "../helpers/tiktok-connector-fixture.ts";
+import { noOpLogger } from "../helpers/mock-factories";
+import { restoreAllMocks } from "../helpers/bun-mock-utils";
 import { createTikTokShareEvent } from "../helpers/tiktok-test-data";
 import { expectNoTechnicalArtifacts } from "../helpers/assertion-helpers";
-
-type EventHandler = (payload: unknown) => void;
-type RuntimeEventHandler = (payload: Record<string, unknown>) => void | Promise<void>;
+import { waitFor } from "../helpers/event-driven-testing";
 
 type UserFacingNotificationData = {
   displayMessage: string;
@@ -31,22 +20,6 @@ type DisplayQueueItem = {
   type: string;
   platform: string;
   data: UserFacingNotificationData;
-};
-
-const createEventBus = () => {
-  const emitter = new EventEmitter();
-  return {
-    emit: (event: string, payload: unknown) => {
-      emitter.emit(event, payload);
-    },
-    on: (event: string, handler: EventHandler) => {
-      emitter.on(event, handler);
-    },
-    subscribe: (event: string, handler: RuntimeEventHandler) => {
-      emitter.on(event, handler);
-      return () => emitter.off(event, handler);
-    },
-  };
 };
 
 const isDisplayQueueItem = (value: unknown): value is DisplayQueueItem => {
@@ -92,68 +65,72 @@ const assertUserFacingOutput = (
 };
 
 describe("TikTok share platform flow (smoke)", () => {
-  afterEach(() => {
-    restoreAllMocks();
+  const cleanups: Array<() => Promise<void> | void> = [];
+
+  const registerCleanup = (fn: () => Promise<void> | void) => {
+    let executed = false;
+    const idempotentFn = async () => {
+      if (executed) return;
+      executed = true;
+      await fn();
+    };
+    cleanups.push(idempotentFn);
+    return idempotentFn;
+  };
+
+  const runCleanups = async () => {
+    while (cleanups.length > 0) {
+      const cleanup = cleanups.pop();
+      if (cleanup) {
+        await cleanup();
+      }
+    }
+  };
+
+  afterEach(async () => {
+    try {
+      await runCleanups();
+    } finally {
+      restoreAllMocks();
+    }
   });
 
   test("routes share through lifecycle, router, and display queue", async () => {
-    const eventBus = createEventBus();
-    const logger = noOpLogger;
-    const displayQueue = createMockDisplayQueue();
-    const configOverrides = {
-      general: {
-        sharesEnabled: true,
-      },
-      tiktok: {
-        enabled: true,
-        sharesEnabled: true,
-      },
-      obs: { enabled: false },
-    };
-    const config = createConfigFixture(configOverrides);
-    const notificationManager = new NotificationManager({
-      displayQueue,
-      logger,
-      eventBus,
-      config,
-      constants: require("../../src/core/constants"),
-      obsGoals: { processDonationGoal: createMockFn() },
-      vfxCommandService: {
-        getVFXConfig: createMockFn().mockResolvedValue(null),
-      },
-      userTrackingService: {
-        isFirstMessage: createMockFn().mockResolvedValue(false),
-      },
-    });
+    const presentation = await createMainPresentationFixture();
+    presentation.config.general.debugEnabled = false;
+    presentation.config.general.envFileReadEnabled = false;
+    presentation.config.general.envFileWriteEnabled = false;
+    presentation.config.general.sharesEnabled = true;
+    presentation.config.logging.file.enabled = false;
+    presentation.config.logging.chat.enabled = false;
+    presentation.config.tiktok.enabled = false;
+    presentation.config.tiktok.dataLoggingEnabled = false;
+    presentation.config.tiktok.sharesEnabled = true;
+
+    await presentation.start();
+    const addItemSpy = spyOn(presentation.queue, "addItem");
 
     const platformLifecycleService = new PlatformLifecycleService({
-      config: { tiktok: { enabled: true } },
-      eventBus,
-      logger,
+      config: { tiktok: { enabled: true, dataLoggingEnabled: false } },
+      eventBus: presentation.bus,
+      logger: noOpLogger,
     });
 
-    const { runtime } = createTestAppRuntime(configOverrides, {
-      eventBus,
-      notificationManager,
-      displayQueue,
-      logger,
+    const tiktokFixture = createTikTokLifetimeFixture({
+      enabled: true,
+      sharesEnabled: true,
+      dataLoggingEnabled: false,
     });
 
-    const platform = new TikTokPlatform(
-      createTikTokConfigFixture({ enabled: true }),
-      {
-        ...createMockTikTokPlatformDependencies(),
-        WebcastEvent: {
-          CHAT: "chat",
-          GIFT: "gift",
-          FOLLOW: "follow",
-          SOCIAL: "social",
-          ROOM_USER: "roomUser",
-          ERROR: "error",
-          DISCONNECT: "disconnect",
-        },
-      },
-    );
+    registerCleanup(async () => {
+      await tiktokFixture.cleanup();
+      await platformLifecycleService.disconnectAll();
+      platformLifecycleService.dispose();
+      restoreAllMocks();
+      await presentation.dispose();
+    });
+
+    const platform = tiktokFixture.platform;
     platform.handlers =
       platformLifecycleService.createDefaultEventHandlers("tiktok");
 
@@ -166,10 +143,14 @@ describe("TikTok share platform flow (smoke)", () => {
     try {
       await platform.handleTikTokSocial(shareEvent);
 
-      await Promise.resolve();
+      await waitFor(() => addItemSpy.mock.calls.length === 1, {
+        timeout: 500,
+        interval: 1,
+      });
+      await presentation.drain();
 
-      expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
-      const firstCall = displayQueue.addItem.mock.calls[0];
+      expect(addItemSpy).toHaveBeenCalledTimes(1);
+      const firstCall = addItemSpy.mock.calls[0];
       expect(firstCall).toBeDefined();
       if (!firstCall) {
         throw new Error("Expected display queue addItem to be called");
@@ -180,8 +161,7 @@ describe("TikTok share platform flow (smoke)", () => {
       expect(queued.data.username).toBe("test-user-share");
       assertUserFacingOutput(queued.data, { username: "test-user-share" });
     } finally {
-      runtime.platformEventRouter?.dispose();
-      platformLifecycleService.dispose();
+      await runCleanups();
     }
   });
 });

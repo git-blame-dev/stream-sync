@@ -1,9 +1,11 @@
 import { describe, test, afterEach, expect } from "bun:test";
 import { YouTubePlatform } from "../../src/platforms/youtube";
+import { InnertubeService } from "../../src/services/innertube-service";
+import { YouTubeStreamDetectionService } from "../../src/services/youtube-stream-detection-service";
+import { ViewerCountExtractionService } from "../../src/services/viewer-count-extraction-service";
 import { getSyntheticFixture } from "../helpers/platform-test-data";
 import { restoreAllMocks } from "../helpers/bun-mock-utils";
 import { noOpLogger } from "../helpers/mock-factories";
-import { createMockPlatformDependencies } from "../helpers/test-setup";
 import { createYouTubeConfigFixture } from "../helpers/config-fixture";
 
 const giftPurchaseHeaderOnly = getSyntheticFixture(
@@ -18,19 +20,66 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 describe("YouTube Gift Purchase Smoke (Canonical Author)", () => {
-  afterEach(() => {
-    restoreAllMocks();
+  const cleanups: Array<() => Promise<void>> = [];
+
+  afterEach(async () => {
+    try {
+      while (cleanups.length > 0) {
+        const fn = cleanups.pop();
+        if (fn) {
+          await fn();
+        }
+      }
+    } finally {
+      restoreAllMocks();
+    }
   });
 
   test("routes gift purchase through event pipeline to handler", async () => {
     const config = createYouTubeConfigFixture({
       enabled: true,
       username: "test-channel",
+      dataLoggingPath: "",
+      dataLoggingEnabled: false,
+      envFileReadEnabled: false,
+      envFileWriteEnabled: false,
     });
-    const dependencies = createMockPlatformDependencies("youtube", {
+    const metadata = new InnertubeService(
+      {
+        createWithTimeout: async () => ({
+          getInfo: async (_videoId: string) => ({}),
+          getChannel: async () => ({
+            videos: [],
+            getLiveStreams: async () => ({ videos: [] }),
+          }),
+        }),
+      },
+      { logger: noOpLogger },
+    );
+    const detector = new YouTubeStreamDetectionService(metadata, {
       logger: noOpLogger,
     });
-    const platform = new YouTubePlatform(config, dependencies);
+    const viewerExtractionService = new ViewerCountExtractionService(metadata, {
+      logger: noOpLogger,
+    });
+    const platform = new YouTubePlatform(config, {
+      logger: noOpLogger,
+      innertubeService: metadata,
+      streamDetectionService: detector,
+      viewerExtractionService,
+    });
+    cleanups.push(async () => {
+      try {
+        await platform.cleanup();
+      } finally {
+        try {
+          await detector.cleanup();
+        } finally {
+          await metadata.dispose();
+        }
+      }
+    });
+
     const giftEvents: Array<Record<string, unknown>> = [];
     platform.handlers = {
       ...platform.handlers,

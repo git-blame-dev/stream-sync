@@ -38,8 +38,8 @@ describe("PlatformEventRouter config gating error handling", () => {
     const config = createConfigFixture({
       general: { followsEnabled: undefined },
     });
-    delete config.general.followsEnabled;
-    delete config.twitch.followsEnabled;
+    Reflect.deleteProperty(config.general, 'followsEnabled');
+    Reflect.deleteProperty(config.twitch, 'followsEnabled');
     const runtime = {
       handleFollowNotification: createMockFn().mockResolvedValue(true),
     };

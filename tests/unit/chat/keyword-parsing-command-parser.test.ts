@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { restoreAllMocks } from "../../helpers/bun-mock-utils";
-import testClock from "../../helpers/test-clock";
 import { CommandParser } from "../../../src/chat/commands";
 
 type CommandParserConfig = {
@@ -199,25 +198,7 @@ describe("CommandParser Keyword Parsing", () => {
     });
   });
 
-  describe("Performance Impact", () => {
-    test("should not impact performance when keyword parsing is disabled", () => {
-      configFixture.general = { keywordParsingEnabled: false };
-      commandParser = new CommandParser(configFixture);
-
-      const startTime = testClock.now();
-
-      for (let i = 0; i < 100; i++) {
-        commandParser.getVFXConfig("!hello", "!hello everyone!");
-      }
-
-      const simulatedDurationMs = 20;
-      testClock.advance(simulatedDurationMs);
-      const endTime = testClock.now();
-      const duration = endTime - startTime;
-
-      expect(duration).toBeLessThan(100);
-    });
-
+  describe("Disabled keyword parsing", () => {
     test("should skip keyword checking when keyword parsing is disabled", () => {
       configFixture.general = { keywordParsingEnabled: false };
       commandParser = new CommandParser(configFixture);

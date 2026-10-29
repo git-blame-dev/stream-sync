@@ -53,7 +53,8 @@ function fixture(maxStreams = 2, extractionEnabled = true) {
     const detector = new YouTubeStreamDetectionService(owner, { logger: noOpLogger });
     const extraction = new ViewerCountExtractionService(owner, { logger: noOpLogger });
     const platform = new YouTubePlatform({ username: channelId, enabled: true, maxStreams,
-        fullCheckInterval: 1, streamPollingInterval: 60, dataLoggingEnabled: false }, {
+        fullCheckInterval: 1, streamPollingInterval: 60, dataLoggingEnabled: false,
+        envFileReadEnabled: false, envFileWriteEnabled: false }, {
         logger: noOpLogger, innertubeService: owner, streamDetectionService: detector,
         ...(extractionEnabled ? { viewerExtractionService: extraction } : {}),
         now: () => now
@@ -185,6 +186,56 @@ describe('authoritative membership through real platform, metadata, provider, st
             expect(f.detected).toEqual([[a, b]]);
             await f.store.pollPlatform('youtube');
             expect(f.writes.at(-1)).toEqual({ inputName: 'Synthetic viewers', inputSettings: { text: '30' }, overlay: true });
+        } finally { await f.close(); }
+    });
+
+    it('publishes complete single, three-stream, large and zero counts through the store and OBS', async () => {
+        const f = fixture(3);
+        const c = 'synthetic_C';
+        try {
+            f.setDiscovery([a]);
+            f.counts.set(a, 1234);
+            await f.platform.getLiveVideoIds();
+            await f.store.pollPlatform('youtube');
+            expect(f.store.getViewerCountSnapshot('youtube')).toMatchObject({ count: 1234, latestOutcome: 'complete' });
+            expect(f.writes.at(-1)?.inputSettings).toEqual({ text: '1.2K' });
+
+            f.setDiscovery([a, b, c]);
+            f.counts.set(a, 45000);
+            f.counts.set(b, 32000);
+            f.counts.set(c, 18000);
+            await f.platform.getLiveVideoIds();
+            await f.store.pollPlatform('youtube');
+            expect(f.store.getViewerCountSnapshot('youtube')).toMatchObject({ count: 95000, latestOutcome: 'complete' });
+            expect(f.writes.at(-1)?.inputSettings).toEqual({ text: '95K' });
+
+            f.counts.set(a, 500);
+            f.counts.set(b, 0);
+            f.counts.set(c, 250);
+            await f.store.pollPlatform('youtube');
+            expect(f.store.getViewerCountSnapshot('youtube')).toMatchObject({ count: 750, latestOutcome: 'complete' });
+            expect(f.writes.at(-1)?.inputSettings).toEqual({ text: '750' });
+        } finally { await f.close(); }
+    });
+
+    it('keeps the last complete output when all metadata requests fail and publishes recovery', async () => {
+        const f = fixture();
+        try {
+            await f.platform.getLiveVideoIds();
+            await f.store.pollPlatform('youtube');
+            const previous = f.store.getViewerCountSnapshot('youtube');
+            const writes = f.writes.length;
+            f.failures.add(a);
+            f.failures.add(b);
+            await f.store.pollPlatform('youtube');
+            expect(f.store.getViewerCountSnapshot('youtube')).toMatchObject({ count: 30, hasCompleteObservation: true,
+                lastCompleteAt: previous.lastCompleteAt, latestOutcome: 'unavailable' });
+            expect(f.writes).toHaveLength(writes);
+            f.failures.clear();
+            f.counts.set(a, 40);
+            await f.store.pollPlatform('youtube');
+            expect(f.store.getViewerCountSnapshot('youtube')).toMatchObject({ count: 60, latestOutcome: 'complete' });
+            expect(f.writes.at(-1)?.inputSettings).toEqual({ text: '60' });
         } finally { await f.close(); }
     });
 

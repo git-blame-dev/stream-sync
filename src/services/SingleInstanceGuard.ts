@@ -202,8 +202,22 @@ async function acquireSingleInstanceGuard(options: SingleInstanceGuardOptions = 
     const registerProcessCleanup = options.registerProcessCleanup !== false;
 
     let directory: fs.Stats | null = null;
+    const rollbackAcquisition = async () => {
+        try {
+            const failedPath = `${lockPath}.failed-${process.pid}-${instanceId}`;
+            if (moveOwnedLock(lockPath, failedPath, directory,
+                owner => owner === null || owner.instanceId === instanceId)) {
+                await fsp.rm(failedPath, { recursive: true, force: true });
+            }
+        } catch {
+            // Preserve the acquisition error; never remove an unverified replacement.
+        }
+    };
+    let created = false;
     const tryAcquire = async () => {
+        created = false;
         await fsp.mkdir(lockPath, { mode: 0o700 });
+        created = true;
         directory = fs.statSync(lockPath);
         await writeOwnerFiles(lockPath, metadata, now);
     };
@@ -214,6 +228,10 @@ async function acquireSingleInstanceGuard(options: SingleInstanceGuardOptions = 
             await tryAcquire();
             acquired = true;
         } catch (error) {
+            if (created) {
+                await rollbackAcquisition();
+                throw error;
+            }
             if (getErrorCode(error) !== 'EEXIST') {
                 throw error;
             }
@@ -247,7 +265,13 @@ async function acquireSingleInstanceGuard(options: SingleInstanceGuardOptions = 
     }
 
     // Keep the acquired file open: later ticks cannot follow a replacement lock path.
-    const heartbeatFd = fs.openSync(path.join(lockPath, HEARTBEAT_FILE), 'r+');
+    let heartbeatFd: number;
+    try {
+        heartbeatFd = fs.openSync(path.join(lockPath, HEARTBEAT_FILE), 'r+');
+    } catch (error) {
+        await rollbackAcquisition();
+        throw error;
+    }
     let released = false;
     let heartbeatTimer: ReturnType<typeof safeSetInterval> | null = safeSetInterval(() => {
         try {

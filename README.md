@@ -27,7 +27,7 @@ The project emphasizes clear platform boundaries, config-driven runtime behavior
 
 - **Runtime / tooling:** Bun, TypeScript, and Vite.
 - **Frontend GUI:** React 19.
-- **YouTube integration:** `youtubei.js` plus optional YouTube API key support.
+- **YouTube integration:** `youtubei.js` for chat, stream detection, and viewer counts. YouTube Data API selectors (`enableAPI=true` or either method set to `api`) are unsupported; use `youtubei`. No YouTube API key is needed.
 - **TikTok integration:** `tiktok-live-connector` connects directly to TikTok using EulerStream signing; the platform adapter owns readiness and retries.
 - **Twitch integration:** direct EventSub WebSocket and Helix API integration.
 - **OBS integration:** `obs-websocket-js`.
@@ -86,6 +86,8 @@ cp .env.example .env
 
 Edit `config.ini` from [`config.example.ini`](config.example.ini) and `.env` from [`.env.example`](.env.example) before starting. Keep secrets in `.env`; do not commit local credentials, logs, token stores, or generated data files.
 
+Prompted credentials are persisted only when their representation roundtrips through the supported env-file loaders. Values with dollar expansion, backslashes, control characters or all three quoting delimiters remain available for the current process, with a notice that they were not persisted. Supply those values through your process environment for subsequent launches.
+
 ```bash
 bun run start
 ```
@@ -95,7 +97,7 @@ Useful development commands:
 ```bash
 bun run start:debug
 bun run build
-bun run verify
+bun --no-env-file run verify
 ```
 
 ### OBS launchers and browser sources
@@ -188,6 +190,10 @@ Controls suppress viewer-facing rows, TTS, VFX, media, and animations while pres
 
 Appearance overrides are saved separately in `data/operator-appearance-overrides.json` and update open GUI sources live. Compact rows, row backgrounds, and badge limits apply to minimal sources; member theme and effect controls apply to decorated member rows in both appearance profiles. A badge limit of zero hides all badges.
 
+Command cooldowns advance only when the command is admitted to the display queue. First-greeting eligibility is consumed by an admitted greeting or first command; source chat alone does not consume it. Cancelling output after admission does not refund that state.
+
+The live log view resets when its backend restarts, including while paused. Pause remains enabled, and resuming shows only the current backend's logs. Log SSE cursors are scoped to the backend session; old numeric cursors trigger a fresh replay.
+
 ### Member presentation
 
 Configure the default member-row presentation in `[gui]`. Themes are `green`, `red`, or `gold`; effects are ordered and comma-separated, with an empty value meaning none:
@@ -254,17 +260,39 @@ Copy-Item .env.example .env
 
 The test suite focuses on observable stream-control behavior rather than live network calls. It includes unit, integration, and smoke E2E tests for platform event routing, viewer counts, OBS integration boundaries, GUI transport, startup wiring, and secret-manager flows.
 
-Run individual checks while developing, or use `bun run verify` as the aggregate local gate:
+Use `--no-env-file` on the outer Bun invocation to prevent automatic local dotenv loading. Shared test fixtures also disable application env-file reads and writes; tests of those policies explicitly opt in using owned temporary files.
+
+Run individual checks while developing, or use `bun --no-env-file run verify` as the aggregate local gate:
 
 ```bash
 bun run lint
 bun run typecheck:all
-bun run test:coverage
+bun --no-env-file run test:coverage
 bun run build
-bun run verify
+bun --no-env-file run verify
 ```
 
 CI runs these checks on pushes and pull requests, then packages Linux and Windows release artifacts after lint, typecheck, tests, and GUI build pass.
+
+### Browser verification
+
+Browser acceptance tests run separately from `bun run verify`. With Bun and Node 24 installed, install the locked dependencies and Playwright Chromium, then run:
+
+```bash
+bun install --frozen-lockfile
+bun run playwright install chromium
+bun --no-env-file run test:browser
+```
+
+The fixture builds temporary production GUI assets and serves them through the real local transport using synthetic test data. It does not require `config.ini`, credentials, OBS, or live platform providers.
+
+The media cases use the synthetic `tests/fixtures/synthetic-red.mp4`: a silent, two-second, 32×32 red H.264/yuv420p clip. Tests read these fixed bytes, so an encoder is not required. To regenerate the fixture when intentionally changing it, use an FFmpeg build with libx264:
+
+```bash
+ffmpeg -y -nostdin -hide_banner -loglevel error -f lavfi -i color=c=red:s=32x32:r=20:d=2 -an -c:v libx264 -pix_fmt yuv420p -movflags +faststart tests/fixtures/synthetic-red.mp4
+```
+
+The independent Ubuntu 24.04 CI job installs Chromium with its required system libraries using `bun run playwright install --with-deps chromium`, then runs with one worker and one retry. Failed tests retain traces under `test-results/browser`; CI uploads `trace.zip` files as the `stream-sync-browser-failure-traces` artifact for seven days.
 
 ## 📦 Releases / Artifacts
 

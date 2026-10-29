@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
+import fs from "node:fs";
 import { createMockFn, restoreAllMocks, type TestMockFn } from "../helpers/bun-mock-utils";
 import { noOpLogger } from "../helpers/mock-factories";
 import {
@@ -6,6 +7,8 @@ import {
   secrets,
   _resetForTesting,
 } from "../../src/core/secrets";
+import { TwitchAuth } from "../../src/auth/TwitchAuth";
+import { TWITCH_OAUTH_SCOPES } from "../../src/auth/twitch-oauth-scopes";
 import { TwitchApiClient } from "../../src/utils/api-clients/twitch-api-client.ts";
 import { TwitchViewerCountProvider } from "../../src/utils/viewer-count-providers";
 import { ViewerCountSystem } from "../../src/utils/viewer-count";
@@ -26,48 +29,177 @@ type TestHttpClient = {
   post: TestMockFn;
 };
 
-type TestTwitchAuth = {
-  refreshTokens: TestMockFn<[], Promise<boolean>>;
-  isReady: TestMockFn<[], boolean>;
+type AuthHttpClient = {
+  get: TestMockFn<[string, unknown?], Promise<{ data?: unknown }>>;
+  post: TestMockFn<[string, unknown?, unknown?], Promise<{ data?: unknown }>>;
 };
 
+const IN_MEMORY_TOKEN_STORE_PATH = "/synthetic-in-memory-token-store/tokens.json";
+
 describe("TwitchApiClient authentication", () => {
+  const ownedSystems = new Set<ViewerCountSystem>();
   let mockLogger: typeof noOpLogger;
   let mockHttpClient: TestHttpClient;
-  let mockTwitchAuth: TestTwitchAuth;
+  let authHttpClient: AuthHttpClient;
+  let twitchAuth: TwitchAuth;
+  let refreshTokensSpy: ReturnType<typeof spyOn<TwitchAuth, "refreshTokens">>;
   let apiClient: TwitchApiClient;
+  let inMemoryTokenFiles: Map<string, string>;
+  let fsSpies: Array<{ mockRestore: () => void }>;
 
   const createMockHttpClient = (): TestHttpClient => ({
     get: createMockFn<[string, TestRequestOptions?], Promise<TestHttpResponse>>(),
     post: createMockFn(),
   });
 
-  const createMockTwitchAuth = (overrides: Partial<TestTwitchAuth> = {}): TestTwitchAuth => ({
-    refreshTokens: createMockFn<[], Promise<boolean>>().mockResolvedValue(true),
-    isReady: createMockFn<[], boolean>().mockReturnValue(true),
-    ...overrides,
+  const createAuthHttpClient = (): AuthHttpClient => ({
+    get: createMockFn<[string, unknown?], Promise<{ data?: unknown }>>().mockResolvedValue({
+      data: {
+        client_id: "test-client-id",
+        user_id: "test-user-id",
+        login: "test-channel",
+        scopes: [...TWITCH_OAUTH_SCOPES],
+      },
+    }),
+    post: createMockFn<[string, unknown?, unknown?], Promise<{ data?: unknown }>>().mockResolvedValue({
+      data: {
+        access_token: "refreshed-access-token",
+        refresh_token: "refreshed-refresh-token",
+        expires_in: 3600,
+      },
+    }),
   });
 
-  beforeEach(() => {
+  const ownSystem = (system: ViewerCountSystem) => {
+    ownedSystems.add(system);
+    return system;
+  };
+
+  beforeEach(async () => {
     _resetForTesting();
     initializeStaticSecrets();
+    secrets.twitch.clientSecret = "test-client-secret";
     secrets.twitch.accessToken = "test-access-token";
+    secrets.twitch.refreshToken = "test-refresh-token";
+
+    inMemoryTokenFiles = new Map([
+      [
+        IN_MEMORY_TOKEN_STORE_PATH,
+        JSON.stringify({
+          twitch: {
+            accessToken: "test-access-token",
+            refreshToken: "test-refresh-token",
+          },
+        }),
+      ],
+    ]);
+
+    const io = fs.promises;
+    const origMkdir = io.mkdir.bind(io);
+    const origChmod = io.chmod.bind(io);
+    const origReadFile = io.readFile.bind(io);
+    const origWriteFile = io.writeFile.bind(io);
+    const origRename = io.rename.bind(io);
+    const origUnlink = io.unlink.bind(io);
+
+    fsSpies = [
+      spyOn(io, "mkdir").mockImplementation((async (targetPath, options) => {
+        if (String(targetPath).startsWith("/synthetic-in-memory-token-store")) {
+          return undefined;
+        }
+        return origMkdir(targetPath, options);
+      }) as typeof io.mkdir),
+      spyOn(io, "chmod").mockImplementation((async (targetPath, mode) => {
+        if (String(targetPath).startsWith("/synthetic-in-memory-token-store")) {
+          return undefined;
+        }
+        return origChmod(targetPath, mode);
+      }) as typeof io.chmod),
+      spyOn(io, "readFile").mockImplementation((async (targetPath, options) => {
+        const key = String(targetPath);
+        if (key.startsWith("/synthetic-in-memory-token-store")) {
+          const content = inMemoryTokenFiles.get(key);
+          if (content === undefined) {
+            throw Object.assign(new Error(`ENOENT: no such file or directory, open '${key}'`), {
+              code: "ENOENT",
+            });
+          }
+          return content;
+        }
+        return origReadFile(targetPath, options as BufferEncoding);
+      }) as typeof io.readFile),
+      spyOn(io, "writeFile").mockImplementation((async (targetPath, data, options) => {
+        const key = String(targetPath);
+        if (key.startsWith("/synthetic-in-memory-token-store")) {
+          inMemoryTokenFiles.set(key, String(data));
+          return undefined;
+        }
+        return origWriteFile(targetPath, data, options);
+      }) as typeof io.writeFile),
+      spyOn(io, "rename").mockImplementation((async (oldPath, newPath) => {
+        const fromKey = String(oldPath);
+        const toKey = String(newPath);
+        if (
+          fromKey.startsWith("/synthetic-in-memory-token-store") ||
+          toKey.startsWith("/synthetic-in-memory-token-store")
+        ) {
+          const content = inMemoryTokenFiles.get(fromKey) ?? "";
+          inMemoryTokenFiles.delete(fromKey);
+          inMemoryTokenFiles.set(toKey, content);
+          return undefined;
+        }
+        return origRename(oldPath, newPath);
+      }) as typeof io.rename),
+      spyOn(io, "unlink").mockImplementation((async (targetPath) => {
+        const key = String(targetPath);
+        if (key.startsWith("/synthetic-in-memory-token-store")) {
+          inMemoryTokenFiles.delete(key);
+          return undefined;
+        }
+        return origUnlink(targetPath);
+      }) as typeof io.unlink),
+    ];
+
     mockLogger = noOpLogger;
     mockHttpClient = createMockHttpClient();
-    mockTwitchAuth = createMockTwitchAuth();
+    authHttpClient = createAuthHttpClient();
+    twitchAuth = new TwitchAuth({
+      tokenStorePath: IN_MEMORY_TOKEN_STORE_PATH,
+      clientId: "test-client-id",
+      expectedUsername: "test-channel",
+      logger: mockLogger,
+      httpClient: authHttpClient,
+    });
+    await twitchAuth.initialize();
+    refreshTokensSpy = spyOn(twitchAuth, "refreshTokens");
 
     apiClient = new TwitchApiClient(
-      mockTwitchAuth,
+      twitchAuth,
       { clientId: "test-client-id", channel: "test-channel" },
       mockLogger,
       { enhancedHttpClient: mockHttpClient },
     );
   });
 
-  afterEach(() => {
-    restoreAllMocks();
-    _resetForTesting();
-    initializeStaticSecrets();
+  afterEach(async () => {
+    try {
+      for (const system of ownedSystems) {
+        system.stopPolling();
+        await system.cleanup();
+      }
+      ownedSystems.clear();
+      if (twitchAuth) {
+        await twitchAuth.dispose();
+      }
+    } finally {
+      refreshTokensSpy?.mockRestore();
+      for (const spy of (fsSpies ?? []).reverse()) {
+        spy.mockRestore();
+      }
+      restoreAllMocks();
+      _resetForTesting();
+      initializeStaticSecrets();
+    }
   });
 
   describe("API request authentication", () => {
@@ -101,7 +233,7 @@ describe("TwitchApiClient authentication", () => {
 
     it("encodes query values exactly once as data", async () => {
       mockHttpClient.get.mockResolvedValue({ status: 200, data: { data: [{ id: "synthetic-id", viewer_count: 0 }] } });
-      const value = "synthetic&other=?雪%20";
+      const value = "synthetic&other=?\u96ea%20";
       await apiClient.getStreamInfo(value);
       await apiClient.getUserInfo(value);
       await apiClient.getBroadcasterId(value);
@@ -172,7 +304,7 @@ describe("TwitchApiClient authentication", () => {
 
     it("retains actual last-good state through HTTP/auth/body failures until confirmed offline", async () => {
       const provider = new TwitchViewerCountProvider(apiClient, {}, { channel: "synthetic-channel" }, null, noOpLogger);
-      const system = new ViewerCountSystem({ platforms: { twitch: provider }, logger: noOpLogger, config: createConfigFixture() });
+      const system = ownSystem(new ViewerCountSystem({ platforms: { twitch: provider }, logger: noOpLogger, config: createConfigFixture() }));
       system.streamStatus.twitch = true;
       mockHttpClient.get.mockResolvedValue({ status: 200, data: { data: [{ viewer_count: 12 }] } });
       await system.pollPlatform("twitch");
@@ -212,7 +344,7 @@ describe("TwitchApiClient authentication", () => {
     it("preserves real Helix measurement when channel configuration becomes blank", async () => {
       const config = { channel: "synthetic-channel" };
       const provider = new TwitchViewerCountProvider(apiClient, {}, config, null, noOpLogger);
-      const system = new ViewerCountSystem({ platforms: { twitch: provider }, logger: noOpLogger, config: createConfigFixture() });
+      const system = ownSystem(new ViewerCountSystem({ platforms: { twitch: provider }, logger: noOpLogger, config: createConfigFixture() }));
       system.streamStatus.twitch = true;
       mockHttpClient.get.mockResolvedValue({ status: 200, data: { data: [{ viewer_count: 12 }] } });
       await system.pollPlatform("twitch");
@@ -234,7 +366,7 @@ describe("TwitchApiClient authentication", () => {
 
     it("preserves the last real poll through malformed Helix responses and admits a subsequent live zero", async () => {
       const provider = new TwitchViewerCountProvider(apiClient, {}, { channel: "synthetic-channel" }, null, noOpLogger);
-      const system = new ViewerCountSystem({ platforms: { twitch: provider }, logger: noOpLogger, config: createConfigFixture() });
+      const system = ownSystem(new ViewerCountSystem({ platforms: { twitch: provider }, logger: noOpLogger, config: createConfigFixture() }));
       system.streamStatus.twitch = true;
       mockHttpClient.get.mockResolvedValue({ status: 200, data: { data: [{ viewer_count: 12 }] } });
       await system.pollPlatform("twitch");
@@ -383,19 +515,22 @@ describe("TwitchApiClient authentication", () => {
         mockHttpClient.get.mockRejectedValueOnce(failure).mockResolvedValueOnce({ status: 200, data: { data: [] } });
         await expect(apiClient.makeRequest("/users")).resolves.toEqual({ data: [] });
       }
-      expect(mockTwitchAuth.refreshTokens).toHaveBeenCalledTimes(3);
+      expect(refreshTokensSpy).toHaveBeenCalledTimes(3);
       expect(mockHttpClient.get).toHaveBeenCalledTimes(6);
     });
     it("rotates protected credentials once and preserves the terminal error", async () => {
       const failure = { response: { status: 401 } };
       mockHttpClient.get.mockRejectedValue(failure);
-      mockTwitchAuth.refreshTokens.mockImplementation(async () => {
-        secrets.twitch.accessToken = "synthetic-rotated-token";
-        return true;
+      authHttpClient.post.mockResolvedValueOnce({
+        data: {
+          access_token: "synthetic-rotated-token",
+          refresh_token: "synthetic-rotated-refresh",
+          expires_in: 3600,
+        },
       });
       const options = { authToken: "caller", auth: { username: "synthetic-user", password: "synthetic-password" }, headers: { authorization: "caller" } };
       await expect(apiClient.makeRequest("/users", options)).rejects.toBe(failure);
-      expect(mockTwitchAuth.refreshTokens).toHaveBeenCalledTimes(1);
+      expect(refreshTokensSpy).toHaveBeenCalledTimes(1);
       expect(mockHttpClient.get).toHaveBeenCalledTimes(2);
       expect(mockHttpClient.get.mock.calls[0]?.[1]?.auth).toBeNull();
       expect(mockHttpClient.get.mock.calls[1]?.[1]).toMatchObject({ auth: null, authToken: "synthetic-rotated-token", disableRetry: true, headers: { Authorization: "Bearer synthetic-rotated-token" } });
@@ -405,7 +540,7 @@ describe("TwitchApiClient authentication", () => {
     it("preserves the original 401 when refresh declines", async () => {
       const failure = { response: { status: 401 } };
       mockHttpClient.get.mockRejectedValue(failure);
-      mockTwitchAuth.refreshTokens.mockResolvedValue(false);
+      refreshTokensSpy.mockResolvedValue(false);
       await expect(apiClient.makeRequest("/users")).rejects.toBe(failure);
       expect(mockHttpClient.get).toHaveBeenCalledTimes(1);
     });
@@ -418,17 +553,18 @@ describe("TwitchApiClient authentication", () => {
         });
 
       secrets.twitch.accessToken = "expired-token";
-      mockTwitchAuth.refreshTokens = createMockFn<[], Promise<boolean>>().mockImplementation(
-        async () => {
-          secrets.twitch.accessToken = "refreshed-token";
-          return true;
+      authHttpClient.post.mockResolvedValueOnce({
+        data: {
+          access_token: "refreshed-token",
+          refresh_token: "refreshed-refresh-token",
+          expires_in: 3600,
         },
-      );
+      });
 
       const result = await apiClient.getUserInfo("testuser");
 
       expect(result).toEqual({ id: "test-user-id", login: "testuser" });
-      expect(mockTwitchAuth.refreshTokens).toHaveBeenCalledTimes(1);
+      expect(refreshTokensSpy).toHaveBeenCalledTimes(1);
       expect(mockHttpClient.get).toHaveBeenCalledTimes(2);
     });
 
@@ -441,12 +577,13 @@ describe("TwitchApiClient authentication", () => {
         });
 
       secrets.twitch.accessToken = "old-token";
-      mockTwitchAuth.refreshTokens = createMockFn<[], Promise<boolean>>().mockImplementation(
-        async () => {
-          secrets.twitch.accessToken = "new-refreshed-token";
-          return true;
+      authHttpClient.post.mockResolvedValueOnce({
+        data: {
+          access_token: "new-refreshed-token",
+          refresh_token: "new-refreshed-refresh-token",
+          expires_in: 3600,
         },
-      );
+      });
 
       await apiClient.getUserInfo("testuser");
 

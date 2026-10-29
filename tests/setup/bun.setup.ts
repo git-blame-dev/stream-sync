@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, beforeEach, expect } from 'bun:test';
+import { afterAll, afterEach, beforeAll, beforeEach } from 'bun:test';
 import { createRequire } from 'node:module';
 
 const nodeRequire = createRequire(import.meta.url);
@@ -41,7 +41,6 @@ type SetupGlobalState = typeof globalThis & {
     waitForDelay: typeof waitForDelay;
     scheduleTestTimeout: typeof scheduleTimeout;
     scheduleTestInterval: typeof scheduleInterval;
-    expectNoAuthentication: () => void;
     restoreConsole: () => void;
     createLoggerMock: () => Record<string, unknown>;
     __TEST_LOGGER__: Record<string, unknown>;
@@ -57,7 +56,6 @@ setupGlobal.waitForDelay = waitForDelay;
 setupGlobal.scheduleTestTimeout = scheduleTimeout;
 setupGlobal.scheduleTestInterval = scheduleInterval;
 
-setupGlobal.expectNoAuthentication = () => {};
 
 setupGlobal.restoreConsole = () => {
     setupGlobal.console = originalConsole;
@@ -157,45 +155,6 @@ const createYoutubeiMock = () => ({
     }
 });
 
-const toHaveLengthGreaterThan = (received: unknown, expected: number) => {
-    const receivedArray = Array.isArray(received) ? received : [];
-    const pass = receivedArray.length > expected;
-    return {
-        message: () => `expected array to have length greater than ${expected}, but got ${receivedArray.length}`,
-        pass
-    };
-};
-
-const toBeValidNotification = (received: unknown) => {
-    const notification = received && typeof received === 'object'
-        ? received as Record<string, unknown>
-        : {};
-    const requiredProps = ['id', 'type', 'username', 'platform', 'displayMessage', 'ttsMessage'];
-    const missingProps = requiredProps.filter((prop) => !Object.prototype.hasOwnProperty.call(notification, prop));
-    if (missingProps.length === 0) {
-        return { message: () => 'expected notification to be valid', pass: true };
-    }
-    return {
-        message: () => `expected notification to be valid, but missing properties: ${missingProps.join(', ')}`,
-        pass: false
-    };
-};
-
-const toBeValidUser = (received: unknown) => {
-    const user = received && typeof received === 'object'
-        ? received as Record<string, unknown>
-        : {};
-    const requiredProps = ['username'];
-    const missingProps = requiredProps.filter((prop) => !Object.prototype.hasOwnProperty.call(user, prop));
-    if (missingProps.length === 0) {
-        return { message: () => 'expected user to be valid', pass: true };
-    }
-    return {
-        message: () => `expected user to be valid, but missing properties: ${missingProps.join(', ')}`,
-        pass: false
-    };
-};
-
 const registerModuleMocks = () => {
     const webSocketMock = createWebSocketMock();
 
@@ -208,12 +167,6 @@ const registerModuleMocks = () => {
 };
 
 registerModuleMocks();
-
-expect.extend({
-    toHaveLengthGreaterThan,
-    toBeValidNotification,
-    toBeValidUser
-});
 
 beforeAll(() => {
     process.env.NODE_ENV = 'test';
@@ -269,8 +222,5 @@ export {
     createWebSocketMock,
     createAxiosMock,
     createTikTokConnectorMock,
-    createYoutubeiMock,
-    toHaveLengthGreaterThan,
-    toBeValidNotification,
-    toBeValidUser
+    createYoutubeiMock
 };

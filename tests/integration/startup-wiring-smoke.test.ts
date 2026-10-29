@@ -1,9 +1,9 @@
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
+import { describe, test, expect, beforeEach, afterEach, spyOn } from "bun:test";
 import path from "path";
 import fs from "fs";
 import { tmpdir } from "node:os";
 import { createRequire } from "node:module";
-import { getDebugMode, getLoggingConfig, initializeLoggingConfig, setDebugMode } from "../../src/core/logging";
+import { getDebugMode, getLoggingConfig, getUnifiedLogger, initializeLoggingConfig, setDebugMode } from "../../src/core/logging";
 import { buildLoggingConfig } from "../../src/core/config-builders";
 const load = createRequire(import.meta.url);
 const configModulePath = load.resolve("../../src/core/config");
@@ -12,6 +12,7 @@ type LoggingConfig = NonNullable<Parameters<typeof initializeLoggingConfig>[0]["
 
 const buildSmokeConfigIni = () => `[general]
 envFileReadEnabled=false
+envFileWriteEnabled=false
 debugEnabled=true
 viewerCountPollingInterval=60
 maxMessageLength=500
@@ -46,7 +47,7 @@ enabled=false
 innertubeInstanceTtlMs=60000
 innertubeMinTtlMs=30000
 userAgents=smoke-agent
-streamDetectionMethod=api
+streamDetectionMethod=youtubei
 
 [handcam]
 enabled=false
@@ -79,6 +80,7 @@ enabled=false
 
 [logging]
 consoleLevel=debug
+fileLoggingEnabled=false
 
 [tiktok]
 enabled=false
@@ -108,13 +110,21 @@ describe("Startup wiring smoke", () => {
     const originalConfigPath = process.env.CHAT_BOT_CONFIG_PATH;
     const originalLogging = getLoggingConfig();
     const originalDebug = getDebugMode();
+    const existsSync = fs.existsSync;
+    const defaultLogAccess: string[] = [];
+    const existsSpy = spyOn(fs, "existsSync").mockImplementation(file => {
+      if (String(file) === "./logs") { defaultLogAccess.push(String(file)); return true; }
+      return existsSync(file);
+    });
     try {
+      getUnifiedLogger();
       process.env.CHAT_BOT_CONFIG_PATH = tempConfigPath;
       delete load.cache[configModulePath];
       const configModule = load(configModulePath) as typeof import("../../src/core/config");
       const normalized = configModule.loadConfig();
       expect(normalized.general?.debugEnabled).toBe(true);
       expect(normalized.general?.envFileReadEnabled).toBe(false);
+      expect(normalized.general?.envFileWriteEnabled).toBe(false);
       const builtLoggingConfig = buildLoggingConfig(normalized);
       const loggingConfig: LoggingConfig = {
         ...builtLoggingConfig,
@@ -122,6 +132,8 @@ describe("Startup wiring smoke", () => {
         file: { ...builtLoggingConfig.file, level: "debug" },
       };
       initializeLoggingConfig({ logging: loggingConfig });
+      expect(builtLoggingConfig.file.enabled).toBe(false);
+      expect(defaultLogAccess).toEqual([]);
       setDebugMode(true);
       expect(getLoggingConfig()).toBe(loggingConfig);
       expect(getDebugMode()).toBe(true);
@@ -136,6 +148,7 @@ describe("Startup wiring smoke", () => {
             if (originalEntry) load.cache[configModulePath] = originalEntry;
             else delete load.cache[configModulePath];
           } finally {
+            existsSpy.mockRestore();
             if (originalConfigPath === undefined) delete process.env.CHAT_BOT_CONFIG_PATH;
             else process.env.CHAT_BOT_CONFIG_PATH = originalConfigPath;
           }

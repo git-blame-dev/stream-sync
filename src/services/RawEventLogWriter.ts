@@ -4,10 +4,14 @@ import { types } from 'node:util';
 
 import { ensureLogDirectory } from '../utils/log-directory';
 import { getSystemTimestampISO } from '../utils/timestamp';
+import { LOG_TEXT_SPAN_SOURCE, WEB_URL_SPAN_SOURCE } from '../core/logger/web-url-pattern';
 
 const RAW_PLATFORMS = new Set(['youtube', 'twitch', 'tiktok', 'streamelements']);
 const REDACTED = '[REDACTED]';
 const LIMITED = '[Capture limit]';
+const BEARER_TOKEN = /\bBearer\s+[^\s,;]+/gi;
+const WEB_URL_SPAN = new RegExp(WEB_URL_SPAN_SOURCE, 'gi');
+const RAW_TEXT_SPAN = new RegExp(LOG_TEXT_SPAN_SOURCE, 'gi');
 const SECRET_KEY = /^(?:authorization|proxyauthorization|accessToken|refreshToken|idToken|authToken|jwtToken|sessionToken|token|clientSecret|secret|password|passwd|cookie|setCookie|sessionId|apiKey|xApiKey|accessKeyId|awsAccessKeyId|privateKey|signingKey|signature|sig|credential|credentials|keyPairId|policy|xAmz.*|xGoog.*)$/i;
 
 function isSecretKey(key: string): boolean {
@@ -16,11 +20,22 @@ function isSecretKey(key: string): boolean {
 
 // RAW capture deliberately retains chat/provider content and non-secret URL parameters.
 // Oversized strings are omitted whole, rather than exposing a credential cut at a boundary.
-function rawText(value: string): string {
-    if (value.length > 4096) return LIMITED;
+function rawText(value: string, depth = 0): string {
+    if (value.length > 4096 || depth >= 12) return LIMITED;
+    // Decode a complete primitive before assignment scanning can interpret its
+    // escaped contents as unquoted diagnostic text.
+    if (value.startsWith('"')) {
+        try {
+            const decoded: unknown = JSON.parse(value);
+            if (typeof decoded === 'string') {
+                const safe = rawText(decoded, depth + 1);
+                return safe === decoded ? value : JSON.stringify(safe);
+            }
+        } catch { /* Embedded and non-JSON strings are handled below. */ }
+    }
     // Scan complete whitespace-delimited candidates: commas and parentheses are
     // legal inside URL credentials. Never sanitize a prefix and retain its suffix.
-    const redactUrl = (candidate: string): string => {
+    const redactUrl = (candidate: string, original = candidate): string => {
         try {
             const url = new URL(candidate);
             const secretKeys = [...url.searchParams.keys()].filter(isSecretKey);
@@ -29,7 +44,7 @@ function rawText(value: string): string {
             if (!url.username && !url.password && secretKeys.length === 0 && fragmentSecretKeys.length === 0) return candidate;
             // Punctuation may belong to the URL or enclosing diagnostic syntax.
             // For credential-bearing candidates, omit the entire ambiguous span.
-            if (/[()[\]{},;|"'<>]/.test(candidate)) return '[Credential URL omitted]';
+            if (/[()[\]{},;|"'<>]/.test(original)) return '[Credential URL omitted]';
             url.username = '';
             url.password = '';
             for (const key of secretKeys) url.searchParams.set(key, REDACTED);
@@ -40,16 +55,40 @@ function rawText(value: string): string {
             return url.toString();
         } catch { return '[Invalid URL omitted]'; }
     };
-    if (/^(?:https?|wss?):\/\/\S+$/i.test(value)) return redactUrl(value);
+    // URL parsing accepts protocol tabs/newlines and spaces in query values.
+    // Test the complete decoded primitive before scanning diagnostic fragments.
+    let wholeWebUrl = false;
+    try {
+        wholeWebUrl = /^(?:https?|wss?):$/.test(new URL(value).protocol);
+    } catch { /* Diagnostic text may contain an embedded URL instead. */ }
+    const redactQuoted = (candidate: string): string => {
+        const quote = candidate[0]!;
+        if (quote === '"') {
+            try {
+                const decoded = JSON.parse(candidate) as string;
+                const safe = rawText(decoded, depth + 1);
+                return safe === decoded ? candidate : JSON.stringify(safe);
+            } catch { /* Preserve non-JSON diagnostic quoting. */ }
+        }
+        return quote + rawText(candidate.slice(1, -1), depth + 1) + quote;
+    };
     // Recognize assignment boundaries once, using the same key policy for quoted
     // and bare values. Non-secret enclosing values cannot hide inner assignments.
-    const redactAssignments = (text: string, depth = 0): string => {
+    const redactAssignments = (text: string, depth = 0, standaloneOnly = false): string => {
         const labels = /("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\b[a-z][a-z0-9_-]*)(\s*[:=]\s*)/gi;
+        const urlSpans = [...text.matchAll(new RegExp(WEB_URL_SPAN_SOURCE, 'gi'))];
         let result = '';
         let cursor = 0;
         let match: RegExpExecArray | null;
         while ((match = labels.exec(text))) {
+            // A whole URL owns its query keys; independently introduced diagnostic
+            // assignments still need filtering before URL serialization escapes spaces.
+            if (standaloneOnly && (match.index === 0 || !/\s/.test(text[match.index - 1]!))) continue;
             const label = match[1]!;
+            if (!label.startsWith('"') && !label.startsWith("'")
+                && !/\s/.test(text[match.index - 1] ?? '')
+                && urlSpans.some(span => span.index !== undefined
+                    && match!.index >= span.index && match!.index < span.index + span[0].length)) continue;
             let key: string;
             // Decode only a bounded primitive label, never provider objects.
             try { key = label.startsWith('"') ? JSON.parse(label) as string : label.startsWith("'") ? label.slice(1, -1) : label; }
@@ -86,6 +125,12 @@ function rawText(value: string): string {
                     end++;
                 }
             }
+            if (!isSecretKey(key) && quote && closed) {
+                result += text.slice(cursor, start) + redactQuoted(text.slice(start, end));
+                cursor = end;
+                labels.lastIndex = end;
+                continue;
+            }
             const content = isSecretKey(key) ? REDACTED : depth >= 12 ? LIMITED
                 : redactAssignments(text.slice(start + (quote ? 1 : 0), end - (closed ? 1 : 0)), depth + 1);
             result += text.slice(cursor, start) + quote + content + (closed ? quote : '');
@@ -94,16 +139,23 @@ function rawText(value: string): string {
         }
         return result + text.slice(cursor);
     };
+    if (wholeWebUrl) {
+        const independent = redactAssignments(value, 0, true).replace(BEARER_TOKEN, `Bearer ${REDACTED}`);
+        // A parser-valid URL can also contain another URL in diagnostic text.
+        // Inspect those spans before whole-value serialization hides their boundary.
+        const embedded = independent.replace(WEB_URL_SPAN, candidate => redactUrl(candidate));
+        return redactUrl(embedded, value);
+    }
     const assignments = redactAssignments(value);
     // Respect complete quoted strings so URL omission cannot erase the label or
     // opening quote of an adjacent field. Bare URL candidates remain conservative.
-    return assignments.replace(/"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\b(?:https?|wss?):\/\/\S+/gi, candidate => {
+    return assignments.replace(RAW_TEXT_SPAN, candidate => {
         const quote = candidate[0];
         if (quote === '"' || quote === "'") {
-            return quote + candidate.slice(1, -1).replace(/\b(?:https?|wss?):\/\/\S+/gi, redactUrl) + quote;
+            return redactQuoted(candidate);
         }
         return redactUrl(candidate);
-    }).replace(/\bBearer\s+[^\s,;]+/gi, `Bearer ${REDACTED}`);
+    }).replace(BEARER_TOKEN, `Bearer ${REDACTED}`);
 }
 
 function captureRaw(value: unknown): unknown {

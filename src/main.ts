@@ -380,9 +380,9 @@ for (let i = 0; i < args.length; i++) {
                     process.stderr.write('Error: --chat argument requires a number\n');
                     process.exit(1);
                 }
-                const chatCount = Number.parseInt(chatArg, 10);
-                if (isNaN(chatCount) || chatCount <= 0) {
-                    process.stderr.write('Error: --chat argument requires a positive number\n');
+                const chatCount = Number(chatArg);
+                if (!/^\+?[0-9]+$/.test(chatArg) || !Number.isSafeInteger(chatCount) || chatCount <= 0) {
+                    process.stderr.write('Error: --chat argument requires a positive safe integer\n');
                     process.exit(1);
                 }
                 cliArgs.chat = chatCount;
@@ -568,8 +568,8 @@ function validateRuntimeCliArgs(cliArgsCandidate: Partial<MainCliArgs> & Record<
     }
 
     if (cliArgsCandidate.chat !== undefined && cliArgsCandidate.chat !== null) {
-        if (!Number.isInteger(cliArgsCandidate.chat) || cliArgsCandidate.chat <= 0) {
-            throw new Error('main override cliArgs.chat must be null or a positive integer');
+        if (!Number.isSafeInteger(cliArgsCandidate.chat) || cliArgsCandidate.chat <= 0) {
+            throw new Error('main override cliArgs.chat must be null or a positive integer within the safe numeric range');
         }
     }
 }
@@ -715,7 +715,7 @@ async function main(overrides: MainOverrides = {}) {
             logger.warn(`USD rate service unavailable; foreign YouTube gifts will be skipped: ${error instanceof Error ? error.message : String(error)}`, 'usd-rates');
         }
 
-        let twitchAuth = null;
+        let twitchAuth: TwitchAuth | null = null;
         let authValid = true;
         if (config.twitch.enabled) {
             if (typeof config.twitch.tokenStorePath !== 'string' || typeof config.twitch.clientId !== 'string') {
@@ -728,6 +728,7 @@ async function main(overrides: MainOverrides = {}) {
                 logger,
                 ...(runtimeOverrides.axios !== undefined ? { httpClient: runtimeOverrides.axios } : {})
             });
+            construction.push(() => twitchAuth?.dispose());
             try {
                 await twitchAuth.initialize();
                 authValid = twitchAuth.isReady();
@@ -841,6 +842,7 @@ async function main(overrides: MainOverrides = {}) {
         const provisionalObsService = obsSubsystem.obsEventService as ReturnType<typeof createOBSEventService>;
         construction.push(() => provisionalObsService.destroy?.());
         construction.push(async () => { await provisionalObsService.disconnect?.(); });
+        construction.push(() => obsSubsystem.effectsManager.dispose());
 
         logger.debug('About to initialize display queue...', 'Main');
         const displayQueueDependencies = {
@@ -885,8 +887,6 @@ async function main(overrides: MainOverrides = {}) {
         const obsEventService = obsSubsystem.obsEventService;
         logger.debug('OBSEventService created', 'Main');
 
-        const obsGoals = obsSubsystem.goalsManager;
-
         logger.debug('About to create notification manager...', 'Main');
         logger.info('Creating notification manager...', 'Main');
         const notificationManager = new NotificationManagerCtor({
@@ -897,8 +897,7 @@ async function main(overrides: MainOverrides = {}) {
             userTrackingService: userTrackingService,
             logger,
             constants: coreConstants,
-            textProcessing,
-            obsGoals
+            textProcessing
         });
         
         logger.debug('Creating spam detection service...', 'Main');

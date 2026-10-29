@@ -2,6 +2,7 @@ import http, { type IncomingMessage, type Server, type ServerResponse } from 'no
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { pipeline } from 'node:stream';
 
 import { createPlatformErrorHandler } from '../../utils/platform-error-handler';
 import { createEventToGuiContractMapper } from './event-to-gui-contract-mapper';
@@ -175,6 +176,7 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
     let unsubscribeFundingGoal: (() => void) | null = null;
     const clients = new Set<ServerResponse<IncomingMessage>>();
     const chatClients = new Set<ServerResponse<IncomingMessage>>();
+    const mediaTransfers = new Set<{ cancel: () => void; closed: Promise<void> }>();
     const chatFeedEnabled = guiConfig.enableChatFeed === true;
     const operatorEnabled = guiConfig.enableOperator === true;
     const operatorApi = operatorEnabled && options.operatorControls && options.operatorLogs && options.operatorAppearance
@@ -433,6 +435,7 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
     const createAppearanceEnvelope = (snapshot: OperatorAppearanceSnapshot | ReturnType<typeof guiAppearanceSnapshot>) => ({
         __guiEvent: 'appearance' as const,
         profile: 'minimal' as const,
+        ...(snapshot.sessionId ? { sessionId: snapshot.sessionId } : {}),
         revision: snapshot.revision,
         settings: { ...snapshot.settings }
     });
@@ -942,13 +945,26 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
             }
 
             const stream = fs.createReadStream(runtimeAsset.filePath, { start, end });
-            stream.on('error', () => {
-                if (!res.headersSent) {
-                    res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
-                }
-                res.end(sendBody ? 'Failed to read runtime asset' : undefined);
+            const sourceClosed = new Promise<void>(resolve => stream.once('close', resolve));
+            let finishPipeline: () => void = () => {};
+            const pipelineClosed = new Promise<void>(resolve => { finishPipeline = resolve; });
+            const transfer = {
+                cancel: () => { stream.destroy(); res.destroy(); },
+                closed: Promise.all([sourceClosed, pipelineClosed]).then(() => { mediaTransfers.delete(transfer); })
+            };
+            mediaTransfers.add(transfer);
+            // Bun's HTTP compatibility layer does not always propagate response
+            // closure through pipeline, so explicitly retire the owned file source.
+            const closeSource = () => { stream.destroy(); };
+            res.once('close', closeSource);
+            const socket = res.socket;
+            socket?.once('close', closeSource);
+            // Pipeline owns errors and premature closes; committed media headers cannot
+            // be followed by a replacement text body. Retirement also joins file close.
+            pipeline(stream, res, () => {
+                socket?.removeListener('close', closeSource);
+                finishPipeline();
             });
-            stream.pipe(res);
             return;
         }
 
@@ -1251,7 +1267,10 @@ function createGuiTransportService(options: GuiTransportOptions = {}): GuiTransp
             if (unsubscribe) retireResource(unsubscribe);
         }
         for (const client of closingClients) retireResource(() => { client.end(); });
+        const closingMedia = [...mediaTransfers];
+        for (const transfer of closingMedia) retireResource(transfer.cancel);
         await dispatchChain.catch(reportRetirementError);
+        await Promise.all(closingMedia.map(transfer => transfer.closed));
         runtimeAssetRegistry.clear();
         giftPlaybackRegistry.clear();
         await pendingStart?.catch(() => undefined);

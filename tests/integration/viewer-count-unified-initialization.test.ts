@@ -1,7 +1,8 @@
 import { describe, test, afterEach, expect } from "bun:test";
 import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
 import type { TestMockFn } from "../helpers/bun-mock-utils";
-import { createMockPlatform, noOpLogger } from "../helpers/mock-factories";
+import { noOpLogger } from "../helpers/mock-factories";
+import { TikTokViewerCountProvider } from "../../src/utils/viewer-count-providers";
 import { ViewerCountSystem } from "../../src/utils/viewer-count.ts";
 import { createConfigFixture } from "../helpers/config-fixture";
 
@@ -10,9 +11,33 @@ type PlatformBehavior = { viewerCount: number };
 type PlatformBehaviors = Partial<Record<PlatformName, PlatformBehavior>>;
 type ViewerCountSystemUnderTest = InstanceType<typeof ViewerCountSystem>;
 const systems = new Set<ViewerCountSystemUnderTest>();
-type MockPlatformWithViewerCount = ReturnType<typeof createMockPlatform> & {
-  getViewerCount: TestMockFn<[], Promise<number>>;
+type PlatformProviderAdapter = {
+  getViewerCount: TestMockFn<[], Promise<number | null>>;
   initialize: TestMockFn<[], Promise<boolean>>;
+  setStreamResponse: (next: () => Promise<number>) => void;
+};
+
+const createConcretePlatformAdapter = (initialViewerCount: number): PlatformProviderAdapter => {
+  let streamResponse: () => Promise<number> = async () => initialViewerCount;
+  const provider = new TikTokViewerCountProvider(
+    {
+      connection: { isConnected: true },
+      getViewerCount: () => streamResponse(),
+    },
+    { logger: noOpLogger },
+  );
+  const getViewerCount = createMockFn<[], Promise<number | null>>(() =>
+    provider.getViewerCount(),
+  );
+  const initialize = createMockFn<[], Promise<boolean>>().mockResolvedValue(true);
+
+  return {
+    getViewerCount,
+    initialize,
+    setStreamResponse: (next) => {
+      streamResponse = next;
+    },
+  };
 };
 
 const hasSeparateEarlyStartMethod = (system: ViewerCountSystemUnderTest) => {
@@ -32,21 +57,13 @@ const createViewerCountSystemWithBehaviors = (
     ...platformBehaviors,
   };
 
-  const platforms: Record<PlatformName, MockPlatformWithViewerCount> = {} as Record<
+  const platforms: Record<PlatformName, PlatformProviderAdapter> = {} as Record<
     PlatformName,
-    MockPlatformWithViewerCount
+    PlatformProviderAdapter
   >;
   Object.entries(defaultPlatformBehaviors).forEach(([name, behavior]) => {
     const platformName = name as PlatformName;
-    const platform = createMockPlatform(platformName, {
-      getViewerCount: createMockFn<[], Promise<number>>().mockResolvedValue(
-        behavior.viewerCount,
-      ),
-      initialize: createMockFn<[], Promise<boolean>>().mockResolvedValue(true),
-      destroy: createMockFn().mockResolvedValue(true),
-      isConnected: createMockFn().mockReturnValue(true),
-    }) as MockPlatformWithViewerCount;
-    platforms[platformName] = platform;
+    platforms[platformName] = createConcretePlatformAdapter(behavior.viewerCount);
   });
 
   const system = new ViewerCountSystem({
@@ -82,17 +99,16 @@ const validateSystemStability = (system: ViewerCountSystemUnderTest) => {
 };
 
 const simulateNetworkFailure = (
-  platform: MockPlatformWithViewerCount,
+  platform: PlatformProviderAdapter,
   errorType = "connection_timeout",
 ) => {
-  if (platform.getViewerCount) {
-    platform.getViewerCount.mockRejectedValue(
-      new Error(`Network ${errorType}`),
-    );
-  }
-  if (platform.initialize) {
-    platform.initialize.mockRejectedValue(new Error(`Platform ${errorType}`));
-  }
+  platform.setStreamResponse(async () => {
+    throw new Error(`Network ${errorType}`);
+  });
+  platform.getViewerCount.mockRejectedValue(
+    new Error(`Network ${errorType}`),
+  );
+  platform.initialize.mockRejectedValue(new Error(`Platform ${errorType}`));
 };
 
 const expectUserSeesViewerCount = (
@@ -260,6 +276,7 @@ describe("ViewerCount Unified Initialization Behavior", () => {
         count: 0, hasCompleteObservation: false, latestOutcome: "unknown",
       });
 
+      platforms.youtube.setStreamResponse(async () => 250);
       platforms.youtube.getViewerCount.mockResolvedValue(250);
       platforms.youtube.initialize.mockResolvedValue(true);
       await simulatePlatformReadiness(system, "youtube", true);

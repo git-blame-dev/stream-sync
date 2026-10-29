@@ -295,7 +295,7 @@ describe('registered lifecycle hooks', () => {
   });
 });
 `);
-            const child = Bun.spawnSync([process.execPath, 'test', '--config', path.join(root, 'bunfig.toml'), path.join(root, 'tests/hooks.test.ts')], {
+            const child = Bun.spawnSync([process.execPath, '--no-env-file', 'test', '--config', path.join(root, 'bunfig.toml'), path.join(root, 'tests/hooks.test.ts')], {
                 cwd: root, stdout: 'pipe', stderr: 'pipe'
             });
             expect({ code: child.exitCode, output: child.stderr.toString() }).toEqual({

@@ -28,8 +28,7 @@ function harness(limit = 2, enabled = true) {
     const manager = new NotificationManager({
         logger: noOpLogger, constants: { NOTIFICATION_CONFIGS, PRIORITY_LEVELS }, eventBus: new EventEmitter(),
         config: createConfigFixture({ general: { giftsEnabled: true, paypiggiesEnabled: true } }),
-        obsGoals: { processDonationGoal: () => undefined },
-        displayQueue: { addItem: item => { queued.push(item); }, getQueueLength: () => queued.length },
+        displayQueue: { addItem: item => { queued.push(item); return [item]; }, getQueueLength: () => queued.length },
         donationSpamDetector: detector
     });
     let sequence = 0;
@@ -60,8 +59,7 @@ it('admits first two gifts and only their suppressed residual with original repl
         logger: noOpLogger, constants: { NOTIFICATION_CONFIGS, PRIORITY_LEVELS },
         eventBus: new EventEmitter(),
         config: createConfigFixture({ general: { giftsEnabled: true } }),
-        obsGoals: { processDonationGoal: () => undefined },
-        displayQueue: { addItem: item => { queued.push(item); }, getQueueLength: () => queued.length },
+        displayQueue: { addItem: item => { queued.push(item); return [item]; }, getQueueLength: () => queued.length },
         donationSpamDetector: detector
     });
     try {

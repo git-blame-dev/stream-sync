@@ -1,26 +1,16 @@
-import { describe, test, afterEach, expect } from "bun:test";
-import EventEmitter from "events";
+import { describe, test, afterEach, expect, spyOn } from "bun:test";
+import { join } from "node:path";
+
 import { PlatformLifecycleService } from "../../src/services/PlatformLifecycleService.ts";
-import NotificationManager from "../../src/notifications/NotificationManager";
 import { TwitchPlatform } from "../../src/platforms/twitch";
-import { createTestAppRuntime } from "../helpers/runtime-test-harness";
-import { createMockDisplayQueue, noOpLogger } from "../helpers/mock-factories";
-import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
-import {
-  createConfigFixture,
-  createTwitchConfigFixture,
-} from "../helpers/config-fixture";
+import { TwitchAuth } from "../../src/auth/TwitchAuth.ts";
+import { createMainPresentationFixture } from "../helpers/main-presentation-fixture.ts";
+import { noOpLogger } from "../helpers/mock-factories";
+import { restoreAllMocks } from "../helpers/bun-mock-utils";
+import { createTwitchConfigFixture } from "../helpers/config-fixture";
 import { expectNoTechnicalArtifacts } from "../helpers/assertion-helpers";
 import { waitFor } from "../helpers/event-driven-testing";
 
-type EventBusHandler = (payload: unknown) => void | Promise<void>;
-type EventBus = {
-  emit: (eventName: string, payload: unknown) => boolean;
-  on: (eventName: string, handler: EventBusHandler) => EventEmitter;
-  subscribe: (eventName: string, handler: EventBusHandler) => () => void;
-};
-type RuntimeOptions = NonNullable<Parameters<typeof createTestAppRuntime>[1]>;
-type RuntimeEventBus = NonNullable<RuntimeOptions["eventBus"]>;
 type QueueItem = {
   type: string;
   platform: string;
@@ -52,36 +42,6 @@ const requireQueueItem = (value: unknown): QueueItem => {
   return { type: value.type, platform: value.platform, data: value.data };
 };
 
-const createRuntimeEventBus = (eventBus: EventBus): RuntimeEventBus => ({
-  emit: (eventName: string, payload: unknown) => {
-    eventBus.emit(eventName, payload);
-  },
-  subscribe: (
-    eventName: string,
-    handler: (event: Record<string, unknown>) => void | Promise<void>,
-  ) =>
-    eventBus.subscribe(eventName, (payload) => {
-      if (isRecord(payload)) {
-        return handler(payload);
-      }
-      return handler({});
-    }),
-});
-
-const createEventBus = (): EventBus => {
-  const emitter = new EventEmitter();
-  return {
-    emit: emitter.emit.bind(emitter),
-    on: emitter.on.bind(emitter),
-    subscribe: (event: string, handler: EventBusHandler) => {
-      emitter.on(event, handler);
-      return () => {
-        emitter.off(event, handler);
-      };
-    },
-  };
-};
-
 const assertUserFacingOutput = (
   data: Record<string, unknown>,
   { username, viewerCount }: RaidCopyExpectations,
@@ -110,66 +70,86 @@ const assertUserFacingOutput = (
 };
 
 describe("Twitch raid platform flow (smoke)", () => {
-  afterEach(() => {
-    restoreAllMocks();
+  const cleanups: Array<() => Promise<void> | void> = [];
+
+  const registerCleanup = (fn: () => Promise<void> | void) => {
+    let executed = false;
+    const idempotentFn = async () => {
+      if (executed) return;
+      executed = true;
+      await fn();
+    };
+    cleanups.push(idempotentFn);
+    return idempotentFn;
+  };
+
+  const runCleanups = async () => {
+    while (cleanups.length > 0) {
+      const cleanup = cleanups.pop();
+      if (cleanup) {
+        await cleanup();
+      }
+    }
+  };
+
+  afterEach(async () => {
+    try {
+      await runCleanups();
+    } finally {
+      restoreAllMocks();
+    }
   });
 
   test("routes raid through lifecycle, router, and display queue", async () => {
-    const eventBus = createEventBus();
-    const logger = noOpLogger;
-    const displayQueue = createMockDisplayQueue();
-    const configOverrides = {
-      general: {
-        raidsEnabled: true,
-      },
-      twitch: {
-        enabled: true,
-        raidsEnabled: true,
-      },
-      obs: { enabled: false },
-    };
-    const config = createConfigFixture(configOverrides);
-    const notificationManager = new NotificationManager({
-      displayQueue,
-      logger,
-      eventBus,
-      config,
-      constants: require("../../src/core/constants"),
-      obsGoals: { processDonationGoal: createMockFn() },
-      vfxCommandService: {
-        getVFXConfig: createMockFn().mockResolvedValue(null),
-      },
-      userTrackingService: {
-        isFirstMessage: createMockFn().mockResolvedValue(false),
-      },
-    });
+    const presentation = await createMainPresentationFixture();
+    presentation.config.general.debugEnabled = false;
+    presentation.config.general.envFileReadEnabled = false;
+    presentation.config.general.envFileWriteEnabled = false;
+    presentation.config.general.raidsEnabled = true;
+    presentation.config.logging.file.enabled = false;
+    presentation.config.logging.chat.enabled = false;
+    presentation.config.twitch.enabled = false;
+    presentation.config.twitch.dataLoggingEnabled = false;
+    presentation.config.twitch.raidsEnabled = true;
+
+    await presentation.start();
+    const addItemSpy = spyOn(presentation.queue, "addItem");
 
     const platformLifecycleService = new PlatformLifecycleService({
-      config: { twitch: { enabled: true } },
-      eventBus,
-      logger,
+      config: { twitch: { enabled: true, dataLoggingEnabled: false } },
+      eventBus: presentation.bus,
+      logger: noOpLogger,
     });
 
-    const { runtime } = createTestAppRuntime(configOverrides, {
-      overrides: {
-        eventBus: createRuntimeEventBus(eventBus),
-        notificationManager,
-        displayQueue,
-        logger,
-      },
+    const auth = new TwitchAuth({
+      tokenStorePath: join(presentation.dir, "twitch-tokens.json"),
+      clientId: "synthetic-client",
+      expectedUsername: "synthetic-user",
+      logger: noOpLogger,
     });
 
     const platform = new TwitchPlatform(
-      createTwitchConfigFixture({ enabled: true }),
+      createTwitchConfigFixture({
+        enabled: true,
+        clientId: "synthetic-client",
+        dataLoggingEnabled: false,
+      }),
       {
-        logger,
-        twitchAuth: {
-          isReady: () => true,
-        },
+        logger: noOpLogger,
+        twitchAuth: auth,
       },
     );
     platform.handlers =
       platformLifecycleService.createDefaultEventHandlers("twitch");
+
+    registerCleanup(async () => {
+      await platform.cleanup();
+      auth.dispose();
+      await platformLifecycleService.disconnectAll();
+      platformLifecycleService.dispose();
+      restoreAllMocks();
+      await presentation.dispose();
+    });
 
     try {
       await platform.handleRaidEvent({
@@ -179,13 +159,14 @@ describe("Twitch raid platform flow (smoke)", () => {
         timestamp: "2024-01-01T00:00:00.000Z",
       });
 
-      await waitFor(() => displayQueue.addItem.mock.calls.length === 1, {
-        timeout: 100,
+      await waitFor(() => addItemSpy.mock.calls.length === 1, {
+        timeout: 500,
         interval: 1,
       });
+      await presentation.drain();
 
-      expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
-      const queued = requireQueueItem(displayQueue.addItem.mock.calls[0]?.[0]);
+      expect(addItemSpy).toHaveBeenCalledTimes(1);
+      const queued = requireQueueItem(addItemSpy.mock.calls[0]?.[0]);
       expect(queued.type).toBe("platform:raid");
       expect(queued.platform).toBe("twitch");
       expect(queued.data.username).toBe("test-user-raider");
@@ -195,8 +176,7 @@ describe("Twitch raid platform flow (smoke)", () => {
         viewerCount: 42,
       });
     } finally {
-      runtime.platformEventRouter?.dispose();
-      platformLifecycleService.dispose();
+      await runCleanups();
     }
   });
 });

@@ -1,3 +1,4 @@
+import type { DisplayQueueItem } from "../../src/interfaces/DisplayQueue";
 import { NOTIFICATION_CONFIGS, PRIORITY_LEVELS } from '../../src/core/constants';
 import NotificationManager from '../../src/notifications/NotificationManager';
 import { AppRuntime } from '../../src/runtime/AppRuntime';
@@ -96,16 +97,18 @@ function createFarewellRoutingHarness(configOverrides: FarewellRoutingHarnessOve
     const queuedSequences: QueuedNotification[][] = [];
     const commandCooldownService = new CommandCooldownService({ config, logger: noOpLogger });
     const displayQueue: DisplayQueue & {
-        addSequence: (items: Array<Record<string, unknown>>) => void;
+        addSequence: (items: DisplayQueueItem[]) => readonly DisplayQueueItem[];
     } = {
-        addItem: (item: Record<string, unknown>) => {
+        addItem: (item: DisplayQueueItem) => {
             queuedItems.push(item as QueuedNotification);
+            return [item];
         },
         addSequence: (items) => {
             queuedSequences.push(items as QueuedNotification[]);
             for (const item of items) {
                 queuedItems.push(item as QueuedNotification);
             }
+            return items;
         },
         getQueueLength: () => queuedItems.length
     };
@@ -126,9 +129,6 @@ function createFarewellRoutingHarness(configOverrides: FarewellRoutingHarnessOve
             PRIORITY_LEVELS,
             NOTIFICATION_CONFIGS
         },
-        obsGoals: {
-            processDonationGoal: async () => {}
-        }
     });
 
     let chatRouter: ChatNotificationRouter | null = null;

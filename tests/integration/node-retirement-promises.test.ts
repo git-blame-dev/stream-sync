@@ -131,7 +131,7 @@ async function run() {
     const userTrackingService = createUserTrackingService();
     const vfxCommandService = createVFXCommandService(config, eventBus);
     const notificationManager = new NotificationManager({ logger: quiet, constants, config,
-      obsGoals: goals, displayQueue, eventBus, userTrackingService, vfxCommandService });
+      displayQueue, eventBus, userTrackingService, vfxCommandService });
     const commandCooldownService = new CommandCooldownService({ config, eventBus, logger: quiet });
     const obsEventService = createOBSEventService({ eventBus, obsConnection: obsManager, obsSources: sources, logger: quiet });
     const platformLifecycleService = new PlatformLifecycleService({ config, eventBus, logger: quiet });

@@ -27,6 +27,7 @@
   },
   "include": [
     "tests/**/*.ts",
+    "tests/**/*.tsx",
     "gui/src/vite-env.d.ts"
   ],
   "exclude": [

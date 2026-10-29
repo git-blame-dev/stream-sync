@@ -11,6 +11,30 @@ describe('BoundedOperatorLogSource', () => {
     ...overrides
   });
 
+  it('resets an overlapping previous-owner cursor and replays the entire new owner', () => {
+    const previous = new BoundedOperatorLogSource();
+    [1, 2, 3].forEach(() => previous.append(input()));
+    const source = new BoundedOperatorLogSource();
+    [1, 2, 3, 4, 5].forEach(() => source.append(input()));
+    const seen: number[] = [];
+    const connection = source.connect(`${previous.history().sessionId}:3`, entry => { seen.push(entry.id); });
+    expect(connection.history.truncated).toBe(true);
+    connection.activate();
+    expect(seen).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it('resets empty owners and delivers entries buffered before activation', () => {
+    const source = new BoundedOperatorLogSource();
+    const seen: number[] = [];
+    const connection = source.connect('synthetic-previous-owner:999', entry => { seen.push(entry.id); });
+    expect(connection.history.truncated).toBe(true);
+    expect(connection.history.newestId).toBeNull();
+    source.append(input());
+    connection.activate();
+    source.append(input());
+    expect(seen).toEqual([1, 2]);
+  });
+
   it('preserves the complete DTO and truncates oversized entries', () => {
     const source = new BoundedOperatorLogSource({ maxEntries: 2, maxBytes: 1000, maxEntryBytes: 256 });
     expect(source.append(input())).toEqual({ id: 1, ...input() });
@@ -52,7 +76,7 @@ describe('BoundedOperatorLogSource', () => {
     const source = new BoundedOperatorLogSource();
     source.append(input({ message: 'one' }));
     const seen: number[] = [];
-    const connection = source.connect(0, (entry) => {
+    const connection = source.connect(`${source.history().sessionId}:0`, (entry) => {
       seen.push(entry.id);
        if (entry.id === 1) source.append(input({ message: 'two' }));
     });
@@ -65,7 +89,7 @@ describe('BoundedOperatorLogSource', () => {
   it('marks high stale IDs reset, isolates throwers, and unsubscribes idempotently', () => {
     const source = new BoundedOperatorLogSource();
     source.append(input({ message: 'one' }));
-    const stale = source.connect(99, () => undefined);
+    const stale = source.connect(`${source.history().sessionId}:99`, () => undefined);
     expect(stale.history.truncated).toBe(true);
     let count = 0;
     const bad = source.connect(undefined, () => false);
@@ -84,7 +108,7 @@ describe('BoundedOperatorLogSource', () => {
     const source = new BoundedOperatorLogSource();
     [1, 2, 3].forEach((n) => source.append(input({ message: String(n) })));
     const seen: number[] = [];
-    const connection = source.connect(1, (entry) => { seen.push(entry.id); });
+    const connection = source.connect(`${source.history().sessionId}:1`, (entry) => { seen.push(entry.id); });
     expect(connection.history.entries.map((entry) => entry.id)).toEqual([2, 3]);
     connection.activate();
     expect(seen).toEqual([2, 3]);
@@ -95,7 +119,7 @@ describe('BoundedOperatorLogSource', () => {
     [1, 2, 3].forEach((n) => source.append(input({ message: String(n) })));
     const seen: number[] = [];
 
-    const connection = source.connect(0, (entry) => { seen.push(entry.id); });
+    const connection = source.connect(`${source.history().sessionId}:0`, (entry) => { seen.push(entry.id); });
 
     expect(connection.history.truncated).toBe(true);
     expect(connection.history.entries.map((entry) => entry.id)).toEqual([2, 3]);

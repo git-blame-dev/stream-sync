@@ -6,6 +6,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { extractBoundedZip } from '../../../../src/services/tiktok-gift-animation/bounded-zip-extractor';
 import { zipFixture, zip64Fixture, type ZipFixtureEntry } from '../../../helpers/bounded-zip-fixture';
+import { withNativeChildEnvironment } from '../../../helpers/native-child-environment';
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
@@ -47,7 +48,8 @@ for (const runtime of ['node', 'bun']) {
                 console.log('BOUNDED_ZIP_ZIP64_OK');
             `;
             const args = runtime === 'node' ? ['--import', 'tsx', '--input-type=module', '--eval', source] : ['--no-env-file', '--eval', source];
-            const result = await promisify(execFile)(runtime, args, { cwd: process.cwd(), timeout: 15000 });
+            const result = await withNativeChildEnvironment(env =>
+                promisify(execFile)(runtime, args, { cwd: process.cwd(), timeout: 15000, env }));
             expect(result.stdout.trim()).toBe('BOUNDED_ZIP_ZIP64_OK');
             expect(result.stderr).toBe('');
         }, 30000);
@@ -183,7 +185,8 @@ for (const [runtime, method, action] of [
             console.log('BOUNDED_ZIP_RUNTIME_OK');
         `;
         const args = runtime === 'node' ? ['--import', 'tsx', '--input-type=module', '--eval', source] : ['--no-env-file', '--eval', source];
-        const result = await promisify(execFile)(runtime, args, { cwd: process.cwd(), timeout: 15000 });
+        const result = await withNativeChildEnvironment(env =>
+            promisify(execFile)(runtime, args, { cwd: process.cwd(), timeout: 15000, env }));
         expect(result.stdout.trim()).toBe('BOUNDED_ZIP_RUNTIME_OK');
         expect(result.stderr).toBe('');
     }, 30000);

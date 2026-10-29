@@ -1692,9 +1692,6 @@ function createPreviewPipeline(options: CreatePreviewPipelineOptions = {}): Prev
             PRIORITY_LEVELS,
             NOTIFICATION_CONFIGS
         },
-        obsGoals: {
-            processDonationGoal: () => {}
-        },
         eventBus,
         config,
         vfxCommandService,

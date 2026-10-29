@@ -1,102 +1,38 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { expect, test } from 'bun:test';
+import { createMainPresentationFixture } from '../helpers/main-presentation-fixture';
 
-import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
-import {
-  createMockNotificationManager,
-  noOpLogger,
-} from "../helpers/mock-factories";
-import { registerMockLifecycleHooks } from "../helpers/mock-lifecycle";
-import { createTestAppRuntime } from "../helpers/runtime-test-harness";
+const gift = { giftType: 'Rose', giftCount: 3, amount: 3, currency: 'coins', repeatCount: 1,
+  type: 'platform:gift', userId: 'synthetic-gift-viewer', timestamp: '2026-01-01T00:00:00.000Z', id: 'synthetic-config-gift' };
 
-type LoggerLike = {
-  debug: (...args: unknown[]) => void;
-  info: (...args: unknown[]) => void;
-  warn: (...args: unknown[]) => void;
-  error: (...args: unknown[]) => void;
-};
-
-type RuntimeNotificationManager = {
-  handleNotification: (...args: unknown[]) => Promise<unknown>;
-};
-
-registerMockLifecycleHooks({
-  clearCallsBeforeEach: true,
-  validateAfterCleanup: true,
-  logPerformanceMetrics: true,
-});
-
-describe("Gift Notification Config Resiliency", () => {
-  afterEach(() => {
-    restoreAllMocks();
+for (const mode of ['missing config', 'incomplete gift'] as const) {
+  test(`actual runtime rejects ${mode} before admission and processes a healthy following gift`, async () => {
+    const h = await createMainPresentationFixture();
+    h.config.logging.file.enabled = false;
+    h.config.logging.chat.enabled = false;
+    try {
+      await h.start();
+      const originalConfig = h.runtime.config;
+      try {
+        if (mode === 'missing config') Reflect.set(h.runtime, 'config', undefined);
+        const input = mode === 'incomplete gift'
+          ? { ...gift, giftType: undefined, giftCount: undefined, amount: undefined, currency: undefined, repeatCount: undefined }
+          : gift;
+        await expect(h.runtime.handleGiftNotification('tiktok', 'Synthetic Gift Viewer', input)).rejects.toThrow(
+          mode === 'missing config' ? 'AppRuntime config unavailable for gift notifications'
+            : 'Gift notification requires giftType, giftCount, amount, and currency');
+        expect(h.queue.getQueueLength()).toBe(0);
+        expect(h.rows).toEqual([]);
+      } finally {
+        Reflect.set(h.runtime, 'config', originalConfig);
+      }
+      expect(await h.runtime.handleGiftNotification('tiktok', 'Synthetic Gift Viewer', gift)).toMatchObject({ success: true });
+      await h.drain();
+      expect(h.rows).toHaveLength(1);
+      expect(h.rows[0]).toMatchObject({ type: 'platform:gift', platform: 'tiktok', data: {
+        username: 'Synthetic Gift Viewer', amount: 3, giftCount: 3, currency: 'coins',
+      } });
+    } finally {
+      await h.dispose();
+    }
   });
-
-  const buildAppRuntime = (
-    overrides: {
-      logger?: LoggerLike;
-      notificationManager?: RuntimeNotificationManager;
-    } = {},
-  ) => {
-    const mockLogger = overrides.logger || noOpLogger;
-    const notificationManager =
-      overrides.notificationManager ||
-      createMockNotificationManager({
-        handleNotification: createMockFn(async () => true),
-      });
-
-    const { runtime } = createTestAppRuntime(
-      {
-        general: { debugEnabled: true, greetingsEnabled: false },
-      },
-      {
-        logger: mockLogger,
-        notificationManager,
-      },
-    );
-
-    return { runtime, mockLogger, notificationManager };
-  };
-
-  test("handleGiftNotification throws when config becomes undefined", async () => {
-    const { runtime } = buildAppRuntime();
-    Reflect.set(runtime, "config", undefined);
-
-    await expect(
-      runtime.handleGiftNotification("tiktok", "TestGifter", {
-        giftType: "Rose",
-        giftCount: 3,
-        amount: 3,
-        currency: "coins",
-        repeatCount: 1,
-        type: "platform:gift",
-        userId: "gifter-1",
-        timestamp: "2024-01-01T00:00:00.000Z",
-        id: "gift-evt-1",
-      }),
-    ).rejects.toThrow("AppRuntime config unavailable for gift notifications");
-  });
-
-  test("gift notifications require complete gift payloads", async () => {
-    const notificationManager = createMockNotificationManager({
-      handleNotification: createMockFn(async () => true),
-    });
-    const { runtime } = buildAppRuntime({ notificationManager });
-
-    await expect(
-      runtime.handleGiftNotification("tiktok", "TestGifter", {
-        giftType: undefined,
-        giftCount: undefined,
-        amount: undefined,
-        currency: undefined,
-        repeatCount: undefined,
-        type: "platform:gift",
-        userId: "gifter-2",
-        timestamp: "2024-01-01T00:00:01.000Z",
-        id: "gift-evt-2",
-      }),
-    ).rejects.toThrow(
-      "Gift notification requires giftType, giftCount, amount, and currency",
-    );
-
-    expect(notificationManager.handleNotification).not.toHaveBeenCalled();
-  });
-});
+}

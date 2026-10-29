@@ -9,11 +9,55 @@ import {
 import { ViewerCountSystem } from "../../src/utils/viewer-count";
 import { YouTubeViewerExtractor } from "../../src/extractors/youtube-viewer-extractor";
 import { InnertubeFactory } from "../../src/factories/innertube-factory";
+import { OBSConnectionManager } from "../../src/obs/connection";
 import { OBSViewerCountObserver } from "../../src/observers/obs-viewer-count-observer";
-import { createMockOBSManager } from "../helpers/mock-factories";
 import { expectNoTechnicalArtifacts } from "../helpers/behavior-validation";
 import { createConfigFixture } from "../helpers/config-fixture";
-import { waitForDelay } from "../helpers/time-utils";
+import { EventEmitter } from "node:events";
+import { YouTubePlatform } from "../../src/platforms/youtube";
+import { InnertubeService } from "../../src/services/innertube-service";
+import { YouTubeStreamDetectionService } from "../../src/services/youtube-stream-detection-service";
+import { ViewerCountExtractionService } from "../../src/services/viewer-count-extraction-service";
+import { noOpLogger } from "../helpers/mock-factories";
+
+class SyntheticObsSocket extends EventEmitter {
+  call = createMockFn<[string, Record<string, unknown>?], Promise<Record<string, unknown>>>()
+    .mockResolvedValue({ status: "success" });
+  async connect() {
+    this.emit("Identified");
+    return { obsWebSocketVersion: "synthetic" };
+  }
+  async disconnect() {
+    this.emit("ConnectionClosed");
+  }
+}
+
+async function realViewerFixture() {
+  let response: unknown = { basic_info: { is_live: true, view_count: 1500 } };
+  let requests = 0;
+  const metadata = new InnertubeService({ createWithTimeout: async () => ({
+    getChannel: async () => ({ videos: [{ id: "synthetic_A", is_live: true }], getLiveStreams: async () => ({ videos: [] }) }),
+    search: async () => ({ videos: [] }),
+    getInfo: async () => {
+      requests++;
+      if (response instanceof Error) throw response;
+      return { ...(response as object), getLiveChat: () => Object.assign(new EventEmitter(), { start() {}, stop() {}, applyFilter() {} }) };
+    },
+  }) }, { logger: noOpLogger });
+  const platform = new YouTubePlatform({ username: `UC${"q".repeat(22)}`, enabled: true, dataLoggingEnabled: false }, {
+    logger: noOpLogger, innertubeService: metadata,
+    streamDetectionService: new YouTubeStreamDetectionService(metadata, { logger: noOpLogger }),
+    viewerExtractionService: new ViewerCountExtractionService(metadata, { logger: noOpLogger }),
+  });
+  const store = new ViewerCountSystem({ logger: noOpLogger, platforms: { youtube: platform },
+    config: { general: { viewerCountPollingIntervalMs: 1000 }, youtube: { enabled: true } } });
+  const counts: number[] = [];
+  store.addObserver({ getObserverId: () => "synthetic-output", onViewerCountUpdate: update => { counts.push(update.count); } });
+  try { await platform.checkMultiStream(); }
+  catch (error) { await platform.cleanup(); await metadata.dispose(); throw error; }
+  return { store, counts, setResponse(value: unknown) { response = value; }, get requests() { return requests; },
+    async close() { await store.cleanup(); await platform.cleanup(); await metadata.dispose(); } };
+}
 
 type ViewerCountUpdate = {
   platform: string;
@@ -72,7 +116,8 @@ const expectFirstArg = <Args extends unknown[]>(mockFn: TestMockFn<Args, unknown
 
 describe("System Resilience and Error Recovery Integration", () => {
   let platforms: TestPlatforms;
-  let obsManager: ReturnType<typeof createMockOBSManager>;
+  let obsSocket: SyntheticObsSocket;
+  let obsManager: OBSConnectionManager;
   let viewerCountSystem: InstanceType<typeof ViewerCountSystem>;
 
   beforeEach(async () => {
@@ -82,7 +127,18 @@ describe("System Resilience and Error Recovery Integration", () => {
       },
     };
 
-    obsManager = createMockOBSManager();
+    obsSocket = new SyntheticObsSocket();
+    obsManager = new OBSConnectionManager({
+      obs: obsSocket,
+      config: {
+        enabled: true,
+        address: "ws://synthetic.invalid",
+        password: "synthetic-password",
+      },
+    });
+    await obsManager.connect();
+    obsSocket.call.mockClear();
+
     const testConfig = createConfigFixture();
     viewerCountSystem = new ViewerCountSystem({
       platforms,
@@ -101,12 +157,19 @@ describe("System Resilience and Error Recovery Integration", () => {
   });
 
   afterEach(async () => {
-    if (viewerCountSystem) {
-      viewerCountSystem.stopPolling();
-      await viewerCountSystem.cleanup();
+    try {
+      if (viewerCountSystem) {
+        viewerCountSystem.stopPolling();
+        await viewerCountSystem.cleanup();
+      }
+      if (obsManager) {
+        obsManager.dispose();
+        await obsManager.disconnect();
+      }
+    } finally {
+      clearAllMocks();
+      restoreAllMocks();
     }
-    clearAllMocks();
-    restoreAllMocks();
   });
 
   describe("Platform API Error Handling", () => {
@@ -116,8 +179,8 @@ describe("System Resilience and Error Recovery Integration", () => {
       );
 
       await viewerCountSystem.updateStreamStatus("youtube", true);
+      await viewerCountSystem.pollPlatform("youtube");
       viewerCountSystem.startPolling();
-      await waitForDelay(50);
 
       expect(viewerCountSystem.isPolling).toBe(true);
       expect(viewerCountSystem.isStreamLive("youtube")).toBe(true);
@@ -125,25 +188,22 @@ describe("System Resilience and Error Recovery Integration", () => {
     });
 
     test("should handle malformed API responses gracefully", async () => {
-      let callCount = 0;
-      platforms.youtube.getViewerCount.mockImplementation(() => {
-        const responses = [
-          null,
-          undefined,
-          "invalid",
-          { invalid: "object" },
-          -1,
-        ];
-        return Promise.resolve(responses[callCount++ % responses.length]);
-      });
-
-      await viewerCountSystem.updateStreamStatus("youtube", true);
-      viewerCountSystem.startPolling();
-      await waitForDelay(100);
-
-      expect(viewerCountSystem.isPolling).toBe(true);
-      expect(viewerCountSystem.isStreamLive("youtube")).toBe(true);
-      expect(callCount).toBeGreaterThan(0);
+      const h = await realViewerFixture();
+      try {
+        await h.store.pollPlatform("youtube");
+        expect(h.store.getViewerCount("youtube")).toBe(1500);
+        const baseline = h.requests;
+        for (const response of [null, undefined, "invalid", { invalid: "object" }, { basic_info: { view_count: -1 } }]) {
+          h.setResponse(response);
+          await h.store.pollPlatform("youtube");
+          expect(h.store.getViewerCountSnapshot("youtube")).toMatchObject({ count: 1500, latestOutcome: "unavailable" });
+          expect(h.counts).toEqual([1500]);
+        }
+        expect(h.requests - baseline).toBe(5);
+        h.setResponse({ basic_info: { is_live: true, view_count: 25 } });
+        await h.store.pollPlatform("youtube");
+        expect(h.counts).toEqual([1500, 25]);
+      } finally { await h.close(); }
     });
 
     test("should maintain system stability during connection failures", async () => {
@@ -152,8 +212,8 @@ describe("System Resilience and Error Recovery Integration", () => {
       );
 
       await viewerCountSystem.updateStreamStatus("youtube", true);
+      await viewerCountSystem.pollPlatform("youtube");
       viewerCountSystem.startPolling();
-      await waitForDelay(50);
 
       expect(viewerCountSystem.isPolling).toBe(true);
       expect(viewerCountSystem.isStreamLive("youtube")).toBe(true);
@@ -175,22 +235,22 @@ describe("System Resilience and Error Recovery Integration", () => {
       viewerCountSystem.addObserver(faultyObserver);
 
       await viewerCountSystem.updateStreamStatus("youtube", true);
+      await viewerCountSystem.pollPlatform("youtube");
       viewerCountSystem.startPolling();
-      await waitForDelay(50);
 
       expect(viewerCountSystem.getViewerCount("youtube")).toBe(1000);
       expect(viewerCountSystem.isPolling).toBe(true);
       expect(faultyObserver.onViewerCountUpdate).toHaveBeenCalled();
-      expect(obsManager.call).toHaveBeenCalled();
+      expect(obsSocket.call).toHaveBeenCalled();
     });
 
     test("should handle OBS connection failures gracefully", async () => {
-      obsManager.isConnected.mockReturnValue(false);
-      obsManager.call.mockRejectedValue(new Error("OBS connection lost"));
+      await obsManager.disconnect();
+      obsSocket.call.mockRejectedValue(new Error("OBS connection lost"));
 
       await viewerCountSystem.updateStreamStatus("youtube", true);
+      await viewerCountSystem.pollPlatform("youtube");
       viewerCountSystem.startPolling();
-      await waitForDelay(50);
 
       expect(viewerCountSystem.getViewerCount("youtube")).toBe(1000);
       expect(viewerCountSystem.isPolling).toBe(true);
@@ -214,8 +274,8 @@ describe("System Resilience and Error Recovery Integration", () => {
       });
 
       await viewerCountSystem.updateStreamStatus("youtube", true);
+      await viewerCountSystem.pollPlatform("youtube");
       viewerCountSystem.startPolling();
-      await waitForDelay(50);
 
       expect(viewerCountSystem.getViewerCount("youtube")).toBe(1000);
       expect(viewerCountSystem.isPolling).toBe(true);
@@ -309,19 +369,27 @@ describe("System Resilience and Error Recovery Integration", () => {
 
   describe("System State Consistency", () => {
     test("should maintain consistent state during errors", async () => {
-      platforms.youtube.getViewerCount
-        .mockRejectedValueOnce(new Error("Error 1"))
-        .mockResolvedValueOnce(1500)
-        .mockRejectedValueOnce(new Error("Error 2"));
-
-      await viewerCountSystem.updateStreamStatus("youtube", true);
-      viewerCountSystem.startPolling();
-      await waitForDelay(100);
-
-      expect(viewerCountSystem.isStreamLive("youtube")).toBe(true);
-      expect(viewerCountSystem.isPolling).toBe(true);
-      expect(typeof viewerCountSystem.getViewerCount("youtube")).toBe("number");
-      expect(viewerCountSystem.getViewerCount("youtube")).toBeGreaterThanOrEqual(0);
+      const h = await realViewerFixture();
+      try {
+        const baseline = h.requests;
+        for (const [response, expected, outcome] of [
+          [new Error("Synthetic first failure"), 0, "unavailable"],
+          [{ basic_info: { is_live: true, view_count: 1500 } }, 1500, "complete"],
+          [new Error("Synthetic second failure"), 1500, "unavailable"],
+          [{ basic_info: { is_live: true, view_count: 0 } }, 0, "complete"],
+        ] as const) {
+          h.setResponse(response); await h.store.pollPlatform("youtube");
+          expect(h.store.getViewerCountSnapshot("youtube")).toMatchObject({ count: expected, latestOutcome: outcome });
+        }
+        expect(h.requests - baseline).toBe(4);
+        expect(h.counts).toEqual([1500, 0]);
+        // Chat offline is not an authoritative zero; unavailable metadata retains the last complete count.
+        await h.store.updateViewerCount("youtube", 7);
+        h.setResponse(new Error("Synthetic offline metadata failure"));
+        await h.store.updateStreamStatus("youtube", false);
+        await h.store.pollPlatform("youtube");
+        expect(h.store.getViewerCountSnapshot("youtube")).toMatchObject({ count: 7, latestOutcome: "unavailable" });
+      } finally { await h.close(); }
     });
 
     test("should handle observer lifecycle during errors", async () => {
@@ -350,8 +418,8 @@ describe("System Resilience and Error Recovery Integration", () => {
       viewerCountSystem.addObserver(qualityObserver);
 
       await viewerCountSystem.updateStreamStatus("youtube", true);
+      await viewerCountSystem.pollPlatform("youtube");
       viewerCountSystem.startPolling();
-      await waitForDelay(50);
 
       const lastSuccessfulUpdate = expectFirstArg(
         qualityObserver.onViewerCountUpdate,
@@ -367,8 +435,8 @@ describe("System Resilience and Error Recovery Integration", () => {
       );
 
       await viewerCountSystem.updateStreamStatus("youtube", true);
+      await viewerCountSystem.pollPlatform("youtube");
       viewerCountSystem.startPolling();
-      await waitForDelay(50);
 
       expect(viewerCountSystem.isStreamLive("youtube")).toBe(true);
       expect(viewerCountSystem.getViewerCount("youtube")).toBe(0);
@@ -387,8 +455,8 @@ describe("System Resilience and Error Recovery Integration", () => {
       viewerCountSystem.addObserver(resourceObserver);
 
       await viewerCountSystem.updateStreamStatus("youtube", true);
+      await viewerCountSystem.pollPlatform("youtube");
       viewerCountSystem.startPolling();
-      await waitForDelay(50);
 
       viewerCountSystem.stopPolling();
       await viewerCountSystem.cleanup();

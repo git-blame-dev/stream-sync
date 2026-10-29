@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readdir, rm, writeFile, symlink, readFile } from 'node:
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { buildArtifact, copyReleaseSupportFiles, GUI_FILES, SUPPORT_FILES, parseTarget, releaseFiles, validatePackage } from '../../../scripts/release/build-artifact';
+import { withNativeChildEnvironment } from '../../helpers/native-child-environment';
 
 const roots: string[] = [];
 async function fixture(): Promise<string> {
@@ -95,8 +96,8 @@ describe('release artifact filesystem behavior', () => {
     const root = await fixture();
     await put(root, 'scripts/release/build-artifact.ts', await readFile(path.resolve(__dirname, '../../../scripts/release/build-artifact.ts'), 'utf8'));
     await rm(path.join(root, 'gui/dist/assets/goal.js'));
-    const result = Bun.spawnSync([process.execPath, path.join(root, 'scripts/release/build-artifact.ts'), 'linux-x64'], {
-      env: { ...process.env, STREAM_SYNC_REUSE_GUI_DIST: 'true', PATH: '/synthetic-no-compiler' },
+    const result = Bun.spawnSync([process.execPath, '--no-env-file', path.join(root, 'scripts/release/build-artifact.ts'), 'linux-x64'], {
+      env: { NODE_ENV: 'test', STREAM_SYNC_REUSE_GUI_DIST: 'true', PATH: '/synthetic-no-compiler' },
       stdout: 'pipe', stderr: 'pipe'
     });
     expect(result.exitCode).toBe(1);
@@ -131,10 +132,13 @@ describe('release artifact filesystem behavior', () => {
         ? [['tar', '-cf', archive, '-C', root, 'package'], ['tar', '-xf', archive, '-C', extracted]]
         : [['zip', '-qr', archive, 'package'], ['unzip', '-q', archive, '-d', extracted]];
       for (const command of commands) {
-        const result = Bun.spawnSync(command, { cwd: root, stdout: 'pipe', stderr: 'pipe' });
+        const result = await withNativeChildEnvironment(env =>
+          Bun.spawnSync(command, { cwd: root, env, stdout: 'pipe', stderr: 'pipe' }));
         expect(result.exitCode).toBe(0);
       }
-      const result = Bun.spawnSync([process.execPath, script, '--verify', 'linux-x64', path.join(extracted, 'package')], { stdout: 'pipe', stderr: 'pipe' });
+      const result = await withNativeChildEnvironment(env =>
+        Bun.spawnSync([process.execPath, '--no-env-file', script, '--verify', 'linux-x64', path.join(extracted, 'package')],
+          { cwd: root, env, stdout: 'pipe', stderr: 'pipe' }));
       expect(result.exitCode).toBe(0);
       await validatePackage(path.join(extracted, 'package'), 'linux-x64');
     }

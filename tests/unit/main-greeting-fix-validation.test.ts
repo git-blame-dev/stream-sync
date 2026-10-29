@@ -1,205 +1,52 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { describe, expect, test } from 'bun:test';
+import { NotificationBuilder } from '../../src/utils/notification-builder';
+import { createMainPresentationFixture } from '../helpers/main-presentation-fixture';
+import type { DisplayQueueItem } from '../../src/interfaces/DisplayQueue';
 
-import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
-import { NotificationBuilder } from "../../src/utils/notification-builder.ts";
-
-type MockFn = ReturnType<typeof createMockFn>;
-
-type ConsoleNotificationData = {
-  username?: string;
-  viewerCount?: number;
-  giftCount?: number;
-  giftType?: string;
-  amount?: number;
-  currency?: string;
-  [key: string]: unknown;
-};
-
-const requireNotificationData = (
-  notification: ConsoleNotificationData | null,
-): ConsoleNotificationData => {
-  expect(notification).not.toBeNull();
-  if (!notification) {
-    throw new Error("Expected notification payload");
-  }
-  return notification;
-};
-
-describe("Main.js Greeting Username Extraction Fix", () => {
-  afterEach(() => {
-    restoreAllMocks();
-  });
-
-  let extractUsernameFromNotificationData: (
-    data: ConsoleNotificationData | null | undefined,
-  ) => string | null;
-  let logNotificationToConsole: (
-    type: string,
-    platform: string,
-    data: ConsoleNotificationData,
-  ) => void;
-  let mockLogger: {
-    console: MockFn;
-    debug: MockFn;
-    info: MockFn;
-    warn: MockFn;
-    error: MockFn;
-  };
-
-  beforeEach(() => {
-    mockLogger = {
-      console: createMockFn(),
-      debug: createMockFn(),
-      info: createMockFn(),
-      warn: createMockFn(),
-      error: createMockFn(),
-    };
-
-    const runtimeContext = {
-      logger: mockLogger,
-
-      extractUsernameFromNotificationData: function (
-        data: ConsoleNotificationData | null | undefined,
-      ) {
-        if (!data || typeof data.username !== "string") {
-          return null;
-        }
-
-        const username = data.username.trim();
-        return username ? username : null;
-      },
-
-      logNotificationToConsole: function (
-        type: string,
-        platform: string,
-        data: ConsoleNotificationData,
-      ) {
-        const username = this.extractUsernameFromNotificationData(data);
-        if (!username) {
-          return;
-        }
-
-        let msg = "";
-        switch (type) {
-          case "follow":
-            msg = `[${platform}] New follow: ${username}`;
-            break;
-          case "subscription":
-            msg = `[${platform}] New subscription: ${username}`;
-            break;
-          case "membership":
-            msg = `[${platform}] New membership: ${username}`;
-            break;
-          case "raid":
-            msg = `[${platform}] Raid from ${username} with ${data.viewerCount ?? 0} viewers!`;
-            break;
-          case "gift":
-            msg = `[${platform}] Gift from ${username}: ${data.giftCount || 1}x ${data.giftType || "gift"} (${data.amount ?? 0} ${data.currency || "coins"})`;
-            break;
-          case "greeting":
-            msg = `[${platform}] Greeting: ${username}`;
-            break;
-          case "farewell":
-            msg = `[${platform}] Farewell: ${username}`;
-            break;
-          default:
-            msg = `[${platform}] Notification (${type}): ${username}`;
-        }
-        if (this.logger && this.logger.console) {
-          this.logger.console(msg, "notification");
-        }
-      },
-    };
-
-    extractUsernameFromNotificationData =
-      runtimeContext.extractUsernameFromNotificationData.bind(runtimeContext);
-    logNotificationToConsole =
-      runtimeContext.logNotificationToConsole.bind(runtimeContext);
-  });
-
-  test("should extract username from notification data", () => {
-    const greetingData = NotificationBuilder.build({
-      type: "greeting",
-      platform: "twitch",
-      username: "TestUser",
-    });
-    const notificationData = requireNotificationData(greetingData);
-
-    expect(notificationData).toMatchObject({
-      type: "greeting",
-      platform: "twitch",
-      username: "TestUser",
-    });
-
-    const extractedUsername =
-      extractUsernameFromNotificationData(notificationData);
-
-    expect(extractedUsername).toBe("TestUser");
-  });
-
-  test("logs greeting notifications with the extracted username", () => {
-    const greetingData = NotificationBuilder.build({
-      type: "greeting",
-      platform: "twitch",
-      username: "TestUser",
-    });
-    const notificationData = requireNotificationData(greetingData);
-
-    logNotificationToConsole("greeting", "twitch", notificationData);
-
-    expect(mockLogger.console).toHaveBeenCalledTimes(1);
-    const consoleCall = mockLogger.console.mock.calls[0];
-    expect(consoleCall).toBeDefined();
-    if (!consoleCall) {
-      throw new Error("Expected greeting notification to be logged");
+describe('actual greeting admission and canonical notification copy', () => {
+  test('main preserves the canonical username through greeting preparation and display', async () => {
+    const fixture = await createMainPresentationFixture();
+    fixture.config.twitch.greetingsEnabled = true;
+    fixture.config.logging.file.enabled = false;
+    fixture.config.logging.chat.enabled = false;
+    try {
+      await fixture.start();
+      await fixture.runtime.platformEventRouter.routeEvent({ type: 'platform:chat-message', platform: 'twitch', data: {
+        username: 'Synthetic Viewer', displayName: 'Synthetic Alternate Name', userId: 'synthetic-greeting-viewer',
+        message: { text: 'synthetic hello' }, timestamp: '2026-01-01T00:00:00.000Z',
+      } });
+      const items: DisplayQueueItem[] = fixture.queue.queue.flatMap(entry =>
+        'children' in entry ? entry.children as DisplayQueueItem[] : [entry]);
+      expect(items.map(item => item.type)).toEqual(['chat', 'greeting']);
+      expect(items[1]!.data).toMatchObject({ username: 'Synthetic Viewer', userId: 'synthetic-greeting-viewer',
+        displayMessage: 'Welcome, Synthetic Viewer! 👋', ttsMessage: 'Hi Synthetic Viewer', logMessage: 'Greeting: Synthetic Viewer' });
+      await fixture.drain();
+      expect(fixture.rows.map(row => row.type)).toEqual(['chat', 'greeting']);
+      expect(fixture.rows[1]!.data.displayMessage).toBe('Welcome, Synthetic Viewer! 👋');
+    } finally {
+      await fixture.dispose();
     }
-    const [message, category] = consoleCall;
-    expect(message).toBe("[twitch] Greeting: TestUser");
-    expect(category).toBe("notification");
   });
 
-  test("returns null when username is missing", () => {
-    expect(
-      extractUsernameFromNotificationData({ displayName: "AltName" }),
-    ).toBeNull();
-    expect(extractUsernameFromNotificationData({ name: "AltName" })).toBeNull();
+  test('the actual builder rejects absent identity and invalid notification inputs', () => {
+    for (const input of [null, undefined, {}, { user: {} },
+      { type: 'greeting', platform: 'twitch', displayName: 'Synthetic Alternate Name' },
+      { type: 'greeting', platform: 'twitch', name: 'Synthetic Alternate Name' }]) {
+      expect(NotificationBuilder.build(input)).toBeNull();
+    }
   });
 
-  test("returns null for invalid data", () => {
-    expect(extractUsernameFromNotificationData(null)).toBeNull();
-    expect(extractUsernameFromNotificationData(undefined)).toBeNull();
-    expect(extractUsernameFromNotificationData({})).toBeNull();
-    expect(extractUsernameFromNotificationData({ user: {} })).toBeNull();
-  });
-
-  test("should fix all notification types using the same username extraction pattern", () => {
-    const notificationData = NotificationBuilder.build({
-      type: "platform:follow",
-      platform: "twitch",
-      username: "TestFollower",
+  for (const { input, logMessage } of [
+    { input: { type: 'platform:follow', platform: 'twitch' }, logMessage: 'New follower: Synthetic Viewer' },
+    { input: { type: 'platform:paypiggy', platform: 'twitch', tier: '1000' }, logMessage: 'New subscriber: Synthetic Viewer!' },
+    { input: { type: 'platform:raid', platform: 'twitch', viewerCount: 10 }, logMessage: 'Incoming raid from Synthetic Viewer with 10 viewers!' },
+    { input: { type: 'platform:gift', platform: 'tiktok', giftType: 'Synthetic Rose', giftCount: 2, amount: 20, currency: 'coins' },
+      logMessage: 'TikTok Gift: 2x Synthetic Rose (20 coins) from Synthetic Viewer' },
+    { input: { type: 'farewell', platform: 'twitch' }, logMessage: 'Farewell: Synthetic Viewer' },
+  ]) {
+    test(`${input.type} generates its own canonical log copy`, () => {
+      expect(NotificationBuilder.build({ ...input, username: 'Synthetic Viewer', userId: 'synthetic-viewer' }))
+        .toMatchObject({ type: input.type, platform: input.platform, username: 'Synthetic Viewer', logMessage });
     });
-    const builtNotificationData = requireNotificationData(notificationData);
-
-    const notificationTypes = [
-      "platform:follow",
-      "platform:paypiggy",
-      "platform:raid",
-      "platform:gift",
-      "farewell",
-    ];
-
-    notificationTypes.forEach((type) => {
-      mockLogger.console.mockClear();
-      logNotificationToConsole(type, "twitch", builtNotificationData);
-
-      const consoleCall = mockLogger.console.mock.calls[0];
-      expect(consoleCall).toBeDefined();
-      if (!consoleCall) {
-        throw new Error(`Expected ${type} notification to be logged`);
-      }
-      const loggedMessage = consoleCall[0];
-      expect(loggedMessage).toContain("TestFollower");
-      expect(loggedMessage).not.toContain("undefined");
-    });
-  });
+  }
 });

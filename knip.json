@@ -5,7 +5,8 @@
     "gui/src/operator/main.tsx",
     "tests/**/*.test.ts",
     "tests/setup/**/*.ts",
-    "tests/fixtures/tiktok-sdk-contract.ts"
+    "tests/fixtures/tiktok-sdk-contract.ts",
+    "tests/fixtures/gui-runtime-media-lifetime.ts"
   ],
   "project": [
     "src/**/*.ts",
@@ -33,6 +34,11 @@
     ],
     "tests/helpers/**/*.ts": [
       "exports"
+    ]
+  },
+  "playwright": {
+    "config": [
+      "tests/browser/playwright.config.ts"
     ]
   }
 }

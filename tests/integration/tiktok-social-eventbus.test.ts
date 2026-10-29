@@ -1,176 +1,47 @@
-import { describe, test, afterEach, expect } from "bun:test";
-import EventEmitter from "events";
-import { PlatformLifecycleService } from "../../src/services/PlatformLifecycleService.ts";
-import { TikTokPlatform } from "../../src/platforms/tiktok";
-import { PlatformEvents } from "../../src/interfaces/PlatformEvents";
-import { createTikTokConfigFixture } from "../helpers/config-fixture";
-import {
-  createMockTikTokPlatformDependencies,
-  noOpLogger,
-} from "../helpers/mock-factories";
-import {
-  createTikTokFollowEvent,
-  createTikTokShareEvent,
-} from "../helpers/tiktok-test-data";
-import { restoreAllMocks } from "../helpers/bun-mock-utils";
+import { expect, test } from 'bun:test';
+import { TikTokPlatform } from '../../src/platforms/tiktok';
+import { PlatformLifecycleService } from '../../src/services/PlatformLifecycleService';
+import { createMainPresentationFixture } from '../helpers/main-presentation-fixture';
+import { noOpLogger } from '../helpers/mock-factories';
+import { waitFor } from '../helpers/event-driven-testing';
 
-type PlatformEventPayload = {
-  type: string;
-  platform: string;
-  data: {
-    userId: string;
-    username: string;
-    timestamp: string;
-  };
-};
-
-type TestEventBus = {
-  emit: (event: string, payload: unknown) => void;
-  subscribe: (event: string, handler: (payload: PlatformEventPayload) => void) => () => void;
-};
-
-const createEventBus = (): TestEventBus => {
-  const emitter = new EventEmitter();
-  return {
-    emit: (event: string, payload: unknown) => {
-      emitter.emit(event, payload);
-    },
-    subscribe: (event: string, handler: (payload: PlatformEventPayload) => void) => {
-      emitter.on(event, handler);
-      return () => emitter.off(event, handler);
-    },
-  };
-};
-
-const waitForPlatformEvent = (eventBus: TestEventBus) =>
-  new Promise<PlatformEventPayload>((resolve) => {
-    const unsubscribe = eventBus.subscribe("platform:event", (event: PlatformEventPayload) => {
-      unsubscribe();
-      resolve(event);
-    });
-  });
-
-const createPlatform = () =>
-  new TikTokPlatform(
-    createTikTokConfigFixture({ enabled: true }),
-    {
-      ...createMockTikTokPlatformDependencies(),
-      WebcastEvent: {
-        CHAT: "chat",
-        GIFT: "gift",
-        FOLLOW: "follow",
-        SHARE: "share",
-        SOCIAL: "social",
-        ROOM_USER: "roomUser",
-        ERROR: "error",
-        DISCONNECT: "disconnect",
-      },
-    },
-  );
-
-describe("TikTok social event bus routing (integration)", () => {
-  afterEach(() => {
-    restoreAllMocks();
-  });
-
-  test("emits follow events through lifecycle handlers", async () => {
-    const eventTimestampMs = Date.parse("2025-01-20T12:00:00.000Z");
-    const eventBus = createEventBus();
-    const lifecycle = new PlatformLifecycleService({
-      config: { tiktok: { enabled: true } },
-      eventBus,
-      logger: noOpLogger,
-    });
-    const platform = createPlatform();
-    platform.handlers = lifecycle.createDefaultEventHandlers("tiktok");
-
-    const followEvent = createTikTokFollowEvent({
-      user: { uniqueId: "test-user-follow", nickname: "test-user-follow" },
-      common: { createTime: eventTimestampMs },
-    });
-    const eventPromise = waitForPlatformEvent(eventBus);
-
+for (const action of ['follow', 'share', 'direct-share'] as const) {
+  test(`actual TikTok ${action} reaches lifecycle, runtime, and display owners`, async () => {
+    const h = await createMainPresentationFixture();
+    h.config.tiktok.followsEnabled = true;
+    h.config.tiktok.sharesEnabled = true;
+    h.config.logging.file.enabled = false;
+    h.config.logging.chat.enabled = false;
+    let platform: TikTokPlatform | undefined;
+    let lifecycle: PlatformLifecycleService | undefined;
+    let unsubscribe = () => {};
     try {
-      await platform.handleTikTokSocial(followEvent);
-
-      const event = await eventPromise;
-      const expectedTimestamp = new Date(eventTimestampMs).toISOString();
-
-      expect(event.type).toBe(PlatformEvents.FOLLOW);
-      expect(event.platform).toBe("tiktok");
-      expect(event.data.userId).toBe("test-user-follow");
-      expect(event.data.username).toBe("test-user-follow");
-      expect(event.data.timestamp).toBe(expectedTimestamp);
+      await h.start();
+      platform = new TikTokPlatform({ enabled: false, dataLoggingEnabled: false }, { logger: noOpLogger });
+      lifecycle = new PlatformLifecycleService({ config: { tiktok: { enabled: true } }, eventBus: h.bus, logger: noOpLogger });
+      platform.handlers = lifecycle.createDefaultEventHandlers('tiktok');
+      const events: unknown[] = [];
+      unsubscribe = h.bus.subscribe('platform:event', event => { events.push(event); });
+      const payload = { user: { uniqueId: `synthetic-${action}`, nickname: 'Synthetic Social Viewer' },
+        common: { createTime: 1767225600000, msgId: `synthetic-${action}` },
+        ...(action === 'direct-share' ? {} : { actionType: action }) };
+      if (action === 'direct-share') await platform.handleTikTokShare(payload);
+      else await platform.handleTikTokSocial(payload);
+      await waitFor(() => h.queue.getQueueLength() === 1, { timeout: 1000, interval: 1 });
+      await h.drain();
+      expect(events).toHaveLength(1);
+      expect(events[0]).toMatchObject({ platform: 'tiktok', type: action === 'follow' ? 'platform:follow' : 'platform:share',
+        data: { userId: `synthetic-${action}`, username: 'Synthetic Social Viewer', timestamp: '2026-01-01T00:00:00.000Z' } });
+      expect(h.rows).toHaveLength(1);
+      expect(h.rows[0]).toMatchObject({ platform: 'tiktok', type: action === 'follow' ? 'platform:follow' : 'platform:share',
+        data: { userId: `synthetic-${action}`, username: 'Synthetic Social Viewer',
+          displayMessage: action === 'follow' ? 'Synthetic Social Viewer just followed!' : 'Synthetic Social Viewer shared the stream' } });
     } finally {
-      lifecycle.dispose();
+      try { await platform?.cleanup(); }
+      finally {
+        try { lifecycle?.dispose(); }
+        finally { unsubscribe(); await h.dispose(); }
+      }
     }
   });
-
-  test("emits share events through lifecycle handlers", async () => {
-    const eventTimestampMs = Date.parse("2025-01-20T12:00:00.000Z");
-    const eventBus = createEventBus();
-    const lifecycle = new PlatformLifecycleService({
-      config: { tiktok: { enabled: true } },
-      eventBus,
-      logger: noOpLogger,
-    });
-    const platform = createPlatform();
-    platform.handlers = lifecycle.createDefaultEventHandlers("tiktok");
-
-    const shareEvent = createTikTokShareEvent({
-      user: { uniqueId: "test-user-share", nickname: "test-user-share" },
-      common: { createTime: eventTimestampMs },
-    });
-    const eventPromise = waitForPlatformEvent(eventBus);
-
-    try {
-      await platform.handleTikTokSocial(shareEvent);
-
-      const event = await eventPromise;
-      const expectedTimestamp = new Date(eventTimestampMs).toISOString();
-
-      expect(event.type).toBe(PlatformEvents.SHARE);
-      expect(event.platform).toBe("tiktok");
-      expect(event.data.userId).toBe("test-user-share");
-      expect(event.data.username).toBe("test-user-share");
-      expect(event.data.timestamp).toBe(expectedTimestamp);
-    } finally {
-      lifecycle.dispose();
-    }
-  });
-
-  test("emits direct share events through lifecycle handlers", async () => {
-    const eventTimestampMs = Date.parse("2025-01-20T12:00:00.000Z");
-    const eventBus = createEventBus();
-    const lifecycle = new PlatformLifecycleService({
-      config: { tiktok: { enabled: true } },
-      eventBus,
-      logger: noOpLogger,
-    });
-    const platform = createPlatform();
-    platform.handlers = lifecycle.createDefaultEventHandlers("tiktok");
-
-    const shareEvent = createTikTokShareEvent({
-      user: { uniqueId: "test-user-direct-share", nickname: "DirectShare" },
-      common: { createTime: eventTimestampMs, msgId: "direct-share-msg-1" },
-      displayType: undefined,
-      label: undefined,
-    });
-    const eventPromise = waitForPlatformEvent(eventBus);
-
-    try {
-      await platform.handleTikTokShare(shareEvent);
-
-      const event = await eventPromise;
-      const expectedTimestamp = new Date(eventTimestampMs).toISOString();
-
-      expect(event.type).toBe(PlatformEvents.SHARE);
-      expect(event.platform).toBe("tiktok");
-      expect(event.data.userId).toBe("test-user-direct-share");
-      expect(event.data.username).toBe("DirectShare");
-      expect(event.data.timestamp).toBe(expectedTimestamp);
-    } finally {
-      lifecycle.dispose();
-    }
-  });
-});
+}

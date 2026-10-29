@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
@@ -19,6 +20,7 @@ type OperatorControls = Record<OperatorControlKey, boolean>;
 type OperatorControlSnapshot = Readonly<{
     controls: OperatorControls;
     overriddenKeys: readonly OperatorControlKey[];
+    sessionId?: string;
     revision: number;
 }>;
 type FileSystem = {
@@ -53,6 +55,7 @@ class OperatorControlService {
     private overrides = new Map<OperatorControlKey, boolean>();
     private values: OperatorControls;
     private listeners = new Set<(snapshot: OperatorControlSnapshot) => void>();
+    readonly sessionId = randomUUID();
     private currentRevision = 0;
     private tempSequence = 0;
     private operation: Promise<void> = Promise.resolve();
@@ -194,6 +197,7 @@ class OperatorControlService {
         const snapshot = Object.freeze({
             controls: Object.freeze(this.controls),
             overriddenKeys: Object.freeze(this.overriddenKeys),
+            sessionId: this.sessionId,
             revision: this.revision
         });
         for (const listener of this.listeners) {

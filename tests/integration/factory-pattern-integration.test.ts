@@ -1,13 +1,8 @@
-import { describe, beforeEach, afterEach, test, expect } from "bun:test";
+import { describe, afterEach, test, expect } from "bun:test";
 import { InnertubeFactory } from "../../src/factories/innertube-factory";
-import testClock from "../helpers/test-clock";
 import { clearAllMocks, restoreAllMocks } from "../helpers/bun-mock-utils";
 
 describe("Factory Pattern Integration", () => {
-  beforeEach(async () => {
-    testClock.reset();
-  });
-
   afterEach(async () => {
     clearAllMocks();
     restoreAllMocks();
@@ -136,21 +131,4 @@ describe("Factory Pattern Integration", () => {
 
   });
 
-  describe("Performance Characteristics", () => {
-    test("handles rapid factory method calls", () => {
-      const startTime = testClock.now();
-      const iterations = 100;
-
-      for (let i = 0; i < iterations; i++) {
-        const stats = InnertubeFactory.getStats();
-        expect(stats).toBeDefined();
-      }
-
-      testClock.advance(iterations - 1);
-      const endTime = testClock.now();
-
-      expect(endTime - startTime).toBeLessThan(100);
-    });
-
-  });
 });

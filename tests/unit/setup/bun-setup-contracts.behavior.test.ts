@@ -7,25 +7,12 @@ import {
   createAxiosMock,
   createTikTokConnectorMock,
   createYoutubeiMock,
-  toHaveLengthGreaterThan,
-  toBeValidNotification,
-  toBeValidUser,
 } from "../../setup/bun.setup";
 
 type TestGlobal = typeof globalThis & {
   originalConsole: Console;
   restoreConsole: () => void;
 };
-
-type SetupMatcherAssertions = ReturnType<typeof expect> & {
-  not: SetupMatcherAssertions;
-  toHaveLengthGreaterThan: (expected: number) => void;
-  toBeValidNotification: () => void;
-  toBeValidUser: () => void;
-};
-
-const expectWithSetupMatchers = (received: unknown): SetupMatcherAssertions =>
-  expect(received) as SetupMatcherAssertions;
 
 describe("bun setup contracts behavior", () => {
   it("allows repeated module mock registration and retains usable registered mocks", async () => {
@@ -77,6 +64,7 @@ describe("bun setup contracts behavior", () => {
   it("restores console through global helper", () => {
     const testGlobal = globalThis as TestGlobal;
     const originalConsole = testGlobal.originalConsole;
+    const previousConsole = global.console;
     try {
       global.console = {
       ...originalConsole,
@@ -90,39 +78,8 @@ describe("bun setup contracts behavior", () => {
       testGlobal.restoreConsole();
       expect(global.console).toBe(originalConsole);
     } finally {
-      global.console = originalConsole;
+      global.console = previousConsole;
     }
   });
 
-  it("supports toHaveLengthGreaterThan matcher behavior", () => {
-    expectWithSetupMatchers([1, 2]).toHaveLengthGreaterThan(1);
-    expectWithSetupMatchers([1]).not.toHaveLengthGreaterThan(3);
-    expect(toHaveLengthGreaterThan([1, 2], 1).pass).toBe(true);
-    expect(toHaveLengthGreaterThan([1], 3).pass).toBe(false);
-  });
-
-  it("supports toBeValidNotification matcher behavior", () => {
-    const notification = {
-      id: "test-id",
-      type: "message",
-      username: "test-user",
-      platform: "test-platform",
-      displayMessage: "test-display",
-      ttsMessage: "test-tts",
-    };
-
-    expectWithSetupMatchers(notification).toBeValidNotification();
-    expectWithSetupMatchers({}).not.toBeValidNotification();
-    expect(
-      toBeValidNotification(notification).pass,
-    ).toBe(true);
-    expect(toBeValidNotification({}).pass).toBe(false);
-  });
-
-  it("supports toBeValidUser matcher behavior", () => {
-    expectWithSetupMatchers({ username: "test-user" }).toBeValidUser();
-    expectWithSetupMatchers({}).not.toBeValidUser();
-    expect(toBeValidUser({ username: "test-user" }).pass).toBe(true);
-    expect(toBeValidUser({}).pass).toBe(false);
-  });
 });

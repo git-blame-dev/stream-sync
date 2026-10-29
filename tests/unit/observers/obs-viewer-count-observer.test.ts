@@ -1,18 +1,18 @@
-import { beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { EventEmitter } from "node:events";
+import { OBSConnectionManager } from "../../../src/obs/connection";
 import { createMockFn } from "../../helpers/bun-mock-utils";
-import { createMockOBSManager, noOpLogger } from "../../helpers/mock-factories";
+import { noOpLogger } from "../../helpers/mock-factories";
 import { expectNoTechnicalArtifacts } from "../../helpers/behavior-validation";
 import { OBSViewerCountObserver } from "../../../src/observers/obs-viewer-count-observer";
 import { ViewerCountObserver } from "../../../src/observers/viewer-count-observer";
 
-type FlexibleMock = ReturnType<typeof createMockFn> & {
-  mockResolvedValue: (value: unknown) => FlexibleMock;
-  mockRejectedValue: (error: unknown) => FlexibleMock;
-  mockResolvedValueOnce: (value: unknown) => FlexibleMock;
-  mockRejectedValueOnce: (error: unknown) => FlexibleMock;
-  mockReturnValue: (value: unknown) => FlexibleMock;
-  mockClear: () => FlexibleMock;
-};
+class SyntheticObsSocket extends EventEmitter {
+  call = createMockFn<[string, Record<string, unknown>?], Promise<Record<string, unknown>>>()
+    .mockResolvedValue({ status: "success" });
+  async connect() { this.emit("Identified"); return { obsWebSocketVersion: "synthetic" }; }
+  async disconnect() { this.emit("ConnectionClosed"); }
+}
 
 const defaultPlatforms = ["twitch", "youtube", "tiktok"];
 
@@ -38,25 +38,33 @@ function createConfigFixture(
 }
 
 describe("OBSViewerCountObserver - Behavior-Focused Testing", () => {
-  let obsManager: ReturnType<typeof createMockOBSManager>;
+  let obsManager: SyntheticObsSocket;
+  let connection: OBSConnectionManager;
   let observer: InstanceType<typeof OBSViewerCountObserver>;
   let logger: typeof noOpLogger;
   let configFixture: ViewerConfigMap;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     configFixture = createConfigFixture();
     logger = noOpLogger;
 
-    obsManager = createMockOBSManager("connected", {
-      call: (createMockFn() as FlexibleMock).mockResolvedValue({
-        status: "success",
-      }),
-      isConnected: (createMockFn() as FlexibleMock).mockReturnValue(true),
-    });
+    obsManager = new SyntheticObsSocket();
+    connection = new OBSConnectionManager({ obs: obsManager,
+      config: { enabled: true, address: "ws://synthetic.invalid", password: "synthetic-password" } });
+    await connection.connect();
+    obsManager.call.mockClear();
 
-    observer = new OBSViewerCountObserver(obsManager, logger, {
+    observer = new OBSViewerCountObserver(connection, logger, {
       config: configFixture,
     });
+  });
+
+  afterEach(async () => {
+    try { await observer?.cleanup(); }
+    finally {
+      connection?.dispose();
+      await connection?.disconnect();
+    }
   });
 
   describe("Observer Initialization & Interface Compliance", () => {
@@ -81,17 +89,17 @@ describe("OBSViewerCountObserver - Behavior-Focused Testing", () => {
     });
 
     test("should initialize with provided OBS manager dependency", () => {
-      const testObserver = new OBSViewerCountObserver(obsManager, logger, {
+      const testObserver = new OBSViewerCountObserver(connection, logger, {
         config: configFixture,
       });
 
       expect(testObserver).toBeDefined();
-      expect(testObserver.obsManager).toBe(obsManager);
+      expect(testObserver.obsManager).toBe(connection);
     });
 
     test("should handle initialization without OBS connection gracefully", async () => {
-      const disconnectedOBS = createMockOBSManager("disconnected");
-      const testObserver = new OBSViewerCountObserver(disconnectedOBS, logger, {
+      await connection.disconnect();
+      const testObserver = new OBSViewerCountObserver(connection, logger, {
         config: configFixture,
       });
 
@@ -244,7 +252,7 @@ describe("OBSViewerCountObserver - Behavior-Focused Testing", () => {
       expect(obsManager.call).not.toHaveBeenCalled();
     });
 
-    test("should enable updates when stream comes online", async () => {
+    test("online status emits no fabricated count and the following complete count reaches OBS", async () => {
       const statusUpdate = {
         platform: "youtube",
         isLive: true,
@@ -254,7 +262,12 @@ describe("OBSViewerCountObserver - Behavior-Focused Testing", () => {
 
       await observer.onStreamStatusChange(statusUpdate);
 
-      expect(statusUpdate.isLive).toBe(true);
+      expect(obsManager.call).not.toHaveBeenCalled();
+      await observer.onViewerCountUpdate({ platform: "youtube", count: 1234,
+        isStreamLive: true, observationKind: "complete" });
+      expect(obsManager.call.mock.calls).toEqual([["SetInputSettings", {
+        inputName: "youtube viewer count", inputSettings: { text: "1.2K" }, overlay: true,
+      }]]);
     });
 
     test("should handle rapid online/offline transitions", async () => {
@@ -422,9 +435,9 @@ describe("OBSViewerCountObserver - Behavior-Focused Testing", () => {
 
   describe("Error Recovery & Resilience", () => {
     test("should continue operating when OBS connection unavailable", async () => {
-      const disconnectedOBS = createMockOBSManager("disconnected");
+      await connection.disconnect();
       const resilientObserver = new OBSViewerCountObserver(
-        disconnectedOBS,
+        connection,
         logger,
         { config: configFixture },
       );
@@ -482,6 +495,9 @@ describe("OBSViewerCountObserver - Behavior-Focused Testing", () => {
       });
 
       expect(obsManager.call).toHaveBeenCalledTimes(2);
+      expect(obsManager.call.mock.calls.at(-1)).toEqual(["SetInputSettings", {
+        inputName: "test_source", inputSettings: { text: "2K" }, overlay: true,
+      }]);
     });
 
     test("should maintain system stability during OBS errors", async () => {
@@ -560,26 +576,14 @@ describe("OBSViewerCountObserver - Behavior-Focused Testing", () => {
       await expect(cleanupPromise).resolves.toBeUndefined();
     });
 
-    test("should not leak memory during extended operation", async () => {
-      const initialMemory = process.memoryUsage().heapUsed;
-
-      for (let i = 0; i < 100; i++) {
-        await observer.onViewerCountUpdate({
-          platform: "youtube",
-          count: i * 10,
-          isStreamLive: true,
-          timestamp: new Date(),
-        });
+    test("joins all 100 repeated count writes with exact source and value", async () => {
+      for (let index = 0; index < 100; index++) {
+        await observer.onViewerCountUpdate({ platform: "youtube", count: index * 10,
+          isStreamLive: true, timestamp: new Date() });
       }
-
-      if (global.gc) {
-        global.gc();
-      }
-
-      const finalMemory = process.memoryUsage().heapUsed;
-      const memoryIncrease = finalMemory - initialMemory;
-
-      expect(memoryIncrease).toBeLessThan(10 * 1024 * 1024);
+      expect(obsManager.call.mock.calls).toEqual(Array.from({ length: 100 }, (_, index) => [
+        "SetInputSettings", { inputName: "youtube viewer count", inputSettings: { text: String(index * 10) }, overlay: true },
+      ]));
     });
 
     test("should handle observer lifecycle correctly", async () => {

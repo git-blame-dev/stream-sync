@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
 import fs from "node:fs/promises";
 import syncFs from "node:fs";
 import os from "node:os";
@@ -30,6 +30,51 @@ describe("SingleInstanceGuard", () => {
   });
 
   const getLockPath = () => path.join(tempDir, "stream-sync.lock");
+
+  for (const failure of ['owner.json', 'heartbeat', 'open'] as const) {
+    it(`rolls back its partial ${failure} failure and permits an immediate retry`, async () => {
+      const lockPath = getLockPath();
+      const originalWrite = fs.writeFile.bind(fs);
+      const originalOpen = syncFs.openSync.bind(syncFs);
+      const error = Object.assign(new Error('synthetic acquisition failure'), { code: 'ENOSPC' });
+      const write = spyOn(fs, 'writeFile').mockImplementation(async (file, ...args) => {
+        if (String(file) === path.join(lockPath, failure)) throw error;
+        return originalWrite(file, ...args);
+      });
+      const open = spyOn(syncFs, 'openSync').mockImplementation((file, ...args) => {
+        if (failure === 'open' && String(file) === path.join(lockPath, 'heartbeat')) throw error;
+        return originalOpen(file, ...args);
+      });
+      try {
+        await expect(acquireSingleInstanceGuard({ lockPath, registerProcessCleanup: false })).rejects.toBe(error);
+      } finally {
+        write.mockRestore();
+        open.mockRestore();
+      }
+      expect(await fs.stat(lockPath).then(() => true, () => false)).toBe(false);
+      const retry = await acquireSingleInstanceGuard({ lockPath, registerProcessCleanup: false });
+      await retry.release();
+    });
+  }
+
+  it('preserves a replacement directory when its own partial acquisition fails', async () => {
+    const lockPath = getLockPath();
+    const original = fs.writeFile.bind(fs);
+    const error = new Error('synthetic replaced acquisition');
+    const write = spyOn(fs, 'writeFile').mockImplementation(async (file, ...args) => {
+      if (String(file) === path.join(lockPath, 'owner.json')) {
+        await fs.rename(lockPath, `${lockPath}.old`);
+        await fs.mkdir(lockPath);
+        await original(path.join(lockPath, 'owner.json'), JSON.stringify({ instanceId: 'synthetic-other-owner' }));
+        throw error;
+      }
+      return original(file, ...args);
+    });
+    try {
+      await expect(acquireSingleInstanceGuard({ lockPath, registerProcessCleanup: false })).rejects.toBe(error);
+    } finally { write.mockRestore(); }
+    expect(JSON.parse(await fs.readFile(path.join(lockPath, 'owner.json'), 'utf8')).instanceId).toBe('synthetic-other-owner');
+  });
 
   it("acquires and releases a lock directory", async () => {
     const lockPath = getLockPath();

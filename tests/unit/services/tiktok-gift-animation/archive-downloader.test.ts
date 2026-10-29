@@ -10,6 +10,7 @@ import { setImmediate as yieldTurn } from 'node:timers/promises';
 import type { LookupAddress } from 'node:dns';
 import { createArchiveDownloader } from '../../../../src/services/tiktok-gift-animation/archive-downloader';
 import { archiveTestTransport, type ArchiveTestHop } from '../../../helpers/archive-download-transport';
+import { withNativeChildEnvironment } from '../../../helpers/native-child-environment';
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
@@ -300,7 +301,8 @@ for (const runtime of ['node', 'bun']) {
             console.log('GIFT_ARCHIVE_PIPELINE_OK');
         `;
         const args = runtime === 'node' ? ['--import', 'tsx', '--input-type=module', '--eval', source] : ['--no-env-file', '--eval', source];
-        const result = await promisify(execFile)(runtime, args, { cwd: process.cwd(), timeout: 15000 });
+        const result = await withNativeChildEnvironment(env =>
+            promisify(execFile)(runtime, args, { cwd: process.cwd(), timeout: 15000, env }));
         expect(result.stdout.trim()).toBe('GIFT_ARCHIVE_PIPELINE_OK');
         expect(result.stderr).toBe('');
     }, 30000);

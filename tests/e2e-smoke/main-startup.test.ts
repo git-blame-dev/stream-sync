@@ -1,137 +1,48 @@
-import { describe, it, beforeEach, afterEach, expect } from "bun:test";
-import { createConfigFixture } from "../helpers/config-fixture";
-import { createMockDisplayQueue } from "../helpers/mock-factories";
-import { captureStdout, captureStderr } from "../helpers/output-capture";
-import {
-  clearAllTimers,
-  useFakeTimers,
-  useRealTimers,
-} from "../helpers/bun-timers";
-import { main } from "../../src/main.ts";
-import type { SingleInstanceMetadata } from "../../src/services/SingleInstanceGuard.ts";
-import type { UsdRateService } from "../../src/services/usd-rate-service";
-import { createDonationSpamDetection } from "../../src/utils/spam-detection";
+import { describe, expect, test } from 'bun:test';
+import { stat } from 'node:fs/promises';
+import { join } from 'node:path';
+import { withTimeout } from '../../src/utils/timeout-wrapper';
+import { createMainPresentationFixture } from '../helpers/main-presentation-fixture';
+import { captureStdout, captureStderr } from '../helpers/output-capture';
 
-type OutputCapture = ReturnType<typeof captureStdout>;
-type StartupOnlyEnv = NodeJS.ProcessEnv["CHAT_BOT_STARTUP_ONLY"];
-type MainOverridesArg = NonNullable<Parameters<typeof main>[0]>;
-type DonationSpamFactory = NonNullable<MainOverridesArg["createDonationSpamDetection"]>;
-
-const TEST_USD_RATE_SERVICE: UsdRateService = Object.freeze({
-  rates: Object.freeze({ USD: 1 }),
-  convertToUsd: (amount: number, currency: string) =>
-    currency.trim().toUpperCase() === "USD" ? amount : null,
-});
-
-const createSuccessfulSecretSetupResult = () => ({
-  applied: {},
-  persisted: [],
-  missingRequired: [],
-});
-
-const TEST_SINGLE_INSTANCE_METADATA: SingleInstanceMetadata = {
-  instanceId: "test-smoke-instance",
-  pid: 1,
-  ppid: 0,
-  hostname: "test-host",
-  platform: process.platform,
-  cwd: "/tmp/test-stream-sync-smoke",
-  command: "test stream-sync smoke",
-  startedAt: "2025-01-15T12:00:00.000Z",
+const gift = {
+    username: 'Synthetic Viewer', userId: 'synthetic-main-viewer', id: 'synthetic-main-gift',
+    timestamp: '2026-01-01T00:00:00.000Z', giftType: 'Bits', giftCount: 1, amount: 100, currency: 'bits',
 };
 
-const buildSmokeConfig = () =>
-  createConfigFixture({
-    general: {
-      debugEnabled: false,
-      envFilePath: "/tmp/test-smoke-env",
-      envFileReadEnabled: false,
-      envFileWriteEnabled: false,
-      viewerCountPollingIntervalMs: 0,
-    },
-    obs: {
-      chatMsgTxt: "test-smoke-chat-text",
-      chatMsgScene: "test-smoke-chat-scene",
-      chatMsgGroup: "test-smoke-chat-group",
-      ttsChatEnabled: false,
-      ttsNotificationsEnabled: true,
-      notificationTxt: "test-smoke-notification-text",
-      notificationScene: "test-smoke-notification-scene",
-      notificationMsgGroup: "test-smoke-notification-group",
-      chatPlatformLogos: {},
-      notificationPlatformLogos: {},
-    },
-    displayQueue: {
-      autoProcess: false,
-      maxQueueSize: 5,
-      rowIntervalMs: 1000,
-    },
-    http: { userAgents: ["test-smoke-agent"] },
-    twitch: { enabled: false },
-    youtube: { enabled: false },
-    tiktok: { enabled: false },
-  });
-
-describe("main startup smoke", () => {
-  let stdoutCapture: OutputCapture;
-  let stderrCapture: OutputCapture;
-  let originalStartupOnly: StartupOnlyEnv;
-
-  beforeEach(() => {
-    stdoutCapture = captureStdout();
-    stderrCapture = captureStderr();
-    useFakeTimers();
-    originalStartupOnly = process.env.CHAT_BOT_STARTUP_ONLY;
-    delete process.env.CHAT_BOT_STARTUP_ONLY;
-  });
-
-  afterEach(() => {
-    if (originalStartupOnly === undefined) {
-      delete process.env.CHAT_BOT_STARTUP_ONLY;
-    } else {
-      process.env.CHAT_BOT_STARTUP_ONLY = originalStartupOnly;
-    }
-    clearAllTimers();
-    useRealTimers();
-    stdoutCapture.restore();
-    stderrCapture.restore();
-  });
-
-  it("starts with fixture-only dependencies", async () => {
-    const createDonationSpamDetectionNoCleanup: DonationSpamFactory = (spamConfig, deps) =>
-      createDonationSpamDetection(spamConfig, { ...deps, autoCleanup: false });
-
-    const overrides: Record<string, unknown> = {
-      cliArgs: { chat: 1 },
-      ensureSecrets: async () => createSuccessfulSecretSetupResult(),
-      createSingleInstanceGuard: async () => ({
-        lockPath: "/tmp/test-stream-sync-smoke.lock",
-        metadata: TEST_SINGLE_INSTANCE_METADATA,
-        release: async () => {},
-      }),
-      initializeDisplayQueue: () => createMockDisplayQueue(),
-      getOBSConnectionManager: () => ({
-        isConnected: () => false,
-        isReady: () => false,
-        ensureConnected: async () => undefined,
-        call: async () => ({}),
-        connect: async () => true,
-        disconnect: async () => undefined,
-        addEventListener: () => undefined,
-        removeEventListener: () => undefined,
-      }),
-      createOBSEventService: () => ({ disconnect: async () => {} }),
-      createSceneManagementService: () => ({}),
-      createDonationSpamDetection: createDonationSpamDetectionNoCleanup,
-      createUsdRateService: async () => TEST_USD_RATE_SERVICE,
-    };
-
-    const result = await main({
-      ...overrides,
-      config: buildSmokeConfig(),
+describe('main real-owner startup and presentation', () => {
+    test('root-created routing and queue present a valid gift and persist exact credit', async () => {
+        const stdout = captureStdout(); const stderr = captureStderr();
+        const h = await createMainPresentationFixture();
+        let unsubscribe: (() => void) | undefined;
+        try {
+            h.config.displayQueue.autoProcess = true;
+            const result = await h.start();
+            expect(result).toMatchObject({ success: true, appStarted: true });
+            expect(h.funding.snapshot.currentUsd).toBe(0);
+            const presented = new Promise<void>(resolve => {
+                unsubscribe = h.bus.subscribe('display:row', () => resolve());
+            });
+            h.bus.emit('platform:event', { platform: 'twitch', type: 'platform:gift', data: gift });
+            await withTimeout(presented, 2000);
+            await h.drain();
+            expect(h.rows).toHaveLength(1);
+            expect(h.rows[0]).toMatchObject({ platform: 'twitch', type: 'platform:gift', data: { username: gift.username, amount: 100, currency: 'bits' } });
+            expect(h.funding.snapshot.currentUsd).toBe(1);
+            expect(await h.persistedFunding()).toMatchObject({ currentMicros: 1000000, revision: 1 });
+            expect(h.nativeGoal()).toMatchObject({ current: 100 });
+            expect(h.queue.getQueueLength()).toBe(0);
+        } finally { unsubscribe?.(); try { await h.dispose(); } finally { stdout.restore(); stderr.restore(); } }
     });
 
-    expect(result.success).toBe(true);
-    expect(result.appStarted).toBe(true);
-  });
+    test('invalid root configuration rolls back acquired funding and the real instance lock', async () => {
+        const stdout = captureStdout(); const stderr = captureStderr();
+        const h = await createMainPresentationFixture();
+        try {
+            Reflect.deleteProperty(h.config, 'goals');
+            await expect(h.start()).rejects.toThrow('requires goals configuration');
+            await expect(stat(join(h.dir, 'instance.lock'))).rejects.toMatchObject({ code: 'ENOENT' });
+            await expect(h.funding.processPresentedContributions([])).rejects.toThrow('disposed');
+        } finally { try { await h.dispose(); } finally { stdout.restore(); stderr.restore(); } }
+    });
 });

@@ -58,7 +58,7 @@ const PlatformEvents = {
     AUTH_HEALTH_CHECK: 'auth:health-check',
     
     // OBS runtime events are emitted through service-specific channels, not PlatformEvents.
-};
+} as const;
 
 const VALID_PLATFORMS = ['twitch', 'youtube', 'tiktok'];
 
@@ -1459,7 +1459,7 @@ class EventBuilder {
             throw new Error(`Invalid platform: ${this._event.platform}`);
         }
         
-        if (!this._event.type || !Object.values(PlatformEvents).includes(this._event.type)) {
+        if (!this._event.type || !Object.values<string>(PlatformEvents).includes(this._event.type)) {
             throw new Error(`Invalid event type: ${this._event.type}`);
         }
 

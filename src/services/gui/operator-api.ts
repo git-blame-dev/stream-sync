@@ -17,7 +17,7 @@ import {
 } from '../operator/operator-control-service';
 
 type OperatorApiOptions = {
-    controls: Pick<OperatorControlService, 'controls' | 'overriddenKeys' | 'revision' | 'reset' | 'setEnabled' | 'subscribe'>;
+    controls: Pick<OperatorControlService, 'controls' | 'overriddenKeys' | 'revision' | 'reset' | 'setEnabled' | 'subscribe'> & { sessionId?: string };
     appearance: Pick<OperatorAppearanceService, 'snapshot' | 'reset' | 'set' | 'subscribe'>;
     logger?: Pick<AppLogger, 'warn' | 'error'> | null;
     logs: OperatorLogSource;
@@ -33,6 +33,7 @@ type OperatorControlView = {
 };
 
 type OperatorStateView = {
+    sessionId?: string;
     revision: number;
     controls: OperatorControlView[];
 };
@@ -76,10 +77,11 @@ function isOperatorRoute(route: string): boolean {
 }
 
 function buildOperatorState(
-    controls: Pick<OperatorControlService, 'controls' | 'overriddenKeys' | 'revision'> | OperatorControlSnapshot
+    controls: (Pick<OperatorControlService, 'controls' | 'overriddenKeys' | 'revision'> & { sessionId?: string }) | OperatorControlSnapshot
 ): OperatorStateView {
     const overriddenKeys = new Set(controls.overriddenKeys);
     return {
+        ...(controls.sessionId ? { sessionId: controls.sessionId } : {}),
         revision: controls.revision,
         controls: OPERATOR_CONTROL_KEYS.map((key) => ({
             key,
@@ -92,6 +94,7 @@ function buildOperatorState(
 
 function buildOperatorAppearance(snapshot: OperatorAppearanceSnapshot): OperatorAppearanceView {
     return {
+        ...(snapshot.sessionId ? { sessionId: snapshot.sessionId } : {}),
         revision: snapshot.revision,
         settings: { ...snapshot.settings },
         overriddenKeys: [...snapshot.overriddenKeys]
@@ -202,8 +205,8 @@ function writeSse(
     }
 }
 
-function writeLogEntry(client: SseClient, entry: OperatorLogEntry): boolean {
-    return writeSse(client, 'log', entry, entry.id);
+function writeLogEntry(client: SseClient, entry: OperatorLogEntry, sessionId: string): boolean {
+    return writeSse(client, 'log', entry, `${sessionId}:${entry.id}`);
 }
 
 function prepareSse(res: ServerResponse<IncomingMessage>): void {
@@ -402,25 +405,24 @@ function createOperatorApi(options: OperatorApiOptions) {
             return;
         }
         const lastEventId = req.headers['last-event-id'];
-        const afterId = typeof lastEventId === 'string' && /^(?:0|[1-9]\d*)$/.test(lastEventId)
-            ? Number(lastEventId)
-            : undefined;
-        const safeAfterId = afterId !== undefined && Number.isSafeInteger(afterId) ? afterId : undefined;
+        const afterCursor = typeof lastEventId === 'string' ? lastEventId : undefined;
         const client: SseClient = { response: res };
         logClients.add(client);
         if (!attachCleanup(req, logClients, client)) return;
-        const connection = logs.connect(safeAfterId, (entry) => writeLogEntry(client, entry));
+        const connection = logs.connect(afterCursor, (entry) => writeLogEntry(client, entry, connection.history.sessionId));
+        const sessionId = connection.history.sessionId;
         client.unsubscribe = connection.unsubscribe;
         if (client.cleanedUp) {
             connection.unsubscribe();
             return;
         }
         prepareSse(res);
-        if (connection.history.truncated && !writeSse(client, 'log.history', {
+        if ((connection.history.truncated || connection.history.entries.length === 0) && !writeSse(client, 'log.history', {
+                sessionId,
                 oldestId: connection.history.oldestId,
                 newestId: connection.history.newestId,
-                truncated: true
-            })) {
+                truncated: connection.history.truncated
+            }, `${sessionId}:${connection.history.entries[0] ? connection.history.entries[0].id - 1 : connection.history.newestId ?? 0}`)) {
             removeClient(logClients, client);
             return;
         }

@@ -1,257 +1,119 @@
-import { describe, test, afterEach, expect } from "bun:test";
+import { describe, expect, it } from 'bun:test';
+import { EventEmitter } from 'node:events';
+import { YouTubePlatform } from '../../src/platforms/youtube';
+import { InnertubeService } from '../../src/services/innertube-service';
+import { YouTubeStreamDetectionService } from '../../src/services/youtube-stream-detection-service';
+import { ViewerCountExtractionService } from '../../src/services/viewer-count-extraction-service';
+import { noOpLogger } from '../helpers/mock-factories';
 
-import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
-import { noOpLogger } from "../helpers/mock-factories";
-import { YouTubePlatform } from "../../src/platforms/youtube";
+type Stream = { id: string; count: number; premiere?: boolean };
+function fixture(streams: Stream[]) {
+    const failures = new Set<string>();
+    const chatFailures = new Set<string>();
+    const chats = new Map<string, EventEmitter>();
+    const owner = new InnertubeService({ createWithTimeout: async () => ({
+        getChannel: async () => ({ videos: streams.map(s => ({ id: s.id,
+            ...(s.premiere ? { is_live_content: true } : { is_live: true }) })), getLiveStreams: async () => ({ videos: [] }) }),
+        search: async () => ({ videos: [] }),
+        getInfo: async (id: string) => {
+            if (failures.has(id)) throw new Error('synthetic metadata unavailable');
+            const stream = streams.find(s => s.id === id)!;
+            return { basic_info: { id, is_live: true, is_live_content: true, view_count: stream.count },
+                getLiveChat: () => {
+                    if (chatFailures.has(id)) throw new Error('synthetic chat unavailable');
+                    const chat = Object.assign(new EventEmitter(), { start(this: EventEmitter) { this.emit('start', {}); }, stop() {}, applyFilter() {} });
+                    chats.set(id, chat);
+                    return chat;
+                } };
+        }
+    }) }, { logger: noOpLogger });
+    const platform = new YouTubePlatform({ username: `UC${'q'.repeat(22)}`, maxStreams: 5,
+        dataLoggingEnabled: false, envFileReadEnabled: false, envFileWriteEnabled: false }, {
+        logger: noOpLogger, innertubeService: owner,
+        streamDetectionService: new YouTubeStreamDetectionService(owner, { logger: noOpLogger }),
+        viewerExtractionService: new ViewerCountExtractionService(owner, { logger: noOpLogger })
+    });
+    return { platform, failures, chatFailures, chats, async close() { await platform.cleanup(); await owner.dispose(); } };
+}
+const streams = (counts: number[]) => counts.map((count, index) => ({ id: `synthetic_${index}`, count }));
 
-type StreamConfig = {
-  videoId: string;
-  viewers: number;
-  isLive?: boolean;
-};
-
-type StreamScenarioOptions = {
-  detectedIds?: string[];
-  failingVideoIds?: string[];
-};
-
-describe("YouTube Multi-Stream Aggregation", () => {
-  afterEach(() => {
-    restoreAllMocks();
-  });
-
-  const createStreamScenario = (streamData: StreamConfig[]) => ({
-    name: `${streamData.length} streams with ${streamData.reduce((sum, s) => sum + s.viewers, 0)} total viewers`,
-    streams: streamData,
-    expectedTotal: streamData.reduce((sum, s) => sum + s.viewers, 0),
-  });
-
-  const createYouTubePlatformWithStreams = async (
-    streamConfigs: StreamConfig[],
-    options: StreamScenarioOptions = {},
-  ) => {
-    const activeVideoIds = streamConfigs.map((stream) => stream.videoId);
-    const failingVideoIds = options.failingVideoIds || [];
-
-    const mockNotificationManager = {
-      emit: createMockFn(),
-      on: createMockFn(),
-      removeListener: createMockFn(),
-    };
-
-    const mockViewerExtractionService = {
-      extractViewerCount: async () => ({ success: false, count: 0 }),
-      getAggregatedViewerCount: createMockFn().mockImplementation(
-        async (...args: unknown[]) => {
-          const [videoIds] = args;
-          if (!Array.isArray(videoIds)) {
-            return {
-              success: true,
-              totalCount: 0,
-              successfulStreams: 0,
-            };
-          }
-          let totalCount = 0;
-          let successfulStreams = 0;
-          for (const videoId of videoIds) {
-            if (typeof videoId !== "string" || failingVideoIds.includes(videoId)) {
-              continue;
-            }
-            const stream = streamConfigs.find((s) => s.videoId === videoId);
-            if (stream && stream.isLive !== false) {
-              totalCount += stream.viewers;
-              successfulStreams++;
-            }
-          }
-          return {
-            success: successfulStreams === videoIds.length,
-            totalCount: successfulStreams === videoIds.length ? totalCount : 0,
-            successfulStreams,
-          };
-        },
-      ),
-    };
-
-    const platform = new YouTubePlatform(
-      {
-        youtube: {
-          viewerCountMethod: "youtubei",
-          enabled: true,
-        },
-      },
-      {
-        logger: noOpLogger,
-        notificationManager: mockNotificationManager,
-        viewerExtractionService: mockViewerExtractionService,
-        streamDetectionService: {
-          detectLiveStreams: createMockFn().mockResolvedValue({
-            success: true,
-            observationKind: "complete",
-            videoIds: options.detectedIds || activeVideoIds,
-          }),
-        },
-      },
-    );
-
-    await platform.getLiveVideoIds();
-    return platform;
-  };
-
-  describe("Multi-Stream Aggregation Success Scenarios", () => {
-    test("should aggregate viewer counts from 3 active streams correctly", async () => {
-      const scenario = createStreamScenario([
-        { videoId: "stream-1", viewers: 140 },
-        { videoId: "stream-2", viewers: 920 },
-        { videoId: "stream-3", viewers: 26 },
-      ]);
-      const platform = await createYouTubePlatformWithStreams(scenario.streams);
-
-      const totalViewers = await platform.getViewerCountByYoutubei();
-
-      expect(totalViewers).toBe(1086);
-      expect(totalViewers).toBe(scenario.expectedTotal);
+describe('YouTube detected membership and metadata aggregation', () => {
+    it.each([
+        [[140, 920, 26], 1086], [[1234], 1234], [[45000, 32000, 18000, 5000], 100000],
+        [[500, 0, 250], 750], [[2500, 150], 2650], [[5000, 2000, 1500, 800], 9300],
+        [[1200, 45, 38, 52], 1335], [[400, 600], 1000], [[123], 123],
+        [[1500, 800, 1200, 600], 4100], [[2000, 1500, 900], 4400],
+        [[1800, 1200, 900], 3900], [[2500, 1800], 4300], [[3000, 1500, 800, 1200], 6500],
+        [[15000, 850, 42], 15892], [[0], 0], [[1000, 2000], 3000], [[4000, 1000], 5000],
+        [[1000, 500], 1500]
+    ] as Array<[number[], number]>)('returns complete counts %p as %i', async (counts, expected) => {
+        const f = fixture(streams(counts));
+        try {
+            await f.platform.getLiveVideoIds();
+            expect(await f.platform.getViewerCount()).toBe(expected);
+        } finally { await f.close(); }
     });
 
-    test("should handle single stream scenario", async () => {
-      const scenario = createStreamScenario([
-        { videoId: "solo-stream", viewers: 1234 },
-      ]);
-      const platform = await createYouTubePlatformWithStreams(scenario.streams);
-
-      const totalViewers = await platform.getViewerCountByYoutubei();
-
-      expect(totalViewers).toBe(1234);
+    it('returns unavailable for partial and all metadata failures and recovers', async () => {
+        const f = fixture(streams([300, 200, 700]));
+        try {
+            await f.platform.getLiveVideoIds();
+            f.failures.add('synthetic_1');
+            expect(await f.platform.getViewerCount()).toBeNull();
+            f.failures.add('synthetic_0'); f.failures.add('synthetic_2');
+            expect(await f.platform.getViewerCount()).toBeNull();
+            f.failures.clear();
+            expect(await f.platform.getViewerCount()).toBe(1200);
+        } finally { await f.close(); }
     });
 
-    test("should aggregate large viewer counts across multiple streams", async () => {
-      const scenario = createStreamScenario([
-        { videoId: "big-stream-1", viewers: 45000 },
-        { videoId: "big-stream-2", viewers: 32000 },
-        { videoId: "big-stream-3", viewers: 18000 },
-        { videoId: "big-stream-4", viewers: 5000 },
-      ]);
-      const platform = await createYouTubePlatformWithStreams(scenario.streams);
-
-      const totalViewers = await platform.getViewerCountByYoutubei();
-
-      expect(totalViewers).toBe(100000);
+    it('returns zero for confirmed empty discovery', async () => {
+        const f = fixture([]);
+        try { await f.platform.getLiveVideoIds(); expect(await f.platform.getViewerCount()).toBe(0); }
+        finally { await f.close(); }
     });
 
-    test("should handle streams with zero viewers correctly", async () => {
-      const scenario = createStreamScenario([
-        { videoId: "active-stream", viewers: 500 },
-        { videoId: "empty-stream", viewers: 0 },
-        { videoId: "another-active", viewers: 250 },
-      ]);
-      const platform = await createYouTubePlatformWithStreams(scenario.streams);
-
-      const totalViewers = await platform.getViewerCountByYoutubei();
-
-      expect(totalViewers).toBe(750);
-    });
-  });
-
-  describe("Error Resilience and Partial Failures", () => {
-    test("should return unavailable rather than a subtotal when one stream fails to load", async () => {
-      const streams = [
-        { videoId: "working-stream-1", viewers: 300 },
-        { videoId: "working-stream-2", viewers: 700 },
-      ];
-      const platform = await createYouTubePlatformWithStreams(streams, {
-        detectedIds: ["working-stream-1", "failing-stream", "working-stream-2"],
-        failingVideoIds: ["failing-stream"],
-      });
-
-      const totalViewers = await platform.getViewerCountByYoutubei();
-
-      expect(totalViewers).toBeNull();
+    it('counts live content including a premiere-shaped item with failed and recovered chat', async () => {
+        const input = streams([3500, 800, 1200, 400]);
+        const f = fixture(input.map((stream, index) => ({ ...stream, premiere: index === 1 })));
+        try {
+            for (const stream of input) f.chatFailures.add(stream.id);
+            await f.platform.checkMultiStream();
+            expect(f.platform.getDetectedStreamIds()).toHaveLength(4);
+            expect(f.platform.getActiveYouTubeVideoIds()).toEqual([]);
+            expect(await f.platform.getViewerCount()).toBe(5900);
+            f.chatFailures.clear();
+            await f.platform.requestImmediateYouTubeStreamRefresh();
+            expect(f.platform.getActiveYouTubeVideoIds()).toHaveLength(4);
+            expect(await f.platform.getViewerCount()).toBe(5900);
+            f.chats.get('synthetic_1')!.emit('end');
+            expect(await f.platform.getViewerCount()).toBe(5900);
+            await f.platform.requestImmediateYouTubeStreamRefresh();
+            expect(await f.platform.getViewerCount()).toBe(5900);
+        } finally { await f.close(); }
     });
 
-    test("should return 0 when no active streams are found", async () => {
-      const platform = await createYouTubePlatformWithStreams([]);
-
-      const totalViewers = await platform.getViewerCountByYoutubei();
-
-      expect(totalViewers).toBe(0);
+    it('counts both ready and failed chats and keeps the total through interruption and recovery', async () => {
+        const f = fixture(streams([4000, 1000]));
+        try {
+            f.chatFailures.add('synthetic_1');
+            await f.platform.checkMultiStream();
+            expect(f.platform.getActiveYouTubeVideoIds()).toEqual(['synthetic_0']);
+            expect(await f.platform.getViewerCount()).toBe(5000);
+            f.chats.get('synthetic_0')!.emit('end');
+            expect(await f.platform.getViewerCount()).toBe(5000);
+            f.chatFailures.clear();
+            await f.platform.requestImmediateYouTubeStreamRefresh();
+            expect(f.platform.getActiveYouTubeVideoIds()).toHaveLength(2);
+            expect(await f.platform.getViewerCount()).toBe(5000);
+        } finally { await f.close(); }
     });
 
-    test("should handle scenario where all streams fail to load", async () => {
-      const platform = await createYouTubePlatformWithStreams([], {
-        detectedIds: ["failing-1", "failing-2"],
-        failingVideoIds: ["failing-1", "failing-2"],
-      });
-
-      const totalViewers = await platform.getViewerCountByYoutubei();
-
-      expect(totalViewers).toBeNull();
+    it('retrieves three successive actual observations', async () => {
+        const f = fixture(streams([2500]));
+        try {
+            await f.platform.getLiveVideoIds();
+            expect([await f.platform.getViewerCount(), await f.platform.getViewerCount(), await f.platform.getViewerCount()]).toEqual([2500, 2500, 2500]);
+        } finally { await f.close(); }
     });
-  });
-
-  describe("Real-World Stream Scenarios", () => {
-    test("should handle typical gaming stream configuration", async () => {
-      const scenario = createStreamScenario([
-        { videoId: "main-gaming-stream", viewers: 2500 },
-        { videoId: "restream-backup", viewers: 150 },
-      ]);
-      const platform = await createYouTubePlatformWithStreams(scenario.streams);
-
-      const totalViewers = await platform.getViewerCountByYoutubei();
-
-      expect(totalViewers).toBe(2650);
-    });
-
-    test("should handle corporate multi-language stream setup", async () => {
-      const scenario = createStreamScenario([
-        { videoId: "english-stream", viewers: 5000 },
-        { videoId: "spanish-stream", viewers: 2000 },
-        { videoId: "french-stream", viewers: 1500 },
-        { videoId: "german-stream", viewers: 800 },
-      ]);
-      const platform = await createYouTubePlatformWithStreams(scenario.streams);
-
-      const totalViewers = await platform.getViewerCountByYoutubei();
-
-      expect(totalViewers).toBe(9300);
-    });
-
-    test("should handle educational stream with breakout sessions", async () => {
-      const scenario = createStreamScenario([
-        { videoId: "main-lecture", viewers: 1200 },
-        { videoId: "breakout-session-1", viewers: 45 },
-        { videoId: "breakout-session-2", viewers: 38 },
-        { videoId: "breakout-session-3", viewers: 52 },
-      ]);
-      const platform = await createYouTubePlatformWithStreams(scenario.streams);
-
-      const totalViewers = await platform.getViewerCountByYoutubei();
-
-      expect(totalViewers).toBe(1335);
-    });
-  });
-
-  describe("Aggregation Behavior", () => {
-    test("should return correct aggregate across multiple streams", async () => {
-      const platform = await createYouTubePlatformWithStreams([
-        { videoId: "stream-1", viewers: 400 },
-        { videoId: "stream-2", viewers: 600 },
-      ]);
-
-      const result = await platform.getViewerCountByYoutubei();
-
-      expect(result).toBe(1000);
-      expect(typeof result).toBe("number");
-      expect(result).toBeGreaterThan(0);
-    });
-
-    test("should return numeric type for all scenarios", async () => {
-      const platform = await createYouTubePlatformWithStreams([
-        { videoId: "test-stream", viewers: 123 },
-      ]);
-
-      const result = await platform.getViewerCountByYoutubei();
-
-      expect(typeof result).toBe("number");
-      expect(Number.isInteger(result)).toBe(true);
-    });
-  });
 });

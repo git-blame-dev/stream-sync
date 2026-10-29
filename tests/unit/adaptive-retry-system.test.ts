@@ -1,7 +1,6 @@
-import { describe, test, expect, beforeEach } from "bun:test";
+import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { noOpLogger } from "../helpers/mock-factories";
 import { registerMockLifecycleHooks } from "../helpers/mock-lifecycle";
-import testClock from "../helpers/test-clock";
 
 registerMockLifecycleHooks({
   clearCallsBeforeEach: true,
@@ -26,6 +25,8 @@ describe("Unified Adaptive Retry System", () => {
       platformRetryCount[platform] = 0;
     });
   });
+
+  afterEach(() => retrySystem.dispose());
 
   describe("Configuration Constants", () => {
     test("should have correct retry configuration values", () => {
@@ -218,17 +219,13 @@ test("computes adaptive retry delays consistently across supported platforms", (
     });
   });
 
-  describe("Performance and Edge Cases", () => {
-    test("should handle very high retry counts efficiently", () => {
+  describe("Retry cap and edge cases", () => {
+    test("caps very high retry counts at the configured maximum", () => {
       platformRetryCount.TikTok = 100;
 
-      const startTime = testClock.now();
       const delay = retrySystem.calculateAdaptiveRetryDelay("TikTok");
-      testClock.advance(1);
-      const endTime = testClock.now();
 
       expect(delay).toBe(60000);
-      expect(endTime - startTime).toBeLessThan(10);
     });
 
     test("should handle invalid platform names gracefully", () => {

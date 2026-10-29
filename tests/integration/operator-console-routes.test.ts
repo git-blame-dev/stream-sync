@@ -13,9 +13,10 @@ import {
 } from "../../src/services/operator/operator-control-service";
 import { createOperatorAppearanceService } from "../../src/services/operator/operator-appearance-service";
 import { createFundingGoalService } from "../../src/services/funding-goal-service";
-import { TestEventBus } from "../helpers/gui-transport-test-utils";
+import { EventBus } from "../../src/core/EventBus";
 
 const temporaryDirectories: string[] = [];
+const retireOwners: Array<() => Promise<void>> = [];
 
 function createDefaults(): OperatorControls {
   return Object.fromEntries(OPERATOR_CONTROL_KEYS.map((key) => [key, true])) as OperatorControls;
@@ -83,6 +84,7 @@ async function createFixture(logSourceOptions?: { maxEntries?: number }) {
     },
     filePath: join(root, "funding-goal.json"),
   });
+  retireOwners.push(() => fundingGoal.dispose());
   const service = createGuiTransportService({
     config: {
       gui: {
@@ -94,13 +96,14 @@ async function createFixture(logSourceOptions?: { maxEntries?: number }) {
       },
     },
     assetsRoot,
-    eventBus: new TestEventBus(),
+    eventBus: new EventBus(),
     logger,
     operatorLogs: source,
     operatorControls: controls,
     operatorAppearance: appearance,
     fundingGoal,
   });
+  retireOwners.push(() => service.stop());
   await service.start();
   const address = service.getAddress();
   if (!address || typeof address === "string") {
@@ -130,7 +133,15 @@ function createSseReader(reader: ReadableStreamDefaultReader<Uint8Array>) {
 }
 
 afterEach(async () => {
-  await Promise.all(temporaryDirectories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })));
+  const errors: unknown[] = [];
+  for (const retire of retireOwners.splice(0).reverse()) {
+    try { await retire(); }
+    catch (error) { errors.push(error); }
+  }
+  const removals = await Promise.allSettled(temporaryDirectories.splice(0).map(directory =>
+    rm(directory, { recursive: true, force: true })));
+  for (const result of removals) if (result.status === "rejected") errors.push(result.reason);
+  if (errors.length) throw new AggregateError(errors, "Synthetic operator fixture cleanup failed");
 });
 
 describe("operator console routes", () => {
@@ -222,6 +233,7 @@ describe("operator console routes", () => {
     try {
       const initial = await fetch(`${baseUrl}/api/v1/operator/appearance`);
       expect(await initial.json()).toMatchObject({
+        sessionId: appearance.sessionId,
         revision: 0,
         settings: { compactRows: true, rowBackgroundsEnabled: false, maxDisplayableBadges: 3 },
       });
@@ -237,6 +249,7 @@ describe("operator console routes", () => {
       });
 
       expect(changed.status).toBe(200);
+      expect(await changed.json()).toMatchObject({ sessionId: appearance.sessionId, revision: 1 });
       expect(appearance.settings.maxDisplayableBadges).toBe(0);
       expect(JSON.parse(await readFile(join(root, "operator-appearance-overrides.json"), "utf8"))).toEqual({
         maxDisplayableBadges: 0,
@@ -418,9 +431,12 @@ describe("operator console routes", () => {
       const sse = createSseReader(reader);
       const initial = await sse.next();
       expect(initial).toContain("event: state");
+      expect(initial).toContain(`"sessionId":"${controls.sessionId}"`);
+      expect(await (await fetch(`${baseUrl}/api/v1/operator/state`)).json()).toMatchObject({ sessionId: controls.sessionId });
       expect(initial).toContain('"revision":0');
       const initialAppearance = await sse.next();
       expect(initialAppearance).toContain("event: appearance");
+      expect(initialAppearance).toContain(`"sessionId":"${appearance.sessionId}"`);
       expect(initialAppearance).toContain('"maxDisplayableBadges":3');
       const initialFundingGoal = await sse.next();
       expect(initialFundingGoal).toContain("event: funding-goal");
@@ -429,12 +445,14 @@ describe("operator console routes", () => {
       await controls.setEnabled("sharesEnabled", false);
       const changed = await sse.next();
       expect(changed).toContain('"revision":1');
+      expect(changed).toContain(`"sessionId":"${controls.sessionId}"`);
       expect(changed).toContain('"key":"sharesEnabled"');
       expect(changed).toContain('"enabled":false');
 
       await appearance.set("compactRows", false);
       const changedAppearance = await sse.next();
       expect(changedAppearance).toContain("event: appearance");
+      expect(changedAppearance).toContain(`"sessionId":"${appearance.sessionId}"`);
       expect(changedAppearance).toContain('"compactRows":false');
     } finally {
       controller.abort();
@@ -443,11 +461,11 @@ describe("operator console routes", () => {
   });
 
   test("replays retained structured logs as named SSE events", async () => {
-    const { baseUrl, service } = await createFixture();
+    const { baseUrl, service, source } = await createFixture();
     const controller = new AbortController();
     try {
       const response = await fetch(`${baseUrl}/api/v1/logs/events`, {
-        headers: { "Last-Event-ID": "1" },
+        headers: { "Last-Event-ID": `${source.history().sessionId}:1` },
         signal: controller.signal,
       });
       const reader = response.body?.getReader();
@@ -507,7 +525,7 @@ describe("operator console routes", () => {
       source.append({ timestamp: "2026-08-11 12:00:02", level: "info", message: "Evicted middle log", source: "test", data: null });
       source.append({ timestamp: "2026-08-11 12:00:03", level: "info", message: "Newest retained log", source: "test", data: null });
       const response = await fetch(`${baseUrl}/api/v1/logs/events`, {
-        headers: { "Last-Event-ID": "1" }, signal: controller.signal,
+        headers: { "Last-Event-ID": `${source.history().sessionId}:1` }, signal: controller.signal,
       });
       const sse = createSseReader(response.body!.getReader());
       const history = await sse.next();
@@ -533,7 +551,10 @@ describe("operator console routes", () => {
         const response = await fetch(`${baseUrl}/api/v1/logs/events`, {
           headers: { "Last-Event-ID": lastEventId }, signal: controller.signal,
         });
-        const frame = await createSseReader(response.body!.getReader()).next();
+        const reader = createSseReader(response.body!.getReader());
+        const reset = await reader.next();
+        expect(reset).toContain('"truncated":true');
+        const frame = await reader.next();
         expect(frame).toContain('"id":1');
       } finally {
         controller.abort();

@@ -1,19 +1,8 @@
 import { describe, it, beforeEach, afterEach, expect } from "bun:test";
-import { clearAllMocks, restoreAllMocks, createMockFn } from "../../helpers/bun-mock-utils";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "path";
 import { RawPlatformDataLoggingService } from "../../../src/services/RawPlatformDataLoggingService.ts";
-
-type ServiceDependencies = ConstructorParameters<typeof RawPlatformDataLoggingService>[0];
-type RawEventLogWriterLike = NonNullable<NonNullable<ServiceDependencies>["rawEventLogWriter"]>;
-type WriteRawEvent = RawEventLogWriterLike["writeRawEvent"];
-type ResolveLogFileName = RawEventLogWriterLike["resolveLogFileName"];
-
-const resolveLogFileName: ResolveLogFileName = (platform: string, eventType: string) =>
-  platform === "youtube" && eventType === "unknown-renderer"
-    ? "youtube-unknown-renderer-log.ndjson"
-    : `${platform}-data-log.ndjson`;
 
 const requireRecord = (value: unknown, label: string): Record<string, unknown> => {
   expect(value).toBeDefined();
@@ -25,35 +14,19 @@ const requireRecord = (value: unknown, label: string): Record<string, unknown> =
 
 describe("RawPlatformDataLoggingService behavior", () => {
   let service: RawPlatformDataLoggingService;
-  let writeRawEventSpy: ReturnType<typeof createMockFn<Parameters<WriteRawEvent>, ReturnType<WriteRawEvent>>>;
   let logDir: string;
 
   beforeEach(async () => {
     logDir = await fs.mkdtemp(path.join(os.tmpdir(), "raw-platform-data-logging-test-"));
-    writeRawEventSpy = createMockFn<Parameters<WriteRawEvent>, ReturnType<WriteRawEvent>>(
-      async ({ platform, eventType }) => ({
-        fileName: resolveLogFileName(platform, eventType),
-        filePath: path.join(logDir, resolveLogFileName(platform, eventType)),
-      }),
-    );
-
-    service = new RawPlatformDataLoggingService({
-      config: { dataLoggingPath: logDir },
-      rawEventLogWriter: {
-        writeRawEvent: writeRawEventSpy,
-        resolveLogFileName,
-      },
-    });
+    service = new RawPlatformDataLoggingService({ config: { dataLoggingPath: logDir } });
   });
 
   afterEach(async () => {
     await fs.rm(logDir, { recursive: true, force: true });
-    restoreAllMocks();
-    clearAllMocks();
   });
 
   describe("User-Observable Platform Logging Behavior", () => {
-    it("writes platform data to the default logs directory", async () => {
+    it("writes each platform payload to its configured directory", async () => {
       const chatData = { username: "TestUser", message: "Hello stream!" };
 
       await service.logRawPlatformData("twitch", "chat", chatData, {
@@ -66,19 +39,10 @@ describe("RawPlatformDataLoggingService behavior", () => {
         dataLoggingEnabled: true,
       });
 
-      expect(writeRawEventSpy.mock.calls).toHaveLength(3);
-
-      const [twitchCall, youtubeCall, tiktokCall] = writeRawEventSpy.mock.calls;
-      if (!twitchCall || !youtubeCall || !tiktokCall) throw new Error("Expected three raw event writes");
-      expect(twitchCall[0].dataLoggingPath).toBe(logDir);
-      expect(youtubeCall[0].dataLoggingPath).toBe(logDir);
-      expect(tiktokCall[0].dataLoggingPath).toBe(logDir);
-
-      expect(twitchCall[0]).toMatchObject({
-        platform: "twitch",
-        eventType: "chat",
-        payload: chatData,
-      });
+      for (const platform of ["twitch", "youtube", "tiktok"]) {
+        const contents = await fs.readFile(path.join(logDir, `${platform}-data-log.ndjson`), "utf8");
+        expect(JSON.parse(contents)).toMatchObject({ platform, eventType: "chat", payload: chatData });
+      }
     });
 
     it("routes YouTube unknown renderer diagnostics to a separate log file", async () => {
@@ -94,14 +58,9 @@ describe("RawPlatformDataLoggingService behavior", () => {
         { dataLoggingEnabled: true },
       );
 
-      expect(writeRawEventSpy.mock.calls).toHaveLength(1);
-      const [writeCall] = writeRawEventSpy.mock.calls;
-      if (!writeCall) throw new Error("Expected unknown renderer write");
-      expect(writeCall[0]).toMatchObject({
-        platform: "youtube",
-        eventType: "unknown-renderer",
-        payload: diagnosticPayload,
-      });
+      expect(await fs.readdir(logDir)).toEqual(["youtube-unknown-renderer-log.ndjson"]);
+      const entry = JSON.parse(await fs.readFile(path.join(logDir, "youtube-unknown-renderer-log.ndjson"), "utf8"));
+      expect(entry).toMatchObject({ platform: "youtube", eventType: "unknown-renderer", payload: diagnosticPayload });
     });
 
     it("does not log when platform logging is disabled for user privacy", async () => {
@@ -114,11 +73,13 @@ describe("RawPlatformDataLoggingService behavior", () => {
         dataLoggingEnabled: false,
       });
 
-      expect(writeRawEventSpy.mock.calls).toHaveLength(0);
+      expect(await fs.readdir(logDir)).toEqual([]);
     });
 
     it("handles filesystem errors gracefully without throwing to callers", async () => {
-      writeRawEventSpy.mockRejectedValueOnce(new Error("Disk full"));
+      const blockedRoot = path.join(logDir, "synthetic-blocked-root");
+      await fs.writeFile(blockedRoot, "synthetic file blocking directory creation");
+      service = new RawPlatformDataLoggingService({ config: { dataLoggingPath: blockedRoot } });
 
       await expect(
         service.logRawPlatformData(
@@ -214,13 +175,18 @@ describe("RawPlatformDataLoggingService behavior", () => {
     });
   });
 
-  describe("Error Recovery User Experience", () => {
-    it("passes the configured log directory to the raw event writer", async () => {
-      await service.logRawPlatformData("twitch", "chat", { msg: "test" }, { dataLoggingEnabled: true });
-
-      const [writeCall] = writeRawEventSpy.mock.calls;
-      if (!writeCall) throw new Error("Expected raw event write");
-      expect(writeCall[0].dataLoggingPath).toBe(logDir);
+  describe("Error recovery", () => {
+    it("writes a later valid event after the configured filesystem root becomes available", async () => {
+      const root = path.join(logDir, "synthetic-recovery");
+      await fs.writeFile(root, "synthetic obstruction");
+      const recovering = new RawPlatformDataLoggingService({ config: { dataLoggingPath: root } });
+      await recovering.logRawPlatformData("twitch", "chat", { message: "synthetic rejected event" }, { dataLoggingEnabled: true });
+      expect(await fs.readFile(root, "utf8")).toBe("synthetic obstruction");
+      await fs.unlink(root);
+      await recovering.logRawPlatformData("twitch", "chat", { message: "synthetic healthy event" }, { dataLoggingEnabled: true });
+      const entries = (await fs.readFile(path.join(root, "twitch-data-log.ndjson"), "utf8")).trim().split("\n");
+      expect(entries).toHaveLength(1);
+      expect(JSON.parse(entries[0]!)).toMatchObject({ payload: { message: "synthetic healthy event" } });
     });
   });
 });

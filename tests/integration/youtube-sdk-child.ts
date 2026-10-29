@@ -11,9 +11,9 @@ export async function runYouTubeSdkChild(args: string[], timeout = 20000) {
     try {
         const config = join(configDir, 'bunfig.toml');
         await writeFile(config, '');
-        child = Bun.spawn([process.execPath, ...args, '--no-env-file', '--config', config], {
+        child = Bun.spawn([process.execPath, '--no-env-file', ...args, '--no-env-file', '--config', config], {
             cwd: fileURLToPath(new URL('../..', import.meta.url)),
-            env: { ...process.env, YOUTUBE_SDK_RETIREMENT_CHILD: '1' },
+            env: { PATH: process.env.PATH, NODE_ENV: 'test', CHAT_BOT_CONFIG_PATH: process.env.CHAT_BOT_CONFIG_PATH, YOUTUBE_SDK_RETIREMENT_CHILD: '1' },
             stdin: 'ignore', stdout: 'pipe', stderr: 'pipe',
             timeout, killSignal: 'SIGKILL'
         });

@@ -1,114 +1,39 @@
-import { describe, test, expect, afterEach } from "bun:test";
-import { EventEmitter } from "events";
-import { noOpLogger } from "../helpers/mock-factories";
-import { TikTokPlatform } from "../../src/platforms/tiktok";
+import { afterEach, beforeEach, expect, test, vi } from 'bun:test';
+import { createTikTokLifetimeFixture, flushConnectorSetup } from '../helpers/tiktok-connector-fixture';
+let fixture: ReturnType<typeof createTikTokLifetimeFixture>;
+beforeEach(() => { vi.useFakeTimers(); fixture = createTikTokLifetimeFixture(); });
+afterEach(async () => { await fixture.cleanup(); vi.useRealTimers(); });
 
-type TikTokDependencies = NonNullable<ConstructorParameters<typeof TikTokPlatform>[1]>;
-type TikTokWebcastEvent = NonNullable<TikTokDependencies["WebcastEvent"]>;
+test('starts with connectionActive false', () => { expect(fixture.platform.connectionActive).toBe(false); });
 
-const WEBCAST_EVENT = {
-  CHAT: "chat",
-  GIFT: "gift",
-  FOLLOW: "follow",
-  SOCIAL: "social",
-  ROOM_USER: "roomUser",
-  ERROR: "error",
-  DISCONNECT: "disconnect",
-} satisfies TikTokWebcastEvent;
+test('successful room entry marks real state connected and duplicate success preserves connection time', async () => {
+    const pending = fixture.platform._connect({});
+    await flushConnectorSetup();
+    fixture.connectors[0]!.open(); fixture.connectors[0]!.enter();
+    await pending;
+    expect(fixture.platform.connectionActive).toBe(true);
+    expect(fixture.platform.connectionStateManager.isConnected()).toBe(true);
+    const time = fixture.platform.connectionTime;
+    vi.advanceTimersByTime(1);
+    await fixture.platform.handleConnectionSuccess();
+    expect(fixture.platform.connectionTime).toBe(time);
+});
 
-describe("TikTokPlatform connection state", () => {
-  let platform: InstanceType<typeof TikTokPlatform>;
+test('stream end deactivates real connection and publishes terminal once', async () => {
+    const pending = fixture.platform._connect({});
+    await flushConnectorSetup();
+    fixture.connectors[0]!.open(); fixture.connectors[0]!.enter();
+    await pending;
+    const statuses: unknown[] = [];
+    fixture.platform.handlers.onStreamStatus = payload => { statuses.push(payload); };
+    await Promise.all([fixture.platform._handleStreamEnd({ code: 4404 }), fixture.platform._handleStreamEnd({ code: 4404 })]);
+    expect(fixture.platform.connectionActive).toBe(false);
+    expect(fixture.platform.connectionStateManager.isConnected()).toBe(false);
+    expect(statuses).toHaveLength(2); // One terminal and one ordinary disconnection status.
+});
 
-  afterEach(() => {
-    if (platform) {
-      platform.removeAllListeners?.();
-    }
-  });
-
-  const createMockConnection = () => {
-    const emitter = new EventEmitter();
-    return {
-      connect: async () => ({ roomId: "testRoom123" }),
-      disconnect: async () => true,
-      on: emitter.on.bind(emitter),
-      emit: emitter.emit.bind(emitter),
-      removeAllListeners: emitter.removeAllListeners.bind(emitter),
-      isConnected: false,
-      isConnecting: false,
-      roomId: "testRoom123",
-    };
-  };
-
-  const buildPlatform = () => {
-    const config = {
-      enabled: true,
-      username: "testTikTokUser",
-      dataLoggingEnabled: false,
-    };
-
-    const deps = {
-      logger: noOpLogger,
-      connectionFactory: {
-        createConnection: () => createMockConnection(),
-      },
-      retrySystem: {
-        resetRetryCount: () => {},
-        handleConnectionError: () => {},
-      },
-      TikTokWebSocketClient: class {},
-      WebcastEvent: WEBCAST_EVENT,
-      ControlEvent: { CONNECTED: "connected" },
-    };
-
-    return new TikTokPlatform(config, deps);
-  };
-
-  test("starts with connectionActive as false", () => {
-    platform = buildPlatform();
-
-    expect(platform.connectionActive).toBe(false);
-  });
-
-  test("handleConnectionSuccess sets connectionActive to true", async () => {
-    platform = buildPlatform();
-    platform.connectionStateManager.markConnected = () => {};
-
-    expect(platform.connectionActive).toBe(false);
-
-    await platform.handleConnectionSuccess();
-
-    expect(platform.connectionActive).toBe(true);
-  });
-
-  test("handleConnectionSuccess is idempotent", async () => {
-    platform = buildPlatform();
-    platform.connectionStateManager.markConnected = () => {};
-
-    await platform.handleConnectionSuccess();
-    const connectionTime1 = platform.connectionTime;
-
-    await platform.handleConnectionSuccess();
-    const connectionTime2 = platform.connectionTime;
-
-    expect(connectionTime1).toBe(connectionTime2);
-  });
-
-  test("_handleStreamEnd sets connectionActive to false", async () => {
-    platform = buildPlatform();
-    platform.connection = createMockConnection();
-    platform.connectionActive = true;
-
-    await platform._handleStreamEnd();
-
-    expect(platform.connectionActive).toBe(false);
-  });
-
-  test("stores handlers in handlers object", () => {
-    platform = buildPlatform();
-    const testHandler = () => {};
-
-    platform.handlers.onViewerCount = testHandler;
-
-    expect(platform.handlers.onViewerCount).toBe(testHandler);
-  });
+test('stores the public viewer-count callback by identity', () => {
+    const handler = () => {};
+    fixture.platform.handlers.onViewerCount = handler;
+    expect(fixture.platform.handlers.onViewerCount).toBe(handler);
 });

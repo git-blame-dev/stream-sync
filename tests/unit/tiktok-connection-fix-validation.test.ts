@@ -1,140 +1,35 @@
-import { describe, test, expect, afterEach } from "bun:test";
-import { EventEmitter } from "events";
-import { noOpLogger } from "../helpers/mock-factories";
-import { TikTokPlatform } from "../../src/platforms/tiktok";
+import { afterEach, beforeEach, expect, test } from 'bun:test';
+import { TikTokWebSocketClient } from '../../src/platforms/tiktok-websocket-client';
+import { createTikTokLifetimeFixture, flushConnectorSetup } from '../helpers/tiktok-connector-fixture';
+let fixture: ReturnType<typeof createTikTokLifetimeFixture>;
+beforeEach(() => { fixture = createTikTokLifetimeFixture(); });
+afterEach(async () => { await fixture.cleanup(); });
 
-type TikTokDependencies = NonNullable<ConstructorParameters<typeof TikTokPlatform>[1]>;
-type TikTokWebcastEvent = NonNullable<TikTokDependencies["WebcastEvent"]>;
+test('real state manager and factory begin disconnected with no connection', () => {
+    expect(fixture.platform.connectionStateManager).toBeDefined();
+    expect(fixture.platform.connectionFactory).toBeDefined();
+    expect(fixture.platform.connectionStateManager.getState()).toBe('disconnected');
+    expect(fixture.platform.connectionStateManager.isConnected()).toBe(false);
+    expect(fixture.platform.connectionStateManager.getConnectionInfo()).toMatchObject({ platform: 'tiktok', state: 'disconnected', hasConnection: false });
+});
 
-const WEBCAST_EVENT = {
-  CHAT: "chat",
-  GIFT: "gift",
-  FOLLOW: "follow",
-  SOCIAL: "social",
-  ROOM_USER: "roomUser",
-  ERROR: "error",
-  DISCONNECT: "disconnect",
-} satisfies TikTokWebcastEvent;
+test('real factory creates a real client with required methods', () => {
+    const connection = fixture.createConnection();
+    expect(connection).toBeInstanceOf(TikTokWebSocketClient);
+    expect(typeof connection.connect).toBe('function');
+    expect(typeof connection.disconnect).toBe('function');
+});
 
-function hasRequiredConnectionMethods(
-  connection: unknown,
-): connection is { connect: () => Promise<unknown>; disconnect: () => Promise<unknown> } {
-  return (
-    typeof connection === "object" &&
-    connection !== null &&
-    "connect" in connection &&
-    typeof connection.connect === "function" &&
-    "disconnect" in connection &&
-    typeof connection.disconnect === "function"
-  );
-}
-
-describe("TikTok Connection State Management", () => {
-  let platform: InstanceType<typeof TikTokPlatform>;
-
-  afterEach(() => {
-    if (platform) {
-      platform.removeAllListeners?.();
-    }
-  });
-
-  const createMockConnection = () => {
-    const emitter = new EventEmitter();
-    return {
-      connect: async () => ({ roomId: "testRoom123" }),
-      disconnect: async () => true,
-      fetchIsLive: async () => true,
-      waitUntilLive: async () => {},
-      on: emitter.on.bind(emitter),
-      emit: emitter.emit.bind(emitter),
-      removeAllListeners: emitter.removeAllListeners.bind(emitter),
-      isConnected: false,
-      isConnecting: false,
-      roomId: "testRoom123",
-    };
-  };
-
-  const buildPlatform = () => {
-    const mockConnection = createMockConnection();
-
-    const config = {
-      enabled: true,
-      username: "testTikTokUser",
-      dataLoggingEnabled: false,
-    };
-
-    const deps = {
-      logger: noOpLogger,
-      connectionFactory: {
-        createConnection: () => mockConnection,
-      },
-      retrySystem: {
-        resetRetryCount: () => {},
-        handleConnectionError: () => {},
-      },
-      TikTokWebSocketClient: class {},
-      WebcastEvent: WEBCAST_EVENT,
-      ControlEvent: { CONNECTED: "connected" },
-    };
-
-    return new TikTokPlatform(config, deps);
-  };
-
-  test("has connectionStateManager defined", () => {
-    platform = buildPlatform();
-
-    expect(platform.connectionStateManager).toBeDefined();
-  });
-
-  test("has connectionFactory defined", () => {
-    platform = buildPlatform();
-
-    expect(platform.connectionFactory).toBeDefined();
-  });
-
-  test("connectionStateManager reports disconnected state initially", () => {
-    platform = buildPlatform();
-
-    expect(platform.connectionStateManager.getState()).toBe("disconnected");
-    expect(platform.connectionStateManager.isConnected()).toBe(false);
-  });
-
-  test("connectionStateManager provides connection info", () => {
-    platform = buildPlatform();
-
-    const info = platform.connectionStateManager.getConnectionInfo();
-
-    expect(info.platform).toBe("tiktok");
-    expect(info.state).toBe("disconnected");
-    expect(info.hasConnection).toBe(false);
-  });
-
-  test("connectionFactory creates connection with required methods", () => {
-    platform = buildPlatform();
-
-    const connection = platform.connectionFactory.createConnection(
-      "tiktok",
-      { username: "testTikTokUser" },
-      {},
-    );
-
-    expect(connection).not.toBeNull();
-    expect(hasRequiredConnectionMethods(connection)).toBe(true);
-    if (!hasRequiredConnectionMethods(connection)) {
-      throw new Error("Expected TikTok connection with required methods");
-    }
-    expect(typeof connection.connect).toBe("function");
-    expect(typeof connection.disconnect).toBe("function");
-  });
-
-  test("cleanup sets connection to null", async () => {
-    platform = buildPlatform();
-    platform.connection = createMockConnection();
-
-    expect(platform.connection).not.toBeNull();
-
-    await platform.cleanup();
-
-    expect(platform.connection).toBeNull();
-  });
+test('cleanup clears real active connection and state and retires external SDK', async () => {
+    const pending = fixture.platform._connect({});
+    await flushConnectorSetup();
+    fixture.connectors[0]!.open(); fixture.connectors[0]!.enter();
+    await pending;
+    expect<unknown>(fixture.platform.connection).toBe(fixture.clients[0]!);
+    expect(fixture.platform.connectionStateManager.isConnected()).toBe(true);
+    await fixture.platform.cleanup();
+    expect(fixture.platform.connection).toBeNull();
+    expect(fixture.platform.connectionStateManager.getConnectionInfo()).toMatchObject({ state: 'disconnected', hasConnection: false });
+    expect(fixture.connectors[0]!.signal?.aborted).toBe(true);
+    expect(fixture.connectors[0]!.disconnects).toBeGreaterThan(0);
 });

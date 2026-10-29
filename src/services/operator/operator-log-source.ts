@@ -1,4 +1,5 @@
 import type { LogLevel } from '../../core/logger/types';
+import { randomUUID } from 'node:crypto';
 
 type JsonLogValue = null | boolean | number | string | JsonLogValue[] | { [key: string]: JsonLogValue };
 
@@ -15,6 +16,7 @@ type OperatorLogEntry = OperatorLogInput & {
 };
 
 type OperatorLogHistory = {
+    sessionId: string;
     entries: readonly OperatorLogEntry[];
     oldestId: number | null;
     newestId: number | null;
@@ -31,7 +33,7 @@ type OperatorLogConnection = {
 
 type OperatorLogSource = {
     append: (input: OperatorLogInput) => OperatorLogEntry;
-    connect: (afterId: number | undefined, subscriber: OperatorLogSubscriber) => OperatorLogConnection;
+    connect: (afterCursor: string | undefined, subscriber: OperatorLogSubscriber) => OperatorLogConnection;
     history: () => OperatorLogHistory;
 };
 
@@ -63,6 +65,7 @@ function encodedBytes(value: unknown): number {
 }
 
 class BoundedOperatorLogSource implements OperatorLogSource {
+    private readonly sessionId = randomUUID();
     private readonly maxEntries: number;
     private readonly maxBytes: number;
     private readonly maxEntryBytes: number;
@@ -138,6 +141,7 @@ class BoundedOperatorLogSource implements OperatorLogSource {
     history(): OperatorLogHistory {
         const entries = this.entries.map(({ entry }) => entry);
         return {
+            sessionId: this.sessionId,
             entries,
             oldestId: entries[0]?.id ?? null,
             newestId: entries.at(-1)?.id ?? null,
@@ -145,9 +149,13 @@ class BoundedOperatorLogSource implements OperatorLogSource {
         };
     }
 
-    connect(afterId: number | undefined, subscriber: OperatorLogSubscriber): OperatorLogConnection {
+    connect(afterCursor: string | undefined, subscriber: OperatorLogSubscriber): OperatorLogConnection {
         const snapshot = this.history();
-        const reset = afterId !== undefined && snapshot.newestId !== null && afterId > snapshot.newestId;
+        const prefix = `${this.sessionId}:`;
+        const sequence = afterCursor?.startsWith(prefix) ? afterCursor.slice(prefix.length) : '';
+        const parsed = /^(?:0|[1-9]\d*)$/.test(sequence) ? Number(sequence) : NaN;
+        const afterId = Number.isSafeInteger(parsed) ? parsed : undefined;
+        const reset = afterCursor !== undefined && (afterId === undefined || afterId > (snapshot.newestId ?? 0));
         const evicted = afterId !== undefined && snapshot.oldestId !== null && afterId < snapshot.oldestId - 1;
         const replay = afterId === undefined || reset || evicted
             ? snapshot.entries
@@ -164,7 +172,7 @@ class BoundedOperatorLogSource implements OperatorLogSource {
         const activate = () => {
             if (activated || state.removed) return;
             activated = true;
-            let deliveredId = replay[0]?.id ? replay[0].id - 1 : (afterId ?? 0);
+            let deliveredId = reset || evicted ? 0 : (afterId ?? 0);
             for (const entry of replay) {
                 if (!this.deliver(state, entry)) return;
                 deliveredId = entry.id;
@@ -183,6 +191,7 @@ class BoundedOperatorLogSource implements OperatorLogSource {
 
         return {
             history: {
+                sessionId: this.sessionId,
                 entries: replay,
                 oldestId: snapshot.oldestId,
                 newestId: snapshot.newestId,

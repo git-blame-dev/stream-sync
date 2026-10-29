@@ -4,7 +4,7 @@ import { isIsoTimestamp } from '../utils/timestamp';
 import { getValidMessageParts, normalizeBadgeImages } from '../utils/message-parts';
 import { UNKNOWN_CHAT_MESSAGE, UNKNOWN_CHAT_USERNAME } from '../constants/degraded-chat';
 import { allowsYouTubeJewelsMissingUserId, getMissingFields } from '../utils/missing-fields';
-import { NotificationInputValidator } from '../notifications/notification-input-validator';
+import { NotificationInputValidator, type ValidatedNotificationPayload } from '../notifications/notification-input-validator';
 import { parseNotificationCount } from '../utils/notification-count';
 
 type RouterUserTrackingService = {
@@ -58,6 +58,9 @@ type RouterLogger = {
 type RouterEventBus = {
     subscribe: (eventName: string, handler: (event: unknown) => Promise<void>) => (() => void) | void;
 };
+
+type RuntimeNotificationHandlerName = 'handleGiftNotification' | 'handlePaypiggyNotification' |
+    'handleGiftPaypiggyNotification' | 'handleFollowNotification' | 'handleShareNotification' | 'handleRaidNotification';
 
 type RuntimeNotificationHandler = (platform: string, username: unknown, payload: RouterRecord) => Promise<unknown> | unknown;
 
@@ -245,17 +248,11 @@ class PlatformEventRouter {
                 }
                 return;
             case PlatformEvents.GIFT: {
-                await this._routeRuntimeNotification('handleGiftNotification', type, platform, payload, (sanitized) => ({
-                    ...sanitized,
-                    type
-                }));
+                await this._routeRuntimeNotification('handleGiftNotification', type, platform, payload);
                 return;
             }
             case PlatformEvents.PAYPIGGY: {
-                await this._routeRuntimeNotification('handlePaypiggyNotification', type, platform, payload, (sanitized) => ({
-                    ...sanitized,
-                    type
-                }));
+                await this._routeRuntimeNotification('handlePaypiggyNotification', type, platform, payload);
                 return;
             }
             case PlatformEvents.GIFTPAYPIGGY: {
@@ -315,9 +312,6 @@ class PlatformEventRouter {
     async forwardToNotificationManager(type: string, platform: string, data: RouterRecord): Promise<void> {
         if (this.notificationManager?.handleNotification) {
             const sanitized = this._sanitizeNotificationPayload(data, type, platform);
-            if (!sanitized) {
-                return;
-            }
             await this.notificationManager.handleNotification(type, platform, sanitized);
         } else {
             throw new Error(`No notification manager available for platform event ${type}`);
@@ -453,21 +447,17 @@ class PlatformEventRouter {
         }
     }
 
-    async _routeRuntimeNotification(handlerName: string, type: string, platform: string, data: RouterRecord, payloadBuilder: ((sanitized: RouterRecord) => RouterRecord) | null = null): Promise<void> {
+    async _routeRuntimeNotification(handlerName: RuntimeNotificationHandlerName, type: string, platform: string, data: RouterRecord): Promise<void> {
         const handler = this.runtime?.[handlerName];
         if (!handler) {
             return;
         }
 
         const sanitized = this._sanitizeNotificationPayload(data, type, platform);
-        if (!sanitized) {
-            return;
-        }
-        const payload = payloadBuilder ? payloadBuilder(sanitized) : sanitized;
-        await (handler as RuntimeNotificationHandler).call(this.runtime, platform, sanitized.username, payload);
+        await handler.call(this.runtime, platform, sanitized.username, sanitized);
     }
 
-    _sanitizeNotificationPayload(data: unknown = {}, sourceType: string | null = null, sourcePlatform: string | null = null): RouterRecord {
+    _sanitizeNotificationPayload(data: unknown = {}, sourceType: string | null = null, sourcePlatform: string | null = null): ValidatedNotificationPayload {
         if (!sourcePlatform) {
             throw new Error('Notification payload requires platform');
         }

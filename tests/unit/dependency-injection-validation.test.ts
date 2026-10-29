@@ -1,14 +1,26 @@
-import { describe, expect, it, afterEach } from "bun:test";
+import { describe, expect, it, afterEach, beforeEach } from "bun:test";
 import { createRequire } from "node:module";
 
 import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
-import { noOpLogger } from "../helpers/mock-factories";
+import { DependencyFactory } from "../../src/utils/dependency-factory";
+import { PlatformConnectionFactory } from "../../src/utils/platform-connection-factory";
+import { validateConnectionFactoryInterface } from "../../src/utils/dependency-validator";
+import { ConnectionStateManager } from "../../src/utils/connection-state-manager";
 
 const load = createRequire(import.meta.url);
 
 describe("Dependency Injection Validation", () => {
-  afterEach(() => {
-    restoreAllMocks();
+  const dependencyFactory = new DependencyFactory();
+  const logger = dependencyFactory.createValidatedLogger("dependency-validation");
+  let youtubeDependencies: ReturnType<DependencyFactory["createYoutubeDependencies"]>;
+  beforeEach(() => {
+    youtubeDependencies = dependencyFactory.createYoutubeDependencies({ username: "synthetic-channel" }, {
+      config: { general: { ignoreSelfMessages: false } },
+    });
+  });
+  afterEach(async () => {
+    try { await youtubeDependencies.innertubeService.dispose(); }
+    finally { restoreAllMocks(); }
   });
 
   describe("Logger Interface Contract Validation", () => {
@@ -54,12 +66,7 @@ describe("Dependency Injection Validation", () => {
     });
 
     it("should accept valid logger interface and proceed with initialization", () => {
-      const validLogger = {
-        info: createMockFn(),
-        debug: createMockFn(),
-        error: createMockFn(),
-        warn: createMockFn(),
-      };
+      const validLogger = logger;
 
       const initializeWithValidLogger = () => {
         const { ConnectionStateManager } = load(
@@ -111,18 +118,8 @@ describe("Dependency Injection Validation", () => {
 
     it("should validate dependency types and interfaces match expected contracts", () => {
       const invalidTypeDependencies = {
+        ...youtubeDependencies,
         logger: "string-instead-of-object",
-        notificationManager: {
-          emit: createMockFn(),
-          on: createMockFn(),
-          removeListener: createMockFn(),
-        },
-        streamDetectionService: {
-          detectLiveStreams: createMockFn().mockResolvedValue({
-            success: true,
-            videoIds: [],
-          }),
-        },
       };
 
       const createPlatformWithInvalidTypes = () => {
@@ -155,9 +152,7 @@ describe("Dependency Injection Validation", () => {
     });
 
     it("should validate connection factory interface before proceeding", () => {
-      const invalidFactory = {
-        someOtherMethod: createMockFn(),
-      };
+      const invalidFactory = { someOtherMethod: true };
 
       const createManagerWithInvalidFactory = () => {
         const { ConnectionStateManager } = load(
@@ -172,27 +167,40 @@ describe("Dependency Injection Validation", () => {
       );
     });
 
-    it("should ensure connection factory can create valid connections", () => {
-      const factoryReturningNull = {
-        createConnection: createMockFn().mockReturnValue(null),
-      };
+    it("should reject null connection DTOs and reuse a real factory connection", async () => {
+      const factory = new PlatformConnectionFactory(logger);
+      validateConnectionFactoryInterface(factory);
+      const manager = new ConnectionStateManager("youtube", factory);
+      try {
+        expect(manager.isConnectionValid(null)).toBe(false);
+        expect(manager.isConnectionValid(undefined)).toBe(false);
+        expect(manager.isConnectionValid({ connect: "invalid" })).toBe(false);
+        expect(() => manager.ensureConnection()).toThrow("not properly initialized");
+        manager.initialize({ username: "synthetic-channel" }, youtubeDependencies);
+        const connection = manager.ensureConnection();
+        expect(manager.isConnectionValid(connection)).toBe(true);
+        expect(manager.ensureConnection()).toBe(connection);
+        expect(manager.isConnected()).toBe(false);
+        await connection.connect();
+        manager.markConnected();
+        expect(manager.isConnected()).toBe(true);
+      } finally { manager.cleanup(); }
+      expect(manager.getConnection()).toBeNull();
+      expect(manager.isConnected()).toBe(false);
+    });
 
-      const useManagerWithNullFactory = () => {
-        const { ConnectionStateManager } = load(
-          "../../src/utils/connection-state-manager",
-        );
-        const manager = new ConnectionStateManager(
-          "youtube",
-          factoryReturningNull,
-        );
-        manager.initialize({}, { logger: noOpLogger });
-        return manager.ensureConnection();
-      };
-
-      expect(useManagerWithNullFactory).toThrow();
-      expect(useManagerWithNullFactory).toThrow(
-        /factory.*returned.*null.*invalid.*connection/i,
-      );
+    it("should preserve actual factory failures in manager error state", () => {
+      const factory = new PlatformConnectionFactory(logger);
+      validateConnectionFactoryInterface(factory);
+      const manager = new ConnectionStateManager("twitch", factory);
+      try {
+        manager.initialize({}, { logger });
+        expect(() => manager.ensureConnection()).toThrow("Twitch connection creation not yet implemented");
+        expect(manager.getState()).toBe("error");
+        expect(manager.lastError).toBeInstanceOf(Error);
+        expect((manager.lastError as Error).message).toBe("Twitch connection creation not yet implemented");
+        expect(manager.getConnection()).toBeNull();
+      } finally { manager.cleanup(); }
     });
   });
 
@@ -214,10 +222,10 @@ describe("Dependency Injection Validation", () => {
     it("should ensure factory creates consistent dependency interfaces", () => {
       const factory = new (load(
         "../../src/utils/platform-connection-factory",
-      ).PlatformConnectionFactory)(noOpLogger);
+      ).PlatformConnectionFactory)(logger);
 
       const createYouTubeDeps = () => {
-        return factory.createStandardDependencies("youtube", noOpLogger);
+        return factory.createStandardDependencies("youtube", logger);
       };
 
       expect(createYouTubeDeps).not.toThrow();
@@ -275,62 +283,4 @@ describe("Dependency Injection Validation", () => {
     });
   });
 
-  describe("Integration Point Validation", () => {
-    it("should validate main.js to platform dependency handoff", () => {
-      const simulateMainJsHandoff = () => {
-        const dependencies = {
-          logger: noOpLogger,
-          notificationManager: {
-            emit: createMockFn(),
-            on: createMockFn(),
-            removeListener: createMockFn(),
-          },
-          app: { handleChatMessage: createMockFn() },
-          streamDetectionService: {
-            detectLiveStreams: createMockFn().mockResolvedValue({
-              success: true,
-              videoIds: [],
-            }),
-          },
-        };
-
-        const config = { youtube: { enabled: true, username: "test-user" } };
-        const { YouTubePlatform } = load("../../src/platforms/youtube");
-        return new YouTubePlatform(config, dependencies);
-      };
-
-      expect(simulateMainJsHandoff).not.toThrow();
-    });
-
-    it("should ensure consistent dependency interfaces across all platforms", () => {
-      const universalDependencies = {
-        logger: noOpLogger,
-        notificationManager: {
-          emit: createMockFn(),
-          on: createMockFn(),
-          removeListener: createMockFn(),
-        },
-        app: { handleChatMessage: createMockFn() },
-        streamDetectionService: {
-          detectLiveStreams: createMockFn().mockResolvedValue({
-            success: true,
-            videoIds: [],
-          }),
-        },
-      };
-
-      const testMultiplePlatforms = () => {
-        const config = {
-          youtube: { enabled: true, username: "test-user" },
-          tiktok: { enabled: true, username: "test-user" },
-        };
-
-        const { YouTubePlatform } = load("../../src/platforms/youtube");
-        const youtubeOk = new YouTubePlatform(config, universalDependencies);
-        return { youtubeOk };
-      };
-
-      expect(testMultiplePlatforms).not.toThrow();
-    });
-  });
 });

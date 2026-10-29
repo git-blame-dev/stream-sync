@@ -19,7 +19,7 @@ function memoryFs(initial?: string) {
 describe("operator appearance", () => {
   test("loads overrides and emits immutable revisioned snapshots", async () => {
     const service = await createOperatorAppearanceService({ defaults, filePath: "/tmp/operator-appearance.json", fs: memoryFs(JSON.stringify({ maxDisplayableBadges: 2 })) });
-    expect(service.snapshot).toEqual({ revision: 0, settings: { ...defaults, maxDisplayableBadges: 2 }, overriddenKeys: ["maxDisplayableBadges"] });
+    expect(service.snapshot).toEqual({ sessionId: service.sessionId, revision: 0, settings: { ...defaults, maxDisplayableBadges: 2 }, overriddenKeys: ["maxDisplayableBadges"] });
     const snapshots: unknown[] = [];
     service.subscribe((snapshot) => snapshots.push(snapshot));
     await service.set("compactRows", true);
@@ -111,11 +111,12 @@ describe("operator appearance", () => {
     const service = await createOperatorAppearanceService({ defaults, filePath: "/tmp/operator-appearance.json", fs });
 
     await expect(service.set("compactRows", true)).rejects.toThrow("write failed");
-    expect(service.snapshot).toEqual({ revision: 0, settings: defaults, overriddenKeys: [] });
+    expect(service.snapshot).toEqual({ sessionId: service.sessionId, revision: 0, settings: defaults, overriddenKeys: [] });
 
     shouldFail = false;
     await service.set("compactRows", true);
     expect(service.snapshot).toEqual({
+      sessionId: service.sessionId,
       revision: 1,
       settings: { ...defaults, compactRows: true },
       overriddenKeys: ["compactRows"],

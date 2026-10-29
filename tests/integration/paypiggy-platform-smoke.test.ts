@@ -1,27 +1,35 @@
-import { describe, test, afterEach, expect } from "bun:test";
+import { describe, test, afterEach, expect, spyOn } from "bun:test";
+import { join } from "node:path";
 
-import EventEmitter from "events";
 import { PlatformLifecycleService } from "../../src/services/PlatformLifecycleService.ts";
-import NotificationManager from "../../src/notifications/NotificationManager";
-import { createTestAppRuntime } from "../helpers/runtime-test-harness";
-import { createMockDisplayQueue, noOpLogger } from "../helpers/mock-factories";
+import { TwitchPlatform } from "../../src/platforms/twitch.ts";
+import { YouTubePlatform } from "../../src/platforms/youtube.ts";
+import { TikTokPlatform } from "../../src/platforms/tiktok.ts";
+import { TwitchAuth } from "../../src/auth/TwitchAuth.ts";
+import { InnertubeService } from "../../src/services/innertube-service.ts";
+import { YouTubeStreamDetectionService } from "../../src/services/youtube-stream-detection-service.ts";
+import { createMainPresentationFixture } from "../helpers/main-presentation-fixture.ts";
+import { createTikTokLifetimeFixture } from "../helpers/tiktok-connector-fixture.ts";
+import { noOpLogger } from "../helpers/mock-factories";
 import { expectNoTechnicalArtifacts } from "../helpers/assertion-helpers";
-import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
-import { createConfigFixture } from "../helpers/config-fixture";
+import { restoreAllMocks } from "../helpers/bun-mock-utils";
+import {
+  createTikTokConfigFixture,
+  createTwitchConfigFixture,
+  createYouTubeConfigFixture,
+} from "../helpers/config-fixture";
 import { waitFor } from "../helpers/event-driven-testing";
 
 type PlatformKey = "twitch" | "youtube" | "tiktok";
 type HandlerName = "onPaypiggy";
-type PlatformHandlers = Record<HandlerName, (payload: PaypiggyPayload) => void>;
-type PlatformConfigOverride = { enabled: boolean; username?: string };
-type EventBusHandler = (payload: unknown) => void | Promise<void>;
-type EventBus = {
-  emit: (eventName: string, payload: unknown) => boolean;
-  on: (eventName: string, handler: EventBusHandler) => EventEmitter;
-  subscribe: (eventName: string, handler: EventBusHandler) => () => void;
+type PlatformConstructor = Parameters<
+  PlatformLifecycleService["initializeAllPlatforms"]
+>[0][string];
+type PlatformConfigOverride = {
+  enabled: boolean;
+  username?: string;
+  dataLoggingEnabled?: boolean;
 };
-type RuntimeOptions = NonNullable<Parameters<typeof createTestAppRuntime>[1]>;
-type RuntimeEventBus = NonNullable<RuntimeOptions["eventBus"]>;
 type PaypiggyPayload = {
   username: string;
   userId: string;
@@ -68,43 +76,43 @@ const requireQueueItem = (value: unknown): QueueItem => {
   ) {
     throw new Error("Queued display item has invalid shape");
   }
-  return { type: value.type, platform: value.platform as PlatformKey, data: value.data };
+  return {
+    type: value.type,
+    platform: value.platform as PlatformKey,
+    data: value.data,
+  };
 };
 
-const createRuntimeEventBus = (eventBus: EventBus): RuntimeEventBus => ({
-  emit: (eventName: string, payload: unknown) => {
-    eventBus.emit(eventName, payload);
-  },
-  subscribe: (
-    eventName: string,
-    handler: (event: Record<string, unknown>) => void | Promise<void>,
-  ) =>
-    eventBus.subscribe(eventName, (payload) => {
-      if (isRecord(payload)) {
-        return handler(payload);
-      }
-      return handler({});
-    }),
-});
-
 describe("Paypiggy platform flows (smoke)", () => {
-  afterEach(() => {
-    restoreAllMocks();
-  });
+  const cleanups: Array<() => Promise<void> | void> = [];
 
-  const createEventBus = (): EventBus => {
-    const emitter = new EventEmitter();
-    return {
-      emit: emitter.emit.bind(emitter),
-      on: emitter.on.bind(emitter),
-      subscribe: (event: string, handler: EventBusHandler) => {
-        emitter.on(event, handler);
-        return () => {
-          emitter.off(event, handler);
-        };
-      },
+  const registerCleanup = (fn: () => Promise<void> | void) => {
+    let executed = false;
+    const idempotentFn = async () => {
+      if (executed) return;
+      executed = true;
+      await fn();
     };
+    cleanups.push(idempotentFn);
+    return idempotentFn;
   };
+
+  const runCleanups = async () => {
+    while (cleanups.length > 0) {
+      const cleanup = cleanups.pop();
+      if (cleanup) {
+        await cleanup();
+      }
+    }
+  };
+
+  afterEach(async () => {
+    try {
+      await runCleanups();
+    } finally {
+      restoreAllMocks();
+    }
+  });
 
   const assertNonEmptyString = (value: unknown) => {
     expect(typeof value).toBe("string");
@@ -156,68 +164,204 @@ describe("Paypiggy platform flows (smoke)", () => {
     }
   };
 
-  const createHarness = (platformKey: PlatformKey) => {
-    const eventBus = createEventBus();
-    const logger = noOpLogger;
-    const displayQueue = createMockDisplayQueue();
-    const platformConfigOverride: PlatformConfigOverride = { enabled: true };
-    if (platformKey === "youtube") {
-      platformConfigOverride.username = "test-channel";
-    }
-    const configOverrides = {
-      general: {
-        debugEnabled: false,
-        giftsEnabled: true,
-        paypiggiesEnabled: true,
-      },
-      [platformKey]: platformConfigOverride,
-      obs: { enabled: false },
-    };
-    const config = createConfigFixture(configOverrides);
-    const notificationManager = new NotificationManager({
-      displayQueue,
-      logger,
-      eventBus,
-      config,
-      constants: require("../../src/core/constants"),
-      obsGoals: { processDonationGoal: createMockFn() },
-      vfxCommandService: {
-        getVFXConfig: createMockFn().mockResolvedValue(null),
-      },
-      userTrackingService: {
-        isFirstMessage: createMockFn().mockResolvedValue(false),
-      },
-    });
+  const createHarness = async (platformKey: PlatformKey) => {
+    const presentation = await createMainPresentationFixture();
+    presentation.config.general.debugEnabled = false;
+    presentation.config.general.envFileReadEnabled = false;
+    presentation.config.general.envFileWriteEnabled = false;
+    presentation.config.general.giftsEnabled = true;
+    presentation.config.general.paypiggiesEnabled = true;
+    presentation.config.logging.file.enabled = false;
+    presentation.config.logging.chat.enabled = false;
 
-    const lifecyclePlatformConfig: PlatformConfigOverride = { enabled: true };
+    presentation.config.twitch.enabled = false;
+    presentation.config.twitch.dataLoggingEnabled = false;
+    presentation.config.twitch.giftsEnabled = true;
+    presentation.config.twitch.paypiggiesEnabled = true;
+
+    presentation.config.youtube.enabled = false;
+    presentation.config.youtube.username = "test-channel";
+    presentation.config.youtube.dataLoggingEnabled = false;
+    presentation.config.youtube.giftsEnabled = true;
+    presentation.config.youtube.paypiggiesEnabled = true;
+
+    presentation.config.tiktok.enabled = false;
+    presentation.config.tiktok.dataLoggingEnabled = false;
+    presentation.config.tiktok.giftsEnabled = true;
+    presentation.config.tiktok.paypiggiesEnabled = true;
+
+    await presentation.start();
+    const addItemSpy = spyOn(presentation.queue, "addItem");
+
+    const lifecyclePlatformConfig: PlatformConfigOverride = {
+      enabled: true,
+      dataLoggingEnabled: false,
+    };
     if (platformKey === "youtube") {
       lifecyclePlatformConfig.username = "test-channel";
     }
 
     const platformLifecycleService = new PlatformLifecycleService({
       config: { [platformKey]: lifecyclePlatformConfig },
-      eventBus,
-      logger,
+      eventBus: presentation.bus,
+      logger: noOpLogger,
     });
 
-    const { runtime } = createTestAppRuntime(configOverrides, {
-      overrides: {
-        eventBus: createRuntimeEventBus(eventBus),
-        notificationManager,
-        displayQueue,
-        logger,
-      },
+    const cleanup = registerCleanup(async () => {
+      await platformLifecycleService.disconnectAll();
+      platformLifecycleService.dispose();
+      restoreAllMocks();
+      await presentation.dispose();
     });
 
     return {
-      eventBus,
-      logger,
-      displayQueue,
-      config,
-      notificationManager,
+      presentation,
+      addItemSpy,
       platformLifecycleService,
-      runtime,
+      cleanup,
     };
+  };
+
+  const createPlatformConstructor = (
+    platformKey: PlatformKey,
+    payload: PaypiggyPayload,
+    tokenDir: string,
+  ): PlatformConstructor => {
+    if (platformKey === "twitch") {
+      const auth = new TwitchAuth({
+        tokenStorePath: join(tokenDir, "twitch-tokens.json"),
+        clientId: "synthetic-client",
+        expectedUsername: "synthetic-user",
+        logger: noOpLogger,
+      });
+      registerCleanup(() => {
+        auth.dispose();
+      });
+
+      class ConfiguredTwitchPlatform extends TwitchPlatform {
+        constructor() {
+          super(
+            createTwitchConfigFixture({
+              enabled: false,
+              clientId: "synthetic-client",
+              dataLoggingEnabled: false,
+            }),
+            {
+              logger: noOpLogger,
+              twitchAuth: auth,
+            },
+          );
+        }
+
+        override async initialize(
+          handlers: Parameters<TwitchPlatform["initialize"]>[0] = {},
+        ) {
+          this.handlers = handlers;
+          await super.initialize(handlers);
+          await this.handlePaypiggyEvent(payload);
+          return undefined;
+        }
+      }
+
+      return ConfiguredTwitchPlatform as unknown as PlatformConstructor;
+    }
+
+    if (platformKey === "youtube") {
+      const innertubeService = new InnertubeService(
+        {
+          createWithTimeout: async () => ({
+            getChannel: async () => ({
+              videos: [],
+              getLiveStreams: async () => ({ videos: [] }),
+            }),
+            search: async () => ({ videos: [] }),
+            getInfo: async (id: string) => ({
+              basic_info: {
+                id,
+                is_live: false,
+                is_live_content: false,
+                view_count: 0,
+              },
+            }),
+          }),
+        },
+        { logger: noOpLogger },
+      );
+      const streamDetectionService = new YouTubeStreamDetectionService(
+        innertubeService,
+        { logger: noOpLogger },
+      );
+      registerCleanup(async () => {
+        await innertubeService.dispose();
+      });
+
+      class ConfiguredYouTubePlatform extends YouTubePlatform {
+        constructor() {
+          super(
+            createYouTubeConfigFixture({
+              enabled: false,
+              username: "test-channel",
+              dataLoggingEnabled: false,
+              envFileReadEnabled: false,
+              envFileWriteEnabled: false,
+            }),
+            {
+              logger: noOpLogger,
+              USER_AGENTS: ["test-agent"],
+              innertubeService,
+              streamDetectionService,
+            },
+          );
+        }
+
+        override async initialize(
+          handlers: Parameters<YouTubePlatform["initialize"]>[0] = {},
+        ) {
+          await super.initialize(handlers);
+          this._emitPlatformEvent(
+            "platform:paypiggy",
+            this.eventFactory.createPaypiggyEvent(payload),
+          );
+        }
+      }
+
+      return ConfiguredYouTubePlatform as unknown as PlatformConstructor;
+    }
+
+    const tiktokFixture = createTikTokLifetimeFixture({
+      enabled: false,
+      username: "synthetic-streamer",
+      dataLoggingEnabled: false,
+    });
+    registerCleanup(async () => {
+      await tiktokFixture.cleanup();
+    });
+
+    class ConfiguredTikTokPlatform extends TikTokPlatform {
+      constructor() {
+        super(
+          createTikTokConfigFixture({
+            enabled: false,
+            username: "synthetic-streamer",
+            dataLoggingEnabled: false,
+          }),
+          {
+            logger: noOpLogger,
+            retrySystem: tiktokFixture.retry,
+          },
+        );
+      }
+
+      override async initialize(
+        handlers: Parameters<TikTokPlatform["initialize"]>[0] = {},
+      ) {
+        const outcome = await super.initialize(handlers);
+        this._emitPlatformEvent("platform:paypiggy", payload);
+        return outcome;
+      }
+    }
+
+    return ConfiguredTikTokPlatform as unknown as PlatformConstructor;
   };
 
   const runPaypiggySmoke = async ({
@@ -227,39 +371,33 @@ describe("Paypiggy platform flows (smoke)", () => {
     assertFn,
     copyExpectations,
   }: PaypiggySmokeCase) => {
-    const harness = createHarness(platformKey);
-
-    class MockPlatform {
-      async initialize(handlers: PlatformHandlers) {
-        handlers[handlerName](payload);
-      }
-
-      on() {}
-
-      cleanup() {
-        return Promise.resolve();
-      }
-    }
+    expect(handlerName).toBe("onPaypiggy");
+    const harness = await createHarness(platformKey);
+    const PlatformConstructor = createPlatformConstructor(
+      platformKey,
+      payload,
+      harness.presentation.dir,
+    );
 
     try {
       await harness.platformLifecycleService.initializeAllPlatforms({
-        [platformKey]: MockPlatform,
+        [platformKey]: PlatformConstructor,
       });
       await harness.platformLifecycleService.waitForBackgroundInits();
-      await waitFor(
-        () => harness.displayQueue.addItem.mock.calls.length === 1,
-        { timeout: 100, interval: 1 },
-      );
+      await waitFor(() => harness.addItemSpy.mock.calls.length === 1, {
+        timeout: 500,
+        interval: 1,
+      });
+      await harness.presentation.drain();
 
-      expect(harness.displayQueue.addItem).toHaveBeenCalledTimes(1);
-      const queued = requireQueueItem(harness.displayQueue.addItem.mock.calls[0]?.[0]);
+      expect(harness.addItemSpy).toHaveBeenCalledTimes(1);
+      const queued = requireQueueItem(harness.addItemSpy.mock.calls[0]?.[0]);
       expect(queued.type).toBe("platform:paypiggy");
       expect(queued.platform).toBe(platformKey);
       assertUserFacingOutput(queued.data, copyExpectations);
       assertFn(queued);
     } finally {
-      harness.runtime.platformEventRouter?.dispose();
-      harness.platformLifecycleService.dispose();
+      await runCleanups();
     }
   };
 

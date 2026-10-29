@@ -18,76 +18,17 @@ import {
   ConnectionStateFactory,
 } from "../../src/utils/platform-connection-state";
 import { TwitchApiClient } from "../../src/utils/api-clients/twitch-api-client.ts";
+import { EnhancedHttpClient } from "../../src/utils/enhanced-http-client";
 import { TwitchViewerCountProvider } from "../../src/utils/viewer-count-providers";
 
-type TwitchConfig = { clientId?: string; channel?: string; username?: string; enabled?: boolean; eventSub?: { isActive: () => boolean } };
 type TwitchAuth = { refreshTokens: () => Promise<boolean> };
+type TwitchConfig = { clientId?: string; channel?: string; username?: string; enabled?: boolean; eventSub?: { isActive: () => boolean } };
 type HttpGetMock = ReturnType<typeof createMockFn> &
   ((url: string, options?: Record<string, unknown>) => Promise<Record<string, unknown>>);
 type HttpClient = { get: HttpGetMock };
-type EventSubLike = { isActive: () => boolean; initialize: () => Promise<void> };
-type LocalTwitchPlatformDependencies = {
-  twitchAuth: TwitchAuth;
-  TwitchEventSub: new () => EventSubLike;
-  enhancedHttpClient: HttpClient;
-};
-type StreamInfo = { isLive: boolean; viewerCount: number; stream: unknown };
-type MockedTwitchApiClient = TwitchApiClient & { getStreamInfo: ReturnType<typeof createMockFn> };
-
 const createHttpClient = (): HttpClient => ({
   get: createMockFn() as HttpGetMock,
 });
-
-class TwitchPlatform {
-  config: TwitchConfig;
-  twitchAuth: TwitchAuth;
-  eventSub: EventSubLike;
-  enhancedHttpClient: HttpClient;
-  apiClient: TwitchApiClient | null;
-  viewerCountProvider: TwitchViewerCountProvider | null;
-  logger = noOpLogger;
-
-  constructor(config: TwitchConfig, dependencies: LocalTwitchPlatformDependencies) {
-    this.config = config;
-    this.twitchAuth = dependencies.twitchAuth;
-    this.eventSub = new dependencies.TwitchEventSub();
-    this.enhancedHttpClient = dependencies.enhancedHttpClient;
-    this.apiClient = null;
-    this.viewerCountProvider = null;
-  }
-
-  async initialize(_handlers: Record<string, unknown>) {
-    this.apiClient = new TwitchApiClient(
-      this.twitchAuth,
-      this.config.clientId ? { clientId: this.config.clientId } : {},
-      this.logger,
-      {
-        enhancedHttpClient: this.enhancedHttpClient,
-      },
-    );
-    this.viewerCountProvider = new TwitchViewerCountProvider(
-      this.apiClient,
-      ConnectionStateFactory,
-      this.config,
-      null,
-      this.logger,
-    );
-    if (this.eventSub.initialize) {
-      await this.eventSub.initialize();
-    }
-  }
-
-  getConnectionState() {
-    return ConnectionStateFactory.createTwitchState(this.config, this.eventSub);
-  }
-
-  async getViewerCount() {
-    if (!this.viewerCountProvider) {
-      return 0;
-    }
-    return await this.viewerCountProvider.getViewerCount();
-  }
-}
 
 describe("TwitchPlatform Modular Refactor", () => {
   afterEach(() => {
@@ -305,27 +246,27 @@ describe("TwitchPlatform Modular Refactor", () => {
   });
 
   describe("TwitchViewerCountProvider Module", () => {
-    let mockApiClient: MockedTwitchApiClient;
+    let apiClient: TwitchApiClient;
+    let sdkGet: HttpGetMock;
     let configFixture: TwitchConfig;
     let mockLogger: typeof noOpLogger;
     let provider: TwitchViewerCountProvider;
 
     beforeEach(() => {
       mockLogger = noOpLogger;
-      const apiClientFixture = new TwitchApiClient(
-        { refreshTokens: createMockFn().mockResolvedValue(true) },
-        { clientId: "test_client_id" },
-        noOpLogger,
-        { enhancedHttpClient: createHttpClient() },
-      );
-      const getStreamInfo = createMockFn();
-      mockApiClient = Object.assign(apiClientFixture, { getStreamInfo });
+      secrets.twitch.accessToken = "synthetic-token";
+      sdkGet = createMockFn() as HttpGetMock;
+      apiClient = new TwitchApiClient(null, { clientId: "synthetic-client" }, noOpLogger, {
+        enhancedHttpClient: new EnhancedHttpClient({ logger: noOpLogger, axios: {
+          get: sdkGet, post: async () => ({}), put: async () => ({}), delete: async () => ({}),
+        } }),
+      });
       configFixture = {
         channel: "test_channel",
         eventSub: { isActive: () => true },
       };
       provider = new TwitchViewerCountProvider(
-        mockApiClient,
+        apiClient,
         ConnectionStateFactory,
         configFixture,
         null,
@@ -335,11 +276,9 @@ describe("TwitchPlatform Modular Refactor", () => {
 
     describe("when provider is ready", () => {
       it("returns the configured channel viewer count when ready", async () => {
-        mockApiClient.getStreamInfo.mockImplementation(async (channel: unknown): Promise<StreamInfo> => ({
-          isLive: true,
-          viewerCount: channel === "test_channel" ? 123 : 0,
-          stream: null,
-        }));
+        sdkGet.mockImplementation(async (url: unknown) => ({ data: { data: [{
+          viewer_count: String(url).includes("user_login=test_channel") ? 123 : 0,
+        }] } }));
 
         const count = await provider.getViewerCount();
 
@@ -347,10 +286,7 @@ describe("TwitchPlatform Modular Refactor", () => {
       });
 
       it("should return 0 for offline stream", async () => {
-        mockApiClient.getStreamInfo.mockResolvedValue({
-          isLive: false,
-          viewerCount: 0,
-        });
+        sdkGet.mockResolvedValue({ data: { data: [] } });
 
         const count = await provider.getViewerCount();
 
@@ -362,7 +298,7 @@ describe("TwitchPlatform Modular Refactor", () => {
       beforeEach(() => {
         const notReadyConfig = { ...configFixture, channel: "" };
         provider = new TwitchViewerCountProvider(
-          mockApiClient,
+          apiClient,
           ConnectionStateFactory,
           notReadyConfig,
           null,
@@ -374,112 +310,18 @@ describe("TwitchPlatform Modular Refactor", () => {
         const count = await provider.getViewerCount();
 
         expect(count).toBeNull();
-        expect(mockApiClient.getStreamInfo).not.toHaveBeenCalled();
+        expect(sdkGet).not.toHaveBeenCalled();
       });
     });
 
     describe("when API call fails", () => {
       it("returns unavailable and tracks the API error", async () => {
-        mockApiClient.getStreamInfo.mockRejectedValue(new Error("API Error"));
+        sdkGet.mockRejectedValue(new Error("API Error"));
 
         const count = await provider.getViewerCount();
 
         expect(count).toBeNull();
         expect(provider.getErrorStats().consecutiveErrors).toBe(1);
-      });
-    });
-  });
-
-  describe("TwitchPlatform Integration", () => {
-    let mockTwitchAuth: TwitchAuth;
-    let mockEventSub: EventSubLike;
-    let mockHttpClient: HttpClient;
-    let twitchPlatform: TwitchPlatform;
-
-    beforeEach(() => {
-      _resetForTesting();
-      initializeStaticSecrets();
-      secrets.twitch.accessToken = "test_token";
-      mockTwitchAuth = {
-        refreshTokens: createMockFn().mockResolvedValue(true),
-      };
-
-      mockEventSub = {
-        isActive: () => true,
-        initialize: createMockFn().mockResolvedValue(),
-      };
-      mockHttpClient = createHttpClient();
-
-      const config = {
-        enabled: true,
-        channel: "test_channel",
-        username: "test_user",
-      };
-
-      class MockTwitchEventSub implements EventSubLike {
-        isActive = mockEventSub.isActive;
-        initialize = async (): Promise<void> => { await mockEventSub.initialize?.(); };
-      }
-
-      twitchPlatform = new TwitchPlatform(config, {
-        twitchAuth: mockTwitchAuth,
-        enhancedHttpClient: mockHttpClient,
-        TwitchEventSub: MockTwitchEventSub,
-      });
-    });
-
-    describe("when platform initializes", () => {
-      it("should create all modular components", async () => {
-        await twitchPlatform.initialize({});
-
-        expect(twitchPlatform.apiClient).toBeDefined();
-        expect(twitchPlatform.viewerCountProvider).toBeDefined();
-        expect(twitchPlatform.eventSub).toBeDefined();
-      });
-    });
-
-    describe("when getting connection state", () => {
-      beforeEach(async () => {
-        await twitchPlatform.initialize({});
-      });
-
-      it("returns Twitch connection metadata from platform state", () => {
-        const state = twitchPlatform.getConnectionState();
-
-        expect(state).toHaveProperty("isConnected", true);
-        expect(state).toHaveProperty("platform", "twitch");
-        expect(state).toHaveProperty("channel", "test_channel");
-        expect(state).toHaveProperty("username", "test_user");
-      });
-    });
-
-    describe("when getting viewer count", () => {
-      beforeEach(async () => {
-        await twitchPlatform.initialize({});
-
-        mockHttpClient.get.mockResolvedValue({
-          data: {
-            data: [{ viewer_count: 456 }],
-          },
-          status: 200,
-          statusText: "OK",
-          headers: {},
-          config: {},
-        });
-      });
-
-      it("returns viewer count data from the active Twitch stream", async () => {
-        const count = await twitchPlatform.getViewerCount();
-
-        expect(count).toBe(456);
-      });
-
-      it("should return 0 when provider not initialized", async () => {
-        twitchPlatform.viewerCountProvider = null;
-
-        const count = await twitchPlatform.getViewerCount();
-
-        expect(count).toBe(0);
       });
     });
   });

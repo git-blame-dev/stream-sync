@@ -35,11 +35,13 @@
     "typecheck:scripts": "tsc --noEmit -p tsconfig.scripts.json",
     "typecheck:tools": "tsc --noEmit -p tsconfig.tools.json",
     "typecheck:all": "bun run typecheck:src && bun run typecheck:tests && bun run typecheck:scripts && bun run typecheck:tools && bun run typecheck:gui && bun run typecheck:gui-node",
-    "test": "NODE_ENV=test bun test",
-    "test:coverage": "NODE_ENV=test bun test --coverage --coverage-reporter=text --coverage-dir=/tmp/bun-coverage tests",
-    "verify": "bun run lint && bun run typecheck:all && bun run test:coverage && bun run build"
+    "test": "NODE_ENV=test bun test --no-env-file",
+    "test:coverage": "NODE_ENV=test bun test --no-env-file --coverage --coverage-reporter=text --coverage-dir=/tmp/bun-coverage tests",
+    "verify": "bun run lint && bun run typecheck:all && bun --no-env-file run test:coverage && bun run build",
+    "test:browser": "playwright test --config tests/browser/playwright.config.ts"
   },
   "devDependencies": {
+    "@playwright/test": "1.64.1",
     "@types/bun": "^1.4.4",
     "@types/ini": "4.1.1",
     "@types/node": "^25.9.9",

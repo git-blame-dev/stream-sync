@@ -143,6 +143,8 @@ class ViewerCountExtractionService {
     YouTubeViewerExtractor: ViewerExtractor;
     config: ExtractionConfig;
     stats: ExtractionStats;
+    private totalResponseTime = 0;
+    private readonly startedAt = performance.now();
 
     constructor(innertubeService: InnertubeServiceLike, dependencies: ServiceDependencies = {}) {
         this.innertubeService = innertubeService;
@@ -170,7 +172,7 @@ class ViewerCountExtractionService {
     }
     
     async extractViewerCount(videoId: string, options: ExtractViewerCountOptions = {}): Promise<ExtractionResponse> {
-        const startTime = Date.now();
+        const startTime = performance.now();
         this.stats.totalRequests++;
         
         try {
@@ -193,7 +195,7 @@ class ViewerCountExtractionService {
             });
             options.signal?.throwIfAborted();
             
-            const responseTime = Date.now() - startTime;
+            const responseTime = performance.now() - startTime;
             const success = extractionResult.success === true && isValidViewerCount(extractionResult.count);
             this._updateStats(success, responseTime);
             
@@ -230,7 +232,7 @@ class ViewerCountExtractionService {
             }
             
         } catch (error: unknown) {
-            const responseTime = Date.now() - startTime;
+            const responseTime = performance.now() - startTime;
             this._updateStats(false, responseTime, error);
             
             this._handleExtractionError(EXTRACTION_FAILURE, new Error(EXTRACTION_FAILURE));
@@ -367,7 +369,7 @@ error?: string;
 getStats(): ExtractionStats & { uptime: number; successRate: string } {
         return {
             ...this.stats,
-            uptime: Date.now() - this.stats.startTime,
+            uptime: performance.now() - this.startedAt,
             successRate: this.stats.totalRequests > 0 ? 
                 (this.stats.successfulExtractions / this.stats.totalRequests * 100).toFixed(2) + '%' : '0%'
         };
@@ -396,8 +398,9 @@ _updateStats(success: boolean, responseTime: number, error: unknown = null): voi
             }
         }
         
-        const totalTime = this.stats.averageResponseTime * (this.stats.totalRequests - 1) + responseTime;
-        this.stats.averageResponseTime = Math.round(totalTime / this.stats.totalRequests);
+        this.totalResponseTime += responseTime;
+        const completed = this.stats.successfulExtractions + this.stats.failedExtractions;
+        this.stats.averageResponseTime = Math.round(this.totalResponseTime / completed);
     }
 
 _handleExtractionError(message: string, error: unknown): void {

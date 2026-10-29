@@ -23,11 +23,6 @@ import {
     createMockTikTokPlatform,
     createMockSpamDetector,
     createMockAuthManager,
-    createMockAuthService,
-    createMockTokenRefresh,
-    createMockAuthInitializer,
-    createMockOAuthHandler,
-    createMockHttpClient,
     createMockTikTokPlatformDependencies,
     createMockWebSocketMessage,
     createTwitchWebSocketMessage,
@@ -164,16 +159,6 @@ describe('mock-factories helper behavior', () => {
         });
     }
 
-    it('omits bearer authorization from refresh headers without dropping client headers', async () => {
-        const refresh = createMockTokenRefresh({ config: { accessToken: 'synthetic-access-token', clientId: 'synthetic-client' } });
-        const headers = await refresh.getRequestHeaders('/synthetic-token', 'token_refresh');
-        expect(headers.authHeaders).not.toHaveProperty('Authorization');
-        expect(headers.combined).not.toHaveProperty('Authorization');
-        expect(headers.combined['Client-ID']).toBe('synthetic-client');
-        expect(headers.combined.Accept).toBe('application/json');
-        expect((await refresh.getRequestHeaders('/synthetic-validation', 'token_validation')).combined.Authorization).toBe('Bearer synthetic-access-token');
-    });
-
     it('generates concurrent messages with each supported raw event type and user identity', () => {
         const messages = createWebSocketMessageSimulator().generateConcurrentPlatformMessages();
         expect(messages.twitch).toMatchObject({ metadata: { subscription_type: 'channel.chat.message' }, payload: { event: { chatter_user_name: 'TestUser_twitch', chatter_user_id: 'synthetic-concurrent-twitch' } } });
@@ -265,10 +250,11 @@ describe('mock-factories helper behavior', () => {
 
     it('supports display queue, obs manager, retry system, and lifecycle reset helpers', async () => {
         const queue = createMockDisplayQueue({ shouldThrowError: true, errorMessage: 'queue-failure' });
-        expect(() => queue.addItem({})).toThrow('queue-failure');
+        expect(() => queue.addItem({ type: "chat", platform: "twitch", data: {} })).toThrow('queue-failure');
 
         const healthyQueue = createMockDisplayQueue();
-        await expect(healthyQueue.addItem({ id: 'item-1' })).resolves.toBe(true);
+        const item = { type: 'chat', platform: 'twitch', data: { id: 'synthetic-item-1' } };
+        expect(healthyQueue.addItem(item)).toEqual([item]);
 
         const obsManager = createMockOBSManager('disconnected');
         expect(obsManager.isConnected()).toBe(false);
@@ -351,7 +337,7 @@ describe('mock-factories helper behavior', () => {
         expect(invalid.malformedData).toBe(true);
     });
 
-    it('provides auth and HTTP mock contracts used by auth workflows', async () => {
+    it('provides active auth-manager fixture contracts', async () => {
         const authReady = createMockAuthManager('READY');
         expect(authReady.getUserId()).toBe('test-broadcaster-id');
         await expect(authReady.getAccessToken()).resolves.toBe('test-access-token');
@@ -361,26 +347,7 @@ describe('mock-factories helper behavior', () => {
         expect(() => authError.getUserId()).toThrow('Authentication not initialized');
         await expect(authError.initialize()).rejects.toThrow('initialization failed');
 
-        const tokenRefresh = createMockTokenRefresh({
-            config: {
-                accessToken: 'test-access-token',
-                refreshToken: 'test-refresh-token',
-                clientId: 'test-client-id'
-            }
-        });
-        const headers = await tokenRefresh.getRequestHeaders('/foo', 'token_validation');
-        expect(headers.combined.Authorization).toContain('Bearer');
-        const lifecycle = await tokenRefresh.handleLifecycleEvent('request_start');
-        expect(lifecycle.actions).toContain('log_start');
 
-        const oauthHandler = createMockOAuthHandler();
-        const configResult = await oauthHandler.updateConfiguration();
-        expect(configResult.implementationType).toBe('delegated_to_central');
-
-        const httpClient = createMockHttpClient();
-        const builtRequest = await httpClient.buildRequest({ endpoint: '/users', authentication: true, retryable: true });
-        expect(builtRequest.builderSource).toBe('centralized_request_builder');
-        expect(builtRequest.builtRequest.url).toContain('api.twitch.tv');
     });
 
     it('builds TikTok dependency bundle for connection/event tests', async () => {
@@ -457,12 +424,6 @@ describe('mock-factories helper behavior', () => {
         const spamDetector = createMockSpamDetector({ shouldShow: false, isLowValue: true });
         expect(spamDetector.handleDonationSpam().shouldShow).toBe(false);
         expect(spamDetector.isLowValueDonation()).toBe(true);
-
-        const authService = createMockAuthService();
-        expect(await authService.validateToken()).toBe(true);
-        const authInitializer = createMockAuthInitializer();
-        const initTimeout = await authInitializer.getTimeoutConfig('token_validation');
-        expect(initTimeout.requestTimeout).toBe(10000);
 
         const websocketChat = createTwitchWebSocketMessage('channel.chat.message', { userId: 'u1', username: 'name', message: 'hello' });
         expect(websocketChat.metadata.message_type).toBe('notification');
@@ -636,80 +597,6 @@ describe('mock-factories helper behavior', () => {
         expect(pushConnection.getState()).toBe('CONNECTED');
         await expect(pushConnection.disconnect()).resolves.toBe(true);
 
-        const tokenRefresh = createMockTokenRefresh({
-            config: {
-                accessToken: 'test-access-token',
-                refreshToken: 'test-refresh-token',
-                clientId: 'test-client-id'
-            }
-        });
-        await expect(tokenRefresh.getRetryConfig('network_timeout')).resolves.toEqual(expect.objectContaining({ maxRetries: 3 }));
-        await expect(tokenRefresh.getRetryConfig('rate_limit')).resolves.toEqual(expect.objectContaining({ maxRetries: 5 }));
-        await expect(tokenRefresh.getRetryConfig('server_error')).resolves.toEqual(expect.objectContaining({ maxRetries: 2 }));
-        await expect(tokenRefresh.getRetryConfig('other')).resolves.toEqual(expect.objectContaining({ maxRetries: 3 }));
 
-        await expect(tokenRefresh.handleResponseStatus({ status: 503 })).resolves.toEqual(expect.objectContaining({ shouldRetry: true }));
-        await expect(tokenRefresh.parseResponseData({ data: { access_token: 'a', expires_in: 10 } }, 'token_response')).resolves.toEqual(expect.objectContaining({ parsedFields: ['access_token', 'expires_in'] }));
-        await expect(tokenRefresh.parseResponseData({ data: { data: [{ id: 'u1', login: 'login1' }] } }, 'user_response')).resolves.toEqual(expect.objectContaining({ parsedFields: ['id', 'login'] }));
-        await expect(tokenRefresh.parseResponseData({ data: { error: 'bad', error_description: 'failed' } }, 'error_response')).resolves.toEqual(expect.objectContaining({ parsedFields: ['error', 'error_description'] }));
-        await expect(tokenRefresh.parseResponseData({ data: {} }, 'unknown')).resolves.toEqual(expect.objectContaining({ parsedFields: [] }));
-
-        await expect(tokenRefresh.handleNetworkError({ code: 'ECONNREFUSED' })).resolves.toEqual(expect.objectContaining({ category: 'connection_refused' }));
-        await expect(tokenRefresh.handleNetworkError({ code: 'ETIMEDOUT' })).resolves.toEqual(expect.objectContaining({ category: 'request_timeout' }));
-        await expect(tokenRefresh.handleNetworkError({ code: 'ENOTFOUND' })).resolves.toEqual(expect.objectContaining({ category: 'dns_error' }));
-        await expect(tokenRefresh.handleNetworkError({ code: 'X' })).resolves.toEqual(expect.objectContaining({ category: 'unknown_error' }));
-
-        await expect(tokenRefresh.handleRequestCancellation('user_initiated')).resolves.toEqual(expect.objectContaining({ handled: true }));
-        await expect(tokenRefresh.handleRequestCancellation('timeout_exceeded')).resolves.toEqual(expect.objectContaining({ handled: true }));
-        await expect(tokenRefresh.handleRequestCancellation('auth_change')).resolves.toEqual(expect.objectContaining({ handled: true }));
-        await expect(tokenRefresh.handleRequestCancellation('other')).resolves.toEqual(expect.objectContaining({ handled: true }));
-
-        await expect(tokenRefresh.handleLifecycleEvent('request_start')).resolves.toEqual(expect.objectContaining({ actions: ['log_start', 'set_timeout', 'track_request'] }));
-        await expect(tokenRefresh.handleLifecycleEvent('request_progress')).resolves.toEqual(expect.objectContaining({ actions: ['update_progress', 'check_cancellation'] }));
-        await expect(tokenRefresh.handleLifecycleEvent('request_complete')).resolves.toEqual(expect.objectContaining({ actions: ['log_completion', 'cleanup_resources', 'update_metrics'] }));
-        await expect(tokenRefresh.handleLifecycleEvent('other')).resolves.toEqual(expect.objectContaining({ actions: [] }));
-
-        await expect(tokenRefresh.queueRequest('token_validation')).resolves.toEqual(expect.objectContaining({ priority: 'high' }));
-        await expect(tokenRefresh.queueRequest('user_data_fetch')).resolves.toEqual(expect.objectContaining({ priority: 'medium' }));
-        await expect(tokenRefresh.queueRequest('optional_metadata')).resolves.toEqual(expect.objectContaining({ priority: 'low' }));
-        await expect(tokenRefresh.queueRequest('unknown')).resolves.toEqual(expect.objectContaining({ priority: 'medium' }));
-        await expect(tokenRefresh.performHttpOperation({ op: 'validate' })).resolves.toEqual(expect.objectContaining({ operationSource: 'centralized_http_client' }));
-
-        const requestWithoutAuth = await tokenRefresh.buildRequest({ endpoint: '/users', authentication: false, retryable: false });
-        expect(requestWithoutAuth.builtRequest.headers.Authorization).toBeUndefined();
-        expect(requestWithoutAuth.builtRequest.retryConfig.maxRetries).toBe(0);
-
-        await expect(tokenRefresh.getTimeoutConfig('token_refresh')).resolves.toEqual(expect.objectContaining({ requestTimeout: 30000 }));
-        await expect(tokenRefresh.getTimeoutConfig('user_data_fetch')).resolves.toEqual(expect.objectContaining({ requestTimeout: 15000 }));
-        await expect(tokenRefresh.getTimeoutConfig('other')).resolves.toEqual(expect.objectContaining({ requestTimeout: 10000 }));
-
-        const authInitializer = createMockAuthInitializer({
-            config: {
-                accessToken: 'test-access-token',
-                refreshToken: 'test-refresh-token',
-                clientId: 'test-client-id'
-            }
-        });
-        await expect(authInitializer.getRequestHeaders('/users', 'token_validation')).resolves.toEqual(expect.objectContaining({ combined: expect.objectContaining({ Authorization: 'Bearer test-access-token' }) }));
-
-        const oauthHandler = createMockOAuthHandler({
-            config: {
-                accessToken: 'test-access-token',
-                refreshToken: 'test-refresh-token',
-                clientId: 'test-client-id'
-            }
-        });
-        await expect(oauthHandler.getRequestHeaders('/users', 'token_validation')).resolves.toEqual(expect.objectContaining({ combined: expect.objectContaining({ Authorization: 'Bearer test-access-token' }) }));
-        expect(oauthHandler.categorizeError()).toEqual({ category: 'recoverable' });
-
-        const httpClient = createMockHttpClient({
-            config: {
-                accessToken: 'test-access-token',
-                refreshToken: 'test-refresh-token',
-                clientId: 'test-client-id'
-            }
-        });
-        await expect(httpClient.getRequestHeaders('/users', 'token_validation')).resolves.toEqual(expect.objectContaining({ combined: expect.objectContaining({ Authorization: 'Bearer test-access-token' }) }));
-        await expect(httpClient.buildRequest({ endpoint: '/users', authentication: true, retryable: true })).resolves.toEqual(expect.objectContaining({ builderSource: 'centralized_request_builder' }));
     });
 });

@@ -13,9 +13,11 @@ const { getRawTestConfig } = nodeRequire('../helpers/config-fixture') as {
 
 process.env.NODE_ENV = 'test';
 
-const tempConfigPath = path.join(os.tmpdir(), 'stream-sync-test-config.ini');
+const tempConfigDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'stream-sync-test-config-'));
+const tempConfigPath = path.join(tempConfigDirectory, 'config.ini');
 fs.writeFileSync(tempConfigPath, ini.stringify(getRawTestConfig()));
 process.env.CHAT_BOT_CONFIG_PATH = tempConfigPath;
+process.once('exit', () => fs.rmSync(tempConfigDirectory, { recursive: true, force: true }));
 
 type ProcessExitCode = Parameters<typeof process.exit>[0];
 type NoopProcessExit = typeof process.exit & { calls: ProcessExitCode[] };

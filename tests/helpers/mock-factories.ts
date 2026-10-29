@@ -1,3 +1,4 @@
+import type { DisplayQueueItem } from '../../src/interfaces/DisplayQueue';
 
 import { setupAutomatedCleanup } from './mock-lifecycle';
 import { waitForDelay } from './time-utils';
@@ -20,34 +21,6 @@ type GiftWorkflowResult = UnknownRecord & {
 type NormalizedMessageResult = UnknownRecord & {
     displayMessage: string;
     preservesUnicode: boolean;
-};
-type Logger = { debug: () => void; info: () => void; warn: () => void; error: () => void };
-type AuthConfig = { accessToken?: string; refreshToken?: string; clientId?: string };
-type AuthFactoryOptions = UnknownRecord & {
-    config?: AuthConfig;
-    logger?: Logger;
-    fileSystem?: unknown;
-    axios?: unknown;
-    _sharedTiming?: number;
-};
-type RequestHeaders = {
-    standardHeaders: Record<string, string>;
-    authHeaders: Record<string, string>;
-    combined: Record<string, string>;
-};
-type TimeoutConfig = { requestTimeout: number; retryTimeout: number };
-type RetryConfig = { maxRetries: number; backoffMultiplier?: number };
-type LifecycleResult = { actions: string[]; timing: Record<string, number> };
-type BuiltRequestResult = {
-    builderSource: string;
-    builtRequest: {
-        url: string;
-        headers: Record<string, string>;
-        method: string;
-        timeout: number;
-        retryConfig: { maxRetries: number };
-    };
-    requestSpec: UnknownRecord;
 };
 type MockMethodMap = Record<string, unknown>;
 type MockPlatformBehavior = UnknownRecord & {
@@ -910,17 +883,17 @@ const createMockDisplayQueue = (queueState: DisplayQueueState = {}, methodOverri
     const throwOnAdd = methodOverrides.shouldThrowError ?? normalizedQueueState.shouldThrowError;
     const errorMessage = methodOverrides.errorMessage ?? normalizedQueueState.errorMessage;
     const addItemMock = throwOnAdd
-        ? createMockFn().mockImplementation(() => {
+        ? createMockFn<[DisplayQueueItem], readonly DisplayQueueItem[]>().mockImplementation(() => {
             throw new Error(errorMessage || 'DisplayQueue error');
         })
-        : createMockFn().mockResolvedValue(true);
+        : createMockFn<[DisplayQueueItem], readonly DisplayQueueItem[]>((item) => [item]);
     const baseMethods = {
         addItem: addItemMock,
-        addSequence: createMockFn<[unknown[]], boolean>().mockImplementation((items) => {
+        addSequence: createMockFn<[DisplayQueueItem[]], readonly DisplayQueueItem[]>().mockImplementation((items) => {
             for (const item of items) {
                 addItemMock(item);
             }
-            return true;
+            return items;
         }),
         addToQueue: createMockFn().mockResolvedValue(true),
         processQueue: createMockFn().mockResolvedValue(true),
@@ -2655,341 +2628,6 @@ const createMockPlatformConnection = (handlerOverrides: UnknownRecord = {}) => {
 };
 
 
-const createMockAuthService = (options: AuthFactoryOptions = {}) => {
-    return {
-        config: options.config || {
-            accessToken: 'test-access-token',
-            refreshToken: 'test-refresh-token'
-        },
-        logger: options.logger || noOpLogger,
-
-        validateToken: createMockFn().mockResolvedValue(true),
-        isPlaceholderToken: createMockFn().mockResolvedValue(false),
-        validateTokenFormat: createMockFn().mockResolvedValue(true),
-        checkTokenExpiration: createMockFn().mockResolvedValue(false),
-        getValidationCriteria: createMockFn().mockResolvedValue({}),
-        performComprehensiveValidation: createMockFn().mockResolvedValue({ valid: true }),
-        getValidationImplementationInfo: createMockFn().mockResolvedValue({ type: 'mock' }),
-
-        _mockType: 'AuthService'
-    };
-};
-
-const createHttpMethods = (options: AuthFactoryOptions = {}) => {
-    const standardHeaders = {
-        'User-Agent': 'TwitchAppRuntime/1.0',
-        'Accept': 'application/json',
-        'Content-Type': 'application/json'
-    };
-    
-    const authHeaders = options.config?.accessToken ? {
-        'Authorization': `Bearer ${options.config.accessToken}`,
-        'Client-ID': options.config?.clientId || 'test-client-id'
-    } : {};
-    
-    return {
-        getRequestHeaders: createMockFn<[string, string], Promise<RequestHeaders>>().mockImplementation(async (_endpoint, operation) => {
-            const requestAuthHeaders = operation === 'token_refresh'
-                ? { 'Client-ID': options.config?.clientId ?? 'test-client-id' }
-                : authHeaders;
-            return {
-                standardHeaders,
-                authHeaders: requestAuthHeaders,
-                combined: { ...standardHeaders, ...requestAuthHeaders }
-            };
-        }),
-        
-        getTimeoutConfig: createMockFn<[string], Promise<TimeoutConfig>>().mockImplementation(async (operation) => {
-            const timeoutMap: Record<string, TimeoutConfig> = {
-                'token_validation': { requestTimeout: 10000, retryTimeout: 15000 },
-                'token_refresh': { requestTimeout: 30000, retryTimeout: 45000 },
-                'user_data_fetch': { requestTimeout: 15000, retryTimeout: 20000 }
-            };
-            
-            return timeoutMap[operation] ?? { requestTimeout: 10000, retryTimeout: 15000 };
-        }),
-        
-        getRetryConfig: createMockFn<[string], Promise<RetryConfig>>().mockImplementation(async (errorType) => {
-            const retryMap: Record<string, RetryConfig> = {
-                'network_timeout': { maxRetries: 3, backoffMultiplier: 2 },
-                'rate_limit': { maxRetries: 5, backoffMultiplier: 1.5 },
-                'server_error': { maxRetries: 2, backoffMultiplier: 3 }
-            };
-            
-            return retryMap[errorType] ?? { maxRetries: 3, backoffMultiplier: 2 };
-        }),
-        
-        handleResponseStatus: createMockFn<[unknown], Promise<UnknownRecord>>().mockImplementation(async (response) => {
-            const responseRecord = asRecord(response);
-            const status = Number(responseRecord.status);
-            const statusCategories: Record<number, UnknownRecord> = {
-                200: { category: 'success', shouldRetry: false },
-                401: { category: 'auth_error', shouldRetry: false },
-                429: { category: 'rate_limit', shouldRetry: true },
-                500: { category: 'server_error', shouldRetry: true },
-                503: { category: 'service_unavailable', shouldRetry: true }
-            };
-            
-            return statusCategories[status] ?? { category: 'unknown', shouldRetry: false };
-        }),
-        
-        parseResponseData: createMockFn<[unknown, string], Promise<UnknownRecord>>().mockImplementation(async (response, format) => {
-            const responseData = asRecord(asRecord(response).data);
-            const userData = Array.isArray(responseData.data) ? asRecord(responseData.data[0]) : {};
-            const formatMappings: Record<string, UnknownRecord> = {
-                'token_response': {
-                    parsedFields: ['access_token', 'expires_in'],
-                    parsedData: {
-                        accessToken: responseData.access_token,
-                        expiresIn: responseData.expires_in
-                    }
-                },
-                'user_response': {
-                    parsedFields: ['id', 'login'],
-                    parsedData: {
-                        id: userData.id,
-                        login: userData.login
-                    }
-                },
-                'error_response': {
-                    parsedFields: ['error', 'error_description'],
-                    parsedData: {
-                        error: responseData.error,
-                        description: responseData.error_description
-                    }
-                }
-            };
-            
-            return formatMappings[format] ?? { parsedFields: [], parsedData: {} };
-        }),
-        
-        handleNetworkError: createMockFn<[unknown], Promise<UnknownRecord>>().mockImplementation(async (error) => {
-            const errorCode = String(asRecord(error).code ?? '');
-            const errorMappings: Record<string, UnknownRecord> = {
-                'ECONNREFUSED': {
-                    category: 'connection_refused',
-                    userMessage: 'Unable to connect to Twitch servers'
-                },
-                'ETIMEDOUT': {
-                    category: 'request_timeout',
-                    userMessage: 'Request to Twitch timed out'
-                },
-                'ENOTFOUND': {
-                    category: 'dns_error',
-                    userMessage: 'Cannot resolve Twitch server address'
-                }
-            };
-            
-            return errorMappings[errorCode] ?? {
-                category: 'unknown_error',
-                userMessage: 'An unexpected network error occurred'
-            };
-        }),
-        
-        handleRequestCancellation: createMockFn<[string], Promise<UnknownRecord>>().mockImplementation(async (reason) => {
-            const cancellationMessages: Record<string, string> = {
-                'user_initiated': 'Request cancelled by user',
-                'timeout_exceeded': 'Request cancelled due to timeout',
-                'auth_change': 'Request cancelled due to authentication change'
-            };
-            
-            return {
-                handled: true,
-                message: cancellationMessages[reason] ?? 'Request cancelled for unknown reason'
-            };
-        }),
-        
-        handleLifecycleEvent: createMockFn<[string], Promise<LifecycleResult>>().mockImplementation(async (event) => {
-            const mockTime = options._sharedTiming ?? createTimestamp().ms;
-            
-            const lifecycleActions: Record<string, LifecycleResult> = {
-                'request_start': {
-                    actions: ['log_start', 'set_timeout', 'track_request'],
-                    timing: { started: mockTime }
-                },
-                'request_progress': {
-                    actions: ['update_progress', 'check_cancellation'],
-                    timing: { progress: mockTime }
-                },
-                'request_complete': {
-                    actions: ['log_completion', 'cleanup_resources', 'update_metrics'],
-                    timing: { completed: mockTime }
-                }
-            };
-            
-            return lifecycleActions[event] ?? { actions: [], timing: {} };
-        }),
-        
-        queueRequest: createMockFn<[string], Promise<UnknownRecord>>().mockImplementation(async (requestType) => {
-            const priorityMappings: Record<string, UnknownRecord> = {
-                'token_validation': { priority: 'high', queuePosition: 1 },
-                'user_data_fetch': { priority: 'medium', queuePosition: 2 },
-                'optional_metadata': { priority: 'low', queuePosition: 3 }
-            };
-            
-            return priorityMappings[requestType] ?? { priority: 'medium', queuePosition: 2 };
-        }),
-        
-        performHttpOperation: createMockFn<[unknown], Promise<UnknownRecord>>().mockImplementation(async (operation) => {
-            return {
-                operationSource: 'centralized_http_client',
-                hasDuplicateLogic: false,
-                httpUtilityReference: 'shared_http_utilities',
-                result: { success: true, data: operation }
-            };
-        }),
-        
-        buildRequest: createMockFn<[unknown], Promise<BuiltRequestResult>>().mockImplementation(async (requestSpec) => {
-            const spec = asRecord(requestSpec);
-            const endpoint = typeof spec.endpoint === 'string' ? spec.endpoint : '';
-            const builtRequest = {
-                url: `https://api.twitch.tv${endpoint}`,
-                headers: { ...standardHeaders, ...(spec.authentication ? authHeaders : {}) },
-                method: 'GET',
-                timeout: 10000,
-                retryConfig: spec.retryable ? { maxRetries: 3 } : { maxRetries: 0 }
-            };
-            
-            return {
-                builderSource: 'centralized_request_builder',
-                builtRequest,
-                requestSpec: spec
-            };
-        })
-    };
-};
-
-const createMockTokenRefresh = (options: AuthFactoryOptions = {}) => {
-    return {
-        config: options.config || {
-            accessToken: 'test-access-token',
-            refreshToken: 'test-refresh-token'
-        },
-        logger: options.logger || noOpLogger,
-        fileSystem: options.fileSystem || createMockFileSystem(),
-
-        validateToken: createMockFn().mockResolvedValue(true),
-        isPlaceholderToken: createMockFn().mockResolvedValue(false),
-        validateTokenFormat: createMockFn().mockResolvedValue(true),
-        checkTokenExpiration: createMockFn().mockResolvedValue(false),
-        getValidationCriteria: createMockFn().mockResolvedValue({}),
-        performComprehensiveValidation: createMockFn().mockResolvedValue({ valid: true }),
-        getValidationImplementationInfo: createMockFn().mockResolvedValue({ type: 'mock' }),
-
-        updateConfig: createMockFn().mockResolvedValue({
-            success: true,
-            updatePattern: 'unified_token_update',
-            updateSteps: ['validate_input', 'backup_current_config', 'apply_updates', 'verify_changes'],
-            userExperience: 'consistent_update_flow',
-            implementationType: 'delegated_to_central'
-        }),
-        validateConfiguration: createMockFn().mockResolvedValue(true),
-        updateTokens: createMockFn().mockResolvedValue(true),
-        validateConfigData: createMockFn().mockResolvedValue(true),
-        updateWithBackup: createMockFn().mockResolvedValue(true),
-        handleConfigUpdateError: createMockFn().mockResolvedValue({ handled: true }),
-        attemptUpdateWithRollback: createMockFn().mockResolvedValue(true),
-        getErrorRecoveryGuidance: createMockFn().mockResolvedValue({ guidance: 'retry' }),
-        performStateChange: createMockFn().mockResolvedValue(true),
-        getSynchronizedConfig: createMockFn().mockResolvedValue({}),
-        performConfigOperation: createMockFn().mockResolvedValue(true),
-        getCurrentState: createMockFn().mockResolvedValue({}),
-
-        ...createHttpMethods(options),
-
-        _mockType: 'TokenRefresh'
-    };
-};
-
-const createMockAuthInitializer = (options: AuthFactoryOptions = {}) => {
-    return {
-        config: options.config || {
-            accessToken: 'test-access-token',
-            refreshToken: 'test-refresh-token'
-        },
-        logger: options.logger || noOpLogger,
-
-        validateToken: createMockFn().mockResolvedValue(true),
-        isPlaceholderToken: createMockFn().mockResolvedValue(false),
-        validateTokenFormat: createMockFn().mockResolvedValue(true),
-        checkTokenExpiration: createMockFn().mockResolvedValue(false),
-        getValidationCriteria: createMockFn().mockResolvedValue({}),
-        performComprehensiveValidation: createMockFn().mockResolvedValue({ valid: true }),
-        getValidationImplementationInfo: createMockFn().mockResolvedValue({ type: 'mock' }),
-
-        ...createHttpMethods(options),
-
-        _mockType: 'AuthInitializer'
-    };
-};
-
-const createMockOAuthHandler = (options: AuthFactoryOptions = {}) => {
-    return {
-        config: options.config || {
-            accessToken: 'test-access-token',
-            refreshToken: 'test-refresh-token'
-        },
-        logger: options.logger || noOpLogger,
-        fileSystem: options.fileSystem || createMockFileSystem(),
-
-        updateConfig: createMockFn().mockResolvedValue({
-            success: true,
-            updatePattern: 'unified_token_update',
-            updateSteps: ['validate_input', 'backup_current_config', 'apply_updates', 'verify_changes'],
-            userExperience: 'consistent_update_flow',
-            implementationType: 'delegated_to_central'
-        }),
-        validateConfiguration: createMockFn().mockResolvedValue(true),
-        updateConfiguration: createMockFn().mockResolvedValue({
-            success: true,
-            updatePattern: 'unified_token_update',
-            updateSteps: ['validate_input', 'backup_current_config', 'apply_updates', 'verify_changes'],
-            userExperience: 'consistent_update_flow',
-            implementationType: 'delegated_to_central'
-        }),
-        createBackup: createMockFn().mockResolvedValue(true),
-        rollbackConfiguration: createMockFn().mockResolvedValue(true),
-        handleFileSystemError: createMockFn().mockReturnValue({ handled: true }),
-        maintainConfigurationState: createMockFn().mockResolvedValue(true),
-        synchronizeConfigurationChanges: createMockFn().mockResolvedValue(true),
-
-        categorizeError: createMockFn().mockReturnValue({ category: 'recoverable' }),
-        attemptRecovery: createMockFn().mockResolvedValue({ recovered: true }),
-        getImplementationInfo: createMockFn().mockReturnValue({ type: 'mock' }),
-
-        validateConfigData: createMockFn().mockResolvedValue(true),
-        updateWithBackup: createMockFn().mockResolvedValue(true),
-        handleConfigUpdateError: createMockFn().mockResolvedValue({ handled: true }),
-        attemptUpdateWithRollback: createMockFn().mockResolvedValue(true),
-        getErrorRecoveryGuidance: createMockFn().mockResolvedValue({ guidance: 'retry' }),
-        performStateChange: createMockFn().mockResolvedValue(true),
-        getSynchronizedConfig: createMockFn().mockResolvedValue({}),
-        performConfigOperation: createMockFn().mockResolvedValue(true),
-        performComprehensiveValidation: createMockFn().mockResolvedValue({ valid: true }),
-        getCurrentState: createMockFn().mockResolvedValue({}),
-
-        ...createHttpMethods(options),
-
-        _mockType: 'OAuthHandler'
-    };
-};
-
-const createMockHttpClient = (options: AuthFactoryOptions = {}) => {
-    return {
-        config: options.config || {
-            accessToken: 'test-access-token',
-            refreshToken: 'test-refresh-token',
-            clientId: 'test-client-id'
-        },
-        logger: options.logger || noOpLogger,
-        axios: options.axios || { request: createMockFn(), get: createMockFn(), post: createMockFn() },
-        
-        ...createHttpMethods(options),
-        
-        _mockType: 'HttpClient'
-    };
-};
-
 function createMockWebSocketMessage(platform: 'twitch', eventType: string, eventData?: UnknownRecord): TwitchWebSocketMessage;
 function createMockWebSocketMessage(platform: 'youtube', eventType: string, eventData?: UnknownRecord): YouTubeWebSocketMessage;
 function createMockWebSocketMessage(platform: 'tiktok', eventType: string, eventData?: UnknownRecord): TikTokWebSocketMessage;
@@ -3377,11 +3015,6 @@ export {
     createMockOBSConnection,
     createMockAuthManager,
 
-    createMockAuthService,
-    createMockTokenRefresh,
-    createMockAuthInitializer,
-    createMockOAuthHandler,
-    createMockHttpClient,
 
     resetMock,
     clearMockCalls,

@@ -1,5 +1,6 @@
 import type { GuiBadgeImage, GuiMessagePart, GuiRowDto, GuiRowKind, RowPresentationOverride } from '../../contracts/gui';
 import { DEFAULT_AVATAR_URL } from '../../constants/avatar';
+import { utf16BudgetPrefix } from '../../utils/utf16-budget-prefix';
 import { normalizeRowEffects, normalizeRowSpriteUrl, normalizeRowTheme } from '../../core/row-presentation';
 import { getValidMessageParts, normalizeBadgeImages } from '../../utils/message-parts';
 
@@ -122,7 +123,7 @@ function applyMessageLimit(text: string, limit: number): string {
     if (!Number.isFinite(limit) || limit <= 0) {
         return text;
     }
-    return text.slice(0, limit);
+    return utf16BudgetPrefix(text, limit);
 }
 
 function normalizeTimestamp(value: unknown): string | null {

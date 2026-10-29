@@ -1,30 +1,20 @@
 import { describe, test, afterEach, expect } from "bun:test";
 
-import EventEmitter from "events";
-import NotificationManager from "../../src/notifications/NotificationManager";
 import { YouTubePlatform } from "../../src/platforms/youtube";
-import {
-  initializeTestLogging,
-  createMockPlatformDependencies,
-} from "../helpers/test-setup";
+import { InnertubeService } from "../../src/services/innertube-service";
+import { YouTubeStreamDetectionService } from "../../src/services/youtube-stream-detection-service";
+import { ViewerCountExtractionService } from "../../src/services/viewer-count-extraction-service";
+import { initializeTestLogging } from "../helpers/test-setup";
 import { getSyntheticFixture } from "../helpers/platform-test-data";
-import { createMockDisplayQueue, noOpLogger } from "../helpers/mock-factories";
-import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
-import {
-  createConfigFixture,
-  createYouTubeConfigFixture,
-} from "../helpers/config-fixture";
+import { noOpLogger } from "../helpers/mock-factories";
+import { restoreAllMocks } from "../helpers/bun-mock-utils";
+import { createYouTubeConfigFixture } from "../helpers/config-fixture";
+import { createMainPresentationFixture } from "../helpers/main-presentation-fixture";
 
 initializeTestLogging();
 
 const realSuperChat = getSyntheticFixture("youtube", "superchat");
 
-type EventHandler = (event: unknown) => void;
-type TestEventBus = {
-  emit: (event: string, payload: unknown) => boolean;
-  on: (event: string, handler: EventHandler) => EventEmitter;
-  subscribe: (event: string, handler: EventHandler) => () => void;
-};
 type YouTubeGiftPayload = {
   type: "platform:gift";
   platform: "youtube";
@@ -80,26 +70,44 @@ function assertNotificationResult(
   expect(typeof value.notificationData.logMessage).toBe("string");
 }
 
-const createEventBus = (): TestEventBus => {
-  const emitter = new EventEmitter();
-  return {
-    emit: emitter.emit.bind(emitter),
-    on: emitter.on.bind(emitter),
-    subscribe: (event: string, handler: EventHandler) => {
-      emitter.on(event, handler);
-      return () => emitter.off(event, handler);
-    },
-  };
+type PlatformHarness = {
+  platform: YouTubePlatform;
+  getCapturedPayload: () => unknown;
+  cleanup: () => Promise<void>;
 };
 
-const createPlatformHarness = () => {
+const createPlatformHarness = (): PlatformHarness => {
   const logger = noOpLogger;
   const platformConfig = createYouTubeConfigFixture({
     enabled: true,
     username: "test-channel",
+    dataLoggingPath: "",
+    dataLoggingEnabled: false,
+    envFileReadEnabled: false,
+    envFileWriteEnabled: false,
   });
-  const dependencies = createMockPlatformDependencies("youtube", { logger });
-  const platform = new YouTubePlatform(platformConfig, dependencies);
+  const metadata = new InnertubeService(
+    {
+      createWithTimeout: async () => ({
+        getInfo: async (_videoId: string) => ({}),
+        getChannel: async () => ({
+          videos: [],
+          getLiveStreams: async () => ({ videos: [] }),
+        }),
+      }),
+    },
+    { logger },
+  );
+  const detector = new YouTubeStreamDetectionService(metadata, { logger });
+  const viewerExtractionService = new ViewerCountExtractionService(metadata, {
+    logger,
+  });
+  const platform = new YouTubePlatform(platformConfig, {
+    logger,
+    innertubeService: metadata,
+    streamDetectionService: detector,
+    viewerExtractionService,
+  });
   let capturedPayload: unknown;
 
   platform.handlers = {
@@ -112,47 +120,40 @@ const createPlatformHarness = () => {
   return {
     platform,
     getCapturedPayload: () => capturedPayload,
-  };
-};
-
-const createNotificationManagerHarness = () => {
-  const displayQueue = createMockDisplayQueue();
-  const logger = noOpLogger;
-  const eventBus = createEventBus();
-  const config = createConfigFixture({
-    general: {
-      debugEnabled: false,
-      giftsEnabled: true,
+    cleanup: async () => {
+      try {
+        await platform.cleanup();
+      } finally {
+        try {
+          await detector.cleanup();
+        } finally {
+          await metadata.dispose();
+        }
+      }
     },
-    youtube: { enabled: true },
-  });
-
-  const notificationManager = new NotificationManager({
-    displayQueue,
-    logger,
-    eventBus,
-    config,
-    constants: require("../../src/core/constants"),
-    obsGoals: { processDonationGoal: createMockFn() },
-    vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) },
-    userTrackingService: {
-      isFirstMessage: createMockFn().mockResolvedValue(false),
-    },
-  });
-
-  return {
-    displayQueue,
-    notificationManager,
   };
 };
 
 describe("YouTube data flow integrity", () => {
-  afterEach(() => {
-    restoreAllMocks();
+  const cleanups: Array<() => Promise<void>> = [];
+
+  afterEach(async () => {
+    try {
+      while (cleanups.length > 0) {
+        const fn = cleanups.pop();
+        if (fn) {
+          await fn();
+        }
+      }
+    } finally {
+      restoreAllMocks();
+    }
   });
 
   test("builds user-facing output from platform event payloads", async () => {
-    const { platform, getCapturedPayload } = createPlatformHarness();
+    const { platform, getCapturedPayload, cleanup } = createPlatformHarness();
+    cleanups.push(cleanup);
+
     await platform.handleChatMessage(realSuperChat);
     const capturedPayload = getCapturedPayload();
 
@@ -164,8 +165,22 @@ describe("YouTube data flow integrity", () => {
     expect(typeof capturedPayload.timestamp).toBe("string");
     expect(capturedPayload.timestamp.trim().length).toBeGreaterThan(0);
 
-    const { displayQueue, notificationManager } =
-      createNotificationManagerHarness();
+    const presentation = await createMainPresentationFixture();
+    cleanups.push(() => presentation.dispose());
+    presentation.config.logging.file.enabled = false;
+    presentation.config.logging.chat.enabled = false;
+    presentation.config.general.debugEnabled = false;
+    presentation.config.general.giftsEnabled = true;
+    presentation.config.vfx.filePath = "/synthetic-only";
+    await presentation.start();
+    presentation.config.youtube.enabled = true;
+    presentation.config.youtube.giftsEnabled = true;
+
+    const notificationManager = presentation.runtime.notificationManager;
+    if (!notificationManager) {
+      throw new Error("Expected runtime notificationManager to be initialized");
+    }
+
     const result = await notificationManager.handleNotification(
       "platform:gift",
       capturedPayload.platform,
@@ -181,6 +196,6 @@ describe("YouTube data flow integrity", () => {
     expect(result.notificationData.ttsMessage.trim().length).toBeGreaterThan(0);
     expect(result.notificationData.logMessage).toEqual(expect.any(String));
     expect(result.notificationData.logMessage.trim().length).toBeGreaterThan(0);
-    expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
+    expect(presentation.queue.getQueueLength()).toBe(1);
   });
 });

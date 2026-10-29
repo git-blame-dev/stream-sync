@@ -1,20 +1,15 @@
-import { describe, test, afterEach, expect } from "bun:test";
+import { describe, test, afterEach, expect, spyOn } from "bun:test";
 
-import EventEmitter from "events";
 import { PlatformLifecycleService } from "../../src/services/PlatformLifecycleService.ts";
-import NotificationManager from "../../src/notifications/NotificationManager";
-import { createTestAppRuntime } from "../helpers/runtime-test-harness";
-import { createMockDisplayQueue, noOpLogger } from "../helpers/mock-factories";
+import { TikTokPlatform } from "../../src/platforms/tiktok.ts";
+import { createMainPresentationFixture } from "../helpers/main-presentation-fixture.ts";
+import { createTikTokLifetimeFixture } from "../helpers/tiktok-connector-fixture.ts";
+import { noOpLogger } from "../helpers/mock-factories";
 import { expectNoTechnicalArtifacts } from "../helpers/assertion-helpers";
-import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
-import { createConfigFixture } from "../helpers/config-fixture";
+import { restoreAllMocks } from "../helpers/bun-mock-utils";
+import { createTikTokConfigFixture } from "../helpers/config-fixture";
+import { waitFor } from "../helpers/event-driven-testing";
 
-type TestEventHandler = (event: Record<string, unknown>) => Promise<void> | void;
-type TestEventBus = {
-  emit: (event: string, payload: unknown) => void;
-  on: (event: string, handler: (...args: unknown[]) => void) => EventEmitter;
-  subscribe: (event: string, handler: TestEventHandler) => () => void;
-};
 type UserFacingData = {
   displayMessage: string;
   ttsMessage: string;
@@ -25,7 +20,9 @@ type UserFacingData = {
   currency?: string;
 };
 type QueueItem = { type: string; platform: string; data: UserFacingData };
-type LifecycleHandlers = { onGift: (payload: Record<string, unknown>) => void };
+type PlatformConstructor = Parameters<
+  PlatformLifecycleService["initializeAllPlatforms"]
+>[0][string];
 
 const requireQueueItem = (value: unknown): QueueItem => {
   if (!value || typeof value !== "object") {
@@ -39,28 +36,35 @@ const requireQueueItem = (value: unknown): QueueItem => {
 };
 
 describe("TikTok gift platform flow (smoke)", () => {
-  afterEach(() => {
-    restoreAllMocks();
-  });
+  const cleanups: Array<() => Promise<void> | void> = [];
 
-  const createEventBus = (): TestEventBus => {
-    const emitter = new EventEmitter();
-    return {
-      emit: (event: string, payload: unknown) => {
-        emitter.emit(event, payload);
-      },
-      on: emitter.on.bind(emitter),
-      subscribe: (event: string, handler: TestEventHandler) => {
-        const listener = (payload: unknown) => {
-          if (payload && typeof payload === "object") {
-            void handler(payload as Record<string, unknown>);
-          }
-        };
-        emitter.on(event, listener);
-        return () => emitter.off(event, listener);
-      },
+  const registerCleanup = (fn: () => Promise<void> | void) => {
+    let executed = false;
+    const idempotentFn = async () => {
+      if (executed) return;
+      executed = true;
+      await fn();
     };
+    cleanups.push(idempotentFn);
+    return idempotentFn;
   };
+
+  const runCleanups = async () => {
+    while (cleanups.length > 0) {
+      const cleanup = cleanups.pop();
+      if (cleanup) {
+        await cleanup();
+      }
+    }
+  };
+
+  afterEach(async () => {
+    try {
+      await runCleanups();
+    } finally {
+      restoreAllMocks();
+    }
+  });
 
   const assertNonEmptyString = (value: string) => {
     expect(typeof value).toBe("string");
@@ -93,79 +97,93 @@ describe("TikTok gift platform flow (smoke)", () => {
   };
 
   test("routes gift through lifecycle, router, and runtime", async () => {
-    const eventBus = createEventBus();
-    const logger = noOpLogger;
-    const displayQueue = createMockDisplayQueue();
-    const configOverrides = {
-      general: {
-        debugEnabled: false,
-        giftsEnabled: true,
-        paypiggiesEnabled: true,
-      },
-      tiktok: { enabled: true },
-      obs: { enabled: false },
-    };
-    const config = createConfigFixture(configOverrides);
-    const notificationManager = new NotificationManager({
-      displayQueue,
-      logger,
-      eventBus,
-      config,
-      constants: require("../../src/core/constants"),
-      obsGoals: { processDonationGoal: createMockFn() },
-      vfxCommandService: {
-        getVFXConfig: createMockFn().mockResolvedValue(null),
-      },
-      userTrackingService: {
-        isFirstMessage: createMockFn().mockResolvedValue(false),
-      },
-    });
+    const presentation = await createMainPresentationFixture();
+    presentation.config.general.debugEnabled = false;
+    presentation.config.general.envFileReadEnabled = false;
+    presentation.config.general.envFileWriteEnabled = false;
+    presentation.config.general.giftsEnabled = true;
+    presentation.config.general.paypiggiesEnabled = true;
+    presentation.config.logging.file.enabled = false;
+    presentation.config.logging.chat.enabled = false;
+    presentation.config.tiktok.enabled = false;
+    presentation.config.tiktok.dataLoggingEnabled = false;
+    presentation.config.tiktok.giftsEnabled = true;
+    presentation.config.tiktok.paypiggiesEnabled = true;
+
+    await presentation.start();
+    const addItemSpy = spyOn(presentation.queue, "addItem");
 
     const platformLifecycleService = new PlatformLifecycleService({
-      config: { tiktok: { enabled: true } },
-      eventBus,
-      logger,
+      config: { tiktok: { enabled: true, dataLoggingEnabled: false } },
+      eventBus: presentation.bus,
+      logger: noOpLogger,
     });
 
-    const { runtime } = createTestAppRuntime(configOverrides, {
-      eventBus,
-      notificationManager,
-      displayQueue,
-      logger,
+    const tiktokFixture = createTikTokLifetimeFixture({
+      enabled: false,
+      username: "synthetic-streamer",
+      dataLoggingEnabled: false,
     });
 
-    class MockTikTokPlatform {
-      async initialize(handlers: LifecycleHandlers) {
-        handlers.onGift({
+    registerCleanup(async () => {
+      await tiktokFixture.cleanup();
+      await platformLifecycleService.disconnectAll();
+      platformLifecycleService.dispose();
+      restoreAllMocks();
+      await presentation.dispose();
+    });
+
+    class ConfiguredTikTokPlatform extends TikTokPlatform {
+      constructor() {
+        super(
+          createTikTokConfigFixture({
+            enabled: false,
+            username: "synthetic-streamer",
+            dataLoggingEnabled: false,
+          }),
+          {
+            logger: noOpLogger,
+            retrySystem: tiktokFixture.retry,
+          },
+        );
+      }
+
+      override async initialize(
+        handlers: Parameters<TikTokPlatform["initialize"]>[0] = {},
+      ) {
+        const outcome = await super.initialize(handlers);
+        await this.handleOfficialGift({
           username: "TikFan",
           userId: "tt-gift-1",
           giftType: "Rose",
           giftCount: 3,
           repeatCount: 3,
           amount: 3,
+          unitAmount: 1,
           currency: "coins",
           id: "tt-gift-event-1",
           timestamp: "2024-01-01T00:00:00.000Z",
         });
-      }
-
-      on() {}
-
-      cleanup() {
-        return Promise.resolve();
+        return outcome;
       }
     }
 
     try {
-      const platformModules: Parameters<PlatformLifecycleService["initializeAllPlatforms"]>[0] = {
-        tiktok: MockTikTokPlatform,
+      const platformModules: Parameters<
+        PlatformLifecycleService["initializeAllPlatforms"]
+      >[0] = {
+        tiktok: ConfiguredTikTokPlatform as unknown as PlatformConstructor,
       };
       await platformLifecycleService.initializeAllPlatforms(platformModules);
       await platformLifecycleService.waitForBackgroundInits();
-      await new Promise(setImmediate);
+      await waitFor(() => addItemSpy.mock.calls.length === 1, {
+        timeout: 500,
+        interval: 1,
+      });
+      await presentation.drain();
 
-      expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
-      const queued = requireQueueItem(displayQueue.addItem.mock.calls[0]?.[0]);
+      expect(addItemSpy).toHaveBeenCalledTimes(1);
+      const queued = requireQueueItem(addItemSpy.mock.calls[0]?.[0]);
       expect(queued.type).toBe("platform:gift");
       expect(queued.platform).toBe("tiktok");
       expect(queued.data.username).toBe("TikFan");
@@ -177,8 +195,7 @@ describe("TikTok gift platform flow (smoke)", () => {
         keyword: "Rose",
       });
     } finally {
-      runtime.platformEventRouter?.dispose();
-      platformLifecycleService.dispose();
+      await runCleanups();
     }
   });
 });

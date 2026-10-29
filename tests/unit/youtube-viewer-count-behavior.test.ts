@@ -1,88 +1,53 @@
-import { describe, expect, it, afterEach } from "bun:test";
-import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
-import {
-  noOpLogger,
-  createMockNotificationManager,
-} from "../helpers/mock-factories";
-import { YouTubePlatform } from "../../src/platforms/youtube";
+import { expect, it } from 'bun:test';
+import { YouTubePlatform } from '../../src/platforms/youtube';
+import { InnertubeService } from '../../src/services/innertube-service';
+import { YouTubeStreamDetectionService } from '../../src/services/youtube-stream-detection-service';
+import { ViewerCountExtractionService } from '../../src/services/viewer-count-extraction-service';
+import { ViewerCountProvider } from '../../src/utils/viewer-count-providers';
+import { noOpLogger } from '../helpers/mock-factories';
 
-type ViewerCountProvider = {
-  getViewerCount: () => Promise<number | null>;
-  getViewerCountForVideo?: (videoId: string) => Promise<number>;
-};
+function fixture() {
+  const requests: string[] = [];
+  let failed = false;
+  const owner = new InnertubeService({ createWithTimeout: async () => ({ getInfo: async (id: string) => {
+    requests.push(id);
+    if (failed) throw new Error('Synthetic metadata failure');
+    return { basic_info: { id, is_live: true, view_count: 321 } };
+  } }) }, { logger: noOpLogger });
+  const platform = new YouTubePlatform({ enabled: false, enableAPI: false, dataLoggingEnabled: false,
+    envFileReadEnabled: false, envFileWriteEnabled: false }, { logger: noOpLogger, innertubeService: owner,
+    streamDetectionService: new YouTubeStreamDetectionService(owner, { logger: noOpLogger }),
+    viewerExtractionService: new ViewerCountExtractionService(owner, { logger: noOpLogger }) });
+  return { platform, requests, fail(value: boolean) { failed = value; },
+    async dispose() { try { await platform.cleanup(); } finally { await owner.dispose(); } } };
+}
 
-const createPlatform = (provider: ViewerCountProvider | null = null) => {
-  const notificationManager = createMockNotificationManager();
-  const platform = new YouTubePlatform(
-    {
-      youtube: { viewerCountMethod: "youtubei" },
-      enabled: true,
-      channel: "test-channel",
-    },
-    {
-      logger: noOpLogger,
-      notificationManager,
-      streamDetectionService: {
-        detectLiveStreams: createMockFn().mockResolvedValue({
-          success: true,
-          videoIds: [],
-        }),
-      },
-    },
-  );
-  platform.viewerCountProvider = provider;
-  return platform;
-};
+it('per-video lookup reaches the actual provider and metadata owner for the requested ID', async () => {
+  const h = fixture();
+  try {
+    expect(await h.platform.getViewerCountForVideo('synthetic-video')).toBe(321);
+    expect(h.requests).toEqual(['synthetic-video']);
+  } finally { await h.dispose(); }
+});
 
-describe("YouTubePlatform viewer count behavior", () => {
-  afterEach(() => {
-    restoreAllMocks();
+for (const mode of ['absent provider', 'provider without per-video capability'] as const) {
+  it(`per-video lookup is unavailable for ${mode} without a metadata request`, async () => {
+    const h = fixture();
+    try {
+      h.platform.viewerCountProvider = mode === 'absent provider' ? null : new ViewerCountProvider('synthetic', noOpLogger);
+      expect(await h.platform.getViewerCountForVideo('synthetic-video')).toBeNull();
+      expect(h.requests).toEqual([]);
+    } finally { await h.dispose(); }
   });
+}
 
-  it("returns provider value for the requested video id", async () => {
-    const provider = {
-      getViewerCount: createMockFn(() => Promise.resolve(0)),
-      getViewerCountForVideo: createMockFn((videoId: string) =>
-        Promise.resolve(videoId === "video-123" ? 321 : 0),
-      ),
-    };
-    const platform = createPlatform(provider);
-
-    const result = await platform.getViewerCountForVideo("video-123");
-
-    expect(result).toBe(321);
-  });
-
-  it("returns unavailable when no provider is configured", async () => {
-    const platform = createPlatform(null);
-
-    const result = await platform.getViewerCountForVideo("video-123");
-
-    expect(result).toBeNull();
-  });
-
-  it("returns unavailable when provider does not support per-video lookup", async () => {
-    const provider = {
-      getViewerCount: createMockFn(() => Promise.resolve(0)),
-    };
-    const platform = createPlatform(provider);
-
-    const result = await platform.getViewerCountForVideo("video-123");
-
-    expect(result).toBeNull();
-  });
-
-  it("returns unavailable when provider throws", async () => {
-    const provider = {
-      getViewerCount: createMockFn(() => Promise.resolve(0)),
-      getViewerCountForVideo: createMockFn().mockRejectedValue(
-        new Error("network"),
-      ),
-    };
-    const platform = createPlatform(provider);
-
-    const result = await platform.getViewerCountForVideo("video-123");
-
-    expect(result).toBeNull();
-  });
+it('external metadata failure is unavailable and the following actual request recovers', async () => {
+  const h = fixture();
+  try {
+    h.fail(true);
+    expect(await h.platform.getViewerCountForVideo('synthetic-video')).toBeNull();
+    h.fail(false);
+    expect(await h.platform.getViewerCountForVideo('synthetic-video')).toBe(321);
+    expect(h.requests).toEqual(['synthetic-video', 'synthetic-video']);
+  } finally { await h.dispose(); }
 });

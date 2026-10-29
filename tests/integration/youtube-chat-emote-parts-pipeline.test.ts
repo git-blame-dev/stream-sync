@@ -1,28 +1,11 @@
-import { describe, test, expect } from "bun:test";
-import EventEmitter from "events";
-
-import { PlatformEventRouter } from "../../src/services/PlatformEventRouter.ts";
-import { ChatNotificationRouter } from "../../src/services/ChatNotificationRouter.ts";
+import { describe, test, afterEach, expect, spyOn } from "bun:test";
+import { restoreAllMocks } from "../helpers/bun-mock-utils";
+import { createMainPresentationFixture } from "../helpers/main-presentation-fixture";
 import { PlatformEvents } from "../../src/interfaces/PlatformEvents";
-import { createConfigFixture } from "../helpers/config-fixture";
-import { createMockDisplayQueue, noOpLogger } from "../helpers/mock-factories";
 
-type ChatRouterRuntime = {
-  config: ReturnType<typeof createConfigFixture>;
-  displayQueue: ReturnType<typeof createMockDisplayQueue>;
-  handleChatMessage: (
-    platform: string,
-    normalizedData: Record<string, unknown>,
-  ) => Promise<unknown>;
-};
-
-type TestEventBus = {
-  emit: (event: string, payload: unknown) => boolean;
-  subscribe: (
-    event: string,
-    handler: (payload: unknown) => Promise<void>,
-  ) => () => void;
-};
+type MainPresentationFixture = Awaited<
+  ReturnType<typeof createMainPresentationFixture>
+>;
 
 type QueuedChatItem = {
   type: string;
@@ -40,184 +23,136 @@ function expectQueuedChatItem(value: unknown): asserts value is QueuedChatItem {
   );
 }
 
-const createEventBus = (): TestEventBus => {
-  const emitter = new EventEmitter();
-  return {
-    emit: (event, payload) => emitter.emit(event, payload),
-    subscribe: (event, handler) => {
-      const listener = (payload: unknown) => {
-        void handler(payload);
-      };
-      emitter.on(event, listener);
-      return () => emitter.off(event, listener);
-    },
-  };
-};
-
 describe("YouTube emote chat parts pipeline (integration)", () => {
-  test("preserves canonical message.parts from router to display queue", async () => {
-    const eventBus = createEventBus();
-    const config = createConfigFixture({
-      general: {
-        messagesEnabled: true,
-        logChatMessages: false,
-      },
-      youtube: {
-        enabled: true,
-        messagesEnabled: true,
-      },
-      obs: { enabled: false },
-    });
-    const displayQueue = createMockDisplayQueue();
-    const runtime: ChatRouterRuntime = {
-      config,
-      displayQueue,
-      handleChatMessage: async (_platform, _normalizedData) => {},
-    };
-    const chatRouter = new ChatNotificationRouter({
-      runtime,
-      logger: noOpLogger,
-      config,
-    });
+  let activePresentation: MainPresentationFixture | null = null;
 
-    runtime.handleChatMessage = (platform, normalizedData) =>
-      chatRouter.handleChatMessage(platform, normalizedData);
-
-    const platformEventRouter = new PlatformEventRouter({
-      eventBus,
-      runtime,
-      notificationManager: { handleNotification: async () => {} },
-      config,
-      logger: noOpLogger,
-    });
-
+  afterEach(async () => {
+    const presentation = activePresentation;
+    activePresentation = null;
     try {
-      eventBus.emit("platform:event", {
-        platform: "youtube",
-        type: PlatformEvents.CHAT_MESSAGE,
-        data: {
-          username: "test-youtube-user",
-          userId: "UC_TEST_CHANNEL_700000",
-          avatarUrl:
-            "https://yt3.ggpht.example.invalid/test-youtube-user=w48-h48-c-k-nd",
-          message: {
-            text: "",
-            parts: [
-              {
-                type: "emote",
-                platform: "youtube",
-                emoteId: "UC_TEST_EMOTE_700/TEST_EMOTE_700",
-                imageUrl:
-                  "https://yt3.ggpht.example.invalid/test-youtube-emote-700=w48-h48-c-k-nd",
-              },
-            ],
-          },
-          timestamp: "2024-01-01T00:00:00.000Z",
-          isMod: false,
-          isPaypiggy: false,
-          isBroadcaster: false,
-          metadata: {},
-        },
-      });
-
-      await new Promise(setImmediate);
-
-      expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
-      const firstCall = displayQueue.addItem.mock.calls.at(0);
-      expect(firstCall).toBeDefined();
-      if (!firstCall) throw new Error("Expected a queued chat item");
-      const [queued] = firstCall;
-      expectQueuedChatItem(queued);
-      expect(queued.type).toBe("chat");
-      expect(queued.platform).toBe("youtube");
-      expect(queued.data.message).toEqual({
-        text: "",
-        parts: [
-          {
-            type: "emote",
-            platform: "youtube",
-            emoteId: "UC_TEST_EMOTE_700/TEST_EMOTE_700",
-            imageUrl:
-              "https://yt3.ggpht.example.invalid/test-youtube-emote-700=w48-h48-c-k-nd",
-          },
-        ],
-      });
+      restoreAllMocks();
     } finally {
-      platformEventRouter.dispose();
+      if (presentation) {
+        await presentation.dispose();
+      }
     }
   });
 
-  test("preserves non-custom emoji glyph text without emitting emote parts", async () => {
-    const eventBus = createEventBus();
-    const config = createConfigFixture({
-      general: {
-        messagesEnabled: true,
-        logChatMessages: false,
-      },
-      youtube: {
-        enabled: true,
-        messagesEnabled: true,
-      },
-      obs: { enabled: false },
-    });
-    const displayQueue = createMockDisplayQueue();
-    const runtime: ChatRouterRuntime = {
-      config,
-      displayQueue,
-      handleChatMessage: async (_platform, _normalizedData) => {},
+  const startYouTubeChatIntegrationFixture = async () => {
+    const presentation = await createMainPresentationFixture();
+    activePresentation = presentation;
+
+    presentation.config.general.envFileReadEnabled = false;
+    presentation.config.general.envFileWriteEnabled = false;
+    presentation.config.logging.file.enabled = false;
+    presentation.config.logging.chat.enabled = false;
+    presentation.config.general.messagesEnabled = true;
+    presentation.config.general.logChatMessages = false;
+    presentation.config.general.greetingsEnabled = false;
+    presentation.config.youtube.messagesEnabled = true;
+    presentation.config.youtube.greetingsEnabled = false;
+    presentation.config.youtube.dataLoggingEnabled = false;
+
+    await presentation.start();
+
+    const displayQueue = {
+      addItem: spyOn(presentation.queue, "addItem"),
     };
-    const chatRouter = new ChatNotificationRouter({
-      runtime,
-      logger: noOpLogger,
-      config,
-    });
 
-    runtime.handleChatMessage = (platform, normalizedData) =>
-      chatRouter.handleChatMessage(platform, normalizedData);
+    return { eventBus: presentation.bus, displayQueue };
+  };
 
-    const platformEventRouter = new PlatformEventRouter({
-      eventBus,
-      runtime,
-      notificationManager: { handleNotification: async () => {} },
-      config,
-      logger: noOpLogger,
-    });
+  test("preserves canonical message.parts from router to display queue", async () => {
+    const { eventBus, displayQueue } =
+      await startYouTubeChatIntegrationFixture();
 
-    try {
-      eventBus.emit("platform:event", {
-        platform: "youtube",
-        type: PlatformEvents.CHAT_MESSAGE,
-        data: {
-          username: "test-youtube-unicode-user",
-          userId: "UC_TEST_CHANNEL_700001",
-          avatarUrl:
-            "https://yt3.ggpht.example.invalid/test-youtube-unicode-user=w48-h48-c-k-nd",
-          message: {
-            text: "hi how are you 🙏goodbye 💔",
-          },
-          timestamp: "2024-01-01T00:00:00.000Z",
-          isMod: false,
-          isPaypiggy: false,
-          isBroadcaster: false,
-          metadata: {},
+    eventBus.emit("platform:event", {
+      platform: "youtube",
+      type: PlatformEvents.CHAT_MESSAGE,
+      data: {
+        username: "test-youtube-user",
+        userId: "UC_TEST_CHANNEL_700000",
+        avatarUrl:
+          "https://yt3.ggpht.example.invalid/test-youtube-user=w48-h48-c-k-nd",
+        message: {
+          text: "",
+          parts: [
+            {
+              type: "emote",
+              platform: "youtube",
+              emoteId: "UC_TEST_EMOTE_700/TEST_EMOTE_700",
+              imageUrl:
+                "https://yt3.ggpht.example.invalid/test-youtube-emote-700=w48-h48-c-k-nd",
+            },
+          ],
         },
-      });
+        timestamp: "2024-01-01T00:00:00.000Z",
+        isMod: false,
+        isPaypiggy: false,
+        isBroadcaster: false,
+        metadata: {},
+      },
+    });
 
-      await new Promise(setImmediate);
+    await new Promise(setImmediate);
 
-      expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
-      const firstCall = displayQueue.addItem.mock.calls.at(0);
-      expect(firstCall).toBeDefined();
-      if (!firstCall) throw new Error("Expected a queued chat item");
-      const [queued] = firstCall;
-      expectQueuedChatItem(queued);
-      expect(queued.type).toBe("chat");
-      expect(queued.platform).toBe("youtube");
-      expect(queued.data.message).toEqual({
-        text: "hi how are you 🙏goodbye 💔",
-      });
-    } finally {
-      platformEventRouter.dispose();
-    }
+    expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
+    const firstCall = displayQueue.addItem.mock.calls.at(0);
+    expect(firstCall).toBeDefined();
+    if (!firstCall) throw new Error("Expected a queued chat item");
+    const [queued] = firstCall;
+    expectQueuedChatItem(queued);
+    expect(queued.type).toBe("chat");
+    expect(queued.platform).toBe("youtube");
+    expect(queued.data.message).toEqual({
+      text: "",
+      parts: [
+        {
+          type: "emote",
+          platform: "youtube",
+          emoteId: "UC_TEST_EMOTE_700/TEST_EMOTE_700",
+          imageUrl:
+            "https://yt3.ggpht.example.invalid/test-youtube-emote-700=w48-h48-c-k-nd",
+        },
+      ],
+    });
+  });
+
+  test("preserves non-custom emoji glyph text without emitting emote parts", async () => {
+    const { eventBus, displayQueue } =
+      await startYouTubeChatIntegrationFixture();
+
+    eventBus.emit("platform:event", {
+      platform: "youtube",
+      type: PlatformEvents.CHAT_MESSAGE,
+      data: {
+        username: "test-youtube-unicode-user",
+        userId: "UC_TEST_CHANNEL_700001",
+        avatarUrl:
+          "https://yt3.ggpht.example.invalid/test-youtube-unicode-user=w48-h48-c-k-nd",
+        message: {
+          text: "hi how are you \ud83d\ude4fgoodbye \ud83d\udc94",
+        },
+        timestamp: "2024-01-01T00:00:00.000Z",
+        isMod: false,
+        isPaypiggy: false,
+        isBroadcaster: false,
+        metadata: {},
+      },
+    });
+
+    await new Promise(setImmediate);
+
+    expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
+    const firstCall = displayQueue.addItem.mock.calls.at(0);
+    expect(firstCall).toBeDefined();
+    if (!firstCall) throw new Error("Expected a queued chat item");
+    const [queued] = firstCall;
+    expectQueuedChatItem(queued);
+    expect(queued.type).toBe("chat");
+    expect(queued.platform).toBe("youtube");
+    expect(queued.data.message).toEqual({
+      text: "hi how are you \ud83d\ude4fgoodbye \ud83d\udc94",
+    });
   });
 });

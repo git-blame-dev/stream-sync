@@ -170,13 +170,58 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Test
-        run: bun run test:coverage
+        run: bun --no-env-file run test:coverage
+
+  browser:
+    name: Browser acceptance
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Cache Bun packages
+        uses: actions/cache@v5
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ env.BUN_VERSION }}-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-${{ env.BUN_VERSION }}-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Install Chromium and system dependencies
+        run: bun run playwright install --with-deps chromium
+
+      - name: Run browser acceptance tests
+        run: bun --no-env-file run test:browser
+
+      - name: Upload browser failure traces
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: stream-sync-browser-failure-traces
+          path: test-results/browser/**/trace.zip
+          if-no-files-found: ignore
+          retention-days: 7
 
   build:
     name: GUI build
     runs-on: ubuntu-24.04
     timeout-minutes: 15
-    needs: [lint, typecheck, test, release-scope]
+    needs: [lint, typecheck, test, browser, release-scope]
     if: github.event_name == 'pull_request' || needs.release-scope.outputs.package == 'true'
 
     steps:
@@ -268,7 +313,7 @@ jobs:
         if: matrix.script == 'build:release:linux'
         run: ./dist/release/stream-sync-linux-x64/stream-sync --help
 
-      - name: Smoke test Windows binary
+      - name: Check Windows binary was packaged
         if: matrix.script == 'build:release:windows'
         run: test -f ./dist/release/stream-sync-windows-x64/stream-sync.exe
 
@@ -291,3 +336,49 @@ jobs:
           if-no-files-found: error
           retention-days: 14
           compression-level: 0
+
+  windows-artifact-smoke:
+    name: Execute extracted Windows artifact
+    runs-on: windows-2025
+    timeout-minutes: 10
+    needs: [package]
+
+    steps:
+      - name: Download packaged Windows artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: stream-sync-windows-x64
+          path: artifact
+
+      - name: Extract and execute the packaged binary
+        shell: pwsh
+        run: |
+          Expand-Archive -LiteralPath artifact/stream-sync-windows-x64.zip -DestinationPath extracted
+          $packagePath = (Resolve-Path extracted/stream-sync-windows-x64).Path
+          $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
+          $startInfo.FileName = Join-Path $packagePath 'stream-sync.exe'
+          $startInfo.Arguments = '--help'
+          $startInfo.WorkingDirectory = $packagePath
+          $startInfo.UseShellExecute = $false
+          $startInfo.RedirectStandardOutput = $true
+          $startInfo.RedirectStandardError = $true
+          $process = [System.Diagnostics.Process]::new()
+          $process.StartInfo = $startInfo
+          try {
+            if (-not $process.Start()) { throw 'Windows binary did not start' }
+            $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+            $stderrTask = $process.StandardError.ReadToEndAsync()
+            if (-not $process.WaitForExit(30000)) {
+              $process.Kill()
+              $process.WaitForExit()
+              throw 'Extracted Windows binary did not finish --help within 30 seconds'
+            }
+            $process.WaitForExit()
+            $helpOutput = $stdoutTask.GetAwaiter().GetResult()
+            Write-Output ($stderrTask.GetAwaiter().GetResult())
+            Write-Output $helpOutput
+            if ($process.ExitCode -ne 0) { throw "Windows binary exited with $($process.ExitCode)" }
+          } finally {
+            $process.Dispose()
+          }
+          if ($helpOutput -notmatch 'Usage: stream-sync') { throw 'Windows binary did not print the expected help' }

@@ -1,18 +1,24 @@
-import { describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it } from 'bun:test';
 
-import { TikTokPlatform } from '../../src/platforms/tiktok';
-import { createMockTikTokPlatformDependencies, noOpLogger } from '../helpers/mock-factories';
 import { createTikTokGiftNotificationFixture } from '../helpers/avatar-source-matrix-fixtures';
+import { createTikTokLifetimeFixture } from '../helpers/tiktok-connector-fixture';
+
+type TikTokLifetimeFixture = ReturnType<typeof createTikTokLifetimeFixture>;
+
+const activeFixtures: TikTokLifetimeFixture[] = [];
 
 function createPlatform() {
-    const platform = new TikTokPlatform({
-        enabled: true, username: 'test-id-boundary-channel', giftAggregationEnabled: false, dataLoggingEnabled: false
-    }, {
-        ...createMockTikTokPlatformDependencies(), logger: noOpLogger,
-        WebcastEvent: {
-            CHAT: 'chat', GIFT: 'gift', FOLLOW: 'follow', SOCIAL: 'social', ROOM_USER: 'roomUser', ERROR: 'error', DISCONNECT: 'disconnect'
-        }
+    const fixture = createTikTokLifetimeFixture({
+        enabled: true,
+        username: 'test-id-boundary-channel',
+        giftAggregationEnabled: false,
+        dataLoggingEnabled: false,
+        dataLoggingPath: '',
+        envFileReadEnabled: false,
+        envFileWriteEnabled: false
     });
+    activeFixtures.push(fixture);
+    const { platform } = fixture;
     const gifts: Array<Record<string, unknown>> = [];
     platform.on('platform:event', (event) => {
         if (event.type === 'platform:gift') gifts.push(event.data);
@@ -21,6 +27,15 @@ function createPlatform() {
 }
 
 describe('TikTok root message-ID boundary', () => {
+    afterEach(async () => {
+        while (activeFixtures.length > 0) {
+            const fixture = activeFixtures.pop();
+            if (fixture) {
+                await fixture.cleanup();
+            }
+        }
+    });
+
     it('does not coerce invalid common IDs or insert them into the duplicate bucket', () => {
         const { platform } = createPlatform();
         const invalidIds: unknown[] = [{}, true, false, '   ', [], NaN, Infinity, null, undefined,

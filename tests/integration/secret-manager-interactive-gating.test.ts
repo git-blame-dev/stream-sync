@@ -16,7 +16,7 @@ describe("secret-manager interactive gating integration", () => {
       fs.mkdirSync(path.dirname(envFilePath));
       fs.writeFileSync(envFilePath, "SYNTHETIC_EXISTING=keep\n", { mode: 0o600 });
       // A child with a synthetic-only environment avoids reading or changing host secrets.
-      const child = Bun.spawnSync([process.execPath, "-e", `
+      const child = Bun.spawnSync([process.execPath, '--no-env-file', "-e", `
 import assert from 'node:assert/strict';
 import { ensureSecrets } from ${JSON.stringify(import.meta.resolve("../../src/utils/secret-manager.ts"))};
 const originalTTY = Object.getOwnPropertyDescriptor(process.stdin, 'isTTY');

@@ -71,12 +71,13 @@ type NotificationQueueItem = DisplayQueueItem & {
     data: NotificationQueueItemData;
 };
 
+// Admission receipts retain child references; they do not report presentation completion.
 type DisplayQueueWriter = {
-    addItem(item: DisplayQueueItem): void;
+    addItem(item: DisplayQueueItem): readonly DisplayQueueItem[];
 };
 
 type DisplayQueueSequenceWriter = DisplayQueueWriter & {
-    addSequence(items: DisplayQueueItem[]): void;
+    addSequence(items: DisplayQueueItem[]): readonly DisplayQueueItem[];
 };
 
 type DisplayQueueLengthReader = {

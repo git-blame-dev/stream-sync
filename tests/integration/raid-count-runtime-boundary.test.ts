@@ -43,7 +43,6 @@ describe("raid count real runtime boundary", () => {
     const notificationManager = new NotificationManager({
       config, logger: noOpLogger, eventBus, displayQueue, constants,
       vfxCommandService, userTrackingService,
-      obsGoals: { processDonationGoal() { throw new Error("Raid must not update donation goals"); } },
     } as unknown as ConstructorParameters<typeof NotificationManager>[0]);
     // Existing service interfaces use narrower callback inputs than runtime's
     // unknown-valued ports; retain the actual service instances at this boundary.

@@ -1,59 +1,25 @@
-import { describe, test, expect, afterEach } from "bun:test";
-import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
-import { createMockNotificationManager } from "../helpers/mock-factories";
-import { createTestAppRuntime } from "../helpers/runtime-test-harness";
+import { expect, test } from 'bun:test';
+import { createMainPresentationFixture } from '../helpers/main-presentation-fixture';
 
-describe("SuperSticker Notification Handling", () => {
-  afterEach(() => {
-    restoreAllMocks();
-  });
-
-  test("emits a gift notification for SuperSticker payloads", async () => {
-    const notificationManager = createMockNotificationManager({
-      handleNotification: createMockFn().mockResolvedValue(true),
-    });
-
-    const { runtime } = createTestAppRuntime(
-      {
-        general: { enabled: true },
-        youtube: { enabled: true },
-      },
-      {
-        notificationManager,
-      },
-    );
-
-    await runtime.handleGiftNotification("youtube", "StickerFan", {
-      type: "platform:gift",
-      giftType: "Super Sticker",
-      giftCount: 1,
-      amount: 5,
-      currency: "USD",
-      sticker: "Shiba dog shaking his hips saying Thank you",
-      userId: "sticker-1",
-      timestamp: "2024-01-01T00:00:00.000Z",
-      id: "supersticker-evt-1",
-    });
-
-    expect(notificationManager.handleNotification).toHaveBeenCalledTimes(1);
-    const notificationCall = notificationManager.handleNotification.mock.calls[0];
-    expect(notificationCall).toBeDefined();
-    if (notificationCall === undefined) {
-      throw new Error("Expected handleNotification to receive a notification call");
-    }
-
-    const [eventType, platform, payload] = notificationCall;
-    expect(eventType).toBe("platform:gift");
-    expect(platform).toBe("youtube");
-    expect(payload).toEqual(
-      expect.objectContaining({
-        username: "StickerFan",
-        giftType: "Super Sticker",
-        giftCount: 1,
-        amount: 5,
-        currency: "USD",
-        type: "platform:gift",
-      }),
-    );
-  });
+test('Super Sticker reaches actual runtime notification, queue and display owners', async () => {
+  const h = await createMainPresentationFixture();
+  h.config.logging.file.enabled = false;
+  h.config.logging.chat.enabled = false;
+  try {
+    await h.start();
+    expect(await h.runtime.handleGiftNotification('youtube', 'Synthetic Sticker Viewer', {
+      type: 'platform:gift', giftType: 'Super Sticker', giftCount: 1, amount: 5, currency: 'USD',
+      sticker: 'Shiba dog shaking his hips saying Thank you', userId: 'synthetic-sticker-viewer',
+      timestamp: '2026-01-01T00:00:00.000Z', id: 'synthetic-super-sticker',
+    })).toMatchObject({ success: true });
+    expect(h.queue.getQueueLength()).toBe(1);
+    await h.drain();
+    expect(h.rows).toHaveLength(1);
+    expect(h.rows[0]).toMatchObject({ type: 'platform:gift', platform: 'youtube', data: {
+      username: 'Synthetic Sticker Viewer', userId: 'synthetic-sticker-viewer', giftType: 'Super Sticker',
+      giftCount: 1, amount: 5, currency: 'USD', sticker: 'Shiba dog shaking his hips saying Thank you',
+    } });
+  } finally {
+    await h.dispose();
+  }
 });

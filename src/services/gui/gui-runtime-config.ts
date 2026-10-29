@@ -20,6 +20,7 @@ type GuiAppearanceSettings = {
     memberRowEffects: readonly RowVisualEffectId[];
 };
 type GuiAppearanceSnapshot = {
+    sessionId?: string;
     revision: number;
     settings: GuiAppearanceSettings;
     overriddenKeys?: readonly string[];
@@ -35,6 +36,7 @@ type GuiRuntimeConfig = {
     notificationTransitionMs: number;
     appearance: {
         profile: GuiAppearanceProfile;
+        sessionId?: string;
         revision: number;
         settings: GuiAppearanceSettings;
     };
@@ -94,6 +96,7 @@ function normalizeAppearanceSnapshot(
         ? appearance.revision
         : 0;
     return {
+        ...(appearance?.sessionId ? { sessionId: appearance.sessionId } : {}),
         revision,
         settings: {
             compactRows: typeof settings.compactRows === 'boolean'
@@ -134,6 +137,7 @@ function buildGuiRuntimeConfig(
         notificationTransitionMs: parseNonNegativeInteger(guiConfig.notificationTransitionMs, DEFAULT_NOTIFICATION_TRANSITION_MS),
         appearance: {
             profile: 'standard',
+            ...(appearanceSnapshot.sessionId ? { sessionId: appearanceSnapshot.sessionId } : {}),
             revision: appearanceSnapshot.revision,
             settings: appearanceSnapshot.settings
         }

@@ -114,7 +114,6 @@ describe('Monetisation pipeline integration', () => {
         });
         notificationManager = new NotificationManager({
             logger: noOpLogger, constants,
-            obsGoals: { processDonationGoal: (...args: unknown[]) => Reflect.apply(goals.processDonationGoal, goals, args) },
             displayQueue, eventBus, config,
             vfxCommandService: {
                 getVFXConfig: async (commandKey: string) => ({ commandKey, command: `!${commandKey}`,

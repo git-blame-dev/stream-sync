@@ -1,22 +1,18 @@
-import { describe, test, afterEach, expect } from "bun:test";
+import { describe, test, afterEach, expect, spyOn } from "bun:test";
+import { join } from "node:path";
 
-import EventEmitter from "events";
 import { PlatformLifecycleService } from "../../src/services/PlatformLifecycleService.ts";
-import NotificationManager from "../../src/notifications/NotificationManager";
-import { createTestAppRuntime } from "../helpers/runtime-test-harness";
-import { createMockDisplayQueue, noOpLogger } from "../helpers/mock-factories";
-import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
-import { createConfigFixture } from "../helpers/config-fixture";
+import { TwitchPlatform } from "../../src/platforms/twitch.ts";
+import { TwitchAuth } from "../../src/auth/TwitchAuth.ts";
+import { createMainPresentationFixture } from "../helpers/main-presentation-fixture.ts";
+import { noOpLogger } from "../helpers/mock-factories";
+import { restoreAllMocks } from "../helpers/bun-mock-utils";
+import { createTwitchConfigFixture } from "../helpers/config-fixture";
 import { waitFor } from "../helpers/event-driven-testing";
 
-type EventBusHandler = (payload: unknown) => void | Promise<void>;
-type EventBus = {
-  emit: (eventName: string, payload: unknown) => boolean;
-  on: (eventName: string, handler: EventBusHandler) => EventEmitter;
-  subscribe: (eventName: string, handler: EventBusHandler) => () => void;
-};
-type RuntimeOptions = NonNullable<Parameters<typeof createTestAppRuntime>[1]>;
-type RuntimeEventBus = NonNullable<RuntimeOptions["eventBus"]>;
+type PlatformConstructor = Parameters<
+  PlatformLifecycleService["initializeAllPlatforms"]
+>[0][string];
 type CheerPayload = {
   username: string;
   userId: string;
@@ -30,9 +26,6 @@ type CheerPayload = {
   timestamp: string;
   giftImageUrl?: string;
   cheermoteInfo: Record<string, unknown>;
-};
-type PlatformHandlers = {
-  onGift: (payload: CheerPayload) => void;
 };
 type QueueItem = {
   type: string;
@@ -61,129 +54,150 @@ const requireQueueItem = (value: unknown): QueueItem => {
   return { type: value.type, platform: value.platform, data: value.data };
 };
 
-const createRuntimeEventBus = (eventBus: EventBus): RuntimeEventBus => ({
-  emit: (eventName: string, payload: unknown) => {
-    eventBus.emit(eventName, payload);
-  },
-  subscribe: (
-    eventName: string,
-    handler: (event: Record<string, unknown>) => void | Promise<void>,
-  ) =>
-    eventBus.subscribe(eventName, (payload) => {
-      if (isRecord(payload)) {
-        return handler(payload);
-      }
-      return handler({});
-    }),
-});
-
 describe("Twitch bits gift platform flow (smoke)", () => {
-  afterEach(() => {
-    restoreAllMocks();
+  const cleanups: Array<() => Promise<void> | void> = [];
+
+  const registerCleanup = (fn: () => Promise<void> | void) => {
+    let executed = false;
+    const idempotentFn = async () => {
+      if (executed) return;
+      executed = true;
+      await fn();
+    };
+    cleanups.push(idempotentFn);
+    return idempotentFn;
+  };
+
+  const runCleanups = async () => {
+    while (cleanups.length > 0) {
+      const cleanup = cleanups.pop();
+      if (cleanup) {
+        await cleanup();
+      }
+    }
+  };
+
+  afterEach(async () => {
+    try {
+      await runCleanups();
+    } finally {
+      restoreAllMocks();
+    }
   });
 
-  const createEventBus = (): EventBus => {
-    const emitter = new EventEmitter();
+  const createTwitchHarness = async (payload: CheerPayload) => {
+    const presentation = await createMainPresentationFixture();
+    presentation.config.general.debugEnabled = false;
+    presentation.config.general.envFileReadEnabled = false;
+    presentation.config.general.envFileWriteEnabled = false;
+    presentation.config.general.giftsEnabled = true;
+    presentation.config.general.paypiggiesEnabled = true;
+    presentation.config.logging.file.enabled = false;
+    presentation.config.logging.chat.enabled = false;
+    presentation.config.twitch.enabled = false;
+    presentation.config.twitch.dataLoggingEnabled = false;
+    presentation.config.twitch.giftsEnabled = true;
+    presentation.config.twitch.paypiggiesEnabled = true;
+
+    await presentation.start();
+    const addItemSpy = spyOn(presentation.queue, "addItem");
+
+    const platformLifecycleService = new PlatformLifecycleService({
+      config: { twitch: { enabled: true, dataLoggingEnabled: false } },
+      eventBus: presentation.bus,
+      logger: noOpLogger,
+    });
+
+    const auth = new TwitchAuth({
+      tokenStorePath: join(presentation.dir, "twitch-tokens.json"),
+      clientId: "synthetic-client",
+      expectedUsername: "synthetic-user",
+      logger: noOpLogger,
+    });
+
+    registerCleanup(async () => {
+      auth.dispose();
+      await platformLifecycleService.disconnectAll();
+      platformLifecycleService.dispose();
+      restoreAllMocks();
+      await presentation.dispose();
+    });
+
+    class ConfiguredTwitchPlatform extends TwitchPlatform {
+      constructor() {
+        super(
+          createTwitchConfigFixture({
+            enabled: false,
+            clientId: "synthetic-client",
+            dataLoggingEnabled: false,
+          }),
+          {
+            logger: noOpLogger,
+            twitchAuth: auth,
+          },
+        );
+      }
+
+      override async initialize(
+        handlers: Parameters<TwitchPlatform["initialize"]>[0] = {},
+      ) {
+        this.handlers = handlers;
+        await super.initialize(handlers);
+        await this.handleGiftEvent(payload);
+        return undefined;
+      }
+    }
+
     return {
-      emit: emitter.emit.bind(emitter),
-      on: emitter.on.bind(emitter),
-      subscribe: (event: string, handler: EventBusHandler) => {
-        emitter.on(event, handler);
-        return () => {
-          emitter.off(event, handler);
-        };
-      },
+      presentation,
+      addItemSpy,
+      platformLifecycleService,
+      ConfiguredTwitchPlatform:
+        ConfiguredTwitchPlatform as unknown as PlatformConstructor,
     };
   };
 
   test("routes bits gift through lifecycle, router, and runtime as gift", async () => {
-    const eventBus = createEventBus();
-    const logger = noOpLogger;
-    const displayQueue = createMockDisplayQueue();
-    const configOverrides = {
-      general: {
-        debugEnabled: false,
-        giftsEnabled: true,
-        paypiggiesEnabled: true,
-      },
-      twitch: { enabled: true },
-      obs: { enabled: false },
-    };
-    const config = createConfigFixture(configOverrides);
-    const notificationManager = new NotificationManager({
-      displayQueue,
-      logger,
-      eventBus,
-      config,
-      constants: require("../../src/core/constants"),
-      obsGoals: { processDonationGoal: createMockFn() },
-      vfxCommandService: {
-        getVFXConfig: createMockFn().mockResolvedValue(null),
-      },
-      userTrackingService: {
-        isFirstMessage: createMockFn().mockResolvedValue(false),
-      },
-    });
-
-    const platformLifecycleService = new PlatformLifecycleService({
-      config: { twitch: { enabled: true } },
-      eventBus,
-      logger,
-    });
-
-    const { runtime } = createTestAppRuntime(configOverrides, {
-      overrides: {
-        eventBus: createRuntimeEventBus(eventBus),
-        notificationManager,
-        displayQueue,
-        logger,
+    const {
+      presentation,
+      addItemSpy,
+      platformLifecycleService,
+      ConfiguredTwitchPlatform,
+    } = await createTwitchHarness({
+      username: "test_user",
+      userId: "tw-cheer-1",
+      giftType: "mixed bits",
+      giftCount: 1,
+      amount: 234,
+      currency: "bits",
+      message: "",
+      id: "cheer-event-234",
+      repeatCount: 1,
+      timestamp: "2024-01-01T00:00:00.000Z",
+      cheermoteInfo: {
+        count: 2,
+        totalBits: 234,
+        cleanPrefix: "Cheer",
+        types: [
+          { prefix: "Cheer", count: 1 },
+          { prefix: "Uni", count: 1 },
+        ],
+        isMixed: true,
       },
     });
-
-    class MockTwitchPlatform {
-      async initialize(handlers: PlatformHandlers) {
-        handlers.onGift({
-          username: "test_user",
-          userId: "tw-cheer-1",
-          giftType: "mixed bits",
-          giftCount: 1,
-          amount: 234,
-          currency: "bits",
-          message: "",
-          id: "cheer-event-234",
-          repeatCount: 1,
-          timestamp: "2024-01-01T00:00:00.000Z",
-          cheermoteInfo: {
-            count: 2,
-            totalBits: 234,
-            cleanPrefix: "Cheer",
-            types: [
-              { prefix: "Cheer", count: 1 },
-              { prefix: "Uni", count: 1 },
-            ],
-            isMixed: true,
-          },
-        });
-      }
-
-      on() {}
-
-      cleanup() {
-        return Promise.resolve();
-      }
-    }
 
     try {
       await platformLifecycleService.initializeAllPlatforms({
-        twitch: MockTwitchPlatform,
+        twitch: ConfiguredTwitchPlatform,
       });
-      await waitFor(() => displayQueue.addItem.mock.calls.length === 1, {
-        timeout: 100,
+      await waitFor(() => addItemSpy.mock.calls.length === 1, {
+        timeout: 500,
         interval: 1,
       });
+      await presentation.drain();
 
-      expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
-      const queued = requireQueueItem(displayQueue.addItem.mock.calls[0]?.[0]);
+      expect(addItemSpy).toHaveBeenCalledTimes(1);
+      const queued = requireQueueItem(addItemSpy.mock.calls[0]?.[0]);
       expect(queued.type).toBe("platform:gift");
       expect(queued.platform).toBe("twitch");
       expect(queued.data.username).toBe("test_user");
@@ -192,96 +206,48 @@ describe("Twitch bits gift platform flow (smoke)", () => {
       expect(queued.data.displayMessage).toBe("test_user sent 234 mixed bits");
       expect(queued.data.parts).toBeUndefined();
     } finally {
-      runtime.platformEventRouter?.dispose();
-      platformLifecycleService.dispose();
+      await runCleanups();
     }
   });
 
   test("routes single-type bits gift with inline image parts", async () => {
-    const eventBus = createEventBus();
-    const logger = noOpLogger;
-    const displayQueue = createMockDisplayQueue();
-    const configOverrides = {
-      general: {
-        debugEnabled: false,
-        giftsEnabled: true,
-        paypiggiesEnabled: true,
-      },
-      twitch: { enabled: true },
-      obs: { enabled: false },
-    };
-    const config = createConfigFixture(configOverrides);
-    const notificationManager = new NotificationManager({
-      displayQueue,
-      logger,
-      eventBus,
-      config,
-      constants: require("../../src/core/constants"),
-      obsGoals: { processDonationGoal: createMockFn() },
-      vfxCommandService: {
-        getVFXConfig: createMockFn().mockResolvedValue(null),
-      },
-      userTrackingService: {
-        isFirstMessage: createMockFn().mockResolvedValue(false),
+    const {
+      presentation,
+      addItemSpy,
+      platformLifecycleService,
+      ConfiguredTwitchPlatform,
+    } = await createTwitchHarness({
+      username: "test_user",
+      userId: "tw-cheer-2",
+      giftType: "bits",
+      giftCount: 1,
+      amount: 100,
+      currency: "bits",
+      message: "go team",
+      id: "cheer-event-100",
+      repeatCount: 1,
+      timestamp: "2024-01-01T00:00:00.000Z",
+      giftImageUrl:
+        "https://example.invalid/twitch/cheer-100-dark-animated-3.gif",
+      cheermoteInfo: {
+        cleanPrefix: "Cheer",
+        tier: 100,
+        isMixed: false,
       },
     });
-
-    const platformLifecycleService = new PlatformLifecycleService({
-      config: { twitch: { enabled: true } },
-      eventBus,
-      logger,
-    });
-
-    const { runtime } = createTestAppRuntime(configOverrides, {
-      overrides: {
-        eventBus: createRuntimeEventBus(eventBus),
-        notificationManager,
-        displayQueue,
-        logger,
-      },
-    });
-
-    class MockTwitchPlatform {
-      async initialize(handlers: PlatformHandlers) {
-        handlers.onGift({
-          username: "test_user",
-          userId: "tw-cheer-2",
-          giftType: "bits",
-          giftCount: 1,
-          amount: 100,
-          currency: "bits",
-          message: "go team",
-          id: "cheer-event-100",
-          repeatCount: 1,
-          timestamp: "2024-01-01T00:00:00.000Z",
-          giftImageUrl:
-            "https://example.invalid/twitch/cheer-100-dark-animated-3.gif",
-          cheermoteInfo: {
-            cleanPrefix: "Cheer",
-            tier: 100,
-            isMixed: false,
-          },
-        });
-      }
-
-      on() {}
-
-      cleanup() {
-        return Promise.resolve();
-      }
-    }
 
     try {
       await platformLifecycleService.initializeAllPlatforms({
-        twitch: MockTwitchPlatform,
+        twitch: ConfiguredTwitchPlatform,
       });
-      await waitFor(() => displayQueue.addItem.mock.calls.length === 1, {
-        timeout: 100,
+      await waitFor(() => addItemSpy.mock.calls.length === 1, {
+        timeout: 500,
         interval: 1,
       });
+      await presentation.drain();
 
-      expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
-      const queued = requireQueueItem(displayQueue.addItem.mock.calls[0]?.[0]);
+      expect(addItemSpy).toHaveBeenCalledTimes(1);
+      const queued = requireQueueItem(addItemSpy.mock.calls[0]?.[0]);
       expect(queued.type).toBe("platform:gift");
       expect(queued.platform).toBe("twitch");
       expect(queued.data.parts).toEqual([
@@ -296,8 +262,7 @@ describe("Twitch bits gift platform flow (smoke)", () => {
         { type: "text", text: ": go team" },
       ]);
     } finally {
-      runtime.platformEventRouter?.dispose();
-      platformLifecycleService.dispose();
+      await runCleanups();
     }
   });
 });

@@ -1,24 +1,19 @@
-import { describe, test, afterEach, expect } from "bun:test";
+import { describe, test, afterEach, expect, spyOn } from "bun:test";
 
-import EventEmitter from "events";
 import { PlatformLifecycleService } from "../../src/services/PlatformLifecycleService.ts";
-import NotificationManager from "../../src/notifications/NotificationManager";
-import { createTestAppRuntime } from "../helpers/runtime-test-harness";
-import { createMockDisplayQueue, noOpLogger } from "../helpers/mock-factories";
+import { YouTubePlatform } from "../../src/platforms/youtube.ts";
+import { InnertubeService } from "../../src/services/innertube-service.ts";
+import { YouTubeStreamDetectionService } from "../../src/services/youtube-stream-detection-service.ts";
+import { createMainPresentationFixture } from "../helpers/main-presentation-fixture.ts";
+import { noOpLogger } from "../helpers/mock-factories";
 import { expectNoTechnicalArtifacts } from "../helpers/assertion-helpers";
-import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
-import { createConfigFixture } from "../helpers/config-fixture";
+import { restoreAllMocks } from "../helpers/bun-mock-utils";
+import { createYouTubeConfigFixture } from "../helpers/config-fixture";
+import { waitFor } from "../helpers/event-driven-testing";
 
-type RuntimeEvent = Record<string, unknown>;
-type EventHandler = (event: RuntimeEvent) => Promise<void> | void;
-type TestEventBus = {
-  emit: (event: string, payload: unknown) => void;
-  on: (event: string, handler: EventHandler) => EventEmitter;
-  subscribe: (event: string, handler: EventHandler) => () => void;
-};
-type GiftPaypiggyHandlers = {
-  onGiftPaypiggy: (payload: GiftPaypiggyPayload) => void;
-};
+type PlatformConstructor = Parameters<
+  PlatformLifecycleService["initializeAllPlatforms"]
+>[0][string];
 type GiftPaypiggyPayload = {
   username: string;
   userId: string;
@@ -58,23 +53,35 @@ function assertQueuedGiftPaypiggy(
 }
 
 describe("YouTube giftpaypiggy platform flow (smoke)", () => {
-  afterEach(() => {
-    restoreAllMocks();
-  });
+  const cleanups: Array<() => Promise<void> | void> = [];
 
-  const createEventBus = (): TestEventBus => {
-    const emitter = new EventEmitter();
-    return {
-      emit: (event: string, payload: unknown) => {
-        emitter.emit(event, payload);
-      },
-      on: emitter.on.bind(emitter),
-      subscribe: (event: string, handler: EventHandler) => {
-        emitter.on(event, handler);
-        return () => emitter.off(event, handler);
-      },
+  const registerCleanup = (fn: () => Promise<void> | void) => {
+    let executed = false;
+    const idempotentFn = async () => {
+      if (executed) return;
+      executed = true;
+      await fn();
     };
+    cleanups.push(idempotentFn);
+    return idempotentFn;
   };
+
+  const runCleanups = async () => {
+    while (cleanups.length > 0) {
+      const cleanup = cleanups.pop();
+      if (cleanup) {
+        await cleanup();
+      }
+    }
+  };
+
+  afterEach(async () => {
+    try {
+      await runCleanups();
+    } finally {
+      restoreAllMocks();
+    }
+  });
 
   const assertNonEmptyString = (value: string) => {
     expect(typeof value).toBe("string");
@@ -117,72 +124,115 @@ describe("YouTube giftpaypiggy platform flow (smoke)", () => {
   };
 
   test("routes giftpaypiggy through lifecycle, router, and runtime", async () => {
-    const eventBus = createEventBus();
-    const logger = noOpLogger;
-    const displayQueue = createMockDisplayQueue();
-    const configOverrides = {
-      general: {
-        debugEnabled: false,
-        giftsEnabled: true,
-        paypiggiesEnabled: true,
-      },
-      youtube: { enabled: true, username: "test-channel" },
-      obs: { enabled: false },
-    };
-    const config = createConfigFixture(configOverrides);
-    const notificationManager = new NotificationManager({
-      displayQueue,
-      logger,
-      eventBus,
-      config,
-      constants: require("../../src/core/constants"),
-      obsGoals: { processDonationGoal: createMockFn() },
-      vfxCommandService: {
-        getVFXConfig: createMockFn().mockResolvedValue(null),
-      },
-      userTrackingService: {
-        isFirstMessage: createMockFn().mockResolvedValue(false),
-      },
-    });
+    const presentation = await createMainPresentationFixture();
+    presentation.config.general.debugEnabled = false;
+    presentation.config.general.envFileReadEnabled = false;
+    presentation.config.general.envFileWriteEnabled = false;
+    presentation.config.general.giftsEnabled = true;
+    presentation.config.general.paypiggiesEnabled = true;
+    presentation.config.logging.file.enabled = false;
+    presentation.config.logging.chat.enabled = false;
+    presentation.config.youtube.enabled = false;
+    presentation.config.youtube.username = "test-channel";
+    presentation.config.youtube.dataLoggingEnabled = false;
+    presentation.config.youtube.giftsEnabled = true;
+    presentation.config.youtube.paypiggiesEnabled = true;
+
+    await presentation.start();
+    const addItemSpy = spyOn(presentation.queue, "addItem");
 
     const platformLifecycleService = new PlatformLifecycleService({
-      config: { youtube: { enabled: true, username: "test-channel" } },
-      eventBus,
-      logger,
-    });
-    const { runtime } = createTestAppRuntime(configOverrides, {
-      eventBus,
-      notificationManager,
-      displayQueue,
-      logger,
+      config: {
+        youtube: {
+          enabled: true,
+          username: "test-channel",
+          dataLoggingEnabled: false,
+        },
+      },
+      eventBus: presentation.bus,
+      logger: noOpLogger,
     });
 
-    class MockYouTubePlatform {
-      initialize(handlers: GiftPaypiggyHandlers): void {
-        handlers.onGiftPaypiggy({
-          username: "GiftMember",
-          userId: "yt-gifter-1",
-          giftCount: 5,
-          timestamp: "2024-01-01T00:00:00.000Z",
-        });
+    const innertubeService = new InnertubeService(
+      {
+        createWithTimeout: async () => ({
+          getChannel: async () => ({
+            videos: [],
+            getLiveStreams: async () => ({ videos: [] }),
+          }),
+          search: async () => ({ videos: [] }),
+          getInfo: async (id: string) => ({
+            basic_info: {
+              id,
+              is_live: false,
+              is_live_content: false,
+              view_count: 0,
+            },
+          }),
+        }),
+      },
+      { logger: noOpLogger },
+    );
+    const streamDetectionService = new YouTubeStreamDetectionService(
+      innertubeService,
+      { logger: noOpLogger },
+    );
+
+    registerCleanup(async () => {
+      await platformLifecycleService.disconnectAll();
+      platformLifecycleService.dispose();
+      await innertubeService.dispose();
+      restoreAllMocks();
+      await presentation.dispose();
+    });
+
+    class ConfiguredYouTubePlatform extends YouTubePlatform {
+      constructor() {
+        super(
+          createYouTubeConfigFixture({
+            enabled: false,
+            username: "test-channel",
+            dataLoggingEnabled: false,
+            envFileReadEnabled: false,
+            envFileWriteEnabled: false,
+          }),
+          {
+            logger: noOpLogger,
+            USER_AGENTS: ["test-agent"],
+            innertubeService,
+            streamDetectionService,
+          },
+        );
       }
 
-      on() {}
-
-      cleanup() {
-        return Promise.resolve();
+      override async initialize(
+        handlers: Parameters<YouTubePlatform["initialize"]>[0] = {},
+      ) {
+        await super.initialize(handlers);
+        this._emitPlatformEvent(
+          "platform:giftpaypiggy",
+          this.eventFactory.createGiftPaypiggyEvent({
+            username: "GiftMember",
+            userId: "yt-gifter-1",
+            giftCount: 5,
+            timestamp: "2024-01-01T00:00:00.000Z",
+          }),
+        );
       }
     }
 
     try {
       await platformLifecycleService.initializeAllPlatforms({
-        youtube: MockYouTubePlatform,
+        youtube: ConfiguredYouTubePlatform as unknown as PlatformConstructor,
       });
-      await Promise.resolve();
-      await Promise.resolve();
+      await waitFor(() => addItemSpy.mock.calls.length === 1, {
+        timeout: 500,
+        interval: 1,
+      });
+      await presentation.drain();
 
-      expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
-      const firstAddItemCall = displayQueue.addItem.mock.calls[0];
+      expect(addItemSpy).toHaveBeenCalledTimes(1);
+      const firstAddItemCall = addItemSpy.mock.calls[0];
       expect(firstAddItemCall).toBeDefined();
       if (!firstAddItemCall) throw new Error("Expected display queue item");
       const [queued] = firstAddItemCall;
@@ -193,8 +243,7 @@ describe("YouTube giftpaypiggy platform flow (smoke)", () => {
         count: 5,
       });
     } finally {
-      runtime.platformEventRouter?.dispose();
-      platformLifecycleService.dispose();
+      await runCleanups();
     }
   });
 });

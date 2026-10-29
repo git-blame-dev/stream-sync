@@ -1,21 +1,19 @@
-import { describe, test, afterEach, expect } from "bun:test";
+import { describe, test, afterEach, expect, spyOn } from "bun:test";
 
-import EventEmitter from "events";
 import { PlatformLifecycleService } from "../../src/services/PlatformLifecycleService.ts";
-import NotificationManager from "../../src/notifications/NotificationManager";
-import { createTestAppRuntime } from "../helpers/runtime-test-harness";
-import { createMockDisplayQueue, noOpLogger } from "../helpers/mock-factories";
+import { YouTubePlatform } from "../../src/platforms/youtube.ts";
+import { InnertubeService } from "../../src/services/innertube-service.ts";
+import { YouTubeStreamDetectionService } from "../../src/services/youtube-stream-detection-service.ts";
+import { createMainPresentationFixture } from "../helpers/main-presentation-fixture.ts";
+import { noOpLogger } from "../helpers/mock-factories";
 import { expectNoTechnicalArtifacts } from "../helpers/assertion-helpers";
-import { createMockFn, restoreAllMocks } from "../helpers/bun-mock-utils";
-import { createConfigFixture } from "../helpers/config-fixture";
+import { restoreAllMocks } from "../helpers/bun-mock-utils";
+import { createYouTubeConfigFixture } from "../helpers/config-fixture";
+import { waitFor } from "../helpers/event-driven-testing";
 
-type RuntimeEvent = Record<string, unknown>;
-type EventHandler = (event: RuntimeEvent) => Promise<void> | void;
-type PlatformHandlers = Parameters<PlatformLifecycleService["initializeAllPlatforms"]>[0] extends Record<string, infer Constructor>
-  ? Constructor extends new (...args: never[]) => { initialize: (handlers: infer Handlers) => unknown }
-    ? Handlers
-    : { onGift: (payload: unknown) => void }
-  : { onGift: (payload: unknown) => void };
+type PlatformConstructor = Parameters<
+  PlatformLifecycleService["initializeAllPlatforms"]
+>[0][string];
 type GiftQueueData = {
   giftType: string;
   currency: string;
@@ -50,27 +48,35 @@ const isQueuedGiftItem = (value: unknown): value is QueuedGiftItem =>
   isGiftQueueData(value.data);
 
 describe("YouTube gift platform flow (smoke)", () => {
-  afterEach(() => {
-    restoreAllMocks();
-  });
+  const cleanups: Array<() => Promise<void> | void> = [];
 
-  const createEventBus = () => {
-    const emitter = new EventEmitter();
-    return {
-      emit: (event: string, payload: unknown) => {
-        emitter.emit(event, payload);
-      },
-      on: (event: string, handler: EventHandler) => {
-        emitter.on(event, handler);
-      },
-      subscribe: (event: string, handler: EventHandler) => {
-        emitter.on(event, handler);
-        return () => {
-          emitter.off(event, handler);
-        };
-      },
+  const registerCleanup = (fn: () => Promise<void> | void) => {
+    let executed = false;
+    const idempotentFn = async () => {
+      if (executed) return;
+      executed = true;
+      await fn();
     };
+    cleanups.push(idempotentFn);
+    return idempotentFn;
   };
+
+  const runCleanups = async () => {
+    while (cleanups.length > 0) {
+      const cleanup = cleanups.pop();
+      if (cleanup) {
+        await cleanup();
+      }
+    }
+  };
+
+  afterEach(async () => {
+    try {
+      await runCleanups();
+    } finally {
+      restoreAllMocks();
+    }
+  });
 
   const assertNonEmptyString = (value: string) => {
     expect(typeof value).toBe("string");
@@ -102,93 +108,137 @@ describe("YouTube gift platform flow (smoke)", () => {
     }
   };
 
-  const configOverrides = {
-    general: {
-      debugEnabled: false,
-      giftsEnabled: true,
-      paypiggiesEnabled: true,
-    },
-    youtube: { enabled: true, username: "test-channel" },
-    obs: { enabled: false },
-  };
+  const createRuntimeDeps = async (payload: Record<string, unknown>) => {
+    const presentation = await createMainPresentationFixture();
+    presentation.config.general.debugEnabled = false;
+    presentation.config.general.envFileReadEnabled = false;
+    presentation.config.general.envFileWriteEnabled = false;
+    presentation.config.general.giftsEnabled = true;
+    presentation.config.general.paypiggiesEnabled = true;
+    presentation.config.logging.file.enabled = false;
+    presentation.config.logging.chat.enabled = false;
+    presentation.config.youtube.enabled = false;
+    presentation.config.youtube.username = "test-channel";
+    presentation.config.youtube.dataLoggingEnabled = false;
+    presentation.config.youtube.giftsEnabled = true;
+    presentation.config.youtube.paypiggiesEnabled = true;
 
-  const createRuntimeDeps = () => {
-    const eventBus = createEventBus();
-    const logger = noOpLogger;
-    const displayQueue = createMockDisplayQueue();
-    const config = createConfigFixture(configOverrides);
-    const notificationManager = new NotificationManager({
-      displayQueue,
-      logger,
-      eventBus,
-      config,
-      constants: require("../../src/core/constants"),
-      obsGoals: { processDonationGoal: createMockFn() },
-      vfxCommandService: {
-        getVFXConfig: createMockFn().mockResolvedValue(null),
-      },
-      userTrackingService: {
-        isFirstMessage: createMockFn().mockResolvedValue(false),
-      },
-    });
+    await presentation.start();
+    const addItemSpy = spyOn(presentation.queue, "addItem");
 
     const platformLifecycleService = new PlatformLifecycleService({
-      config: { youtube: { enabled: true, username: "test-channel" } },
-      eventBus,
-      logger,
+      config: {
+        youtube: {
+          enabled: true,
+          username: "test-channel",
+          dataLoggingEnabled: false,
+        },
+      },
+      eventBus: presentation.bus,
+      logger: noOpLogger,
     });
 
-    const runtimeBundle = createTestAppRuntime(configOverrides, {
-      eventBus,
-      notificationManager,
-      displayQueue,
-      logger,
+    const innertubeService = new InnertubeService(
+      {
+        createWithTimeout: async () => ({
+          getChannel: async () => ({
+            videos: [],
+            getLiveStreams: async () => ({ videos: [] }),
+          }),
+          search: async () => ({ videos: [] }),
+          getInfo: async (id: string) => ({
+            basic_info: {
+              id,
+              is_live: false,
+              is_live_content: false,
+              view_count: 0,
+            },
+          }),
+        }),
+      },
+      { logger: noOpLogger },
+    );
+    const streamDetectionService = new YouTubeStreamDetectionService(
+      innertubeService,
+      { logger: noOpLogger },
+    );
+
+    registerCleanup(async () => {
+      await platformLifecycleService.disconnectAll();
+      platformLifecycleService.dispose();
+      await innertubeService.dispose();
+      restoreAllMocks();
+      await presentation.dispose();
     });
+
+    class ConfiguredYouTubePlatform extends YouTubePlatform {
+      constructor() {
+        super(
+          createYouTubeConfigFixture({
+            enabled: false,
+            username: "test-channel",
+            dataLoggingEnabled: false,
+            envFileReadEnabled: false,
+            envFileWriteEnabled: false,
+          }),
+          {
+            logger: noOpLogger,
+            USER_AGENTS: ["test-agent"],
+            innertubeService,
+            streamDetectionService,
+          },
+        );
+      }
+
+      override async initialize(
+        handlers: Parameters<YouTubePlatform["initialize"]>[0] = {},
+      ) {
+        await super.initialize(handlers);
+        this._emitPlatformEvent(
+          "platform:gift",
+          this.eventFactory.createGiftEvent(payload),
+        );
+      }
+    }
 
     return {
-      eventBus,
-      logger,
-      displayQueue,
-      config,
-      notificationManager,
+      presentation,
+      addItemSpy,
       platformLifecycleService,
-      runtimeBundle,
+      ConfiguredYouTubePlatform:
+        ConfiguredYouTubePlatform as unknown as PlatformConstructor,
     };
   };
 
   test("routes Super Chat gifts through lifecycle, router, and runtime", async () => {
-    const { displayQueue, platformLifecycleService, runtimeBundle } =
-      createRuntimeDeps();
-
-    class MockYouTubePlatform {
-      async initialize(handlers: PlatformHandlers) {
-        handlers.onGift({
-          username: "ChatHero",
-          userId: "yt-chat-1",
-          giftType: "Super Chat",
-          giftCount: 1,
-          amount: 5,
-          currency: "USD",
-          id: "yt-superchat-1",
-          timestamp: "2024-01-01T00:00:00.000Z",
-        });
-      }
-
-      on() {}
-
-      cleanup() {
-        return Promise.resolve();
-      }
-    }
+    const {
+      presentation,
+      addItemSpy,
+      platformLifecycleService,
+      ConfiguredYouTubePlatform,
+    } = await createRuntimeDeps({
+      username: "ChatHero",
+      userId: "yt-chat-1",
+      giftType: "Super Chat",
+      giftCount: 1,
+      amount: 5,
+      currency: "USD",
+      id: "yt-superchat-1",
+      timestamp: "2024-01-01T00:00:00.000Z",
+    });
 
     try {
       await platformLifecycleService.initializeAllPlatforms({
-        youtube: MockYouTubePlatform,
+        youtube: ConfiguredYouTubePlatform,
       });
-      await new Promise(setImmediate);
+      await waitFor(() => addItemSpy.mock.calls.length === 1, {
+        timeout: 500,
+        interval: 1,
+      });
+      await presentation.drain();
 
-      expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
-      const [queued] = displayQueue.addItem.mock.calls[0] ?? [];
+      expect(addItemSpy).toHaveBeenCalledTimes(1);
+      const [queued] = addItemSpy.mock.calls[0] ?? [];
       expect(isQueuedGiftItem(queued)).toBe(true);
       if (!isQueuedGiftItem(queued)) {
         throw new Error("Expected a YouTube gift queue item");
@@ -203,47 +253,42 @@ describe("YouTube gift platform flow (smoke)", () => {
         keyword: "Super Chat",
       });
     } finally {
-      runtimeBundle.runtime.platformEventRouter?.dispose();
-      platformLifecycleService.dispose();
+      await runCleanups();
     }
   });
 
   test("routes Super Sticker gifts through lifecycle, router, and runtime", async () => {
-    const { displayQueue, platformLifecycleService, runtimeBundle } =
-      createRuntimeDeps();
-
-    class MockYouTubePlatform {
-      async initialize(handlers: PlatformHandlers) {
-        handlers.onGift({
-          username: "test-sticker-hero",
-          userId: "yt-sticker-1",
-          giftType: "Super Sticker",
-          giftCount: 1,
-          amount: 3,
-          currency: "USD",
-          message: "Nice sticker",
-          giftImageUrl:
-            "https://lh3.googleusercontent.com/test-supersticker=s176-rwa",
-          id: "yt-supersticker-1",
-          timestamp: "2024-01-01T00:00:00.000Z",
-        });
-      }
-
-      on() {}
-
-      cleanup() {
-        return Promise.resolve();
-      }
-    }
+    const {
+      presentation,
+      addItemSpy,
+      platformLifecycleService,
+      ConfiguredYouTubePlatform,
+    } = await createRuntimeDeps({
+      username: "test-sticker-hero",
+      userId: "yt-sticker-1",
+      giftType: "Super Sticker",
+      giftCount: 1,
+      amount: 3,
+      currency: "USD",
+      message: "Nice sticker",
+      giftImageUrl:
+        "https://lh3.googleusercontent.com/test-supersticker=s176-rwa",
+      id: "yt-supersticker-1",
+      timestamp: "2024-01-01T00:00:00.000Z",
+    });
 
     try {
       await platformLifecycleService.initializeAllPlatforms({
-        youtube: MockYouTubePlatform,
+        youtube: ConfiguredYouTubePlatform,
       });
-      await new Promise(setImmediate);
+      await waitFor(() => addItemSpy.mock.calls.length === 1, {
+        timeout: 500,
+        interval: 1,
+      });
+      await presentation.drain();
 
-      expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
-      const [queued] = displayQueue.addItem.mock.calls[0] ?? [];
+      expect(addItemSpy).toHaveBeenCalledTimes(1);
+      const [queued] = addItemSpy.mock.calls[0] ?? [];
       expect(isQueuedGiftItem(queued)).toBe(true);
       if (!isQueuedGiftItem(queued)) {
         throw new Error("Expected a YouTube gift queue item");
@@ -268,46 +313,41 @@ describe("YouTube gift platform flow (smoke)", () => {
         keyword: "Super Sticker",
       });
     } finally {
-      runtimeBundle.runtime.platformEventRouter?.dispose();
-      platformLifecycleService.dispose();
+      await runCleanups();
     }
   });
 
   test("routes YouTube jewels gifts without userId through lifecycle, router, and runtime", async () => {
-    const { displayQueue, platformLifecycleService, runtimeBundle } =
-      createRuntimeDeps();
-
-    class MockYouTubePlatform {
-      async initialize(handlers: PlatformHandlers) {
-        handlers.onGift({
-          username: "test-jewels-user",
-          giftType: "Girl power",
-          giftCount: 1,
-          amount: 300,
-          currency: "jewels",
-          id: "yt-jewels-1",
-          timestamp: "2024-01-01T00:00:00.000Z",
-          metadata: {
-            missingFields: ["userId"],
-          },
-        });
-      }
-
-      on() {}
-
-      cleanup() {
-        return Promise.resolve();
-      }
-    }
+    const {
+      presentation,
+      addItemSpy,
+      platformLifecycleService,
+      ConfiguredYouTubePlatform,
+    } = await createRuntimeDeps({
+      username: "test-jewels-user",
+      giftType: "Girl power",
+      giftCount: 1,
+      amount: 300,
+      currency: "jewels",
+      id: "yt-jewels-1",
+      timestamp: "2024-01-01T00:00:00.000Z",
+      metadata: {
+        missingFields: ["userId"],
+      },
+    });
 
     try {
       await platformLifecycleService.initializeAllPlatforms({
-        youtube: MockYouTubePlatform,
+        youtube: ConfiguredYouTubePlatform,
       });
-      await new Promise(setImmediate);
+      await waitFor(() => addItemSpy.mock.calls.length === 1, {
+        timeout: 500,
+        interval: 1,
+      });
+      await presentation.drain();
 
-      expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
-      const [queued] = displayQueue.addItem.mock.calls[0] ?? [];
+      expect(addItemSpy).toHaveBeenCalledTimes(1);
+      const [queued] = addItemSpy.mock.calls[0] ?? [];
       expect(isQueuedGiftItem(queued)).toBe(true);
       if (!isQueuedGiftItem(queued)) {
         throw new Error("Expected a YouTube gift queue item");
@@ -323,8 +363,7 @@ describe("YouTube gift platform flow (smoke)", () => {
         keyword: "jewels",
       });
     } finally {
-      runtimeBundle.runtime.platformEventRouter?.dispose();
-      platformLifecycleService.dispose();
+      await runCleanups();
     }
   });
 });

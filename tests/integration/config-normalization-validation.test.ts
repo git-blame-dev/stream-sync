@@ -234,7 +234,7 @@ describe("ConfigValidator normalize + validate integration", () => {
       youtube: {
         enabled: "true",
         username: "test-channel",
-        streamDetectionMethod: "api",
+        streamDetectionMethod: "youtubei",
       },
     };
 
@@ -252,9 +252,28 @@ describe("ConfigValidator normalize + validate integration", () => {
     const normalizedValid = ConfigValidator.normalize(rawConfigValid);
     const normalizedInvalid = ConfigValidator.normalize(rawConfigInvalid);
 
-    expect(normalizedValid.youtube.streamDetectionMethod).toBe("api");
+    expect(normalizedValid.youtube.streamDetectionMethod).toBe("youtubei");
     expect(normalizedInvalid.youtube.streamDetectionMethod).toBe("youtubei");
+    expect(ConfigValidator.validate(normalizedValid)).toEqual({ isValid: true, errors: [] });
   });
+
+  for (const selection of [
+    { field: "enableAPI", value: "true", correction: "enableAPI=false" },
+    { field: "streamDetectionMethod", value: "api", correction: "streamDetectionMethod=youtubei" },
+    { field: "viewerCountMethod", value: "api", correction: "viewerCountMethod=youtubei" },
+  ]) {
+    it(`rejects unsupported YouTube ${selection.field} with an actionable correction`, () => {
+      const rawConfig = {
+        general: {},
+        youtube: { enabled: "true", username: "synthetic-channel", [selection.field]: selection.value },
+      };
+      expect(() => ConfigValidator.normalize(rawConfig)).toThrow(/YouTube Data API is not supported/);
+      expect(() => ConfigValidator.normalize(rawConfig)).toThrow(selection.correction);
+      const validation = ConfigValidator.validate(rawConfig);
+      expect(validation.isValid).toBe(false);
+      expect(validation.errors.join(" ")).toContain(selection.correction);
+    });
+  }
 
   it("platform-overrideable fields default to null for inheritance", () => {
     const rawConfig = {

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import {
@@ -27,6 +28,7 @@ type OperatorAppearanceSettings = Readonly<{
     memberRowEffects: readonly RowVisualEffectId[];
 }>;
 type OperatorAppearanceSnapshot = Readonly<{
+    sessionId?: string;
     revision: number;
     settings: OperatorAppearanceSettings;
     overriddenKeys: readonly OperatorAppearanceKey[];
@@ -91,6 +93,7 @@ class OperatorAppearanceService {
     private overrides = new Map<OperatorAppearanceKey, boolean | number | RowTheme | readonly RowVisualEffectId[]>();
     private values: OperatorAppearanceSettings;
     private listeners = new Set<(snapshot: OperatorAppearanceSnapshot) => void>();
+    readonly sessionId = randomUUID();
     private currentRevision = 0;
     private tempSequence = 0;
     private operation: Promise<void> = Promise.resolve();
@@ -239,6 +242,7 @@ class OperatorAppearanceService {
         const settings = this.settings;
         Object.freeze(settings.memberRowEffects);
         return Object.freeze({
+            sessionId: this.sessionId,
             revision: this.revision,
             settings: Object.freeze(settings),
             overriddenKeys: Object.freeze(this.overriddenKeys)

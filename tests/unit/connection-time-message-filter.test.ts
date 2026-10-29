@@ -57,7 +57,7 @@ describe("Connection-Time Message Filter", () => {
       data: {},
     }));
     router.detectCommand = createMockFn<Parameters<typeof router.detectCommand>, ReturnType<typeof router.detectCommand>>(async () => null);
-    router.processCommand = createMockFn<Parameters<typeof router.processCommand>, ReturnType<typeof router.processCommand>>(async () => false);
+    router.processCommand = createMockFn<Parameters<typeof router.processCommand>, ReturnType<typeof router.processCommand>>(async () => []);
     router.isFirstMessage = createMockFn<Parameters<typeof router.isFirstMessage>, ReturnType<typeof router.isFirstMessage>>(() => false);
     router.isGreetingEnabled = createMockFn<Parameters<typeof router.isGreetingEnabled>, ReturnType<typeof router.isGreetingEnabled>>(() => false);
 
