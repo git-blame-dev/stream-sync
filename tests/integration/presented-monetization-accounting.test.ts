@@ -61,7 +61,7 @@ async function harness(blockWrites = false, failWrites = false, nativeGoalsEnabl
     const presented: DisplayQueueItem[] = [];
     const queue = new DisplayQueue({ call: async () => ({}) }, {
         autoProcess: false, maxQueueSize: 2, rowIntervalMs: 0,
-        ttsNotificationsEnabled: false, obs: { ttsTxt: 'test-tts' }
+        ttsNotificationsEnabled: false, obs: {}
     }, { PRIORITY_LEVELS }, eventBus, {
         sourcesManager: { updateTextSource: async () => {}, clearTextSource: async () => {} },
         goalsManager: goals,

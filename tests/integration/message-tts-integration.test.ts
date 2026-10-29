@@ -115,7 +115,7 @@ describe("MessageTTS Integration", () => {
       });
       expect(ttsStages[1]).toEqual({
         text: "MemberUser says Happy to support!",
-        delay: 4000,
+        delay: 0,
         type: "message",
       });
     });
@@ -158,7 +158,7 @@ describe("MessageTTS Integration", () => {
       });
       expect(ttsStages[1]).toEqual({
         text: "TwitchSub says Love this channel!",
-        delay: 4000,
+        delay: 0,
         type: "message",
       });
     });

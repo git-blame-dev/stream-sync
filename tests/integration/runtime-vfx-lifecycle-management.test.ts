@@ -38,7 +38,6 @@ const createRuntimeConfig = (overrides: Partial<RuntimeConfig> = {}): RuntimeCon
       notificationScene: "test-notification-scene",
       chatPlatformLogos: { twitch: "test-chat-logo" },
       notificationPlatformLogos: { twitch: "test-notification-logo" },
-      ttsTxt: "test-tts-source",
       notificationTxt: "test-notification-source",
     },
     handcam: {

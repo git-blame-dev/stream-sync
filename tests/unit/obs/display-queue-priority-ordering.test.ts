@@ -15,7 +15,7 @@ describe('DisplayQueue priority ordering', () => {
         const presented: string[] = [];
         const queue = new DisplayQueue({ call: async () => ({}) }, {
             autoProcess: false, rowIntervalMs: 0, ttsChatEnabled: true, ttsNotificationsEnabled: true,
-            obs: { ttsTxt: 'synthetic-tts', ttsMethod: 'neural-tts' }
+            obs: {}
         }, { PRIORITY_LEVELS }, { emit: () => {} }, {
             operatorControls: controls, delay: async () => {},
             onPresentationStarted: (item) => { presented.push(item.type); },
@@ -41,7 +41,7 @@ describe('DisplayQueue priority ordering', () => {
         const started: string[] = [];
         const queue = new DisplayQueue({ call: async () => ({}) }, {
             autoProcess: false, rowIntervalMs: 0, ttsNotificationsEnabled: false,
-            obs: { ttsTxt: 'synthetic-tts' }
+            obs: {}
         }, { PRIORITY_LEVELS }, { emit: () => {} }, {
             delay: async () => {},
             onPresentationStarted: (item) => { started.push(String(item.data.username)); }

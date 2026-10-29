@@ -234,8 +234,6 @@ class ConfigValidator {
             connectionTimeoutMs: ConfigValidator.parseNumber(raw.connectionTimeoutMs, { defaultValue: DEFAULTS.obs.connectionTimeoutMs }),
             ttsChatEnabled: ConfigValidator.parseBoolean(raw.ttsChatEnabled, DEFAULTS.obs.ttsChatEnabled),
             ttsNotificationsEnabled: ConfigValidator.parseBoolean(raw.ttsNotificationsEnabled, DEFAULTS.obs.ttsNotificationsEnabled),
-            ttsTxt: ConfigValidator.parseString(raw.ttsTxt, DEFAULTS.obs.ttsTxt),
-            ttsMethod: raw.ttsMethod === 'neural-tts' ? 'neural-tts' : DEFAULTS.obs.ttsMethod,
             neuralTtsEndpoint: ConfigValidator.parseString(raw.neuralTtsEndpoint, DEFAULTS.obs.neuralTtsEndpoint),
             neuralTtsVoice: ConfigValidator.parseString(raw.neuralTtsVoice, ''),
             neuralTtsCommand: ConfigValidator.parseString(raw.neuralTtsCommand, '')

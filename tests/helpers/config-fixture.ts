@@ -27,7 +27,6 @@ type TestConfigKnownSections = {
         password?: string;
         enabled?: boolean;
         connectionTimeoutMs?: number;
-        ttsTxt: string;
         ttsChatEnabled: boolean;
         ttsNotificationsEnabled: boolean;
     };
@@ -121,7 +120,6 @@ const RAW_TEST_CONFIG = {
         enabled: 'false',
         address: 'ws://localhost:4455',
         connectionTimeoutMs: '5000',
-        ttsTxt: 'test-tts-source',
         ttsChatEnabled: 'false',
         ttsNotificationsEnabled: 'true'
     },

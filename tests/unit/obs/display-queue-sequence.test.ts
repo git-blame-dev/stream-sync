@@ -18,7 +18,7 @@ function createQueue(maxQueueSize?: number, onStart?: (item: DisplayQueueItem) =
     const started: string[] = [];
     const queue = new DisplayQueue({ call: async () => ({}) }, {
         autoProcess: false, rowIntervalMs: 0, ttsNotificationsEnabled: false,
-        obs: { ttsTxt: 'synthetic-tts' },
+        obs: {},
         ...(maxQueueSize === undefined ? {} : { maxQueueSize })
     }, { PRIORITY_LEVELS }, { emit: () => {} }, {
         delay: async () => {},

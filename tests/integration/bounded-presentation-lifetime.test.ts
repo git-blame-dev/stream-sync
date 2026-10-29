@@ -24,7 +24,7 @@ it('retains a presentation slot until its awaitable accounting settles', async (
     const accounting = deferred();
     const queue = new DisplayQueue({ call: async () => ({}) }, {
         autoProcess: false, maxQueueSize: 1, rowIntervalMs: 0,
-        ttsNotificationsEnabled: false, obs: { ttsTxt: 'synthetic-tts' }
+        ttsNotificationsEnabled: false, obs: {}
     }, { PRIORITY_LEVELS }, { emit: () => {} }, {
         sourcesManager: { updateTextSource: async () => {}, clearTextSource: async () => {} },
         onPresentationStarted: async () => { started.resolve(); await accounting.promise; }
@@ -84,7 +84,7 @@ function harness(options: {
     };
     const queue = new DisplayQueue(obs, {
         autoProcess: false, rowIntervalMs: 0, maxQueueSize: 8,
-        ttsNotificationsEnabled: false, obs: { ttsTxt: 'synthetic-tts' }, ...options.config
+        ttsNotificationsEnabled: false, obs: {}, ...options.config
     }, { PRIORITY_LEVELS }, eventBus,
     { sourcesManager: sources, goalsManager: goals, delay: async () => {}, ...options.dependencies });
     return { queue, tracker, rows, lifecycle, obsCalls };
@@ -198,19 +198,21 @@ describe('bounded presentation lifetime with real queue, effects, sources, goals
         expect(paid.data.goalOutcome).toBe('applied');
     });
 
-    for (const blockedRead of [1, 2]) {
-        it(`fences the borrowed source ${blockedRead === 1 ? 'clear' : 'update'} continuation after stop`, async () => {
+    for (const blockedStep of [1, 2]) {
+        it(`fences the neural speech ${blockedStep === 1 ? 'health' : 'speak'} continuation after stop`, async () => {
             const entered = deferred();
             const release = deferred();
-            let reads = 0;
+            let requests = 0;
             let stopping = false;
             const lateRequests: string[] = [];
             const { queue } = harness({
                 config: { ttsChatEnabled: true },
-                call: async (request) => {
-                    if (stopping) lateRequests.push(request);
-                    if (request === 'GetInputSettings' && ++reads === blockedRead) { entered.resolve(); await release.promise; }
-                    return { inputSettings: { font: { face: 'synthetic-font' } } };
+                dependencies: {
+                    fetch: async (url) => {
+                        if (stopping) lateRequests.push(String(url));
+                        if (++requests === blockedStep) { entered.resolve(); await release.promise; }
+                        return new Response(null, { status: 200 });
+                    }
                 }
             });
             queue.addItem({ type: 'chat', platform: 'twitch', data: { username: 'synthetic-viewer', message: 'synthetic text' } });
@@ -221,19 +223,24 @@ describe('bounded presentation lifetime with real queue, effects, sources, goals
             release.resolve();
             await Promise.all([running, stopped]);
             expect(lateRequests).toEqual([]);
-            expect(reads).toBe(blockedRead);
+            expect(requests).toBe(blockedStep);
         });
     }
 
-    it('stop joins an already-issued borrowed source Set and suppresses subsequent TTS stages', async () => {
+    it('stop joins an already-issued neural speak request and suppresses subsequent TTS stages', async () => {
         const entered = deferred();
         const release = deferred();
         const calls: string[] = [];
-        const { queue } = harness({ config: { ttsChatEnabled: true }, call: async (request) => {
-            calls.push(request);
-            if (request === 'SetInputSettings') { entered.resolve(); await release.promise; }
-            return { inputSettings: {} };
-        } });
+        const { queue } = harness({
+            config: { ttsChatEnabled: true },
+            dependencies: {
+                fetch: async (url, init) => {
+                    calls.push(`${init?.method || 'GET'}:${new URL(String(url)).pathname}`);
+                    if (String(url).endsWith('/v1/speak')) { entered.resolve(); await release.promise; }
+                    return new Response(null, { status: 200 });
+                }
+            }
+        });
         queue.addItem({ type: 'chat', platform: 'twitch', data: { username: 'synthetic-viewer', message: 'synthetic text' } });
         const running = queue.processQueue();
         await entered.promise;
@@ -243,21 +250,24 @@ describe('bounded presentation lifetime with real queue, effects, sources, goals
         expect(retired).toBe(false);
         release.resolve();
         await Promise.all([running, stopping]);
-        expect(calls).toEqual(['GetInputSettings', 'SetInputSettings']);
+        expect(calls).toEqual(['GET:/health', 'POST:/v1/speak']);
     });
 
-    it('passes the effect timeout signal through the borrowed source operation, not only the stop signal', async () => {
+    it('passes the effect timeout signal through the neural speech operation, not only the stop signal', async () => {
         useFakeTimers();
         const entered = deferred();
         const response = deferred();
         const calls: string[] = [];
         const { queue } = harness({
             config: { gui: { enableNotifications: true }, ttsNotificationsEnabled: true, effectFallbackMs: 25 },
-            dependencies: { notificationDelay: async () => {} },
-            call: async (request) => {
-                calls.push(request);
-                if (request === 'GetInputSettings') { entered.resolve(); await response.promise; }
-                return { inputSettings: { font: 'synthetic-font' } };
+            dependencies: {
+                notificationDelay: async () => {},
+                fetch: async (url, init) => {
+                    calls.push(`${init?.method || 'GET'}:${new URL(String(url)).pathname}`);
+                    entered.resolve();
+                    await response.promise;
+                    return new Response(null, { status: 200 });
+                }
             }
         });
         try {
@@ -268,7 +278,7 @@ describe('bounded presentation lifetime with real queue, effects, sources, goals
             expect(queue.getQueueLength()).toBe(1);
             response.resolve();
             await running;
-            expect(calls).toEqual(['GetInputSettings']);
+            expect(calls).toEqual(['GET:/health']);
         } finally {
             response.resolve();
             await queue.stop();
@@ -276,31 +286,32 @@ describe('bounded presentation lifetime with real queue, effects, sources, goals
         }
     });
 
-    it('starts a real source-writing successor with fresh cancellation state after fallback retirement', async () => {
+    it('starts a real neural-speaking successor with fresh cancellation state after fallback retirement', async () => {
         useFakeTimers();
         const entered = deferred();
         const response = deferred();
         const order: string[] = [];
         const qualified: string[] = [];
-        let textReads = 0;
+        let healthReads = 0;
         const { queue, tracker, rows, lifecycle } = harness({
             config: { gui: { enableNotifications: true }, ttsNotificationsEnabled: true, effectFallbackMs: 25 },
             dependencies: {
                 notificationDelay: async () => {},
-                onPresentationStarted: (item) => { qualified.push(String(item.data.username)); }
+                onPresentationStarted: (item) => { qualified.push(String(item.data.username)); },
+                fetch: async (url, init) => {
+                    const pathname = new URL(String(url)).pathname;
+                    if (pathname === '/health') {
+                        order.push('health');
+                        if (++healthReads === 1) { entered.resolve(); await response.promise; }
+                    }
+                    if (pathname === '/v1/speak' && init?.method === 'POST') {
+                        order.push(`speak:${(JSON.parse(String(init.body)) as { text: string }).text}`);
+                    }
+                    return new Response(null, { status: 200 });
+                }
             },
             emit: (event, payload) => {
                 if (event === 'display:row') order.push(`row:${(payload.data as { username: string }).username}`);
-            },
-            call: async (request, payload) => {
-                if (payload.inputName === 'synthetic-tts') {
-                    if (request === 'GetInputSettings') {
-                        order.push('get');
-                        if (++textReads === 1) { entered.resolve(); await response.promise; }
-                    }
-                    if (request === 'SetInputSettings') order.push(`set:${(payload.inputSettings as { text: string }).text}`);
-                }
-                return { inputSettings: { font: 'synthetic-font' } };
             }
         });
         const first = notification('synthetic-timeout', 'platform:gift');
@@ -311,13 +322,13 @@ describe('bounded presentation lifetime with real queue, effects, sources, goals
             await entered.promise;
             advanceTimersByTime(25);
             expect(queue.getQueueLength()).toBe(2);
-            expect(order).toEqual(['row:synthetic-timeout', 'get']);
+            expect(order).toEqual(['row:synthetic-timeout', 'health']);
             expect(tracker.getGoalState('twitch')?.current).toBe(7);
             response.resolve();
             await running;
             expect(order).toEqual([
-                'row:synthetic-timeout', 'get',
-                'row:synthetic-successor', 'get', 'set:', 'get', 'set:synthetic-successor'
+                'row:synthetic-timeout', 'health',
+                'row:synthetic-successor', 'health', 'speak:synthetic-successor'
             ]);
             expect(rows).toEqual(['synthetic-timeout', 'synthetic-successor']);
             expect(lifecycle).toEqual(['started', 'exit-started', 'started', 'exit-started']);
@@ -415,7 +426,7 @@ describe('bounded presentation lifetime with real queue, effects, sources, goals
         const accounting = deferred();
         const chatShown = deferred();
         const { queue, rows } = harness({
-            config: { maxQueueSize: 3, ttsNotificationsEnabled: true, obs: { ttsTxt: 'synthetic-tts', ttsMethod: 'neural-tts' } },
+            config: { maxQueueSize: 3, ttsNotificationsEnabled: true, obs: {} },
             emit: (event, payload) => { if (event === 'display:row' && (payload.data as { username: string }).username === 'synthetic-chat') chatShown.resolve(); },
             dependencies: {
                 fetch: async (_url, init) => {
@@ -508,7 +519,7 @@ describe('bounded presentation lifetime with real queue, effects, sources, goals
         const requests: string[] = [];
         let signal: AbortSignal | null | undefined;
         const { queue, rows } = harness({
-            config: { ttsNotificationsEnabled: true, obs: { ttsTxt: 'synthetic-tts', ttsMethod: 'neural-tts' } },
+            config: { ttsNotificationsEnabled: true, obs: {} },
             dependencies: { fetch: async (url, init) => {
                 requests.push(String(url)); signal = init?.signal; requested.resolve();
                 await response.promise;
@@ -563,7 +574,7 @@ describe('bounded presentation lifetime with real queue, effects, sources, goals
         const requests: string[] = [];
         const { queue, rows } = harness({
             config: { gui: { enableNotifications: true }, effectFallbackMs: 25,
-                ttsNotificationsEnabled: true, obs: { ttsTxt: 'synthetic-tts', ttsMethod: 'neural-tts' } },
+                ttsNotificationsEnabled: true, obs: {} },
             dependencies: {
                 notificationDelay: async () => {},
                 fetch: async (url, init) => {

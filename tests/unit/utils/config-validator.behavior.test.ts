@@ -348,19 +348,16 @@ describe("ConfigValidator._normalizeObsSection()", () => {
     expect(result.connectionTimeoutMs).toBe(10000);
     expect(result.ttsChatEnabled).toBe(false);
     expect(result.ttsNotificationsEnabled).toBe(true);
-    expect(result.ttsMethod).toBe('obs-text');
     expect(result.neuralTtsEndpoint).toBe('http://127.0.0.1:8765');
   });
 
-  it("normalizes neural TTS settings while keeping the selected method explicit", () => {
+  it("normalizes neural TTS settings", () => {
     const result = ConfigValidator._normalizeObsSection({
-      ttsMethod: 'neural-tts',
       neuralTtsEndpoint: 'http://localhost:9876',
       neuralTtsVoice: 'test-voice',
       neuralTtsCommand: '/opt/test/neural-tts'
     });
 
-    expect(result.ttsMethod).toBe('neural-tts');
     expect(result.neuralTtsEndpoint).toBe('http://localhost:9876');
     expect(result.neuralTtsVoice).toBe('test-voice');
     expect(result.neuralTtsCommand).toBe('/opt/test/neural-tts');

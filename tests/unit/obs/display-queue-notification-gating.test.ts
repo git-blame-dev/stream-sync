@@ -74,7 +74,7 @@ describe("DisplayQueue platform notification gating", () => {
       },
       handcam: { enabled: false },
       gifts: { giftVideoSource: "gift-video", giftAudioSource: "gift-audio" },
-      obs: { ttsTxt: "tts-text" },
+      obs: {},
       youtube: {},
       twitch: {},
       tiktok: {},

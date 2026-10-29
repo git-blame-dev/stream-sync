@@ -75,7 +75,7 @@ describe("DisplayQueue gift effects handcam glow", () => {
         ttsNotificationsEnabled: true,
         chat: {},
         notification: {},
-        obs: { ttsTxt: "testTtsTxt" },
+        obs: {},
         handcam: createHandcamConfigFixture({ enabled: handcamEnabled, rampUpDuration: 0, rampDownDuration: 0, holdDuration: 0, totalSteps: 1 }),
       },
       { PRIORITY_LEVELS },
@@ -84,6 +84,12 @@ describe("DisplayQueue gift effects handcam glow", () => {
         sourcesManager: mockSourcesManager,
         goalsManager: mockGoalsManager,
         delay: async () => {},
+        fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+          if (String(input).endsWith("/v1/speak") && init?.method === "POST") {
+            recordedTexts.push(JSON.parse(String(init.body)).text);
+          }
+          return new Response(null, { status: 200 });
+        },
       },
     );
 

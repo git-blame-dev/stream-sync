@@ -162,7 +162,7 @@ describe("DisplayQueue gift flow (smoke E2E)", () => {
         groupName: "notif-group",
         platformLogos: {},
       },
-      obs: { ttsTxt: "tts-source" },
+      obs: {},
       gifts: { giftVideoSource: "gift-video", giftAudioSource: "gift-audio" },
       handcam: { enabled: false },
       ttsNotificationsEnabled: true,
@@ -178,6 +178,12 @@ describe("DisplayQueue gift flow (smoke E2E)", () => {
         sourcesManager,
         goalsManager,
         delay: async () => {},
+        fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+          if (String(input).endsWith("/v1/speak") && init?.method === "POST") {
+            actions.push({ type: "text", source: "tts-source", text: JSON.parse(String(init.body)).text });
+          }
+          return new Response(null, { status: 200 });
+        },
       },
     );
 

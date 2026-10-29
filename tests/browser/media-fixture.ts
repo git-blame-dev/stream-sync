@@ -48,7 +48,7 @@ export async function createMediaHarness(bus: EventBus, directory: string) {
       emit: bus.emit,
       subscribe: (event, handler) => bus.subscribe(event, payload => handler(payload as Record<string, unknown>)),
     },
-    config: { obs: { ttsTxt: 'synthetic-unused-tts' }, gui: { enableDock: true } },
+    config: { obs: {}, gui: { enableDock: true } },
     giftAnimationResolver: resolver,
     delay: async () => { throw new Error('Synthetic media test must not delay'); },
     handleDisplayQueueError: (message, error) => { throw new Error(message, { cause: error }); },

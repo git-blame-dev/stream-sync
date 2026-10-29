@@ -5,7 +5,6 @@ import { PlatformEvents } from '../interfaces/PlatformEvents';
 import { OBSViewerCountObserver } from '../observers/obs-viewer-count-observer';
 import type { InnertubeService } from '../services/innertube-service';
 import { getOBSConnectionManager, initializeOBSConnection } from '../obs/connection';
-import { clearStartupTTS } from '../obs/startup';
 import { getDefaultGoalsManager } from '../obs/goals';
 import { NeuralTtsProcessManager } from '../obs/neural-tts-process-manager';
 import { ChatNotificationRouter } from '../services/ChatNotificationRouter';
@@ -53,8 +52,8 @@ type RuntimeObsConfig = RuntimeRecord & {
     password?: string;
     enabled?: boolean;
     connectionTimeoutMs?: number;
-    ttsTxt: string;
-    ttsMethod?: string;
+    ttsChatEnabled?: boolean;
+    ttsNotificationsEnabled?: boolean;
     neuralTtsEndpoint?: string;
     neuralTtsVoice?: string;
     neuralTtsCommand?: string;
@@ -476,7 +475,7 @@ class AppRuntime {
 
         if (this.dependencies.neuralTtsProcessManager) {
             this.neuralTtsProcessManager = this.dependencies.neuralTtsProcessManager;
-        } else if (this.config?.obs?.ttsMethod === 'neural-tts') {
+        } else if (this._isTtsEnabled()) {
             this.neuralTtsProcessManager = new NeuralTtsProcessManager({
                 config: this.config,
                 logger: this.logger
@@ -997,7 +996,7 @@ class AppRuntime {
             }
 
             this.assertActiveLifetime();
-            if (this.config?.obs?.ttsMethod === 'neural-tts') {
+            if (this._isTtsEnabled()) {
                 this.logger.info('Ensuring Neural TTS service is started...', 'AppRuntime');
                 try {
                     const neuralTtsProcessManager = this._getNeuralTtsProcessManager();
@@ -1019,16 +1018,6 @@ class AppRuntime {
             }
 
             const obsManager = this._getObsConnectionManager();
-            const sourcesManager = this._getObsSourcesManager();
-
-            this.logger.info('Clearing previous TTS...', 'AppRuntime');
-            await clearStartupTTS(this.config, {
-                logger: this.logger,
-                obsManager,
-                ...(sourcesManager ? { sourcesManager } : {})
-            });
-            this.assertActiveLifetime();
-            this.logger.info('TTS cleared', 'AppRuntime');
 
             this.logger.info('Initializing goal display...', 'AppRuntime');
             const goalsManager = this._getDefaultGoalsManager();
@@ -1568,6 +1557,10 @@ class AppRuntime {
         return null;
     }
 
+    _isTtsEnabled(): boolean {
+        return this.config?.obs?.ttsNotificationsEnabled !== false || this.config?.obs?.ttsChatEnabled === true;
+    }
+
     _getNeuralTtsProcessManager(): RuntimeNeuralTtsProcessManager | null {
         if (this.neuralTtsProcessManager) {
             return this.neuralTtsProcessManager;
@@ -1576,7 +1569,7 @@ class AppRuntime {
             this.neuralTtsProcessManager = this.dependencies.neuralTtsProcessManager;
             return this.neuralTtsProcessManager;
         }
-        if (this.config?.obs?.ttsMethod === 'neural-tts') {
+        if (this._isTtsEnabled()) {
             this.neuralTtsProcessManager = new NeuralTtsProcessManager({
                 config: this.config,
                 logger: this.logger

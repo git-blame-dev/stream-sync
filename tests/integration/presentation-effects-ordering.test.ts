@@ -39,7 +39,7 @@ test('greeting waits for both matching external media ends before TTS', async ()
     h.config.logging.chat.enabled = false;
     h.config.obs.ttsNotificationsEnabled = true;
     h.config.displayQueue.rowIntervalMs = 1000;
-    h.config.obs.ttsTxt = 'synthetic-tts';
+
     h.config.vfx.filePath = '/synthetic-only';
     h.config.cooldowns.cmdCooldown = 0;
     h.config.cooldowns.globalCmdCooldownMs = 0;
@@ -61,12 +61,17 @@ test('greeting waits for both matching external media ends before TTS', async ()
         }
         throw new Error('Synthetic media admission did not arrive');
     };
-    const ttsWrites = () => h.socket.writes.filter(write => write.inputName === 'synthetic-tts' && (write.inputSettings as { text?: string }).text);
+    const spokenTts: string[] = [];
+    const ttsWrites = () => spokenTts;
     let running: Promise<void> | undefined;
     let off = () => {};
     const completions: unknown[] = [];
     try {
         await h.start();
+        h.queue.effects.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+            if (String(input).endsWith('/v1/speak') && init?.method === 'POST') spokenTts.push((JSON.parse(String(init.body)) as { text: string }).text);
+            return new Response(null, { status: 200 });
+        };
         useFakeTimers();
         off = h.bus.subscribe('vfx:effect-completed', event => { completions.push(event); });
         h.queue.addItem({ type: 'greeting', platform: 'twitch',
@@ -114,7 +119,7 @@ test('greeting waits for both matching external media ends before TTS', async ()
         const ids = completions.map(value => (value as { correlationId: string }).correlationId);
         expect(ids.every(id => typeof id === 'string' && id.length > 0)).toBe(true);
         expect(new Set(ids).size).toBe(2);
-        expect(ttsWrites()).toEqual([{ inputName: 'synthetic-tts', inputSettings: { font: { face: 'Synthetic font' }, color: 123, text: 'Synthetic greeting' }, overlay: false }]);
+        expect(ttsWrites()).toEqual(['Synthetic greeting']);
     } finally {
         h.socket.emit('MediaInputPlaybackEnded', { inputName: 'Synthetic A' });
         h.socket.emit('MediaInputPlaybackEnded', { inputName: 'Synthetic B' });
@@ -160,7 +165,6 @@ for (const outcome of ['timeout', 'restart failure', 'retirement'] as const) {
         h.config.logging.file.enabled = false;
         h.config.logging.chat.enabled = false;
         h.config.obs.ttsNotificationsEnabled = true;
-        h.config.obs.ttsTxt = 'synthetic-tts';
         h.config.vfx.filePath = '/synthetic-only';
         h.config.commands.a = '!a,Synthetic A,,5000';
         let admitted = false;
@@ -174,11 +178,16 @@ for (const outcome of ['timeout', 'restart failure', 'retirement'] as const) {
             return original(method, data);
         };
         const flush = async () => { for (let i = 0; i < 200; i++) await Promise.resolve(); };
-        const texts = () => h.socket.writes.filter(write => write.inputName === 'synthetic-tts' && (write.inputSettings as { text?: string }).text);
+        const spokenTexts: string[] = [];
+        const texts = () => spokenTexts;
         let running: Promise<void> | undefined;
         let fake = false;
         try {
             await h.start();
+            h.queue.effects.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+                if (String(input).endsWith('/v1/speak') && init?.method === 'POST') spokenTexts.push((JSON.parse(String(init.body)) as { text: string }).text);
+                return new Response(null, { status: 200 });
+            };
             useFakeTimers(); fake = true;
             h.queue.addItem({ type: 'platform:follow', platform: 'twitch',
                 vfxConfig: { commandKey: 'a', command: '!a', filename: 'a', mediaSource: 'Synthetic A', vfxFilePath: '/synthetic-only' },
@@ -203,9 +212,7 @@ for (const outcome of ['timeout', 'restart failure', 'retirement'] as const) {
                 advanceTimersByTime(50);
                 await flush();
                 await running;
-                expect(texts()).toEqual([{ inputName: 'synthetic-tts', inputSettings: {
-                    font: { face: 'Synthetic font' }, color: 123, text: 'Synthetic follow',
-                }, overlay: false }]);
+                expect(texts()).toEqual(['Synthetic follow']);
             }
         } finally {
             h.socket.emit('MediaInputPlaybackEnded', { inputName: 'Synthetic A' });
@@ -223,7 +230,6 @@ for (const mode of ['no VFX', 'partial VFX', 'two speech stages', 'gift VFX', 's
         h.config.logging.file.enabled = false;
         h.config.logging.chat.enabled = false;
         h.config.obs.ttsNotificationsEnabled = true;
-        h.config.obs.ttsTxt = 'synthetic-tts';
         h.config.vfx.filePath = '/synthetic-only';
         h.config.commands.a = '!a,Synthetic A,,5000';
         h.config.commands.gifts = '!gift,Synthetic A,,5000';
@@ -240,9 +246,14 @@ for (const mode of ['no VFX', 'partial VFX', 'two speech stages', 'gift VFX', 's
         let fake = false;
         let off = () => {};
         const commands: unknown[] = [];
+        const texts: string[] = [];
         let running: Promise<unknown> | undefined;
         try {
             await h.start();
+            h.queue.effects.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+                if (String(input).endsWith('/v1/speak') && init?.method === 'POST') texts.push((JSON.parse(String(init.body)) as { text: string }).text);
+                return new Response(null, { status: 200 });
+            };
             off = h.bus.subscribe('vfx:command-received', event => { commands.push(event); });
             useFakeTimers(); fake = true;
             const complete = { commandKey: 'a', command: '!a', filename: 'a', mediaSource: 'Synthetic A', vfxFilePath: '/synthetic-only' };
@@ -262,8 +273,6 @@ for (const mode of ['no VFX', 'partial VFX', 'two speech stages', 'gift VFX', 's
             expect(restarts).toEqual(mode === 'gift VFX' || mode === 'two speech stages' || mode === 'single follow' ? ['Synthetic A'] : []);
             if (mode === 'gift VFX') expect(commands).toMatchObject([{ commandKey: 'gifts', username: 'Synthetic viewer', platform: 'tiktok' }]);
             else if (mode === 'no VFX' || mode === 'partial VFX') expect(commands).toEqual([]);
-            const texts = h.socket.writes.filter(write => write.inputName === 'synthetic-tts' && (write.inputSettings as { text?: string }).text)
-                .map(write => (write.inputSettings as { text: string }).text);
             expect(texts).toEqual(mode === 'gift VFX' ? [] : mode === 'two speech stages' ? ['Synthetic first', 'Synthetic second'] : ['Synthetic first']);
         } finally {
             h.socket.emit('MediaInputPlaybackEnded', { inputName: 'Synthetic A' });

@@ -70,11 +70,9 @@ type DisplayQueueEffectsDependencies = {
     config: {
         ttsChatEnabled?: boolean;
         ttsNotificationsEnabled?: boolean;
-        obs: {
-            ttsTxt: string;
+        obs?: {
             ttsChatEnabled?: boolean;
             ttsNotificationsEnabled?: boolean;
-            ttsMethod?: 'obs-text' | 'neural-tts';
             neuralTtsEndpoint?: string;
             neuralTtsVoice?: string;
             neuralTtsCommand?: string;
@@ -131,7 +129,10 @@ class DisplayQueueEffects {
     private controller = new AbortController();
     private readonly cancellations = new Set<() => void>();
     private readonly goalAttempts = new WeakSet<QueueItem>();
-    fetch: SpeechFetch;
+    private outputFetch: SpeechFetch;
+    private readonly guardedFetch: SpeechFetch;
+    get fetch() { return this.guardedFetch; }
+    set fetch(fn: SpeechFetch) { this.outputFetch = fn; }
 
     beginPresentation() {
         if (this.disposalPromise) throw new Error('Display effects disposed');
@@ -213,11 +214,16 @@ class DisplayQueueEffects {
         this.extractUsername = extractUsername;
         this.ownsGiftAnimationResolver = !giftAnimationResolver;
         this.giftAnimationResolver = giftAnimationResolver || createGiftAnimationResolver({ logger });
-        const speechFetch = fetchOverride || globalThis.fetch.bind(globalThis);
-        this.fetch = async (input, init) => {
+        const defaultTestFetch: SpeechFetch = async () => new Response(JSON.stringify({ ready: true }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' }
+        });
+        this.outputFetch = fetchOverride
+            || (process.env.NODE_ENV === 'test' ? defaultTestFetch : globalThis.fetch.bind(globalThis));
+        this.guardedFetch = async (input, init) => {
             this.assertActive();
             const signal = init?.signal ? AbortSignal.any([init.signal, this.controller.signal]) : this.controller.signal;
-            const result = await speechFetch(input, { ...init, signal });
+            const result = await this.outputFetch(input, { ...init, signal });
             this.assertActive();
             return result;
         };
@@ -373,18 +379,11 @@ class DisplayQueueEffects {
     }
 
     async setTTSText(text: string) {
-        if (this.config.obs.ttsMethod === 'neural-tts') {
-            await this.speakWithNeuralTts(text);
-            return;
-        }
-
-        await this.sourcesManager.clearTextSource(this.config.obs.ttsTxt);
-        await this.delay(50);
-        await this.sourcesManager.updateTextSource(this.config.obs.ttsTxt, text);
+        await this.speakWithNeuralTts(text);
     }
 
     async speakWithNeuralTts(text: string) {
-        const endpoint = this.config.obs.neuralTtsEndpoint || 'http://127.0.0.1:8765';
+        const endpoint = this.config.obs?.neuralTtsEndpoint || 'http://127.0.0.1:8765';
         let baseUrl: URL;
         try {
             baseUrl = new URL(endpoint);
@@ -407,7 +406,7 @@ class DisplayQueueEffects {
             throw new Error(`Neural TTS service is not ready (HTTP ${health.status})`);
         }
 
-        const voice = this.config.obs.neuralTtsVoice?.trim();
+        const voice = this.config.obs?.neuralTtsVoice?.trim();
         const response = await this.fetch(`${root}/v1/speak`, {
             method: 'POST',
             redirect: 'error',
@@ -559,27 +558,15 @@ class DisplayQueueEffects {
         }
 
         if (this.isNotificationTTSEnabled()) {
-            if (this.config.obs.ttsMethod === 'neural-tts') {
-                const ttsPromise = (async () => {
-                    for (const stage of ttsStages) {
-                        if (stage.delay > 0) {
-                            await this.delay(stage.delay);
-                        }
-                        await this.setTTSText(stage.text);
-                    }
-                })();
-                allPromises.push(ttsPromise);
-            } else {
+            const ttsPromise = (async () => {
                 for (const stage of ttsStages) {
-                    const ttsPromise = (async () => {
-                        if (stage.delay > 0) {
-                            await this.delay(stage.delay);
-                        }
-                        await this.setTTSText(stage.text);
-                    })();
-                    allPromises.push(ttsPromise);
+                    if (stage.delay > 0) {
+                        await this.delay(stage.delay);
+                    }
+                    await this.setTTSText(stage.text);
                 }
-            }
+            })();
+            allPromises.push(ttsPromise);
         }
 
         if (hasVfx) {

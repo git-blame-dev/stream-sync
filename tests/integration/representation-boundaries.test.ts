@@ -71,7 +71,7 @@ describe('representation boundaries through productive owners', () => {
         const effects = new DisplayQueueEffects({
             obsManager: obs,
             sourcesManager: sources,
-            goalsManager: goals, config: { obs: { ttsTxt: 'synthetic-tts' } }, delay: async () => {},
+            goalsManager: goals, config: { obs: {} }, delay: async () => {},
             handleDisplayQueueError: () => {}, extractUsername: () => 'Synthetic Viewer'
         });
         try {

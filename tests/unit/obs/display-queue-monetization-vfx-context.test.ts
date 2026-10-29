@@ -136,7 +136,7 @@ describe("DisplayQueue monetization VFX context", () => {
       },
       handcam: { enabled: false },
       gifts: { giftVideoSource: "gift-video", giftAudioSource: "gift-audio" },
-      obs: { ttsTxt: "testTts" },
+      obs: {},
       youtube: {},
       twitch: {},
       tiktok: {},

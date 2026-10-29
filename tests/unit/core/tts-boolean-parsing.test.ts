@@ -31,7 +31,6 @@ describe("TTS Configuration Boolean Parsing", () => {
         autoProcess: false,
         maxQueueSize: 100,
         obs: {
-          ttsTxt: "tts txt",
           ...(ttsValue === undefined ? {} : { ttsNotificationsEnabled: ttsValue }),
         },
         chat: {

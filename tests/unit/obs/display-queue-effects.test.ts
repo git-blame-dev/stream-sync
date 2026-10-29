@@ -71,7 +71,7 @@ describe("DisplayQueueEffects", () => {
   it("retires effects with a resolve-only borrowed resolver without requiring a cleanup method", async () => {
     const resolver = { resolveFromNotificationData: async () => null };
     const effects = new DisplayQueueEffects({
-      config: { obs: { ttsTxt: "synthetic-tts" } },
+      config: { obs: {} },
       sourcesManager: { clearTextSource: async () => {}, updateTextSource: async () => {} },
       obsManager: { call: async () => ({}) }, goalsManager: createNoopGoalsManager(),
       delay: async () => {}, handleDisplayQueueError() {}, extractUsername,
@@ -87,15 +87,13 @@ describe("DisplayQueueEffects", () => {
     const ttsUpdates: string[] = [];
     const sourcesManager = {
       clearTextSource: async () => {},
-      updateTextSource: async (_source: string, text: string) => {
-        ttsUpdates.push(text);
-      },
+      updateTextSource: async () => {},
     };
     const effects = new DisplayQueueEffects({
       config: {
         ttsChatEnabled: true,
         ttsNotificationsEnabled: true,
-        obs: { ttsTxt: "tts" },
+        obs: {},
         handcam: handcamConfig(false),
       },
       sourcesManager,
@@ -104,6 +102,12 @@ describe("DisplayQueueEffects", () => {
       delay: async () => {},
       handleDisplayQueueError: () => {},
       extractUsername,
+      fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input).endsWith("/v1/speak") && init?.method === "POST") {
+          ttsUpdates.push(JSON.parse(String(init.body)).text);
+        }
+        return new Response(null, { status: 200 });
+      },
     });
 
     await effects.handleNotificationEffects({
@@ -129,7 +133,7 @@ describe("DisplayQueueEffects", () => {
       config: {
         ttsChatEnabled: false,
         ttsNotificationsEnabled: false,
-        obs: { ttsTxt: "tts" },
+        obs: {},
         handcam: handcamConfig(true),
         gifts: { giftVideoSource: "gift-video", giftAudioSource: "gift-audio" },
       },
@@ -182,7 +186,7 @@ describe("DisplayQueueEffects", () => {
       config: {
         ttsChatEnabled: false,
         ttsNotificationsEnabled: false,
-        obs: { ttsTxt: "tts" },
+        obs: {},
         handcam: handcamConfig(false),
       },
       sourcesManager: {
@@ -221,7 +225,7 @@ describe("DisplayQueueEffects", () => {
       config: {
         ttsChatEnabled: false,
         ttsNotificationsEnabled: false,
-        obs: { ttsTxt: "tts" },
+        obs: {},
         handcam: handcamConfig(false),
         gifts: { giftVideoSource: "gift-video", giftAudioSource: "gift-audio" },
       },
@@ -264,7 +268,7 @@ describe("DisplayQueueEffects", () => {
       config: {
         ttsChatEnabled: false,
         ttsNotificationsEnabled: false,
-        obs: { ttsTxt: "tts" },
+        obs: {},
         handcam: handcamConfig(false),
       },
       sourcesManager: {
@@ -303,14 +307,12 @@ describe("DisplayQueueEffects", () => {
       config: {
         ttsChatEnabled: true,
         ttsNotificationsEnabled: true,
-        obs: { ttsTxt: "tts" },
+        obs: {},
         handcam: handcamConfig(false),
       },
       sourcesManager: {
         clearTextSource: async () => {},
-        updateTextSource: async (_source: string, text: string) => {
-          ttsUpdates.push(text);
-        },
+        updateTextSource: async () => {},
       },
       obsManager: { call: async () => ({}) },
       goalsManager: createNoopGoalsManager(),
@@ -318,6 +320,12 @@ describe("DisplayQueueEffects", () => {
       delay: async () => {},
       handleDisplayQueueError: () => {},
       extractUsername,
+      fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input).endsWith("/v1/speak") && init?.method === "POST") {
+          ttsUpdates.push(JSON.parse(String(init.body)).text);
+        }
+        return new Response(null, { status: 200 });
+      },
     });
 
     const result = await effects.handleSequentialEffects(
@@ -342,15 +350,13 @@ describe("DisplayQueueEffects", () => {
       config: {
         ttsChatEnabled: true,
         ttsNotificationsEnabled: true,
-        obs: { ttsTxt: "tts" },
+        obs: {},
         handcam: handcamConfig(false),
         gifts: { giftVideoSource: "gift-video", giftAudioSource: "gift-audio" },
       },
       sourcesManager: {
         clearTextSource: async () => {},
-        updateTextSource: async (_source: string, text: string) => {
-          ttsUpdates.push(text);
-        },
+        updateTextSource: async () => {},
       },
       obsManager: { call: async () => ({}) },
       goalsManager: createNoopGoalsManager(),
@@ -360,6 +366,12 @@ describe("DisplayQueueEffects", () => {
       delay: async () => {},
       handleDisplayQueueError: () => {},
       extractUsername,
+      fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input).endsWith("/v1/speak") && init?.method === "POST") {
+          ttsUpdates.push(JSON.parse(String(init.body)).text);
+        }
+        return new Response(null, { status: 200 });
+      },
     });
 
     await effects.handleGiftEffects(
@@ -382,7 +394,7 @@ describe("DisplayQueueEffects", () => {
       config: {
         ttsChatEnabled: false,
         ttsNotificationsEnabled: false,
-        obs: { ttsTxt: "tts" },
+        obs: {},
         handcam: handcamConfig(false),
         gifts: { giftVideoSource: "gift-video", giftAudioSource: "gift-audio" },
         gui: { enableOverlay: true, enableDock: false, showGifts: true },
@@ -446,7 +458,7 @@ describe("DisplayQueueEffects", () => {
       config: {
         ttsChatEnabled: false,
         ttsNotificationsEnabled: false,
-        obs: { ttsTxt: "tts" },
+        obs: {},
         handcam: handcamConfig(false),
         gifts: { giftVideoSource: "gift-video", giftAudioSource: "gift-audio" },
         gui: { enableOverlay: true, enableDock: false, showGifts: true },
@@ -495,7 +507,7 @@ describe("DisplayQueueEffects", () => {
       config: {
         ttsChatEnabled: false,
         ttsNotificationsEnabled: false,
-        obs: { ttsTxt: "tts" },
+        obs: {},
         handcam: handcamConfig(false),
         gifts: { giftVideoSource: "gift-video", giftAudioSource: "gift-audio" },
         gui: { enableOverlay: false, enableDock: false, showGifts: true },
@@ -552,7 +564,7 @@ describe("DisplayQueueEffects", () => {
       config: {
         ttsChatEnabled: false,
         ttsNotificationsEnabled: false,
-        obs: { ttsTxt: "tts" },
+        obs: {},
         handcam: handcamConfig(false),
         gifts: { giftVideoSource: "gift-video", giftAudioSource: "gift-audio" },
         gui: { enableOverlay: true, enableDock: false, showGifts: true },
@@ -611,7 +623,7 @@ describe("DisplayQueueEffects", () => {
       config: {
         ttsChatEnabled: false,
         ttsNotificationsEnabled: false,
-        obs: { ttsTxt: "tts" },
+        obs: {},
         handcam: handcamConfig(false),
         gifts: { giftVideoSource: "gift-video", giftAudioSource: "gift-audio" },
         gui: { enableOverlay: true, enableDock: false, showGifts: true },
@@ -679,7 +691,7 @@ describe("DisplayQueueEffects", () => {
       config: {
         ttsChatEnabled: false,
         ttsNotificationsEnabled: false,
-        obs: { ttsTxt: "tts" },
+        obs: {},
         handcam: handcamConfig(false),
       },
       sourcesManager: {
@@ -731,7 +743,7 @@ describe("DisplayQueueEffects", () => {
       config: {
         ttsChatEnabled: false,
         ttsNotificationsEnabled: false,
-        obs: { ttsTxt: "tts" },
+        obs: {},
         handcam: handcamConfig(false),
       },
       sourcesManager: {
@@ -769,7 +781,7 @@ describe("DisplayQueueEffects", () => {
       config: {
         ttsChatEnabled: false,
         ttsNotificationsEnabled: false,
-        obs: { ttsTxt: "tts" },
+        obs: {},
         handcam: handcamConfig(false),
       },
       sourcesManager: {
@@ -800,7 +812,7 @@ describe("DisplayQueueEffects", () => {
       config: {
         ttsChatEnabled: false,
         ttsNotificationsEnabled: false,
-        obs: { ttsTxt: "tts" },
+        obs: {},
         handcam: handcamConfig(false),
         gifts: { giftVideoSource: "gift-video", giftAudioSource: "gift-audio" },
       },
@@ -850,7 +862,7 @@ describe("DisplayQueueEffects", () => {
       config: {
         ttsChatEnabled: false,
         ttsNotificationsEnabled: false,
-        obs: { ttsTxt: "tts" },
+        obs: {},
         handcam: handcamConfig(false),
         gifts: { giftVideoSource: "gift-video", giftAudioSource: "gift-audio" },
       },

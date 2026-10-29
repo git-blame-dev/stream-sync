@@ -122,7 +122,7 @@ describe("DisplayQueue - Twitch Bits Goal Calculation", () => {
       },
       handcam: { enabled: false },
       gifts: { giftVideoSource: "gift-video", giftAudioSource: "gift-audio" },
-      obs: { ttsTxt: "tts-text" },
+      obs: {},
       youtube: {},
       twitch: {},
       tiktok: {},

@@ -8,11 +8,18 @@ describe("DisplayQueue notification TTS disabled", () => {
   let mockOBSManager: ConstructorParameters<typeof DisplayQueue>[0];
   let mockSourcesManager: NonNullable<ConstructorParameters<typeof DisplayQueue>[4]>["sourcesManager"];
   let updateCalls: string[];
+  let mockFetch: NonNullable<ConstructorParameters<typeof DisplayQueue>[4]>["fetch"];
   let queue: DisplayQueue;
   let testRuntimeConstants: ConstructorParameters<typeof DisplayQueue>[2];
 
   beforeEach(() => {
     updateCalls = [];
+    mockFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith("/v1/speak") && init?.method === "POST") {
+        updateCalls.push(JSON.parse(String(init.body)).text);
+      }
+      return new Response(JSON.stringify({ ready: true }), { status: 200, headers: { "content-type": "application/json" } });
+    };
 
     mockOBSManager = {
       isReady: createMockFn().mockResolvedValue(true),
@@ -69,12 +76,12 @@ describe("DisplayQueue notification TTS disabled", () => {
           groupName: "group",
           platformLogos: {},
         },
-        obs: { ttsTxt: "tts txt" },
+        obs: {},
         youtube: {},
       },
       testRuntimeConstants,
       new EventEmitter(),
-      mockSourcesManager === undefined ? {} : { sourcesManager: mockSourcesManager },
+      mockSourcesManager === undefined ? { fetch: mockFetch } : { sourcesManager: mockSourcesManager, fetch: mockFetch },
     );
   });
 
@@ -99,12 +106,12 @@ describe("DisplayQueue notification TTS disabled", () => {
         ttsNotificationsEnabled: false,
         chat: {},
         notification: {},
-        obs: { ttsTxt: "tts txt", ttsNotificationsEnabled: false },
+        obs: { ttsNotificationsEnabled: false },
         youtube: {},
       },
       testRuntimeConstants,
       new EventEmitter(),
-      mockSourcesManager === undefined ? {} : { sourcesManager: mockSourcesManager },
+      mockSourcesManager === undefined ? { fetch: mockFetch } : { sourcesManager: mockSourcesManager, fetch: mockFetch },
     );
 
     await queueWithNotificationsDisabled.handleNotificationEffects({
@@ -128,12 +135,12 @@ describe("DisplayQueue notification TTS disabled", () => {
         ttsNotificationsEnabled: true,
         chat: {},
         notification: {},
-        obs: { ttsTxt: "tts txt", ttsChatEnabled: false, ttsNotificationsEnabled: true },
+        obs: { ttsChatEnabled: false, ttsNotificationsEnabled: true },
         youtube: {},
       },
       testRuntimeConstants,
       new EventEmitter(),
-      mockSourcesManager === undefined ? {} : { sourcesManager: mockSourcesManager },
+      mockSourcesManager === undefined ? { fetch: mockFetch } : { sourcesManager: mockSourcesManager, fetch: mockFetch },
     );
 
     await queueWithNotificationsEnabled.handleNotificationEffects({
@@ -155,14 +162,14 @@ describe("DisplayQueue notification TTS disabled", () => {
       {
         chat: {},
         notification: {},
-        obs: { ttsTxt: "tts txt", ttsChatEnabled: true, ttsNotificationsEnabled: true },
+        obs: { ttsChatEnabled: true, ttsNotificationsEnabled: true },
         youtube: {},
       },
       testRuntimeConstants,
       new EventEmitter(),
       mockSourcesManager === undefined
-        ? { delay: async () => {} }
-        : { sourcesManager: mockSourcesManager, delay: async () => {} },
+        ? { delay: async () => {}, fetch: mockFetch }
+        : { sourcesManager: mockSourcesManager, delay: async () => {}, fetch: mockFetch },
     );
     await chatQueue.displayChatItem({
       type: "chat",
@@ -183,14 +190,14 @@ describe("DisplayQueue notification TTS disabled", () => {
       {
         chat: {},
         notification: {},
-        obs: { ttsTxt: "tts txt", ttsChatEnabled: false, ttsNotificationsEnabled: true },
+        obs: { ttsChatEnabled: false, ttsNotificationsEnabled: true },
         youtube: {},
       },
       testRuntimeConstants,
       new EventEmitter(),
       mockSourcesManager === undefined
-        ? { delay: async () => {} }
-        : { sourcesManager: mockSourcesManager, delay: async () => {} },
+        ? { delay: async () => {}, fetch: mockFetch }
+        : { sourcesManager: mockSourcesManager, delay: async () => {}, fetch: mockFetch },
     );
     await chatQueue.displayChatItem({
       type: "chat",

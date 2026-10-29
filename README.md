@@ -19,7 +19,7 @@ The project emphasizes clear platform boundaries, config-driven runtime behavior
 
 - Unified chat and command handling across YouTube, TikTok, and Twitch.
 - Donation and monetization-style alerts, including YouTube gifts/super chats, Twitch cheers/sub events, and TikTok gifts.
-- OBS WebSocket integration for chat, alerts, TTS text, platform logos, viewer counts, and goals.
+- OBS WebSocket integration for chat, alerts, VFX media, viewer counts, and goals, paired with local Neural-TTS speech output.
 - Local GUI/overlay assets built with Vite and React for browser or OBS browser-source use.
 - Per-platform enablement and filtering through `config.ini`, including message types, viewer counts, data logging, and stream detection.
 
@@ -53,7 +53,7 @@ Platform adapters and event normalizers
 Notification, command, monetization, and viewer-count services
         │
         ├── OBS WebSocket outputs
-        ├── TTS text output
+        ├── Neural-TTS speech output
         ├── GUI / browser overlay transport
         └── logs and optional local data files
 ```
@@ -74,7 +74,6 @@ Key directories:
 - Bun 1.3.x.
 - OBS with [obs-websocket](https://github.com/obsproject/obs-websocket) enabled if OBS output is used.
 - Platform credentials for the services you enable.
-- `unzip` if TikTok gift animation asset extraction is used.
 
 ### Install from source
 
@@ -310,12 +309,14 @@ Each archive includes the executable, bundled GUI assets, [`config.example.ini`]
 - `.env`, `config.ini`, `logs/`, token stores, and generated `data/` files may contain sensitive or personal stream data and should stay out of commits and public screenshots.
 - TikTok connectivity depends on TikTok availability and EulerStream signing with the configured API key. Start scripts use Bun; running the connector under Node requires Node 22 or newer.
 - OBS output requires matching source names in `config.ini`; mismatched scene/source names will prevent overlay updates.
+- OBS media completion events (`MediaInputPlaybackEnded`) identify the media input by source name rather than an individual playback token, and bound the completion event wait to 10 seconds from restart dispatch; a delayed completion from a superseded playback on the same source cannot be distinguished by the OBS WebSocket protocol.
+- TikTok gift animations are extracted in-process into `<os.tmpdir()>/stream-sync-tiktok-gift-animation` (for example `/tmp/stream-sync-tiktok-gift-animation` on Linux or `%TEMP%\stream-sync-tiktok-gift-animation` on Windows) and retained as immutable published entries (bounded by default to 12 entries and 512 MiB). When the cache reaches capacity, existing cached animations remain playable and new downloads are declined while gift notifications continue normally without animation. Clear the cache directory only when Stream Sync and all browser playback sources are stopped.
 - Platform features are disabled by default in `config.example.ini`; only enable the services you have configured.
 
-## 🧯 Troubleshooting
+## 🧭 Troubleshooting
 
 - **No platform events appear:** confirm the platform is enabled in `config.ini`, required credentials are present in `.env`, and the channel/username values match the target account.
 - **OBS sources do not update:** check that OBS is running, obs-websocket is enabled, `OBS_PASSWORD` matches, and configured source names exist in the active scene collection.
-- **TikTok gifts or animations fail:** ensure `TIKTOK_API_KEY` is set when the integration requires it and `unzip` is available on the host.
+- **TikTok gifts or animations fail:** ensure `TIKTOK_API_KEY` is set when the integration requires it and check whether `<os.tmpdir()>/stream-sync-tiktok-gift-animation` has reached its entry or byte quota.
 - **Viewer counts stay empty:** verify the platform-specific `viewerCountEnabled` setting and source name for the OBS text source.
 - **Release binary will not start:** copy both `config.example.ini` and `.env.example`, edit them locally, then run the binary from inside the extracted archive folder.

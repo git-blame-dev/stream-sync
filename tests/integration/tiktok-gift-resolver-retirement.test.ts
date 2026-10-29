@@ -51,7 +51,7 @@ function queueWithOwnedResolver(resolver: Resolver, bus = new TestEventBus(),
   const queue = new DisplayQueue({ call: async () => ({}) }, {
     autoProcess: true,
     gui: { enableOverlay: true, showGifts: true, enableNotifications: coordinated },
-    obs: { ttsTxt: "synthetic-tts" }, ttsNotificationsEnabled: false,
+    obs: {}, ttsNotificationsEnabled: false,
   }, {}, bus, {
     sourcesManager: { clearTextSource: async () => {}, updateTextSource: async () => {} },
     goalsManager: goalBoundary(processDonationGoal),

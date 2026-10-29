@@ -84,7 +84,7 @@ async function run() {
     obsManager: { call: async () => ({}) },
     sourcesManager: { clearTextSource: async () => {}, updateTextSource: async () => {} },
     goalsManager: { processDonationGoal: async () => {}, processPaypiggyGoal: async () => {} },
-    config: { obs: { ttsTxt: 'synthetic-tts' } }, delay: async () => {},
+    config: { obs: {} }, delay: async () => {},
     handleDisplayQueueError() {}, extractUsername: () => null,
     createGiftAnimationResolver: () => resolver,
   });
@@ -101,7 +101,7 @@ async function run() {
       obsManager: { call: async () => ({}) },
       sourcesManager: { clearTextSource: async () => {}, updateTextSource: async () => {} },
       goalsManager: { processDonationGoal: async () => {}, processPaypiggyGoal: async () => {} },
-      config: { obs: { ttsTxt: 'synthetic-tts' } }, delay: async () => {},
+      config: { obs: {} }, delay: async () => {},
       handleDisplayQueueError() {}, extractUsername: () => null,
       giftAnimationResolver: resolver,
     });

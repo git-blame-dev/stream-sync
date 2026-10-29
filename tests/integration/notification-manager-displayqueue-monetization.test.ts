@@ -103,7 +103,7 @@ describe('Monetisation pipeline integration', () => {
             ttsChatEnabled: false, ttsNotificationsEnabled: false,
             chat: { sourceName: 'test-chat', sceneName: 'test-scene', groupName: 'test-group', platformLogos: {} },
             notification: { sourceName: 'test-notification', sceneName: 'test-scene', groupName: 'test-group', platformLogos: {} },
-            obs: { ttsTxt: 'test-tts' }, handcam: { enabled: false },
+            obs: {}, handcam: { enabled: false },
             gifts: {}, vfx: { vfxFilePath: '/test-only/vfx' }, twitch: {}, youtube: {}, tiktok: {}
         }, constants, eventBus, {
             sourcesManager: sources, goalsManager: goals,

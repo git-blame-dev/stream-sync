@@ -55,11 +55,7 @@ describe('funding goal schema', () => {
 });
 
 describe('speech output schema', () => {
-    it('defaults to the unchanged OBS text method and defines local neural TTS settings', () => {
-        expect(CONFIG_SCHEMA.obs?.ttsMethod).toEqual({
-            type: 'string', default: 'obs-text', enum: ['obs-text', 'neural-tts']
-        });
-        expect(DEFAULTS.obs.ttsMethod).toBe('obs-text');
+    it('defines local neural TTS settings', () => {
         expect(DEFAULTS.obs.neuralTtsEndpoint).toBe('http://127.0.0.1:8765');
         expect(CONFIG_SCHEMA.obs?.neuralTtsVoice).toEqual({ type: 'string', userDefined: true });
         expect(CONFIG_SCHEMA.obs?.neuralTtsCommand).toEqual({ type: 'string', userDefined: true });

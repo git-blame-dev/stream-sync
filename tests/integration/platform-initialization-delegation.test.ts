@@ -61,7 +61,6 @@ function createPlatformDelegationConfig(): PlatformDelegationConfig {
       notificationScene: "test-notification-scene",
       chatPlatformLogos: {},
       notificationPlatformLogos: {},
-      ttsTxt: "test-tts-source",
       notificationTxt: "test-notification-source",
     },
     handcam: {

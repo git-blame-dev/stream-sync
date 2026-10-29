@@ -46,7 +46,7 @@ async function fixture() {
         ttsChatEnabled: false, ttsNotificationsEnabled: false,
         chat: { sourceName: 'synthetic-chat', sceneName: 'synthetic-scene', groupName: 'synthetic-group', platformLogos: {} },
         notification: { sourceName: 'synthetic-notification', sceneName: 'synthetic-scene', groupName: 'synthetic-group', platformLogos: {} },
-        obs: { ttsTxt: 'synthetic-tts' }, handcam: { enabled: false }, gifts: {}, twitch: {}, youtube: {}, tiktok: {}
+        obs: {}, handcam: { enabled: false }, gifts: {}, twitch: {}, youtube: {}, tiktok: {}
     }, constants, bus, { sourcesManager: sources, goalsManager: goals, operatorControls: controls,
         delay: async () => {}, notificationDelay: async () => {}, onPresentationStarted: async item => {
             presented.push(item);

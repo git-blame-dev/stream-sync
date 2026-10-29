@@ -34,7 +34,6 @@ notificationPlatformLogoTwitch=smoke notification twitch
 notificationPlatformLogoYouTube=smoke notification youtube
 notificationPlatformLogoTikTok=smoke notification tiktok
 connectionTimeoutMs=1000
-ttsTxt=smoke tts txt
 
 [timing]
 fadeDuration=250
