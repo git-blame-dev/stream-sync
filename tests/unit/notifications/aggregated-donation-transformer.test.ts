@@ -48,14 +48,16 @@ describe("createSyntheticGiftFromAggregated", () => {
     expect(result.isAggregated).toBe(true);
   });
 
-  it("preserves userId and username", () => {
+  it("preserves userId, username, and optional avatarUrl", () => {
     const result = createSyntheticGiftFromAggregated(createAggregatedDonationFixture({
       userId: "testId",
       username: "testName",
+      avatarUrl: " https://example.invalid/donor-avatar.png ",
     }));
 
     expect(result.userId).toBe("testId");
     expect(result.username).toBe("testName");
+    expect(result.avatarUrl).toBe("https://example.invalid/donor-avatar.png");
   });
 
   it("formats multiple gift types in giftType string", () => {

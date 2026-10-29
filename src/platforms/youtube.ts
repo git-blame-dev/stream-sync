@@ -8,7 +8,7 @@ import { PlatformEvents } from '../interfaces/PlatformEvents';
 import { YouTubeLiveStreamService } from '../services/youtube-live-stream-service';
 import { RawPlatformDataLoggingService } from '../services/RawPlatformDataLoggingService';
 import { collectMissingFields, getMissingFields, mergeMissingFieldsMetadata } from '../utils/missing-fields';
-import { normalizeYouTubeMessage } from '../utils/message-normalization';
+import { extractYouTubeBadgeImages, normalizeYouTubeMessage } from '../utils/message-normalization';
 import { getValidMessageParts } from '../utils/message-parts';
 import { validateYouTubePlatformDependencies } from '../utils/dependency-validator';
 import { createPlatformErrorHandler } from '../utils/platform-error-handler';
@@ -908,8 +908,8 @@ class YouTubePlatform extends EventEmitter {
         try {
             const parsed = this.monetizationParser.parseSuperChat(toUnknownMap(chatItem));
             const payload = this.eventFactory.createGiftEvent({
-                ...parsed,
-                ...author
+                ...author,
+                ...parsed
             });
             this._emitPlatformEvent(PlatformEvents.GIFT, payload);
         } catch (error) {
@@ -927,8 +927,8 @@ class YouTubePlatform extends EventEmitter {
         try {
             const parsed = this.monetizationParser.parseSuperSticker(toUnknownMap(chatItem));
             const payload = this.eventFactory.createGiftEvent({
-                ...parsed,
-                ...author
+                ...author,
+                ...parsed
             });
             this._emitPlatformEvent(PlatformEvents.GIFT, payload);
         } catch (error) {
@@ -953,9 +953,9 @@ class YouTubePlatform extends EventEmitter {
             });
             const hasMetadata = missingFields.length > 0 || usedReceivedTimestamp;
             const payload = this.eventFactory.createGiftEvent({
+                ...author,
                 ...parsed,
                 timestamp: parsed.timestamp ?? receivedTimestamp,
-                ...author,
                 ...(hasMetadata
                     ? {
                         metadata: mergeMissingFieldsMetadata({}, missingFields, {
@@ -990,8 +990,8 @@ class YouTubePlatform extends EventEmitter {
         try {
             const parsed = this.monetizationParser.parseMembership(toUnknownMap(chatItem));
             const payload = this.eventFactory.createPaypiggyEvent({
-                ...parsed,
-                ...author
+                ...author,
+                ...parsed
             });
             this._emitPlatformEvent(PlatformEvents.PAYPIGGY, payload);
         } catch (error) {
@@ -1005,8 +1005,8 @@ class YouTubePlatform extends EventEmitter {
         try {
             const parsed = this.monetizationParser.parseGiftPurchase(toUnknownMap(chatItem));
             const payload = this.eventFactory.createGiftPaypiggyEvent({
-                ...parsed,
-                ...author
+                ...author,
+                ...parsed
             });
             this._emitPlatformEvent(PlatformEvents.GIFTPAYPIGGY, payload);
         } catch (error) {
@@ -1131,26 +1131,29 @@ class YouTubePlatform extends EventEmitter {
             degradedMessage.parts = messageParts;
         }
 
-        const firstThumbnail = Array.isArray(author.thumbnails) ? toUnknownMap(author.thumbnails[0]) : {};
+        const thumbnails = Array.isArray(author.thumbnails) ? author.thumbnails.filter(isRecord) : [];
+        const avatarUrl = thumbnails
+            .map((thumb) => (typeof thumb.url === 'string' ? thumb.url.trim() : ''))
+            .find((url) => url.length > 0) || '';
+        const badgeImages = extractYouTubeBadgeImages(author);
 
         return {
             platform: 'youtube',
             ...(userId ? { userId } : {}),
             username: username || UNKNOWN_CHAT_USERNAME,
-            avatarUrl: typeof firstThumbnail.url === 'string'
-                ? firstThumbnail.url.trim()
-                : '',
+            avatarUrl,
             message: degradedMessage,
             ...(typeof timestamp === 'string' && timestamp.trim().length > 0 ? { timestamp } : {}),
             isMod: author.is_moderator === true,
             isPaypiggy,
             isBroadcaster,
+            ...(badgeImages.length > 0 ? { badgeImages } : {}),
             metadata: mergeMissingFieldsMetadata({
                 uniqueId: messageData.id || null,
                 isSuperChat: !!messageData.superchat,
                 isSuperSticker: !!messageData.supersticker,
                 isMembership: !!messageData.isMembership,
-                authorPhoto: firstThumbnail.url || null
+                authorPhoto: avatarUrl || null
             }, missingFields, {
                 ...(typeof timestamp === 'string' && timestamp.trim().length > 0 ? { sourceTimestamp: timestamp } : {})
             })
@@ -1164,7 +1167,8 @@ class YouTubePlatform extends EventEmitter {
         }
         return {
             username: author.name,
-            userId: author.id
+            userId: author.id,
+            ...(author.thumbnailUrl ? { avatarUrl: author.thumbnailUrl } : {})
         };
     }
 
@@ -1176,9 +1180,18 @@ class YouTubePlatform extends EventEmitter {
         const itemAuthor = toUnknownMap(item.author);
         const username = this._resolveChatItemAuthorName(chatItem);
         const rawUserId = typeof itemAuthor.id === 'string' ? itemAuthor.id.trim() : '';
+        const authorAvatar = toUnknownMap(item.author_avatar ?? item.authorAvatar);
+        const avatarImage = authorAvatar.image;
+        const avatarSources = Array.isArray(avatarImage)
+            ? avatarImage
+            : (Array.isArray(toUnknownMap(avatarImage).sources) ? toUnknownMap(avatarImage).sources as unknown[] : []);
+        const avatarUrl = avatarSources
+            .map((source) => (typeof toUnknownMap(source).url === 'string' ? (toUnknownMap(source).url as string).trim() : ''))
+            .find((url) => url.length > 0) || '';
         return {
             ...(username ? { username } : {}),
-            ...(rawUserId ? { userId: rawUserId } : {})
+            ...(rawUserId ? { userId: rawUserId } : {}),
+            ...(avatarUrl ? { avatarUrl } : {})
         };
     }
 

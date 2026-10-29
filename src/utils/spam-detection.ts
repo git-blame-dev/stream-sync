@@ -1,6 +1,7 @@
 import { safeSetInterval, safeSetTimeout } from './timeout-validator';
 import { createPlatformErrorHandler } from './platform-error-handler';
 import { copyNotificationContributions, type NotificationContribution } from '../notifications/notification-contribution';
+import { DEFAULT_AVATAR_URL } from '../constants/avatar';
 
 type SpamLogger = {
     debug: (message: string, source?: string) => void;
@@ -36,6 +37,7 @@ type DonationSpamDetectionDependencies = {
         message: string;
         notifications: DonationNotification[];
         currency: string;
+        avatarUrl?: string;
         contributions: readonly NotificationContribution[];
     }) => void) | null;
     autoCleanup?: boolean;
@@ -61,6 +63,7 @@ type UserSpamTracker = {
     aggregationTimer: ReturnType<typeof setTimeout> | null;
     username: string;
     platform: string;
+    avatarUrl?: string;
 };
 
 type StableDonationTrackerIdentity = {
@@ -245,7 +248,7 @@ class DonationSpamDetection {
         giftType: string,
         giftCount: number,
         platform?: string | null,
-        source?: { amount: number; currency: string; contribution: NotificationContribution }
+        source?: { amount: number; currency: string; contribution: NotificationContribution; avatarUrl?: string }
     ) {
         if (this.destroyed) {
             return { shouldShow: false, aggregatedMessage: null };
@@ -289,6 +292,13 @@ class DonationSpamDetection {
             }
 
             const userTracker = this.donationSpamTracker[trackerKey];
+            const normalizedAvatarUrl = trimNonEmptyString(source?.avatarUrl);
+            if (normalizedAvatarUrl && normalizedAvatarUrl !== DEFAULT_AVATAR_URL) {
+                userTracker.avatarUrl = normalizedAvatarUrl;
+            } else if (normalizedAvatarUrl && !userTracker.avatarUrl) {
+                userTracker.avatarUrl = normalizedAvatarUrl;
+            }
+
             const originalCount = userTracker.notifications.length;
             userTracker.notifications = userTracker.notifications.filter(
                 (notification) => (now - notification.timestamp) <= windowMs
@@ -395,6 +405,7 @@ class DonationSpamDetection {
                         totalCoins: groupAmount,
                         totalGifts: groupCount,
                         currency,
+                        ...(userTracker.avatarUrl ? { avatarUrl: userTracker.avatarUrl } : {}),
                         contributions: copyNotificationContributions(notifications.flatMap(notification => notification.contribution ? [notification.contribution] : [])),
                         giftTypes: uniqueGiftTypes,
                         message: aggregatedMessage,

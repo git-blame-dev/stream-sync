@@ -91,7 +91,7 @@ type DonationSpamDetectorLike = {
         giftType: unknown,
         giftCount: number,
         platform: string,
-        source?: { amount: number; currency: string; contribution: NotificationContribution },
+        source?: { amount: number; currency: string; contribution: NotificationContribution; avatarUrl?: string },
     ): { shouldShow: boolean };
 };
 
@@ -120,6 +120,7 @@ type AggregatedDonationInput = {
     totalCoins: number;
     message: string;
     currency?: string;
+    avatarUrl?: string;
     contributions?: readonly NotificationContribution[];
 };
 
@@ -432,6 +433,7 @@ class NotificationManager extends EventEmitter {
                         throw new Error('Gift spam detection requires valid amount');
                     }
                     const perGiftAmount = amount / giftCount;
+                    const resolvedAvatarUrl = trimNonEmptyString(normalizedData.avatarUrl);
                     const spamResult = this.donationSpamDetector.handleDonationSpam(
                         normalizedData.userId,
                         normalizedData.username,
@@ -442,7 +444,8 @@ class NotificationManager extends EventEmitter {
                         {
                             amount,
                             currency: typeof normalizedData.currency === 'string' ? normalizedData.currency : '',
-                            contribution: createNotificationContribution(platformName, notificationType, data as NotificationRecord)
+                            contribution: createNotificationContribution(platformName, notificationType, data as NotificationRecord),
+                            ...(resolvedAvatarUrl ? { avatarUrl: resolvedAvatarUrl } : {})
                         }
                     );
 

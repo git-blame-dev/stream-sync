@@ -8,10 +8,12 @@ type AggregatedDonation = {
     totalCoins: number;
     message: string;
     currency?: string;
+    avatarUrl?: string;
     contributions?: readonly NotificationContribution[];
 };
 
 function createSyntheticGiftFromAggregated(aggregatedData: AggregatedDonation) {
+    const avatarUrl = typeof aggregatedData.avatarUrl === 'string' ? aggregatedData.avatarUrl.trim() : '';
     return {
         userId: aggregatedData.userId,
         username: aggregatedData.username,
@@ -19,6 +21,7 @@ function createSyntheticGiftFromAggregated(aggregatedData: AggregatedDonation) {
         giftCount: aggregatedData.totalGifts,
         amount: aggregatedData.totalCoins,
         currency: aggregatedData.currency ?? 'coins',
+        ...(avatarUrl ? { avatarUrl } : {}),
         ...(aggregatedData.contributions ? { contributions: copyNotificationContributions(aggregatedData.contributions) } : {}),
         message: aggregatedData.message,
         isAggregated: true

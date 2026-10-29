@@ -481,9 +481,9 @@ function normalizeYouTubeMessage(chatItem: unknown, platformName = 'youtube') {
             badge.tooltip.toLowerCase().includes('member')
         );
         const thumbnails = Array.isArray(author.thumbnails) ? author.thumbnails.filter(isRecord) : [];
-        const avatarUrl = typeof thumbnails[0]?.url === 'string'
-            ? thumbnails[0].url.trim()
-            : '';
+        const avatarUrl = thumbnails
+            .map((thumb) => (typeof thumb.url === 'string' ? thumb.url.trim() : ''))
+            .find((url) => url.length > 0) || '';
 
         const normalized: NormalizedChatMessage = {
             platform: String(platformName || 'youtube').toLowerCase(),
@@ -502,7 +502,7 @@ function normalizeYouTubeMessage(chatItem: unknown, platformName = 'youtube') {
                 isSuperChat: !!messageData.superchat,
                 isSuperSticker: !!messageData.supersticker,
                 isMembership: !!messageData.isMembership,
-                authorPhoto: thumbnails[0]?.url || null
+                authorPhoto: avatarUrl || null
             },
             rawData: summarizeYouTubeChat(messageData, author, timestamp)
         };

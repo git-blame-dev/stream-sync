@@ -1043,7 +1043,7 @@ class TwitchPlatform extends EventEmitter {
             : (typeof data?.chatter_user_id === 'string' ? data.chatter_user_id.trim() : '');
         const cacheKey = this._getAvatarCacheKey(userId);
 
-        if (payloadAvatarUrl) {
+        if (payloadAvatarUrl && payloadAvatarUrl !== this.fallbackAvatarUrl) {
             if (cacheKey) {
                 this._setCachedAvatarUrl(cacheKey, payloadAvatarUrl);
                 this.avatarLookupMissCache.delete(cacheKey);

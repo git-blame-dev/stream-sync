@@ -459,12 +459,13 @@ function createYouTubeMonetizationParser(options: YouTubeMonetizationParserOptio
         const item = toRecord(chatItem.item);
         const author = toRecord(item.author);
         const thumbnails = Array.isArray(author.thumbnails) ? author.thumbnails : [];
-        const firstThumbnail = thumbnails.length > 0 ? toRecord(thumbnails[0]) : {};
-        const avatarUrl = firstThumbnail.url;
-        if (typeof avatarUrl !== 'string') {
-            return '';
+        for (const thumbnail of thumbnails) {
+            const avatarUrl = toRecord(thumbnail).url;
+            if (typeof avatarUrl === 'string' && avatarUrl.trim()) {
+                return avatarUrl.trim();
+            }
         }
-        return avatarUrl.trim();
+        return '';
     };
 
     const normalizeStickerImageUrl = (url: unknown): string => {

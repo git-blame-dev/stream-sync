@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { adaptTikTokEvent } from '../../../src/platforms/tiktok/tiktok-event-adapter';
 import { normalizeTikTokChatEvent, normalizeTikTokGiftEvent } from '../../../src/platforms/tiktok/events/event-normalizer';
+import { extractTikTokAvatarUrl, extractTikTokUserData } from '../../../src/utils/tiktok-data-extraction';
 const common={msgId:'synthetic-message',createTime:'1800000000'};
 const user={id:'9000000000000000003',displayId:'synthetic-user',nickname:'Synthetic User',avatarLarge:{urlList:['https://example.invalid/avatar.png']},followInfo:{followStatus:1},badgeImageList:[{urlList:['https://example.invalid/badge.png']}],badgeList:[{combine:{icon:{urlList:['https://example.invalid/combine.png']}},text:{defaultPattern:'Synthetic badge'}}]};
 test('v3 emote-only chat preserves identities, privileges, avatar and badge images',()=>{
@@ -33,6 +34,8 @@ test('v3 image badges, combine badge labels and canonical user key ordering surv
         ],
     });
     const adapted = adaptTikTokEvent('chat', { common, user: rawUserWithManyKeys, content: 'badge check' });
+    const adaptedTopKeys = Object.keys(adapted);
+    expect(adaptedTopKeys.slice(0, 6)).toEqual(['msgId', 'isModerator', 'isOwner', 'user', 'comment', 'emotes']);
     const adaptedUserKeys = Object.keys(adapted.user as Record<string, unknown>);
     expect(adaptedUserKeys.slice(0, 8)).toEqual(['userId', 'uniqueId', 'nickname', 'profilePicture', 'followRole', 'userBadges', 'badgeImageList', 'badges']);
     const normalized = normalizeTikTokChatEvent(adapted);
@@ -41,6 +44,46 @@ test('v3 image badges, combine badge labels and canonical user key ordering surv
         { imageUrl: 'https://example.invalid/moderator-badge.png', source: 'tiktok', label: '' },
         { imageUrl: 'https://example.invalid/level-badge.png', source: 'tiktok', label: 'Level 25' },
     ]);
+});
+test('v3 superfan barrage and gift icon fallbacks resolve user and gift image',()=>{
+    const barrageAdapted = adaptTikTokEvent('superfan', {
+        common,
+        commonBarrageContent: {
+            pieces: [
+                {
+                    type: 11,
+                    userValue: {
+                        user: {
+                            id: '9000000000000000006',
+                            displayId: 'synthetic-superfan-user',
+                            nickname: 'Synthetic Superfan User',
+                            avatarThumb: { urlList: ['https://example.invalid/superfan-avatar.webp'] },
+                        },
+                    },
+                },
+            ],
+        },
+    });
+    expect(extractTikTokUserData(barrageAdapted)).toEqual({
+        userId: 'synthetic-superfan-user',
+        username: 'Synthetic Superfan User',
+    });
+    expect(extractTikTokAvatarUrl(barrageAdapted)).toBe('https://example.invalid/superfan-avatar.webp');
+
+    const iconGiftResult = normalizeTikTokGiftEvent(adaptTikTokEvent('gift', {
+        common,
+        user,
+        gift: {
+            name: 'Synthetic Icon Gift',
+            type: 1,
+            diamondCount: 10,
+            image: { urlList: [] },
+            icon: { urlList: ['https://example.invalid/gift-icon.png'] },
+        },
+        repeatCount: 1,
+        repeatEnd: 1,
+    }));
+    expect(iconGiftResult.giftImageUrl).toBe('https://example.invalid/gift-icon.png');
 });
 test('gift streak accounting and image survive v3 translation',()=>{
     const result=normalizeTikTokGiftEvent(adaptTikTokEvent('gift',{common,user,gift:{name:'Synthetic Rose',type:1,diamondCount:5,image:{urlList:['https://example.invalid/gift.png']}},repeatCount:3,repeatEnd:1,groupId:'synthetic-group'}));

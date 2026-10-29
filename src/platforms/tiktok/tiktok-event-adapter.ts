@@ -11,6 +11,20 @@ function image(value: unknown): Payload {
     return { ...valueRecord, url: valueRecord.urlList ?? valueRecord.url };
 }
 
+function firstImageUrl(...candidates: unknown[]): string | undefined {
+    for (const candidate of candidates) {
+        const candidateRecord = record(candidate);
+        const urls = candidateRecord.urlList ?? candidateRecord.url;
+        if (Array.isArray(urls)) {
+            const found = urls.map(normalizeTikTokHttpUrl).find(Boolean);
+            if (found) {
+                return found;
+            }
+        }
+    }
+    return undefined;
+}
+
 function userAvatar(user: Payload): Payload {
     for (const candidate of [user.avatarLarge, user.avatarMedium, user.avatarThumb, user.avatarJpg, user.profilePicture]) {
         const candidateRecord = record(candidate);
@@ -40,12 +54,30 @@ function adaptBadge(value: unknown): Payload {
     };
 }
 
+function resolveEventUser(data: Payload, common: Payload): Payload | null {
+    if (data.user && typeof data.user === 'object' && !Array.isArray(data.user)) {
+        return data.user as Payload;
+    }
+    const pieces = [
+        ...(Array.isArray(record(common.displayText).pieces) ? record(common.displayText).pieces as unknown[] : []),
+        ...(Array.isArray(record(data.commonBarrageContent).pieces) ? record(data.commonBarrageContent).pieces as unknown[] : []),
+    ];
+    for (const piece of pieces) {
+        const pieceUser = record(record(piece).userValue).user;
+        if (pieceUser && typeof pieceUser === 'object' && !Array.isArray(pieceUser)) {
+            return pieceUser as Payload;
+        }
+    }
+    return null;
+}
+
 /** Translate the connector's v3 payloads at the platform boundary. */
 function adaptTikTokEvent(type: string, value: unknown): Payload {
     const data = record(value);
-    const user = record(data.user);
-    const identity = record(data.userIdentity);
     const common = record(data.common);
+    const rawUser = resolveEventUser(data, common);
+    const user = record(rawUser);
+    const identity = record(data.userIdentity);
     const gift = record(data.gift);
     const badgeList = Array.isArray(user.badgeList) ? user.badgeList : [];
     const adaptedUserFields: Payload = {
@@ -58,28 +90,28 @@ function adaptTikTokEvent(type: string, value: unknown): Payload {
         badgeImageList: (Array.isArray(user.badgeImageList) ? user.badgeImageList : []).map(image),
         badges: badgeList.map(adaptBadge),
     };
-    const result: Payload = {
-        ...data,
+    const adapted: Payload = {
         msgId: common.msgId,
         isModerator: identity.isModeratorOfAnchor === true,
         isOwner: identity.isAnchor === true,
-        ...(data.user ? { user: Object.assign({ ...adaptedUserFields }, user, adaptedUserFields) } : {}),
+        ...(rawUser ? { user: Object.assign({ ...adaptedUserFields }, user, adaptedUserFields) } : {}),
     };
     if (type === 'chat') {
-        result.comment = data.content;
-        result.emotes = (Array.isArray(data.emotes) ? data.emotes : []).map(value => {
+        adapted.comment = data.content;
+        adapted.emotes = (Array.isArray(data.emotes) ? data.emotes : []).map(value => {
             const entry = record(value);
             const emote = record(entry.emote);
-            const urls = record(emote.image).urlList;
+            const urls = record(emote.image).urlList ?? record(emote.image).url;
             return { placeInComment: entry.index, emote: {
                 emoteId: emote.emoteId,
                 image: { imageUrl: Array.isArray(urls) ? urls[0] : undefined },
             } };
         });
     } else if (type === 'gift') {
-        result.giftDetails = data.gift ? { ...gift, giftName: gift.name, giftType: gift.type } : undefined;
-        const urls = record(gift.image).urlList;
-        result.gift = { ...gift, giftPictureUrl: Array.isArray(urls) ? urls[0] : undefined };
+        const rawGiftDetails = record(data.giftDetails);
+        adapted.giftDetails = data.gift ? { ...gift, giftName: gift.name, giftType: gift.type } : undefined;
+        const giftPictureUrl = firstImageUrl(gift.image, gift.icon, rawGiftDetails.giftImage);
+        adapted.gift = { ...gift, giftPictureUrl };
     } else if (type === 'envelope' && data.envelopeInfo) {
         const envelope = record(data.envelopeInfo);
         const metadata: Payload = {};
@@ -95,19 +127,18 @@ function adaptTikTokEvent(type: string, value: unknown): Payload {
         const displayKey = record(common.displayText).key;
         metadata.isSuperFanBox = envelope.businessType === 19 ||
             (typeof displayKey === 'string' && displayKey.toLowerCase().includes('ttlive_superfanbox'));
-        const urls = record(envelope.sendUserAvatar).urlList;
-        const avatarUrl = Array.isArray(urls) ? urls.map(normalizeTikTokHttpUrl).find(Boolean) : undefined;
-        if (avatarUrl) result.avatarUrl = avatarUrl;
-        result.metadata = { envelope: metadata };
+        const avatarUrl = firstImageUrl(envelope.sendUserAvatar);
+        if (avatarUrl) adapted.avatarUrl = avatarUrl;
+        adapted.metadata = { envelope: metadata };
     } else if (type === 'subscribe') {
         const months = Number(data.subMonth);
-        if (Number.isSafeInteger(months) && months > 0) result.months = months;
+        if (Number.isSafeInteger(months) && months > 0) adapted.months = months;
     } else if (type === 'roomUser') {
         const count = typeof data.total === 'number' || (typeof data.total === 'string' && /^\d+$/.test(data.total))
             ? Number(data.total) : NaN;
-        result.viewerCount = Number.isSafeInteger(count) && count >= 0 ? count : undefined;
+        adapted.viewerCount = Number.isSafeInteger(count) && count >= 0 ? count : undefined;
     }
-    return result;
+    return Object.assign({ ...adapted }, data, adapted);
 }
 
 export { adaptTikTokEvent };
